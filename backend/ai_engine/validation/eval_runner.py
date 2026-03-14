@@ -97,7 +97,7 @@ def run_ic_memo_eval(
     golden_set_name: str = "ic_memo_default",
     force_rerun: bool = False,
 ) -> EvalRunReport:
-    started_at = dt.datetime.now(dt.UTC)
+    started_at = dt.datetime.now(dt.timezone.utc)
     run_id = uuid.uuid4()
     provider_manifest = _build_provider_manifest()
     prompt_manifest_hash = _compute_prompt_manifest_hash()
@@ -120,7 +120,7 @@ def run_ic_memo_eval(
             model_manifest_hash=model_manifest_hash,
             provider_manifest=provider_manifest,
             started_at=started_at,
-            completed_at=dt.datetime.now(dt.UTC),
+            completed_at=dt.datetime.now(dt.timezone.utc),
             classification=RegressionState.DATA_ISSUE,
             classification_reason="No eligible deals found for evaluation.",
             summary=EvalRunSummary(),
@@ -175,7 +175,7 @@ def run_ic_memo_eval(
         model_manifest_hash=model_manifest_hash,
         provider_manifest=provider_manifest,
         started_at=started_at,
-        completed_at=dt.datetime.now(dt.UTC),
+        completed_at=dt.datetime.now(dt.timezone.utc),
         classification=classification,
         classification_reason=reason,
         blocking_layer=blocking_layer,
@@ -870,6 +870,7 @@ def main() -> None:  # pragma: no cover - manual CLI wrapper
     parser.add_argument("--force-rerun", action="store_true")
     args = parser.parse_args()
 
+    from app.core.db.engine import async_session_factory
 
     SessionLocal = async_session_factory
     deal_ids = [uuid.UUID(raw.strip()) for raw in args.deal_ids.split(",") if raw.strip()]

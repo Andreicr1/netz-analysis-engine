@@ -94,7 +94,7 @@ def _pre_classify_from_corpus(
                 ]
             )
             and "closed" not in combined[:500],
-        ]
+        ],
     )
     if open_signals >= 2:
         return "OPEN_ENDED_FUND"
@@ -121,7 +121,7 @@ def _pre_classify_from_corpus(
                     "growth equity",
                 ]
             ),
-        ]
+        ],
     )
     if closed_signals >= 1:
         return "CLOSED_END_FUND"
@@ -144,7 +144,7 @@ def _pre_classify_from_corpus(
                     "specialty finance",
                 ]
             ),
-        ]
+        ],
     )
     if revolving_signals >= 1:
         return "REVOLVING_CREDIT"
@@ -161,7 +161,7 @@ def _pre_classify_from_corpus(
                 ]
             ),
             any(x in deal_name for x in ["note", "bond"]),
-        ]
+        ],
     )
     if note_signals >= 1:
         return "NOTE_OR_BOND"
@@ -177,7 +177,7 @@ def _pre_classify_from_corpus(
                     "equity participation",
                 ]
             ),
-        ]
+        ],
     )
     if equity_signals >= 1:
         return "EQUITY_CO_INVEST"
@@ -194,7 +194,7 @@ def _pre_classify_from_corpus(
                 ]
             ),
             "maturity" in combined and ("coupon" in combined or "interest" in combined),
-        ]
+        ],
     )
     if term_signals >= 1:
         return "TERM_LOAN"

@@ -136,7 +136,7 @@ def _retrieve_deal_context(
         )
     except Exception:
         logger.warning(
-            "Search retrieval failed for deal %s", deal_id, exc_info=True
+            "Search retrieval failed for deal %s", deal_id, exc_info=True,
         )
         return "", 0, [], {}
 
@@ -395,7 +395,7 @@ def _validate_output(output: dict[str, Any]) -> tuple[bool, list[str]]:
     missing_keys = required_keys - set(output.keys())
     if missing_keys:
         issues.append(
-            f"Missing top-level keys: {', '.join(sorted(missing_keys))}"
+            f"Missing top-level keys: {', '.join(sorted(missing_keys))}",
         )
 
     overview = output.get("deal_overview", {})
@@ -406,7 +406,7 @@ def _validate_output(output: dict[str, Any]) -> tuple[bool, list[str]]:
     if len(citations) < _MIN_CITATIONS_REQUIRED:
         issues.append(
             f"citations has only {len(citations)} entries "
-            f"(minimum {_MIN_CITATIONS_REQUIRED} required for Tier-1)"
+            f"(minimum {_MIN_CITATIONS_REQUIRED} required for Tier-1)",
         )
 
     for i, cit in enumerate(citations):
@@ -428,7 +428,7 @@ def _validate_output(output: dict[str, Any]) -> tuple[bool, list[str]]:
     if len(key_risks) < _MIN_KEY_RISKS:
         issues.append(
             f"risk_map.key_risks has only {len(key_risks)} entries "
-            f"(minimum {_MIN_KEY_RISKS})"
+            f"(minimum {_MIN_KEY_RISKS})",
         )
 
     return len(issues) == 0, issues
@@ -441,14 +441,14 @@ def _validate_memo(memo_output: dict[str, Any]) -> tuple[bool, list[str]]:
     if len(memo_text) < _MIN_MEMO_CHARS:
         issues.append(
             f"investment_memo is only {len(memo_text)} chars "
-            f"(minimum {_MIN_MEMO_CHARS})"
+            f"(minimum {_MIN_MEMO_CHARS})",
         )
     confidence = memo_output.get("confidence_score")
     if confidence is not None:
         try:
             if not (0.0 <= float(confidence) <= 1.0):
                 issues.append(
-                    f"confidence_score {confidence} outside [0, 1] range"
+                    f"confidence_score {confidence} outside [0, 1] range",
                 )
         except (TypeError, ValueError):
             issues.append(f"confidence_score {confidence} is not numeric")
@@ -473,7 +473,7 @@ def _set_intelligence_status(
                 "UPDATE pipeline_deals "
                 "SET intelligence_status = CAST(:status AS intelligence_status_enum), "
                 "intelligence_generated_at = :ts "
-                "WHERE id = :id"
+                "WHERE id = :id",
             ),
             {"status": status, "ts": generated_at, "id": str(deal_id)},
         )
@@ -481,7 +481,7 @@ def _set_intelligence_status(
         db.execute(
             text(
                 "UPDATE pipeline_deals "
-                "SET intelligence_status = CAST(:status AS intelligence_status_enum) WHERE id = :id"
+                "SET intelligence_status = CAST(:status AS intelligence_status_enum) WHERE id = :id",
             ),
             {"status": status, "id": str(deal_id)},
         )
@@ -500,7 +500,7 @@ def _write_research_output(
     db.execute(
         text(
             "UPDATE pipeline_deals "
-            "SET research_output = :data WHERE id = :id"
+            "SET research_output = :data WHERE id = :id",
         ),
         {"data": json.dumps(data, default=str), "id": str(deal_id)},
     )
@@ -614,7 +614,7 @@ def generate_pipeline_intelligence(
 
     # ── Idempotency guard ─────────────────────────────────────────
     deal = db.execute(
-        select(PipelineDeal).where(PipelineDeal.id == deal_id)
+        select(PipelineDeal).where(PipelineDeal.id == deal_id),
     ).scalar_one_or_none()
     if deal is None:
         logger.error("Deal %s not found in pipeline_deals", deal_id)
@@ -641,7 +641,7 @@ def generate_pipeline_intelligence(
     )
     if not context:
         logger.warning(
-            "No chunks found for deal %s — marking FAILED", deal_id
+            "No chunks found for deal %s — marking FAILED", deal_id,
         )
         _set_intelligence_status(db, deal_id, STATUS_FAILED)
         return {}
@@ -786,7 +786,7 @@ def generate_pipeline_intelligence(
         curation_summary_lines.append(
             f"  {ch_type}: {meta['original_count']} -> {meta['final_count']} "
             f"(hard_dedup={meta['hard_dedup_removed']}, "
-            f"semantic_dedup={meta['semantic_dedup_removed']})"
+            f"semantic_dedup={meta['semantic_dedup_removed']})",
         )
     curation_summary = "\n".join(curation_summary_lines)
 
@@ -831,16 +831,16 @@ def generate_pipeline_intelligence(
                 deal_id, "; ".join(issues_b),
             )
         structured_output["investment_memo"] = memo_output.get(
-            "investment_memo", ""
+            "investment_memo", "",
         )
         structured_output["memo_word_count"] = memo_output.get(
-            "memo_word_count", 0
+            "memo_word_count", 0,
         )
         structured_output["confidence_score"] = memo_output.get(
-            "confidence_score", 0.5
+            "confidence_score", 0.5,
         )
         structured_output["confidence_rationale"] = memo_output.get(
-            "confidence_rationale", ""
+            "confidence_rationale", "",
         )
         if memo_output.get("_meta"):
             structured_output["_meta_memo"] = memo_output["_meta"]
@@ -872,7 +872,7 @@ def generate_pipeline_intelligence(
     try:
         with db.begin_nested():
             _write_research_output(
-                db, deal_id, structured_output, auto_commit=False
+                db, deal_id, structured_output, auto_commit=False,
             )
             now = datetime.now(UTC)
             _set_intelligence_status(
@@ -910,7 +910,7 @@ def generate_pipeline_intelligence(
     risk_count = len(
         structured_output.get("risk_map", {}).get("key_risks", [])
         if isinstance(structured_output.get("risk_map"), dict)
-        else structured_output.get("risk_map", [])
+        else structured_output.get("risk_map", []),
     )
 
     logger.info(
@@ -938,13 +938,13 @@ def generate_all_pending(
 
     stmt = select(PipelineDeal).where(
         text(
-            "intelligence_status::text IN ('PENDING', 'FAILED')"
-        )
+            "intelligence_status::text IN ('PENDING', 'FAILED')",
+        ),
     )
     if not force:
         stmt = stmt.where(
             PipelineDeal.research_output.is_(None)
-            | text("intelligence_status::text != 'READY'")
+            | text("intelligence_status::text != 'READY'"),
         )
     stmt = stmt.limit(limit)
 

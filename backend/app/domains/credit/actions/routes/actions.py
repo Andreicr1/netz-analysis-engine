@@ -72,8 +72,8 @@ def list_actions(
             select(ExecutionAction)
             .where(ExecutionAction.fund_id == fund_id)
             .limit(limit)
-            .offset(offset)
-        ).scalars().all()
+            .offset(offset),
+        ).scalars().all(),
     )
 
 
@@ -94,7 +94,7 @@ def update_action(
         evidence_count = db.execute(
             select(func.count())
             .select_from(EvidenceDocument)
-            .where(EvidenceDocument.fund_id == fund_id, EvidenceDocument.action_id == action.id)
+            .where(EvidenceDocument.fund_id == fund_id, EvidenceDocument.action_id == action.id),
         ).scalar_one()
         if evidence_count == 0:
             write_audit_event(

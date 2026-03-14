@@ -156,7 +156,7 @@ def persist_underwriting_artifact(
         .where(
             DealUnderwritingArtifact.fund_id == fund_id,
             DealUnderwritingArtifact.deal_id == deal_id,
-        )
+        ),
     ).scalar_one()
     next_version = existing_count + 1
 
@@ -168,7 +168,7 @@ def persist_underwriting_artifact(
             DealUnderwritingArtifact.deal_id == deal_id,
             DealUnderwritingArtifact.is_active == True,  # noqa: E712
         )
-        .values(is_active=False)
+        .values(is_active=False),
     )
 
     # ── Create new active artifact ────────────────────────────────
@@ -225,7 +225,7 @@ def get_active_artifact(
             DealUnderwritingArtifact.fund_id == fund_id,
             DealUnderwritingArtifact.deal_id == deal_id,
             DealUnderwritingArtifact.is_active == True,  # noqa: E712
-        )
+        ),
     ).scalar_one_or_none()
 
 
@@ -243,6 +243,6 @@ def get_artifact_history(
                 DealUnderwritingArtifact.fund_id == fund_id,
                 DealUnderwritingArtifact.deal_id == deal_id,
             )
-            .order_by(DealUnderwritingArtifact.version_number.desc())
-        ).scalars().all()
+            .order_by(DealUnderwritingArtifact.version_number.desc()),
+        ).scalars().all(),
     )

@@ -11,8 +11,7 @@ from app.domains.credit.portfolio.enums import AlertSeverity, AlertType
 
 
 class Alert(Base):
-    """
-    Alert objects are generated when an obligation is missed or breached.
+    """Alert objects are generated when an obligation is missed or breached.
     Alerts are always linked to an asset and optionally to an obligation.
 
     IMPORTANT: Alerts must not contain fund_id directly.

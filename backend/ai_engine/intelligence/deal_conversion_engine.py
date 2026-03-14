@@ -128,7 +128,7 @@ def convert_pipeline_to_portfolio(
         select(PipelineDeal).where(
             PipelineDeal.fund_id == fund_id,
             PipelineDeal.id == pipeline_deal_id,
-        )
+        ),
     ).scalar_one_or_none()
     if deal is None:
         raise ValueError("Pipeline deal not found")
@@ -139,12 +139,12 @@ def convert_pipeline_to_portfolio(
     if deal.intelligence_status != "READY":
         raise ValueError(
             f"Intelligence status must be READY (current: {deal.intelligence_status}). "
-            "Run AI review first."
+            "Run AI review first.",
         )
 
     if not deal.research_output:
         raise ValueError(
-            "research_output is empty — run AI intelligence pipeline first"
+            "research_output is empty — run AI intelligence pipeline first",
         )
 
     ro = deal.research_output or {}
@@ -199,7 +199,7 @@ def convert_pipeline_to_portfolio(
         source_container="portfolio-active-investments",
         source_folder=f"portfolio-active-investments/{deal.deal_name or deal.title}",
         strategy_type=_title_case_strategy(
-            overview.get("strategy_type") or overview.get("sector")
+            overview.get("strategy_type") or overview.get("sector"),
         ),
         target_return=overview.get("yield") or overview.get("target_return"),
         committed_capital_usd=commitment,

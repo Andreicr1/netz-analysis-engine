@@ -42,6 +42,7 @@ def download_file(path: str, if_none_match: str | None = None) -> tuple[bytes | 
     Returns:
         Tuple of (content_bytes, ctag, last_modified).
         content_bytes is None if the server returned 304 Not Modified.
+
     """
     if not settings.GRAPH_SITE_ID or not settings.GRAPH_DRIVE_ID:
         raise ValueError("GRAPH_SITE_ID and GRAPH_DRIVE_ID must be configured")

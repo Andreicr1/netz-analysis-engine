@@ -92,7 +92,7 @@ def create_capital_call(
     _role_guard=Depends(require_role(["ADMIN", "GP"])),
 ) -> dict[str, Any]:
     last_num = db.execute(
-        select(func.max(CapitalCall.call_number)).where(CapitalCall.fund_id == fund_id)
+        select(func.max(CapitalCall.call_number)).where(CapitalCall.fund_id == fund_id),
     ).scalar() or 0
 
     call = CapitalCall(
@@ -126,7 +126,7 @@ def get_capital_call(
     actor=Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE", "AUDITOR"])),
 ) -> dict[str, Any]:
     call = db.execute(
-        select(CapitalCall).where(CapitalCall.id == call_id, CapitalCall.fund_id == fund_id)
+        select(CapitalCall).where(CapitalCall.id == call_id, CapitalCall.fund_id == fund_id),
     ).scalar_one_or_none()
     if not call:
         raise HTTPException(status_code=404, detail="Capital call not found")
@@ -135,8 +135,8 @@ def get_capital_call(
         db.execute(
             select(CapitalCallAllocation)
             .where(CapitalCallAllocation.capital_call_id == call_id)
-            .order_by(CapitalCallAllocation.investor_name)
-        ).scalars().all()
+            .order_by(CapitalCallAllocation.investor_name),
+        ).scalars().all(),
     )
 
     result = _call_to_dict(call)
@@ -168,7 +168,7 @@ def add_allocations(
     _role_guard=Depends(require_role(["ADMIN", "GP"])),
 ) -> dict[str, Any]:
     call = db.execute(
-        select(CapitalCall).where(CapitalCall.id == call_id, CapitalCall.fund_id == fund_id)
+        select(CapitalCall).where(CapitalCall.id == call_id, CapitalCall.fund_id == fund_id),
     ).scalar_one_or_none()
     if not call:
         raise HTTPException(status_code=404, detail="Capital call not found")
@@ -210,7 +210,7 @@ def issue_capital_call(
 ) -> dict[str, Any]:
     """Transition capital call from DRAFT to ISSUED."""
     call = db.execute(
-        select(CapitalCall).where(CapitalCall.id == call_id, CapitalCall.fund_id == fund_id)
+        select(CapitalCall).where(CapitalCall.id == call_id, CapitalCall.fund_id == fund_id),
     ).scalar_one_or_none()
     if not call:
         raise HTTPException(status_code=404, detail="Capital call not found")
@@ -219,7 +219,7 @@ def issue_capital_call(
 
     alloc_count = db.execute(
         select(func.count(CapitalCallAllocation.id))
-        .where(CapitalCallAllocation.capital_call_id == call_id)
+        .where(CapitalCallAllocation.capital_call_id == call_id),
     ).scalar() or 0
     if alloc_count == 0:
         raise HTTPException(status_code=400, detail="Cannot issue without allocations")
@@ -258,7 +258,7 @@ def record_payment(
             CapitalCallAllocation.id == alloc_id,
             CapitalCallAllocation.capital_call_id == call_id,
             CapitalCallAllocation.fund_id == fund_id,
-        )
+        ),
     ).scalar_one_or_none()
     if not alloc:
         raise HTTPException(status_code=404, detail="Allocation not found")
@@ -272,7 +272,7 @@ def record_payment(
     call = db.execute(select(CapitalCall).where(CapitalCall.id == call_id)).scalar_one()
     total_paid = db.execute(
         select(func.sum(CapitalCallAllocation.paid_amount))
-        .where(CapitalCallAllocation.capital_call_id == call_id)
+        .where(CapitalCallAllocation.capital_call_id == call_id),
     ).scalar() or 0
 
     call.total_received = float(total_paid)
@@ -314,7 +314,7 @@ def list_distributions(
     if status:
         stmt = stmt.where(Distribution.status == status)
     rows = list(
-        db.execute(stmt.order_by(Distribution.distribution_date.desc()).limit(limit)).scalars().all()
+        db.execute(stmt.order_by(Distribution.distribution_date.desc()).limit(limit)).scalars().all(),
     )
     return {
         "count": len(rows),
@@ -331,7 +331,7 @@ def create_distribution(
     _role_guard=Depends(require_role(["ADMIN", "GP"])),
 ) -> dict[str, Any]:
     last_num = db.execute(
-        select(func.max(Distribution.distribution_number)).where(Distribution.fund_id == fund_id)
+        select(func.max(Distribution.distribution_number)).where(Distribution.fund_id == fund_id),
     ).scalar() or 0
 
     dist = Distribution(

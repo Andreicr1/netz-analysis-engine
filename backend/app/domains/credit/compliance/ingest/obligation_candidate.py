@@ -1,5 +1,4 @@
-"""
-Lightweight deterministic obligation-candidate detector.
+"""Lightweight deterministic obligation-candidate detector.
 No LLM required — keyword + frequency-hint matching.
 """
 from __future__ import annotations
@@ -33,8 +32,7 @@ FREQUENCY_HINTS: dict[str, str] = {
 
 
 def detect_obligation_candidate(text: str) -> dict:
-    """
-    Returns::
+    """Returns::
 
         {
             "is_candidate": bool,

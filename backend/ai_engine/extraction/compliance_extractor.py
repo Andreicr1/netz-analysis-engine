@@ -1,5 +1,4 @@
-"""
-LLM-Powered Compliance Obligation Extractor
+"""LLM-Powered Compliance Obligation Extractor
 ============================================
 
 Reads document chunks from the fund-data-index (Azure AI Search) across
@@ -69,7 +68,7 @@ def _fetch_domain_chunks(domain: str, top: int = 50) -> str:
         chunks = AzureComplianceKBAdapter.fetch_live(domain=domain, top=top)
     except Exception as exc:
         logger.warning(
-            "compliance_extractor: fetch_live failed for %s — %s", domain, exc
+            "compliance_extractor: fetch_live failed for %s — %s", domain, exc,
         )
         return ""
 
@@ -125,7 +124,7 @@ def _infer_next_due_date(raw_date: str | None, frequency: str | None) -> date | 
         # Next quarter end
         for m in [3, 6, 9, 12]:
             candidate = date(
-                year, m, 28 if m == 2 else 30 if m in (4, 6, 9, 11) else 31
+                year, m, 28 if m == 2 else 30 if m in (4, 6, 9, 11) else 31,
             )
             if candidate > today:
                 return candidate
@@ -162,7 +161,7 @@ def extract_obligations_from_index(
         existing_names = {n.lower().strip() for n in rows if n}
     except Exception as exc:
         logger.error(
-            "compliance_extractor: failed to load existing obligations — %s", exc
+            "compliance_extractor: failed to load existing obligations — %s", exc,
         )
         # Continue with empty set — will create obligations without dedup
         existing_names = set()

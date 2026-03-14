@@ -19,8 +19,7 @@ def convert_deal_to_asset(
     actor_id: str,
     fund_id: uuid.UUID,
 ) -> PortfolioAsset:
-    """
-    Approved deals become canonical PortfolioAssets.
+    """Approved deals become canonical PortfolioAssets.
 
     This service:
       1. Maps ``deal.deal_type`` → ``AssetType``

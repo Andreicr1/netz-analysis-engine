@@ -1,5 +1,4 @@
-"""
-AI Deep Review Service — Tier-1 Institutional Memorandum OS.
+"""AI Deep Review Service — Tier-1 Institutional Memorandum OS.
 
 V4 Pipeline (13-Chapter Memo Book):
   1. RAG context extraction (sectional budgeting + evidence map)
@@ -177,7 +176,7 @@ def get_current_im_draft(
             InvestmentMemorandumDraft.fund_id == fund_id,
             InvestmentMemorandumDraft.deal_id == deal_id,
             InvestmentMemorandumDraft.is_current == True,  # noqa: E712
-        )
+        ),
     ).scalar_one_or_none()
 
     if current is not None:
@@ -191,7 +190,7 @@ def get_current_im_draft(
             InvestmentMemorandumDraft.deal_id == deal_id,
         )
         .order_by(InvestmentMemorandumDraft.generated_at.desc())
-        .limit(1)
+        .limit(1),
     ).scalar_one_or_none()
 
 
@@ -211,7 +210,7 @@ def run_portfolio_review(
         select(ActiveInvestment).where(
             ActiveInvestment.id == investment_id,
             ActiveInvestment.fund_id == fund_id,
-        )
+        ),
     ).scalar_one_or_none()
     if investment is None:
         return {"error": "Investment not found"}
@@ -271,7 +270,7 @@ def run_all_portfolio_reviews(
     investments = list(
         db.execute(select(ActiveInvestment).where(ActiveInvestment.fund_id == fund_id))
         .scalars()
-        .all()
+        .all(),
     )
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -351,6 +350,7 @@ def run_deal_deep_review_v4(
 
     Returns a summary dict.  Raises on LLM/validation failure.
     No manual commit — caller manages transaction boundary.
+
     """
     from ai_engine.governance.artifact_cache import (
         artifact_exists_v4,
@@ -394,7 +394,7 @@ def run_deal_deep_review_v4(
 
     # ── Stage 1b: Deal lookup ────────────────────────────────────
     deal = db.execute(
-        select(Deal).where(Deal.id == deal_id, Deal.fund_id == fund_id)
+        select(Deal).where(Deal.id == deal_id, Deal.fund_id == fund_id),
     ).scalar_one_or_none()
     if deal is None:
         return {"error": "Deal not found", "dealId": str(deal_id)}
@@ -616,7 +616,7 @@ def run_deal_deep_review_v4(
     model_sponsor = get_model("sponsor")
 
     def _sponsor_call_openai(
-        system: str, user: str, *, max_tokens: int = max_tokens_sponsor
+        system: str, user: str, *, max_tokens: int = max_tokens_sponsor,
     ):
         return _call_openai(
             system,
@@ -801,7 +801,7 @@ def run_deal_deep_review_v4(
     }
 
     def _critic_call_openai(
-        system: str, user: str, *, max_tokens: int = max_tokens_critic
+        system: str, user: str, *, max_tokens: int = max_tokens_critic,
     ):
         return _call_openai(
             system,
@@ -837,7 +837,7 @@ def run_deal_deep_review_v4(
         model_critic_esc = get_model("critic_escalation")
 
         def _critic_esc_call_openai(
-            system: str, user: str, *, max_tokens: int = max_tokens_escalation
+            system: str, user: str, *, max_tokens: int = max_tokens_escalation,
         ):
             return _call_openai(
                 system,
@@ -912,7 +912,7 @@ def run_deal_deep_review_v4(
 
     # ── Stage 12: 13-Chapter Memo Book generation ────────────────
     model_memo = get_model(
-        "memo"
+        "memo",
     )  # default chapter model (overridden per-chapter in memo_book_generator)
 
     def _memo_call_openai(
@@ -956,7 +956,7 @@ def run_deal_deep_review_v4(
     chapters = memo_result.get("chapters", [])
     full_memo_text = memo_result.get("fullMemo", "")
     chapter_texts = memo_result.get(
-        "chapter_texts", {}
+        "chapter_texts", {},
     )  # ch_tag → section_text for Tone Normalizer
     citations_used = memo_result.get("citations_used", [])
     chapter_citations = _index_chapter_citations(chapters, citations_used)
@@ -1206,7 +1206,7 @@ def run_deal_deep_review_v4(
                                 _MemoChapter.version_tag == version_tag,
                                 _MemoChapter.chapter_tag == _ch_tag,
                             )
-                            .values(content_md=_revised)
+                            .values(content_md=_revised),
                         )
                         post_tone_chapter_texts[_ch_tag] = _revised
                 db.flush()
@@ -1232,7 +1232,7 @@ def run_deal_deep_review_v4(
             tone_pass1_changes = tone_result.get("pass1_changes", {})
             tone_pass2_changes = tone_result.get("pass2_changes", [])
             _tone_signal_original = tone_result.get(
-                "signal_original", im_recommendation
+                "signal_original", im_recommendation,
             )
             _tone_signal_final = tone_result.get("signal_final", im_recommendation)
 
@@ -1244,7 +1244,7 @@ def run_deal_deep_review_v4(
             )
     else:
         logger.debug(
-            "TONE_NORMALIZER_SKIPPED deal_id=%s reason=no_chapter_texts", deal_id
+            "TONE_NORMALIZER_SKIPPED deal_id=%s reason=no_chapter_texts", deal_id,
         )
 
     # ── Post-tone confidence adjustment (never increases score) ──
@@ -1252,7 +1252,7 @@ def run_deal_deep_review_v4(
         uw_confidence,
         tone_signal_escalated=bool(
             tone_pass2_changes
-            and any("escalat" in str(c).lower() for c in tone_pass2_changes)
+            and any("escalat" in str(c).lower() for c in tone_pass2_changes),
         )
         if chapter_texts
         else False,
@@ -1299,7 +1299,7 @@ def run_deal_deep_review_v4(
                 "instrument_type": instrument_type,
                 "pipeline_version": "v4.4-ic-grade",
                 "retrieval_policy": retrieval_audit.get(
-                    "retrieval_policy", "IC_GRADE_V1"
+                    "retrieval_policy", "IC_GRADE_V1",
                 ),
                 "stages_completed": 13,
                 "chapter_count": len(chapters),
@@ -1310,7 +1310,7 @@ def run_deal_deep_review_v4(
                             c.get("chunk_id")
                             for c in citations_used
                             if c.get("chunk_id") != "NONE"
-                        }
+                        },
                     ),
                     "unsupported_claims_detected": unsupported_claims_detected,
                     "self_audit_pass": not unsupported_claims_detected,
@@ -1318,7 +1318,7 @@ def run_deal_deep_review_v4(
                 "retrieval_audit": retrieval_audit,
                 "saturation_report": saturation_report,
                 "appendix_1_source_index": memo_result.get(
-                    "appendix_1_source_index", ""
+                    "appendix_1_source_index", "",
                 ),
                 "appendix_kyc_checks": kyc_appendix_text,
                 "kyc_screening_summary": kyc_results.get("summary", {}),
@@ -1332,7 +1332,7 @@ def run_deal_deep_review_v4(
                     signal_final=_tone_signal_final,
                 ),
             },
-        )
+        ),
     )
 
     # ── Stage 13c: Persist Unified Underwriting Artifact ─────────
@@ -1376,7 +1376,7 @@ def run_deal_deep_review_v4(
 
     _v4_risk_band = _derive_risk_band(analysis)
     _v4_risk_band_label = {"HIGH": "HIGH", "MEDIUM": "MODERATE", "LOW": "LOW"}.get(
-        _v4_risk_band, _v4_risk_band
+        _v4_risk_band, _v4_risk_band,
     )
 
     _v4_returns = analysis.get("expectedReturns", {})
@@ -1428,14 +1428,14 @@ def run_deal_deep_review_v4(
                 or deal_fields.get("strategy_type")
                 or "Private Credit",
                 80,
-            )
+            ),
         ),
         geography=_trunc(
-            analysis.get("geography") or deal_fields.get("geography"), 120
+            analysis.get("geography") or deal_fields.get("geography"), 120,
         ),
         sector_focus=_trunc(analysis.get("sectorFocus"), 160),
         target_return=_trunc(
-            _v4_returns.get("targetIRR") or _v4_returns.get("couponRate"), 60
+            _v4_returns.get("targetIRR") or _v4_returns.get("couponRate"), 60,
         ),
         risk_band=_trunc(_v4_risk_band_label, 20),
         liquidity_profile=_trunc(analysis.get("liquidityProfile"), 80),
@@ -1459,16 +1459,16 @@ def run_deal_deep_review_v4(
 
     # Build IC brief from chapter texts or analysis
     _exec_summary = chapter_texts.get(
-        "ch01_executive_summary", analysis.get("executiveSummary", "")
+        "ch01_executive_summary", analysis.get("executiveSummary", ""),
     )
     _opp_overview = chapter_texts.get(
-        "ch02_opportunity", analysis.get("opportunityOverview", "")
+        "ch02_opportunity", analysis.get("opportunityOverview", ""),
     )
     _return_profile = chapter_texts.get(
-        "ch08_returns", analysis.get("returnProfile", "")
+        "ch08_returns", analysis.get("returnProfile", ""),
     )
     _downside_case = chapter_texts.get(
-        "ch09_downside", analysis.get("downsideCase", "")
+        "ch09_downside", analysis.get("downsideCase", ""),
     )
     _risk_summary = chapter_texts.get("ch10_risk", analysis.get("riskSummary", ""))
     _peer_compare = chapter_texts.get("ch12_peers", analysis.get("peerComparison", ""))
@@ -1513,19 +1513,19 @@ def run_deal_deep_review_v4(
             delete(DealIntelligenceProfile).where(
                 DealIntelligenceProfile.fund_id == fund_id,
                 DealIntelligenceProfile.deal_id == deal_id,
-            )
+            ),
         )
         db.execute(
             delete(DealRiskFlag).where(
                 DealRiskFlag.fund_id == fund_id,
                 DealRiskFlag.deal_id == deal_id,
-            )
+            ),
         )
         db.execute(
             delete(DealICBrief).where(
                 DealICBrief.fund_id == fund_id,
                 DealICBrief.deal_id == deal_id,
-            )
+            ),
         )
         db.flush()
         db.add(_v4_profile)
@@ -1589,7 +1589,7 @@ def run_deal_deep_review_v4(
                     c.get("chunk_id")
                     for c in citations_used
                     if c.get("chunk_id") != "NONE"
-                }
+                },
             ),
             "unsupportedClaimsDetected": unsupported_claims_detected,
             "selfAuditPass": not unsupported_claims_detected,
@@ -1684,7 +1684,7 @@ async def async_run_deal_deep_review_v4(
 
     # ── Stage 1b: Deal lookup (sync, fast) ────────────────────────
     deal = db.execute(
-        select(Deal).where(Deal.id == deal_id, Deal.fund_id == fund_id)
+        select(Deal).where(Deal.id == deal_id, Deal.fund_id == fund_id),
     ).scalar_one_or_none()
     if deal is None:
         return {"error": "Deal not found", "dealId": str(deal_id)}
@@ -1722,7 +1722,7 @@ async def async_run_deal_deep_review_v4(
     def _gather_texts_threadsafe() -> dict:
         with SessionLocal() as session:
             deal_obj = session.execute(
-                select(Deal).where(Deal.id == deal_id, Deal.fund_id == fund_id)
+                select(Deal).where(Deal.id == deal_id, Deal.fund_id == fund_id),
             ).scalar_one()
             return _gather_deal_texts(session, fund_id=fund_id, deal=deal_obj)
 
@@ -2293,7 +2293,7 @@ async def async_run_deal_deep_review_v4(
                     critic_addendum=critic_addendum,
                     evidence_pack=evidence_pack,
                     call_openai_fn=_memo_call_openai,
-                )
+                ),
             )
 
         if rewrite_tasks:
@@ -2428,7 +2428,7 @@ async def async_run_deal_deep_review_v4(
                                 _MemoChapter.version_tag == version_tag,
                                 _MemoChapter.chapter_tag == _ch_tag,
                             )
-                            .values(content_md=_revised)
+                            .values(content_md=_revised),
                         )
                         post_tone_chapter_texts[_ch_tag] = _revised
                 db.flush()
@@ -2458,7 +2458,7 @@ async def async_run_deal_deep_review_v4(
         uw_confidence,
         tone_signal_escalated=bool(
             tone_pass2_changes
-            and any("escalat" in str(c).lower() for c in tone_pass2_changes)
+            and any("escalat" in str(c).lower() for c in tone_pass2_changes),
         )
         if chapter_texts
         else False,
@@ -2497,7 +2497,7 @@ async def async_run_deal_deep_review_v4(
                 "instrument_type": instrument_type,
                 "pipeline_version": "v4.4-ic-grade",
                 "retrieval_policy": retrieval_audit.get(
-                    "retrieval_policy", "IC_GRADE_V1"
+                    "retrieval_policy", "IC_GRADE_V1",
                 ),
                 "stages_completed": 13,
                 "chapter_count": len(chapters),
@@ -2508,7 +2508,7 @@ async def async_run_deal_deep_review_v4(
                             c.get("chunk_id")
                             for c in citations_used
                             if c.get("chunk_id") != "NONE"
-                        }
+                        },
                     ),
                     "unsupported_claims_detected": unsupported_claims_detected,
                     "self_audit_pass": not unsupported_claims_detected,
@@ -2516,7 +2516,7 @@ async def async_run_deal_deep_review_v4(
                 "retrieval_audit": retrieval_audit,
                 "saturation_report": saturation_report,
                 "appendix_1_source_index": memo_result.get(
-                    "appendix_1_source_index", ""
+                    "appendix_1_source_index", "",
                 ),
                 "appendix_kyc_checks": kyc_appendix_text,
                 "kyc_screening_summary": kyc_results.get("summary", {}),
@@ -2530,7 +2530,7 @@ async def async_run_deal_deep_review_v4(
                     signal_final=_tone_signal_final,
                 ),
             },
-        )
+        ),
     )
 
     # ── Persist Unified Underwriting Artifact ─────────────────────
@@ -2567,7 +2567,7 @@ async def async_run_deal_deep_review_v4(
     # ── Persist DealIntelligenceProfile + DealICBrief ─────────────
     _v4_risk_band = _derive_risk_band(analysis)
     _v4_risk_band_label = {"HIGH": "HIGH", "MEDIUM": "MODERATE", "LOW": "LOW"}.get(
-        _v4_risk_band, _v4_risk_band
+        _v4_risk_band, _v4_risk_band,
     )
     _v4_returns = analysis.get("expectedReturns", {})
     _v4_risks = analysis.get("riskFactors", [])
@@ -2618,14 +2618,14 @@ async def async_run_deal_deep_review_v4(
                 or deal_fields.get("strategy_type")
                 or "Private Credit",
                 80,
-            )
+            ),
         ),
         geography=_trunc(
-            analysis.get("geography") or deal_fields.get("geography"), 120
+            analysis.get("geography") or deal_fields.get("geography"), 120,
         ),
         sector_focus=_trunc(analysis.get("sectorFocus"), 160),
         target_return=_trunc(
-            _v4_returns.get("targetIRR") or _v4_returns.get("couponRate"), 60
+            _v4_returns.get("targetIRR") or _v4_returns.get("couponRate"), 60,
         ),
         risk_band=_trunc(_v4_risk_band_label, 20),
         liquidity_profile=_trunc(analysis.get("liquidityProfile"), 80),
@@ -2648,16 +2648,16 @@ async def async_run_deal_deep_review_v4(
     )
 
     _exec_summary = chapter_texts.get(
-        "ch01_executive_summary", analysis.get("executiveSummary", "")
+        "ch01_executive_summary", analysis.get("executiveSummary", ""),
     )
     _opp_overview = chapter_texts.get(
-        "ch02_opportunity", analysis.get("opportunityOverview", "")
+        "ch02_opportunity", analysis.get("opportunityOverview", ""),
     )
     _return_profile = chapter_texts.get(
-        "ch08_returns", analysis.get("returnProfile", "")
+        "ch08_returns", analysis.get("returnProfile", ""),
     )
     _downside_case = chapter_texts.get(
-        "ch09_downside", analysis.get("downsideCase", "")
+        "ch09_downside", analysis.get("downsideCase", ""),
     )
     _risk_summary = chapter_texts.get("ch10_risk", analysis.get("riskSummary", ""))
     _peer_compare = chapter_texts.get("ch12_peers", analysis.get("peerComparison", ""))
@@ -2705,19 +2705,19 @@ async def async_run_deal_deep_review_v4(
             delete(DealIntelligenceProfile).where(
                 DealIntelligenceProfile.fund_id == fund_id,
                 DealIntelligenceProfile.deal_id == deal_id,
-            )
+            ),
         )
         db.execute(
             delete(DealRiskFlag).where(
                 DealRiskFlag.fund_id == fund_id,
                 DealRiskFlag.deal_id == deal_id,
-            )
+            ),
         )
         db.execute(
             delete(DealICBrief).where(
                 DealICBrief.fund_id == fund_id,
                 DealICBrief.deal_id == deal_id,
-            )
+            ),
         )
         db.flush()
         db.add(_v4_profile)
@@ -2777,7 +2777,7 @@ async def async_run_deal_deep_review_v4(
                     c.get("chunk_id")
                     for c in citations_used
                     if c.get("chunk_id") != "NONE"
-                }
+                },
             ),
             "unsupportedClaimsDetected": unsupported_claims_detected,
             "selfAuditPass": not unsupported_claims_detected,
@@ -2811,10 +2811,10 @@ def run_all_deals_deep_review_v4(
             select(Deal).where(
                 Deal.fund_id == fund_id,
                 Deal.deal_folder_path.is_not(None),
-            )
+            ),
         )
         .scalars()
-        .all()
+        .all(),
     )
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -2839,7 +2839,7 @@ def run_all_deals_deep_review_v4(
                             "UPDATE pipeline_deals "
                             "SET intelligence_status = CAST(:s AS intelligence_status_enum), "
                             "    intelligence_generated_at = :ts "
-                            "WHERE id = :id"
+                            "WHERE id = :id",
                         ),
                         {
                             "s": "READY",
@@ -2860,7 +2860,7 @@ def run_all_deals_deep_review_v4(
                             text(
                                 "UPDATE pipeline_deals "
                                 "SET intelligence_status = CAST(:s AS intelligence_status_enum) "
-                                "WHERE id = :id"
+                                "WHERE id = :id",
                             ),
                             {"s": "FAILED", "id": str(deal.id)},
                         )
@@ -2908,10 +2908,10 @@ async def async_run_all_deals_deep_review_v4(
             select(Deal).where(
                 Deal.fund_id == fund_id,
                 Deal.deal_folder_path.is_not(None),
-            )
+            ),
         )
         .scalars()
-        .all()
+        .all(),
     )
 
     SessionLocal = async_session_factory

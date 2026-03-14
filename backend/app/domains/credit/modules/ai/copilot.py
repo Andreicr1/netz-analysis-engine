@@ -67,10 +67,10 @@ def activity(
             .where(AIAnswer.fund_id == fund_id)
             .order_by(AIAnswer.created_at_utc.desc())
             .offset(offset)
-            .limit(limit)
+            .limit(limit),
         )
         .scalars()
-        .all()
+        .all(),
     )
 
     question_ids = [a.question_id for a in answers]
@@ -86,8 +86,8 @@ def activity(
             db.execute(
                 select(AIAnswerCitation.answer_id, func.count())
                 .where(AIAnswerCitation.fund_id == fund_id, AIAnswerCitation.answer_id.in_(answer_ids))
-                .group_by(AIAnswerCitation.answer_id)
-            ).all()
+                .group_by(AIAnswerCitation.answer_id),
+            ).all(),
         )
         for aid, cnt in rows:
             citations_count_by_answer[aid] = int(cnt or 0)
@@ -105,7 +105,7 @@ def activity(
                 timestamp_utc=a.created_at_utc,
                 insufficient_evidence=ans_text == "Insufficient evidence in the Data Room",
                 citations_count=int(citations_count_by_answer.get(a.id, 0)),
-            )
+            ),
         )
 
     return Page(items=items, limit=limit, offset=offset)
@@ -193,7 +193,7 @@ def retrieve(
                     DocumentVersion.fund_id == fund_id,
                     Document.fund_id == fund_id,
                     DocumentVersion.id.in_(version_ids),
-                )
+                ),
             )
             .all()
         )
@@ -221,7 +221,7 @@ def retrieve(
                 chunk_index=h.chunk_index,
                 excerpt=excerpt,
                 source_blob=_blob_path_for_response(v),
-            )
+            ),
         )
 
     write_audit_event(
@@ -347,7 +347,7 @@ def answer(
                 DocumentVersion.fund_id == fund_id,
                 Document.fund_id == fund_id,
                 DocumentChunk.id.in_([uuid.UUID(x) for x in retrieved_chunk_ids]),
-            )
+            ),
         )
         .all()
     )
@@ -371,7 +371,7 @@ def answer(
                 "page_end": c.page_end,
                 "excerpt": (c.text[:800] + ("..." if len(c.text) > 800 else "")),
                 "source_blob": _blob_path_for_response(v),
-            }
+            },
         )
 
     if not evidence_items:
@@ -421,7 +421,7 @@ def answer(
         [
             f"- chunk_id: {e['chunk_id']}\n  title: {e['title']}\n  root_folder: {e['root_folder']}\n  folder_path: {e['folder_path']}\n  pages: {e['page_start']}-{e['page_end']}\n  excerpt: {e['excerpt']}"
             for e in evidence_items
-        ]
+        ],
     )
     source_count = len({e.get("root_folder") or "" for e in evidence_items})
     user_prompt = prompt_registry.render(
@@ -531,7 +531,7 @@ def answer(
                 source_blob=src,
                 created_by=actor.actor_id,
                 updated_by=actor.actor_id,
-            )
+            ),
         )
         out_citations.append(
             AIAnswerCitationOut(
@@ -542,7 +542,7 @@ def answer(
                 page_end=c_row.page_end,
                 excerpt=excerpt,
                 source_blob=src,
-            )
+            ),
         )
 
     write_audit_event(

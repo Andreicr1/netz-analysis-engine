@@ -126,8 +126,8 @@ def build_manager_profiles(
             select(DocumentRegistry).where(
                 DocumentRegistry.fund_id == fund_id,
                 DocumentRegistry.root_folder == "2 Deals & Managers",
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
 
     by_manager: dict[str, list[DocumentRegistry]] = defaultdict(list)
@@ -153,8 +153,8 @@ def build_manager_profiles(
                 select(DocumentChunk.version_id, DocumentChunk.text)
                 .join(DocumentVersion, and_(DocumentVersion.id == DocumentChunk.version_id, DocumentVersion.fund_id == fund_id))
                 .where(DocumentChunk.fund_id == fund_id, DocumentChunk.version_id.in_(all_version_ids))
-                .limit(2000)
-            ).all()
+                .limit(2000),
+            ).all(),
         )
         for vid, text in all_chunk_rows:
             chunks_by_version[vid].append(text or "")
@@ -205,7 +205,7 @@ def build_manager_profiles(
             select(ManagerProfile).where(
                 ManagerProfile.fund_id == fund_id,
                 ManagerProfile.name == manager_name,
-            )
+            ),
         ).scalar_one_or_none()
 
         if existing is None:

@@ -1,5 +1,4 @@
-"""
-Netz Global Intelligence Agent.
+"""Netz Global Intelligence Agent.
 
 Single unified agent that answers questions across all knowledge sources:
   - Investment Pipeline (deal documents, deal_context.json)
@@ -39,8 +38,7 @@ PIPELINE_CONTAINER = "investment-pipeline-intelligence"
 
 
 class NetzGlobalAgent:
-    """
-    Stateless agent: each call resolves its own search clients + LLM.
+    """Stateless agent: each call resolves its own search clients + LLM.
     Safe for concurrent use — no shared mutable state.
     """
 
@@ -59,8 +57,7 @@ class NetzGlobalAgent:
         ui_context: dict[str, Any] | None = None,
         system_prompt_override: str | None = None,
     ) -> dict[str, Any]:
-        """
-        End-to-end: detect intent → parallel retrieve → RBAC filter →
+        """End-to-end: detect intent → parallel retrieve → RBAC filter →
         merge → deal-context inject → LLM → quality → return.
 
         Parameters
@@ -80,6 +77,7 @@ class NetzGlobalAgent:
         Returns
         -------
         dict matching GlobalAgentResponse schema.
+
         """
         # 1. Intent routing
         if domains:
@@ -101,7 +99,7 @@ class NetzGlobalAgent:
             effective_top = max(top, 30)
 
         all_chunks = self._parallel_retrieve(
-            question, resolved_domains, deal_folder, effective_top
+            question, resolved_domains, deal_folder, effective_top,
         )
 
         # 3. RBAC filter
@@ -120,7 +118,7 @@ class NetzGlobalAgent:
 
         if not all_chunks:
             logger.warning(
-                "GLOBAL_AGENT NO_CHUNKS question=%r", question[:80]
+                "GLOBAL_AGENT NO_CHUNKS question=%r", question[:80],
             )
             return {
                 "answer": "Insufficient evidence in indexed documents.",
@@ -209,8 +207,7 @@ class NetzGlobalAgent:
         deal_folder: str | None,
         top: int,
     ) -> list[Any]:
-        """
-        Fan out to relevant adapters concurrently using ThreadPoolExecutor.
+        """Fan out to relevant adapters concurrently using ThreadPoolExecutor.
         """
         futures: dict[Any, str] = {}
         all_chunks: list[Any] = []
@@ -219,7 +216,7 @@ class NetzGlobalAgent:
             # Pipeline retrieval
             if "PIPELINE" in domains:
                 fut = executor.submit(
-                    self._retrieve_pipeline, question, deal_folder, top
+                    self._retrieve_pipeline, question, deal_folder, top,
                 )
                 futures[fut] = "PIPELINE"
 
@@ -227,7 +224,7 @@ class NetzGlobalAgent:
             compliance_domains = [d for d in domains if d in _COMPLIANCE_DOMAINS]
             for d in compliance_domains:
                 fut = executor.submit(
-                    self._retrieve_compliance, question, d, top
+                    self._retrieve_compliance, question, d, top,
                 )
                 futures[fut] = d
 
@@ -246,21 +243,21 @@ class NetzGlobalAgent:
         return all_chunks
 
     def _retrieve_pipeline(
-        self, question: str, deal_folder: str | None, top: int
+        self, question: str, deal_folder: str | None, top: int,
     ) -> list[Any]:
         """Retrieve from global-vector-chunks-v4."""
         from app.domains.credit.global_agent.pipeline_kb_adapter import PipelineKBAdapter
 
         try:
             return PipelineKBAdapter.search_live(
-                query=question, deal_folder=deal_folder, top=top
+                query=question, deal_folder=deal_folder, top=top,
             )
         except Exception as exc:
             logger.error("GLOBAL_AGENT PIPELINE_RETRIEVAL_ERROR: %s", exc)
             return []
 
     def _retrieve_compliance(
-        self, question: str, domain: str, top: int
+        self, question: str, domain: str, top: int,
     ) -> list[Any]:
         """Retrieve from dedicated compliance indexes via AzureComplianceKBAdapter."""
         from app.domains.credit.compliance.kb.azure_kb_adapter import (
@@ -269,7 +266,7 @@ class NetzGlobalAgent:
 
         try:
             return AzureComplianceKBAdapter.search_live(
-                query=question, domain=domain, top=top
+                query=question, domain=domain, top=top,
             )
         except Exception as exc:
             logger.error(
@@ -319,8 +316,7 @@ class NetzGlobalAgent:
     # ------------------------------------------------------------------ #
     @staticmethod
     def _load_deal_context_chunk(deal_folder: str) -> Any | None:
-        """
-        Load deal_context.json from blob and wrap as a synthetic
+        """Load deal_context.json from blob and wrap as a synthetic
         ComplianceChunk. Returns None if unavailable.
         """
         from app.domains.credit.compliance.ingest.compliance_kb_schema import (
@@ -356,8 +352,7 @@ class NetzGlobalAgent:
     # LLM                                                                 #
     # ------------------------------------------------------------------ #
     def _call_llm(self, user_prompt: str, system_prompt_override: str | None = None) -> str:
-        """
-        Call the centralised OpenAI provider with the global system prompt.
+        """Call the centralised OpenAI provider with the global system prompt.
         Uses gpt-4.1 (policy-grade model) for deterministic, structured answers.
         """
         from ai_engine.model_config import get_model
@@ -400,6 +395,6 @@ class NetzGlobalAgent:
             source_name = source_name.replace("_", " ").replace("-", " ") if source_name else "unknown"
 
             lines.append(
-                f"[{cid}] (domain={domain}, doc_type={doc_type}, source={source_name})\n{text}"
+                f"[{cid}] (domain={domain}, doc_type={doc_type}, source={source_name})\n{text}",
             )
         return "\n\n---\n\n".join(lines)

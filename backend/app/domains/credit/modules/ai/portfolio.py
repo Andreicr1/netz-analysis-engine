@@ -91,16 +91,16 @@ def list_portfolio_investments(
         db.execute(
             select(ActiveInvestment)
             .where(ActiveInvestment.fund_id == fund_id)
-            .order_by(ActiveInvestment.last_monitoring_at.desc().nullslast(), ActiveInvestment.updated_at.desc())
-        ).scalars().all()
+            .order_by(ActiveInvestment.last_monitoring_at.desc().nullslast(), ActiveInvestment.updated_at.desc()),
+        ).scalars().all(),
     )
     risks = list(
         db.execute(
             select(InvestmentRiskRegistry).where(
                 InvestmentRiskRegistry.fund_id == fund_id,
                 InvestmentRiskRegistry.risk_type == "OVERALL",
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
     risk_by_investment = {row.investment_id: row for row in risks}
 
@@ -133,7 +133,7 @@ def get_portfolio_investment_detail(
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> PortfolioInvestmentDetailResponse:
     investment = db.execute(
-        select(ActiveInvestment).where(ActiveInvestment.fund_id == fund_id, ActiveInvestment.id == investment_id)
+        select(ActiveInvestment).where(ActiveInvestment.fund_id == fund_id, ActiveInvestment.id == investment_id),
     ).scalar_one_or_none()
     if investment is None:
         raise HTTPException(status_code=404, detail="Active investment not found")
@@ -142,32 +142,32 @@ def get_portfolio_investment_detail(
         db.execute(
             select(PerformanceDriftFlag)
             .where(PerformanceDriftFlag.fund_id == fund_id, PerformanceDriftFlag.investment_id == investment_id)
-            .order_by(PerformanceDriftFlag.created_at.desc())
-        ).scalars().all()
+            .order_by(PerformanceDriftFlag.created_at.desc()),
+        ).scalars().all(),
     )
     covenants = list(
         db.execute(
             select(CovenantStatusRegister)
             .where(CovenantStatusRegister.fund_id == fund_id, CovenantStatusRegister.investment_id == investment_id)
-            .order_by(CovenantStatusRegister.created_at.desc())
-        ).scalars().all()
+            .order_by(CovenantStatusRegister.created_at.desc()),
+        ).scalars().all(),
     )
     cash_impacts = list(
         db.execute(
             select(CashImpactFlag)
             .where(CashImpactFlag.fund_id == fund_id, CashImpactFlag.investment_id == investment_id)
-            .order_by(CashImpactFlag.created_at.desc())
-        ).scalars().all()
+            .order_by(CashImpactFlag.created_at.desc()),
+        ).scalars().all(),
     )
     risks = list(
         db.execute(
             select(InvestmentRiskRegistry)
             .where(InvestmentRiskRegistry.fund_id == fund_id, InvestmentRiskRegistry.investment_id == investment_id)
-            .order_by(InvestmentRiskRegistry.created_at.desc())
-        ).scalars().all()
+            .order_by(InvestmentRiskRegistry.created_at.desc()),
+        ).scalars().all(),
     )
     brief = db.execute(
-        select(BoardMonitoringBrief).where(BoardMonitoringBrief.fund_id == fund_id, BoardMonitoringBrief.investment_id == investment_id)
+        select(BoardMonitoringBrief).where(BoardMonitoringBrief.fund_id == fund_id, BoardMonitoringBrief.investment_id == investment_id),
     ).scalar_one_or_none()
 
     drift_out = [
@@ -234,7 +234,7 @@ def get_portfolio_investment_detail(
             *[row.as_of for row in cash_impacts],
             *[row.as_of for row in risks],
             brief.as_of if brief else investment.as_of,
-        ]
+        ],
     )
 
     return PortfolioInvestmentDetailResponse(
@@ -275,32 +275,32 @@ def list_portfolio_alerts(
             select(PerformanceDriftFlag)
             .where(PerformanceDriftFlag.fund_id == fund_id, PerformanceDriftFlag.status == "OPEN")
             .order_by(PerformanceDriftFlag.created_at.desc())
-            .limit(200)
-        ).scalars().all()
+            .limit(200),
+        ).scalars().all(),
     )
     covenant_rows = list(
         db.execute(
             select(CovenantStatusRegister)
             .where(CovenantStatusRegister.fund_id == fund_id, CovenantStatusRegister.status.in_(["BREACH", "WARNING", "NOT_TESTED", "NOT_CONFIGURED"]))
             .order_by(CovenantStatusRegister.created_at.desc())
-            .limit(200)
-        ).scalars().all()
+            .limit(200),
+        ).scalars().all(),
     )
     cash_rows = list(
         db.execute(
             select(CashImpactFlag)
             .where(CashImpactFlag.fund_id == fund_id, CashImpactFlag.resolved_flag.is_(False))
             .order_by(CashImpactFlag.created_at.desc())
-            .limit(200)
-        ).scalars().all()
+            .limit(200),
+        ).scalars().all(),
     )
     risk_rows = list(
         db.execute(
             select(InvestmentRiskRegistry)
             .where(InvestmentRiskRegistry.fund_id == fund_id, InvestmentRiskRegistry.risk_type == "OVERALL", InvestmentRiskRegistry.risk_level.in_(["HIGH", "MEDIUM"]))
             .order_by(InvestmentRiskRegistry.created_at.desc())
-            .limit(200)
-        ).scalars().all()
+            .limit(200),
+        ).scalars().all(),
     )
 
     referenced_inv_ids: set[uuid.UUID] = set()
@@ -330,7 +330,7 @@ def list_portfolio_alerts(
                 investmentName=inv.investment_name,
                 message=row.reasoning,
                 createdAt=row.created_at,
-            )
+            ),
         )
     for row in covenant_rows:
         inv = by_id.get(row.investment_id)
@@ -344,7 +344,7 @@ def list_portfolio_alerts(
                 investmentName=inv.investment_name,
                 message=row.details or f"Covenant status {row.status} for {row.covenant_name}.",
                 createdAt=row.created_at,
-            )
+            ),
         )
     for row in cash_rows:
         inv = by_id.get(row.investment_id)
@@ -358,7 +358,7 @@ def list_portfolio_alerts(
                 investmentName=inv.investment_name,
                 message=row.message,
                 createdAt=row.created_at,
-            )
+            ),
         )
     for row in risk_rows:
         inv = by_id.get(row.investment_id)
@@ -372,7 +372,7 @@ def list_portfolio_alerts(
                 investmentName=inv.investment_name,
                 message=row.rationale,
                 createdAt=row.created_at,
-            )
+            ),
         )
 
     items.sort(key=lambda i: i.createdAt, reverse=True)
@@ -425,10 +425,10 @@ def list_investment_reviews(
                 PeriodicReviewReport.investment_id == investment_id,
             )
             .order_by(PeriodicReviewReport.reviewed_at.desc())
-            .limit(50)
+            .limit(50),
         )
         .scalars()
-        .all()
+        .all(),
     )
     as_of = rows[0].reviewed_at if rows else _utcnow()
     items = [PeriodicReviewOut.model_validate(r) for r in rows]
@@ -450,7 +450,7 @@ def get_latest_investment_review(
             PeriodicReviewReport.investment_id == investment_id,
         )
         .order_by(PeriodicReviewReport.reviewed_at.desc())
-        .limit(1)
+        .limit(1),
     ).scalar_one_or_none()
 
     return PeriodicReviewResponse(
@@ -477,7 +477,7 @@ def get_portfolio_deal_monitoring(
         select(ActiveInvestment).where(
             ActiveInvestment.fund_id == fund_id,
             ActiveInvestment.id == investment_id,
-        )
+        ),
     ).scalar_one_or_none()
     if investment is None:
         raise HTTPException(status_code=404, detail="Active investment not found")
@@ -488,7 +488,7 @@ def get_portfolio_deal_monitoring(
 
     if investment.deal_id:
         portfolio_deal = db.execute(
-            select(PortfolioDeal).where(PortfolioDeal.id == investment.deal_id)
+            select(PortfolioDeal).where(PortfolioDeal.id == investment.deal_id),
         ).scalar_one_or_none()
         if portfolio_deal:
             portfolio_deal_id = portfolio_deal.id
@@ -522,8 +522,8 @@ def get_portfolio_deal_monitoring(
                 CovenantStatusRegister.fund_id == fund_id,
                 CovenantStatusRegister.investment_id == investment_id,
             )
-            .order_by(CovenantStatusRegister.created_at.desc())
-        ).scalars().all()
+            .order_by(CovenantStatusRegister.created_at.desc()),
+        ).scalars().all(),
     )
     covenant_items = [
         CovenantMonitoringItem(
@@ -544,8 +544,8 @@ def get_portfolio_deal_monitoring(
                 InvestmentRiskRegistry.fund_id == fund_id,
                 InvestmentRiskRegistry.investment_id == investment_id,
             )
-            .order_by(InvestmentRiskRegistry.created_at.desc())
-        ).scalars().all()
+            .order_by(InvestmentRiskRegistry.created_at.desc()),
+        ).scalars().all(),
     )
     risk_items = [
         RiskMonitoringItem(
@@ -561,7 +561,7 @@ def get_portfolio_deal_monitoring(
         select(BoardMonitoringBrief).where(
             BoardMonitoringBrief.fund_id == fund_id,
             BoardMonitoringBrief.investment_id == investment_id,
-        )
+        ),
     ).scalar_one_or_none()
     brief_out = (
         PortfolioBriefOut(
@@ -583,7 +583,7 @@ def get_portfolio_deal_monitoring(
             PeriodicReviewReport.investment_id == investment_id,
         )
         .order_by(PeriodicReviewReport.reviewed_at.desc())
-        .limit(1)
+        .limit(1),
     ).scalar_one_or_none()
     latest_review_out = (
         PeriodicReviewOut.model_validate(latest_review_row)
@@ -651,7 +651,7 @@ def get_periodic_review_pdf(
         select(ActiveInvestment).where(
             ActiveInvestment.fund_id == fund_id,
             ActiveInvestment.id == investment_id,
-        )
+        ),
     ).scalar_one_or_none()
     if investment is None:
         raise HTTPException(status_code=404, detail="Active investment not found")
@@ -662,7 +662,7 @@ def get_periodic_review_pdf(
                 PeriodicReviewReport.id == review_id,
                 PeriodicReviewReport.investment_id == investment_id,
                 PeriodicReviewReport.fund_id == fund_id,
-            )
+            ),
         ).scalar_one_or_none()
     else:
         review_row = db.execute(
@@ -672,7 +672,7 @@ def get_periodic_review_pdf(
                 PeriodicReviewReport.investment_id == investment_id,
             )
             .order_by(PeriodicReviewReport.reviewed_at.desc())
-            .limit(1)
+            .limit(1),
         ).scalar_one_or_none()
 
     if not review_row:

@@ -11,8 +11,7 @@ from app.domains.credit.portfolio.enums import ActionStatus
 
 
 class Action(Base):
-    """
-    Execution layer.
+    """Execution layer.
     Every alert requires an action to be resolved with evidence.
 
     IMPORTANT: Actions must never exist without an Alert.

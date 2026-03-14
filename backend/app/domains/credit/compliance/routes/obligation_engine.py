@@ -1,5 +1,4 @@
-"""
-Compliance Obligation Engine — Unified (DB-backed).
+"""Compliance Obligation Engine — Unified (DB-backed).
 
 MIGRATION NOTE (2026-03-07): This router previously used a JSON file store.
 It now delegates to the DB-backed compliance service, making PostgreSQL the
@@ -80,8 +79,8 @@ def list_obligations(
         stmt = stmt.where(Obligation.fund_id == fund_id)
     obligations = list(
         db.execute(
-            stmt.order_by(Obligation.created_at.desc()).limit(limit).offset(offset)
-        ).scalars().all()
+            stmt.order_by(Obligation.created_at.desc()).limit(limit).offset(offset),
+        ).scalars().all(),
     )
     # sa_model_to_dict is the codebase-wide serialization pattern (20+ modules);
     # a Pydantic response_model would add coupling for minimal gain here.
@@ -157,7 +156,7 @@ def seed_obligations(
     effective_fund_id = fund_id or uuid.UUID("00000000-0000-0000-0000-000000000000")
 
     existing = db.execute(
-        select(Obligation).where(Obligation.fund_id == effective_fund_id).limit(1)
+        select(Obligation).where(Obligation.fund_id == effective_fund_id).limit(1),
     ).scalar_one_or_none()
 
     if existing:

@@ -52,8 +52,7 @@ class FoundryResponsesClient:
 
 
 def safe_parse_json_object(text: str) -> dict[str, Any]:
-    """
-    Robustly parse a JSON object from model output (Responses API output_text).
+    """Robustly parse a JSON object from model output (Responses API output_text).
     """
     t = (text or "").strip()
     if t.startswith("```"):

@@ -65,8 +65,8 @@ def list_published_packs(
             select(MonthlyReportPack).where(
                 MonthlyReportPack.fund_id == fund_id,
                 MonthlyReportPack.status == ReportPackStatus.PUBLISHED,
-            ).limit(limit).offset(offset)
-        ).scalars().all()
+            ).limit(limit).offset(offset),
+        ).scalars().all(),
     )
 
     background_tasks.add_task(

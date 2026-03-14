@@ -157,7 +157,7 @@ def upsert_chunks(documents: list[dict[str, Any]]) -> int:
         raise RuntimeError(
             f"Duplicate chunk IDs in batch ({len(duplicates)} collisions). "
             f"First: {duplicates[0]}. Ensure document_id is passed to build_search_document(). "
-            f"Chunk ID format must be {{deal_id}}_{{document_id}}_{{chunk_index}}."
+            f"Chunk ID format must be {{deal_id}}_{{document_id}}_{{chunk_index}}.",
         )
 
     from app.services.azure.search_client import get_search_client
@@ -224,7 +224,7 @@ def search_deal_chunks(
                     vector=query_vector,
                     k_nearest_neighbors=top,
                     fields="embedding",
-                )
+                ),
             ],
         )
 
@@ -274,7 +274,7 @@ def search_fund_policy_chunks(
                     vector=query_vector,
                     k_nearest_neighbors=top,
                     fields="embedding",
-                )
+                ),
             ],
         )
 

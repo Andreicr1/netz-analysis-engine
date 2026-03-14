@@ -1,5 +1,4 @@
-"""
-extraction_orchestrator.py — Cloud-Native Pipeline Orchestrator
+"""extraction_orchestrator.py — Cloud-Native Pipeline Orchestrator
 ================================================================
 Adapted from cu-pdf-prepare/pipeline_azure.py for use as a module
 inside the FastAPI backend on Azure App Service.
@@ -275,7 +274,7 @@ def reset_and_run_indexer(
             logger.info("Indexer complete — %s documents indexed", docs)
             return
         if status in ("transientFailure", "persistentFailure"):
-            logger.warning("Indexer failed: %s", last.get('errorMessage', ''))
+            logger.warning("Indexer failed: %s", last.get("errorMessage", ""))
             return
         time.sleep(interval)
         elapsed += interval
@@ -308,13 +307,13 @@ def _run_stage_a_bootstrap(
     elif extractor == "fund_data_bootstrap":
         from ai_engine.extraction.fund_data_bootstrap import bootstrap_fund_folder
         return bootstrap_fund_folder(
-            item_dir, blob_service, source_cfg["input_container"], item_folder
+            item_dir, blob_service, source_cfg["input_container"], item_folder,
         )
 
     elif extractor == "market_data_bootstrap":
         from ai_engine.extraction.market_data_bootstrap import bootstrap_market_folder
         return bootstrap_market_folder(
-            item_dir, blob_service, source_cfg["input_container"], item_folder
+            item_dir, blob_service, source_cfg["input_container"], item_folder,
         )
 
     else:
@@ -356,7 +355,7 @@ def _post_process_chunks(
             from ai_engine.extraction.fund_data_bootstrap import inject_fund_data_metadata
             logger.info("Injecting fund-data metadata into %d chunks", len(chunks))
             chunks = inject_fund_data_metadata(
-                chunks, blob_stage_a_meta, blob_service, source_cfg["input_container"]
+                chunks, blob_stage_a_meta, blob_service, source_cfg["input_container"],
             )
         if not skip_enrich:
             from ai_engine.extraction.fund_data_enrichment import enrich_fund_data_chunks
@@ -373,16 +372,16 @@ def _post_process_chunks(
         )
         logger.info("Injecting market-data metadata into %d chunks", len(chunks))
         chunks = inject_market_metadata(
-            chunks, blob_stage_a_meta, blob_service, source_cfg["input_container"]
+            chunks, blob_stage_a_meta, blob_service, source_cfg["input_container"],
         )
         if not skip_enrich and blob_stage_a_meta.get("source_type") == "BENCHMARK":
             cache_file = item_dir / "benchmark_enrichment_cache.json"
             chunks = enrich_benchmark_chunks(
-                chunks, gpt_client, cache_path=cache_file
+                chunks, gpt_client, cache_path=cache_file,
             )
 
     cu_chunks_path.write_text(
-        json.dumps(chunks, indent=2, ensure_ascii=False), encoding="utf-8"
+        json.dumps(chunks, indent=2, ensure_ascii=False), encoding="utf-8",
     )
 
 
@@ -428,7 +427,7 @@ def run_item(
             if not skip_bootstrap:
                 stage_a_meta = _run_stage_a_bootstrap(
                     item_dir, item_folder, source_cfg,
-                    blob_service, gpt_client, embed_client, dry_run
+                    blob_service, gpt_client, embed_client, dry_run,
                 )
             else:
                 logger.info("[2/5] Stage A Bootstrap — SKIPPED")
@@ -502,7 +501,7 @@ def run_item(
                     if fpath.exists():
                         upload_file_to_blob(
                             blob_service, container,
-                            f"{item_folder}/{fname}", fpath
+                            f"{item_folder}/{fname}", fpath,
                         )
             else:
                 logger.info("[5/5] Upload — DRY-RUN, skipped")
@@ -531,8 +530,7 @@ def run_extraction_pipeline(
     poll_timeout: int = 600,
     job_id: str | None = None,
 ) -> str:
-    """
-    Run the full extraction pipeline for *source* (or all sources when source=="all").
+    """Run the full extraction pipeline for *source* (or all sources when source=="all").
 
     Parameters
     ----------
@@ -550,6 +548,7 @@ def run_extraction_pipeline(
     Returns
     -------
     str — job_id that can be polled via get_job_status()
+
     """
     if job_id is None:
         job_id = _new_job(source, deals_filter)
@@ -617,13 +616,13 @@ def run_extraction_pipeline(
                 icon = "[OK]" if r["status"] == "ok" else (
                     "[EMPTY]" if r["status"] == "empty" else "[FAIL]"
                 )
-                logger.info("%s %s → status=%s chunks=%d", icon, item, r['status'], r.get('chunks', 0))
+                logger.info("%s %s → status=%s chunks=%d", icon, item, r["status"], r.get("chunks", 0))
 
             # Trigger indexer
             ok_items = [r for r in all_results if r["status"] == "ok"]
             if not no_index and not dry_run and ok_items:
                 reset_and_run_indexer(
-                    source_cfg["indexer"], poll_timeout=poll_timeout
+                    source_cfg["indexer"], poll_timeout=poll_timeout,
                 )
 
         ok    = len([r for r in all_results if r["status"] == "ok"])

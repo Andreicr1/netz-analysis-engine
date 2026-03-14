@@ -52,7 +52,7 @@ def _validate_required(data: dict, fields: list[str], chart_type: str) -> None:
     missing = [f for f in fields if data.get(f) is None]
     if missing:
         raise ValueError(
-            f"chart_renderer.{chart_type}: missing required fields: {missing}"
+            f"chart_renderer.{chart_type}: missing required fields: {missing}",
         )
 
 
@@ -74,6 +74,7 @@ def render_waterfall(data: dict[str, Any]) -> BytesIO:
 
     Raises:
         ValueError if required fields are missing or values are implausible.
+
     """
     import matplotlib.pyplot as plt  # lazy — ensures MPLBACKEND env var is already set
 
@@ -148,6 +149,7 @@ def render_radar(data: dict[str, Any]) -> BytesIO:
 
     Raises:
         ValueError if axes/scores length != 6 or any score is outside [0, 10].
+
     """
     import matplotlib.pyplot as plt  # lazy import
     import numpy as np
@@ -161,11 +163,11 @@ def render_radar(data: dict[str, Any]) -> BytesIO:
     if len(axes) != 6 or len(scores) != 6:
         raise ValueError(
             f"chart_renderer.radar: axes and scores must each have exactly 6 elements "
-            f"(got axes={len(axes)}, scores={len(scores)})"
+            f"(got axes={len(axes)}, scores={len(scores)})",
         )
     if any(s < 0 or s > 10 for s in scores):
         raise ValueError(
-            f"chart_renderer.radar: all scores must be in [0, 10] (got {scores})"
+            f"chart_renderer.radar: all scores must be in [0, 10] (got {scores})",
         )
 
     # Polar coordinates
@@ -234,12 +236,13 @@ def render_heatmap(data: dict[str, Any]) -> BytesIO:
 
     Raises:
         ValueError if matrix shape doesn't match row_values × col_values.
+
     """
     import matplotlib.pyplot as plt  # lazy import
     import numpy as np
 
     _validate_required(
-        data, ["row_label", "col_label", "row_values", "col_values", "matrix"], "heatmap"
+        data, ["row_label", "col_label", "row_values", "col_values", "matrix"], "heatmap",
     )
 
     row_label  = str(data["row_label"])
@@ -256,7 +259,7 @@ def render_heatmap(data: dict[str, Any]) -> BytesIO:
     if len(matrix) != n_rows or any(len(r) != n_cols for r in matrix):
         raise ValueError(
             f"chart_renderer.heatmap: matrix shape must be "
-            f"{n_rows}×{n_cols} (row_values × col_values) — got {len(matrix)} rows"
+            f"{n_rows}×{n_cols} (row_values × col_values) — got {len(matrix)} rows",
         )
 
     mat = np.array(matrix)
@@ -306,12 +309,13 @@ def render_chart(chart_type: str, data: dict[str, Any]) -> BytesIO:
 
     Raises:
         ValueError: if chart_type is unknown or data is invalid.
+
     """
     fn = _RENDER_FN.get(chart_type)
     if fn is None:
         raise ValueError(
             f"chart_renderer: unknown chart type '{chart_type}'. "
-            f"Supported: {list(_RENDER_FN.keys())}"
+            f"Supported: {list(_RENDER_FN.keys())}",
         )
     return fn(data)
 

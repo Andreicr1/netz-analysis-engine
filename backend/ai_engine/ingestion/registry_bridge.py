@@ -77,10 +77,10 @@ def bridge_registry_to_deal_documents(
             select(DocumentRegistry).where(
                 DocumentRegistry.fund_id == fund_id,
                 DocumentRegistry.container_name == PIPELINE_CONTAINER,
-            )
+            ),
         )
         .scalars()
-        .all()
+        .all(),
     )
     result.registry_rows_scanned = len(registry_rows)
 

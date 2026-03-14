@@ -56,7 +56,7 @@ class CallOpenAiFn(Protocol):
     """Structural type for the OpenAI completion callback."""
 
     def __call__(
-        self, system_prompt: str, user_content: str, *, max_tokens: int = ..., model: str | None = ...
+        self, system_prompt: str, user_content: str, *, max_tokens: int = ..., model: str | None = ...,
     ) -> dict[str, Any]: ...
 
 
@@ -137,7 +137,7 @@ def _persist_chapter(
             MemoChapter.chapter_number == ch_num,
             MemoChapter.is_current == True,  # noqa: E712
         )
-        .values(is_current=False)
+        .values(is_current=False),
     )
 
     chapter_row = MemoChapter(
@@ -211,6 +211,7 @@ def generate_memo_book(
             "chaptersGenerated": int,
             "chaptersFromCache": int,
         }
+
     """
     from ai_engine.governance.artifact_cache import load_cached_chapter
 
@@ -385,7 +386,7 @@ def generate_memo_book(
                     user_content=prepared["user_content"],
                     model=pending["ch_model"],
                     max_tokens=prepared["max_tokens"],
-                )
+                ),
             )
 
         # 2. Submit batch
@@ -495,7 +496,7 @@ def generate_memo_book(
                 )
 
                 section_text = chapter_result.get("section_text", "")
-                section_texts_map[pending['ch_num']] = (
+                section_texts_map[pending["ch_num"]] = (
                     f"## {pending['ch_num']}. {pending['ch_title']}\n\n{section_text}"
                 )
 

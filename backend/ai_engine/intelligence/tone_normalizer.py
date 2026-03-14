@@ -1,5 +1,4 @@
-"""
-Tone Normalizer Agent — Netz Private Credit OS
+"""Tone Normalizer Agent — Netz Private Credit OS
 ===============================================
 
 Two-pass post-processing for IC memo quality:
@@ -263,6 +262,7 @@ async def run_tone_normalizer(
     Returns
     -------
     dict matching ToneReviewResult schema.
+
     """
     if not chapter_texts:
         logger.warning("TONE_NORMALIZER: no chapter_texts provided — skipping")

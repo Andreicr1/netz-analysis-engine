@@ -1,5 +1,4 @@
-"""
-Batch API Client — Netz Private Credit OS
+"""Batch API Client — Netz Private Credit OS
 ==========================================
 
 OpenAI Batch API support for deep review chapter generation.
@@ -94,6 +93,7 @@ def submit_chapter_batch(
     -------
     str
         The batch ID for polling.
+
     """
     client = _get_batch_client()
 
@@ -158,6 +158,7 @@ def poll_batch(
         If the batch doesn't complete within the timeout.
     RuntimeError
         If the batch fails or is cancelled.
+
     """
     client = _get_batch_client()
     start = time.monotonic()
@@ -196,14 +197,14 @@ def poll_batch(
                     for e in batch.errors.data[:5]
                 ]
             raise RuntimeError(
-                f"Batch {batch_id} {status}: {errors}"
+                f"Batch {batch_id} {status}: {errors}",
             )
 
         elapsed = time.monotonic() - start
         if elapsed > timeout:
             raise TimeoutError(
                 f"Batch {batch_id} still {status} after {elapsed:.0f}s "
-                f"(timeout={timeout}s)"
+                f"(timeout={timeout}s)",
             )
 
         time.sleep(interval)
@@ -223,6 +224,7 @@ def parse_batch_results(batch_result: dict[str, Any]) -> dict[str, dict[str, Any
     dict[str, dict]
         Mapping of custom_id → parsed JSON response body.
         Failed requests have an "error" key instead of parsed content.
+
     """
     client = _get_batch_client()
 
@@ -263,12 +265,12 @@ def parse_batch_results(batch_result: dict[str, Any]) -> dict[str, dict[str, Any
                 results[custom_id] = parsed
             except json.JSONDecodeError:
                 results[custom_id] = {
-                    "error": f"Invalid JSON in batch response: {output_text[:200]}"
+                    "error": f"Invalid JSON in batch response: {output_text[:200]}",
                 }
         else:
             error_body = response.get("body", {})
             results[custom_id] = {
-                "error": f"HTTP {status_code}: {json.dumps(error_body, default=str)[:300]}"
+                "error": f"HTTP {status_code}: {json.dumps(error_body, default=str)[:300]}",
             }
 
     logger.info(
@@ -290,7 +292,7 @@ def parse_batch_results(batch_result: dict[str, Any]) -> dict[str, dict[str, Any
                 custom_id = entry.get("custom_id", "unknown")
                 if custom_id not in results:
                     results[custom_id] = {
-                        "error": json.dumps(entry.get("error", {}), default=str)[:300]
+                        "error": json.dumps(entry.get("error", {}), default=str)[:300],
                     }
         except Exception as exc:
             logger.warning("BATCH_ERROR_FILE_PARSE_FAILED: %s", exc)

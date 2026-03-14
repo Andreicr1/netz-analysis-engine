@@ -35,7 +35,7 @@ def attach_fund_investment(
     actor=Depends(require_role(["ADMIN", "INVESTMENT_TEAM"])),
 ):
     asset = db.execute(
-        select(PortfolioAsset).where(PortfolioAsset.id == asset_id, PortfolioAsset.fund_id == fund_id)
+        select(PortfolioAsset).where(PortfolioAsset.id == asset_id, PortfolioAsset.fund_id == fund_id),
     ).scalar_one_or_none()
 
     if not asset:
@@ -107,7 +107,7 @@ def get_fund_investment(
     fi = db.execute(
         select(FundInvestment)
         .join(PortfolioAsset, PortfolioAsset.id == FundInvestment.asset_id)
-        .where(PortfolioAsset.fund_id == fund_id, FundInvestment.asset_id == asset_id)
+        .where(PortfolioAsset.fund_id == fund_id, FundInvestment.asset_id == asset_id),
     ).scalar_one_or_none()
 
     if not fi:

@@ -145,8 +145,8 @@ _GOING_CONCERN_KEYWORDS = [
 def _normalize_light(name: str) -> str:
     """Lowercase + collapse punctuation/spaces. Preserves all meaningful words."""
     n = name.lower()
-    n = re.sub(r'[^\w\s]', ' ', n)
-    n = re.sub(r'\s+', ' ', n).strip()
+    n = re.sub(r"[^\w\s]", " ", n)
+    n = re.sub(r"\s+", " ", n).strip()
     return n
 
 
@@ -158,10 +158,10 @@ def _normalize_heavy(name: str) -> str:
     """
     n = _normalize_light(name)
     n = re.sub(
-        r'\b(incorporated|corporation|inc|llc|corp|ltd|limited|lp|llp|plc|the)\b',
-        ' ', n,
+        r"\b(incorporated|corporation|inc|llc|corp|ltd|limited|lp|llp|plc|the)\b",
+        " ", n,
     )
-    n = re.sub(r'\s+', ' ', n).strip()
+    n = re.sub(r"\s+", " ", n).strip()
     return n
 
 
@@ -1256,6 +1256,7 @@ def fetch_edgar_multi_entity(
             "entities_found":  int,
             "combined_warnings": List[str],
         }
+
     """
     results: list[dict[str, Any]] = []
     seen_ciks: set[str] = set()
@@ -1287,7 +1288,7 @@ def fetch_edgar_multi_entity(
             for existing in results:
                 if existing.get("cik") == cik:
                     existing.setdefault("also_matched_as", []).append(
-                        {"name": name, "role": role}
+                        {"name": name, "role": role},
                     )
                     break
             continue
@@ -1425,7 +1426,7 @@ def build_edgar_multi_entity_context(
         ])
         sections.append(
             f"Deal name: {deal_name or 'N/A'} "
-            f"(identified as sponsor/manager — not the investment vehicle)"
+            f"(identified as sponsor/manager — not the investment vehicle)",
         )
     else:
         sections.append(f"Target vehicle under analysis: {target_label}")
@@ -1500,7 +1501,7 @@ def build_edgar_multi_entity_context(
             else:
                 sections.append(
                     f"  ⚠ GOING CONCERN DETECTED in {name} ⚠ — "
-                    f"this is a RELATED entity; assess contagion risk to {target_label}"
+                    f"this is a RELATED entity; assess contagion risk to {target_label}",
                 )
         elif gc is False:
             sections.append("  Going concern: Not detected")
@@ -1513,11 +1514,11 @@ def build_edgar_multi_entity_context(
                 sections.append("  XBRL Metrics (DIRECT TARGET — may use for underwriting):")
             else:
                 sections.append(
-                    f"  XBRL Metrics (\u26a0 belong to {name}, NOT to {target_label}):"
+                    f"  XBRL Metrics (\u26a0 belong to {name}, NOT to {target_label}):",
                 )
                 sections.append(
                     f"  \u26a0 USE ONLY for manager platform assessment — do NOT treat "
-                    f"as {target_label} metrics."
+                    f"as {target_label} metrics.",
                 )
             if metrics_type == "BDC_REIT":
                 if "total_assets_usd" in metrics:
@@ -1548,7 +1549,7 @@ def build_edgar_multi_entity_context(
         if form_d:
             sections.append(
                 f"  Form D: filed {form_d.get('filing_date', 'n/a')} "
-                f"— {form_d.get('entity_name', 'n/a')}"
+                f"— {form_d.get('entity_name', 'n/a')}",
             )
 
         sections.append("")  # blank line between entities

@@ -144,7 +144,7 @@ def evaluate_retrieval_layer(
             score=coverage_score,
             actual=coverage_status,
             expected="SATURATED|COMPLETE",
-        )
+        ),
     )
 
     unique_docs = int(chapter_audit.get("unique_docs", 0) or 0)
@@ -156,7 +156,7 @@ def evaluate_retrieval_layer(
             score=diversity_score,
             actual=unique_docs,
             expected=">=4 unique docs",
-        )
+        ),
     )
 
     actual_doc_types = {str(v).upper() for v in (chapter_audit.get("doc_types", []) or []) if v}
@@ -171,7 +171,7 @@ def evaluate_retrieval_layer(
             actual=sorted(actual_doc_types),
             expected=sorted(expected_doc_types),
             details={"overlap": overlap},
-        )
+        ),
     )
 
     chunk_count = int(chapter_audit.get("chunk_count", 0) or 0)
@@ -184,7 +184,7 @@ def evaluate_retrieval_layer(
             score=chunk_score,
             actual=chunk_count,
             expected=f"{min_chunks}-30 chunks",
-        )
+        ),
     )
 
     recency = recency_analysis(_build_recency_proxies(evidence_pack))
@@ -197,7 +197,7 @@ def evaluate_retrieval_layer(
             actual=recency.get("mixed_revisions", False),
             expected=False,
             details=recency,
-        )
+        ),
     )
 
     if chapter_tag in NUMERIC_DENSE_CHAPTERS:
@@ -210,7 +210,7 @@ def evaluate_retrieval_layer(
                 score=numeric_score,
                 actual=number_count,
                 expected=">=8 numeric tokens",
-            )
+            ),
         )
     else:
         metrics.append(
@@ -221,7 +221,7 @@ def evaluate_retrieval_layer(
                 actual=None,
                 expected=None,
                 reason="Numeric density is not gating for this chapter.",
-            )
+            ),
         )
 
     return _finalise_layer("layer1", metrics)
@@ -258,7 +258,7 @@ def evaluate_grounding_layer(
                 actual=cross.get("overall_status"),
                 expected="CONFIRMED|NO_CRITICAL_CLAIMS",
                 details=cross,
-            )
+            ),
         )
     else:
         metrics.append(
@@ -267,7 +267,7 @@ def evaluate_grounding_layer(
                 status=MetricStatus.DATA_ISSUE,
                 score=0.0,
                 reason="No chapter-level citations/excerpts available for cross-validation.",
-            )
+            ),
         )
 
     citation_count = len(chapter_citations)
@@ -279,7 +279,7 @@ def evaluate_grounding_layer(
             score=citation_score,
             actual=citation_count,
             expected=">=1 citation for grounded chapters",
-        )
+        ),
     )
 
     attr_score, attr_reason = _entity_attribution_score(chapter_text)
@@ -289,7 +289,7 @@ def evaluate_grounding_layer(
             status=_status_from_score(attr_score, warn_floor=0.6),
             score=attr_score,
             reason=attr_reason,
-        )
+        ),
     )
 
     if citation_count > 0:
@@ -303,7 +303,7 @@ def evaluate_grounding_layer(
                 score=ungrounded_score,
                 actual=round(ungrounded_rate, 4),
                 expected="<=0.40",
-            )
+            ),
         )
     else:
         metrics.append(
@@ -312,7 +312,7 @@ def evaluate_grounding_layer(
                 status=MetricStatus.DATA_ISSUE,
                 score=0.0,
                 reason="No chapter-level citations available to estimate grounding coverage.",
-            )
+            ),
         )
 
     fabrication_detected = bool(citation_governance.get("unsupported_claims_detected"))
@@ -324,7 +324,7 @@ def evaluate_grounding_layer(
             score=fabrication_score,
             actual=fabrication_detected,
             expected=False,
-        )
+        ),
     )
 
     return _finalise_layer("layer2", metrics)
@@ -390,7 +390,7 @@ def evaluate_decision_integrity_layer(
             expected=expected_pre_tone if expected_pre_tone >= 0 else None,
             details={"recomputed": recomputed, "stored_breakdown": confidence_breakdown},
             reason="" if expected_pre_tone >= 0 else "Pre-tone confidence score missing from evidence pack.",
-        )
+        ),
     )
 
     caps = set(evidence_pack.get("confidence_caps_applied", []) or [])
@@ -403,7 +403,7 @@ def evaluate_decision_integrity_layer(
             score=1.0 if hard_cap_ok else 0.0,
             actual=sorted(caps),
             expected="Hard policy breach cap present when hard breaches exist",
-        )
+        ),
     )
 
     post_tone = int((artifact.get("critic_findings", {}) or {}).get("confidence_score_deterministic") or evidence_pack.get("confidence_score", 0) or 0)
@@ -415,7 +415,7 @@ def evaluate_decision_integrity_layer(
             score=1.0 if tone_invariant_ok else 0.0,
             actual=post_tone,
             expected=f"<= {expected_pre_tone}" if expected_pre_tone >= 0 else None,
-        )
+        ),
     )
 
     fatal_flaws = critic_output.get("fatal_flaws", []) or []
@@ -427,7 +427,7 @@ def evaluate_decision_integrity_layer(
             score=1.0 if fatal_override_ok else 0.0,
             actual=len(fatal_flaws),
             expected="post-tone score <= 40 when fatal flaws exist",
-        )
+        ),
     )
 
     decision_anchor = evidence_pack.get("decision_anchor", {}) or {}
@@ -442,7 +442,7 @@ def evaluate_decision_integrity_layer(
                 score=1.0 if aligned else 0.0,
                 actual=chapter_recommendation,
                 expected=expected_decision,
-            )
+            ),
         )
     else:
         metrics.append(
@@ -451,7 +451,7 @@ def evaluate_decision_integrity_layer(
                 status=MetricStatus.NOT_APPLICABLE if chapter_tag != CH13_TAG else MetricStatus.DATA_ISSUE,
                 score=1.0 if chapter_tag != CH13_TAG else 0.0,
                 reason="Decision-anchor alignment is chapter-13 specific.",
-            )
+            ),
         )
 
     idempotent = _check_idempotency(
@@ -470,7 +470,7 @@ def evaluate_decision_integrity_layer(
             score=1.0 if idempotent else 0.0,
             actual=idempotent,
             expected=True,
-        )
+        ),
     )
 
     blocker_class = _classify_blocker(decision_anchor, critic_output, hard_checks)
@@ -481,7 +481,7 @@ def evaluate_decision_integrity_layer(
             score=1.0 if blocker_class != "UNKNOWN" else 0.5,
             actual=blocker_class,
             expected="Known blocker class",
-        )
+        ),
     )
 
     return _finalise_layer("layer3", metrics)
@@ -522,7 +522,7 @@ def _build_recency_proxies(evidence_pack: dict[str, Any]) -> list[EvidenceChunkP
                 chunk_text="",
                 source_blob=str(cit.get("blob_name", "")),
                 last_modified=str(cit.get("last_modified")) if cit.get("last_modified") else None,
-            )
+            ),
         )
     return proxies
 
@@ -537,7 +537,7 @@ def _build_grounding_proxies(chapter_citations: list[dict[str, Any]]) -> list[Ev
                 chunk_text=text,
                 source_blob=str(cit.get("source_name") or cit.get("blob_name") or ""),
                 last_modified=str(cit.get("last_modified")) if cit.get("last_modified") else None,
-            )
+            ),
         )
     return proxies
 
@@ -619,7 +619,7 @@ def _check_idempotency(
                 critic_output=critic_output,
                 quant_profile=quant_profile,
                 evidence_pack_meta=evidence_pack_meta,
-            )
+            ),
         )
     serialised = [str(result) for result in results]
     return all(item == serialised[0] for item in serialised)

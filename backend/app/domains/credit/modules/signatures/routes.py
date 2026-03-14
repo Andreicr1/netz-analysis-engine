@@ -54,8 +54,8 @@ def list_signature_requests(
                 Role.INVESTMENT_TEAM,
                 Role.AUDITOR,
                 Role.ADMIN,
-            ]
-        )
+            ],
+        ),
     ),
 ) -> Page[SignatureRequestOut]:
     items = service.list_requests(db, fund_id=fund_id, limit=limit, offset=offset)
@@ -76,21 +76,21 @@ def get_signature_request(
                 Role.INVESTMENT_TEAM,
                 Role.AUDITOR,
                 Role.ADMIN,
-            ]
-        )
+            ],
+        ),
     ),
 ) -> SignatureRequestDetailOut:
     tx = db.execute(
         select(CashTransaction).where(
-            CashTransaction.fund_id == fund_id, CashTransaction.id == request_id
-        )
+            CashTransaction.fund_id == fund_id, CashTransaction.id == request_id,
+        ),
     ).scalar_one_or_none()
     if not tx:
         # Keep error consistent with service.sign/reject
         from fastapi import HTTPException, status
 
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Signature request not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Signature request not found",
         )
 
     out = service.build_detail(db, fund_id=fund_id, tx=tx)
@@ -108,7 +108,7 @@ def sign_request(
     _role_guard: Actor = Depends(require_roles([Role.DIRECTOR, Role.ADMIN])),
 ) -> SignatureRequestDetailOut:
     out = service.sign(
-        db, fund_id=fund_id, actor=actor, tx_id=request_id, comment=payload.comment
+        db, fund_id=fund_id, actor=actor, tx_id=request_id, comment=payload.comment,
     )
     return SignatureRequestDetailOut(**out)
 
@@ -124,7 +124,7 @@ def reject_request(
     _role_guard: Actor = Depends(require_roles([Role.DIRECTOR, Role.ADMIN])),
 ) -> SignatureRequestDetailOut:
     out = service.reject(
-        db, fund_id=fund_id, actor=actor, tx_id=request_id, reason=payload.reason
+        db, fund_id=fund_id, actor=actor, tx_id=request_id, reason=payload.reason,
     )
     return SignatureRequestDetailOut(**out)
 
@@ -137,16 +137,16 @@ def execution_pack(
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
     _role_guard: Actor = Depends(
-        require_roles([Role.DIRECTOR, Role.GP, Role.COMPLIANCE, Role.ADMIN])
+        require_roles([Role.DIRECTOR, Role.GP, Role.COMPLIANCE, Role.ADMIN]),
     ),
 ) -> dict:
     return service.generate_execution_pack(
-        db, fund_id=fund_id, actor=actor, tx_id=request_id
+        db, fund_id=fund_id, actor=actor, tx_id=request_id,
     )
 
 
 @router.post(
-    "/{request_id}/send-for-esignature", response_model=SendForESignatureResponse
+    "/{request_id}/send-for-esignature", response_model=SendForESignatureResponse,
 )
 def send_for_esignature(
     fund_id: uuid.UUID,

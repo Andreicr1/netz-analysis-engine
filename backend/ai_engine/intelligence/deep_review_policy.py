@@ -131,7 +131,7 @@ def _gather_policy_context(
         total += len(snippet)
 
     logger.info(
-        "POLICY_RAG_COMPLETE fund=%s chunks=%d chars=%d", f_id, len(policy_hits), total
+        "POLICY_RAG_COMPLETE fund=%s chunks=%d chars=%d", f_id, len(policy_hits), total,
     )
     return "\n\n".join(parts)
 
@@ -164,6 +164,7 @@ def _run_hard_policy_checks(
             "has_hard_breaches": bool,
             "policy_source": dict,  # audit trail of threshold sources
         }
+
     """
     from ai_engine.governance.policy_loader import load_policy_thresholds
 
@@ -189,17 +190,17 @@ def _run_hard_policy_checks(
                     "observed": weight,
                     "detail": f"Manager '{bucket.get('name', 'Unknown')}' at {weight}% exceeds {manager_limit}% limit",
                     "requires_board_override": True,
-                }
+                },
             )
 
     # ── 2. Single investment size ────────────────────────────────
     total_exposure = concentration_dict.get(
-        "total_exposure_usd"
+        "total_exposure_usd",
     ) or concentration_dict.get("total_nav_usd", 0.0)
     requested_amount = deal_fields.get("requested_amount") or 0.0
     if total_exposure > 0 and requested_amount > 0:
         deal_exposure_pct = round(
-            (requested_amount / (total_exposure + requested_amount)) * 100.0, 2
+            (requested_amount / (total_exposure + requested_amount)) * 100.0, 2,
         )
         if deal_exposure_pct > deal_limit:
             breaches.append(
@@ -210,7 +211,7 @@ def _run_hard_policy_checks(
                     "observed": deal_exposure_pct,
                     "detail": f"Deal at {deal_exposure_pct}% of portfolio exceeds {deal_limit}% limit",
                     "requires_board_override": True,
-                }
+                },
             )
 
     # ── 3. Non-USD exposure unhedged ─────────────────────────────
@@ -232,7 +233,7 @@ def _run_hard_policy_checks(
                 "observed": currency,
                 "detail": f"Deal denominated in {currency} with no hedge identified",
                 "requires_board_override": True,
-            }
+            },
         )
 
     # ── 4. Illiquidity lock-up > max_lockup_years ────────────────
@@ -267,7 +268,7 @@ def _run_hard_policy_checks(
                 "observed": lockup_years,
                 "detail": f"Lock-up of {lockup_years} years exceeds {lockup_limit}-year limit",
                 "requires_board_override": True,
-            }
+            },
         )
 
     has_hard_breaches = len(breaches) > 0
@@ -459,6 +460,7 @@ def _compute_decision_anchor(
     Returns:
         dict with keys: finalDecision, decisionRationale,
         policyStatus, confirmedFatalFlaws, hardBreaches, icGate.
+
     """
 
     _critic = critic_dict or {}
@@ -636,7 +638,7 @@ def _compute_confidence_score(
         evidence_confidence = min(evidence_confidence, 0.35)
 
     conc_board_override: bool = bool(
-        concentration_dict.get("requires_board_override", False)
+        concentration_dict.get("requires_board_override", False),
     )
     if conc_board_override:
         evidence_confidence = min(evidence_confidence, 0.25)
@@ -660,7 +662,7 @@ def _compute_confidence_score(
     if hard_breaches:
         breach_labels = ", ".join(b.get("limit", "?") for b in hard_breaches[:3])
         blocked_reasons.append(
-            f"{len(hard_breaches)} hard policy breach(es): {breach_labels}"
+            f"{len(hard_breaches)} hard policy breach(es): {breach_labels}",
         )
     if conc_board_override:
         blocked_reasons.append("concentration requires board override")
@@ -674,7 +676,7 @@ def _compute_confidence_score(
             conditional_reasons.append("policy compliance is CONDITIONAL")
         if conc_any_breach and not conc_board_override:
             conditional_reasons.append(
-                "concentration limit breach (no board override required)"
+                "concentration limit breach (no board override required)",
             )
         if quant_status == "INSUFFICIENT_DATA":
             conditional_reasons.append("insufficient quantitative data")

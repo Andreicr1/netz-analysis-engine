@@ -12,8 +12,7 @@ from app.domains.credit.deals.enums import DealStage, DealType, RejectionCode
 
 
 class Deal(Base):
-    """
-    Canonical record of every opportunity ever reviewed.
+    """Canonical record of every opportunity ever reviewed.
     Deals are never deleted, even if rejected.
     """
 

@@ -129,6 +129,7 @@ def list_blobs_in_container(container_name: str) -> list[BlobDescriptor]:
 
     Returns:
         Sorted list of BlobDescriptor for supported file types.
+
     """
     from app.services.azure.blob_client import get_blob_service_client
 
@@ -228,6 +229,7 @@ def chunk_text(pages: list[PageInput]) -> list[Chunk]:
 
     Returns:
         List of Chunk dicts (chunk_index, page_start, page_end, content).
+
     """
     from ai_engine.extraction.chunking import chunk_document
 
@@ -315,6 +317,7 @@ def ingest_single_blob(
 
     Returns:
         IngestResult with chunk count or error details.
+
     """
     from ai_engine.extraction.embedding_service import generate_embeddings
     from ai_engine.extraction.search_upsert_service import upsert_chunks
@@ -370,7 +373,7 @@ def ingest_single_blob(
     search_docs: list[dict[str, Any]] = []
     for chunk, vector in zip(chunks, emb_batch.vectors, strict=False):
         chunk_id = compute_chunk_id(
-            descriptor.container, descriptor.blob_path, chunk["chunk_index"]
+            descriptor.container, descriptor.blob_path, chunk["chunk_index"],
         )
         doc = _build_knowledge_search_document(
             chunk_id=chunk_id,
@@ -430,6 +433,7 @@ def run_knowledge_ingest(
 
     Returns:
         KnowledgeIngestReport with per-blob results and totals.
+
     """
     target_containers = containers or list(KNOWLEDGE_CONTAINERS.keys())
 
@@ -438,7 +442,7 @@ def run_knowledge_ingest(
         if c not in KNOWLEDGE_CONTAINERS:
             raise ValueError(
                 f"Unknown knowledge container '{c}'. "
-                f"Valid: {sorted(KNOWLEDGE_CONTAINERS.keys())}"
+                f"Valid: {sorted(KNOWLEDGE_CONTAINERS.keys())}",
             )
 
     report = KnowledgeIngestReport(

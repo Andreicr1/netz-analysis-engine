@@ -209,7 +209,7 @@ async def upload_deal_document(
         select(DealDocument).where(
             DealDocument.deal_id == deal_id,
             DealDocument.blob_path == blob_name,
-        )
+        ),
     ).scalar_one_or_none()
 
     if existing_doc:

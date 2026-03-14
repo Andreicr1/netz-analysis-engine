@@ -1,5 +1,4 @@
-"""
-Azure AI Search adapter for the global-vector-chunks-v4 index.
+"""Azure AI Search adapter for the global-vector-chunks-v4 index.
 Mirrors AzureComplianceKBAdapter but targets the pipeline deal chunks index.
 """
 from __future__ import annotations
@@ -29,8 +28,7 @@ _OVERVIEW_PATTERNS = re.compile(
 
 
 class PipelineKBAdapter:
-    """
-    Retrieves chunks from global-vector-chunks-v4 in Azure AI Search.
+    """Retrieves chunks from global-vector-chunks-v4 in Azure AI Search.
     Results are mapped to ComplianceChunk so the global agent can merge
     pipeline evidence with compliance evidence seamlessly.
     """
@@ -41,8 +39,7 @@ class PipelineKBAdapter:
         deal_folder: str | None = None,
         top: int = 20,
     ) -> list[ComplianceChunk]:
-        """
-        Full-text search against global-vector-chunks-v4.
+        """Full-text search against global-vector-chunks-v4.
 
         For overview questions (pipeline summary, all deals, etc.), performs
         a broad wildcard search and ensures diverse deal coverage by
@@ -61,6 +58,7 @@ class PipelineKBAdapter:
         -------
         list[ComplianceChunk]
             Sorted by search_score descending.
+
         """
         from app.services.azure.search_client import get_search_client
 
@@ -99,7 +97,7 @@ class PipelineKBAdapter:
 
 
 def _standard_search(
-    client, query: str, top: int, odata_filter: str | None
+    client, query: str, top: int, odata_filter: str | None,
 ) -> list[ComplianceChunk]:
     """Normal targeted search."""
     results = client.search(
@@ -111,8 +109,7 @@ def _standard_search(
 
 
 def _overview_search(client, query: str, top: int) -> list[ComplianceChunk]:
-    """
-    Broad search that ensures coverage of all deals in the index.
+    """Broad search that ensures coverage of all deals in the index.
 
     Strategy: fetch a large result set with a generic query, then
     pick the best chunks from each unique deal_folder to ensure

@@ -120,7 +120,7 @@ def scan_document_registry(
                 select(DocumentRegistry).where(
                     DocumentRegistry.fund_id == fund_id,
                     DocumentRegistry.container_name == container_name,
-                )
+                ),
             ).scalars().all()
         }
 

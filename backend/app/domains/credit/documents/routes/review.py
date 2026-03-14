@@ -105,7 +105,7 @@ def submit_for_review(
     now = datetime.now(UTC)
 
     document_exists = db.execute(
-        select(Document.id).where(Document.id == payload.document_id, Document.fund_id == fund_id)
+        select(Document.id).where(Document.id == payload.document_id, Document.fund_id == fund_id),
     ).scalar_one_or_none()
     if document_exists is None:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -116,7 +116,7 @@ def submit_for_review(
                 DocumentVersion.id == payload.document_version_id,
                 DocumentVersion.document_id == payload.document_id,
                 DocumentVersion.fund_id == fund_id,
-            )
+            ),
         ).scalar_one_or_none()
         if version_exists is None:
             raise HTTPException(status_code=404, detail="Document version not found")
@@ -189,8 +189,8 @@ def list_reviews(
     total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar() or 0
     rows = list(
         db.execute(
-            stmt.order_by(DocumentReview.submitted_at.desc()).limit(limit).offset(offset)
-        ).scalars().all()
+            stmt.order_by(DocumentReview.submitted_at.desc()).limit(limit).offset(offset),
+        ).scalars().all(),
     )
 
     return {"total": total, "reviews": [_review_to_dict(r) for r in rows]}
@@ -230,8 +230,8 @@ def review_summary(
         db.execute(
             select(DocumentReview.status, func.count(DocumentReview.id))
             .where(DocumentReview.fund_id == fund_id)
-            .group_by(DocumentReview.status)
-        ).all()
+            .group_by(DocumentReview.status),
+        ).all(),
     )
     counts = {s.value: 0 for s in ReviewStatus}
     for status_val, cnt in rows:
@@ -261,16 +261,16 @@ def get_review_detail(
         db.execute(
             select(ReviewAssignment)
             .where(ReviewAssignment.review_id == review_id)
-            .order_by(ReviewAssignment.round_number, ReviewAssignment.created_at)
-        ).scalars().all()
+            .order_by(ReviewAssignment.round_number, ReviewAssignment.created_at),
+        ).scalars().all(),
     )
 
     events = list(
         db.execute(
             select(ReviewEvent)
             .where(ReviewEvent.review_id == review_id)
-            .order_by(ReviewEvent.created_at.asc())
-        ).scalars().all()
+            .order_by(ReviewEvent.created_at.asc()),
+        ).scalars().all(),
     )
 
     checklist_items = _get_checklist_items(db, review_id)
@@ -389,7 +389,7 @@ def submit_decision(
             ReviewAssignment.reviewer_actor_id == actor.actor_id,
             ReviewAssignment.round_number == review.current_round,
             ReviewAssignment.decision.is_(None),
-        )
+        ),
     ).scalar_one_or_none()
 
     if not assignment:
@@ -564,7 +564,7 @@ def trigger_ai_analysis(
         analysis_db = async_session_factory()
         try:
             r = analysis_db.execute(
-                select(DocumentReview).where(DocumentReview.id == review_id)
+                select(DocumentReview).where(DocumentReview.id == review_id),
             ).scalar_one()
             stats = analyze_review_checklist(analysis_db, review=r, fund_id=fund_id)
 
@@ -658,7 +658,7 @@ def check_item(
         select(ReviewChecklistItem).where(
             ReviewChecklistItem.id == item_id,
             ReviewChecklistItem.review_id == review_id,
-        )
+        ),
     ).scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Checklist item not found")
@@ -695,7 +695,7 @@ def uncheck_item(
         select(ReviewChecklistItem).where(
             ReviewChecklistItem.id == item_id,
             ReviewChecklistItem.review_id == review_id,
-        )
+        ),
     ).scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Checklist item not found")
@@ -720,7 +720,7 @@ def _get_review(db: Session, fund_id: uuid.UUID, review_id: uuid.UUID) -> Docume
     review = db.execute(
         select(DocumentReview).where(
             DocumentReview.id == review_id, DocumentReview.fund_id == fund_id,
-        )
+        ),
     ).scalar_one_or_none()
     if not review:
         raise HTTPException(status_code=404, detail="Document review not found")
@@ -752,8 +752,8 @@ def _evaluate_review_outcome(db: Session, review: DocumentReview) -> None:
                 ReviewAssignment.review_id == review.id,
                 ReviewAssignment.round_number == review.current_round,
                 ReviewAssignment.is_required.is_(True),
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
 
     if not assignments:
@@ -808,8 +808,8 @@ def _get_checklist_items(db: Session, review_id: uuid.UUID) -> list[ReviewCheckl
         db.execute(
             select(ReviewChecklistItem)
             .where(ReviewChecklistItem.review_id == review_id)
-            .order_by(ReviewChecklistItem.sort_order)
-        ).scalars().all()
+            .order_by(ReviewChecklistItem.sort_order),
+        ).scalars().all(),
     )
 
 
@@ -821,8 +821,8 @@ def _get_unchecked_required_items(db: Session, review_id: uuid.UUID) -> list[Rev
                 ReviewChecklistItem.is_required.is_(True),
                 ReviewChecklistItem.is_checked.is_(False),
             )
-            .order_by(ReviewChecklistItem.sort_order)
-        ).scalars().all()
+            .order_by(ReviewChecklistItem.sort_order),
+        ).scalars().all(),
     )
 
 

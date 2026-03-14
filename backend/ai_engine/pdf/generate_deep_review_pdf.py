@@ -21,7 +21,7 @@ import logging
 import os
 import re
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from io import BytesIO
 from typing import Any
 
@@ -69,6 +69,8 @@ def _load_review_data(
 ) -> dict:
     """Load all deep review artefacts from Postgres."""
     from sqlalchemy import text as sa_text
+
+    from app.core.db.engine import async_session_factory
 
     db = async_session_factory()
     try:
@@ -282,7 +284,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
     kyc_rows = data.get("kyc_screenings") or []
 
     # ── Timestamps ───────────────────────────────────────────────
-    as_of = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    as_of = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     if profile and profile[10]:
         as_of = profile[10].strftime("%Y-%m-%d %H:%M UTC")
     elif im and im[11]:
@@ -760,6 +762,7 @@ def _generate_v4_pdf(deal_id: str, output: str | None = None) -> str:
     from sqlalchemy import select
 
     from ai_engine.pdf.memo_md_to_pdf import generate_memo_pdf
+    from app.core.db.engine import async_session_factory
     from app.domains.credit.modules.ai.models import MemoChapter
 
     SessionLocal = async_session_factory

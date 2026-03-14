@@ -78,8 +78,8 @@ def discover_active_investments(
             select(DocumentRegistry).where(
                 DocumentRegistry.fund_id == fund_id,
                 DocumentRegistry.container_name == PORTFOLIO_CONTAINER,
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
 
     grouped: dict[str, list[DocumentRegistry]] = defaultdict(list)
@@ -95,16 +95,16 @@ def discover_active_investments(
     # Batch pre-load intelligence profiles for all pipeline deals
     all_profiles = list(
         db.execute(
-            select(DealIntelligenceProfile).where(DealIntelligenceProfile.fund_id == fund_id)
-        ).scalars().all()
+            select(DealIntelligenceProfile).where(DealIntelligenceProfile.fund_id == fund_id),
+        ).scalars().all(),
     )
     profiles_by_deal = {p.deal_id: p for p in all_profiles}
 
     # Batch pre-load existing active investments for the fund
     all_active_invs = list(
         db.execute(
-            select(ActiveInvestment).where(ActiveInvestment.fund_id == fund_id)
-        ).scalars().all()
+            select(ActiveInvestment).where(ActiveInvestment.fund_id == fund_id),
+        ).scalars().all(),
     )
     active_inv_by_folder = {inv.source_folder: inv for inv in all_active_invs if inv.source_folder}
 
@@ -124,7 +124,7 @@ def discover_active_investments(
         if p_deal and not port_deal:
             if p_deal.approved_deal_id:
                 port_deal = next(
-                    (d for d in port_deals if d.id == p_deal.approved_deal_id), None
+                    (d for d in port_deals if d.id == p_deal.approved_deal_id), None,
                 )
             elif p_deal.id in port_by_pipeline:
                 port_deal = port_by_pipeline[p_deal.id]
@@ -155,7 +155,7 @@ def discover_active_investments(
                     "to": lifecycle,
                     "at": as_of.isoformat(),
                     "reason": "daily_monitoring_reclassification",
-                }
+                },
             )
 
         # deal_id now points to portfolio deals.id (not pipeline_deals.id)
@@ -213,7 +213,7 @@ def extract_portfolio_metrics(
             PortfolioMetric.fund_id == fund_id,
             PortfolioMetric.as_of == as_of_date,
             PortfolioMetric.metric_name.like("AI4_%"),
-        )
+        ),
     )
 
     # ── METRIC STATUS: PENDING_REAL_DATA_SOURCE ──────────────────────
@@ -336,8 +336,8 @@ def detect_performance_drift(
             .where(PortfolioMetric.fund_id == fund_id, PortfolioMetric.metric_name.like("AI4_%"))
             .group_by(PortfolioMetric.as_of)
             .order_by(PortfolioMetric.as_of.desc())
-            .limit(2)
-        ).scalars().all()
+            .limit(2),
+        ).scalars().all(),
     )
 
     db.execute(delete(PerformanceDriftFlag).where(PerformanceDriftFlag.fund_id == fund_id))
@@ -353,8 +353,8 @@ def detect_performance_drift(
                 PortfolioMetric.as_of.in_(dates),
                 PortfolioMetric.metric_name.like("AI4_%"),
                 PortfolioMetric.metric_name != "AI4_DATA_STATUS",
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
     current_rows = [r for r in both_period_rows if r.as_of == dates[0]]
     baseline_rows = [r for r in both_period_rows if r.as_of == dates[1]]
@@ -434,7 +434,7 @@ def build_covenant_surveillance(
 
     all_tests = list(db.execute(
         select(CovenantTest).where(CovenantTest.fund_id == fund_id)
-        .order_by(CovenantTest.covenant_id, CovenantTest.tested_at.desc())
+        .order_by(CovenantTest.covenant_id, CovenantTest.tested_at.desc()),
     ).scalars().all())
     latest_test_by_covenant: dict[uuid.UUID, CovenantTest] = {}
     for t in all_tests:
@@ -446,7 +446,7 @@ def build_covenant_surveillance(
         select(CovenantBreach).where(
             CovenantBreach.fund_id == fund_id,
             CovenantBreach.covenant_test_id.in_(test_ids),
-        )
+        ),
     ).scalars().all()) if test_ids else []
     breach_by_test: dict[uuid.UUID, CovenantBreach] = {b.covenant_test_id: b for b in all_breaches}
 
@@ -516,7 +516,7 @@ def build_covenant_surveillance(
                     as_of=as_of,
                     created_by=actor_id,
                     updated_by=actor_id,
-                )
+                ),
             )
 
     db.flush()
@@ -536,8 +536,8 @@ def evaluate_liquidity_cash_impact(
             select(CashTransaction).where(
                 CashTransaction.fund_id == fund_id,
                 CashTransaction.value_date.is_not(None),
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
 
     db.execute(delete(CashImpactFlag).where(CashImpactFlag.fund_id == fund_id))
@@ -780,7 +780,7 @@ def build_board_monitoring_briefs(
             select(BoardMonitoringBrief).where(
                 BoardMonitoringBrief.fund_id == fund_id,
                 BoardMonitoringBrief.investment_id == inv.id,
-            )
+            ),
         ).scalar_one_or_none()
 
         if existing is None:

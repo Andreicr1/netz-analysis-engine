@@ -139,7 +139,7 @@ def compute_engine_quality_score(delta: DeepReviewDeltaReport) -> EngineScore:
         scores["consistency"] = -0.5
         reasons.append(
             f"Low consistency ({con.consistency_score:.2f}): "
-            + "; ".join(con.contradictions[:3])
+            + "; ".join(con.contradictions[:3]),
         )
 
     # ── Weighted composite ───────────────────────────────────────

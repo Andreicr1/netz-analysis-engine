@@ -198,6 +198,7 @@ def analyze_sponsor(
     Returns:
         Sponsor analysis dict conforming to the output schema.
         Returns a default NOT_ASSESSED dict if inputs are insufficient.
+
     """
     sponsor_name = deal_fields.get("sponsor_name", "").strip()
 

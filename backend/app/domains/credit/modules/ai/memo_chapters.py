@@ -51,7 +51,7 @@ def get_deal_memo_chapters(
             MemoEvidencePack.fund_id == fund_id,
             MemoEvidencePack.deal_id == deal_id,
             MemoEvidencePack.is_current == True,  # noqa: E712
-        ).order_by(MemoEvidencePack.generated_at.desc()).limit(1)
+        ).order_by(MemoEvidencePack.generated_at.desc()).limit(1),
     ).scalar_one_or_none()
 
     if not pack:
@@ -66,7 +66,7 @@ def get_deal_memo_chapters(
         select(MemoChapter).where(
             MemoChapter.evidence_pack_id == pack.id,
             MemoChapter.is_current == True,  # noqa: E712
-        ).order_by(MemoChapter.chapter_number)
+        ).order_by(MemoChapter.chapter_number),
     ).scalars().all()
 
     chapters = [
@@ -109,7 +109,7 @@ def get_deal_evidence_pack(
             MemoEvidencePack.fund_id == fund_id,
             MemoEvidencePack.deal_id == deal_id,
             MemoEvidencePack.is_current == True,  # noqa: E712
-        ).order_by(MemoEvidencePack.generated_at.desc()).limit(1)
+        ).order_by(MemoEvidencePack.generated_at.desc()).limit(1),
     ).scalar_one_or_none()
 
     if not pack:
@@ -149,7 +149,7 @@ def get_deal_im_draft(
             InvestmentMemorandumDraft.deal_id == deal_id,
         )
         .order_by(InvestmentMemorandumDraft.generated_at.desc())
-        .limit(1)
+        .limit(1),
     ).scalar_one_or_none()
 
     return InvestmentMemorandumResponse(
@@ -200,7 +200,7 @@ def get_deal_im_pdf(
                 InvestmentMemorandumDraft.deal_id == deal_id,
             )
             .order_by(InvestmentMemorandumDraft.generated_at.desc())
-            .limit(1)
+            .limit(1),
         ).scalar_one_or_none()
         if not im_row:
             return ICMemorandumPdfResponse(
@@ -228,7 +228,7 @@ def get_deal_im_pdf(
         select(UWArtifact)
         .where(UWArtifact.deal_id == deal_id, UWArtifact.is_active == True)  # noqa: E712
         .order_by(UWArtifact.created_at.desc())
-        .limit(1)
+        .limit(1),
     ).scalar_one_or_none()
 
     artifact = {}
@@ -244,7 +244,7 @@ def get_deal_im_pdf(
         }
 
     deal_row = db.execute(
-        select(Deal).where(Deal.id == deal_id)
+        select(Deal).where(Deal.id == deal_id),
     ).scalar_one_or_none()
     deal_name = (deal_row.deal_name or deal_row.title) if deal_row else "Unknown Deal"
 
@@ -502,7 +502,7 @@ def regenerate_memo_chapter(
             MemoEvidencePack.deal_id == deal_id,
             MemoEvidencePack.fund_id == fund_id,
             MemoEvidencePack.is_current == True,  # noqa: E712
-        ).order_by(MemoEvidencePack.generated_at.desc()).limit(1)
+        ).order_by(MemoEvidencePack.generated_at.desc()).limit(1),
     ).scalar_one_or_none()
 
     if not pack_row:
@@ -519,7 +519,7 @@ def regenerate_memo_chapter(
     from app.services.search_index import AzureSearchChunksClient
 
     deal_row = db.execute(
-        select(Deal).where(Deal.id == deal_id)
+        select(Deal).where(Deal.id == deal_id),
     ).scalar_one_or_none()
     deal_name = (deal_row.deal_name or deal_row.title) if deal_row else "Unknown Deal"
 
@@ -602,7 +602,7 @@ def regenerate_memo_chapter(
             MemoChapter.chapter_number == ch_num,
             MemoChapter.is_current == True,  # noqa: E712
         )
-        .values(is_current=False)
+        .values(is_current=False),
     )
 
     new_row = MemoChapter(
@@ -700,7 +700,7 @@ def rebuild_deal_im_pdf(
         select(UWArtifact)
         .where(UWArtifact.deal_id == deal_id, UWArtifact.is_active == True)  # noqa: E712
         .order_by(UWArtifact.created_at.desc())
-        .limit(1)
+        .limit(1),
     ).scalar_one_or_none()
 
     artifact = {}
@@ -716,7 +716,7 @@ def rebuild_deal_im_pdf(
         }
 
     deal_row = db.execute(
-        select(Deal).where(Deal.id == deal_id)
+        select(Deal).where(Deal.id == deal_id),
     ).scalar_one_or_none()
     deal_name = (deal_row.deal_name or deal_row.title) if deal_row else "Unknown Deal"
 

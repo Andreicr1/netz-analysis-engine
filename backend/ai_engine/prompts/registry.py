@@ -1,5 +1,4 @@
-"""
-Prompt Template Registry — Jinja2-based prompt management.
+"""Prompt Template Registry — Jinja2-based prompt management.
 
 Centralizes all AI prompt templates with:
 - Jinja2 rendering with variable interpolation
@@ -78,6 +77,7 @@ class PromptRegistry:
 
         Raises:
             TemplateNotFound: If the template file does not exist
+
         """
         try:
             template = self._env.get_template(template_name)

@@ -19,10 +19,10 @@ class ReconciliationMatch(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "reconciliation_matches"
 
     bank_line_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("bank_statement_lines.id", ondelete="CASCADE"), nullable=False, index=True
+        ForeignKey("bank_statement_lines.id", ondelete="CASCADE"), nullable=False, index=True,
     )
     cash_transaction_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("cash_transactions.id", ondelete="SET NULL"), nullable=True, index=True
+        ForeignKey("cash_transactions.id", ondelete="SET NULL"), nullable=True, index=True,
     )
 
     matched_by: Mapped[str] = mapped_column(String(128), nullable=False)

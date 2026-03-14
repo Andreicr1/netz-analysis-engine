@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -227,6 +227,8 @@ def _load_review_data(
     """
     from sqlalchemy import text as sa_text
 
+    from app.core.db.engine import async_session_factory
+
     db = async_session_factory()
 
     try:
@@ -351,7 +353,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
         overall_rating = review[2] or "N/A"
         review_type = review[1] or "PERIODIC"
 
-    now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     as_of = reviewed_at_str if review else now_str
 
     styles = _build_styles()

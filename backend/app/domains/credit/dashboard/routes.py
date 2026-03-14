@@ -101,8 +101,8 @@ def portfolio_summary(
             select(Loan).where(
                 Loan.fund_id == fund_id,
                 Loan.status == "active",
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
 
     active_count = len(loans)
@@ -123,9 +123,9 @@ def portfolio_summary(
             select(func.count(DealIntelligenceProfile.id)).where(
                 DealIntelligenceProfile.fund_id == fund_id,
                 DealIntelligenceProfile.risk_band.in_(["HIGH", "High"]),
-            )
+            ),
         ).scalar_one_or_none()
-        or 0
+        or 0,
     )
 
     # Avg confidence from research_output.deal_overview.confidence_score
@@ -136,8 +136,8 @@ def portfolio_summary(
                 PipelineDeal.fund_id == fund_id,
                 PipelineDeal.intelligence_status == "READY",
                 PipelineDeal.is_archived.is_(False),
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
 
     confidence_scores: list[float] = []
@@ -180,8 +180,8 @@ def pipeline_summary(
             select(PipelineDeal).where(
                 PipelineDeal.fund_id == fund_id,
                 PipelineDeal.is_archived.is_(False),
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
 
     total_count = len(all_active)
@@ -222,13 +222,13 @@ def macro_snapshot(
 
     today = dt.date.today()
     row: MacroSnapshot | None = db.execute(
-        select(MacroSnapshot).where(MacroSnapshot.as_of_date == today)
+        select(MacroSnapshot).where(MacroSnapshot.as_of_date == today),
     ).scalar_one_or_none()
 
     # Fallback: most recent available snapshot
     if row is None:
         row = db.execute(
-            select(MacroSnapshot).order_by(MacroSnapshot.as_of_date.desc()).limit(1)
+            select(MacroSnapshot).order_by(MacroSnapshot.as_of_date.desc()).limit(1),
         ).scalar_one_or_none()
 
     if row is None:
@@ -276,8 +276,8 @@ def compliance_alerts(
                 PipelineDeal.fund_id == fund_id,
                 PipelineDeal.intelligence_status == "READY",
                 PipelineDeal.is_archived.is_(False),
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
 
     upcoming: list[dict[str, Any]] = []
@@ -348,8 +348,8 @@ def pipeline_analytics(
             select(PipelineDeal).where(
                 PipelineDeal.fund_id == fund_id,
                 PipelineDeal.is_archived.is_(False),
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
 
     profiles: dict[uuid.UUID, DealIntelligenceProfile] = {}
@@ -358,7 +358,7 @@ def pipeline_analytics(
         rows = db.execute(
             select(DealIntelligenceProfile).where(
                 DealIntelligenceProfile.deal_id.in_(deal_ids),
-            )
+            ),
         ).scalars().all()
         for p in rows:
             profiles[p.deal_id] = p
@@ -463,11 +463,11 @@ def macro_history(
 ) -> dict[str, Any]:
     today = dt.date.today()
     row: MacroSnapshot | None = db.execute(
-        select(MacroSnapshot).where(MacroSnapshot.as_of_date == today)
+        select(MacroSnapshot).where(MacroSnapshot.as_of_date == today),
     ).scalar_one_or_none()
     if row is None:
         row = db.execute(
-            select(MacroSnapshot).order_by(MacroSnapshot.as_of_date.desc()).limit(1)
+            select(MacroSnapshot).order_by(MacroSnapshot.as_of_date.desc()).limit(1),
         ).scalar_one_or_none()
 
     result: dict[str, list[dict[str, Any]]] = {
@@ -649,7 +649,7 @@ def fred_search(
                     "last_updated": s.get("last_updated", ""),
                 }
                 for s in data.get("seriess", [])
-            ]
+            ],
         }
         _cache_set(cache_key, result, _FRED_SEARCH_TTL)
         return result

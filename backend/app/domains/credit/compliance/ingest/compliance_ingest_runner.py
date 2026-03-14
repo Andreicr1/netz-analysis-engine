@@ -1,5 +1,4 @@
-"""
-Unified Compliance Knowledge Base ingestion engine.
+"""Unified Compliance Knowledge Base ingestion engine.
 Consolidates: Fund Constitution · Service Providers · CIMA Regulation
 into compliance-global-index (JSON stores under backend/data/compliance/).
 
@@ -45,8 +44,7 @@ def _load_json(path: Path) -> dict:
 
 
 def chunk_text(text: str, max_chars: int = 1200) -> list[str]:
-    """
-    Deterministic paragraph-boundary chunker (no LLM).
+    """Deterministic paragraph-boundary chunker (no LLM).
     Splits on blank lines first; groups short paragraphs together
     until the buffer reaches max_chars.
     """
@@ -72,8 +70,7 @@ def chunk_text(text: str, max_chars: int = 1200) -> list[str]:
 
 
 class ComplianceIngestRunner:
-    """
-    Unified Compliance Knowledge Base ingestion engine.
+    """Unified Compliance Knowledge Base ingestion engine.
 
     Usage::
 

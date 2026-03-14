@@ -275,7 +275,7 @@ def classify_documents(
             select(DocumentRegistry).where(
                 DocumentRegistry.fund_id == fund_id,
                 DocumentRegistry.version_id == version.id,
-            )
+            ),
         ).scalar_one_or_none()
 
         payload = {
@@ -354,8 +354,8 @@ def _read_text_content(db: Session, doc: DocumentRegistry) -> str:
                     DocumentChunk.fund_id == doc.fund_id,
                     DocumentChunk.version_id == doc.version_id,
                 )
-                .limit(50)
-            ).all()
+                .limit(50),
+            ).all(),
         )
         text = "\n".join((item[0] or "") for item in chunks)
         if text.strip():
@@ -416,8 +416,8 @@ def classify_registered_documents(
         db.execute(
             select(DocumentRegistry)
             .where(DocumentRegistry.fund_id == fund_id)
-            .order_by(DocumentRegistry.updated_at.desc())
-        ).scalars().all()
+            .order_by(DocumentRegistry.updated_at.desc()),
+        ).scalars().all(),
     )
 
     saved: list[DocumentClassification] = []
@@ -429,7 +429,7 @@ def classify_registered_documents(
             select(DocumentClassification).where(
                 DocumentClassification.fund_id == fund_id,
                 DocumentClassification.doc_id == doc.id,
-            )
+            ),
         ).scalar_one_or_none()
 
         payload = {

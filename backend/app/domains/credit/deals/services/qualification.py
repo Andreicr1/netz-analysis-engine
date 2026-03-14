@@ -4,8 +4,7 @@ from app.domains.credit.deals.enums import DealType, RejectionCode
 
 
 def run_minimum_qualification(deal) -> tuple[bool, str, RejectionCode | None]:
-    """
-    Deterministic minimum mandate filters for the Netz Private Credit Fund.
+    """Deterministic minimum mandate filters for the Netz Private Credit Fund.
 
     Mandate-qualifying deal types:
       - DIRECT_LOAN   — core mandate

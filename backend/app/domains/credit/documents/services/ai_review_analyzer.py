@@ -49,8 +49,8 @@ def analyze_review_checklist(
         db.execute(
             select(ReviewChecklistItem)
             .where(ReviewChecklistItem.review_id == review.id)
-            .order_by(ReviewChecklistItem.sort_order)
-        ).scalars().all()
+            .order_by(ReviewChecklistItem.sort_order),
+        ).scalars().all(),
     )
 
     if not items:

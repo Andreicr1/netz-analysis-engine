@@ -105,8 +105,8 @@ def list_deals(
 ):
     return list(
         db.execute(
-            select(Deal).where(Deal.fund_id == fund_id).limit(limit).offset(offset)
-        ).scalars().all()
+            select(Deal).where(Deal.fund_id == fund_id).limit(limit).offset(offset),
+        ).scalars().all(),
     )
 
 
@@ -162,8 +162,8 @@ def get_deal_stage_timeline(
         db.execute(
             select(DealStageHistory)
             .where(DealStageHistory.deal_id == deal_id, DealStageHistory.fund_id == fund_id)
-            .order_by(DealStageHistory.changed_at.asc())
-        ).scalars().all()
+            .order_by(DealStageHistory.changed_at.asc()),
+        ).scalars().all(),
     )
 
     stage_order = [s.value for s in DealStage if s not in (DealStage.REJECTED, DealStage.CLOSED)]

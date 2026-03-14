@@ -169,8 +169,7 @@ def browse(
     prefix: str = Query("", max_length=500),
     actor=Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN", "AUDITOR"])),
 ):
-    """
-    List folders and files in the dataroom blob container.
+    """List folders and files in the dataroom blob container.
     Uses virtual directory (delimiter-based) listing.
     """
     container = settings.AZURE_STORAGE_DATAROOM_CONTAINER
@@ -266,7 +265,7 @@ def file_link(
 PIPELINE_CONTAINER = "investment-pipeline-intelligence"
 
 _PIPELINE_INTERNAL_SUFFIXES = frozenset({
-    ".json", ".jsonl", ".log", ".tmp", ".pyc", ".gz"
+    ".json", ".jsonl", ".log", ".tmp", ".pyc", ".gz",
 })
 
 

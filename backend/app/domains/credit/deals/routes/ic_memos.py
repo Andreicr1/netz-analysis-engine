@@ -20,7 +20,7 @@ router = APIRouter(tags=["IC Memos"], dependencies=[Depends(require_fund_access(
 
 def _get_latest_memo(db: Session, deal_id: uuid.UUID) -> ICMemo | None:
     return db.execute(
-        select(ICMemo).where(ICMemo.deal_id == deal_id).order_by(ICMemo.version.desc())
+        select(ICMemo).where(ICMemo.deal_id == deal_id).order_by(ICMemo.version.desc()),
     ).scalar_one_or_none()
 
 

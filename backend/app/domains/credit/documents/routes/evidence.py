@@ -26,7 +26,7 @@ def mark_uploaded(
         select(EvidenceDocument).where(
             EvidenceDocument.fund_id == fund_id,
             EvidenceDocument.id == evidence_id,
-        )
+        ),
     ).scalar_one_or_none()
 
     if not evidence:

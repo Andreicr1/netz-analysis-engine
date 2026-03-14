@@ -39,7 +39,7 @@ def get_deal_evidence_governance(
     import json as _json
 
     deal = db.execute(
-        select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id)
+        select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id),
     ).scalar_one_or_none()
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
@@ -109,7 +109,7 @@ def get_deal_underwriting_artifact(
             DealUnderwritingArtifact.fund_id == fund_id,
             DealUnderwritingArtifact.deal_id == deal_id,
             DealUnderwritingArtifact.is_active == True,  # noqa: E712
-        )
+        ),
     ).scalar_one_or_none()
 
     if not artifact:
@@ -146,8 +146,8 @@ def get_deal_underwriting_artifact_history(
                 DealUnderwritingArtifact.fund_id == fund_id,
                 DealUnderwritingArtifact.deal_id == deal_id,
             )
-            .order_by(DealUnderwritingArtifact.version_number.desc())
-        ).scalars().all()
+            .order_by(DealUnderwritingArtifact.version_number.desc()),
+        ).scalars().all(),
     )
     return {
         "dealId": str(deal_id),
@@ -196,7 +196,7 @@ def get_deal_critical_gaps(
             DealUnderwritingArtifact.fund_id == fund_id,
             DealUnderwritingArtifact.deal_id == deal_id,
             DealUnderwritingArtifact.is_active == True,  # noqa: E712
-        )
+        ),
     ).scalar_one_or_none()
 
     if not artifact:
@@ -233,7 +233,7 @@ def get_deal_critical_gaps(
                 chapter_num=int(entry.get("chapter_num", 0)),
                 chapter_title=entry.get("chapter_title", ""),
                 gap=gap_text,
-            )
+            ),
         )
 
     log.info(

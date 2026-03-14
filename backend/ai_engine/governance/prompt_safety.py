@@ -59,6 +59,7 @@ def sanitize_user_input(
     Returns
     -------
     str — sanitised text, safe to interpolate into a prompt template.
+
     """
     if not text:
         return ""

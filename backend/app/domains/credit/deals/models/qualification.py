@@ -10,8 +10,7 @@ from app.core.db.base import Base
 
 
 class DealQualification(Base):
-    """
-    Stores qualification runs for audit + learning.
+    """Stores qualification runs for audit + learning.
     Qualification runs must persist forever.
     """
 

@@ -635,7 +635,7 @@ def compute_rate_decomposition(
         if computed_spread > 0:
             result["spread_bps"] = int(computed_spread * 100)
             result["fee_notes"].append(
-                f"Spread computed: coupon {coupon}% - base {base_rate}% = {int(computed_spread * 100)}bps"
+                f"Spread computed: coupon {coupon}% - base {base_rate}% = {int(computed_spread * 100)}bps",
             )
 
     # ── Fee stack ────────────────────────────────────────────────
@@ -807,7 +807,7 @@ def _compute_risk_adjusted_return_v2(
     adjusted = max(round(base_return - total_haircut, 4), 0.0)
     notes.append(
         f"{risk_count} risk factors → total haircut {total_haircut:.1f}pp "
-        f"(cap {_MAX_TOTAL_HAIRCUT_PP}pp) | {base_return:.2f}% → {adjusted:.2f}%"
+        f"(cap {_MAX_TOTAL_HAIRCUT_PP}pp) | {base_return:.2f}% → {adjusted:.2f}%",
     )
     return adjusted, notes
 
@@ -1062,6 +1062,7 @@ def compute_quant_profile(
 
     Returns:
         QuantProfile with all metrics populated deterministically.
+
     """
     # ── Ensure v2 schema ─────────────────────────────────────────
     analysis = _ensure_v2(structured_analysis)

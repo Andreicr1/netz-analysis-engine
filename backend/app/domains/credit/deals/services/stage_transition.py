@@ -30,7 +30,7 @@ VALID_TRANSITIONS: dict[DealStage, list[DealStage]] = {
 def _get_latest_memo(db: Session, deal_id: uuid.UUID) -> ICMemo | None:
     """Return the most recent ICMemo for a deal, ordered by version DESC."""
     return db.execute(
-        select(ICMemo).where(ICMemo.deal_id == deal_id).order_by(ICMemo.version.desc())
+        select(ICMemo).where(ICMemo.deal_id == deal_id).order_by(ICMemo.version.desc()),
     ).scalar_one_or_none()
 
 
@@ -53,8 +53,7 @@ def transition_deal_stage(
     fund_id: uuid.UUID,
     extra_audit: dict | None = None,
 ) -> None:
-    """
-    Validate and execute a deal stage transition.
+    """Validate and execute a deal stage transition.
 
     * Writes an audit event.
     * Sets ``deal.updated_at``.
@@ -70,7 +69,7 @@ def transition_deal_stage(
         raise ValueError(
             f"Invalid stage transition: {from_stage.value} → {new_stage.value}. "
             f"Allowed targets from {from_stage.value}: "
-            f"{[s.value for s in allowed] if allowed else '(terminal — none)'}."
+            f"{[s.value for s in allowed] if allowed else '(terminal — none)'}.",
         )
 
     # --- Guard: CONDITIONAL requires a memo with non-empty conditions ---
@@ -79,7 +78,7 @@ def transition_deal_stage(
         if not memo or not memo.conditions:
             raise ValueError(
                 "Cannot transition to CONDITIONAL: the deal has no IC Memo "
-                "with pending conditions. Create a CONDITIONAL memo first."
+                "with pending conditions. Create a CONDITIONAL memo first.",
             )
 
     # --- Guard: APPROVED from CONDITIONAL requires all conditions resolved ---
@@ -91,7 +90,7 @@ def transition_deal_stage(
                 titles_str = "; ".join(open_titles)
                 raise ValueError(
                     f"Cannot approve deal with {len(open_titles)} open condition(s): "
-                    f"{titles_str}. Resolve or waive all conditions first."
+                    f"{titles_str}. Resolve or waive all conditions first.",
                 )
 
     # --- Execute transition ---

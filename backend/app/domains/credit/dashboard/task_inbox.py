@@ -107,8 +107,8 @@ def _cash_tasks(
                 CashTransaction.status.in_(actionable),
             )
             .order_by(CashTransaction.created_at.desc())
-            .limit(50)
-        ).scalars().all()
+            .limit(50),
+        ).scalars().all(),
     )
 
     if not rows:
@@ -166,8 +166,8 @@ def _compliance_tasks(
             select(Obligation).where(
                 Obligation.fund_id == fund_id,
                 Obligation.is_active.is_(True),
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
 
     if not active_obligations:
@@ -250,8 +250,8 @@ def _signature_tasks(
                 SignatureQueueItem.status.in_(pending_statuses),
             )
             .order_by(SignatureQueueItem.created_at.desc())
-            .limit(50)
-        ).scalars().all()
+            .limit(50),
+        ).scalars().all(),
     )
 
     if not rows:
@@ -304,8 +304,8 @@ def _action_tasks(
                 Action.status.in_(["Open", "In Progress", "Pending Evidence", "Under Review"]),
             )
             .order_by(Action.due_date.asc().nullslast(), Action.created_at.desc())
-            .limit(50)
-        ).scalars().all()
+            .limit(50),
+        ).scalars().all(),
     )
 
     if not rows:
@@ -360,8 +360,8 @@ def _pipeline_tasks(
                 PipelineDeal.approved_deal_id.is_(None),
             )
             .order_by(PipelineDeal.created_at.desc())
-            .limit(50)
-        ).scalars().all()
+            .limit(50),
+        ).scalars().all(),
     )
 
     if not rows:
@@ -432,8 +432,8 @@ def _document_review_tasks(
     rows = list(
         db.execute(
             stmt.order_by(DocumentReview.due_date.asc().nullslast(), DocumentReview.submitted_at.desc())
-            .limit(50)
-        ).scalars().all()
+            .limit(50),
+        ).scalars().all(),
     )
 
     if not rows:

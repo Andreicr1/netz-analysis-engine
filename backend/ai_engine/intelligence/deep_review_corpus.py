@@ -57,7 +57,7 @@ _FINANCIAL_LEGAL_TYPES = frozenset(
         "FINANCIAL_STATEMENTS",
         "FUND_POLICY",
         "FUND_CONSTITUTION",
-    }
+    },
 )
 _RISK_COVENANT_TYPES = frozenset(
     {
@@ -71,7 +71,7 @@ _RISK_COVENANT_TYPES = frozenset(
         "INSURANCE",
         "WATCHLIST",
         "MONITORING",
-    }
+    },
 )
 # Anything else falls into market/strategy bucket
 
@@ -142,7 +142,7 @@ def _load_deal_context_from_blob(
         data = download_bytes(blob_uri=blob_uri(_RAW_DOCS_CONTAINER, blob_path))
         deal_ctx = json.loads(data.decode("utf-8"))
         logger.info(
-            "DEAL_CONTEXT_LOADED blob=%s keys=%s", blob_path, list(deal_ctx.keys())
+            "DEAL_CONTEXT_LOADED blob=%s keys=%s", blob_path, list(deal_ctx.keys()),
         )
     except Exception as exc:
         logger.debug("deal_context.json not available for %s: %s", folder, exc)
@@ -153,7 +153,7 @@ def _load_deal_context_from_blob(
         data = download_bytes(blob_uri=blob_uri(_RAW_DOCS_CONTAINER, blob_path))
         fund_ctx = json.loads(data.decode("utf-8"))
         logger.info(
-            "FUND_CONTEXT_LOADED blob=%s keys=%s", blob_path, list(fund_ctx.keys())
+            "FUND_CONTEXT_LOADED blob=%s keys=%s", blob_path, list(fund_ctx.keys()),
         )
     except Exception as exc:
         logger.debug("fund_context.json not available for %s: %s", folder, exc)
@@ -168,15 +168,15 @@ def _load_deal_context_from_blob(
         deal_fields["target_vehicle"] = inv_ctx.get("target_vehicle", "")
         deal_fields["netz_vehicle"] = inv_ctx.get("netz_vehicle", "")
         deal_fields["subscription_structure"] = inv_ctx.get(
-            "subscription_structure", ""
+            "subscription_structure", "",
         )
         commitment = inv_ctx.get("commitment", {})
         if commitment:
             deal_fields["commitment_usd"] = commitment.get(
-                "amount_usd"
+                "amount_usd",
             ) or commitment.get("target_max_usd")
             deal_fields["portfolio_weight_max"] = commitment.get(
-                "portfolio_weight_max", ""
+                "portfolio_weight_max", "",
             )
         deal_fields["liquidity_terms"] = inv_ctx.get("liquidity_terms", {})
         deal_fields["return_target"] = inv_ctx.get("return_target", {})
@@ -308,7 +308,7 @@ def _load_deal_context_from_blob(
 
 
 def _gather_deal_texts(
-    db: Session, *, fund_id: uuid.UUID, deal: Deal
+    db: Session, *, fund_id: uuid.UUID, deal: Deal,
 ) -> dict[str, Any]:
     """IC-Grade retrieval — per-chapter specialized evidence assembly.
 
@@ -335,6 +335,7 @@ def _gather_deal_texts(
             "retrieval_audit": {structured audit artifact},
             "saturation_report": {gaps, missing_document_classes, all_saturated},
         }
+
     """
     from ai_engine.intelligence.memo_book_generator import CHAPTER_REGISTRY
     from ai_engine.intelligence.retrieval_governance import (
@@ -477,10 +478,10 @@ def _gather_deal_texts_legacy(db: Session, *, fund_id: uuid.UUID, deal: Deal) ->
             select(DocumentRegistry).where(
                 DocumentRegistry.fund_id == fund_id,
                 DocumentRegistry.container_name == "investment-pipeline-intelligence",
-            )
+            ),
         )
         .scalars()
-        .all()
+        .all(),
     )
     folder = (
         (deal.deal_folder_path or "").split("/")[-1]
@@ -505,7 +506,7 @@ def _gather_deal_texts_legacy(db: Session, *, fund_id: uuid.UUID, deal: Deal) ->
 
 
 def _gather_investment_texts(
-    db: Session, *, fund_id: uuid.UUID, investment: ActiveInvestment
+    db: Session, *, fund_id: uuid.UUID, investment: ActiveInvestment,
 ) -> str:
     """Retrieve investment document content via RAG retrieval.
 
@@ -572,7 +573,7 @@ def _gather_investment_texts(
 
 
 def _gather_investment_texts_legacy(
-    db: Session, *, fund_id: uuid.UUID, investment: ActiveInvestment
+    db: Session, *, fund_id: uuid.UUID, investment: ActiveInvestment,
 ) -> str:
     """Legacy blob-based text gathering for investments."""
     docs = list(
@@ -580,10 +581,10 @@ def _gather_investment_texts_legacy(
             select(DocumentRegistry).where(
                 DocumentRegistry.fund_id == fund_id,
                 DocumentRegistry.container_name == investment.source_container,
-            )
+            ),
         )
         .scalars()
-        .all()
+        .all(),
     )
     folder = (
         investment.source_folder.split("/")[-1]

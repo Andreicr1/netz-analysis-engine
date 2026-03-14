@@ -47,7 +47,7 @@ def _get_integration_key() -> str:
     if not key:
         raise RuntimeError(
             "ADOBE_SIGN_INTEGRATION_KEY is not set.  "
-            "Configure it in your .env or environment variables."
+            "Configure it in your .env or environment variables.",
         )
     return key
 
@@ -86,7 +86,7 @@ def upload_transient_document(
     data = {"File-Name": file_name, "Mime-Type": mime_type}
 
     logger.info(
-        "Uploading transient document: %s (%d bytes)", file_name, len(file_bytes)
+        "Uploading transient document: %s (%d bytes)", file_name, len(file_bytes),
     )
 
     with httpx.Client(timeout=_TIMEOUT) as client:
@@ -113,7 +113,7 @@ def create_agreement(payload: AgreementCreationRequest) -> AgreementCreationResp
 
     with httpx.Client(timeout=_TIMEOUT) as client:
         resp = client.post(
-            url, headers=_headers(), json=payload.model_dump(exclude_none=True)
+            url, headers=_headers(), json=payload.model_dump(exclude_none=True),
         )
 
     if resp.status_code >= 400:
@@ -318,7 +318,7 @@ def verify_webhook_signature(
     secret = getattr(settings, "ADOBE_SIGN_WEBHOOK_SECRET", None)
     if not secret:
         logger.warning(
-            "ADOBE_SIGN_WEBHOOK_SECRET not set — skipping signature verification"
+            "ADOBE_SIGN_WEBHOOK_SECRET not set — skipping signature verification",
         )
         return True  # permissive in dev; enforce in prod
 

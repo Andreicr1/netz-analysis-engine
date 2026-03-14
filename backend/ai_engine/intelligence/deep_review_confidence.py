@@ -94,6 +94,7 @@ def compute_underwriting_confidence(
         caps_applied        : list[str]   — human-readable cap reasons
         breakdown           : dict        — per-block scores
         rationale_bullets   : list[str]   — max 8 deterministic bullets
+
     """
     _hard   = hard_check_results or {}
     _conc   = concentration_profile or {}
@@ -178,6 +179,7 @@ def apply_tone_normalizer_adjustment(
     Returns
     -------
     Updated ``confidence_result`` dict (mutated in place and returned).
+
     """
     if not tone_signal_escalated:
         return confidence_result
@@ -237,7 +239,7 @@ def _block_evidence_coverage(
     if major or minor:
         bullets.append(
             f"Evidence gaps: {major} major (MISSING), {minor} minor (PARTIAL) "
-            f"→ coverage {score}/{_MAX_EVIDENCE_COVERAGE}"
+            f"→ coverage {score}/{_MAX_EVIDENCE_COVERAGE}",
         )
     return score
 
@@ -271,7 +273,7 @@ def _block_evidence_quality(
         if penalty:
             bullets.append(
                 f"Critical chapters below doc/chunk minimums → quality "
-                f"{score}/{_MAX_EVIDENCE_QUALITY}"
+                f"{score}/{_MAX_EVIDENCE_QUALITY}",
             )
         return score
 
@@ -284,7 +286,7 @@ def _block_evidence_quality(
     if penalty:
         bullets.append(
             f"Retrieval evidence confidence={ev_conf} → quality "
-            f"{score}/{_MAX_EVIDENCE_QUALITY}"
+            f"{score}/{_MAX_EVIDENCE_QUALITY}",
         )
     return score
 
@@ -304,7 +306,7 @@ def _block_decision_integrity(
         score = max(0, 5 - len(breaches))
         bullets.append(
             f"Hard policy breaches ({len(breaches)}) → integrity "
-            f"{score}/{_MAX_DECISION_INTEGRITY}"
+            f"{score}/{_MAX_DECISION_INTEGRITY}",
         )
         return score
 
@@ -330,7 +332,7 @@ def _block_decision_integrity(
         bullets.append(
             f"Concentration: {limit_breaches} limit breach(es), "
             f"{soft_flags} soft flag(s) → integrity "
-            f"{score}/{_MAX_DECISION_INTEGRITY}"
+            f"{score}/{_MAX_DECISION_INTEGRITY}",
         )
     return score
 
@@ -363,7 +365,7 @@ def _block_diligence_gaps(
         if missing_count:
             bullets.append(
                 f"Missing critical terms ({missing_count}) → diligence "
-                f"{score}/{_MAX_DILIGENCE_GAPS}"
+                f"{score}/{_MAX_DILIGENCE_GAPS}",
             )
         return score
 
@@ -375,7 +377,7 @@ def _block_diligence_gaps(
     if gap_count:
         bullets.append(
             f"Critic identified {gap_count} material gap(s) → diligence "
-            f"{score}/{_MAX_DILIGENCE_GAPS}"
+            f"{score}/{_MAX_DILIGENCE_GAPS}",
         )
     return score
 
@@ -395,7 +397,7 @@ def _block_critic_outcome(
     if fatal_count:
         bullets.append(
             f"Critic fatal flaws: {fatal_count} → outcome "
-            f"{score}/{_MAX_CRITIC_OUTCOME}"
+            f"{score}/{_MAX_CRITIC_OUTCOME}",
         )
     return score
 
@@ -441,7 +443,7 @@ def _block_data_integrity(
     score = max(0, score)
     if reasons:
         bullets.append(
-            f"Data integrity: {', '.join(reasons)} → {score}/{_MAX_DATA_INTEGRITY}"
+            f"Data integrity: {', '.join(reasons)} → {score}/{_MAX_DATA_INTEGRITY}",
         )
     return score
 
@@ -463,7 +465,7 @@ def _apply_caps(
     # Cap 1: Hard policy breach → max 30
     if hard.get("has_hard_breaches") and score > 30:
         caps_applied.append(
-            f"Hard policy breach → cap 30 (was {score})"
+            f"Hard policy breach → cap 30 (was {score})",
         )
         score = 30
 
@@ -471,14 +473,14 @@ def _apply_caps(
     fatal_count = len(critic.get("fatal_flaws", []))
     if fatal_count >= 3 and score > 40:
         caps_applied.append(
-            f"Critic fatal flaws ({fatal_count}) ≥ 3 → cap 40 (was {score})"
+            f"Critic fatal flaws ({fatal_count}) ≥ 3 → cap 40 (was {score})",
         )
         score = 40
 
     # Cap 3: Concentration requires board override → max 65
     if conc.get("requires_board_override") and score > 65:
         caps_applied.append(
-            f"Concentration requires board override → cap 65 (was {score})"
+            f"Concentration requires board override → cap 65 (was {score})",
         )
         score = 65
 
@@ -489,7 +491,7 @@ def _apply_caps(
             and currency.upper() != "USD"
             and score > 55):
         caps_applied.append(
-            f"metrics_status=PARTIAL + non-USD ({currency}) → cap 55 (was {score})"
+            f"metrics_status=PARTIAL + non-USD ({currency}) → cap 55 (was {score})",
         )
         score = 55
 
@@ -498,7 +500,7 @@ def _apply_caps(
     evidence_conf = global_stats.get("evidence_confidence", "")
     if evidence_conf == "LOW" and score > 55:
         caps_applied.append(
-            f"Low evidence diversity (evidence_confidence=LOW) → cap 55 (was {score})"
+            f"Low evidence diversity (evidence_confidence=LOW) → cap 55 (was {score})",
         )
         score = 55
 

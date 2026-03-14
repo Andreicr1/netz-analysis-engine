@@ -193,7 +193,7 @@ def _ingest_single_document(
         emb = generate_embeddings(texts)
         if len(emb.vectors) != len(chunks):
             raise ValueError(
-                f"Embedding count mismatch: {len(emb.vectors)} vectors for {len(chunks)} chunks"
+                f"Embedding count mismatch: {len(emb.vectors)} vectors for {len(chunks)} chunks",
             )
 
         # 5. Build search documents (enriched with intelligence)
@@ -556,7 +556,7 @@ async def _async_ingest_single_document(doc: DocumentInfo) -> DocumentIngestResu
         emb = await async_generate_embeddings(texts)
         if len(emb.vectors) != len(enriched_chunks):
             raise ValueError(
-                f"Embedding count mismatch: {len(emb.vectors)} vectors for {len(enriched_chunks)} chunks"
+                f"Embedding count mismatch: {len(emb.vectors)} vectors for {len(enriched_chunks)} chunks",
             )
 
         # 7. Build enriched search documents (~23 fields)
@@ -698,7 +698,7 @@ async def async_run_ingest_for_unindexed_documents(
                     filename=doc.filename,
                     sponsor_name=sponsor_name,
                     fund_context=(fund_contexts or {}).get(doc.deal_id),
-                )
+                ),
             )
     finally:
         # Close session A before entering async context

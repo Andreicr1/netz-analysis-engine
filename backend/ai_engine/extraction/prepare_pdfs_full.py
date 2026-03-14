@@ -1,5 +1,4 @@
-"""
-CU PDF Preparation — Full Pipeline: Mistral OCR + Cohere Rerank + Semantic Chunking
+"""CU PDF Preparation — Full Pipeline: Mistral OCR + Cohere Rerank + Semantic Chunking
 ====================================================================================
 Stage 1 — Mistral Document AI (OCR, base64, handles scanned docs, table_format=html)
 Stage 2 — Cohere Rerank → doc_type (31 candidates, zero-shot classification)
@@ -734,7 +733,7 @@ def vehicle_hint(filename: str, text: str, debug: bool = False) -> tuple[str | N
     corpus = filename + "\n" + text
 
     # Filename override — CAOFF é sempre feeder (Cayman offshore feeder fund)
-    if re.search(r'\bCAOFF\b', filename):
+    if re.search(r"\bCAOFF\b", filename):
         return "feeder_master", "feeder_master: signals -> ['CAOFF filename override']"
 
     # REIT / Real-Estate Trust override — non-traded REITs and real-estate trusts
@@ -742,12 +741,12 @@ def vehicle_hint(filename: str, text: str, debug: bool = False) -> tuple[str | N
     # Class A/T/D shares) that trips the feeder_master and spv heuristics.
     # A REIT or real-estate trust is always a standalone vehicle.
     _REIT_RE = re.compile(
-        r'\bnon[- ]traded\s+REIT\b'
-        r'|\bReal\s+Estate\s+Investment\s+Trust\b'
-        r'|\bReal\s+Estate\s+(?:\w+\s+){0,4}Trust\b'  # entity names like "Real Estate Net Lease Trust"
-        r'|\bUPREIT\b'
-        r'|\bOP\s+Units?\b|\bOperating\s+Partnership\s+Units?\b'
-        r'|\bClass\s+[A-Z]\s+(?:shares?|units?|stock)\b',
+        r"\bnon[- ]traded\s+REIT\b"
+        r"|\bReal\s+Estate\s+Investment\s+Trust\b"
+        r"|\bReal\s+Estate\s+(?:\w+\s+){0,4}Trust\b"  # entity names like "Real Estate Net Lease Trust"
+        r"|\bUPREIT\b"
+        r"|\bOP\s+Units?\b|\bOperating\s+Partnership\s+Units?\b"
+        r"|\bClass\s+[A-Z]\s+(?:shares?|units?|stock)\b",
         re.IGNORECASE,
     )
     if _REIT_RE.search(corpus):
@@ -786,8 +785,7 @@ def vehicle_hint(filename: str, text: str, debug: bool = False) -> tuple[str | N
 # ============================================================
 
 def _pdf_batch_to_base64(pdf_path: str, start_page: int, end_page: int) -> str:
-    """
-    Extrai páginas [start_page, end_page) do PDF e retorna como base64.
+    """Extrai páginas [start_page, end_page) do PDF e retorna como base64.
     end_page é exclusivo (Python slice-style).
     """
     doc = fitz.open(pdf_path)
@@ -801,7 +799,7 @@ def _pdf_batch_to_base64(pdf_path: str, start_page: int, end_page: int) -> str:
     if len(data) > MISTRAL_MAX_FILE_BYTES:
         raise ValueError(
             f"Lote págs {start_page+1}–{end_page} excede {MISTRAL_MAX_FILE_MB} MB "
-            "(PDF com muitas imagens de alta resolução). Comprima o arquivo ou reduza max_pages."
+            "(PDF com muitas imagens de alta resolução). Comprima o arquivo ou reduza max_pages.",
         )
 
     return base64.b64encode(data).decode()
@@ -812,8 +810,7 @@ def extract_ocr_text(
     mistral_key: str,
     batch_size: int = MISTRAL_MAX_PAGES,
 ) -> tuple[str, int, int]:
-    """
-    Extrai texto OCR do PDF COMPLETO, dividindo automaticamente em lotes de
+    """Extrai texto OCR do PDF COMPLETO, dividindo automaticamente em lotes de
     `batch_size` páginas (padrão = 1000, limite da API pública Mistral).
 
     Para PDFs normais (≤ 1000 págs) o documento inteiro é enviado em uma única
@@ -854,8 +851,7 @@ def extract_ocr_text(
 
 
 def call_mistral_ocr(pdf_b64: str, mistral_key: str) -> str:
-    """
-    Chama a API pública Mistral OCR e retorna o texto extraído como markdown.
+    """Chama a API pública Mistral OCR e retorna o texto extraído como markdown.
     Capacidades utilizadas:
       - table_format: "html" → tabelas financeiras extraídas como HTML (mais preciso)
       - include_image_base64: False → não retorna imagens (reduz payload)
@@ -910,8 +906,7 @@ def call_mistral_ocr(pdf_b64: str, mistral_key: str) -> str:
 # ============================================================
 
 def _rerank_ocr_window(ocr_text: str) -> str:
-    """
-    Extrai janela head+tail do OCR para a query do Cohere Rerank.
+    """Extrai janela head+tail do OCR para a query do Cohere Rerank.
 
     Head (primeiros RERANK_OCR_HEAD_CHARS): nome do fundo, partes, tipo do doc.
     Tail (últimos RERANK_OCR_TAIL_CHARS): bloco de assinatura, declarações de
@@ -933,8 +928,7 @@ def cohere_classify(
     api_key: str,
     top_n: int | None = None,
 ) -> list[tuple[str, float]]:
-    """
-    Usa o Cohere Rerank para classificar o texto contra os candidatos.
+    """Usa o Cohere Rerank para classificar o texto contra os candidatos.
     query = texto do documento (pré-processado via _rerank_ocr_window)
     candidates = {label: description}
     Retorna lista ordenada de (label, relevance_score).
@@ -1039,8 +1033,7 @@ def classify_with_document_qna(
     mistral_key: str,
     filename: str,
 ) -> tuple[str, str, float]:
-    """
-    Fallback classifier using Mistral Document Q&A (chat/completions + JSON mode).
+    """Fallback classifier using Mistral Document Q&A (chat/completions + JSON mode).
     Called when Cohere doc_type score < COHERE_FALLBACK_THRESHOLD.
 
     Uses the already-extracted OCR text (no re-upload) to ask mistral-small-latest
@@ -1049,6 +1042,7 @@ def classify_with_document_qna(
     Returns:
         (doc_type, vehicle_type, confidence_0_to_1)
     All values are validated against the canonical candidate lists.
+
     """
     doc_type_list    = list(DOC_TYPE_CANDIDATES.keys())
     vehicle_type_list = list(VEHICLE_TYPE_CANDIDATES.keys())
@@ -1326,7 +1320,7 @@ def _extract_fund_name(filename: str, ocr_text: str) -> str:
         # Remove trailing doc-type descriptors to isolate the entity name
         stripped = _DOC_SUFFIXES_RE.sub("", candidate).strip(" -\u2013\u2014")
         # Collapse double spaces left by suffix removal (e.g. "Garrington  Code of Conduct")
-        stripped = re.sub(r'\s{2,}', ' ', stripped).strip()
+        stripped = re.sub(r"\s{2,}", " ", stripped).strip()
         if len(stripped) >= 4:
             candidate = stripped
         # Remove common legal suffixes
@@ -1352,11 +1346,11 @@ def _extract_fund_name(filename: str, ocr_text: str) -> str:
         # Reject single-word candidates that are countries, regions, or generic labels
         # (e.g. "Canada" from "Canada Employee Handbook", "ANBIMA" from "QDD ANBIMA")
         _INVALID_STANDALONE = re.compile(
-            r'^(US|USA|UK|Canada|Australia|Germany|France|Japan|Brazil|Brasil'
-            r'|ANBIMA|CVM|SEC|FINRA|CIMA|FCA'
-            r'|International|Global|General|Standard|Default'
-            r'|Annual|Monthly|Quarterly|Weekly'
-            r'|Draft|Final|Signed|Executed|Confidential)$',
+            r"^(US|USA|UK|Canada|Australia|Germany|France|Japan|Brazil|Brasil"
+            r"|ANBIMA|CVM|SEC|FINRA|CIMA|FCA"
+            r"|International|Global|General|Standard|Default"
+            r"|Annual|Monthly|Quarterly|Weekly"
+            r"|Draft|Final|Signed|Executed|Confidential)$",
             re.IGNORECASE,
         )
         if len(candidate.split()) == 1 and _INVALID_STANDALONE.match(candidate):
@@ -1378,8 +1372,7 @@ def _extract_fund_name(filename: str, ocr_text: str) -> str:
 
 
 def _resolve_vehicle_from_context(filename: str) -> tuple[str | None, str | None]:
-    """
-    Check if the filename matches a known alias from fund_context.json and
+    """Check if the filename matches a known alias from fund_context.json and
     resolve to a validated vehicle_type.
 
     Flow:  filename → alias key → full vehicle name → validated_vehicles → vehicle_type
@@ -1423,7 +1416,7 @@ def process_file(
     t0 = time.time()
     try:
         ocr_text, total_pages, n_batches = extract_ocr_text(
-            pdf_path, mistral_key, batch_size=max_pages
+            pdf_path, mistral_key, batch_size=max_pages,
         )
     except Exception as e:
         logger.warning("[FAIL] Mistral OCR: %s", e)
@@ -1482,7 +1475,7 @@ def process_file(
     t1 = time.time()
     try:
         doc_type, doc_score, doc_top3 = classify_doc_type(
-            ocr_text, cohere_key, path.name, subfolder_hint=subfolder_doc_hint
+            ocr_text, cohere_key, path.name, subfolder_hint=subfolder_doc_hint,
         )
     except Exception as e:
         logger.warning("[FAIL] Cohere doc_type: %s", e)
@@ -1491,7 +1484,7 @@ def process_file(
     # ── Stage 3: Cohere Rerank → vehicle_type ────────────────
     try:
         vehicle_type, vehicle_score, vehicle_top3 = classify_vehicle_type(
-            ocr_text, cohere_key, path.name, subfolder_hint=subfolder_veh_hint
+            ocr_text, cohere_key, path.name, subfolder_hint=subfolder_veh_hint,
         )
     except Exception as e:
         logger.warning("[FAIL] Cohere vehicle_type: %s", e)
@@ -1504,7 +1497,7 @@ def process_file(
         logger.info("[QnA] doc_score=%.3f < %s → Mistral Document Q&A fallback", doc_score, COHERE_FALLBACK_THRESHOLD)
         try:
             fb_doc, fb_veh, fb_score = classify_with_document_qna(
-                ocr_text, mistral_key, path.name
+                ocr_text, mistral_key, path.name,
             )
             doc_type      = fb_doc
             doc_score     = fb_score
@@ -1763,7 +1756,7 @@ def process_folder(
     ]
     report_path.write_text(
         json.dumps(report_data, indent=2, ensure_ascii=False),
-        encoding="utf-8"
+        encoding="utf-8",
     )
 
     # Chunks — full semantic chunks for Stage 7 (embedding)
@@ -1771,7 +1764,7 @@ def process_folder(
         chunks_path = folder / "cu_chunks.json"
         chunks_path.write_text(
             json.dumps(all_chunks, indent=2, ensure_ascii=False),
-            encoding="utf-8"
+            encoding="utf-8",
         )
         logger.info("Chunks written: %s → %s", f"{len(all_chunks):,}", chunks_path.name)
 

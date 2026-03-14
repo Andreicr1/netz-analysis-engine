@@ -157,10 +157,10 @@ def list_nav_snapshots(
         db.execute(
             select(NAVSnapshot)
             .where(NAVSnapshot.fund_id == fund_id)
-            .order_by(NAVSnapshot.period_month.desc(), NAVSnapshot.created_at.desc())
+            .order_by(NAVSnapshot.period_month.desc(), NAVSnapshot.created_at.desc()),
         )
         .scalars()
-        .all()
+        .all(),
     )
 
     return {"items": [_snapshot_out(s) for s in snaps]}
@@ -174,7 +174,7 @@ def get_nav_snapshot(
     actor=Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR", "INVESTMENT_TEAM"])),
 ):
     snap = db.execute(
-        select(NAVSnapshot).where(NAVSnapshot.fund_id == fund_id, NAVSnapshot.id == snapshot_id)
+        select(NAVSnapshot).where(NAVSnapshot.fund_id == fund_id, NAVSnapshot.id == snapshot_id),
     ).scalar_one_or_none()
     if not snap:
         raise HTTPException(status_code=404, detail="Not found")
@@ -183,10 +183,10 @@ def get_nav_snapshot(
         db.execute(
             select(NAVSnapshot)
             .where(NAVSnapshot.fund_id == fund_id)
-            .order_by(NAVSnapshot.period_month.desc(), NAVSnapshot.created_at.desc())
+            .order_by(NAVSnapshot.period_month.desc(), NAVSnapshot.created_at.desc()),
         )
         .scalars()
-        .all()
+        .all(),
     )
     return {"snapshot": _snapshot_out(snap), "assets": [_valuation_out(v) for v in vals]}
 
@@ -199,7 +199,7 @@ def finalize_nav_snapshot(
     actor=Depends(require_role(["ADMIN", "GP"])),
 ):
     snap = db.execute(
-        select(NAVSnapshot).where(NAVSnapshot.fund_id == fund_id, NAVSnapshot.id == snapshot_id)
+        select(NAVSnapshot).where(NAVSnapshot.fund_id == fund_id, NAVSnapshot.id == snapshot_id),
     ).scalar_one_or_none()
     if not snap:
         raise HTTPException(status_code=404, detail="Not found")
@@ -212,10 +212,10 @@ def finalize_nav_snapshot(
             select(AssetValuationSnapshot).where(
                 AssetValuationSnapshot.fund_id == fund_id,
                 AssetValuationSnapshot.nav_snapshot_id == snap.id,
-            )
+            ),
         )
         .scalars()
-        .all()
+        .all(),
     )
 
     missing_evidence = [
@@ -259,7 +259,7 @@ def publish_nav_snapshot(
     actor=Depends(require_role(["ADMIN", "GP", "COMPLIANCE"])),
 ):
     snap = db.execute(
-        select(NAVSnapshot).where(NAVSnapshot.fund_id == fund_id, NAVSnapshot.id == snapshot_id)
+        select(NAVSnapshot).where(NAVSnapshot.fund_id == fund_id, NAVSnapshot.id == snapshot_id),
     ).scalar_one_or_none()
     if not snap:
         raise HTTPException(status_code=404, detail="Not found")
@@ -298,7 +298,7 @@ def record_asset_valuation(
     actor=Depends(require_role(["ADMIN", "GP"])),
 ):
     snap = db.execute(
-        select(NAVSnapshot).where(NAVSnapshot.fund_id == fund_id, NAVSnapshot.id == snapshot_id)
+        select(NAVSnapshot).where(NAVSnapshot.fund_id == fund_id, NAVSnapshot.id == snapshot_id),
     ).scalar_one_or_none()
     if not snap:
         raise HTTPException(status_code=404, detail="Not found")
@@ -344,7 +344,7 @@ def record_asset_valuation(
             AssetValuationSnapshot.fund_id == fund_id,
             AssetValuationSnapshot.nav_snapshot_id == snap.id,
             AssetValuationSnapshot.asset_id == asset_id,
-        )
+        ),
     ).scalar_one_or_none()
     if dup:
         raise HTTPException(status_code=400, detail="Valuation for this asset already recorded in this snapshot")
@@ -388,7 +388,7 @@ def list_asset_valuations(
     actor=Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR", "INVESTMENT_TEAM"])),
 ):
     snap = db.execute(
-        select(NAVSnapshot).where(NAVSnapshot.fund_id == fund_id, NAVSnapshot.id == snapshot_id)
+        select(NAVSnapshot).where(NAVSnapshot.fund_id == fund_id, NAVSnapshot.id == snapshot_id),
     ).scalar_one_or_none()
     if not snap:
         raise HTTPException(status_code=404, detail="Not found")
@@ -397,10 +397,10 @@ def list_asset_valuations(
         db.execute(
             select(AssetValuationSnapshot)
             .where(AssetValuationSnapshot.fund_id == fund_id, AssetValuationSnapshot.nav_snapshot_id == snap.id)
-            .order_by(AssetValuationSnapshot.created_at.asc())
+            .order_by(AssetValuationSnapshot.created_at.asc()),
         )
         .scalars()
-        .all()
+        .all(),
     )
 
     return {"items": [_valuation_out(v) for v in vals]}
@@ -408,18 +408,18 @@ def list_asset_valuations(
 
 def _export_evidence_pack(db: Session, *, fund_id: uuid.UUID, limit: int, generated_by: str | None) -> dict:
     answers = list(
-        db.execute(select(AIAnswer).where(AIAnswer.fund_id == fund_id).order_by(AIAnswer.created_at_utc.desc()).limit(limit)).scalars().all()
+        db.execute(select(AIAnswer).where(AIAnswer.fund_id == fund_id).order_by(AIAnswer.created_at_utc.desc()).limit(limit)).scalars().all(),
     )
     answer_ids = [a.id for a in answers]
     questions = list(
-        db.execute(select(AIQuestion).where(AIQuestion.fund_id == fund_id, AIQuestion.id.in_([a.question_id for a in answers]))).scalars().all()
+        db.execute(select(AIQuestion).where(AIQuestion.fund_id == fund_id, AIQuestion.id.in_([a.question_id for a in answers]))).scalars().all(),
     )
     by_q = {q.id: q for q in questions}
 
     citations = []
     if answer_ids:
         citations = list(
-            db.execute(select(AIAnswerCitation).where(AIAnswerCitation.fund_id == fund_id, AIAnswerCitation.answer_id.in_(answer_ids))).scalars().all()
+            db.execute(select(AIAnswerCitation).where(AIAnswerCitation.fund_id == fund_id, AIAnswerCitation.answer_id.in_(answer_ids))).scalars().all(),
         )
     by_answer: dict[uuid.UUID, list[AIAnswerCitation]] = {}
     for c in citations:
@@ -447,7 +447,7 @@ def _export_evidence_pack(db: Session, *, fund_id: uuid.UUID, limit: int, genera
                     }
                     for c in by_answer.get(a.id, [])
                 ],
-            }
+            },
         )
     return manifest
 
@@ -483,10 +483,10 @@ def generate_monthly_pack(
         db.execute(
             select(AssetValuationSnapshot)
             .where(AssetValuationSnapshot.fund_id == fund_id, AssetValuationSnapshot.nav_snapshot_id == snap.id)
-            .order_by(AssetValuationSnapshot.created_at.asc())
+            .order_by(AssetValuationSnapshot.created_at.asc()),
         )
         .scalars()
-        .all()
+        .all(),
     )
 
     manifest: dict = {
@@ -574,7 +574,7 @@ def list_monthly_packs(
     packs = list(
         db.execute(select(MonthlyReportPack).where(MonthlyReportPack.fund_id == fund_id).order_by(MonthlyReportPack.created_at.desc()))
         .scalars()
-        .all()
+        .all(),
     )
     # EPIC11 v1: only show packs that have blob output metadata
     packs = [p for p in packs if getattr(p, "blob_path", None)]
@@ -701,7 +701,7 @@ def list_investor_statements(
     rows = list(
         db.execute(select(InvestorStatement).where(InvestorStatement.fund_id == fund_id).order_by(InvestorStatement.created_at.desc()))
         .scalars()
-        .all()
+        .all(),
     )
     return {
         "items": [
@@ -714,7 +714,7 @@ def list_investor_statements(
                 "created_by": r.created_by,
             }
             for r in rows
-        ]
+        ],
     }
 
 
@@ -726,7 +726,7 @@ def download_investor_statement(
     actor=Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR"])),
 ):
     row = db.execute(
-        select(InvestorStatement).where(InvestorStatement.fund_id == fund_id, InvestorStatement.id == statement_id)
+        select(InvestorStatement).where(InvestorStatement.fund_id == fund_id, InvestorStatement.id == statement_id),
     ).scalar_one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail="Not found")

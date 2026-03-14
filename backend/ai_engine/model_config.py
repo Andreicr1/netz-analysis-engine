@@ -1,5 +1,4 @@
-"""
-Model Configuration — Netz Private Credit OS
+"""Model Configuration — Netz Private Credit OS
 ============================================
 
 Centralises every model string used across the pipeline.
@@ -127,6 +126,7 @@ def get_model(stage: str) -> str:
     'o4-mini'
     >>> get_model("tone_pass1")
     'gpt-4.1-mini'
+
     """
     # Normalise: hyphens to underscores for env var lookup
     env_key = "NETZ_MODEL_" + stage.upper().replace("-", "_")
@@ -141,7 +141,7 @@ def get_model(stage: str) -> str:
         return model
 
     logger.warning(
-        "MODEL_FALLBACK stage=%s → %s (not in MODELS dict)", stage, _DEFAULT_MODEL
+        "MODEL_FALLBACK stage=%s → %s (not in MODELS dict)", stage, _DEFAULT_MODEL,
     )
     return _DEFAULT_MODEL
 

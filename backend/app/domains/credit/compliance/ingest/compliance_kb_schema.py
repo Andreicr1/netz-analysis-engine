@@ -1,5 +1,4 @@
-"""
-Pydantic schemas for the Unified Compliance Knowledge Base.
+"""Pydantic schemas for the Unified Compliance Knowledge Base.
 Covers: Fund Constitution · Service Provider Contracts · CIMA Regulation
 """
 from __future__ import annotations
@@ -40,7 +39,7 @@ class ComplianceDocument(BaseModel):
     effective_date: str | None = None
 
     ingested_at: str = Field(
-        default_factory=lambda: datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+        default_factory=lambda: datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
 
 

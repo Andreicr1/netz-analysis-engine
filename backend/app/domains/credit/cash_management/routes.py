@@ -79,22 +79,22 @@ def snapshot(
                     CashTransactionStatus.PENDING_APPROVAL,
                     CashTransactionStatus.APPROVED,
                     CashTransactionStatus.SENT_TO_ADMIN,
-                ]), 1
+                ]), 1,
             ))).label("pending"),
             func.count(case((
                 (CashTransaction.status == CashTransactionStatus.EXECUTED)
                 & CashTransaction.execution_confirmed_at.isnot(None)
-                & (CashTransaction.execution_confirmed_at >= month_start), 1
+                & (CashTransaction.execution_confirmed_at >= month_start), 1,
             ))).label("executed_month"),
         )
         .select_from(CashTransaction)
-        .where(CashTransaction.fund_id == fund_id, CashTransaction.currency == "USD")
+        .where(CashTransaction.fund_id == fund_id, CashTransaction.currency == "USD"),
     ).one()
 
     recon_stats = db.execute(
         select(
             func.count(case((
-                BankStatementLine.reconciliation_status == ReconciliationStatus.UNMATCHED, 1
+                BankStatementLine.reconciliation_status == ReconciliationStatus.UNMATCHED, 1,
             ))).label("unreconciled"),
             func.max(case((
                 BankStatementLine.reconciliation_status.in_([ReconciliationStatus.MATCHED, ReconciliationStatus.DISCREPANCY]),
@@ -102,7 +102,7 @@ def snapshot(
             ))).label("last_recon"),
         )
         .select_from(BankStatementLine)
-        .where(BankStatementLine.fund_id == fund_id)
+        .where(BankStatementLine.fund_id == fund_id),
     ).one()
 
     return {
@@ -163,7 +163,7 @@ def _get_director_count(db: Session, fund_id: uuid.UUID, tx_id: uuid.UUID) -> in
             CashTransactionApproval.fund_id == fund_id,
             CashTransactionApproval.transaction_id == tx_id,
             CashTransactionApproval.approver_role == "DIRECTOR",
-        )
+        ),
     ).scalar_one()
 
 
@@ -272,7 +272,7 @@ def manual_match(
         select(BankStatementLine).where(
             BankStatementLine.fund_id == fund_id,
             BankStatementLine.id == line_id,
-        )
+        ),
     ).scalar_one_or_none()
     if not line:
         raise HTTPException(status_code=404, detail="Statement line not found")
@@ -299,7 +299,7 @@ def manual_match(
             select(CashTransaction).where(
                 CashTransaction.fund_id == fund_id,
                 CashTransaction.id == tx_id,
-            )
+            ),
         ).scalar_one_or_none()
         if not tx:
             raise HTTPException(status_code=404, detail="Transaction not found")
@@ -317,7 +317,7 @@ def manual_match(
 
     # Append-only evidence of the reconciliation decision.
     existing_match = db.execute(
-        select(ReconciliationMatch).where(ReconciliationMatch.fund_id == fund_id, ReconciliationMatch.bank_line_id == line.id)
+        select(ReconciliationMatch).where(ReconciliationMatch.fund_id == fund_id, ReconciliationMatch.bank_line_id == line.id),
     ).scalar_one_or_none()
     if existing_match:
         raise HTTPException(status_code=400, detail="Statement line already has a reconciliation match record")
@@ -623,7 +623,7 @@ def mark_reconciled(
             BankStatementLine.fund_id == fund_id,
             BankStatementLine.matched_transaction_id == tx.id,
             BankStatementLine.reconciliation_status == ReconciliationStatus.MATCHED,
-        )
+        ),
     ).scalar_one()
     if int(has_match or 0) < 1:
         raise HTTPException(status_code=409, detail="Cannot mark reconciled without a matched bank statement line")
@@ -838,8 +838,7 @@ async def upload_statement(
     db: Session = Depends(get_db),
     actor=Depends(require_role(["COMPLIANCE", "GP", "ADMIN"])),
 ):
-    """
-    Upload a bank statement for reconciliation.
+    """Upload a bank statement for reconciliation.
     Stores statement metadata in registry and persists the file in blob storage (append-only evidence).
     """
     _require_fund_access(fund_id, actor)
@@ -894,7 +893,7 @@ async def upload_statement(
                         "direction": direction,
                         "description": description,
                         "amount_usd": amount_usd,
-                    }
+                    },
                 )
 
         safe = "".join(c for c in filename if c.isalnum() or c in ("-", "_", "."))
@@ -1025,8 +1024,7 @@ def add_line(
     db: Session = Depends(get_db),
     actor=Depends(require_role(["COMPLIANCE", "GP", "ADMIN"])),
 ):
-    """
-    Add a manual statement line for reconciliation.
+    """Add a manual statement line for reconciliation.
     """
     _require_fund_access(fund_id, actor)
     
@@ -1062,8 +1060,7 @@ def reconcile(
     db: Session = Depends(get_db),
     actor=Depends(require_role(["COMPLIANCE", "GP", "ADMIN"])),
 ):
-    """
-    Run reconciliation engine to match bank statement lines with transactions.
+    """Run reconciliation engine to match bank statement lines with transactions.
     """
     _require_fund_access(fund_id, actor)
     
@@ -1089,8 +1086,7 @@ def reconciliation_report(
     db: Session = Depends(get_db),
     actor=Depends(require_role(["COMPLIANCE", "GP", "ADMIN"])),
 ):
-    """
-    Get reconciliation report showing unmatched lines and unexplained transactions.
+    """Get reconciliation report showing unmatched lines and unexplained transactions.
     """
     _require_fund_access(fund_id, actor)
     

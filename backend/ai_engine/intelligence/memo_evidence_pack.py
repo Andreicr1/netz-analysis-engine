@@ -1,5 +1,4 @@
-"""
-memo_evidence_pack.py
+"""memo_evidence_pack.py
 
 Tier-1 EvidencePack builder for Deep Review V4.
 
@@ -91,6 +90,7 @@ def build_evidence_pack(
         Curation metadata from the evidence_selector dual-surface pipeline.
         Records which curated chunks were used per chapter for traceability.
         Contains per-chapter: governance_chunks_used, terms_chunks_used, etc.
+
     """
 
     deal_fields = deal_fields or {}
@@ -173,7 +173,7 @@ def build_evidence_pack(
             tp_name = tp.get("name", "unknown")
             tp_docs = tp.get("documents", []) + tp.get("ucc_filings", [])
             tp_warning_parts.append(
-                f"{tp_name} (docs: {', '.join(tp_docs[:6])})"
+                f"{tp_name} (docs: {', '.join(tp_docs[:6])})",
             )
         investor_identity["third_party_attribution_rule"] = (
             "CRITICAL — THIRD-PARTY DOCUMENT ATTRIBUTION: "
@@ -286,6 +286,7 @@ def validate_evidence_pack(pack: dict[str, Any]) -> None:
     Raises
     ------
     ValueError  if required surfaces are missing.
+
     """
     if not pack:
         raise ValueError("EvidencePack is empty")
@@ -297,7 +298,7 @@ def validate_evidence_pack(pack: dict[str, Any]) -> None:
     if not has_v4_keys and not has_legacy_keys:
         raise ValueError(
             "EvidencePack missing required fields: "
-            "need deal_overview/deal_identity (V4) or deal_id/executive_summary (legacy)"
+            "need deal_overview/deal_identity (V4) or deal_id/executive_summary (legacy)",
         )
 
     if not isinstance(pack.get("citations", []), list):
@@ -337,7 +338,7 @@ def persist_evidence_pack(
             MemoEvidencePack.deal_id == deal_id,
             MemoEvidencePack.is_current == True,  # noqa: E712
         )
-        .values(is_current=False)
+        .values(is_current=False),
     )
 
     row = MemoEvidencePack(

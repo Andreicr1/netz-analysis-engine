@@ -482,7 +482,7 @@ def _build_critic_input(context: dict[str, Any]) -> str:
     # absent for this instrument type and what constitutes a fatal flaw.
     instrument_type = context.get("instrument_type", "UNKNOWN")
     instr_profile = INSTRUMENT_TYPE_PROFILES.get(
-        instrument_type, INSTRUMENT_TYPE_PROFILES["UNKNOWN"]
+        instrument_type, INSTRUMENT_TYPE_PROFILES["UNKNOWN"],
     )
     sections.append("=== INSTRUMENT TYPE CONTEXT (READ FIRST) ===")
     sections.append(json.dumps({
@@ -690,6 +690,7 @@ def critique_intelligence(
 
     Raises:
         ValueError: If LLM call or JSON parsing fails.
+
     """
     if call_openai_fn is None:
         raise ValueError("call_openai_fn must be provided — critic engine requires LLM access.")

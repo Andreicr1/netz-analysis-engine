@@ -53,8 +53,8 @@ def discover_pipeline_deals(db: Session, *, fund_id: uuid.UUID, actor_id: str = 
             select(DocumentRegistry).where(
                 DocumentRegistry.fund_id == fund_id,
                 DocumentRegistry.container_name == PIPELINE_CONTAINER,
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
 
     grouped: dict[str, list[DocumentRegistry]] = defaultdict(list)
@@ -67,7 +67,7 @@ def discover_pipeline_deals(db: Session, *, fund_id: uuid.UUID, actor_id: str = 
     all_deals = {
         d.deal_folder_path: d
         for d in db.execute(
-            select(Deal).where(Deal.fund_id == fund_id)
+            select(Deal).where(Deal.fund_id == fund_id),
         ).scalars().all()
         if d.deal_folder_path
     }
@@ -128,16 +128,16 @@ def aggregate_deal_documents(db: Session, *, fund_id: uuid.UUID, actor_id: str =
             select(DocumentRegistry).where(
                 DocumentRegistry.fund_id == fund_id,
                 DocumentRegistry.container_name == PIPELINE_CONTAINER,
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
 
     all_ddi = list(
         db.execute(
             select(DealDocumentIntelligence).where(
                 DealDocumentIntelligence.fund_id == fund_id,
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
     ddi_lookup: dict[tuple, DealDocumentIntelligence] = {
         (row.deal_id, row.doc_id): row for row in all_ddi
@@ -247,7 +247,7 @@ def _infer_risk_flags_for_deal(deal: Deal, anchors: list[KnowledgeAnchor], docs:
                         "severity": "MEDIUM",
                         "reasoning": "Legal draft detected in pipeline; review terms before IC.",
                         "source_document": str(doc.doc_id),
-                    }
+                    },
                 )
                 break
 
@@ -292,15 +292,15 @@ def run_pipeline_monitoring(db: Session, *, fund_id: uuid.UUID, actor_id: str = 
 
     all_profiles = list(
         db.execute(
-            select(DealIntelligenceProfile).where(DealIntelligenceProfile.fund_id == fund_id)
-        ).scalars().all()
+            select(DealIntelligenceProfile).where(DealIntelligenceProfile.fund_id == fund_id),
+        ).scalars().all(),
     )
     profiles_by_deal = {p.deal_id: p for p in all_profiles}
 
     all_flags = list(
         db.execute(
-            select(DealRiskFlag).where(DealRiskFlag.fund_id == fund_id)
-        ).scalars().all()
+            select(DealRiskFlag).where(DealRiskFlag.fund_id == fund_id),
+        ).scalars().all(),
     )
     flags_by_deal: dict[uuid.UUID, list[DealRiskFlag]] = defaultdict(list)
     for f in all_flags:
@@ -311,8 +311,8 @@ def run_pipeline_monitoring(db: Session, *, fund_id: uuid.UUID, actor_id: str = 
             select(PipelineAlert).where(
                 PipelineAlert.fund_id == fund_id,
                 PipelineAlert.resolved_flag.is_(False),
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
     open_alerts_set: set[tuple] = {
         (a.deal_id, a.alert_type) for a in all_open_alerts

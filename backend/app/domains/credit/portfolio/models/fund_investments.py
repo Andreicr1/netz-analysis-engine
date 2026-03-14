@@ -11,8 +11,7 @@ from app.domains.credit.portfolio.enums import ReportingFrequency
 
 
 class FundInvestment(Base):
-    """
-    Asset extension table.
+    """Asset extension table.
 
     Represents an investment into an underlying fund (FoF / commitment).
     Always linked 1:1 to PortfolioAsset.

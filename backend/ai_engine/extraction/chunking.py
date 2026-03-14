@@ -135,6 +135,7 @@ def chunk_document_semantic(
 
     Returns:
         List of EnrichedChunk dicts with semantic metadata.
+
     """
     if not pages:
         return []

@@ -1,5 +1,4 @@
-"""
-Lightweight intent router: given a question and optional deal_folder,
+"""Lightweight intent router: given a question and optional deal_folder,
 returns the list of knowledge domains that should be queried.
 
 Uses keyword heuristics — no LLM call to keep latency low.
@@ -52,8 +51,7 @@ class IntentRouter:
 
     @staticmethod
     def detect_domains(question: str, deal_folder: str | None = None) -> list[str]:
-        """
-        Return the list of knowledge domains relevant to *question*.
+        """Return the list of knowledge domains relevant to *question*.
 
         Rules:
         - If *deal_folder* is provided, PIPELINE is always included.
@@ -76,7 +74,7 @@ class IntentRouter:
         # Fallback: if nothing matched, query everything.
         if not detected:
             logger.debug(
-                "INTENT_ROUTER no keywords matched — falling back to all domains"
+                "INTENT_ROUTER no keywords matched — falling back to all domains",
             )
             return list(ALL_DOMAINS)
 

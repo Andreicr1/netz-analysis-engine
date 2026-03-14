@@ -1,5 +1,4 @@
-"""
-Stage 7 — Chunk Embedding
+"""Stage 7 — Chunk Embedding
 =========================
 Reads cu_chunks.json from Stage 6 (prepare_pdfs_full.py)
 Embeds each chunk's content via the centralised provider layer
@@ -112,7 +111,7 @@ def embed_folder(
     output_path = folder / "cu_chunks_embedded.json"
     output_path.write_text(
         json.dumps(chunks, ensure_ascii=False),  # no indent — file can be large
-        encoding="utf-8"
+        encoding="utf-8",
     )
 
     size_mb = output_path.stat().st_size / (1024 * 1024)

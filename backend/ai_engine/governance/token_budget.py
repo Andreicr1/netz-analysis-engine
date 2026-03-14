@@ -58,7 +58,6 @@ class TokenBudgetTracker:
     # -- pre-flight: no-op (no enforcement) ---------------------------------
     def check_before_call(self, *, label: str = "") -> None:
         """No-op.  Kept so callers don't need changes."""
-        pass
 
     # -- post-call recording ------------------------------------------------
     def record(self, *, input_tokens: int = 0, output_tokens: int = 0,

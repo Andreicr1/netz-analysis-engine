@@ -154,14 +154,14 @@ def _check_board_override(profile: ConcentrationProfile, policy: PolicyThreshold
     for trigger in triggers:
         if trigger_map.get(trigger, False):
             reasons.append(
-                f"{trigger} breach — policy source: {policy.board_override_triggers.source}"
+                f"{trigger} breach — policy source: {policy.board_override_triggers.source}",
             )
 
     # Safety net: manager breach always requires board override
     if profile.manager_limit_breached and not any("single_manager" in r for r in reasons):
         reasons.append(
             f"single_manager breach (limit: {policy.single_manager_pct.value}% "
-            f"from {policy.single_manager_pct.source})"
+            f"from {policy.single_manager_pct.source})",
         )
 
     profile.requires_board_override = len(reasons) > 0
@@ -184,6 +184,7 @@ def compute_concentration(
             {deal_name, manager_name, strategy_type, geography,
              committed_capital_usd, is_non_usd_unhedged, has_hard_lockup}
         policy: Pre-loaded PolicyThresholds. If None, loaded from cache/indices.
+
     """
     if policy is None:
         policy = load_policy_thresholds()
@@ -193,8 +194,8 @@ def compute_concentration(
             select(ActiveInvestment).where(
                 ActiveInvestment.fund_id == fund_id,
                 ActiveInvestment.lifecycle_status.in_(["ACTIVE", "MONITORING"]),
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
 
     profile = ConcentrationProfile()
@@ -230,7 +231,7 @@ def compute_concentration(
             getattr(inv, "geography", None)
             or getattr(inv, "domicile", None)
             or getattr(inv, "country", None)
-            or "global"
+            or "global",
         )
         geo_exp[geo] = geo_exp.get(geo, 0.0) + exposure
         name_exp[inv.investment_name] = name_exp.get(inv.investment_name, 0.0) + exposure

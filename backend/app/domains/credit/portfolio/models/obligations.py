@@ -11,16 +11,17 @@ from app.domains.credit.portfolio.enums import ObligationStatus, ObligationType
 
 
 class AssetObligation(Base):
-    """
-    Universal monitoring object.
+    """Universal monitoring object.
 
     Obligations are generated per asset and drive alerts/actions.
+
     Examples:
     - Fund Investment → NAV_REPORT quarterly
     - Loan → COVENANT_TEST monthly
 
     IMPORTANT: AssetObligation must never contain fund_id directly.
     Fund scoping is enforced via join to PortfolioAsset.
+
     """
 
     __tablename__ = "asset_obligations"

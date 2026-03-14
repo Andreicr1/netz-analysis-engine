@@ -1,5 +1,4 @@
-"""
-Stage 6 — Semantic Markdown Chunking
+"""Stage 6 — Semantic Markdown Chunking
 
 Takes Mistral OCR markdown output and produces semantically coherent chunks
 aligned to document structure. Preserves tables as atomic units, respects
@@ -28,13 +27,12 @@ logger = logging.getLogger(__name__)
 
 
 def _slugify_key(value: str) -> str:
-    """
-    Produce an Azure AI Search-safe document key from an arbitrary string.
+    """Produce an Azure AI Search-safe document key from an arbitrary string.
     Azure only allows: A-Z a-z 0-9 dash underscore equal-sign.
     Spaces and all other punctuation are collapsed to a single underscore.
     """
-    slug = re.sub(r'[^A-Za-z0-9\-=]+', '_', value)
-    return slug.strip('_') or 'doc'
+    slug = re.sub(r"[^A-Za-z0-9\-=]+", "_", value)
+    return slug.strip("_") or "doc"
 
 
 # ============================================================
@@ -101,36 +99,36 @@ def get_chunk_sizes(doc_type: str) -> tuple[int, int, int]:
 
 _SECTION_TYPE_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(
-        r'fee|carried interest|management fee|performance fee|hurdle|waterfall|'
-        r'expense|cost|incentive fee|base fee|preferred return',
+        r"fee|carried interest|management fee|performance fee|hurdle|waterfall|"
+        r"expense|cost|incentive fee|base fee|preferred return",
         re.IGNORECASE), "fees"),
     (re.compile(
-        r'\breturn\b|performance|irr|moic|multiple|yield|distribution|income|'
-        r'net asset value|\bnav\b|track record|tvm|tvpi|dpi|rvpi',
+        r"\breturn\b|performance|irr|moic|multiple|yield|distribution|income|"
+        r"net asset value|\bnav\b|track record|tvm|tvpi|dpi|rvpi",
         re.IGNORECASE), "returns"),
     (re.compile(
-        r'term|duration|commitment period|investment period|fund life|extension|'
-        r'maturity|key term|summary of terms|structure|fund size|target size',
+        r"term|duration|commitment period|investment period|fund life|extension|"
+        r"maturity|key term|summary of terms|structure|fund size|target size",
         re.IGNORECASE), "terms"),
     (re.compile(
-        r'governance|director|board|committee|voting|consent|amendment|'
-        r'removal|key person|clawback|side letter|\bmfn\b',
+        r"governance|director|board|committee|voting|consent|amendment|"
+        r"removal|key person|clawback|side letter|\bmfn\b",
         re.IGNORECASE), "governance"),
     (re.compile(
-        r'team|partner|principal|founder|biography|\bbio\b|experience|'
-        r'background|personnel|investment committee|management team|staff',
+        r"team|partner|principal|founder|biography|\bbio\b|experience|"
+        r"background|personnel|investment committee|management team|staff",
         re.IGNORECASE), "team"),
     (re.compile(
-        r'portfolio|investment|deal|transaction|position|holding|'
-        r'borrower|loan|credit|collateral|asset|origination',
+        r"portfolio|investment|deal|transaction|position|holding|"
+        r"borrower|loan|credit|collateral|asset|origination",
         re.IGNORECASE), "portfolio"),
     (re.compile(
-        r'risk|covenant|restriction|limit|concentration|default|'
-        r'breach|compliance|regulation|watchlist',
+        r"risk|covenant|restriction|limit|concentration|default|"
+        r"breach|compliance|regulation|watchlist",
         re.IGNORECASE), "risk"),
     (re.compile(
-        r'market|macro|outlook|commentary|strategy|thesis|opportunity|'
-        r'sector|industry|pipeline|landscape',
+        r"market|macro|outlook|commentary|strategy|thesis|opportunity|"
+        r"sector|industry|pipeline|landscape",
         re.IGNORECASE), "strategy"),
 ]
 
@@ -171,13 +169,13 @@ def classify_section_type(
 # ============================================================
 
 _HAS_NUMBERS = re.compile(
-    r'\d+\.?\d*\s*%'                       # percentages: 18.5%, 8%
-    r'|\$[\d,]+\.?\d*'                     # USD: $1,250,000
-    r'|R\$[\d,]+\.?\d*'                    # BRL: R$50,000,000
-    r'|[\d,]+\.?\d*[xX]\b'                 # multiples: 1.8x
-    r'|\b\d+\.?\d*[xX]\s'                  # multiples with space
-    r'|(?:USD|EUR|GBP|BRL|CHF)\s*[\d,]+'  # currency amounts
-    r'|\b(?:IRR|MOIC|NAV|AUM)\s*:?\s*[\d]',  # labeled metrics
+    r"\d+\.?\d*\s*%"                       # percentages: 18.5%, 8%
+    r"|\$[\d,]+\.?\d*"                     # USD: $1,250,000
+    r"|R\$[\d,]+\.?\d*"                    # BRL: R$50,000,000
+    r"|[\d,]+\.?\d*[xX]\b"                 # multiples: 1.8x
+    r"|\b\d+\.?\d*[xX]\s"                  # multiples with space
+    r"|(?:USD|EUR|GBP|BRL|CHF)\s*[\d,]+"  # currency amounts
+    r"|\b(?:IRR|MOIC|NAV|AUM)\s*:?\s*[\d]",  # labeled metrics
 )
 
 
@@ -199,8 +197,7 @@ class Block:
 
 
 def _is_pipe_row(line: str) -> bool:
-    """
-    Returns True when a line is a Markdown table row or separator.
+    """Returns True when a line is a Markdown table row or separator.
     A table row starts and ends with | and has ≥ 2 pipe characters.
     Matches both data rows  (| Fund | NAV |)
     and separator rows     (| ---- | --- |)
@@ -214,14 +211,13 @@ def _is_pipe_row(line: str) -> bool:
 # Pattern: [tbl-12.html](tbl-12.html) or [table_001.html](table_001.html)
 # These lines must be treated as table blocks so has_table propagates correctly.
 _MISTRAL_TABLE_LINK_RE = re.compile(
-    r'\[[^\]]+\.html\]\([^)]+\.html\)',
+    r"\[[^\]]+\.html\]\([^)]+\.html\)",
     re.IGNORECASE,
 )
 
 
 def _split_html_table(table_html: str, max_chars: int) -> list[str]:
-    """
-    Split an oversized HTML table into smaller sub-tables of ≤ max_chars.
+    """Split an oversized HTML table into smaller sub-tables of ≤ max_chars.
 
     Preserves the header row (first <tr> with <th> or the very first <tr>)
     in every sub-table so each chunk is self-contained.
@@ -232,12 +228,12 @@ def _split_html_table(table_html: str, max_chars: int) -> list[str]:
         return [table_html]
 
     # Extract rows
-    rows = re.findall(r'<tr[^>]*>.*?</tr>', table_html, re.DOTALL | re.IGNORECASE)
+    rows = re.findall(r"<tr[^>]*>.*?</tr>", table_html, re.DOTALL | re.IGNORECASE)
     if not rows:
         return [table_html]
 
     # Detect header row (contains <th> tags)
-    header_row = rows[0] if (re.search(r'<th[\s>]', rows[0], re.IGNORECASE) or len(rows) == 1) else None
+    header_row = rows[0] if (re.search(r"<th[\s>]", rows[0], re.IGNORECASE) or len(rows) == 1) else None
     data_rows = rows[1:] if header_row else rows
 
     # Build sub-tables
@@ -269,8 +265,7 @@ def _split_html_table(table_html: str, max_chars: int) -> list[str]:
 
 
 def parse_markdown_blocks(markdown: str) -> list[Block]:
-    """
-    Parse markdown into structural blocks.
+    """Parse markdown into structural blocks.
     HTML tables (from Mistral OCR table_format=html) are treated as atomic units.
     Markdown pipe-tables are also collected as single blocks.
     """
@@ -287,16 +282,16 @@ def parse_markdown_blocks(markdown: str) -> list[Block]:
         # a SINGLE line (e.g. <table>…</table>). We must check the opening line
         # for </table> first; otherwise the loop would skip past it and eat all
         # subsequent lines up to the next </table> (or EOF).
-        if re.search(r'<table[\s>/]|<table>$', line, re.IGNORECASE):
+        if re.search(r"<table[\s>/]|<table>$", line, re.IGNORECASE):
             table_lines = [line]
-            if re.search(r'</table>', line, re.IGNORECASE):
+            if re.search(r"</table>", line, re.IGNORECASE):
                 # Self-contained single-line table → don't collect further
                 i += 1
             else:
                 i += 1
                 while i < len(lines):
                     table_lines.append(lines[i])
-                    if re.search(r'</table>', lines[i], re.IGNORECASE):
+                    if re.search(r"</table>", lines[i], re.IGNORECASE):
                         i += 1
                         break
                     i += 1
@@ -313,7 +308,7 @@ def parse_markdown_blocks(markdown: str) -> list[Block]:
             continue
 
         # Markdown header
-        header_match = re.match(r'^(#{1,6})\s+(.+)$', line)
+        header_match = re.match(r"^(#{1,6})\s+(.+)$", line)
         if header_match:
             level = len(header_match.group(1))
             text  = header_match.group(2).strip()
@@ -336,7 +331,7 @@ def parse_markdown_blocks(markdown: str) -> list[Block]:
 
         # Legacy: first line has | anywhere + NEXT line is a pure separator
         # (catches the rare case where the header row doesn't start/end with |)
-        if "|" in line and i + 1 < len(lines) and re.match(r'^[\|\s\-:]+$', lines[i + 1].strip()):
+        if "|" in line and i + 1 < len(lines) and re.match(r"^[\|\s\-:]+$", lines[i + 1].strip()):
             table_lines = [line]
             i += 1
             while i < len(lines) and "|" in lines[i]:
@@ -352,12 +347,12 @@ def parse_markdown_blocks(markdown: str) -> list[Block]:
             continue
 
         # List item — collect contiguous list lines
-        if re.match(r'^\s*[-*•]\s+', line) or re.match(r'^\s*\d+\.\s+', line):
+        if re.match(r"^\s*[-*•]\s+", line) or re.match(r"^\s*\d+\.\s+", line):
             list_lines = [line]
             i += 1
             while i < len(lines) and (
-                re.match(r'^\s*[-*•]\s+', lines[i]) or
-                re.match(r'^\s*\d+\.\s+', lines[i]) or
+                re.match(r"^\s*[-*•]\s+", lines[i]) or
+                re.match(r"^\s*\d+\.\s+", lines[i]) or
                 (lines[i].startswith("  ") and list_lines)
             ):
                 list_lines.append(lines[i])
@@ -373,15 +368,15 @@ def parse_markdown_blocks(markdown: str) -> list[Block]:
             next_line = lines[i]
             if not next_line.strip():
                 break
-            if re.match(r'^#{1,6}\s+', next_line):
+            if re.match(r"^#{1,6}\s+", next_line):
                 break
-            if re.search(r'<table[\s>/]|<table>$', next_line, re.IGNORECASE):
+            if re.search(r"<table[\s>/]|<table>$", next_line, re.IGNORECASE):
                 break
             if _MISTRAL_TABLE_LINK_RE.search(next_line):
                 break
             if _is_pipe_row(next_line):
                 break
-            if "|" in next_line and i + 1 < len(lines) and re.match(r'^[\|\s\-:]+$', lines[i + 1].strip()):
+            if "|" in next_line and i + 1 < len(lines) and re.match(r"^[\|\s\-:]+$", lines[i + 1].strip()):
                 break
             para_lines.append(next_line)
             i += 1
@@ -441,8 +436,7 @@ def chunk_markdown(
     doc_type: str,
     metadata: dict,
 ) -> list[Chunk]:
-    """
-    Core chunking logic. Returns list of Chunk objects.
+    """Core chunking logic. Returns list of Chunk objects.
 
     Rules:
     - Tables are always atomic — never split across chunks.
@@ -531,7 +525,7 @@ def chunk_markdown(
 
             # Real table (HTML or pipe rows) — split if oversized
             table_chars = len(block.raw)
-            if table_chars > max_chars and re.search(r'<table', block.raw, re.IGNORECASE):
+            if table_chars > max_chars and re.search(r"<table", block.raw, re.IGNORECASE):
                 # Split oversized HTML table into sub-tables
                 sub_tables = _split_html_table(block.raw, max_chars)
                 for sub_html in sub_tables:
@@ -578,8 +572,7 @@ def chunk_document(
     doc_type:     str,
     metadata:     dict,
 ) -> list[dict]:
-    """
-    Entry point for Stage 6.
+    """Entry point for Stage 6.
 
     Args:
         ocr_markdown: Full markdown string from Mistral OCR (Stage 1).
@@ -589,6 +582,7 @@ def chunk_document(
 
     Returns:
         List of chunk dicts ready for embedding (Stage 7) and indexing (Stage 8).
+
     """
     if not ocr_markdown.strip():
         return []

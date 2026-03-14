@@ -32,7 +32,7 @@ def evaluate_llm_judge(
                     status=MetricStatus.DATA_ISSUE,
                     score=0.0,
                     reason="Chapter text is empty.",
-                )
+                ),
             ],
             warnings=["Layer 4 skipped because chapter text is empty."],
         )

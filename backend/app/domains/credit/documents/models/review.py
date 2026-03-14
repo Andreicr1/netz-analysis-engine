@@ -161,8 +161,8 @@ class ReviewChecklistItem(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
 
     ai_finding: Mapped[dict | None] = mapped_column(
         JSONB, nullable=True,
-        comment='AI pre-analysis: {status: FOUND|NOT_FOUND|UNCLEAR, confidence: 0-100, '
-                'excerpt: str, source_chunk_id: str, model: str, analyzed_at: str}',
+        comment="AI pre-analysis: {status: FOUND|NOT_FOUND|UNCLEAR, confidence: 0-100, "
+                "excerpt: str, source_chunk_id: str, model: str, analyzed_at: str}",
     )
 
     __table_args__ = (

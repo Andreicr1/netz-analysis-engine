@@ -41,7 +41,7 @@ def process_pending_versions(
             select(DocumentVersion)
             .where(DocumentVersion.fund_id == fund_id, DocumentVersion.ingestion_status == DocumentIngestionStatus.PENDING)
             .order_by(DocumentVersion.created_at.asc())
-            .limit(limit)
+            .limit(limit),
         )
         .scalars()
         .all()
@@ -142,7 +142,7 @@ def _process_one(db: Session, *, fund_id: uuid.UUID, version: DocumentVersion, a
                         page_end=d.page_end,
                         created_by=actor_id,
                         updated_by=actor_id,
-                    )
+                    ),
                 )
             db.flush()
 
@@ -162,7 +162,7 @@ def _process_one(db: Session, *, fund_id: uuid.UUID, version: DocumentVersion, a
             db.execute(
                 select(DocumentChunk)
                 .where(DocumentChunk.fund_id == fund_id, DocumentChunk.version_id == version.id)
-                .order_by(DocumentChunk.chunk_index.asc())
+                .order_by(DocumentChunk.chunk_index.asc()),
             )
             .scalars()
             .all()
@@ -183,7 +183,7 @@ def _process_one(db: Session, *, fund_id: uuid.UUID, version: DocumentVersion, a
                     "chunk_index": int(c.chunk_index),
                     "content_text": c.text,
                     "uploaded_at": (version.uploaded_at or version.created_at).astimezone(UTC).isoformat(),
-                }
+                },
             )
         client.upsert_chunks(items=items)
 

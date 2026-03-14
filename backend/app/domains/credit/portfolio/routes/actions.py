@@ -39,8 +39,8 @@ def list_actions(
             .join(PortfolioAsset, PortfolioAsset.id == Action.asset_id)
             .where(PortfolioAsset.fund_id == fund_id)
             .limit(limit)
-            .offset(offset)
-        ).scalars().all()
+            .offset(offset),
+        ).scalars().all(),
     )
 
 
@@ -58,7 +58,7 @@ def update_action(
         .where(
             PortfolioAsset.fund_id == fund_id,
             Action.id == action_id,
-        )
+        ),
     ).scalar_one_or_none()
 
     if not action:

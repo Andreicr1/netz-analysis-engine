@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from io import BytesIO
 from typing import Any
 
@@ -475,7 +475,7 @@ def generate_memo_pdf(
     output_path: str | None = None,
 ) -> str:
     """Read a markdown investment memo and produce an institutional PDF."""
-    with open(md_path, encoding="utf-8") as f:
+    with open(md_path, "r", encoding="utf-8") as f:
         raw_md = f.read()
 
     # 1. Pre-process: normalise Unicode dashes + remove LLM structural noise
@@ -489,7 +489,7 @@ def generate_memo_pdf(
         deal_name = h1.group(1).strip() if h1 else "Unknown Deal"
 
     recommendation = meta.get("IC Recommendation", "CONDITIONAL")
-    generated      = meta.get("Generated", datetime.now(UTC).strftime("%Y-%m-%d"))
+    generated      = meta.get("Generated", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
     version_tag    = meta.get("Version Tag", "")
 
     # 3. Build document

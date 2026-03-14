@@ -171,7 +171,7 @@ def get_latest_ingest_job(
         select(PipelineIngestJob)
         .where(PipelineIngestJob.fund_id == str(fund_id))
         .order_by(PipelineIngestJob.started_at.desc())
-        .limit(1)
+        .limit(1),
     ).scalar_one_or_none()
 
     if row is None:
@@ -196,7 +196,7 @@ def get_ingest_job(
         .where(
             PipelineIngestJob.id == job_id,
             PipelineIngestJob.fund_id == str(fund_id),
-        )
+        ),
     ).scalar_one_or_none()
 
     if row is None:
@@ -229,7 +229,7 @@ def trigger_deal_bootstrap(
     # Look up deal name
     deal = db.execute(
         select(PipelineDeal.deal_name)
-        .where(PipelineDeal.id == deal_id, PipelineDeal.fund_id == str(fund_id))
+        .where(PipelineDeal.id == deal_id, PipelineDeal.fund_id == str(fund_id)),
     ).scalar_one_or_none()
 
     if deal is None:
@@ -240,7 +240,7 @@ def trigger_deal_bootstrap(
     # Look up blob paths for this deal's PDFs
     rows = db.execute(
         select(DocumentRegistry.container_name, DocumentRegistry.blob_path)
-        .where(DocumentRegistry.fund_id == str(fund_id))
+        .where(DocumentRegistry.fund_id == str(fund_id)),
     ).all()
 
     blob_pairs = [
@@ -291,7 +291,7 @@ def trigger_deal_reanalyze(
 
     deal = db.execute(
         select(PipelineDeal.deal_name)
-        .where(PipelineDeal.id == deal_id, PipelineDeal.fund_id == str(fund_id))
+        .where(PipelineDeal.id == deal_id, PipelineDeal.fund_id == str(fund_id)),
     ).scalar_one_or_none()
 
     if deal is None:

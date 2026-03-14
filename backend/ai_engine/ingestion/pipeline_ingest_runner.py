@@ -25,9 +25,9 @@ import asyncio
 import logging
 import sys
 import uuid
-from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+from typing import Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ def _create_ingest_job(db, *, fund_id: uuid.UUID, actor_id: str):
     job = PipelineIngestJob(
         fund_id=str(fund_id),
         status=IngestJobStatus.RUNNING,
-        started_at=datetime.now(UTC),
+        started_at=datetime.now(timezone.utc),
         created_by=actor_id,
         updated_by=actor_id,
     )
@@ -101,6 +101,7 @@ def _create_ingest_job(db, *, fund_id: uuid.UUID, actor_id: str):
 
 def _get_db_session():
     """Mirror the legacy ingest runner bootstrap for worker execution."""
+    from app.core.db.engine import async_session_factory
 
     SessionLocal = async_session_factory
     return SessionLocal()
@@ -110,7 +111,7 @@ def _finalise_job(db, job, *, result: PipelineIngestResult, failed: bool):
     """Persist final counters and status to the PipelineIngestJob row."""
     from app.domains.credit.modules.ai.ingest_job_model import IngestJobStatus
 
-    job.finished_at = datetime.now(UTC)
+    job.finished_at = datetime.now(timezone.utc)
     job.documents_discovered = result.documents_scanned
     job.documents_bridged = result.documents_bridged
     job.documents_ingested = result.documents_ingested
@@ -149,7 +150,7 @@ def run_full_pipeline_ingest(
     """
     fund_id = _coerce_uuid(fund_id, field_name="fund_id")
     deal_ids = _coerce_uuid_list(deal_ids, field_name="deal_ids")
-    result = PipelineIngestResult(started_at=datetime.now(UTC).isoformat())
+    result = PipelineIngestResult(started_at=datetime.now(timezone.utc).isoformat())
     db = _get_db_session()
 
     # ── Create audit job row ──────────────────────────────────────────
@@ -307,7 +308,7 @@ def run_full_pipeline_ingest(
         pipeline_failed = True
 
     finally:
-        result.finished_at = datetime.now(UTC).isoformat()
+        result.finished_at = datetime.now(timezone.utc).isoformat()
 
         # Determine failure: explicit fatal OR any stage errors
         if result.errors:
@@ -359,7 +360,7 @@ async def async_run_full_pipeline_ingest(
     """
     fund_id = _coerce_uuid(fund_id, field_name="fund_id")
     deal_ids_coerced = _coerce_uuid_list(deal_ids, field_name="deal_ids")
-    result = PipelineIngestResult(started_at=datetime.now(UTC).isoformat())
+    result = PipelineIngestResult(started_at=datetime.now(timezone.utc).isoformat())
     db = _get_db_session()
 
     # ── Create audit job row ──────────────────────────────────────────
@@ -608,7 +609,7 @@ async def async_run_full_pipeline_ingest(
         pipeline_failed = True
 
     finally:
-        result.finished_at = datetime.now(UTC).isoformat()
+        result.finished_at = datetime.now(timezone.utc).isoformat()
 
         if result.errors:
             pipeline_failed = True

@@ -122,6 +122,7 @@ def enrich_chunks_with_authority(
     Returns:
         enriched_chunks: original chunks with added issuer_* fields
         issuer_summary: {category: [unique issuer names]} for prompt injection
+
     """
     issuer_summary: dict[str, set[str]] = {}
     enriched: list[dict[str, Any]] = []
@@ -193,16 +194,16 @@ def resolve_authority_profiles(
             .where(
                 DocumentRegistry.fund_id == fund_id,
                 DocumentClassification.fund_id == fund_id,
-            )
-        ).all()
+            ),
+        ).all(),
     )
 
     existing_profiles = {
         p.doc_id: p
         for p in db.execute(
             select(DocumentGovernanceProfile).where(
-                DocumentGovernanceProfile.fund_id == fund_id
-            )
+                DocumentGovernanceProfile.fund_id == fund_id,
+            ),
         ).scalars().all()
     }
 

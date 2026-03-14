@@ -35,7 +35,7 @@ def list_all_evidence(
             select(EvidenceDocument)
             .where(EvidenceDocument.fund_id == fund_id)
             .limit(limit)
-            .offset(offset)
-        ).scalars().all()
+            .offset(offset),
+        ).scalars().all(),
     )
 

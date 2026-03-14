@@ -201,7 +201,7 @@ def _get_portfolio_financials(
         for cf in cashflows:
             cf_lines.append(
                 f"  {cf.flow_date} | {cf.flow_type} | {cf.currency} {float(cf.amount):,.2f}"
-                + (f" | {cf.description}" if cf.description else "")
+                + (f" | {cf.description}" if cf.description else ""),
             )
         cashflow_summary = "\n".join(cf_lines)
 
@@ -258,7 +258,7 @@ def _write_jsonb_column(
     allowed_cols = _ALLOWED_JSONB_TARGETS.get(table)
     if allowed_cols is None or column not in allowed_cols:
         logger.error(
-            "Blocked JSONB write to disallowed target %s.%s", table, column
+            "Blocked JSONB write to disallowed target %s.%s", table, column,
         )
         return
 

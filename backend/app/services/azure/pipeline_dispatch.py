@@ -1,5 +1,4 @@
-"""
-Pipeline dispatch — route async work to Service Bus or BackgroundTasks.
+"""Pipeline dispatch — route async work to Service Bus or BackgroundTasks.
 
 Centralises the ``USE_SERVICE_BUS`` feature-flag check so every pipeline
 endpoint uses the same branching logic:
@@ -51,6 +50,7 @@ def update_deal_intelligence_status(
         Target status literal, typically ``"READY"`` or ``"FAILED"``.
     generated_at:
         If provided, also sets ``intelligence_generated_at``.
+
     """
     if generated_at is not None:
         db_session.execute(
@@ -58,7 +58,7 @@ def update_deal_intelligence_status(
                 "UPDATE pipeline_deals "
                 "SET intelligence_status = CAST(:s AS intelligence_status_enum), "
                 "    intelligence_generated_at = :ts "
-                "WHERE id = :id AND fund_id = :fid"
+                "WHERE id = :id AND fund_id = :fid",
             ),
             {
                 "s": status,
@@ -72,7 +72,7 @@ def update_deal_intelligence_status(
             _sa_text(
                 "UPDATE pipeline_deals "
                 "SET intelligence_status = CAST(:s AS intelligence_status_enum) "
-                "WHERE id = :id AND fund_id = :fid"
+                "WHERE id = :id AND fund_id = :fid",
             ),
             {"s": status, "id": str(deal_id), "fid": str(fund_id)},
         )

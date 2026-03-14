@@ -11,8 +11,7 @@ from app.core.db.base import Base
 
 
 class ICMemo(Base):
-    """
-    Institutional Investment Committee memo record.
+    """Institutional Investment Committee memo record.
     Stores structured metadata, narrative, recommendation and conditions.
 
     IC memos must persist forever.  Reprocessed deals create new versions
@@ -22,11 +21,11 @@ class ICMemo(Base):
     __tablename__ = "ic_memos"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4,
     )
 
     deal_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), index=True, nullable=False
+        Uuid(as_uuid=True), index=True, nullable=False,
     )
 
     executive_summary: Mapped[str] = mapped_column(Text, nullable=False)

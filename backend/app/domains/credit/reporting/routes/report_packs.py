@@ -90,7 +90,7 @@ def generate_pack(
                 section_type=section_type,
                 snapshot=snapshot,
                 created_at=datetime.utcnow(),
-            )
+            ),
         )
 
     pack.status = ReportPackStatus.GENERATED

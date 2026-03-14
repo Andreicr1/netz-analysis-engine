@@ -43,16 +43,16 @@ def snapshot(
     fund_id: uuid.UUID,
     db: Session = Depends(get_db),
     _role_guard: Actor = Depends(
-        require_roles([Role.COMPLIANCE, Role.ADMIN, Role.AUDITOR, Role.INVESTMENT_TEAM])
+        require_roles([Role.COMPLIANCE, Role.ADMIN, Role.AUDITOR, Role.INVESTMENT_TEAM]),
     ),
 ) -> ComplianceSnapshotOut:
     obligations = list(
         db.execute(select(Obligation.id).where(Obligation.fund_id == fund_id))
         .scalars()
-        .all()
+        .all(),
     )
     wf = service.get_workflow_status_map(
-        db, fund_id=fund_id, obligation_ids=obligations
+        db, fund_id=fund_id, obligation_ids=obligations,
     )
 
     total_open = 0
@@ -62,8 +62,8 @@ def snapshot(
 
     total_gaps = db.execute(
         select(sa_func.count()).select_from(Obligation).where(
-            Obligation.fund_id == fund_id, Obligation.name.like(f"{AI_GAP_PREFIX}%")
-        )
+            Obligation.fund_id == fund_id, Obligation.name.like(f"{AI_GAP_PREFIX}%"),
+        ),
     ).scalar_one()
 
     since = datetime.now(UTC) - timedelta(days=30)
@@ -76,10 +76,10 @@ def snapshot(
                 AuditEvent.entity_type == "obligation",
                 AuditEvent.action == service.AUDIT_ACTION_CLOSED,
                 AuditEvent.created_at >= since,
-            )
+            ),
         )
         .scalars()
-        .all()
+        .all(),
     )
 
     return ComplianceSnapshotOut(
@@ -117,11 +117,11 @@ def list_obligations(
     offset: int = Depends(_offset),
     view: str = Query(default="active", pattern="^(active|closed|all)$"),
     _role_guard: Actor = Depends(
-        require_roles([Role.COMPLIANCE, Role.ADMIN, Role.AUDITOR, Role.INVESTMENT_TEAM])
+        require_roles([Role.COMPLIANCE, Role.ADMIN, Role.AUDITOR, Role.INVESTMENT_TEAM]),
     ),
 ) -> Page[ObligationWorkflowOut]:
     items, wf, total = service.list_obligations(
-        db, fund_id=fund_id, limit=limit, offset=offset, view=view
+        db, fund_id=fund_id, limit=limit, offset=offset, view=view,
     )
 
     out: list[ObligationWorkflowOut] = []
@@ -129,7 +129,7 @@ def list_obligations(
         ow = ObligationWorkflowOut.model_validate(o)
         ow.workflow_status = wf.get(o.id, "OPEN")
         ow.display_status = service.compute_display_status(
-            ow.workflow_status, o.next_due_date
+            ow.workflow_status, o.next_due_date,
         )
         out.append(ow)
 
@@ -142,18 +142,18 @@ def get_obligation(
     obligation_id: uuid.UUID,
     db: Session = Depends(get_db),
     _role_guard: Actor = Depends(
-        require_roles([Role.COMPLIANCE, Role.ADMIN, Role.AUDITOR, Role.INVESTMENT_TEAM])
+        require_roles([Role.COMPLIANCE, Role.ADMIN, Role.AUDITOR, Role.INVESTMENT_TEAM]),
     ),
 ) -> ObligationWorkflowOut:
     try:
         ob = service.get_obligation(db, fund_id=fund_id, obligation_id=obligation_id)
         wf = service.get_workflow_status_map(
-            db, fund_id=fund_id, obligation_ids=[ob.id]
+            db, fund_id=fund_id, obligation_ids=[ob.id],
         )
         out = ObligationWorkflowOut.model_validate(ob)
         out.workflow_status = wf.get(ob.id, "OPEN")
         out.display_status = service.compute_display_status(
-            out.workflow_status, ob.next_due_date
+            out.workflow_status, ob.next_due_date,
         )
         return out
     except ValueError as e:
@@ -161,19 +161,19 @@ def get_obligation(
 
 
 @router.get(
-    "/obligations/{obligation_id}/evidence", response_model=list[ObligationEvidenceOut]
+    "/obligations/{obligation_id}/evidence", response_model=list[ObligationEvidenceOut],
 )
 def list_evidence(
     fund_id: uuid.UUID,
     obligation_id: uuid.UUID,
     db: Session = Depends(get_db),
     _role_guard: Actor = Depends(
-        require_roles([Role.COMPLIANCE, Role.ADMIN, Role.AUDITOR, Role.INVESTMENT_TEAM])
+        require_roles([Role.COMPLIANCE, Role.ADMIN, Role.AUDITOR, Role.INVESTMENT_TEAM]),
     ),
 ) -> list[ObligationEvidenceOut]:
     try:
         events = service.list_linked_evidence(
-            db, fund_id=fund_id, obligation_id=obligation_id
+            db, fund_id=fund_id, obligation_id=obligation_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -192,13 +192,13 @@ def list_evidence(
                 folder_path=after.get("folder_path"),
                 linked_at=ev.created_at,
                 linked_by=ev.actor_id,
-            )
+            ),
         )
     return out
 
 
 @router.post(
-    "/obligations/{obligation_id}/evidence/link", status_code=status.HTTP_201_CREATED
+    "/obligations/{obligation_id}/evidence/link", status_code=status.HTTP_201_CREATED,
 )
 def link_evidence(
     fund_id: uuid.UUID,
@@ -234,7 +234,7 @@ def mark_in_progress(
 ) -> dict:
     try:
         service.mark_in_progress(
-            db, fund_id=fund_id, actor=actor, obligation_id=obligation_id
+            db, fund_id=fund_id, actor=actor, obligation_id=obligation_id,
         )
         return {"status": "in_progress"}
     except ValueError as e:
@@ -252,7 +252,7 @@ def close_obligation(
 ) -> dict:
     try:
         service.close_obligation(
-            db, fund_id=fund_id, actor=actor, obligation_id=obligation_id
+            db, fund_id=fund_id, actor=actor, obligation_id=obligation_id,
         )
         return {"status": "closed"}
     except ValueError as e:
@@ -270,7 +270,7 @@ def reopen_obligation(
 ) -> dict:
     try:
         service.reopen_obligation(
-            db, fund_id=fund_id, actor=actor, obligation_id=obligation_id
+            db, fund_id=fund_id, actor=actor, obligation_id=obligation_id,
         )
         return {"status": "reopened"}
     except ValueError as e:
@@ -283,12 +283,12 @@ def obligation_audit(
     obligation_id: uuid.UUID,
     db: Session = Depends(get_db),
     _role_guard: Actor = Depends(
-        require_roles([Role.COMPLIANCE, Role.ADMIN, Role.AUDITOR, Role.INVESTMENT_TEAM])
+        require_roles([Role.COMPLIANCE, Role.ADMIN, Role.AUDITOR, Role.INVESTMENT_TEAM]),
     ),
 ) -> list[AuditEventOut]:
     try:
         items = service.get_obligation_audit(
-            db, fund_id=fund_id, obligation_id=obligation_id
+            db, fund_id=fund_id, obligation_id=obligation_id,
         )
         return [AuditEventOut.model_validate(item) for item in items]
     except ValueError as e:
@@ -296,7 +296,7 @@ def obligation_audit(
 
 
 @router.post(
-    "/obligations", response_model=ObligationOut, status_code=status.HTTP_201_CREATED
+    "/obligations", response_model=ObligationOut, status_code=status.HTTP_201_CREATED,
 )
 def create_obligation(
     fund_id: uuid.UUID,
@@ -307,7 +307,7 @@ def create_obligation(
     _role_guard: Actor = Depends(require_roles([Role.COMPLIANCE, Role.ADMIN])),
 ) -> ObligationOut:
     obligation = service.create_obligation(
-        db, fund_id=fund_id, actor=actor, payload=payload
+        db, fund_id=fund_id, actor=actor, payload=payload,
     )
     return ObligationOut.model_validate(obligation)
 
@@ -348,7 +348,7 @@ def get_obligation_status(
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> Page[ObligationStatusOut]:
     items = service.list_obligation_status(
-        db, fund_id=fund_id, limit=limit, offset=offset
+        db, fund_id=fund_id, limit=limit, offset=offset,
     )
     return Page(
         items=[ObligationStatusOut.model_validate(item) for item in items],
@@ -387,11 +387,11 @@ def recompute_gaps(
     items = list(
         db.execute(
             select(Obligation).where(
-                Obligation.fund_id == fund_id, Obligation.name.like(f"{AI_GAP_PREFIX}%")
-            )
+                Obligation.fund_id == fund_id, Obligation.name.like(f"{AI_GAP_PREFIX}%"),
+            ),
         )
         .scalars()
-        .all()
+        .all(),
     )
     return Page(
         items=[ObligationOut.model_validate(item) for item in items],
@@ -408,7 +408,7 @@ def list_gaps(
     limit: int = Depends(_limit),
     offset: int = Depends(_offset),
     _role_guard: Actor = Depends(
-        require_roles([Role.COMPLIANCE, Role.ADMIN, Role.AUDITOR, Role.INVESTMENT_TEAM])
+        require_roles([Role.COMPLIANCE, Role.ADMIN, Role.AUDITOR, Role.INVESTMENT_TEAM]),
     ),
 ) -> Page[ObligationOut]:
     stmt = (
@@ -420,8 +420,8 @@ def list_gaps(
     items = list(db.execute(stmt).scalars().all())
     total = db.execute(
         select(sa_func.count()).select_from(Obligation).where(
-            Obligation.fund_id == fund_id, Obligation.name.like(f"{AI_GAP_PREFIX}%")
-        )
+            Obligation.fund_id == fund_id, Obligation.name.like(f"{AI_GAP_PREFIX}%"),
+        ),
     ).scalar_one()
     return Page(
         items=[ObligationOut.model_validate(item) for item in items],
@@ -443,12 +443,12 @@ def list_requirements(
     obligation_id: uuid.UUID,
     db: Session = Depends(get_db),
     _role_guard: Actor = Depends(
-        require_roles([Role.COMPLIANCE, Role.ADMIN, Role.AUDITOR, Role.INVESTMENT_TEAM])
+        require_roles([Role.COMPLIANCE, Role.ADMIN, Role.AUDITOR, Role.INVESTMENT_TEAM]),
     ),
 ) -> list[ObligationRequirementOut]:
     try:
         items = service.list_requirements(
-            db, fund_id=fund_id, obligation_id=obligation_id
+            db, fund_id=fund_id, obligation_id=obligation_id,
         )
         return [ObligationRequirementOut.model_validate(item) for item in items]
     except ValueError as e:

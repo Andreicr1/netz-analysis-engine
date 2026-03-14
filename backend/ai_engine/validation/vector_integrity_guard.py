@@ -33,7 +33,7 @@ def validate_embedding_dimensions() -> None:
     """
     endpoint = settings.AZURE_SEARCH_ENDPOINT
     index_name = settings.prefixed_index(
-        settings.SEARCH_CHUNKS_INDEX_NAME or "global-vector-chunks-v4"
+        settings.SEARCH_CHUNKS_INDEX_NAME or "global-vector-chunks-v4",
     )
 
     if not endpoint:
@@ -70,7 +70,7 @@ def validate_embedding_dimensions() -> None:
             raise RuntimeError(
                 f"Embedding dimension mismatch between embedding model and search index. "
                 f"Model '{EMBEDDING_MODEL_NAME}' produces {EMBEDDING_DIMENSIONS}-dim vectors, "
-                f"but index '{index_name}' expects {vector_dim}-dim vectors."
+                f"but index '{index_name}' expects {vector_dim}-dim vectors.",
             )
 
         logger.info(
@@ -103,7 +103,7 @@ def validate_embedding_model() -> None:
         raise RuntimeError(
             f"Embedding model drift detected. "
             f"Expected '{EMBEDDING_MODEL_NAME}', but settings has '{configured}'. "
-            f"Dynamic switching is not allowed."
+            f"Dynamic switching is not allowed.",
         )
     logger.info("Embedding model validated: %s", EMBEDDING_MODEL_NAME)
 
@@ -137,14 +137,14 @@ def validate_index_prefix() -> None:
             raise RuntimeError(
                 f"Index prefix mismatch: NETZ_ENV='dev' but resolved index "
                 f"'{resolved}' does not start with 'dev-'. "
-                f"Dev/prod cross-contamination risk."
+                f"Dev/prod cross-contamination risk.",
             )
     elif env == "prod":
         if resolved.startswith("dev-"):
             raise RuntimeError(
                 f"Index prefix mismatch: NETZ_ENV='prod' but resolved index "
                 f"'{resolved}' starts with 'dev-'. "
-                f"Dev/prod cross-contamination risk."
+                f"Dev/prod cross-contamination risk.",
             )
 
     logger.info("Index prefix validated: env=%s index=%s", env, resolved)
@@ -184,8 +184,7 @@ def validate_blob_container_prefix() -> None:
         )
         if BLOB_GUARD_STRICT:
             raise RuntimeError(msg)
-        else:
-            logger.warning(msg)
+        logger.warning(msg)
     else:
         logger.info("Blob container prefixes validated: env=%s containers=%s", env, containers)
 
@@ -231,7 +230,7 @@ def validate_index_not_empty() -> None:
                 raise RuntimeError(
                     f"SEARCH INDEX EMPTY — {label} index '{idx_name}' returned 0 documents. "
                     f"Evidence retrieval will be completely starved. "
-                    f"Check SEARCH_INDEX_NAME / SEARCH_CHUNKS_INDEX_NAME in .env."
+                    f"Check SEARCH_INDEX_NAME / SEARCH_CHUNKS_INDEX_NAME in .env.",
                 )
             logger.info("Index document-count OK: %s index '%s' has documents.", label, idx_name)
 

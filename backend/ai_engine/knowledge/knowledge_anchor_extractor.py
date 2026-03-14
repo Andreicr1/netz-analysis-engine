@@ -79,8 +79,8 @@ def extract_knowledge_anchors(
             .where(
                 DocumentRegistry.fund_id == fund_id,
                 DocumentClassification.fund_id == fund_id,
-            )
-        ).all()
+            ),
+        ).all(),
     )
 
     doc_ids = [doc.id for doc, _ in rows]

@@ -36,8 +36,7 @@ def list_chunks(
     only_candidates: bool = False,
     limit: int = 50,
 ):
-    """
-    Returns compliance KB chunks.
+    """Returns compliance KB chunks.
 
     **Data source**: Azure AI Search indexes (direct) when `AZURE_SEARCH_ENDPOINT` is
     configured; falls back to `data/compliance/kb_chunks.json` in offline/dev mode.
@@ -73,8 +72,7 @@ def search_chunks(
     domain: str | None = None,
     limit: int = 20,
 ):
-    """
-    Full-text search across compliance knowledge-base indexes.
+    """Full-text search across compliance knowledge-base indexes.
 
     **Data source**: Azure AI Search when `AZURE_SEARCH_ENDPOINT` is configured
     (all 3 indexes by default; scoped to one when *domain* is supplied).
@@ -97,8 +95,7 @@ def search_chunks(
 
 @router.post("/refresh", summary="Report primary data source and local fallback count")
 def refresh_from_seed_store():
-    """
-    Reports the active data-source configuration.
+    """Reports the active data-source configuration.
     - When `AZURE_SEARCH_ENDPOINT` is set, `/chunks` and `/search` query Azure directly.
     - Local `kb_chunks.json` is the offline/dev fallback.
     """
@@ -138,8 +135,7 @@ def trigger_compliance_ingest(
     deprecated=True,
 )
 def list_chunks_live(domain: str, top: int = 20):
-    """
-    **Deprecated.** `GET /chunks` now queries Azure AI Search directly.
+    """**Deprecated.** `GET /chunks` now queries Azure AI Search directly.
     This endpoint is kept for backward compatibility and will be removed in a future release.
 
     **domain** must be one of: `REGULATORY` | `CONSTITUTION` | `SERVICE_PROVIDER`

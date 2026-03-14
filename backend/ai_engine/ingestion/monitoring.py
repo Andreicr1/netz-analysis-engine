@@ -97,14 +97,14 @@ def run_daily_cycle(
             select(ObligationRegister).where(
                 ObligationRegister.fund_id == fund_id,
                 ObligationRegister.status == "MissingEvidence",
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
 
     all_existing_alerts = list(
         db.execute(
-            select(GovernanceAlert).where(GovernanceAlert.fund_id == fund_id)
-        ).scalars().all()
+            select(GovernanceAlert).where(GovernanceAlert.fund_id == fund_id),
+        ).scalars().all(),
     )
     existing_by_alert_id: dict[str, GovernanceAlert] = {
         a.alert_id: a for a in all_existing_alerts
@@ -126,7 +126,7 @@ def run_daily_cycle(
             actionable_next_step="Review classification output and validate dataQuality before dissemination.",
             as_of=now,
             actor_id=actor_id,
-        )
+        ),
     )
 
     if missing_evidence_rows:
@@ -143,7 +143,7 @@ def run_daily_cycle(
                 actionable_next_step="Collect and link formal evidence for obligations marked MissingEvidence.",
                 as_of=now,
                 actor_id=actor_id,
-            )
+            ),
         )
 
     overdue = 0
@@ -171,7 +171,7 @@ def run_daily_cycle(
                 actionable_next_step="Escalate overdue obligations to Compliance Officer and register remediation evidence.",
                 as_of=now,
                 actor_id=actor_id,
-            )
+            ),
         )
 
     if approaching > 0:
@@ -188,7 +188,7 @@ def run_daily_cycle(
                 actionable_next_step="Prepare deliverables and verify submission evidence before due dates.",
                 as_of=now,
                 actor_id=actor_id,
-            )
+            ),
         )
 
     if profiles:
@@ -205,7 +205,7 @@ def run_daily_cycle(
                 actionable_next_step="Validate key declared risks and reporting cadence against latest source documents.",
                 as_of=now,
                 actor_id=actor_id,
-            )
+            ),
         )
 
     db.add_all(pending_adds)

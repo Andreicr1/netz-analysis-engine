@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 def _get_db_session():
     """Create a standalone database session (outside FastAPI request cycle)."""
+    from app.core.db.engine import async_session_factory
 
     SessionLocal = async_session_factory
     return SessionLocal()

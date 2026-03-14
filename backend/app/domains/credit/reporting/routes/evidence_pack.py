@@ -18,18 +18,18 @@ router = APIRouter(tags=["Evidence Pack"], dependencies=[Depends(require_fund_ac
 
 def _build_evidence_manifest(db: Session, fund_id: uuid.UUID, limit: int, actor) -> dict:
     answers = list(
-        db.execute(select(AIAnswer).where(AIAnswer.fund_id == fund_id).order_by(AIAnswer.created_at_utc.desc()).limit(limit)).scalars().all()
+        db.execute(select(AIAnswer).where(AIAnswer.fund_id == fund_id).order_by(AIAnswer.created_at_utc.desc()).limit(limit)).scalars().all(),
     )
     answer_ids = [a.id for a in answers]
     questions = list(
-        db.execute(select(AIQuestion).where(AIQuestion.fund_id == fund_id, AIQuestion.id.in_([a.question_id for a in answers]))).scalars().all()
+        db.execute(select(AIQuestion).where(AIQuestion.fund_id == fund_id, AIQuestion.id.in_([a.question_id for a in answers]))).scalars().all(),
     )
     by_q = {q.id: q for q in questions}
 
     citations: list[AIAnswerCitation] = []
     if answer_ids:
         citations = list(
-            db.execute(select(AIAnswerCitation).where(AIAnswerCitation.fund_id == fund_id, AIAnswerCitation.answer_id.in_(answer_ids))).scalars().all()
+            db.execute(select(AIAnswerCitation).where(AIAnswerCitation.fund_id == fund_id, AIAnswerCitation.answer_id.in_(answer_ids))).scalars().all(),
         )
     by_answer: dict[uuid.UUID, list[AIAnswerCitation]] = {}
     for c in citations:
@@ -72,8 +72,7 @@ def export_evidence_pack(
     db: Session = Depends(get_db),
     actor=Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR"])),
 ):
-    """
-    v1 output: JSON manifest (future EPIC: PDF binder).
+    """v1 output: JSON manifest (future EPIC: PDF binder).
     """
     payload = payload or {}
     limit = max(1, min(200, int(payload.get("limit", 20))))

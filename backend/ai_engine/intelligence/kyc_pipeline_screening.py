@@ -69,7 +69,7 @@ def _extract_persons_from_analysis(
                 {
                     "first_name": parts[0],
                     "last_name": " ".join(parts[1:]),
-                }
+                },
             )
         else:
             # Single word name — treat as last name
@@ -77,7 +77,7 @@ def _extract_persons_from_analysis(
                 {
                     "first_name": "",
                     "last_name": full_name,
-                }
+                },
             )
 
     return persons
@@ -152,7 +152,7 @@ def _extract_orgs_from_analysis(
 
 
 def _run_person_screening(
-    client: Any, person: dict, profile_id: str | None, ref_prefix: str = "pipeline"
+    client: Any, person: dict, profile_id: str | None, ref_prefix: str = "pipeline",
 ) -> dict:
     """Screen a single person using the real v3 flow (submit → check → result)."""
     import uuid as _uuid
@@ -179,7 +179,7 @@ def _run_person_screening(
 
 
 def _run_org_screening(
-    client: Any, org: dict, profile_id: str | None, ref_prefix: str = "pipeline"
+    client: Any, org: dict, profile_id: str | None, ref_prefix: str = "pipeline",
 ) -> dict:
     """Screen a single organisation using the real v3 flow."""
     import uuid as _uuid
@@ -194,7 +194,7 @@ def _run_org_screening(
         )
     except Exception as exc:
         logger.warning(
-            "KYC_ORG_SCREENING_FAILED name=%s error=%s", org.get("name"), exc
+            "KYC_ORG_SCREENING_FAILED name=%s error=%s", org.get("name"), exc,
         )
         return {"error": str(exc)}
 
@@ -243,7 +243,7 @@ def run_kyc_screenings(
     profile_id = settings.KYC_SPIDER_DEFAULT_PROFILE
 
     persons = _extract_persons_from_analysis(
-        analysis, index_key_persons, sponsor_output
+        analysis, index_key_persons, sponsor_output,
     )[:max_persons]
     orgs = _extract_orgs_from_analysis(analysis, deal_fields)[:max_orgs]
 
@@ -285,7 +285,7 @@ def run_kyc_screenings(
                         "name": f"{entity['first_name']} {entity['last_name']}".strip(),
                         "entity_type": "PERSON",
                         "result": result,
-                    }
+                    },
                 )
             else:
                 org_results.append(
@@ -293,7 +293,7 @@ def run_kyc_screenings(
                         "name": entity["name"],
                         "entity_type": "ORGANISATION",
                         "result": result,
-                    }
+                    },
                 )
 
     # Compute summary stats
@@ -397,10 +397,10 @@ def build_kyc_appendix(kyc_results: dict[str, Any], deal_name: str = "") -> str:
         lines.append("### Person Screenings")
         lines.append("")
         lines.append(
-            "| # | Name | Status | Matches | PEP | Sanctions | Adverse Media |"
+            "| # | Name | Status | Matches | PEP | Sanctions | Adverse Media |",
         )
         lines.append(
-            "|---|------|--------|---------|-----|-----------|---------------|"
+            "|---|------|--------|---------|-----|-----------|---------------|",
         )
 
         for idx, entry in enumerate(person_results, 1):
@@ -427,7 +427,7 @@ def build_kyc_appendix(kyc_results: dict[str, Any], deal_name: str = "") -> str:
                 if cr.get("checkId") in ("AM", "ADVERSE_MEDIA")
             )
             lines.append(
-                f"| {idx} | {entry['name']} | {state} | {n_hits} | {pep} | {sanc} | {adv} |"
+                f"| {idx} | {entry['name']} | {state} | {n_hits} | {pep} | {sanc} | {adv} |",
             )
 
         lines.append("")
@@ -456,10 +456,10 @@ def build_kyc_appendix(kyc_results: dict[str, Any], deal_name: str = "") -> str:
         lines.append("### Organisation Screenings")
         lines.append("")
         lines.append(
-            "| # | Entity | Status | Matches | PEP | Sanctions | Adverse Media |"
+            "| # | Entity | Status | Matches | PEP | Sanctions | Adverse Media |",
         )
         lines.append(
-            "|---|--------|--------|---------|-----|-----------|---------------|"
+            "|---|--------|--------|---------|-----|-----------|---------------|",
         )
 
         for idx, entry in enumerate(org_results, 1):
@@ -486,7 +486,7 @@ def build_kyc_appendix(kyc_results: dict[str, Any], deal_name: str = "") -> str:
                 if cr.get("checkId") in ("AM", "ADVERSE_MEDIA")
             )
             lines.append(
-                f"| {idx} | {entry['name']} | {state} | {n_hits} | {pep} | {sanc} | {adv} |"
+                f"| {idx} | {entry['name']} | {state} | {n_hits} | {pep} | {sanc} | {adv} |",
             )
 
         lines.append("")
@@ -515,7 +515,7 @@ def build_kyc_appendix(kyc_results: dict[str, Any], deal_name: str = "") -> str:
 
     lines.append("---")
     lines.append(
-        "*Screening powered by KYC Spider v3 API. Results are indicative and require manual review.*"
+        "*Screening powered by KYC Spider v3 API. Results are indicative and require manual review.*",
     )
 
     return "\n".join(lines)

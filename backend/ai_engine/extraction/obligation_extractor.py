@@ -89,8 +89,8 @@ def extract_obligation_register(
             select(DocumentRegistry).where(
                 DocumentRegistry.fund_id == fund_id,
                 DocumentRegistry.institutional_type.in_(["LEGAL_BINDING", "REGULATORY_CIMA"]),
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
 
     # ── Batch-load chunks for all candidates ─────────────────────────
@@ -100,7 +100,7 @@ def extract_obligation_register(
         chunk_rows = db.execute(
             select(DocumentChunk.version_id, DocumentChunk.text)
             .join(DocumentVersion, and_(DocumentVersion.id == DocumentChunk.version_id, DocumentVersion.fund_id == fund_id))
-            .where(DocumentChunk.fund_id == fund_id, DocumentChunk.version_id.in_(all_version_ids))
+            .where(DocumentChunk.fund_id == fund_id, DocumentChunk.version_id.in_(all_version_ids)),
         ).all()
         for version_id, text_val in chunk_rows:
             chunks_by_version.setdefault(version_id, []).append(text_val or "")
@@ -109,7 +109,7 @@ def extract_obligation_register(
     existing_obligations: dict[str, ObligationRegister] = {
         r.obligation_id: r
         for r in db.execute(
-            select(ObligationRegister).where(ObligationRegister.fund_id == fund_id)
+            select(ObligationRegister).where(ObligationRegister.fund_id == fund_id),
         ).scalars().all()
     }
 
@@ -154,7 +154,7 @@ def extract_obligation_register(
                         "versionId": str(doc.version_id),
                         "title": doc.title,
                         "path": source_descriptor,
-                    }
+                    },
                 ],
                 "as_of": now,
                 "data_latency": doc.data_latency,

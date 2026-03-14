@@ -120,7 +120,7 @@ def update_counterparty_route(
     _require_fund_access(fund_id, actor)
     try:
         cpty = update_counterparty(
-            db, fund_id=fund_id, actor=actor, counterparty_id=counterparty_id, payload=payload
+            db, fund_id=fund_id, actor=actor, counterparty_id=counterparty_id, payload=payload,
         )
         db.commit()
         return CounterpartyRead.model_validate(cpty)
@@ -138,7 +138,7 @@ def archive_counterparty_route(
     _require_fund_access(fund_id, actor)
     try:
         cpty = archive_counterparty(
-            db, fund_id=fund_id, actor=actor, counterparty_id=counterparty_id
+            db, fund_id=fund_id, actor=actor, counterparty_id=counterparty_id,
         )
         db.commit()
         return CounterpartyRead.model_validate(cpty)
@@ -173,7 +173,7 @@ def request_bank_account_change_route(
     _require_fund_access(fund_id, actor)
     try:
         change = request_bank_account_change(
-            db, fund_id=fund_id, actor=actor, counterparty_id=counterparty_id, payload=payload
+            db, fund_id=fund_id, actor=actor, counterparty_id=counterparty_id, payload=payload,
         )
         db.commit()
         return BankAccountChangeRead.model_validate(change)
@@ -204,7 +204,7 @@ def review_bank_account_change_route(
     _require_fund_access(fund_id, actor)
     try:
         change, _account = approve_bank_account_change(
-            db, fund_id=fund_id, actor=actor, change_id=change_id, review=payload
+            db, fund_id=fund_id, actor=actor, change_id=change_id, review=payload,
         )
         db.commit()
         return BankAccountChangeRead.model_validate(change)
@@ -238,7 +238,7 @@ def link_document_route(
     _require_fund_access(fund_id, actor)
     try:
         link = link_document(
-            db, fund_id=fund_id, actor=actor, counterparty_id=counterparty_id, payload=payload
+            db, fund_id=fund_id, actor=actor, counterparty_id=counterparty_id, payload=payload,
         )
         db.commit()
         return CounterpartyDocumentRead.model_validate(link)

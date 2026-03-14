@@ -10,8 +10,7 @@ from app.core.db.base import Base
 
 
 class EvidenceDocument(Base):
-    """
-    Evidence attached to Actions or Deals (IC support).
+    """Evidence attached to Actions or Deals (IC support).
 
     Evidence must support both Deals and Actions.
     """

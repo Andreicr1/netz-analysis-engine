@@ -118,6 +118,7 @@ def compare_v3_vs_v4(
     Returns
     -------
     DeepReviewDeltaReport
+
     """
     deal_id = v4.get("dealId") or v3.get("dealId") or ""
     deal_name = v4.get("dealName") or v3.get("dealName")
@@ -386,7 +387,7 @@ def _compare_consistency(
         # Strong divergence: one positive, one negative
         if pol_a * pol_b < 0 and abs(pol_a - pol_b) > 0.6:
             contradictions.append(
-                f"{pair_name}: {tag_a}(pol={pol_a:.2f}) vs {tag_b}(pol={pol_b:.2f})"
+                f"{pair_name}: {tag_a}(pol={pol_a:.2f}) vs {tag_b}(pol={pol_b:.2f})",
             )
             penalty += 0.15
 
@@ -399,7 +400,7 @@ def _compare_consistency(
         # If recommendation is very positive but risk is very negative
         if rec_pol > 0.3 and risk_pol < -0.3:
             contradictions.append(
-                f"recommendation_risk: ch13(pol={rec_pol:.2f}) vs ch09(pol={risk_pol:.2f})"
+                f"recommendation_risk: ch13(pol={rec_pol:.2f}) vs ch09(pol={risk_pol:.2f})",
             )
             penalty += 0.2
 

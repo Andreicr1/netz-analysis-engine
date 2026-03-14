@@ -103,7 +103,7 @@ def update_schedule(
     schedule = db.execute(
         select(ReportSchedule).where(
             ReportSchedule.id == schedule_id, ReportSchedule.fund_id == fund_id,
-        )
+        ),
     ).scalar_one_or_none()
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
@@ -136,7 +136,7 @@ def trigger_schedule(
     schedule = db.execute(
         select(ReportSchedule).where(
             ReportSchedule.id == schedule_id, ReportSchedule.fund_id == fund_id,
-        )
+        ),
     ).scalar_one_or_none()
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
@@ -186,8 +186,8 @@ def list_schedule_runs(
             select(ReportRun)
             .where(ReportRun.schedule_id == schedule_id, ReportRun.fund_id == fund_id)
             .order_by(ReportRun.started_at.desc())
-            .limit(limit)
-        ).scalars().all()
+            .limit(limit),
+        ).scalars().all(),
     )
     return {
         "count": len(rows),

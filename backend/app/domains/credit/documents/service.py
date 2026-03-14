@@ -38,7 +38,7 @@ def _utcnow() -> datetime:
 
 def allowed_root_folders(db: Session, *, fund_id: uuid.UUID) -> set[str]:
     rows = db.execute(
-        select(DocumentRootFolder.name).where(DocumentRootFolder.fund_id == fund_id, DocumentRootFolder.is_active == True)  # noqa: E712
+        select(DocumentRootFolder.name).where(DocumentRootFolder.fund_id == fund_id, DocumentRootFolder.is_active == True),  # noqa: E712
     ).all()
     custom = {r[0] for r in rows}
     return set(CANONICAL_ROOT_FOLDERS).union(custom)
@@ -159,7 +159,7 @@ def upload_document(
             Document.root_folder == rf,
             Document.folder_path == folder_path,
             Document.title == title,
-        )
+        ),
     ).scalar_one_or_none()
 
     created = False
@@ -271,8 +271,8 @@ def upload_document(
                     "domain": (doc.domain.value if doc.domain else None),
                     "version_blob_path": ver.blob_path,
                     "uploaded_at": ver.uploaded_at.isoformat() if ver.uploaded_at else None,
-                }
-            ]
+                },
+            ],
         )
         indexed = True
 

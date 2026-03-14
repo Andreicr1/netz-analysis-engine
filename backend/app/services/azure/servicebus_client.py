@@ -1,5 +1,4 @@
-"""
-Azure Service Bus producer — enqueue pipeline jobs.
+"""Azure Service Bus producer — enqueue pipeline jobs.
 
 Usage::
 
@@ -39,7 +38,7 @@ def _get_client():
     if not ns:
         logger.warning(
             "SERVICE_BUS_NAMESPACE not configured — Service Bus operations "
-            "will be skipped (local dev mode)."
+            "will be skipped (local dev mode).",
         )
         return None
 
@@ -92,7 +91,7 @@ def send_to_topic(topic: str, payload: dict, *, stage: str) -> str | None:
         sender.send_messages(msg)
 
     logger.info(
-        "Enqueued job %s to topic=%s stage=%s", job_id, topic, stage
+        "Enqueued job %s to topic=%s stage=%s", job_id, topic, stage,
     )
     return job_id
 
@@ -118,7 +117,7 @@ def send_to_queue(queue: str, payload: dict, *, stage: str = "memo") -> str | No
             ServiceBusMessage(
                 body=json.dumps(envelope),
                 message_id=job_id,
-            )
+            ),
         )
 
     logger.info("Enqueued job %s to queue=%s", job_id, queue)

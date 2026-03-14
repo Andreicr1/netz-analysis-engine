@@ -1,5 +1,4 @@
-"""
-market_data_bootstrap.py — Stage A for market-data source
+"""market_data_bootstrap.py — Stage A for market-data source
 ==========================================================
 Extracts market-data metadata for documents stored in the `market-data` Azure Blob
 container (PitchBook benchmarks, market research, performance benchmarks, etc.).
@@ -74,8 +73,7 @@ def _infer_publisher_from_path(blob_name: str) -> str:
 
 
 def _infer_reference_date_from_path(blob_name: str) -> str:
-    """
-    Infer reference_date from blob filename patterns.
+    """Infer reference_date from blob filename patterns.
     Looks for patterns like: q2-2025, q2_2025, 2025-q2, 2025q2, fy2024, 2024
     """
     import re
@@ -113,8 +111,7 @@ def build_market_document_metadata(
     blob_name: str,
     blob_tags: dict[str, str],
 ) -> dict:
-    """
-    Build the metadata dict for a single market-data document.
+    """Build the metadata dict for a single market-data document.
 
     Parameters
     ----------
@@ -125,6 +122,7 @@ def build_market_document_metadata(
     Returns
     -------
     dict — metadata injected into every chunk from this document
+
     """
     return {
         "source_type":    blob_tags.get("source_type",    _infer_source_type_from_path(blob_name)),
@@ -144,8 +142,7 @@ def bootstrap_market_folder(
     input_container: str,
     item_folder: str,
 ) -> dict:
-    """
-    Stage A for market-data source.
+    """Stage A for market-data source.
 
     Infers metadata from the item_folder (e.g. "benchmarks") and from blob tags
     of the first PDF found in that folder. Writes a fund_context.json-equivalent
@@ -161,6 +158,7 @@ def bootstrap_market_folder(
     Returns
     -------
     dict — the market context metadata (also written to fund_context.json)
+
     """
     logger.info("Market Data Bootstrap — source type inference for '%s'", item_folder)
 
@@ -231,8 +229,7 @@ def inject_market_metadata(
     blob_service: BlobServiceClient,
     input_container: str,
 ) -> list[dict]:
-    """
-    Post-process: inject market-data-specific fields into every chunk from blob tags.
+    """Post-process: inject market-data-specific fields into every chunk from blob tags.
 
     Parameters
     ----------
@@ -244,6 +241,7 @@ def inject_market_metadata(
     Returns
     -------
     list[dict] — chunks with market-data fields injected
+
     """
     tags_cache: dict[str, dict[str, str]] = {}
 
@@ -252,7 +250,7 @@ def inject_market_metadata(
 
         if blob_name and blob_name not in tags_cache:
             tags_cache[blob_name] = get_blob_tags(
-                blob_service, input_container, blob_name
+                blob_service, input_container, blob_name,
             )
         tags = tags_cache.get(blob_name, {})
 
@@ -287,8 +285,7 @@ def enrich_benchmark_chunks(
     cache_path: Path | None = None,
     source_type_filter: str = "BENCHMARK",
 ) -> list[dict]:
-    """
-    Per-chunk GPT enrichment for BENCHMARK documents.
+    """Per-chunk GPT enrichment for BENCHMARK documents.
 
     Extracts: asset_class, sub_strategy, metric_type, vintage_year, geography
     from each chunk using a fast LLM call. Results are cached to avoid re-processing
@@ -308,6 +305,7 @@ def enrich_benchmark_chunks(
     Returns
     -------
     list[dict] — chunks with vintage_year, metric_type, asset_class, etc. populated
+
     """
     # ── Load enrichment cache ─────────────────────────────────────────────
     cache: dict[str, dict] = {}

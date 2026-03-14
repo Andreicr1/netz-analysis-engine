@@ -10,5 +10,5 @@
 
 raise ImportError(
     "ic_cover.py is deprecated. "
-    "Import build_ic_cover_story from ai_engine.pdf.pdf_base instead."
+    "Import build_ic_cover_story from ai_engine.pdf.pdf_base instead.",
 )

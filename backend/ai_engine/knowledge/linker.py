@@ -90,7 +90,7 @@ def _upsert_entity(
             KnowledgeEntity.fund_id == fund_id,
             KnowledgeEntity.entity_type == entity_type,
             KnowledgeEntity.canonical_name == canonical_name,
-        )
+        ),
     ).scalar_one_or_none()
     if existing is not None:
         existing.updated_by = actor_id
@@ -128,7 +128,7 @@ def _upsert_link(
             KnowledgeLink.source_document_id == source_document_id,
             KnowledgeLink.target_entity_id == target_entity_id,
             KnowledgeLink.link_type == link_type,
-        )
+        ),
     ).scalar_one_or_none()
 
     if existing is not None:
@@ -151,7 +151,7 @@ def _upsert_link(
             evidence_snippet=evidence_snippet,
             created_by=actor_id,
             updated_by=actor_id,
-        )
+        ),
     )
     db.flush()
     return True
@@ -172,8 +172,8 @@ def _preload_corpora(db: Session, docs: list[DocumentRegistry]) -> dict[uuid.UUI
             db.execute(
                 select(DocumentChunk.version_id, DocumentChunk.text)
                 .where(DocumentChunk.fund_id == fund_id, DocumentChunk.version_id.in_(all_version_ids))
-                .limit(len(all_version_ids) * 60)
-            ).all()
+                .limit(len(all_version_ids) * 60),
+            ).all(),
         )
         for vid, text in rows:
             chunks_by_version[vid].append(text or "")
@@ -195,8 +195,8 @@ def _document_corpus(db: Session, doc: DocumentRegistry, *, corpus_cache: dict[u
             db.execute(
                 select(DocumentChunk.text)
                 .where(DocumentChunk.fund_id == doc.fund_id, DocumentChunk.version_id == doc.version_id)
-                .limit(60)
-            ).all()
+                .limit(60),
+            ).all(),
         )
     text = " ".join([doc.title or "", doc.blob_path or ""] + [row[0] or "" for row in chunks])
     return _normalize(text)
@@ -215,7 +215,7 @@ def _source_registry_doc_id(db: Session, *, fund_id: uuid.UUID, source_documents
         except Exception:
             continue
         row = db.execute(
-            select(DocumentRegistry.id).where(DocumentRegistry.fund_id == fund_id, DocumentRegistry.document_id == document_id)
+            select(DocumentRegistry.id).where(DocumentRegistry.fund_id == fund_id, DocumentRegistry.document_id == document_id),
         ).first()
         if row:
             return row[0]
@@ -237,11 +237,11 @@ def build_entity_index(
     # single UNION query is impractical since each targets a different table
     # with distinct columns and filter predicates.
     managers = list(
-        db.execute(select(ManagerProfile).where(ManagerProfile.fund_id == fund_id, ManagerProfile.as_of <= effective_as_of)).scalars().all()
+        db.execute(select(ManagerProfile).where(ManagerProfile.fund_id == fund_id, ManagerProfile.as_of <= effective_as_of)).scalars().all(),
     )
     deals = list(db.execute(select(Deal).where(Deal.fund_id == fund_id)).scalars().all())
     obligations = list(
-        db.execute(select(ObligationRegister).where(ObligationRegister.fund_id == fund_id, ObligationRegister.as_of <= effective_as_of)).scalars().all()
+        db.execute(select(ObligationRegister).where(ObligationRegister.fund_id == fund_id, ObligationRegister.as_of <= effective_as_of)).scalars().all(),
     )
     provider_docs = list(
         db.execute(
@@ -249,8 +249,8 @@ def build_entity_index(
                 DocumentRegistry.fund_id == fund_id,
                 DocumentRegistry.container_name == "service-providers-contracts",
                 DocumentRegistry.as_of <= effective_as_of,
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
 
     for manager in managers:
@@ -301,7 +301,7 @@ def link_document(
     corpus_cache: dict[uuid.UUID, str] | None = None,
 ) -> int:
     doc = db.execute(
-        select(DocumentRegistry).where(DocumentRegistry.fund_id == fund_id, DocumentRegistry.id == document_id)
+        select(DocumentRegistry).where(DocumentRegistry.fund_id == fund_id, DocumentRegistry.id == document_id),
     ).scalar_one_or_none()
     if doc is None:
         return 0
@@ -361,11 +361,11 @@ def map_obligation_evidence(
 
     obligation_entities = list(
         db.execute(
-            select(KnowledgeEntity).where(KnowledgeEntity.fund_id == fund_id, KnowledgeEntity.entity_type == "OBLIGATION")
-        ).scalars().all()
+            select(KnowledgeEntity).where(KnowledgeEntity.fund_id == fund_id, KnowledgeEntity.entity_type == "OBLIGATION"),
+        ).scalars().all(),
     )
     obligations = list(
-        db.execute(select(ObligationRegister).where(ObligationRegister.fund_id == fund_id, ObligationRegister.as_of <= now)).scalars().all()
+        db.execute(select(ObligationRegister).where(ObligationRegister.fund_id == fund_id, ObligationRegister.as_of <= now)).scalars().all(),
     )
     obligation_by_key = {row.obligation_id: row for row in obligations}
 
@@ -375,8 +375,8 @@ def map_obligation_evidence(
                 DocumentRegistry.fund_id == fund_id,
                 DocumentRegistry.container_name == "portfolio-monitoring-evidence",
                 DocumentRegistry.as_of <= now,
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
     evidence_corpus = _preload_corpora(db, evidence_docs) if evidence_docs else {}
 
@@ -411,7 +411,7 @@ def map_obligation_evidence(
             select(ObligationEvidenceMap).where(
                 ObligationEvidenceMap.fund_id == fund_id,
                 ObligationEvidenceMap.obligation_id == entity.id,
-            )
+            ),
         ).scalar_one_or_none()
 
         if existing_map is None:
@@ -425,7 +425,7 @@ def map_obligation_evidence(
                     last_checked_at=now,
                     created_by=actor_id,
                     updated_by=actor_id,
-                )
+                ),
             )
         else:
             existing_map.evidence_document_id = best_doc_id
@@ -467,12 +467,12 @@ def detect_binding_conflicts(
 ) -> tuple[int, int]:
     effective_as_of = as_of or _now_utc()
     obligations = list(
-        db.execute(select(ObligationRegister).where(ObligationRegister.fund_id == fund_id, ObligationRegister.as_of <= effective_as_of)).scalars().all()
+        db.execute(select(ObligationRegister).where(ObligationRegister.fund_id == fund_id, ObligationRegister.as_of <= effective_as_of)).scalars().all(),
     )
     entities = list(
         db.execute(
-            select(KnowledgeEntity).where(KnowledgeEntity.fund_id == fund_id, KnowledgeEntity.entity_type == "OBLIGATION")
-        ).scalars().all()
+            select(KnowledgeEntity).where(KnowledgeEntity.fund_id == fund_id, KnowledgeEntity.entity_type == "OBLIGATION"),
+        ).scalars().all(),
     )
     entity_by_obligation_id = {entity.canonical_name: entity for entity in entities}
 
@@ -501,7 +501,7 @@ def detect_binding_conflicts(
                 continue
 
             source_doc = db.execute(
-                select(DocumentRegistry).where(DocumentRegistry.fund_id == fund_id, DocumentRegistry.id == source_doc_id)
+                select(DocumentRegistry).where(DocumentRegistry.fund_id == fund_id, DocumentRegistry.id == source_doc_id),
             ).scalar_one_or_none()
             if source_doc is None:
                 continue
@@ -546,8 +546,8 @@ def run_cross_container_linking(
             select(DocumentRegistry).where(
                 DocumentRegistry.fund_id == fund_id,
                 DocumentRegistry.as_of <= effective_as_of,
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
 
     corpus_cache = _preload_corpora(db, docs) if docs else {}
@@ -599,8 +599,8 @@ def get_entity_links_snapshot(
                 KnowledgeLink.fund_id == fund_id,
                 KnowledgeLink.target_entity_id == entity_id,
                 KnowledgeLink.created_at <= as_of,
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
 
     links = [
@@ -644,8 +644,8 @@ def get_obligation_status_snapshot(
             .where(
                 ObligationEvidenceMap.fund_id == fund_id,
                 ObligationEvidenceMap.last_checked_at <= as_of,
-            )
-        ).all()
+            ),
+        ).all(),
     )
 
     obligations = [

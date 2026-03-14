@@ -1,5 +1,4 @@
-"""
-Compliance Global Intelligence Agent — API routes.
+"""Compliance Global Intelligence Agent — API routes.
 
 POST /compliance/agent/query
   Request:  { "question": str, "domain": str|null }
@@ -82,7 +81,7 @@ class AgentQueryResponse(BaseModel):
     retrieval_confidence: float = 0.0
     confidence_components: ConfidenceComponents = ConfidenceComponents()
     cross_validation: CrossValidationResult = CrossValidationResult(
-        has_critical_claims=False, claims=[], overall_status="NO_CRITICAL_CLAIMS"
+        has_critical_claims=False, claims=[], overall_status="NO_CRITICAL_CLAIMS",
     )
     recency: RecencyAnalysis = RecencyAnalysis()
 
@@ -92,8 +91,7 @@ class AgentQueryResponse(BaseModel):
 # ------------------------------------------------------------------ #
 @router.post("/query", response_model=AgentQueryResponse)
 def query_agent(payload: AgentQueryRequest):
-    """
-    Ask the Compliance Intelligence Agent a question.
+    """Ask the Compliance Intelligence Agent a question.
     The agent retrieves evidence from Azure AI Search indexes,
     grounds its answer exclusively on those chunks, and returns
     structured citations.

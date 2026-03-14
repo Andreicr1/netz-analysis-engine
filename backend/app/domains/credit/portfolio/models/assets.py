@@ -8,8 +8,7 @@ from app.domains.credit.portfolio.enums import AssetType, Strategy
 
 
 class PortfolioAsset(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
-    """
-    Canonical asset object (asset-first).
+    """Canonical asset object (asset-first).
 
     All subtype tables (e.g. FundInvestment) must link 1:1 via asset_id.
     """

@@ -136,8 +136,8 @@ def list_document_versions(
         db.execute(
             select(DocumentVersion)
             .where(DocumentVersion.fund_id == fund_id, DocumentVersion.document_id == document_id)
-            .order_by(DocumentVersion.version_number.asc())
-        ).scalars().all()
+            .order_by(DocumentVersion.version_number.asc()),
+        ).scalars().all(),
     )
     return vers
 
@@ -169,8 +169,7 @@ def process_pending(
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM])),
     _write_guard: Actor = Depends(require_readonly_allowed()),
 ):
-    """
-    Operational endpoint to process pending document versions.
+    """Operational endpoint to process pending document versions.
     This is a stopgap until an Azure Functions / queue worker is wired.
     """
     limit = 10

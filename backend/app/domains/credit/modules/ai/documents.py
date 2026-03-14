@@ -91,7 +91,7 @@ def get_manager_profile(
         select(ManagerProfile).where(
             ManagerProfile.fund_id == fund_id,
             func.lower(ManagerProfile.name) == manager.strip().lower(),
-        )
+        ),
     ).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Manager profile not found")
@@ -116,8 +116,8 @@ def get_daily_alerts(
             select(GovernanceAlert)
             .where(GovernanceAlert.fund_id == fund_id)
             .order_by(GovernanceAlert.as_of.desc())
-            .limit(200)
-        ).scalars().all()
+            .limit(200),
+        ).scalars().all(),
     )
     as_of, data_latency, data_quality = _envelope_from_rows(rows)
     items = [GovernanceAlertItem.model_validate(row) for row in rows]
@@ -187,8 +187,8 @@ def get_documents_index(
             .where(DocumentRegistry.fund_id == fund_id)
             .order_by(DocumentRegistry.last_ingested_at.desc())
             .limit(limit)
-            .offset(offset)
-        ).scalars().all()
+            .offset(offset),
+        ).scalars().all(),
     )
 
     if not docs:
@@ -201,16 +201,16 @@ def get_documents_index(
             select(DocumentClassification).where(
                 DocumentClassification.fund_id == fund_id,
                 DocumentClassification.doc_id.in_(doc_ids),
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
     governance_profiles = list(
         db.execute(
             select(DocumentGovernanceProfile).where(
                 DocumentGovernanceProfile.fund_id == fund_id,
                 DocumentGovernanceProfile.doc_id.in_(doc_ids),
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     )
     anchors = list(
         db.execute(
@@ -219,8 +219,8 @@ def get_documents_index(
                 KnowledgeAnchor.fund_id == fund_id,
                 KnowledgeAnchor.doc_id.in_(doc_ids),
             )
-            .group_by(KnowledgeAnchor.doc_id)
-        ).all()
+            .group_by(KnowledgeAnchor.doc_id),
+        ).all(),
     )
 
     by_doc_classification = {row.doc_id: row for row in classifications}
@@ -243,7 +243,7 @@ def get_documents_index(
                 shareability=doc.shareability,
                 auditReady=bool(classification and profile and anchors_count.get(doc.id, 0) > 0),
                 lastIngestedAt=doc.last_ingested_at,
-            )
+            ),
         )
 
     as_of, data_latency, data_quality = _envelope_from_rows(docs)
@@ -258,23 +258,23 @@ def get_document_detail(
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.COMPLIANCE, Role.GP, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> DocumentDetailResponse:
     doc = db.execute(
-        select(DocumentRegistry).where(DocumentRegistry.fund_id == fund_id, DocumentRegistry.id == doc_id)
+        select(DocumentRegistry).where(DocumentRegistry.fund_id == fund_id, DocumentRegistry.id == doc_id),
     ).scalar_one_or_none()
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
 
     classification = db.execute(
-        select(DocumentClassification).where(DocumentClassification.fund_id == fund_id, DocumentClassification.doc_id == doc_id)
+        select(DocumentClassification).where(DocumentClassification.fund_id == fund_id, DocumentClassification.doc_id == doc_id),
     ).scalar_one_or_none()
     governance_profile = db.execute(
-        select(DocumentGovernanceProfile).where(DocumentGovernanceProfile.fund_id == fund_id, DocumentGovernanceProfile.doc_id == doc_id)
+        select(DocumentGovernanceProfile).where(DocumentGovernanceProfile.fund_id == fund_id, DocumentGovernanceProfile.doc_id == doc_id),
     ).scalar_one_or_none()
     anchors = list(
         db.execute(
             select(KnowledgeAnchor)
             .where(KnowledgeAnchor.fund_id == fund_id, KnowledgeAnchor.doc_id == doc_id)
-            .order_by(KnowledgeAnchor.anchor_type.asc())
-        ).scalars().all()
+            .order_by(KnowledgeAnchor.anchor_type.asc()),
+        ).scalars().all(),
     )
 
     anchor_out = [

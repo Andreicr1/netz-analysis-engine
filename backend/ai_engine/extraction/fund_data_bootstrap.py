@@ -1,5 +1,4 @@
-"""
-fund_data_bootstrap.py — Stage A for fund-data source
+"""fund_data_bootstrap.py — Stage A for fund-data source
 ======================================================
 Extracts fund-level metadata for documents stored in the `fund-data` Azure Blob
 container (fund constitution, regulatory, service-provider documents).
@@ -41,8 +40,7 @@ _FUND_NAME = "Netz Private Credit Fund"
 
 
 def _infer_category_from_path(blob_name: str) -> str | None:
-    """
-    Infer fund_data_category from the blob path.
+    """Infer fund_data_category from the blob path.
     e.g. "fund-constitution/netz-private-credit-fund-im.pdf" → "fund-constitution"
     e.g. "regulatory/cima-regulations-2024.pdf"              → "regulatory"
     """
@@ -72,8 +70,7 @@ def build_fund_document_metadata(
     blob_name: str,
     blob_tags: dict[str, str],
 ) -> dict:
-    """
-    Build the metadata dict for a single fund-data document.
+    """Build the metadata dict for a single fund-data document.
 
     Parameters
     ----------
@@ -87,6 +84,7 @@ def build_fund_document_metadata(
     -------
     dict
         Metadata injected into every chunk from this document.
+
     """
     inferred_category = _infer_category_from_path(blob_name)
 
@@ -110,8 +108,7 @@ def bootstrap_fund_folder(
     input_container: str,
     item_folder: str,
 ) -> dict:
-    """
-    Stage A for fund-data source.
+    """Stage A for fund-data source.
 
     Determines the fund_data_category from the item_folder name (which is the
     first-level path segment in the fund-data container, e.g. "fund-constitution").
@@ -129,6 +126,7 @@ def bootstrap_fund_folder(
     Returns
     -------
     dict — the fund context metadata (also written to fund_context.json)
+
     """
     logger.info("Fund Data Bootstrap — category inference for '%s'", item_folder)
 
@@ -200,8 +198,7 @@ def inject_fund_data_metadata(
     blob_service: BlobServiceClient,
     input_container: str,
 ) -> list[dict]:
-    """
-    Post-process: inject fund-data-specific fields into every chunk.
+    """Post-process: inject fund-data-specific fields into every chunk.
 
     The blob-level tags are fetched per unique blob_name so that documents
     within the same folder can have different jurisdictions or languages.
@@ -216,6 +213,7 @@ def inject_fund_data_metadata(
     Returns
     -------
     list[dict] — enriched chunks
+
     """
     # Cache blob tags per blob_name to avoid redundant API calls
     tags_cache: dict[str, dict[str, str]] = {}
@@ -225,7 +223,7 @@ def inject_fund_data_metadata(
 
         if blob_name and blob_name not in tags_cache:
             tags_cache[blob_name] = get_blob_tags(
-                blob_service, input_container, blob_name
+                blob_service, input_container, blob_name,
             )
         tags = tags_cache.get(blob_name, {})
 

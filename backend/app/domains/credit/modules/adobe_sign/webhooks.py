@@ -64,7 +64,7 @@ async def webhook_transfer_orders(
         payload_dict = json.loads(body)
     except json.JSONDecodeError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON",
         )
 
     payload = WebhookEventPayload(**payload_dict)
@@ -122,7 +122,7 @@ async def webhook_ic_memos(
         payload_dict = json.loads(body)
     except json.JSONDecodeError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON",
         )
 
     payload = WebhookEventPayload(**payload_dict)
@@ -139,7 +139,7 @@ async def webhook_ic_memos(
             form_data = form_data_list[0] if form_data_list else None
         except Exception:
             logger.warning(
-                "Could not retrieve form data for agreement %s", payload.agreement_id
+                "Could not retrieve form data for agreement %s", payload.agreement_id,
             )
 
     result = adobe_service.process_ic_memo_webhook(
@@ -187,7 +187,7 @@ async def webhook_signature_queue(
         payload_dict = json.loads(body)
     except json.JSONDecodeError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid JSON",
         )
 
     payload = WebhookEventPayload(**payload_dict)

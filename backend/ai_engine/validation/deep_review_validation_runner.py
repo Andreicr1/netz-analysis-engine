@@ -75,6 +75,7 @@ def run_deep_review_validation_sample(
     Returns
     -------
     DeepReviewValidationReport
+
     """
     from app.domains.credit.modules.deals.models import PipelineDeal as Deal
 
@@ -98,7 +99,7 @@ def run_deep_review_validation_sample(
                 Deal.deal_folder_path.is_not(None),
             )
             .order_by(Deal.created_at.asc())
-            .limit(sample_size)
+            .limit(sample_size),
         ).scalars().all()
         selected_ids = list(rows)
 
@@ -137,7 +138,7 @@ def run_deep_review_validation_sample(
                     deal_id=str(deal_id),
                     v3_error=str(exc),
                     v4_error=str(exc),
-                )
+                ),
             )
 
     # ── Compute aggregate score ──────────────────────────────────
@@ -226,7 +227,7 @@ def _benchmark_single_deal(
                 MemoEvidencePack.deal_id == deal_id,
                 MemoEvidencePack.fund_id == fund_id,
                 MemoEvidencePack.is_current == True,  # noqa: E712
-            ).order_by(MemoEvidencePack.generated_at.desc()).limit(1)
+            ).order_by(MemoEvidencePack.generated_at.desc()).limit(1),
         ).scalar_one_or_none()
         if pack_row:
             v4_evidence_pack = pack_row.evidence_json
@@ -236,7 +237,7 @@ def _benchmark_single_deal(
                 select(MemoChapter).where(
                     MemoChapter.evidence_pack_id == pack_row.id,
                     MemoChapter.is_current == True,  # noqa: E712
-                ).order_by(MemoChapter.chapter_number)
+                ).order_by(MemoChapter.chapter_number),
             ).scalars().all()
             v4_chapters = [
                 {

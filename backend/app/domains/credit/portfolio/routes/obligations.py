@@ -41,7 +41,7 @@ def create_obligation(
         select(PortfolioAsset).where(
             PortfolioAsset.id == asset_id,
             PortfolioAsset.fund_id == fund_id,
-        )
+        ),
     ).scalar_one_or_none()
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
@@ -80,8 +80,8 @@ def list_obligations(
             .join(PortfolioAsset, PortfolioAsset.id == AssetObligation.asset_id)
             .where(PortfolioAsset.fund_id == fund_id)
             .limit(limit)
-            .offset(offset)
-        ).scalars().all()
+            .offset(offset),
+        ).scalars().all(),
     )
 
 
@@ -99,7 +99,7 @@ def update_obligation(
         .where(
             PortfolioAsset.fund_id == fund_id,
             AssetObligation.id == obligation_id,
-        )
+        ),
     ).scalar_one_or_none()
 
     if not ob:

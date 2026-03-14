@@ -139,7 +139,7 @@ def build_evidence_summary(evidence_pack: dict[str, Any]) -> str:
         parts.append(
             f"\nMACRO: Federal Funds={macro.get('federal_funds_rate', 'N/A')}, "
             f"10Y={macro.get('treasury_10y', 'N/A')}, "
-            f"Spread={macro.get('bbb_spread', 'N/A')}"
+            f"Spread={macro.get('bbb_spread', 'N/A')}",
         )
 
     # Sponsor
@@ -281,6 +281,7 @@ def generate_chapter(
     Returns:
         Dict with at least ``section_text``.  Ch13 also has
         ``recommendation`` and ``confidence_level``.
+
     """
     # Extract deal_structure for Jinja2 template branching (direct_loan / fund_investment)
     deal_identity = evidence_pack.get("deal_identity", {})
@@ -428,7 +429,7 @@ def generate_chapter(
             content = chunk.get("content", "")
             parts.append(
                 f"\n--- Chunk {i} | chunk_id: {chunk_id}"
-                f" | doc_type: {doc_type} | source: {blob} ---"
+                f" | doc_type: {doc_type} | source: {blob} ---",
             )
             parts.append(content)
 
@@ -665,7 +666,7 @@ def _build_appendix_1(all_citations: list[dict[str, Any]]) -> str:
         cid_display = cid[:70] if len(cid) > 70 else cid
         lines.append(
             f"| {ref_num} | {cid_display} | {source} | {doc_type}"
-            f" | {chapters} | {excerpt} | {page} |"
+            f" | {chapters} | {excerpt} | {page} |",
         )
 
     lines.append("")

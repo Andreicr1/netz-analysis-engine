@@ -93,7 +93,7 @@ def _pdf_to_base64(pdf_bytes: bytes, start_page: int = 0, end_page: int | None =
     if len(data) > MISTRAL_MAX_FILE_BYTES:
         raise ValueError(
             f"PDF batch pages {start_page + 1}–{end_page} exceeds "
-            f"{MISTRAL_MAX_FILE_MB} MB limit."
+            f"{MISTRAL_MAX_FILE_MB} MB limit.",
         )
     return base64.b64encode(data).decode()
 
@@ -162,6 +162,7 @@ async def async_extract_pdf_with_mistral(
     Raises:
         RuntimeError: On API errors after retries exhausted.
         ValueError: If api_key is not provided and not configured.
+
     """
     if api_key is None:
         from app.core.config.settings import settings
@@ -232,7 +233,7 @@ async def async_extract_pdf_with_mistral(
 
                     logger.debug("Mistral OCR error response: %s", resp.text[:500])
                     raise RuntimeError(
-                        f"Mistral OCR failed with HTTP {resp.status_code}"
+                        f"Mistral OCR failed with HTTP {resp.status_code}",
                     )
 
                 except httpx.TimeoutException:

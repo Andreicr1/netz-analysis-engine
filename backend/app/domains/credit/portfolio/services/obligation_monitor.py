@@ -14,8 +14,7 @@ from app.domains.credit.portfolio.models.obligations import AssetObligation
 
 
 def check_overdue_obligations(db: Session) -> int:
-    """
-    Workflow loop: detect overdue obligations and generate Alerts + Actions.
+    """Workflow loop: detect overdue obligations and generate Alerts + Actions.
 
     Auditability:
     - writes audit events with actor_id='system' and request_id='workflow'
@@ -30,7 +29,7 @@ def check_overdue_obligations(db: Session) -> int:
         .where(
             AssetObligation.status == ObligationStatus.OPEN,
             AssetObligation.due_date < today,
-        )
+        ),
     ).all()
 
     overdue_ob_ids = [ob.id for ob, _ in overdue]
@@ -42,7 +41,7 @@ def check_overdue_obligations(db: Session) -> int:
                 select(Alert).where(
                     Alert.obligation_id.in_(overdue_ob_ids),
                     Alert.alert_type == AlertType.OBLIGATION_OVERDUE,
-                )
+                ),
             ).scalars().all()
         }
 

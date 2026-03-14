@@ -12,8 +12,7 @@ from app.domains.credit.cash_management.enums import CashTransactionDirection, R
 
 
 class BankStatementUpload(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
-    """
-    Represents a bank statement document upload for manual reconciliation.
+    """Represents a bank statement document upload for manual reconciliation.
     Each upload corresponds to a statement period and is stored as immutable evidence.
     """
 
@@ -32,8 +31,7 @@ class BankStatementUpload(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
 
 
 class BankStatementLine(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
-    """
-    Individual ledger line from a bank statement.
+    """Individual ledger line from a bank statement.
     Can be manually entered or parsed from CSV/PDF.
     Used for reconciliation against CashTransaction records.
     """
@@ -41,7 +39,7 @@ class BankStatementLine(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "bank_statement_lines"
 
     statement_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("bank_statement_uploads.id", ondelete="CASCADE"), nullable=False, index=True
+        ForeignKey("bank_statement_uploads.id", ondelete="CASCADE"), nullable=False, index=True,
     )
     value_date: Mapped[date] = mapped_column(Date, nullable=False)
     description: Mapped[str] = mapped_column(String(1000), nullable=False)
@@ -50,13 +48,13 @@ class BankStatementLine(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     
     # Reconciliation fields
     matched_transaction_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("cash_transactions.id", ondelete="SET NULL"), nullable=True, index=True
+        ForeignKey("cash_transactions.id", ondelete="SET NULL"), nullable=True, index=True,
     )
     reconciliation_status: Mapped[ReconciliationStatus] = mapped_column(
-        SAEnum(ReconciliationStatus, name="reconciliation_status_enum"), 
-        nullable=False, 
+        SAEnum(ReconciliationStatus, name="reconciliation_status_enum"),
+        nullable=False,
         server_default=ReconciliationStatus.UNMATCHED.value,
-        index=True
+        index=True,
     )
     reconciled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reconciled_by: Mapped[str | None] = mapped_column(String(128), nullable=True)

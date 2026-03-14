@@ -156,6 +156,7 @@ def build_chapter_query_map(deal_name: str) -> dict[str, list[str]]:
     -------
     dict[str, list[str]]
         Mapping from chapter_key → list of specialized retrieval queries.
+
     """
     dn = deal_name  # shorthand
 
@@ -612,6 +613,7 @@ def gather_chapter_evidence(
         "retrieval_mode"  — PIPELINE_SCREENING | LEGAL_PACK | UNDERWRITING | IC_GRADE
         "doc_type_filter" — the OData filter string used (or None)
         "stats"           — {chunk_count, unique_docs, doc_types}
+
     """
     query_map = build_chapter_query_map(deal_name)
     queries   = query_map.get(chapter_key, [])
@@ -1233,13 +1235,14 @@ def retrieve_market_benchmarks(
         content + structured benchmark fields (publisher, reference_date,
         asset_class, sub_strategy, vintage_year, metric_type, etc.).
         Returns [] if chapter_id is unknown or search fails.
+
     """
     import httpx as _httpx
 
     queries = CHAPTER_MARKET_DATA_QUERIES.get(chapter_id, [])
     if not queries:
         logger.warning(
-            "retrieve_market_benchmarks: no queries for chapter %s", chapter_id
+            "retrieve_market_benchmarks: no queries for chapter %s", chapter_id,
         )
         return []
 

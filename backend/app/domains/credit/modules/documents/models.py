@@ -92,8 +92,7 @@ class DocumentAccessPolicy(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
 
 
 class DocumentRootFolder(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
-    """
-    Custom root folders created by ADMINs (rare).
+    """Custom root folders created by ADMINs (rare).
     Canonical roots live in code constants; this table future-proofs governance.
     """
 
@@ -106,8 +105,7 @@ class DocumentRootFolder(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
 
 
 class DocumentChunk(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
-    """
-    Append-only chunk store (source of truth) for audit reproducibility.
+    """Append-only chunk store (source of truth) for audit reproducibility.
     New document version => new set of chunks.
     """
 

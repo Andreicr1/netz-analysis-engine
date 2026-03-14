@@ -56,7 +56,7 @@ def trigger_deal_deep_review_v4(
             _sa_text(
                 "UPDATE pipeline_deals "
                 "SET intelligence_status = CAST(:s AS intelligence_status_enum) "
-                "WHERE id = :id AND fund_id = :fid"
+                "WHERE id = :id AND fund_id = :fid",
             ),
             {"s": "PROCESSING", "id": str(deal_id), "fid": str(fund_id)},
         )
@@ -129,7 +129,7 @@ def get_deep_review_status(
     from app.domains.credit.modules.ai.models import MemoChapter
 
     deal = db.execute(
-        select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id)
+        select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id),
     ).scalar_one_or_none()
     if deal is None:
         raise HTTPException(status_code=404, detail="Deal not found")
@@ -140,7 +140,7 @@ def get_deep_review_status(
             MemoChapter.deal_id == deal_id,
             MemoChapter.fund_id == fund_id,
             MemoChapter.is_current == True,  # noqa: E712
-        )
+        ),
     ).scalar() or 0
 
     return {
@@ -166,7 +166,7 @@ def reset_deal_intelligence_status(
     from sqlalchemy import text as _sa_text
 
     deal = db.execute(
-        select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id)
+        select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id),
     ).scalar_one_or_none()
     if deal is None:
         raise HTTPException(status_code=404, detail="Deal not found")
@@ -184,7 +184,7 @@ def reset_deal_intelligence_status(
             _sa_text(
                 "UPDATE pipeline_deals "
                 "SET intelligence_status = CAST(:s AS intelligence_status_enum) "
-                "WHERE id = :id AND fund_id = :fid"
+                "WHERE id = :id AND fund_id = :fid",
             ),
             {"s": "PENDING", "id": str(deal_id), "fid": str(fund_id)},
         )
@@ -215,7 +215,7 @@ def reset_all_stuck_deals(
             "UPDATE pipeline_deals "
             "SET intelligence_status = CAST(:s AS intelligence_status_enum) "
             "WHERE fund_id = :fid "
-            "AND intelligence_status = CAST(:from_s AS intelligence_status_enum)"
+            "AND intelligence_status = CAST(:from_s AS intelligence_status_enum)",
         ),
         {"s": "PENDING", "fid": str(fund_id), "from_s": "PROCESSING"},
     )

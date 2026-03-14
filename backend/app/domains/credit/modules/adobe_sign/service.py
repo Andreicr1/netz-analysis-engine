@@ -72,12 +72,12 @@ def send_transfer_order_for_esignature(
         select(CashTransaction).where(
             CashTransaction.fund_id == fund_id,
             CashTransaction.id == tx_id,
-        )
+        ),
     ).scalar_one_or_none()
 
     if not tx:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found",
         )
 
     if getattr(tx, "adobe_sign_agreement_id", None):
@@ -88,7 +88,7 @@ def send_transfer_order_for_esignature(
 
     # 2. Generate the execution-pack PDF (reuse existing service)
     pack = signatures_service.generate_execution_pack(
-        db, fund_id=fund_id, actor=actor, tx_id=tx_id
+        db, fund_id=fund_id, actor=actor, tx_id=tx_id,
     )
     pdf_bytes: bytes | None = pack.get("pdf_bytes")
     if not pdf_bytes:
@@ -198,7 +198,7 @@ def send_ic_memo_to_committee(
 
     if not memo:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="IC Memo not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="IC Memo not found",
         )
 
     if getattr(memo, "adobe_sign_agreement_id", None):
@@ -309,8 +309,8 @@ def process_transfer_order_webhook(
 
     tx = db.execute(
         select(CashTransaction).where(
-            CashTransaction.adobe_sign_agreement_id == agreement_id  # type: ignore[attr-defined]
-        )
+            CashTransaction.adobe_sign_agreement_id == agreement_id,  # type: ignore[attr-defined]
+        ),
     ).scalar_one_or_none()
 
     if not tx:
@@ -323,7 +323,7 @@ def process_transfer_order_webhook(
 
         # Upload to Azure Blob Storage
         container = getattr(
-            app_settings, "AZURE_BLOB_TRANSFER_ORDERS_CONTAINER", "transfer-orders"
+            app_settings, "AZURE_BLOB_TRANSFER_ORDERS_CONTAINER", "transfer-orders",
         )
         blob_name = f"{tx.fund_id}/{tx.id}/signed_transfer_order_{agreement_id}.pdf"
 
@@ -383,7 +383,7 @@ def process_transfer_order_webhook(
         return {"status": "completed", "transaction_id": str(tx.id)}
 
     logger.info(
-        "Ignoring event %s for transfer order agreement %s", event, agreement_id
+        "Ignoring event %s for transfer order agreement %s", event, agreement_id,
     )
     return {"status": "ignored", "event": event}
 
@@ -410,8 +410,8 @@ def process_ic_memo_webhook(
 
     memo = db.execute(
         select(ICMemo).where(
-            ICMemo.adobe_sign_agreement_id == agreement_id  # type: ignore[attr-defined]
-        )
+            ICMemo.adobe_sign_agreement_id == agreement_id,  # type: ignore[attr-defined]
+        ),
     ).scalar_one_or_none()
 
     if not memo:
@@ -443,7 +443,7 @@ def process_ic_memo_webhook(
                     "vote": vote_value,
                     "signed_at": datetime.now(UTC).isoformat(),
                     "signer_status": "COMPLETED",
-                }
+                },
             )
 
         memo.committee_votes = votes  # type: ignore[attr-defined]
@@ -627,7 +627,7 @@ def _upsert_document_registry(
             DocumentRegistry.fund_id == fund_id,
             DocumentRegistry.container_name == container_name,
             DocumentRegistry.blob_path == blob_path,
-        )
+        ),
     ).scalar_one_or_none()
 
     now = datetime.now(UTC)

@@ -57,8 +57,8 @@ def list_pipeline_deals(
             .where(Deal.fund_id == fund_id)
             .order_by(Deal.last_updated_at.desc().nullslast(), Deal.updated_at.desc())
             .limit(limit)
-            .offset(offset)
-        ).scalars().all()
+            .offset(offset),
+        ).scalars().all(),
     )
     deal_ids = [d.id for d in deals]
 
@@ -74,8 +74,8 @@ def list_pipeline_deals(
                 DealUnderwritingArtifact.fund_id == fund_id,
                 DealUnderwritingArtifact.deal_id.in_(deal_ids),
                 DealUnderwritingArtifact.is_active == True,  # noqa: E712
-            )
-        ).scalars().all()
+            ),
+        ).scalars().all(),
     ) if deal_ids else []
     artifact_by_deal = {a.deal_id: a for a in artifacts}
 
@@ -86,7 +86,7 @@ def list_pipeline_deals(
         db.execute(
             select(DealDocument.deal_id, sa_func.count(DealDocument.id))
             .where(DealDocument.fund_id == fund_id)
-            .group_by(DealDocument.deal_id)
+            .group_by(DealDocument.deal_id),
         ).all()
     )
     doc_count_map: dict[uuid.UUID, int] = {row[0]: row[1] for row in doc_counts_q}
@@ -96,7 +96,7 @@ def list_pipeline_deals(
         db.execute(
             select(MemoChapter.deal_id, sa_func.count(MemoChapter.id), sa_func.max(MemoChapter.generated_at))
             .where(MemoChapter.fund_id == fund_id, MemoChapter.is_current == True)  # noqa: E712
-            .group_by(MemoChapter.deal_id)
+            .group_by(MemoChapter.deal_id),
         ).all()
     )
     chapter_count_map: dict[uuid.UUID, int] = {row[0]: row[1] for row in chapter_counts_q}
@@ -124,7 +124,7 @@ def list_pipeline_deals(
                 dealFolderPath=deal.deal_folder_path,
                 chaptersCompleted=chapter_count_map.get(deal.id, 0),
                 lastGenerated=chapter_last_gen_map.get(deal.id) or deal.intelligence_generated_at,
-            )
+            ),
         )
 
     as_of = max((item.asOf for item in items), default=_utcnow())
@@ -139,20 +139,20 @@ def get_pipeline_deal_detail(
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> PipelineDealDetailResponse:
     deal = db.execute(
-        select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id, Deal.deal_folder_path.is_not(None))
+        select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id, Deal.deal_folder_path.is_not(None)),
     ).scalar_one_or_none()
     if deal is None:
         raise HTTPException(status_code=404, detail="Pipeline deal not found")
 
     profile = db.execute(
-        select(DealIntelligenceProfile).where(DealIntelligenceProfile.fund_id == fund_id, DealIntelligenceProfile.deal_id == deal_id)
+        select(DealIntelligenceProfile).where(DealIntelligenceProfile.fund_id == fund_id, DealIntelligenceProfile.deal_id == deal_id),
     ).scalar_one_or_none()
     risk_flags = list(
         db.execute(
             select(DealRiskFlag)
             .where(DealRiskFlag.fund_id == fund_id, DealRiskFlag.deal_id == deal_id)
-            .order_by(DealRiskFlag.created_at.desc())
-        ).scalars().all()
+            .order_by(DealRiskFlag.created_at.desc()),
+        ).scalars().all(),
     )
     brief = db.execute(select(DealICBrief).where(DealICBrief.fund_id == fund_id, DealICBrief.deal_id == deal_id)).scalar_one_or_none()
 
@@ -184,7 +184,7 @@ def get_pipeline_deal_detail(
             MemoChapter.fund_id == fund_id,
             MemoChapter.is_current == True,  # noqa: E712
             MemoChapter.chapter_number.in_(list(_BRIEF_CHAPTER_MAP.values())),
-        )
+        ),
     ).scalars().all():
         content = _normalize_chapter_content(
             row.content_md, row.chapter_number, row.chapter_title or "",
@@ -216,7 +216,7 @@ def get_pipeline_deal_detail(
             DealUnderwritingArtifact.fund_id == fund_id,
             DealUnderwritingArtifact.deal_id == deal_id,
             DealUnderwritingArtifact.is_active == True,  # noqa: E712
-        )
+        ),
     ).scalar_one_or_none()
 
     if brief_out and artifact:
@@ -242,7 +242,7 @@ def get_pipeline_deal_detail(
     research_output = None
     try:
         ro_row = db.execute(
-            select(Deal.research_output).where(Deal.id == deal_id)
+            select(Deal.research_output).where(Deal.id == deal_id),
         ).scalar_one_or_none()
         if ro_row and isinstance(ro_row, (dict, list)):
             research_output = ro_row
@@ -278,11 +278,11 @@ def get_pipeline_deal_detail(
                 from app.domains.credit.dashboard.routes import _stress_level_from_snapshot
                 _today = dt.date.today()
                 _snap_row = db.execute(
-                    select(MacroSnapshot).where(MacroSnapshot.as_of_date == _today)
+                    select(MacroSnapshot).where(MacroSnapshot.as_of_date == _today),
                 ).scalar_one_or_none()
                 if _snap_row is None:
                     _snap_row = db.execute(
-                        select(MacroSnapshot).order_by(MacroSnapshot.as_of_date.desc()).limit(1)
+                        select(MacroSnapshot).order_by(MacroSnapshot.as_of_date.desc()).limit(1),
                     ).scalar_one_or_none()
                 if _snap_row:
                     _sd = _snap_row.data_json or {}
@@ -315,8 +315,8 @@ def get_pipeline_deal_detail(
                 )
                 .join(DealDocumentIntelligence, DealDocumentIntelligence.doc_id == DocumentRegistry.id)
                 .where(DealDocumentIntelligence.deal_id == deal_id)
-                .order_by(DocumentRegistry.last_ingested_at.desc())
-            ).all()
+                .order_by(DocumentRegistry.last_ingested_at.desc()),
+            ).all(),
         )
         for doc in doc_rows:
             documents_out.append({
@@ -342,7 +342,7 @@ def get_pipeline_deal_detail(
                         MemoChapter.deal_id == deal_id,
                         MemoChapter.chapter_number == 8,
                         MemoChapter.is_current == True,  # noqa: E712
-                    )
+                    ),
                 ).scalar_one_or_none()
                 if ch8_content:
                     _irr_patterns = [
@@ -450,8 +450,8 @@ def get_pipeline_alerts(
             select(PipelineAlert)
             .where(PipelineAlert.fund_id == fund_id)
             .order_by(PipelineAlert.created_at.desc())
-            .limit(300)
-        ).scalars().all()
+            .limit(300),
+        ).scalars().all(),
     )
 
     items = [

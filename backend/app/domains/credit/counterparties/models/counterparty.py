@@ -44,10 +44,10 @@ class Counterparty(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     legal_name: Mapped[str] = mapped_column(String(500), nullable=False)
     trading_name: Mapped[str | None] = mapped_column(String(500), nullable=True)
     country_of_incorporation: Mapped[str | None] = mapped_column(
-        String(3), nullable=True
+        String(3), nullable=True,
     )
     registration_number: Mapped[str | None] = mapped_column(
-        String(100), nullable=True
+        String(100), nullable=True,
     )
     status: Mapped[CounterpartyStatus] = mapped_column(
         SAEnum(CounterpartyStatus, name="counterparty_status_enum"),
@@ -57,10 +57,10 @@ class Counterparty(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
 
     # Deal linkage (for APPROVED_INVESTMENT type)
     deal_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("deals.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("deals.id", ondelete="SET NULL"), nullable=True,
     )
     pipeline_deal_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("pipeline_deals.id", ondelete="SET NULL"), nullable=True
+        ForeignKey("pipeline_deals.id", ondelete="SET NULL"), nullable=True,
     )
 
     # International compliance
@@ -69,22 +69,22 @@ class Counterparty(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
 
     # Service provider fields (nullable, only for SERVICE_PROVIDER)
     service_type: Mapped[ServiceType | None] = mapped_column(
-        SAEnum(ServiceType, name="service_type_enum"), nullable=True
+        SAEnum(ServiceType, name="service_type_enum"), nullable=True,
     )
     contract_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     contract_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     contract_value: Mapped[Decimal | None] = mapped_column(
-        Numeric(20, 2), nullable=True
+        Numeric(20, 2), nullable=True,
     )
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationships (lazy="raise" — explicit loading only)
     bank_accounts: Mapped[list[CounterpartyBankAccount]] = relationship(
-        back_populates="counterparty", lazy="raise"
+        back_populates="counterparty", lazy="raise",
     )
     documents: Mapped[list[CounterpartyDocument]] = relationship(
-        back_populates="counterparty", lazy="raise"
+        back_populates="counterparty", lazy="raise",
     )
 
     __table_args__ = (
@@ -100,7 +100,7 @@ class Counterparty(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
             "fund_id",
             "deal_id",
             postgresql_where=sa.text(
-                "entity_type = 'APPROVED_INVESTMENT' AND deal_id IS NOT NULL"
+                "entity_type = 'APPROVED_INVESTMENT' AND deal_id IS NOT NULL",
             ),
             unique=True,
         ),
@@ -127,7 +127,7 @@ class CounterpartyBankAccount(Base, IdMixin, AuditMetaMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
     counterparty: Mapped[Counterparty] = relationship(
-        back_populates="bank_accounts", lazy="raise"
+        back_populates="bank_accounts", lazy="raise",
     )
 
     # counterparty_id index already created by index=True on the FK column
@@ -147,12 +147,12 @@ class CounterpartyDocument(Base, IdMixin, AuditMetaMixin):
         index=True,
     )
     document_role: Mapped[DocumentRole] = mapped_column(
-        SAEnum(DocumentRole, name="document_role_enum"), nullable=False
+        SAEnum(DocumentRole, name="document_role_enum"), nullable=False,
     )
     notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     counterparty: Mapped[Counterparty] = relationship(
-        back_populates="documents", lazy="raise"
+        back_populates="documents", lazy="raise",
     )
 
     __table_args__ = (
@@ -188,7 +188,7 @@ class BankAccountChange(Base, IdMixin, AuditMetaMixin):
     requested_by: Mapped[str] = mapped_column(String(128), nullable=False)
     reviewed_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
     reviewed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        DateTime(timezone=True), nullable=True,
     )
     review_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 

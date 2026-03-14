@@ -51,8 +51,8 @@ def get_obligation_register(
                 .where(ObligationRegister.fund_id == fund_id)
                 .order_by(ObligationRegister.as_of.desc())
                 .limit(limit)
-                .offset(offset)
-            ).scalars().all()
+                .offset(offset),
+            ).scalars().all(),
         )
         if existing:
             as_of, data_latency, data_quality = _envelope_from_rows(existing)
@@ -66,8 +66,8 @@ def get_obligation_register(
             .where(ObligationRegister.fund_id == fund_id)
             .order_by(ObligationRegister.as_of.desc())
             .limit(limit)
-            .offset(offset)
-        ).scalars().all()
+            .offset(offset),
+        ).scalars().all(),
     )
     as_of, data_latency, data_quality = _envelope_from_rows(rows)
     items = [ObligationRegisterItem.model_validate(row) for row in rows]

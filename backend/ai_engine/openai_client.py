@@ -1,5 +1,4 @@
-"""
-OpenAI Provider Layer — direct OpenAI API client with Azure OpenAI fallback.
+"""OpenAI Provider Layer — direct OpenAI API client with Azure OpenAI fallback.
 
 Centralises all OpenAI SDK usage behind two thin helpers:
   • ``create_completion()``  — Responses API (``client.responses.create``)
@@ -97,7 +96,7 @@ def _get_client() -> OpenAI:
 
     raise ValueError(
         "No AI provider configured. Set OPENAI_API_KEY (direct) "
-        "or AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_KEY (Azure OpenAI)."
+        "or AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_KEY (Azure OpenAI).",
     )
 
 
@@ -149,7 +148,7 @@ def _get_foundry_client() -> OpenAI:
     if not endpoint or not key:
         raise ValueError(
             "AZURE_AI_FOUNDRY_ENDPOINT and AZURE_AI_FOUNDRY_KEY must be set "
-            "to use Azure AI Foundry models (DeepSeek, Mistral, etc.)."
+            "to use Azure AI Foundry models (DeepSeek, Mistral, etc.).",
         )
 
     # Strip trailing /chat/completions* — the SDK appends it automatically.
@@ -201,14 +200,14 @@ def _get_async_client() -> AsyncOpenAI:
 
     raise ValueError(
         "No AI provider configured. Set OPENAI_API_KEY (direct) "
-        "or AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_KEY (Azure OpenAI)."
+        "or AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_KEY (Azure OpenAI).",
     )
 
 
 def _is_primary_azure() -> bool:
     """Check if the primary AI provider is Azure OpenAI (no direct API key)."""
     return not bool(settings.OPENAI_API_KEY) and bool(
-        settings.AZURE_OPENAI_ENDPOINT and settings.AZURE_OPENAI_KEY
+        settings.AZURE_OPENAI_ENDPOINT and settings.AZURE_OPENAI_KEY,
     )
 
 
@@ -251,7 +250,7 @@ def _get_async_foundry_client() -> AsyncOpenAI:
     if not endpoint or not key:
         raise ValueError(
             "AZURE_AI_FOUNDRY_ENDPOINT and AZURE_AI_FOUNDRY_KEY must be set "
-            "to use Azure AI Foundry models (DeepSeek, Mistral, etc.)."
+            "to use Azure AI Foundry models (DeepSeek, Mistral, etc.).",
         )
     base_url = re.sub(r"/chat/completions.*$", "", endpoint.rstrip("/"))
     _async_foundry_client = AsyncOpenAI(
@@ -476,6 +475,7 @@ def create_completion(
     reasoning_effort : str | None
         Explicit reasoning effort.  Overrides the per-stage default.
         Valid values: ``"low"``, ``"medium"``, ``"high"``.
+
     """
     mdl = model or settings.OPENAI_MODEL_INTELLIGENCE
 
@@ -956,11 +956,12 @@ def create_embedding(
 
     Raises ``RuntimeError`` if the resolved model does not match the
     canonical ``EMBEDDING_MODEL_NAME`` constant (B2 guard).
+
     """
     from ai_engine.validation.vector_integrity_guard import EMBEDDING_MODEL_NAME
 
     # ── Pick client: prefer OpenAI direct, then Azure OpenAI, then Foundry ──
-    if settings.OPENAI_API_KEY or settings.AZURE_OPENAI_ENDPOINT and settings.AZURE_OPENAI_KEY:
+    if settings.OPENAI_API_KEY or (settings.AZURE_OPENAI_ENDPOINT and settings.AZURE_OPENAI_KEY):
         client = _get_client()
     elif settings.AZURE_AI_FOUNDRY_KEY:
         logger.info("EMBEDDING_PROVIDER=foundry (no OpenAI/Azure OpenAI config)")
@@ -968,7 +969,7 @@ def create_embedding(
     else:
         raise ValueError(
             "No AI provider configured for embeddings. "
-            "Set OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT+KEY, or AZURE_AI_FOUNDRY_KEY."
+            "Set OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT+KEY, or AZURE_AI_FOUNDRY_KEY.",
         )
 
     mdl = model or settings.OPENAI_EMBEDDING_MODEL
@@ -977,7 +978,7 @@ def create_embedding(
         raise RuntimeError(
             f"Embedding model drift detected at runtime. "
             f"Expected '{EMBEDDING_MODEL_NAME}', got '{mdl}'. "
-            f"Dynamic switching is not allowed."
+            f"Dynamic switching is not allowed.",
         )
 
     logger.info("Creating embedding with model=%s for %d inputs", mdl, len(inputs))
@@ -1023,7 +1024,7 @@ async def async_create_embedding(
     from ai_engine.validation.vector_integrity_guard import EMBEDDING_MODEL_NAME
 
     # ── Pick async client: prefer OpenAI direct, then Azure OpenAI, then Foundry
-    if settings.OPENAI_API_KEY or settings.AZURE_OPENAI_ENDPOINT and settings.AZURE_OPENAI_KEY:
+    if settings.OPENAI_API_KEY or (settings.AZURE_OPENAI_ENDPOINT and settings.AZURE_OPENAI_KEY):
         client = _get_async_client()
     elif settings.AZURE_AI_FOUNDRY_KEY:
         logger.info("ASYNC_EMBEDDING_PROVIDER=foundry (no OpenAI/Azure OpenAI config)")
@@ -1031,7 +1032,7 @@ async def async_create_embedding(
     else:
         raise ValueError(
             "No AI provider configured for embeddings. "
-            "Set OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT+KEY, or AZURE_AI_FOUNDRY_KEY."
+            "Set OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT+KEY, or AZURE_AI_FOUNDRY_KEY.",
         )
 
     mdl = model or settings.OPENAI_EMBEDDING_MODEL
@@ -1040,7 +1041,7 @@ async def async_create_embedding(
         raise RuntimeError(
             f"Embedding model drift detected at runtime. "
             f"Expected '{EMBEDDING_MODEL_NAME}', got '{mdl}'. "
-            f"Dynamic switching is not allowed."
+            f"Dynamic switching is not allowed.",
         )
 
     logger.info("ASYNC_EMBEDDING_REQUEST model=%s inputs=%d", mdl, len(inputs))

@@ -1,5 +1,4 @@
-"""
-deals_enrichment.py
+"""deals_enrichment.py
 ====================
 Per-chunk LLM enrichment for the *deals* pipeline source.
 
@@ -89,8 +88,7 @@ def enrich_deals_chunks(
     max_tokens: int = 400,
     cache_path: Path | None = None,
 ) -> list[dict]:
-    """
-    Per-chunk LLM enrichment for deals source.
+    """Per-chunk LLM enrichment for deals source.
 
     Extracts: borrower_sector, loan_structure, key_persons_mentioned,
               financial_metric_type, risk_flags
@@ -110,6 +108,7 @@ def enrich_deals_chunks(
     Returns
     -------
     list[dict] — same chunks with enrichment fields populated
+
     """
     # ── Load enrichment cache ─────────────────────────────────────────────
     cache: dict[str, dict] = {}
@@ -254,7 +253,7 @@ async def async_enrich_chunk(
             context_parts: list[str] = []
             if hasattr(fund_context, "fund_strategy") and fund_context.fund_strategy:
                 context_parts.append(
-                    f"Fund strategy: {', '.join(fund_context.fund_strategy)}"
+                    f"Fund strategy: {', '.join(fund_context.fund_strategy)}",
                 )
             if hasattr(fund_context, "roles") and fund_context.roles:
                 known_persons = ", ".join(fund_context.roles.keys())

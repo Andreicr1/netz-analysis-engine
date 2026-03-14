@@ -34,7 +34,7 @@ def artifact_exists(
             InvestmentMemorandumDraft.deal_id == deal_id,
             InvestmentMemorandumDraft.is_current == True,  # noqa: E712
             InvestmentMemorandumDraft.version_tag.like(f"{version_prefix}%"),
-        ).limit(1)
+        ).limit(1),
     ).scalar_one_or_none()
 
     return row is not None
@@ -60,7 +60,7 @@ def load_cached_artifact(
         select(DealIntelligenceProfile).where(
             DealIntelligenceProfile.deal_id == deal_id,
             DealIntelligenceProfile.fund_id == fund_id,
-        )
+        ),
     ).scalar_one_or_none()
 
     im_draft = db.execute(
@@ -68,14 +68,14 @@ def load_cached_artifact(
             InvestmentMemorandumDraft.deal_id == deal_id,
             InvestmentMemorandumDraft.fund_id == fund_id,
             InvestmentMemorandumDraft.is_current == True,  # noqa: E712
-        )
+        ),
     ).scalar_one_or_none()
 
     brief = db.execute(
         select(DealICBrief).where(
             DealICBrief.deal_id == deal_id,
             DealICBrief.fund_id == fund_id,
-        )
+        ),
     ).scalar_one_or_none()
 
     if not profile or not im_draft:
@@ -129,7 +129,7 @@ def artifact_exists_v4(
             MemoEvidencePack.deal_id == deal_id,
             MemoEvidencePack.is_current == True,  # noqa: E712
             MemoEvidencePack.version_tag.like(f"{version_prefix}%"),
-        ).limit(1)
+        ).limit(1),
     ).scalar_one_or_none()
 
     return row is not None
@@ -152,7 +152,7 @@ def load_cached_artifact_v4(
             MemoEvidencePack.deal_id == deal_id,
             MemoEvidencePack.fund_id == fund_id,
             MemoEvidencePack.is_current == True,  # noqa: E712
-        ).order_by(MemoEvidencePack.generated_at.desc()).limit(1)
+        ).order_by(MemoEvidencePack.generated_at.desc()).limit(1),
     ).scalar_one_or_none()
 
     if not pack:
@@ -162,7 +162,7 @@ def load_cached_artifact_v4(
         select(MemoChapter).where(
             MemoChapter.evidence_pack_id == pack.id,
             MemoChapter.is_current == True,  # noqa: E712
-        ).order_by(MemoChapter.chapter_number)
+        ).order_by(MemoChapter.chapter_number),
     ).scalars().all()
 
     chapter_list = [
@@ -209,7 +209,7 @@ def chapter_exists(
             MemoChapter.evidence_pack_id == evidence_pack_id,
             MemoChapter.chapter_number == chapter_number,
             MemoChapter.is_current == True,  # noqa: E712
-        ).limit(1)
+        ).limit(1),
     ).scalar_one_or_none()
 
     return row is not None
@@ -234,7 +234,7 @@ def load_cached_chapter(
             MemoChapter.evidence_pack_id == evidence_pack_id,
             MemoChapter.chapter_number == chapter_number,
             MemoChapter.is_current == True,  # noqa: E712
-        ).limit(1)
+        ).limit(1),
     ).scalar_one_or_none()
 
     # Fallback: latest by generated_at regardless of is_current
@@ -243,7 +243,7 @@ def load_cached_chapter(
             select(MemoChapter).where(
                 MemoChapter.evidence_pack_id == evidence_pack_id,
                 MemoChapter.chapter_number == chapter_number,
-            ).order_by(MemoChapter.generated_at.desc()).limit(1)
+            ).order_by(MemoChapter.generated_at.desc()).limit(1),
         ).scalar_one_or_none()
 
     if not ch:

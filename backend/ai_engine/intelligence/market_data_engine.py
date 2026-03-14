@@ -693,6 +693,7 @@ def compute_macro_stress_severity(snapshot: dict[str, Any]) -> dict[str, Any]:
       66+:   SEVERE
 
     Fully deterministic — no LLM, no randomness.
+
     """
     score    = 0
     triggers: list[str] = []
@@ -888,7 +889,7 @@ def _build_macro_snapshot_legacy() -> dict[str, Any]:
     missing = [f for f in _CRITICAL if snapshot.get(f) is None]
     if missing:
         raise RuntimeError(
-            f"MACRO_SNAPSHOT_INCOMPLETE — critical fields are None: {missing}"
+            f"MACRO_SNAPSHOT_INCOMPLETE — critical fields are None: {missing}",
         )
     return snapshot
 
@@ -951,18 +952,17 @@ def _build_macro_snapshot_expanded(
             if is_critical:
                 raise RuntimeError(
                     f"MACRO_SNAPSHOT_CRITICAL_FAILURE — series '{series_id}' "
-                    f"({entry['label']}) failed: {exc}"
+                    f"({entry['label']}) failed: {exc}",
                 ) from exc
-            else:
-                result[category][series_id] = {
-                    "series": [], "latest": None, "latest_date": None,
-                    "transform_result": None, "trend_direction": None,
-                    "delta_12m": None, "delta_12m_pct": None,
-                    "label":       entry["label"],
-                    "fred_series": series_id,
-                    "error":       str(exc),
-                }
-                logger.warning("FRED_SERIES_FAILED series=%s error=%s", series_id, exc)
+            result[category][series_id] = {
+                "series": [], "latest": None, "latest_date": None,
+                "transform_result": None, "trend_direction": None,
+                "delta_12m": None, "delta_12m_pct": None,
+                "label":       entry["label"],
+                "fred_series": series_id,
+                "error":       str(exc),
+            }
+            logger.warning("FRED_SERIES_FAILED series=%s error=%s", series_id, exc)
 
         # Rate-limit buffer (120 req/min; ~35 calls — well within limit)
         time.sleep(_FRED_SLEEP_BETWEEN_CALLS)
@@ -978,7 +978,7 @@ def _build_macro_snapshot_expanded(
             metro_yoy = regional.get("delta_12m_pct")
             if nat_yoy is not None and metro_yoy is not None:
                 result["regional"]["national_vs_metro_delta"] = round(
-                    metro_yoy - nat_yoy, 2
+                    metro_yoy - nat_yoy, 2,
                 )
 
     # Compute backward-compatible scalar fields
@@ -1011,7 +1011,7 @@ def _build_macro_snapshot_expanded(
     missing = [k for k, v in _CRITICAL_SCALARS.items() if v is None]
     if missing:
         raise RuntimeError(
-            f"MACRO_SNAPSHOT_INCOMPLETE — critical scalars None after fetch: {missing}"
+            f"MACRO_SNAPSHOT_INCOMPLETE — critical scalars None after fetch: {missing}",
         )
 
     risk_free_10y_value = risk_free_10y
@@ -1093,7 +1093,7 @@ def get_macro_snapshot(
 
     # Check / invalidate cache
     cached = db.execute(
-        select(MacroSnapshot).where(MacroSnapshot.as_of_date == today)
+        select(MacroSnapshot).where(MacroSnapshot.as_of_date == today),
     ).scalar_one_or_none()
 
     _VALUE_KEYS = (
@@ -1131,7 +1131,7 @@ def get_macro_snapshot(
                     metro_yoy = regional.get("delta_12m_pct")
                     if nat_yoy is not None and metro_yoy is not None:
                         base_snapshot["regional"]["national_vs_metro_delta"] = round(
-                            metro_yoy - nat_yoy, 2
+                            metro_yoy - nat_yoy, 2,
                         )
             return base_snapshot
 
@@ -1143,7 +1143,7 @@ def get_macro_snapshot(
         fallback = db.execute(
             select(MacroSnapshot)
             .where(MacroSnapshot.as_of_date < today)
-            .order_by(MacroSnapshot.as_of_date.desc())
+            .order_by(MacroSnapshot.as_of_date.desc()),
         ).scalar_one_or_none()
         if fallback and fallback.data_json:
             logger.warning(
@@ -1164,7 +1164,7 @@ def get_macro_snapshot(
     except Exception:
         db.rollback()
         cached = db.execute(
-            select(MacroSnapshot).where(MacroSnapshot.as_of_date == today)
+            select(MacroSnapshot).where(MacroSnapshot.as_of_date == today),
         ).scalar_one_or_none()
         if cached and cached.data_json:
             logger.info("MARKET_DATA_RACE_RECOVERED as_of=%s", today.isoformat())
@@ -1191,7 +1191,7 @@ def get_macro_snapshot(
             metro_yoy = regional.get("delta_12m_pct")
             if nat_yoy is not None and metro_yoy is not None:
                 snapshot["regional"]["national_vs_metro_delta"] = round(
-                    metro_yoy - nat_yoy, 2
+                    metro_yoy - nat_yoy, 2,
                 )
 
     return snapshot

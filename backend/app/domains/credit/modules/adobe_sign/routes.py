@@ -16,7 +16,7 @@ from app.domains.credit.modules.adobe_sign.schemas import (
 )
 
 router = APIRouter(
-    tags=["IC Memos – Committee Voting"], dependencies=[Depends(require_fund_access())]
+    tags=["IC Memos – Committee Voting"], dependencies=[Depends(require_fund_access())],
 )
 
 

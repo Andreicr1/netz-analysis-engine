@@ -1,5 +1,4 @@
-"""
-fund_data_enrichment.py
+"""fund_data_enrichment.py
 ========================
 Per-chunk LLM enrichment for the *fund-data* pipeline source.
 
@@ -85,8 +84,7 @@ def enrich_fund_data_chunks(
     max_tokens: int = 150,
     cache_path: Path | None = None,
 ) -> list[dict]:
-    """
-    Per-chunk LLM enrichment for fund-data source.
+    """Per-chunk LLM enrichment for fund-data source.
 
     Extracts: clause_type, party_role, obligation_type, applies_to
 
@@ -105,6 +103,7 @@ def enrich_fund_data_chunks(
     Returns
     -------
     list[dict] — same chunks with enrichment fields populated
+
     """
     # ── Load enrichment cache ─────────────────────────────────────────────
     cache: dict[str, dict] = {}

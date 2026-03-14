@@ -1,5 +1,4 @@
-"""
-Entity Bootstrap — Auto-extract fund names, aliases, vehicle entities and roles
+"""Entity Bootstrap — Auto-extract fund names, aliases, vehicle entities and roles
 from OCR text before the main classification pipeline runs.
 
 Stages:
@@ -245,14 +244,14 @@ _P_ALIAS_QUOTED = re.compile(
 
 # Pattern 1b — parenthesized acronym WITHOUT quotes:  "Trust (ORENT)", "Fund VI (BOREP)"
 _P_ALIAS_PAREN = re.compile(
-    r'([A-Z][A-Za-z0-9\s\-&\.]{8,80}?)'
-    r'\s*\(\s*([A-Z][A-Z0-9]{2,10})\s*\)',
+    r"([A-Z][A-Za-z0-9\s\-&\.]{8,80}?)"
+    r"\s*\(\s*([A-Z][A-Z0-9]{2,10})\s*\)",
 )
 
 _P_ACRONYM_ENTITY = re.compile(
-    r'\b([A-Z]{2,8}(?:\s+[IVX]{1,4})?)\b'
-    r'(?:\s*,)?\s+(?:is\s+)?a(?:n)?\s+'
-    r'(?:Cayman|Delaware|Irish|Luxembourg|limited|exempted|offshore|onshore|registered)',
+    r"\b([A-Z]{2,8}(?:\s+[IVX]{1,4})?)\b"
+    r"(?:\s*,)?\s+(?:is\s+)?a(?:n)?\s+"
+    r"(?:Cayman|Delaware|Irish|Luxembourg|limited|exempted|offshore|onshore|registered)",
     re.IGNORECASE,
 )
 
@@ -263,84 +262,84 @@ _P_FORMERLY = re.compile(
 )
 
 _P_TITLE_HEADER = re.compile(
-    r'^#{1,3}\s+([A-Z][A-Za-z0-9\s\-&\.]{5,80}?)(?:\s+[—\-–]|\s+Fund\b|\s+LP\b'
-    r'|\s+LLC\b|\s+BDC\b|\s+AMC\b|\s+DAC\b|\s+Certificate\b)',
+    r"^#{1,3}\s+([A-Z][A-Za-z0-9\s\-&\.]{5,80}?)(?:\s+[—\-–]|\s+Fund\b|\s+LP\b"
+    r"|\s+LLC\b|\s+BDC\b|\s+AMC\b|\s+DAC\b|\s+Certificate\b)",
     re.MULTILINE,
 )
 
 _P_ROLE_DECL = re.compile(
-    r'([A-Z][A-Za-z0-9\s\-&\.\(\)]{3,60}?)\s+as\s+(?:its\s+)?'
-    r'(Investment Manager|Fund Administrator|Administrator|Auditor|'
-    r'Legal Counsel|Custodian|Sponsor|General Partner|GP|Manager|'
-    r'Issuer|Co-Issuer|Arranger|Calculation Agent|Collateral Manager)',
+    r"([A-Z][A-Za-z0-9\s\-&\.\(\)]{3,60}?)\s+as\s+(?:its\s+)?"
+    r"(Investment Manager|Fund Administrator|Administrator|Auditor|"
+    r"Legal Counsel|Custodian|Sponsor|General Partner|GP|Manager|"
+    r"Issuer|Co-Issuer|Arranger|Calculation Agent|Collateral Manager)",
     re.IGNORECASE,
 )
 
 # Pattern 5b — key persons: "Name, Title" or "Name — Title" or "Title: Name"
 _P_KEY_PERSON = re.compile(
-    r'([A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]{2,})'  # "John D. Smith"
-    r'\s*[,\u2014\u2013\-|]\s*'
-    r'(Chief\s+\w+\s*\w*|C[EFIOST]O|President|Vice\s+President|'
-    r'Managing\s+(?:Partner|Director|Member|Principal)|'
-    r'Senior\s+(?:Partner|Director|Vice\s+President|Managing\s+Director)|'
-    r'Portfolio\s+Manager|Fund\s+Manager|Head\s+of\s+\w+|'
-    r'General\s+Counsel|Partner|Director|Principal|Founder|'
-    r'Co-Founder|Chairman|Chairwoman|Treasurer|Secretary)',
+    r"([A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]{2,})"  # "John D. Smith"
+    r"\s*[,\u2014\u2013\-|]\s*"
+    r"(Chief\s+\w+\s*\w*|C[EFIOST]O|President|Vice\s+President|"
+    r"Managing\s+(?:Partner|Director|Member|Principal)|"
+    r"Senior\s+(?:Partner|Director|Vice\s+President|Managing\s+Director)|"
+    r"Portfolio\s+Manager|Fund\s+Manager|Head\s+of\s+\w+|"
+    r"General\s+Counsel|Partner|Director|Principal|Founder|"
+    r"Co-Founder|Chairman|Chairwoman|Treasurer|Secretary)",
     re.IGNORECASE,
 )
 
-_P_ISIN = re.compile(r'\bISIN\s*:?\s*([A-Z]{2}[A-Z0-9]{10})\b')
-_P_WKN  = re.compile(r'\bWKN\s*:?\s*([A-Z0-9]{6})\b')
+_P_ISIN = re.compile(r"\bISIN\s*:?\s*([A-Z]{2}[A-Z0-9]{10})\b")
+_P_WKN  = re.compile(r"\bWKN\s*:?\s*([A-Z0-9]{6})\b")
 
 _SKIP_ENTITIES = re.compile(
-    r'^(the Fund|the Manager|the Company|the Partnership|the Trust|'
-    r'the General Partner|the Limited Partner|the Investor|'
-    r'the Administrator|this Agreement|the Agreement|'
-    r'Class A|Class B|Series [A-Z])$',
+    r"^(the Fund|the Manager|the Company|the Partnership|the Trust|"
+    r"the General Partner|the Limited Partner|the Investor|"
+    r"the Administrator|this Agreement|the Agreement|"
+    r"Class A|Class B|Series [A-Z])$",
     re.IGNORECASE,
 )
 
 # Filter alias VALUES that are clearly not entity names.
 # Catches: form field labels, multi-line strings, generic financial terms.
 _SKIP_ALIAS_VALUES = re.compile(
-    r'\n'                                              # multi-line = form field or fragment
-    r'|Beneficiary|Bank\s+Name|Bank\s+Account'        # wire instruction fields
-    r'|will\s+apply|net\s+asset\s+value'              # sentence fragments
-    r'|hereinafter|pursuant\s+to'                     # legal boilerplate fragments
+    r"\n"                                              # multi-line = form field or fragment
+    r"|Beneficiary|Bank\s+Name|Bank\s+Account"        # wire instruction fields
+    r"|will\s+apply|net\s+asset\s+value"              # sentence fragments
+    r"|hereinafter|pursuant\s+to"                     # legal boilerplate fragments
     # Values that start with articles, pronouns, or verbs — not entity names
-    r'|^(This\s+material|This\s+document|This\s+fund'
-    r'|The\s+Fund|The\s+Manager|The\s+Company'
-    r'|We\s+have|We\s+are|It\s+is|There\s+is'
-    r'|U\.S\.\s+tax|Internal\s+Revenue|Cayman\s+Special'
-    r'|Canadian\s+generally|International\s+Financial'
-    r'|Combating\s+the|Focused\s+on|Subject\s+to'
-    r'|August|January|February|March|April|May|June'
-    r'|July|September|October|November|December)'
+    r"|^(This\s+material|This\s+document|This\s+fund"
+    r"|The\s+Fund|The\s+Manager|The\s+Company"
+    r"|We\s+have|We\s+are|It\s+is|There\s+is"
+    r"|U\.S\.\s+tax|Internal\s+Revenue|Cayman\s+Special"
+    r"|Canadian\s+generally|International\s+Financial"
+    r"|Combating\s+the|Focused\s+on|Subject\s+to"
+    r"|August|January|February|March|April|May|June"
+    r"|July|September|October|November|December)"
     # Generic standalone terms
-    r'|^\s*(Company|Fund|Manager|Partner|Investor'
-    r'|Units|Shares|Class|Series|Notes|Certificates'
-    r'|Distribution|Distributions|Participant'
-    r'|Agreement|Instrument|Schedule|Annex)\s*$',
+    r"|^\s*(Company|Fund|Manager|Partner|Investor"
+    r"|Units|Shares|Class|Series|Notes|Certificates"
+    r"|Distribution|Distributions|Participant"
+    r"|Agreement|Instrument|Schedule|Annex)\s*$",
     re.IGNORECASE,
 )
 
 # Filter alias KEYS that are generic financial abbreviations with no entity meaning.
 _SKIP_ALIAS_KEYS = re.compile(
-    r'^(NAV|IRR|MOIC|AUM|LP|GP|LLC|LPA|SPV|NDA|MFN|PPM|SMA'
-    r'|DRIP|DTC|AML|KYC|FATCA|CRS|ERISA|QPAM|FINRA|SEC|CIMA'
-    r'|USD|EUR|GBP|BRL|CHF|JPY|YTD|QTD|MTD'
-    r'|Q1|Q2|Q3|Q4|H1|H2|FY'
-    r'|CEO|CFO|CIO|COO|MD|VP|SVP|EVP'
+    r"^(NAV|IRR|MOIC|AUM|LP|GP|LLC|LPA|SPV|NDA|MFN|PPM|SMA"
+    r"|DRIP|DTC|AML|KYC|FATCA|CRS|ERISA|QPAM|FINRA|SEC|CIMA"
+    r"|USD|EUR|GBP|BRL|CHF|JPY|YTD|QTD|MTD"
+    r"|Q1|Q2|Q3|Q4|H1|H2|FY"
+    r"|CEO|CFO|CIO|COO|MD|VP|SVP|EVP"
     # Regulatory / compliance / accounting standards — not entity names
-    r'|IFRS|GAAP|GAAS|PCAOB|FASB|IASB|CPA|CFA|CAIA|IMC|ACCA'
-    r'|CFT|AMLCO|MLRO|DMLRO|FATF|GDPR|LGPD|OFAC|FinCEN'
-    r'|IRC|IRS|HMRC|CRA|OECD|BASEL|SOLVENCY'
+    r"|IFRS|GAAP|GAAS|PCAOB|FASB|IASB|CPA|CFA|CAIA|IMC|ACCA"
+    r"|CFT|AMLCO|MLRO|DMLRO|FATF|GDPR|LGPD|OFAC|FinCEN"
+    r"|IRC|IRS|HMRC|CRA|OECD|BASEL|SOLVENCY"
     # Legal / structural terms — not entity names
-    r'|SPE|CLO|CDO|CDX|CDS|MBS|ABS|RMBS|CMBS'
-    r'|PLC|AG|BV|NV|GmbH|SARL|SAS|SRL'
+    r"|SPE|CLO|CDO|CDX|CDS|MBS|ABS|RMBS|CMBS"
+    r"|PLC|AG|BV|NV|GmbH|SARL|SAS|SRL"
     # Generic document labels
-    r'|DRAFT|FINAL|APPENDIX|SCHEDULE|EXHIBIT|ANNEX|ADDENDUM)$'
-    r'|^[A-Z]{10,}$',  # concatenated names without spaces e.g. CHICAGOATLANTIC
+    r"|DRAFT|FINAL|APPENDIX|SCHEDULE|EXHIBIT|ANNEX|ADDENDUM)$"
+    r"|^[A-Z]{10,}$",  # concatenated names without spaces e.g. CHICAGOATLANTIC
     re.IGNORECASE,
 )
 
@@ -396,8 +395,8 @@ def extract_entities_regex(text: str, filename: str = "") -> dict:
             pos   = m.start()
             ctx   = text[max(0, pos - 200):pos].strip()
             names = re.findall(
-                r'[A-Z][A-Za-z0-9\s\-&\.]{5,60}'
-                r'(?:Fund|LP|LLC|SA|Ltd\.?|BDC|AMC|DAC|Certificate)',
+                r"[A-Z][A-Za-z0-9\s\-&\.]{5,60}"
+                r"(?:Fund|LP|LLC|SA|Ltd\.?|BDC|AMC|DAC|Certificate)",
                 ctx,
             )
             full = names[-1].strip() if names else acronym
@@ -446,73 +445,73 @@ def extract_entities_regex(text: str, filename: str = "") -> dict:
 # ============================================================
 
 _P_STRATEGY = re.compile(
-    r'\b(private\s+credit|direct\s+lending|bridge\s+lending|bridge\s+loans?'
-    r'|senior\s+secured\s+(?:loans?|lending)|mezzanine\s+(?:lending|debt|finance)'
-    r'|asset[- ]based\s+lending|real\s+estate\s+(?:credit|debt|equity|income)'
-    r'|net\s+lease|triple\s+net\s+lease|credit\s+opportunities'
-    r'|tactical\s+credit|opportunistic\s+credit|multi[- ]strategy'
-    r'|transitional\s+(?:lending|loans?)|construction\s+(?:lending|loans?)'
-    r'|commercial\s+real\s+estate|residential\s+mortgage'
-    r'|distressed\s+(?:credit|debt)|special\s+situations'
-    r'|structured\s+credit|venture\s+(?:lending|debt)'
-    r'|cannabis\s+(?:lending|credit)|healthcare\s+(?:lending|credit)'
-    r'|first\s+lien|second\s+lien|unitranche|revolving\s+credit'
-    r'|private\s+lending|workforce\s+housing|affordable\s+housing'
-    r'|multifamily|industrial|logistics|life\s+sciences|hospitality'
-    r'|trade\s+finance|factoring|invoice\s+finance|equipment\s+(?:finance|leasing)'
-    r'|infrastructure\s+(?:debt|lending)|project\s+finance'
-    r'|corporate\s+(?:lending|credit)|leveraged\s+(?:lending|loans?|finance))\b',
+    r"\b(private\s+credit|direct\s+lending|bridge\s+lending|bridge\s+loans?"
+    r"|senior\s+secured\s+(?:loans?|lending)|mezzanine\s+(?:lending|debt|finance)"
+    r"|asset[- ]based\s+lending|real\s+estate\s+(?:credit|debt|equity|income)"
+    r"|net\s+lease|triple\s+net\s+lease|credit\s+opportunities"
+    r"|tactical\s+credit|opportunistic\s+credit|multi[- ]strategy"
+    r"|transitional\s+(?:lending|loans?)|construction\s+(?:lending|loans?)"
+    r"|commercial\s+real\s+estate|residential\s+mortgage"
+    r"|distressed\s+(?:credit|debt)|special\s+situations"
+    r"|structured\s+credit|venture\s+(?:lending|debt)"
+    r"|cannabis\s+(?:lending|credit)|healthcare\s+(?:lending|credit)"
+    r"|first\s+lien|second\s+lien|unitranche|revolving\s+credit"
+    r"|private\s+lending|workforce\s+housing|affordable\s+housing"
+    r"|multifamily|industrial|logistics|life\s+sciences|hospitality"
+    r"|trade\s+finance|factoring|invoice\s+finance|equipment\s+(?:finance|leasing)"
+    r"|infrastructure\s+(?:debt|lending)|project\s+finance"
+    r"|corporate\s+(?:lending|credit)|leveraged\s+(?:lending|loans?|finance))\b",
     re.IGNORECASE,
 )
 
 _P_JURISDICTION = re.compile(
-    r'(?:organized|incorporated|formed|established|registered|domiciled)'
-    r'\s+(?:under\s+the\s+laws?\s+of\s+|in\s+)'
-    r'(?:the\s+)?(Cayman\s+Islands?|Delaware|Ireland|Luxembourg|Jersey'
-    r'|Guernsey|British\s+Virgin\s+Islands?|BVI|Bermuda|Netherlands'
-    r'|Hong\s+Kong|Singapore|Switzerland|United\s+Kingdom'
-    r'|England(?:\s+and\s+Wales)?|State\s+of\s+Delaware'
-    r'|State\s+of\s+New\s+York|Marshall\s+Islands)',
+    r"(?:organized|incorporated|formed|established|registered|domiciled)"
+    r"\s+(?:under\s+the\s+laws?\s+of\s+|in\s+)"
+    r"(?:the\s+)?(Cayman\s+Islands?|Delaware|Ireland|Luxembourg|Jersey"
+    r"|Guernsey|British\s+Virgin\s+Islands?|BVI|Bermuda|Netherlands"
+    r"|Hong\s+Kong|Singapore|Switzerland|United\s+Kingdom"
+    r"|England(?:\s+and\s+Wales)?|State\s+of\s+Delaware"
+    r"|State\s+of\s+New\s+York|Marshall\s+Islands)",
     re.IGNORECASE,
 )
 
 _P_JURISDICTION_ENTITY = re.compile(
-    r'a\s+(Cayman\s+Islands?|Delaware|Ireland|Luxembourg|Jersey'
-    r'|Guernsey|British\s+Virgin\s+Islands?|BVI|Bermuda|Netherlands'
-    r'|Hong\s+Kong|Singapore|Switzerland|United\s+Kingdom'
-    r'|England(?:\s+and\s+Wales)?)\s+'
-    r'(?:exempted\s+)?(?:limited\s+partnership|limited\s+liability\s+company'
-    r'|company|LLC|corporation|exempted\s+company)',
+    r"a\s+(Cayman\s+Islands?|Delaware|Ireland|Luxembourg|Jersey"
+    r"|Guernsey|British\s+Virgin\s+Islands?|BVI|Bermuda|Netherlands"
+    r"|Hong\s+Kong|Singapore|Switzerland|United\s+Kingdom"
+    r"|England(?:\s+and\s+Wales)?)\s+"
+    r"(?:exempted\s+)?(?:limited\s+partnership|limited\s+liability\s+company"
+    r"|company|LLC|corporation|exempted\s+company)",
     re.IGNORECASE,
 )
 
 _P_MGMT_FEE = re.compile(
-    r'management\s+fee[^.]{0,50}?(\d+\.?\d*)\s*%',
+    r"management\s+fee[^.]{0,50}?(\d+\.?\d*)\s*%",
     re.IGNORECASE,
 )
 
 _P_PERF_FEE = re.compile(
-    r'(?:incentive|performance|carried\s+interest)\s+'
-    r'(?:fee|allocation)[^.]{0,50}?(\d+\.?\d*)\s*%',
+    r"(?:incentive|performance|carried\s+interest)\s+"
+    r"(?:fee|allocation)[^.]{0,50}?(\d+\.?\d*)\s*%",
     re.IGNORECASE,
 )
 
 _P_HURDLE = re.compile(
-    r'(?:hurdle\s+rate|preferred\s+return|pref(?:erred)?\s*\.?\s*ret)'
-    r'[^.]{0,50}?(\d+\.?\d*)\s*%',
+    r"(?:hurdle\s+rate|preferred\s+return|pref(?:erred)?\s*\.?\s*ret)"
+    r"[^.]{0,50}?(\d+\.?\d*)\s*%",
     re.IGNORECASE,
 )
 
 _P_LOCKUP = re.compile(
-    r'(?:lock[- ]?up|minimum\s+hold(?:ing)?\s+period'
-    r'|minimum\s+investment\s+period)[^.\n]{0,60}?'
-    r'(\d+)\s*[- ]?\s*(year|month|quarter)',
+    r"(?:lock[- ]?up|minimum\s+hold(?:ing)?\s+period"
+    r"|minimum\s+investment\s+period)[^.\n]{0,60}?"
+    r"(\d+)\s*[- ]?\s*(year|month|quarter)",
     re.IGNORECASE,
 )
 
 _P_FUND_SIZE = re.compile(
-    r'(?:target\s+(?:fund\s+)?size|fund\s+size)'
-    r'[^.\n]{0,60}?\$?\s*(\d[\d,.]*)\s*(million|billion|mn|bn|MM|M\b|B\b)',
+    r"(?:target\s+(?:fund\s+)?size|fund\s+size)"
+    r"[^.\n]{0,60}?\$?\s*(\d[\d,.]*)\s*(million|billion|mn|bn|MM|M\b|B\b)",
     re.IGNORECASE,
 )
 
@@ -539,8 +538,7 @@ def _first_pct_in_range(
 
 
 def extract_fund_metadata(ocr_text: str) -> dict:
-    """
-    Extract structured fund metadata from full OCR text.
+    """Extract structured fund metadata from full OCR text.
     Returns dict with: fund_strategy, fund_jurisdiction, key_terms.
     All regex-based, zero API cost.
     """
@@ -550,7 +548,7 @@ def extract_fund_metadata(ocr_text: str) -> dict:
     strategies: list[str] = []
     seen_lower: set[str] = set()
     for m in _P_STRATEGY.finditer(ocr_text):
-        s = re.sub(r'\s+', ' ', m.group(1).strip().lower())
+        s = re.sub(r"\s+", " ", m.group(1).strip().lower())
         if s not in seen_lower:
             seen_lower.add(s)
             strategies.append(s)
@@ -561,7 +559,7 @@ def extract_fund_metadata(ocr_text: str) -> dict:
     for pat in (_P_JURISDICTION, _P_JURISDICTION_ENTITY):
         m = pat.search(ocr_text)
         if m:
-            jur = re.sub(r'\s+', ' ', m.group(1).strip())
+            jur = re.sub(r"\s+", " ", m.group(1).strip())
             # Normalize common variants
             jur_map = {
                 "State of Delaware": "Delaware",
@@ -705,8 +703,7 @@ def validate_vehicle_type_rerank(
     api_key: str,
     filename: str = "",
 ) -> tuple[str, float]:
-    """
-    Validate vehicle_type of a discovered entity via Cohere Rerank.
+    """Validate vehicle_type of a discovered entity via Cohere Rerank.
     Filename hints are prepended to the query for stronger signal.
     """
     import requests  # lazy import - optional dependency
@@ -750,8 +747,7 @@ def validate_vehicle_type_rerank(
 # ============================================================
 
 def ocr_pdf_bootstrap(pdf_path: str, mistral_key: str) -> str:
-    """
-    OCR the HEAD + TAIL pages of the PDF.
+    """OCR the HEAD + TAIL pages of the PDF.
 
     HEAD (first BOOTSTRAP_PAGES_HEAD pages) captures entity declarations in
     legal documents (LPA, IM, subscription agreements).
@@ -860,7 +856,7 @@ def merge_discoveries(results: list[dict]) -> dict:
             if alias_normalized in merged["aliases"]:
                 existing = merged["aliases"][alias_normalized]
                 _FUND_SUFFIX = re.compile(
-                    r'Fund|Trust|Partners|LP\b|LLC\b|Capital Fund', re.IGNORECASE)
+                    r"Fund|Trust|Partners|LP\b|LLC\b|Capital Fund", re.IGNORECASE)
                 new_is_fund = bool(_FUND_SUFFIX.search(str(full)))
                 old_is_fund = bool(_FUND_SUFFIX.search(existing))
                 # Prefer fund-like name; if both or neither, keep longest
@@ -901,7 +897,7 @@ def merge_discoveries(results: list[dict]) -> dict:
     # Example: fund_names=["Blue Owl Real Estate Fund VI"] + alias BLUE OWL
     # exists but maps to the manager -> promote the fund name as better value.
     _FUND_SUFFIX_PROMO = re.compile(
-        r'Fund|Trust|Partners|LP\b|LLC\b|Capital Fund', re.IGNORECASE)
+        r"Fund|Trust|Partners|LP\b|LLC\b|Capital Fund", re.IGNORECASE)
     for title in merged["titles"]:
         # Derive a candidate alias key from the title (first 2-3 uppercase words)
         words = title.split()
@@ -917,7 +913,7 @@ def merge_discoveries(results: list[dict]) -> dict:
         for ck in candidate_keys:
             if ck in merged["aliases"]:
                 existing = merged["aliases"][ck]
-                if _FUND_SUFFIX_PROMO.search(title) and not _FUND_SUFFIX_PROMO.search(existing) or _FUND_SUFFIX_PROMO.search(title) and len(title) > len(existing):
+                if (_FUND_SUFFIX_PROMO.search(title) and not _FUND_SUFFIX_PROMO.search(existing)) or (_FUND_SUFFIX_PROMO.search(title) and len(title) > len(existing)):
                     merged["aliases"][ck] = title
                     break
 
@@ -925,7 +921,7 @@ def merge_discoveries(results: list[dict]) -> dict:
     merged["aliases"] = dict(
         sorted(merged["aliases"].items(),
                key=lambda x: alias_count.get(x[0], 0),
-               reverse=True)
+               reverse=True),
     )
     return merged
 
@@ -997,13 +993,13 @@ def write_enriched(folder: Path, seed: dict, discovered: dict,
         if t not in set(seed.get("aliases", []) + list(discovered["aliases"].values()))
     ]
     _NOISE_TITLE = re.compile(
-        r'\n'                          # multi-line fragments
-        r'|^(Historically|Currently|Executive\s+Summary'
-        r'|Confidential|Proprietary|For\s+Institutional'
-        r'|Advantages|Focused\s+on|Strategies\s+have'
-        r'|Easy\s+to|This\s+material|August|September'
-        r'|January|February|March|April|May|June|July'
-        r'|October|November|December)',
+        r"\n"                          # multi-line fragments
+        r"|^(Historically|Currently|Executive\s+Summary"
+        r"|Confidential|Proprietary|For\s+Institutional"
+        r"|Advantages|Focused\s+on|Strategies\s+have"
+        r"|Easy\s+to|This\s+material|August|September"
+        r"|January|February|March|April|May|June|July"
+        r"|October|November|December)",
         re.IGNORECASE,
     )
     clean_titles = [
@@ -1120,7 +1116,7 @@ def bootstrap_folder(
     # pairs where the alias key matches an uppercase token found in a PDF filename.
     filename_tokens: set[str] = set()
     for pdf in pdfs:
-        for tok in re.findall(r'\b([A-Z]{2,8})\b', pdf.stem):
+        for tok in re.findall(r"\b([A-Z]{2,8})\b", pdf.stem):
             if not _SKIP_ALIAS_KEYS.match(tok):
                 filename_tokens.add(tok)
 
@@ -1173,16 +1169,16 @@ def bootstrap_folder(
     # Summary
     logger.info(
         "Summary — Aliases: %d | Roles: %d | Formerly: %s | ISINs: %s | Veh hints: %s",
-        len(merged['aliases']), len(merged['roles']),
-        merged['formerly'], [i['value'] for i in merged['isins']],
-        merged['vehicle_hints'],
+        len(merged["aliases"]), len(merged["roles"]),
+        merged["formerly"], [i["value"] for i in merged["isins"]],
+        merged["vehicle_hints"],
     )
-    if fund_meta.get('fund_strategy'):
-        logger.info("Strategy: %s", fund_meta['fund_strategy'])
-    if fund_meta.get('fund_jurisdiction'):
-        logger.info("Jurisdiction: %s", fund_meta['fund_jurisdiction'])
-    if fund_meta.get('key_terms'):
-        logger.info("Key terms: %s", fund_meta['key_terms'])
+    if fund_meta.get("fund_strategy"):
+        logger.info("Strategy: %s", fund_meta["fund_strategy"])
+    if fund_meta.get("fund_jurisdiction"):
+        logger.info("Jurisdiction: %s", fund_meta["fund_jurisdiction"])
+    if fund_meta.get("key_terms"):
+        logger.info("Key terms: %s", fund_meta["key_terms"])
 
     seed = load_seed(folder)
     write_enriched(folder, seed, merged, validated_vehicles, fund_meta, dry_run)
@@ -1243,6 +1239,7 @@ async def async_bootstrap_deal(
     E. Merge all discoveries
     F. Cohere Rerank vehicle_type validation
     G. Fund metadata extraction (regex, zero cost)
+
     """
     import asyncio
 

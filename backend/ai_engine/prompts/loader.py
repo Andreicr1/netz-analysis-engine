@@ -65,12 +65,13 @@ def load_prompt(category: str, name: str, **kwargs: str) -> str:
     ------
     FileNotFoundError
         If the template file does not exist.
+
     """
     template = _read_template(category, name)
     if template is None:
         raise FileNotFoundError(
             f"Prompt template not found: {category}/{name}.txt "
-            f"(looked in {_PROMPTS_DIR / category})"
+            f"(looked in {_PROMPTS_DIR / category})",
         )
 
     if kwargs:
