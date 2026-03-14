@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_USER: netz
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: netz_engine_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U netz"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://netz:password@localhost:5432/netz_engine_test
+      DATABASE_URL_SYNC: postgresql+psycopg://netz:password@localhost:5432/netz_engine_test
+      REDIS_URL: redis://localhost:6379/0
+      APP_ENV: development
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev]"
+        working-directory: backend
+      - name: Lint
+        run: python -m ruff check .
+        working-directory: backend
+      - name: Test
+        run: python -m pytest tests/ -v --tb=short
+        working-directory: backend
