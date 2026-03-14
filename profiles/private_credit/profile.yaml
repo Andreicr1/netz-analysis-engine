@@ -1,0 +1,101 @@
+# Private Credit IC Memo Profile
+# ===============================
+# Defines the 14-chapter Investment Committee memorandum structure.
+# Engine reads this at runtime — zero private-credit assumptions in core pipeline.
+
+name: private_credit
+display_name: "Private Credit IC Memo"
+version: 1
+
+chapters:
+  - id: ch01_exec
+    title: "Executive Summary"
+    type: ANALYTICAL
+    max_tokens: 4000
+    chunk_budget: [20, 4000]
+
+  - id: ch02_macro
+    title: "Macro & Market Context"
+    type: ANALYTICAL
+    max_tokens: 3000
+    chunk_budget: [10, 3000]
+
+  - id: ch03_exit
+    title: "Exit / Macro Regime"
+    type: ANALYTICAL
+    max_tokens: 3000
+    chunk_budget: [10, 3000]
+
+  - id: ch04_sponsor
+    title: "Sponsor Profile"
+    type: DESCRIPTIVE
+    max_tokens: 4000
+    chunk_budget: [15, 4000]
+
+  - id: ch05_legal
+    title: "Legal Structure"
+    type: DESCRIPTIVE
+    max_tokens: 4000
+    chunk_budget: [30, 8000]
+
+  - id: ch06_terms
+    title: "Terms & Covenants"
+    type: ANALYTICAL
+    max_tokens: 4000
+    chunk_budget: [30, 8000]
+
+  - id: ch07_capital
+    title: "Capital Structure"
+    type: ANALYTICAL
+    max_tokens: 4000
+    chunk_budget: [20, 4000]
+
+  - id: ch08_returns
+    title: "Return Modeling"
+    type: ANALYTICAL
+    max_tokens: 4000
+    chunk_budget: [20, 4000]
+
+  - id: ch09_downside
+    title: "Downside Scenario"
+    type: ANALYTICAL
+    max_tokens: 4000
+    chunk_budget: [20, 4000]
+
+  - id: ch10_covenants
+    title: "Covenant Assessment"
+    type: DESCRIPTIVE
+    max_tokens: 4000
+    chunk_budget: [20, 4000]
+
+  - id: ch11_risks
+    title: "Key Risks"
+    type: DESCRIPTIVE
+    max_tokens: 4000
+    chunk_budget: [20, 4000]
+
+  - id: ch12_peers
+    title: "Peer Comparison"
+    type: ANALYTICAL
+    max_tokens: 3000
+    chunk_budget: [10, 3000]
+
+  - id: ch13_recommendation
+    title: "Recommendation"
+    type: ANALYTICAL
+    max_tokens: 3000
+    chunk_budget: [0, 0]  # Synthesis-only, no evidence chunks
+
+  - id: ch14_governance_stress
+    title: "Governance Stress"
+    type: ANALYTICAL
+    max_tokens: 6000
+    chunk_budget: [30, 8000]
+
+tone_normalization:
+  descriptive_max_chars: 10000
+  analytical_min_chars: 6000
+
+recommendation_chapter: ch13_recommendation
+evidence_law_template: evidence_law.j2
+evidence_law_ch13_template: evidence_law_ch13.j2
