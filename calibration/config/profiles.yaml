@@ -1,0 +1,84 @@
+# Model Portfolio Profiles
+# Each profile defines CVaR parameters, allocation bands, and rebalance rules
+
+profiles:
+  conservative:
+    display_name: "Conservative"
+    description: "Capital preservation with moderate income"
+    cvar:
+      window_months: 12
+      confidence: 0.95
+      limit: -0.08          # max 8% loss at 95% confidence over 12m
+      warning_pct: 0.80     # warning at 80% of limit utilized
+      breach_days: 5        # consecutive days to trigger breach
+    core_weight_range: [0.80, 0.85]
+    satellite_weight_range: [0.15, 0.20]
+    max_single_fund_weight: 0.10
+    strategic_allocation:
+      na_equity_large: { target: 0.12, min: 0.08, max: 0.16 }
+      na_equity_value: { target: 0.05, min: 0.02, max: 0.08 }
+      dm_europe_equity: { target: 0.05, min: 0.02, max: 0.08 }
+      em_equity: { target: 0.03, min: 0.00, max: 0.06 }
+      fi_us_aggregate: { target: 0.25, min: 0.20, max: 0.35 }
+      fi_us_treasury: { target: 0.15, min: 0.10, max: 0.25 }
+      fi_us_tips: { target: 0.10, min: 0.05, max: 0.15 }
+      fi_us_high_yield: { target: 0.05, min: 0.00, max: 0.08 }
+      alt_real_estate: { target: 0.05, min: 0.02, max: 0.08 }
+      alt_gold: { target: 0.05, min: 0.02, max: 0.08 }
+      cash: { target: 0.10, min: 0.05, max: 0.20 }
+
+  moderate:
+    display_name: "Moderate"
+    description: "Balanced growth and income"
+    cvar:
+      window_months: 3
+      confidence: 0.95
+      limit: -0.06           # max 6% loss at 95% confidence over 3m
+      warning_pct: 0.80
+      breach_days: 3
+    core_weight_range: [0.70, 0.80]
+    satellite_weight_range: [0.20, 0.30]
+    max_single_fund_weight: 0.12
+    strategic_allocation:
+      na_equity_large: { target: 0.20, min: 0.15, max: 0.28 }
+      na_equity_growth: { target: 0.08, min: 0.04, max: 0.12 }
+      na_equity_value: { target: 0.07, min: 0.03, max: 0.10 }
+      dm_europe_equity: { target: 0.07, min: 0.03, max: 0.10 }
+      dm_asia_equity: { target: 0.03, min: 0.00, max: 0.06 }
+      em_equity: { target: 0.05, min: 0.02, max: 0.08 }
+      fi_us_aggregate: { target: 0.15, min: 0.10, max: 0.22 }
+      fi_us_treasury: { target: 0.08, min: 0.04, max: 0.12 }
+      fi_us_tips: { target: 0.05, min: 0.02, max: 0.08 }
+      fi_us_high_yield: { target: 0.05, min: 0.02, max: 0.08 }
+      alt_real_estate: { target: 0.05, min: 0.02, max: 0.08 }
+      alt_commodities: { target: 0.03, min: 0.00, max: 0.06 }
+      alt_gold: { target: 0.04, min: 0.02, max: 0.06 }
+      cash: { target: 0.05, min: 0.02, max: 0.10 }
+
+  growth:
+    display_name: "Growth"
+    description: "Long-term capital appreciation"
+    cvar:
+      window_months: 6
+      confidence: 0.95
+      limit: -0.12           # max 12% loss at 95% confidence over 6m
+      warning_pct: 0.80
+      breach_days: 5
+    core_weight_range: [0.60, 0.70]
+    satellite_weight_range: [0.30, 0.40]
+    max_single_fund_weight: 0.15
+    strategic_allocation:
+      na_equity_large: { target: 0.25, min: 0.18, max: 0.32 }
+      na_equity_growth: { target: 0.12, min: 0.06, max: 0.18 }
+      na_equity_value: { target: 0.08, min: 0.04, max: 0.12 }
+      na_equity_small: { target: 0.05, min: 0.02, max: 0.08 }
+      dm_europe_equity: { target: 0.08, min: 0.04, max: 0.12 }
+      dm_asia_equity: { target: 0.05, min: 0.02, max: 0.08 }
+      em_equity: { target: 0.08, min: 0.04, max: 0.12 }
+      fi_us_aggregate: { target: 0.08, min: 0.04, max: 0.12 }
+      fi_us_treasury: { target: 0.04, min: 0.00, max: 0.08 }
+      fi_us_high_yield: { target: 0.05, min: 0.02, max: 0.08 }
+      alt_real_estate: { target: 0.04, min: 0.02, max: 0.06 }
+      alt_commodities: { target: 0.04, min: 0.02, max: 0.06 }
+      alt_gold: { target: 0.02, min: 0.00, max: 0.04 }
+      cash: { target: 0.02, min: 0.00, max: 0.05 }

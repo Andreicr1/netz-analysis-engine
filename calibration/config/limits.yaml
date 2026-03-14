@@ -1,0 +1,84 @@
+# CVaR Limits & Regime Thresholds
+# OFR-calibrated limits (2026-03-14): anchored to OFR Form PF P50 equity shock data
+# Conservative 5% = P50 equity -5% to -8% (Basel minimum: 250 days ≈ 12 months at 95%)
+# Moderate 8% = P50 equity shock upper bound
+# Growth 15% = P5 rate shock (-14.7%) acceptable as single-factor tail
+
+cvar_limits:
+  conservative:
+    cvar_95_12m: -0.05      # OFR P50 equity shock: -5% to -8% (anchored at P50)
+    warning_threshold: 0.80  # 80% of limit → warning
+    breach_consecutive_days: 5
+  moderate:
+    cvar_95_3m: -0.08       # OFR P50 equity shock upper bound
+    warning_threshold: 0.80
+    breach_consecutive_days: 3
+  growth:
+    cvar_95_6m: -0.15       # OFR P5 rate shock (-14.7%) as acceptable single-factor tail
+    warning_threshold: 0.80
+    breach_consecutive_days: 5
+
+regime_thresholds:
+  # VIX-based
+  vix_risk_off: 25         # VIX above this → RISK_OFF
+  vix_extreme: 35          # VIX above this → CRISIS
+
+  # Yield curve (informational — leading indicator for IC, does not override hierarchy)
+  yield_curve_inversion: -0.10  # 10Y-2Y spread below this → logged for IC awareness
+
+  # Inflation
+  cpi_yoy_high: 4.0        # CPI YoY above this → INFLATION regime
+  cpi_yoy_normal: 2.5      # CPI YoY below this → normal
+
+  # Sahm Rule recession indicator (informational — corroborates yield curve inversion)
+  # Sahm (2019): 0.50pp rise in 3-month unemployment average from 12-month low = recession onset
+  sahm_rule_recession: 0.50
+
+  # Default regime
+  default: RISK_ON
+
+regime_definitions:
+  RISK_ON:
+    description: "Normal market conditions, risk appetite high"
+    equity_tilt: 0.0         # no adjustment
+  RISK_OFF:
+    description: "Elevated volatility, defensive positioning"
+    equity_tilt: -0.05       # reduce equity by 5% → shift to bonds/gold
+  INFLATION:
+    description: "Above-target inflation, favor real assets"
+    equity_tilt: -0.02
+    tips_tilt: +0.03
+    commodities_tilt: +0.02
+  CRISIS:
+    description: "Extreme stress, maximize capital preservation"
+    equity_tilt: -0.10
+    cash_tilt: +0.08
+    gold_tilt: +0.05
+
+regime_markov:
+  # Markov 2-state switching on log-VIX (statsmodels MarkovRegression)
+  # Weekly re-fit on expanding window (capped at preferred_lookback_days)
+  preferred_lookback_days: 504    # 2 trading years
+  min_obs_required: 252           # absolute minimum for stable 2-state estimation
+  high_vol_threshold: 0.65        # P(high-vol state) above this → early warning
+  # IMPORTANT: always use filtered (causal) probabilities — NOT smoothed (look-ahead bias)
+  use_markov_smoothing: false
+  # Convergence bounds (caps wall-clock time at ~800ms)
+  maxiter: 100
+  tol: 0.0001
+
+drift_bands:
+  # Rebalance trigger: if any block drifts beyond this % from target
+  maintenance_trigger: 0.05   # 5% absolute drift → maintenance rebalance
+  urgent_trigger: 0.10        # 10% drift → urgent rebalance
+
+drift:
+  dtw:
+    # Thresholds for derivative DTW (ddtw_distance), length-normalized (raw / window).
+    # Raw aeon dtw_distance (cumulative) is NOT normalized — do NOT use 0.15/0.25.
+    # ddtw operates on first-order differences, making it scale-invariant.
+    dtw_divergence_warning: 0.40     # ddtw/N above this → warning
+    dtw_divergence_critical: 0.90    # ddtw/N above this → fund review flag
+    dtw_window_days: 63
+    dtw_window_constraint: 0.1       # 10% warping constraint (±6 days for 63-day window)
+    use_derivative_dtw: true         # ddtw_distance (scale-invariant) vs dtw_distance

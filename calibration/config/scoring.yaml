@@ -1,0 +1,10 @@
+# Fund Scoring Weights — Used by scoring_service.py
+# Total must sum to 1.0. Adjust via calibration notebooks.
+
+scoring_weights:
+  return_consistency: 0.20
+  risk_adjusted_return: 0.25
+  drawdown_control: 0.20
+  information_ratio: 0.15
+  flows_momentum: 0.10
+  lipper_rating: 0.10

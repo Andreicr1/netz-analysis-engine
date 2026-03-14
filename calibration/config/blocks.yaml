@@ -1,0 +1,127 @@
+# Allocation Blocks: Geography × Asset Class → ETF Proxy Mapping
+# Each block represents an investable segment in the model portfolio
+
+blocks:
+  # North America — Equity
+  na_equity_large:
+    geography: north_america
+    asset_class: equity
+    display_name: "North America Large Cap Equity"
+    benchmark_ticker: SPY
+    description: "US large-cap equity exposure via S&P 500"
+
+  na_equity_growth:
+    geography: north_america
+    asset_class: equity
+    display_name: "North America Growth Equity"
+    benchmark_ticker: QQQ
+    description: "US growth/technology exposure via NASDAQ-100"
+
+  na_equity_value:
+    geography: north_america
+    asset_class: equity
+    display_name: "North America Value Equity"
+    benchmark_ticker: IWD
+    description: "US value equity via Russell 1000 Value"
+
+  na_equity_small:
+    geography: north_america
+    asset_class: equity
+    display_name: "North America Small Cap Equity"
+    benchmark_ticker: IWM
+    description: "US small-cap equity via Russell 2000"
+
+  # Europe — Equity
+  dm_europe_equity:
+    geography: dm_europe
+    asset_class: equity
+    display_name: "Developed Europe Equity"
+    benchmark_ticker: VGK
+    description: "European developed market equity"
+
+  # Asia Pacific — Equity
+  dm_asia_equity:
+    geography: dm_asia
+    asset_class: equity
+    display_name: "Developed Asia Pacific Equity"
+    benchmark_ticker: EWJ
+    description: "Japan and developed Asia equity"
+
+  # Emerging Markets — Equity
+  em_equity:
+    geography: emerging_markets
+    asset_class: equity
+    display_name: "Emerging Markets Equity"
+    benchmark_ticker: EEM
+    description: "Broad emerging markets equity"
+
+  # Fixed Income
+  fi_us_aggregate:
+    geography: north_america
+    asset_class: fixed_income
+    display_name: "US Aggregate Bond"
+    benchmark_ticker: AGG
+    description: "US investment-grade aggregate bond"
+
+  fi_us_treasury:
+    geography: north_america
+    asset_class: fixed_income
+    display_name: "US Treasury"
+    benchmark_ticker: IEF
+    description: "US intermediate-term Treasury bonds"
+
+  fi_us_tips:
+    geography: north_america
+    asset_class: fixed_income
+    display_name: "US TIPS"
+    benchmark_ticker: TIP
+    description: "US inflation-protected securities"
+
+  fi_us_high_yield:
+    geography: north_america
+    asset_class: fixed_income
+    display_name: "US High Yield"
+    benchmark_ticker: HYG
+    description: "US high-yield corporate bonds"
+
+  fi_em_debt:
+    geography: emerging_markets
+    asset_class: fixed_income
+    display_name: "Emerging Market Debt"
+    benchmark_ticker: EMB
+    description: "USD-denominated emerging market bonds"
+
+  # Alternatives
+  alt_real_estate:
+    geography: north_america
+    asset_class: alternatives
+    display_name: "Real Estate (REITs)"
+    benchmark_ticker: VNQ
+    description: "US real estate investment trusts"
+
+  alt_commodities:
+    geography: global
+    asset_class: alternatives
+    display_name: "Commodities"
+    benchmark_ticker: DJP
+    description: "Broad commodities basket"
+
+  alt_gold:
+    geography: global
+    asset_class: alternatives
+    display_name: "Gold"
+    benchmark_ticker: GLD
+    description: "Physical gold exposure"
+
+  # Cash
+  cash:
+    geography: north_america
+    asset_class: cash
+    display_name: "Cash & Equivalents"
+    benchmark_ticker: SHV
+    description: "Short-term US Treasury bills"
+
+# Ticker aliases for handling ticker changes
+ticker_aliases:
+  # Add mappings here when tickers change
+  # OLD_TICKER: NEW_TICKER

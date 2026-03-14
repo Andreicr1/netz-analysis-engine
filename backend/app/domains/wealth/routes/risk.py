@@ -1,0 +1,233 @@
+import asyncio
+from datetime import date
+
+import redis.asyncio as aioredis
+import structlog
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import StreamingResponse
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config.settings import settings
+from app.core.security.clerk_auth import CurrentUser, get_current_user
+from app.database import get_db
+from app.domains.wealth.models.portfolio import PortfolioSnapshot
+from app.domains.wealth.schemas.macro import MacroIndicators
+from app.domains.wealth.schemas.risk import CVaRPoint, CVaRStatus, RegimeHistoryPoint, RegimeRead
+from app.routers.common import VALID_PROFILES, get_latest_snapshot
+from app.routers.common import validate_profile as _validate_profile
+from quant_engine.regime_service import get_current_regime, get_latest_macro_values
+
+logger = structlog.get_logger()
+
+# Shared Redis connection for SSE pub/sub fan-out
+_sse_redis: aioredis.Redis | None = None
+_sse_redis_lock = asyncio.Lock()
+
+
+async def _get_sse_redis() -> aioredis.Redis:
+    """Get or create a shared Redis connection for SSE (async-safe)."""
+    global _sse_redis
+    async with _sse_redis_lock:
+        if _sse_redis is None:
+            _sse_redis = aioredis.from_url(settings.redis_url)
+    return _sse_redis
+
+
+async def close_sse_redis() -> None:
+    """Close the shared SSE Redis connection. Call during app shutdown."""
+    global _sse_redis
+    if _sse_redis is not None:
+        await _sse_redis.aclose()
+        _sse_redis = None
+
+router = APIRouter(prefix="/risk")
+
+
+@router.get(
+    "/{profile}/cvar",
+    response_model=CVaRStatus,
+    summary="Current CVaR status",
+    description="Returns the current CVaR level, limit, utilization, and trigger status for a profile.",
+)
+async def get_cvar(
+    profile: str,
+    db: AsyncSession = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> CVaRStatus:
+    _validate_profile(profile)
+    snap = await get_latest_snapshot(db, profile)
+    return CVaRStatus(
+        profile=profile,
+        calc_date=snap.snapshot_date if snap else None,
+        cvar_current=snap.cvar_current if snap else None,
+        cvar_limit=snap.cvar_limit if snap else None,
+        cvar_utilized_pct=snap.cvar_utilized_pct if snap else None,
+        trigger_status=snap.trigger_status if snap else None,
+        consecutive_breach_days=snap.consecutive_breach_days if snap else 0,
+        regime=snap.regime if snap else None,
+        cvar_lower_5=float(snap.cvar_lower_5) if snap and snap.cvar_lower_5 is not None else None,
+        cvar_upper_95=float(snap.cvar_upper_95) if snap and snap.cvar_upper_95 is not None else None,
+    )
+
+
+@router.get(
+    "/{profile}/cvar/history",
+    response_model=list[CVaRPoint],
+    summary="Rolling CVaR history",
+    description="Returns CVaR time-series for a profile within a date range.",
+)
+async def get_cvar_history(
+    profile: str,
+    from_date: date | None = Query(None, alias="from"),
+    to_date: date | None = Query(None, alias="to"),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> list[CVaRPoint]:
+    _validate_profile(profile)
+    stmt = select(PortfolioSnapshot).where(PortfolioSnapshot.profile == profile)
+    if from_date is not None:
+        stmt = stmt.where(PortfolioSnapshot.snapshot_date >= from_date)
+    if to_date is not None:
+        stmt = stmt.where(PortfolioSnapshot.snapshot_date <= to_date)
+    stmt = stmt.order_by(PortfolioSnapshot.snapshot_date).offset(offset).limit(limit)
+    result = await db.execute(stmt)
+    return [
+        CVaRPoint(
+            snapshot_date=row.snapshot_date,
+            cvar_current=row.cvar_current,
+            cvar_limit=row.cvar_limit,
+            cvar_utilized_pct=row.cvar_utilized_pct,
+            trigger_status=row.trigger_status,
+        )
+        for row in result.scalars().all()
+    ]
+
+
+@router.get(
+    "/regime",
+    response_model=RegimeRead,
+    summary="Current regime classification",
+    description="Returns the current market regime based on latest portfolio snapshots.",
+)
+async def get_regime(
+    db: AsyncSession = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> RegimeRead:
+    return await get_current_regime(db)
+
+
+@router.get(
+    "/regime/history",
+    response_model=list[RegimeHistoryPoint],
+    summary="Regime history",
+    description="Returns regime classification history across all profiles.",
+)
+async def get_regime_history(
+    from_date: date | None = Query(None, alias="from"),
+    to_date: date | None = Query(None, alias="to"),
+    limit: int = Query(100, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> list[RegimeHistoryPoint]:
+    stmt = select(PortfolioSnapshot).where(PortfolioSnapshot.regime.is_not(None))
+    if from_date is not None:
+        stmt = stmt.where(PortfolioSnapshot.snapshot_date >= from_date)
+    if to_date is not None:
+        stmt = stmt.where(PortfolioSnapshot.snapshot_date <= to_date)
+    stmt = stmt.order_by(PortfolioSnapshot.snapshot_date).offset(offset).limit(limit)
+    result = await db.execute(stmt)
+    return [
+        RegimeHistoryPoint(
+            snapshot_date=row.snapshot_date,
+            profile=row.profile,
+            regime=row.regime,
+        )
+        for row in result.scalars().all()
+    ]
+
+
+@router.get(
+    "/macro",
+    response_model=MacroIndicators,
+    summary="Current macro indicators",
+    description="Returns the latest VIX, yield curve spread, CPI YoY, and Fed Funds rate from FRED data.",
+)
+async def get_macro(
+    db: AsyncSession = Depends(get_db),
+    user: CurrentUser = Depends(get_current_user),
+) -> MacroIndicators:
+    macro = await get_latest_macro_values(db)
+    vix_val, vix_date = macro.get("VIXCLS", (None, None))
+    yc_val, yc_date = macro.get("YIELD_CURVE_10Y2Y", (None, None))
+    cpi_val, cpi_date = macro.get("CPI_YOY", (None, None))
+    ff_val, ff_date = macro.get("DFF", (None, None))
+    return MacroIndicators(
+        vix=vix_val,
+        vix_date=vix_date,
+        yield_curve_10y2y=yc_val,
+        yield_curve_date=yc_date,
+        cpi_yoy=cpi_val,
+        cpi_date=cpi_date,
+        fed_funds_rate=ff_val,
+        fed_funds_date=ff_date,
+    )
+
+
+async def _sse_generator(request: Request):
+    """Subscribe to Redis pub/sub and stream CVaR/regime alerts as SSE."""
+    import time as _time
+
+    r = await _get_sse_redis()
+    pubsub = r.pubsub()
+    channels = [f"wealth:alerts:{p}" for p in sorted(VALID_PROFILES)]
+    await pubsub.subscribe(*channels)
+
+    last_heartbeat = _time.monotonic()
+    heartbeat_interval = 15  # seconds
+
+    try:
+        while True:
+            if await request.is_disconnected():
+                break
+            # Poll with short timeout so we stay responsive to messages and disconnects
+            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+            if message and message["type"] == "message":
+                data = message["data"]
+                if isinstance(data, bytes):
+                    data = data.decode("utf-8")
+                yield f"data: {data}\n\n"
+                last_heartbeat = _time.monotonic()
+            elif _time.monotonic() - last_heartbeat >= heartbeat_interval:
+                # Send heartbeat to keep connection alive without blocking message processing
+                yield ": heartbeat\n\n"
+                last_heartbeat = _time.monotonic()
+    except asyncio.CancelledError:
+        pass
+    finally:
+        await pubsub.unsubscribe(*channels)
+        await pubsub.aclose()
+
+
+@router.get(
+    "/stream",
+    summary="Live risk stream (SSE)",
+    description="Server-Sent Events stream for real-time CVaR and regime alerts across all profiles. "
+    "Requires Bearer token via standard Authorization header.",
+)
+async def risk_stream(
+    request: Request,
+    user: CurrentUser = Depends(get_current_user),
+) -> StreamingResponse:
+    return StreamingResponse(
+        _sse_generator(request),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

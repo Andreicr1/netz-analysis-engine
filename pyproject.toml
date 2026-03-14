@@ -65,7 +65,16 @@ src = ["backend"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
-ignore = ["E501", "B008"]  # B008: Depends() in defaults is correct FastAPI pattern
+ignore = [
+    "E501",   # Line too long
+    "B008",   # Depends() in defaults — correct FastAPI pattern
+    "B904",   # raise from — migrated code, fix incrementally
+    "E712",   # == True comparisons — migrated code, fix incrementally
+    "SIM108", # ternary — migrated code, fix incrementally
+    "SIM117", # nested with — migrated code, fix incrementally
+    "SIM105", # contextlib.suppress — migrated code
+    "E402",   # import not at top — intentional lazy imports in workers
+]
 
 [tool.mypy]
 python_version = "3.12"
