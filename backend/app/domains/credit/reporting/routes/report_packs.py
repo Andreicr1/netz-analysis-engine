@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.audit import write_audit_event
-from app.core.db.engine import get_db
-from app.core.security.clerk_auth import require_fund_access, require_role
+from app.core.security.clerk_auth import Actor, get_actor, require_fund_access, require_role
+from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.credit.documents.models.evidence import EvidenceDocument
 from app.domains.credit.reporting.enums import ReportPackStatus, ReportSectionType
 from app.domains.credit.reporting.models.report_packs import MonthlyReportPack
@@ -26,26 +26,27 @@ router = APIRouter(tags=["Reporting Packs"], dependencies=[Depends(require_fund_
 
 
 @router.post("/funds/{fund_id}/report-packs", response_model=ReportPackOut, status_code=status.HTTP_201_CREATED)
-def create_pack(
+async def create_pack(
     fund_id: uuid.UUID,
     payload: ReportPackCreate,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "COMPLIANCE", "INVESTMENT_TEAM"])),
-):
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "COMPLIANCE", "INVESTMENT_TEAM"])),
+) -> ReportPackOut:
     pack = MonthlyReportPack(
         fund_id=fund_id,
         period_start=payload.period_start,
         period_end=payload.period_end,
         status=ReportPackStatus.DRAFT,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(UTC),
     )
     db.add(pack)
-    db.flush()
+    await db.flush()
 
-    write_audit_event(
+    await write_audit_event(
         db=db,
         fund_id=fund_id,
-        actor_id=actor.id,
+        actor_id=actor.actor_id,
         action="report_pack.created",
         entity_type="MonthlyReportPack",
         entity_id=str(pack.id),
@@ -53,19 +54,21 @@ def create_pack(
         after={"period_start": str(payload.period_start), "period_end": str(payload.period_end)},
     )
 
-    db.commit()
-    db.refresh(pack)
-    return pack
+    return ReportPackOut.model_validate(pack)
 
 
 @router.post("/funds/{fund_id}/report-packs/{pack_id}/generate", response_model=ReportPackOut)
-def generate_pack(
+async def generate_pack(
     fund_id: uuid.UUID,
     pack_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "COMPLIANCE", "INVESTMENT_TEAM"])),
-):
-    pack = db.execute(select(MonthlyReportPack).where(MonthlyReportPack.fund_id == fund_id, MonthlyReportPack.id == pack_id)).scalar_one_or_none()
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "COMPLIANCE", "INVESTMENT_TEAM"])),
+) -> ReportPackOut:
+    result = await db.execute(
+        select(MonthlyReportPack).where(MonthlyReportPack.fund_id == fund_id, MonthlyReportPack.id == pack_id),
+    )
+    pack = result.scalar_one_or_none()
     if not pack:
         raise HTTPException(status_code=404, detail="Not found")
 
@@ -73,14 +76,12 @@ def generate_pack(
         raise HTTPException(status_code=400, detail="Pack must be DRAFT to generate")
 
     # Generate immutable snapshots.
-    # Sequential by design: all generators share the same SQLAlchemy session
-    # which is NOT thread-safe. Each generator is a single COUNT/SUM query
-    # (see generators.py), so the overhead of sequential execution is minimal.
+    # Sequential by design: each generator is a single COUNT/SUM query.
     sections = [
-        (ReportSectionType.NAV_SUMMARY, generate_nav_summary(db, fund_id)),
-        (ReportSectionType.PORTFOLIO_EXPOSURE, generate_portfolio_exposure(db, fund_id)),
-        (ReportSectionType.OBLIGATIONS, generate_overdue_obligations(db, fund_id)),
-        (ReportSectionType.ACTIONS, generate_open_actions(db, fund_id)),
+        (ReportSectionType.NAV_SUMMARY, await generate_nav_summary(db, fund_id)),
+        (ReportSectionType.PORTFOLIO_EXPOSURE, await generate_portfolio_exposure(db, fund_id)),
+        (ReportSectionType.OBLIGATIONS, await generate_overdue_obligations(db, fund_id)),
+        (ReportSectionType.ACTIONS, await generate_open_actions(db, fund_id)),
     ]
 
     for section_type, snapshot in sections:
@@ -89,17 +90,17 @@ def generate_pack(
                 report_pack_id=pack.id,
                 section_type=section_type,
                 snapshot=snapshot,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(UTC),
             ),
         )
 
     pack.status = ReportPackStatus.GENERATED
-    db.flush()
+    await db.flush()
 
-    write_audit_event(
+    await write_audit_event(
         db=db,
         fund_id=fund_id,
-        actor_id=actor.id,
+        actor_id=actor.actor_id,
         action="report_pack.generated",
         entity_type="MonthlyReportPack",
         entity_id=str(pack.id),
@@ -107,19 +108,21 @@ def generate_pack(
         after={"status": pack.status.value},
     )
 
-    db.commit()
-    db.refresh(pack)
-    return pack
+    return ReportPackOut.model_validate(pack)
 
 
 @router.post("/funds/{fund_id}/report-packs/{pack_id}/publish", response_model=ReportPackOut)
-def publish_pack(
+async def publish_pack(
     fund_id: uuid.UUID,
     pack_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "COMPLIANCE", "INVESTMENT_TEAM"])),
-):
-    pack = db.execute(select(MonthlyReportPack).where(MonthlyReportPack.fund_id == fund_id, MonthlyReportPack.id == pack_id)).scalar_one_or_none()
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "COMPLIANCE", "INVESTMENT_TEAM"])),
+) -> ReportPackOut:
+    result = await db.execute(
+        select(MonthlyReportPack).where(MonthlyReportPack.fund_id == fund_id, MonthlyReportPack.id == pack_id),
+    )
+    pack = result.scalar_one_or_none()
     if not pack:
         raise HTTPException(status_code=404, detail="Not found")
 
@@ -127,13 +130,13 @@ def publish_pack(
         raise HTTPException(status_code=400, detail="Pack must be GENERATED to publish")
 
     pack.status = ReportPackStatus.PUBLISHED
-    pack.published_at = datetime.utcnow()
-    db.flush()
+    pack.published_at = datetime.now(UTC)
+    await db.flush()
 
-    write_audit_event(
+    await write_audit_event(
         db=db,
         fund_id=fund_id,
-        actor_id=actor.id,
+        actor_id=actor.actor_id,
         action="report_pack.published",
         entity_type="MonthlyReportPack",
         entity_id=str(pack.id),
@@ -153,12 +156,12 @@ def publish_pack(
         uploaded_at=None,
     )
     db.add(evidence)
-    db.flush()
+    await db.flush()
 
-    write_audit_event(
+    await write_audit_event(
         db=db,
         fund_id=fund_id,
-        actor_id=actor.id,
+        actor_id=actor.actor_id,
         action="report_pack.evidence_registered",
         entity_type="EvidenceDocument",
         entity_id=str(evidence.id),
@@ -166,7 +169,4 @@ def publish_pack(
         after={"filename": filename, "report_pack_id": str(pack.id)},
     )
 
-    db.commit()
-    db.refresh(pack)
-    return pack
-
+    return ReportPackOut.model_validate(pack)

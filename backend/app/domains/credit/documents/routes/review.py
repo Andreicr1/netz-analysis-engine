@@ -1,15 +1,15 @@
 """Document Review routes — governed review workflow for legal documents.
 
 Endpoints:
-  POST /document-reviews                          → submit document for review
-  GET  /document-reviews                          → list reviews (filterable)
-  GET  /document-reviews/{id}                     → review detail + assignments + events
-  POST /document-reviews/{id}/assign              → assign reviewer(s)
-  POST /document-reviews/{id}/decide              → reviewer submits decision
-  POST /document-reviews/{id}/finalize            → GP/Admin force-decides
-  POST /document-reviews/{id}/resubmit            → resubmit after revision request
-  GET  /document-reviews/pending                  → reviews awaiting current actor's decision
-  GET  /document-reviews/summary                  → dashboard counts by status
+  POST /document-reviews                          -> submit document for review
+  GET  /document-reviews                          -> list reviews (filterable)
+  GET  /document-reviews/{id}                     -> review detail + assignments + events
+  POST /document-reviews/{id}/assign              -> assign reviewer(s)
+  POST /document-reviews/{id}/decide              -> reviewer submits decision
+  POST /document-reviews/{id}/finalize            -> GP/Admin force-decides
+  POST /document-reviews/{id}/resubmit            -> resubmit after revision request
+  GET  /document-reviews/pending                  -> reviews awaiting current actor's decision
+  GET  /document-reviews/summary                  -> dashboard counts by status
 """
 from __future__ import annotations
 
@@ -23,12 +23,11 @@ logger = logging.getLogger(__name__)
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.audit import write_audit_event
-from app.core.db.engine import get_db
-from app.core.security.auth import Actor
-from app.core.security.clerk_auth import get_actor, require_fund_access, require_role
+from app.core.security.clerk_auth import Actor, get_actor, require_fund_access, require_role
+from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.credit.documents.models.review import (
     DocumentReview,
     ReviewAssignment,
@@ -48,7 +47,7 @@ router = APIRouter(
 )
 
 
-# ── Routing rules by document type ──────────────────────────────────
+# -- Routing rules by document type -----------------------------------------
 
 _REVIEW_ROUTING: dict[str, list[str]] = {
     "LEGAL": ["COMPLIANCE", "INVESTMENT_TEAM"],
@@ -61,7 +60,7 @@ _REVIEW_ROUTING: dict[str, list[str]] = {
 }
 
 
-# ── Schemas ──────────────────────────────────────────────────────────
+# -- Schemas -----------------------------------------------------------------
 
 class ReviewSubmit(BaseModel):
     document_id: uuid.UUID
@@ -91,33 +90,35 @@ class FinalizePayload(BaseModel):
     comments: str | None = None
 
 
-# ── Submit ───────────────────────────────────────────────────────────
+# -- Submit ------------------------------------------------------------------
 
 @router.post("")
-def submit_for_review(
+async def submit_for_review(
     fund_id: uuid.UUID,
     payload: ReviewSubmit,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     actor: Actor = Depends(get_actor),
-    _role_guard=Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE"])),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE"])),
 ) -> dict[str, Any]:
     """Submit a document for review. Auto-assigns reviewers based on document type."""
     now = datetime.now(UTC)
 
-    document_exists = db.execute(
+    result = await db.execute(
         select(Document.id).where(Document.id == payload.document_id, Document.fund_id == fund_id),
-    ).scalar_one_or_none()
+    )
+    document_exists = result.scalar_one_or_none()
     if document_exists is None:
         raise HTTPException(status_code=404, detail="Document not found")
 
     if payload.document_version_id is not None:
-        version_exists = db.execute(
+        result = await db.execute(
             select(DocumentVersion.id).where(
                 DocumentVersion.id == payload.document_version_id,
                 DocumentVersion.document_id == payload.document_id,
                 DocumentVersion.fund_id == fund_id,
             ),
-        ).scalar_one_or_none()
+        )
+        version_exists = result.scalar_one_or_none()
         if version_exists is None:
             raise HTTPException(status_code=404, detail="Document version not found")
 
@@ -140,43 +141,43 @@ def submit_for_review(
         routing_basis=f"auto-routed by document_type={payload.document_type}",
     )
     db.add(review)
-    db.flush()
+    await db.flush()
 
-    checklist_items = _create_checklist_from_template(db, review)
+    checklist_items = await _create_checklist_from_template(db, review)
 
-    _log_event(db, review, "submitted", actor.actor_id, {
+    await _log_event(db, review, "submitted", actor.actor_id, {
         "document_type": payload.document_type,
         "priority": payload.priority,
         "routing_roles": routing_roles,
         "checklist_items": len(checklist_items),
     })
 
-    write_audit_event(
+    await write_audit_event(
         db=db, fund_id=fund_id, actor_id=actor.actor_id,
         action="document_review.submitted", entity_type="DocumentReview",
         entity_id=str(review.id), before=None,
         after={"document_id": str(payload.document_id), "document_type": payload.document_type},
     )
 
-    db.commit()
     return {
         **_review_to_dict(review),
         "suggestedReviewerRoles": routing_roles,
     }
 
 
-# ── List & Detail ────────────────────────────────────────────────────
+# -- List & Detail -----------------------------------------------------------
 
 @router.get("")
-def list_reviews(
+async def list_reviews(
     fund_id: uuid.UUID,
     status: str | None = None,
     document_type: str | None = None,
     deal_id: uuid.UUID | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE", "AUDITOR"])),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE", "AUDITOR"])),
 ) -> dict[str, Any]:
     stmt = select(DocumentReview).where(DocumentReview.fund_id == fund_id)
     if status:
@@ -186,22 +187,22 @@ def list_reviews(
     if deal_id:
         stmt = stmt.where(DocumentReview.deal_id == deal_id)
 
-    total = db.execute(select(func.count()).select_from(stmt.subquery())).scalar() or 0
-    rows = list(
-        db.execute(
-            stmt.order_by(DocumentReview.submitted_at.desc()).limit(limit).offset(offset),
-        ).scalars().all(),
+    count_result = await db.execute(select(func.count()).select_from(stmt.subquery()))
+    total = count_result.scalar() or 0
+    result = await db.execute(
+        stmt.order_by(DocumentReview.submitted_at.desc()).limit(limit).offset(offset),
     )
+    rows = list(result.scalars().all())
 
     return {"total": total, "reviews": [_review_to_dict(r) for r in rows]}
 
 
 @router.get("/pending")
-def get_pending_reviews(
+async def get_pending_reviews(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     actor: Actor = Depends(get_actor),
-    _role_guard=Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE"])),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE"])),
 ) -> dict[str, Any]:
     """Return reviews where the current actor has an undecided assignment."""
     stmt = (
@@ -215,24 +216,25 @@ def get_pending_reviews(
         )
         .order_by(DocumentReview.due_date.asc().nullslast(), DocumentReview.submitted_at.desc())
     )
-    rows = list(db.execute(stmt).scalars().all())
+    result = await db.execute(stmt)
+    rows = list(result.scalars().all())
     return {"count": len(rows), "reviews": [_review_to_dict(r) for r in rows]}
 
 
 @router.get("/summary")
-def review_summary(
+async def review_summary(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE", "AUDITOR"])),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE", "AUDITOR"])),
 ) -> dict[str, Any]:
     """Dashboard-level review counts by status."""
-    rows = list(
-        db.execute(
-            select(DocumentReview.status, func.count(DocumentReview.id))
-            .where(DocumentReview.fund_id == fund_id)
-            .group_by(DocumentReview.status),
-        ).all(),
+    result = await db.execute(
+        select(DocumentReview.status, func.count(DocumentReview.id))
+        .where(DocumentReview.fund_id == fund_id)
+        .group_by(DocumentReview.status),
     )
+    rows = list(result.all())
     counts = {s.value: 0 for s in ReviewStatus}
     for status_val, cnt in rows:
         counts[status_val] = cnt
@@ -249,31 +251,30 @@ def review_summary(
 
 
 @router.get("/{review_id}")
-def get_review_detail(
+async def get_review_detail(
     fund_id: uuid.UUID,
     review_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE", "AUDITOR"])),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE", "AUDITOR"])),
 ) -> dict[str, Any]:
-    review = _get_review(db, fund_id, review_id)
+    review = await _get_review(db, fund_id, review_id)
 
-    assignments = list(
-        db.execute(
-            select(ReviewAssignment)
-            .where(ReviewAssignment.review_id == review_id)
-            .order_by(ReviewAssignment.round_number, ReviewAssignment.created_at),
-        ).scalars().all(),
+    assign_result = await db.execute(
+        select(ReviewAssignment)
+        .where(ReviewAssignment.review_id == review_id)
+        .order_by(ReviewAssignment.round_number, ReviewAssignment.created_at),
     )
+    assignments = list(assign_result.scalars().all())
 
-    events = list(
-        db.execute(
-            select(ReviewEvent)
-            .where(ReviewEvent.review_id == review_id)
-            .order_by(ReviewEvent.created_at.asc()),
-        ).scalars().all(),
+    event_result = await db.execute(
+        select(ReviewEvent)
+        .where(ReviewEvent.review_id == review_id)
+        .order_by(ReviewEvent.created_at.asc()),
     )
+    events = list(event_result.scalars().all())
 
-    checklist_items = _get_checklist_items(db, review_id)
+    checklist_items = await _get_checklist_items(db, review_id)
     total_cl = len(checklist_items)
     checked_cl = sum(1 for i in checklist_items if i.is_checked)
     required_cl = sum(1 for i in checklist_items if i.is_required)
@@ -315,19 +316,19 @@ def get_review_detail(
     return result
 
 
-# ── Assign ───────────────────────────────────────────────────────────
+# -- Assign ------------------------------------------------------------------
 
 @router.post("/{review_id}/assign")
-def assign_reviewer(
+async def assign_reviewer(
     fund_id: uuid.UUID,
     review_id: uuid.UUID,
     payload: list[AssignReviewer],
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     actor: Actor = Depends(get_actor),
-    _role_guard=Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM"])),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM"])),
 ) -> dict[str, Any]:
     """Assign one or more reviewers. Transitions status to UNDER_REVIEW."""
-    review = _get_review(db, fund_id, review_id)
+    review = await _get_review(db, fund_id, review_id)
 
     if review.status in (ReviewStatus.APPROVED.value, ReviewStatus.REJECTED.value, ReviewStatus.CANCELLED.value):
         raise HTTPException(status_code=409, detail=f"Cannot assign reviewers: review is {review.status}")
@@ -348,55 +349,55 @@ def assign_reviewer(
     if review.status == ReviewStatus.SUBMITTED.value:
         review.status = ReviewStatus.UNDER_REVIEW.value
 
-    db.flush()
+    await db.flush()
 
-    _log_event(db, review, "assigned", actor.actor_id, {
+    await _log_event(db, review, "assigned", actor.actor_id, {
         "reviewers": [p.reviewer_actor_id for p in payload],
         "round": review.current_round,
     })
 
-    write_audit_event(
+    await write_audit_event(
         db=db, fund_id=fund_id, actor_id=actor.actor_id,
         action="document_review.reviewers_assigned", entity_type="DocumentReview",
         entity_id=str(review_id), before={"status": ReviewStatus.SUBMITTED.value},
         after={"status": review.status, "reviewers_added": len(created)},
     )
 
-    db.commit()
     return {"reviewId": str(review_id), "status": review.status, "assignmentsAdded": len(created)}
 
 
-# ── Decide ───────────────────────────────────────────────────────────
+# -- Decide ------------------------------------------------------------------
 
 @router.post("/{review_id}/decide")
-def submit_decision(
+async def submit_decision(
     fund_id: uuid.UUID,
     review_id: uuid.UUID,
     payload: ReviewDecisionPayload,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     actor: Actor = Depends(get_actor),
-    _role_guard=Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE"])),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE"])),
 ) -> dict[str, Any]:
     """A reviewer submits their decision on the document."""
-    review = _get_review(db, fund_id, review_id)
+    review = await _get_review(db, fund_id, review_id)
 
     if review.status not in (ReviewStatus.UNDER_REVIEW.value, ReviewStatus.SUBMITTED.value):
         raise HTTPException(status_code=409, detail=f"Cannot decide: review is {review.status}")
 
-    assignment = db.execute(
+    result = await db.execute(
         select(ReviewAssignment).where(
             ReviewAssignment.review_id == review_id,
             ReviewAssignment.reviewer_actor_id == actor.actor_id,
             ReviewAssignment.round_number == review.current_round,
             ReviewAssignment.decision.is_(None),
         ),
-    ).scalar_one_or_none()
+    )
+    assignment = result.scalar_one_or_none()
 
     if not assignment:
         raise HTTPException(status_code=403, detail="You are not assigned as a reviewer for this round, or you already decided")
 
     if payload.decision == ReviewDecision.APPROVED.value:
-        unchecked = _get_unchecked_required_items(db, review_id)
+        unchecked = await _get_unchecked_required_items(db, review_id)
         if unchecked:
             labels = [item.label for item in unchecked[:5]]
             raise HTTPException(
@@ -412,24 +413,23 @@ def submit_decision(
     assignment.decision = payload.decision
     assignment.decision_at = now
     assignment.comments = payload.comments
-    db.flush()
+    await db.flush()
 
-    _log_event(db, review, "decision", actor.actor_id, {
+    await _log_event(db, review, "decision", actor.actor_id, {
         "decision": payload.decision,
         "comments": payload.comments,
         "round": review.current_round,
     })
 
-    _evaluate_review_outcome(db, review)
+    await _evaluate_review_outcome(db, review)
 
-    write_audit_event(
+    await write_audit_event(
         db=db, fund_id=fund_id, actor_id=actor.actor_id,
         action=f"document_review.decision.{payload.decision.lower()}", entity_type="DocumentReview",
         entity_id=str(review_id), before=None,
         after={"decision": payload.decision, "review_status": review.status},
     )
 
-    db.commit()
     return {
         "reviewId": str(review_id),
         "yourDecision": payload.decision,
@@ -438,19 +438,19 @@ def submit_decision(
     }
 
 
-# ── Finalize (force-decide) ─────────────────────────────────────────
+# -- Finalize (force-decide) ------------------------------------------------
 
 @router.post("/{review_id}/finalize")
-def finalize_review(
+async def finalize_review(
     fund_id: uuid.UUID,
     review_id: uuid.UUID,
     payload: FinalizePayload,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     actor: Actor = Depends(get_actor),
-    _role_guard=Depends(require_role(["ADMIN", "GP"])),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP"])),
 ) -> dict[str, Any]:
     """GP/Admin force-decides the review regardless of pending assignments."""
-    review = _get_review(db, fund_id, review_id)
+    review = await _get_review(db, fund_id, review_id)
 
     if review.status in (ReviewStatus.APPROVED.value, ReviewStatus.REJECTED.value, ReviewStatus.CANCELLED.value):
         raise HTTPException(status_code=409, detail=f"Review is already {review.status}")
@@ -460,39 +460,38 @@ def finalize_review(
     review.final_decision = payload.decision
     review.decided_by = actor.actor_id
     review.decided_at = now
-    db.flush()
+    await db.flush()
 
-    _log_event(db, review, "finalized", actor.actor_id, {
+    await _log_event(db, review, "finalized", actor.actor_id, {
         "decision": payload.decision,
         "comments": payload.comments,
         "force": True,
     })
 
-    write_audit_event(
+    await write_audit_event(
         db=db, fund_id=fund_id, actor_id=actor.actor_id,
         action=f"document_review.finalized.{payload.decision.lower()}", entity_type="DocumentReview",
         entity_id=str(review_id), before={"status": review.status},
         after={"status": payload.decision, "decided_by": actor.actor_id},
     )
 
-    db.commit()
     return {"reviewId": str(review_id), "status": review.status, "finalDecision": review.final_decision}
 
 
-# ── Resubmit ─────────────────────────────────────────────────────────
+# -- Resubmit ----------------------------------------------------------------
 
 @router.post("/{review_id}/resubmit")
-def resubmit_for_review(
+async def resubmit_for_review(
     fund_id: uuid.UUID,
     review_id: uuid.UUID,
     document_version_id: uuid.UUID | None = None,
     notes: str | None = None,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     actor: Actor = Depends(get_actor),
-    _role_guard=Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM"])),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM"])),
 ) -> dict[str, Any]:
     """Resubmit a document after revision was requested."""
-    review = _get_review(db, fund_id, review_id)
+    review = await _get_review(db, fund_id, review_id)
 
     if review.status != ReviewStatus.REVISION_REQUESTED.value:
         raise HTTPException(status_code=409, detail=f"Cannot resubmit: review is {review.status}, expected REVISION_REQUESTED")
@@ -507,35 +506,34 @@ def resubmit_for_review(
         review.document_version_id = document_version_id
     if notes:
         review.review_notes = notes
-    db.flush()
+    await db.flush()
 
-    _log_event(db, review, "resubmitted", actor.actor_id, {
+    await _log_event(db, review, "resubmitted", actor.actor_id, {
         "round": review.current_round,
         "revision_count": review.revision_count,
         "new_version_id": str(document_version_id) if document_version_id else None,
     })
 
-    write_audit_event(
+    await write_audit_event(
         db=db, fund_id=fund_id, actor_id=actor.actor_id,
         action="document_review.resubmitted", entity_type="DocumentReview",
         entity_id=str(review_id), before={"status": "REVISION_REQUESTED"},
         after={"status": "SUBMITTED", "round": review.current_round},
     )
 
-    db.commit()
     return {"reviewId": str(review_id), "status": review.status, "currentRound": review.current_round}
 
 
-# ── AI Analysis ──────────────────────────────────────────────────────
+# -- AI Analysis -------------------------------------------------------------
 
 @router.post("/{review_id}/ai-analyze")
-def trigger_ai_analysis(
+async def trigger_ai_analysis(
     fund_id: uuid.UUID,
     review_id: uuid.UUID,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     actor: Actor = Depends(get_actor),
-    _role_guard=Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE"])),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE"])),
 ) -> dict[str, Any]:
     """Trigger AI pre-analysis of all checklist items for a document review.
 
@@ -543,47 +541,20 @@ def trigger_ai_analysis(
     and produces a finding (FOUND / NOT_FOUND / UNCLEAR) with confidence
     and supporting excerpt.
     """
-    review = _get_review(db, fund_id, review_id)
+    review = await _get_review(db, fund_id, review_id)
 
     if review.status in (ReviewStatus.CANCELLED.value,):
         raise HTTPException(status_code=409, detail=f"Cannot analyze: review is {review.status}")
 
-    _log_event(db, review, "ai_analysis_started", actor.actor_id, {})
+    await _log_event(db, review, "ai_analysis_started", actor.actor_id, {})
 
-    write_audit_event(
+    await write_audit_event(
         db=db, fund_id=fund_id, actor_id=actor.actor_id,
         action="document_review.ai_analysis_started", entity_type="DocumentReview",
         entity_id=str(review_id), before=None, after={"triggered_by": actor.actor_id},
     )
 
-    db.commit()
-
-    from app.domains.credit.documents.services.ai_review_analyzer import analyze_review_checklist
-
-    def _run_analysis() -> None:
-        analysis_db = async_session_factory()
-        try:
-            r = analysis_db.execute(
-                select(DocumentReview).where(DocumentReview.id == review_id),
-            ).scalar_one()
-            stats = analyze_review_checklist(analysis_db, review=r, fund_id=fund_id)
-
-            _log_event(analysis_db, r, "ai_analysis_completed", "ai-engine", {
-                "stats": stats,
-            })
-            analysis_db.commit()
-
-            logger.info(
-                "AI review analysis completed review=%s stats=%s",
-                review_id, stats,
-            )
-        except Exception:
-            logger.error("AI review analysis failed review=%s", review_id, exc_info=True)
-            analysis_db.rollback()
-        finally:
-            analysis_db.close()
-
-    from app.core.config import settings
+    from app.core.config.settings import settings
     if getattr(settings, "USE_SERVICE_BUS", False):
         from app.services.azure.servicebus_client import send_to_queue
         send_to_queue("memo-generation", {
@@ -599,6 +570,31 @@ def trigger_ai_analysis(
             "message": "AI analysis queued. Results will appear on checklist items.",
         }
 
+    from app.core.db.engine import async_session_factory
+    from app.domains.credit.documents.services.ai_review_analyzer import analyze_review_checklist
+
+    async def _run_analysis() -> None:
+        async with async_session_factory() as analysis_db:
+            try:
+                result = await analysis_db.execute(
+                    select(DocumentReview).where(DocumentReview.id == review_id),
+                )
+                r = result.scalar_one()
+                stats = await analyze_review_checklist(analysis_db, review=r, fund_id=fund_id)
+
+                await _log_event(analysis_db, r, "ai_analysis_completed", "ai-engine", {
+                    "stats": stats,
+                })
+                await analysis_db.commit()
+
+                logger.info(
+                    "AI review analysis completed review=%s stats=%s",
+                    review_id, stats,
+                )
+            except Exception:
+                logger.error("AI review analysis failed review=%s", review_id, exc_info=True)
+                await analysis_db.rollback()
+
     background_tasks.add_task(_run_analysis)
     return {
         "reviewId": str(review_id),
@@ -608,22 +604,23 @@ def trigger_ai_analysis(
     }
 
 
-# ── Checklist ─────────────────────────────────────────────────────────
+# -- Checklist ---------------------------------------------------------------
 
 class CheckItemPayload(BaseModel):
     notes: str | None = None
 
 
 @router.get("/{review_id}/checklist")
-def get_review_checklist(
+async def get_review_checklist(
     fund_id: uuid.UUID,
     review_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE", "AUDITOR"])),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE", "AUDITOR"])),
 ) -> dict[str, Any]:
     """Return the checklist items for a review."""
-    _get_review(db, fund_id, review_id)
-    items = _get_checklist_items(db, review_id)
+    await _get_review(db, fund_id, review_id)
+    items = await _get_checklist_items(db, review_id)
 
     total = len(items)
     checked = sum(1 for i in items if i.is_checked)
@@ -643,23 +640,24 @@ def get_review_checklist(
 
 
 @router.post("/{review_id}/checklist/{item_id}/check")
-def check_item(
+async def check_item(
     fund_id: uuid.UUID,
     review_id: uuid.UUID,
     item_id: uuid.UUID,
     payload: CheckItemPayload | None = None,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     actor: Actor = Depends(get_actor),
-    _role_guard=Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE"])),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE"])),
 ) -> dict[str, Any]:
     """Mark a checklist item as verified."""
-    review = _get_review(db, fund_id, review_id)
-    item = db.execute(
+    review = await _get_review(db, fund_id, review_id)
+    result = await db.execute(
         select(ReviewChecklistItem).where(
             ReviewChecklistItem.id == item_id,
             ReviewChecklistItem.review_id == review_id,
         ),
-    ).scalar_one_or_none()
+    )
+    item = result.scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Checklist item not found")
 
@@ -668,67 +666,67 @@ def check_item(
     item.checked_at = datetime.now(UTC)
     if payload and payload.notes:
         item.notes = payload.notes
-    db.flush()
+    await db.flush()
 
-    _log_event(db, review, "checklist_checked", actor.actor_id, {
+    await _log_event(db, review, "checklist_checked", actor.actor_id, {
         "item_id": str(item_id),
         "label": item.label,
         "category": item.category,
     })
 
-    db.commit()
     return _checklist_item_to_dict(item)
 
 
 @router.post("/{review_id}/checklist/{item_id}/uncheck")
-def uncheck_item(
+async def uncheck_item(
     fund_id: uuid.UUID,
     review_id: uuid.UUID,
     item_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     actor: Actor = Depends(get_actor),
-    _role_guard=Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE"])),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "INVESTMENT_TEAM", "COMPLIANCE"])),
 ) -> dict[str, Any]:
     """Unmark a checklist item."""
-    review = _get_review(db, fund_id, review_id)
-    item = db.execute(
+    review = await _get_review(db, fund_id, review_id)
+    result = await db.execute(
         select(ReviewChecklistItem).where(
             ReviewChecklistItem.id == item_id,
             ReviewChecklistItem.review_id == review_id,
         ),
-    ).scalar_one_or_none()
+    )
+    item = result.scalar_one_or_none()
     if not item:
         raise HTTPException(status_code=404, detail="Checklist item not found")
 
     item.is_checked = False
     item.checked_by = None
     item.checked_at = None
-    db.flush()
+    await db.flush()
 
-    _log_event(db, review, "checklist_unchecked", actor.actor_id, {
+    await _log_event(db, review, "checklist_unchecked", actor.actor_id, {
         "item_id": str(item_id),
         "label": item.label,
     })
 
-    db.commit()
     return _checklist_item_to_dict(item)
 
 
-# ── Helpers ──────────────────────────────────────────────────────────
+# -- Helpers -----------------------------------------------------------------
 
-def _get_review(db: Session, fund_id: uuid.UUID, review_id: uuid.UUID) -> DocumentReview:
-    review = db.execute(
+async def _get_review(db: AsyncSession, fund_id: uuid.UUID, review_id: uuid.UUID) -> DocumentReview:
+    result = await db.execute(
         select(DocumentReview).where(
             DocumentReview.id == review_id, DocumentReview.fund_id == fund_id,
         ),
-    ).scalar_one_or_none()
+    )
+    review = result.scalar_one_or_none()
     if not review:
         raise HTTPException(status_code=404, detail="Document review not found")
     return review
 
 
-def _log_event(
-    db: Session,
+async def _log_event(
+    db: AsyncSession,
     review: DocumentReview,
     event_type: str,
     actor_id: str,
@@ -741,20 +739,19 @@ def _log_event(
         actor_id=actor_id,
         detail=detail,
     ))
-    db.flush()
+    await db.flush()
 
 
-def _evaluate_review_outcome(db: Session, review: DocumentReview) -> None:
+async def _evaluate_review_outcome(db: AsyncSession, review: DocumentReview) -> None:
     """Check if all required reviewers have decided and update review status accordingly."""
-    assignments = list(
-        db.execute(
-            select(ReviewAssignment).where(
-                ReviewAssignment.review_id == review.id,
-                ReviewAssignment.round_number == review.current_round,
-                ReviewAssignment.is_required.is_(True),
-            ),
-        ).scalars().all(),
+    result = await db.execute(
+        select(ReviewAssignment).where(
+            ReviewAssignment.review_id == review.id,
+            ReviewAssignment.round_number == review.current_round,
+            ReviewAssignment.is_required.is_(True),
+        ),
     )
+    assignments = list(result.scalars().all())
 
     if not assignments:
         return
@@ -777,11 +774,11 @@ def _evaluate_review_outcome(db: Session, review: DocumentReview) -> None:
 
     review.decided_at = datetime.now(UTC)
     review.decided_by = "consensus"
-    db.flush()
+    await db.flush()
 
 
-def _create_checklist_from_template(
-    db: Session,
+async def _create_checklist_from_template(
+    db: AsyncSession,
     review: DocumentReview,
 ) -> list[ReviewChecklistItem]:
     """Auto-generate checklist items from the template for the document type."""
@@ -799,31 +796,29 @@ def _create_checklist_from_template(
         )
         db.add(item)
         items.append(item)
-    db.flush()
+    await db.flush()
     return items
 
 
-def _get_checklist_items(db: Session, review_id: uuid.UUID) -> list[ReviewChecklistItem]:
-    return list(
-        db.execute(
-            select(ReviewChecklistItem)
-            .where(ReviewChecklistItem.review_id == review_id)
-            .order_by(ReviewChecklistItem.sort_order),
-        ).scalars().all(),
+async def _get_checklist_items(db: AsyncSession, review_id: uuid.UUID) -> list[ReviewChecklistItem]:
+    result = await db.execute(
+        select(ReviewChecklistItem)
+        .where(ReviewChecklistItem.review_id == review_id)
+        .order_by(ReviewChecklistItem.sort_order),
     )
+    return list(result.scalars().all())
 
 
-def _get_unchecked_required_items(db: Session, review_id: uuid.UUID) -> list[ReviewChecklistItem]:
-    return list(
-        db.execute(
-            select(ReviewChecklistItem).where(
-                ReviewChecklistItem.review_id == review_id,
-                ReviewChecklistItem.is_required.is_(True),
-                ReviewChecklistItem.is_checked.is_(False),
-            )
-            .order_by(ReviewChecklistItem.sort_order),
-        ).scalars().all(),
+async def _get_unchecked_required_items(db: AsyncSession, review_id: uuid.UUID) -> list[ReviewChecklistItem]:
+    result = await db.execute(
+        select(ReviewChecklistItem).where(
+            ReviewChecklistItem.review_id == review_id,
+            ReviewChecklistItem.is_required.is_(True),
+            ReviewChecklistItem.is_checked.is_(False),
+        )
+        .order_by(ReviewChecklistItem.sort_order),
     )
+    return list(result.scalars().all())
 
 
 def _checklist_item_to_dict(i: ReviewChecklistItem) -> dict[str, Any]:

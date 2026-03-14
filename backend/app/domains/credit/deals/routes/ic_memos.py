@@ -6,33 +6,37 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.audit import write_audit_event
-from app.core.db.engine import get_db
-from app.core.security.clerk_auth import require_fund_access, require_role
+from app.core.security.clerk_auth import Actor, get_actor
+from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.credit.deals.models.deals import Deal
 from app.domains.credit.deals.models.ic_memos import ICMemo
 from app.domains.credit.deals.schemas.deals import ConditionResolvePayload, ICMemoOut
 
-router = APIRouter(tags=["IC Memos"], dependencies=[Depends(require_fund_access())])
+router = APIRouter(tags=["IC Memos"])
 
 
-def _get_latest_memo(db: Session, deal_id: uuid.UUID) -> ICMemo | None:
-    return db.execute(
+async def _get_latest_memo(db: AsyncSession, deal_id: uuid.UUID) -> ICMemo | None:
+    result = await db.execute(
         select(ICMemo).where(ICMemo.deal_id == deal_id).order_by(ICMemo.version.desc()),
-    ).scalar_one_or_none()
+    )
+    return result.scalar_one_or_none()
 
 
-@router.post("/funds/{fund_id}/deals/{deal_id}/ic-memo")
-def create_ic_memo(
+@router.post("/funds/{fund_id}/deals/{deal_id}/ic-memo", response_model=dict)
+async def create_ic_memo(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
     payload: dict,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["INVESTMENT_TEAM", "ADMIN"])),
-):
-    deal = db.execute(select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id)).scalar_one_or_none()
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> dict:
+    result = await db.execute(
+        select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id),
+    )
+    deal = result.scalar_one_or_none()
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
 
@@ -40,7 +44,7 @@ def create_ic_memo(
         raise HTTPException(status_code=400, detail="executive_summary is required")
 
     # Determine next version
-    latest = _get_latest_memo(db, deal_id)
+    latest = await _get_latest_memo(db, deal_id)
     next_version = (latest.version + 1) if latest else 1
 
     memo = ICMemo(
@@ -54,9 +58,9 @@ def create_ic_memo(
         memo_blob_url=payload.get("memo_blob_url"),
     )
     db.add(memo)
-    db.flush()
+    await db.flush()
 
-    write_audit_event(
+    await write_audit_event(
         db=db,
         fund_id=fund_id,
         actor_id=actor.id,
@@ -72,41 +76,47 @@ def create_ic_memo(
         },
     )
 
-    db.commit()
+    await db.commit()
     return {"memo_id": str(memo.id), "version": next_version}
 
 
 @router.get("/funds/{fund_id}/deals/{deal_id}/ic-memo", response_model=ICMemoOut)
-def get_latest_ic_memo(
+async def get_latest_ic_memo(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "INVESTMENT_TEAM", "COMPLIANCE", "AUDITOR"])),
-):
-    deal = db.execute(select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id)).scalar_one_or_none()
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> ICMemoOut:
+    result = await db.execute(
+        select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id),
+    )
+    deal = result.scalar_one_or_none()
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
 
-    memo = _get_latest_memo(db, deal_id)
+    memo = await _get_latest_memo(db, deal_id)
     if not memo:
         raise HTTPException(status_code=404, detail="No IC Memo found for this deal")
 
-    return memo
+    return ICMemoOut.model_validate(memo)
 
 
-@router.patch("/funds/{fund_id}/deals/{deal_id}/ic-memo/conditions")
-def resolve_condition(
+@router.patch("/funds/{fund_id}/deals/{deal_id}/ic-memo/conditions", response_model=dict)
+async def resolve_condition(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
     payload: ConditionResolvePayload,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "INVESTMENT_TEAM", "COMPLIANCE"])),
-):
-    deal = db.execute(select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id)).scalar_one_or_none()
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> dict:
+    result = await db.execute(
+        select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id),
+    )
+    deal = result.scalar_one_or_none()
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
 
-    memo = _get_latest_memo(db, deal_id)
+    memo = await _get_latest_memo(db, deal_id)
     if not memo:
         raise HTTPException(status_code=404, detail="No IC Memo found for this deal")
 
@@ -155,9 +165,9 @@ def resolve_condition(
     # Write back (JSONB mutation requires reassignment for SQLAlchemy dirty tracking)
     memo.conditions = conditions
     memo.condition_history = history
-    db.flush()
+    await db.flush()
 
-    write_audit_event(
+    await write_audit_event(
         db=db,
         fund_id=fund_id,
         actor_id=actor.id,
@@ -179,7 +189,7 @@ def resolve_condition(
         for c in conditions
     )
 
-    db.commit()
+    await db.commit()
     return {
         "memo_id": str(memo.id),
         "condition_id": payload.condition_id,
@@ -188,19 +198,22 @@ def resolve_condition(
     }
 
 
-@router.get("/funds/{fund_id}/deals/{deal_id}/ic-memo/voting-status")
-def get_voting_status(
+@router.get("/funds/{fund_id}/deals/{deal_id}/ic-memo/voting-status", response_model=dict)
+async def get_voting_status(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "INVESTMENT_TEAM", "COMPLIANCE", "AUDITOR", "GP"])),
-):
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> dict:
     """Return structured IC Committee voting status with quorum tracking."""
-    deal = db.execute(select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id)).scalar_one_or_none()
+    result = await db.execute(
+        select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id),
+    )
+    deal = result.scalar_one_or_none()
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
 
-    memo = _get_latest_memo(db, deal_id)
+    memo = await _get_latest_memo(db, deal_id)
     if not memo:
         raise HTTPException(status_code=404, detail="No IC Memo found for this deal")
 
@@ -263,4 +276,3 @@ def get_voting_status(
         },
         "conditionHistory": memo.condition_history or [],
     }
-

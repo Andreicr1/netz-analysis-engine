@@ -4,11 +4,11 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.audit import write_audit_event
-from app.core.db.engine import get_db
-from app.core.security.clerk_auth import require_fund_access, require_role
+from app.core.security.clerk_auth import Actor, get_actor
+from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.credit.deals.enums import DealStage
 from app.domains.credit.deals.models.deals import Deal
 from app.domains.credit.deals.models.qualification import DealQualification
@@ -20,30 +20,21 @@ from app.domains.credit.deals.services.stage_transition import (
 )
 from app.domains.credit.modules.deals.models import DealStageHistory
 
-
-def _limit(limit: int = Query(default=50, ge=1, le=200)) -> int:
-    return limit
-
-
-def _offset(offset: int = Query(default=0, ge=0)) -> int:
-    return offset
-
-
-router = APIRouter(prefix="/funds/{fund_id}/deals", tags=["Deals"], dependencies=[Depends(require_fund_access())])
+router = APIRouter(prefix="/funds/{fund_id}/deals", tags=["Deals"])
 
 
 @router.post("", response_model=DealOut, status_code=status.HTTP_201_CREATED)
-def create_deal(
+async def create_deal(
     fund_id: uuid.UUID,
     payload: DealCreate,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "INVESTMENT_TEAM"])),
-):
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> DealOut:
     deal = Deal(fund_id=fund_id, **payload.model_dump())
     db.add(deal)
-    db.flush()
+    await db.flush()
 
-    write_audit_event(
+    await write_audit_event(
         db=db,
         fund_id=fund_id,
         actor_id=actor.id,
@@ -58,9 +49,9 @@ def create_deal(
     passed, summary, rejection_code = run_minimum_qualification(deal)
     qual = DealQualification(deal_id=deal.id, passed=passed, summary=summary)
     db.add(qual)
-    db.flush()
+    await db.flush()
 
-    write_audit_event(
+    await write_audit_event(
         db=db,
         fund_id=fund_id,
         actor_id="system",
@@ -69,11 +60,16 @@ def create_deal(
         entity_type="DealQualification",
         entity_id=str(qual.id),
         before=None,
-        after={"deal_id": str(deal.id), "passed": passed, "summary": summary, "rejection_code": rejection_code.value if rejection_code else None},
+        after={
+            "deal_id": str(deal.id),
+            "passed": passed,
+            "summary": summary,
+            "rejection_code": rejection_code.value if rejection_code else None,
+        },
     )
 
     if passed:
-        transition_deal_stage(
+        await transition_deal_stage(
             db, deal, DealStage.QUALIFIED,
             actor_id="system", fund_id=fund_id,
             extra_audit={"trigger": "auto_qualification"},
@@ -81,7 +77,7 @@ def create_deal(
     else:
         deal.rejection_code = rejection_code
         deal.rejection_notes = summary
-        transition_deal_stage(
+        await transition_deal_stage(
             db, deal, DealStage.REJECTED,
             actor_id="system", fund_id=fund_id,
             extra_audit={
@@ -90,35 +86,37 @@ def create_deal(
             },
         )
 
-    db.commit()
-    db.refresh(deal)
-    return deal
+    await db.commit()
+    await db.refresh(deal)
+    return DealOut.model_validate(deal)
 
 
 @router.get("", response_model=list[DealOut])
-def list_deals(
+async def list_deals(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "INVESTMENT_TEAM", "AUDITOR"])),
-    limit: int = Depends(_limit),
-    offset: int = Depends(_offset),
-):
-    return list(
-        db.execute(
-            select(Deal).where(Deal.fund_id == fund_id).limit(limit).offset(offset),
-        ).scalars().all(),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+) -> list[DealOut]:
+    result = await db.execute(
+        select(Deal).where(Deal.fund_id == fund_id).limit(limit).offset(offset),
     )
+    return [DealOut.model_validate(row) for row in result.scalars().all()]
 
 
 @router.patch("/{deal_id}/decision", response_model=DealOut)
-def decide_deal(
+async def decide_deal(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
     payload: DealDecision,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "INVESTMENT_TEAM", "COMPLIANCE"])),
-):
-    deal = db.execute(select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id)).scalar_one_or_none()
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> DealOut:
+    result = await db.execute(
+        select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id),
+    )
+    deal = result.scalar_one_or_none()
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
 
@@ -127,7 +125,7 @@ def decide_deal(
         deal.rejection_notes = payload.rejection_notes
 
     try:
-        transition_deal_stage(
+        await transition_deal_stage(
             db,
             deal,
             payload.stage,
@@ -141,30 +139,32 @@ def decide_deal(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    db.commit()
-    db.refresh(deal)
-    return deal
+    await db.commit()
+    await db.refresh(deal)
+    return DealOut.model_validate(deal)
 
 
-@router.get("/{deal_id}/stage-timeline")
-def get_deal_stage_timeline(
+@router.get("/{deal_id}/stage-timeline", response_model=dict)
+async def get_deal_stage_timeline(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "INVESTMENT_TEAM", "COMPLIANCE", "AUDITOR", "GP"])),
-):
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> dict:
     """Return the deal's stage history as a timeline plus allowed next transitions."""
-    deal = db.execute(select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id)).scalar_one_or_none()
+    result = await db.execute(
+        select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id),
+    )
+    deal = result.scalar_one_or_none()
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
 
-    history = list(
-        db.execute(
-            select(DealStageHistory)
-            .where(DealStageHistory.deal_id == deal_id, DealStageHistory.fund_id == fund_id)
-            .order_by(DealStageHistory.changed_at.asc()),
-        ).scalars().all(),
+    history_result = await db.execute(
+        select(DealStageHistory)
+        .where(DealStageHistory.deal_id == deal_id, DealStageHistory.fund_id == fund_id)
+        .order_by(DealStageHistory.changed_at.asc()),
     )
+    history = list(history_result.scalars().all())
 
     stage_order = [s.value for s in DealStage if s not in (DealStage.REJECTED, DealStage.CLOSED)]
     current_stage = deal.stage if isinstance(deal.stage, str) else deal.stage.value
@@ -221,4 +221,3 @@ def get_deal_stage_timeline(
         "allowedTransitions": allowed_next,
         "timeline": timeline_events,
     }
-

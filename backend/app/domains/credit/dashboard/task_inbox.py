@@ -1,7 +1,7 @@
-"""Task Inbox — cross-domain aggregation of pending user actions.
+"""Task Inbox -- cross-domain aggregation of pending user actions.
 
 Endpoint:
-  GET /dashboard/task-inbox → pending tasks across all modules
+  GET /dashboard/task-inbox -> pending tasks across all modules
 
 Aggregates:
   - Execution actions still open
@@ -16,20 +16,19 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.db.engine import get_db
-from app.core.security.auth import Actor
-from app.core.security.clerk_auth import get_actor
+from app.core.security.clerk_auth import Actor, get_actor
+from app.core.tenancy.middleware import get_db_with_rls
 from app.shared.enums import Role
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
 @router.get("/task-inbox")
-def task_inbox(
+async def task_inbox(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     actor: Actor = Depends(get_actor),
 ) -> dict[str, Any]:
     """Return all pending tasks grouped by module, filtered by actor role."""
@@ -39,17 +38,17 @@ def task_inbox(
     sections: list[dict[str, Any]] = []
     total = 0
 
-    actions = _action_tasks(db, fund_id, roles, is_admin)
+    actions = await _action_tasks(db, fund_id, roles, is_admin)
     if actions:
         sections.append(actions)
         total += actions["count"]
 
-    pipeline = _pipeline_tasks(db, fund_id, roles, is_admin)
+    pipeline = await _pipeline_tasks(db, fund_id, roles, is_admin)
     if pipeline:
         sections.append(pipeline)
         total += pipeline["count"]
 
-    doc_reviews = _document_review_tasks(db, fund_id, roles, is_admin, actor)
+    doc_reviews = await _document_review_tasks(db, fund_id, roles, is_admin, actor)
     if doc_reviews:
         sections.append(doc_reviews)
         total += doc_reviews["count"]
@@ -61,10 +60,10 @@ def task_inbox(
     }
 
 
-# ── Execution Actions ────────────────────────────────────────────────
+# -- Execution Actions -------------------------------------------------------
 
-def _action_tasks(
-    db: Session,
+async def _action_tasks(
+    db: AsyncSession,
     fund_id: uuid.UUID,
     roles: set[str],
     is_admin: bool,
@@ -75,16 +74,15 @@ def _action_tasks(
 
     from app.domains.credit.modules.actions.models import Action
 
-    rows = list(
-        db.execute(
-            select(Action).where(
-                Action.fund_id == fund_id,
-                Action.status.in_(["Open", "In Progress", "Pending Evidence", "Under Review"]),
-            )
-            .order_by(Action.due_date.asc().nullslast(), Action.created_at.desc())
-            .limit(50),
-        ).scalars().all(),
+    result = await db.execute(
+        select(Action).where(
+            Action.fund_id == fund_id,
+            Action.status.in_(["Open", "In Progress", "Pending Evidence", "Under Review"]),
+        )
+        .order_by(Action.due_date.asc().nullslast(), Action.created_at.desc())
+        .limit(50),
     )
+    rows = list(result.scalars().all())
 
     if not rows:
         return None
@@ -113,10 +111,10 @@ def _action_tasks(
     }
 
 
-# ── Pipeline Deals (IC Decision) ────────────────────────────────────
+# -- Pipeline Deals (IC Decision) -------------------------------------------
 
-def _pipeline_tasks(
-    db: Session,
+async def _pipeline_tasks(
+    db: AsyncSession,
     fund_id: uuid.UUID,
     roles: set[str],
     is_admin: bool,
@@ -127,20 +125,17 @@ def _pipeline_tasks(
 
     from app.domains.credit.modules.deals.models import PipelineDeal
 
-    ic_stages = ("IC_REVIEW", "IC Decision", "ic_review", "ic_decision", "CONDITIONAL", "Conditional")
-
-    rows = list(
-        db.execute(
-            select(PipelineDeal).where(
-                PipelineDeal.fund_id == fund_id,
-                PipelineDeal.is_archived.is_(False),
-                PipelineDeal.intelligence_status == "READY",
-                PipelineDeal.approved_deal_id.is_(None),
-            )
-            .order_by(PipelineDeal.created_at.desc())
-            .limit(50),
-        ).scalars().all(),
+    result = await db.execute(
+        select(PipelineDeal).where(
+            PipelineDeal.fund_id == fund_id,
+            PipelineDeal.is_archived.is_(False),
+            PipelineDeal.intelligence_status == "READY",
+            PipelineDeal.approved_deal_id.is_(None),
+        )
+        .order_by(PipelineDeal.created_at.desc())
+        .limit(50),
     )
+    rows = list(result.scalars().all())
 
     if not rows:
         return None
@@ -168,10 +163,10 @@ def _pipeline_tasks(
     }
 
 
-# ── Document Reviews ─────────────────────────────────────────────────
+# -- Document Reviews --------------------------------------------------------
 
-def _document_review_tasks(
-    db: Session,
+async def _document_review_tasks(
+    db: AsyncSession,
     fund_id: uuid.UUID,
     roles: set[str],
     is_admin: bool,
@@ -207,12 +202,11 @@ def _document_review_tasks(
             )
         )
 
-    rows = list(
-        db.execute(
-            stmt.order_by(DocumentReview.due_date.asc().nullslast(), DocumentReview.submitted_at.desc())
-            .limit(50),
-        ).scalars().all(),
+    result = await db.execute(
+        stmt.order_by(DocumentReview.due_date.asc().nullslast(), DocumentReview.submitted_at.desc())
+        .limit(50),
     )
+    rows = list(result.scalars().all())
 
     if not rows:
         return None
@@ -224,7 +218,7 @@ def _document_review_tasks(
         items.append({
             "id": str(r.id),
             "title": r.title,
-            "subtitle": f"{r.document_type} — {r.submitted_by}",
+            "subtitle": f"{r.document_type} -- {r.submitted_by}",
             "status": r.status,
             "action": "reviewDocument",
             "priority": "high" if r.priority == "URGENT" or overdue else ("medium" if r.priority == "HIGH" else "low"),
