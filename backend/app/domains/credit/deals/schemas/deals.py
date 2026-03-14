@@ -31,12 +31,22 @@ class DealOut(BaseModel):
     deal_type: DealType
     stage: DealStage
 
+    asset_id: uuid.UUID | None = None
+
     name: str
     sponsor_name: str | None
     description: str | None
 
     rejection_code: RejectionCode | None
     rejection_notes: str | None
+
+    monitoring_output: dict[str, Any] | None = None
+    marketing_thesis: dict[str, Any] | None = None
+
+    pipeline_deal_id: uuid.UUID | None = None
+
+    created_at: datetime
+    updated_at: datetime
 
 
 # ---------------------------------------------------------------------------
@@ -60,7 +70,13 @@ class ICMemoOut(BaseModel):
     memo_blob_url: str | None
     condition_history: list[dict[str, Any]]
 
+    adobe_sign_agreement_id: str | None = None
+    committee_members: list[dict[str, Any]] | None = None
+    committee_votes: list[dict[str, Any]] | None = None
+    esignature_status: str | None = None
+
     created_at: datetime
+    updated_at: datetime
 
 
 class ConditionResolvePayload(BaseModel):

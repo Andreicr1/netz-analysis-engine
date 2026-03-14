@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
@@ -22,4 +23,7 @@ class FundInvestmentOut(BaseModel):
     underlying_fund_name: str
     reporting_frequency: ReportingFrequency
     nav_source: str | None
+
+    created_at: datetime
+    updated_at: datetime
 

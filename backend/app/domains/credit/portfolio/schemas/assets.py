@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,4 +23,7 @@ class PortfolioAssetOut(BaseModel):
     asset_type: AssetType
     strategy: Strategy
     name: str
+
+    created_at: datetime
+    updated_at: datetime
 

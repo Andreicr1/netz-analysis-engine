@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.credit.deals.enums import DealStage
 from app.domains.credit.deals.models.deals import Deal
@@ -11,8 +11,8 @@ from app.domains.credit.portfolio.enums import AssetType, Strategy
 from app.domains.credit.portfolio.models.assets import PortfolioAsset
 
 
-def convert_deal_to_asset(
-    db: Session,
+async def convert_deal_to_asset(
+    db: AsyncSession,
     deal: Deal,
     *,
     actor_id: str,
@@ -43,12 +43,12 @@ def convert_deal_to_asset(
     )
 
     db.add(asset)
-    db.flush()
-    db.refresh(asset)
+    await db.flush()
+    await db.refresh(asset)
 
     deal.asset_id = asset.id
 
-    transition_deal_stage(
+    await transition_deal_stage(
         db,
         deal,
         DealStage.CONVERTED_TO_ASSET,
@@ -58,4 +58,3 @@ def convert_deal_to_asset(
     )
 
     return asset
-

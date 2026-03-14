@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.audit import write_audit_event
 from app.domains.credit.deals.enums import DealStage
@@ -27,11 +27,12 @@ VALID_TRANSITIONS: dict[DealStage, list[DealStage]] = {
 }
 
 
-def _get_latest_memo(db: Session, deal_id: uuid.UUID) -> ICMemo | None:
+async def _get_latest_memo(db: AsyncSession, deal_id: uuid.UUID) -> ICMemo | None:
     """Return the most recent ICMemo for a deal, ordered by version DESC."""
-    return db.execute(
+    result = await db.execute(
         select(ICMemo).where(ICMemo.deal_id == deal_id).order_by(ICMemo.version.desc()),
-    ).scalar_one_or_none()
+    )
+    return result.scalar_one_or_none()
 
 
 def _open_conditions(memo: ICMemo) -> list[str]:
@@ -44,8 +45,8 @@ def _open_conditions(memo: ICMemo) -> list[str]:
     ]
 
 
-def transition_deal_stage(
-    db: Session,
+async def transition_deal_stage(
+    db: AsyncSession,
     deal: Deal,
     new_stage: DealStage,
     *,
@@ -74,7 +75,7 @@ def transition_deal_stage(
 
     # --- Guard: CONDITIONAL requires a memo with non-empty conditions ---
     if new_stage == DealStage.CONDITIONAL:
-        memo = _get_latest_memo(db, deal.id)
+        memo = await _get_latest_memo(db, deal.id)
         if not memo or not memo.conditions:
             raise ValueError(
                 "Cannot transition to CONDITIONAL: the deal has no IC Memo "
@@ -83,7 +84,7 @@ def transition_deal_stage(
 
     # --- Guard: APPROVED from CONDITIONAL requires all conditions resolved ---
     if new_stage == DealStage.APPROVED and from_stage == DealStage.CONDITIONAL:
-        memo = _get_latest_memo(db, deal.id)
+        memo = await _get_latest_memo(db, deal.id)
         if memo:
             open_titles = _open_conditions(memo)
             if open_titles:
@@ -102,13 +103,13 @@ def transition_deal_stage(
 
     deal.stage = new_stage
     deal.updated_at = datetime.now(UTC)
-    db.flush()
+    await db.flush()
 
     after: dict = {"stage": new_stage.value}
     if extra_audit:
         after.update(extra_audit)
 
-    write_audit_event(
+    await write_audit_event(
         db=db,
         fund_id=fund_id,
         actor_id=actor_id,
@@ -129,4 +130,4 @@ def transition_deal_stage(
         rationale=extra_audit.get("rejection_notes") if extra_audit else None,
     )
     db.add(history_entry)
-    db.flush()
+    await db.flush()

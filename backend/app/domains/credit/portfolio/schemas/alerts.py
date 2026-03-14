@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
@@ -14,4 +15,7 @@ class AlertOut(BaseModel):
 
     alert_type: AlertType
     severity: AlertSeverity
+
+    created_at: datetime
+    updated_at: datetime
 

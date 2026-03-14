@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
@@ -25,4 +25,7 @@ class ObligationOut(BaseModel):
     obligation_type: ObligationType
     status: ObligationStatus
     due_date: date
+
+    created_at: datetime
+    updated_at: datetime
 

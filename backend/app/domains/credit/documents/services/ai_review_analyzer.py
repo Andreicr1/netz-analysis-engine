@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.credit.documents.models.review import DocumentReview, ReviewChecklistItem
 
@@ -35,8 +35,8 @@ def _get_system_prompt() -> str:
         )
 
 
-def analyze_review_checklist(
-    db: Session,
+async def analyze_review_checklist(
+    db: AsyncSession,
     *,
     review: DocumentReview,
     fund_id: uuid.UUID,
@@ -45,13 +45,12 @@ def analyze_review_checklist(
 
     Returns summary stats and updates each ReviewChecklistItem.ai_finding in-place.
     """
-    items = list(
-        db.execute(
-            select(ReviewChecklistItem)
-            .where(ReviewChecklistItem.review_id == review.id)
-            .order_by(ReviewChecklistItem.sort_order),
-        ).scalars().all(),
+    result = await db.execute(
+        select(ReviewChecklistItem)
+        .where(ReviewChecklistItem.review_id == review.id)
+        .order_by(ReviewChecklistItem.sort_order),
     )
+    items = list(result.scalars().all())
 
     if not items:
         return {"analyzed": 0, "found": 0, "notFound": 0, "unclear": 0, "errors": 0}
@@ -94,7 +93,7 @@ def analyze_review_checklist(
             }
             stats["errors"] += 1
 
-    db.flush()
+    await db.flush()
     return stats
 
 
