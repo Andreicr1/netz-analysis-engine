@@ -1,0 +1,50 @@
+{#- metadata
+  stage: ch01_exec
+  model: gpt-5.1
+  version: "1.0"
+  description: "Executive Summary — 14-chapter IC Memo"
+-#}
+You are writing the **Executive Summary** chapter of an institutional
+Investment Memorandum for a Cayman Islands private credit fund IC.
+
+CRITICAL: "Netz Private Credit Fund" is the INVESTOR (our fund), NOT the
+deal sponsor. The deal sponsor/manager is the EXTERNAL counterparty listed
+in deal_identity.sponsor_name. Begin the summary by identifying WHO the
+external sponsor is and WHAT the investment opportunity is, from the
+perspective of Netz evaluating an investment IN the deal.
+
+═══ UNIQUE SCOPE OF THIS CHAPTER ═══
+This chapter OWNS the opening recommendation signal and deal identity. It synthesises
+one key insight per dimension — it does NOT duplicate the financial analysis, risk
+register, legal terms, or macro tables from other chapters. Every bullet must be
+an actionable IC-level takeaway, not a description of what a later chapter covers.
+
+Write a 600-800 word executive overview covering:
+  • Deal identity and sponsor (the EXTERNAL manager, NOT Netz)
+  • Transaction rationale
+  • Key terms (tenor, rate, collateral)
+  • Return profile summary
+  • Top 3 risks
+  • Recommendation signal (INVEST / PASS / CONDITIONAL)
+  • Fund governance highlights — if evidence includes the INVESTOR's
+    (Netz Private Credit Fund) offering memorandum or fund constitution,
+    note any board-approved liberalities, investment policy overrides,
+    or governance features material to the IC.  These describe NETZ's
+    governance, NOT the deal target's.  Netz's administrator is Zedra
+    Fund Administration (Cayman) Ltd.; do NOT attribute Zedra to the
+    deal being evaluated.
+  • Regulatory standing — if CIMA regulatory evidence is present,
+    state NETZ's current regulatory compliance posture in one sentence.
+    CIMA evidence in the index describes OUR fund, not the deal.
+
+Use the EvidencePack data — do NOT fabricate.
+Write in Markdown.  Be analytical, not descriptive.
+Return JSON:
+{% raw %}{
+  "section_text": "...markdown...",
+  "omitted_sections": [],
+  "critical_gaps": [
+    {"field": "recommendation", "reason": "Insufficient evidence to issue INVEST/PASS/CONDITIONAL", "blocks_approval": true}
+  ]
+}{% endraw %}
+Omit omitted_sections[] and critical_gaps[] arrays if empty.

@@ -1,0 +1,222 @@
+from __future__ import annotations
+
+import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.core.db.audit import write_audit_event
+from app.domains.credit.documents.enums import DocumentIngestionStatus
+from app.domains.credit.modules.documents.models import Document, DocumentChunk, DocumentVersion
+from app.services.blob_storage import download_bytes
+from app.services.chunking import chunk_pdf_pages
+from app.services.document_text_extractor import extract_pdf_pages
+from app.services.search_index import AzureSearchChunksClient
+
+
+@dataclass(frozen=True)
+class WorkerResult:
+    processed: int
+    indexed: int
+    failed: int
+    skipped: int
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
+def process_pending_versions(
+    db: Session,
+    *,
+    fund_id: uuid.UUID,
+    limit: int = 10,
+    actor_id: str = "ingestion-worker",
+) -> WorkerResult:
+    vers = (
+        db.execute(
+            select(DocumentVersion)
+            .where(DocumentVersion.fund_id == fund_id, DocumentVersion.ingestion_status == DocumentIngestionStatus.PENDING)
+            .order_by(DocumentVersion.created_at.asc())
+            .limit(limit)
+        )
+        .scalars()
+        .all()
+    )
+    processed = indexed = failed = skipped = 0
+    for v in vers:
+        processed += 1
+        try:
+            _process_one(db, fund_id=fund_id, version=v, actor_id=actor_id)
+            indexed += 1
+        except Exception:
+            failed += 1
+    return WorkerResult(processed=processed, indexed=indexed, failed=failed, skipped=skipped)
+
+
+def process_version(
+    db: Session,
+    *,
+    fund_id: uuid.UUID,
+    version_id: uuid.UUID,
+    actor_id: str = "ingestion-worker",
+) -> None:
+    v = db.execute(select(DocumentVersion).where(DocumentVersion.fund_id == fund_id, DocumentVersion.id == version_id)).scalar_one()
+    _process_one(db, fund_id=fund_id, version=v, actor_id=actor_id)
+
+
+def _process_one(db: Session, *, fund_id: uuid.UUID, version: DocumentVersion, actor_id: str) -> None:
+    if version.ingestion_status == DocumentIngestionStatus.INDEXED:
+        return
+
+    # Mark PROCESSING early
+    version.ingestion_status = DocumentIngestionStatus.PROCESSING
+    version.updated_by = actor_id
+    db.commit()
+
+    try:
+        doc = db.execute(select(Document).where(Document.fund_id == fund_id, Document.id == version.document_id)).scalar_one()
+
+        if not version.blob_uri:
+            raise ValueError("document_version.blob_uri is missing")
+
+        data = download_bytes(blob_uri=version.blob_uri)
+
+        extracted = extract_pdf_pages(data)
+        extracted_text = extracted.text
+
+        write_audit_event(
+            db,
+            fund_id=fund_id,
+            actor_id=actor_id,
+            action="DOCUMENT_TEXT_EXTRACTED",
+            entity_type="document_version",
+            entity_id=version.id,
+            before=None,
+            after={
+                "document_id": str(doc.id),
+                "version_id": str(version.id),
+                "page_count": len(extracted.pages),
+                "text_chars": len(extracted_text or ""),
+            },
+        )
+
+        # Scanned / no-text placeholder (OCR future EPIC)
+        if not (extracted_text or "").strip():
+            version.ingestion_status = DocumentIngestionStatus.FAILED
+            version.ingest_error = {"reason": "scanned_pdf_or_no_text", "detail": "OCR not implemented yet"}
+            version.updated_by = actor_id
+            write_audit_event(
+                db,
+                fund_id=fund_id,
+                actor_id=actor_id,
+                action="INGESTION_FAILED",
+                entity_type="document_version",
+                entity_id=version.id,
+                before=None,
+                after={"reason": "scanned_pdf_or_no_text"},
+            )
+            db.commit()
+            return
+
+        # Idempotency: if chunks already exist for this version, don't recreate.
+        existing = db.execute(select(func.count(DocumentChunk.id)).where(DocumentChunk.fund_id == fund_id, DocumentChunk.version_id == version.id)).scalar_one()
+
+        if existing == 0:
+            drafts = chunk_pdf_pages(pages=extracted.pages)
+            for d in drafts:
+                db.add(
+                    DocumentChunk(
+                        fund_id=fund_id,
+                        access_level="internal",
+                        document_id=doc.id,
+                        version_id=version.id,
+                        chunk_index=d.chunk_index,
+                        text=d.text,
+                        embedding_vector=None,
+                        version_checksum=version.checksum,
+                        page_start=d.page_start,
+                        page_end=d.page_end,
+                        created_by=actor_id,
+                        updated_by=actor_id,
+                    )
+                )
+            db.flush()
+
+            write_audit_event(
+                db,
+                fund_id=fund_id,
+                actor_id=actor_id,
+                action="DOCUMENT_CHUNKED",
+                entity_type="document_version",
+                entity_id=version.id,
+                before=None,
+                after={"chunks_created": len(drafts), "document_id": str(doc.id), "version_id": str(version.id)},
+            )
+            db.commit()
+
+        chunks = (
+            db.execute(
+                select(DocumentChunk)
+                .where(DocumentChunk.fund_id == fund_id, DocumentChunk.version_id == version.id)
+                .order_by(DocumentChunk.chunk_index.asc())
+            )
+            .scalars()
+            .all()
+        )
+
+        client = AzureSearchChunksClient()
+        items = []
+        for c in chunks:
+            items.append(
+                {
+                    "chunk_id": str(c.id),
+                    "fund_id": str(fund_id),
+                    "document_id": str(doc.id),
+                    "version_id": str(version.id),
+                    "root_folder": doc.root_folder,
+                    "folder_path": doc.folder_path,
+                    "title": doc.title,
+                    "chunk_index": int(c.chunk_index),
+                    "content_text": c.text,
+                    "uploaded_at": (version.uploaded_at or version.created_at).astimezone(UTC).isoformat(),
+                }
+            )
+        client.upsert_chunks(items=items)
+
+        write_audit_event(
+            db,
+            fund_id=fund_id,
+            actor_id=actor_id,
+            action="DOCUMENT_CHUNKS_INDEXED",
+            entity_type="document_version",
+            entity_id=version.id,
+            before=None,
+            after={"chunks_indexed": len(items), "index": settings.SEARCH_CHUNKS_INDEX_NAME},
+        )
+
+        version.ingestion_status = DocumentIngestionStatus.INDEXED
+        version.indexed_at = _utcnow()
+        version.updated_by = actor_id
+        db.commit()
+
+    except Exception as e:
+        version.ingestion_status = DocumentIngestionStatus.FAILED
+        version.ingest_error = {"reason": "exception", "detail": str(e)}
+        version.updated_by = actor_id
+        write_audit_event(
+            db,
+            fund_id=fund_id,
+            actor_id=actor_id,
+            action="INGESTION_FAILED",
+            entity_type="document_version",
+            entity_id=version.id,
+            before=None,
+            after={"reason": "exception", "detail": str(e)},
+        )
+        db.commit()
+        raise
+

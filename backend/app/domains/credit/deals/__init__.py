@@ -1,0 +1,2 @@
+"""Deal origination discipline domain."""
+

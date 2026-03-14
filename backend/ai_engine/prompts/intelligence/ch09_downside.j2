@@ -1,0 +1,132 @@
+{#- metadata
+  stage: ch09_downside
+  model: gpt-5.1
+  version: "2.0"
+  description: "Downside Scenario Model — 14-chapter IC Memo"
+-#}
+You are writing the **Downside Scenario Model** chapter of an institutional IC Memo.
+
+═══ UNIQUE SCOPE OF THIS CHAPTER ═══
+This chapter OWNS loss modeling and stressed cash flows.
+DO NOT re-identify or rank risks (covered in ch11), re-describe covenants (ch10),
+or repeat return decomposition math (ch08). Every paragraph must quantify a downside
+outcome — stressed IRR, loss given default, recovery mechanics, or time-to-exit.
+Qualitative risk narrative belongs in ch11. This chapter is the numbers under stress.
+
+═══ MACRO STRESS CALIBRATION ═══
+macro_snapshot.stress_severity.level   = {{ stress_level }}  (NONE / MILD / MODERATE / SEVERE)
+macro_snapshot.stress_severity.score   = {{ stress_score }}  (0-100)
+Active stress triggers: {{ stress_triggers }}
+Real estate sub-stress:  {{ real_estate_stress }}
+Credit sub-stress:       {{ credit_stress }}
+Rate/spread sub-stress:  {{ rate_stress }}
+
+Use DRSFRMACBS (single-family mortgage delinquency, macro_snapshot.mortgage)
+and DRALACBN (all-loan delinquency, macro_snapshot.credit_quality) to calibrate
+the BASE CASE delinquency assumption. If either trend_direction == "rising",
+tighten the base-case input.
+stress_severity.level anchors scenario selection:
+  NONE/MILD → cite low systemic risk;
+  MODERATE/SEVERE → explicitly link each trigger to the downside scenario driver.
+
+{% if deal_structure == "fund_investment" %}
+═══ DEAL TYPE: FUND INVESTMENT ═══
+Downside modeling for a fund-of-funds / feeder investment must address:
+  • NAV deterioration at the target fund level: model NAV haircut (10%, 25%, 40%)
+    and its propagation through Netz's balance sheet.
+  • Gate and side-pocket activation: if the offering memorandum defines gate
+    thresholds, model the liquidity trap — Netz cannot exit even if it wants to.
+  • Two-layer fee continuation under stress: management fees continue even if
+    performance fees are not triggered — model the drag on stressed net returns.
+  • Regulatory wind-down scenario: if CIMA evidence is present, model the impact
+    of Netz receiving a regulatory enforcement action during a stressed period.
+  • Key service provider failure: if Zedra (Netz's administrator) exits during
+    stress, model the NAV reporting gap risk and its investor confidence impact.
+{% else %}
+═══ DEAL TYPE: DIRECT LOAN ═══
+Downside modeling for a direct credit facility must address:
+  • Collateral value under stress: model LTV deterioration given collateral haircut.
+  • Default probability over loan tenor: calibrate against sector delinquency data.
+  • Recovery mechanics: enforcement timeline, liquidation discount, legal costs.
+  • Prepayment optionality: if the borrower prepays under stress, model fee recovery.
+  • Covenant breach scenario: if covenants are defined, model the recovery path
+    assuming a covenant cure period, standstill, and eventual enforcement.
+{% endif %}
+
+Present downside scenarios in a MANDATORY comparison table:
+
+| Parameter                  | Mild Stress   | Moderate Stress | Severe Stress  |
+|----------------------------|---------------|-----------------|----------------|
+| Default Rate Assumption    | 1–2%          | 3–5%            | 8–12%          |
+| Recovery Rate              | 70–80%        | 50–65%          | 20–40%         |
+| Collateral Haircut         | 10%           | 20–25%          | 30–40%         |
+| Redemption Pressure        | ~15% NAV      | ~30% NAV        | >50% NAV       |
+| Gate Triggered?            | NO            | POSSIBLE        | YES            |
+| Suspension Triggered?      | NO            | NO              | POSSIBLE       |
+| Net IRR Impact             | [derive]      | [derive]        | [derive]       |
+| Time to Exit (months)      | [base]        | [+X months]     | [+Y months]    |
+| NAV per Share Impact       | −X%           | −Y%             | −Z%            |
+
+Derive all values from evidenced base-case parameters. Where fund-specific data is
+unavailable, use the fallback protocol:
+1. Derive from available evidence and label: "Est. based on [source]"
+2. Calibrate using macro data and label: "Calibrated from macro data"
+3. Use benchmark medians as proxy: "~X% (PB median proxy)"
+4. Use [DATA GAP] ONLY when parameter is truly unknowable.
+5. NEVER fill an entire column with [DATA GAP].
+
+Then write narrative analysis below the table (target: 600-900 words).
+Focus on: which stress scenario is most likely given current macro, what triggers
+escalation between scenarios, and what the IC should monitor as early warning signals.
+
+═══ CHART DATA EXTRACTION ═══
+
+After your analysis, place this chart marker in section_text after the comparison table:
+  <!-- CHART:heatmap:Recovery Rate Sensitivity — Collateral Haircut vs. Resolution Timeline -->
+
+In the charts array, populate a 5×5 recovery rate matrix (%) under varying
+collateral haircut and time-to-resolution combinations:
+  row_label: "Collateral Haircut (%)"
+  col_label: "Time to Resolution (months)"
+  row_values: [10, 20, 30, 40, 50]   (% haircut applied to collateral value)
+  col_values: [6, 12, 18, 24, 36]    (months to full resolution/liquidation)
+  matrix: derive recovery rate % for each (haircut, timeline) combination using:
+    recovery_rate = (1 - haircut/100) * base_collateral_coverage - legal_cost_pct
+    where legal_cost_pct increases with timeline (approx +1-2% per 6 months)
+  If base collateral coverage is unknown, use 80% as the baseline.
+  unit: "%"
+
+If insufficient data to derive even approximate values → add to critical_gaps.
+
+═══ OUTPUT FORMAT ═══
+
+Return JSON with ALL of the following fields:
+
+{% raw %}{
+  "section_text": "...full markdown chapter...",
+  "charts": [
+    {
+      "type": "heatmap",
+      "title": "Recovery Rate Sensitivity — Collateral Haircut vs. Resolution Timeline",
+      "data": {
+        "row_label": "Collateral Haircut (%)",
+        "col_label": "Time to Resolution (months)",
+        "row_values": [10, 20, 30, 40, 50],
+        "col_values": [6, 12, 18, 24, 36],
+        "matrix": [[95.0, ...], [88.0, ...], [78.0, ...], [65.0, ...], [50.0, ...]],
+        "title": "Recovery Rate Sensitivity — Collateral Haircut vs. Resolution Timeline",
+        "unit": "%"
+      }
+    }
+  ],
+  "omitted_sections": [],
+  "critical_gaps": [
+    {"field": "collateral_coverage", "reason": "No collateral valuation in EvidencePack", "blocks_approval": true}
+  ]
+}{% endraw %}
+
+Rules:
+- omit charts[] entries where data is truly unavailable (add to critical_gaps instead)
+- omit omitted_sections[] if nothing was skipped
+- omit critical_gaps[] if all critical data was found
+- critical_gaps blocks_approval = true only for data without which IC cannot vote

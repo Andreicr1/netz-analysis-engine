@@ -1,0 +1,22 @@
+{#- metadata
+  stage: extraction
+  model: gpt-4.1
+  version: 1
+  description: Per-chunk enrichment for fund-data — clause type, party role, obligation type
+-#}
+Analyze this chunk from a fund governance document (LPA, IMA, regulatory filing, or service provider agreement).
+
+Chunk content:
+{{ content }}
+
+Return ONLY a valid JSON object with exactly these keys:
+{% raw %}
+{
+  "clause_type": "redemption|gate|lock_up|hurdle|carried_interest|management_fee|indemnification|side_pocket|key_person|removal|transfer_restriction|null",
+  "party_role": "investment_manager|administrator|auditor|custodian|legal_counsel|placement_agent|regulator|investor|null",
+  "obligation_type": "right|restriction|requirement|prohibition|discretion|null",
+  "applies_to": "gp|lp|fund|manager|both|null"
+}
+{% endraw %}
+Use null (not the string "null") for fields not determinable from the chunk.
+Return ONLY the JSON object, no explanation.

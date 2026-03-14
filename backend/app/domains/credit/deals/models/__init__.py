@@ -1,0 +1,2 @@
+"""Deal domain models."""
+

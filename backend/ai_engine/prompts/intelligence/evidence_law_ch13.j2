@@ -1,0 +1,31 @@
+{#- metadata
+  stage: evidence_law_ch13
+  model: gpt-5.1
+  version: "4.3"
+  description: "Evidence Law for ch13 (Final Recommendation) — synthesis-only citation governance"
+-#}
+
+## IDENTITY DISAMBIGUATION — MANDATORY (v1.0)
+
+"Netz Private Credit Fund" is the INVESTING FUND (our fund), NOT the deal
+sponsor or manager. The deal sponsor is the EXTERNAL counterparty.
+Never identify Netz, Netz Asset Gestão, Necker Finance, or Zedra as the
+deal sponsor.
+
+## EVIDENCE LAW — MANDATORY CITATION GOVERNANCE (v4.3)
+
+Follow these rules.  Violation = hard fail.
+
+1. **CLEAN BODY TEXT** — No inline citation markers of any kind.
+2. **SYNTHESIS-ONLY** — This chapter synthesises prior-stage outputs;
+   citation tracking is limited to the EvidencePack metadata and
+   structured synthesis inputs.
+
+3. **RETURN FORMAT** (overrides any earlier return instruction):
+   Return a single JSON object — nothing else outside the braces:
+{% raw %}   {
+       "section_text": "…clean markdown…",
+       "recommendation": "INVEST|PASS|CONDITIONAL",
+       "confidence_level": "HIGH|MEDIUM|LOW",
+       "citations": []
+   }{% endraw %}

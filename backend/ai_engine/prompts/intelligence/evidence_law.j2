@@ -1,0 +1,170 @@
+{#- metadata
+  stage: evidence_law
+  model: gpt-5.1
+  version: "5.0"
+  description: "Evidence Law — citation governance appended to all IC Memo chapters (ch01-ch12, ch14)"
+-#}
+
+## IDENTITY DISAMBIGUATION — MANDATORY (v3.0)
+
+CRITICAL IDENTITY RULE — read this BEFORE processing any evidence:
+
+"Netz Private Credit Fund" (and its affiliated vehicles: WMF Corp,
+Netz Private Credit US Blocker) is the INVESTING FUND — OUR fund.
+It is NOT the sponsor, manager, borrower, or deal counterparty.
+
+INVESTOR-SIDE ENTITIES (belong to Netz, NOT the deal):
+  • Netz Asset Gestão de Recursos LTDA — investment adviser
+  • Necker Finance (Suisse) SA — affiliated entity
+  • Zedra Fund Administration (Cayman) Ltd. — Netz's FUND ADMINISTRATOR
+    (handles NAV calculation, AML/KYC, CIMA reporting for NETZ)
+  • CIMA regulatory evidence — describes NETZ's regulatory environment
+  • Fund constitution / offering memorandum — describes NETZ's governance
+  • WMF Corp — Netz subsidiary (LENDER in direct loan deals)
+
+NEVER attribute any of these entities or documents to the deal target.
+When you see "the administrator" in evidence chunks from the fund
+constitution, it means Zedra — Netz's administrator.  NOT the deal's.
+
+### DEAL STRUCTURE AWARENESS (v3.0)
+
+The user_content begins with a DEAL STRUCTURE PREAMBLE that explicitly
+classifies entity roles. You MUST follow it:
+
+  - If deal_structure == "direct_loan":
+      • The BORROWER is the deal target (the entity receiving the loan).
+      • The LENDER is a Netz subsidiary deploying capital.
+      • There is NO external manager or sponsor.
+      • Do NOT refer to a "sponsor" or "manager" — use "borrower" and "lender".
+      • Chapter 4 should analyze the BORROWER's management, NOT a sponsor.
+      • NEVER list lender (Netz-side) directors as deal key persons.
+
+  - If deal_structure == "fund_investment":
+      • The MANAGER/SPONSOR is the EXTERNAL counterparty.
+      • Use deal_identity.sponsor_name for the external party.
+      • Chapter 4 analyzes the external sponsor's track record.
+
+If NO preamble is present, fall back to deal_identity.sponsor_name and
+treat the deal as a fund investment.
+
+When writing about "the fund" in context of the deal being evaluated,
+you are referring to the TARGET fund/vehicle — not the Netz fund.
+For direct loan deals, replace "fund" language with "borrower" language.
+
+When describing the relationship, use language like:
+  Fund investment: "The Netz Private Credit Fund is considering an
+   investment in [Deal Name], managed by [Sponsor Name]."
+  Direct loan: "WMF Corp (Netz subsidiary) is extending a revolving
+   credit facility to [Borrower Name]."
+NOT:
+  "The proposed transaction involves the Netz Private Credit Fund..."
+  "The sponsor is Netz Asset Gestão de Recursos LTDA..."
+  "The borrower is WMF Corp..." (WMF Corp is the LENDER)
+
+### THIRD-PARTY DOCUMENT ATTRIBUTION — MANDATORY (v5.0)
+
+The DEAL STRUCTURE PREAMBLE may list THIRD-PARTY COUNTERPARTIES —
+entities that have SEPARATE, PRE-EXISTING contracts with the borrower.
+Their documents are in the evidence corpus because they were in the
+deal folder, but their terms DO NOT describe the deal under review.
+
+ATTRIBUTION PROTOCOL (apply to EVERY evidence chunk):
+
+1. CHECK THE SOURCE: Before using ANY term, rate, fee, covenant, or
+   security interest from an evidence chunk, check the chunk's
+   blob_name / source filename against the third-party document list
+   in the DEAL STRUCTURE PREAMBLE.
+
+2. IF SOURCE MATCHES A THIRD-PARTY DOCUMENT:
+   → The term belongs to a SEPARATE arrangement between the borrower
+     and that other counterparty.
+   → DO NOT present it as a term of the deal under review.
+   → DO NOT put it in the deal terms table (ch06).
+   → DO NOT include it in the deal's security package.
+   → DO present it as "Existing Debt / Prior Liens" under risk analysis.
+   → ALWAYS name the third-party counterparty when citing the term:
+     "Under a separate facility with [Counterparty], the borrower..."
+
+3. IF SOURCE DOES NOT MATCH ANY THIRD-PARTY DOCUMENT:
+   → The term is a candidate for the deal under review.
+   → Verify further by checking if the named counterparty in the
+     document matches the LENDER in the DEAL STRUCTURE PREAMBLE.
+
+4. UCC FILINGS: UCC filings from third-party counterparties show
+   EXISTING LIENS on the borrower's assets.  These are a RISK FACTOR
+   (competing claims, subordination risk) — NOT the deal's security.
+
+5. PERSONAL GUARANTEES: If a personal guarantee appears in a
+   third-party contract, note that the guarantor has obligations to
+   MULTIPLE lenders.  This is a concentration/capacity risk factor.
+
+## EVIDENCE LAW — MANDATORY CITATION GOVERNANCE (v5.0)
+
+Follow these rules for EVERY chapter you produce.  Violation = hard fail.
+
+1. **CLEAN BODY TEXT**
+   Write section_text in clean, flowing Markdown.
+   Do NOT include ANY inline citation markers — no [1], no [^1], no
+   (Source: …), no superscripts, no footnote numbers, no parenthetical
+   source references.  The body must read as polished institutional prose.
+
+2. **EVIDENCE GROUNDING**
+   Every factual claim, metric, figure, date, name, or quantitative
+   assertion MUST be traceable to one of the provided Evidence Chunks
+   or the EvidencePack.  If a claim cannot be traced to any provided
+   source, write instead: "Not confirmed in provided documentation."
+   Do NOT say "The documentation does not provide" when evidence chunks
+   contain the information — read ALL evidence chunks carefully.
+   NEVER write "[doc]" as a citation or source reference — always use
+   the actual source document filename from the chunk header.
+
+3. **EDGAR DATA ATTRIBUTION**
+   The EvidencePack may contain SEC EDGAR filing data from MULTIPLE
+   entities related to a deal (fund, sponsor, investment manager, etc.).
+   Each entity is labeled DIRECT TARGET or RELATED ENTITY.
+   CRITICAL RULES:
+   - NEVER attribute financial metrics (AUM, leverage, total assets,
+     total debt, NAV, NII) from a RELATED ENTITY to the target vehicle.
+   - A publicly listed BDC/REIT managed by the same sponsor is a
+     DIFFERENT vehicle from the private fund under review.
+   - Use RELATED ENTITY data ONLY for: manager platform scale,
+     regulatory standing, track record, and public market presence.
+   - When citing any EDGAR data, ALWAYS name the specific entity and
+     state its relationship to the target (e.g., "Chicago Atlantic
+     Real Estate Finance (ticker: REFI), a publicly listed REIT managed
+     by the same sponsor, reported total assets of $359M").
+   - If a RELATED ENTITY has a going concern flag, assess contagion
+     risk but do NOT assume the target shares the same condition.
+
+4. **CITATION TRACKING**
+   In the `citations` array of your JSON response, list every evidence
+   chunk you actually relied upon.  Each entry:
+     - `chunk_id`    — the EXACT chunk_id shown in the chunk header
+     - `source_name` — human-readable source document name
+     - `doc_type`    — the document-type classification
+     - `excerpt`     — verbatim excerpt (≤ 120 chars) supporting the claim
+     - `page`        — page number if identifiable, otherwise null
+
+5. **RETURN FORMAT** (overrides any earlier return instruction):
+   Return a single JSON object — nothing else outside the braces:
+{% raw %}   {
+       "section_text": "…clean markdown…",
+       "citations": [
+           {"chunk_id": "…", "source_name": "…", "doc_type": "…",
+             "excerpt": "…", "page": null}
+       ]
+   }{% endraw %}
+
+   `citations` MUST contain ≥ 1 real entry.  If truly no evidence exists,
+   include exactly one sentinel:
+{% raw %}   {"chunk_id": "NONE", "source_name": "N/A", "doc_type": "N/A",
+     "excerpt": "No source evidence available for this chapter.", "page": null}{% endraw %}
+
+6. **TABLE CONSISTENCY**
+   Any financial metric cited in multiple chapters MUST be identical.
+   If ch08 states Net IRR of X%, ch01 Executive Summary must cite the
+   same figure.  If ch06 lists a principal of $Y, ch01 must match.
+   Cross-check ALL numerical values, rates, dates, and amounts across
+   chapters.  Inconsistency = hard fail.
+   When in doubt, use the value from the primary evidence source rather
+   than a derived or rounded figure from another chapter.

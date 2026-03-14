@@ -1,0 +1,17 @@
+{#- metadata
+  stage: qna_classify
+  model: mistral-small-latest
+  version: 1
+  description: Document Q&A fallback classification user prompt
+-#}
+Filename: {{ filename }}
+
+Document text (first {{ qna_classify_chars }} chars):
+{{ ocr_text_excerpt }}
+
+Classify this document using ONLY these exact values:
+  doc_type:     one of {{ doc_type_list }}
+  vehicle_type: one of {{ vehicle_type_list }}
+  confidence:   integer 1-10 (certainty in doc_type)
+
+Return exactly: {"doc_type": "...", "vehicle_type": "...", "confidence": N}

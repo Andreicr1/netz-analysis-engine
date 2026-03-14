@@ -1,0 +1,23 @@
+{#- metadata
+  stage: extraction
+  model: gpt-4.1
+  version: 1
+  description: Per-chunk enrichment for market-data benchmarks — asset class, strategy, metrics
+-#}
+Analyze this chunk from a private markets benchmark report and extract structured data fields.
+
+Chunk content:
+{{ content }}
+
+Return ONLY a valid JSON object with exactly these keys:
+{% raw %}
+{
+  "asset_class": "private_equity|private_debt|real_estate|venture_capital|real_assets|funds_of_funds|secondaries|private_capital|null",
+  "sub_strategy": "direct_lending|mezzanine|distressed_debt|real_estate_debt|bridge|senior_secured|unitranche|null",
+  "metric_type": "irr|tvpi|dpi|rvpi|pme|quarterly_return|horizon_irr|net_irr|gross_irr|null",
+  "vintage_year": "<4-digit year as string, or null>",
+  "geography": "global|north_america|europe|asia|latin_america|null"
+}
+{% endraw %}
+Use null (not the string "null") for fields not determinable from the chunk.
+Return ONLY the JSON object, no explanation.

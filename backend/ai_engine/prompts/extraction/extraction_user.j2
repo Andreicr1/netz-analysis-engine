@@ -1,0 +1,45 @@
+{#- metadata
+  stage: extraction
+  model: gpt-4.1
+  version: 1
+  description: User prompt for structured metadata extraction from fund documents
+-#}
+Extract structured metadata from this document:
+
+DOCUMENT TYPE: {{ doc_type }}
+TITLE: {{ title }}
+CONTENT (first 12000 chars):
+---
+{{ content }}
+---
+
+Return JSON:
+{% raw %}
+{
+  "entities": {
+    "funds": ["<fund names>"],
+    "companies": ["<company names>"],
+    "persons": ["<person names and roles>"],
+    "service_providers": ["<administrator/custodian/auditor/counsel names>"]
+  },
+  "financial_figures": {
+    "<metric_name>": {"value": "<amount>", "currency": "<CCY>", "as_of": "<date if known>"}
+  },
+  "dates": {
+    "<date_type>": "<YYYY-MM-DD or descriptive>"
+  },
+  "deal_structure": {
+    "vehicle_type": "<direct_investment | fund_of_funds | feeder_master | standalone_fund | spv | other>",
+    "investment_chain": ["<entity1 → entity2 → entity3>"],
+    "capital_allocation": {
+      "<vehicle_name>": "<percentage or amount>"
+    },
+    "underlying_investments": ["<description of underlying assets/strategies>"]
+  },
+  "governance_flags": ["<flag1>", "<flag2>"],
+  "counterparties": [
+    {"name": "<entity>", "role": "<role>", "jurisdiction": "<if known>"}
+  ],
+  "jurisdictions": ["<jurisdiction1>", "<jurisdiction2>"]
+}
+{% endraw %}

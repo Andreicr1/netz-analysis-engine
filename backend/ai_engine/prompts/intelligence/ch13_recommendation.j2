@@ -1,0 +1,66 @@
+{#- metadata
+  stage: ch13_recommendation
+  model: gpt-5.1
+  version: "1.0"
+  description: "Final Recommendation — 14-chapter IC Memo"
+-#}
+You are writing the **Final Recommendation** chapter of an institutional
+Investment Memorandum.
+
+CRITICAL: "Netz Private Credit Fund" is the INVESTOR (our fund). The deal
+sponsor/manager is the EXTERNAL counterparty in deal_identity.sponsor_name.
+Frame the recommendation as: whether Netz should invest IN this deal.
+
+THIS IS A SYNTHESIS-ONLY CHAPTER.  You receive:
+  • The EvidencePack summary (frozen facts)
+  • Quant profile summary
+  • Critic findings (adversarial review results)
+  • Policy compliance status and breaches
+  • Sponsor red flags
+  • Chapter summaries from ch01-ch12 (key conclusions from each chapter)
+
+You must:
+  1. State the IC recommendation: INVEST / PASS / CONDITIONAL
+  2. Confidence level: HIGH / MEDIUM / LOW
+  3. Key conditions for approval (if CONDITIONAL):
+     - Include any board-approved liberality or policy override that is
+       a prerequisite for the investment (e.g. "Board resolution required
+       to approve single-name concentration above 15% policy limit")
+     - Include any pending regulatory filing or compliance item that
+       must clear before funding
+  4. Summary rationale (3-5 bullet points) — where applicable, ground
+     the rationale in:
+     - Fund constitution / offering memorandum permissions
+     - Regulatory compliance standing from CIMA evidence
+     - Service provider adequacy assessment
+  5. Board override requirements (if any concentration/policy breaches)
+     — if the deal requires a policy exception, state whether the offering
+     memorandum permits the board to grant such exception and under what
+     conditions
+  6. Governance and regulatory pre-conditions — list any governance
+     actions (board vote, investor consent) or regulatory clearances
+     required before the investment can proceed
+
+IC POLICY RULE — LOCK-UP CLASSIFICATION:
+The existence of an early redemption mechanism — even with a NAV penalty —
+disqualifies a fund from being classified as a "hard lock-up" for blocking
+purposes. A hard lock-up block exists only when there is NO exit mechanism
+of any kind during the lock period.
+For any deal where early redemption is available (e.g. after 12 months at a
+NAV discount), lock_up_breach = FALSE. The NAV discount should be flagged as
+a liquidity cost in return modeling, but does NOT constitute a policy violation.
+Do NOT cite lock-up as a blocking/PASS trigger when early redemption exists.
+Evaluate the final recommendation based on remaining factors independently.
+
+Be decisive.  Do NOT equivocate.
+Target: 400-600 words.
+
+Return JSON:
+{% raw %}{
+    "section_text": "...markdown...",
+    "recommendation": "INVEST|PASS|CONDITIONAL",
+    "confidence_level": "HIGH|MEDIUM|LOW",
+    "omitted_sections": [],
+    "critical_gaps": []
+}{% endraw %}
+Omit omitted_sections[] and critical_gaps[] arrays if empty.

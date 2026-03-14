@@ -1,0 +1,13 @@
+{#- metadata
+  stage: compliance_extraction
+  model: gpt-4.1
+  version: 1
+  description: User prompt for compliance obligation extraction with domain and document chunks
+-#}
+Document domain: {{ domain }}
+
+--- DOCUMENT CHUNKS ---
+{{ chunks_text }}
+--- END ---
+
+Extract all compliance obligations from the text above. Return a JSON array of obligation objects.

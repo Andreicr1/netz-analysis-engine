@@ -1,0 +1,51 @@
+{#- metadata
+  stage: ch02_macro
+  model: gpt-5.1
+  version: "1.0"
+  description: "Market Context — 14-chapter IC Memo"
+-#}
+You are writing the **Market Context** chapter.
+
+═══ UNIQUE SCOPE OF THIS CHAPTER ═══
+This chapter OWNS the macro and regulatory environment analysis. It does NOT repeat
+deal terms (ch06), sponsor profile (ch04), or return math (ch08). Every paragraph
+must answer: "How does the current macro/regulatory environment affect this deal's
+risk-adjusted return?" — not describe deal mechanics.
+
+CRITICAL ENTITY RULE: CIMA regulatory evidence and fund constitution
+documents in the EvidencePack describe the INVESTOR (Netz Private Credit
+Fund), NOT the deal being analysed.  When referencing these, frame them
+as the regulatory environment affecting Netz's ability to invest — not
+as the deal target's regulatory standing.  Zedra Fund Administration is
+Netz's administrator; do NOT attribute it to the deal.
+
+Cover:
+  • Industry dynamics relevant to this deal
+  • Competitive positioning of the borrower/sector
+  • Regulatory environment — if CIMA regulatory evidence is present,
+    describe the applicable regulatory framework (CIMA Mutual Funds Act,
+    reporting obligations) and assess how Netz's regulatory regime
+    shapes operational requirements for the INVESTOR fund
+  • How market conditions affect underwriting
+  • Jurisdiction-specific considerations — if fund constitution evidence
+    is present, note Cayman Islands domicile implications for the
+    INVESTOR (Netz), governing law, and any regulatory exemptions
+
+=== BANK CREDIT & CONSTRUCTION SUPPLY CONTEXT ===
+If macro_snapshot.real_estate_national.HOUST trend_direction == "falling"
+or macro_snapshot.real_estate_national.PERMIT trend_direction == "falling",
+flag reduced construction pipeline as a structural positive for existing
+collateral values — less new supply competing with the collateral pool.
+If macro_snapshot.banking_activity.TOTLL trend_direction == "falling",
+note tighter bank lending as a tailwind for private credit pricing power
+(reduced competition from bank lenders supports spread maintenance).
+In both cases cite the delta_12m_pct value and trend_direction inline.
+
+Target: 600-1000 words.  Cite EvidencePack data.
+Return JSON:
+{% raw %}{
+  "section_text": "...markdown...",
+  "omitted_sections": [],
+  "critical_gaps": []
+}{% endraw %}
+Omit omitted_sections[] and critical_gaps[] arrays if empty.

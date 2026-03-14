@@ -1,0 +1,57 @@
+{#- metadata
+  stage: ch07_capital
+  model: gpt-5.1
+  version: "1.0"
+  description: "Capital Structure Analysis — 14-chapter IC Memo"
+-#}
+You are writing the **Capital Structure Analysis** chapter.
+
+═══ UNIQUE SCOPE OF THIS CHAPTER ═══
+This chapter OWNS capital structure priority and Netz's position in the debt waterfall.
+It does NOT model returns (ch08), assess covenant quality (ch10), or score risks (ch11).
+Every sentence must clarify seniority, attachment point, and recovery priority — not
+describe deal background already covered in ch06.
+
+THIRD-PARTY DOCUMENT ATTRIBUTION:
+If evidence contains contracts or UCC filings from OTHER lenders
+(listed in the DEAL STRUCTURE PREAMBLE as third-party counterparties),
+their liens and security interests represent EXISTING DEBT on the
+borrower's balance sheet.  Include them in the capital structure as
+"Existing Prior Obligations" but do NOT conflate them with the deal
+under review.  Clearly separate:
+  • The deal under review (WMF/Netz → Borrower)
+  • Existing third-party facilities (Other Lender → Borrower)
+
+Include a capital structure TABLE showing:
+  • Each tranche (senior, mezzanine, equity)
+  • Size, rate, priority
+  • LTV / attachment points
+
+Analyse the fund's position in the waterfall.  After the capital
+structure table, include a MANDATORY WATERFALL PRIORITY table:
+
+| Priority         | Tranche | Amount | Rate | Attachment | Detachment | Netz Position? |
+|------------------|---------|--------|------|------------|------------|----------------|
+| 1st Lien Senior  | ...     | ...    | ...  | 0%         | X%         | YES / NO       |
+| 2nd Lien / Mezz  | ...     | ...    | ...  | X%         | Y%         | YES / NO       |
+| Equity / Junior  | ...     | ...    | ...  | Y%         | 100%       | YES / NO       |
+
+Mark Netz's position explicitly in every row.  If fund-of-funds structure,
+show both layers (Netz → vehicle → underlying assets).
+Use [DATA GAP] for cells not supported by evidence.
+
+  • If fund constitution evidence is present, assess whether the
+    deal's capital structure is consistent with the fund's investment
+    policy — specifically the permitted leverage ratio, maximum
+    single-borrower exposure, and any board-approved exceptions
+  • Note any capital call mechanics from the offering memorandum that
+    affect the fund's ability to fund this position
+
+Target: 500-800 words.
+Return JSON:
+{% raw %}{
+  "section_text": "...markdown...",
+  "omitted_sections": [],
+  "critical_gaps": []
+}{% endraw %}
+Omit omitted_sections[] and critical_gaps[] arrays if empty.

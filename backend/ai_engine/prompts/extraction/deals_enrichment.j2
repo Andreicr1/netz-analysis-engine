@@ -1,0 +1,27 @@
+{#- metadata
+  stage: extraction
+  model: gpt-4.1
+  version: 1
+  description: Per-chunk enrichment for deals pipeline — borrower sector, loan structure, risk flags
+-#}
+Analyze this chunk from a private credit / alternative investment fund document.
+
+Chunk content:
+{{ content }}
+
+Return ONLY a valid JSON object with exactly these keys:
+{% raw %}
+{
+  "borrower_sector": "cannabis|real_estate|healthcare|technology|industrials|consumer|financial_services|energy|agriculture|null",
+  "loan_structure": "senior_secured|mezzanine|unitranche|second_lien|bridge|revolving|term_loan|null",
+  "key_persons_mentioned": ["<name1>", "<name2>"],
+  "financial_metric_type": "irr|yield|ltv|dscr|moic|nav|aum|spread|default_rate|null",
+  "risk_flags": ["<flag1>", "<flag2>"]
+}
+{% endraw %}
+Rules:
+- key_persons_mentioned: only real names (e.g. "David Kite"), not titles. Empty list [] if none.
+- risk_flags: empty list [] if none detected.
+- Valid risk flag values: concentration_risk, liquidity_risk, regulatory_risk, leverage_risk, currency_risk, sector_risk, key_person_risk
+- Use null (not the string "null") for string fields not determinable from the chunk.
+- Return ONLY the JSON object, no explanation.

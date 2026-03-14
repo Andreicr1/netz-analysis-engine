@@ -1,0 +1,289 @@
+"""Azure AI Search upsert service — writes chunks to global-vector-chunks-v2.
+
+Uses mergeOrUpload action for idempotent upserts.
+Handles id constraints (no colons or special characters).
+Batches uploads for performance.
+"""
+from __future__ import annotations
+
+import logging
+import re
+import uuid
+from datetime import UTC, datetime
+from typing import Any
+
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+_INDEX_NAME = settings.prefixed_index(settings.SEARCH_CHUNKS_INDEX_NAME or "global-vector-chunks-v2")
+_UPLOAD_BATCH_SIZE = 100
+
+
+def _safe_id(raw: str) -> str:
+    """Sanitize a document id for Azure Search (alphanumeric, dash, underscore)."""
+    return re.sub(r"[^a-zA-Z0-9_-]", "_", raw)
+
+
+def build_search_document(
+    *,
+    deal_id: uuid.UUID,
+    fund_id: uuid.UUID,
+    domain: str,
+    doc_type: str,
+    authority: str,
+    title: str,
+    chunk_index: int,
+    content: str,
+    embedding: list[float],
+    page_start: int,
+    page_end: int,
+    container_name: str | None = None,
+    blob_name: str | None = None,
+    document_id: uuid.UUID | None = None,
+    doc_summary: str | None = None,
+    doc_metadata: str | None = None,
+    # ── Hybrid pipeline enrichment fields (Phase 6) ──────────────────
+    vehicle_type: str | None = None,
+    section_type: str | None = None,
+    breadcrumb: str | None = None,
+    has_table: bool | None = None,
+    has_numbers: bool | None = None,
+    char_count: int | None = None,
+    governance_critical: bool | None = None,
+    governance_flags: list[str] | None = None,
+    borrower_sector: str | None = None,
+    loan_structure: str | None = None,
+    key_persons_mentioned: list[str] | None = None,
+    financial_metric_type: str | None = None,
+    risk_flags: list[str] | None = None,
+) -> dict[str, Any]:
+    """Build a single document dict matching the global-vector-chunks-v2 schema.
+
+    Chunk ID formula (v2): ``{deal_id}_{document_id}_{chunk_index}``
+    Previous (v1) used ``{deal_id}_{doc_type}_{chunk_index}`` which caused
+    collisions when two documents of the same doc_type belonged to one deal.
+    The ``document_id`` discriminator is the DealDocument PK — always unique.
+    If ``document_id`` is not available (backward compat), falls back to
+    ``{deal_id}_{doc_type}_{chunk_index}``.
+    """
+    if document_id is not None:
+        doc_id = _safe_id(f"{deal_id}_{document_id}_{chunk_index}")
+    else:
+        doc_id = _safe_id(f"{deal_id}_{doc_type}_{chunk_index}")
+    now = datetime.now(UTC).isoformat()
+    doc: dict[str, Any] = {
+        "@search.action": "mergeOrUpload",
+        "id": doc_id,
+        "fund_id": str(fund_id),
+        "deal_id": str(deal_id),
+        "domain": domain,
+        "doc_type": doc_type,
+        "authority": authority or "",
+        "title": title,
+        "content": content,
+        "embedding": embedding,
+        "page_start": page_start,
+        "page_end": page_end,
+        "chunk_index": chunk_index,
+        "created_at": now,
+        "last_modified": now,
+    }
+    # ── Fields previously accepted but silently dropped (bug fix) ────
+    if container_name:
+        doc["container_name"] = container_name
+    if blob_name:
+        doc["blob_name"] = blob_name
+    # ── Document Intelligence enrichment fields ─────────────────────
+    if doc_summary:
+        doc["doc_summary"] = doc_summary
+    if doc_metadata:
+        doc["doc_metadata"] = doc_metadata
+
+    # ── Hybrid pipeline enrichment fields ────────────────────────────
+    # Only include non-None fields (Azure Search ignores absent fields).
+    if vehicle_type is not None:
+        doc["vehicle_type"] = vehicle_type
+    if section_type is not None:
+        doc["section_type"] = section_type
+    if breadcrumb is not None:
+        doc["breadcrumb"] = breadcrumb
+    if has_table is not None:
+        doc["has_table"] = has_table
+    if has_numbers is not None:
+        doc["has_numbers"] = has_numbers
+    if char_count is not None:
+        doc["char_count"] = char_count
+    if governance_critical is not None:
+        doc["governance_critical"] = governance_critical
+    if governance_flags is not None:
+        doc["governance_flags"] = governance_flags
+    if borrower_sector is not None:
+        doc["borrower_sector"] = borrower_sector
+    if loan_structure is not None:
+        doc["loan_structure"] = loan_structure
+    if key_persons_mentioned is not None:
+        doc["key_persons_mentioned"] = key_persons_mentioned
+    if financial_metric_type is not None:
+        doc["financial_metric_type"] = financial_metric_type
+    if risk_flags is not None:
+        doc["risk_flags"] = risk_flags
+
+    return doc
+
+
+def upsert_chunks(documents: list[dict[str, Any]]) -> int:
+    """Upsert a list of search documents into global-vector-chunks-v2.
+
+    Returns the count of successfully uploaded documents.
+    Validates that all chunk IDs within the batch are unique before uploading.
+    """
+    if not documents:
+        return 0
+
+    # ── Duplicate ID guard ────────────────────────────────────────────
+    ids = [d["id"] for d in documents]
+    seen: set[str] = set()
+    duplicates: list[str] = []
+    for doc_id in ids:
+        if doc_id in seen:
+            duplicates.append(doc_id)
+        seen.add(doc_id)
+    if duplicates:
+        logger.error(
+            "Duplicate chunk IDs detected — aborting upsert to prevent silent overwrites: %s",
+            duplicates[:10],
+        )
+        raise RuntimeError(
+            f"Duplicate chunk IDs in batch ({len(duplicates)} collisions). "
+            f"First: {duplicates[0]}. Ensure document_id is passed to build_search_document(). "
+            f"Chunk ID format must be {{deal_id}}_{{document_id}}_{{chunk_index}}."
+        )
+
+    from app.services.azure.search_client import get_search_client
+
+    client = get_search_client(index_name=_INDEX_NAME)
+    total_uploaded = 0
+
+    for i in range(0, len(documents), _UPLOAD_BATCH_SIZE):
+        batch = documents[i : i + _UPLOAD_BATCH_SIZE]
+        try:
+            result = client.upload_documents(documents=batch)
+            succeeded = sum(1 for r in result if r.succeeded)
+            failed = len(batch) - succeeded
+            total_uploaded += succeeded
+            if failed > 0:
+                logger.warning(
+                    "Search upsert batch %d: %d succeeded, %d failed",
+                    i // _UPLOAD_BATCH_SIZE,
+                    succeeded,
+                    failed,
+                )
+        except Exception:
+            logger.error(
+                "Search upsert batch %d failed entirely (%d docs)",
+                i // _UPLOAD_BATCH_SIZE,
+                len(batch),
+                exc_info=True,
+            )
+
+    logger.info("Upserted %d/%d chunks to %s", total_uploaded, len(documents), _INDEX_NAME)
+    return total_uploaded
+
+
+def search_deal_chunks(
+    *,
+    deal_id: uuid.UUID,
+    query_text: str | None = None,
+    query_vector: list[float] | None = None,
+    top: int = 20,
+    domain_filter: str | None = None,
+) -> list[dict[str, Any]]:
+    """Hybrid search (BM25 + vector) for chunks belonging to a deal.
+
+    Supports optional domain filtering for cross-domain regulatory references.
+    """
+    from typing import cast
+
+    from azure.search.documents.models import VectorizedQuery, VectorQuery
+
+    from app.services.azure.search_client import get_search_client
+
+    client = get_search_client(index_name=_INDEX_NAME)
+
+    filter_expr = f"deal_id eq '{deal_id}'"
+    if domain_filter:
+        filter_expr = f"({filter_expr}) and (domain eq '{domain_filter}')"
+
+    vector_queries: list[VectorQuery] | None = None
+    if query_vector:
+        vector_queries = cast(
+            list[VectorQuery],
+            [
+                VectorizedQuery(
+                    vector=query_vector,
+                    k_nearest_neighbors=top,
+                    fields="embedding",
+                )
+            ],
+        )
+
+    results = client.search(
+        search_text=query_text or "*",
+        filter=filter_expr,
+        vector_queries=vector_queries,
+        top=top,
+        select=["id", "deal_id", "domain", "doc_type", "title", "content", "page_start", "page_end", "chunk_index"],
+    )
+
+    return [dict(r) for r in results]
+
+
+def search_fund_policy_chunks(
+    *,
+    fund_id: uuid.UUID,
+    query_text: str | None = None,
+    query_vector: list[float] | None = None,
+    top: int = 30,
+    domain_filter: str = "POLICY",
+) -> list[dict[str, Any]]:
+    """Search for fund-level policy / governance / regulatory chunks.
+
+    Fund-level documents are indexed with a nil-UUID deal_id
+    (00000000-0000-0000-0000-000000000000).  This function filters by
+    fund_id + domain rather than by deal_id.
+
+    Used by Deep Review v3 Stage 4 (policy compliance).
+    """
+    from typing import cast
+
+    from azure.search.documents.models import VectorizedQuery, VectorQuery
+
+    from app.services.azure.search_client import get_search_client
+
+    client = get_search_client(index_name=_INDEX_NAME)
+
+    filter_expr = f"fund_id eq '{fund_id}' and domain eq '{domain_filter}'"
+
+    vector_queries: list[VectorQuery] | None = None
+    if query_vector:
+        vector_queries = cast(
+            list[VectorQuery],
+            [
+                VectorizedQuery(
+                    vector=query_vector,
+                    k_nearest_neighbors=top,
+                    fields="embedding",
+                )
+            ],
+        )
+
+    results = client.search(
+        search_text=query_text or "*",
+        filter=filter_expr,
+        vector_queries=vector_queries,
+        top=top,
+        select=["id", "deal_id", "fund_id", "domain", "doc_type", "title", "content", "page_start", "page_end", "chunk_index"],
+    )
+
+    return [dict(r) for r in results]

@@ -1,0 +1,73 @@
+{#- metadata
+  stage: ch10_covenants
+  model: gpt-5.1
+  version: "1.0"
+  description: "Covenant Strength Assessment — 14-chapter IC Memo"
+-#}
+You are writing the **Covenant Strength Assessment** chapter.
+
+═══ UNIQUE SCOPE OF THIS CHAPTER ═══
+This chapter OWNS covenant quality, policy compliance, and headroom analysis. It
+does NOT model loss given default (ch09), list all deal risks (ch11), or repeat
+deal term values (ch06). Every row in the covenant register must provide headroom
+analysis or flag a breach risk — not just enumerate terms already in ch06.
+
+Evaluate covenant quality:
+  • Financial maintenance covenants (LTV, DSCR, leverage)
+  • Incurrence covenants
+  • Reporting frequency and cure provisions
+  • Covenant headroom analysis
+  • Comparison to market standard
+  • Investment policy compliance — if fund constitution / offering
+    memorandum evidence is present, validate the deal against the
+    fund's investment policy constraints:
+    - Single-name concentration limit vs. this deal's size
+    - Sector / geography / asset-class allocation limits
+    - Maximum tenor / weighted average life constraints
+    - Leverage / borrowing limits at the fund level
+    - If the board has approved extrapolations beyond standard policy
+      limits for this deal, document the specific liberality granted,
+      the board resolution reference (if available), and any conditions
+      or sunset clauses attached
+    - Assess remaining headroom after this deal is booked
+  • Regulatory obligation covenants — if CIMA regulatory evidence is
+    present, note Netz's (the INVESTOR's) regulatory compliance
+    covenants embedded in its governing documents (e.g. mandatory
+    annual audit delivery within 6 months of fiscal year-end, NAV
+    reporting frequency).  Label these as INVESTOR obligations,
+    not deal-level covenants.
+
+Present ALL covenants as a MANDATORY register table:
+
+| Covenant                   | Type        | Threshold  | Measurement | Cure Period | Headroom Est. |
+|----------------------------|-------------|------------|-------------|-------------|---------------|
+| [Financial Covenant 1]     | Maintenance | [value]    | [frequency] | [days]      | [if known]    |
+| [Financial Covenant 2]     | Maintenance |            |             |             |               |
+| [Incurrence Covenant]      | Incurrence  |            |             |             |               |
+| Single-name Concentration  | Fund Policy | [limit %]  | Per deal    | Board vote  | [remaining]   |
+| Sector Allocation          | Fund Policy |            |             |             |               |
+| CIMA Annual Audit Delivery | Regulatory  | 6mo of YE  | Annual      | N/A         |               |
+| NAV Reporting Frequency    | Regulatory  |            |             |             |               |
+
+Classify each: Financial / Fund Policy / Regulatory / Legal.
+Flag any breach or headroom concern in the Headroom Est. column.
+Use [NOT FOUND IN EVIDENCE] for rows with no evidentiary support.
+Write narrative analysis BELOW the table.
+
+IMPORTANT — LOCK-UP / REDEMPTION DISAMBIGUATION RULE:
+In the source documents, "12" appears in two distinct contexts:
+  (1) "12 months" = early redemption window (investor may exit after 12 months at a NAV discount)
+  (2) "2 years" = hard lock-up period (the actual lock-up duration)
+These are DIFFERENT terms. Never conflate them. If a chunk contains "12" in proximity
+to "lock" or "lock-up", it refers to the early redemption window (12 months), NOT the
+lock-up duration. The hard lock-up is always 2 years. If a chunk appears to contradict
+this, flag as [CHUNK CONFLICT] but do not change the 2-year figure without explicit evidence.
+
+Target: 500-800 words.
+Return JSON:
+{% raw %}{
+  "section_text": "...markdown...",
+  "omitted_sections": [],
+  "critical_gaps": []
+}{% endraw %}
+Omit omitted_sections[] and critical_gaps[] arrays if empty.

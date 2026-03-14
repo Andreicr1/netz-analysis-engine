@@ -1,0 +1,136 @@
+{#- metadata
+  stage: ch03_exit
+  model: gpt-5.1
+  version: "1.0"
+  description: "Macro Regime & Exit Environment — 14-chapter IC Memo"
+-#}
+You are writing the **Macro Regime & Exit Environment** chapter.
+
+═══ UNIQUE SCOPE OF THIS CHAPTER ═══
+This chapter OWNS exit mechanics and liquidity assessment. It uses macro data to
+frame the exit environment but does NOT re-produce the full macro table (ch02 covers
+that). It does NOT model losses under stress (ch09) or score risks (ch11). Every
+paragraph must answer: "Under what conditions can Netz exit, and how long will it take?"
+
+The EvidencePack contains a FRED macro snapshot with REAL numeric data.
+You MUST cite the actual numbers from the snapshot — do NOT state they are
+"not confirmed" or "not available".  The snapshot fields are:
+  risk_free_10y, risk_free_2y, yield_curve_2s10s, baa_spread,
+  cpi_yoy, gdp_yoy, unemployment_rate, financial_conditions_index,
+  recession_flag, as_of_date.
+
+═══ SECTION 1: MACRO REGIME ═══
+Structure:
+  • Current rate environment — cite 10Y (risk_free_10y), 2Y (risk_free_2y),
+    2s10s spread (yield_curve_2s10s) with actual values
+  • Credit spreads and risk appetite — cite Baa spread (baa_spread)
+  • Inflation regime — cite CPI YoY (cpi_yoy) and GDP YoY (gdp_yoy)
+  • Unemployment and labor market — cite unemployment_rate
+  • Financial conditions and recession risk — cite financial_conditions_index
+    (NFCI: negative = loose, positive = tight) and recession_flag
+  • Implications for deal pricing, exit timing, recovery assumptions
+
+Present the macro environment data as a TABLE before the narrative:
+
+| Metric                    | Current Value | Source      | Signal                    |
+|---------------------------|---------------|-------------|---------------------------|
+| 10Y Treasury (DGS10)      | X.XX%         | FRED        | Tight / Neutral / Loose   |
+| 2Y Treasury (DGS2)        | X.XX%         | FRED        |                           |
+| 2s10s Yield Curve         | X.XX%         | FRED (calc) | Normal / Inverted / Flat  |
+| Baa Credit Spread         | X.XX%         | FRED        | Wide / Normal / Tight     |
+| CPI YoY                   | X.XX%         | FRED        | Above / At / Below target |
+| GDP Growth (YoY)          | X.XX%         | FRED        |                           |
+| Unemployment Rate         | X.XX%         | FRED        |                           |
+| NFCI Financial Conditions | X.XXX         | FRED        | >0 Tight / <0 Loose       |
+| Recession Flag            | YES / NO      | NBER / FRED |                           |
+
+Populate every row using the EvidencePack macro_snapshot values.
+Use [N/A — not yet available] for null snapshot fields.
+Write narrative analysis BELOW the table (300–400 words).
+
+Every macro subsection MUST include at least one specific number from the
+snapshot.  If a value is null, state it is not yet available for the period.
+
+=== MACRO TIME-SERIES CONTEXT ===
+Use the full 12-month series in macro_snapshot.rates_spreads to describe the
+DIRECTION of rates (rising / falling / stable) — not just the current level.
+Reference: DGS10 trend_direction, BAA10Y trend_direction, yield_curve_2s10s
+delta_12m.  Lead with direction language (e.g. "The 10-year Treasury has been
+rising over the past 12 months, reaching X%") before citing the spot value.
+If macro_snapshot.regional.case_shiller_metro is present, cite the
+metro-specific HPI trend_direction and delta_12m_pct for the deal geography
+vs. the national CSUSHPINSA trend — flag divergence where material.
+
+═══ SECTION 2: EXIT ENVIRONMENT & LIQUIDITY ASSESSMENT ═══
+This section is MANDATORY and must be at least 400 words.
+
+Analyze the exit environment for THIS specific deal type based on all
+EvidencePack evidence.  Cover ALL of the following subsections:
+
+**2a. Instrument-Specific Exit Mechanics**
+  Identify the deal instrument type (revolving credit facility, term loan,
+  open-ended fund, closed-end fund, etc.) from the EvidencePack.
+  Describe the specific exit path for this instrument:
+  • For revolving credit / open-ended structures: redemption queue mechanics,
+    notice periods, gate provisions, frequency of NAV calculation
+  • For term loans / closed-end structures: maturity profile, refinancing
+    risk, extension options
+  • For secondary market exits: liquidity depth, typical bid-ask spreads,
+    pricing discount to par or NAV
+  Cite specific terms from the fund documents if present in evidence.
+
+**2b. Secondary Market & Liquidity Conditions**
+  Assess current secondary market conditions for private credit / private debt:
+  • Is the secondary market for this instrument type currently liquid or
+    constrained?  Reference the macro spread environment as a signal.
+  • Typical redemption / exit timelines for this fund category in the current
+    rate environment
+  • Identify any redemption restriction triggers that could impair exit:
+    gates, queues, suspension of redemptions
+  If EvidencePack market_benchmarks contains PitchBook or other secondary
+  market data, cite it explicitly:
+    – Realized exit multiples (DPI / TVPI) for comparable vintage years
+    – Secondary pricing as % of NAV for comparable strategies
+    – Typical hold period distributions for the strategy
+  If market_benchmarks is absent, state that market data was not available
+  and rely on macro proxies.
+
+**2c. Exit Timing Analysis**
+  Given the current macro regime:
+  • Is this a favorable or unfavorable window to exit / redeem?
+  • What macro conditions would need to change to improve exit prospects
+    (e.g., spread compression, curve normalization, credit cycle turn)?
+  • What is the realistic exit timeline for a position of this size and type?
+  • Flag any macro risks that could extend the exit timeline:
+    recession risk, spread widening, liquidity freeze
+
+**2d. Portfolio-Level Exit Risk**
+  Assess the concentration and sequencing risk at exit:
+  • If this is a fund-of-funds or multi-manager structure: layered liquidity
+    risk (underlying fund gates compound the top-level fund gates)
+  • For single-strategy funds: key-person risk at exit, rollover risk at
+    maturity
+  • Credit deterioration scenarios that could prevent orderly exit:
+    default, restructuring, forced asset sale
+
+**2e. IC Verdict — Exit Environment**
+  Conclude with a CLEAR IC-grade statement:
+  | Exit Dimension         | Assessment    | Key Constraint                  |
+  |------------------------|---------------|---------------------------------|
+  | Instrument liquidity   | HIGH/MED/LOW  | e.g., 90-day redemption queue   |
+  | Secondary market depth | HIGH/MED/LOW  | e.g., thin market, wide spreads |
+  | Macro exit window      | OPEN/NEUTRAL/ | e.g., tight spreads favorable   |
+  |                        | CONSTRAINED   |                                 |
+  | Redemption risk        | HIGH/MED/LOW  | e.g., gate at 10% net assets    |
+  | Overall exit profile   | FAVORABLE /   |                                 |
+  |                        | NEUTRAL /     |                                 |
+  |                        | ADVERSE       |                                 |
+
+Target: 1,000–1,400 words total (Section 1 + Section 2 combined).
+Return JSON:
+{% raw %}{
+  "section_text": "...markdown...",
+  "omitted_sections": [],
+  "critical_gaps": []
+}{% endraw %}
+Omit omitted_sections[] and critical_gaps[] arrays if empty.

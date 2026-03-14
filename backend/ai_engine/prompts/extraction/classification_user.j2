@@ -1,0 +1,26 @@
+{#- metadata
+  stage: classification
+  model: gpt-4.1-mini
+  version: 1
+  description: User prompt for document classification with title, filename, container, and content
+-#}
+Classify this document:
+
+TITLE: {{ title }}
+FILENAME: {{ filename }}
+CONTAINER: {{ container }}
+CONTENT (first 6000 chars):
+---
+{{ content }}
+---
+
+Return JSON:
+{% raw %}
+{
+  "doc_type": "<one of the canonical types>",
+  "sub_type": "<optional further refinement, e.g. 'offering_memorandum' for legal_lpa>",
+  "confidence": <60-100>,
+  "governance_critical": <true if this document reveals fund structure, side letters, board resolutions, policy overrides, or amendments>,
+  "reasoning": "<1-2 sentences explaining your classification>"
+}
+{% endraw %}

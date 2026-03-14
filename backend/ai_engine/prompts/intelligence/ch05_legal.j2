@@ -1,0 +1,78 @@
+{#- metadata
+  stage: ch05_legal
+  model: gpt-5.1
+  version: "1.0"
+  description: "Legal Structure & Document Analysis — 14-chapter IC Memo"
+-#}
+You are writing the **Legal Structure & Document Analysis** chapter.
+
+═══ UNIQUE SCOPE OF THIS CHAPTER ═══
+This chapter OWNS legal structure, documentation quality, and the INVESTOR's
+regulatory compliance posture. It does NOT describe deal terms in tabular form
+(ch06), assess covenant headroom (ch10), or score risks (ch11). Every clause
+must be assessed for enforceability and investor protection quality.
+
+CRITICAL ENTITY RULE: Fund constitution, offering memorandum, and CIMA
+evidence in the EvidencePack describe the INVESTOR (Netz Private Credit
+Fund), NOT the deal target.  Zedra Fund Administration is Netz's
+administrator.  When analysing these documents, clearly attribute them
+to the investor fund.  The deal target's legal structure comes from its
+own LPA, credit agreements, and subscription documents.
+
+CRITICAL — THIRD-PARTY DOCUMENT ATTRIBUTION:
+The evidence may contain contracts and UCC filings from OTHER
+counterparties who have SEPARATE lending arrangements with the
+borrower.  Check the DEAL STRUCTURE PREAMBLE for the list of
+third-party counterparties and their document filenames.
+  • If a source document belongs to a third-party counterparty,
+    its terms (pledges, guaranties, security interests) describe
+    that SEPARATE arrangement, NOT the deal being evaluated.
+  • Present third-party contracts under a dedicated sub-section
+    titled "Existing Obligations & Prior Liens" — flag them as
+    risk factors (subordination, competing claims, asset pledges).
+  • NEVER present guaranties or pledges from a third-party contract
+    as the security package of the deal under review unless the
+    deal's OWN documents explicitly incorporate them.
+
+Cover:
+  • Borrower structure (SPVs, guarantors, jurisdictions)
+  • Critical clauses (negative pledge, change of control, default waterfall)
+  • Enforcement mechanics
+  • Intercreditor arrangements
+  • Existing Obligations & Prior Liens — if evidence contains contracts
+    with OTHER lenders/counterparties, describe the borrower's existing
+    debt obligations, pledged assets, and UCC filings.  Flag risks:
+    - Are the same assets pledged to both the existing lender AND the
+      deal under review?  (competing liens)
+    - Does the existing facility create subordination risk?
+    - Are personal guarantees shared across multiple facilities?
+  • Jurisdictional risk
+  • Investor fund constitution analysis — if evidence from Netz's fund
+    constitution or offering memorandum is present, you MUST analyse
+    (labelling these as NETZ's governance provisions):
+    - Share class structure and investor rights per class
+    - Amendment and modification thresholds (e.g. 75% in value required
+      to amend certain provisions)
+    - Quorum requirements for shareholder meetings
+    - Board-approved liberalities and policy overrides — where the board
+      has explicitly authorised deviations from standard investment
+      policy limits (e.g. single-name concentration above policy ceiling,
+      sector allocation above standard thresholds), describe each
+      liberality, its scope, and any conditions or sunset clauses
+    - Reserved matters requiring special majority or investor consent
+    - Side letter governance — key side letter rights (MFN, co-invest,
+      fee rebates, information rights) if evidenced
+  • Regulatory compliance posture — if CIMA regulatory evidence is
+    present, assess Netz's legal obligations arising from the regulatory
+    regime (filing deadlines, audited financial statement submission,
+    AML/KYC obligations).  This is the INVESTOR's regulatory posture,
+    not the deal target's.
+
+Target: 800-1200 words.  Include tables where appropriate.
+Return JSON:
+{% raw %}{
+  "section_text": "...markdown...",
+  "omitted_sections": [],
+  "critical_gaps": []
+}{% endraw %}
+Omit omitted_sections[] and critical_gaps[] arrays if empty.

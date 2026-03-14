@@ -1,0 +1,205 @@
+{#- metadata
+  stage: ch08_returns
+  model: gpt-5.1
+  version: "2.0"
+  description: "Return Modeling — 14-chapter IC Memo"
+-#}
+You are writing the **Return Modeling** chapter of an institutional IC Memo.
+
+═══ UNIQUE SCOPE OF THIS CHAPTER ═══
+This chapter OWNS return decomposition and IRR math.
+DO NOT re-describe deal terms (covered in ch06), capital structure (covered in ch07),
+or risks (covered in ch11). Every sentence must advance return analysis.
+If a point does not directly inform IRR, fee drag, or benchmark positioning — cut it.
+
+{% if deal_structure == "fund_investment" %}
+═══ DEAL TYPE: FUND INVESTMENT ═══
+This is a fund-of-funds or feeder investment. Return analysis must:
+  • Decompose gross-to-net return through the TWO-LAYER fee stack: deal-level fees
+    (management fee + carried interest at the target fund) AND Netz-level fees
+    (management fee + performance allocation per Netz's offering memorandum).
+  • Model the distribution waterfall as defined in the target fund's offering
+    memorandum — return of capital → preferred return → GP catch-up → carry.
+  • Compute net-to-LP return AFTER both fee layers. Label each layer explicitly.
+  • If the target fund has a hurdle rate, compare the deal's projected return
+    to both the target fund hurdle AND Netz's own hurdle rate.
+  • For PIK or side-pocket structures, model the cash vs. accrual split separately.
+{% else %}
+═══ DEAL TYPE: DIRECT LOAN ═══
+This is a direct lending / credit facility. Return analysis must:
+  • Decompose return into: base coupon + spread + OID/upfront fee (annualised)
+    + exit fee (annualised) + PIK accrual (if any).
+  • If the loan is floating rate, show returns at the current reference rate AND
+    at +200bps / −100bps to capture rate sensitivity.
+  • Compute net-to-LP return after Netz management and performance fees only
+    (no second-layer fund fees unless a fund vehicle wraps this credit).
+  • Compare net IRR to Netz's hurdle rate (if stated in the offering memorandum).
+{% endif %}
+
+Cover:
+  • Base case IRR and multiple (cite quant data from EvidencePack)
+  • Fee income (origination, exit) and PIK if present
+  • Cash flow timing and duration
+  • Sensitivity to rate changes and prepayment
+  • Comparison to fund hurdle rate and benchmark positioning
+
+Present return analysis in MANDATORY tables:
+
+TABLE 1 — Base Case Return Model:
+
+| Return Component               | Gross | Fee Drag | Net to LP | Source |
+|--------------------------------|-------|----------|-----------|--------|
+| Base Yield / Coupon            |       |          |           |        |
+| Origination Fee (annualised)   |       |          |           |        |
+| Exit Fee (annualised)          |       |          |           |        |
+| PIK Accrual (if applicable)    |       |          |           |        |
+| Management Fee                 |       | (-)      |           |        |
+| Performance Fee (if triggered) |       | (-)      |           |        |
+| **Net IRR (estimated)**        |       |          | ✓         |        |
+| vs. Hurdle Rate                |       |          | above/below |      |
+
+TABLE 2 — Sensitivity Analysis:
+
+| Scenario                | Gross IRR | Net IRR | vs. Hurdle  | Time to Exit |
+|-------------------------|-----------|---------|-------------|--------------|
+| Base Case               |           |         |             |              |
+| Rate +200bps            |           |         |             |              |
+| Rate −200bps            |           |         |             |              |
+| Default Rate ×2         |           |         |             |              |
+| Prepayment at Year 1    |           |         |             |              |
+| Stress (gate activated) |           |         |             |              |
+
+TABLE 2B — 2-Way Sensitivity Matrix (Net IRR % | Default Rate × Rate):
+If sufficient data exists, produce a 2-way matrix. This data will also be
+rendered as a visual heatmap — populate it precisely.
+
+| Net IRR %      | Rate −100bps | Base Rate | Rate +100bps | Rate +200bps |
+|----------------|-------------|-----------|--------------|--------------|
+| Default 1×     |             |           |              |              |
+| Default 1.5×   |             |           |              |              |
+| Default 2×     |             |           |              |              |
+| Default 3×     |             |           |              |              |
+
+If insufficient data: omit TABLE 2B and note reason in omitted_sections output field.
+
+TABLE 2C — Return Attribution (decompose Base Case):
+
+| Return Driver                     | Contribution to Gross IRR | Notes              |
+|-----------------------------------|---------------------------|--------------------|
+| Base Yield / Coupon Income        |                           | Primary driver     |
+| Origination Fee (annualised)      |                           |                    |
+| Exit / Prepayment Fee (ann.)      |                           |                    |
+| Capital Appreciation / Discount   |                           | If applicable      |
+| PIK Accrual (if applicable)       |                           |                    |
+| **Total Gross IRR**               |                           |                    |
+| Less: Management Fee              |                           | (fee drag)         |
+| Less: Performance Fee             |                           | (fee drag)         |
+| **Net IRR to LP**                 |                           |                    |
+
+Use [DATA GAP] for cells not supported by evidence. For TABLE 2C, derive from
+evidenced fee structure — even if approximate, show the decomposition.
+
+=== MISSING-DATA FALLBACK PROTOCOL ===
+
+When fund-specific data is not available for a table cell:
+1. FIRST check whether a reasonable proxy can be derived from available evidence
+   (e.g. stated 12-month return of 10.83% → use as base yield).
+2. If a proxy exists, use it and label clearly:
+   "~10.8% (stated 12-mo return)" or "Est. 1.5% (derived from credit policy LTV)"
+3. If market_benchmarks data is available, use the benchmark median as calibration
+   point and label: "~11.0% (PitchBook median proxy, direct lending 2022 vintage)"
+4. Use [DATA GAP] ONLY when no proxy, derivation, or benchmark calibration is
+   possible — i.e. the parameter is truly unknowable from available evidence.
+5. NEVER fill an entire table column or row with [DATA GAP]. If most cells would
+   be [DATA GAP], consolidate into a "Data Availability" narrative paragraph
+   below the table explaining what is missing and what would be needed.
+
+=== MARKET BENCHMARK CONTEXT ===
+
+If the EvidencePack contains a `market_benchmarks` section (non-empty), you MUST
+include a mandatory third table grounding this deal's returns against third-party
+benchmark data from PitchBook, Preqin, Bloomberg, or equivalent sources:
+
+TABLE 3 — Market Position vs. Benchmark:
+
+| Metric         | This Deal | PB/Preqin Median | Top Quartile | Top Decile | Vintage | Source |
+|----------------|-----------|------------------|--------------|------------|---------|--------|
+| Net IRR        |           |                  |              |            |         |        |
+| Gross Multiple |           |                  |              |            |         |        |
+| DPI            |           |                  |              |            |         |        |
+| Yield / Coupon |           |                  |              |            |         |        |
+
+For each benchmark row, cite the publisher and reference_date from the benchmark chunk.
+If no benchmark data is available, omit TABLE 3 and note in omitted_sections.
+
+Then write narrative (target: 600-1000 words).
+
+═══ CHART DATA EXTRACTION ═══
+
+After completing your analysis, you MUST embed chart markers in section_text
+AND populate the charts array in the JSON output with exact numeric data.
+
+CHART 1 — Waterfall (Return Attribution):
+  Place this exact marker in section_text after TABLE 2C:
+    <!-- CHART:waterfall:Return Attribution — Base Case -->
+  In the charts array, populate with evidenced values from TABLE 2C.
+  Required: base_yield (float %), total_irr (float %).
+  Optional: fee_income (origination+exit annualised %), pik (float %).
+  If base_yield or total_irr cannot be evidenced → add to critical_gaps.
+
+CHART 2 — Heatmap (Sensitivity — Net IRR):
+  If TABLE 2B was populated (not omitted):
+    Place this exact marker in section_text after TABLE 2B:
+      <!-- CHART:heatmap:Net IRR Sensitivity — Default Rate vs. Rate Movement -->
+    In the charts array, populate with:
+      row_label: "Default Rate Multiplier"
+      col_label: "Interest Rate Movement"
+      row_values: [1.0, 1.5, 2.0, 3.0]
+      col_values: [-1.0, 0.0, 1.0, 2.0]
+      matrix: [[r1c1, r1c2, r1c3, r1c4], ...]  (Net IRR % values from TABLE 2B)
+      unit: "%"
+  If TABLE 2B was omitted, omit this chart too.
+
+═══ OUTPUT FORMAT ═══
+
+Return JSON with ALL of the following fields:
+
+{% raw %}{
+  "section_text": "...full markdown chapter...",
+  "charts": [
+    {
+      "type": "waterfall",
+      "title": "Return Attribution — Base Case",
+      "data": {
+        "base_yield": <float>,
+        "fee_income": <float or omit>,
+        "pik": <float or omit>,
+        "total_irr": <float>,
+        "label": "Base Case"
+      }
+    },
+    {
+      "type": "heatmap",
+      "title": "Net IRR Sensitivity — Default Rate vs. Rate Movement",
+      "data": {
+        "row_label": "Default Rate Multiplier",
+        "col_label": "Interest Rate Movement (bps / 100)",
+        "row_values": [1.0, 1.5, 2.0, 3.0],
+        "col_values": [-1.0, 0.0, 1.0, 2.0],
+        "matrix": [[...], [...], [...], [...]],
+        "title": "Net IRR Sensitivity — Default Rate vs. Rate Movement",
+        "unit": "%"
+      }
+    }
+  ],
+  "omitted_sections": ["TABLE 2B omitted: insufficient data for 2-way matrix"],
+  "critical_gaps": [
+    {"field": "base_yield", "reason": "No coupon or yield stated in EvidencePack", "blocks_approval": true}
+  ]
+}{% endraw %}
+
+Rules:
+- omit charts[] entries where data is truly unavailable (add to critical_gaps instead)
+- omit omitted_sections[] if nothing was skipped
+- omit critical_gaps[] if all critical data was found
+- critical_gaps blocks_approval = true only for data without which IC cannot vote

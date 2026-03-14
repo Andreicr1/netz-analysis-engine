@@ -1,0 +1,118 @@
+{#- metadata
+  stage: ch06_terms
+  model: gpt-5.1
+  version: "1.0"
+  description: "Detailed Investment Terms & Covenants — 14-chapter IC Memo"
+-#}
+You are writing the **Detailed Investment Terms & Covenants** chapter.
+
+═══ UNIQUE SCOPE OF THIS CHAPTER ═══
+This chapter OWNS the precise term sheet and existing third-party facilities. The
+narrative below tables must build analytically on term quality — it does NOT narrate
+return decomposition math (ch08) or covenant headroom analysis (ch10). Avoid restating
+table data in prose; instead analyse implications (e.g., "the 90-day notice period
+creates a significant liquidity mismatch against the 30-day LIBOR reset cycle").
+
+╔══════════════════════════════════════════════════════════════════════╗
+║  CRITICAL — THIRD-PARTY DOCUMENT ATTRIBUTION (MANDATORY)           ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+Before populating ANY term in the table or narrative below, you MUST
+verify which counterparty the source document belongs to:
+
+1. Check the DEAL STRUCTURE PREAMBLE for the list of third-party
+   counterparties and their document filenames.
+2. For EACH term you extract (interest rate, fees, covenants, pledges),
+   check whether the source chunk's blob_name / source filename matches
+   a third-party counterparty's document list.
+3. If it DOES match a third-party document:
+   → That term belongs to a SEPARATE, PRE-EXISTING arrangement between
+     the borrower and that other counterparty.
+   → Do NOT put it in the deal terms table.
+   → Instead, present it in a dedicated "Existing Third-Party Facilities"
+     section AFTER the deal terms analysis.
+4. If it does NOT match any third-party document:
+   → It is a candidate for the deal under review. Verify it further
+     by checking whether the counterparty named in the document matches
+     the LENDER identified in the DEAL STRUCTURE PREAMBLE.
+
+EXAMPLE OF WHAT TO AVOID:
+  • A contract between the borrower and "ACV Capital" or "AFC" showing
+    "Prime + 6.25%" — this is the OTHER lender's rate, NOT the deal rate.
+  • UCC filings pledging assets to a third party — these are EXISTING
+    LIENS, not the deal's security package.
+  • Personal guarantees in a third-party contract — these may be shared
+    but must be attributed to their original contract.
+
+Cover:
+  • Rate structure (fixed/floating, spread, floor) — FROM THE DEAL'S
+    OWN DOCUMENTS ONLY
+  • Fees (origination, exit, PIK) — FROM THE DEAL'S OWN DOCUMENTS ONLY
+  • Prepayment mechanics and call protection
+  • Financial covenants (maintenance vs. incurrence)
+  • Reporting requirements
+  • Security package detail — FROM THE DEAL'S OWN DOCUMENTS ONLY
+  • Existing Third-Party Facilities — if evidence contains contracts
+    with OTHER lenders, present them in a SEPARATE sub-section:
+    - Name the counterparty explicitly
+    - Summarize their key terms (rate, fees, maturity, security)
+    - Assess overlap with the deal under review (shared collateral,
+      competing liens, cross-default provisions)
+    - Flag intercreditor risk
+  • Offering memorandum cross-reference — if fund constitution evidence
+    is present, cross-reference the deal terms against the fund's
+    authorised investment parameters:
+    - Compare the deal's fee structure (management fee, performance
+      allocation, carried interest) against the offering memorandum's
+      fee schedule — flag any deviations
+    - Compare the deal's return target against the fund's hurdle rate
+      — state whether the deal clears the hurdle on a base-case basis
+    - Note lock-up period compatibility — does the deal's tenor fit
+      within the fund's lock-up and liquidity framework?
+    - Redemption terms — assess alignment between the deal's cash flow
+      profile and the fund's redemption notice periods
+    - If the board has approved extrapolations or exceptions to standard
+      investment policy limits for this deal, describe them and assess
+      whether the exception is adequately compensated by return premium
+  • Service provider fee benchmarking — if service provider evidence is
+    present, note Netz's (the INVESTOR's) administrator (Zedra),
+    custodian, and auditor fee arrangements and whether they are
+    market-standard.  These are NETZ's service providers, NOT the deal's.
+
+Target: 800-1200 words.
+BEGIN with the following MANDATORY terms table — populate every row from
+evidence or mark [NOT FOUND IN EVIDENCE].
+
+CRITICAL: Every value in Source Document column must come from a document
+that is part of the DEAL UNDER REVIEW (WMF/Netz ↔ Borrower), NOT from
+a third-party counterparty's contract.  If the only source for a term
+is a third-party document, mark the cell [NOT FOUND IN DEAL DOCUMENTS]
+and note the third-party source in a separate table below.
+
+| Term Parameter           | Value / Description          | Source Document | Notes |
+|--------------------------|------------------------------|-----------------|-------|
+| Interest Rate / Coupon   |                              |                 |       |
+| Rate Type                | Fixed / Floating / PIK       |                 |       |
+| Base Rate / Floor        |                              |                 |       |
+| Origination Fee          |                              |                 |       |
+| Exit Fee                 |                              |                 |       |
+| Prepayment Premium       |                              |                 |       |
+| Management Fee           |                              |                 |       |
+| Performance Fee / Carry  |                              |                 |       |
+| Hurdle Rate              |                              |                 |       |
+| Hard Lock-up Period      |                              |                 |       |
+| Soft Lock-up Period      |                              |                 |       |
+| Redemption Notice Period |                              |                 |       |
+| Gate Threshold           |                              |                 |       |
+| Tenor / Maturity         |                              |                 |       |
+| Security Package         |                              |                 |       |
+
+Write narrative analysis BELOW the table.  Do not repeat table data
+in the narrative — build on it analytically.
+Return JSON:
+{% raw %}{
+  "section_text": "...markdown...",
+  "omitted_sections": [],
+  "critical_gaps": []
+}{% endraw %}
+Omit omitted_sections[] and critical_gaps[] arrays if empty.

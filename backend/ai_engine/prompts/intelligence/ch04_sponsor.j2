@@ -1,0 +1,74 @@
+{#- metadata
+  stage: ch04_sponsor
+  model: gpt-5.1
+  version: "1.0"
+  description: "Sponsor & Management Analysis — 14-chapter IC Memo"
+-#}
+You are writing the **Sponsor & Management Analysis** chapter.
+
+═══ UNIQUE SCOPE OF THIS CHAPTER ═══
+This chapter OWNS sponsor identity, track record, key persons, and governance quality
+at the DEAL TARGET level. It does NOT assess capital structure (ch07), legal terms
+(ch05), or risk taxonomy (ch11). Every paragraph must answer: "Should we trust this
+manager with our capital?" — through evidence, not description.
+
+CRITICAL: This chapter analyzes the EXTERNAL deal sponsor/manager — the
+counterparty identified in deal_identity.sponsor_name. "Netz Private Credit
+Fund" and its affiliates (Netz Asset Gestão, Necker Finance, Zedra) are the
+INVESTOR SIDE, NOT the sponsor being analyzed. If evidence chunks mention
+Netz entities, those describe OUR fund's governance — do not conflate them
+with the deal sponsor's profile.
+
+Using the sponsor profile and key persons data from the EvidencePack
+AND the raw evidence chunks provided:
+  • Sponsor track record and AUM (of the EXTERNAL manager)
+  • Key person backgrounds, names, titles, and roles — you MUST extract
+    every named individual found in the evidence.  Present them as a
+    MANDATORY table immediately after sponsor profile:
+
+    | Name | Title | Role in Deal | Background | Risk Signal            |
+    |------|-------|--------------|-------------------------|------------------------|
+    | ...  | ...   | ...          | ...                     | NONE / LOW / MED / HIGH |
+
+    Sources: org charts, management bios, LPAs, subscription agreements,
+    compliance docs.  If a person appears in any evidence chunk — include them.
+    After the table, write narrative governance assessment.
+
+    Present governance red flags (if any) as a second table:
+
+    | Flag | Severity     | Evidence (doc + section) | Recommended Action |
+    |------|--------------|--------------------------|-------------------|
+    | ...  | HIGH/MED/LOW | ...                      | ...               |
+
+  • Governance structure assessment — describe the DEAL TARGET's
+    governance framework (board, quorum, amendment thresholds) using
+    evidence from the deal's own documents (LPA, subscription docs).
+    Do NOT use Netz's fund constitution or offering memorandum to
+    describe the deal sponsor's governance — those describe the
+    INVESTOR.
+  • Red flags (if any)
+  • Alignment of interest with LPs
+  • Service provider ecosystem — map the DEAL TARGET's service
+    providers (administrator, custodian, auditor, legal counsel).
+    CRITICAL: Zedra Fund Administration is Netz's administrator,
+    NOT the deal's.  Do NOT list Zedra as a deal service provider.
+    Only list service providers evidenced in the deal's own documents.
+  • CIMA regulatory standing — if regulatory evidence for the DEAL
+    TARGET is present, note its compliance posture.  CIMA evidence
+    in the index typically describes Netz (the investor) — do NOT
+    attribute Netz's CIMA standing to the deal sponsor.
+
+CRITICAL: If the evidence chunks contain org charts, management lists,
+biographies, or team descriptions, you MUST extract and name every
+person with their role. Do NOT say "not provided" if names appear
+anywhere in the evidence.
+
+Do NOT fabricate — only state what is evidenced.
+Target: 800-1200 words.
+Return JSON:
+{% raw %}{
+  "section_text": "...markdown...",
+  "omitted_sections": [],
+  "critical_gaps": []
+}{% endraw %}
+Omit omitted_sections[] and critical_gaps[] arrays if empty.

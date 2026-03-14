@@ -1,0 +1,146 @@
+{#- metadata
+  stage: ch11_risks
+  model: gpt-5.1
+  version: "2.0"
+  description: "Key Risks — 14-chapter IC Memo"
+-#}
+You are writing the **Key Risks** chapter of an institutional IC Memo.
+
+═══ UNIQUE SCOPE OF THIS CHAPTER ═══
+This chapter OWNS risk identification, taxonomy, and scoring. It does NOT model
+losses under stress (covered in ch09) or describe return components (covered in ch08).
+Every risk entry must add a dimension not yet captured in other chapters.
+Do NOT re-describe collateral values, covenant terms, or return math — reference
+them briefly ("as modelled in ch09") and add the risk angle only.
+
+CRITICAL ENTITY RULE: Fund constitution, CIMA regulatory evidence, and service
+provider data in the EvidencePack describe the INVESTOR (Netz Private Credit Fund),
+NOT the deal target. Zedra Fund Administration is Netz's administrator. When
+assessing regulatory, governance, or service-provider risks from these documents,
+attribute them to the correct entity.
+
+{% if deal_structure == "fund_investment" %}
+═══ DEAL TYPE: FUND INVESTMENT ═══
+For fund-of-funds / feeder investments, the risk register MUST include:
+  • Blind-pool risk: limited visibility into target fund's current portfolio
+  • Fee layering risk: adverse IC decisions at the target fund level affect Netz's
+    net return without Netz having veto rights
+  • Side-pocket / illiquidity risk: target fund's side pockets can trap capital
+    beyond the expected investment horizon
+  • Key-person risk at the TARGET FUND level (separate from Netz's KPR)
+  • Denominator effect risk: if target fund's portfolio deteriorates, NAV decline
+    can force Netz into a breached concentration limit
+Label these as FUND INVESTMENT STRUCTURE RISKS in the Category column.
+{% else %}
+═══ DEAL TYPE: DIRECT LOAN ═══
+For direct credit facilities, the risk register MUST include:
+  • Obligor credit risk: probability of default given leverage, cash flow coverage
+  • Collateral enforcement risk: title clarity, enforcement jurisdiction, timeline
+  • Covenant breach and cure risk: which covenants are closest to breach, cure path
+  • Refinancing / bullet maturity risk: can the borrower refinance at maturity?
+  • Concentration risk: what % of Netz's deployed capital does this represent?
+Label these as DIRECT CREDIT RISKS in the Category column.
+{% endif %}
+
+Produce a ranked risk register:
+  • List ALL material risks ranked HIGH → MEDIUM → LOW
+  • For each: risk factor, severity, mitigation, residual exposure
+  • Include credit, market, operational, legal, concentration risks
+  • Regulatory compliance risk — if CIMA regulatory evidence is present, assess
+    NETZ's (the investor fund's) regulatory risks:
+    - Filing deadline risk (missed CIMA filings → penalties, licence risk)
+    - AML/KYC compliance risk per Cayman AML regulations
+    - NAV reporting and audited financial statement delivery risk
+    Label clearly as INVESTOR FUND risks, not deal-level risks.
+  • Service provider risk — if service provider evidence is present:
+    - Key-person dependency at Netz's service providers
+    - Termination notice periods and transition adequacy
+    - Liability cap adequacy
+    CRITICAL: Zedra is Netz's administrator — do NOT attribute to deal target.
+  • Governance risk — if Netz's fund constitution evidence is present:
+    - Investor concentration (single LP controlling >50% of votes)
+    - Low quorum thresholds
+    - Broad amendment powers without investor consent
+
+Use this EXACT risk register format — minimum 8 rows, maximum 15 rows:
+
+| # | Risk Factor | Category | Severity | Probability | Mitigation | Residual | Source |
+|---|-------------|----------|----------|-------------|------------|----------|--------|
+| 1 | ...         | Credit   | HIGH     | HIGH        | ...        | MED      | [source filename] |
+
+Categories: Credit | Market | Operational | Legal | Governance | Regulatory | Liquidity
+Severity and Probability: HIGH / MEDIUM / LOW
+Order: all HIGH severity first, then MEDIUM, then LOW.
+
+MINIMUM RISK COUNTS PER CATEGORY:
+  • Credit: ≥ 2 rows
+  • Market: ≥ 1 row
+  • Operational: ≥ 1 row
+  • Legal: ≥ 1 row
+  • At least 1 row from Governance OR Regulatory
+If a category lacks evidence, still include a row with Probability LOW
+and note "No evidence of this risk in current documentation."
+
+IMPACT QUANTIFICATION:
+For each risk, quantify the potential financial impact where possible
+(e.g., "~5% NAV reduction", "$X million exposure", "200bps yield compression").
+If quantification is not feasible, state the qualitative impact channel.
+
+SOURCE COLUMN RULE:
+Write the actual source document filename (e.g. "credit_policy.pdf"),
+NOT "[doc]". If multiple sources, separate by "; ". If no source, write "—".
+
+═══ RISK PROFILE SCORING (FOR RADAR CHART) ═══
+
+After completing the risk register, assign scores (0 = no risk, 10 = maximum risk)
+on exactly these 6 axes. Derive scores from the risk register — HIGH severity on
+an axis pulls the score toward 8-10, MEDIUM toward 4-7, LOW toward 1-3.
+
+  1. Credit / Default Risk      — probability-weighted default exposure
+  2. Liquidity Risk              — gate/suspension risk, exit timeline under stress
+  3. Structural / Legal Risk     — enforcement, jurisdiction, documentation quality
+  4. Sponsor / Key Person Risk   — GP / manager concentration and succession
+  5. Market / Rate Risk          — rate sensitivity, spread widening, macro exposure
+  6. Covenant / Documentation Risk — covenant tightness, missing docs, ambiguous terms
+
+Place this exact marker in section_text after the risk register table:
+  <!-- CHART:radar:Risk Profile — Key Risks Summary -->
+
+═══ OUTPUT FORMAT ═══
+
+Return JSON with ALL of the following fields:
+
+{% raw %}{
+  "section_text": "...full markdown chapter...",
+  "charts": [
+    {
+      "type": "radar",
+      "title": "Risk Profile — Key Risks Summary",
+      "data": {
+        "axes": [
+          "Credit / Default Risk",
+          "Liquidity Risk",
+          "Structural / Legal Risk",
+          "Sponsor / Key Person Risk",
+          "Market / Rate Risk",
+          "Covenant / Documentation Risk"
+        ],
+        "scores": [<float 0-10>, <float 0-10>, <float 0-10>, <float 0-10>, <float 0-10>, <float 0-10>],
+        "label": "Risk Profile"
+      }
+    }
+  ],
+  "omitted_sections": [],
+  "critical_gaps": [
+    {"field": "collateral_documentation", "reason": "No title / security documentation in EvidencePack", "blocks_approval": true}
+  ]
+}{% endraw %}
+
+Rules:
+- ALL 6 radar scores are required — if a dimension lacks evidence, score it 5
+  (unknown = moderate risk) and add a note in omitted_sections
+- omit omitted_sections[] if nothing was skipped
+- omit critical_gaps[] if all critical data was found
+- critical_gaps blocks_approval = true only for data without which IC cannot vote
+
+Target: 600-1000 words (narrative below risk register).

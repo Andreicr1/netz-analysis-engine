@@ -1,0 +1,71 @@
+{#- metadata
+  stage: ch12_peers
+  model: gpt-5.1
+  version: "1.0"
+  description: "Peer Comparison — 14-chapter IC Memo"
+-#}
+You are writing the **Peer Comparison** chapter.
+
+═══ UNIQUE SCOPE OF THIS CHAPTER ═══
+This chapter OWNS peer comparison and market positioning. It does NOT repeat
+deal-specific return decomposition (ch08), risk scoring (ch11), or macro analysis
+(ch02). Every comparison must be actionable: "This deal is above/at/below market
+on [metric] because [evidence]." Avoid restating the subject deal's terms — reference
+ch06 for terms and advance to benchmarking.
+
+Compare this deal to peers using this MANDATORY table structure:
+
+| Fund / Deal       | Strategy | Size | Gross Yield | Net IRR | LTV | Tenor | Gate | Lock-up | Source   |
+|-------------------|----------|------|-------------|---------|-----|-------|------|---------|----------|
+| **[THIS DEAL]**   | ...      | ...  | ...         | ...     | ... | ...   | ...  | ...     | Indexed  |
+| Peer 1            | ...      | ...  | ...         | ...     | ... | ...   | ...  | ...     | [source] |
+| Peer 2            | ...      | ...  | ...         | ...     | ... | ...   | ...  | ...     |          |
+
+Bold the subject deal row.  Minimum 3 rows (this deal + 2 peers).
+If peer data is not in indexed documents, use macro context and flag
+with the short code [Mkt est.] in the Source column.
+After the table, add a footnote line:
+> *Mkt est. = Market estimate — not sourced from indexed deal documents.*
+Do NOT fabricate specific fund names.
+  • Relative value assessment narrative below the table
+  • State whether this deal is above / at / below market on each key dimension
+If peer data is limited, document which dimensions lack comparables.
+
+=== MARKET POSITION TABLE (MANDATORY IF BENCHMARK DATA IS AVAILABLE) ===
+
+If the EvidencePack contains a `market_benchmarks` section (non-empty), you MUST
+include the following table sourced exclusively from third-party benchmark data
+(PitchBook, Preqin, Bloomberg, etc.):
+
+TABLE 2 — Market Position vs. Benchmark Universe:
+
+| Metric             | This Deal | PB/Preqin Median | PB Top Quartile | PB Top Decile | Vintage | Publisher | Reference Date |
+|--------------------|-----------|------------------|-----------------|---------------|---------|-----------|----------------|
+| Net IRR            |           |                  |                 |               |         |           |                |
+| Gross Multiple     |           |                  |                 |               |         |           |                |
+| Management Fee     |           |                  |                 |               |         |           |                |
+| Performance Fee    |           |                  |                 |               |         |           |                |
+| Lock-up Period     |           |                  |                 |               |         |           |                |
+| Redemption Gate    |           |                  |                 |               |         |           |                |
+| Target Fund Size   |           |                  |                 |               |         |           |                |
+
+Rules for TABLE 2:
+- Cite only data from market_benchmarks chunks in the EvidencePack.
+- Use [DATA GAP] for any cell not covered by benchmark evidence.
+- Citation format: "X% per [Publisher] [reference_date] ([asset_class] [vintage_year])"
+- Do NOT use general market knowledge for this table — benchmark chunks only.
+- If market_benchmarks is empty or missing: omit TABLE 2 and state:
+  "[No benchmark data available — market_benchmarks empty in EvidencePack]"
+
+After TABLE 2, write a "Benchmark Positioning" narrative (2-3 paragraphs) assessing
+whether this deal is in the top quartile, median, or below-median range for each key
+metric, citing the specific benchmark source.
+
+Target: 500-800 words.
+Return JSON:
+{% raw %}{
+  "section_text": "...markdown...",
+  "omitted_sections": [],
+  "critical_gaps": []
+}{% endraw %}
+Omit omitted_sections[] and critical_gaps[] arrays if empty.

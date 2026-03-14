@@ -1,0 +1,23 @@
+{#- metadata
+  stage: doc_summary
+  model: gpt-4.1-mini
+  version: 1
+  description: User prompt for document summarisation with type, title, and content
+-#}
+Summarise this document for the IC:
+
+DOCUMENT TYPE: {{ doc_type }}
+TITLE: {{ title }}
+CONTENT (first 10000 chars):
+---
+{{ content }}
+---
+
+Return JSON:
+{% raw %}
+{
+  "summary": "<200-word factual summary>",
+  "key_findings": ["<finding 1>", "<finding 2>", "...up to 5 findings"],
+  "deal_relevance_score": <1-10, where 10 = critical for IC decision>
+}
+{% endraw %}
