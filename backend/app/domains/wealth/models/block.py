@@ -1,12 +1,10 @@
-from datetime import datetime
-
-from sqlalchemy import Boolean, DateTime, String, Text, func
+from sqlalchemy import Boolean, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db.base import Base
+from app.core.db.base import AuditMetaMixin, Base
 
 
-class AllocationBlock(Base):
+class AllocationBlock(Base, AuditMetaMixin):
     __tablename__ = "allocation_blocks"
 
     block_id: Mapped[str] = mapped_column(String(80), primary_key=True)
@@ -16,6 +14,3 @@ class AllocationBlock(Base):
     description: Mapped[str | None] = mapped_column(Text)
     benchmark_ticker: Mapped[str | None] = mapped_column(String(20))
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )

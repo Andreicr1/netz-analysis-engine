@@ -19,10 +19,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, IdMixin
+from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, IdMixin, OrganizationScopedMixin
 
 
-class AIQuery(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class AIQuery(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "ai_queries"
 
     actor_id: Mapped[str] = mapped_column(String(200), index=True)
@@ -31,7 +31,7 @@ class AIQuery(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     created_at_utc: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
-class AIResponse(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class AIResponse(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "ai_responses"
 
     query_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ai_queries.id", ondelete="CASCADE"), index=True)
@@ -46,7 +46,7 @@ class AIResponse(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
 
 
 # EPIC 3C: institutional Q&A (append-only) with explicit citation table.
-class AIQuestion(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class AIQuestion(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "ai_questions"
 
     actor_id: Mapped[str] = mapped_column(String(200), index=True)
@@ -58,7 +58,7 @@ class AIQuestion(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     created_at_utc: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
-class AIAnswer(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class AIAnswer(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "ai_answers"
 
     question_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ai_questions.id", ondelete="CASCADE"), index=True)
@@ -70,7 +70,7 @@ class AIAnswer(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (Index("ix_ai_answers_fund_question", "fund_id", "question_id"),)
 
 
-class AIAnswerCitation(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class AIAnswerCitation(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "ai_answer_citations"
 
     answer_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ai_answers.id", ondelete="CASCADE"), index=True)
@@ -85,7 +85,7 @@ class AIAnswerCitation(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (Index("ix_ai_answer_citations_fund_answer", "fund_id", "answer_id"),)
 
 
-class DocumentRegistry(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class DocumentRegistry(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "document_registry"
 
     document_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), index=True, nullable=True)
@@ -118,7 +118,7 @@ class DocumentRegistry(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     )
 
 
-class ManagerProfile(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class ManagerProfile(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "manager_profiles"
 
     name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
@@ -137,7 +137,7 @@ class ManagerProfile(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (Index("ix_manager_profiles_fund_name", "fund_id", "name", unique=True),)
 
 
-class ObligationRegister(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class ObligationRegister(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "obligation_register"
 
     obligation_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
@@ -156,7 +156,7 @@ class ObligationRegister(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (Index("ix_obligation_register_fund_obligation_id", "fund_id", "obligation_id", unique=True),)
 
 
-class GovernanceAlert(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class GovernanceAlert(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "governance_alerts"
 
     alert_id: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
@@ -172,7 +172,7 @@ class GovernanceAlert(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (Index("ix_governance_alerts_fund_alert_id", "fund_id", "alert_id", unique=True),)
 
 
-class DocumentClassification(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class DocumentClassification(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "document_classifications"
 
     doc_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("document_registry.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -183,7 +183,7 @@ class DocumentClassification(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (Index("ix_document_classifications_fund_doc", "fund_id", "doc_id", unique=True),)
 
 
-class DocumentGovernanceProfile(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class DocumentGovernanceProfile(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "document_governance_profile"
 
     doc_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("document_registry.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -195,7 +195,7 @@ class DocumentGovernanceProfile(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (Index("ix_document_governance_profile_fund_doc", "fund_id", "doc_id", unique=True),)
 
 
-class KnowledgeAnchor(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class KnowledgeAnchor(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "knowledge_anchors"
 
     doc_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("document_registry.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -207,7 +207,7 @@ class KnowledgeAnchor(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (Index("ix_knowledge_anchors_fund_doc", "fund_id", "doc_id"),)
 
 
-class KnowledgeEntity(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class KnowledgeEntity(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "knowledge_entities"
 
     entity_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
@@ -216,7 +216,7 @@ class KnowledgeEntity(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (Index("ix_knowledge_entities_fund_type_name", "fund_id", "entity_type", "canonical_name", unique=True),)
 
 
-class KnowledgeLink(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class KnowledgeLink(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "knowledge_links"
 
     source_document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("document_registry.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -231,7 +231,7 @@ class KnowledgeLink(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     )
 
 
-class ObligationEvidenceMap(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class ObligationEvidenceMap(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "obligation_evidence_map"
 
     obligation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("knowledge_entities.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -242,7 +242,7 @@ class ObligationEvidenceMap(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (Index("ix_obligation_evidence_map_fund_obligation", "fund_id", "obligation_id", unique=True),)
 
 
-class DealDocumentIntelligence(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class DealDocumentIntelligence(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "deal_documents"
 
     deal_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pipeline_deals.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -253,7 +253,7 @@ class DealDocumentIntelligence(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (Index("ix_deal_documents_fund_deal_doc", "fund_id", "deal_id", "doc_id", unique=True),)
 
 
-class DealIntelligenceProfile(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class DealIntelligenceProfile(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "deal_intelligence_profiles"
 
     deal_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pipeline_deals.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -273,7 +273,7 @@ class DealIntelligenceProfile(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (Index("ix_deal_intelligence_profiles_fund_deal", "fund_id", "deal_id", unique=True),)
 
 
-class DealRiskFlag(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class DealRiskFlag(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "deal_risk_flags"
 
     deal_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pipeline_deals.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -285,7 +285,7 @@ class DealRiskFlag(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (Index("ix_deal_risk_flags_fund_deal", "fund_id", "deal_id"),)
 
 
-class DealICBrief(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class DealICBrief(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "deal_ic_briefs"
 
     deal_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pipeline_deals.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -300,7 +300,7 @@ class DealICBrief(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (Index("ix_deal_ic_briefs_fund_deal", "fund_id", "deal_id", unique=True),)
 
 
-class PipelineAlert(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class PipelineAlert(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "pipeline_alerts"
 
     deal_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pipeline_deals.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -312,7 +312,7 @@ class PipelineAlert(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (Index("ix_pipeline_alerts_fund_deal", "fund_id", "deal_id"),)
 
 
-class ActiveInvestment(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class ActiveInvestment(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "active_investments"
 
     # FK targets portfolio deals (deals.id), NOT pipeline_deals.
@@ -341,7 +341,7 @@ class ActiveInvestment(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     )
 
 
-class PerformanceDriftFlag(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class PerformanceDriftFlag(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "performance_drift_flags"
 
     investment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("active_investments.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -357,7 +357,7 @@ class PerformanceDriftFlag(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (Index("ix_performance_drift_flags_fund_investment", "fund_id", "investment_id"),)
 
 
-class CovenantStatusRegister(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class CovenantStatusRegister(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "covenant_status_register"
 
     investment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("active_investments.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -375,7 +375,7 @@ class CovenantStatusRegister(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (Index("ix_covenant_status_register_fund_investment", "fund_id", "investment_id"),)
 
 
-class CashImpactFlag(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class CashImpactFlag(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "cash_impact_flags"
 
     investment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("active_investments.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -391,7 +391,7 @@ class CashImpactFlag(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (Index("ix_cash_impact_flags_fund_investment", "fund_id", "investment_id"),)
 
 
-class InvestmentRiskRegistry(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class InvestmentRiskRegistry(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "investment_risk_registry"
 
     investment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("active_investments.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -405,7 +405,7 @@ class InvestmentRiskRegistry(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (Index("ix_investment_risk_registry_fund_investment", "fund_id", "investment_id"),)
 
 
-class BoardMonitoringBrief(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class BoardMonitoringBrief(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "board_monitoring_briefs"
 
     investment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("active_investments.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -438,7 +438,7 @@ class MacroSnapshot(Base, IdMixin, AuditMetaMixin):
     )
 
 
-class InvestmentMemorandumDraft(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class InvestmentMemorandumDraft(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """AI-generated Investment Memorandum draft for IC review."""
     __tablename__ = "investment_memorandum_drafts"
 
@@ -467,7 +467,7 @@ class InvestmentMemorandumDraft(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
 # ─────────────────────────────────────────────────────────────────
 
 
-class MemoEvidencePack(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class MemoEvidencePack(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """Frozen institutional truth source for V4 chapter-book memo generation.
 
     Generated once per deal version.  Every memo chapter reads from this
@@ -494,7 +494,7 @@ class MemoEvidencePack(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     )
 
 
-class MemoChapter(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class MemoChapter(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """Individual memo chapter in the V4 chapter-book architecture.
 
     Each chapter is generated independently from a frozen EvidencePack
@@ -535,7 +535,7 @@ class MemoChapter(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
 # ─────────────────────────────────────────────────────────────────
 
 
-class DealUnderwritingArtifact(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class DealUnderwritingArtifact(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """Unified underwriting truth object produced by Deep Review V4.
 
     Only one row per deal may have ``is_active=True`` at any time.
@@ -572,7 +572,7 @@ class DealUnderwritingArtifact(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     )
 
 
-class PeriodicReviewReport(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class PeriodicReviewReport(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """AI-generated periodic review of an active investment."""
     __tablename__ = "periodic_review_reports"
 

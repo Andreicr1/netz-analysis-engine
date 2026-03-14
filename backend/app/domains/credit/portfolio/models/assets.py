@@ -3,11 +3,11 @@ from __future__ import annotations
 from sqlalchemy import Enum, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, IdMixin
+from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, OrganizationScopedMixin, IdMixin
 from app.domains.credit.portfolio.enums import AssetType, Strategy
 
 
-class PortfolioAsset(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class PortfolioAsset(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """Canonical asset object (asset-first).
 
     All subtype tables (e.g. FundInvestment) must link 1:1 via asset_id.

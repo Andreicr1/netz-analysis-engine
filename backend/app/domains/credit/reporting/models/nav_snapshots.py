@@ -6,11 +6,11 @@ from sqlalchemy import DateTime, Index, Numeric, String
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, IdMixin
+from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, OrganizationScopedMixin, IdMixin
 from app.domains.credit.reporting.enums import NavSnapshotStatus
 
 
-class NAVSnapshot(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class NAVSnapshot(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "nav_snapshots"
 
     period_month: Mapped[str] = mapped_column(String(7), nullable=False, index=True)  # YYYY-MM

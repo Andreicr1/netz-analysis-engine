@@ -18,10 +18,10 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, IdMixin
+from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, IdMixin, OrganizationScopedMixin
 
 
-class PipelineDeal(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class PipelineDeal(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """Pipeline deal — origination / due-diligence phase.
 
     Table: pipeline_deals.  Intelligence lifecycle fields
@@ -94,7 +94,7 @@ class PipelineDeal(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
 Deal = PipelineDeal
 
 
-class DealDocument(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class DealDocument(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "pipeline_deal_documents"
 
     deal_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pipeline_deals.id", ondelete="CASCADE"), index=True)
@@ -117,7 +117,7 @@ class DealDocument(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     )
 
 
-class DealStageHistory(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class DealStageHistory(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "pipeline_deal_stage_history"
 
     deal_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pipeline_deals.id", ondelete="CASCADE"), index=True)
@@ -127,7 +127,7 @@ class DealStageHistory(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
-class DealDecision(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class DealDecision(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "pipeline_deal_decisions"
 
     deal_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pipeline_deals.id", ondelete="CASCADE"), index=True)
@@ -137,7 +137,7 @@ class DealDecision(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     decided_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
-class QualificationRule(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class QualificationRule(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "pipeline_qualification_rules"
 
     name: Mapped[str] = mapped_column(String(200), index=True)
@@ -146,7 +146,7 @@ class QualificationRule(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     rule_config: Mapped[dict] = mapped_column(JSON)
 
 
-class QualificationResult(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class QualificationResult(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "pipeline_qualification_results"
 
     deal_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pipeline_deals.id", ondelete="CASCADE"), index=True)
@@ -159,7 +159,7 @@ class QualificationResult(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     run_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
-class DealCashflow(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class DealCashflow(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """Portfolio-deal cashflow ledger entry (FK → deals.id)."""
 
     __tablename__ = "deal_cashflows"
@@ -178,15 +178,11 @@ class DealCashflow(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     )
 
 
-class DealConversionEvent(Base):
+class DealConversionEvent(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """Immutable audit record of each Pipeline → Portfolio conversion."""
 
     __tablename__ = "deal_conversion_events"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        primary_key=True, default=uuid.uuid4, index=True,
-    )
-    fund_id: Mapped[uuid.UUID] = mapped_column(index=True)
     pipeline_deal_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("pipeline_deals.id", ondelete="SET NULL"), nullable=True, index=True,
     )
@@ -199,36 +195,26 @@ class DealConversionEvent(Base):
     approved_by: Mapped[str] = mapped_column(String(128), nullable=False)
     approval_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     conversion_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    created_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False,
-    )
 
     __table_args__ = (
         Index("ix_deal_conversion_events_fund_created", "fund_id", "created_at"),
     )
 
 
-class DealEvent(Base):
+class DealEvent(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """Immutable lifecycle audit log for deal events across pipeline + portfolio."""
 
     __tablename__ = "deal_events"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        primary_key=True, default=uuid.uuid4, index=True,
-    )
     deal_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("deals.id", ondelete="SET NULL"), nullable=True, index=True,
     )
     pipeline_deal_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("pipeline_deals.id", ondelete="SET NULL"), nullable=True, index=True,
     )
-    fund_id: Mapped[uuid.UUID] = mapped_column(index=True)
     event_type: Mapped[str] = mapped_column(String(64), index=True)
     actor_id: Mapped[str] = mapped_column(String(128))
     payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    created_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False,
-    )
 
     __table_args__ = (
         Index("ix_deal_events_fund_type", "fund_id", "event_type"),

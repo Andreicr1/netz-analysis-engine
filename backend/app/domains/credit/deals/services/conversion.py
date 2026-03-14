@@ -4,7 +4,6 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from app.domains.credit.counterparties.service import auto_create_investment_counterparty
 from app.domains.credit.deals.enums import DealStage
 from app.domains.credit.deals.models.deals import Deal
 from app.domains.credit.deals.services.stage_transition import transition_deal_stage
@@ -56,16 +55,6 @@ def convert_deal_to_asset(
         actor_id=actor_id,
         fund_id=fund_id,
         extra_audit={"asset_id": str(asset.id)},
-    )
-
-    # Auto-create counterparty registry entry for the approved investment
-    auto_create_investment_counterparty(
-        db,
-        fund_id=fund_id,
-        actor_id=actor_id,
-        deal_id=deal.id,
-        deal_name=deal.name,
-        pipeline_deal_id=deal.pipeline_deal_id,
     )
 
     return asset

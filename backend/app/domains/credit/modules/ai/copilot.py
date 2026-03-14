@@ -18,10 +18,6 @@ from app.core.security.auth import Actor
 from app.core.security.clerk_auth import get_actor, require_readonly_allowed, require_roles
 from app.domains.credit.ai.services.agent_context import AgentUIContext, build_agent_runtime_context
 from app.domains.credit.ai.services.ai_scope import enforce_root_folder_scope, filter_hits_by_scope
-from app.domains.credit.compliance.services.evidence_gap import (
-    create_obligation_from_gap,
-    detect_evidence_gap,
-)
 from app.domains.credit.modules.ai import service
 from app.domains.credit.modules.ai.models import AIAnswer, AIAnswerCitation, AIQuestion
 from app.domains.credit.modules.ai.routes._helpers import (
@@ -333,8 +329,7 @@ def answer(
             after={"answer_len": len(ans_text), "citation_count": 0},
         )
         db.commit()
-        gap = detect_evidence_gap(question=payload.question, retrieved_chunks=[])
-        create_obligation_from_gap(db, fund_id=fund_id, actor_id=actor.actor_id, gap=gap)
+        # Evidence gap detection removed (compliance domain out of scope)
         return AIAnswerResponse(answer=ans_text, citations=[])
 
     chunk_rows = (
@@ -399,8 +394,7 @@ def answer(
             after={"reason": "chunks_not_found_in_db"},
         )
         db.commit()
-        gap = detect_evidence_gap(question=payload.question, retrieved_chunks=[])
-        create_obligation_from_gap(db, fund_id=fund_id, actor_id=actor.actor_id, gap=gap)
+        # Evidence gap detection removed (compliance domain out of scope)
         return AIAnswerResponse(answer=ans_text, citations=[])
 
     runtime_context = build_agent_runtime_context(
@@ -469,8 +463,7 @@ def answer(
             after={"reason": "model_returned_no_citations"},
         )
         db.commit()
-        gap = detect_evidence_gap(question=payload.question, retrieved_chunks=evidence_items)
-        create_obligation_from_gap(db, fund_id=fund_id, actor_id=actor.actor_id, gap=gap)
+        # Evidence gap detection removed (compliance domain out of scope)
         return AIAnswerResponse(answer="Insufficient evidence in the Data Room", citations=[])
 
     cited_ids: list[str] = []
@@ -491,8 +484,7 @@ def answer(
             after={"reason": "citations_not_in_retrieved_set"},
         )
         db.commit()
-        gap = detect_evidence_gap(question=payload.question, retrieved_chunks=evidence_items)
-        create_obligation_from_gap(db, fund_id=fund_id, actor_id=actor.actor_id, gap=gap)
+        # Evidence gap detection removed (compliance domain out of scope)
         return AIAnswerResponse(answer="Insufficient evidence in the Data Room", citations=[])
 
     a_row = AIAnswer(

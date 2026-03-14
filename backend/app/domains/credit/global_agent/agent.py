@@ -21,8 +21,8 @@ from sqlalchemy.orm import Session
 
 from ai_engine.prompts import prompt_registry
 from app.domains.credit.ai.services.agent_context import AgentUIContext, build_agent_runtime_context
-from app.domains.credit.compliance.agent.citation_formatter import format_citations
-from app.domains.credit.compliance.agent.evidence_quality import (
+from ai_engine.validation.citation_formatter import format_citations
+from ai_engine.validation.evidence_quality import (
     compute_confidence,
     cross_validate_answer,
     recency_analysis,
@@ -260,7 +260,7 @@ class NetzGlobalAgent:
         self, question: str, domain: str, top: int,
     ) -> list[Any]:
         """Retrieve from dedicated compliance indexes via AzureComplianceKBAdapter."""
-        from app.domains.credit.compliance.kb.azure_kb_adapter import (
+        from ai_engine.extraction.azure_kb_adapter import (
             AzureComplianceKBAdapter,
         )
 
@@ -319,7 +319,7 @@ class NetzGlobalAgent:
         """Load deal_context.json from blob and wrap as a synthetic
         ComplianceChunk. Returns None if unavailable.
         """
-        from app.domains.credit.compliance.ingest.compliance_kb_schema import (
+        from ai_engine.extraction.kb_schema import (
             ComplianceChunk,
         )
         from app.services.blob_storage import blob_uri, download_bytes

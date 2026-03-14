@@ -13,7 +13,7 @@ from ai_engine.validation.validation_schema import (
     MetricResult,
     MetricStatus,
 )
-from app.domains.credit.compliance.agent.evidence_quality import (
+from ai_engine.validation.evidence_quality import (
     cross_validate_answer,
     recency_analysis,
 )

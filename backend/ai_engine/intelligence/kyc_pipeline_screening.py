@@ -231,7 +231,7 @@ def run_kyc_screenings(
             },
         }
 
-    from app.domains.credit.compliance.kyc.client import KYCSpiderClient
+    from ai_engine.intelligence.kyc_client import KYCSpiderClient
 
     client = KYCSpiderClient(
         base_url=settings.KYC_SPIDER_BASE_URL
@@ -538,7 +538,7 @@ def persist_kyc_screenings_to_db(
 
     Returns count of screenings persisted.
     """
-    from app.domains.credit.compliance.kyc import models as kyc_models
+    from ai_engine.intelligence import kyc_models
 
     count = 0
     all_entries = kyc_results.get("persons", []) + kyc_results.get("organisations", [])

@@ -12,10 +12,10 @@ from decimal import Decimal
 from sqlalchemy import Boolean, Date, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db.base import Base
+from app.core.db.base import AuditMetaMixin, Base
 
 
-class MacroData(Base):
+class MacroData(Base, AuditMetaMixin):
     __tablename__ = "macro_data"
 
     series_id: Mapped[str] = mapped_column(String(30), primary_key=True)
