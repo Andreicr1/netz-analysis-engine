@@ -1,7 +1,7 @@
 ---
 title: "refactor: Credit Deep Review Modularization — Wave 2"
 type: refactor
-status: active
+status: completed
 date: 2026-03-15
 origin: docs/brainstorms/2026-03-15-credit-vertical-modular-alignment-brainstorm.md
 deepened: 2026-03-15
@@ -661,13 +661,13 @@ Pure structural refactor. No schema changes, no new tables, no data flow changes
 - Phase 0b: Golden test snapshots captured ✅ (12 tests, commit 6b478b7)
 - Phase 0c: Policy compliance circular import fixed ✅ (commit 6b478b7)
 
-### Current Progress (as of session break)
+### Final Status
 
-- **Branch:** `refactor/credit-deep-review-wave2` (1 commit ahead of main)
-- **Staging directory:** `backend/vertical_engines/credit/deep_review_pkg/` contains 9 of 11 modules (all except service.py and __init__.py)
-- **Next step:** Phase 1b — create service.py from remaining deep_review.py (~2500 LOC transformation)
-- **After that:** Phase 1c — rename deep_review_pkg → deep_review, update all internal imports
-- **Final:** Phase 1d — external callers, import-linter contract, validation
+- **Branch:** `refactor/credit-deep-review-wave2` (5 commits ahead of main)
+- **Phase 1 COMPLETE:** All 4 sub-phases committed (1a → 1b → 1c → 1d)
+- **Package:** `backend/vertical_engines/credit/deep_review/` — 11 modules, 6-tier DAG
+- **Validation:** 336 tests pass, 5/5 import-linter contracts, zero old import paths
+- **Phase 2 (prompt relocation):** Deferred to follow-up PR as planned
 
 ## Per-PR Checklist
 
@@ -677,7 +677,7 @@ Phase 0 (before branching) — COMMITTED (6b478b7):
 [x] Golden test snapshots captured for confidence, decision, hard policy (12 tests)
 [x] Policy compliance _call_openai circular import fixed (policy.py → helpers.py)
 
-Phase 1a — Module creation (IN PROGRESS, in deep_review_pkg/ staging dir):
+Phase 1a — Module creation — COMMITTED (d74d85a):
 [x] models.py — _LLM_CONCURRENCY + STAGE_CRITICALITY, zero sibling imports (leaf)
 [x] helpers.py — structlog, __all__, zero behavioral changes (from agent)
 [x] corpus.py — structlog, __all__, zero behavioral changes (from agent)
@@ -688,36 +688,36 @@ Phase 1a — Module creation (IN PROGRESS, in deep_review_pkg/ staging dir):
 [x] persist.py — _index_chapter_citations + _build_tone_artifacts extracted
 [x] portfolio.py — ORM scalars extracted before threading, error messages sanitized
 
-Phase 1b — service.py creation (TODO):
-[ ] Create service.py from remaining deep_review.py (~2500 LOC)
+Phase 1b — service.py creation — COMMITTED (c34aefe):
+[x] Create service.py from remaining deep_review.py (~2783 LOC)
     - Remove extracted functions (portfolio, persist helpers, _LLM_CONCURRENCY)
-    - Update imports to point to new package modules (deep_review_pkg.*)
-    - stdlib logging → structlog
+    - Update imports to point to new package modules
+    - stdlib logging → structlog with dot-separated event names
     - db.add() loop → db.add_all() (2 occurrences: sync + async)
     - Add NEVER_RAISES_CONTRACT_VIOLATION log prefix to outer catches
     - Keep ALL function-level imports as-is
     - Add __all__ with 4 public functions
 
-Phase 1c — Package assembly (TODO):
-[ ] Rename deep_review_pkg/ → deep_review/ (requires removing deep_review.py first)
+Phase 1c — Package assembly — COMMITTED (72ce6cb):
+[x] Rename deep_review_pkg/ → deep_review/ (Git tracked renames)
     - Copy deep_review_pkg/* to deep_review/
     - git rm deep_review.py and all 5 flat deep_review_*.py files
     - git rm deep_review_pkg/ staging directory
-[ ] Create __init__.py with PEP 562 lazy imports matching edgar/memo pattern
-[ ] Update ALL internal imports in package modules:
+[x] Create __init__.py with PEP 562 lazy imports matching edgar/memo pattern
+[x] Update ALL internal imports in package modules:
     - deep_review_helpers → deep_review.helpers
     - deep_review_corpus → deep_review.corpus
     - deep_review_prompts → deep_review.prompts
     - deep_review_policy → deep_review.policy (+ decision)
 
-Phase 1d — External callers + validation (TODO):
-[ ] Update eval_metrics.py import path (only external caller that changes)
-[ ] Update test_vertical_engines.py::EXPECTED_MODULES
-[ ] Add import-linter layers contract to pyproject.toml
-[ ] Golden tests updated to import from new package paths
-[ ] Deletion audit — grep confirms zero remaining old import paths
-[ ] python -c "import vertical_engines.credit.deep_review" succeeds
-[ ] make check passes — lint + typecheck + test + architecture (5/5 contracts)
+Phase 1d — External callers + validation — COMMITTED (0fc2de0):
+[x] Update eval_metrics.py import path (only external caller that changes)
+[x] Update test_vertical_engines.py::EXPECTED_MODULES
+[x] Add import-linter layers contract to pyproject.toml (6-tier: service → portfolio → persist → domain → helpers → models)
+[x] Golden tests updated to import from new package paths
+[x] Deletion audit — grep confirms zero remaining old import paths
+[x] python -c "import vertical_engines.credit.deep_review" succeeds
+[x] 336 tests pass — lint + architecture (5/5 contracts) + test
 ```
 
 ## Sources & References
