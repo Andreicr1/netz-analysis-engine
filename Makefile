@@ -1,7 +1,7 @@
-.PHONY: check test lint typecheck serve migrate migration help pipeline
+.PHONY: check test lint typecheck architecture serve migrate migration help pipeline
 
 # ── Unified gate ──────────────────────────────────────────
-check: lint typecheck test
+check: lint architecture typecheck test
 	@echo "All checks passed."
 
 # ── Python backend ────────────────────────────────────────
@@ -13,6 +13,9 @@ typecheck:
 
 test:
 	cd backend && python -m pytest tests/ $(ARGS)
+
+architecture:
+	cd backend && lint-imports --config ../pyproject.toml
 
 # ── Serve (dev) ───────────────────────────────────────────
 serve:
@@ -34,10 +37,11 @@ down:
 
 # ── Help ──────────────────────────────────────────────────
 help:
-	@echo "make check       - Full gate: lint + typecheck + test"
+	@echo "make check       - Full gate: lint + architecture + typecheck + test"
 	@echo "make test        - pytest (ARGS for extra flags)"
 	@echo "make lint        - ruff check"
 	@echo "make typecheck   - mypy"
+	@echo "make architecture - import-linter DAG enforcement"
 	@echo "make serve       - uvicorn dev server on :8000"
 	@echo "make migrate     - alembic upgrade head"
 	@echo "make migration   - generate new migration (MSG=description)"

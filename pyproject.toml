@@ -31,6 +31,7 @@ dev = [
     "httpx>=0.28",
     "ruff>=0.9",
     "mypy>=1.14",
+    "import-linter>=2.1",
 ]
 ai = [
     "openai>=1.60",
@@ -102,3 +103,31 @@ warn_unused_configs = true
 [[tool.mypy.overrides]]
 module = ["redis.*", "sse_starlette.*", "edgar.*", "rapidfuzz.*"]
 ignore_missing_imports = true
+
+# ── Import architecture enforcement (import-linter) ──────────────────
+[tool.importlinter]
+root_packages = ["vertical_engines", "quant_engine", "app"]
+
+[[tool.importlinter.contracts]]
+name = "Verticals must not import each other"
+type = "independence"
+modules = [
+    "vertical_engines.credit",
+    "vertical_engines.wealth",
+]
+
+# Forward-looking: currently matches edgar/ only. Covers all engine packages
+# as Wave 1 PRs convert flat files to edgar-style subdirectories.
+[[tool.importlinter.contracts]]
+name = "Engine domain modules must not import service"
+type = "forbidden"
+source_modules = ["vertical_engines.credit.*.models"]
+forbidden_modules = ["vertical_engines.credit.*.service"]
+
+# Phase A ratchet (bdabdc8): regime + cvar are vertical-agnostic.
+# Other quant services still depend on app.domains.wealth — subsequent phases.
+[[tool.importlinter.contracts]]
+name = "Vertical-agnostic quant services must not import wealth domain models"
+type = "forbidden"
+source_modules = ["quant_engine.regime_service", "quant_engine.cvar_service"]
+forbidden_modules = ["app.domains.wealth"]
