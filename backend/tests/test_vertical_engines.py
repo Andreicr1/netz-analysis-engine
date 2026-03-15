@@ -47,7 +47,7 @@ class TestCreditModuleStructure:
         "vertical_engines.credit.pipeline_engine",
         "vertical_engines.credit.pipeline_intelligence",
         "vertical_engines.credit.portfolio_intelligence",
-        "vertical_engines.credit.retrieval_governance",
+        "vertical_engines.credit.retrieval",
         "vertical_engines.credit.tone_normalizer",
         "vertical_engines.credit.underwriting_artifact",
         "vertical_engines.credit.deep_review_corpus",
