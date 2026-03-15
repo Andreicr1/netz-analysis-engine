@@ -64,6 +64,9 @@ def generate_weekly_report(
     current_regions = current_snapshot.get("regions", {})
 
     score_deltas: list[ScoreDelta] = []
+    # TODO: Detect regime transitions between snapshots (requires storing
+    # per-region regime in snapshot data — Phase 3 when regime hierarchy
+    # is integrated into the macro_ingestion worker pipeline).
     regime_transitions: dict[str, tuple[str, str]] = {}
     staleness_alerts: list[str] = []
     gi_deltas: dict[str, float] = {}

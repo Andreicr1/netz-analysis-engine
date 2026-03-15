@@ -264,7 +264,7 @@ async def generate_review(
         as_of_date=current.as_of_date,
         snapshot_id=current.id,
         report_json=build_report_json(report),
-        created_by=user.actor_id if hasattr(user, "actor_id") else str(user),
+        created_by=user.actor_id,
     )
     db.add(review)
     await db.flush()
@@ -285,8 +285,12 @@ async def approve_review(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> MacroReviewRead:
-    """Approve a pending macro review. Optionally creates tactical positions."""
-    stmt = select(MacroReview).where(MacroReview.id == review_id)
+    """Approve a pending macro review."""
+    stmt = (
+        select(MacroReview)
+        .where(MacroReview.id == review_id)
+        .with_for_update()
+    )
     result = await db.execute(stmt)
     review = result.scalar_one_or_none()
 
@@ -302,12 +306,9 @@ async def approve_review(
         )
 
     review.status = "approved"
-    review.approved_by = user.actor_id if hasattr(user, "actor_id") else str(user)
+    review.approved_by = user.actor_id
     review.approved_at = datetime.now(timezone.utc)
     review.decision_rationale = body.decision_rationale
-
-    # Tactical positions created via separate allocation endpoint (Phase 2+)
-    # The atomic close/insert pattern lives in the allocation service.
 
     await db.flush()
     return MacroReviewRead.model_validate(review)
@@ -327,7 +328,11 @@ async def reject_review(
     user: CurrentUser = Depends(get_current_user),
 ) -> MacroReviewRead:
     """Reject a pending macro review with rationale."""
-    stmt = select(MacroReview).where(MacroReview.id == review_id)
+    stmt = (
+        select(MacroReview)
+        .where(MacroReview.id == review_id)
+        .with_for_update()
+    )
     result = await db.execute(stmt)
     review = result.scalar_one_or_none()
 
@@ -343,6 +348,7 @@ async def reject_review(
         )
 
     review.status = "rejected"
+    review.approved_by = user.actor_id  # Record who rejected for audit trail
     review.decision_rationale = body.decision_rationale
 
     await db.flush()

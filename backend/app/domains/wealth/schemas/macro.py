@@ -123,21 +123,10 @@ class MacroReviewRead(BaseModel):
     created_by: str | None = None
 
 
-class TacticalPositionInput(BaseModel):
-    """Tactical position to create on approval."""
-
-    profile: str
-    block_id: str
-    overweight: float = Field(ge=-0.20, le=0.20)
-    conviction_score: float | None = Field(default=None, ge=0, le=100)
-    rationale: str | None = None
-
-
 class MacroReviewApprove(BaseModel):
     """PATCH body for approving a macro review."""
 
     decision_rationale: str = Field(max_length=2000)
-    tactical_positions: list[TacticalPositionInput] | None = None
 
 
 class MacroReviewReject(BaseModel):

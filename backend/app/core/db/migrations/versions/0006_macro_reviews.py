@@ -89,7 +89,7 @@ def upgrade() -> None:
             WHERE tp2.organization_id = tp1.organization_id
               AND tp2.profile = tp1.profile AND tp2.block_id = tp1.block_id
               AND tp2.valid_to IS NULL
-            ORDER BY tp2.created_at DESC LIMIT 1)
+            ORDER BY tp2.created_at DESC, tp2.position_id DESC LIMIT 1)
     """)
 
     op.create_index(

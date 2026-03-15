@@ -6,7 +6,6 @@ from quant_engine.regime_service import (
     RegionalRegimeResult,
     classify_regional_regime,
     compose_global_regime,
-    get_hysteresis_days,
     resolve_regional_regime_config,
 )
 
@@ -140,18 +139,3 @@ class TestComposeGlobalRegime:
         assert regime == "RISK_ON"
 
 
-class TestHysteresisDays:
-    def test_immediate_crisis(self):
-        assert get_hysteresis_days("RISK_ON", "CRISIS") == 0
-
-    def test_slow_recovery(self):
-        assert get_hysteresis_days("CRISIS", "RISK_ON") == 10
-
-    def test_risk_off_to_risk_on(self):
-        assert get_hysteresis_days("RISK_OFF", "RISK_ON") == 5
-
-    def test_any_to_risk_off(self):
-        assert get_hysteresis_days("RISK_ON", "RISK_OFF") == 3
-
-    def test_any_to_inflation(self):
-        assert get_hysteresis_days("RISK_ON", "INFLATION") == 5
