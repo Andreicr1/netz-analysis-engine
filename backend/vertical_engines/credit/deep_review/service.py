@@ -1,43 +1,23 @@
-"""AI Deep Review Service — Tier-1 Institutional Memorandum OS.
+"""Deep Review V4 — IC-Grade Investment Memorandum Pipeline.
 
-V4 Pipeline (13-Chapter Memo Book):
-  1. RAG context extraction (sectional budgeting + evidence map)
-  2. Structured deal analysis (extraction prompt)
-  2.5. Macro context injection (FRED Market Data Engine — deterministic)
-  3. Quant engine injection (ic_quant_engine — deterministic)
-  4. Concentration engine injection (concentration_engine — deterministic)
-  5. Policy compliance search (fund-level policy RAG)
-  6. Decision Anchor computation (deterministic gate)
-  7. 13-chapter IM generation (chapter-by-chapter with curated evidence surfaces)
-  8. Critic loop (critic/ — adversarial, rewrite if fatal flaws)
-  9. Atomic versioned persist (no delete of old drafts, chart-ready metadata)
+Main orchestrator: sync + async single-deal pipelines and batch runners.
+This is the service layer (top of the deep_review DAG). It imports from
+all sibling modules in the package and from external engine packages.
 
-Also provides:
-  • Portfolio periodic reviews (``run_portfolio_review``)
-  • Current IM draft retrieval (``get_current_im_draft``)
-
-Safety invariants:
-  • Validate-before-persist (no delete-first pattern)
-  • Sectional token budgeting (40/30/30 split)
-  • Evidence map tracking per context chunk
-  • Atomic transaction control (no manual commit/rollback inside functions)
-  • Fail-safe JSON validation with structured logging
-  • Batch runner session isolation
-
-Note: V3 (9-stage pipeline) was deprecated and removed.  All entry points
-now use the V4 13-chapter architecture exclusively.
+NOTE: Sibling engine imports are function-level (not module-scope) by design.
+This keeps import time O(1) and prevents circular dependencies.
 """
 
 from __future__ import annotations
 
 import asyncio
 import datetime as dt
-import logging
 import os
 import uuid
 from collections.abc import Awaitable
 from typing import Any
 
+import structlog
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
 
@@ -45,267 +25,47 @@ from ai_engine.governance.token_budget import TokenBudgetTracker
 
 # Cost Governance — multi-model routing + token budget
 from ai_engine.model_config import get_model  # single source of truth for model routing
-from ai_engine.prompts import prompt_registry
 from app.domains.credit.modules.ai.models import (
-    ActiveInvestment,
     DealICBrief,
     DealIntelligenceProfile,
     DealRiskFlag,
-    InvestmentMemorandumDraft,
-    PeriodicReviewReport,
 )
 from app.domains.credit.modules.deals.models import PipelineDeal as Deal  # pipeline domain
-from vertical_engines.credit.deep_review_corpus import (
+from vertical_engines.credit.deep_review.corpus import (
     _gather_deal_texts,
-    _gather_investment_texts,
     _load_deal_context_from_blob,
 )
-
-# ---------------------------------------------------------------------------
-# Import from split modules
-# ---------------------------------------------------------------------------
-from vertical_engines.credit.deep_review_helpers import (
-    _MODEL,
+from vertical_engines.credit.deep_review.decision import (
+    _compute_confidence_score,
+    _compute_decision_anchor,
+)
+from vertical_engines.credit.deep_review.helpers import (
     _async_call_openai,
     _call_openai,
     _now_utc,
     _title_case_strategy,
     _trunc,
 )
-from vertical_engines.credit.deep_review_policy import (
-    _compute_confidence_score,
-    _compute_decision_anchor,
+from vertical_engines.credit.deep_review.models import _LLM_CONCURRENCY
+from vertical_engines.credit.deep_review.persist import (
+    _build_tone_artifacts,
+    _index_chapter_citations,
+)
+from vertical_engines.credit.deep_review.policy import (
     _gather_policy_context,
     _run_hard_policy_checks,
     _run_policy_compliance,
 )
-from vertical_engines.credit.deep_review_prompts import (
+from vertical_engines.credit.deep_review.prompts import (
     _build_deal_review_prompt_v2,
     _pre_classify_from_corpus,
 )
 
-logger = logging.getLogger(__name__)
+# NOTE: Sibling engine imports are function-level (not module-scope) by design.
+# This keeps import time O(1) and prevents circular dependencies with the
+# ~40 engine packages that service.py orchestrates.
 
-_LLM_CONCURRENCY = max(1, int(os.getenv("NETZ_LLM_CONCURRENCY", "5")))
-
-
-# ---------------------------------------------------------------------------
-# Eval artifact helpers
-# ---------------------------------------------------------------------------
-def _index_chapter_citations(
-    chapters: list[dict[str, Any]],
-    citations: list[dict[str, Any]],
-) -> dict[str, list[dict[str, Any]]]:
-    """Group flat memo citations by chapter tag for eval consumers."""
-    by_number: dict[int, str] = {}
-    for ch in chapters:
-        chapter_number = ch.get("chapter_number")
-        chapter_tag = ch.get("chapter_tag")
-        if chapter_number is None or not chapter_tag:
-            continue
-        try:
-            by_number[int(chapter_number)] = str(chapter_tag)
-        except (TypeError, ValueError):
-            continue
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    for raw in citations or []:
-        citation = dict(raw or {})
-        chapter_tag = str(citation.get("chapter_tag") or "").strip()
-        if not chapter_tag:
-            chapter_number = citation.get("chapter_number")
-            if isinstance(chapter_number, int):
-                chapter_tag = by_number.get(chapter_number, "")
-        if not chapter_tag:
-            continue
-        citation["chapter_tag"] = chapter_tag
-        grouped.setdefault(chapter_tag, []).append(citation)
-    return grouped
-
-
-def _build_tone_artifacts(
-    *,
-    pre_tone_chapters: dict[str, str],
-    post_tone_chapters: dict[str, str],
-    tone_review_log: list[Any],
-    tone_pass1_changes: dict[str, Any],
-    tone_pass2_changes: list[Any],
-    signal_original: str,
-    signal_final: str,
-) -> dict[str, Any]:
-    """Persist only changed chapter snapshots to keep the audit payload compact."""
-    changed_chapters = sorted(
-        chapter_tag
-        for chapter_tag in set(pre_tone_chapters) | set(post_tone_chapters)
-        if (pre_tone_chapters.get(chapter_tag) or "") != (post_tone_chapters.get(chapter_tag) or "")
-    )
-    return {
-        "signal_original": signal_original,
-        "signal_final": signal_final,
-        "changed_chapters": changed_chapters,
-        "pre_tone_snapshots": {
-            chapter_tag: pre_tone_chapters.get(chapter_tag, "")
-            for chapter_tag in changed_chapters
-        },
-        "post_tone_snapshots": {
-            chapter_tag: post_tone_chapters.get(chapter_tag, "")
-            for chapter_tag in changed_chapters
-        },
-        "pass1_changes": tone_pass1_changes,
-        "pass2_changes": tone_pass2_changes,
-        "review_log": tone_review_log,
-    }
-
-
-# ---------------------------------------------------------------------------
-# Public API: Current IM Draft query
-# ---------------------------------------------------------------------------
-def get_current_im_draft(
-    db: Session,
-    *,
-    fund_id: uuid.UUID,
-    deal_id: uuid.UUID,
-) -> InvestmentMemorandumDraft | None:
-    """Return the current (is_current=True) IM draft for a deal.
-
-    Fallback: if no draft has is_current=True (legacy data), return the
-    latest by generated_at.  Returns None if no drafts exist.
-    """
-    # Primary: explicit current pointer
-    current = db.execute(
-        select(InvestmentMemorandumDraft).where(
-            InvestmentMemorandumDraft.fund_id == fund_id,
-            InvestmentMemorandumDraft.deal_id == deal_id,
-            InvestmentMemorandumDraft.is_current == True,  # noqa: E712
-        ),
-    ).scalar_one_or_none()
-
-    if current is not None:
-        return current
-
-    # Fallback: latest generated_at (for pre-migration rows)
-    return db.execute(
-        select(InvestmentMemorandumDraft)
-        .where(
-            InvestmentMemorandumDraft.fund_id == fund_id,
-            InvestmentMemorandumDraft.deal_id == deal_id,
-        )
-        .order_by(InvestmentMemorandumDraft.generated_at.desc())
-        .limit(1),
-    ).scalar_one_or_none()
-
-
-# ---------------------------------------------------------------------------
-# Public API: Portfolio periodic review
-# ---------------------------------------------------------------------------
-def run_portfolio_review(
-    db: Session,
-    *,
-    fund_id: uuid.UUID,
-    investment_id: uuid.UUID,
-    actor_id: str = "ai-engine",
-) -> dict[str, Any]:
-    """Run a periodic AI review of an active investment."""
-    now = _now_utc()
-    investment = db.execute(
-        select(ActiveInvestment).where(
-            ActiveInvestment.id == investment_id,
-            ActiveInvestment.fund_id == fund_id,
-        ),
-    ).scalar_one_or_none()
-    if investment is None:
-        return {"error": "Investment not found"}
-
-    corpus = _gather_investment_texts(db, fund_id=fund_id, investment=investment)
-    if not corpus.strip():
-        return {"error": "No readable documents found for this investment"}
-
-    system_prompt = prompt_registry.render("intelligence/portfolio_review.j2")
-    review = _call_openai(system_prompt, corpus)
-
-    report = PeriodicReviewReport(
-        fund_id=fund_id,
-        investment_id=investment_id,
-        review_type="PERIODIC",
-        overall_rating=review.get("overallRating", "AMBER"),
-        executive_summary=review.get("executiveSummary", "Review pending."),
-        performance_assessment=review.get("performanceAssessment", ""),
-        covenant_compliance=review.get("covenantCompliance", ""),
-        material_changes=review.get("materialChanges", []),
-        risk_evolution=review.get("riskEvolution", ""),
-        liquidity_assessment=review.get("liquidityAssessment", ""),
-        valuation_view=review.get("valuationView", ""),
-        recommended_actions=review.get("recommendedActions", []),
-        reviewed_at=now,
-        model_version=_MODEL,
-        created_by=actor_id,
-        updated_by=actor_id,
-    )
-    with db.begin_nested():
-        db.add(report)
-
-    # No db.commit() — caller manages transaction boundary.
-
-    return {
-        "investmentId": str(investment_id),
-        "investmentName": investment.investment_name,
-        "overallRating": report.overall_rating,
-        "asOf": now.isoformat(),
-    }
-
-
-# ---------------------------------------------------------------------------
-# Public API: Batch periodic review for all active investments
-# ---------------------------------------------------------------------------
-def run_all_portfolio_reviews(
-    db: Session,
-    *,
-    fund_id: uuid.UUID,
-    actor_id: str = "ai-engine",
-) -> dict[str, Any]:
-    """Run periodic review for every active investment.
-
-    Pre-V3 Hardening (Task 9): Each investment gets its own DB session.
-    """
-
-    investments = list(
-        db.execute(select(ActiveInvestment).where(ActiveInvestment.fund_id == fund_id))
-        .scalars()
-        .all(),
-    )
-
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
-    SessionLocal = async_session_factory
-    results = []
-
-    def _review_investment(inv):
-        try:
-            with SessionLocal() as session:
-                result = run_portfolio_review(
-                    session,
-                    fund_id=fund_id,
-                    investment_id=inv.id,
-                    actor_id=actor_id,
-                )
-                if "error" not in result:
-                    session.commit()
-                return result
-        except Exception as exc:
-            logger.warning("Portfolio review failed for %s: %s", inv.id, exc)
-            return {"investmentId": str(inv.id), "error": str(exc)}
-
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        futures = {executor.submit(_review_investment, inv): inv for inv in investments}
-        for future in as_completed(futures):
-            results.append(future.result())
-
-    return {
-        "asOf": _now_utc().isoformat(),
-        "totalInvestments": len(investments),
-        "reviewed": len([r for r in results if "error" not in r]),
-        "errors": len([r for r in results if "error" in r]),
-        "results": results,
-    }
+logger = structlog.get_logger()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -383,13 +143,13 @@ def run_deal_deep_review_v4(
     max_tokens_escalation = 16000 if full_mode else 12000
 
     if full_mode:
-        logger.info("V4_FULL_MODE_ENABLED deal_id=%s", deal_id)
+        logger.info("deep_review.v4.full_mode_enabled", deal_id=str(deal_id))
 
     # ── Stage 1: Cache check ─────────────────────────────────────
     if not force and artifact_exists_v4(db, deal_id=deal_id):
         cached = load_cached_artifact_v4(db, deal_id=deal_id, fund_id=fund_id)
         if cached and cached.get("chaptersCompleted", 0) >= 13:
-            logger.info("V4_CACHE_HIT deal_id=%s — returning cached result", deal_id)
+            logger.info("deep_review.v4.cache_hit", deal_id=str(deal_id))
             return cached
 
     # ── Stage 1b: Deal lookup ────────────────────────────────────
@@ -412,7 +172,7 @@ def run_deal_deep_review_v4(
     deal_context_blob = _load_deal_context_from_blob(deal, deal_fields)
 
     version_tag = f"v4-{now.strftime('%Y%m%dT%H%M%S')}"
-    logger.info("V4_START deal_id=%s version=%s", deal_id, version_tag)
+    logger.info("deep_review.v4.start", deal_id=str(deal_id), version=version_tag)
 
     # ── Stage 2: IC-Grade retrieval (per-chapter specialized) ──────
     context = _gather_deal_texts(db, fund_id=fund_id, deal=deal)
@@ -438,7 +198,7 @@ def run_deal_deep_review_v4(
         deal_role_map=deal_fields.get("deal_role_map"),
         third_party_counterparties=deal_fields.get("third_party_counterparties"),
     )
-    logger.info("V4_PRE_CLASSIFIED deal_id=%s type=%s", deal_id, pre_instrument_type)
+    logger.info("deep_review.v4.pre_classified", deal_id=str(deal_id), type=pre_instrument_type)
     analysis = _call_openai(
         deal_review_prompt,
         corpus,
@@ -485,9 +245,9 @@ def run_deal_deep_review_v4(
             )
         except Exception as _mb_exc:
             logger.warning(
-                "V4_MARKET_BENCHMARKS_WARN chapter=%s error=%s",
-                chapter,
-                _mb_exc,
+                "deep_review.v4.market_benchmarks.warn",
+                chapter=chapter,
+                error=str(_mb_exc),
             )
             return []
 
@@ -496,9 +256,9 @@ def run_deal_deep_review_v4(
         for _chunks in _mb_pool.map(_fetch_benchmarks, _mb_chapters):
             _market_benchmarks.extend(_chunks)
     logger.info(
-        "V4_MARKET_BENCHMARKS_RETRIEVED deal_id=%s total_chunks=%d",
-        deal_id,
-        len(_market_benchmarks),
+        "deep_review.v4.market_benchmarks.retrieved",
+        deal_id=str(deal_id),
+        total_chunks=len(_market_benchmarks),
     )
 
     # ── Stage 4.5: Instrument classification (deterministic) ────
@@ -506,13 +266,13 @@ def run_deal_deep_review_v4(
 
     instrument_type = classify_instrument_type(analysis)
     logger.info(
-        "V4_INSTRUMENT_CLASSIFIED deal_id=%s type=%s",
-        deal_id,
-        instrument_type,
+        "deep_review.v4.instrument_classified",
+        deal_id=str(deal_id),
+        type=instrument_type,
     )
 
     # ── Stage 4.7: EDGAR public filing data (multi-entity) ──────
-    logger.info("V4_STAGE_4_7_EDGAR_START", extra={"deal_id": str(deal_id)})
+    logger.info("deep_review.v4.edgar.start", deal_id=str(deal_id))
     edgar_context: str = ""
     # Extract targetVehicle from analysis for smart attribution
     _target_vehicle = ""
@@ -548,19 +308,17 @@ def run_deal_deep_review_v4(
             target_vehicle=_target_vehicle,
         )
         logger.info(
-            "V4_STAGE_4_7_EDGAR_COMPLETE",
-            extra={
-                "deal_id": str(deal_id),
-                "entities_tried": edgar_multi["entities_tried"],
-                "entities_found": edgar_multi["entities_found"],
-                "unique_ciks": edgar_multi["unique_ciks"],
-                "context_chars": len(edgar_context),
-            },
+            "deep_review.v4.edgar.complete",
+            deal_id=str(deal_id),
+            entities_tried=edgar_multi["entities_tried"],
+            entities_found=edgar_multi["entities_found"],
+            unique_ciks=edgar_multi["unique_ciks"],
+            context_chars=len(edgar_context),
         )
     except Exception as exc:
         logger.warning(
-            "V4_STAGE_4_7_EDGAR_FAILED",
-            extra={"deal_id": str(deal_id), "error": str(exc)},
+            "NEVER_RAISES_CONTRACT_VIOLATION.deep_review.edgar",
+            error=str(exc),
             exc_info=True,
         )
         # Non-fatal: pipeline continues without EDGAR context
@@ -655,14 +413,10 @@ def run_deal_deep_review_v4(
                 ch04_parts.append(f"{header}\n{content}")
         sponsor_evidence_text = "\n\n".join(ch04_parts) if ch04_parts else None
         logger.info(
-            "V4_SPONSOR_EVIDENCE_BUILT",
-            extra={
-                "ch04_chunks": len(ch04_chunks),
-                "index_key_persons": len(index_key_persons),
-                "sponsor_evidence_chars": len(sponsor_evidence_text)
-                if sponsor_evidence_text
-                else 0,
-            },
+            "deep_review.v4.sponsor.evidence_built",
+            ch04_chunks=len(ch04_chunks),
+            index_key_persons=len(index_key_persons),
+            sponsor_evidence_chars=len(sponsor_evidence_text) if sponsor_evidence_text else 0,
         )
 
     sponsor_output = analyze_sponsor(
@@ -709,23 +463,23 @@ def run_deal_deep_review_v4(
                 )
             except Exception as _kyc_db_exc:
                 logger.warning(
-                    "KYC_PIPELINE_DB_PERSIST_FAILED deal_id=%s error=%s",
-                    deal_id,
-                    _kyc_db_exc,
+                    "deep_review.v4.kyc.db_persist_failed",
+                    deal_id=str(deal_id),
+                    error=str(_kyc_db_exc),
                 )
 
         logger.info(
-            "V4_KYC_SCREENING_COMPLETE deal_id=%s persons=%d orgs=%d matches=%d",
-            deal_id,
-            kyc_results.get("summary", {}).get("total_persons_screened", 0),
-            kyc_results.get("summary", {}).get("total_orgs_screened", 0),
-            kyc_results.get("summary", {}).get("total_matches", 0),
+            "deep_review.v4.kyc.complete",
+            deal_id=str(deal_id),
+            persons=kyc_results.get("summary", {}).get("total_persons_screened", 0),
+            orgs=kyc_results.get("summary", {}).get("total_orgs_screened", 0),
+            matches=kyc_results.get("summary", {}).get("total_matches", 0),
         )
     except Exception as _kyc_exc:
         logger.warning(
-            "V4_KYC_SCREENING_FAILED deal_id=%s error=%s — continuing without KYC appendix",
-            deal_id,
-            _kyc_exc,
+            "NEVER_RAISES_CONTRACT_VIOLATION.deep_review.kyc",
+            error=str(_kyc_exc),
+            exc_info=True,
         )
 
     # ── Stage 10: Build & freeze EvidencePack (≤ 5 000 tokens) ───
@@ -743,7 +497,7 @@ def run_deal_deep_review_v4(
     try:
         validate_evidence_pack(evidence_pack)
     except ValueError as exc:
-        logger.error("V4_EVIDENCE_PACK_INVALID errors=%s", exc)
+        logger.error("deep_review.v4.evidence_pack.invalid", errors=str(exc))
         return {
             "error": "EvidencePack validation failed",
             "dealId": str(deal_id),
@@ -754,16 +508,18 @@ def run_deal_deep_review_v4(
     if edgar_context.strip():
         evidence_pack["edgar_public_filings"] = edgar_context
         logger.info(
-            "V4_EDGAR_INJECTED_INTO_PACK",
-            extra={"deal_id": str(deal_id), "chars": len(edgar_context)},
+            "deep_review.v4.edgar.injected_into_pack",
+            deal_id=str(deal_id),
+            chars=len(edgar_context),
         )
 
     # Inject deal_context (vehicles, investment terms, fund strategy, entity tree)
     if deal_context_blob:
         evidence_pack["deal_context"] = deal_context_blob
         logger.info(
-            "V4_DEAL_CONTEXT_INJECTED_INTO_PACK",
-            extra={"deal_id": str(deal_id), "keys": list(deal_context_blob.keys())},
+            "deep_review.v4.deal_context.injected_into_pack",
+            deal_id=str(deal_id),
+            keys=list(deal_context_blob.keys()),
         )
 
     model_evidence = get_model("evidence_pack")
@@ -778,10 +534,10 @@ def run_deal_deep_review_v4(
     )
     evidence_pack_id = pack_row.id
     logger.info(
-        "V4_EVIDENCE_PACK_FROZEN deal_id=%s pack_id=%s tokens=%d",
-        deal_id,
-        evidence_pack_id,
-        pack_row.token_count,
+        "deep_review.v4.evidence_pack.frozen",
+        deal_id=str(deal_id),
+        pack_id=str(evidence_pack_id),
+        tokens=pack_row.token_count,
     )
 
     # ── Stage 11: IC Critic (adversarial review) ─────────────────
@@ -828,11 +584,11 @@ def run_deal_deep_review_v4(
 
     if _conf < 0.75 or _fatal or _rewrite:
         logger.warning(
-            "V4_CRITIC_ESCALATION deal_id=%s confidence=%.2f fatal_flaws=%d rewrite=%s",
-            deal_id,
-            _conf,
-            len(_fatal),
-            _rewrite,
+            "deep_review.v4.critic.escalation",
+            deal_id=str(deal_id),
+            confidence=_conf,
+            fatal_flaws=len(_fatal),
+            rewrite=_rewrite,
         )
         model_critic_esc = get_model("critic_escalation")
 
@@ -857,11 +613,10 @@ def run_deal_deep_review_v4(
         critic_dict = critic_dict_escalation  # promote escalated as authoritative
         critic_escalated = True
         logger.info(
-            "V4_CRITIC_ESCALATION_COMPLETE deal_id=%s "
-            "default_confidence=%.2f escalated_confidence=%.2f",
-            deal_id,
-            critic_dict_default.get("confidence_score", 0),
-            critic_dict.get("confidence_score", 0),
+            "deep_review.v4.critic.escalation_complete",
+            deal_id=str(deal_id),
+            default_confidence=critic_dict_default.get("confidence_score", 0),
+            escalated_confidence=critic_dict.get("confidence_score", 0),
         )
 
     # Inject critic output into the evidence pack for Chapter 13
@@ -903,11 +658,11 @@ def run_deal_deep_review_v4(
     )
     evidence_pack["decision_anchor"] = decision_anchor
     logger.info(
-        "V4_DECISION_ANCHOR deal_id=%s decision=%s icGate=%s rationale=%s",
-        deal_id,
-        decision_anchor["finalDecision"],
-        decision_anchor["icGate"],
-        decision_anchor["decisionRationale"],
+        "deep_review.v4.decision_anchor",
+        deal_id=str(deal_id),
+        decision=decision_anchor["finalDecision"],
+        ic_gate=decision_anchor["icGate"],
+        rationale=decision_anchor["decisionRationale"],
     )
 
     # ── Stage 12: 13-Chapter Memo Book generation ────────────────
@@ -985,10 +740,10 @@ def run_deal_deep_review_v4(
 
     if critic_post_dict.get("rewrite_required") and chapter_texts:
         logger.warning(
-            "V4_CRITIC_POST_MEMO_REWRITE deal_id=%s fatal_flaws=%d confidence=%.2f",
-            deal_id,
-            len(critic_post_dict.get("fatal_flaws", [])),
-            critic_post_dict.get("confidence_score", 0),
+            "deep_review.v4.critic.post_memo_rewrite",
+            deal_id=str(deal_id),
+            fatal_flaws=len(critic_post_dict.get("fatal_flaws", [])),
+            confidence=critic_post_dict.get("confidence_score", 0),
         )
         affected_tags = set()
         for flaw in critic_post_dict.get("fatal_flaws", []):
@@ -1008,8 +763,9 @@ def run_deal_deep_review_v4(
             affected_tags = {"ch01_exec", "ch13_recommendation"}
 
         logger.info(
-            "V4_CRITIC_REWRITE_CHAPTERS deal_id=%s chapters=%s",
-            deal_id, sorted(affected_tags),
+            "deep_review.v4.critic.rewrite_chapters",
+            deal_id=str(deal_id),
+            chapters=sorted(affected_tags),
         )
 
         critic_addendum = (
@@ -1043,14 +799,15 @@ def run_deal_deep_review_v4(
                     )
                     critic_rewrite_count += 1
             except Exception:
-                logger.exception("V4_CRITIC_REWRITE_FAILED ch=%s deal_id=%s", ch_tag, deal_id)
+                logger.exception("deep_review.v4.critic.rewrite_failed", chapter=ch_tag, deal_id=str(deal_id))
 
         critic_dict = critic_post_dict
         evidence_pack["critic_output"]["post_memo_review"] = critic_post_dict
         evidence_pack["critic_output"]["rewrite_count"] = critic_rewrite_count
         logger.info(
-            "V4_CRITIC_REWRITE_COMPLETE deal_id=%s rewrote=%d chapters",
-            deal_id, critic_rewrite_count,
+            "deep_review.v4.critic.rewrite_complete",
+            deal_id=str(deal_id),
+            rewrote=critic_rewrite_count,
         )
     elif critic_post_dict.get("fatal_flaws"):
         critic_dict = critic_post_dict
@@ -1059,7 +816,7 @@ def run_deal_deep_review_v4(
     # ── Stage 13: Underwriting Reliability Score (deterministic) ──
     # Computed BEFORE Tone Normalizer so narrative adjustments cannot
     # inflate the score.  Uses only structured artifacts.
-    from vertical_engines.credit.deep_review_confidence import (
+    from vertical_engines.credit.deep_review.confidence import (
         apply_tone_normalizer_adjustment,
         compute_underwriting_confidence,
     )
@@ -1122,27 +879,25 @@ def run_deal_deep_review_v4(
     evidence_confidence: float = _legacy_conf["evidence_confidence"]
 
     logger.info(
-        "V4_CONFIDENCE_COMPUTED deal_id=%s uw_score=%d uw_level=%s "
-        "legacy_final=%.3f caps=%s",
-        deal_id,
-        confidence_score,
-        confidence_level,
-        final_confidence,
-        confidence_caps,
+        "deep_review.v4.confidence_computed",
+        deal_id=str(deal_id),
+        uw_score=confidence_score,
+        uw_level=confidence_level,
+        legacy_final=final_confidence,
+        caps=confidence_caps,
     )
 
     token_summary = budget.summary()
     logger.info(
-        "V4_COMPLETE deal_id=%s version=%s chapters=%d confidence=%.2f "
-        "evidence_confidence=%.2f ic_gate=%s fatal_flaws=%d tokens=%s",
-        deal_id,
-        version_tag,
-        len(chapters),
-        final_confidence,
-        evidence_confidence,
-        ic_gate,
-        len(critic_dict.get("fatal_flaws", [])),
-        token_summary,
+        "deep_review.v4.complete",
+        deal_id=str(deal_id),
+        version=version_tag,
+        chapters=len(chapters),
+        confidence=final_confidence,
+        evidence_confidence=evidence_confidence,
+        ic_gate=ic_gate,
+        fatal_flaws=len(critic_dict.get("fatal_flaws", [])),
+        tokens=token_summary,
     )
 
     # ── Stage 4.5: Tone Normalizer ─────────────────────────────────
@@ -1168,10 +923,10 @@ def run_deal_deep_review_v4(
             )
 
             logger.info(
-                "TONE_NORMALIZER_START deal_id=%s chapters=%d signal=%s",
-                deal_id,
-                len(chapter_texts),
-                im_recommendation,
+                "deep_review.v4.tone_normalizer.start",
+                deal_id=str(deal_id),
+                chapters=len(chapter_texts),
+                signal=im_recommendation,
             )
 
             _tone_coro = _run_tone_normalizer(
@@ -1211,20 +966,20 @@ def run_deal_deep_review_v4(
                         post_tone_chapter_texts[_ch_tag] = _revised
                 db.flush()
                 logger.info(
-                    "TONE_NORMALIZER_DB_UPDATED deal_id=%s chapters=%d",
-                    deal_id,
-                    len(tone_result["chapters"]),
+                    "deep_review.v4.tone_normalizer.db_updated",
+                    deal_id=str(deal_id),
+                    chapters=len(tone_result["chapters"]),
                 )
 
             # Signal escalation (may only go harder, never softer)
             if tone_result.get("signal_escalated"):
                 _new_signal = tone_result.get("signal_final", im_recommendation)
                 logger.warning(
-                    "TONE_SIGNAL_ESCALATED deal_id=%s %s → %s | %s",
-                    deal_id,
-                    im_recommendation,
-                    _new_signal,
-                    tone_result.get("escalation_rationale", ""),
+                    "deep_review.v4.tone_normalizer.signal_escalated",
+                    deal_id=str(deal_id),
+                    signal_from=im_recommendation,
+                    signal_to=_new_signal,
+                    rationale=tone_result.get("escalation_rationale", ""),
                 )
                 im_recommendation = _new_signal
 
@@ -1238,13 +993,15 @@ def run_deal_deep_review_v4(
 
         except Exception as _tone_exc:
             logger.warning(
-                "TONE_NORMALIZER_FAILED deal_id=%s error=%s — continuing without normalisation",
-                deal_id,
-                _tone_exc,
+                "NEVER_RAISES_CONTRACT_VIOLATION.deep_review.tone_normalizer",
+                error=str(_tone_exc),
+                exc_info=True,
             )
     else:
         logger.debug(
-            "TONE_NORMALIZER_SKIPPED deal_id=%s reason=no_chapter_texts", deal_id,
+            "deep_review.v4.tone_normalizer.skipped",
+            deal_id=str(deal_id),
+            reason="no_chapter_texts",
         )
 
     # ── Post-tone confidence adjustment (never increases score) ──
@@ -1264,15 +1021,25 @@ def run_deal_deep_review_v4(
     confidence_caps = uw_confidence["caps_applied"]
 
     logger.info(
-        "V4_CONFIDENCE_POST_TONE deal_id=%s uw_score=%d uw_level=%s caps=%s",
-        deal_id,
-        confidence_score,
-        confidence_level,
-        confidence_caps,
+        "deep_review.v4.confidence_post_tone",
+        deal_id=str(deal_id),
+        uw_score=confidence_score,
+        uw_level=confidence_level,
+        caps=confidence_caps,
     )
 
     # ── Stage 13b: Persist final metadata into evidence pack row ──
     from app.domains.credit.modules.ai.models import MemoEvidencePack
+
+    _tone_artifacts = _build_tone_artifacts(
+        pre_tone_chapters=pre_tone_chapter_texts,
+        post_tone_chapters=post_tone_chapter_texts,
+        tone_review_log=tone_review_log,
+        tone_pass1_changes=tone_pass1_changes,
+        tone_pass2_changes=tone_pass2_changes,
+        signal_original=_tone_signal_original,
+        signal_final=_tone_signal_final,
+    )
 
     db.execute(
         update(MemoEvidencePack)
@@ -1322,15 +1089,7 @@ def run_deal_deep_review_v4(
                 ),
                 "appendix_kyc_checks": kyc_appendix_text,
                 "kyc_screening_summary": kyc_results.get("summary", {}),
-                "tone_artifacts": _build_tone_artifacts(
-                    pre_tone_chapters=pre_tone_chapter_texts,
-                    post_tone_chapters=post_tone_chapter_texts,
-                    tone_review_log=tone_review_log,
-                    tone_pass1_changes=tone_pass1_changes,
-                    tone_pass2_changes=tone_pass2_changes,
-                    signal_original=_tone_signal_original,
-                    signal_final=_tone_signal_final,
-                ),
+                "tone_artifacts": _tone_artifacts,
             },
         ),
     )
@@ -1363,9 +1122,9 @@ def run_deal_deep_review_v4(
         critical_gaps=critical_gaps_all,
     )
     logger.info(
-        "V4_UNDERWRITING_ARTIFACT_PERSISTED deal_id=%s recommendation=%s",
-        deal_id,
-        im_recommendation,
+        "deep_review.v4.underwriting_artifact.persisted",
+        deal_id=str(deal_id),
+        recommendation=im_recommendation,
     )
 
     # ── Stage 13d: Persist DealIntelligenceProfile + DealICBrief ──
@@ -1406,15 +1165,7 @@ def run_deal_deep_review_v4(
         "pipeline_version": "v4",
         "token_budget": token_summary,
         "chapter_citations": chapter_citations,
-        "tone_artifacts": _build_tone_artifacts(
-            pre_tone_chapters=pre_tone_chapter_texts,
-            post_tone_chapters=post_tone_chapter_texts,
-            tone_review_log=tone_review_log,
-            tone_pass1_changes=tone_pass1_changes,
-            tone_pass2_changes=tone_pass2_changes,
-            signal_original=_tone_signal_original,
-            signal_final=_tone_signal_final,
-        ),
+        "tone_artifacts": _tone_artifacts,
         "tone_signal_original": _tone_signal_original,
         "tone_signal_final": _tone_signal_final,
     }
@@ -1529,17 +1280,16 @@ def run_deal_deep_review_v4(
         )
         db.flush()
         db.add(_v4_profile)
-        for _flag in _v4_risk_flags:
-            db.add(_flag)
+        db.add_all(_v4_risk_flags)
         db.add(_v4_brief)
 
     logger.info(
-        "V4_PROFILE_BRIEF_PERSISTED deal_id=%s strategy=%s risk_band=%s signal=%s flags=%d",
-        deal_id,
-        _v4_profile.strategy_type,
-        _v4_risk_band_label,
-        _rec_signal,
-        len(_v4_risk_flags),
+        "deep_review.v4.profile_brief.persisted",
+        deal_id=str(deal_id),
+        strategy=_v4_profile.strategy_type,
+        risk_band=_v4_risk_band_label,
+        signal=_rec_signal,
+        flags=len(_v4_risk_flags),
     )
 
     return {
@@ -1673,13 +1423,13 @@ async def async_run_deal_deep_review_v4(
     max_tokens_escalation = 16000 if full_mode else 12000
 
     if full_mode:
-        logger.info("V4_FULL_MODE_ENABLED deal_id=%s", deal_id)
+        logger.info("deep_review.v4.full_mode_enabled", deal_id=str(deal_id))
 
     # ── Stage 1: Cache check (sync, fast) ─────────────────────────
     if not force and artifact_exists_v4(db, deal_id=deal_id):
         cached = load_cached_artifact_v4(db, deal_id=deal_id, fund_id=fund_id)
         if cached and cached.get("chaptersCompleted", 0) >= 13:
-            logger.info("V4_CACHE_HIT deal_id=%s — returning cached result", deal_id)
+            logger.info("deep_review.v4.cache_hit", deal_id=str(deal_id))
             return cached
 
     # ── Stage 1b: Deal lookup (sync, fast) ────────────────────────
@@ -1709,7 +1459,7 @@ async def async_run_deal_deep_review_v4(
     )
 
     version_tag = f"v4-{now.strftime('%Y%m%dT%H%M%S')}"
-    logger.info("V4_ASYNC_START deal_id=%s version=%s", deal_id, version_tag)
+    logger.info("deep_review.v4.async.start", deal_id=str(deal_id), version=version_tag)
 
     # ══════════════════════════════════════════════════════════════
     # Phase 1: Parallel retrieval + deterministic stages
@@ -1717,6 +1467,8 @@ async def async_run_deal_deep_review_v4(
     # After gather() returns, all threads have completed — main db
     # session is exclusively owned by the event loop thread again.
     # ══════════════════════════════════════════════════════════════
+    from app.core.db.engine import async_session_factory
+
     SessionLocal = async_session_factory
 
     def _gather_texts_threadsafe() -> dict:
@@ -1748,7 +1500,7 @@ async def async_run_deal_deep_review_v4(
                     chapter, search_endpoint=_SE, search_api_key=_SK, top_k=12,
                 )
             except Exception as exc:
-                logger.warning("V4_MARKET_BENCHMARKS_WARN chapter=%s error=%s", chapter, exc)
+                logger.warning("deep_review.v4.market_benchmarks.warn", chapter=chapter, error=str(exc))
                 return []
 
         from concurrent.futures import ThreadPoolExecutor as _TPE
@@ -1801,8 +1553,10 @@ async def async_run_deal_deep_review_v4(
     macro_stress_flag = macro_stress["level"] in ("MODERATE", "SEVERE")
 
     logger.info(
-        "V4_ASYNC_PHASE1_COMPLETE deal_id=%s corpus_len=%d benchmarks=%d",
-        deal_id, len(corpus), len(_market_benchmarks),
+        "deep_review.v4.async.phase1_complete",
+        deal_id=str(deal_id),
+        corpus_len=len(corpus),
+        benchmarks=len(_market_benchmarks),
     )
 
     # ══════════════════════════════════════════════════════════════
@@ -1815,7 +1569,7 @@ async def async_run_deal_deep_review_v4(
         deal_role_map=deal_fields.get("deal_role_map"),
         third_party_counterparties=deal_fields.get("third_party_counterparties"),
     )
-    logger.info("V4_PRE_CLASSIFIED deal_id=%s type=%s", deal_id, pre_instrument_type)
+    logger.info("deep_review.v4.pre_classified", deal_id=str(deal_id), type=pre_instrument_type)
 
     analysis = await guarded(_async_call_openai(
         deal_review_prompt,
@@ -1827,7 +1581,7 @@ async def async_run_deal_deep_review_v4(
     ))
 
     instrument_type = classify_instrument_type(analysis)
-    logger.info("V4_INSTRUMENT_CLASSIFIED deal_id=%s type=%s", deal_id, instrument_type)
+    logger.info("deep_review.v4.instrument_classified", deal_id=str(deal_id), type=instrument_type)
 
     # ══════════════════════════════════════════════════════════════
     # Phase 3: Parallel stages (EDGAR, policy, sponsor, KYC, quant)
@@ -1860,14 +1614,12 @@ async def async_run_deal_deep_review_v4(
             target_vehicle=_target_vehicle,
         )
         logger.info(
-            "V4_STAGE_4_7_EDGAR_COMPLETE",
-            extra={
-                "deal_id": str(deal_id),
-                "entities_tried": edgar_multi["entities_tried"],
-                "entities_found": edgar_multi["entities_found"],
-                "unique_ciks": edgar_multi["unique_ciks"],
-                "context_chars": len(ctx),
-            },
+            "deep_review.v4.edgar.complete",
+            deal_id=str(deal_id),
+            entities_tried=edgar_multi["entities_tried"],
+            entities_found=edgar_multi["entities_found"],
+            unique_ciks=edgar_multi["unique_ciks"],
+            context_chars=len(ctx),
         )
         return ctx
 
@@ -1987,13 +1739,16 @@ async def async_run_deal_deep_review_v4(
         if isinstance(result, BaseException):
             if stage_names[i] in ("EDGAR", "KYC"):
                 logger.warning(
-                    "V4_ASYNC_NONFATAL_STAGE_%s_FAILED error=%s",
-                    stage_names[i], type(result).__name__,
+                    "NEVER_RAISES_CONTRACT_VIOLATION.deep_review.async_phase3",
+                    stage=stage_names[i],
+                    error=type(result).__name__,
+                    exc_info=True,
                 )
             else:
                 logger.error(
-                    "V4_ASYNC_FATAL_STAGE_%s_FAILED error=%s",
-                    stage_names[i], type(result).__name__,
+                    "deep_review.v4.async.phase3.fatal_stage_failed",
+                    stage=stage_names[i],
+                    error=type(result).__name__,
                 )
                 raise result
 
@@ -2027,17 +1782,18 @@ async def async_run_deal_deep_review_v4(
             )
         except Exception as _kyc_db_exc:
             logger.warning(
-                "KYC_PIPELINE_DB_PERSIST_FAILED deal_id=%s error=%s",
-                deal_id, type(_kyc_db_exc).__name__,
+                "deep_review.v4.kyc.db_persist_failed",
+                deal_id=str(deal_id),
+                error=type(_kyc_db_exc).__name__,
             )
 
     logger.info(
-        "V4_ASYNC_PHASE3_COMPLETE deal_id=%s edgar=%d policy=%s sponsor_flags=%d kyc=%s",
-        deal_id,
-        len(edgar_context),
-        policy_dict.get("overall_status", "N/A"),
-        len(sponsor_output.get("governance_red_flags", [])),
-        kyc_results.get("summary", {}).get("total_matches", "N/A"),
+        "deep_review.v4.async.phase3_complete",
+        deal_id=str(deal_id),
+        edgar=len(edgar_context),
+        policy=policy_dict.get("overall_status", "N/A"),
+        sponsor_flags=len(sponsor_output.get("governance_red_flags", [])),
+        kyc=kyc_results.get("summary", {}).get("total_matches", "N/A"),
     )
 
     # ══════════════════════════════════════════════════════════════
@@ -2057,7 +1813,7 @@ async def async_run_deal_deep_review_v4(
     try:
         validate_evidence_pack(evidence_pack)
     except ValueError as exc:
-        logger.error("V4_EVIDENCE_PACK_INVALID errors=%s", exc)
+        logger.error("deep_review.v4.evidence_pack.invalid", errors=str(exc))
         return {
             "error": "EvidencePack validation failed",
             "dealId": str(deal_id),
@@ -2076,8 +1832,10 @@ async def async_run_deal_deep_review_v4(
     )
     evidence_pack_id = pack_row.id
     logger.info(
-        "V4_EVIDENCE_PACK_FROZEN deal_id=%s pack_id=%s tokens=%d",
-        deal_id, evidence_pack_id, pack_row.token_count,
+        "deep_review.v4.evidence_pack.frozen",
+        deal_id=str(deal_id),
+        pack_id=str(evidence_pack_id),
+        tokens=pack_row.token_count,
     )
 
     # ══════════════════════════════════════════════════════════════
@@ -2120,8 +1878,11 @@ async def async_run_deal_deep_review_v4(
 
     if _conf < 0.75 or _fatal or _rewrite:
         logger.warning(
-            "V4_CRITIC_ESCALATION deal_id=%s confidence=%.2f fatal_flaws=%d rewrite=%s",
-            deal_id, _conf, len(_fatal), _rewrite,
+            "deep_review.v4.critic.escalation",
+            deal_id=str(deal_id),
+            confidence=_conf,
+            fatal_flaws=len(_fatal),
+            rewrite=_rewrite,
         )
         model_critic_esc = get_model("critic_escalation")
 
@@ -2141,11 +1902,10 @@ async def async_run_deal_deep_review_v4(
         critic_dict = critic_dict_escalation
         critic_escalated = True
         logger.info(
-            "V4_CRITIC_ESCALATION_COMPLETE deal_id=%s "
-            "default_confidence=%.2f escalated_confidence=%.2f",
-            deal_id,
-            critic_dict_default.get("confidence_score", 0),
-            critic_dict.get("confidence_score", 0),
+            "deep_review.v4.critic.escalation_complete",
+            deal_id=str(deal_id),
+            default_confidence=critic_dict_default.get("confidence_score", 0),
+            escalated_confidence=critic_dict.get("confidence_score", 0),
         )
 
     # Inject critic output into evidence pack (consumed by chapter prompts)
@@ -2181,8 +1941,10 @@ async def async_run_deal_deep_review_v4(
     )
     evidence_pack["decision_anchor"] = decision_anchor
     logger.info(
-        "V4_DECISION_ANCHOR deal_id=%s decision=%s icGate=%s",
-        deal_id, decision_anchor["finalDecision"], decision_anchor["icGate"],
+        "deep_review.v4.decision_anchor",
+        deal_id=str(deal_id),
+        decision=decision_anchor["finalDecision"],
+        ic_gate=decision_anchor["icGate"],
     )
 
     # ══════════════════════════════════════════════════════════════
@@ -2247,10 +2009,10 @@ async def async_run_deal_deep_review_v4(
 
     if critic_post_dict.get("rewrite_required") and chapter_texts:
         logger.warning(
-            "V4_CRITIC_POST_MEMO_REWRITE deal_id=%s fatal_flaws=%d confidence=%.2f",
-            deal_id,
-            len(critic_post_dict.get("fatal_flaws", [])),
-            critic_post_dict.get("confidence_score", 0),
+            "deep_review.v4.critic.post_memo_rewrite",
+            deal_id=str(deal_id),
+            fatal_flaws=len(critic_post_dict.get("fatal_flaws", [])),
+            confidence=critic_post_dict.get("confidence_score", 0),
         )
         affected_tags: set[str] = set()
         for flaw in critic_post_dict.get("fatal_flaws", []):
@@ -2303,8 +2065,10 @@ async def async_run_deal_deep_review_v4(
             for ch_tag, result in zip(rewrite_tags, rewrite_results, strict=False):
                 if isinstance(result, BaseException):
                     logger.warning(
-                        "V4_ASYNC_CRITIC_REWRITE_FAILED chapter=%s deal_id=%s error=%s",
-                        ch_tag, deal_id, type(result).__name__,
+                        "deep_review.v4.async.critic.rewrite_failed",
+                        chapter=ch_tag,
+                        deal_id=str(deal_id),
+                        error=type(result).__name__,
                     )
                     continue
                 if result:
@@ -2326,7 +2090,7 @@ async def async_run_deal_deep_review_v4(
         evidence_pack["critic_output"]["post_memo_review"] = critic_post_dict
 
     # ── Confidence Score (deterministic, before tone) ─────────────
-    from vertical_engines.credit.deep_review_confidence import (
+    from vertical_engines.credit.deep_review.confidence import (
         apply_tone_normalizer_adjustment,
         compute_underwriting_confidence,
     )
@@ -2387,9 +2151,13 @@ async def async_run_deal_deep_review_v4(
 
     token_summary = budget.summary()
     logger.info(
-        "V4_ASYNC_COMPLETE deal_id=%s version=%s chapters=%d confidence=%.2f "
-        "ic_gate=%s tokens=%s",
-        deal_id, version_tag, len(chapters), final_confidence, ic_gate, token_summary,
+        "deep_review.v4.async.complete",
+        deal_id=str(deal_id),
+        version=version_tag,
+        chapters=len(chapters),
+        confidence=final_confidence,
+        ic_gate=ic_gate,
+        tokens=token_summary,
     )
 
     # ── Tone Normalizer (already async — await directly) ──────────
@@ -2407,8 +2175,10 @@ async def async_run_deal_deep_review_v4(
                 run_tone_normalizer as _run_tone_normalizer,
             )
             logger.info(
-                "TONE_NORMALIZER_START deal_id=%s chapters=%d signal=%s",
-                deal_id, len(chapter_texts), im_recommendation,
+                "deep_review.v4.tone_normalizer.start",
+                deal_id=str(deal_id),
+                chapters=len(chapter_texts),
+                signal=im_recommendation,
             )
 
             tone_result = await _run_tone_normalizer(
@@ -2436,8 +2206,10 @@ async def async_run_deal_deep_review_v4(
             if tone_result.get("signal_escalated"):
                 _new_signal = tone_result.get("signal_final", im_recommendation)
                 logger.warning(
-                    "TONE_SIGNAL_ESCALATED deal_id=%s %s → %s",
-                    deal_id, im_recommendation, _new_signal,
+                    "deep_review.v4.tone_normalizer.signal_escalated",
+                    deal_id=str(deal_id),
+                    signal_from=im_recommendation,
+                    signal_to=_new_signal,
                 )
                 im_recommendation = _new_signal
 
@@ -2449,8 +2221,9 @@ async def async_run_deal_deep_review_v4(
 
         except Exception as _tone_exc:
             logger.warning(
-                "TONE_NORMALIZER_FAILED deal_id=%s error=%s — continuing",
-                deal_id, type(_tone_exc).__name__,
+                "NEVER_RAISES_CONTRACT_VIOLATION.deep_review.tone_normalizer",
+                error=str(_tone_exc),
+                exc_info=True,
             )
 
     # Post-tone confidence adjustment
@@ -2471,6 +2244,16 @@ async def async_run_deal_deep_review_v4(
 
     # ── Persist final metadata ────────────────────────────────────
     from app.domains.credit.modules.ai.models import MemoEvidencePack
+
+    _tone_artifacts = _build_tone_artifacts(
+        pre_tone_chapters=pre_tone_chapter_texts,
+        post_tone_chapters=post_tone_chapter_texts,
+        tone_review_log=tone_review_log,
+        tone_pass1_changes=tone_pass1_changes,
+        tone_pass2_changes=tone_pass2_changes,
+        signal_original=_tone_signal_original,
+        signal_final=_tone_signal_final,
+    )
 
     db.execute(
         update(MemoEvidencePack)
@@ -2520,15 +2303,7 @@ async def async_run_deal_deep_review_v4(
                 ),
                 "appendix_kyc_checks": kyc_appendix_text,
                 "kyc_screening_summary": kyc_results.get("summary", {}),
-                "tone_artifacts": _build_tone_artifacts(
-                    pre_tone_chapters=pre_tone_chapter_texts,
-                    post_tone_chapters=post_tone_chapter_texts,
-                    tone_review_log=tone_review_log,
-                    tone_pass1_changes=tone_pass1_changes,
-                    tone_pass2_changes=tone_pass2_changes,
-                    signal_original=_tone_signal_original,
-                    signal_final=_tone_signal_final,
-                ),
+                "tone_artifacts": _tone_artifacts,
             },
         ),
     )
@@ -2596,15 +2371,7 @@ async def async_run_deal_deep_review_v4(
         "pipeline_version": "v4",
         "token_budget": token_summary,
         "chapter_citations": chapter_citations,
-        "tone_artifacts": _build_tone_artifacts(
-            pre_tone_chapters=pre_tone_chapter_texts,
-            post_tone_chapters=post_tone_chapter_texts,
-            tone_review_log=tone_review_log,
-            tone_pass1_changes=tone_pass1_changes,
-            tone_pass2_changes=tone_pass2_changes,
-            signal_original=_tone_signal_original,
-            signal_final=_tone_signal_final,
-        ),
+        "tone_artifacts": _tone_artifacts,
         "tone_signal_original": _tone_signal_original,
         "tone_signal_final": _tone_signal_final,
     }
@@ -2721,13 +2488,15 @@ async def async_run_deal_deep_review_v4(
         )
         db.flush()
         db.add(_v4_profile)
-        for _flag in _v4_risk_flags:
-            db.add(_flag)
+        db.add_all(_v4_risk_flags)
         db.add(_v4_brief)
 
     logger.info(
-        "V4_ASYNC_PROFILE_PERSISTED deal_id=%s strategy=%s risk_band=%s signal=%s",
-        deal_id, _v4_profile.strategy_type, _v4_risk_band_label, _rec_signal,
+        "deep_review.v4.async.profile_persisted",
+        deal_id=str(deal_id),
+        strategy=_v4_profile.strategy_type,
+        risk_band=_v4_risk_band_label,
+        signal=_rec_signal,
     )
 
     return {
@@ -2819,6 +2588,8 @@ def run_all_deals_deep_review_v4(
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
+    from app.core.db.engine import async_session_factory
+
     SessionLocal = async_session_factory
     results: list[dict[str, Any]] = []
 
@@ -2848,12 +2619,12 @@ def run_all_deals_deep_review_v4(
                         },
                     )
                     session.commit()
-                    logger.info("V4_STATUS_READY deal_id=%s", deal.id)
+                    logger.info("deep_review.v4.batch.status_ready", deal_id=str(deal.id))
                 else:
                     logger.warning(
-                        "V4_RESULT_ERROR deal_id=%s error=%s",
-                        deal.id,
-                        result.get("error"),
+                        "deep_review.v4.batch.result_error",
+                        deal_id=str(deal.id),
+                        error=result.get("error"),
                     )
                     try:
                         session.execute(
@@ -2869,7 +2640,7 @@ def run_all_deals_deep_review_v4(
                         session.rollback()
                 return result
         except Exception as exc:
-            logger.warning("V4 deep review failed for deal %s: %s", deal.id, exc)
+            logger.warning("deep_review.v4.batch.deal_failed", deal_id=str(deal.id), error=str(exc))
             return {"dealId": str(deal.id), "error": str(exc)}
 
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -2914,6 +2685,8 @@ async def async_run_all_deals_deep_review_v4(
         .all(),
     )
 
+    from app.core.db.engine import async_session_factory
+
     SessionLocal = async_session_factory
 
     # Capture deal IDs before entering async — ORM objects are session-bound
@@ -2939,11 +2712,12 @@ async def async_run_all_deals_deep_review_v4(
                     generated_at=dt.datetime.now(dt.UTC),
                 )
                 session.commit()
-                logger.info("V4_BATCH_READY deal_id=%s", deal_id)
+                logger.info("deep_review.v4.async_batch.ready", deal_id=str(deal_id))
             else:
                 logger.warning(
-                    "V4_BATCH_SOFT_ERROR deal_id=%s error=%s",
-                    deal_id, result.get("error"),
+                    "deep_review.v4.async_batch.soft_error",
+                    deal_id=str(deal_id),
+                    error=result.get("error"),
                 )
                 try:
                     update_deal_intelligence_status(
@@ -2955,7 +2729,7 @@ async def async_run_all_deals_deep_review_v4(
             return result
         except Exception as exc:
             session.rollback()
-            logger.warning("V4_BATCH_FAILED deal_id=%s error=%s", deal_id, type(exc).__name__)
+            logger.warning("deep_review.v4.async_batch.failed", deal_id=str(deal_id), error=type(exc).__name__)
             try:
                 update_deal_intelligence_status(
                     session, deal_id=deal_id, fund_id=fund_id, status="FAILED",
@@ -2975,7 +2749,7 @@ async def async_run_all_deals_deep_review_v4(
     results: list[dict[str, Any]] = []
     for (did, _fid), raw in zip(deal_ids, raw_results, strict=False):
         if isinstance(raw, BaseException):
-            logger.error("V4_BATCH_GATHER_EXCEPTION deal_id=%s error=%s", did, type(raw).__name__)
+            logger.error("deep_review.v4.async_batch.gather_exception", deal_id=str(did), error=type(raw).__name__)
             results.append({"dealId": str(did), "error": str(raw)})
         else:
             results.append(raw)
@@ -2988,3 +2762,11 @@ async def async_run_all_deals_deep_review_v4(
         "errors": len([r for r in results if "error" in r]),
         "results": results,
     }
+
+
+__all__ = [
+    "run_deal_deep_review_v4",
+    "async_run_deal_deep_review_v4",
+    "run_all_deals_deep_review_v4",
+    "async_run_all_deals_deep_review_v4",
+]

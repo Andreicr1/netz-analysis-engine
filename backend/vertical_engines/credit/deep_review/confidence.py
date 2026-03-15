@@ -36,10 +36,11 @@ See ``docs/development/CONFIDENCE_SCORING.md`` for the full weight/cap table.
 """
 from __future__ import annotations
 
-import logging
 from typing import Any
 
-logger = logging.getLogger(__name__)
+import structlog
+
+logger = structlog.get_logger()
 
 # ── Block weight ceilings ────────────────────────────────────────────
 _MAX_EVIDENCE_COVERAGE  = 25
@@ -206,8 +207,9 @@ def apply_tone_normalizer_adjustment(
         )
         confidence_result["caps_applied"].append(cap_msg)
         confidence_result["rationale_bullets"].append(cap_msg)
-        logger.info("CONFIDENCE_TONE_PENALTY score=%d→%d contradictions=%d",
-                     old_score, new_score, contradiction_count)
+        logger.info("confidence_tone_penalty",
+                     old_score=old_score, new_score=new_score,
+                     contradictions=contradiction_count)
 
     return confidence_result
 
@@ -516,3 +518,6 @@ def _score_to_level(score: int) -> str:
     if score >= _LOW_THRESHOLD:
         return "MEDIUM"
     return "LOW"
+
+
+__all__ = ["compute_underwriting_confidence", "apply_tone_normalizer_adjustment"]

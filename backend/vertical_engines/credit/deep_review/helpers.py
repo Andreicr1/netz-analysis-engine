@@ -9,14 +9,15 @@ from __future__ import annotations
 
 import datetime as dt
 import json
-import logging
 from typing import Any
+
+import structlog
 
 from ai_engine.governance.token_budget import TokenBudgetTracker
 from ai_engine.model_config import get_model
 from ai_engine.openai_client import _extract_json_from_text
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 _MODEL = get_model("structured")
 
@@ -26,7 +27,7 @@ def _parse_json_payload(raw: str) -> dict[str, Any]:
     extracted = _extract_json_from_text(raw or "")
     parsed = json.loads(extracted)
     if not isinstance(parsed, dict) or not parsed:
-        logger.error("DEEP_REVIEW_EMPTY_JSON", extra={"parsed": parsed})
+        logger.error("DEEP_REVIEW_EMPTY_JSON", parsed=parsed)
         raise ValueError("LLM returned empty or non-dict JSON payload.")
     return parsed
 
@@ -112,15 +113,16 @@ def _call_openai(
         except (json.JSONDecodeError, ValueError) as exc:
             last_exc = exc
             logger.warning(
-                "DEEP_REVIEW_JSON_PARSE_RETRY attempt=%d raw_length=%d error=%s",
-                attempt + 1,
-                len(raw),
-                exc,
+                "DEEP_REVIEW_JSON_PARSE_RETRY",
+                attempt=attempt + 1,
+                raw_length=len(raw),
+                error=str(exc),
             )
 
     logger.error(
         "DEEP_REVIEW_INVALID_JSON",
-        extra={"raw_length": len(raw), "error": str(last_exc) if last_exc else "unknown"},
+        raw_length=len(raw),
+        error=str(last_exc) if last_exc else "unknown",
     )
     raise ValueError(f"LLM returned invalid JSON: {last_exc}") from last_exc
 
@@ -204,13 +206,16 @@ async def _async_call_openai(
         except (json.JSONDecodeError, ValueError) as exc:
             last_exc = exc
             logger.warning(
-                "ASYNC_DEEP_REVIEW_JSON_PARSE_RETRY attempt=%d raw_length=%d error=%s",
-                attempt + 1, len(raw), exc,
+                "ASYNC_DEEP_REVIEW_JSON_PARSE_RETRY",
+                attempt=attempt + 1,
+                raw_length=len(raw),
+                error=str(exc),
             )
 
     logger.error(
         "ASYNC_DEEP_REVIEW_INVALID_JSON",
-        extra={"raw_length": len(raw), "error": str(last_exc) if last_exc else "unknown"},
+        raw_length=len(raw),
+        error=str(last_exc) if last_exc else "unknown",
     )
     raise ValueError(f"LLM returned invalid JSON: {last_exc}") from last_exc
 
@@ -231,7 +236,7 @@ def _trunc(value: str | float | None, maxlen: int) -> str | None:
 
 
 def _title_case_strategy(value: str | None) -> str | None:
-    """Normalise strategy_type to Title Case (e.g. 'ASSET_BACKED_LENDING' → 'Asset Backed Lending')."""
+    """Normalise strategy_type to Title Case (e.g. 'ASSET_BACKED_LENDING' -> 'Asset Backed Lending')."""
     if not value:
         return value
     return " ".join(w.capitalize() for w in value.replace("_", " ").split())
@@ -239,3 +244,14 @@ def _title_case_strategy(value: str | None) -> str | None:
 
 def _now_utc() -> dt.datetime:
     return dt.datetime.now(dt.UTC)
+
+
+__all__ = [
+    "_MODEL",
+    "_call_openai",
+    "_async_call_openai",
+    "_parse_json_payload",
+    "_trunc",
+    "_title_case_strategy",
+    "_now_utc",
+]

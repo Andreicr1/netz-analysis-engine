@@ -16,7 +16,7 @@ from ai_engine.validation.validation_schema import (
     MetricResult,
     MetricStatus,
 )
-from vertical_engines.credit.deep_review_confidence import compute_underwriting_confidence
+from vertical_engines.credit.deep_review import compute_underwriting_confidence
 
 CH13_TAG = "ch13_recommendation"
 NUMERIC_DENSE_CHAPTERS = {

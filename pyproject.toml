@@ -146,6 +146,27 @@ ignore_imports = [
 ]
 unmatched_ignore_imports_alerting = "warn"
 
+# Deep review internal DAG: 5-tier architecture enforced as layers.
+# models (leaf) → domain modules → persist → portfolio → service (top).
+[[tool.importlinter.contracts]]
+name = "Deep review internal DAG"
+type = "layers"
+layers = [
+    "service",
+    "portfolio",
+    "persist",
+    "corpus | prompts | policy | decision | confidence",
+    "helpers",
+    "models",
+]
+containers = [
+    "vertical_engines.credit.deep_review",
+]
+exhaustive = true
+exhaustive_ignores = [
+    "__init__",
+]
+
 # Phase A ratchet (bdabdc8): regime + cvar are vertical-agnostic.
 # Other quant services still depend on app.domains.wealth — subsequent phases.
 [[tool.importlinter.contracts]]

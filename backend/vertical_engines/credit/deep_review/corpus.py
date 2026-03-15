@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
-import logging
 import uuid
 from pathlib import Path
 from typing import Any
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -18,62 +18,10 @@ from app.domains.credit.modules.ai.models import (
 from app.domains.credit.modules.deals.models import PipelineDeal as Deal  # pipeline domain
 from app.services.blob_storage import blob_uri, download_bytes
 from app.services.text_extract import extract_text_from_docx, extract_text_from_pdf
-from vertical_engines.credit.deep_review_helpers import _MODEL, _now_utc, _trunc  # noqa: F401
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
-# ---------------------------------------------------------------------------
-# Sectional token budget (Task 6 — Pre-V3 Hardening)
-# ---------------------------------------------------------------------------
-# Total ~120 000 chars (~30 k tokens).  Split by section priority so that
-# financial/legal context (most critical for IC decisions) gets the largest
-# share, followed by risk/covenants, then market/strategy.
 _TOTAL_BUDGET_CHARS = 300_000
-_BUDGET_FINANCIAL_LEGAL = int(_TOTAL_BUDGET_CHARS * 0.40)  # 120 000
-_BUDGET_RISK_COVENANTS = int(_TOTAL_BUDGET_CHARS * 0.30)  # 90 000
-_BUDGET_MARKET_STRATEGY = int(_TOTAL_BUDGET_CHARS * 0.30)  # 90 000
-
-# Doc-type classification for sectional budgeting
-# ---------------------------------------------------------------------------
-# Hard policy limits — now sourced from PolicyThresholds (policy_loader.py).
-# Kept as backward-compat aliases for any external callers.
-# Internal code uses policy.* instead.
-# ---------------------------------------------------------------------------
-
-_FINANCIAL_LEGAL_TYPES = frozenset(
-    {
-        "TERM_SHEET",
-        "CREDIT_AGREEMENT",
-        "FACILITY_AGREEMENT",
-        "LOAN_AGREEMENT",
-        "SECURITY_AGREEMENT",
-        "INTERCREDITOR",
-        "GUARANTEE",
-        "PLEDGE",
-        "SUBSCRIPTION_AGREEMENT",
-        "SIDE_LETTER",
-        "LEGAL",
-        "FINANCIAL",
-        "FINANCIAL_STATEMENTS",
-        "FUND_POLICY",
-        "FUND_CONSTITUTION",
-    },
-)
-_RISK_COVENANT_TYPES = frozenset(
-    {
-        "RISK_ASSESSMENT",
-        "COVENANT_COMPLIANCE",
-        "COVENANT",
-        "RISK",
-        "COMPLIANCE",
-        "REGULATORY",
-        "REGULATORY_CIMA",
-        "INSURANCE",
-        "WATCHLIST",
-        "MONITORING",
-    },
-)
-# Anything else falls into market/strategy bucket
 
 
 # ---------------------------------------------------------------------------
@@ -90,7 +38,7 @@ def _extract_text_from_blob(container: str, blob_path: str) -> str:
     """
     suffix = Path(blob_path).suffix.lower()
     if suffix not in _EXTRACTABLE_EXTENSIONS:
-        logger.debug("Skipping unsupported file type '%s': %s", suffix, blob_path)
+        logger.debug("blob.skip_unsupported", suffix=suffix, blob_path=blob_path)
         return ""
     try:
         data = download_bytes(blob_uri=blob_uri(container, blob_path))
@@ -142,10 +90,10 @@ def _load_deal_context_from_blob(
         data = download_bytes(blob_uri=blob_uri(_RAW_DOCS_CONTAINER, blob_path))
         deal_ctx = json.loads(data.decode("utf-8"))
         logger.info(
-            "DEAL_CONTEXT_LOADED blob=%s keys=%s", blob_path, list(deal_ctx.keys()),
+            "deal_context.loaded", blob=blob_path, keys=list(deal_ctx.keys()),
         )
     except Exception as exc:
-        logger.debug("deal_context.json not available for %s: %s", folder, exc)
+        logger.debug("deal_context.unavailable", folder=folder, error=str(exc))
 
     # ── Load fund_context.json ──────────────────────
     try:
@@ -153,10 +101,10 @@ def _load_deal_context_from_blob(
         data = download_bytes(blob_uri=blob_uri(_RAW_DOCS_CONTAINER, blob_path))
         fund_ctx = json.loads(data.decode("utf-8"))
         logger.info(
-            "FUND_CONTEXT_LOADED blob=%s keys=%s", blob_path, list(fund_ctx.keys()),
+            "fund_context.loaded", blob=blob_path, keys=list(fund_ctx.keys()),
         )
     except Exception as exc:
-        logger.debug("fund_context.json not available for %s: %s", folder, exc)
+        logger.debug("fund_context.unavailable", folder=folder, error=str(exc))
 
     if not deal_ctx and not fund_ctx:
         return {}
@@ -210,9 +158,9 @@ def _load_deal_context_from_blob(
         deal_fields["borrower"] = deal_ctx.get("borrower", "")
         deal_fields["lender"] = deal_ctx.get("lender", "")
         logger.info(
-            "DEAL_ROLE_MAP direct_loan borrower=%s lender=%s",
-            deal_ctx.get("borrower", "")[:60],
-            deal_ctx.get("lender", "")[:60],
+            "deal_role_map.direct_loan",
+            borrower=deal_ctx.get("borrower", "")[:60],
+            lender=deal_ctx.get("lender", "")[:60],
         )
     elif deal_ctx.get("manager"):
         # Fund-type deal — external manager/sponsor
@@ -242,9 +190,9 @@ def _load_deal_context_from_blob(
         deal_fields["third_party_counterparties"] = third_parties
         tp_names = [tp.get("name", "?") for tp in third_parties]
         logger.info(
-            "THIRD_PARTY_COUNTERPARTIES loaded count=%d names=%s",
-            len(third_parties),
-            tp_names,
+            "third_party_counterparties.loaded",
+            count=len(third_parties),
+            names=tp_names,
         )
 
     if deal_ctx.get("geography"):
@@ -287,9 +235,9 @@ def _load_deal_context_from_blob(
     }
 
     logger.info(
-        "DEAL_CONTEXT_ENRICHED deal=%s added_fields=%d",
-        deal_fields.get("deal_name", ""),
-        sum(
+        "deal_context.enriched",
+        deal=deal_fields.get("deal_name", ""),
+        added_fields=sum(
             1
             for k in (
                 "vehicles",
@@ -372,13 +320,13 @@ def _gather_deal_texts(
         d_id = deal_name
 
     logger.info(
-        "IC_GRADE_RETRIEVAL_START deal=%s policy=%s chapters=%d fund_id=%s deal_id=%s scope_mode=%s",
-        deal_name,
-        RETRIEVAL_POLICY_NAME,
-        len(CHAPTER_REGISTRY),
-        f_id,
-        d_id,
-        scope_mode,
+        "ic_grade_retrieval.start",
+        deal=deal_name,
+        policy=RETRIEVAL_POLICY_NAME,
+        chapters=len(CHAPTER_REGISTRY),
+        fund_id=f_id,
+        deal_id=d_id,
+        scope_mode=scope_mode,
     )
 
     # ── Per-chapter specialized retrieval (parallel) ──────────────
@@ -403,11 +351,11 @@ def _gather_deal_texts(
 
     for ch_key, ch_result in chapter_evidence.items():
         logger.info(
-            "IC_CHAPTER_EVIDENCE ch=%s status=%s chunks=%d docs=%d",
-            ch_key,
-            ch_result["coverage_status"],
-            ch_result["stats"]["chunk_count"],
-            ch_result["stats"]["unique_docs"],
+            "ic_chapter_evidence.complete",
+            chapter=ch_key,
+            status=ch_result["coverage_status"],
+            chunks=ch_result["stats"]["chunk_count"],
+            docs=ch_result["stats"]["unique_docs"],
         )
 
     # ── Build IC-grade corpus (coverage reranking) ────────────────
@@ -444,8 +392,10 @@ def _gather_deal_texts(
 
     # ── Fallback: legacy blob download (only if no indexed chunks) ──
     logger.warning(
-        "RAG_EMPTY_FALLBACK_BLOB_DOWNLOAD",
-        extra={"deal_id": d_id, "fund_id": f_id, "entity_type": "deal"},
+        "rag_empty.fallback_blob_download",
+        deal_id=d_id,
+        fund_id=f_id,
+        entity_type="deal",
     )
     legacy_text = _gather_deal_texts_legacy(db, fund_id=fund_id, deal=deal)
     return {
@@ -456,17 +406,6 @@ def _gather_deal_texts(
         "retrieval_audit": retrieval_audit,
         "saturation_report": saturation_report,
     }
-
-
-def _classify_doc_type(doc_type: str) -> str:
-    """Classify a doc_type string into a budget bucket (legacy — kept for compat)."""
-    dt_upper = (doc_type or "").upper()
-    if dt_upper in _FINANCIAL_LEGAL_TYPES:
-        return "financial_legal"
-    if dt_upper in _RISK_COVENANT_TYPES:
-        return "risk_covenants"
-    return "market_strategy"
-
 
 
 
@@ -537,8 +476,8 @@ def _gather_investment_texts(
         )
     except Exception:
         logger.warning(
-            "RAG retrieval failed for investment %s — blob fallback",
-            investment.id,
+            "rag_retrieval.failed",
+            investment_id=str(investment.id),
             exc_info=True,
         )
         chunks = []
@@ -562,12 +501,10 @@ def _gather_investment_texts(
 
     # ── Fallback: legacy blob download ────────────────────────────
     logger.warning(
-        "RAG_EMPTY_FALLBACK_BLOB_DOWNLOAD",
-        extra={
-            "investment_id": str(investment.id),
-            "fund_id": str(fund_id),
-            "entity_type": "investment",
-        },
+        "rag_empty.fallback_blob_download",
+        investment_id=str(investment.id),
+        fund_id=str(fund_id),
+        entity_type="investment",
     )
     return _gather_investment_texts_legacy(db, fund_id=fund_id, investment=investment)
 
@@ -606,3 +543,10 @@ def _gather_investment_texts_legacy(
         parts.append(f"--- Document: {doc.blob_path} ---\n{chunk}")
         total += len(chunk)
     return "\n\n".join(parts)
+
+
+__all__ = [
+    "_gather_deal_texts",
+    "_gather_investment_texts",
+    "_load_deal_context_from_blob",
+]
