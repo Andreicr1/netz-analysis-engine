@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from ai_engine.prompts import prompt_registry
-from vertical_engines.credit.deep_review_helpers import _MODEL, _call_openai, _now_utc  # noqa: F401
+from vertical_engines.credit.deep_review.helpers import _MODEL, _call_openai, _now_utc  # noqa: F401
 
 if TYPE_CHECKING:
     from ai_engine.governance.policy_loader import PolicyThresholds

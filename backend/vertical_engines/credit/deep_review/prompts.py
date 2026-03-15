@@ -6,7 +6,7 @@ import structlog
 from typing import Any
 
 from ai_engine.prompts import prompt_registry
-from vertical_engines.credit.deep_review_helpers import _call_openai, _trunc  # noqa: F401
+from vertical_engines.credit.deep_review.helpers import _call_openai, _trunc  # noqa: F401
 
 logger = structlog.get_logger()
 

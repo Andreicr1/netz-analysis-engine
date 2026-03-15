@@ -18,7 +18,7 @@ from app.domains.credit.modules.ai.models import (
 from app.domains.credit.modules.deals.models import PipelineDeal as Deal  # pipeline domain
 from app.services.blob_storage import blob_uri, download_bytes
 from app.services.text_extract import extract_text_from_docx, extract_text_from_pdf
-from vertical_engines.credit.deep_review_helpers import _MODEL, _now_utc, _trunc  # noqa: F401
+from vertical_engines.credit.deep_review.helpers import _MODEL, _now_utc, _trunc  # noqa: F401
 
 logger = structlog.get_logger()
 

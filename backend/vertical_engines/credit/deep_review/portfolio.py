@@ -18,8 +18,8 @@ from app.domains.credit.modules.ai.models import (
     InvestmentMemorandumDraft,
     PeriodicReviewReport,
 )
-from vertical_engines.credit.deep_review_corpus import _gather_investment_texts
-from vertical_engines.credit.deep_review_helpers import (
+from vertical_engines.credit.deep_review.corpus import _gather_investment_texts
+from vertical_engines.credit.deep_review.helpers import (
     _MODEL,
     _call_openai,
     _now_utc,
