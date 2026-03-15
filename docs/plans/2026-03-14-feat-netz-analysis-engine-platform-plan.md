@@ -709,7 +709,20 @@ Cross-cutting AI utilities incorrectly housed in compliance were relocated to `a
 
 #### Phase 4: AI Engine + Profile Extraction (Sprint 3 — Week 7-8)
 
-**Goal:** AI engine migrated intact and made profile-agnostic. Upload architecture with SSE.
+**Goal:** AI engine migrated intact and made profile-agnostic. Upload architecture with SSE. DB-backed configuration system replaces YAML.
+
+##### Completed: ProductConfig (Customizable Vertical Configuration)
+
+> **Full plan:** [docs/plans/2026-03-14-feat-customizable-vertical-config-plan.md](2026-03-14-feat-customizable-vertical-config-plan.md)
+
+- [x] **ConfigService (read-only)** — DB-backed config with cascade: TTLCache → DB override → DB default → YAML fallback
+- [x] **Migration 0004** — `vertical_config_defaults` (global) + `vertical_config_overrides` (RLS) + 7 seed configs
+- [x] **Credit calibration seed data** — Institutional defaults (Moody's, S&P, Basel III) for ic_critic_engine/ic_quant_engine
+- [x] **quant_engine refactor** — Removed `@lru_cache` + YAML loading from cvar/regime/scoring/drift services; config injected as parameter
+- [x] **Wealth routes** — ConfigService injected at async entry points
+- [x] **Startup health check** — Verifies all 7 (vertical, config_type) pairs at boot
+- [x] **IP protection** — `CLIENT_VISIBLE_TYPES = {calibration, scoring, blocks, portfolio_profiles}`; chapters/prompts never exposed
+- [x] **29 tests** — deep_merge, IP protection, resolve functions, seed YAML validation
 
 ##### Tasks
 
@@ -735,8 +748,9 @@ Cross-cutting AI utilities incorrectly housed in compliance were relocated to `a
   - ADLS Gen2 backend (when `FEATURE_ADLS_ENABLED=true`)
   - Inject as FastAPI dependency and into workers
 - [ ] **`backend/ai_engine/profile_loader.py`** — ProfileLoader
-  - Cascade: `profiles/tenants/{org_id}/{profile}/` → `profiles/{profile}/` → hardcoded
-  - Loads YAML config + instantiates vertical engine class
+  - Uses `ConfigService.get(vertical, config_type, org_id)` instead of filesystem loading
+  - Cascade now handled by ConfigService (DB override → DB default → YAML fallback)
+  - Instantiates correct vertical engine class from registry
   - Registry: `{"private_credit": CreditAnalyzer, "liquid_funds": WealthAnalyzer}`
 - [ ] **`backend/vertical_engines/wealth/`** — NEW (not migrated, built fresh)
   - `fund_analyzer.py` — 7-chapter fund manager DD report

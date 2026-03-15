@@ -44,7 +44,7 @@ frontends/
   wealth/           ← SvelteKit "netz-wealth-os"
 ```
 
-**Database:** PostgreSQL 16 + TimescaleDB + Redis 7. Migrations via Alembic. App uses async asyncpg. Current migration head: `0003_credit_domain` (0004_vertical_configs planned for Sprint 3).
+**Database:** PostgreSQL 16 + TimescaleDB + Redis 7. Migrations via Alembic. App uses async asyncpg. Current migration head: `0004_vertical_configs`.
 
 **Auth:** Clerk JWT v2. `organization_id` from `o.id` claim. RLS via `SET LOCAL app.current_organization_id`. Dev bypass: `X-DEV-ACTOR` header.
 
@@ -93,6 +93,7 @@ Two-layer architecture: universal core (`ai_engine/`) + vertical specializations
 - `vertical_engines/{vertical}/` — domain-specific: analysis logic, prompts, scoring. One directory per asset class.
 - `ProfileLoader` connects `profiles/` YAML config to `vertical_engines/` code via `ConfigService`.
 - **Do not rewrite vertical_engines/credit/ business logic.** Only session injection allowed (caller provides `db: Session`).
+- `quant_engine/` services receive config as parameter (no YAML loading, no `@lru_cache`). Config resolved once at async entry point via `ConfigService.get()`, passed down to sync functions.
 
 ## Data Lake Rules (ADLS Gen2)
 

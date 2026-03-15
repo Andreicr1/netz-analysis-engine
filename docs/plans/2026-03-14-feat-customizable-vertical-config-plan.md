@@ -2,6 +2,7 @@
 title: "feat: Customizable Vertical Configuration System (ProductConfig)"
 type: feat
 status: active
+phase1_completed: 2026-03-14
 date: 2026-03-14
 deepened: 2026-03-14
 origin: docs/brainstorms/2026-03-14-customizable-vertical-config-brainstorm.md
@@ -604,14 +605,14 @@ Client UI → PUT /api/v1/configs/{vertical}/calibration
 
 ##### Acceptance Criteria
 
-- [ ] `ConfigService.get("liquid_funds", "calibration")` returns same values as current YAML
-- [ ] `ConfigService.get("private_credit", "calibration")` returns credit-specific thresholds
-- [ ] Tenant override merges correctly with default (deep merge, sparse override)
-- [ ] In-process cache hit on second call within 60s TTL
-- [ ] All existing quant_engine tests pass with injected config
-- [ ] Startup health check logs OK for all seeded config_types
-- [ ] Migration is idempotent (running twice does not fail or duplicate)
-- [ ] `make check` passes
+- [x] `ConfigService.get("liquid_funds", "calibration")` returns same values as current YAML
+- [x] `ConfigService.get("private_credit", "calibration")` returns credit-specific thresholds
+- [x] Tenant override merges correctly with default (deep merge, sparse override)
+- [x] In-process cache hit on second call within 60s TTL
+- [x] All existing quant_engine tests pass with injected config
+- [x] Startup health check logs OK for all seeded config_types
+- [x] Migration is idempotent (running twice does not fail or duplicate)
+- [x] `make check` passes
 
 ##### Key Files
 
