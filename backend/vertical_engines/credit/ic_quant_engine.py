@@ -816,201 +816,21 @@ def _compute_risk_adjusted_return_v2(
 #  B: Scenario Engine — deterministic (v2 — uses creditMetrics)
 # ══════════════════════════════════════════════════════════════════════
 
-_SCENARIO_PROXY: dict[str, dict[str, float]] = {
-    "Base":     {"loss_rate": 1.0, "recovery_rate": 70.0},
-    "Downside": {"loss_rate": 3.0, "recovery_rate": 55.0},
-    "Severe":   {"loss_rate": 7.0, "recovery_rate": 40.0},
-}
-_CONCENTRATION_LOSS_ADJ_PP = 2.0
-
-
-def _build_deterministic_scenarios(
-    base_return_pct: float | None,
-    risks: list[dict],
-    credit_metrics: dict[str, Any] | None = None,
-    concentration_profile: dict[str, Any] | None = None,
-    liquidity_hooks: dict[str, Any] | None = None,
-) -> tuple[list[dict[str, Any]], list[str]]:
-    """Build Base / Downside / Severe scenarios.
-
-    Uses creditMetrics.defaultRatePct / recoveryRatePct when available,
-    otherwise proxy values labelled PROXY_FROM_SEVERITY.
-    """
-    proxy_flags: list[str] = []
-    _cm = credit_metrics or {}
-    _conc = concentration_profile or {}
-    _liq = liquidity_hooks or {}
-
-    if base_return_pct is None:
-        return [], ["SCENARIO_SKIPPED_NO_BASE_RETURN"]
-
-    # ── Credit metrics → actual default/recovery ─────────────────
-    cm_default = _v2_num(_cm, "defaultRatePct")
-    cm_recovery = _v2_num(_cm, "recoveryRatePct")
-
-    # ── Concentration adjustment ─────────────────────────────────
-    conc_adj = 0.0
-    conc_note = ""
-    top_exposure = _conc.get("top_single_exposure_pct") or 0.0
-    if top_exposure >= 80.0 or _conc.get("single_name_100_pct"):
-        conc_adj = _CONCENTRATION_LOSS_ADJ_PP
-        conc_note = f"CONCENTRATION_ADJ +{conc_adj}pp loss (single-name ≥80%)"
-
-    # ── Liquidity delay from hooks ───────────────────────────────
-    lockup_months = _liq.get("lockup_months")
-
-    scenarios: list[dict[str, Any]] = []
-    for name, proxy in _SCENARIO_PROXY.items():
-        notes: list[str] = []
-        inputs_used: dict[str, Any] = {}
-
-        # Loss rate
-        if cm_default is not None and name == "Base":
-            loss = cm_default
-            inputs_used["loss_rate_source"] = "CREDIT_METRICS"
-        else:
-            loss = proxy["loss_rate"]
-            inputs_used["loss_rate_source"] = "PROXY_FROM_SEVERITY"
-            if name == "Base":
-                proxy_flags.append(f"PROXY_FROM_SEVERITY:loss_rate:{name}")
-                notes.append("Loss rate is a proxy from severity scale")
-
-        # Recovery rate
-        if cm_recovery is not None and name == "Base":
-            recovery = cm_recovery
-            inputs_used["recovery_rate_source"] = "CREDIT_METRICS"
-        else:
-            recovery = proxy["recovery_rate"]
-            inputs_used["recovery_rate_source"] = "PROXY_FROM_SEVERITY"
-            if name == "Base":
-                proxy_flags.append(f"PROXY_FROM_SEVERITY:recovery_rate:{name}")
-                notes.append("Recovery rate is a proxy from severity scale")
-
-        # Concentration adjustment
-        if conc_adj > 0:
-            loss += conc_adj
-            notes.append(conc_note)
-            if f"CONCENTRATION_ADJ:{name}" not in proxy_flags:
-                proxy_flags.append(f"CONCENTRATION_ADJ:{name}")
-
-        loss_impact = loss * (1.0 - recovery / 100.0)
-        expected_net = round(base_return_pct - loss_impact, 4)
-        nav_drawdown = round(loss * (1.0 - recovery / 100.0), 4)
-
-        inputs_used.update({
-            "base_return_pct": base_return_pct,
-            "loss_rate_pct": loss,
-            "recovery_rate_pct": recovery,
-            "concentration_adj_pp": conc_adj,
-        })
-
-        scenarios.append({
-            "scenario_name": name,
-            "inputs_used": inputs_used,
-            "expected_net_return_pct": expected_net,
-            "nav_drawdown_proxy_pct": nav_drawdown if nav_drawdown > 0 else None,
-            "loss_rate_pct": loss,
-            "recovery_rate_pct": recovery,
-            "liquidity_delay_months": lockup_months,
-            "notes": notes,
-        })
-
-    return scenarios, proxy_flags
-
+# Scenario analysis — delegated to credit_scenarios module
+from vertical_engines.credit.credit_scenarios import (  # noqa: E402
+    build_deterministic_scenarios as _build_deterministic_scenarios,
+)
 
 # ══════════════════════════════════════════════════════════════════════
 #  C: Sensitivity — 2D grid + 3D summary (legacy 1D deprecated)
 # ══════════════════════════════════════════════════════════════════════
-
-_DEFAULT_RATES_GRID = [1.0, 3.0, 5.0, 8.0]
-_RECOVERY_RATES_GRID = [80.0, 65.0, 50.0, 35.0]
-
-
-def _build_sensitivity_2d(
-    base_return_pct: float | None,
-    proxy_flags: list[str],
-) -> list[dict[str, Any]]:
-    """Build 2D sensitivity grid: default_rate × recovery_rate."""
-    if base_return_pct is None:
-        return []
-
-    grid: list[dict[str, Any]] = []
-    for dr in _DEFAULT_RATES_GRID:
-        for rr in _RECOVERY_RATES_GRID:
-            loss_impact = dr * (1.0 - rr / 100.0)
-            net = round(base_return_pct - loss_impact, 4)
-            grid.append({
-                "default_rate_pct": dr,
-                "recovery_rate_pct": rr,
-                "loss_impact_pct": round(loss_impact, 4),
-                "net_return_pct": net,
-            })
-    return grid
-
-
-_RATE_SHOCKS_BPS = [0, 100, 200]
-
-
-def _build_sensitivity_3d_summary(
-    base_return_pct: float | None,
-    sensitivity_2d: list[dict[str, Any]],
-) -> dict[str, Any]:
-    """Build 3D summary: default × recovery × rate shocks."""
-    if base_return_pct is None or not sensitivity_2d:
-        return {}
-
-    all_cells: list[dict[str, Any]] = []
-    for shock in _RATE_SHOCKS_BPS:
-        shock_pct = shock / 100.0
-        for cell in sensitivity_2d:
-            shocked_return = round(cell["net_return_pct"] - shock_pct, 4)
-            all_cells.append({
-                "rate_shock_bps": shock,
-                "default_rate_pct": cell["default_rate_pct"],
-                "recovery_rate_pct": cell["recovery_rate_pct"],
-                "shocked_net_return_pct": shocked_return,
-            })
-
-    all_cells.sort(key=lambda c: c["shocked_net_return_pct"])
-    top_fragile = all_cells[:5]
-
-    break_even: dict[str, Any] = {}
-    for cell in all_cells:
-        if cell["shocked_net_return_pct"] <= 0.0:
-            break_even = {
-                "rate_shock_bps": cell["rate_shock_bps"],
-                "default_rate_pct": cell["default_rate_pct"],
-                "recovery_rate_pct": cell["recovery_rate_pct"],
-                "note": "First combination where net return ≤ 0%",
-            }
-            break
-
-    shock0 = [c for c in all_cells if c["rate_shock_bps"] == 0]
-    dominant = "unknown"
-    if shock0:
-        dr_groups: dict[float, list[float]] = {}
-        rr_groups: dict[float, list[float]] = {}
-        for c in shock0:
-            dr_groups.setdefault(c["default_rate_pct"], []).append(c["shocked_net_return_pct"])
-            rr_groups.setdefault(c["recovery_rate_pct"], []).append(c["shocked_net_return_pct"])
-        dr_means = [sum(v) / len(v) for v in dr_groups.values()]
-        rr_means = [sum(v) / len(v) for v in rr_groups.values()]
-        dr_range = max(dr_means) - min(dr_means) if dr_means else 0
-        rr_range = max(rr_means) - min(rr_means) if rr_means else 0
-        if dr_range > rr_range * 1.5:
-            dominant = "default_rate"
-        elif rr_range > dr_range * 1.5:
-            dominant = "recovery_rate"
-        else:
-            dominant = "balanced"
-
-    return {
-        "top_fragile_combinations": top_fragile,
-        "break_even_thresholds": break_even,
-        "dominant_driver": dominant,
-        "rate_shocks_bps": _RATE_SHOCKS_BPS,
-        "note": "3D summary: default_rate × recovery_rate × rate_shock",
-    }
+# Sensitivity analysis — delegated to credit_sensitivity module
+from vertical_engines.credit.credit_sensitivity import (  # noqa: E402
+    build_sensitivity_2d as _build_sensitivity_2d,
+)
+from vertical_engines.credit.credit_sensitivity import (
+    build_sensitivity_3d_summary as _build_sensitivity_3d_summary,
+)
 
 
 # Legacy 1D sensitivity (deprecated, kept for backward compat)

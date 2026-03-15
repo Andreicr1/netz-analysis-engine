@@ -15,9 +15,10 @@ from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_curr
 from app.database import get_db
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.schemas.macro import MacroIndicators
-from app.domains.wealth.schemas.risk import CVaRPoint, CVaRStatus, RegimeHistoryPoint, RegimeRead
+from app.domains.wealth.schemas.risk import CVaRPoint, CVaRStatus, RegimeHistoryPoint
 from app.routers.common import VALID_PROFILES, get_latest_snapshot
 from app.routers.common import validate_profile as _validate_profile
+from app.shared.schemas import RegimeRead
 from quant_engine.regime_service import get_current_regime, get_latest_macro_values
 
 logger = structlog.get_logger()
@@ -121,7 +122,18 @@ async def get_regime(
     actor: Actor = Depends(get_actor),
 ) -> RegimeRead:
     config = await config_service.get("liquid_funds", "calibration", actor.organization_id)
-    return await get_current_regime(db, config=config)
+
+    # Pre-fetch fallback regime from latest PortfolioSnapshot
+    fallback_stmt = (
+        select(PortfolioSnapshot.regime)
+        .where(PortfolioSnapshot.regime.is_not(None))
+        .order_by(PortfolioSnapshot.snapshot_date.desc())
+        .limit(1)
+    )
+    fallback_result = await db.execute(fallback_stmt)
+    fallback_regime = fallback_result.scalar_one_or_none() or "RISK_ON"
+
+    return await get_current_regime(db, config=config, fallback_regime=fallback_regime)
 
 
 @router.get(
