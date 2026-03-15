@@ -12,10 +12,27 @@ Returns snapshot with stress severity embedded.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from typing import Any
+    from vertical_engines.credit.market_data.models import (
+        FRED_SERIES_REGISTRY as FRED_SERIES_REGISTRY,
+    )
+    from vertical_engines.credit.market_data.regional import (
+        fetch_regional_case_shiller as fetch_regional_case_shiller,
+    )
+    from vertical_engines.credit.market_data.regional import (
+        resolve_metro_key as resolve_metro_key,
+    )
+    from vertical_engines.credit.market_data.service import (
+        get_macro_snapshot as get_macro_snapshot,
+    )
+    from vertical_engines.credit.market_data.stress import (
+        compute_macro_stress_flag as compute_macro_stress_flag,
+    )
+    from vertical_engines.credit.market_data.stress import (
+        compute_macro_stress_severity as compute_macro_stress_severity,
+    )
 
 
 def __getattr__(name: str) -> Any:

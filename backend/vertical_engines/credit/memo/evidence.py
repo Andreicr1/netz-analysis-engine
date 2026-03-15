@@ -239,21 +239,6 @@ def _build_benchmark_meta(benchmarks: list[dict[str, Any]] | None) -> dict[str, 
 
 
 # ---------------------------------------------------------------------
-# compress_to_budget  (NO-OP — kept for backward-compat imports)
-# ---------------------------------------------------------------------
-
-def compress_to_budget(
-    pack: dict[str, Any],
-    *,
-    max_tokens: int = 999_999,
-) -> dict[str, Any]:
-    """Legacy API — returns pack unchanged.  Budget compression has been
-    disabled to preserve full-context analysis quality.
-    """
-    return pack
-
-
-# ---------------------------------------------------------------------
 # EvidencePack Validation (Public)
 # ---------------------------------------------------------------------
 

@@ -57,6 +57,13 @@ logger = structlog.get_logger()
 # ---------------------------------------------------------------------------
 
 
+def _extract_gap_text(gap: Any) -> str:
+    """Extract gap description from a gap entry (dict or string)."""
+    if isinstance(gap, dict):
+        return gap.get("description") or gap.get("gap") or str(gap)
+    return str(gap or "")
+
+
 def _attribute_citations(
     citations: list[dict[str, Any]],
     *,
@@ -83,7 +90,7 @@ def _persist_chapter(
     section_text: str,
     version_tag: str,
     ch_model: str,
-    evidence_pack: dict[str, Any],
+    evidence_pack_json_len: int,
     actor_id: str,
 ) -> None:
     """Persist a single memo chapter row with is_current flip.
@@ -121,7 +128,7 @@ def _persist_chapter(
         version_tag=version_tag[:40],
         generated_at=now,
         model_version=ch_model[:80],
-        token_count_input=len(json.dumps(evidence_pack, default=str)) // 4,
+        token_count_input=evidence_pack_json_len // 4,
         token_count_output=len(section_text) // 4,
         is_current=True,
         created_by=actor_id,
@@ -167,6 +174,7 @@ def generate_memo_book(
 
     # ── Build shared evidence summary (F + E) — once for all chapters ──
     evidence_summary = build_evidence_summary(evidence_pack)
+    evidence_pack_json_len = len(json.dumps(evidence_pack, default=str))
     logger.info("EVIDENCE_SUMMARY_BUILT", chars=len(evidence_summary))
 
     chapters_output: list[dict[str, Any]] = []
@@ -258,12 +266,11 @@ def generate_memo_book(
 
         ch_critical_gaps = chapter_result.get("critical_gaps", [])
         for gap in ch_critical_gaps:
-            gap_text = gap.get("description") or gap.get("gap") or str(gap) if isinstance(gap, dict) else str(gap or "")
             all_critical_gaps.append({
                 "chapter_tag": ch_tag,
                 "chapter_num": ch_num,
                 "chapter_title": ch_title,
-                "gap": gap_text,
+                "gap": _extract_gap_text(gap),
             })
 
         section_text = section_text.replace("\x00", "")
@@ -279,7 +286,7 @@ def generate_memo_book(
             section_text=section_text,
             version_tag=version_tag,
             ch_model=ch_model,
-            evidence_pack=evidence_pack,
+            evidence_pack_json_len=evidence_pack_json_len,
             actor_id=actor_id,
         )
 
@@ -370,12 +377,11 @@ def generate_memo_book(
 
                 ch_critical_gaps = result_data.get("critical_gaps", [])
                 for gap in ch_critical_gaps:
-                    gap_text = gap.get("description") or gap.get("gap") or str(gap) if isinstance(gap, dict) else str(gap or "")
                     all_critical_gaps.append({
                         "chapter_tag": ch_tag,
                         "chapter_num": ch_num,
                         "chapter_title": ch_title,
-                        "gap": gap_text,
+                        "gap": _extract_gap_text(gap),
                     })
 
                 section_text = section_text.replace("\x00", "")
@@ -391,7 +397,7 @@ def generate_memo_book(
                     section_text=section_text,
                     version_tag=version_tag,
                     ch_model=ch_model,
-                    evidence_pack=evidence_pack,
+                    evidence_pack_json_len=evidence_pack_json_len,
                     actor_id=actor_id,
                 )
 
@@ -435,12 +441,11 @@ def generate_memo_book(
 
                 ch_critical_gaps = chapter_result.get("critical_gaps", [])
                 for gap in ch_critical_gaps:
-                    gap_text = gap.get("description") or gap.get("gap") or str(gap) if isinstance(gap, dict) else str(gap or "")
                     all_critical_gaps.append({
                         "chapter_tag": pending["ch_tag"],
                         "chapter_num": pending["ch_num"],
                         "chapter_title": pending["ch_title"],
-                        "gap": gap_text,
+                        "gap": _extract_gap_text(gap),
                     })
 
                 section_text = section_text.replace("\x00", "")
@@ -456,7 +461,7 @@ def generate_memo_book(
                     section_text=section_text,
                     version_tag=version_tag,
                     ch_model=pending["ch_model"],
-                    evidence_pack=evidence_pack,
+                    evidence_pack_json_len=evidence_pack_json_len,
                     actor_id=actor_id,
                 )
 
@@ -556,6 +561,7 @@ async def async_generate_memo_book(
         sem = asyncio.Semaphore(5)
 
     evidence_summary = build_evidence_summary(evidence_pack)
+    evidence_pack_json_len = len(json.dumps(evidence_pack, default=str))
     logger.info("ASYNC_EVIDENCE_SUMMARY_BUILT", chars=len(evidence_summary))
 
     chapters_output: list[dict[str, Any]] = []
@@ -653,16 +659,11 @@ async def async_generate_memo_book(
 
         ch_critical_gaps = result.get("critical_gaps", [])
         for gap in ch_critical_gaps:
-            gap_text = (
-                gap.get("description") or gap.get("gap") or str(gap)
-                if isinstance(gap, dict)
-                else str(gap or "")
-            )
             all_critical_gaps.append({
                 "chapter_tag": ch_tag,
                 "chapter_num": ch_num,
                 "chapter_title": ch_title,
-                "gap": gap_text,
+                "gap": _extract_gap_text(gap),
             })
 
         _persist_chapter(
@@ -676,7 +677,7 @@ async def async_generate_memo_book(
             section_text=section_text,
             version_tag=version_tag,
             ch_model=ch_model,
-            evidence_pack=evidence_pack,
+            evidence_pack_json_len=evidence_pack_json_len,
             actor_id=actor_id,
         )
         chapters_generated += 1
@@ -738,7 +739,7 @@ async def async_generate_memo_book(
             section_text=section_text,
             version_tag=version_tag,
             ch_model=ch_model,
-            evidence_pack=evidence_pack,
+            evidence_pack_json_len=evidence_pack_json_len,
             actor_id=actor_id,
         )
         chapters_generated += 1

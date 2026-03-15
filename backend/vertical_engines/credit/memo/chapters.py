@@ -16,6 +16,7 @@ import structlog
 
 from ai_engine.model_config import get_model
 from ai_engine.prompts import prompt_registry
+from vertical_engines.credit.memo.models import CallOpenAiFn
 from vertical_engines.credit.memo.prompts import (
     _CHAPTER_CHUNK_BUDGET,
     _CHAPTER_DOC_AFFINITY,
@@ -255,7 +256,7 @@ def generate_chapter(
     chapter_title: str,
     evidence_pack: dict[str, Any],
     evidence_chunks: list[dict[str, Any]],
-    call_openai_fn: Any,
+    call_openai_fn: CallOpenAiFn,
     model: str | None = None,
     evidence_summary: str | None = None,
     prepare_only: bool = False,
@@ -487,7 +488,7 @@ def generate_recommendation_chapter(
     critic_findings: dict[str, Any],
     policy_breaches: dict[str, Any],
     sponsor_red_flags: list[dict[str, Any]],
-    call_openai_fn: Any,
+    call_openai_fn: CallOpenAiFn,
     model: str | None = None,
     decision_anchor: dict[str, Any] | None = None,
     chapter_summaries: dict[str, str] | None = None,
@@ -686,8 +687,8 @@ def regenerate_chapter_with_critic(
     ch_tag: str,
     original_text: str,
     critic_addendum: str,
-    evidence_pack: dict,
-    call_openai_fn,
+    evidence_pack: dict[str, Any],
+    call_openai_fn: CallOpenAiFn,
 ) -> str | None:
     """Regenerate a single chapter incorporating critic findings.
 

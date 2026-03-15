@@ -50,9 +50,6 @@ if TYPE_CHECKING:
         build_evidence_pack as build_evidence_pack,
     )
     from vertical_engines.credit.memo.evidence import (
-        compress_to_budget as compress_to_budget,
-    )
-    from vertical_engines.credit.memo.evidence import (
         persist_evidence_pack as persist_evidence_pack,
     )
     from vertical_engines.credit.memo.evidence import (
@@ -85,7 +82,6 @@ __all__ = [
     "build_evidence_pack",
     "validate_evidence_pack",
     "persist_evidence_pack",
-    "compress_to_budget",
     # tone
     "run_tone_normalizer",
 ]
@@ -112,7 +108,7 @@ def __getattr__(name: str) -> Any:
 
     if name in (
         "build_evidence_pack", "validate_evidence_pack",
-        "persist_evidence_pack", "compress_to_budget",
+        "persist_evidence_pack",
     ):
         from vertical_engines.credit.memo import evidence as _evidence
         return getattr(_evidence, name)
