@@ -378,14 +378,7 @@ def _run_policy_compliance(
         f"have already been checked deterministically and passed.\n"
         f"Focus on qualitative policy alignment, strategy fit, and governance guidelines."
     )
-    try:
-        from vertical_engines.credit import deep_review as _deep_review
-
-        openai_caller = getattr(_deep_review, "_call_openai", _call_openai)
-    except Exception:
-        openai_caller = _call_openai
-
-    data = openai_caller(_get_policy_compliance_system(), user_content, max_tokens=4000)
+    data = _call_openai(_get_policy_compliance_system(), user_content, max_tokens=4000)
 
     # Extract soft guideline exceptions from LLM response
     llm_violations = data.get("violations", [])

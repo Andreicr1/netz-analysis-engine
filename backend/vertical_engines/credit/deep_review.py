@@ -275,6 +275,8 @@ def run_all_portfolio_reviews(
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
+    from app.core.db.engine import async_session_factory
+
     SessionLocal = async_session_factory
     results = []
 
@@ -1717,6 +1719,8 @@ async def async_run_deal_deep_review_v4(
     # After gather() returns, all threads have completed — main db
     # session is exclusively owned by the event loop thread again.
     # ══════════════════════════════════════════════════════════════
+    from app.core.db.engine import async_session_factory
+
     SessionLocal = async_session_factory
 
     def _gather_texts_threadsafe() -> dict:
@@ -2819,6 +2823,8 @@ def run_all_deals_deep_review_v4(
 
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
+    from app.core.db.engine import async_session_factory
+
     SessionLocal = async_session_factory
     results: list[dict[str, Any]] = []
 
@@ -2913,6 +2919,8 @@ async def async_run_all_deals_deep_review_v4(
         .scalars()
         .all(),
     )
+
+    from app.core.db.engine import async_session_factory
 
     SessionLocal = async_session_factory
 
