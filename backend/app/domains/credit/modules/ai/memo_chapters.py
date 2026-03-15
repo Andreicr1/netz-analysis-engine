@@ -474,7 +474,7 @@ def regenerate_memo_chapter(
 
     log = logging.getLogger("ai.regenerate_chapter")
 
-    from vertical_engines.credit.memo_book_generator import (
+    from vertical_engines.credit.memo import (
         CHAPTER_REGISTRY,
         generate_chapter,
         select_chapter_chunks,

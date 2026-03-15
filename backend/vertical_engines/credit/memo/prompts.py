@@ -1,4 +1,7 @@
-"""Memo chapter prompts, token budgets, and configuration constants."""
+"""Memo chapter prompts, token budgets, and configuration constants.
+
+LEAF node — imports only from __future__. No sibling imports.
+"""
 from __future__ import annotations
 
 _CHAPTER_DOC_AFFINITY: dict[str, frozenset[str]] = {

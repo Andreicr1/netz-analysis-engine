@@ -1,15 +1,6 @@
-"""Batch API Client — Netz Private Credit OS
-==========================================
+"""Batch API Client — OpenAI Batch API support for deep review chapter generation.
 
-OpenAI Batch API support for deep review chapter generation.
 Submits all chapter requests as a single batch for 50% input cost discount.
-
-Usage:
-    from vertical_engines.credit.batch_client import submit_chapter_batch, poll_batch, parse_batch_results
-
-    batch_id = submit_chapter_batch(requests)
-    await poll_batch(batch_id, timeout=1800)
-    results = parse_batch_results(batch_id)
 
 Architecture:
   - Each chapter request is serialised as a Responses API call in JSONL
@@ -17,23 +8,21 @@ Architecture:
   - Polled with exponential backoff until completion
   - Results parsed back into chapter dicts
 
-Note: Batch API offers 50% discount on input tokens but has latency
-(typically 1-15 minutes for 14 chapter requests, max 24h guarantee).
-Use for non-interactive deep review runs (e.g. background processing).
+Imports models only (LEAF-tier).
 """
 from __future__ import annotations
 
 import io
 import json
-import logging
 import time
 from typing import Any
 
+import structlog
 from openai import OpenAI
 
 from app.core.config import settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 def _get_batch_client() -> OpenAI:
@@ -82,40 +71,27 @@ def submit_chapter_batch(
 ) -> str:
     """Submit a batch of chapter requests to the OpenAI Batch API.
 
-    Parameters
-    ----------
-    requests : list[dict]
-        List of request dicts from build_chapter_request().
-    metadata : dict | None
-        Optional metadata (e.g. deal_id, version_tag) for tracking.
-
-    Returns
-    -------
-    str
-        The batch ID for polling.
-
+    Returns the batch ID for polling.
     """
     client = _get_batch_client()
 
-    # Build JSONL content
     jsonl_lines = [json.dumps(req, default=str) for req in requests]
     jsonl_content = "\n".join(jsonl_lines)
 
     logger.info(
-        "BATCH_SUBMIT_START requests=%d total_chars=%d",
-        len(requests), len(jsonl_content),
+        "BATCH_SUBMIT_START",
+        requests=len(requests),
+        total_chars=len(jsonl_content),
     )
 
-    # Upload JSONL file
     file_obj = io.BytesIO(jsonl_content.encode("utf-8"))
     uploaded = client.files.create(
         file=("batch_chapters.jsonl", file_obj),
         purpose="batch",
     )
 
-    logger.info("BATCH_FILE_UPLOADED file_id=%s", uploaded.id)
+    logger.info("BATCH_FILE_UPLOADED", file_id=uploaded.id)
 
-    # Create batch
     batch = client.batches.create(
         input_file_id=uploaded.id,
         endpoint="/v1/responses",
@@ -123,7 +99,7 @@ def submit_chapter_batch(
         metadata=metadata or {},
     )
 
-    logger.info("BATCH_CREATED batch_id=%s status=%s", batch.id, batch.status)
+    logger.info("BATCH_CREATED", batch_id=batch.id, status=batch.status)
     return batch.id
 
 
@@ -135,22 +111,6 @@ def poll_batch(
     max_interval: float = 60.0,
 ) -> dict[str, Any]:
     """Poll a batch until it completes or times out.
-
-    Parameters
-    ----------
-    batch_id : str
-        Batch ID from submit_chapter_batch().
-    timeout : float
-        Maximum seconds to wait (default 30 minutes).
-    poll_interval : float
-        Initial polling interval in seconds.
-    max_interval : float
-        Maximum polling interval (exponential backoff cap).
-
-    Returns
-    -------
-    dict
-        Batch status object with keys: status, request_counts, output_file_id, etc.
 
     Raises
     ------
@@ -170,11 +130,12 @@ def poll_batch(
         request_counts = batch.request_counts
 
         logger.info(
-            "BATCH_POLL batch_id=%s status=%s completed=%s/%s failed=%s",
-            batch_id, status,
-            getattr(request_counts, "completed", "?"),
-            getattr(request_counts, "total", "?"),
-            getattr(request_counts, "failed", "?"),
+            "BATCH_POLL",
+            batch_id=batch_id,
+            status=status,
+            completed=getattr(request_counts, "completed", "?"),
+            total=getattr(request_counts, "total", "?"),
+            failed=getattr(request_counts, "failed", "?"),
         )
 
         if status == "completed":
@@ -214,17 +175,8 @@ def poll_batch(
 def parse_batch_results(batch_result: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Parse the output JSONL from a completed batch.
 
-    Parameters
-    ----------
-    batch_result : dict
-        Result from poll_batch() with output_file_id.
-
-    Returns
-    -------
-    dict[str, dict]
-        Mapping of custom_id → parsed JSON response body.
-        Failed requests have an "error" key instead of parsed content.
-
+    Returns mapping of custom_id → parsed JSON response body.
+    Failed requests have an "error" key instead of parsed content.
     """
     client = _get_batch_client()
 
@@ -232,7 +184,6 @@ def parse_batch_results(batch_result: dict[str, Any]) -> dict[str, dict[str, Any
     if not output_file_id:
         raise ValueError("No output_file_id in batch result — batch may have failed")
 
-    # Download output JSONL
     content = client.files.content(output_file_id)
     text = content.text
 
@@ -248,12 +199,10 @@ def parse_batch_results(batch_result: dict[str, Any]) -> dict[str, dict[str, Any
 
         if status_code == 200:
             body = response.get("body", {})
-            # Extract text from Responses API output
             output_text = ""
             if isinstance(body, dict):
                 output_text = body.get("output_text", "")
                 if not output_text:
-                    # Try extracting from output array
                     for item in body.get("output", []):
                         if item.get("type") == "message":
                             for content_item in item.get("content", []):
@@ -274,10 +223,10 @@ def parse_batch_results(batch_result: dict[str, Any]) -> dict[str, dict[str, Any
             }
 
     logger.info(
-        "BATCH_RESULTS_PARSED total=%d successful=%d failed=%d",
-        len(results),
-        sum(1 for r in results.values() if "error" not in r),
-        sum(1 for r in results.values() if "error" in r),
+        "BATCH_RESULTS_PARSED",
+        total=len(results),
+        successful=sum(1 for r in results.values() if "error" not in r),
+        failed=sum(1 for r in results.values() if "error" in r),
     )
 
     # Also parse error file if present
@@ -295,6 +244,6 @@ def parse_batch_results(batch_result: dict[str, Any]) -> dict[str, dict[str, Any
                         "error": json.dumps(entry.get("error", {}), default=str)[:300],
                     }
         except Exception as exc:
-            logger.warning("BATCH_ERROR_FILE_PARSE_FAILED: %s", exc)
+            logger.warning("BATCH_ERROR_FILE_PARSE_FAILED", error=str(exc))
 
     return results

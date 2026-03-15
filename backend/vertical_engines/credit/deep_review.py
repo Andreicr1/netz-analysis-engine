@@ -363,9 +363,9 @@ def run_deal_deep_review_v4(
         extract_searchable_entities,
         fetch_edgar_multi_entity,
     )
-    from vertical_engines.credit.memo_book_generator import generate_memo_book
-    from vertical_engines.credit.memo_evidence_pack import (
+    from vertical_engines.credit.memo import (
         build_evidence_pack,
+        generate_memo_book,
         persist_evidence_pack,
         validate_evidence_pack,
     )
@@ -1022,7 +1022,7 @@ def run_deal_deep_review_v4(
             if ch_tag not in chapter_texts:
                 continue
             try:
-                from vertical_engines.credit.memo_chapter_engine import (
+                from vertical_engines.credit.memo import (
                     regenerate_chapter_with_critic,
                 )
 
@@ -1163,7 +1163,7 @@ def run_deal_deep_review_v4(
             import asyncio as _asyncio
             from concurrent.futures import ThreadPoolExecutor as _ToneTPE
 
-            from vertical_engines.credit.tone_normalizer import (
+            from vertical_engines.credit.memo import (
                 run_tone_normalizer as _run_tone_normalizer,
             )
 
@@ -1648,8 +1648,8 @@ async def async_run_deal_deep_review_v4(
         extract_searchable_entities,
         fetch_edgar_multi_entity,
     )
-    from vertical_engines.credit.memo_book_generator import async_generate_memo_book
-    from vertical_engines.credit.memo_evidence_pack import (
+    from vertical_engines.credit.memo import (
+        async_generate_memo_book,
         build_evidence_pack,
         persist_evidence_pack,
         validate_evidence_pack,
@@ -2275,7 +2275,7 @@ async def async_run_deal_deep_review_v4(
             + "\n".join(f"- GAP: {g}" for g in critic_post_dict.get("material_gaps", []))
         )
 
-        from vertical_engines.credit.memo_chapter_engine import (
+        from vertical_engines.credit.memo import (
             regenerate_chapter_with_critic,
         )
 
@@ -2403,7 +2403,7 @@ async def async_run_deal_deep_review_v4(
 
     if chapter_texts:
         try:
-            from vertical_engines.credit.tone_normalizer import (
+            from vertical_engines.credit.memo import (
                 run_tone_normalizer as _run_tone_normalizer,
             )
             logger.info(

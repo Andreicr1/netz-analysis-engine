@@ -1,6 +1,4 @@
-"""memo_evidence_pack.py
-
-Tier-1 EvidencePack builder for Deep Review V4.
+"""Tier-1 EvidencePack builder for Deep Review V4.
 
 Purpose
 -------
@@ -15,19 +13,20 @@ Design Principles
 - No artificial slicing (e.g. "top 10 only") is permitted.
 - NO token-budget compression is applied.  Full-context fidelity is
   required for institutional-grade analysis.
-"""
 
+Imports models only (LEAF-tier).
+"""
 from __future__ import annotations
 
 import datetime as dt
 import json
-import logging
 import uuid as _uuid
 from typing import Any
 
+import structlog
 from sqlalchemy.orm import Session
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 _CHARS_PER_TOKEN = 3.5  # conservative English finance baseline
 
@@ -82,14 +81,9 @@ def build_evidence_pack(
         RAG evidence chunks with provenance metadata.
     market_benchmarks : list[dict] | None
         Structured benchmark chunks from market-data-index (PitchBook, Preqin,
-        Bloomberg, etc.).  Each dict contains content + fields: publisher,
-        reference_date, asset_class, sub_strategy, vintage_year, metric_type.
-        Used to ground ch08 (Return Modeling) and ch12 (Peer Comparison) with
-        authoritative third-party data.
+        Bloomberg, etc.).
     curated_surfaces_meta : dict | None
         Curation metadata from the evidence_selector dual-surface pipeline.
-        Records which curated chunks were used per chapter for traceability.
-        Contains per-chapter: governance_chunks_used, terms_chunks_used, etc.
 
     """
 
@@ -118,8 +112,6 @@ def build_evidence_pack(
     # -----------------------------------------------------------------
 
     # ── INVESTOR IDENTITY — anti-confusion guard ───────────────
-    # This block clearly identifies Netz as the INVESTING fund so
-    # chapter LLMs never confuse it with the deal sponsor/borrower.
     investor_identity = {
         "fund_name": "Netz Private Credit Fund",
         "role": "INVESTOR — this is OUR fund. It is NOT the deal sponsor, manager, or borrower.",
@@ -142,13 +134,9 @@ def build_evidence_pack(
     }
 
     # ── DEAL ROLE MAP — pre-computed entity-role assignments ──────
-    # Injected from deal_context.json via deep_review loader.
-    # Provides unambiguous Borrower / Lender / Manager classification.
     deal_role_map = deal_fields.get("deal_role_map", {})
     if deal_role_map:
         investor_identity["deal_role_map"] = deal_role_map
-        # For direct loan deals, reinforce that the lender is on the
-        # investor side and is NOT the deal sponsor.
         if deal_role_map.get("deal_structure") == "direct_loan":
             investor_identity["disambiguation_rule"] = (
                 "This is a DIRECT LOAN deal. "
@@ -162,9 +150,6 @@ def build_evidence_pack(
             )
 
     # ── THIRD-PARTY COUNTERPARTIES — document attribution guard ──
-    # Pre-existing lending relationships with OTHER parties whose
-    # documents are in the evidence corpus.  Their terms must NOT be
-    # presented as the deal under review.
     third_parties = deal_fields.get("third_party_counterparties", [])
     if third_parties:
         investor_identity["third_party_counterparties"] = third_parties
@@ -227,11 +212,7 @@ def build_evidence_pack(
 
 
 def _build_benchmark_meta(benchmarks: list[dict[str, Any]] | None) -> dict[str, Any]:
-    """Derive summary metadata from the market_benchmarks list.
-
-    Returns a compact dict used by chapter prompts to understand the
-    breadth of benchmark coverage without iterating all chunks.
-    """
+    """Derive summary metadata from the market_benchmarks list."""
     if not benchmarks:
         return {"count": 0, "publishers": [], "reference_dates": [], "asset_classes": []}
 
@@ -251,7 +232,7 @@ def _build_benchmark_meta(benchmarks: list[dict[str, Any]] | None) -> dict[str, 
     return {
         "count": len(benchmarks),
         "publishers": publishers,
-        "reference_dates": reference_dates[:5],   # most recent 5
+        "reference_dates": reference_dates[:5],
         "asset_classes": asset_classes,
         "vintage_years": vintage_years[:5],
     }
@@ -291,7 +272,6 @@ def validate_evidence_pack(pack: dict[str, Any]) -> None:
     if not pack:
         raise ValueError("EvidencePack is empty")
 
-    # Accept either V4 or legacy key sets
     has_v4_keys = "deal_overview" in pack or "deal_identity" in pack
     has_legacy_keys = "deal_id" in pack or "executive_summary" in pack
 
@@ -325,11 +305,9 @@ def persist_evidence_pack(
     """
     from app.domains.credit.modules.ai.models import MemoEvidencePack
 
-    # Estimate tokens from serialised JSON (no compression)
     serialized = json.dumps(pack, default=str)
     token_count = _estimate_tokens(serialized)
 
-    # ── Unset is_current on previous packs for this deal ─────────
     from sqlalchemy import update as _sa_update
     db.execute(
         _sa_update(MemoEvidencePack)
@@ -357,7 +335,9 @@ def persist_evidence_pack(
     db.flush()
 
     logger.info(
-        "EVIDENCE_PACK_PERSISTED pack_id=%s tokens=%d version=%s",
-        row.id, row.token_count, version_tag,
+        "EVIDENCE_PACK_PERSISTED",
+        pack_id=str(row.id),
+        tokens=row.token_count,
+        version=version_tag,
     )
     return row
