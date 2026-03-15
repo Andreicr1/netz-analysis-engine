@@ -7,20 +7,19 @@ Classifies market regime using multi-signal approach:
 - Falls back to portfolio volatility proxy when FRED data unavailable
 
 Priority hierarchy: CRISIS > INFLATION > RISK_OFF > RISK_ON
+
+Config is injected as parameter by callers via ConfigService.get("liquid_funds", "calibration").
 """
 
 from dataclasses import dataclass, field
 from datetime import date
-from functools import lru_cache
 from typing import TypedDict
 
 import numpy as np
 import structlog
-import yaml
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config.settings import get_calibration_path
 from app.domains.wealth.models.macro import MacroData
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.schemas.risk import RegimeRead
@@ -29,14 +28,14 @@ logger = structlog.get_logger()
 
 
 class RegimeThresholds(TypedDict):
-    """Typed regime detection thresholds from limits.yaml."""
+    """Typed regime detection thresholds."""
 
     vix_risk_off: float
     vix_extreme: float
     yield_curve_inversion: float
     cpi_yoy_high: float
     cpi_yoy_normal: float
-    sahm_rule_recession: float  # SAHMREALTIME >= this = recession signal
+    sahm_rule_recession: float
     default: str
 
 
@@ -46,14 +45,14 @@ class RegimeDefinition(TypedDict):
     description: str
 
 
-# Hardcoded fallback if limits.yaml is missing
+# Hardcoded fallback — used only if config parameter is not provided.
 _DEFAULT_THRESHOLDS: RegimeThresholds = {
     "vix_risk_off": 25,
     "vix_extreme": 35,
     "yield_curve_inversion": -0.10,
     "cpi_yoy_high": 4.0,
     "cpi_yoy_normal": 2.5,
-    "sahm_rule_recession": 0.50,  # Sahm (2019): 0.50pp rise from 12m low = recession onset
+    "sahm_rule_recession": 0.50,
     "default": "RISK_ON",
 }
 
@@ -64,19 +63,23 @@ REGIME_DEFINITIONS: dict[str, RegimeDefinition] = {
     "CRISIS": {"description": "Extreme stress, maximize capital preservation"},
 }
 
-# Staleness thresholds (business days) before falling back to volatility proxy
-STALENESS_DAILY = 3   # VIX, Treasury, DFF
-STALENESS_MONTHLY = 45  # CPI
+# Staleness thresholds (business days)
+STALENESS_DAILY = 3
+STALENESS_MONTHLY = 45
 
 
-@lru_cache(maxsize=1)
-def get_regime_thresholds() -> RegimeThresholds:
-    """Load regime thresholds from limits.yaml, fallback to hardcoded defaults."""
+def resolve_regime_thresholds(config: dict | None = None) -> RegimeThresholds:
+    """Extract regime thresholds from calibration config dict.
+
+    Falls back to hardcoded defaults if config is None or malformed.
+    """
+    if config is None:
+        return _DEFAULT_THRESHOLDS
+
     try:
-        config_path = get_calibration_path() / "limits.yaml"
-        with open(config_path) as f:
-            data = yaml.safe_load(f)
-        raw = data["regime_thresholds"]
+        raw = config.get("regime_thresholds", {})
+        if not raw:
+            return _DEFAULT_THRESHOLDS
         return RegimeThresholds(
             vix_risk_off=float(raw["vix_risk_off"]),
             vix_extreme=float(raw["vix_extreme"]),
@@ -86,11 +89,8 @@ def get_regime_thresholds() -> RegimeThresholds:
             sahm_rule_recession=float(raw.get("sahm_rule_recession", 0.50)),
             default=raw.get("default", "RISK_ON"),
         )
-    except FileNotFoundError:
-        logger.warning("limits.yaml not found, using default regime thresholds")
-        return _DEFAULT_THRESHOLDS
     except (KeyError, TypeError, ValueError) as e:
-        logger.error("limits.yaml malformed for regime_thresholds", error=str(e))
+        logger.error("Malformed regime config, using defaults", error=str(e))
         return _DEFAULT_THRESHOLDS
 
 
@@ -107,44 +107,35 @@ def classify_regime_multi_signal(
     cpi_yoy: float | None,
     sahm_rule: float | None = None,
     thresholds: RegimeThresholds | None = None,
+    config: dict | None = None,
 ) -> tuple[str, dict[str, str]]:
-    """Classify regime using priority hierarchy:
+    """Classify regime using priority hierarchy.
 
-    1. VIX >= vix_extreme (35) -> CRISIS
-    2. CPI YoY >= cpi_yoy_high (4.0) -> INFLATION
-    3. VIX >= vix_risk_off (25) -> RISK_OFF
-    4. Otherwise -> RISK_ON
-
-    Informational signals (logged for IC awareness, do not override hierarchy):
-    - Yield curve inversion: leading indicator of future recession
-    - Sahm Rule >= 0.50: real-time recession onset corroboration (Sahm 2019)
-
-    Returns (regime, reasons_dict) for auditability.
+    Args:
+        thresholds: Pre-resolved thresholds (takes precedence).
+        config: Raw calibration config dict from ConfigService (resolved if thresholds is None).
     """
     if thresholds is None:
-        thresholds = get_regime_thresholds()
+        thresholds = resolve_regime_thresholds(config)
 
     reasons: dict[str, str] = {}
 
-    # Rule 1: CRISIS — extreme volatility
     if vix is not None and vix >= thresholds["vix_extreme"]:
         reasons["vix"] = f"VIX={vix:.1f} >= {thresholds['vix_extreme']} (CRISIS)"
         reasons["decision"] = "CRISIS: extreme VIX overrides all other signals"
         return "CRISIS", reasons
 
-    # Rule 2: INFLATION — high CPI regardless of VIX
     if cpi_yoy is not None and cpi_yoy >= thresholds["cpi_yoy_high"]:
         reasons["cpi"] = f"CPI_YoY={cpi_yoy:.1f}% >= {thresholds['cpi_yoy_high']}% (INFLATION)"
         reasons["decision"] = "INFLATION: CPI above threshold"
         return "INFLATION", reasons
 
-    # Rule 3: RISK_OFF — elevated VIX
     if vix is not None and vix >= thresholds["vix_risk_off"]:
         reasons["vix"] = f"VIX={vix:.1f} >= {thresholds['vix_risk_off']} (RISK_OFF)"
         reasons["decision"] = "RISK_OFF: elevated volatility"
         return "RISK_OFF", reasons
 
-    # Informational signals — logged for IC awareness, do not override hierarchy
+    # Informational signals — IC awareness only
     if yield_curve_spread is not None and yield_curve_spread < thresholds["yield_curve_inversion"]:
         reasons["yield_curve"] = (
             f"10Y-2Y={yield_curve_spread:.2f}% inverted "
@@ -157,7 +148,6 @@ def classify_regime_multi_signal(
             f"(recession onset signal — IC awareness)"
         )
 
-    # Rule 4: Default
     if vix is not None:
         reasons["vix"] = f"VIX={vix:.1f} < {thresholds['vix_risk_off']} (RISK_ON)"
     reasons["decision"] = "RISK_ON: no stress signals triggered"
@@ -169,11 +159,7 @@ def classify_regime_from_volatility(
     vix_risk_off: float = 25.0,
     vix_extreme: float = 35.0,
 ) -> str:
-    """Fallback: classify regime from portfolio volatility proxy.
-
-    Maps portfolio volatility to VIX-equivalent thresholds.
-    Used when FRED data is unavailable or stale.
-    """
+    """Fallback: classify regime from portfolio volatility proxy."""
     vol_pct = annualized_vol * 100
 
     if vol_pct >= vix_extreme:
@@ -186,12 +172,14 @@ def classify_regime_from_volatility(
 def detect_regime(
     returns: np.ndarray,
     trading_days_per_year: int = 252,
+    config: dict | None = None,
 ) -> RegimeResult:
     """Detect market regime from a returns series (volatility proxy fallback).
 
-    Used when FRED macro data is unavailable.
+    Args:
+        config: Raw calibration config dict from ConfigService.
     """
-    thresholds = get_regime_thresholds()
+    thresholds = resolve_regime_thresholds(config)
 
     if len(returns) < 10:
         default = thresholds["default"]
@@ -218,23 +206,18 @@ def detect_regime(
 async def get_latest_macro_values(
     db: AsyncSession,
 ) -> dict[str, tuple[float | None, date | None]]:
-    """Query latest VIX, yield curve spread, CPI YoY, Fed Funds from macro_data.
-
-    Returns {series_id: (value, obs_date)} for regime-relevant series.
-    Logs warnings for stale data.
-    """
+    """Query latest VIX, yield curve spread, CPI YoY, Fed Funds from macro_data."""
     series_staleness = {
         "VIXCLS": STALENESS_DAILY,
         "YIELD_CURVE_10Y2Y": STALENESS_DAILY,
         "CPI_YOY": STALENESS_MONTHLY,
         "DFF": STALENESS_DAILY,
-        "SAHMREALTIME": STALENESS_MONTHLY,  # published with jobs report
+        "SAHMREALTIME": STALENESS_MONTHLY,
     }
 
     result: dict[str, tuple[float | None, date | None]] = {}
     today = date.today()
 
-    # Single query for all series using DISTINCT ON
     stmt = (
         select(MacroData.series_id, MacroData.value, MacroData.obs_date)
         .where(MacroData.series_id.in_(series_staleness.keys()))
@@ -261,7 +244,6 @@ async def get_latest_macro_values(
         else:
             result[series_id] = (float(value), obs_date)
 
-    # Mark missing series
     for series_id in series_staleness:
         if series_id not in found_series:
             result[series_id] = (None, None)
@@ -269,11 +251,14 @@ async def get_latest_macro_values(
     return result
 
 
-async def get_current_regime(db: AsyncSession) -> RegimeRead:
+async def get_current_regime(
+    db: AsyncSession,
+    config: dict | None = None,
+) -> RegimeRead:
     """Get current market regime from FRED macro data.
 
-    Falls back to latest portfolio snapshot regime if FRED data unavailable.
-    Replaces the old consensus-voting approach since regime is market-wide.
+    Args:
+        config: Raw calibration config dict from ConfigService.
     """
     macro = await get_latest_macro_values(db)
 
@@ -282,13 +267,11 @@ async def get_current_regime(db: AsyncSession) -> RegimeRead:
     cpi_val = macro.get("CPI_YOY", (None, None))[0]
     sahm_val = macro.get("SAHMREALTIME", (None, None))[0]
 
-    # If we have at least VIX, use multi-signal classification
     if vix_val is not None:
         regime, reasons = classify_regime_multi_signal(
-            vix_val, yield_val, cpi_val, sahm_rule=sahm_val
+            vix_val, yield_val, cpi_val, sahm_rule=sahm_val, config=config
         )
 
-        # Find most recent date across available series
         as_of = None
         for _, obs_date in macro.values():
             if obs_date is not None and (as_of is None or obs_date > as_of):

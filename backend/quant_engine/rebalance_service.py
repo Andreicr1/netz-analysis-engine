@@ -4,6 +4,8 @@ Implements the rebalance cascade state machine:
     ok → warning → breach → hard_stop
 
 Each state transition creates a RebalanceEvent with actor_source tracking.
+
+Config is injected as parameter by callers via ConfigService.
 """
 
 import uuid
@@ -18,9 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.models.rebalance import RebalanceEvent
-from app.services.cvar_service import (
-    PROFILE_CVAR_CONFIG,
-)
+from quant_engine.cvar_service import resolve_cvar_config
 
 logger = structlog.get_logger()
 
@@ -49,29 +49,31 @@ def determine_cascade_action(
     cvar_utilized_pct: float,
     consecutive_breach_days: int,
     profile: str,
+    config: dict | None = None,
 ) -> tuple[str | None, str | None]:
     """Determine if a cascade action is needed based on status transition.
 
+    Args:
+        config: portfolio_profiles config dict from ConfigService.
+
     Returns (event_type, trigger_reason) or (None, None) if no action needed.
     """
-    config = PROFILE_CVAR_CONFIG[profile]
+    profiles = resolve_cvar_config(config)
+    profile_config = profiles[profile]
 
-    # No change or improving → no action
     if trigger_status == "ok":
         return None, None
 
-    # Transition to warning
     if trigger_status == "warning" and previous_trigger_status in (None, "ok"):
         return "cvar_breach", (
             f"CVaR utilization at {cvar_utilized_pct:.1f}% "
-            f"(warning threshold: {config['warning_pct'] * 100:.0f}%)"
+            f"(warning threshold: {profile_config['warning_pct'] * 100:.0f}%)"
         )
 
-    # Transition to breach
     if trigger_status == "breach" and previous_trigger_status != "breach":
         return "cvar_breach", (
             f"CVaR breach: {consecutive_breach_days} consecutive days "
-            f"above limit (threshold: {config['breach_days']})"
+            f"above limit (threshold: {profile_config['breach_days']})"
         )
 
     return None, None
@@ -118,13 +120,13 @@ async def process_cascade(
     consecutive_breach_days: int,
     cvar_current: float | None = None,
     current_weights: dict[str, Any] | None = None,
+    config: dict | None = None,
 ) -> CascadeResult:
     """Process the rebalance cascade for a profile.
 
-    Called by portfolio_eval worker after computing CVaR status.
-    Creates rebalance events on state transitions.
+    Args:
+        config: portfolio_profiles config dict from ConfigService.
     """
-    # Get previous trigger status from last snapshot
     stmt = (
         select(PortfolioSnapshot.trigger_status)
         .where(PortfolioSnapshot.profile == profile)
@@ -140,6 +142,7 @@ async def process_cascade(
         cvar_utilized_pct,
         consecutive_breach_days,
         profile,
+        config=config,
     )
 
     if event_type is None:

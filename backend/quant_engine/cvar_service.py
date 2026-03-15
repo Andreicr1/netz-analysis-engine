@@ -3,32 +3,24 @@
 Provides rolling CVaR computation for individual funds and portfolio-level
 CVaR evaluation with breach detection.
 
-Profile CVaR config is loaded from calibration/config/profiles.yaml via
-@lru_cache. Falls back to hardcoded defaults if the file is missing.
+Config is injected as parameter by callers via ConfigService.get("liquid_funds", "portfolio_profiles").
 """
 
 from dataclasses import dataclass
-from functools import lru_cache
 from typing import TypedDict
 
 import numpy as np
 import structlog
-import yaml
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config.settings import get_calibration_path
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 
 logger = structlog.get_logger()
 
 
 class ProfileCVaRConfig(TypedDict):
-    """Typed configuration for per-profile CVaR parameters.
-
-    Mirrors the ``cvar`` section of each profile in
-    ``calibration/config/profiles.yaml``.
-    """
+    """Typed configuration for per-profile CVaR parameters."""
 
     window_months: int
     confidence: float
@@ -37,7 +29,7 @@ class ProfileCVaRConfig(TypedDict):
     breach_days: int
 
 
-# Hardcoded fallback if profiles.yaml is missing
+# Hardcoded fallback — used only if config parameter is not provided.
 _DEFAULT_CVAR_CONFIG: dict[str, ProfileCVaRConfig] = {
     "conservative": {
         "window_months": 12,
@@ -63,14 +55,18 @@ _DEFAULT_CVAR_CONFIG: dict[str, ProfileCVaRConfig] = {
 }
 
 
-@lru_cache(maxsize=1)
-def get_profile_cvar_config() -> dict[str, ProfileCVaRConfig]:
-    """Load CVaR config from profiles.yaml, fallback to hardcoded defaults."""
+def resolve_cvar_config(
+    config: dict | None = None,
+) -> dict[str, ProfileCVaRConfig]:
+    """Extract per-profile CVaR config from portfolio_profiles config dict.
+
+    Falls back to hardcoded defaults if config is None or malformed.
+    """
+    if config is None:
+        return _DEFAULT_CVAR_CONFIG
+
     try:
-        config_path = get_calibration_path() / "profiles.yaml"
-        with open(config_path) as f:
-            data = yaml.safe_load(f)
-        profiles = data["profiles"]
+        profiles = config.get("profiles", config)
         return {
             name: ProfileCVaRConfig(
                 window_months=int(profile["cvar"]["window_months"]),
@@ -80,18 +76,11 @@ def get_profile_cvar_config() -> dict[str, ProfileCVaRConfig]:
                 breach_days=int(profile["cvar"]["breach_days"]),
             )
             for name, profile in profiles.items()
+            if isinstance(profile, dict) and "cvar" in profile
         }
-    except FileNotFoundError:
-        logger.warning("profiles.yaml not found, using default CVaR config")
-        return _DEFAULT_CVAR_CONFIG
     except (KeyError, TypeError, ValueError) as e:
-        logger.error("profiles.yaml malformed for CVaR config", error=str(e))
+        logger.error("Malformed CVaR config, using defaults", error=str(e))
         return _DEFAULT_CVAR_CONFIG
-
-
-# Module-level alias for backward compatibility — callers that import
-# PROFILE_CVAR_CONFIG directly will get the cached YAML-loaded config.
-PROFILE_CVAR_CONFIG = get_profile_cvar_config()
 
 
 @dataclass
@@ -127,11 +116,10 @@ def compute_cvar_from_returns(
 
 
 def get_cvar_utilization(cvar_current: float, cvar_limit: float) -> float:
-    """Primitive: compute CVaR utilization as a percentage of the limit.
+    """Compute CVaR utilization as a percentage of the limit.
 
     Both cvar_current and cvar_limit are negative numbers (losses).
     Returns a positive percentage (0-100+).
-    Example: cvar_current=-0.05, cvar_limit=-0.08 → 62.5%
     """
     if cvar_limit == 0:
         return 0.0
@@ -144,10 +132,7 @@ def classify_trigger_status(
     warning_threshold_pct: float = 80.0,
     breach_consecutive_days: int = 5,
 ) -> str:
-    """Pure function: classify CVaR trigger status.
-
-    Returns one of: 'ok', 'warning', 'breach'.
-    """
+    """Classify CVaR trigger status. Returns 'ok', 'warning', or 'breach'."""
     if utilization_pct >= 100.0 and consecutive_days >= breach_consecutive_days:
         return "breach"
     if utilization_pct >= warning_threshold_pct:
@@ -159,10 +144,17 @@ async def check_breach_status(
     db: AsyncSession,
     profile: str,
     cvar_current: float,
+    config: dict | None = None,
 ) -> BreachStatus:
-    """Check breach status for a profile given current CVaR."""
-    config = PROFILE_CVAR_CONFIG[profile]
-    cvar_limit = config["limit"]
+    """Check breach status for a profile given current CVaR.
+
+    Args:
+        config: portfolio_profiles config dict from ConfigService.
+               Falls back to hardcoded defaults if None.
+    """
+    profiles = resolve_cvar_config(config)
+    profile_config = profiles.get(profile, _DEFAULT_CVAR_CONFIG.get(profile, {}))
+    cvar_limit = profile_config["limit"]
 
     utilization = get_cvar_utilization(cvar_current, cvar_limit)
 
@@ -177,7 +169,6 @@ async def check_breach_status(
     row = result.scalar_one_or_none()
     prev_days = row if row is not None else 0
 
-    # If currently over limit, increment; otherwise reset
     if utilization >= 100.0:
         consecutive_days = prev_days + 1
     else:
@@ -186,8 +177,8 @@ async def check_breach_status(
     trigger = classify_trigger_status(
         utilization,
         consecutive_days,
-        warning_threshold_pct=config["warning_pct"] * 100,
-        breach_consecutive_days=config["breach_days"],
+        warning_threshold_pct=profile_config["warning_pct"] * 100,
+        breach_consecutive_days=profile_config["breach_days"],
     )
 
     return BreachStatus(
@@ -197,5 +188,3 @@ async def check_breach_status(
         cvar_utilized_pct=utilization,
         consecutive_breach_days=consecutive_days,
     )
-
-

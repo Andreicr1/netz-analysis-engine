@@ -16,6 +16,9 @@ from app.domains.wealth.schemas.macro import MacroIndicators
 from app.domains.wealth.schemas.risk import CVaRPoint, CVaRStatus, RegimeHistoryPoint, RegimeRead
 from app.routers.common import VALID_PROFILES, get_latest_snapshot
 from app.routers.common import validate_profile as _validate_profile
+from app.core.config.config_service import ConfigService
+from app.core.config.dependencies import get_config_service
+from app.core.security.clerk_auth import Actor, get_actor
 from quant_engine.regime_service import get_current_regime, get_latest_macro_values
 
 logger = structlog.get_logger()
@@ -115,8 +118,11 @@ async def get_cvar_history(
 async def get_regime(
     db: AsyncSession = Depends(get_db),
     user: CurrentUser = Depends(get_current_user),
+    config_service: ConfigService = Depends(get_config_service),
+    actor: Actor = Depends(get_actor),
 ) -> RegimeRead:
-    return await get_current_regime(db)
+    config = await config_service.get("liquid_funds", "calibration", actor.organization_id)
+    return await get_current_regime(db, config=config)
 
 
 @router.get(

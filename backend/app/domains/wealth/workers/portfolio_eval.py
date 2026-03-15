@@ -5,6 +5,9 @@ Usage:
 
 Evaluates each profile's current CVaR, breach status, regime, and
 creates daily portfolio_snapshots. Publishes alerts via Redis pub/sub.
+
+Config loaded from DB via ConfigService (falls back to hardcoded defaults
+when running standalone without RLS context).
 """
 
 import asyncio
@@ -23,16 +26,39 @@ from app.domains.wealth.models.fund import Fund
 from app.domains.wealth.models.nav import NavTimeseries
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from quant_engine.cvar_service import (
-    PROFILE_CVAR_CONFIG,
     BreachStatus,
     check_breach_status,
     compute_cvar_from_returns,
+    resolve_cvar_config,
 )
 from quant_engine.regime_service import detect_regime
 
 logger = structlog.get_logger()
 
 PROFILES = ["conservative", "moderate", "growth"]
+
+
+async def _load_worker_config(db: AsyncSession) -> dict:
+    """Load portfolio_profiles config for worker context (no RLS).
+
+    Workers run without Clerk actor context, so we query the defaults
+    table directly (no RLS). Returns raw config dict or None for fallback.
+    """
+    try:
+        from app.core.config.models import VerticalConfigDefault
+
+        result = await db.execute(
+            select(VerticalConfigDefault.config).where(
+                VerticalConfigDefault.vertical == "liquid_funds",
+                VerticalConfigDefault.config_type == "portfolio_profiles",
+            )
+        )
+        config = result.scalar_one_or_none()
+        if config is not None:
+            return config
+    except Exception as e:
+        logger.warning("Could not load config from DB, using defaults", error=str(e))
+    return None
 
 
 async def _get_profile_weights(db: AsyncSession, profile: str) -> dict[str, float]:
@@ -59,16 +85,11 @@ async def _get_fund_returns_by_block(
     block_weights: dict[str, float],
     window_months: int,
 ) -> tuple[dict[str, np.ndarray], dict[str, float]]:
-    """Fetch returns for funds in each block. Returns (fund_returns, fund_weights).
-
-    For simplicity, picks the first active fund per block.
-    Production would use the full fund_selection logic.
-    """
+    """Fetch returns for funds in each block."""
     end_date = date.today()
     start_date = end_date - timedelta(days=window_months * 30)
     block_ids = list(block_weights.keys())
 
-    # Batch-fetch one representative fund per block
     funds_stmt = (
         select(Fund)
         .where(Fund.block_id.in_(block_ids), Fund.is_active == True, Fund.ticker.is_not(None))
@@ -81,7 +102,6 @@ async def _get_fund_returns_by_block(
     if not block_funds:
         return {}, {}
 
-    # Batch-fetch returns for all selected funds in one query
     fund_ids = [f.fund_id for f in block_funds.values()]
     ret_stmt = (
         select(NavTimeseries.fund_id, NavTimeseries.return_1d)
@@ -143,22 +163,25 @@ async def _publish_alert(
         logger.warning("Failed to publish Redis alert", error=str(e))
 
 
-async def evaluate_profile(db: AsyncSession, profile: str) -> dict | None:
+async def evaluate_profile(
+    db: AsyncSession,
+    profile: str,
+    config: dict | None = None,
+) -> dict | None:
     """Evaluate a single profile: compute CVaR, breach status, regime."""
-    config = PROFILE_CVAR_CONFIG[profile]
+    profiles = resolve_cvar_config(config)
+    profile_config = profiles[profile]
     today = date.today()
 
-    # Get strategic weights
     block_weights = await _get_profile_weights(db, profile)
     if not block_weights:
         logger.info("No strategic weights found", profile=profile)
-        # Create snapshot with no data
         return {
             "profile": profile,
             "snapshot_date": today,
             "weights": {},
             "cvar_current": None,
-            "cvar_limit": config["limit"],
+            "cvar_limit": profile_config["limit"],
             "cvar_utilized_pct": None,
             "trigger_status": "ok",
             "consecutive_breach_days": 0,
@@ -167,14 +190,11 @@ async def evaluate_profile(db: AsyncSession, profile: str) -> dict | None:
             "satellite_weight": None,
         }
 
-    # Get fund returns for the profile's CVaR window
     fund_returns, fund_weights = await _get_fund_returns_by_block(
-        db, block_weights, config["window_months"]
+        db, block_weights, profile_config["window_months"]
     )
 
-    # Compute portfolio-level CVaR
     if fund_returns and fund_weights:
-        # Weighted portfolio returns
         fund_ids = list(fund_weights.keys())
         min_len = min(len(fund_returns[fid]) for fid in fund_ids)
         if min_len > 0:
@@ -183,9 +203,7 @@ async def evaluate_profile(db: AsyncSession, profile: str) -> dict | None:
                 w = fund_weights[fid]
                 portfolio_returns += w * fund_returns[fid][-min_len:]
 
-            cvar, _ = compute_cvar_from_returns(portfolio_returns, config["confidence"])
-
-            # Regime detection from portfolio returns
+            cvar, _ = compute_cvar_from_returns(portfolio_returns, profile_config["confidence"])
             regime_result = detect_regime(portfolio_returns)
         else:
             cvar = 0.0
@@ -194,10 +212,8 @@ async def evaluate_profile(db: AsyncSession, profile: str) -> dict | None:
         cvar = 0.0
         regime_result = detect_regime(np.array([]))
 
-    # Check breach status
-    breach = await check_breach_status(db, profile, cvar)
+    breach = await check_breach_status(db, profile, cvar, config=config)
 
-    # Publish alert if warning or breach
     if breach.trigger_status in ("warning", "breach"):
         await _publish_alert(profile, breach)
 
@@ -206,7 +222,7 @@ async def evaluate_profile(db: AsyncSession, profile: str) -> dict | None:
         "snapshot_date": today,
         "weights": block_weights,
         "cvar_current": round(cvar, 6),
-        "cvar_limit": config["limit"],
+        "cvar_limit": profile_config["limit"],
         "cvar_utilized_pct": round(breach.cvar_utilized_pct, 2),
         "trigger_status": breach.trigger_status,
         "consecutive_breach_days": breach.consecutive_breach_days,
@@ -221,7 +237,6 @@ async def run_portfolio_eval() -> dict[str, str]:
     logger.info("Starting portfolio evaluation")
     results: dict[str, str] = {}
 
-    # Shared Redis connection for all alert publishes
     redis_conn = None
     try:
         import redis.asyncio as aioredis
@@ -233,13 +248,15 @@ async def run_portfolio_eval() -> dict[str, str]:
 
     try:
         async with async_session() as db:
+            # Load config once for all profiles
+            config = await _load_worker_config(db)
+
             for profile in PROFILES:
-                snapshot_data = await evaluate_profile(db, profile)
+                snapshot_data = await evaluate_profile(db, profile, config=config)
                 if snapshot_data is None:
                     results[profile] = "skipped"
                     continue
 
-                # Upsert snapshot (use index_elements instead of hardcoded constraint name)
                 stmt = pg_insert(PortfolioSnapshot).values(
                     profile=snapshot_data["profile"],
                     snapshot_date=snapshot_data["snapshot_date"],
@@ -268,7 +285,6 @@ async def run_portfolio_eval() -> dict[str, str]:
                     },
                 )
                 await db.execute(stmt)
-                # Commit per-profile to avoid long transactions
                 await db.commit()
                 results[profile] = snapshot_data["trigger_status"]
                 logger.info(
