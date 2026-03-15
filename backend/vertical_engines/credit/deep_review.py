@@ -9,7 +9,7 @@ V4 Pipeline (13-Chapter Memo Book):
   5. Policy compliance search (fund-level policy RAG)
   6. Decision Anchor computation (deterministic gate)
   7. 13-chapter IM generation (chapter-by-chapter with curated evidence surfaces)
-  8. Critic loop (ic_critic_engine — adversarial, rewrite if fatal flaws)
+  8. Critic loop (critic/ — adversarial, rewrite if fatal flaws)
   9. Atomic versioned persist (no delete of old drafts, chart-ready metadata)
 
 Also provides:
@@ -362,7 +362,7 @@ def run_deal_deep_review_v4(
         extract_searchable_entities,
         fetch_edgar_multi_entity,
     )
-    from vertical_engines.credit.ic_critic_engine import critique_intelligence
+    from vertical_engines.credit.critic import critique_intelligence
     from vertical_engines.credit.ic_quant_engine import compute_quant_profile
     from vertical_engines.credit.memo_book_generator import generate_memo_book
     from vertical_engines.credit.memo_evidence_pack import (
@@ -502,9 +502,9 @@ def run_deal_deep_review_v4(
     )
 
     # ── Stage 4.5: Instrument classification (deterministic) ────
-    from vertical_engines.credit.ic_critic_engine import _classify_instrument_type
+    from vertical_engines.credit.critic import classify_instrument_type
 
-    instrument_type = _classify_instrument_type(analysis)
+    instrument_type = classify_instrument_type(analysis)
     logger.info(
         "V4_INSTRUMENT_CLASSIFIED deal_id=%s type=%s",
         deal_id,
@@ -1644,8 +1644,8 @@ async def async_run_deal_deep_review_v4(
         extract_searchable_entities,
         fetch_edgar_multi_entity,
     )
-    from vertical_engines.credit.ic_critic_engine import (
-        _classify_instrument_type,
+    from vertical_engines.credit.critic import (
+        classify_instrument_type,
         critique_intelligence,
     )
     from vertical_engines.credit.ic_quant_engine import compute_quant_profile
@@ -1826,7 +1826,7 @@ async def async_run_deal_deep_review_v4(
         label="v4_stage3_analysis",
     ))
 
-    instrument_type = _classify_instrument_type(analysis)
+    instrument_type = classify_instrument_type(analysis)
     logger.info("V4_INSTRUMENT_CLASSIFIED deal_id=%s type=%s", deal_id, instrument_type)
 
     # ══════════════════════════════════════════════════════════════

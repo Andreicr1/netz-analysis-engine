@@ -25,7 +25,7 @@ def _deal_review_template_context(
     third_party_counterparties: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build shared template context for deal review prompts."""
-    from vertical_engines.credit.ic_critic_engine import INSTRUMENT_TYPE_PROFILES
+    from vertical_engines.credit.critic import INSTRUMENT_TYPE_PROFILES
 
     profile = INSTRUMENT_TYPE_PROFILES.get(
         instrument_type,
