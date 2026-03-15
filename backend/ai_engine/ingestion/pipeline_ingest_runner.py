@@ -197,7 +197,7 @@ def run_full_pipeline_ingest(
         logger.info("[Stage 2/5] Discovering pipeline deals for fund %s", fund_id)
         deals: list = []
         try:
-            from vertical_engines.credit.pipeline_intelligence import discover_pipeline_deals
+            from vertical_engines.credit.pipeline import discover_pipeline_deals
 
             deals = discover_pipeline_deals(db, fund_id=fund_id, actor_id=actor_id)
             result.deals_discovered = len(deals)
@@ -413,7 +413,7 @@ async def async_run_full_pipeline_ingest(
         logger.info("[Stage 2/5] Discovering pipeline deals for fund %s", fund_id)
         deals: list = []
         try:
-            from vertical_engines.credit.pipeline_intelligence import discover_pipeline_deals
+            from vertical_engines.credit.pipeline import discover_pipeline_deals
 
             def _discover_threadsafe() -> list:
                 return discover_pipeline_deals(db, fund_id=fund_id, actor_id=actor_id)
