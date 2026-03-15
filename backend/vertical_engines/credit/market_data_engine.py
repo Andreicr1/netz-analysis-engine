@@ -38,7 +38,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.domains.credit.modules.ai.models import MacroSnapshot
+from app.shared.models import MacroSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -512,91 +512,8 @@ def _compute_gdp_growth(
 #  Transform functions (deterministic, pure)
 # ---------------------------------------------------------------------------
 
-_EMPTY_TRANSFORM: dict[str, Any] = {
-    "series": [], "latest": None, "latest_date": None,
-    "transform_result": None, "trend_direction": None,
-    "delta_12m": None, "delta_12m_pct": None,
-}
-
-
-def _apply_transform(
-    series_id: str,
-    observations: list[dict],
-    transform: str | None,
-) -> dict[str, Any]:
-    """Apply a transform to a raw list of {date, value} observations.
-
-    Returns a dict with:
-      series           -- full curve (list of {date, value})
-      latest           -- most recent float value
-      latest_date      -- ISO date string of latest observation
-      transform_result -- computed derived value (YoY%, MoM delta, etc.)
-      trend_direction  -- "rising" | "falling" | "stable"
-      delta_12m        -- absolute change latest vs oldest in window
-      delta_12m_pct    -- % change latest vs oldest in window
-
-    Observations are assumed sorted descending (newest first), which is
-    the default FRED sort order.
-    """
-    if not observations:
-        return dict(_EMPTY_TRANSFORM)
-
-    parsed: list[dict[str, Any]] = []
-    for o in observations:
-        try:
-            parsed.append({"date": o["date"], "value": float(o["value"])})
-        except (ValueError, TypeError):
-            continue
-
-    if not parsed:
-        return dict(_EMPTY_TRANSFORM)
-
-    latest      = parsed[0]["value"]
-    latest_date = parsed[0]["date"]
-
-    # delta vs oldest available in window
-    delta_12m     = None
-    delta_12m_pct = None
-    if len(parsed) >= 2:
-        oldest = parsed[-1]["value"]
-        delta_12m = round(latest - oldest, 4)
-        if oldest != 0:
-            delta_12m_pct = round((latest / oldest - 1) * 100, 2)
-
-    # trend: 3-obs rolling vs full-window average
-    trend_direction = "stable"
-    if len(parsed) >= 6:
-        recent_avg = sum(p["value"] for p in parsed[:3]) / 3
-        full_avg   = sum(p["value"] for p in parsed) / len(parsed)
-        if recent_avg > full_avg * 1.02:
-            trend_direction = "rising"
-        elif recent_avg < full_avg * 0.98:
-            trend_direction = "falling"
-
-    # transform_result
-    transform_result = None
-    if transform == "yoy_pct":
-        transform_result = delta_12m_pct
-    elif transform == "yoy_pct_cpi":
-        if len(parsed) >= 13:
-            cpi_now     = parsed[0]["value"]
-            cpi_12m_ago = parsed[12]["value"]
-            if cpi_12m_ago > 0:
-                transform_result = round((cpi_now / cpi_12m_ago - 1) * 100, 2)
-    elif transform == "mom_delta":
-        if len(parsed) >= 2:
-            transform_result = round(parsed[0]["value"] - parsed[1]["value"], 1)
-
-    return {
-        "series":           parsed,
-        "latest":           latest,
-        "latest_date":      latest_date,
-        "transform_result": transform_result,
-        "trend_direction":  trend_direction,
-        "delta_12m":        delta_12m,
-        "delta_12m_pct":    delta_12m_pct,
-    }
-
+# Transform logic delegated to fred_service.apply_transform
+from quant_engine.fred_service import apply_transform as _apply_transform  # noqa: E402
 
 # ---------------------------------------------------------------------------
 #  Regional Case-Shiller: dynamic fetch based on deal geography
@@ -695,109 +612,24 @@ def compute_macro_stress_severity(snapshot: dict[str, Any]) -> dict[str, Any]:
 
     Fully deterministic — no LLM, no randomness.
 
+    Note: This function delegates to quant_engine.stress_severity_service
+    but converts the result back to the legacy dict format with UPPERCASE
+    grade levels for backward compatibility with existing consumers.
     """
-    score    = 0
-    triggers: list[str] = []
+    from quant_engine.stress_severity_service import compute_stress_severity
 
-    # RECESSION
-    if snapshot.get("recession_flag"):
-        score += 40
-        triggers.append("NBER recession indicator active")
+    result = compute_stress_severity(snapshot)
 
-    # FINANCIAL CONDITIONS (NFCI)
-    nfci = snapshot.get("financial_conditions_index")
-    if nfci is not None:
-        if nfci > 1.0:
-            score += 25
-            triggers.append(f"NFCI severely tight ({nfci:.2f} > 1.0)")
-        elif nfci > 0.0:
-            score += 10
-            triggers.append(f"NFCI above neutral ({nfci:.2f} > 0.0)")
-
-    # YIELD CURVE
-    curve = snapshot.get("yield_curve_2s10s")
-    if curve is not None:
-        if curve < -0.50:
-            score += 20
-            triggers.append(f"Deep yield curve inversion ({curve:.2f}%)")
-        elif curve < 0:
-            score += 10
-            triggers.append(f"Yield curve inverted ({curve:.2f}%)")
-
-    # CREDIT SPREADS (track separately for rate_stress sub-dim)
-    rate_sub_start = score
-    baa = snapshot.get("baa_spread")
-    if baa is not None:
-        if baa > 3.0:
-            score += 20
-            triggers.append(f"Baa spread elevated ({baa:.2f}% > 3.0%)")
-        elif baa > 2.0:
-            score += 8
-            triggers.append(f"Baa spread above normal ({baa:.2f}%)")
-
-    hy = snapshot.get("hy_spread_proxy")
-    if hy is not None:
-        if hy > 8.0:
-            score += 15
-            triggers.append(f"HY spread stressed ({hy:.2f}% > 8.0%)")
-        elif hy > 5.0:
-            score += 5
-            triggers.append(f"HY spread elevated ({hy:.2f}%)")
-
-    rate_sub = score - rate_sub_start
-
-    # REAL ESTATE
-    re_score = 0
-    re_data  = snapshot.get("real_estate_national", {})
-    hpi      = (re_data.get("CSUSHPINSA") or {})
-    hpi_yoy  = hpi.get("delta_12m_pct")
-    if hpi_yoy is not None:
-        if hpi_yoy < -5.0:
-            re_score += 20
-            triggers.append(f"National HPI declining sharply ({hpi_yoy:.1f}% YoY)")
-        elif hpi_yoy < 0:
-            re_score += 10
-            triggers.append(f"National HPI negative ({hpi_yoy:.1f}% YoY)")
-
-    mtg_data = snapshot.get("mortgage", {})
-    mtg_del  = (mtg_data.get("DRSFRMACBS") or {}).get("latest")
-    if mtg_del is not None and mtg_del > 4.0:
-        re_score += 15
-        triggers.append(f"Mortgage delinquency elevated ({mtg_del:.1f}%)")
-
-    score += re_score
-
-    # CREDIT QUALITY
-    cq_score = 0
-    cq_data  = snapshot.get("credit_quality", {})
-    all_del  = (cq_data.get("DRALACBN") or {}).get("latest")
-    if all_del is not None and all_del > 2.5:
-        cq_score += 10
-        triggers.append(f"Overall loan delinquency elevated ({all_del:.1f}%)")
-
-    score += cq_score
-
-    # GRADE
-    score = min(score, 100)
-    if score <= 15:
-        level = "NONE"
-    elif score <= 35:
-        level = "MILD"
-    elif score <= 65:
-        level = "MODERATE"
-    else:
-        level = "SEVERE"
-
-    def _grade(s: int) -> str:
-        return "NONE" if s == 0 else ("MILD" if s < 15 else ("MODERATE" if s < 30 else "SEVERE"))
+    # Convert to legacy format (UPPERCASE levels for backward compat)
+    sub_dims = result.sub_dimensions or {}
 
     return {
-        "level":              level,
-        "score":              score,
-        "triggers":           triggers,
-        "real_estate_stress": _grade(re_score),
-        "credit_stress":      "NONE" if cq_score == 0 else ("MILD" if cq_score < 10 else "MODERATE"),
-        "rate_stress":        _grade(rate_sub),
+        "level":              result.level.upper(),
+        "score":              int(result.score),
+        "triggers":           result.triggers,
+        "real_estate_stress": (sub_dims.get("real_estate_stress") or "none").upper(),
+        "credit_stress":      (sub_dims.get("credit_stress") or "none").upper(),
+        "rate_stress":        (sub_dims.get("rate_stress") or "none").upper(),
     }
 
 
