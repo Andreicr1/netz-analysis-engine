@@ -335,12 +335,12 @@ class RerankResult:
 - Latency benchmark: ~1-3s for 80 pairs on CPU (well within 5s budget)
 
 **Acceptance criteria:**
-- [ ] `local_reranker.py` with `rerank()` async function
-- [ ] `asyncio.Lock` serializing `predict()` calls (lazy-init, not module-level)
-- [ ] `asyncio.to_thread()` wrapping synchronous `CrossEncoder.predict()` inside the lock
-- [ ] Lazy model loading with double-checked locking (not module-level)
-- [ ] Numerically stable sigmoid normalization (handle both positive and negative logits)
-- [ ] `sentence-transformers>=3.0,<4.0` added to `[ai]` optional deps in `pyproject.toml`
+- [x] `local_reranker.py` with `rerank()` async function
+- [x] `asyncio.Lock` serializing `predict()` calls (lazy-init, not module-level)
+- [x] `asyncio.to_thread()` wrapping synchronous `CrossEncoder.predict()` inside the lock
+- [x] Lazy model loading with double-checked locking (not module-level)
+- [x] Numerically stable sigmoid normalization (handle both positive and negative logits)
+- [ ] `sentence-transformers>=3.0,<4.0` added to `[reranker]` optional deps in `pyproject.toml`
 - [ ] `torch>=2.2` pinned as floor dependency
 
 ##### Task 1.4: Validation Gates (`ai_engine/pipeline/validation.py`)
@@ -378,10 +378,10 @@ def validate_embeddings(embeddings: list, chunk_count: int) -> PipelineStageResu
 - Other documents in batch continue processing
 
 **Acceptance criteria:**
-- [ ] `validation.py` with typed validators for each transition
-- [ ] Content retention check: `(input_chars - sum(chunk_chars)) / input_chars < 0.25` (one-directional — expansion is a separate WARNING, not FAILURE). 25% threshold accommodates legitimate stripping of headers/footers/TOC/boilerplate while catching catastrophic loss (60%+).
-- [ ] Return `PipelineStageResult` with success/warnings/errors
-- [ ] Thresholds as module constants (not hardcoded inline)
+- [x] `validation.py` with typed validators for each transition
+- [x] Content retention check: `(input_chars - sum(chunk_chars)) / input_chars < 0.25` (one-directional — expansion is a separate WARNING, not FAILURE). 25% threshold accommodates legitimate stripping of headers/footers/TOC/boilerplate while catching catastrophic loss (60%+).
+- [x] Return `PipelineStageResult` with success/warnings/errors
+- [x] Thresholds as module constants (not hardcoded inline)
 
 ##### Task 1.5: Wire Hybrid Classifier into document_intelligence.py
 
