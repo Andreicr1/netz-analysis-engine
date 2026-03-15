@@ -38,7 +38,6 @@ from openai import OpenAI
 
 from ai_engine.extraction.embed_chunks import embed_folder
 from ai_engine.extraction.entity_bootstrap import bootstrap_folder
-from ai_engine.extraction.prepare_pdfs_full import process_folder
 
 logger = logging.getLogger(__name__)
 
@@ -434,13 +433,58 @@ def run_item(
 
             # ── Step 3 ─────────────────────────────────────────────────────
             if not skip_prepare:
-                logger.info("[3/5] prepare_pdfs_full — OCR + Classification + Chunking")
-                process_folder(
-                    str(item_dir),
-                    _mistral_key(),
-                    _azure_key(),
-                    dry_run,
-                )
+                logger.info("[3/5] unified_pipeline — OCR + Classification + Chunking")
+                import asyncio
+
+                from ai_engine.pipeline.models import IngestRequest
+                from ai_engine.pipeline.unified_pipeline import process as run_pipeline
+
+                pdfs = sorted(item_dir.rglob("*.pdf"))
+                all_chunks: list[dict] = []
+
+                # Load fund_context from entity bootstrap
+                fund_context: dict | None = None
+                ctx_path = item_dir / "fund_context.json"
+                if ctx_path.exists():
+                    fund_context = json.loads(ctx_path.read_text(encoding="utf-8"))
+
+                for pdf in pdfs:
+                    # Build blob URI from container + item_folder + relative path
+                    relative = pdf.relative_to(item_dir)
+                    blob_uri = f"{source_cfg['input_container']}/{item_folder}/{relative}"
+
+                    request = IngestRequest(
+                        source="batch",
+                        # NOTE: Batch pipeline runs outside JWT context — org_id is a placeholder.
+                        # The nil UUID is never used for RLS or ADLS paths (batch passes db=None).
+                        # Phase 3 will resolve real org_id from blob container metadata.
+                        org_id=uuid.UUID(int=0),
+                        vertical="credit",
+                        document_id=uuid.uuid5(uuid.NAMESPACE_URL, blob_uri),
+                        blob_uri=blob_uri,
+                        filename=pdf.name,
+                        fund_context=fund_context,
+                    )
+
+                    if not dry_run:
+                        try:
+                            # CONSTRAINT: asyncio.run() creates a new event loop per PDF.
+                            # This is safe ONLY when run_item() is called from a sync context
+                            # (CLI, Azure Functions worker). Will raise RuntimeError if called
+                            # from within an existing async event loop (e.g., FastAPI route).
+                            # TODO: Convert run_item() to async with Semaphore(8) + gather
+                            # for batch concurrency (see todo #023).
+                            pipeline_result = asyncio.run(run_pipeline(request))
+                            if pipeline_result.success and pipeline_result.data:
+                                chunk_count = pipeline_result.data.get("chunk_count", 0)
+                                logger.info("[pipeline] %s → %d chunks", pdf.name, chunk_count)
+                            elif not pipeline_result.success:
+                                logger.warning("[pipeline] %s FAILED: %s", pdf.name, pipeline_result.errors)
+                        except Exception as exc:
+                            logger.warning("[pipeline] %s error: %s", pdf.name, exc)
+                    else:
+                        logger.info("[DRY RUN] %s", pdf.name)
+
                 if not dry_run and (stage_a_meta or source_cfg["metadata_extractor"] == "deal_bootstrap"):
                     logger.info("[3b/5] Post-process chunks — metadata injection + Stage B.5 enrichment")
                     _post_process_chunks(
@@ -449,7 +493,7 @@ def run_item(
                         skip_enrich=skip_enrich,
                     )
             else:
-                logger.info("[3/5] prepare_pdfs_full — SKIPPED")
+                logger.info("[3/5] unified_pipeline — SKIPPED")
 
             # ── Step 4 ─────────────────────────────────────────────────────
             if not skip_embed and not dry_run:

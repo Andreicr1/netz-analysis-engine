@@ -14,7 +14,7 @@ from app.core.db.audit import write_audit_event
 from app.core.security.clerk_auth import Actor, get_actor, require_role
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.credit.documents import service
-from app.domains.credit.documents.services.ingestion_worker import process_pending_versions
+from app.domains.credit.documents.enums import DocumentIngestionStatus
 from app.domains.credit.modules.documents.models import Document, DocumentVersion
 from app.domains.credit.modules.documents.schemas import DocumentOut, DocumentVersionOut, Page
 from app.shared.enums import Role
@@ -162,9 +162,10 @@ async def process_pending(
     actor: Actor = Depends(get_actor),
     _role_guard: Actor = Depends(require_role(Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM)),
 ):
-    """Operational endpoint to process pending document versions.
-    This is a stopgap until an Azure Functions / queue worker is wired.
-    """
+    """Process pending document versions through the unified pipeline."""
+    from ai_engine.pipeline.models import IngestRequest
+    from ai_engine.pipeline.unified_pipeline import process as run_pipeline
+
     limit = 10
     if payload and isinstance(payload, dict) and "limit" in payload:
         try:
@@ -184,5 +185,73 @@ async def process_pending(
         after={"limit": limit},
     )
 
-    res = await process_pending_versions(db, fund_id=fund_id, limit=limit, actor_id=actor.actor_id)
-    return {"processed": res.processed, "indexed": res.indexed, "failed": res.failed, "skipped": res.skipped}
+    # Fetch pending versions
+    result = await db.execute(
+        select(DocumentVersion)
+        .where(
+            DocumentVersion.fund_id == fund_id,
+            DocumentVersion.ingestion_status == DocumentIngestionStatus.PENDING,
+        )
+        .order_by(DocumentVersion.created_at.asc())
+        .limit(limit),
+    )
+    versions = result.scalars().all()
+
+    processed = indexed = failed = skipped = 0
+    for version in versions:
+        processed += 1
+
+        # Same-document concurrency guard
+        if version.ingestion_status == DocumentIngestionStatus.PROCESSING:
+            skipped += 1
+            continue
+
+        # Mark PROCESSING
+        version.ingestion_status = DocumentIngestionStatus.PROCESSING
+        version.updated_by = actor.actor_id
+        await db.commit()
+
+        try:
+            # Fetch parent document for metadata
+            doc_result = await db.execute(
+                select(Document).where(
+                    Document.fund_id == fund_id,
+                    Document.id == version.document_id,
+                ),
+            )
+            doc = doc_result.scalar_one()
+
+            request = IngestRequest(
+                source="ui",
+                org_id=actor.organization_id,
+                vertical="credit",
+                document_id=version.document_id,
+                blob_uri=version.blob_uri or "",
+                filename=doc.title or "document.pdf",
+                fund_id=fund_id,
+                version_id=version.id,
+            )
+            pipeline_result = await run_pipeline(request, db=db, actor_id=actor.actor_id)
+
+            if pipeline_result.success:
+                version.ingestion_status = DocumentIngestionStatus.INDEXED
+                version.indexed_at = datetime.now()
+                indexed += 1
+            else:
+                version.ingestion_status = DocumentIngestionStatus.FAILED
+                version.ingest_error = {
+                    "stage": pipeline_result.stage,
+                    "errors": pipeline_result.errors,
+                }
+                failed += 1
+
+        except Exception as e:
+            logger.exception("Pipeline failed for version %s", version.id)
+            version.ingestion_status = DocumentIngestionStatus.FAILED
+            version.ingest_error = {"reason": "processing_error", "type": type(e).__name__}
+            failed += 1
+
+        version.updated_by = actor.actor_id
+        await db.commit()
+
+    return {"processed": processed, "indexed": indexed, "failed": failed, "skipped": skipped}

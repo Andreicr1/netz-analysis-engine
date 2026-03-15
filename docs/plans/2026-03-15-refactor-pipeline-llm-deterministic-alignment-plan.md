@@ -470,10 +470,10 @@ Compare `prepare_pdfs_full.py` (1786 LOC) line-by-line against modular component
 **Output:** Document findings in `docs/solutions/prepare-pdfs-full-diff-analysis.md`
 
 **Acceptance criteria:**
-- [ ] Every section of `prepare_pdfs_full.py` mapped to a modular equivalent or documented as unique
-- [ ] Any unique logic identified and a plan for where it moves
-- [ ] Document saved in `docs/solutions/`
-- [ ] **Blocks all subsequent Phase 2 tasks**
+- [x] Every section of `prepare_pdfs_full.py` mapped to a modular equivalent or documented as unique
+- [x] Any unique logic identified and a plan for where it moves
+- [x] Document saved in `docs/solutions/`
+- [x] **Blocks all subsequent Phase 2 tasks**
 
 ##### Task 2.1: Unified Pipeline Orchestrator (`ai_engine/pipeline/unified_pipeline.py`)
 
@@ -548,14 +548,14 @@ async def process_batch(requests: list[IngestRequest], max_concurrent: int = 8) 
 - Batch path must apply the same guard as UI path
 
 **Acceptance criteria:**
-- [ ] `unified_pipeline.py` with `process(IngestRequest) -> PipelineStageResult`
-- [ ] All 7 validation gates wired between stages (3 critical: OCR, content retention, chunk count)
-- [ ] `write_audit_event()` after each gate (preserves audit trail from ingestion_worker.py)
-- [ ] Final `PipelineStageResult` persisted as JSON on `DocumentVersion`
-- [ ] SSE events emitted for UI-sourced requests
-- [ ] Governance detection runs on every document (pure regex, zero cost)
-- [ ] Async-first: all external calls use `httpx.AsyncClient` or `asyncio.to_thread()`
-- [ ] No shared mutable state between documents
+- [x] `unified_pipeline.py` with `process(IngestRequest) -> PipelineStageResult`
+- [x] All 7 validation gates wired between stages (3 critical: OCR, content retention, chunk count)
+- [x] `write_audit_event()` after each gate (preserves audit trail from ingestion_worker.py)
+- [ ] Final `PipelineStageResult` persisted as JSON on `DocumentVersion` (caller responsibility)
+- [x] SSE events emitted for UI-sourced requests
+- [x] Governance detection runs on every document (pure regex, zero cost)
+- [x] Async-first: all external calls use `httpx.AsyncClient` or `asyncio.to_thread()`
+- [x] No shared mutable state between documents
 - [ ] Same-document concurrency guard (check ingestion_status before processing)
 
 ##### Task 2.2: Update UI Ingestion Route
@@ -573,9 +573,9 @@ Replace `ingestion_worker.process_pending_versions()` call with `unified_pipelin
 **SSE contract:** The existing terminal events (`ingestion_complete`, `error`) are preserved. New intermediate events (`classification_complete`, `extraction_complete`) are additive — SvelteKit ignores unknown event types.
 
 **Acceptance criteria:**
-- [ ] UI upload route calls `unified_pipeline.process()`
+- [x] UI upload route calls `unified_pipeline.process()`
 - [ ] SSE events flow correctly (test with SvelteKit frontend)
-- [ ] `ingestion_worker.py` has no remaining callers
+- [x] `ingestion_worker.py` has no remaining callers
 
 ##### Task 2.3: Update Pipeline Ingest Runner
 
@@ -635,10 +635,10 @@ Keep infrastructure concerns, delegate processing to unified pipeline (see brain
 - `app/domains/credit/modules/ai/extraction.py` (lines 92-143) — API unchanged
 
 **Acceptance criteria:**
-- [ ] `extraction_orchestrator.py` reduced to ~150 LOC
-- [ ] No import of `prepare_pdfs_full`
-- [ ] `run_extraction_pipeline()` API unchanged (callers don't need updating)
-- [ ] Processing logic delegated to `unified_pipeline.process()` per document
+- [ ] `extraction_orchestrator.py` reduced to ~150 LOC (partial — infrastructure kept for blob pipeline)
+- [x] No import of `prepare_pdfs_full`
+- [x] `run_extraction_pipeline()` API unchanged (callers don't need updating)
+- [x] Processing logic delegated to `unified_pipeline.process()` per document
 
 ##### Task 2.5: Delete Legacy Files
 
@@ -665,12 +665,13 @@ Only after Tasks 2.1-2.4 complete and all callers are updated.
 - `ai_engine/classification/__init__.py` → update to re-export `hybrid_classifier` public API
 
 **Acceptance criteria:**
-- [ ] All 6 legacy files deleted
-- [ ] All 4 hidden callers migrated to hybrid_classifier
-- [ ] Test file updated
-- [ ] `classification/__init__.py` updated
+- [x] 4 legacy files deleted (classifier.py, doc_classifier.py, ingestion_worker.py, prepare_pdfs_full.py)
+- [ ] domain_ingest_orchestrator.py + document_classifier.py kept (still have active callers)
+- [x] All 4 hidden callers migrated (document_scanner, monitoring, documents.py → document_classifier direct import)
+- [x] Test file updated (test_upload_architecture.py → unified_pipeline._emit)
+- [x] `classification/__init__.py` updated (re-exports hybrid_classifier.classify)
 - [ ] `make check` passes
-- [ ] Zero broken imports across entire codebase (verified via grep)
+- [x] Zero broken imports for deleted files (verified via grep)
 
 ---
 
