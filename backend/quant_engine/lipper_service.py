@@ -6,6 +6,8 @@ When enabled, queries lipper_ratings table for the latest rating.
 The concrete API ingestion will be implemented when the Lipper/LSEG API
 key and documentation are available. This service defines the consumer
 interface so scoring_service.py can call it regardless of the flag state.
+
+Note: imports LipperRating from app.domains.wealth — wealth-vertical-specific dependency (lazy import).
 """
 
 from datetime import date

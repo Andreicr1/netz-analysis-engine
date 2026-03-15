@@ -6,6 +6,8 @@ Constraints: weights sum to 1, per-block bounds, portfolio CVaR <= limit, long-o
 
 Also provides compute_inputs_from_nav() to compute covariance matrix
 and expected returns from historical NAV data.
+
+Note: imports Fund, NavTimeseries from app.domains.wealth — wealth-vertical-specific dependency.
 """
 
 import asyncio

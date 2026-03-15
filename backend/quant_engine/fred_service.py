@@ -18,6 +18,7 @@ Config is injected as parameter — no module-level settings reads.
 from __future__ import annotations
 
 import math
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -45,25 +46,27 @@ class TokenBucketRateLimiter:
     refill_rate: float = 2.0
     _tokens: float = field(init=False, repr=False)
     _last_refill: float = field(init=False, repr=False)
+    _lock: threading.Lock = field(init=False, repr=False, default_factory=threading.Lock)
 
     def __post_init__(self) -> None:
         self._tokens = self.max_tokens
         self._last_refill = time.monotonic()
 
     def acquire(self) -> None:
-        """Block until a token is available."""
-        now = time.monotonic()
-        elapsed = now - self._last_refill
-        self._tokens = min(self.max_tokens, self._tokens + elapsed * self.refill_rate)
-        self._last_refill = now
+        """Block until a token is available. Thread-safe via threading.Lock."""
+        with self._lock:
+            now = time.monotonic()
+            elapsed = now - self._last_refill
+            self._tokens = min(self.max_tokens, self._tokens + elapsed * self.refill_rate)
+            self._last_refill = now
 
-        if self._tokens < 1.0:
-            wait = (1.0 - self._tokens) / self.refill_rate
-            time.sleep(wait)
-            self._tokens = 0.0
-            self._last_refill = time.monotonic()
-        else:
-            self._tokens -= 1.0
+            if self._tokens < 1.0:
+                wait = (1.0 - self._tokens) / self.refill_rate
+                time.sleep(wait)
+                self._tokens = 0.0
+                self._last_refill = time.monotonic()
+            else:
+                self._tokens -= 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -220,9 +223,9 @@ class FredService:
                     return []
 
                 return [
-                    FredObservation(date=obs["date"], value=parse_fred_value(obs["value"], series_id, obs["date"]))
+                    FredObservation(date=obs["date"], value=val)
                     for obs in data.get("observations", [])
-                    if parse_fred_value(obs.get("value", ""), series_id, obs.get("date", "")) is not None
+                    if (val := parse_fred_value(obs.get("value", ""), series_id, obs.get("date", ""))) is not None
                 ]
 
             except httpx.HTTPStatusError as e:

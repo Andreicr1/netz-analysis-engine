@@ -12,6 +12,8 @@ Design decisions:
 - test_size=63: fixed 3-month test periods for consistent per-fold Sharpe comparability.
 - Expanding window (TimeSeriesSplit default): superior to rolling for covariance stability.
 - Report fold consistency (N/5 positive Sharpe), NOT p-values. See Finucane (2004).
+
+Note: imports Fund, NavTimeseries from app.domains.wealth — wealth-vertical-specific dependency.
 """
 
 from collections import defaultdict
