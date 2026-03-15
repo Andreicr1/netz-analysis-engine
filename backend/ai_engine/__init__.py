@@ -23,7 +23,7 @@ def run_documents_ingest_pipeline(*args, **kwargs):
 
 
 def run_pipeline_ingest(*args, **kwargs):
-    from vertical_engines.credit.pipeline_intelligence import run_pipeline_ingest as _impl
+    from vertical_engines.credit.pipeline import run_pipeline_ingest as _impl
 
     return _impl(*args, **kwargs)
 

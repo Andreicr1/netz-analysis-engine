@@ -238,7 +238,7 @@ retrieval/
 
 ---
 
-### Phase 5: pipeline/ (PR #5)
+### Phase 5: pipeline/ (PR #5) ✅
 
 **Source:** `pipeline_engine.py` (1030 LOC) + `pipeline_intelligence.py` (385 LOC)
 
