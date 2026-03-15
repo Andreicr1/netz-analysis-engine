@@ -140,7 +140,7 @@ def _rebuild_single_document(
     Raises ``ValueError`` if embedding dimensions don't match.
     """
     import io
-    import uuid
+    import json
 
     import pyarrow.parquet as pq
 
@@ -163,13 +163,12 @@ def _rebuild_single_document(
             )
 
     # ── Build search documents ────────────────────────────────────
-    doc_uuid = uuid.UUID(doc_id_str)
+    doc_uuid = UUID(doc_id_str)
     effective_deal_id = deal_id or doc_uuid
     effective_fund_id = fund_id or doc_uuid
 
     search_docs: list[dict[str, Any]] = []
-    for i in range(len(table)):
-        row = {col: table.column(col)[i].as_py() for col in table.column_names}
+    for row in table.to_pylist():
         search_doc = build_search_document(
             deal_id=effective_deal_id,
             fund_id=effective_fund_id,
@@ -177,7 +176,7 @@ def _rebuild_single_document(
             doc_type=row.get("doc_type", ""),
             authority="rebuild_service",
             title="",
-            chunk_index=row.get("chunk_index", i),
+            chunk_index=row.get("chunk_index", 0),
             content=row.get("content", ""),
             embedding=row.get("embedding", []),
             page_start=row.get("page_start", 0),
@@ -189,6 +188,8 @@ def _rebuild_single_document(
             has_table=row.get("has_table"),
             has_numbers=row.get("has_numbers"),
             char_count=row.get("char_count"),
+            governance_critical=row.get("governance_critical"),
+            governance_flags=json.loads(row.get("governance_flags", "[]")) if row.get("governance_flags") else None,
             organization_id=org_id,
         )
         search_docs.append(search_doc)

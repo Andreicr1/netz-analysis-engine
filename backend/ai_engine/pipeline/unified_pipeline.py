@@ -162,6 +162,8 @@ def _build_chunks_parquet(chunks: list[dict[str, Any]], doc_id: str) -> bytes:
             "char_count": chunk.get("char_count", 0),
             "doc_type": chunk.get("doc_type", ""),
             "vehicle_type": chunk.get("vehicle_type", ""),
+            "governance_critical": bool(chunk.get("governance_critical", False)),
+            "governance_flags": json.dumps(chunk.get("governance_flags", [])),
             "embedding": chunk.get("embedding", []),
             "embedding_model": EMBEDDING_MODEL_NAME,
             "embedding_dim": EMBEDDING_DIMENSIONS,
@@ -180,6 +182,8 @@ def _build_chunks_parquet(chunks: list[dict[str, Any]], doc_id: str) -> bytes:
         "char_count": pa.array([r["char_count"] for r in rows], type=pa.int32()),
         "doc_type": pa.array([r["doc_type"] for r in rows], type=pa.string()),
         "vehicle_type": pa.array([r["vehicle_type"] for r in rows], type=pa.string()),
+        "governance_critical": pa.array([r["governance_critical"] for r in rows], type=pa.bool_()),
+        "governance_flags": pa.array([r["governance_flags"] for r in rows], type=pa.string()),
         "embedding": pa.array(
             [r["embedding"] for r in rows],
             type=pa.list_(pa.float32()),
@@ -445,25 +449,19 @@ async def process(
 
     doc_id_str = str(request.document_id)
 
-    # 8a. Bronze: raw OCR output
+    # 8a. Build all paths
     bronze_path = bronze_document_path(request.org_id, request.vertical, doc_id_str)
+    silver_path = silver_chunks_path(request.org_id, request.vertical, doc_id_str)
+    meta_path = silver_metadata_path(request.org_id, request.vertical, doc_id_str)
+
+    # 8b. Build all payloads (before gather)
     bronze_payload = json.dumps({
         "document_id": doc_id_str,
         "filename": request.filename,
         "ocr_text": ocr_text,
         "page_count": page_count,
     }).encode()
-    bronze_ok = await _write_to_lake(bronze_path, bronze_payload)
-
-    # 8b. Silver: chunks + embeddings as Parquet
-    silver_path = silver_chunks_path(request.org_id, request.vertical, doc_id_str)
     parquet_bytes = await asyncio.to_thread(_build_chunks_parquet, chunks, doc_id_str)
-    silver_ok = await _write_to_lake(
-        silver_path, parquet_bytes, content_type="application/octet-stream",
-    )
-
-    # 8c. Silver: extracted metadata + summary as JSON
-    meta_path = silver_metadata_path(request.org_id, request.vertical, doc_id_str)
     meta_payload = json.dumps({
         "document_id": doc_id_str,
         "filename": request.filename,
@@ -476,11 +474,24 @@ async def process(
         "metadata": extraction_metadata,
         "summary": summary_text,
     }).encode()
-    meta_ok = await _write_to_lake(meta_path, meta_payload)
+
+    # 8c. Write all three in parallel
+    bronze_ok, silver_ok, meta_ok = await asyncio.gather(
+        _write_to_lake(bronze_path, bronze_payload),
+        _write_to_lake(silver_path, parquet_bytes, content_type="application/octet-stream"),
+        _write_to_lake(meta_path, meta_payload),
+    )
 
     metrics["storage_bronze"] = bronze_ok
     metrics["storage_silver_chunks"] = silver_ok
     metrics["storage_silver_metadata"] = meta_ok
+
+    if not bronze_ok:
+        warnings.append("ADLS bronze write failed — raw OCR not persisted to lake")
+    if not silver_ok:
+        warnings.append("ADLS silver chunks write failed — rebuild capability degraded")
+    if not meta_ok:
+        warnings.append("ADLS silver metadata write failed")
 
     await _emit(request.version_id, "storage_complete", {
         "bronze": bronze_ok,

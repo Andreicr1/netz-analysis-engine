@@ -18,7 +18,6 @@ from uuid import UUID
 _SAFE_PATH_SEGMENT_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._\-]*$")
 
 _VALID_VERTICALS = frozenset({"credit", "wealth"})
-_VALID_TIERS = frozenset({"bronze", "silver", "gold"})
 
 
 def _validate_segment(value: str, label: str) -> None:
