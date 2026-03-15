@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from ai_engine.prompts import prompt_registry
-from vertical_engines.credit.deep_review.helpers import _MODEL, _call_openai, _now_utc  # noqa: F401
+from vertical_engines.credit.deep_review.helpers import _call_openai
 
 if TYPE_CHECKING:
     from ai_engine.governance.policy_loader import PolicyThresholds
@@ -108,14 +108,14 @@ def _gather_policy_context(
                     }
         except Exception:
             logger.warning(
-                "Policy RAG query failed",
+                "deep_review.policy_rag.query_failed",
                 fund_id=f_id,
                 query=query[:60],
                 exc_info=True,
             )
 
     if not policy_hits:
-        logger.info("No compliance chunks in v4 index", event="POLICY_RAG_EMPTY", fund_id=f_id)
+        logger.info("deep_review.policy_rag.empty", fund_id=f_id)
         return ""
 
     parts: list[str] = []
@@ -132,8 +132,7 @@ def _gather_policy_context(
         total += len(snippet)
 
     logger.info(
-        "Policy RAG complete",
-        event="POLICY_RAG_COMPLETE",
+        "deep_review.policy_rag.complete",
         fund_id=f_id,
         chunks=len(policy_hits),
         chars=total,

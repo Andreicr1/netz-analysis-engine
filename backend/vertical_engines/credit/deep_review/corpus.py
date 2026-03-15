@@ -18,62 +18,10 @@ from app.domains.credit.modules.ai.models import (
 from app.domains.credit.modules.deals.models import PipelineDeal as Deal  # pipeline domain
 from app.services.blob_storage import blob_uri, download_bytes
 from app.services.text_extract import extract_text_from_docx, extract_text_from_pdf
-from vertical_engines.credit.deep_review.helpers import _MODEL, _now_utc, _trunc  # noqa: F401
 
 logger = structlog.get_logger()
 
-# ---------------------------------------------------------------------------
-# Sectional token budget (Task 6 — Pre-V3 Hardening)
-# ---------------------------------------------------------------------------
-# Total ~120 000 chars (~30 k tokens).  Split by section priority so that
-# financial/legal context (most critical for IC decisions) gets the largest
-# share, followed by risk/covenants, then market/strategy.
 _TOTAL_BUDGET_CHARS = 300_000
-_BUDGET_FINANCIAL_LEGAL = int(_TOTAL_BUDGET_CHARS * 0.40)  # 120 000
-_BUDGET_RISK_COVENANTS = int(_TOTAL_BUDGET_CHARS * 0.30)  # 90 000
-_BUDGET_MARKET_STRATEGY = int(_TOTAL_BUDGET_CHARS * 0.30)  # 90 000
-
-# Doc-type classification for sectional budgeting
-# ---------------------------------------------------------------------------
-# Hard policy limits — now sourced from PolicyThresholds (policy_loader.py).
-# Kept as backward-compat aliases for any external callers.
-# Internal code uses policy.* instead.
-# ---------------------------------------------------------------------------
-
-_FINANCIAL_LEGAL_TYPES = frozenset(
-    {
-        "TERM_SHEET",
-        "CREDIT_AGREEMENT",
-        "FACILITY_AGREEMENT",
-        "LOAN_AGREEMENT",
-        "SECURITY_AGREEMENT",
-        "INTERCREDITOR",
-        "GUARANTEE",
-        "PLEDGE",
-        "SUBSCRIPTION_AGREEMENT",
-        "SIDE_LETTER",
-        "LEGAL",
-        "FINANCIAL",
-        "FINANCIAL_STATEMENTS",
-        "FUND_POLICY",
-        "FUND_CONSTITUTION",
-    },
-)
-_RISK_COVENANT_TYPES = frozenset(
-    {
-        "RISK_ASSESSMENT",
-        "COVENANT_COMPLIANCE",
-        "COVENANT",
-        "RISK",
-        "COMPLIANCE",
-        "REGULATORY",
-        "REGULATORY_CIMA",
-        "INSURANCE",
-        "WATCHLIST",
-        "MONITORING",
-    },
-)
-# Anything else falls into market/strategy bucket
 
 
 # ---------------------------------------------------------------------------
@@ -458,17 +406,6 @@ def _gather_deal_texts(
         "retrieval_audit": retrieval_audit,
         "saturation_report": saturation_report,
     }
-
-
-def _classify_doc_type(doc_type: str) -> str:
-    """Classify a doc_type string into a budget bucket (legacy — kept for compat)."""
-    dt_upper = (doc_type or "").upper()
-    if dt_upper in _FINANCIAL_LEGAL_TYPES:
-        return "financial_legal"
-    if dt_upper in _RISK_COVENANT_TYPES:
-        return "risk_covenants"
-    return "market_strategy"
-
 
 
 

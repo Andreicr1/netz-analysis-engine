@@ -1,6 +1,6 @@
 """Deep Review V4 — IC-Grade Investment Memorandum Pipeline.
 
-Three-tier DAG: models → domain modules → persist/portfolio → service.
+Six-layer DAG: models → helpers → domain modules → persist → portfolio → service.
 This is distinct from the standard two-tier edgar pattern because deep_review
 is the only engine that persists other engines' results.
 
@@ -52,16 +52,23 @@ if TYPE_CHECKING:
     )
 
 __all__ = [
+    # service (lazy)
     "run_deal_deep_review_v4",
     "async_run_deal_deep_review_v4",
     "run_all_deals_deep_review_v4",
     "async_run_all_deals_deep_review_v4",
+    # portfolio (lazy)
     "run_portfolio_review",
     "run_all_portfolio_reviews",
     "get_current_im_draft",
+    # confidence (eager)
     "compute_underwriting_confidence",
     "apply_tone_normalizer_adjustment",
 ]
+
+
+def __dir__() -> list[str]:
+    return __all__
 
 
 def __getattr__(name: str) -> Any:

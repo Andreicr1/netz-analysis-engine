@@ -139,6 +139,9 @@ def run_all_portfolio_reviews(
 
     from app.core.db.engine import async_session_factory
 
+    # Despite the name, async_session_factory produces sync-compatible sessions
+    # when used as a context manager (with ... as session). Each thread gets
+    # its own isolated session for transaction safety.
     SessionLocal = async_session_factory
     results = []
 

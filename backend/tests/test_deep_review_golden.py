@@ -266,3 +266,14 @@ class TestGoldenHardPolicyChecks:
         r1 = _run_hard_policy_checks(**GOLDEN_HARD_POLICY_INPUT)
         r2 = _run_hard_policy_checks(**GOLDEN_HARD_POLICY_INPUT)
         assert r1 == r2
+
+
+class TestPackagePublicAPI:
+    """Verify all __all__ symbols are importable from the package root."""
+
+    def test_all_symbols_importable(self):
+        import vertical_engines.credit.deep_review as pkg
+
+        for name in pkg.__all__:
+            attr = getattr(pkg, name)
+            assert callable(attr), f"{name} should be callable"

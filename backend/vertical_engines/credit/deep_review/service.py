@@ -1031,6 +1031,16 @@ def run_deal_deep_review_v4(
     # ── Stage 13b: Persist final metadata into evidence pack row ──
     from app.domains.credit.modules.ai.models import MemoEvidencePack
 
+    _tone_artifacts = _build_tone_artifacts(
+        pre_tone_chapters=pre_tone_chapter_texts,
+        post_tone_chapters=post_tone_chapter_texts,
+        tone_review_log=tone_review_log,
+        tone_pass1_changes=tone_pass1_changes,
+        tone_pass2_changes=tone_pass2_changes,
+        signal_original=_tone_signal_original,
+        signal_final=_tone_signal_final,
+    )
+
     db.execute(
         update(MemoEvidencePack)
         .where(MemoEvidencePack.id == evidence_pack_id)
@@ -1079,15 +1089,7 @@ def run_deal_deep_review_v4(
                 ),
                 "appendix_kyc_checks": kyc_appendix_text,
                 "kyc_screening_summary": kyc_results.get("summary", {}),
-                "tone_artifacts": _build_tone_artifacts(
-                    pre_tone_chapters=pre_tone_chapter_texts,
-                    post_tone_chapters=post_tone_chapter_texts,
-                    tone_review_log=tone_review_log,
-                    tone_pass1_changes=tone_pass1_changes,
-                    tone_pass2_changes=tone_pass2_changes,
-                    signal_original=_tone_signal_original,
-                    signal_final=_tone_signal_final,
-                ),
+                "tone_artifacts": _tone_artifacts,
             },
         ),
     )
@@ -1163,15 +1165,7 @@ def run_deal_deep_review_v4(
         "pipeline_version": "v4",
         "token_budget": token_summary,
         "chapter_citations": chapter_citations,
-        "tone_artifacts": _build_tone_artifacts(
-            pre_tone_chapters=pre_tone_chapter_texts,
-            post_tone_chapters=post_tone_chapter_texts,
-            tone_review_log=tone_review_log,
-            tone_pass1_changes=tone_pass1_changes,
-            tone_pass2_changes=tone_pass2_changes,
-            signal_original=_tone_signal_original,
-            signal_final=_tone_signal_final,
-        ),
+        "tone_artifacts": _tone_artifacts,
         "tone_signal_original": _tone_signal_original,
         "tone_signal_final": _tone_signal_final,
     }
@@ -2251,6 +2245,16 @@ async def async_run_deal_deep_review_v4(
     # ── Persist final metadata ────────────────────────────────────
     from app.domains.credit.modules.ai.models import MemoEvidencePack
 
+    _tone_artifacts = _build_tone_artifacts(
+        pre_tone_chapters=pre_tone_chapter_texts,
+        post_tone_chapters=post_tone_chapter_texts,
+        tone_review_log=tone_review_log,
+        tone_pass1_changes=tone_pass1_changes,
+        tone_pass2_changes=tone_pass2_changes,
+        signal_original=_tone_signal_original,
+        signal_final=_tone_signal_final,
+    )
+
     db.execute(
         update(MemoEvidencePack)
         .where(MemoEvidencePack.id == evidence_pack_id)
@@ -2299,15 +2303,7 @@ async def async_run_deal_deep_review_v4(
                 ),
                 "appendix_kyc_checks": kyc_appendix_text,
                 "kyc_screening_summary": kyc_results.get("summary", {}),
-                "tone_artifacts": _build_tone_artifacts(
-                    pre_tone_chapters=pre_tone_chapter_texts,
-                    post_tone_chapters=post_tone_chapter_texts,
-                    tone_review_log=tone_review_log,
-                    tone_pass1_changes=tone_pass1_changes,
-                    tone_pass2_changes=tone_pass2_changes,
-                    signal_original=_tone_signal_original,
-                    signal_final=_tone_signal_final,
-                ),
+                "tone_artifacts": _tone_artifacts,
             },
         ),
     )
@@ -2375,15 +2371,7 @@ async def async_run_deal_deep_review_v4(
         "pipeline_version": "v4",
         "token_budget": token_summary,
         "chapter_citations": chapter_citations,
-        "tone_artifacts": _build_tone_artifacts(
-            pre_tone_chapters=pre_tone_chapter_texts,
-            post_tone_chapters=post_tone_chapter_texts,
-            tone_review_log=tone_review_log,
-            tone_pass1_changes=tone_pass1_changes,
-            tone_pass2_changes=tone_pass2_changes,
-            signal_original=_tone_signal_original,
-            signal_final=_tone_signal_final,
-        ),
+        "tone_artifacts": _tone_artifacts,
         "tone_signal_original": _tone_signal_original,
         "tone_signal_final": _tone_signal_final,
     }
