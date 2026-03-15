@@ -26,9 +26,6 @@ MIN_CLASSIFICATION_CONFIDENCE = 0.3
 MAX_CONTENT_LOSS_RATIO = 0.25   # 25% — accommodates header/footer/TOC stripping
                                  # while catching catastrophic loss (60%+)
 
-# Extraction (metadata)
-REQUIRED_METADATA_FIELDS = frozenset({"doc_type"})
-
 # Embeddings
 EXPECTED_EMBEDDING_DIM = 3072   # text-embedding-3-large
 
@@ -178,33 +175,6 @@ def validate_chunks(
             "input_char_count": input_char_count,
             "output_char_count": output_chars,
         },
-        warnings=warnings,
-        errors=errors,
-    )
-
-
-def validate_extraction(metadata: dict) -> PipelineStageResult:
-    """Validate metadata extraction output before embedding.
-
-    Checks:
-    - Metadata dict is not empty
-    - Required fields present
-    """
-    errors: list[str] = []
-    warnings: list[str] = []
-
-    if not metadata:
-        errors.append("Metadata extraction returned empty dict")
-    else:
-        missing = REQUIRED_METADATA_FIELDS - set(metadata.keys())
-        if missing:
-            errors.append(f"Missing required metadata fields: {missing}")
-
-    return PipelineStageResult(
-        stage="extraction_validation",
-        success=len(errors) == 0,
-        data=metadata if not errors else None,
-        metrics={"field_count": len(metadata) if metadata else 0},
         warnings=warnings,
         errors=errors,
     )

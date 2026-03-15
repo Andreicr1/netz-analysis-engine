@@ -16,8 +16,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_engine.pipeline.models import (
     HybridClassificationResult,
@@ -28,7 +31,6 @@ from ai_engine.pipeline.validation import (
     validate_chunks,
     validate_classification,
     validate_embeddings,
-    validate_extraction,
     validate_ocr_output,
 )
 
@@ -52,7 +54,7 @@ async def _emit(version_id: UUID | None, event_type: str, data: dict | None = No
 
 
 async def _audit(
-    db: Any | None,
+    db: AsyncSession | None,
     *,
     fund_id: UUID | None,
     actor_id: str,
@@ -79,13 +81,39 @@ async def _audit(
         logger.warning("Audit write failed: %s for %s", action, entity_id, exc_info=True)
 
 
+# ── Gate helper ─────────────────────────────────────────────────────
+
+
+async def _check_gate(
+    gate: PipelineStageResult,
+    stage: str,
+    *,
+    request: IngestRequest,
+    db: AsyncSession | None,
+    actor_id: str,
+    metrics: dict[str, Any],
+    warnings: list[str],
+) -> PipelineStageResult | None:
+    """Check a validation gate. Returns a failure result if gate failed, else None."""
+    warnings.extend(gate.warnings)
+    if gate.success:
+        return None
+    await _emit(request.version_id, "error", {"stage": stage, "errors": gate.errors})
+    await _audit(db, fund_id=request.fund_id, actor_id=actor_id,
+                 action="INGESTION_FAILED", entity_id=request.document_id,
+                 after={"stage": stage, "errors": gate.errors})
+    return PipelineStageResult(
+        stage=stage, success=False, data=None, metrics=metrics, errors=gate.errors,
+    )
+
+
 # ── Main pipeline ───────────────────────────────────────────────────
 
 
 async def process(
     request: IngestRequest,
     *,
-    db: Any | None = None,
+    db: AsyncSession | None = None,
     actor_id: str = "unified-pipeline",
 ) -> PipelineStageResult:
     """Process a single document through the full pipeline.
@@ -108,9 +136,9 @@ async def process(
     await _emit(request.version_id, "processing", {"stage": "started"})
 
     # ── 1. Pre-filter ───────────────────────────────────────────
-    from ai_engine.ingestion.skip_filter import is_skippable
+    from ai_engine.extraction.skip_filter import should_skip_document
 
-    if is_skippable(request.filename):
+    if should_skip_document(request.filename):
         logger.info("[pipeline] SKIP %s — standard compliance form", request.filename)
         return PipelineStageResult(
             stage="pre_filter",
@@ -124,10 +152,12 @@ async def process(
     from ai_engine.extraction.mistral_ocr import async_extract_pdf_with_mistral
     from app.services.blob_storage import download_bytes
 
-    pdf_bytes = download_bytes(blob_uri=request.blob_uri)
+    pdf_bytes = await asyncio.to_thread(download_bytes, blob_uri=request.blob_uri)
     page_blocks = await async_extract_pdf_with_mistral(pdf_bytes)
+    del pdf_bytes  # release potentially large PDF from memory
     ocr_text = "\n\n".join(pb.text for pb in page_blocks)
     page_count = len(page_blocks)
+    del page_blocks  # release OCR page blocks from memory
 
     metrics["ocr_chars"] = len(ocr_text)
     metrics["page_count"] = page_count
@@ -141,21 +171,9 @@ async def process(
 
     # ── Gate: OCR validation ────────────────────────────────────
     ocr_gate = validate_ocr_output(ocr_text, request.filename)
-    if not ocr_gate.success:
-        await _emit(request.version_id, "error", {
-            "stage": "ocr", "errors": ocr_gate.errors,
-        })
-        await _audit(db, fund_id=request.fund_id, actor_id=actor_id,
-                     action="INGESTION_FAILED", entity_id=request.document_id,
-                     after={"stage": "ocr", "errors": ocr_gate.errors})
-        return PipelineStageResult(
-            stage="ocr",
-            success=False,
-            data=None,
-            metrics=metrics,
-            errors=ocr_gate.errors,
-        )
-    warnings.extend(ocr_gate.warnings)
+    failure = await _check_gate(ocr_gate, "ocr", request=request, db=db, actor_id=actor_id, metrics=metrics, warnings=warnings)
+    if failure:
+        return failure
 
     # ── 3. Classification ───────────────────────────────────────
     from ai_engine.classification.hybrid_classifier import classify
@@ -185,26 +203,16 @@ async def process(
 
     # ── Gate: Classification validation ─────────────────────────
     cls_gate = validate_classification(classification)
-    if not cls_gate.success:
-        await _emit(request.version_id, "error", {
-            "stage": "classification", "errors": cls_gate.errors,
-        })
-        await _audit(db, fund_id=request.fund_id, actor_id=actor_id,
-                     action="INGESTION_FAILED", entity_id=request.document_id,
-                     after={"stage": "classification", "errors": cls_gate.errors})
-        return PipelineStageResult(
-            stage="classification",
-            success=False,
-            data=None,
-            metrics=metrics,
-            errors=cls_gate.errors,
-        )
-    warnings.extend(cls_gate.warnings)
+    failure = await _check_gate(cls_gate, "classification", request=request, db=db, actor_id=actor_id, metrics=metrics, warnings=warnings)
+    if failure:
+        return failure
 
     # ── 4. Governance detection ─────────────────────────────────
-    from ai_engine.ingestion.governance_detector import detect_governance
+    from ai_engine.extraction.governance_detector import detect_governance
 
-    gov_critical, gov_flags = detect_governance(ocr_text)
+    gov_result = detect_governance(ocr_text)
+    gov_critical = gov_result.governance_critical
+    gov_flags = gov_result.governance_flags
     metrics["governance_critical"] = gov_critical
     metrics["governance_flags"] = gov_flags
 
@@ -254,21 +262,9 @@ async def process(
 
     # ── Gate: Chunk validation ──────────────────────────────────
     chunk_gate = validate_chunks(chunks, len(ocr_text))
-    if not chunk_gate.success:
-        await _emit(request.version_id, "error", {
-            "stage": "chunking", "errors": chunk_gate.errors,
-        })
-        await _audit(db, fund_id=request.fund_id, actor_id=actor_id,
-                     action="INGESTION_FAILED", entity_id=request.document_id,
-                     after={"stage": "chunking", "errors": chunk_gate.errors})
-        return PipelineStageResult(
-            stage="chunking",
-            success=False,
-            data=None,
-            metrics=metrics,
-            errors=chunk_gate.errors,
-        )
-    warnings.extend(chunk_gate.warnings)
+    failure = await _check_gate(chunk_gate, "chunking", request=request, db=db, actor_id=actor_id, metrics=metrics, warnings=warnings)
+    if failure:
+        return failure
 
     # ── 6. Extract metadata + summarize (parallel) ──────────────
     from ai_engine.extraction.document_intelligence import (
@@ -324,13 +320,6 @@ async def process(
         "has_summary": bool(summary_text),
     })
 
-    # ── Gate: Extraction validation ─────────────────────────────
-    ext_gate = validate_extraction(extraction_metadata)
-    # Extraction gate is non-critical — metadata may be empty for some doc types
-    warnings.extend(ext_gate.warnings)
-    if ext_gate.errors:
-        warnings.extend(ext_gate.errors)  # downgrade to warnings — don't halt
-
     # ── 7. Embedding ────────────────────────────────────────────
     from ai_engine.extraction.embed_chunks import build_embed_text, embed_batch
 
@@ -348,21 +337,9 @@ async def process(
 
     # ── Gate: Embedding validation ──────────────────────────────
     emb_gate = validate_embeddings(vectors, len(chunks))
-    if not emb_gate.success:
-        await _emit(request.version_id, "error", {
-            "stage": "embedding", "errors": emb_gate.errors,
-        })
-        await _audit(db, fund_id=request.fund_id, actor_id=actor_id,
-                     action="INGESTION_FAILED", entity_id=request.document_id,
-                     after={"stage": "embedding", "errors": emb_gate.errors})
-        return PipelineStageResult(
-            stage="embedding",
-            success=False,
-            data=None,
-            metrics=metrics,
-            errors=emb_gate.errors,
-        )
-    warnings.extend(emb_gate.warnings)
+    failure = await _check_gate(emb_gate, "embedding", request=request, db=db, actor_id=actor_id, metrics=metrics, warnings=warnings)
+    if failure:
+        return failure
 
     # ── 8. Index to Azure Search ────────────────────────────────
     from ai_engine.extraction.search_upsert_service import (
@@ -376,8 +353,10 @@ async def process(
     for chunk in chunks:
         search_doc = build_search_document(
             deal_id=request.deal_id or request.document_id,
-            fund_id=request.fund_id or request.org_id,
-            domain="credit",
+            # fund_id: use document_id as fallback (not org_id — semantically different).
+            # Batch path may not have fund_id; document_id ensures unique scoping.
+            fund_id=request.fund_id or request.document_id,
+            domain=request.vertical,
             doc_type=classification.doc_type,
             authority="unified_pipeline",
             title=request.filename,

@@ -455,7 +455,10 @@ def run_item(
 
                     request = IngestRequest(
                         source="batch",
-                        org_id=uuid.UUID(int=0),  # batch pipeline — org from blob context
+                        # NOTE: Batch pipeline runs outside JWT context — org_id is a placeholder.
+                        # The nil UUID is never used for RLS or ADLS paths (batch passes db=None).
+                        # Phase 3 will resolve real org_id from blob container metadata.
+                        org_id=uuid.UUID(int=0),
                         vertical="credit",
                         document_id=uuid.uuid5(uuid.NAMESPACE_URL, blob_uri),
                         blob_uri=blob_uri,
@@ -465,6 +468,12 @@ def run_item(
 
                     if not dry_run:
                         try:
+                            # CONSTRAINT: asyncio.run() creates a new event loop per PDF.
+                            # This is safe ONLY when run_item() is called from a sync context
+                            # (CLI, Azure Functions worker). Will raise RuntimeError if called
+                            # from within an existing async event loop (e.g., FastAPI route).
+                            # TODO: Convert run_item() to async with Semaphore(8) + gather
+                            # for batch concurrency (see todo #023).
                             pipeline_result = asyncio.run(run_pipeline(request))
                             if pipeline_result.success and pipeline_result.data:
                                 chunk_count = pipeline_result.data.get("chunk_count", 0)
