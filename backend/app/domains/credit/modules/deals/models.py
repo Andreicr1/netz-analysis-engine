@@ -83,7 +83,7 @@ class PipelineDeal(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, Audi
         back_populates="deal",
         cascade="all, delete-orphan",
         passive_deletes=True,
-        lazy="selectin",
+        lazy="raise",
     )
 
     __table_args__ = (Index("ix_pipeline_deals_fund_stage", "fund_id", "stage"),)
@@ -110,7 +110,7 @@ class DealDocument(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, Audi
     last_indexed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # --- relationship ---
-    deal: Mapped[PipelineDeal] = relationship("PipelineDeal", back_populates="documents")
+    deal: Mapped[PipelineDeal] = relationship("PipelineDeal", back_populates="documents", lazy="raise")
 
     __table_args__ = (
         Index("uq_deal_doc_blob_path", "deal_id", "blob_path", unique=True),

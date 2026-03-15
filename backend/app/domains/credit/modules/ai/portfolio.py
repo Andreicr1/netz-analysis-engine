@@ -14,9 +14,9 @@ from ai_engine.intelligence.deep_review import (
 )
 from ai_engine.intelligence.portfolio_intelligence import run_portfolio_ingest
 from app.core.db.engine import get_db
-from app.core.security.auth import Actor
-from app.core.security.clerk_auth import get_actor, require_readonly_allowed, require_roles
+from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed, require_roles
 from app.domains.credit.deals.models.deals import Deal as PortfolioDeal
+from app.domains.credit.modules.ai._helpers import _utcnow
 from app.domains.credit.modules.ai.models import (
     ActiveInvestment,
     BoardMonitoringBrief,
@@ -26,7 +26,6 @@ from app.domains.credit.modules.ai.models import (
     PerformanceDriftFlag,
     PeriodicReviewReport,
 )
-from app.domains.credit.modules.ai.routes._helpers import _utcnow
 from app.domains.credit.modules.ai.schemas import (
     CashflowEventItem,
     CashflowSummary,

@@ -192,6 +192,25 @@ def require_role(*allowed_roles: Role):
     return _check
 
 
+# Backward-compatible aliases (migrated from netz-wealth-os / netz-private-credit-os)
+CurrentUser = Actor
+get_current_user = get_actor
+
+# Alias used by credit modules — same semantics as require_role
+require_roles = require_role
+
+
+def require_readonly_allowed():
+    """Dependency: allow readonly roles (INVESTOR, AUDITOR, ADVISOR) plus all write roles."""
+    from app.shared.enums import READONLY_ROLES
+    return require_role(*READONLY_ROLES, Role.INVESTMENT_TEAM, Role.GP, Role.DIRECTOR, Role.COMPLIANCE)
+
+
+def require_ic_member():
+    """Dependency: require IC member role (ADMIN or INVESTMENT_TEAM)."""
+    return require_role(Role.INVESTMENT_TEAM)
+
+
 def require_fund_access():
     """FastAPI dependency factory: validate fund_id access + organization context."""
 

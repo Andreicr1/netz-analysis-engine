@@ -20,13 +20,13 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from ai_engine.prompts import prompt_registry
-from app.domains.credit.ai.services.agent_context import AgentUIContext, build_agent_runtime_context
 from ai_engine.validation.citation_formatter import format_citations
 from ai_engine.validation.evidence_quality import (
     compute_confidence,
     cross_validate_answer,
     recency_analysis,
 )
+from app.domains.credit.ai.services.agent_context import AgentUIContext, build_agent_runtime_context
 from app.domains.credit.global_agent.intent_router import IntentRouter
 
 logger = logging.getLogger(__name__)

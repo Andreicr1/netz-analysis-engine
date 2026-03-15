@@ -10,8 +10,7 @@ from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
 from app.core.db.engine import get_db
-from app.core.security.auth import Actor
-from app.core.security.clerk_auth import get_actor, require_readonly_allowed
+from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed
 from app.domains.credit.modules.deals import service
 from app.domains.credit.modules.deals.models import DealDocument, PipelineDeal
 from app.domains.credit.modules.deals.schemas import (

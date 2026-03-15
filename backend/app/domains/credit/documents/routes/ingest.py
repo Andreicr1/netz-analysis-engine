@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.audit import write_audit_event
-from app.core.security.clerk_auth import Actor, get_actor, require_fund_access, require_role
+from app.core.security.clerk_auth import Actor, get_actor, require_role
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.credit.documents import service
 from app.domains.credit.documents.services.ingestion_worker import process_pending_versions

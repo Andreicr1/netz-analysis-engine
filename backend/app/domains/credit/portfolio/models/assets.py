@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import Enum, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, OrganizationScopedMixin, IdMixin
+from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, IdMixin, OrganizationScopedMixin
 from app.domains.credit.portfolio.enums import AssetType, Strategy
 
 

@@ -9,22 +9,21 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+import app.domains.credit.modules.ai.service as service
 from ai_engine.openai_client import create_completion as _llm_completion
 from ai_engine.prompts import prompt_registry
 from app.core.db.audit import write_audit_event
 from app.core.db.engine import get_db
 from app.core.middleware.audit import get_request_id
-from app.core.security.auth import Actor
-from app.core.security.clerk_auth import get_actor, require_readonly_allowed, require_roles
+from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed, require_roles
 from app.domains.credit.ai.services.agent_context import AgentUIContext, build_agent_runtime_context
 from app.domains.credit.ai.services.ai_scope import enforce_root_folder_scope, filter_hits_by_scope
-from app.domains.credit.modules.ai import service
-from app.domains.credit.modules.ai.models import AIAnswer, AIAnswerCitation, AIQuestion
-from app.domains.credit.modules.ai.routes._helpers import (
+from app.domains.credit.modules.ai._helpers import (
     _blob_path_for_response,
     _limit,
     _offset,
 )
+from app.domains.credit.modules.ai.models import AIAnswer, AIAnswerCitation, AIQuestion
 from app.domains.credit.modules.ai.schemas import (
     AIActivityItemOut,
     AIAnswerCitationOut,

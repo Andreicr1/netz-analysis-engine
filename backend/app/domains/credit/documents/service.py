@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.db.audit import write_audit_event
-from app.core.security.auth import Actor
+from app.core.security.clerk_auth import Actor
 from app.domains.credit.documents.constants import CANONICAL_ROOT_FOLDERS
 from app.domains.credit.documents.enums import DocumentDomain, DocumentIngestionStatus
 from app.domains.credit.modules.documents.models import (
@@ -18,8 +18,6 @@ from app.domains.credit.modules.documents.models import (
     DocumentRootFolder,
     DocumentVersion,
 )
-from app.services.blob_storage import upload_bytes_append_only
-from app.services.search_index import AzureSearchMetadataClient
 from app.shared.utils import sa_model_to_dict
 
 PATH_SEGMENT_RE = re.compile(r"^[^\\\\/:*?\"<>|]+$")  # conservative for blob names
@@ -191,6 +189,7 @@ async def upload_document(
 
     # Blob path convention (container dataroom; path is inside container)
     blob_rel = f"{folder_path}/{doc.id}/v{next_ver}.pdf"
+    from app.services.blob_storage import upload_bytes_append_only
     write_res = upload_bytes_append_only(
         container=settings.AZURE_STORAGE_DATAROOM_CONTAINER,
         blob_name=blob_rel,
@@ -261,6 +260,7 @@ async def upload_document(
 
     indexed = False
     if settings.AZURE_SEARCH_ENDPOINT and settings.SEARCH_INDEX_NAME:
+        from app.services.search_index import AzureSearchMetadataClient
         client = AzureSearchMetadataClient()
         client.upsert_dataroom_metadata(
             items=[

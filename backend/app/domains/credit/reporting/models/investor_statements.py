@@ -5,7 +5,7 @@ import uuid
 from sqlalchemy import Index, Numeric, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, OrganizationScopedMixin, IdMixin
+from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, IdMixin, OrganizationScopedMixin
 
 
 class InvestorStatement(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):

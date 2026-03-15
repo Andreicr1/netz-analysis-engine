@@ -361,9 +361,9 @@ class CovenantStatusRegister(Base, IdMixin, OrganizationScopedMixin, FundScopedM
     __tablename__ = "covenant_status_register"
 
     investment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("active_investments.id", ondelete="CASCADE"), nullable=False, index=True)
-    covenant_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("covenants.id", ondelete="SET NULL"), nullable=True, index=True)
-    covenant_test_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("covenant_tests.id", ondelete="SET NULL"), nullable=True, index=True)
-    breach_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("covenant_breaches.id", ondelete="SET NULL"), nullable=True, index=True)
+    covenant_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True, index=True)
+    covenant_test_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True, index=True)
+    breach_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True, index=True)
     covenant_name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     severity: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
@@ -379,7 +379,7 @@ class CashImpactFlag(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, Au
     __tablename__ = "cash_impact_flags"
 
     investment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("active_investments.id", ondelete="CASCADE"), nullable=False, index=True)
-    transaction_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("cash_transactions.id", ondelete="SET NULL"), nullable=True, index=True)
+    transaction_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True, index=True)
     impact_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     severity: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     estimated_impact_usd: Mapped[float | None] = mapped_column(nullable=True)
@@ -607,7 +607,7 @@ class DeepReviewValidationRun(Base, IdMixin, AuditMetaMixin):
     __tablename__ = "deep_review_validation_runs"
 
     fund_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("funds.id", ondelete="SET NULL"), nullable=True, index=True,
+        nullable=True, index=True,
     )
     run_id: Mapped[uuid.UUID] = mapped_column(
         nullable=False, index=True,
@@ -638,7 +638,7 @@ class EvalRun(Base, IdMixin, AuditMetaMixin):
     __tablename__ = "eval_runs"
 
     fund_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("funds.id", ondelete="SET NULL"), nullable=True, index=True,
+        nullable=True, index=True,
     )
     run_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
     trigger_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
@@ -668,7 +668,7 @@ class EvalChapterScore(Base, IdMixin, AuditMetaMixin):
 
     run_id: Mapped[uuid.UUID] = mapped_column(nullable=False, index=True)
     fund_id: Mapped[uuid.UUID | None] = mapped_column(
-        ForeignKey("funds.id", ondelete="SET NULL"), nullable=True, index=True,
+        nullable=True, index=True,
     )
     deal_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("pipeline_deals.id", ondelete="CASCADE"), nullable=True, index=True,

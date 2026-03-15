@@ -8,7 +8,6 @@ retrieval.
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from ai_engine.extraction.kb_schema import ComplianceChunk
 

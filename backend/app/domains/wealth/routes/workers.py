@@ -8,9 +8,9 @@ from fastapi import APIRouter, BackgroundTasks, Depends, status
 from pydantic import BaseModel
 
 from app.core.security.clerk_auth import CurrentUser, get_current_user
-from app.workers.ingestion import run_ingestion
-from app.workers.portfolio_eval import run_portfolio_eval
-from app.workers.risk_calc import run_risk_calc
+from app.domains.wealth.workers.ingestion import run_ingestion
+from app.domains.wealth.workers.portfolio_eval import run_portfolio_eval
+from app.domains.wealth.workers.risk_calc import run_risk_calc
 
 router = APIRouter(prefix="/workers")
 

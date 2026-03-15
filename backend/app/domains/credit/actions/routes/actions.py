@@ -11,7 +11,7 @@ from app.core.security.clerk_auth import Actor, get_actor
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.credit.actions.schemas.actions import ActionCreate, ActionOut, ActionUpdate
 from app.domains.credit.documents.models.evidence import EvidenceDocument
-from app.domains.credit.modules.actions.models import Action as ExecutionAction
+from app.domains.credit.portfolio.models.actions import Action as ExecutionAction
 
 router = APIRouter(tags=["Actions"])
 

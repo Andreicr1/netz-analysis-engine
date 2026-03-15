@@ -7,15 +7,15 @@ from typing import Any
 
 from ai_engine.intelligence.deep_review_confidence import compute_underwriting_confidence
 from ai_engine.validation.deep_review_comparator import _extract_recommendation_from_chapter
+from ai_engine.validation.evidence_quality import (
+    cross_validate_answer,
+    recency_analysis,
+)
 from ai_engine.validation.validation_schema import (
     LayerAggregateScore,
     LayerScore,
     MetricResult,
     MetricStatus,
-)
-from ai_engine.validation.evidence_quality import (
-    cross_validate_answer,
-    recency_analysis,
 )
 
 CH13_TAG = "ch13_recommendation"

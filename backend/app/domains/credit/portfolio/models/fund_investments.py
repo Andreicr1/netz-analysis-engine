@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+import uuid
+
 from sqlalchemy import Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db.base import AuditMetaMixin, Base, OrganizationScopedMixin
 from app.domains.credit.portfolio.enums import ReportingFrequency
-
-import uuid
 
 
 class FundInvestment(Base, OrganizationScopedMixin, AuditMetaMixin):
