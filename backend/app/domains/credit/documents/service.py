@@ -121,6 +121,103 @@ async def create_root_folder(db: AsyncSession, *, fund_id: uuid.UUID, actor: Act
     return folder
 
 
+async def create_document_pending(
+    db: AsyncSession,
+    *,
+    fund_id: uuid.UUID,
+    actor: Actor,
+    root_folder: str,
+    subfolder_path: str | None,
+    domain: str | None,
+    title: str,
+    filename: str,
+    content_type: str | None,
+) -> UploadResult:
+    """Create a Document + DocumentVersion in PENDING state (no blob upload).
+
+    Used by the two-step SAS URL upload flow:
+      1. This function creates the records
+      2. Client uploads directly to SAS URL
+      3. ``upload-complete`` triggers ingestion
+    """
+    rf = _safe_root_folder(root_folder)
+    if rf not in await allowed_root_folders(db, fund_id=fund_id):
+        raise ValueError("root_folder is not allowed")
+
+    sub = _normalize_subfolder_path(subfolder_path)
+    folder_path = rf if not sub else f"{rf}/{sub}"
+
+    if not (filename.lower().endswith(".pdf") or (content_type or "").lower() == "application/pdf"):
+        raise ValueError("Only PDF uploads are supported for Data Room ingest")
+
+    dom = None
+    if domain:
+        try:
+            dom = DocumentDomain(domain)
+        except Exception:
+            dom = DocumentDomain.OTHER
+
+    # Stable doc identity by folder_path+title within fund
+    result = await db.execute(
+        select(Document).where(
+            Document.fund_id == fund_id,
+            Document.root_folder == rf,
+            Document.folder_path == folder_path,
+            Document.title == title,
+        ),
+    )
+    doc = result.scalar_one_or_none()
+
+    if not doc:
+        doc = Document(
+            fund_id=fund_id,
+            access_level="internal",
+            source="dataroom",
+            document_type="DATAROOM",
+            title=title,
+            status="uploaded",
+            current_version=0,
+            root_folder=rf,
+            folder_path=folder_path,
+            domain=dom,
+            original_filename=filename,
+            content_type=content_type,
+            created_by=actor.actor_id,
+            updated_by=actor.actor_id,
+        )
+        db.add(doc)
+        await db.flush()
+
+    next_ver = int(doc.current_version or 0) + 1
+
+    ver = DocumentVersion(
+        fund_id=fund_id,
+        access_level="internal",
+        document_id=doc.id,
+        version_number=next_ver,
+        blob_uri=None,  # Set later after SAS URL generation
+        blob_path=None,
+        checksum=None,
+        file_size_bytes=None,
+        is_final=False,
+        content_type=content_type or "application/pdf",
+        uploaded_by=actor.actor_id,
+        uploaded_at=_utcnow(),
+        ingestion_status=DocumentIngestionStatus.PENDING,
+        meta={},
+        created_by=actor.actor_id,
+        updated_by=actor.actor_id,
+    )
+    db.add(ver)
+    await db.flush()
+
+    doc.current_version = next_ver
+    doc.updated_by = actor.actor_id
+    await db.commit()
+
+    return UploadResult(document=doc, version=ver, blob_path="")
+
+
 async def upload_document(
     db: AsyncSession,
     *,

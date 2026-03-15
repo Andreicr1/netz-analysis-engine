@@ -764,7 +764,7 @@ Cross-cutting AI utilities incorrectly housed in compliance were relocated to `a
   - `profiles/private_credit/evaluation_criteria.yaml` — extract from validation configs
   - `profiles/liquid_funds/profile.yaml` — 7 chapters for wealth DD
   - `profiles/liquid_funds/prompts/` — wealth-specific prompts
-- [ ] **Upload architecture** (see brainstorm Section I)
+- [x] **Upload architecture** (see brainstorm Section I)
   - `POST /api/v1/documents/upload-url` → generate SAS URL + `upload_id`
   - `POST /api/v1/documents/upload-complete` → enqueue to Service Bus, return `job_id`
   - `GET /api/v1/jobs/{job_id}/stream` → SSE events (chunking, OCR, embeddings, indexed, complete)
