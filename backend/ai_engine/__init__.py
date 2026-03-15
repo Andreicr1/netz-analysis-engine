@@ -29,7 +29,7 @@ def run_pipeline_ingest(*args, **kwargs):
 
 
 def run_portfolio_ingest(*args, **kwargs):
-    from vertical_engines.credit.portfolio_intelligence import run_portfolio_ingest as _impl
+    from vertical_engines.credit.portfolio import run_portfolio_ingest as _impl
 
     return _impl(*args, **kwargs)
 
