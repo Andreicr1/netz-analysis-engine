@@ -1,0 +1,38 @@
+# Macro Intelligence Suite — Regional Scoring Configuration
+#
+# Controls how regional macro scores are computed from FRED data.
+# This file is SEED DATA ONLY — runtime config resolved via ConfigService.
+# Org-specific overrides go in vertical_config_overrides table.
+#
+# Source: Macrosynergy Research (2024) — percentile normalization,
+# equal-weight composites as institutional standard.
+
+regional_scoring:
+  lookback_years: 10
+  min_coverage: 0.50  # Minimum fraction of total dimension weight required
+
+  dimension_weights:
+    growth: 0.20
+    inflation: 0.20
+    monetary: 0.15
+    financial_conditions: 0.20
+    labor: 0.15
+    sentiment: 0.10
+
+  staleness:
+    daily:
+      fresh_days: 3
+      max_useful_days: 10
+      floor: 0.30
+    weekly:
+      fresh_days: 10
+      max_useful_days: 30
+      floor: 0.40
+    monthly:
+      fresh_days: 45
+      max_useful_days: 90
+      floor: 0.50
+    quarterly:
+      fresh_days: 100
+      max_useful_days: 180
+      floor: 0.50

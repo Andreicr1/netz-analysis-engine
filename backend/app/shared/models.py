@@ -14,6 +14,7 @@ import datetime as dt
 from decimal import Decimal
 
 from sqlalchemy import JSON, Boolean, Date, DateTime, Numeric, String, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db.base import AuditMetaMixin, Base, IdMixin
@@ -36,6 +37,23 @@ class MacroData(Base, AuditMetaMixin):
     value: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     source: Mapped[str | None] = mapped_column(String(30), server_default="fred")
     is_derived: Mapped[bool] = mapped_column(Boolean, server_default="false")
+
+
+class MacroRegionalSnapshot(Base, IdMixin, AuditMetaMixin):
+    """Regional macro scoring snapshot — one row per calendar day.
+
+    GLOBAL TABLE: No organization_id, no RLS.
+    Populated by macro_ingestion worker.  Uses JSONB (supports GIN indexes)
+    — intentional difference from credit's macro_snapshots which uses JSON.
+    Stores composite scores for US/Europe/Asia/EM + global indicators.
+    """
+
+    __tablename__ = "macro_regional_snapshots"
+
+    as_of_date: Mapped[dt.date] = mapped_column(
+        Date, nullable=False, unique=True, index=True,
+    )
+    data_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
 
 
 class MacroSnapshot(Base, IdMixin, AuditMetaMixin):
