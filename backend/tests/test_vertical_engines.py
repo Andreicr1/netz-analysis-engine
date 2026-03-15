@@ -60,7 +60,7 @@ class TestCreditModuleStructure:
         "vertical_engines.credit.edgar",
         "vertical_engines.credit.kyc",
         "vertical_engines.credit.memo_chapter_prompts",
-        "vertical_engines.credit.deal_conversion_engine",
+        "vertical_engines.credit.deal_conversion",
     ]
 
     def test_all_credit_modules_discoverable(self):

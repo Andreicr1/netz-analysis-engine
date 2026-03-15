@@ -1,92 +1,33 @@
-"""Pipeline → Portfolio Deal Conversion Engine.
+"""Deal conversion service — pipeline → portfolio deal transition.
 
-This is a controlled domain transition.  A pipeline deal (research /
-due-diligence) is approved and converted into:
-
-1. A **Portfolio Deal** (``deals`` table) — the operational identity.
-2. An **ActiveInvestment** wrapper (``active_investments``) — the
-   monitoring entity.
-3. A **DealConversionEvent** audit record.
-4. Azure Search metadata merge (``domain`` → ``portfolio``).
-
-The conversion is:
-- **Idempotent** — double-approval is rejected.
-- **Gated** — requires ``intelligence_status == READY``.
-- **Transactional** — full rollback on failure.
-- **Auditable** — every step is logged.
+Error contract: raises-on-failure (transactional engine).
+Raises ValueError on validation gates:
+- Deal not found
+- Deal already converted (idempotent guard)
+- Intelligence status not READY
+- research_output empty
 """
-
 from __future__ import annotations
 
 import datetime as dt
-import logging
-import re
 import uuid
-from dataclasses import dataclass
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-logger = logging.getLogger(__name__)
+from vertical_engines.credit.deal_conversion.models import ConversionResult
+from vertical_engines.credit.deal_conversion.normalization import (
+    derive_deal_type,
+    normalize_amount,
+    title_case_strategy,
+)
 
-
-# ── Result DTO ────────────────────────────────────────────────────────
-
-
-@dataclass
-class ConversionResult:
-    portfolio_deal_id: uuid.UUID
-    active_investment_id: uuid.UUID
-    pipeline_deal_id: uuid.UUID
-    status: str = "converted"
-
-
-# ── Helpers ───────────────────────────────────────────────────────────
+logger = structlog.get_logger()
 
 
 def _utcnow() -> dt.datetime:
     return dt.datetime.now(dt.UTC)
-
-
-def _normalize_amount(val: object | None) -> float | None:
-    """Best-effort parse of a monetary string (e.g. '$10M', '10,000,000')."""
-    if val is None:
-        return None
-    if isinstance(val, (int, float)):
-        return float(val)
-    text = str(val).replace(",", "").replace("$", "").strip()
-    match = re.search(r"([\d.]+)\s*(k|m|mm|b|bn)?", text, re.IGNORECASE)
-    if not match:
-        return None
-    num = float(match.group(1))
-    suffix = (match.group(2) or "").lower()
-    multipliers = {"k": 1e3, "m": 1e6, "mm": 1e6, "b": 1e9, "bn": 1e9}
-    return num * multipliers.get(suffix, 1.0)
-
-
-def _title_case_strategy(value: str | None) -> str | None:
-    """Normalize strategy_type to Title Case (e.g. 'ASSET_BACKED' → 'Asset Backed')."""
-    if not value:
-        return value
-    return " ".join(w.capitalize() for w in value.replace("_", " ").split())
-
-
-def _derive_deal_type(research_output: dict | None) -> str:
-    """Derive DealType enum value from research_output.deal_overview.instrument."""
-    overview = (research_output or {}).get("deal_overview", {})
-    instrument = (overview.get("instrument") or "").lower()
-    if any(w in instrument for w in ("loan", "credit", "debt", "lending", "facility")):
-        return "DIRECT_LOAN"
-    if "fund" in instrument:
-        return "FUND_INVESTMENT"
-    if any(w in instrument for w in ("equity", "preferred", "stock")):
-        return "EQUITY_STAKE"
-    if any(w in instrument for w in ("note", "spv", "structured")):
-        return "SPV_NOTE"
-    return "DIRECT_LOAN"
-
-
-# ── Main Conversion Function ─────────────────────────────────────────
 
 
 def convert_pipeline_to_portfolio(
@@ -151,7 +92,7 @@ def convert_pipeline_to_portfolio(
     overview = ro.get("deal_overview", {})
 
     # ── Step 2: Create Portfolio Deal ─────────────────────────────
-    deal_type_str = deal_type_override or _derive_deal_type(ro)
+    deal_type_str = deal_type_override or derive_deal_type(ro)
     deal_type = DomainDealType(deal_type_str)
 
     sponsor = (
@@ -164,11 +105,11 @@ def convert_pipeline_to_portfolio(
         description_override or overview.get("strategy_summary") or deal.ai_summary
     )
 
-    commitment = _normalize_amount(overview.get("ticket_size"))
+    commitment = normalize_amount(overview.get("ticket_size"))
     if commitment is None:
-        commitment = _normalize_amount(overview.get("commitment"))
+        commitment = normalize_amount(overview.get("commitment"))
     if commitment is None:
-        commitment = _normalize_amount(deal.requested_amount)
+        commitment = normalize_amount(deal.requested_amount)
 
     portfolio_deal = PortfolioDeal(
         fund_id=fund_id,
@@ -183,22 +124,22 @@ def convert_pipeline_to_portfolio(
     db.flush()
 
     logger.info(
-        "Created portfolio deal %s for pipeline deal %s",
-        portfolio_deal.id,
-        deal.id,
+        "convert_pipeline_to_portfolio.portfolio_deal_created",
+        portfolio_deal_id=str(portfolio_deal.id),
+        pipeline_deal_id=str(deal.id),
     )
 
     # ── Step 3: Create ActiveInvestment ───────────────────────────
     active_inv = ActiveInvestment(
         fund_id=fund_id,
         access_level="internal",
-        deal_id=portfolio_deal.id,  # anchored to deals.id (portfolio)
+        deal_id=portfolio_deal.id,
         investment_name=deal.deal_name or deal.title,
         manager_name=sponsor,
         lifecycle_status="ACTIVE",
         source_container="portfolio-active-investments",
         source_folder=f"portfolio-active-investments/{deal.deal_name or deal.title}",
-        strategy_type=_title_case_strategy(
+        strategy_type=title_case_strategy(
             overview.get("strategy_type") or overview.get("sector"),
         ),
         target_return=overview.get("yield") or overview.get("target_return"),
@@ -214,9 +155,9 @@ def convert_pipeline_to_portfolio(
     db.flush()
 
     logger.info(
-        "Created active investment %s → portfolio deal %s",
-        active_inv.id,
-        portfolio_deal.id,
+        "convert_pipeline_to_portfolio.active_investment_created",
+        active_investment_id=str(active_inv.id),
+        portfolio_deal_id=str(portfolio_deal.id),
     )
 
     # ── Step 4: Mark Pipeline Deal as Approved ────────────────────
@@ -285,24 +226,23 @@ def convert_pipeline_to_portfolio(
     db.flush()
 
     # ── Step 6: Azure Search metadata transition (best-effort) ────
-    _search_merge_count = 0
     try:
         from app.domains.credit.modules.deals.doc_reclassification import reclassify_vector_chunks
 
-        _search_merge_count = reclassify_vector_chunks(
+        search_merge_count = reclassify_vector_chunks(
             pipeline_deal_id=deal.id,
             portfolio_deal_id=portfolio_deal.id,
             fund_id=fund_id,
         )
         logger.info(
-            "Reclassified %d vector chunks pipeline→portfolio for deal %s",
-            _search_merge_count,
-            deal.id,
+            "convert_pipeline_to_portfolio.vector_chunks_reclassified",
+            count=search_merge_count,
+            pipeline_deal_id=str(deal.id),
         )
     except Exception:
         logger.warning(
-            "Azure Search reclassification deferred for pipeline_deal=%s",
-            deal.id,
+            "convert_pipeline_to_portfolio.vector_reclassification_deferred",
+            pipeline_deal_id=str(deal.id),
             exc_info=True,
         )
 
