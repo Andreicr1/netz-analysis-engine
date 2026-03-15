@@ -35,6 +35,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ai_engine.model_config import get_model
+from ai_engine.pipeline.models import CANONICAL_DOC_TYPES
 from ai_engine.prompt_safety import sanitize_user_input
 from ai_engine.prompts import prompt_registry
 
@@ -45,65 +46,8 @@ logger = logging.getLogger(__name__)
 #  Canonical Document Type Taxonomy
 # ═══════════════════════════════════════════════════════════════════════
 #
-#  Designed to be the SINGLE source of truth, consumed by:
-#    • Azure Search index ``doc_type`` field (retrieval governance filters)
-#    • _CHAPTER_DOC_AFFINITY (memo book generator evidence selection)
-#    • CRITICAL_DOC_TYPES (corpus inclusion guarantee)
-#    • Document registry (Postgres)
-#
-#  Convention: lower_snake_case, matching retrieval governance OData filters.
-
-CANONICAL_DOC_TYPES: tuple[str, ...] = (
-    # ── Legal ─────────────────────────────────────────────────────────
-    "legal_lpa",                # Limited Partnership Agreement / Fund Constitution / Offering Memo
-    "legal_side_letter",        # Side Letter Agreement — governance-critical
-    "legal_subscription",       # Subscription Agreement / Application Form
-    "legal_agreement",          # Admin agreements, service agreements, engagement letters
-    "legal_amendment",          # Amendments to existing agreements
-    "legal_poa",                # Power of Attorney
-    "legal_term_sheet",         # Term Sheet, LOI, indicative terms, fee letter
-    "legal_credit_agreement",   # Credit Agreement, Facility Agreement, Loan Agreement
-    "legal_security",           # Security Agreement, Pledge, Guarantee, Collateral
-    "legal_intercreditor",      # Intercreditor Agreement
-
-    # ── Financial ─────────────────────────────────────────────────────
-    "financial_statements",     # Audited/unaudited financial statements
-    "financial_nav",            # NAV reports, valuations, performance
-    "financial_projections",    # Financial models, projections, scenarios
-
-    # ── Regulatory ────────────────────────────────────────────────────
-    "regulatory_cima",          # CIMA filings, licenses, registrations
-    "regulatory_compliance",    # Compliance manuals, AML/KYC policies, procedures
-    "regulatory_qdd",           # QDD documentation, tax compliance
-
-    # ── Fund Structure / Profile ──────────────────────────────────────
-    "fund_structure",           # Fund org docs, org charts, vehicle diagrams
-    "fund_profile",             # Fund profile, strategy description
-    "fund_presentation",        # Fund presentations, marketing decks, pitchbooks
-    "fund_policy",              # Investment / credit / risk policies
-    "strategy_profile",         # Strategy overview, mandate description
-
-    # ── Capital & Operations ──────────────────────────────────────────
-    "capital_raising",          # Capital raising materials, DDQ, commitments
-    "credit_policy",            # Credit/lending policies, underwriting standards
-
-    # ── Operational ───────────────────────────────────────────────────
-    "operational_service",      # Service provider agreements (admin, custodian, auditor)
-    "operational_insurance",    # Insurance policies, coverage
-    "operational_monitoring",   # Portfolio monitoring, watchlist, covenant compliance
-
-    # ── Analysis ──────────────────────────────────────────────────────
-    "investment_memo",          # IC memos, investment memos, committee presentations
-    "risk_assessment",          # Risk assessments, due diligence reports
-
-    # ── General ───────────────────────────────────────────────────────
-    "org_chart",                # Organizational charts
-    "attachment",               # General attachments, exhibits, annexes
-    "other",                    # Unclassified
-)
-
-# Lookup set for validation
-_VALID_DOC_TYPES: frozenset[str] = frozenset(CANONICAL_DOC_TYPES)
+#  Single source of truth: ``ai_engine.pipeline.models.CANONICAL_DOC_TYPES``
+#  (imported at the top of this module).  Do NOT redefine here.
 
 
 # ── Affinity mapping: canonical doc_type → chapter affinity tags ──────
@@ -401,7 +345,7 @@ async def async_classify_document(
         data = json.loads(result.text)
 
         doc_type = data.get("doc_type", "other")
-        if doc_type not in _VALID_DOC_TYPES:
+        if doc_type not in CANONICAL_DOC_TYPES:
             logger.warning(
                 "LLM returned invalid doc_type '%s' for '%s' — falling back to 'other'",
                 doc_type, title,

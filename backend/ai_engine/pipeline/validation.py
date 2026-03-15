@@ -53,8 +53,15 @@ def validate_ocr_output(text: str, filename: str) -> PipelineStageResult:
         )
 
     if char_count > 0:
-        non_printable = sum(1 for c in text if not c.isprintable() and c not in "\n\r\t")
-        ratio = non_printable / char_count
+        # Sample-based scan to avoid O(n) on large documents
+        _SAMPLE_HEAD = 10_000
+        _SAMPLE_TAIL = 5_000
+        if char_count > _SAMPLE_HEAD + _SAMPLE_TAIL:
+            sample = text[:_SAMPLE_HEAD] + text[-_SAMPLE_TAIL:]
+        else:
+            sample = text
+        non_printable = sum(1 for c in sample if not c.isprintable() and c not in "\n\r\t")
+        ratio = non_printable / len(sample)
         if ratio > MAX_NON_PRINTABLE_RATIO:
             errors.append(
                 f"Non-printable character ratio {ratio:.1%} exceeds "

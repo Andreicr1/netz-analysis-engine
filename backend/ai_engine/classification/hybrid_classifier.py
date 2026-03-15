@@ -312,11 +312,12 @@ DOC_TYPE_DESCRIPTIONS: dict[str, str] = {
 }
 
 # Verify at import time that descriptions cover exactly the canonical set.
-assert set(DOC_TYPE_DESCRIPTIONS.keys()) == CANONICAL_DOC_TYPES, (
-    f"DOC_TYPE_DESCRIPTIONS keys mismatch: "
-    f"extra={set(DOC_TYPE_DESCRIPTIONS.keys()) - CANONICAL_DOC_TYPES}, "
-    f"missing={CANONICAL_DOC_TYPES - set(DOC_TYPE_DESCRIPTIONS.keys())}"
-)
+if set(DOC_TYPE_DESCRIPTIONS.keys()) != CANONICAL_DOC_TYPES:
+    raise RuntimeError(
+        f"DOC_TYPE_DESCRIPTIONS keys mismatch: "
+        f"extra={set(DOC_TYPE_DESCRIPTIONS.keys()) - CANONICAL_DOC_TYPES}, "
+        f"missing={CANONICAL_DOC_TYPES - set(DOC_TYPE_DESCRIPTIONS.keys())}"
+    )
 
 
 VEHICLE_TYPE_DESCRIPTIONS: dict[str, str] = {
@@ -373,11 +374,12 @@ VEHICLE_TYPE_DESCRIPTIONS: dict[str, str] = {
     ),
 }
 
-assert set(VEHICLE_TYPE_DESCRIPTIONS.keys()) == CANONICAL_VEHICLE_TYPES, (
-    f"VEHICLE_TYPE_DESCRIPTIONS keys mismatch: "
-    f"extra={set(VEHICLE_TYPE_DESCRIPTIONS.keys()) - CANONICAL_VEHICLE_TYPES}, "
-    f"missing={CANONICAL_VEHICLE_TYPES - set(VEHICLE_TYPE_DESCRIPTIONS.keys())}"
-)
+if set(VEHICLE_TYPE_DESCRIPTIONS.keys()) != CANONICAL_VEHICLE_TYPES:
+    raise RuntimeError(
+        f"VEHICLE_TYPE_DESCRIPTIONS keys mismatch: "
+        f"extra={set(VEHICLE_TYPE_DESCRIPTIONS.keys()) - CANONICAL_VEHICLE_TYPES}, "
+        f"missing={CANONICAL_VEHICLE_TYPES - set(VEHICLE_TYPE_DESCRIPTIONS.keys())}"
+    )
 
 
 # =====================================================================
@@ -649,7 +651,7 @@ _REIT_RE = re.compile(
 )
 
 
-def _classify_vehicle_rules(filename: str, text: str) -> str | None:
+def classify_vehicle_rules(filename: str, text: str) -> str | None:
     """Layer 1 vehicle type: deterministic heuristics from prepare_pdfs_full.py."""
     corpus = filename + "\n" + text
 
@@ -763,7 +765,7 @@ async def classify(
         vehicle_type = "other"
     else:
         # Layer 1: heuristic rules
-        vt = _classify_vehicle_rules(filename, _ocr_window(text) if text else "")
+        vt = classify_vehicle_rules(filename, _ocr_window(text) if text else "")
         if vt is not None and vt in CANONICAL_VEHICLE_TYPES:
             vehicle_type = vt
         elif text:

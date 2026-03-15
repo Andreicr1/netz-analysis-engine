@@ -720,11 +720,11 @@ def validate_vehicle_type(
     heuristics (regex rules ported from prepare_pdfs_full.py).
     No API calls — pure Python, zero cost.
     """
-    from ai_engine.classification.hybrid_classifier import _classify_vehicle_rules
+    from ai_engine.classification.hybrid_classifier import classify_vehicle_rules
 
     # Use hybrid classifier's vehicle rules (Layer 1 heuristics)
     text = f"Entity: {entity_name}\n\n{context_text[:5000]}"
-    vehicle = _classify_vehicle_rules(filename, text)
+    vehicle = classify_vehicle_rules(filename, text)
 
     if vehicle is not None:
         return vehicle, 0.85  # High confidence for deterministic match

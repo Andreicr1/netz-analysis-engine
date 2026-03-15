@@ -99,3 +99,5 @@ class IngestRequest:
     def __post_init__(self) -> None:
         if self.vertical not in {"credit", "wealth"}:
             raise ValueError(f"Invalid vertical: {self.vertical!r}")
+        if ".." in self.blob_uri or self.blob_uri.startswith("/"):
+            raise ValueError(f"Invalid blob_uri: path traversal detected in {self.blob_uri!r}")

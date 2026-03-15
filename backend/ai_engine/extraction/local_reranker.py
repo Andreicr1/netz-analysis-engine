@@ -17,12 +17,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import threading
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-# Model identifier — pin to specific revision in production.
+# Model identifier — pinned to known-good commit.
 _MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+_MODEL_REVISION = "c510bff"  # Pin to known-good commit
 
 
 @dataclass(frozen=True)
@@ -41,13 +43,16 @@ class RerankResult:
 _model = None
 _init_lock: asyncio.Lock | None = None
 _predict_lock: asyncio.Lock | None = None
+_bootstrap_lock = threading.Lock()  # Not an asyncio primitive — safe at module level
 
 
 def _get_init_lock() -> asyncio.Lock:
     """Get or create the init lock (lazy, not module-level)."""
     global _init_lock
     if _init_lock is None:
-        _init_lock = asyncio.Lock()
+        with _bootstrap_lock:
+            if _init_lock is None:
+                _init_lock = asyncio.Lock()
     return _init_lock
 
 
@@ -55,7 +60,9 @@ def _get_predict_lock() -> asyncio.Lock:
     """Get or create the predict lock (lazy, not module-level)."""
     global _predict_lock
     if _predict_lock is None:
-        _predict_lock = asyncio.Lock()
+        with _bootstrap_lock:
+            if _predict_lock is None:
+                _predict_lock = asyncio.Lock()
     return _predict_lock
 
 
@@ -74,7 +81,7 @@ async def _ensure_model():
 
         def _load():
             from sentence_transformers import CrossEncoder
-            return CrossEncoder(_MODEL_NAME)
+            return CrossEncoder(_MODEL_NAME, revision=_MODEL_REVISION)
 
         _model = await asyncio.to_thread(_load)
         logger.info("Cross-encoder model loaded successfully")
