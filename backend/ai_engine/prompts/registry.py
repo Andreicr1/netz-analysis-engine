@@ -59,6 +59,7 @@ class PromptRegistry:
             keep_trailing_newline=True,
             trim_blocks=True,
             lstrip_blocks=True,
+            auto_reload=os.getenv("NETZ_ENV", "dev") == "dev",
         )
         logger.info(
             "PromptRegistry initialized — base=%s prompt_set=%s search_paths=%s",
@@ -111,13 +112,20 @@ class PromptRegistry:
     def list_templates(self, subdirectory: str = "") -> list[str]:
         """List all .j2 template files, optionally filtered by subdirectory."""
         results = []
-        search_dir = self._base_dir / subdirectory if subdirectory else self._base_dir
-        if not search_dir.is_dir():
-            return results
-        for p in sorted(search_dir.rglob("*.j2")):
-            rel = p.relative_to(self._base_dir)
-            results.append(str(rel).replace("\\", "/"))
-        return results
+        seen: set[str] = set()
+        for search_dir_str in self._env.loader.searchpath:
+            search_dir = Path(search_dir_str)
+            if subdirectory:
+                search_dir = search_dir / subdirectory
+            if not search_dir.is_dir():
+                continue
+            for p in sorted(search_dir.rglob("*.j2")):
+                rel = p.relative_to(Path(search_dir_str))
+                name = str(rel).replace("\\", "/")
+                if name not in seen:
+                    seen.add(name)
+                    results.append(name)
+        return sorted(results)
 
     @lru_cache(maxsize=128)
     def get_metadata(self, template_name: str) -> dict[str, Any]:
@@ -157,9 +165,31 @@ class PromptRegistry:
         directories so that ``render()`` can resolve package-local
         ``.j2`` files without requiring a central directory.
         Duplicate paths are silently ignored.
+
+        Raises ValueError if the path is outside the project tree or
+        is not an existing directory.
         """
-        path_str = str(path)
+        resolved = Path(path).resolve()
+        backend_root = Path(__file__).resolve().parents[2]  # ai_engine/prompts/registry.py -> parents[2] = backend/
+        if not str(resolved).startswith(str(backend_root)):
+            raise ValueError(
+                f"Template search path must be within the backend directory: {resolved}"
+            )
+        if not resolved.is_dir():
+            raise ValueError(f"Template search path is not a directory: {resolved}")
+        path_str = str(resolved)
         if path_str not in self._env.loader.searchpath:
+            # Warn on template name collisions (first-registered path wins in FileSystemLoader)
+            existing_names: set[str] = set()
+            for sp in self._env.loader.searchpath:
+                for f in Path(sp).glob("*.j2"):
+                    existing_names.add(f.name)
+            for f in resolved.glob("*.j2"):
+                if f.name in existing_names:
+                    logger.warning(
+                        "Template name collision: %s in %s shadows existing template",
+                        f.name, path_str,
+                    )
             self._env.loader.searchpath.append(path_str)
 
     def has_template(self, template_name: str) -> bool:

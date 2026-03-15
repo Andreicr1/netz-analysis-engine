@@ -22,7 +22,6 @@ from vertical_engines.credit.memo.prompts import (
     _CHAPTER_DOC_AFFINITY,
     _CHAPTER_EXTRA_SECTIONS,
     _CHAPTER_MAX_TOKENS,
-    _CHAPTER_PROMPTS,
     _SHARED_PACK_SECTIONS,
 )
 
@@ -37,24 +36,20 @@ _CHAPTER_TAGS = (
 
 
 def _get_chapter_base_prompt(chapter_tag: str, **context: Any) -> str | None:
-    """Return system prompt for a chapter from registry or legacy fallback."""
-    if chapter_tag in _CHAPTER_TAGS and prompt_registry.has_template(f"{chapter_tag}.j2"):
+    """Return system prompt for a chapter from the prompt registry."""
+    if chapter_tag in _CHAPTER_TAGS:
         return prompt_registry.render(f"{chapter_tag}.j2", **context)
-    return _CHAPTER_PROMPTS.get(chapter_tag)
+    return None
 
 
 def _get_evidence_law() -> str:
-    if prompt_registry.has_template("evidence_law.j2"):
-        return prompt_registry.render("evidence_law.j2")
-    from vertical_engines.credit.memo.prompts import _EVIDENCE_LAW
-    return _EVIDENCE_LAW
+    """Return the evidence law prompt."""
+    return prompt_registry.render("evidence_law.j2")
 
 
 def _get_evidence_law_ch13() -> str:
-    if prompt_registry.has_template("evidence_law_ch13.j2"):
-        return prompt_registry.render("evidence_law_ch13.j2")
-    from vertical_engines.credit.memo.prompts import _EVIDENCE_LAW_CH13
-    return _EVIDENCE_LAW_CH13
+    """Return the Ch13-specific evidence law prompt."""
+    return prompt_registry.render("evidence_law_ch13.j2")
 
 
 def filter_evidence_pack(evidence_pack: dict[str, Any], chapter_tag: str) -> dict[str, Any]:
