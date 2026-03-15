@@ -11,10 +11,6 @@ Covers:
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
-
 from vertical_engines.credit.edgar.cik_resolver import sanitize_entity_name
 from vertical_engines.credit.edgar.context_serializer import build_edgar_multi_entity_context
 from vertical_engines.credit.edgar.entity_extraction import extract_searchable_entities
@@ -27,7 +23,6 @@ from vertical_engines.credit.edgar.models import (
     InsiderSignalType,
     SignalSeverity,
 )
-
 
 # ── Entity Extraction Tests ──────────────────────────────────────
 
