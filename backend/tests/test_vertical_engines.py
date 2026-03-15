@@ -1,4 +1,4 @@
-"""Tests for vertical_engines structure — imports, base interfaces, credit module."""
+"""Tests for vertical_engines structure — imports, base interfaces, credit + wealth modules."""
 
 from __future__ import annotations
 
@@ -110,6 +110,84 @@ class TestCreditModuleStructure:
             assert len(j2_files) >= 13, (
                 f"Expected >=13 chapter prompts, found {len(j2_files)}"
             )
+
+
+# ── Wealth module structure tests ─────────────────────────────────────────────
+
+
+class TestWealthModuleStructure:
+    """Verify wealth engine modules exist and implement BaseAnalyzer."""
+
+    EXPECTED_MODULES = [
+        "vertical_engines.wealth.fund_analyzer",
+        "vertical_engines.wealth.dd_report_engine",
+        "vertical_engines.wealth.quant_analyzer",
+    ]
+
+    def test_all_wealth_modules_discoverable(self):
+        missing = []
+        for mod in self.EXPECTED_MODULES:
+            spec = importlib.util.find_spec(mod)
+            if spec is None:
+                missing.append(mod)
+        assert not missing, f"Modules not found: {missing}"
+
+    def test_fund_analyzer_implements_base(self):
+        from vertical_engines.base.base_analyzer import BaseAnalyzer
+        from vertical_engines.wealth.fund_analyzer import FundAnalyzer
+
+        assert issubclass(FundAnalyzer, BaseAnalyzer)
+        assert FundAnalyzer.vertical == "liquid_funds"
+
+    def test_fund_analyzer_is_concrete(self):
+        """FundAnalyzer should NOT be abstract — all methods implemented."""
+        from vertical_engines.wealth.fund_analyzer import FundAnalyzer
+
+        assert not inspect.isabstract(FundAnalyzer)
+
+    def test_dd_report_chapters(self):
+        from vertical_engines.wealth.dd_report_engine import DD_CHAPTERS
+
+        assert len(DD_CHAPTERS) == 7
+        assert DD_CHAPTERS[0]["id"] == "ch01_executive"
+        assert DD_CHAPTERS[-1]["id"] == "ch07_recommendation"
+
+
+# ── Profile YAML tests ───────────────────────────────────────────────────────
+
+
+class TestProfileYAML:
+    def test_private_credit_profile_loads(self):
+        from pathlib import Path
+
+        import yaml
+
+        profile_path = Path(__file__).resolve().parents[2] / "profiles" / "private_credit" / "profile.yaml"
+        data = yaml.safe_load(profile_path.read_text())
+        assert data["name"] == "private_credit"
+        assert len(data["chapters"]) == 14
+        assert data.get("global_knowledge_feedback") is True
+
+    def test_liquid_funds_profile_loads(self):
+        from pathlib import Path
+
+        import yaml
+
+        profile_path = Path(__file__).resolve().parents[2] / "profiles" / "liquid_funds" / "profile.yaml"
+        data = yaml.safe_load(profile_path.read_text())
+        assert data["name"] == "liquid_funds"
+        assert len(data["chapters"]) == 7
+
+    def test_evaluation_criteria_loads(self):
+        from pathlib import Path
+
+        import yaml
+
+        criteria_path = Path(__file__).resolve().parents[2] / "profiles" / "private_credit" / "evaluation_criteria.yaml"
+        data = yaml.safe_load(criteria_path.read_text())
+        assert data["global_knowledge_feedback"] is True
+        assert "confidence_weights" in data
+        assert "critic" in data
 
 
 # ── ai_engine backward-compat re-exports ─────────────────────────────────────

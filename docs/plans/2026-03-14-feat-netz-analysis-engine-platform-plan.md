@@ -752,12 +752,12 @@ Cross-cutting AI utilities incorrectly housed in compliance were relocated to `a
   - Cascade now handled by ConfigService (DB override → DB default → YAML fallback)
   - Instantiates correct vertical engine class from registry
   - Registry: `{"private_credit": CreditAnalyzer, "liquid_funds": WealthAnalyzer}`
-- [ ] **`backend/vertical_engines/wealth/`** — NEW (not migrated, built fresh)
+- [x] **`backend/vertical_engines/wealth/`** — NEW (not migrated, built fresh)
   - `fund_analyzer.py` — 7-chapter fund manager DD report
   - `dd_report_engine.py` — report generation loop
   - `quant_analyzer.py` — integrates with `quant_engine/` (CVaR, Sharpe, drawdown)
   - `prompts/` — wealth-specific Jinja2 prompts
-- [ ] **Profile extraction**
+- [x] **Profile extraction**
   - `profiles/private_credit/profile.yaml` — 14 chapters with budgets, affinity, model routing
   - `profiles/private_credit/prompts/` — symlink or copy from `vertical_engines/credit/prompts/`
   - `profiles/private_credit/output_schema.json` — formalize IC memo JSON schema

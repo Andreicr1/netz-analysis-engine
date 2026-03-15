@@ -99,3 +99,6 @@ tone_normalization:
 recommendation_chapter: ch13_recommendation
 evidence_law_template: evidence_law.j2
 evidence_law_ch13_template: evidence_law_ch13.j2
+
+# Global knowledge flywheel — signals this profile participates
+global_knowledge_feedback: true

@@ -1,0 +1,36 @@
+# Private Credit Evaluation Criteria
+# ===================================
+# Defines quality thresholds, scoring weights, and global knowledge participation.
+# Used by validation pipeline and eval runner.
+
+name: private_credit_evaluation
+version: 1
+
+# Enable global knowledge flywheel for this profile
+global_knowledge_feedback: true
+
+# Chapter quality thresholds
+chapter_quality:
+  minimum_score: 0.6
+  target_score: 0.8
+  rewrite_threshold: 0.4
+
+# Confidence scoring weights
+confidence_weights:
+  data_completeness: 0.25
+  analytical_depth: 0.25
+  evidence_quality: 0.20
+  consistency: 0.15
+  critic_alignment: 0.15
+
+# Critic engine thresholds
+critic:
+  max_fatal_flaws: 0
+  max_material_gaps: 3
+  rewrite_on_fatal: true
+
+# Recommendation calibration
+recommendation:
+  invest_threshold: 0.75
+  conditional_threshold: 0.50
+  # Below conditional_threshold → DECLINE

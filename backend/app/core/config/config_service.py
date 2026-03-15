@@ -45,6 +45,7 @@ _YAML_FALLBACK_MAP: dict[tuple[str, str], str] = {
     ("private_credit", "chapters"): "profiles/private_credit/profile.yaml",
     ("private_credit", "calibration"): "calibration/seeds/private_credit/calibration.yaml",
     ("private_credit", "scoring"): "calibration/seeds/private_credit/scoring.yaml",
+    ("liquid_funds", "chapters"): "profiles/liquid_funds/profile.yaml",
 }
 
 
