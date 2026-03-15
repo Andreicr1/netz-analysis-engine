@@ -128,6 +128,17 @@ async def _verify_config_completeness() -> None:
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """App lifespan: validate secrets, log startup, cleanup on shutdown."""
     settings.validate_production_secrets()
+
+    # SEC EDGAR identity — must be set once before any edgartools calls.
+    # set_identity() is idempotent but NOT thread-safe (closes HTTP clients),
+    # so we call it here at startup, before worker threads are spawned.
+    try:
+        from edgar import set_identity
+        set_identity(settings.edgar_identity)
+        logger.info("EDGAR identity set to: %s", settings.edgar_identity)
+    except ImportError:
+        logger.debug("edgartools not installed — EDGAR identity not set")
+
     logger.info(
         "Netz Analysis Engine starting — env=%s",
         settings.app_env,
