@@ -41,7 +41,7 @@ class TestCreditModuleStructure:
         "vertical_engines.credit.critic",
         "vertical_engines.credit.ic_quant_engine",
         "vertical_engines.credit.market_data_engine",
-        "vertical_engines.credit.sponsor_engine",
+        "vertical_engines.credit.sponsor",
         "vertical_engines.credit.memo_chapter_engine",
         "vertical_engines.credit.memo_book_generator",
         "vertical_engines.credit.pipeline_engine",
