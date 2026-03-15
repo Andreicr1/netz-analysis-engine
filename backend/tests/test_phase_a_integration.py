@@ -19,7 +19,7 @@ class TestCreditSensitivityIntegration:
     """Verify extracted credit_sensitivity produces identical output."""
 
     def test_2d_grid_via_extracted_module(self) -> None:
-        from vertical_engines.credit.credit_sensitivity import build_sensitivity_2d
+        from vertical_engines.credit.quant import build_sensitivity_2d
 
         grid = build_sensitivity_2d(8.5, [])
         assert len(grid) == 16
@@ -28,7 +28,7 @@ class TestCreditSensitivityIntegration:
         assert grid[-1]["net_return_pct"] == pytest.approx(3.3, abs=1e-4)
 
     def test_3d_summary_via_extracted_module(self) -> None:
-        from vertical_engines.credit.credit_sensitivity import (
+        from vertical_engines.credit.quant import (
             build_sensitivity_2d,
             build_sensitivity_3d_summary,
         )
@@ -38,11 +38,11 @@ class TestCreditSensitivityIntegration:
         assert len(summary["top_fragile_combinations"]) == 5
         assert summary["dominant_driver"] in ("default_rate", "balanced", "recovery_rate")
 
-    def test_ic_quant_engine_delegates_correctly(self) -> None:
-        """ic_quant_engine's _build_sensitivity_2d should delegate to extracted module."""
-        from vertical_engines.credit.ic_quant_engine import _build_sensitivity_2d
+    def test_quant_package_exports_correctly(self) -> None:
+        """quant package exports build_sensitivity_2d."""
+        from vertical_engines.credit.quant.sensitivity import build_sensitivity_2d as sens_2d
 
-        grid = _build_sensitivity_2d(8.5, [])
+        grid = sens_2d(8.5, [])
         assert len(grid) == 16
         assert grid[0]["default_rate_pct"] == 1.0
 
@@ -56,7 +56,7 @@ class TestCreditScenariosIntegration:
     """Verify extracted credit_scenarios produces identical output."""
 
     def test_scenarios_via_extracted_module(self) -> None:
-        from vertical_engines.credit.credit_scenarios import build_deterministic_scenarios
+        from vertical_engines.credit.quant import build_deterministic_scenarios
 
         scenarios, flags = build_deterministic_scenarios(
             base_return_pct=8.5,
@@ -67,10 +67,12 @@ class TestCreditScenariosIntegration:
         assert scenarios[0]["scenario_name"] == "Base"
         assert scenarios[0]["loss_rate_pct"] == 2.0
 
-    def test_ic_quant_engine_delegates_correctly(self) -> None:
-        from vertical_engines.credit.ic_quant_engine import _build_deterministic_scenarios
+    def test_quant_package_exports_correctly(self) -> None:
+        from vertical_engines.credit.quant.scenarios import (
+            build_deterministic_scenarios as build_scen,
+        )
 
-        scenarios, flags = _build_deterministic_scenarios(
+        scenarios, flags = build_scen(
             base_return_pct=8.5,
             risks=[],
         )
@@ -252,7 +254,7 @@ class TestCreditBacktest:
     """Unit tests for credit PD/LGD backtest service."""
 
     def _make_synthetic_data(self, n_obs: int = 200, default_rate: float = 0.1) -> "BacktestInput":
-        from vertical_engines.credit.credit_backtest import BacktestInput
+        from vertical_engines.credit.quant import BacktestInput
 
         rng = np.random.default_rng(42)
         n_defaults = int(n_obs * default_rate)
@@ -275,7 +277,7 @@ class TestCreditBacktest:
         )
 
     def test_backtest_completes(self) -> None:
-        from vertical_engines.credit.credit_backtest import backtest_pd_model
+        from vertical_engines.credit.quant import backtest_pd_model
 
         inp = self._make_synthetic_data(n_obs=200)
         result = backtest_pd_model(inp)
@@ -289,7 +291,7 @@ class TestCreditBacktest:
         assert result.n_defaults == 20
 
     def test_backtest_insufficient_data(self) -> None:
-        from vertical_engines.credit.credit_backtest import BacktestInput, backtest_pd_model
+        from vertical_engines.credit.quant import BacktestInput, backtest_pd_model
 
         inp = BacktestInput(
             features=np.random.randn(30, 3),
@@ -301,7 +303,7 @@ class TestCreditBacktest:
         assert result.status == "insufficient_data"
 
     def test_backtest_rejects_nan_features(self) -> None:
-        from vertical_engines.credit.credit_backtest import BacktestInput, backtest_pd_model
+        from vertical_engines.credit.quant import BacktestInput, backtest_pd_model
 
         features = np.random.randn(200, 3)
         features[10, 1] = np.nan
@@ -315,7 +317,7 @@ class TestCreditBacktest:
         assert result.status == "insufficient_data"
 
     def test_backtest_rejects_non_binary_labels(self) -> None:
-        from vertical_engines.credit.credit_backtest import BacktestInput, backtest_pd_model
+        from vertical_engines.credit.quant import BacktestInput, backtest_pd_model
 
         inp = BacktestInput(
             features=np.random.randn(200, 3),
@@ -327,7 +329,7 @@ class TestCreditBacktest:
         assert result.status == "insufficient_data"
 
     def test_vintage_cohort_analysis(self) -> None:
-        from vertical_engines.credit.credit_backtest import backtest_pd_model
+        from vertical_engines.credit.quant import backtest_pd_model
 
         inp = self._make_synthetic_data(n_obs=200)
         result = backtest_pd_model(inp)
@@ -339,7 +341,7 @@ class TestCreditBacktest:
             assert "avg_recovery" in cohort
 
     def test_temporal_cv_strategy(self) -> None:
-        from vertical_engines.credit.credit_backtest import CVStrategy, backtest_pd_model
+        from vertical_engines.credit.quant import CVStrategy, backtest_pd_model
 
         inp = self._make_synthetic_data(n_obs=200)
         inp.cv_strategy = CVStrategy.TEMPORAL

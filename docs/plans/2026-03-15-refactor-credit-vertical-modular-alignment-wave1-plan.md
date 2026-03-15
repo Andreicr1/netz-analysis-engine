@@ -268,7 +268,7 @@ pipeline/
 
 ---
 
-### Phase 6: quant/ (PR #6)
+### Phase 6: quant/ (PR #6) ✅
 
 **Source:** `ic_quant_engine.py` (~950 LOC) + `credit_scenarios.py` (130 LOC) + `credit_sensitivity.py` (110 LOC) + `credit_backtest.py` (200 LOC)
 

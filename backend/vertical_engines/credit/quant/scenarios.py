@@ -1,12 +1,12 @@
 """Credit-specific deterministic scenario analysis.
 
-Extracted from ic_quant_engine.py for modularity.
 Builds Base / Downside / Severe scenarios using credit metrics
 (default rate, recovery rate, concentration adjustment).
 
 Sync service — pure computation, no I/O.
-"""
 
+Imports only models.py (leaf).
+"""
 from __future__ import annotations
 
 from typing import Any
@@ -17,9 +17,9 @@ logger = structlog.get_logger()
 
 # Scenario proxy table — severity-scaled default assumptions
 SCENARIO_PROXY: dict[str, dict[str, float]] = {
-    "Base":     {"loss_rate": 1.0, "recovery_rate": 70.0},
+    "Base": {"loss_rate": 1.0, "recovery_rate": 70.0},
     "Downside": {"loss_rate": 3.0, "recovery_rate": 55.0},
-    "Severe":   {"loss_rate": 7.0, "recovery_rate": 40.0},
+    "Severe": {"loss_rate": 7.0, "recovery_rate": 40.0},
 }
 CONCENTRATION_LOSS_ADJ_PP = 2.0
 
@@ -44,7 +44,7 @@ def _v2_num(block: dict[str, Any] | None, key: str) -> float | None:
 
 def build_deterministic_scenarios(
     base_return_pct: float | None,
-    risks: list[dict],
+    risks: list[dict[str, Any]],
     credit_metrics: dict[str, Any] | None = None,
     concentration_profile: dict[str, Any] | None = None,
     liquidity_hooks: dict[str, Any] | None = None,
@@ -72,11 +72,9 @@ def build_deterministic_scenarios(
     if base_return_pct is None:
         return [], ["SCENARIO_SKIPPED_NO_BASE_RETURN"]
 
-    # Credit metrics → actual default/recovery
     cm_default = _v2_num(_cm, "defaultRatePct")
     cm_recovery = _v2_num(_cm, "recoveryRatePct")
 
-    # Concentration adjustment
     conc_adj = 0.0
     conc_note = ""
     top_exposure = _conc.get("top_single_exposure_pct") or 0.0
@@ -84,7 +82,6 @@ def build_deterministic_scenarios(
         conc_adj = CONCENTRATION_LOSS_ADJ_PP
         conc_note = f"CONCENTRATION_ADJ +{conc_adj}pp loss (single-name ≥80%)"
 
-    # Liquidity delay from hooks
     lockup_months = _liq.get("lockup_months")
 
     scenarios: list[dict[str, Any]] = []
@@ -92,7 +89,6 @@ def build_deterministic_scenarios(
         notes: list[str] = []
         inputs_used: dict[str, Any] = {}
 
-        # Loss rate
         if cm_default is not None and name == "Base":
             loss = cm_default
             inputs_used["loss_rate_source"] = "CREDIT_METRICS"
@@ -103,7 +99,6 @@ def build_deterministic_scenarios(
                 proxy_flags.append(f"PROXY_FROM_SEVERITY:loss_rate:{name}")
                 notes.append("Loss rate is a proxy from severity scale")
 
-        # Recovery rate
         if cm_recovery is not None and name == "Base":
             recovery = cm_recovery
             inputs_used["recovery_rate_source"] = "CREDIT_METRICS"
@@ -114,7 +109,6 @@ def build_deterministic_scenarios(
                 proxy_flags.append(f"PROXY_FROM_SEVERITY:recovery_rate:{name}")
                 notes.append("Recovery rate is a proxy from severity scale")
 
-        # Concentration adjustment
         if conc_adj > 0:
             loss += conc_adj
             notes.append(conc_note)

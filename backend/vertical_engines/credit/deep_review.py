@@ -363,13 +363,13 @@ def run_deal_deep_review_v4(
         extract_searchable_entities,
         fetch_edgar_multi_entity,
     )
-    from vertical_engines.credit.ic_quant_engine import compute_quant_profile
     from vertical_engines.credit.memo_book_generator import generate_memo_book
     from vertical_engines.credit.memo_evidence_pack import (
         build_evidence_pack,
         persist_evidence_pack,
         validate_evidence_pack,
     )
+    from vertical_engines.credit.quant import compute_quant_profile
     from vertical_engines.credit.sponsor import analyze_sponsor
 
     now = _now_utc()
@@ -1648,13 +1648,13 @@ async def async_run_deal_deep_review_v4(
         extract_searchable_entities,
         fetch_edgar_multi_entity,
     )
-    from vertical_engines.credit.ic_quant_engine import compute_quant_profile
     from vertical_engines.credit.memo_book_generator import async_generate_memo_book
     from vertical_engines.credit.memo_evidence_pack import (
         build_evidence_pack,
         persist_evidence_pack,
         validate_evidence_pack,
     )
+    from vertical_engines.credit.quant import compute_quant_profile
     from vertical_engines.credit.sponsor import analyze_sponsor
 
     now = _now_utc()
