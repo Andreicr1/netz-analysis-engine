@@ -58,7 +58,7 @@ class TestCreditModuleStructure:
         "vertical_engines.credit.memo_evidence_pack",
         "vertical_engines.credit.domain_ai_engine",
         "vertical_engines.credit.batch_client",
-        "vertical_engines.credit.ic_edgar_engine",
+        "vertical_engines.credit.edgar",
         "vertical_engines.credit.kyc_client",
         "vertical_engines.credit.kyc_models",
         "vertical_engines.credit.kyc_pipeline_screening",

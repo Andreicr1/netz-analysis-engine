@@ -358,7 +358,7 @@ def run_deal_deep_review_v4(
     )
     from ai_engine.portfolio.concentration_engine import compute_concentration
     from vertical_engines.credit.ic_critic_engine import critique_intelligence
-    from vertical_engines.credit.ic_edgar_engine import (
+    from vertical_engines.credit.edgar import (
         build_edgar_multi_entity_context,
         extract_searchable_entities,
         fetch_edgar_multi_entity,
@@ -1643,7 +1643,7 @@ async def async_run_deal_deep_review_v4(
         _classify_instrument_type,
         critique_intelligence,
     )
-    from vertical_engines.credit.ic_edgar_engine import (
+    from vertical_engines.credit.edgar import (
         build_edgar_multi_entity_context,
         extract_searchable_entities,
         fetch_edgar_multi_entity,
