@@ -470,10 +470,10 @@ Compare `prepare_pdfs_full.py` (1786 LOC) line-by-line against modular component
 **Output:** Document findings in `docs/solutions/prepare-pdfs-full-diff-analysis.md`
 
 **Acceptance criteria:**
-- [ ] Every section of `prepare_pdfs_full.py` mapped to a modular equivalent or documented as unique
-- [ ] Any unique logic identified and a plan for where it moves
-- [ ] Document saved in `docs/solutions/`
-- [ ] **Blocks all subsequent Phase 2 tasks**
+- [x] Every section of `prepare_pdfs_full.py` mapped to a modular equivalent or documented as unique
+- [x] Any unique logic identified and a plan for where it moves
+- [x] Document saved in `docs/solutions/`
+- [x] **Blocks all subsequent Phase 2 tasks**
 
 ##### Task 2.1: Unified Pipeline Orchestrator (`ai_engine/pipeline/unified_pipeline.py`)
 
