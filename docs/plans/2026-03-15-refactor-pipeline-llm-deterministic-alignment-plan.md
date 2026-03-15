@@ -573,9 +573,9 @@ Replace `ingestion_worker.process_pending_versions()` call with `unified_pipelin
 **SSE contract:** The existing terminal events (`ingestion_complete`, `error`) are preserved. New intermediate events (`classification_complete`, `extraction_complete`) are additive — SvelteKit ignores unknown event types.
 
 **Acceptance criteria:**
-- [ ] UI upload route calls `unified_pipeline.process()`
+- [x] UI upload route calls `unified_pipeline.process()`
 - [ ] SSE events flow correctly (test with SvelteKit frontend)
-- [ ] `ingestion_worker.py` has no remaining callers
+- [x] `ingestion_worker.py` has no remaining callers
 
 ##### Task 2.3: Update Pipeline Ingest Runner
 
@@ -635,10 +635,10 @@ Keep infrastructure concerns, delegate processing to unified pipeline (see brain
 - `app/domains/credit/modules/ai/extraction.py` (lines 92-143) — API unchanged
 
 **Acceptance criteria:**
-- [ ] `extraction_orchestrator.py` reduced to ~150 LOC
-- [ ] No import of `prepare_pdfs_full`
-- [ ] `run_extraction_pipeline()` API unchanged (callers don't need updating)
-- [ ] Processing logic delegated to `unified_pipeline.process()` per document
+- [ ] `extraction_orchestrator.py` reduced to ~150 LOC (partial — infrastructure kept for blob pipeline)
+- [x] No import of `prepare_pdfs_full`
+- [x] `run_extraction_pipeline()` API unchanged (callers don't need updating)
+- [x] Processing logic delegated to `unified_pipeline.process()` per document
 
 ##### Task 2.5: Delete Legacy Files
 

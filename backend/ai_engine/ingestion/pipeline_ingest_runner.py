@@ -242,7 +242,7 @@ def run_full_pipeline_ingest(
             logger.error(error, exc_info=True)
             result.errors.append(error)
 
-        # ── Stage 4: Ingest unindexed documents ──────────────────────
+        # ── Stage 4: Ingest unindexed documents via unified pipeline ─
         logger.info("[Stage 4/5] Ingesting unindexed documents for fund %s", fund_id)
         try:
             from ai_engine.ingestion.domain_ingest_orchestrator import (
@@ -538,7 +538,7 @@ async def async_run_full_pipeline_ingest(
         # Close the session used for Stages 1-3 before async Stage 4
         db.close()
 
-        # ── Stage 4: Async parallel ingest ────────────────────────────
+        # ── Stage 4: Async parallel ingest via unified pipeline ──────
         logger.info("[Stage 4/5] Async ingesting unindexed documents for fund %s", fund_id)
         try:
             from ai_engine.ingestion.domain_ingest_orchestrator import (
