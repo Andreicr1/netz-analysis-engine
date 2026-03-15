@@ -85,7 +85,7 @@ def run_portfolio_review(
     if not corpus.strip():
         return {"error": "No readable documents found for this investment"}
 
-    system_prompt = prompt_registry.render("intelligence/portfolio_review.j2")
+    system_prompt = prompt_registry.render("portfolio_review.j2")
     review = _call_openai(system_prompt, corpus)
 
     report = PeriodicReviewReport(

@@ -178,7 +178,7 @@ def _run_analysis(
         index_key_persons_count=len(unique_key_persons),
     )
 
-    system_prompt = prompt_registry.render("intelligence/sponsor_assessment.j2")
+    system_prompt = prompt_registry.render("sponsor_assessment.j2")
     data = call_openai_fn(system_prompt, user_content, max_tokens=6000)
 
     # Validate output shape
