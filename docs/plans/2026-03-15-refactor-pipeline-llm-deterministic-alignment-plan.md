@@ -548,14 +548,14 @@ async def process_batch(requests: list[IngestRequest], max_concurrent: int = 8) 
 - Batch path must apply the same guard as UI path
 
 **Acceptance criteria:**
-- [ ] `unified_pipeline.py` with `process(IngestRequest) -> PipelineStageResult`
-- [ ] All 7 validation gates wired between stages (3 critical: OCR, content retention, chunk count)
-- [ ] `write_audit_event()` after each gate (preserves audit trail from ingestion_worker.py)
-- [ ] Final `PipelineStageResult` persisted as JSON on `DocumentVersion`
-- [ ] SSE events emitted for UI-sourced requests
-- [ ] Governance detection runs on every document (pure regex, zero cost)
-- [ ] Async-first: all external calls use `httpx.AsyncClient` or `asyncio.to_thread()`
-- [ ] No shared mutable state between documents
+- [x] `unified_pipeline.py` with `process(IngestRequest) -> PipelineStageResult`
+- [x] All 7 validation gates wired between stages (3 critical: OCR, content retention, chunk count)
+- [x] `write_audit_event()` after each gate (preserves audit trail from ingestion_worker.py)
+- [ ] Final `PipelineStageResult` persisted as JSON on `DocumentVersion` (caller responsibility)
+- [x] SSE events emitted for UI-sourced requests
+- [x] Governance detection runs on every document (pure regex, zero cost)
+- [x] Async-first: all external calls use `httpx.AsyncClient` or `asyncio.to_thread()`
+- [x] No shared mutable state between documents
 - [ ] Same-document concurrency guard (check ingestion_status before processing)
 
 ##### Task 2.2: Update UI Ingestion Route
