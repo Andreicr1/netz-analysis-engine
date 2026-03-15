@@ -45,7 +45,7 @@ class TestCreditModuleStructure:
         "vertical_engines.credit.memo_chapter_engine",
         "vertical_engines.credit.memo_book_generator",
         "vertical_engines.credit.pipeline",
-        "vertical_engines.credit.portfolio_intelligence",
+        "vertical_engines.credit.portfolio",
         "vertical_engines.credit.retrieval",
         "vertical_engines.credit.tone_normalizer",
         "vertical_engines.credit.underwriting_artifact",

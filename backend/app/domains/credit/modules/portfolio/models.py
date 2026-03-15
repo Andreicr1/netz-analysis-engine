@@ -28,3 +28,8 @@ class CovenantTest(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, Audi
 class CovenantBreach(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """Stub — operational module, not in analytical scope."""
     __tablename__ = "covenant_breaches_stub"
+
+
+class PortfolioMetric(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
+    """Stub — operational module, not in analytical scope."""
+    __tablename__ = "portfolio_metrics_stub"

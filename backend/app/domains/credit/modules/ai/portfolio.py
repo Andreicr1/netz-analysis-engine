@@ -52,7 +52,7 @@ from vertical_engines.credit.deep_review import (
     run_all_portfolio_reviews,
     run_portfolio_review,
 )
-from vertical_engines.credit.portfolio_intelligence import run_portfolio_ingest
+from vertical_engines.credit.portfolio import run_portfolio_ingest
 
 router = APIRouter()
 
