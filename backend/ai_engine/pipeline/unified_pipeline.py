@@ -20,7 +20,6 @@ from typing import Any
 from uuid import UUID
 
 from ai_engine.pipeline.models import (
-    CANONICAL_DOC_TYPES,
     HybridClassificationResult,
     IngestRequest,
     PipelineStageResult,
@@ -122,8 +121,8 @@ async def process(
         )
 
     # ── 2. OCR ──────────────────────────────────────────────────
-    from app.services.blob_storage import download_bytes
     from ai_engine.extraction.mistral_ocr import async_extract_pdf_with_mistral
+    from app.services.blob_storage import download_bytes
 
     pdf_bytes = download_bytes(blob_uri=request.blob_uri)
     page_blocks = await async_extract_pdf_with_mistral(pdf_bytes)
@@ -368,6 +367,8 @@ async def process(
     # ── 8. Index to Azure Search ────────────────────────────────
     from ai_engine.extraction.search_upsert_service import (
         build_search_document,
+    )
+    from ai_engine.extraction.search_upsert_service import (
         upsert_chunks as upsert_search_chunks,
     )
 

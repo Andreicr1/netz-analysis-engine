@@ -435,6 +435,7 @@ def run_item(
             if not skip_prepare:
                 logger.info("[3/5] unified_pipeline — OCR + Classification + Chunking")
                 import asyncio
+
                 from ai_engine.pipeline.models import IngestRequest
                 from ai_engine.pipeline.unified_pipeline import process as run_pipeline
 
