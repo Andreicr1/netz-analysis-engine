@@ -11,7 +11,6 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ai_engine.intelligence.deep_review_helpers import _MODEL, _now_utc, _trunc  # noqa: F401
 from app.domains.credit.modules.ai.models import (
     ActiveInvestment,
     DocumentRegistry,
@@ -19,6 +18,7 @@ from app.domains.credit.modules.ai.models import (
 from app.domains.credit.modules.deals.models import PipelineDeal as Deal  # pipeline domain
 from app.services.blob_storage import blob_uri, download_bytes
 from app.services.text_extract import extract_text_from_docx, extract_text_from_pdf
+from vertical_engines.credit.deep_review_helpers import _MODEL, _now_utc, _trunc  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -337,15 +337,15 @@ def _gather_deal_texts(
         }
 
     """
-    from ai_engine.intelligence.memo_book_generator import CHAPTER_REGISTRY
-    from ai_engine.intelligence.retrieval_governance import (
+    from app.services.search_index import AzureSearchChunksClient
+    from vertical_engines.credit.memo_book_generator import CHAPTER_REGISTRY
+    from vertical_engines.credit.retrieval_governance import (
         RETRIEVAL_POLICY_NAME,
         build_ic_corpus,
         build_retrieval_audit,
         enforce_evidence_saturation,
         gather_chapter_evidence,
     )
-    from app.services.search_index import AzureSearchChunksClient
 
     deal_name = deal.deal_name or deal.title or ""
     searcher = AzureSearchChunksClient()

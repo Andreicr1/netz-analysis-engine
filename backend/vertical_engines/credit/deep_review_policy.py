@@ -8,8 +8,8 @@ import re
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from ai_engine.intelligence.deep_review_helpers import _MODEL, _call_openai, _now_utc  # noqa: F401
 from ai_engine.prompts import prompt_registry
+from vertical_engines.credit.deep_review_helpers import _MODEL, _call_openai, _now_utc  # noqa: F401
 
 if TYPE_CHECKING:
     from ai_engine.governance.policy_loader import PolicyThresholds
@@ -379,7 +379,7 @@ def _run_policy_compliance(
         f"Focus on qualitative policy alignment, strategy fit, and governance guidelines."
     )
     try:
-        from ai_engine.intelligence import deep_review as _deep_review
+        from vertical_engines.credit import deep_review as _deep_review
 
         openai_caller = getattr(_deep_review, "_call_openai", _call_openai)
     except Exception:

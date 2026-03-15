@@ -125,7 +125,7 @@ def run_pipeline_analysis(
     intelligence.pipeline_engine which performs a single RAG + GPT pass
     and writes both research_output AND derived summary columns.
     """
-    from ai_engine.intelligence.pipeline_engine import generate_pipeline_intelligence
+    from vertical_engines.credit.pipeline_engine import generate_pipeline_intelligence
 
     return generate_pipeline_intelligence(
         db,

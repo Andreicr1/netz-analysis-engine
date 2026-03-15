@@ -250,8 +250,8 @@ def dispatch_deep_review(
             "dealId": str(deal_id),
         }
 
-    from ai_engine.intelligence.deep_review import async_run_deal_deep_review_v4
     from app.core.db.session import get_session_local
+    from vertical_engines.credit.deep_review import async_run_deal_deep_review_v4
 
     async def _run() -> None:
         log = logging.getLogger("ai.deep_review_v4")

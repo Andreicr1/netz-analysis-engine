@@ -726,11 +726,11 @@ Cross-cutting AI utilities incorrectly housed in compliance were relocated to `a
 
 ##### Tasks
 
-- [ ] **`backend/vertical_engines/base/`** — shared interface
+- [x] **`backend/vertical_engines/base/`** — shared interface
   - `base_analyzer.py` — `BaseAnalyzer` abstract class with `analyze()`, `extract_structured()`, `critique()`
   - `base_extractor.py` — structured extraction base
   - `base_critic.py` — critic base
-- [ ] **`backend/vertical_engines/credit/`** — MOVE from `ai_engine/intelligence/`
+- [x] **`backend/vertical_engines/credit/`** — MOVE from `ai_engine/intelligence/`
   - Move (do NOT rewrite): `deep_review.py`, `ic_critic_engine.py`, `ic_quant_engine.py`, `market_data_engine.py`, `sponsor_engine.py`, `memo_chapter_engine.py`, `deep_review_corpus.py`, `deep_review_helpers.py`, `deep_review_confidence.py`, `deep_review_policy.py`, `memo_evidence_pack.py`, `tone_normalizer.py`, `underwriting_artifact.py`, `retrieval_governance.py`
   - Move `ai_engine/prompts/intelligence/*.j2` → `vertical_engines/credit/prompts/`
   - Apply session injection to all files with Session imports:
@@ -738,43 +738,43 @@ Cross-cutting AI utilities incorrectly housed in compliance were relocated to `a
     - Functions that open sessions → receive session as parameter
     - Caller (route/worker) provides the session
   - Do NOT rewrite business logic. Move + session injection ONLY.
-- [ ] **`backend/ai_engine/`** — keep universal modules only
+- [x] **`backend/ai_engine/`** — keep universal modules only
   - KEEP: `extraction/`, `governance/`, `validation/`, `pdf/`, `knowledge/`, `ingestion/`, `classification/`, `openai_client.py`, `model_config.py`
   - REMOVE from ai_engine: `intelligence/` directory (moved to `vertical_engines/credit/`)
   - REMOVE from ai_engine: `prompts/intelligence/` (moved to `vertical_engines/credit/prompts/`)
   - KEEP: `prompts/extraction/`, `prompts/loader.py`, `prompts/registry.py` (extraction prompts are universal)
-- [ ] **`backend/app/services/storage_client.py`** — StorageClient implementation
+- [x] **`backend/app/services/storage_client.py`** — StorageClient implementation
   - Local filesystem backend (default, `FEATURE_ADLS_ENABLED=false`)
   - ADLS Gen2 backend (when `FEATURE_ADLS_ENABLED=true`)
   - Inject as FastAPI dependency and into workers
-- [ ] **`backend/ai_engine/profile_loader.py`** — ProfileLoader
+- [x] **`backend/ai_engine/profile_loader.py`** — ProfileLoader
   - Uses `ConfigService.get(vertical, config_type, org_id)` instead of filesystem loading
   - Cascade now handled by ConfigService (DB override → DB default → YAML fallback)
   - Instantiates correct vertical engine class from registry
   - Registry: `{"private_credit": CreditAnalyzer, "liquid_funds": WealthAnalyzer}`
-- [ ] **`backend/vertical_engines/wealth/`** — NEW (not migrated, built fresh)
+- [x] **`backend/vertical_engines/wealth/`** — NEW (not migrated, built fresh)
   - `fund_analyzer.py` — 7-chapter fund manager DD report
   - `dd_report_engine.py` — report generation loop
   - `quant_analyzer.py` — integrates with `quant_engine/` (CVaR, Sharpe, drawdown)
   - `prompts/` — wealth-specific Jinja2 prompts
-- [ ] **Profile extraction**
+- [x] **Profile extraction**
   - `profiles/private_credit/profile.yaml` — 14 chapters with budgets, affinity, model routing
   - `profiles/private_credit/prompts/` — symlink or copy from `vertical_engines/credit/prompts/`
   - `profiles/private_credit/output_schema.json` — formalize IC memo JSON schema
   - `profiles/private_credit/evaluation_criteria.yaml` — extract from validation configs
   - `profiles/liquid_funds/profile.yaml` — 7 chapters for wealth DD
   - `profiles/liquid_funds/prompts/` — wealth-specific prompts
-- [ ] **Upload architecture** (see brainstorm Section I)
+- [x] **Upload architecture** (see brainstorm Section I)
   - `POST /api/v1/documents/upload-url` → generate SAS URL + `upload_id`
   - `POST /api/v1/documents/upload-complete` → enqueue to Service Bus, return `job_id`
   - `GET /api/v1/jobs/{job_id}/stream` → SSE events (chunking, OCR, embeddings, indexed, complete)
   - Workers emit progress: `tracker.publish_event(job_id, "ocr_complete", {"pages": 47})`
-- [ ] **Worker unification**
+- [x] **Worker unification**
   - `backend/worker_app/function_app.py` — Azure Functions: extraction, ingest, compliance, memo
   - Workers import from `backend/ai_engine/` and `backend/app/domains/credit/`
   - Progress events emitted to Redis pub/sub → SSE endpoint picks up
 
-- [ ] **Global knowledge aggregation (anonymous market intelligence)**
+- [x] **Global knowledge aggregation (anonymous market intelligence)**
   - `backend/worker_app/knowledge_aggregator.py` — post-memo aggregation worker
     - Triggered async after every IC memo is generated and stored
     - Extracts anonymous signals and writes to `gold/_global/analysis_patterns/`

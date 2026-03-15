@@ -43,6 +43,7 @@ from app.domains.credit.documents.routes.ingest import router as credit_ingest_r
 from app.domains.credit.documents.routes.review import router as credit_review_router
 
 # Documents
+from app.domains.credit.documents.routes.upload_url import router as credit_upload_url_router
 from app.domains.credit.documents.routes.uploads import router as credit_uploads_router
 
 # Modules — AI (aggregated router), Deals, Documents
@@ -227,6 +228,7 @@ api_v1.include_router(credit_fund_investments_router)
 
 # Documents
 api_v1.include_router(credit_uploads_router)
+api_v1.include_router(credit_upload_url_router)
 api_v1.include_router(credit_review_router)
 api_v1.include_router(credit_evidence_router)
 api_v1.include_router(credit_auditor_router)

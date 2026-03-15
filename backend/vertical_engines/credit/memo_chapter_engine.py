@@ -5,7 +5,9 @@ import json
 import logging
 from typing import Any
 
-from ai_engine.intelligence.memo_chapter_prompts import (
+from ai_engine.model_config import get_model
+from ai_engine.prompts import prompt_registry
+from vertical_engines.credit.memo_chapter_prompts import (
     _CHAPTER_CHUNK_BUDGET,
     _CHAPTER_DOC_AFFINITY,
     _CHAPTER_EXTRA_SECTIONS,
@@ -13,8 +15,6 @@ from ai_engine.intelligence.memo_chapter_prompts import (
     _CHAPTER_PROMPTS,
     _SHARED_PACK_SECTIONS,
 )
-from ai_engine.model_config import get_model
-from ai_engine.prompts import prompt_registry
 
 logger = logging.getLogger(__name__)
 
@@ -40,14 +40,14 @@ def _get_chapter_base_prompt(chapter_tag: str, **context: Any) -> str | None:
 def _get_evidence_law() -> str:
     if prompt_registry.has_template("intelligence/evidence_law.j2"):
         return prompt_registry.render("intelligence/evidence_law.j2")
-    from ai_engine.intelligence.memo_chapter_prompts import _EVIDENCE_LAW
+    from vertical_engines.credit.memo_chapter_prompts import _EVIDENCE_LAW
     return _EVIDENCE_LAW
 
 
 def _get_evidence_law_ch13() -> str:
     if prompt_registry.has_template("intelligence/evidence_law_ch13.j2"):
         return prompt_registry.render("intelligence/evidence_law_ch13.j2")
-    from ai_engine.intelligence.memo_chapter_prompts import _EVIDENCE_LAW_CH13
+    from vertical_engines.credit.memo_chapter_prompts import _EVIDENCE_LAW_CH13
     return _EVIDENCE_LAW_CH13
 
 def filter_evidence_pack(evidence_pack: dict[str, Any], chapter_tag: str) -> dict[str, Any]:

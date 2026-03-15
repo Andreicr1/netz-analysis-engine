@@ -9,7 +9,6 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ai_engine.intelligence.deep_review import async_run_all_deals_deep_review_v4
 from ai_engine.validation.deep_review_validation_runner import run_deep_review_validation_sample
 from ai_engine.validation.eval_runner import run_ic_memo_eval
 from ai_engine.validation.validation_schema import (
@@ -27,6 +26,7 @@ from app.domains.credit.modules.ai.schemas import (
 )
 from app.domains.credit.modules.deals.models import Deal
 from app.shared.enums import Role
+from vertical_engines.credit.deep_review import async_run_all_deals_deep_review_v4
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

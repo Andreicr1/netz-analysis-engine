@@ -197,7 +197,7 @@ def run_full_pipeline_ingest(
         logger.info("[Stage 2/5] Discovering pipeline deals for fund %s", fund_id)
         deals: list = []
         try:
-            from ai_engine.intelligence.pipeline_intelligence import discover_pipeline_deals
+            from vertical_engines.credit.pipeline_intelligence import discover_pipeline_deals
 
             deals = discover_pipeline_deals(db, fund_id=fund_id, actor_id=actor_id)
             result.deals_discovered = len(deals)
@@ -275,7 +275,7 @@ def run_full_pipeline_ingest(
         if run_ai_analysis:
             logger.info("[Stage 5/5] Running Deep Review for all deals in fund %s", fund_id)
             try:
-                from ai_engine.intelligence.deep_review import run_all_deals_deep_review_v4
+                from vertical_engines.credit.deep_review import run_all_deals_deep_review_v4
 
                 logger.info("PIPELINE_USING_DEEP_REVIEW_V4")
                 review_result = run_all_deals_deep_review_v4(
@@ -413,7 +413,7 @@ async def async_run_full_pipeline_ingest(
         logger.info("[Stage 2/5] Discovering pipeline deals for fund %s", fund_id)
         deals: list = []
         try:
-            from ai_engine.intelligence.pipeline_intelligence import discover_pipeline_deals
+            from vertical_engines.credit.pipeline_intelligence import discover_pipeline_deals
 
             def _discover_threadsafe() -> list:
                 return discover_pipeline_deals(db, fund_id=fund_id, actor_id=actor_id)
@@ -571,7 +571,7 @@ async def async_run_full_pipeline_ingest(
         if run_ai_analysis:
             logger.info("[Stage 5/5] Running Deep Review for all deals in fund %s", fund_id)
             try:
-                from ai_engine.intelligence.deep_review import run_all_deals_deep_review_v4
+                from vertical_engines.credit.deep_review import run_all_deals_deep_review_v4
 
                 # Deep review uses its own sessions internally
                 def _deep_review_threadsafe():

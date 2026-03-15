@@ -352,7 +352,7 @@ def run_ingest_for_unindexed_documents(
 
     # 4. Trigger AI analysis for affected deals
     if run_ai_analysis and deals_with_new_docs:
-        from ai_engine.intelligence.domain_ai_engine import run_deal_ai_analysis
+        from vertical_engines.credit.domain_ai_engine import run_deal_ai_analysis
 
         for deal_id, (domain, deal_fund_id, deal_name, sponsor_name) in deals_with_new_docs.items():
             try:
@@ -760,7 +760,7 @@ async def async_run_ingest_for_unindexed_documents(
 
         # Trigger AI analysis for affected deals (sequential, uses DB)
         if run_ai_analysis and deals_with_new_docs:
-            from ai_engine.intelligence.domain_ai_engine import run_deal_ai_analysis
+            from vertical_engines.credit.domain_ai_engine import run_deal_ai_analysis
 
             for deal_id, (domain, deal_fund_id, deal_name, sponsor_name) in deals_with_new_docs.items():
                 try:
@@ -811,8 +811,8 @@ def reanalyze_deal(
 
     Useful after manual corrections or additional context.
     """
-    from ai_engine.intelligence.domain_ai_engine import run_deal_ai_analysis
     from app.domains.credit.modules.deals.ai_mode import resolve_ai_mode
+    from vertical_engines.credit.domain_ai_engine import run_deal_ai_analysis
 
     ctx = resolve_ai_mode(db, pipeline_deal_id=pipeline_deal_id, deal_id=deal_id)
     return run_deal_ai_analysis(

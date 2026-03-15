@@ -5,7 +5,7 @@ OpenAI Batch API support for deep review chapter generation.
 Submits all chapter requests as a single batch for 50% input cost discount.
 
 Usage:
-    from ai_engine.intelligence.batch_client import submit_chapter_batch, poll_batch, parse_batch_results
+    from vertical_engines.credit.batch_client import submit_chapter_batch, poll_batch, parse_batch_results
 
     batch_id = submit_chapter_batch(requests)
     await poll_batch(batch_id, timeout=1800)

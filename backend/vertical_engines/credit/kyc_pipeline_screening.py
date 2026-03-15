@@ -48,7 +48,7 @@ def _extract_persons_from_analysis(
                 raw_names.add(n)
 
     # 3) Corporate structure — extract person names from guarantors / ownership
-    from ai_engine.intelligence.sponsor_engine import extract_key_persons_from_analysis
+    from vertical_engines.credit.sponsor_engine import extract_key_persons_from_analysis
 
     for name in extract_key_persons_from_analysis(analysis):
         if name.strip() and len(name.strip()) > 2:
@@ -231,7 +231,7 @@ def run_kyc_screenings(
             },
         }
 
-    from ai_engine.intelligence.kyc_client import KYCSpiderClient
+    from vertical_engines.credit.kyc_client import KYCSpiderClient
 
     client = KYCSpiderClient(
         base_url=settings.KYC_SPIDER_BASE_URL
@@ -538,7 +538,7 @@ def persist_kyc_screenings_to_db(
 
     Returns count of screenings persisted.
     """
-    from ai_engine.intelligence import kyc_models
+    from vertical_engines.credit import kyc_models
 
     count = 0
     all_entries = kyc_results.get("persons", []) + kyc_results.get("organisations", [])

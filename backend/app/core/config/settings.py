@@ -66,6 +66,16 @@ class Settings(BaseSettings):
     # ── Feature Flags ────────────────────────────────────
     feature_lipper_enabled: bool = False
     feature_auto_rebalance: bool = False
+    feature_adls_enabled: bool = False
+
+    # ── ADLS Gen2 (Data Lake) ──────────────────────────
+    adls_account_name: str = ""
+    adls_account_key: str = ""
+    adls_container_name: str = "netz-analysis"
+    adls_connection_string: str = ""
+
+    # ── Local Storage (dev) ────────────────────────────
+    local_storage_root: str = ""
 
     # ── Calibration ──────────────────────────────────────
     calibration_path: str = ""
@@ -82,6 +92,11 @@ class Settings(BaseSettings):
             raise RuntimeError("CLERK_JWKS_URL must be set in production.")
         if self.dev_token == "dev-token-change-me":
             raise RuntimeError("DEV_TOKEN must be changed from default in production.")
+        if self.feature_adls_enabled:
+            if not self.adls_account_name:
+                raise RuntimeError("ADLS_ACCOUNT_NAME must be set when FEATURE_ADLS_ENABLED=true.")
+            if not (self.adls_account_key or self.adls_connection_string):
+                raise RuntimeError("ADLS credentials (account key or connection string) must be set when FEATURE_ADLS_ENABLED=true.")
 
 
 settings = Settings()

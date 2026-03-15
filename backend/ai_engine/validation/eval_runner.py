@@ -130,7 +130,7 @@ def run_ic_memo_eval(
         return report
 
     if run_mode == EvalRunMode.RUN_AND_EVALUATE or force_rerun:
-        from ai_engine.intelligence.deep_review import run_deal_deep_review_v4
+        from vertical_engines.credit.deep_review import run_deal_deep_review_v4
 
         for deal in selected_deals:
             try:
