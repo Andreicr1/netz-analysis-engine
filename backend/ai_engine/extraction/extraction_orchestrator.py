@@ -9,7 +9,7 @@ All Azure credentials are read at runtime from environment variables
     AZURE_SEARCH_ENDPOINT           — Azure AI Search endpoint
     AZURE_SEARCH_API_KEY            — Azure AI Search admin key
     MISTRAL_API_KEY                 — Mistral OCR (public API)
-    AZURE_API_KEY                   — Cohere Rerank (Azure AI Foundry)
+    AZURE_API_KEY                   — Azure AI Foundry (classification now local)
     OPENAI_API_KEY                  — direct OpenAI primary provider (optional)
     AZURE_OPENAI_KEY                — Azure OpenAI provider key
     AZURE_OPENAI_ENDPOINT           — Azure OpenAI provider endpoint
@@ -299,7 +299,7 @@ def _run_stage_a_bootstrap(
 
     if extractor == "deal_bootstrap":
         bootstrap_folder(
-            item_dir, _mistral_key(), _azure_key(),
+            item_dir, _mistral_key(),
             dry_run=dry_run,
         )
         return {}

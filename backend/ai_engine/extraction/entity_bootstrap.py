@@ -6,10 +6,7 @@ Stages:
   B — text-embedding-3-large filters lines by similarity to canonical phrases
   C — Regex extraction on filtered lines (zero cost, zero LLM)
   D — GPT-4.1-mini fallback only when regex yield < MIN_REGEX_ENTITIES
-  E — Cohere Rerank validates vehicle_type of top discovered aliases
-
-All three services use the same Azure AI Foundry project (netzai.services.ai.azure.com):
-  - Cohere Rerank (vehicle validation)
+  E — Deterministic rules validate vehicle_type of top discovered aliases
 
 Public API services:
   - Mistral OCR (public API, MISTRAL_API_KEY)
@@ -49,8 +46,7 @@ BOOTSTRAP_MAX_PDFS   = 0   # 0 = no limit — process ALL PDFs in the deal folde
 EMBEDDING_THRESHOLD      = 0.72
 EMBEDDING_TOP_N          = 20
 
-COHERE_RERANK_URL = "https://netzai.services.ai.azure.com/providers/cohere/v2/rerank"
-COHERE_MODEL      = "Cohere-rerank-v4.0-pro"
+# Cohere Rerank removed — vehicle validation now uses hybrid classifier rules
 
 GPT_MINI_MODEL     = _get_model("classification")
 MIN_REGEX_ENTITIES = 3
@@ -694,52 +690,58 @@ def extract_entities_gpt(text: str) -> dict:
 
 
 # ============================================================
-# COHERE RERANK — vehicle_type validation
+# VEHICLE TYPE VALIDATION — deterministic (replaced Cohere Rerank)
 # ============================================================
 
-def validate_vehicle_type_rerank(
+# Map entity_bootstrap expanded types → canonical 6 types
+_VEHICLE_TYPE_CANONICAL_MAP: dict[str, str] = {
+    "standalone_fund": "standalone_fund",
+    "feeder_master": "feeder_master",
+    "fund_of_funds": "fund_of_funds",
+    "direct_investment": "direct_investment",
+    "spv": "spv",
+    "bdc": "standalone_fund",
+    "structured_note": "spv",
+    "dac": "spv",
+    "amc": "spv",
+    "separately_managed_account": "other",
+    "other": "other",
+}
+
+
+def validate_vehicle_type(
     entity_name: str,
     context_text: str,
-    api_key: str,
     filename: str = "",
 ) -> tuple[str, float]:
-    """Validate vehicle_type of a discovered entity via Cohere Rerank.
-    Filename hints are prepended to the query for stronger signal.
+    """Validate vehicle_type of a discovered entity using deterministic rules.
+
+    Replaces Cohere Rerank with the hybrid classifier's Layer 1 vehicle
+    heuristics (regex rules ported from prepare_pdfs_full.py).
+    No API calls — pure Python, zero cost.
     """
-    import requests  # lazy import - optional dependency
-    hint_v, hint_r = filename_vehicle_hint(filename)
-    hint_prefix    = f"HINT: {hint_r}\n\n" if hint_r else ""
-    query          = f"{hint_prefix}Entity: {entity_name}\n\nContext:\n{context_text[:2000]}"
+    from ai_engine.classification.hybrid_classifier import classify_vehicle_rules
 
-    labels    = list(VEHICLE_TYPE_CANDIDATES.keys())
-    documents = list(VEHICLE_TYPE_CANDIDATES.values())
+    # Use hybrid classifier's vehicle rules (Layer 1 heuristics)
+    text = f"Entity: {entity_name}\n\n{context_text[:5000]}"
+    vehicle = classify_vehicle_rules(filename, text)
 
-    try:
-        resp = requests.post(
-            COHERE_RERANK_URL,
-            headers={
-                "Content-Type": "application/json",
-                "api-key":      api_key,
-            },
-            json={
-                "model":     COHERE_MODEL,
-                "query":     query,
-                "documents": documents,
-                "top_n":     3,
-            },
-            timeout=30,
-        )
-        if resp.status_code != 200:
-            return "other", 0.0
+    if vehicle is not None:
+        return vehicle, 0.85  # High confidence for deterministic match
 
-        results = resp.json().get("results", [])
-        ranked  = sorted(results, key=lambda r: r["relevance_score"], reverse=True)
-        best    = ranked[0]
-        return labels[best["index"]], round(best["relevance_score"], 4)
+    # Fallback: check against entity_bootstrap's expanded VEHICLE_TYPE_CANDIDATES
+    # using simple keyword matching
+    corpus = (entity_name + " " + context_text[:2000]).lower()
+    for vtype in VEHICLE_TYPE_CANDIDATES:
+        if vtype == "other":
+            continue
+        # Check if vehicle type name keywords appear in corpus
+        keywords = vtype.replace("_", " ")
+        if keywords in corpus:
+            canonical = _VEHICLE_TYPE_CANONICAL_MAP.get(vtype, "other")
+            return canonical, 0.70
 
-    except Exception as e:
-        logger.warning("Rerank validation failed (%s)", e)
-        return "other", 0.0
+    return "other", 0.0
 
 
 # ============================================================
@@ -1045,7 +1047,6 @@ def write_enriched(folder: Path, seed: dict, discovered: dict,
 def bootstrap_folder(
     folder: Path,
     mistral_key: str,
-    cohere_key: str,
     dry_run: bool = False,
 ) -> dict:
     logger.info("Bootstrap: %s", folder.name)
@@ -1148,12 +1149,12 @@ def bootstrap_folder(
     # Merge all discoveries
     merged = merge_discoveries(all_discoveries)
 
-    # Stage E — Cohere Rerank validates vehicle_type for top 5 aliases
-    logger.info("Rerank vehicle_type validation:")
+    # Stage E — Deterministic vehicle_type validation (replaced Cohere Rerank)
+    logger.info("Vehicle_type validation:")
     validated_vehicles: dict[str, dict] = {}
     for alias, full_name in list(merged["aliases"].items())[:5]:
-        vehicle, score = validate_vehicle_type_rerank(
-            full_name, ocr_full_text, cohere_key,
+        vehicle, score = validate_vehicle_type(
+            full_name, ocr_full_text,
             filename=str(folder.name),
         )
         validated_vehicles[full_name] = {
@@ -1237,13 +1238,11 @@ async def async_bootstrap_deal(
     C. Regex extraction on filtered lines
     D. GPT-4.1-mini fallback when regex yield < MIN_REGEX_ENTITIES
     E. Merge all discoveries
-    F. Cohere Rerank vehicle_type validation
+    F. Deterministic vehicle_type validation (hybrid classifier rules)
     G. Fund metadata extraction (regex, zero cost)
 
     """
     import asyncio
-
-    from app.core.config import settings
 
     # Filter to PDFs only
     pdf_blobs = [(c, p) for c, p in blob_paths if p.lower().endswith(".pdf")]
@@ -1334,15 +1333,14 @@ async def async_bootstrap_deal(
     # ── Stage E: Merge all discoveries ──
     merged = merge_discoveries(all_discoveries)
 
-    # ── Stage F: Cohere Rerank vehicle validation (top 5 aliases) ──
+    # ── Stage F: Deterministic vehicle validation (replaced Cohere Rerank) ──
     validated_vehicles: dict[str, dict] = {}
-    cohere_key = settings.COHERE_RERANK_KEY
-    if cohere_key and merged["aliases"]:
+    if merged["aliases"]:
         for alias, full_name in list(merged["aliases"].items())[:5]:
             try:
                 vehicle, score = await asyncio.to_thread(
-                    validate_vehicle_type_rerank,
-                    full_name, ocr_full_text, cohere_key, deal_name,
+                    validate_vehicle_type,
+                    full_name, ocr_full_text, deal_name,
                 )
                 validated_vehicles[full_name] = {
                     "alias": alias,

@@ -35,6 +35,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from ai_engine.model_config import get_model
+from ai_engine.pipeline.models import CANONICAL_DOC_TYPES
 from ai_engine.prompt_safety import sanitize_user_input
 from ai_engine.prompts import prompt_registry
 
@@ -45,65 +46,8 @@ logger = logging.getLogger(__name__)
 #  Canonical Document Type Taxonomy
 # ═══════════════════════════════════════════════════════════════════════
 #
-#  Designed to be the SINGLE source of truth, consumed by:
-#    • Azure Search index ``doc_type`` field (retrieval governance filters)
-#    • _CHAPTER_DOC_AFFINITY (memo book generator evidence selection)
-#    • CRITICAL_DOC_TYPES (corpus inclusion guarantee)
-#    • Document registry (Postgres)
-#
-#  Convention: lower_snake_case, matching retrieval governance OData filters.
-
-CANONICAL_DOC_TYPES: tuple[str, ...] = (
-    # ── Legal ─────────────────────────────────────────────────────────
-    "legal_lpa",                # Limited Partnership Agreement / Fund Constitution / Offering Memo
-    "legal_side_letter",        # Side Letter Agreement — governance-critical
-    "legal_subscription",       # Subscription Agreement / Application Form
-    "legal_agreement",          # Admin agreements, service agreements, engagement letters
-    "legal_amendment",          # Amendments to existing agreements
-    "legal_poa",                # Power of Attorney
-    "legal_term_sheet",         # Term Sheet, LOI, indicative terms, fee letter
-    "legal_credit_agreement",   # Credit Agreement, Facility Agreement, Loan Agreement
-    "legal_security",           # Security Agreement, Pledge, Guarantee, Collateral
-    "legal_intercreditor",      # Intercreditor Agreement
-
-    # ── Financial ─────────────────────────────────────────────────────
-    "financial_statements",     # Audited/unaudited financial statements
-    "financial_nav",            # NAV reports, valuations, performance
-    "financial_projections",    # Financial models, projections, scenarios
-
-    # ── Regulatory ────────────────────────────────────────────────────
-    "regulatory_cima",          # CIMA filings, licenses, registrations
-    "regulatory_compliance",    # Compliance manuals, AML/KYC policies, procedures
-    "regulatory_qdd",           # QDD documentation, tax compliance
-
-    # ── Fund Structure / Profile ──────────────────────────────────────
-    "fund_structure",           # Fund org docs, org charts, vehicle diagrams
-    "fund_profile",             # Fund profile, strategy description
-    "fund_presentation",        # Fund presentations, marketing decks, pitchbooks
-    "fund_policy",              # Investment / credit / risk policies
-    "strategy_profile",         # Strategy overview, mandate description
-
-    # ── Capital & Operations ──────────────────────────────────────────
-    "capital_raising",          # Capital raising materials, DDQ, commitments
-    "credit_policy",            # Credit/lending policies, underwriting standards
-
-    # ── Operational ───────────────────────────────────────────────────
-    "operational_service",      # Service provider agreements (admin, custodian, auditor)
-    "operational_insurance",    # Insurance policies, coverage
-    "operational_monitoring",   # Portfolio monitoring, watchlist, covenant compliance
-
-    # ── Analysis ──────────────────────────────────────────────────────
-    "investment_memo",          # IC memos, investment memos, committee presentations
-    "risk_assessment",          # Risk assessments, due diligence reports
-
-    # ── General ───────────────────────────────────────────────────────
-    "org_chart",                # Organizational charts
-    "attachment",               # General attachments, exhibits, annexes
-    "other",                    # Unclassified
-)
-
-# Lookup set for validation
-_VALID_DOC_TYPES: frozenset[str] = frozenset(CANONICAL_DOC_TYPES)
+#  Single source of truth: ``ai_engine.pipeline.models.CANONICAL_DOC_TYPES``
+#  (imported at the top of this module).  Do NOT redefine here.
 
 
 # ── Affinity mapping: canonical doc_type → chapter affinity tags ──────
@@ -401,7 +345,7 @@ async def async_classify_document(
         data = json.loads(result.text)
 
         doc_type = data.get("doc_type", "other")
-        if doc_type not in _VALID_DOC_TYPES:
+        if doc_type not in CANONICAL_DOC_TYPES:
             logger.warning(
                 "LLM returned invalid doc_type '%s' for '%s' — falling back to 'other'",
                 doc_type, title,
@@ -572,13 +516,13 @@ async def async_run_document_intelligence(
 
 
 # ═══════════════════════════════════════════════════════════════════════
-#  Full Intelligence — Cohere Rerank + Governance + Metadata + Summary
+#  Full Intelligence — Hybrid Classifier + Governance + Metadata + Summary
 # ═══════════════════════════════════════════════════════════════════════
 
 
 @dataclass
 class FullIntelligenceResult:
-    """Combined result from Cohere classification + governance + LLM extraction."""
+    """Combined result from hybrid classification + governance + LLM extraction."""
     doc_type: str
     doc_type_score: float
     vehicle_type: str
@@ -587,7 +531,7 @@ class FullIntelligenceResult:
     governance_flags: list[str]
     metadata: MetadataResult
     summary: SummaryResult
-    classification_source: str = "cohere"  # "cohere" | "llm_fallback"
+    classification_source: str = "hybrid_layer1"  # "hybrid_layer1" | "hybrid_layer2" | "hybrid_layer3"
 
 
 async def async_run_full_intelligence(
@@ -598,21 +542,15 @@ async def async_run_full_intelligence(
     content: str,
     fund_context: object | None = None,
 ) -> FullIntelligenceResult:
-    """Hybrid intelligence: Cohere Rerank classification + governance regex + LLM extraction.
+    """Hybrid intelligence: hybrid classifier + governance regex + LLM extraction.
 
     Pipeline:
-    1. Cohere Rerank doc_type (sequential — resolves doc_type first)
-    2. If Cohere doc_type score < threshold → fallback to LLM classification
-    3. LLM metadata extraction + summarization in parallel (with resolved doc_type)
-    4. Governance regex detection (instant, zero-cost)
-    5. Cohere Rerank vehicle_type (after doc_type resolved)
-
-    Falls back to full LLM pipeline if Cohere is unavailable.
+    1. Hybrid classifier (Layer 1 rules → Layer 2 TF-IDF → Layer 3 LLM)
+       resolves doc_type + vehicle_type in a single call.
+    2. LLM metadata extraction + summarization in parallel (with resolved doc_type)
+    3. Governance regex detection (instant, zero-cost)
     """
-    from ai_engine.extraction.cohere_rerank import (
-        async_classify_doc_type,
-        async_classify_vehicle_type,
-    )
+    from ai_engine.classification.hybrid_classifier import classify as hybrid_classify
     from ai_engine.extraction.governance_detector import detect_governance
 
     logger.info(
@@ -620,131 +558,50 @@ async def async_run_full_intelligence(
         title, filename,
     )
 
-    # Check if Cohere is configured
-    cohere_available = False
-    try:
-        from app.core.config.settings import settings
-        cohere_available = bool(settings.COHERE_RERANK_KEY)
-        fallback_threshold = settings.COHERE_FALLBACK_THRESHOLD
-    except Exception:
-        fallback_threshold = 0.35
+    # Step 1: Hybrid classification (handles its own escalation internally)
+    classification = await hybrid_classify(
+        content, filename, title=title, container=container,
+    )
+    doc_type = classification.doc_type
+    doc_type_score = classification.confidence
+    vehicle_type = classification.vehicle_type
+    vehicle_type_score = classification.confidence
+    classification_source = f"hybrid_layer{classification.layer}"
 
-    classification_source = "cohere"
-
-    if cohere_available:
-        # Step 1: Classify first (fast Cohere call) to get resolved doc_type
-        try:
-            doc_type_result = await async_classify_doc_type(content, filename)
-
-            doc_type = doc_type_result.doc_type
-            doc_type_score = doc_type_result.score
-
-            # Validate against canonical types
-            if doc_type not in _VALID_DOC_TYPES:
-                logger.warning("Cohere returned invalid doc_type '%s' — falling back to 'other'", doc_type)
-                doc_type = "other"
-
-            # Fallback to LLM classification if score too low
-            if doc_type_score < fallback_threshold:
-                logger.info(
-                    "Cohere score %.3f < %.3f for '%s' — using LLM fallback",
-                    doc_type_score, fallback_threshold, filename,
-                )
-                llm_classification = await async_classify_document(
-                    title=title, filename=filename, container=container, content=content,
-                )
-                doc_type = llm_classification.doc_type
-                doc_type_score = llm_classification.confidence / 100.0
-                classification_source = "llm_fallback"
-
-            # Step 2: Run metadata + summary in parallel with the resolved doc_type
-            # Enrich content with fund aliases from entity bootstrap (Stage 2.5)
-            meta_content = content
-            if fund_context and hasattr(fund_context, "aliases") and fund_context.aliases:
-                alias_lines = ", ".join(
-                    f"{k} = {v}" for k, v in fund_context.aliases.items()
-                )
-                meta_content = (
-                    f"[Fund entity aliases: {alias_lines}]\n\n{content}"
-                )
-
-            metadata, summary = await asyncio.gather(
-                async_extract_metadata(title=title, doc_type=doc_type, content=meta_content),
-                async_summarize_document(title=title, doc_type=doc_type, content=content),
-            )
-
-        except Exception:
-            logger.warning(
-                "Cohere classification failed — full LLM fallback: %s",
-                filename, exc_info=True,
-            )
-            # Full LLM fallback
-            di_result = await async_run_document_intelligence(
-                title=title, filename=filename, container=container, content=content,
-            )
-            doc_type = di_result.classification.doc_type
-            doc_type_score = di_result.classification.confidence / 100.0
-            metadata = di_result.metadata
-            summary = di_result.summary
-            classification_source = "llm_fallback"
-    else:
-        # No Cohere — full LLM pipeline
-        di_result = await async_run_document_intelligence(
-            title=title, filename=filename, container=container, content=content,
+    # Step 2: Run metadata + summary in parallel with the resolved doc_type
+    # Enrich content with fund aliases from entity bootstrap
+    meta_content = content
+    if fund_context and hasattr(fund_context, "aliases") and fund_context.aliases:
+        alias_lines = ", ".join(
+            f"{k} = {v}" for k, v in fund_context.aliases.items()
         )
-        doc_type = di_result.classification.doc_type
-        doc_type_score = di_result.classification.confidence / 100.0
-        metadata = di_result.metadata
-        summary = di_result.summary
-        classification_source = "llm_fallback"
+        meta_content = (
+            f"[Fund entity aliases: {alias_lines}]\n\n{content}"
+        )
+
+    metadata, summary = await asyncio.gather(
+        async_extract_metadata(title=title, doc_type=doc_type, content=meta_content),
+        async_summarize_document(title=title, doc_type=doc_type, content=content),
+    )
 
     # Governance detection (sync, instant, zero-cost)
     gov = detect_governance(content)
 
-    # Vehicle type classification
-    # Extract bootstrap vehicle hint (highest confidence from Stage 2.5)
-    _bootstrap_vehicle_hint: str | None = None
+    # Bootstrap vehicle hint override (highest confidence from Stage 2.5)
     if fund_context and hasattr(fund_context, "vehicles") and fund_context.vehicles:
         best_v = max(
             fund_context.vehicles.values(),
             key=lambda v: v.get("confidence", 0) if isinstance(v, dict) else 0,
             default=None,
         )
-        if best_v and isinstance(best_v, dict) and best_v.get("confidence", 0) > 0.8:
-            _bootstrap_vehicle_hint = best_v.get("vehicle_type")
-
-    if cohere_available:
-        try:
-            vehicle_result = await async_classify_vehicle_type(
-                content, filename, doc_type,
-            )
-            vehicle_type = vehicle_result.vehicle_type
-            vehicle_type_score = vehicle_result.score
-
-            # Use bootstrap hint as tiebreaker for borderline Cohere scores
-            if (
-                _bootstrap_vehicle_hint
-                and vehicle_type_score < fallback_threshold
-                and vehicle_type in ("other", "unknown")
-            ):
-                logger.info(
-                    "Vehicle type using bootstrap hint '%s' (Cohere score %.3f < %.3f)",
-                    _bootstrap_vehicle_hint, vehicle_type_score, fallback_threshold,
-                )
-                vehicle_type = _bootstrap_vehicle_hint
-                vehicle_type_score = 0.75  # bootstrap-derived confidence
-
-        except Exception:
-            logger.warning("Vehicle type classification failed: %s", filename, exc_info=True)
-            vehicle_type = _bootstrap_vehicle_hint or "other"
-            vehicle_type_score = 0.75 if _bootstrap_vehicle_hint else 0.0
-    else:
-        if _bootstrap_vehicle_hint:
-            vehicle_type = _bootstrap_vehicle_hint
+        if (
+            best_v
+            and isinstance(best_v, dict)
+            and best_v.get("confidence", 0) > 0.8
+            and vehicle_type == "other"
+        ):
+            vehicle_type = best_v.get("vehicle_type", "other")
             vehicle_type_score = 0.75
-        else:
-            vehicle_type = metadata.deal_structure.get("vehicle_type", "other") if metadata.deal_structure else "other"
-            vehicle_type_score = 0.5
 
     logger.info(
         "FULL_INTELLIGENCE_COMPLETE title='%s' doc_type=%s(%.2f) vehicle=%s(%.2f) "

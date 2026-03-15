@@ -36,6 +36,11 @@ dev = [
 ai = [
     "openai>=1.60",
     "numpy>=2.0",
+    "scikit-learn>=1.6",
+]
+reranker = [
+    "sentence-transformers>=3.0,<4.0",
+    "torch>=2.2",
 ]
 quant = [
     "numpy>=2.0",
