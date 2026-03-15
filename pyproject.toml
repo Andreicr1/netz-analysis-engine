@@ -37,6 +37,7 @@ ai = [
     "openai>=1.60",
     "numpy>=2.0",
     "scikit-learn>=1.6",
+    "pyarrow>=15.0",
 ]
 reranker = [
     "sentence-transformers>=3.0,<4.0",
@@ -106,7 +107,7 @@ warn_return_any = true
 warn_unused_configs = true
 
 [[tool.mypy.overrides]]
-module = ["redis.*", "sse_starlette.*", "edgar.*", "rapidfuzz.*"]
+module = ["redis.*", "sse_starlette.*", "edgar.*", "rapidfuzz.*", "pyarrow.*"]
 ignore_missing_imports = true
 
 # ── Import architecture enforcement (import-linter) ──────────────────
