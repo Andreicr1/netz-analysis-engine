@@ -67,7 +67,7 @@ _DEFAULT_GRADE_BOUNDARIES: list[tuple[int, str]] = [
 # Sub-dimension grading uses tighter boundaries (matches original _grade function)
 _DEFAULT_SUBDIM_BOUNDARIES: list[tuple[int, str]] = [
     (0, "none"),
-    (14, "mild"),
+    (9, "mild"),  # matches original credit_stress: score < 10 = MILD, score >= 10 = MODERATE
     (29, "moderate"),
     (100, "severe"),
 ]

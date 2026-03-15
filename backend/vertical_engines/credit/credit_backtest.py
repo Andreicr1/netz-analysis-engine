@@ -35,7 +35,6 @@ class CVStrategy(str, Enum):
 
     STRATIFIED = "stratified"
     TEMPORAL = "temporal"
-    TEMPORAL_STRATIFIED = "temporal_stratified"
 
 
 @dataclass
@@ -159,9 +158,10 @@ def backtest_pd_model(
     n_splits = _select_n_splits(n_obs, n_defaults, inp.n_splits)
 
     try:
+        from sklearn.base import clone
         from sklearn.linear_model import LogisticRegression
         from sklearn.metrics import brier_score_loss, mean_absolute_error, roc_auc_score
-        from sklearn.model_selection import StratifiedKFold, TimeSeriesSplit, cross_val_predict
+        from sklearn.model_selection import StratifiedKFold, TimeSeriesSplit
         from sklearn.pipeline import Pipeline
         from sklearn.preprocessing import StandardScaler
     except ImportError as e:
@@ -192,28 +192,26 @@ def backtest_pd_model(
     else:
         cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
 
-    # PD model: cross-validated OOF predictions
+    # PD model: single-pass cross-validated OOF predictions + per-fold AUC
     try:
-        y_proba = cross_val_predict(pipeline, X, y, cv=cv, method="predict_proba")[:, 1]
-        auc_roc = float(roc_auc_score(y, y_proba))
-        brier = float(brier_score_loss(y, y_proba))
-
-        # Per-fold AUC for std calculation
+        oof_predictions = np.zeros(n_obs)
         fold_aucs = []
-        for train_idx, val_idx in cv.split(X, y):
-            if len(np.unique(y[val_idx])) < 2:
-                continue
-            pipeline_clone = Pipeline([
-                ("scaler", StandardScaler()),
-                ("classifier", LogisticRegression(
-                    class_weight="balanced", max_iter=1000,
-                    solver="lbfgs", random_state=42,
-                )),
-            ])
-            pipeline_clone.fit(X[train_idx], y[train_idx])
-            fold_proba = pipeline_clone.predict_proba(X[val_idx])[:, 1]
-            fold_aucs.append(float(roc_auc_score(y[val_idx], fold_proba)))
 
+        for train_idx, val_idx in cv.split(X, y):
+            X_train, X_val = X[train_idx], X[val_idx]
+            y_train, y_val = y[train_idx], y[val_idx]
+
+            fold_pipeline = clone(pipeline)
+            fold_pipeline.fit(X_train, y_train)
+
+            proba = fold_pipeline.predict_proba(X_val)[:, 1]
+            oof_predictions[val_idx] = proba
+
+            if len(np.unique(y_val)) > 1:
+                fold_aucs.append(float(roc_auc_score(y_val, proba)))
+
+        auc_roc = float(roc_auc_score(y, oof_predictions))
+        brier = float(brier_score_loss(y, oof_predictions))
         auc_std = float(np.std(fold_aucs)) if fold_aucs else 0.0
 
     except Exception as e:

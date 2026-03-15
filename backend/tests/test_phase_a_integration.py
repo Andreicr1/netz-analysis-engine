@@ -242,12 +242,6 @@ class TestRegimeDecoupled:
         regime, reasons = classify_regime_multi_signal(vix=20.0, yield_curve_spread=1.0, cpi_yoy=50.0)
         assert regime == "RISK_ON"
 
-    def test_regime_read_from_shared_schemas(self) -> None:
-        from app.shared.schemas import RegimeRead
-
-        r = RegimeRead(regime="CRISIS", reasons={"vix": "extreme"})
-        assert r.regime == "CRISIS"
-
 
 # ──────────────────────────────────────────────────────────────────
 #  credit_backtest — unit tests

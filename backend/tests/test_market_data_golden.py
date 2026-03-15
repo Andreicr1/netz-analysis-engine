@@ -126,6 +126,34 @@ class TestStressSeverityGolden:
         assert result["score"] == 0
         assert result["triggers"] == []
 
+    def test_credit_stress_score_10_is_moderate(self) -> None:
+        """Score of 10 in credit_stress sub-dimension maps to MODERATE.
+
+        credit_stress has only 1 indicator worth max 10 points.
+        Original code: score == 0 → NONE, score < 10 → MILD, else MODERATE.
+        So score 10 must be MODERATE, not MILD.
+        """
+        snapshot = {
+            "recession_flag": False,
+            "financial_conditions_index": -0.5,
+            "yield_curve_2s10s": 1.5,
+            "baa_spread": 1.5,
+            "hy_spread_proxy": 3.5,
+            "real_estate_national": {
+                "CSUSHPINSA": {"delta_12m_pct": 5.0},
+            },
+            "mortgage": {
+                "DRSFRMACBS": {"latest": 2.0},
+            },
+            "credit_quality": {
+                "DRALACBN": {"latest": 3.0},  # >= 2.5 triggers 10 points
+            },
+        }
+        result = compute_macro_stress_severity(snapshot)
+
+        assert result["credit_stress"] == "MODERATE"
+        assert result["score"] == 10
+
     def test_partial_data(self) -> None:
         """Only some fields present — graceful degradation."""
         snapshot = {
