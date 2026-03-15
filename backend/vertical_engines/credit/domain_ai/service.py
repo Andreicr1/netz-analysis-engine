@@ -1,4 +1,4 @@
-"""Domain-aware AI analysis engine.
+"""Domain-aware AI analysis service.
 
 After documents are indexed, this module performs domain-specific AI analysis:
 

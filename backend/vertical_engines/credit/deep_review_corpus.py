@@ -338,7 +338,7 @@ def _gather_deal_texts(
 
     """
     from app.services.search_index import AzureSearchChunksClient
-    from vertical_engines.credit.memo_book_generator import CHAPTER_REGISTRY
+    from vertical_engines.credit.memo import CHAPTER_REGISTRY
     from vertical_engines.credit.retrieval import (
         RETRIEVAL_POLICY_NAME,
         build_ic_corpus,

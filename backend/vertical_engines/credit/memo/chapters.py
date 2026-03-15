@@ -1,13 +1,23 @@
-"""Memo chapter generation engine — individual chapter production and evidence curation."""
+"""Memo chapter generation — individual chapter production and evidence curation.
+
+Imports models, prompts (sibling modules within memo package).
+
+Error contract: never-raises for generation functions (orchestration engine).
+generate_chapter and generate_recommendation_chapter catch all exceptions
+and return degraded results with status information.
+"""
 from __future__ import annotations
 
 import json
-import logging
+import re
 from typing import Any
+
+import structlog
 
 from ai_engine.model_config import get_model
 from ai_engine.prompts import prompt_registry
-from vertical_engines.credit.memo_chapter_prompts import (
+from vertical_engines.credit.memo.models import CallOpenAiFn
+from vertical_engines.credit.memo.prompts import (
     _CHAPTER_CHUNK_BUDGET,
     _CHAPTER_DOC_AFFINITY,
     _CHAPTER_EXTRA_SECTIONS,
@@ -16,7 +26,7 @@ from vertical_engines.credit.memo_chapter_prompts import (
     _SHARED_PACK_SECTIONS,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # Chapter tags with Jinja2 templates (intelligence/chXX_name.j2)
 _CHAPTER_TAGS = (
@@ -27,11 +37,7 @@ _CHAPTER_TAGS = (
 
 
 def _get_chapter_base_prompt(chapter_tag: str, **context: Any) -> str | None:
-    """Return system prompt for a chapter from registry or legacy fallback.
-
-    Any kwargs are passed through as Jinja2 template context variables
-    (e.g. deal_structure="direct_loan" for deal-type branching).
-    """
+    """Return system prompt for a chapter from registry or legacy fallback."""
     if chapter_tag in _CHAPTER_TAGS and prompt_registry.has_template(f"intelligence/{chapter_tag}.j2"):
         return prompt_registry.render(f"intelligence/{chapter_tag}.j2", **context)
     return _CHAPTER_PROMPTS.get(chapter_tag)
@@ -40,15 +46,16 @@ def _get_chapter_base_prompt(chapter_tag: str, **context: Any) -> str | None:
 def _get_evidence_law() -> str:
     if prompt_registry.has_template("intelligence/evidence_law.j2"):
         return prompt_registry.render("intelligence/evidence_law.j2")
-    from vertical_engines.credit.memo_chapter_prompts import _EVIDENCE_LAW
+    from vertical_engines.credit.memo.prompts import _EVIDENCE_LAW
     return _EVIDENCE_LAW
 
 
 def _get_evidence_law_ch13() -> str:
     if prompt_registry.has_template("intelligence/evidence_law_ch13.j2"):
         return prompt_registry.render("intelligence/evidence_law_ch13.j2")
-    from vertical_engines.credit.memo_chapter_prompts import _EVIDENCE_LAW_CH13
+    from vertical_engines.credit.memo.prompts import _EVIDENCE_LAW_CH13
     return _EVIDENCE_LAW_CH13
+
 
 def filter_evidence_pack(evidence_pack: dict[str, Any], chapter_tag: str) -> dict[str, Any]:
     """Return a chapter-relevant subset of the evidence pack.
@@ -64,8 +71,6 @@ def filter_evidence_pack(evidence_pack: dict[str, Any], chapter_tag: str) -> dic
 # ---------------------------------------------------------------------------
 # Evidence pack summary (F — Cost Governance + E — Prompt Caching)
 # ---------------------------------------------------------------------------
-# Deterministic summary placed at the START of instructions for prompt
-# caching.  Identical across all 14 chapter calls → cached after first.
 
 def build_evidence_summary(evidence_pack: dict[str, Any]) -> str:
     """Build a compact deterministic summary of the evidence pack.
@@ -170,7 +175,6 @@ def select_chapter_chunks(
     if chapter_tag == "ch13_recommendation":
         return []  # Synthesis-only — no evidence chunks
 
-    # Resolve per-chapter chunk budget (B — Cost Governance)
     budget = _CHAPTER_CHUNK_BUDGET.get(chapter_tag, (20, 4000))
     if max_chunks is None:
         max_chunks = budget[0]
@@ -178,10 +182,6 @@ def select_chapter_chunks(
         max_chars_per_chunk = budget[1]
 
     # --- BUG-3 FIX: Forced source documents for Chapter 14 ---
-    # Gate/suspension/removal mechanics are in governance docs that get
-    # excluded by Ch14's semantic query vector (too focused on "adverse
-    # event" / "stress"). Force-include chunks from these sources so
-    # they survive the relevance filter.
     _CH14_FORCED_SOURCES = frozenset({
         "credit_policy.pdf",
         "investment_policy.pdf",
@@ -205,22 +205,14 @@ def select_chapter_chunks(
 
     affinity = _CHAPTER_DOC_AFFINITY.get(chapter_tag, frozenset())
 
-    # Score chunks by affinity (affinity=3, non-affinity=1)
-    # Check both original doc_type (canonical lower_case from Document
-    # Intelligence) and UPPER_CASE (legacy keyword classifier) against
-    # the affinity set — ensures both taxonomies score correctly.
     scored: list[tuple[int, dict]] = []
     for chunk in remaining:
         raw_type = chunk.get("doc_type") or ""
         score = 3 if (raw_type in affinity or raw_type.upper() in affinity) else 1
         scored.append((score, chunk))
 
-    # Sort by score descending
     scored.sort(key=lambda x: x[0], reverse=True)
 
-    # --- Document diversity pass ---
-    # Ensure we pick from at least min_unique_docs distinct sources.
-    # Start with forced chunks (ch14 governance docs) then fill normally.
     selected: list[dict] = list(forced)
     seen_docs: set[str] = {
         (c.get("blob_name", c.get("title", "")) or "") for c in forced
@@ -230,7 +222,7 @@ def select_chapter_chunks(
     for _score, chunk in scored:
         blob = chunk.get("blob_name", chunk.get("title", ""))
         if blob and blob not in seen_docs:
-            selected.append(dict(chunk))  # copy to avoid mutating caller
+            selected.append(dict(chunk))
             seen_docs.add(blob)
             if len(selected) >= max_chunks:
                 break
@@ -264,26 +256,17 @@ def generate_chapter(
     chapter_title: str,
     evidence_pack: dict[str, Any],
     evidence_chunks: list[dict[str, Any]],
-    call_openai_fn: Any,
+    call_openai_fn: CallOpenAiFn,
     model: str | None = None,
     evidence_summary: str | None = None,
     prepare_only: bool = False,
 ) -> dict[str, Any]:
     """Generate a single memo chapter.
 
-    Args:
-        evidence_pack: Frozen EvidencePack — will be filtered per-chapter (D).
-        evidence_chunks: Relevant evidence for this chapter (per-chapter budget).
-        call_openai_fn: ``fn(system, user, *, max_tokens, model) → dict``
-        evidence_summary: Pre-built deterministic summary (F) placed at the
-            top of system_prompt for prompt caching (E).
-
-    Returns:
-        Dict with at least ``section_text``.  Ch13 also has
-        ``recommendation`` and ``confidence_level``.
-
+    Returns dict with at least ``section_text``.  Ch13 also has
+    ``recommendation`` and ``confidence_level``.
     """
-    # Extract deal_structure for Jinja2 template branching (direct_loan / fund_investment)
+    # Extract deal_structure for Jinja2 template branching
     deal_identity = evidence_pack.get("deal_identity", {})
     role_map = deal_identity.get("deal_role_map") or (
         evidence_pack.get("investor_identity", {}).get("deal_role_map", {})
@@ -295,10 +278,6 @@ def generate_chapter(
         raise ValueError(f"No system prompt for chapter tag: {chapter_tag}")
 
     evidence_law = _get_evidence_law()
-    # ── Prompt caching (E): shared summary as instruction prefix ──
-    # The evidence_summary is identical across all 14 chapter calls.
-    # Placing it at the START of instructions ensures OpenAI's automatic
-    # prompt caching activates after the first chapter (50% input discount).
     if evidence_summary:
         system_prompt = (
             "=== DEAL CONTEXT SUMMARY (shared reference) ===\n"
@@ -313,14 +292,10 @@ def generate_chapter(
     # ── Evidence pack filtering (D): chapter-relevant subset only ──
     filtered_pack = filter_evidence_pack(evidence_pack, chapter_tag)
 
-    # Build user content — Deal Structure Preamble + filtered EvidencePack + chunks
+    # Build user content
     parts: list[str] = []
 
     # ── Deal Structure Preamble ──────────────────────────────────
-    # Pre-computed entity-role assignments from deal_context.json.
-    # Placed BEFORE the evidence pack so the LLM reads it first and
-    # never confuses Borrower with Lender or Investor with Sponsor.
-    # (deal_identity, role_map, deal_structure already extracted above for Jinja2 context)
     if role_map:
         preamble_lines = [
             "╔══════════════════════════════════════════════════════════╗",
@@ -363,8 +338,6 @@ def generate_chapter(
                 preamble_lines.append(f"NOTE: {note}")
 
         # ── Third-party counterparty attribution block ───────────
-        # Warns the LLM about documents from OTHER counterparties
-        # whose contracts with the borrower are in the evidence corpus.
         third_parties = (
             evidence_pack.get("investor_identity", {}).get("third_party_counterparties")
             or deal_identity.get("third_party_counterparties")
@@ -444,52 +417,51 @@ def generate_chapter(
             "max_tokens": max_tokens,
         }
 
-    logger.info("CHAPTER_GENERATE_START", extra={
-        "chapter": chapter_num,
-        "tag": chapter_tag,
-        "user_chars": len(user_content),
-        "system_chars": len(system_prompt),
-        "evidence_chunks": len(evidence_chunks),
-        "pack_sections": len(filtered_pack),
-        "max_tokens": max_tokens,
-        "has_summary_prefix": bool(evidence_summary),
-    })
+    logger.info(
+        "CHAPTER_GENERATE_START",
+        chapter=chapter_num,
+        tag=chapter_tag,
+        user_chars=len(user_content),
+        system_chars=len(system_prompt),
+        evidence_chunks=len(evidence_chunks),
+        pack_sections=len(filtered_pack),
+        max_tokens=max_tokens,
+        has_summary_prefix=bool(evidence_summary),
+    )
 
     try:
         data = call_openai_fn(system_prompt, user_content, max_tokens=max_tokens, model=model)
     except Exception as exc:
-        logger.error("CHAPTER_GENERATE_FAILED", extra={
-            "chapter": chapter_num, "tag": chapter_tag, "error": str(exc),
-        })
+        logger.error("CHAPTER_GENERATE_FAILED", chapter=chapter_num, tag=chapter_tag, error=str(exc), exc_info=True)
         return {
             "section_text": f"*Chapter {chapter_num}: {chapter_title} — generation failed: {exc}*",
             "citations": [],
+            "status": "NOT_ASSESSED",
         }
 
     section_text = data.get("section_text", "")
-    # Sanitise NUL bytes that some models emit — PostgreSQL rejects \x00
     section_text = section_text.replace("\x00", "")
     citations = data.get("citations", [])
-    charts = data.get("charts", [])                    # list[dict] — chart data objects
-    omitted_sections = data.get("omitted_sections", [])  # list[str] — silently omitted subsections
-    critical_gaps = data.get("critical_gaps", [])        # list[str] — approval-blocking gaps
+    charts = data.get("charts", [])
+    omitted_sections = data.get("omitted_sections", [])
+    critical_gaps = data.get("critical_gaps", [])
 
     if not section_text.strip():
         section_text = f"*Chapter {chapter_num}: {chapter_title} — LLM returned empty.*"
 
-    # Embed CHARTDATA comments into section_text so chart data persists with the
-    # stored markdown — enables chart rendering on PDF regeneration from cache.
     if charts:
         from ai_engine.pdf.chart_renderer import inject_chart_data_into_text
         section_text = inject_chart_data_into_text(section_text, charts)
 
-    logger.info("CHAPTER_GENERATE_COMPLETE", extra={
-        "chapter": chapter_num, "tag": chapter_tag,
-        "output_chars": len(section_text),
-        "citations_count": len(citations),
-        "charts_count": len(charts),
-        "critical_gaps_count": len(critical_gaps),
-    })
+    logger.info(
+        "CHAPTER_GENERATE_COMPLETE",
+        chapter=chapter_num,
+        tag=chapter_tag,
+        output_chars=len(section_text),
+        citations_count=len(citations),
+        charts_count=len(charts),
+        critical_gaps_count=len(critical_gaps),
+    )
 
     result: dict[str, Any] = {
         "section_text": section_text,
@@ -516,19 +488,17 @@ def generate_recommendation_chapter(
     critic_findings: dict[str, Any],
     policy_breaches: dict[str, Any],
     sponsor_red_flags: list[dict[str, Any]],
-    call_openai_fn: Any,
+    call_openai_fn: CallOpenAiFn,
     model: str | None = None,
     decision_anchor: dict[str, Any] | None = None,
     chapter_summaries: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Generate Chapter 13 — Final Recommendation — from synthesis inputs.
 
-    When ``decision_anchor`` is provided, the recommendation is BINDING —
-    the LLM explains and justifies but MUST NOT override it.
+    When ``decision_anchor`` is provided, the recommendation is BINDING.
     """
     base_prompt = _get_chapter_base_prompt("ch13_recommendation") or ""
 
-    # ── Inject Decision Anchor constraint if available ────────
     if decision_anchor:
         _flaws = ", ".join(decision_anchor.get("confirmedFatalFlaws", [])) or "None"
         _breaches = ", ".join(decision_anchor.get("hardBreaches", [])) or "None"
@@ -579,27 +549,24 @@ def generate_recommendation_chapter(
 
     user_content = "\n".join(parts)
 
-    logger.info("RECOMMENDATION_CHAPTER_START", extra={
-        "user_chars": len(user_content),
-    })
+    logger.info("RECOMMENDATION_CHAPTER_START", user_chars=len(user_content))
 
     try:
         data = call_openai_fn(system_prompt, user_content, max_tokens=3000, model=model)
     except Exception as exc:
-        logger.error("RECOMMENDATION_CHAPTER_FAILED", extra={"error": str(exc)})
+        logger.error("RECOMMENDATION_CHAPTER_FAILED", error=str(exc), exc_info=True)
         return {
             "section_text": f"*Final Recommendation — generation failed: {exc}*",
             "recommendation": "CONDITIONAL",
             "confidence_level": "LOW",
+            "status": "NOT_ASSESSED",
         }
 
-    # If a decision anchor is provided, force alignment.
     rec = data.get("recommendation", "CONDITIONAL")
     if decision_anchor:
         rec = decision_anchor["finalDecision"]
 
     _rec_text = data.get("section_text", "*Recommendation generation returned empty.*")
-    # Sanitise NUL bytes that some models emit — PostgreSQL rejects \x00
     _rec_text = _rec_text.replace("\x00", "")
     result = {
         "section_text": _rec_text,
@@ -608,25 +575,21 @@ def generate_recommendation_chapter(
         "citations": data.get("citations", []),
     }
 
-    logger.info("RECOMMENDATION_CHAPTER_COMPLETE", extra={
-        "recommendation": result["recommendation"],
-        "confidence_level": result["confidence_level"],
-    })
+    logger.info(
+        "RECOMMENDATION_CHAPTER_COMPLETE",
+        recommendation=result["recommendation"],
+        confidence_level=result["confidence_level"],
+    )
 
     return result
 
 
 # ---------------------------------------------------------------------------
-# Appendix 1 — Source Index builder
+# Appendix builders
 # ---------------------------------------------------------------------------
 
 def _build_appendix_1(all_citations: list[dict[str, Any]]) -> str:
-    """Build **Appendix 1 — Source Index** from accumulated citations.
-
-    De-duplicates by ``chunk_id``, accumulates chapter attribution.
-    Returns a Markdown table suitable for appending to the memo body.
-    """
-    # Collect real citations (skip sentinel)
+    """Build **Appendix 1 — Source Index** from accumulated citations."""
     source_map: dict[str, dict[str, Any]] = {}
     for cit in all_citations:
         cid = cit.get("chunk_id", "UNKNOWN")
@@ -662,7 +625,6 @@ def _build_appendix_1(all_citations: list[dict[str, Any]]) -> str:
         chapters = ", ".join(f"Ch{n}" for n in sorted(info["chapters"]))
         excerpt = (info["excerpt"] or "").replace("|", "\\|").replace("\n", " ")[:80]
         page = info["page"] or "—"
-        # Truncate chunk_id for table readability
         cid_display = cid[:70] if len(cid) > 70 else cid
         lines.append(
             f"| {ref_num} | {cid_display} | {source} | {doc_type}"
@@ -674,13 +636,8 @@ def _build_appendix_1(all_citations: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-
 def _build_appendix_2(all_critical_gaps: list[dict[str, Any]]) -> str:
-    """Build **Appendix 2 — Data Gaps Register** from accumulated critical gaps.
-
-    Only included in the PDF when at least one critical gap was flagged across the
-    14 chapters. Each gap row contains chapter attribution and the full gap text.
-    """
+    """Build **Appendix 2 — Data Gaps Register** from accumulated critical gaps."""
     if not all_critical_gaps:
         return ""
 
@@ -710,7 +667,6 @@ def _build_appendix_2(all_critical_gaps: list[dict[str, Any]]) -> str:
 
 def _extract_recommendation_from_text(text: str) -> tuple[str, str]:
     """Best-effort extraction of recommendation from cached chapter text."""
-    import re
     rec = "CONDITIONAL"
     conf = "MEDIUM"
     for pattern in (r"recommendation[:\s]*(INVEST|PASS|CONDITIONAL)", r"\b(INVEST|PASS|CONDITIONAL)\b"):
@@ -731,8 +687,8 @@ def regenerate_chapter_with_critic(
     ch_tag: str,
     original_text: str,
     critic_addendum: str,
-    evidence_pack: dict,
-    call_openai_fn,
+    evidence_pack: dict[str, Any],
+    call_openai_fn: CallOpenAiFn,
 ) -> str | None:
     """Regenerate a single chapter incorporating critic findings.
 
@@ -765,9 +721,8 @@ def regenerate_chapter_with_critic(
         data = json.loads(text)
         revised = data.get("section_text", "")
         if revised and len(revised) > 200:
-            logger.info("regenerate_chapter_with_critic: %s revised (%d chars)", ch_tag, len(revised))
+            logger.info("regenerate_chapter_with_critic", ch_tag=ch_tag, revised_chars=len(revised))
             return revised
     except Exception:
-        logger.exception("regenerate_chapter_with_critic failed for %s", ch_tag)
+        logger.exception("regenerate_chapter_with_critic failed", ch_tag=ch_tag)
     return None
-
