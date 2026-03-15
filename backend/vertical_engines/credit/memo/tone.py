@@ -59,7 +59,7 @@ def _get_llm_semaphore() -> asyncio.Semaphore:
 
 def _pass1_system(chapter_type: str, max_chars: int) -> str:
     return prompt_registry.render(
-        "intelligence/tone_pass1.j2",
+        "tone_pass1.j2",
         chapter_type=chapter_type,
         max_chars=max_chars,
     )
@@ -155,7 +155,7 @@ def _run_pass2(
     )
 
     try:
-        system_prompt = prompt_registry.render("intelligence/tone_pass2.j2")
+        system_prompt = prompt_registry.render("tone_pass2.j2")
         result = create_completion(
             system_prompt=system_prompt,
             user_prompt=user,

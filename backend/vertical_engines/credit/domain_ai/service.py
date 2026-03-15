@@ -156,7 +156,7 @@ def run_portfolio_analysis(
         return {}
 
     system = prompt_registry.render(
-        "intelligence/domain_portfolio.j2",
+        "domain_portfolio.j2",
         deal_name=deal_name,
         sponsor_name=sponsor_name or "Unknown",
         cashflow_summary=cashflow_summary or "No cashflows recorded yet.",

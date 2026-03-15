@@ -28,7 +28,7 @@ from vertical_engines.credit.memo.prompts import (
 
 logger = structlog.get_logger()
 
-# Chapter tags with Jinja2 templates (intelligence/chXX_name.j2)
+# Chapter tags with Jinja2 templates (chXX_name.j2 in credit/prompts/)
 _CHAPTER_TAGS = (
     "ch01_exec", "ch02_macro", "ch03_exit", "ch04_sponsor", "ch05_legal",
     "ch06_terms", "ch07_capital", "ch08_returns", "ch09_downside", "ch10_covenants",
@@ -38,21 +38,21 @@ _CHAPTER_TAGS = (
 
 def _get_chapter_base_prompt(chapter_tag: str, **context: Any) -> str | None:
     """Return system prompt for a chapter from registry or legacy fallback."""
-    if chapter_tag in _CHAPTER_TAGS and prompt_registry.has_template(f"intelligence/{chapter_tag}.j2"):
-        return prompt_registry.render(f"intelligence/{chapter_tag}.j2", **context)
+    if chapter_tag in _CHAPTER_TAGS and prompt_registry.has_template(f"{chapter_tag}.j2"):
+        return prompt_registry.render(f"{chapter_tag}.j2", **context)
     return _CHAPTER_PROMPTS.get(chapter_tag)
 
 
 def _get_evidence_law() -> str:
-    if prompt_registry.has_template("intelligence/evidence_law.j2"):
-        return prompt_registry.render("intelligence/evidence_law.j2")
+    if prompt_registry.has_template("evidence_law.j2"):
+        return prompt_registry.render("evidence_law.j2")
     from vertical_engines.credit.memo.prompts import _EVIDENCE_LAW
     return _EVIDENCE_LAW
 
 
 def _get_evidence_law_ch13() -> str:
-    if prompt_registry.has_template("intelligence/evidence_law_ch13.j2"):
-        return prompt_registry.render("intelligence/evidence_law_ch13.j2")
+    if prompt_registry.has_template("evidence_law_ch13.j2"):
+        return prompt_registry.render("evidence_law_ch13.j2")
     from vertical_engines.credit.memo.prompts import _EVIDENCE_LAW_CH13
     return _EVIDENCE_LAW_CH13
 

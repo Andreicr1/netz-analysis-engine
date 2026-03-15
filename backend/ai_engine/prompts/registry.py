@@ -11,7 +11,7 @@ Usage::
 
     from ai_engine.prompts import prompt_registry
 
-    system = prompt_registry.render("intelligence/ch01_exec.j2", deal_name="ABC Corp")
+    system = prompt_registry.render("ch01_exec.j2", deal_name="ABC Corp")
     system, user = prompt_registry.render_pair("doc_review", question="...", chunks="...")
 """
 from __future__ import annotations
@@ -69,7 +69,7 @@ class PromptRegistry:
         """Render a Jinja2 template with context variables.
 
         Args:
-            template_name: Path relative to prompts dir (e.g. "intelligence/ch01_exec.j2")
+            template_name: Template filename (e.g. "ch01_exec.j2")
             **context: Variables to inject into the template
 
         Returns:

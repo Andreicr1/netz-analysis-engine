@@ -174,7 +174,7 @@ def generate_pipeline_intelligence(
     # ══════════════════════════════════════════════════════════════
     structured_model = get_model("structured")
     system_a = prompt_registry.render(
-        "intelligence/pipeline_structured.j2",
+        "pipeline_structured.j2",
         deal_name=deal_name,
         sponsor_name=sponsor_name or "Unknown",
         min_citations=MIN_CITATIONS_REQUIRED,
@@ -250,7 +250,7 @@ def generate_pipeline_intelligence(
     # ══════════════════════════════════════════════════════════════
     memo_model = get_model("pipeline_memo")
     system_b = prompt_registry.render(
-        "intelligence/pipeline_memo.j2",
+        "pipeline_memo.j2",
         deal_name=deal_name,
         sponsor_name=sponsor_name or "Unknown",
     )
