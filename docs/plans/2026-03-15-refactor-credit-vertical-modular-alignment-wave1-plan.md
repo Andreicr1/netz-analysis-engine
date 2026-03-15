@@ -386,7 +386,7 @@ deal_conversion/
 
 ---
 
-### Phase 10: underwriting/ (PR #10)
+### Phase 10: underwriting/ (PR #10) ✅
 
 **Source:** `underwriting_artifact.py` (249 LOC)
 
@@ -411,7 +411,7 @@ underwriting/
 
 ---
 
-### Phase 11: domain_ai/ (PR #11) — NEW (was TBD)
+### Phase 11: domain_ai/ (PR #11) ✅ — NEW (was TBD)
 
 **Source:** `domain_ai_engine.py` (270 LOC)
 

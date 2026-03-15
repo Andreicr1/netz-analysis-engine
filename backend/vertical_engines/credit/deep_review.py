@@ -1338,7 +1338,7 @@ def run_deal_deep_review_v4(
     # ── Stage 13c: Persist Unified Underwriting Artifact ─────────
     # This is the SINGLE authoritative IC truth object.  Pipeline Engine
     # must never write to this table.
-    from vertical_engines.credit.underwriting_artifact import persist_underwriting_artifact
+    from vertical_engines.credit.underwriting import persist_underwriting_artifact
 
     persist_underwriting_artifact(
         db,
@@ -1372,7 +1372,7 @@ def run_deal_deep_review_v4(
     # V4 must populate these tables so the pipeline deal list endpoint
     # (GET /pipeline/deals) can show strategy_type, risk_band, and
     # recommendation_signal without requiring a separate V3 run.
-    from vertical_engines.credit.underwriting_artifact import derive_risk_band as _derive_risk_band
+    from vertical_engines.credit.underwriting import derive_risk_band as _derive_risk_band
 
     _v4_risk_band = _derive_risk_band(analysis)
     _v4_risk_band_label = {"HIGH": "HIGH", "MEDIUM": "MODERATE", "LOW": "LOW"}.get(
@@ -2534,10 +2534,10 @@ async def async_run_deal_deep_review_v4(
     )
 
     # ── Persist Unified Underwriting Artifact ─────────────────────
-    from vertical_engines.credit.underwriting_artifact import (
+    from vertical_engines.credit.underwriting import (
         derive_risk_band as _derive_risk_band,
     )
-    from vertical_engines.credit.underwriting_artifact import (
+    from vertical_engines.credit.underwriting import (
         persist_underwriting_artifact,
     )
 
