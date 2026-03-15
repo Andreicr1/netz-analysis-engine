@@ -194,27 +194,6 @@ def _pre_classify_from_corpus(
     return "UNKNOWN"
 
 
-def _build_deal_review_prompt(
-    instrument_type: str,
-    deal_role_map: dict[str, Any] | None = None,
-    third_party_counterparties: list[dict[str, Any]] | None = None,
-) -> str:
-    """Build instrument-aware structured extraction prompt."""
-    return prompt_registry.render(
-        "intelligence/deal_review_system_v1.j2",
-        **_deal_review_template_context(
-            instrument_type,
-            deal_role_map=deal_role_map,
-            third_party_counterparties=third_party_counterparties,
-        ),
-    )
-
-
-# ══════════════════════════════════════════════════════════════════════
-#  structured_analysis_v2 — rigorous extraction prompt
-# ══════════════════════════════════════════════════════════════════════
-
-
 def _build_deal_review_prompt_v2(
     instrument_type: str,
     deal_role_map: dict[str, Any] | None = None,
@@ -222,7 +201,7 @@ def _build_deal_review_prompt_v2(
 ) -> str:
     """Build v2 structured extraction prompt."""
     return prompt_registry.render(
-        "intelligence/deal_review_system_v2.j2",
+        "deal_review_system_v2.j2",
         **_deal_review_template_context(
             instrument_type,
             deal_role_map=deal_role_map,
@@ -234,6 +213,5 @@ def _build_deal_review_prompt_v2(
 __all__ = [
     "_deal_review_template_context",
     "_pre_classify_from_corpus",
-    "_build_deal_review_prompt",
     "_build_deal_review_prompt_v2",
 ]

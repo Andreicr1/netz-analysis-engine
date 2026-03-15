@@ -150,6 +150,18 @@ class PromptRegistry:
             logger.warning("Invalid YAML metadata in template %s", template_name)
             return {}
 
+    def add_search_path(self, path: Path | str) -> None:
+        """Append a directory to the Jinja2 template search paths.
+
+        Allows engine packages to register their own ``templates/``
+        directories so that ``render()`` can resolve package-local
+        ``.j2`` files without requiring a central directory.
+        Duplicate paths are silently ignored.
+        """
+        path_str = str(path)
+        if path_str not in self._env.loader.searchpath:
+            self._env.loader.searchpath.append(path_str)
+
     def has_template(self, template_name: str) -> bool:
         """Check if a template exists without raising."""
         try:

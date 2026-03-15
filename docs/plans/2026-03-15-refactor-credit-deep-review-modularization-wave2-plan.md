@@ -695,7 +695,7 @@ Pure structural refactor. No schema changes, no new tables, no data flow changes
 - **Validation:** 337 tests pass, 5/5 import-linter contracts, zero old import paths
 - **Code review:** 8 agents (kieran-python, security-sentinel, performance-oracle, architecture-strategist, pattern-recognition, agent-native, learnings-researcher, code-simplicity). 0 P1, 3 P2, 9 P3 — all non-deferred fixed before merge.
 - **Compound doc:** `docs/solutions/architecture-patterns/wave2-deep-review-modularization-MonolithToDAGPackage-20260315.md`
-- **Phase 2 (prompt relocation):** Deferred to follow-up PR as planned
+- **Phase 2 (prompt relocation):** Completed — PR #24
 
 ### Review Fixes Applied (commit 29f5e13)
 

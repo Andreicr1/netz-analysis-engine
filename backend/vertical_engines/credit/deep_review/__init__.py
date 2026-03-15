@@ -20,7 +20,14 @@ dicts with status/warnings on failure. exc_info=True in structlog.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
+
+from ai_engine.prompts import prompt_registry
+
+# Register package-local templates so prompt_registry.render() can
+# resolve deep_review .j2 files without the old "intelligence/" prefix.
+prompt_registry.add_search_path(Path(__file__).parent / "templates")
 
 # Eagerly import leaf-node symbols only (no transitive deps)
 from vertical_engines.credit.deep_review.confidence import (
