@@ -128,7 +128,7 @@ async def rerank(
 
     # Normalize scores via sigmoid and build results
     results = []
-    for i, (raw_score, doc) in enumerate(zip(raw_scores, documents)):
+    for i, (raw_score, doc) in enumerate(zip(raw_scores, documents, strict=True)):
         score = _stable_sigmoid(float(raw_score))
         results.append(RerankResult(index=i, score=score, text=doc))
 

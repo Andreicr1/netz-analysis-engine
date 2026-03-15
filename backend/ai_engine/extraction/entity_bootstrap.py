@@ -1244,8 +1244,6 @@ async def async_bootstrap_deal(
     """
     import asyncio
 
-    from app.core.config import settings
-
     # Filter to PDFs only
     pdf_blobs = [(c, p) for c, p in blob_paths if p.lower().endswith(".pdf")]
     if max_pdfs > 0:
