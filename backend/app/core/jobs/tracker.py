@@ -47,6 +47,34 @@ def _channel_name(job_id: str) -> str:
     return f"job:{job_id}:events"
 
 
+async def register_job_owner(job_id: str, organization_id: str, ttl_seconds: int = 3600) -> None:
+    """Store job->org mapping in Redis for SSE tenant authorization."""
+    pool = get_redis_pool()
+    r = aioredis.Redis(connection_pool=pool)
+    try:
+        await r.set(f"job:{job_id}:org", organization_id, ex=ttl_seconds)
+    finally:
+        await r.aclose()
+
+
+async def verify_job_owner(job_id: str, organization_id: str) -> bool:
+    """Check if job belongs to the given organization.
+
+    Returns True if owned or if no mapping exists (backward compat with
+    jobs created before ownership tracking was added).
+    """
+    pool = get_redis_pool()
+    r = aioredis.Redis(connection_pool=pool)
+    try:
+        owner = await r.get(f"job:{job_id}:org")
+        if owner is None:
+            return True  # No mapping = legacy job, allow (backward compat)
+        # Pool uses decode_responses=True, so owner is already str
+        return owner == organization_id
+    finally:
+        await r.aclose()
+
+
 async def publish_event(
     job_id: str,
     event_type: str,

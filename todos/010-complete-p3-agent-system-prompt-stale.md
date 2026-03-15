@@ -1,5 +1,5 @@
 ---
-status: pending
+status: done
 priority: p3
 issue_id: "010"
 tags: [code-review, architecture, agent-native]
@@ -22,6 +22,6 @@ The global agent's `GLOBAL_SYSTEM_PROMPT` references "Counterparty Registry" and
 **Note:** This is important for agent-native parity but not a merge blocker — it's pre-existing tech debt amplified by new features.
 
 ## Acceptance Criteria
-- [ ] No references to removed operational modules in system prompt
-- [ ] New capabilities documented in agent prompt
-- [ ] `build_agent_runtime_context()` returns meaningful data
+- [x] No references to removed operational modules in system prompt
+- [x] New capabilities documented in agent prompt
+- [x] `build_agent_runtime_context()` returns meaningful data

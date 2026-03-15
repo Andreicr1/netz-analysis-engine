@@ -12,13 +12,13 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import APIRouter, Depends, FastAPI, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config.settings import settings
 from app.core.db.engine import engine
 from app.core.jobs.sse import create_job_stream
-from app.core.jobs.tracker import close_redis_pool, publish_event
+from app.core.jobs.tracker import close_redis_pool, publish_event, verify_job_owner
 from app.core.security.clerk_auth import Actor, get_actor
 
 # Actions
@@ -201,6 +201,8 @@ async def stream_job(request: Request, job_id: str, actor: Actor = Depends(get_a
     Workers publish events to Redis pub/sub → this endpoint subscribes and streams.
     Frontend consumes via fetch() + ReadableStream (not EventSource — auth headers needed).
     """
+    if not await verify_job_owner(job_id, str(actor.organization_id)):
+        raise HTTPException(status_code=403, detail="Job not found")
     return await create_job_stream(request, job_id)
 
 

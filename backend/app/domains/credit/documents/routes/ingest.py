@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +22,17 @@ from app.domains.credit.modules.documents.schemas import DocumentOut, DocumentVe
 from app.shared.enums import Role
 
 router = APIRouter(prefix="/documents", tags=["documents.ingest"])
+
+
+class ProcessPendingRequest(BaseModel):
+    limit: int = Field(default=10, ge=1, le=50)
+
+
+class ProcessPendingResponse(BaseModel):
+    processed: int
+    indexed: int
+    failed: int
+    skipped: int
 
 
 @router.post("/upload")
@@ -57,7 +70,7 @@ async def upload(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error("Document upload failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Upload failed: {type(e).__name__}")
+        raise HTTPException(status_code=500, detail="Upload failed — see server logs")
 
     return {
         "document_id": str(res.document.id),
@@ -154,10 +167,10 @@ async def create_root_folder(
     return {"id": str(folder.id), "name": folder.name}
 
 
-@router.post("/ingestion/process-pending")
+@router.post("/ingestion/process-pending", response_model=ProcessPendingResponse)
 async def process_pending(
     fund_id: uuid.UUID,
-    payload: dict | None = None,
+    payload: ProcessPendingRequest | None = None,
     db: AsyncSession = Depends(get_db_with_rls),
     actor: Actor = Depends(get_actor),
     _role_guard: Actor = Depends(require_role(Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM)),
@@ -166,13 +179,7 @@ async def process_pending(
     from ai_engine.pipeline.models import IngestRequest
     from ai_engine.pipeline.unified_pipeline import process as run_pipeline
 
-    limit = 10
-    if payload and isinstance(payload, dict) and "limit" in payload:
-        try:
-            limit = int(payload["limit"])
-        except Exception:
-            limit = 10
-    limit = max(1, min(limit, 50))
+    limit = payload.limit if payload else 10
 
     await write_audit_event(
         db,
@@ -197,61 +204,87 @@ async def process_pending(
     )
     versions = result.scalars().all()
 
-    processed = indexed = failed = skipped = 0
-    for version in versions:
-        processed += 1
+    if not versions:
+        return ProcessPendingResponse(processed=0, indexed=0, failed=0, skipped=0)
 
-        # Same-document concurrency guard
-        if version.ingestion_status == DocumentIngestionStatus.PROCESSING:
-            skipped += 1
-            continue
+    # Batch-fetch parent documents to avoid N+1 queries
+    doc_ids = {v.document_id for v in versions}
+    doc_result = await db.execute(
+        select(Document).where(
+            Document.fund_id == fund_id,
+            Document.id.in_(doc_ids),
+        )
+    )
+    docs_by_id = {d.id: d for d in doc_result.scalars().all()}
 
-        # Mark PROCESSING
-        version.ingestion_status = DocumentIngestionStatus.PROCESSING
-        version.updated_by = actor.actor_id
-        await db.commit()
+    # Semaphore created inside async function (CLAUDE.md rule)
+    sem = asyncio.Semaphore(3)
 
-        try:
-            # Fetch parent document for metadata
-            doc_result = await db.execute(
-                select(Document).where(
-                    Document.fund_id == fund_id,
-                    Document.id == version.document_id,
-                ),
-            )
-            doc = doc_result.scalar_one()
+    async def _process_one(version: DocumentVersion) -> tuple[str, str]:
+        """Process a single version. Returns (status, version_id)."""
+        async with sem:
+            # Same-document concurrency guard
+            if version.ingestion_status == DocumentIngestionStatus.PROCESSING:
+                return ("skipped", str(version.id))
 
-            request = IngestRequest(
-                source="ui",
-                org_id=actor.organization_id,
-                vertical="credit",
-                document_id=version.document_id,
-                blob_uri=version.blob_uri or "",
-                filename=doc.title or "document.pdf",
-                fund_id=fund_id,
-                version_id=version.id,
-            )
-            pipeline_result = await run_pipeline(request, db=db, actor_id=actor.actor_id)
+            # Mark PROCESSING
+            version.ingestion_status = DocumentIngestionStatus.PROCESSING
+            version.updated_by = actor.actor_id
+            await db.commit()
 
-            if pipeline_result.success:
-                version.ingestion_status = DocumentIngestionStatus.INDEXED
-                version.indexed_at = datetime.now()
-                indexed += 1
-            else:
+            try:
+                doc = docs_by_id[version.document_id]
+
+                request = IngestRequest(
+                    source="ui",
+                    org_id=actor.organization_id,
+                    vertical="credit",
+                    document_id=version.document_id,
+                    blob_uri=version.blob_uri or "",
+                    filename=doc.title or "document.pdf",
+                    fund_id=fund_id,
+                    version_id=version.id,
+                )
+                pipeline_result = await run_pipeline(request, db=db, actor_id=actor.actor_id)
+
+                if pipeline_result.success:
+                    version.ingestion_status = DocumentIngestionStatus.INDEXED
+                    version.indexed_at = datetime.now(UTC)
+                    result_status = "indexed"
+                else:
+                    version.ingestion_status = DocumentIngestionStatus.FAILED
+                    version.ingest_error = {
+                        "stage": pipeline_result.stage,
+                        "errors": pipeline_result.errors,
+                    }
+                    result_status = "failed"
+
+            except Exception as e:
+                logger.error("Pipeline failed for version %s: %s", version.id, e, exc_info=True)
                 version.ingestion_status = DocumentIngestionStatus.FAILED
-                version.ingest_error = {
-                    "stage": pipeline_result.stage,
-                    "errors": pipeline_result.errors,
-                }
-                failed += 1
+                version.ingest_error = {"reason": "processing_error"}
+                result_status = "failed"
 
-        except Exception as e:
-            logger.exception("Pipeline failed for version %s", version.id)
-            version.ingestion_status = DocumentIngestionStatus.FAILED
-            version.ingest_error = {"reason": "processing_error", "type": type(e).__name__}
+            version.updated_by = actor.actor_id
+            await db.commit()
+            return (result_status, str(version.id))
+
+    gather_results = await asyncio.gather(
+        *[_process_one(v) for v in versions],
+        return_exceptions=True,
+    )
+
+    processed = len(versions)
+    indexed = failed = skipped = 0
+    for r in gather_results:
+        if isinstance(r, Exception):
+            logger.error("Unexpected error in _process_one: %s", r, exc_info=True)
             failed += 1
+        elif r[0] == "indexed":
+            indexed += 1
+        elif r[0] == "failed":
+            failed += 1
+        elif r[0] == "skipped":
+            skipped += 1
 
-        version.updated_by = actor.actor_id
-        await db.commit()
-
-    return {"processed": processed, "indexed": indexed, "failed": failed, "skipped": skipped}
+    return ProcessPendingResponse(processed=processed, indexed=indexed, failed=failed, skipped=skipped)

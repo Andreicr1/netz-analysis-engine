@@ -43,26 +43,41 @@ Structure your answer as:
 - NEVER output raw chunk_ids, UUIDs, or blob paths.
 - Clean up file names: remove underscores, format dates.
 
-## Available API Domains
+## Available Capabilities
 
-### Counterparty Registry
-Manages investment counterparties and service providers scoped to a fund.
-- List/search counterparties: GET /funds/{fund_id}/counterparties
-- Create counterparty (ADMIN only): POST /funds/{fund_id}/counterparties
-- Get counterparty detail: GET /funds/{fund_id}/counterparties/{id}
-- Update counterparty (ADMIN only): PUT /funds/{fund_id}/counterparties/{id}
-- Bank account changes require four-eyes approval: the reviewer must be a \
-different user from the requester. Submitting a bank account change and \
-approving it yourself will return a 400 error.
-- Approve/reject bank account change: POST /funds/{fund_id}/counterparties/{id}/bank-account/approve
-- Document linking: POST /funds/{fund_id}/counterparties/{id}/documents
+### Deal Pipeline & Portfolio
+Manages deals in analysis and portfolio monitoring scoped to a fund.
+- List/search deals: GET /api/v1/credit/deals
+- Deal detail: GET /api/v1/credit/deals/{deal_id}
+- Portfolio overview: GET /api/v1/credit/portfolio
+- Portfolio alerts & actions: GET /api/v1/credit/portfolio/alerts
+- Dashboard aggregation: GET /api/v1/credit/dashboard
 
-### Advisor Portal
-Read-only data surface for investment advisors. \
-AI-powered Q&A about fund performance, portfolio, and documents.
-- Dashboard: GET /funds/{fund_id}/advisor/dashboard
-- Portfolio positions: GET /funds/{fund_id}/advisor/portfolio
-- AI Q&A (rate-limited 10/min): POST /funds/{fund_id}/advisor/agent/query
+### Document Management & Dataroom
+Upload, process, and search fund documents with full-text retrieval.
+- Upload documents: POST /api/v1/credit/documents/upload-url
+- List documents: GET /api/v1/credit/documents
+- Process pending documents: POST /api/v1/credit/documents/{id}/process
+- Search dataroom: GET /api/v1/credit/dataroom/search
+- Dataroom folder governance: GET /api/v1/credit/dataroom/folders
+
+### Document Processing Pipeline
+Unified pipeline processes documents through deterministic stages:
+OCR -> classification -> chunking -> extraction -> embedding -> indexing.
+- Pipeline runs emit real-time SSE progress events for each stage.
+- Extracted evidence is indexed for RAG retrieval by this agent.
+- Pipeline configuration is managed via ConfigService (not raw YAML).
+
+### IC Memos & Reporting
+AI-generated investment committee memos and reporting packs.
+- Generate IC memo: POST /api/v1/credit/deals/{deal_id}/memo
+- Report packs: GET /api/v1/credit/reporting
+- Investor statements: GET /api/v1/credit/reporting/statements
+
+### Global Agent (this agent)
+- Query: POST /api/v1/credit/agent/query
+- Performs parallel RAG retrieval across pipeline, regulatory, \
+constitution, and service provider knowledge bases.
 """
 
 GLOBAL_USER_TEMPLATE = """\

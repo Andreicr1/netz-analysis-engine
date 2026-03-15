@@ -133,6 +133,15 @@ async def process(
     metrics: dict[str, Any] = {"source": request.source}
     warnings: list[str] = []
 
+    # Register job→org ownership in Redis so the SSE endpoint can enforce
+    # tenant isolation (todo #030).
+    if request.version_id:
+        try:
+            from app.core.jobs.tracker import register_job_owner
+            await register_job_owner(str(request.version_id), str(request.org_id))
+        except Exception:
+            logger.warning("Failed to register job owner for %s", request.version_id, exc_info=True)
+
     await _emit(request.version_id, "processing", {"stage": "started"})
 
     # ── 1. Pre-filter ───────────────────────────────────────────
@@ -294,8 +303,8 @@ async def process(
     # Handle exceptions from gather
     extraction_metadata: dict[str, Any] = {}
     if isinstance(metadata_result, Exception):
-        logger.error("Metadata extraction failed: %s", metadata_result)
-        warnings.append(f"Metadata extraction failed: {metadata_result}")
+        logger.error("Metadata extraction failed: %s", metadata_result, exc_info=True)
+        warnings.append("Metadata extraction failed")
     else:
         extraction_metadata = {
             "dates": metadata_result.dates,
@@ -307,8 +316,8 @@ async def process(
 
     summary_text = ""
     if isinstance(summary_result, Exception):
-        logger.error("Summarization failed: %s", summary_result)
-        warnings.append(f"Summarization failed: {summary_result}")
+        logger.error("Summarization failed: %s", summary_result, exc_info=True)
+        warnings.append("Summarization failed")
     else:
         summary_text = summary_result.summary
 
