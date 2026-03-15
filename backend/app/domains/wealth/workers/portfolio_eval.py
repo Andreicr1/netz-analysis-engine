@@ -212,7 +212,17 @@ async def evaluate_profile(
         cvar = 0.0
         regime_result = detect_regime(np.array([]))
 
-    breach = await check_breach_status(db, profile, cvar, config=config)
+    # Pre-fetch consecutive breach days from last snapshot
+    prev_breach_stmt = (
+        select(PortfolioSnapshot.consecutive_breach_days)
+        .where(PortfolioSnapshot.profile == profile)
+        .order_by(PortfolioSnapshot.snapshot_date.desc())
+        .limit(1)
+    )
+    prev_result = await db.execute(prev_breach_stmt)
+    prev_breach_days = prev_result.scalar_one_or_none() or 0
+
+    breach = check_breach_status(profile, cvar, consecutive_breach_days=prev_breach_days, config=config)
 
     if breach.trigger_status in ("warning", "breach"):
         await _publish_alert(profile, breach)

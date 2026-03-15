@@ -4,6 +4,8 @@ Scores funds using externalized weights. Each fund gets a composite
 manager_score (0-100) based on risk-adjusted metrics.
 
 Config is injected as parameter by callers via ConfigService.get("liquid_funds", "scoring").
+
+Note: imports FundRiskMetrics from app.domains.wealth — wealth-vertical-specific dependency.
 """
 
 import structlog

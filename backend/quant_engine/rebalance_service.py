@@ -6,6 +6,8 @@ Implements the rebalance cascade state machine:
 Each state transition creates a RebalanceEvent with actor_source tracking.
 
 Config is injected as parameter by callers via ConfigService.
+
+Note: imports PortfolioSnapshot, RebalanceEvent from app.domains.wealth — wealth-vertical-specific dependency.
 """
 
 import uuid

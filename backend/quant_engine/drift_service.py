@@ -7,6 +7,8 @@ Config is injected as parameter by callers via ConfigService.get("liquid_funds",
 
 Drift = actual_weight - (strategic_target + tactical_overweight)
 Intentional tactical bets are NOT flagged as drift.
+
+Note: imports StrategicAllocation, TacticalPosition, PortfolioSnapshot from app.domains.wealth — wealth-vertical-specific dependency.
 """
 
 from dataclasses import dataclass

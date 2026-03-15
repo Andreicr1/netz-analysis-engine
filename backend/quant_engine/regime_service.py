@@ -4,9 +4,13 @@ Classifies market regime using multi-signal approach:
 - VIX (from FRED VIXCLS) for volatility stress
 - Yield curve (DGS10-DGS2 spread) for recession risk
 - CPI YoY for inflation
-- Falls back to portfolio volatility proxy when FRED data unavailable
+- Falls back to caller-provided fallback_regime when FRED data unavailable
 
 Priority hierarchy: CRISIS > INFLATION > RISK_OFF > RISK_ON
+
+Sync/async boundary: Pure classification functions are sync.
+get_latest_macro_values() and get_current_regime() are async (DB access).
+Callers dispatch sync functions via asyncio.to_thread() if needed.
 
 Config is injected as parameter by callers via ConfigService.get("liquid_funds", "calibration").
 """
@@ -20,9 +24,8 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domains.wealth.models.macro import MacroData
-from app.domains.wealth.models.portfolio import PortfolioSnapshot
-from app.schemas.risk import RegimeRead
+from app.shared.models import MacroData
+from app.shared.schemas import RegimeRead
 
 logger = structlog.get_logger()
 
@@ -67,6 +70,14 @@ REGIME_DEFINITIONS: dict[str, RegimeDefinition] = {
 STALENESS_DAILY = 3
 STALENESS_MONTHLY = 45
 
+# Plausibility bounds for input validation
+_PLAUSIBILITY = {
+    "vix": (0.0, 200.0),
+    "cpi_yoy": (-10.0, 30.0),
+    "yield_curve": (-10.0, 10.0),
+    "sahm_rule": (-1.0, 5.0),
+}
+
 
 def resolve_regime_thresholds(config: dict | None = None) -> RegimeThresholds:
     """Extract regime thresholds from calibration config dict.
@@ -94,6 +105,25 @@ def resolve_regime_thresholds(config: dict | None = None) -> RegimeThresholds:
         return _DEFAULT_THRESHOLDS
 
 
+def _validate_plausibility(
+    name: str,
+    value: float | None,
+) -> float | None:
+    """Reject physically impossible values with warning log."""
+    if value is None:
+        return None
+    lo, hi = _PLAUSIBILITY.get(name, (float("-inf"), float("inf")))
+    if value < lo or value > hi:
+        logger.warning(
+            "Implausible macro value rejected",
+            signal=name,
+            value=value,
+            bounds=(lo, hi),
+        )
+        return None
+    return value
+
+
 @dataclass
 class RegimeResult:
     regime: str
@@ -117,6 +147,12 @@ def classify_regime_multi_signal(
     """
     if thresholds is None:
         thresholds = resolve_regime_thresholds(config)
+
+    # Validate plausibility
+    vix = _validate_plausibility("vix", vix)
+    yield_curve_spread = _validate_plausibility("yield_curve", yield_curve_spread)
+    cpi_yoy = _validate_plausibility("cpi_yoy", cpi_yoy)
+    sahm_rule = _validate_plausibility("sahm_rule", sahm_rule)
 
     reasons: dict[str, str] = {}
 
@@ -254,11 +290,17 @@ async def get_latest_macro_values(
 async def get_current_regime(
     db: AsyncSession,
     config: dict | None = None,
+    *,
+    fallback_regime: str = "RISK_ON",
 ) -> RegimeRead:
     """Get current market regime from FRED macro data.
 
     Args:
         config: Raw calibration config dict from ConfigService.
+        fallback_regime: Regime label to use when FRED data is unavailable.
+            Callers provide their own fallback strategy:
+            - Wealth: pre-fetches from PortfolioSnapshot.regime
+            - Credit: uses stress_severity level or defaults to "RISK_ON"
     """
     macro = await get_latest_macro_values(db)
 
@@ -283,19 +325,12 @@ async def get_current_regime(
             reasons=reasons,
         )
 
-    # Fallback: query latest snapshot for regime
-    logger.info("No FRED macro data available, falling back to snapshot regime")
-    stmt = (
-        select(PortfolioSnapshot)
-        .where(PortfolioSnapshot.regime.is_not(None))
-        .order_by(PortfolioSnapshot.snapshot_date.desc())
-        .limit(1)
+    # Fallback: caller-provided regime (no DB query for PortfolioSnapshot)
+    logger.info(
+        "No FRED macro data available, using caller-provided fallback",
+        fallback_regime=fallback_regime,
     )
-    result = await db.execute(stmt)
-    snap = result.scalar_one_or_none()
-
     return RegimeRead(
-        regime=snap.regime if snap else "RISK_ON",
-        as_of_date=snap.snapshot_date if snap else None,
-        reasons={"source": "volatility_proxy_fallback"},
+        regime=fallback_regime,
+        reasons={"source": "caller_fallback", "fallback": fallback_regime},
     )

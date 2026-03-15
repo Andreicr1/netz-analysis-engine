@@ -529,11 +529,10 @@ Wealth Portfolio Eval (portfolio_eval.py)
 
 | Item | Phase | Trigger |
 |------|-------|---------|
-| **EDGAR upgrade with edgartools** | **Phase B — NEXT** | Replace `ic_edgar_engine.py` (1561 LOC hand-rolled HTTP) with `edgartools` library. Structured financials (income/balance/CF multi-period), Form 4 insider trading signals, built-in CIK resolution. See brainstorm Phase B. **Research done:** current engine has 4-tier CIK resolution + manual XBRL; deep_review consumes via `edgar_public_filings` text in evidence pack (all 13 chapters); edgartools not in pyproject.toml yet; no existing EDGAR tests. Key files: `ic_edgar_engine.py` (1561L), `deep_review.py` (consumes at L514-566 sync, L1974-1980 async), `evidence_law.j2` (attribution rules L121-137). Multi-entity orchestration (8 entity roles) must be preserved. Non-fatal design must be maintained. |
+| Protocol interfaces for SensitivityEngine/ScenarioRunner | Phase B+ | When a second vertical needs parameter sweeps |
+| Full quant_engine decoupling (drift, scoring, rebalance, optimizer) | Phase B+ | When these services need cross-vertical reuse |
 | FRED parallel fetching with ThreadPoolExecutor | **Phase B** | Cold-start with token bucket at 2 req/s and 40+ séries = ~20s. Perceptível no SSE do Deep Review enquanto o usuário assiste o progresso. Usar `ThreadPoolExecutor(max_workers=5)` com critical séries sequenciais, non-critical em paralelo — reduz para ~6s |
-| Protocol interfaces for SensitivityEngine/ScenarioRunner | Phase C+ | When a second vertical needs parameter sweeps |
-| Full quant_engine decoupling (drift, scoring, rebalance, optimizer) | Phase C+ | When these services need cross-vertical reuse |
-| FRED revision window awareness per series | Phase C | When backtesting needs point-in-time macro data |
+| FRED revision window awareness per series | Phase B | When backtesting needs point-in-time macro data |
 | SALib Sobol indices for multi-dimensional sensitivity | Phase C | When 6+ parameter dimensions are needed |
 | Statsmodels PD/LGD models (Logit, GLM Binomial, SARIMAX) | Phase C | Statistical modeling phase |
 | Pymoo reverse stress testing | Phase C+ | "Find minimum shock that breaches CVaR limit" |

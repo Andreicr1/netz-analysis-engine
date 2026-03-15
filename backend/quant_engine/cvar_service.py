@@ -3,6 +3,10 @@
 Provides rolling CVaR computation for individual funds and portfolio-level
 CVaR evaluation with breach detection.
 
+Sync/async boundary: Pure computation functions are sync.
+check_breach_status() accepts consecutive_breach_days as parameter —
+the caller (wealth portfolio_eval) pre-fetches from PortfolioSnapshot.
+
 Config is injected as parameter by callers via ConfigService.get("liquid_funds", "portfolio_profiles").
 """
 
@@ -11,10 +15,6 @@ from typing import TypedDict
 
 import numpy as np
 import structlog
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.domains.wealth.models.portfolio import PortfolioSnapshot
 
 logger = structlog.get_logger()
 
@@ -140,15 +140,22 @@ def classify_trigger_status(
     return "ok"
 
 
-async def check_breach_status(
-    db: AsyncSession,
+def check_breach_status(
     profile: str,
     cvar_current: float,
+    consecutive_breach_days: int = 0,
     config: dict | None = None,
 ) -> BreachStatus:
     """Check breach status for a profile given current CVaR.
 
+    Pure function — no DB access. Caller pre-fetches consecutive_breach_days
+    from PortfolioSnapshot (or provides 0 for first evaluation).
+
     Args:
+        profile: Portfolio profile name (conservative/moderate/growth).
+        cvar_current: Current CVaR value (negative number = loss).
+        consecutive_breach_days: Previous consecutive days in breach state.
+            Caller fetches from PortfolioSnapshot.consecutive_breach_days.
         config: portfolio_profiles config dict from ConfigService.
                Falls back to hardcoded defaults if None.
     """
@@ -158,25 +165,14 @@ async def check_breach_status(
 
     utilization = get_cvar_utilization(cvar_current, cvar_limit)
 
-    # Get previous consecutive breach days from last snapshot
-    stmt = (
-        select(PortfolioSnapshot.consecutive_breach_days)
-        .where(PortfolioSnapshot.profile == profile)
-        .order_by(PortfolioSnapshot.snapshot_date.desc())
-        .limit(1)
-    )
-    result = await db.execute(stmt)
-    row = result.scalar_one_or_none()
-    prev_days = row if row is not None else 0
-
     if utilization >= 100.0:
-        consecutive_days = prev_days + 1
+        new_consecutive = consecutive_breach_days + 1
     else:
-        consecutive_days = 0
+        new_consecutive = 0
 
     trigger = classify_trigger_status(
         utilization,
-        consecutive_days,
+        new_consecutive,
         warning_threshold_pct=profile_config["warning_pct"] * 100,
         breach_consecutive_days=profile_config["breach_days"],
     )
@@ -186,5 +182,5 @@ async def check_breach_status(
         cvar_current=cvar_current,
         cvar_limit=cvar_limit,
         cvar_utilized_pct=utilization,
-        consecutive_breach_days=consecutive_days,
+        consecutive_breach_days=new_consecutive,
     )
