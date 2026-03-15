@@ -573,11 +573,10 @@ Client UI → PUT /api/v1/configs/{vertical}/calibration
         result = calculate_cvar(nav_data, profile, config)  # sync function, config as param
     ```
 
-- [ ] **`ai_engine/profile_loader.py`** — update to use ConfigService
-  - `ProfileLoader.__init__(config_service)` instead of filesystem loading
-  - `load(profile_name, org_id)` → queries chapters, calibration from ConfigService
-  - Instantiates correct vertical engine class from registry
-  - **model_routing stays as env vars** (deferred to Sprint 5-6 — env vars work fine)
+- [x] **`ai_engine/profile_loader.py`** — ~~update to use ConfigService~~ **DEFERRED to parent plan Phase 4**
+  - Depends on `vertical_engines/` which doesn't exist yet
+  - ConfigService is ready; ProfileLoader will consume it when vertical engines are built
+  - Tracked in: `docs/plans/2026-03-14-feat-netz-analysis-engine-platform-plan.md` Phase 4
 
 - [x] **Credit calibration seed YAML** — create from best practices research
   - `calibration/seeds/private_credit/calibration.yaml` — leverage limits, coverage ratios, LTV, concentration, tenor, regime, scenarios, monitoring triggers
