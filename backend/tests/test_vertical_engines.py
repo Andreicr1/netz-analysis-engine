@@ -38,7 +38,7 @@ class TestCreditModuleStructure:
 
     EXPECTED_MODULES = [
         "vertical_engines.credit.deep_review",
-        "vertical_engines.credit.ic_critic_engine",
+        "vertical_engines.credit.critic",
         "vertical_engines.credit.ic_quant_engine",
         "vertical_engines.credit.market_data_engine",
         "vertical_engines.credit.sponsor_engine",
