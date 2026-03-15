@@ -449,7 +449,7 @@ def run_deal_deep_review_v4(
     )
 
     # ── Stage 4: Macro context injection (deterministic) ─────────
-    from vertical_engines.credit.market_data_engine import (
+    from vertical_engines.credit.market_data import (
         compute_macro_stress_severity,
         get_macro_snapshot,
     )
@@ -1727,7 +1727,7 @@ async def async_run_deal_deep_review_v4(
             return _gather_deal_texts(session, fund_id=fund_id, deal=deal_obj)
 
     def _get_macro_threadsafe() -> dict:
-        from vertical_engines.credit.market_data_engine import get_macro_snapshot
+        from vertical_engines.credit.market_data import get_macro_snapshot
         with SessionLocal() as session:
             return get_macro_snapshot(session, deal_geography=deal_geography)
 
@@ -1796,7 +1796,7 @@ async def async_run_deal_deep_review_v4(
 
     concentration_dict = concentration_profile.to_dict()
 
-    from vertical_engines.credit.market_data_engine import compute_macro_stress_severity
+    from vertical_engines.credit.market_data import compute_macro_stress_severity
     macro_stress = compute_macro_stress_severity(macro_snapshot)
     macro_stress_flag = macro_stress["level"] in ("MODERATE", "SEVERE")
 
