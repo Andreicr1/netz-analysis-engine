@@ -1,7 +1,7 @@
 .PHONY: check test lint typecheck architecture serve migrate migration help pipeline
 
 # ── Unified gate ──────────────────────────────────────────
-check: lint typecheck test architecture
+check: lint architecture typecheck test
 	@echo "All checks passed."
 
 # ── Python backend ────────────────────────────────────────
@@ -37,7 +37,7 @@ down:
 
 # ── Help ──────────────────────────────────────────────────
 help:
-	@echo "make check       - Full gate: lint + typecheck + test"
+	@echo "make check       - Full gate: lint + architecture + typecheck + test"
 	@echo "make test        - pytest (ARGS for extra flags)"
 	@echo "make lint        - ruff check"
 	@echo "make typecheck   - mypy"
