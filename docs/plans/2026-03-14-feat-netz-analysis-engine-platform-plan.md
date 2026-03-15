@@ -743,11 +743,11 @@ Cross-cutting AI utilities incorrectly housed in compliance were relocated to `a
   - REMOVE from ai_engine: `intelligence/` directory (moved to `vertical_engines/credit/`)
   - REMOVE from ai_engine: `prompts/intelligence/` (moved to `vertical_engines/credit/prompts/`)
   - KEEP: `prompts/extraction/`, `prompts/loader.py`, `prompts/registry.py` (extraction prompts are universal)
-- [ ] **`backend/app/services/storage_client.py`** — StorageClient implementation
+- [x] **`backend/app/services/storage_client.py`** — StorageClient implementation
   - Local filesystem backend (default, `FEATURE_ADLS_ENABLED=false`)
   - ADLS Gen2 backend (when `FEATURE_ADLS_ENABLED=true`)
   - Inject as FastAPI dependency and into workers
-- [ ] **`backend/ai_engine/profile_loader.py`** — ProfileLoader
+- [x] **`backend/ai_engine/profile_loader.py`** — ProfileLoader
   - Uses `ConfigService.get(vertical, config_type, org_id)` instead of filesystem loading
   - Cascade now handled by ConfigService (DB override → DB default → YAML fallback)
   - Instantiates correct vertical engine class from registry
