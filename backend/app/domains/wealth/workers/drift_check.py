@@ -42,8 +42,9 @@ async def run_drift_check() -> dict[str, str]:
 
         # Load config once for all profiles (worker context, no RLS)
         try:
-            from app.core.config.models import VerticalConfigDefault
             from sqlalchemy import select as sa_select
+
+            from app.core.config.models import VerticalConfigDefault
 
             cfg_result = await db.execute(
                 sa_select(VerticalConfigDefault.config).where(

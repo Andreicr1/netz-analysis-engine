@@ -8,17 +8,16 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config.config_service import ConfigService
+from app.core.config.dependencies import get_config_service
 from app.core.config.settings import settings
-from app.core.security.clerk_auth import CurrentUser, get_current_user
+from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.database import get_db
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.schemas.macro import MacroIndicators
 from app.domains.wealth.schemas.risk import CVaRPoint, CVaRStatus, RegimeHistoryPoint, RegimeRead
 from app.routers.common import VALID_PROFILES, get_latest_snapshot
 from app.routers.common import validate_profile as _validate_profile
-from app.core.config.config_service import ConfigService
-from app.core.config.dependencies import get_config_service
-from app.core.security.clerk_auth import Actor, get_actor
 from quant_engine.regime_service import get_current_regime, get_latest_macro_values
 
 logger = structlog.get_logger()

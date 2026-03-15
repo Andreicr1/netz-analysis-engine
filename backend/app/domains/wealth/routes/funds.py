@@ -6,17 +6,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config.config_service import ConfigService
+from app.core.config.dependencies import get_config_service
 from app.core.config.settings import settings
-from app.core.security.clerk_auth import CurrentUser, get_current_user
+from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.database import get_db
 from app.domains.wealth.models.fund import Fund
 from app.domains.wealth.models.nav import NavTimeseries
 from app.domains.wealth.models.risk import FundRiskMetrics
 from app.domains.wealth.schemas.fund import FundRead, NavPoint
 from app.domains.wealth.schemas.risk import FundRiskRead, FundScoreRead
-from app.core.config.config_service import ConfigService
-from app.core.config.dependencies import get_config_service
-from app.core.security.clerk_auth import Actor, get_actor
 from quant_engine.scoring_service import compute_fund_score
 from quant_engine.talib_momentum_service import (
     compute_flow_momentum,
