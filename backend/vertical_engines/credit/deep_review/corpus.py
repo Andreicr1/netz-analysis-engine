@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
-import structlog
 import uuid
 from pathlib import Path
 from typing import Any
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 

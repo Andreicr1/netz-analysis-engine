@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import structlog
 from typing import Any
+
+import structlog
 
 from ai_engine.prompts import prompt_registry
 from vertical_engines.credit.deep_review.helpers import _call_openai, _trunc  # noqa: F401

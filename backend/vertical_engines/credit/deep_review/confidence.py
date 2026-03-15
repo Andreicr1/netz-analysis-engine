@@ -36,8 +36,9 @@ See ``docs/development/CONFIDENCE_SCORING.md`` for the full weight/cap table.
 """
 from __future__ import annotations
 
-import structlog
 from typing import Any
+
+import structlog
 
 logger = structlog.get_logger()
 

@@ -5,9 +5,6 @@ package extraction and assert they remain identical AFTER the move.
 """
 from __future__ import annotations
 
-import pytest
-
-
 # ── Fixtures: known inputs for deterministic functions ─────────────────────
 
 
@@ -101,7 +98,7 @@ class TestGoldenConfidence:
     """Verify compute_underwriting_confidence deterministic output."""
 
     def test_confidence_returns_dict(self):
-        from vertical_engines.credit.deep_review_confidence import (
+        from vertical_engines.credit.deep_review.confidence import (
             compute_underwriting_confidence,
         )
 
@@ -114,7 +111,7 @@ class TestGoldenConfidence:
         assert "rationale_bullets" in result
 
     def test_confidence_score_is_deterministic(self):
-        from vertical_engines.credit.deep_review_confidence import (
+        from vertical_engines.credit.deep_review.confidence import (
             compute_underwriting_confidence,
         )
 
@@ -126,7 +123,7 @@ class TestGoldenConfidence:
 
     def test_confidence_golden_snapshot(self):
         """Exact score captured before Wave 2 — assert unchanged after move."""
-        from vertical_engines.credit.deep_review_confidence import (
+        from vertical_engines.credit.deep_review.confidence import (
             compute_underwriting_confidence,
         )
 
@@ -146,7 +143,7 @@ class TestGoldenConfidence:
 
     def test_confidence_hard_breach_caps_at_30(self):
         """Hard policy breach forces cap at 30 and LOW level."""
-        from vertical_engines.credit.deep_review_confidence import (
+        from vertical_engines.credit.deep_review.confidence import (
             compute_underwriting_confidence,
         )
 
@@ -162,7 +159,7 @@ class TestGoldenConfidence:
 
     def test_tone_adjustment_never_increases(self):
         """Post-tone adjustment can only reduce score, never increase."""
-        from vertical_engines.credit.deep_review_confidence import (
+        from vertical_engines.credit.deep_review.confidence import (
             apply_tone_normalizer_adjustment,
             compute_underwriting_confidence,
         )
@@ -183,7 +180,7 @@ class TestGoldenDecisionAnchor:
     """Verify _compute_decision_anchor deterministic output."""
 
     def test_clean_deal_invests(self):
-        from vertical_engines.credit.deep_review_policy import (
+        from vertical_engines.credit.deep_review.decision import (
             _compute_decision_anchor,
         )
 
@@ -192,7 +189,7 @@ class TestGoldenDecisionAnchor:
         assert result["icGate"] == "CLEAR"
 
     def test_hard_breach_passes(self):
-        from vertical_engines.credit.deep_review_policy import (
+        from vertical_engines.credit.deep_review.decision import (
             _compute_decision_anchor,
         )
 
@@ -206,7 +203,7 @@ class TestGoldenDecisionAnchor:
         assert result["icGate"] == "BLOCKED"
 
     def test_two_fatal_flaws_passes(self):
-        from vertical_engines.credit.deep_review_policy import (
+        from vertical_engines.credit.deep_review.decision import (
             _compute_decision_anchor,
         )
 
@@ -223,7 +220,7 @@ class TestGoldenDecisionAnchor:
         assert result["finalDecision"] == "PASS"
 
     def test_one_fatal_flaw_conditional(self):
-        from vertical_engines.credit.deep_review_policy import (
+        from vertical_engines.credit.deep_review.decision import (
             _compute_decision_anchor,
         )
 
@@ -237,7 +234,7 @@ class TestGoldenDecisionAnchor:
         assert result["finalDecision"] == "CONDITIONAL"
 
     def test_decision_is_deterministic(self):
-        from vertical_engines.credit.deep_review_policy import (
+        from vertical_engines.credit.deep_review.decision import (
             _compute_decision_anchor,
         )
 
@@ -250,7 +247,7 @@ class TestGoldenHardPolicyChecks:
     """Verify _run_hard_policy_checks deterministic output."""
 
     def test_clean_deal_no_breaches(self):
-        from vertical_engines.credit.deep_review_policy import (
+        from vertical_engines.credit.deep_review.policy import (
             _run_hard_policy_checks,
         )
 
@@ -262,7 +259,7 @@ class TestGoldenHardPolicyChecks:
         assert result["has_hard_breaches"] is False
 
     def test_hard_checks_deterministic(self):
-        from vertical_engines.credit.deep_review_policy import (
+        from vertical_engines.credit.deep_review.policy import (
             _run_hard_policy_checks,
         )
 

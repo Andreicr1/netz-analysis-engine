@@ -35,6 +35,10 @@ from vertical_engines.credit.deep_review.corpus import (
     _gather_deal_texts,
     _load_deal_context_from_blob,
 )
+from vertical_engines.credit.deep_review.decision import (
+    _compute_confidence_score,
+    _compute_decision_anchor,
+)
 from vertical_engines.credit.deep_review.helpers import (
     _async_call_openai,
     _call_openai,
@@ -51,10 +55,6 @@ from vertical_engines.credit.deep_review.policy import (
     _gather_policy_context,
     _run_hard_policy_checks,
     _run_policy_compliance,
-)
-from vertical_engines.credit.deep_review.decision import (
-    _compute_confidence_score,
-    _compute_decision_anchor,
 )
 from vertical_engines.credit.deep_review.prompts import (
     _build_deal_review_prompt_v2,
@@ -949,6 +949,7 @@ def run_deal_deep_review_v4(
             # Update DB chapter records with normalised text
             if tone_result.get("chapters"):
                 from sqlalchemy import update as _sa_update
+
                 from app.domains.credit.modules.ai.models import MemoChapter as _MemoChapter
 
                 for _ch_tag, _revised in tone_result["chapters"].items():

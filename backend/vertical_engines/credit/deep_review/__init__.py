@@ -31,13 +31,23 @@ from vertical_engines.credit.deep_review.confidence import (
 if TYPE_CHECKING:
     from vertical_engines.credit.deep_review.portfolio import (
         get_current_im_draft as get_current_im_draft,
+    )
+    from vertical_engines.credit.deep_review.portfolio import (
         run_all_portfolio_reviews as run_all_portfolio_reviews,
+    )
+    from vertical_engines.credit.deep_review.portfolio import (
         run_portfolio_review as run_portfolio_review,
     )
     from vertical_engines.credit.deep_review.service import (
         async_run_all_deals_deep_review_v4 as async_run_all_deals_deep_review_v4,
+    )
+    from vertical_engines.credit.deep_review.service import (
         async_run_deal_deep_review_v4 as async_run_deal_deep_review_v4,
+    )
+    from vertical_engines.credit.deep_review.service import (
         run_all_deals_deep_review_v4 as run_all_deals_deep_review_v4,
+    )
+    from vertical_engines.credit.deep_review.service import (
         run_deal_deep_review_v4 as run_deal_deep_review_v4,
     )
 
