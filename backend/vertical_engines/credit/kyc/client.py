@@ -1,17 +1,15 @@
 """KYC Spider API client.
 
-Relocated from app.domains.credit.compliance.kyc.client after the
-compliance domain was removed from scope. Used by kyc_pipeline_screening
-for automated KYC/AML checks during deep review.
+Imports only from stdlib + httpx. No sibling imports.
 """
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 import httpx
+import structlog
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 class KYCSpiderClient:
@@ -89,5 +87,5 @@ class KYCSpiderClient:
             }
 
         except Exception as exc:
-            logger.error("KYCSpiderClient.screen_customer failed: %s", exc)
+            logger.error("kyc_spider_screen_failed", error=str(exc))
             raise
