@@ -357,12 +357,12 @@ def run_deal_deep_review_v4(
         load_cached_artifact_v4,
     )
     from ai_engine.portfolio.concentration_engine import compute_concentration
-    from vertical_engines.credit.ic_critic_engine import critique_intelligence
     from vertical_engines.credit.edgar import (
         build_edgar_multi_entity_context,
         extract_searchable_entities,
         fetch_edgar_multi_entity,
     )
+    from vertical_engines.credit.ic_critic_engine import critique_intelligence
     from vertical_engines.credit.ic_quant_engine import compute_quant_profile
     from vertical_engines.credit.memo_book_generator import generate_memo_book
     from vertical_engines.credit.memo_evidence_pack import (
@@ -1639,14 +1639,14 @@ async def async_run_deal_deep_review_v4(
         load_cached_artifact_v4,
     )
     from ai_engine.portfolio.concentration_engine import compute_concentration
-    from vertical_engines.credit.ic_critic_engine import (
-        _classify_instrument_type,
-        critique_intelligence,
-    )
     from vertical_engines.credit.edgar import (
         build_edgar_multi_entity_context,
         extract_searchable_entities,
         fetch_edgar_multi_entity,
+    )
+    from vertical_engines.credit.ic_critic_engine import (
+        _classify_instrument_type,
+        critique_intelligence,
     )
     from vertical_engines.credit.ic_quant_engine import compute_quant_profile
     from vertical_engines.credit.memo_book_generator import async_generate_memo_book

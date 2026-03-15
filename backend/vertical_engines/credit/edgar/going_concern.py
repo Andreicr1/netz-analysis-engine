@@ -83,8 +83,14 @@ def _classify_context(text_window: str) -> GoingConcernVerdict:
 
 def check_going_concern(
     company: Any,  # edgar.Company — typed as Any to avoid import at module level
+    *,
+    filing: Any | None = None,
 ) -> dict[str, Any] | None:
     """Scan latest 10-K for going concern language.
+
+    Args:
+        filing: Pre-fetched latest 10-K filing. When provided, skip
+            ``company.get_filings()`` call to avoid duplicate SEC requests.
 
     Uses edgartools filing.text() for document retrieval.
     Never raises — returns None on failure.
@@ -97,8 +103,9 @@ def check_going_concern(
         accession: str
     """
     try:
-        filings = company.get_filings(form="10-K")
-        filing = filings.latest() if filings else None
+        if filing is None:
+            filings = company.get_filings(form="10-K")
+            filing = filings.latest() if filings else None
         if not filing:
             return None
 

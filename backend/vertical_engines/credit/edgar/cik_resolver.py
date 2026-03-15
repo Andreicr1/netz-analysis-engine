@@ -115,7 +115,7 @@ def _resolve_via_edgartools(
         if results:
             best = results[0]
             similarity = fuzz.ratio(entity_name.lower(), best.name.lower()) / 100.0
-            if similarity >= 0.70:
+            if similarity >= 0.85:
                 cik = str(best.cik).zfill(10)
                 logger.debug(
                     "cik_resolved",
@@ -146,7 +146,8 @@ def _resolve_via_edgartools(
 
 # ── Blob index fallback ──────────────────────────────────────────
 
-# Module-level cache — plain dict (not asyncio primitive), safe at module level
+# Module-level cache — plain dict (not asyncio primitive), safe at module level.
+# Benign race: worst case is redundant blob download; dict assignment is GIL-atomic.
 _INDEX_CACHE: dict[str, Any] | None = None
 
 

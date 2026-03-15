@@ -11,6 +11,7 @@ Key invariants:
 from __future__ import annotations
 
 import dataclasses
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
@@ -29,9 +30,35 @@ from vertical_engines.credit.edgar.models import EdgarEntityResult
 
 logger = structlog.get_logger()
 
+# SEC requires a descriptive User-Agent on all EDGAR requests
+_SEC_USER_AGENT = "Netz Analysis Engine tech@netzco.com"
+
 # SIC codes for metric type routing
 _AM_PLATFORM_SIC_CODES = {"6282", "6726", "6199"}
 _INVESTMENT_SIC_CODES = {"6726", "6798", "6199", "6770"}
+
+
+def _check_distributed_rate(max_per_second: int = 8) -> None:
+    """Redis-based distributed rate check for SEC EDGAR compliance.
+
+    Sliding window counter: key = edgar:rate:{current_second}, TTL = 2s.
+    If counter exceeds max_per_second, sleep until next second.
+    Falls back silently if Redis is unavailable.
+    """
+    try:
+        import redis
+
+        from app.core.config.settings import settings
+
+        r = redis.from_url(settings.redis_url, decode_responses=True)
+        key = f"edgar:rate:{int(time.time())}"
+        count = r.incr(key)
+        if count == 1:
+            r.expire(key, 2)
+        if count > max_per_second:
+            time.sleep(1.0)  # Wait for next second window
+    except Exception:
+        pass  # Fall back to edgartools-only rate limiting
 
 
 def fetch_edgar_data(
@@ -41,14 +68,22 @@ def fetch_edgar_data(
     ticker: str | None = None,
     role: str = "unknown",
     is_direct_target: bool = False,
+    pre_resolved_cik: str | None = None,
 ) -> dict[str, Any]:
     """Fetch EDGAR data for a single entity. Never raises.
+
+    Args:
+        pre_resolved_cik: When provided, skip CIK resolution and use this
+            value directly. Used by fetch_edgar_multi_entity() to avoid
+            redundant resolution after Phase 1 dedup.
 
     Returns dict with keys:
         status, cik, matched_name, entity_metadata, financial_metrics,
         metrics_type, going_concern, form_d, warnings, lookup_entity,
         resolution_method, resolution_confidence
     """
+    _check_distributed_rate()
+
     result = EdgarEntityResult(
         entity_name=entity_name,
         role=role,
@@ -58,32 +93,37 @@ def fetch_edgar_data(
     warnings: list[str] = []
 
     # ── CIK Resolution ──
-    cik_result = resolve_cik(entity_name, ticker)
-    result.cik = cik_result.cik
-    result.company_name = cik_result.company_name
-    result.resolution_method = cik_result.method
-    result.resolution_confidence = cik_result.confidence
+    if pre_resolved_cik is not None:
+        result.cik = pre_resolved_cik
+        result.resolution_method = "pre_resolved"
+        result.resolution_confidence = 1.0
+    else:
+        cik_result = resolve_cik(entity_name, ticker)
+        result.cik = cik_result.cik
+        result.company_name = cik_result.company_name
+        result.resolution_method = cik_result.method
+        result.resolution_confidence = cik_result.confidence
 
-    if not cik_result.cik:
+        if cik_result.confidence < 0.7 and cik_result.cik:
+            warnings.append(
+                f"Low confidence CIK match ({cik_result.confidence:.0%}): "
+                f"'{entity_name}' matched to '{cik_result.company_name}'"
+            )
+
+    if not result.cik:
         # Try Form D search as last resort
         form_d = _search_form_d(entity_name)
         if form_d:
             return _to_dict(result, status="FORM_D_ONLY", warnings=warnings, form_d=form_d)
         return _to_dict(result, status="NOT_FOUND", warnings=warnings)
 
-    if cik_result.confidence < 0.7:
-        warnings.append(
-            f"Low confidence CIK match ({cik_result.confidence:.0%}): "
-            f"'{entity_name}' matched to '{cik_result.company_name}'"
-        )
-
     # ── Company metadata + financial extraction ──
     try:
         from edgar import Company
 
-        company = Company(int(cik_result.cik))
+        company = Company(int(result.cik))
         if company.not_found:
-            warnings.append(f"Company not found for CIK {cik_result.cik}")
+            warnings.append(f"Company not found for CIK {result.cik}")
             return _to_dict(result, status="NOT_FOUND", warnings=warnings)
 
         result.company_name = company.name
@@ -95,9 +135,19 @@ def fetch_edgar_data(
         is_am = sic in _AM_PLATFORM_SIC_CODES
         is_investment = sic in _INVESTMENT_SIC_CODES
 
+        # Fetch 10-K filings once — shared by financials + going concern
+        ten_k_filings = None
+        try:
+            ten_k_filings = company.get_filings(form="10-K", amendments=False)
+        except Exception as exc:
+            warnings.append(f"10-K filings fetch failed: {type(exc).__name__}")
+            logger.warning("ten_k_fetch_failed", entity=entity_name, exc_info=True)
+
         # Structured financials
         try:
-            result.financials = extract_structured_financials(company)
+            result.financials = extract_structured_financials(
+                company, filings=ten_k_filings,
+            )
             if result.financials and result.financials.balance_sheet:
                 result.financials.ratios = calculate_ratios(result.financials)
         except Exception as exc:
@@ -114,9 +164,15 @@ def fetch_edgar_data(
             warnings.append(f"Metric extraction failed: {type(exc).__name__}")
             logger.warning("metrics_failed", entity=entity_name, exc_info=True)
 
-        # Going concern
+        # Going concern — pass latest 10-K filing to avoid re-fetching
+        latest_10k = None
+        if ten_k_filings:
+            try:
+                latest_10k = ten_k_filings.latest()
+            except Exception:
+                pass
         try:
-            result.going_concern = check_going_concern(company)
+            result.going_concern = check_going_concern(company, filing=latest_10k)
         except Exception as exc:
             warnings.append(f"Going concern scan failed: {type(exc).__name__}")
             logger.warning("going_concern_failed", entity=entity_name, exc_info=True)
@@ -136,7 +192,7 @@ def fetch_edgar_data(
         logger.warning(
             "edgar_lookup_failed",
             entity=entity_name,
-            cik=cik_result.cik,
+            cik=result.cik,
             exc_info=True,
         )
 
@@ -182,20 +238,21 @@ def fetch_edgar_multi_entity(
             seen_ciks.add(cik)
         resolved.append((entity, cik))
 
-    # Phase 2: Fetch data in parallel
-    def _fetch_one(entity: dict[str, Any]) -> dict[str, Any]:
+    # Phase 2: Fetch data in parallel (pass pre-resolved CIK to skip re-resolution)
+    def _fetch_one(entity: dict[str, Any], cik: str | None) -> dict[str, Any]:
         return fetch_edgar_data(
             entity_name=entity["name"],
             instrument_type=instrument_type,
             ticker=entity.get("ticker"),
             role=entity["role"],
             is_direct_target=entity.get("is_direct_target", False),
+            pre_resolved_cik=cik,
         )
 
     with ThreadPoolExecutor(max_workers=3, thread_name_prefix="edgar") as pool:
         future_to_entity = {
-            pool.submit(_fetch_one, entity): entity
-            for entity, _ in resolved
+            pool.submit(_fetch_one, entity, cik): entity
+            for entity, cik in resolved
         }
         for future in as_completed(future_to_entity):
             entity = future_to_entity[future]
@@ -308,7 +365,7 @@ def _search_form_d(entity_name: str) -> dict[str, Any] | None:
             "startdt": "2020-01-01",
         }
         headers = {
-            "User-Agent": "Netz Analysis Engine tech@netzco.com",
+            "User-Agent": _SEC_USER_AGENT,
             "Accept-Encoding": "gzip, deflate",
         }
         resp = httpx.get(url, params=params, headers=headers, timeout=20.0)

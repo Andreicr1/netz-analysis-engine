@@ -19,7 +19,7 @@ Sync service — dispatched via asyncio.to_thread().
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import structlog
@@ -65,7 +65,7 @@ def _detect_signals_impl(
     lookback_days: int,
 ) -> list[InsiderSignal]:
     """Internal implementation — may raise."""
-    cutoff = datetime.now() - timedelta(days=lookback_days)
+    cutoff = datetime.now(UTC) - timedelta(days=lookback_days)
     cutoff_str = cutoff.strftime("%Y-%m-%d")
     entity_name = getattr(company, "name", "Unknown")
 
@@ -186,7 +186,7 @@ def _check_net_selling(
     threshold: float = 0.10,
 ) -> None:
     """Detect aggregate insider net selling > threshold of holdings in window."""
-    today = datetime.now().isoformat()[:10]
+    today = datetime.now(UTC).date().isoformat()
     window_cutoff = _add_days_str(today, -window_days)
 
     for insider, txns in insider_txns.items():
@@ -259,7 +259,7 @@ def _check_cluster_selling(
                 transactions=window_sells[:10],
                 aggregate_value=agg_value,
                 period_days=window_days,
-                detected_at=datetime.now().isoformat()[:10],
+                detected_at=datetime.now(UTC).date().isoformat(),
             ))
             break  # One cluster signal is sufficient
 
@@ -301,7 +301,7 @@ def _check_executive_sales(
                 transactions=sells[:10],
                 aggregate_value=agg_value,
                 period_days=365,
-                detected_at=datetime.now().isoformat()[:10],
+                detected_at=datetime.now(UTC).date().isoformat(),
             ))
 
 

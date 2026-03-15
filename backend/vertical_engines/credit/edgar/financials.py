@@ -82,8 +82,16 @@ def _statement_df_to_dicts(df: Any) -> list[dict[str, Any]]:
     return periods
 
 
-def extract_structured_financials(company: Any) -> FinancialStatements:
+def extract_structured_financials(
+    company: Any,
+    *,
+    filings: Any | None = None,
+) -> FinancialStatements:
     """Extract multi-period income/balance/CF from XBRL filings.
+
+    Args:
+        filings: Pre-fetched 10-K filings. When provided, skip
+            ``company.get_filings()`` call to avoid duplicate SEC requests.
 
     Primary: XBRLS.from_filings() for multi-period stitching.
     Fallback: EntityFacts for BDCs with custom taxonomies.
@@ -99,7 +107,8 @@ def extract_structured_financials(company: Any) -> FinancialStatements:
         return result
 
     try:
-        filings = company.get_filings(form="10-K", amendments=False)
+        if filings is None:
+            filings = company.get_filings(form="10-K", amendments=False)
         if not filings:
             return result
         filings = filings.head(5)
