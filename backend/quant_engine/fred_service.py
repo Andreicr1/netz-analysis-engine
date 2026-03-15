@@ -357,9 +357,9 @@ class FredService:
         but all threads share the same TokenBucketRateLimiter — the global
         FRED rate limit (2 req/s) is respected across all threads.
 
-        This reduces wall-clock time from ~23s (sequential) to ~6s (4 domains
-        in parallel) because threads sleep on rate-limiter acquisition rather
-        than blocking the main thread serially.
+        With 45 series at 2 req/s (after initial 10-token burst), realistic
+        wall-clock time is ~18s.  Threading overlaps network latency with
+        rate-limiter waits and prevents one slow domain from blocking others.
 
         Args:
             domain_batches: Mapping of domain name to list of series configs.

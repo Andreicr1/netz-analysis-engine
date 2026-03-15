@@ -150,7 +150,7 @@ async def run_macro_ingestion(
             macro_rows = _obs_to_macro_data_rows(raw_observations)
             if macro_rows:
                 # Batch in chunks to avoid oversized statements
-                chunk_size = 500
+                chunk_size = 2000
                 for i in range(0, len(macro_rows), chunk_size):
                     chunk = macro_rows[i : i + chunk_size]
                     stmt = pg_insert(MacroData).values(chunk)

@@ -106,12 +106,10 @@ class TestBuildRegionalSnapshot:
             obs, as_of=date(2026, 3, 15), config=custom_config,
         )
 
-        # Different weights should produce different composite scores
-        # (at least for US which has all 6 dimensions)
-        assert custom_result["regions"]["US"]["composite_score"] != \
-               default_result["regions"]["US"]["composite_score"] or True
-        # Note: with uniform synthetic data, scores might coincide.
-        # The important thing is no errors.
+        # Both snapshots should produce valid scores without errors
+        for result in (default_result, custom_result):
+            us_score = result["regions"]["US"]["composite_score"]
+            assert 0 <= us_score <= 100
 
     def test_defaults_to_today_when_no_as_of(self):
         result = build_regional_snapshot({})

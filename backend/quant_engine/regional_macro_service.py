@@ -495,7 +495,10 @@ def score_global_indicators(
     Categories: geopolitical risk, energy stress, commodity stress, USD strength.
     Each is a percentile-rank composite of its constituent series.
     """
-    def _avg_score(series_ids: list[str], invert: bool = False) -> float:
+    # Build lookup for per-series invert flags from registry
+    _global_invert: dict[str, bool] = {s.series_id: s.invert for s in GLOBAL_SERIES}
+
+    def _avg_score(series_ids: list[str]) -> float:
         scores: list[float] = []
         for sid in series_ids:
             obs = raw_observations.get(sid, [])
@@ -503,23 +506,25 @@ def score_global_indicators(
             if len(history) == 0:
                 continue
             current = float(history[-1])
-            scores.append(percentile_rank_score(current, history, invert=invert))
+            scores.append(percentile_rank_score(
+                current, history, invert=_global_invert.get(sid, False),
+            ))
         return round(sum(scores) / len(scores), 2) if scores else 50.0
 
-    # Geopolitical: higher GPR/EPU = higher risk score
-    geopolitical = _avg_score(["GPRH", "USEPUINDXD"], invert=True)
+    # Geopolitical: GPR + EPU (both inverted per registry)
+    geopolitical = _avg_score(["GPRH", "USEPUINDXD"])
 
-    # Energy stress: higher oil/gas prices + lower reserves = higher stress
-    energy_price = _avg_score(["DCOILWTICO", "DCOILBRENTEU", "DHHNGSP"], invert=True)
-    energy_reserves = _avg_score(["WCSSTUS1", "WCESTUS1"], invert=False)
+    # Energy stress: prices (inverted) + reserves (not inverted)
+    energy_price = _avg_score(["DCOILWTICO", "DCOILBRENTEU", "DHHNGSP"])
+    energy_reserves = _avg_score(["WCSSTUS1", "WCESTUS1"])
     # Low reserves + high prices = stress
     energy_stress = round((energy_price * 0.6 + (100.0 - energy_reserves) * 0.4), 2)
 
-    # Commodity stress: higher fertilizer = stress, copper/gold are mixed
-    commodity = _avg_score(["PCOPPUSDM", "GOLDAMGBD228NLBM", "PFERTINDEXM"], invert=True)
+    # Commodity stress: per-series invert from registry
+    commodity = _avg_score(["PCOPPUSDM", "GOLDAMGBD228NLBM", "PFERTINDEXM"])
 
-    # USD strength: straight percentile
-    usd = _avg_score(["DTWEXBGS"], invert=False)
+    # USD strength: straight percentile (not inverted per registry)
+    usd = _avg_score(["DTWEXBGS"])
 
     return GlobalIndicatorsResult(
         geopolitical_risk_score=geopolitical,

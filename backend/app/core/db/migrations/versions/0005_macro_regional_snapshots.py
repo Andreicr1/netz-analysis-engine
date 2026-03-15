@@ -35,7 +35,7 @@ def upgrade() -> None:
             primary_key=True,
             server_default=sa.text("gen_random_uuid()"),
         ),
-        sa.Column("as_of_date", sa.Date, nullable=False, unique=True, index=True),
+        sa.Column("as_of_date", sa.Date, nullable=False, unique=True),
         sa.Column("data_json", sa.dialects.postgresql.JSONB, nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
@@ -102,7 +102,17 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Restore original CHECK constraints (without macro_intelligence)
+    # 1. Remove macro_intelligence rows FIRST (before narrowing CHECK constraints)
+    op.execute("""
+        DELETE FROM vertical_config_overrides
+        WHERE config_type = 'macro_intelligence'
+    """)
+    op.execute("""
+        DELETE FROM vertical_config_defaults
+        WHERE vertical = 'liquid_funds' AND config_type = 'macro_intelligence'
+    """)
+
+    # 2. Now safe to restore narrower CHECK constraints
     op.execute("""
         ALTER TABLE vertical_config_overrides
         DROP CONSTRAINT ck_overrides_config_type
@@ -129,10 +139,5 @@ def downgrade() -> None:
         ))
     """)
 
-    # Remove seed data
-    op.execute("""
-        DELETE FROM vertical_config_defaults
-        WHERE vertical = 'liquid_funds' AND config_type = 'macro_intelligence'
-    """)
-
+    # 3. Drop the table last
     op.drop_table("macro_regional_snapshots")
