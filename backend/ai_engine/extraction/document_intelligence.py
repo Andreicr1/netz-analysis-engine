@@ -572,13 +572,13 @@ async def async_run_document_intelligence(
 
 
 # ═══════════════════════════════════════════════════════════════════════
-#  Full Intelligence — Cohere Rerank + Governance + Metadata + Summary
+#  Full Intelligence — Hybrid Classifier + Governance + Metadata + Summary
 # ═══════════════════════════════════════════════════════════════════════
 
 
 @dataclass
 class FullIntelligenceResult:
-    """Combined result from Cohere classification + governance + LLM extraction."""
+    """Combined result from hybrid classification + governance + LLM extraction."""
     doc_type: str
     doc_type_score: float
     vehicle_type: str

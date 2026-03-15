@@ -340,8 +340,8 @@ class RerankResult:
 - [x] `asyncio.to_thread()` wrapping synchronous `CrossEncoder.predict()` inside the lock
 - [x] Lazy model loading with double-checked locking (not module-level)
 - [x] Numerically stable sigmoid normalization (handle both positive and negative logits)
-- [ ] `sentence-transformers>=3.0,<4.0` added to `[reranker]` optional deps in `pyproject.toml`
-- [ ] `torch>=2.2` pinned as floor dependency
+- [x] `sentence-transformers>=3.0,<4.0` added to `[reranker]` optional deps in `pyproject.toml`
+- [x] `torch>=2.2` pinned as floor dependency
 
 ##### Task 1.4: Validation Gates (`ai_engine/pipeline/validation.py`)
 
@@ -426,10 +426,10 @@ Find where Cohere Rerank is used for RAG chunk reranking (not classification) an
 - Verify IC memo quality is maintained (same chapters, similar evidence selection)
 
 **Acceptance criteria:**
-- [ ] No Cohere API calls remain anywhere in the codebase
-- [ ] `cohere_rerank.py` can be deleted
-- [ ] IC memo pipeline produces comparable evidence selection
-- [ ] No `httpx` calls to `netzai.services.ai.azure.com` Cohere endpoint
+- [x] No Cohere API calls remain anywhere in the codebase (IC memo uses Azure AI Search semantic reranker, not Cohere)
+- [x] `cohere_rerank.py` can be deleted
+- [x] IC memo pipeline produces comparable evidence selection (uses Azure AI Search reranker, unchanged)
+- [x] No `httpx` calls to `netzai.services.ai.azure.com` Cohere endpoint
 
 ##### Task 1.7: Delete `cohere_rerank.py` and Update Dependencies
 
@@ -439,8 +439,8 @@ Find where Cohere Rerank is used for RAG chunk reranking (not classification) an
 - Add `sentence-transformers>=3.0` to `[ai]` optional deps in `pyproject.toml`
 
 **Acceptance criteria:**
-- [ ] `cohere_rerank.py` deleted
-- [ ] No broken imports
+- [x] `cohere_rerank.py` deleted
+- [x] No broken imports (verified via grep)
 - [ ] `make check` passes
 
 ---

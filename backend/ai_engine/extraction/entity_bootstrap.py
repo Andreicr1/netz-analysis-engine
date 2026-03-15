@@ -1047,7 +1047,6 @@ def write_enriched(folder: Path, seed: dict, discovered: dict,
 def bootstrap_folder(
     folder: Path,
     mistral_key: str,
-    cohere_key: str,
     dry_run: bool = False,
 ) -> dict:
     logger.info("Bootstrap: %s", folder.name)
