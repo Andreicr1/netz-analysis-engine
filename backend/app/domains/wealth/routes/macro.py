@@ -8,12 +8,14 @@ Phase 2: GET /regime, GET /reviews, POST /reviews/generate,
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config.config_service import ConfigService
 from app.core.security.clerk_auth import CurrentUser, get_current_user, require_role
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.macro_committee import MacroReview
@@ -157,6 +159,7 @@ async def get_macro_snapshot(
 async def get_hierarchical_regime(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
+    org_id: UUID | None = Depends(get_org_id),
 ) -> RegimeHierarchyRead:
     """Return hierarchical regime classification: global + 4 regions.
 
@@ -164,7 +167,9 @@ async def get_hierarchical_regime(
     composition with pessimistic override for global regime.
     """
     macro = await get_latest_macro_values(db)
-    config = resolve_regional_regime_config(None)
+    config_service = ConfigService(db)
+    raw_config = await config_service.get("liquid_funds", "macro_intelligence", org_id)
+    config = resolve_regional_regime_config(raw_config)
 
     vix_val = macro.get("VIXCLS", (None, None))[0]
     cpi_val = macro.get("CPI_YOY", (None, None))[0]
@@ -207,12 +212,20 @@ async def get_hierarchical_regime(
 )
 async def list_reviews(
     limit: int = Query(default=20, le=100),
-    status_filter: str | None = Query(default=None, alias="status"),
+    offset: int = Query(default=0, ge=0),
+    status_filter: Literal["pending", "approved", "rejected"] | None = Query(
+        default=None, alias="status",
+    ),
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[MacroReviewRead]:
     """List macro committee reviews for the current organization."""
-    stmt = select(MacroReview).order_by(MacroReview.created_at.desc()).limit(limit)
+    stmt = (
+        select(MacroReview)
+        .order_by(MacroReview.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+    )
     if status_filter:
         stmt = stmt.where(MacroReview.status == status_filter)
     result = await db.execute(stmt)
