@@ -1,14 +1,14 @@
-"""Dashboard aggregate endpoints — OVP-style summaries for the Operations Dashboard.
+"""Dashboard aggregate endpoints -- OVP-style summaries for the Operations Dashboard.
 
 Endpoints:
-  GET /dashboard/portfolio-summary    → portfolio KPIs
-  GET /dashboard/pipeline-summary     → deal pipeline KPIs
-  GET /dashboard/pipeline-analytics   → stage/strategy/bubble chart data
-  GET /dashboard/macro-snapshot       → FRED macro indicators (latest)
-  GET /dashboard/macro-history        → FRED 30-day series for sparklines
-  GET /dashboard/compliance-alerts    → upcoming regulatory deadlines
-  GET /dashboard/fred-search          → FRED series search proxy (Phase 3)
-  GET /dashboard/macro-fred-multi     → multi-series FRED observations (Phase 3)
+  GET /dashboard/portfolio-summary    -> portfolio KPIs
+  GET /dashboard/pipeline-summary     -> deal pipeline KPIs
+  GET /dashboard/pipeline-analytics   -> stage/strategy/bubble chart data
+  GET /dashboard/macro-snapshot       -> FRED macro indicators (latest)
+  GET /dashboard/macro-history        -> FRED 30-day series for sparklines
+  GET /dashboard/compliance-alerts    -> upcoming regulatory deadlines
+  GET /dashboard/fred-search          -> FRED series search proxy (Phase 3)
+  GET /dashboard/macro-fred-multi     -> multi-series FRED observations (Phase 3)
 """
 from __future__ import annotations
 
@@ -24,11 +24,12 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
-from app.core.db.engine import get_db
+from app.core.security.clerk_auth import Actor, get_actor
+from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.credit.modules.ai.models import (
     DealIntelligenceProfile,
     MacroSnapshot,
@@ -89,21 +90,21 @@ def _stress_level_from_snapshot(data: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 @router.get("/portfolio-summary")
-def portfolio_summary(
+async def portfolio_summary(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
 ) -> dict[str, Any]:
     """Portfolio KPIs: AUM, active count, high-risk count, avg confidence."""
 
     # Active loans
-    loans: list[Loan] = list(
-        db.execute(
-            select(Loan).where(
-                Loan.fund_id == fund_id,
-                Loan.status == "active",
-            ),
-        ).scalars().all(),
+    result = await db.execute(
+        select(Loan).where(
+            Loan.fund_id == fund_id,
+            Loan.status == "active",
+        ),
     )
+    loans: list[Loan] = list(result.scalars().all())
 
     active_count = len(loans)
     total_principal = sum((float(ln.principal_amount or 0) for ln in loans), 0.0)
@@ -116,29 +117,24 @@ def portfolio_summary(
     else:
         aum_formatted = f"{total_principal:,.0f}"
 
-    # High-risk profiles (from approved pipeline deals that became portfolio)
-    # Approximate: risk_band in (HIGH) from DealIntelligenceProfile
-    high_risk_count = int(
-        db.execute(
-            select(func.count(DealIntelligenceProfile.id)).where(
-                DealIntelligenceProfile.fund_id == fund_id,
-                DealIntelligenceProfile.risk_band.in_(["HIGH", "High"]),
-            ),
-        ).scalar_one_or_none()
-        or 0,
+    # High-risk profiles
+    hr_result = await db.execute(
+        select(func.count(DealIntelligenceProfile.id)).where(
+            DealIntelligenceProfile.fund_id == fund_id,
+            DealIntelligenceProfile.risk_band.in_(["HIGH", "High"]),
+        ),
     )
+    high_risk_count = int(hr_result.scalar_one_or_none() or 0)
 
     # Avg confidence from research_output.deal_overview.confidence_score
-    # Compute a rough average by scanning READY deals
-    ready_deals: list[PipelineDeal] = list(
-        db.execute(
-            select(PipelineDeal).where(
-                PipelineDeal.fund_id == fund_id,
-                PipelineDeal.intelligence_status == "READY",
-                PipelineDeal.is_archived.is_(False),
-            ),
-        ).scalars().all(),
+    ready_result = await db.execute(
+        select(PipelineDeal).where(
+            PipelineDeal.fund_id == fund_id,
+            PipelineDeal.intelligence_status == "READY",
+            PipelineDeal.is_archived.is_(False),
+        ),
     )
+    ready_deals: list[PipelineDeal] = list(ready_result.scalars().all())
 
     confidence_scores: list[float] = []
     for deal in ready_deals:
@@ -169,20 +165,20 @@ def portfolio_summary(
 # ---------------------------------------------------------------------------
 
 @router.get("/pipeline-summary")
-def pipeline_summary(
+async def pipeline_summary(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
 ) -> dict[str, Any]:
     """Deal pipeline KPIs: totals, AI-ready, pending IC, converted QTD."""
 
-    all_active: list[PipelineDeal] = list(
-        db.execute(
-            select(PipelineDeal).where(
-                PipelineDeal.fund_id == fund_id,
-                PipelineDeal.is_archived.is_(False),
-            ),
-        ).scalars().all(),
+    result = await db.execute(
+        select(PipelineDeal).where(
+            PipelineDeal.fund_id == fund_id,
+            PipelineDeal.is_archived.is_(False),
+        ),
     )
+    all_active: list[PipelineDeal] = list(result.scalars().all())
 
     total_count = len(all_active)
     analysis_ready = sum(1 for d in all_active if d.intelligence_status == "READY")
@@ -192,13 +188,13 @@ def pipeline_summary(
     )
 
     # Converted this quarter
-    now = dt.datetime.utcnow()
-    quarter_start = dt.datetime(now.year, ((now.month - 1) // 3) * 3 + 1, 1)
+    now = dt.datetime.now(dt.UTC)
+    quarter_start = dt.datetime(now.year, ((now.month - 1) // 3) * 3 + 1, 1, tzinfo=dt.UTC)
     converted_qtd = sum(
         1 for d in all_active
         if d.approved_deal_id is not None
         and d.approved_at is not None
-        and d.approved_at.replace(tzinfo=None) >= quarter_start
+        and d.approved_at.replace(tzinfo=None) >= quarter_start.replace(tzinfo=None)
     )
 
     return {
@@ -214,22 +210,25 @@ def pipeline_summary(
 # ---------------------------------------------------------------------------
 
 @router.get("/macro-snapshot")
-def macro_snapshot(
-    fund_id: uuid.UUID,  # noqa: ARG001 — required for fund_router path prefix
-    db: Session = Depends(get_db),
+async def macro_snapshot(
+    fund_id: uuid.UUID,  # noqa: ARG001 -- required for fund_router path prefix
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
 ) -> dict[str, Any]:
     """Latest FRED macro indicators from cached MacroSnapshot."""
 
     today = dt.date.today()
-    row: MacroSnapshot | None = db.execute(
+    result = await db.execute(
         select(MacroSnapshot).where(MacroSnapshot.as_of_date == today),
-    ).scalar_one_or_none()
+    )
+    row: MacroSnapshot | None = result.scalar_one_or_none()
 
     # Fallback: most recent available snapshot
     if row is None:
-        row = db.execute(
+        result = await db.execute(
             select(MacroSnapshot).order_by(MacroSnapshot.as_of_date.desc()).limit(1),
-        ).scalar_one_or_none()
+        )
+        row = result.scalar_one_or_none()
 
     if row is None:
         return {
@@ -261,24 +260,24 @@ def macro_snapshot(
 # ---------------------------------------------------------------------------
 
 @router.get("/compliance-alerts")
-def compliance_alerts(
+async def compliance_alerts(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
 ) -> dict[str, Any]:
     """Upcoming regulatory deadlines extracted from deal research_output.compliance."""
 
     today = dt.date.today()
     days_ahead = 90  # look-ahead window
 
-    ready_deals: list[PipelineDeal] = list(
-        db.execute(
-            select(PipelineDeal).where(
-                PipelineDeal.fund_id == fund_id,
-                PipelineDeal.intelligence_status == "READY",
-                PipelineDeal.is_archived.is_(False),
-            ),
-        ).scalars().all(),
+    result = await db.execute(
+        select(PipelineDeal).where(
+            PipelineDeal.fund_id == fund_id,
+            PipelineDeal.intelligence_status == "READY",
+            PipelineDeal.is_archived.is_(False),
+        ),
     )
+    ready_deals: list[PipelineDeal] = list(result.scalars().all())
 
     upcoming: list[dict[str, Any]] = []
 
@@ -339,28 +338,28 @@ def _parse_return(raw: str | None) -> float | None:
 
 
 @router.get("/pipeline-analytics")
-def pipeline_analytics(
+async def pipeline_analytics(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
 ) -> dict[str, Any]:
-    deals: list[PipelineDeal] = list(
-        db.execute(
-            select(PipelineDeal).where(
-                PipelineDeal.fund_id == fund_id,
-                PipelineDeal.is_archived.is_(False),
-            ),
-        ).scalars().all(),
+    result = await db.execute(
+        select(PipelineDeal).where(
+            PipelineDeal.fund_id == fund_id,
+            PipelineDeal.is_archived.is_(False),
+        ),
     )
+    deals: list[PipelineDeal] = list(result.scalars().all())
 
     profiles: dict[uuid.UUID, DealIntelligenceProfile] = {}
     if deals:
         deal_ids = [d.id for d in deals]
-        rows = db.execute(
+        p_result = await db.execute(
             select(DealIntelligenceProfile).where(
                 DealIntelligenceProfile.deal_id.in_(deal_ids),
             ),
-        ).scalars().all()
-        for p in rows:
+        )
+        for p in p_result.scalars().all():
             profiles[p.deal_id] = p
 
     stage_counts: dict[str, int] = defaultdict(int)
@@ -417,7 +416,7 @@ def pipeline_analytics(
             "totalTicket": agg["totalTicket"],
         })
 
-    # IC Status Breakdown — mutually exclusive categories
+    # IC Status Breakdown -- mutually exclusive categories
     ic_counts: dict[str, int] = defaultdict(int)
     for deal in deals:
         stage_raw = (deal.stage or deal.lifecycle_stage or "").lower().strip()
@@ -457,20 +456,23 @@ _SERIES_MAP = {
 
 
 @router.get("/macro-history")
-def macro_history(
+async def macro_history(
     fund_id: uuid.UUID,  # noqa: ARG001
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
 ) -> dict[str, Any]:
     today = dt.date.today()
-    row: MacroSnapshot | None = db.execute(
+    result = await db.execute(
         select(MacroSnapshot).where(MacroSnapshot.as_of_date == today),
-    ).scalar_one_or_none()
+    )
+    row: MacroSnapshot | None = result.scalar_one_or_none()
     if row is None:
-        row = db.execute(
+        result = await db.execute(
             select(MacroSnapshot).order_by(MacroSnapshot.as_of_date.desc()).limit(1),
-        ).scalar_one_or_none()
+        )
+        row = result.scalar_one_or_none()
 
-    result: dict[str, list[dict[str, Any]]] = {
+    macro_result: dict[str, list[dict[str, Any]]] = {
         "treasury10y": [],
         "baaSpread": [],
         "yieldCurve": [],
@@ -479,14 +481,14 @@ def macro_history(
     }
 
     if row is None:
-        return result
+        return macro_result
 
     data = row.data_json or {}
 
     for key, (module, series_id) in _SERIES_MAP.items():
         block = (data.get(module) or {}).get(series_id) or {}
         points = block.get("series") or []
-        result[key] = [{"date": p["date"], "value": p["value"]} for p in points[:30] if p.get("value") is not None]
+        macro_result[key] = [{"date": p["date"], "value": p["value"]} for p in points[:30] if p.get("value") is not None]
 
     dgs10_block = (data.get("rates_spreads") or {}).get("DGS10") or {}
     dgs2_block = (data.get("rates_spreads") or {}).get("DGS2") or {}
@@ -496,22 +498,23 @@ def macro_history(
     for d in sorted(dgs10_pts.keys(), reverse=True)[:30]:
         if d in dgs2_pts:
             curve_pts.append({"date": d, "value": round(dgs10_pts[d] - dgs2_pts[d], 4)})
-    result["yieldCurve"] = curve_pts
+    macro_result["yieldCurve"] = curve_pts
 
-    return result
+    return macro_result
 
 
 # ---------------------------------------------------------------------------
-#  FRED Series Proxy — hides API key from frontend
+#  FRED Series Proxy -- hides API key from frontend
 # ---------------------------------------------------------------------------
 
 @router.get("/macro-fred-series")
-def macro_fred_series(
-    fund_id: uuid.UUID,  # noqa: ARG001 — required for fund_router path prefix
+async def macro_fred_series(
+    fund_id: uuid.UUID,  # noqa: ARG001 -- required for fund_router path prefix
+    actor: Actor = Depends(get_actor),
     series_id: str = "DGS10",
     period: str = "1Y",
 ) -> dict[str, Any]:
-    """Proxy to FRED API — hides the API key from the frontend bundle."""
+    """Proxy to FRED API -- hides the API key from the frontend bundle."""
     import requests as http_requests
 
     from app.core.config.settings import settings
@@ -565,10 +568,10 @@ def macro_fred_series(
 
 
 # ---------------------------------------------------------------------------
-#  FRED Search Proxy — server-side cached series search
+#  FRED Search Proxy -- server-side cached series search
 # ---------------------------------------------------------------------------
 
-# Simple in-memory cache: key → (expire_time, data)
+# Simple in-memory cache: key -> (expire_time, data)
 _fred_cache: dict[str, tuple[float, Any]] = {}
 _fred_cache_lock = threading.Lock()
 _FRED_CACHE_MAX_SIZE = 500
@@ -603,8 +606,9 @@ def _cache_set(key: str, value: Any, ttl: int) -> None:
 
 
 @router.get("/fred-search")
-def fred_search(
-    fund_id: uuid.UUID,  # noqa: ARG001 — required for fund_router path prefix
+async def fred_search(
+    fund_id: uuid.UUID,  # noqa: ARG001 -- required for fund_router path prefix
+    actor: Actor = Depends(get_actor),
     q: str = Query(..., min_length=2, max_length=100),
     limit: int = Query(default=20, le=50),
 ) -> dict[str, Any]:
@@ -659,7 +663,7 @@ def fred_search(
 
 
 # ---------------------------------------------------------------------------
-#  Multi-series FRED observations — up to 4 series in one call
+#  Multi-series FRED observations -- up to 4 series in one call
 # ---------------------------------------------------------------------------
 
 def _fetch_fred_observations(
@@ -704,12 +708,13 @@ def _fetch_fred_observations(
 
 
 @router.get("/macro-fred-multi")
-def macro_fred_multi(
-    fund_id: uuid.UUID,  # noqa: ARG001 — required for fund_router path prefix
+async def macro_fred_multi(
+    fund_id: uuid.UUID,  # noqa: ARG001 -- required for fund_router path prefix
+    actor: Actor = Depends(get_actor),
     series_ids: str = Query(..., description="Comma-separated FRED series IDs (max 4)"),
     period: str = Query(default="1Y"),
 ) -> dict[str, Any]:
-    """Fetch observations for multiple FRED series — max 4 concurrent."""
+    """Fetch observations for multiple FRED series -- max 4 concurrent."""
     from app.core.config.settings import settings
 
     api_key = settings.FRED_API_KEY

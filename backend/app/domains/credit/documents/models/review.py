@@ -27,7 +27,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, IdMixin
+from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, IdMixin, OrganizationScopedMixin
 
 
 class ReviewStatus(str, Enum):
@@ -52,7 +52,7 @@ class ReviewPriority(str, Enum):
     URGENT = "URGENT"
 
 
-class DocumentReview(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class DocumentReview(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """A review request for a document requiring approval before execution."""
 
     __tablename__ = "document_reviews"
@@ -108,7 +108,7 @@ class DocumentReview(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     )
 
 
-class ReviewAssignment(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class ReviewAssignment(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """Assignment of a reviewer to a document review."""
 
     __tablename__ = "review_assignments"
@@ -138,7 +138,7 @@ class ReviewAssignment(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     )
 
 
-class ReviewChecklistItem(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class ReviewChecklistItem(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """A checklist item that must be verified during document review."""
 
     __tablename__ = "review_checklist_items"
@@ -170,7 +170,7 @@ class ReviewChecklistItem(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     )
 
 
-class ReviewEvent(Base, IdMixin, FundScopedMixin):
+class ReviewEvent(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin):
     """Immutable log of review lifecycle events."""
 
     __tablename__ = "review_events"

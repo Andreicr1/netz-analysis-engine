@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.audit import write_audit_event
 from app.domains.credit.portfolio.enums import AlertSeverity, AlertType, ObligationStatus
@@ -13,7 +13,7 @@ from app.domains.credit.portfolio.models.assets import PortfolioAsset
 from app.domains.credit.portfolio.models.obligations import AssetObligation
 
 
-def check_overdue_obligations(db: Session) -> int:
+async def check_overdue_obligations(db: AsyncSession) -> int:
     """Workflow loop: detect overdue obligations and generate Alerts + Actions.
 
     Auditability:
@@ -23,26 +23,28 @@ def check_overdue_obligations(db: Session) -> int:
     """
     today = date.today()
 
-    overdue = db.execute(
+    result = await db.execute(
         select(AssetObligation, PortfolioAsset.fund_id)
         .join(PortfolioAsset, PortfolioAsset.id == AssetObligation.asset_id)
         .where(
             AssetObligation.status == ObligationStatus.OPEN,
             AssetObligation.due_date < today,
         ),
-    ).all()
+    )
+    overdue = result.all()
 
     overdue_ob_ids = [ob.id for ob, _ in overdue]
     existing_alerts_map: dict = {}
     if overdue_ob_ids:
+        alerts_result = await db.execute(
+            select(Alert).where(
+                Alert.obligation_id.in_(overdue_ob_ids),
+                Alert.alert_type == AlertType.OBLIGATION_OVERDUE,
+            ),
+        )
         existing_alerts_map = {
             a.obligation_id: a
-            for a in db.execute(
-                select(Alert).where(
-                    Alert.obligation_id.in_(overdue_ob_ids),
-                    Alert.alert_type == AlertType.OBLIGATION_OVERDUE,
-                ),
-            ).scalars().all()
+            for a in alerts_result.scalars().all()
         }
 
     generated = 0
@@ -53,8 +55,8 @@ def check_overdue_obligations(db: Session) -> int:
             if ob.status != ObligationStatus.OVERDUE:
                 before = {"status": ob.status.value}
                 ob.status = ObligationStatus.OVERDUE
-                db.flush()
-                write_audit_event(
+                await db.flush()
+                await write_audit_event(
                     db=db,
                     fund_id=fund_id,
                     actor_id="system",
@@ -74,9 +76,9 @@ def check_overdue_obligations(db: Session) -> int:
             severity=AlertSeverity.HIGH,
         )
         db.add(alert)
-        db.flush()
+        await db.flush()
 
-        write_audit_event(
+        await write_audit_event(
             db=db,
             fund_id=fund_id,
             actor_id="system",
@@ -100,9 +102,9 @@ def check_overdue_obligations(db: Session) -> int:
             evidence_required=True,
         )
         db.add(action)
-        db.flush()
+        await db.flush()
 
-        write_audit_event(
+        await write_audit_event(
             db=db,
             fund_id=fund_id,
             actor_id="system",
@@ -121,9 +123,9 @@ def check_overdue_obligations(db: Session) -> int:
 
         before = {"status": ob.status.value}
         ob.status = ObligationStatus.OVERDUE
-        db.flush()
+        await db.flush()
 
-        write_audit_event(
+        await write_audit_event(
             db=db,
             fund_id=fund_id,
             actor_id="system",
@@ -138,7 +140,6 @@ def check_overdue_obligations(db: Session) -> int:
         generated += 1
 
     if generated > 0:
-        db.commit()
+        await db.commit()
 
     return generated
-

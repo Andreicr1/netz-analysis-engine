@@ -4,15 +4,16 @@ import calendar
 import json
 import uuid
 from datetime import UTC, date, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.db.audit import write_audit_event
-from app.core.db.engine import get_db
-from app.core.security.clerk_auth import require_fund_access, require_role
+from app.core.security.clerk_auth import Actor, get_actor, require_fund_access, require_role
+from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.credit.modules.ai.models import AIAnswer, AIAnswerCitation, AIQuestion
 from app.domains.credit.modules.documents.models import Document
 from app.domains.credit.reporting.enums import (
@@ -52,7 +53,7 @@ def _month_start_end(period_month: str) -> tuple[date, date]:
     return start, end
 
 
-def _snapshot_out(s: NAVSnapshot) -> dict:
+def _snapshot_out(s: NAVSnapshot) -> dict[str, Any]:
     return {
         "id": str(s.id),
         "fund_id": str(s.fund_id),
@@ -71,7 +72,7 @@ def _snapshot_out(s: NAVSnapshot) -> dict:
     }
 
 
-def _valuation_out(v: AssetValuationSnapshot) -> dict:
+def _valuation_out(v: AssetValuationSnapshot) -> dict[str, Any]:
     return {
         "id": str(v.id),
         "nav_snapshot_id": str(v.nav_snapshot_id),
@@ -85,7 +86,7 @@ def _valuation_out(v: AssetValuationSnapshot) -> dict:
     }
 
 
-def _pack_out(p: MonthlyReportPack) -> dict:
+def _pack_out(p: MonthlyReportPack) -> dict[str, Any]:
     return {
         "id": str(p.id),
         "fund_id": str(p.fund_id),
@@ -100,12 +101,13 @@ def _pack_out(p: MonthlyReportPack) -> dict:
 
 
 @router.post("/funds/{fund_id}/reports/nav/snapshots")
-def create_nav_snapshot(
+async def create_nav_snapshot(
     fund_id: uuid.UUID,
     payload: dict,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "GP"])),
-):
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP"])),
+) -> dict[str, Any]:
     period_month = str(payload.get("period_month") or "").strip()
     try:
         _parse_period_month(period_month)
@@ -126,97 +128,92 @@ def create_nav_snapshot(
         assets_value_usd=float(payload["assets_value_usd"]),
         liabilities_usd=float(payload["liabilities_usd"]),
         status=NavSnapshotStatus.DRAFT,
-        created_by=actor.id,
-        updated_by=actor.id,
+        created_by=actor.actor_id,
+        updated_by=actor.actor_id,
     )
     db.add(snap)
-    db.flush()
+    await db.flush()
 
-    write_audit_event(
+    await write_audit_event(
         db,
         fund_id=fund_id,
-        actor_id=actor.id,
+        actor_id=actor.actor_id,
         action="NAV_SNAPSHOT_CREATED",
         entity_type="nav_snapshot",
-        entity_id=snap.id,
+        entity_id=str(snap.id),
         before=None,
         after=_snapshot_out(snap),
     )
-    db.commit()
-    db.refresh(snap)
+
     return _snapshot_out(snap)
 
 
 @router.get("/funds/{fund_id}/reports/nav/snapshots")
-def list_nav_snapshots(
+async def list_nav_snapshots(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR", "INVESTMENT_TEAM"])),
-):
-    snaps = list(
-        db.execute(
-            select(NAVSnapshot)
-            .where(NAVSnapshot.fund_id == fund_id)
-            .order_by(NAVSnapshot.period_month.desc(), NAVSnapshot.created_at.desc()),
-        )
-        .scalars()
-        .all(),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR", "INVESTMENT_TEAM"])),
+) -> dict[str, Any]:
+    result = await db.execute(
+        select(NAVSnapshot)
+        .where(NAVSnapshot.fund_id == fund_id)
+        .order_by(NAVSnapshot.period_month.desc(), NAVSnapshot.created_at.desc()),
     )
-
+    snaps = list(result.scalars().all())
     return {"items": [_snapshot_out(s) for s in snaps]}
 
 
 @router.get("/funds/{fund_id}/reports/nav/snapshots/{snapshot_id}")
-def get_nav_snapshot(
+async def get_nav_snapshot(
     fund_id: uuid.UUID,
     snapshot_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR", "INVESTMENT_TEAM"])),
-):
-    snap = db.execute(
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR", "INVESTMENT_TEAM"])),
+) -> dict[str, Any]:
+    result = await db.execute(
         select(NAVSnapshot).where(NAVSnapshot.fund_id == fund_id, NAVSnapshot.id == snapshot_id),
-    ).scalar_one_or_none()
+    )
+    snap = result.scalar_one_or_none()
     if not snap:
         raise HTTPException(status_code=404, detail="Not found")
 
-    snaps = list(
-        db.execute(
-            select(NAVSnapshot)
-            .where(NAVSnapshot.fund_id == fund_id)
-            .order_by(NAVSnapshot.period_month.desc(), NAVSnapshot.created_at.desc()),
-        )
-        .scalars()
-        .all(),
+    val_result = await db.execute(
+        select(AssetValuationSnapshot).where(
+            AssetValuationSnapshot.fund_id == fund_id,
+            AssetValuationSnapshot.nav_snapshot_id == snap.id,
+        ),
     )
+    vals = list(val_result.scalars().all())
     return {"snapshot": _snapshot_out(snap), "assets": [_valuation_out(v) for v in vals]}
 
 
 @router.post("/funds/{fund_id}/reports/nav/snapshots/{snapshot_id}/finalize")
-def finalize_nav_snapshot(
+async def finalize_nav_snapshot(
     fund_id: uuid.UUID,
     snapshot_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "GP"])),
-):
-    snap = db.execute(
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP"])),
+) -> dict[str, Any]:
+    result = await db.execute(
         select(NAVSnapshot).where(NAVSnapshot.fund_id == fund_id, NAVSnapshot.id == snapshot_id),
-    ).scalar_one_or_none()
+    )
+    snap = result.scalar_one_or_none()
     if not snap:
         raise HTTPException(status_code=404, detail="Not found")
 
     if snap.status != NavSnapshotStatus.DRAFT:
         raise HTTPException(status_code=400, detail="Snapshot must be DRAFT to finalize")
 
-    vals = list(
-        db.execute(
-            select(AssetValuationSnapshot).where(
-                AssetValuationSnapshot.fund_id == fund_id,
-                AssetValuationSnapshot.nav_snapshot_id == snap.id,
-            ),
-        )
-        .scalars()
-        .all(),
+    val_result = await db.execute(
+        select(AssetValuationSnapshot).where(
+            AssetValuationSnapshot.fund_id == fund_id,
+            AssetValuationSnapshot.nav_snapshot_id == snap.id,
+        ),
     )
+    vals = list(val_result.scalars().all())
 
     missing_evidence = [
         str(v.id)
@@ -232,35 +229,35 @@ def finalize_nav_snapshot(
     before = _snapshot_out(snap)
     snap.status = NavSnapshotStatus.FINALIZED
     snap.finalized_at = _utcnow()
-    snap.finalized_by = actor.id
-    snap.updated_by = actor.id
+    snap.finalized_by = actor.actor_id
+    snap.updated_by = actor.actor_id
 
-    write_audit_event(
+    await write_audit_event(
         db,
         fund_id=fund_id,
-        actor_id=actor.id,
+        actor_id=actor.actor_id,
         action="NAV_SNAPSHOT_FINALIZED",
         entity_type="nav_snapshot",
-        entity_id=snap.id,
+        entity_id=str(snap.id),
         before=before,
         after=_snapshot_out(snap),
     )
 
-    db.commit()
-    db.refresh(snap)
     return _snapshot_out(snap)
 
 
 @router.post("/funds/{fund_id}/reports/nav/snapshots/{snapshot_id}/publish")
-def publish_nav_snapshot(
+async def publish_nav_snapshot(
     fund_id: uuid.UUID,
     snapshot_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "GP", "COMPLIANCE"])),
-):
-    snap = db.execute(
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "COMPLIANCE"])),
+) -> dict[str, Any]:
+    result = await db.execute(
         select(NAVSnapshot).where(NAVSnapshot.fund_id == fund_id, NAVSnapshot.id == snapshot_id),
-    ).scalar_one_or_none()
+    )
+    snap = result.scalar_one_or_none()
     if not snap:
         raise HTTPException(status_code=404, detail="Not found")
 
@@ -270,36 +267,36 @@ def publish_nav_snapshot(
     before = _snapshot_out(snap)
     snap.status = NavSnapshotStatus.PUBLISHED
     snap.published_at = _utcnow()
-    snap.published_by = actor.id
-    snap.updated_by = actor.id
+    snap.published_by = actor.actor_id
+    snap.updated_by = actor.actor_id
 
-    write_audit_event(
+    await write_audit_event(
         db,
         fund_id=fund_id,
-        actor_id=actor.id,
+        actor_id=actor.actor_id,
         action="NAV_SNAPSHOT_PUBLISHED",
         entity_type="nav_snapshot",
-        entity_id=snap.id,
+        entity_id=str(snap.id),
         before=before,
         after=_snapshot_out(snap),
     )
 
-    db.commit()
-    db.refresh(snap)
     return _snapshot_out(snap)
 
 
 @router.post("/funds/{fund_id}/reports/nav/snapshots/{snapshot_id}/assets")
-def record_asset_valuation(
+async def record_asset_valuation(
     fund_id: uuid.UUID,
     snapshot_id: uuid.UUID,
     payload: dict,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "GP"])),
-):
-    snap = db.execute(
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP"])),
+) -> dict[str, Any]:
+    result = await db.execute(
         select(NAVSnapshot).where(NAVSnapshot.fund_id == fund_id, NAVSnapshot.id == snapshot_id),
-    ).scalar_one_or_none()
+    )
+    snap = result.scalar_one_or_none()
     if not snap:
         raise HTTPException(status_code=404, detail="Not found")
 
@@ -335,17 +332,21 @@ def record_asset_valuation(
         except Exception:
             raise HTTPException(status_code=400, detail="supporting_document_id must be a UUID")
 
-        exists = db.execute(select(Document).where(Document.fund_id == fund_id, Document.id == doc_id)).scalar_one_or_none()
+        doc_result = await db.execute(
+            select(Document).where(Document.fund_id == fund_id, Document.id == doc_id),
+        )
+        exists = doc_result.scalar_one_or_none()
         if not exists:
             raise HTTPException(status_code=400, detail="supporting_document_id not found for this fund")
 
-    dup = db.execute(
+    dup_result = await db.execute(
         select(AssetValuationSnapshot).where(
             AssetValuationSnapshot.fund_id == fund_id,
             AssetValuationSnapshot.nav_snapshot_id == snap.id,
             AssetValuationSnapshot.asset_id == asset_id,
         ),
-    ).scalar_one_or_none()
+    )
+    dup = dup_result.scalar_one_or_none()
     if dup:
         raise HTTPException(status_code=400, detail="Valuation for this asset already recorded in this snapshot")
 
@@ -358,74 +359,74 @@ def record_asset_valuation(
         valuation_usd=float(payload["valuation_usd"]),
         valuation_method=method,
         supporting_document_id=doc_id,
-        created_by=actor.id,
-        updated_by=actor.id,
+        created_by=actor.actor_id,
+        updated_by=actor.actor_id,
     )
     db.add(v)
-    db.flush()
+    await db.flush()
 
-    write_audit_event(
+    await write_audit_event(
         db,
         fund_id=fund_id,
-        actor_id=actor.id,
+        actor_id=actor.actor_id,
         action="ASSET_VALUATION_RECORDED",
         entity_type="asset_valuation_snapshot",
-        entity_id=v.id,
+        entity_id=str(v.id),
         before=None,
         after=_valuation_out(v),
     )
 
-    db.commit()
-    db.refresh(v)
     return _valuation_out(v)
 
 
 @router.get("/funds/{fund_id}/reports/nav/snapshots/{snapshot_id}/assets")
-def list_asset_valuations(
+async def list_asset_valuations(
     fund_id: uuid.UUID,
     snapshot_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR", "INVESTMENT_TEAM"])),
-):
-    snap = db.execute(
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR", "INVESTMENT_TEAM"])),
+) -> dict[str, Any]:
+    result = await db.execute(
         select(NAVSnapshot).where(NAVSnapshot.fund_id == fund_id, NAVSnapshot.id == snapshot_id),
-    ).scalar_one_or_none()
+    )
+    snap = result.scalar_one_or_none()
     if not snap:
         raise HTTPException(status_code=404, detail="Not found")
 
-    vals = list(
-        db.execute(
-            select(AssetValuationSnapshot)
-            .where(AssetValuationSnapshot.fund_id == fund_id, AssetValuationSnapshot.nav_snapshot_id == snap.id)
-            .order_by(AssetValuationSnapshot.created_at.asc()),
-        )
-        .scalars()
-        .all(),
+    val_result = await db.execute(
+        select(AssetValuationSnapshot)
+        .where(AssetValuationSnapshot.fund_id == fund_id, AssetValuationSnapshot.nav_snapshot_id == snap.id)
+        .order_by(AssetValuationSnapshot.created_at.asc()),
     )
-
+    vals = list(val_result.scalars().all())
     return {"items": [_valuation_out(v) for v in vals]}
 
 
-def _export_evidence_pack(db: Session, *, fund_id: uuid.UUID, limit: int, generated_by: str | None) -> dict:
-    answers = list(
-        db.execute(select(AIAnswer).where(AIAnswer.fund_id == fund_id).order_by(AIAnswer.created_at_utc.desc()).limit(limit)).scalars().all(),
+async def _export_evidence_pack(db: AsyncSession, *, fund_id: uuid.UUID, limit: int, generated_by: str | None) -> dict[str, Any]:
+    a_result = await db.execute(
+        select(AIAnswer).where(AIAnswer.fund_id == fund_id).order_by(AIAnswer.created_at_utc.desc()).limit(limit),
     )
+    answers = list(a_result.scalars().all())
     answer_ids = [a.id for a in answers]
-    questions = list(
-        db.execute(select(AIQuestion).where(AIQuestion.fund_id == fund_id, AIQuestion.id.in_([a.question_id for a in answers]))).scalars().all(),
+
+    q_result = await db.execute(
+        select(AIQuestion).where(AIQuestion.fund_id == fund_id, AIQuestion.id.in_([a.question_id for a in answers])),
     )
+    questions = list(q_result.scalars().all())
     by_q = {q.id: q for q in questions}
 
-    citations = []
+    citations: list[AIAnswerCitation] = []
     if answer_ids:
-        citations = list(
-            db.execute(select(AIAnswerCitation).where(AIAnswerCitation.fund_id == fund_id, AIAnswerCitation.answer_id.in_(answer_ids))).scalars().all(),
+        c_result = await db.execute(
+            select(AIAnswerCitation).where(AIAnswerCitation.fund_id == fund_id, AIAnswerCitation.answer_id.in_(answer_ids)),
         )
+        citations = list(c_result.scalars().all())
     by_answer: dict[uuid.UUID, list[AIAnswerCitation]] = {}
     for c in citations:
         by_answer.setdefault(c.answer_id, []).append(c)
 
-    manifest = {"fund_id": str(fund_id), "generated_by": generated_by, "items": []}
+    manifest: dict[str, Any] = {"fund_id": str(fund_id), "generated_by": generated_by, "items": []}
     for a in answers:
         q = by_q.get(a.question_id)
         manifest["items"].append(
@@ -453,12 +454,13 @@ def _export_evidence_pack(db: Session, *, fund_id: uuid.UUID, limit: int, genera
 
 
 @router.post("/funds/{fund_id}/reports/monthly-pack/generate")
-def generate_monthly_pack(
+async def generate_monthly_pack(
     fund_id: uuid.UUID,
     payload: dict,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "GP", "COMPLIANCE"])),
-):
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "COMPLIANCE"])),
+) -> dict[str, Any]:
     try:
         snapshot_id = uuid.UUID(str(payload.get("nav_snapshot_id")))
     except Exception:
@@ -473,34 +475,34 @@ def generate_monthly_pack(
     binder_limit = int(payload.get("evidence_binder_limit") or 20)
     binder_limit = max(1, min(200, binder_limit))
 
-    snap = db.execute(select(NAVSnapshot).where(NAVSnapshot.fund_id == fund_id, NAVSnapshot.id == snapshot_id)).scalar_one_or_none()
+    result = await db.execute(
+        select(NAVSnapshot).where(NAVSnapshot.fund_id == fund_id, NAVSnapshot.id == snapshot_id),
+    )
+    snap = result.scalar_one_or_none()
     if not snap:
         raise HTTPException(status_code=404, detail="NAV snapshot not found")
     if snap.status not in (NavSnapshotStatus.FINALIZED, NavSnapshotStatus.PUBLISHED):
         raise HTTPException(status_code=400, detail="NAV snapshot must be FINALIZED to generate pack")
 
-    assets = list(
-        db.execute(
-            select(AssetValuationSnapshot)
-            .where(AssetValuationSnapshot.fund_id == fund_id, AssetValuationSnapshot.nav_snapshot_id == snap.id)
-            .order_by(AssetValuationSnapshot.created_at.asc()),
-        )
-        .scalars()
-        .all(),
+    asset_result = await db.execute(
+        select(AssetValuationSnapshot)
+        .where(AssetValuationSnapshot.fund_id == fund_id, AssetValuationSnapshot.nav_snapshot_id == snap.id)
+        .order_by(AssetValuationSnapshot.created_at.asc()),
     )
+    assets = list(asset_result.scalars().all())
 
-    manifest: dict = {
+    manifest: dict[str, Any] = {
         "kind": "MONTHLY_REPORT_PACK",
         "fund_id": str(fund_id),
         "nav_snapshot": _snapshot_out(snap),
         "asset_valuations": [_valuation_out(v) for v in assets],
         "pack_type": pack_type.value,
         "generated_at_utc": _utcnow().isoformat(),
-        "generated_by": actor.id,
+        "generated_by": actor.actor_id,
     }
 
     if include_binder:
-        manifest["evidence_binder"] = _export_evidence_pack(db, fund_id=fund_id, limit=binder_limit, generated_by=actor.id)
+        manifest["evidence_binder"] = await _export_evidence_pack(db, fund_id=fund_id, limit=binder_limit, generated_by=actor.actor_id)
 
     payload_bytes = json.dumps(manifest, ensure_ascii=False, default=str, indent=2).encode("utf-8")
 
@@ -532,63 +534,65 @@ def generate_monthly_pack(
     pack.nav_snapshot_id = snap.id
     pack.blob_path = write_res.blob_uri
     pack.generated_at = _utcnow()
-    pack.generated_by = actor.id
+    pack.generated_by = actor.actor_id
     pack.pack_type = pack_type
 
     db.add(pack)
-    db.flush()
+    await db.flush()
 
-    write_audit_event(
+    await write_audit_event(
         db,
         fund_id=fund_id,
-        actor_id=actor.id,
+        actor_id=actor.actor_id,
         action="MONTHLY_PACK_GENERATED",
         entity_type="monthly_report_pack",
-        entity_id=pack.id,
+        entity_id=str(pack.id),
         before=None,
         after=_pack_out(pack),
     )
 
-    write_audit_event(
+    await write_audit_event(
         db,
         fund_id=fund_id,
-        actor_id=actor.id,
+        actor_id=actor.actor_id,
         action="REPORT_PUBLISHED",
         entity_type="monthly_report_pack",
-        entity_id=pack.id,
+        entity_id=str(pack.id),
         before=None,
         after={"blob_path": pack.blob_path, "pack_type": pack_type.value, "nav_snapshot_id": str(snap.id)},
     )
 
-    db.commit()
-    db.refresh(pack)
     return _pack_out(pack)
 
 
 @router.get("/funds/{fund_id}/reports/monthly-pack/list")
-def list_monthly_packs(
+async def list_monthly_packs(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR"])),
-):
-    packs = list(
-        db.execute(select(MonthlyReportPack).where(MonthlyReportPack.fund_id == fund_id).order_by(MonthlyReportPack.created_at.desc()))
-        .scalars()
-        .all(),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR"])),
+) -> dict[str, Any]:
+    result = await db.execute(
+        select(MonthlyReportPack).where(MonthlyReportPack.fund_id == fund_id).order_by(MonthlyReportPack.created_at.desc()),
     )
+    packs = list(result.scalars().all())
     # EPIC11 v1: only show packs that have blob output metadata
     packs = [p for p in packs if getattr(p, "blob_path", None)]
     return {"items": [_pack_out(p) for p in packs]}
 
 
 @router.get("/funds/{fund_id}/reports/monthly-pack/{pack_id}/download")
-def download_monthly_pack(
+async def download_monthly_pack(
     fund_id: uuid.UUID,
     pack_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR"])),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR"])),
 ):
-    pack = db.execute(select(MonthlyReportPack).where(MonthlyReportPack.fund_id == fund_id, MonthlyReportPack.id == pack_id)).scalar_one_or_none()
+    result = await db.execute(
+        select(MonthlyReportPack).where(MonthlyReportPack.fund_id == fund_id, MonthlyReportPack.id == pack_id),
+    )
+    pack = result.scalar_one_or_none()
     if not pack:
         raise HTTPException(status_code=404, detail="Not found")
     if not pack.blob_path:
@@ -605,12 +609,13 @@ def download_monthly_pack(
 
 
 @router.post("/funds/{fund_id}/reports/investor-statements/generate")
-def generate_investor_statement(
+async def generate_investor_statement(
     fund_id: uuid.UUID,
     payload: dict,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "GP", "COMPLIANCE"])),
-):
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "COMPLIANCE"])),
+) -> dict[str, Any]:
     period_month = str(payload.get("period_month") or "").strip()
     try:
         _parse_period_month(period_month)
@@ -642,7 +647,7 @@ def generate_investor_statement(
         "distributions": _num("distributions"),
         "ending_balance": _num("ending_balance"),
         "generated_at_utc": _utcnow().isoformat(),
-        "generated_by": actor.id,
+        "generated_by": actor.actor_id,
     }
 
     payload_bytes = json.dumps(statement_manifest, ensure_ascii=False, default=str, indent=2).encode("utf-8")
@@ -665,19 +670,19 @@ def generate_investor_statement(
         distributions=_num("distributions"),
         ending_balance=_num("ending_balance"),
         blob_path=write_res.blob_uri,
-        created_by=actor.id,
-        updated_by=actor.id,
+        created_by=actor.actor_id,
+        updated_by=actor.actor_id,
     )
     db.add(row)
-    db.flush()
+    await db.flush()
 
-    write_audit_event(
+    await write_audit_event(
         db,
         fund_id=fund_id,
-        actor_id=actor.id,
+        actor_id=actor.actor_id,
         action="INVESTOR_STATEMENT_GENERATED",
         entity_type="investor_statement",
-        entity_id=row.id,
+        entity_id=str(row.id),
         before=None,
         after={
             "id": str(row.id),
@@ -687,22 +692,20 @@ def generate_investor_statement(
         },
     )
 
-    db.commit()
-    db.refresh(row)
     return {"id": str(row.id), "blob_path": row.blob_path, "period_month": row.period_month}
 
 
 @router.get("/funds/{fund_id}/reports/investor-statements")
-def list_investor_statements(
+async def list_investor_statements(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR"])),
-):
-    rows = list(
-        db.execute(select(InvestorStatement).where(InvestorStatement.fund_id == fund_id).order_by(InvestorStatement.created_at.desc()))
-        .scalars()
-        .all(),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR"])),
+) -> dict[str, Any]:
+    result = await db.execute(
+        select(InvestorStatement).where(InvestorStatement.fund_id == fund_id).order_by(InvestorStatement.created_at.desc()),
     )
+    rows = list(result.scalars().all())
     return {
         "items": [
             {
@@ -719,15 +722,17 @@ def list_investor_statements(
 
 
 @router.get("/funds/{fund_id}/reports/investor-statements/{statement_id}/download")
-def download_investor_statement(
+async def download_investor_statement(
     fund_id: uuid.UUID,
     statement_id: uuid.UUID,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR"])),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR"])),
 ):
-    row = db.execute(
+    result = await db.execute(
         select(InvestorStatement).where(InvestorStatement.fund_id == fund_id, InvestorStatement.id == statement_id),
-    ).scalar_one_or_none()
+    )
+    row = result.scalar_one_or_none()
     if not row:
         raise HTTPException(status_code=404, detail="Not found")
 
@@ -742,12 +747,13 @@ def download_investor_statement(
 
 
 @router.get("/funds/{fund_id}/reports/archive")
-def get_reporting_archive(
+async def get_reporting_archive(
     fund_id: uuid.UUID,
     period_month: str | None = None,
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR", "INVESTMENT_TEAM"])),
-):
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR", "INVESTMENT_TEAM"])),
+) -> dict[str, Any]:
     """Read-only archive of persisted reporting artifacts (no client-side derivation)."""
 
     period_month = (period_month or "").strip() or None
@@ -763,7 +769,8 @@ def get_reporting_archive(
     )
     if period_month:
         nav_stmt = nav_stmt.where(NAVSnapshot.period_month == period_month)
-    nav = list(db.execute(nav_stmt.order_by(NAVSnapshot.period_month.desc(), NAVSnapshot.published_at.desc())).scalars().all())
+    nav_result = await db.execute(nav_stmt.order_by(NAVSnapshot.period_month.desc(), NAVSnapshot.published_at.desc()))
+    nav = list(nav_result.scalars().all())
 
     packs_stmt = select(MonthlyReportPack).where(
         MonthlyReportPack.fund_id == fund_id,
@@ -773,12 +780,14 @@ def get_reporting_archive(
     if period_month:
         start, end = _month_start_end(period_month)
         packs_stmt = packs_stmt.where(MonthlyReportPack.period_start == start, MonthlyReportPack.period_end == end)
-    packs = list(db.execute(packs_stmt.order_by(MonthlyReportPack.published_at.desc())).scalars().all())
+    packs_result = await db.execute(packs_stmt.order_by(MonthlyReportPack.published_at.desc()))
+    packs = list(packs_result.scalars().all())
 
     stmt_stmt = select(InvestorStatement).where(InvestorStatement.fund_id == fund_id)
     if period_month:
         stmt_stmt = stmt_stmt.where(InvestorStatement.period_month == period_month)
-    statements = list(db.execute(stmt_stmt.order_by(InvestorStatement.created_at.desc())).scalars().all())
+    stmt_result = await db.execute(stmt_stmt.order_by(InvestorStatement.created_at.desc()))
+    statements = list(stmt_result.scalars().all())
 
     return {
         "fund_id": str(fund_id),

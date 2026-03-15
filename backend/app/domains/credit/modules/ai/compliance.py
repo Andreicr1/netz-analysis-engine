@@ -15,15 +15,14 @@ from ai_engine.knowledge.linker import (
     run_cross_container_linking,
 )
 from app.core.db.engine import get_db
-from app.core.security.auth import Actor
-from app.core.security.clerk_auth import get_actor, require_readonly_allowed, require_roles
-from app.domains.credit.modules.ai.models import ObligationRegister
-from app.domains.credit.modules.ai.routes._helpers import (
+from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed, require_roles
+from app.domains.credit.modules.ai._helpers import (
     _envelope_from_rows,
     _limit,
     _offset,
     _utcnow,
 )
+from app.domains.credit.modules.ai.models import ObligationRegister
 from app.domains.credit.modules.ai.schemas import (
     ObligationRegisterItem,
     ObligationRegisterResponse,

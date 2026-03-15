@@ -1,26 +1,27 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, Text, Uuid
+from sqlalchemy import Enum, ForeignKey, String, Text, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db.base import Base
+from app.core.db.base import (
+    AuditMetaMixin,
+    Base,
+    FundScopedMixin,
+    IdMixin,
+    OrganizationScopedMixin,
+)
 from app.domains.credit.deals.enums import DealStage, DealType, RejectionCode
 
 
-class Deal(Base):
+class Deal(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """Canonical record of every opportunity ever reviewed.
     Deals are never deleted, even if rejected.
     """
 
     __tablename__ = "deals"
-
-    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
-
-    fund_id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), index=True, nullable=False)
 
     deal_type: Mapped[DealType] = mapped_column(
         Enum(DealType, name="deal_type_enum"),
@@ -63,16 +64,5 @@ class Deal(Base):
         ForeignKey("pipeline_deals.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
-    )
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=datetime.utcnow,
-        nullable=False,
-    )
-
-    updated_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
     )
 

@@ -6,11 +6,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.db.audit import write_audit_event
-from app.core.security.auth import Actor
+from app.core.security.clerk_auth import Actor
 from app.domains.credit.documents.constants import CANONICAL_ROOT_FOLDERS
 from app.domains.credit.documents.enums import DocumentDomain, DocumentIngestionStatus
 from app.domains.credit.modules.documents.models import (
@@ -18,8 +18,6 @@ from app.domains.credit.modules.documents.models import (
     DocumentRootFolder,
     DocumentVersion,
 )
-from app.services.blob_storage import upload_bytes_append_only
-from app.services.search_index import AzureSearchMetadataClient
 from app.shared.utils import sa_model_to_dict
 
 PATH_SEGMENT_RE = re.compile(r"^[^\\\\/:*?\"<>|]+$")  # conservative for blob names
@@ -36,10 +34,11 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def allowed_root_folders(db: Session, *, fund_id: uuid.UUID) -> set[str]:
-    rows = db.execute(
+async def allowed_root_folders(db: AsyncSession, *, fund_id: uuid.UUID) -> set[str]:
+    result = await db.execute(
         select(DocumentRootFolder.name).where(DocumentRootFolder.fund_id == fund_id, DocumentRootFolder.is_active == True),  # noqa: E712
-    ).all()
+    )
+    rows = result.all()
     custom = {r[0] for r in rows}
     return set(CANONICAL_ROOT_FOLDERS).union(custom)
 
@@ -70,19 +69,20 @@ def _safe_root_folder(root_folder: str) -> str:
     return rf
 
 
-def create_root_folder(db: Session, *, fund_id: uuid.UUID, actor: Actor, name: str) -> DocumentRootFolder:
+async def create_root_folder(db: AsyncSession, *, fund_id: uuid.UUID, actor: Actor, name: str) -> DocumentRootFolder:
     rf = _safe_root_folder(name)
     if rf in set(CANONICAL_ROOT_FOLDERS):
         raise ValueError("root_folder already exists (canonical)")
 
-    existing = db.execute(select(DocumentRootFolder).where(DocumentRootFolder.fund_id == fund_id, DocumentRootFolder.name == rf)).scalar_one_or_none()
+    result = await db.execute(select(DocumentRootFolder).where(DocumentRootFolder.fund_id == fund_id, DocumentRootFolder.name == rf))
+    existing = result.scalar_one_or_none()
     if existing:
         if existing.is_active:
             return existing
         before = sa_model_to_dict(existing)
         existing.is_active = True
         existing.updated_by = actor.actor_id
-        write_audit_event(
+        await write_audit_event(
             db,
             fund_id=fund_id,
             actor_id=actor.actor_id,
@@ -92,8 +92,8 @@ def create_root_folder(db: Session, *, fund_id: uuid.UUID, actor: Actor, name: s
             before=before,
             after=sa_model_to_dict(existing),
         )
-        db.commit()
-        db.refresh(existing)
+        await db.commit()
+        await db.refresh(existing)
         return existing
 
     folder = DocumentRootFolder(
@@ -105,8 +105,8 @@ def create_root_folder(db: Session, *, fund_id: uuid.UUID, actor: Actor, name: s
         updated_by=actor.actor_id,
     )
     db.add(folder)
-    db.flush()
-    write_audit_event(
+    await db.flush()
+    await write_audit_event(
         db,
         fund_id=fund_id,
         actor_id=actor.actor_id,
@@ -116,13 +116,13 @@ def create_root_folder(db: Session, *, fund_id: uuid.UUID, actor: Actor, name: s
         before=None,
         after=sa_model_to_dict(folder),
     )
-    db.commit()
-    db.refresh(folder)
+    await db.commit()
+    await db.refresh(folder)
     return folder
 
 
-def upload_document(
-    db: Session,
+async def upload_document(
+    db: AsyncSession,
     *,
     fund_id: uuid.UUID,
     actor: Actor,
@@ -135,7 +135,7 @@ def upload_document(
     data: bytes,
 ) -> UploadResult:
     rf = _safe_root_folder(root_folder)
-    if rf not in allowed_root_folders(db, fund_id=fund_id):
+    if rf not in await allowed_root_folders(db, fund_id=fund_id):
         raise ValueError("root_folder is not allowed")
 
     sub = _normalize_subfolder_path(subfolder_path)
@@ -153,14 +153,15 @@ def upload_document(
             dom = DocumentDomain.OTHER
 
     # Stable doc identity by folder_path+title within fund
-    doc = db.execute(
+    result = await db.execute(
         select(Document).where(
             Document.fund_id == fund_id,
             Document.root_folder == rf,
             Document.folder_path == folder_path,
             Document.title == title,
         ),
-    ).scalar_one_or_none()
+    )
+    doc = result.scalar_one_or_none()
 
     created = False
     if not doc:
@@ -182,12 +183,13 @@ def upload_document(
             updated_by=actor.actor_id,
         )
         db.add(doc)
-        db.flush()
+        await db.flush()
 
     next_ver = int(doc.current_version or 0) + 1
 
     # Blob path convention (container dataroom; path is inside container)
     blob_rel = f"{folder_path}/{doc.id}/v{next_ver}.pdf"
+    from app.services.blob_storage import upload_bytes_append_only
     write_res = upload_bytes_append_only(
         container=settings.AZURE_STORAGE_DATAROOM_CONTAINER,
         blob_name=blob_rel,
@@ -215,7 +217,7 @@ def upload_document(
         updated_by=actor.actor_id,
     )
     db.add(ver)
-    db.flush()
+    await db.flush()
 
     doc_before = sa_model_to_dict(doc)
     doc.current_version = next_ver
@@ -224,7 +226,7 @@ def upload_document(
     doc.updated_by = actor.actor_id
 
     if created:
-        write_audit_event(
+        await write_audit_event(
             db,
             fund_id=fund_id,
             actor_id=actor.actor_id,
@@ -235,7 +237,7 @@ def upload_document(
             after=sa_model_to_dict(doc),
         )
 
-    write_audit_event(
+    await write_audit_event(
         db,
         fund_id=fund_id,
         actor_id=actor.actor_id,
@@ -245,7 +247,7 @@ def upload_document(
         before=None,
         after=sa_model_to_dict(ver),
     )
-    write_audit_event(
+    await write_audit_event(
         db,
         fund_id=fund_id,
         actor_id=actor.actor_id,
@@ -258,6 +260,7 @@ def upload_document(
 
     indexed = False
     if settings.AZURE_SEARCH_ENDPOINT and settings.SEARCH_INDEX_NAME:
+        from app.services.search_index import AzureSearchMetadataClient
         client = AzureSearchMetadataClient()
         client.upsert_dataroom_metadata(
             items=[
@@ -276,7 +279,7 @@ def upload_document(
         )
         indexed = True
 
-    write_audit_event(
+    await write_audit_event(
         db,
         fund_id=fund_id,
         actor_id=actor.actor_id,
@@ -292,14 +295,14 @@ def upload_document(
         },
     )
 
-    db.commit()
-    db.refresh(doc)
-    db.refresh(ver)
+    await db.commit()
+    await db.refresh(doc)
+    await db.refresh(ver)
     return UploadResult(document=doc, version=ver, blob_path=blob_rel)
 
 
-def list_documents(
-    db: Session,
+async def list_documents(
+    db: AsyncSession,
     *,
     fund_id: uuid.UUID,
     limit: int,
@@ -323,5 +326,5 @@ def list_documents(
     if title_q:
         stmt = stmt.where(Document.title.ilike(f"%{title_q}%"))
     stmt = stmt.offset(offset).limit(limit)
-    return list(db.execute(stmt).scalars().all())
-
+    result = await db.execute(stmt)
+    return list(result.scalars().all())

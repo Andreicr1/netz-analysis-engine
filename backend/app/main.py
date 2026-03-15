@@ -21,6 +21,61 @@ from app.core.jobs.sse import create_job_stream
 from app.core.jobs.tracker import close_redis_pool, publish_event
 from app.core.security.clerk_auth import Actor, get_actor
 
+# Actions
+from app.domains.credit.actions.routes.actions import router as credit_actions_router
+
+# Dashboard
+from app.domains.credit.dashboard.routes import router as credit_dashboard_router
+from app.domains.credit.dashboard.task_inbox import router as credit_task_inbox_router
+from app.domains.credit.dataroom.routes.routes import data_room_router as credit_data_room_router
+
+# Dataroom
+from app.domains.credit.dataroom.routes.routes import router as credit_dataroom_router
+from app.domains.credit.deals.routes.conversion import router as credit_conversion_router
+
+# ── Credit domain routers ────────────────────────────────────
+# Deals
+from app.domains.credit.deals.routes.deals import router as credit_deals_router
+from app.domains.credit.deals.routes.ic_memos import router as credit_ic_memos_router
+from app.domains.credit.documents.routes.auditor import router as credit_auditor_router
+from app.domains.credit.documents.routes.evidence import router as credit_evidence_router
+from app.domains.credit.documents.routes.ingest import router as credit_ingest_router
+from app.domains.credit.documents.routes.review import router as credit_review_router
+
+# Documents
+from app.domains.credit.documents.routes.uploads import router as credit_uploads_router
+
+# Modules — AI (aggregated router), Deals, Documents
+from app.domains.credit.modules.ai import router as credit_ai_router
+from app.domains.credit.modules.deals.routes import router as credit_pipeline_deals_router
+from app.domains.credit.modules.documents.routes import router as credit_module_documents_router
+from app.domains.credit.portfolio.routes.actions import router as credit_portfolio_actions_router
+from app.domains.credit.portfolio.routes.alerts import router as credit_alerts_router
+
+# Portfolio
+from app.domains.credit.portfolio.routes.assets import router as credit_assets_router
+from app.domains.credit.portfolio.routes.fund_investments import (
+    router as credit_fund_investments_router,
+)
+from app.domains.credit.portfolio.routes.obligations import router as credit_obligations_router
+from app.domains.credit.reporting.routes.evidence_pack import router as credit_evidence_pack_router
+from app.domains.credit.reporting.routes.investor_portal import (
+    router as credit_investor_portal_router,
+)
+
+# Reporting
+from app.domains.credit.reporting.routes.report_packs import router as credit_report_packs_router
+from app.domains.credit.reporting.routes.reports import router as credit_reports_router
+from app.domains.credit.reporting.routes.schedules import router as credit_schedules_router
+from app.domains.wealth.routes.allocation import router as wealth_allocation_router
+from app.domains.wealth.routes.analytics import router as wealth_analytics_router
+
+# ── Wealth domain routers ────────────────────────────────────
+from app.domains.wealth.routes.funds import router as wealth_funds_router
+from app.domains.wealth.routes.portfolios import router as wealth_portfolios_router
+from app.domains.wealth.routes.risk import router as wealth_risk_router
+from app.domains.wealth.routes.workers import router as wealth_workers_router
+
 logger = logging.getLogger(__name__)
 
 
@@ -101,6 +156,59 @@ async def test_emit_event(job_id: str, event_type: str = "test", message: str = 
     await publish_event(job_id, event_type, {"message": message})
     return {"status": "published", "job_id": job_id, "event": event_type}
 
+
+# ── Mount wealth domain routes ───────────────────────────────
+
+api_v1.include_router(wealth_funds_router)
+api_v1.include_router(wealth_allocation_router)
+api_v1.include_router(wealth_analytics_router)
+api_v1.include_router(wealth_portfolios_router)
+api_v1.include_router(wealth_risk_router)
+api_v1.include_router(wealth_workers_router)
+
+# ── Mount credit domain routes ───────────────────────────────
+
+# Deals
+api_v1.include_router(credit_deals_router)
+api_v1.include_router(credit_ic_memos_router)
+api_v1.include_router(credit_conversion_router)
+
+# Portfolio
+api_v1.include_router(credit_assets_router)
+api_v1.include_router(credit_alerts_router)
+api_v1.include_router(credit_obligations_router)
+api_v1.include_router(credit_portfolio_actions_router)
+api_v1.include_router(credit_fund_investments_router)
+
+# Documents
+api_v1.include_router(credit_uploads_router)
+api_v1.include_router(credit_review_router)
+api_v1.include_router(credit_evidence_router)
+api_v1.include_router(credit_auditor_router)
+api_v1.include_router(credit_ingest_router)
+
+# Reporting
+api_v1.include_router(credit_report_packs_router)
+api_v1.include_router(credit_investor_portal_router)
+api_v1.include_router(credit_evidence_pack_router)
+api_v1.include_router(credit_reports_router)
+api_v1.include_router(credit_schedules_router)
+
+# Dashboard
+api_v1.include_router(credit_dashboard_router)
+api_v1.include_router(credit_task_inbox_router)
+
+# Dataroom
+api_v1.include_router(credit_dataroom_router)
+api_v1.include_router(credit_data_room_router)
+
+# Actions
+api_v1.include_router(credit_actions_router)
+
+# Modules — AI, Pipeline Deals, Documents
+api_v1.include_router(credit_ai_router)
+api_v1.include_router(credit_pipeline_deals_router)
+api_v1.include_router(credit_module_documents_router)
 
 # ── Mount API v1 ─────────────────────────────────────────────
 

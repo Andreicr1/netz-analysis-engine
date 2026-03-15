@@ -14,8 +14,13 @@ from ai_engine.ingestion.monitoring import run_daily_cycle
 from ai_engine.knowledge.knowledge_builder import build_manager_profiles
 from app.core.db.audit import write_audit_event
 from app.core.db.engine import get_db
-from app.core.security.auth import Actor
-from app.core.security.clerk_auth import get_actor, require_readonly_allowed, require_roles
+from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed, require_roles
+from app.domains.credit.modules.ai._helpers import (
+    _envelope_from_rows,
+    _limit,
+    _offset,
+    _utcnow,
+)
 from app.domains.credit.modules.ai.models import (
     DocumentClassification,
     DocumentGovernanceProfile,
@@ -23,12 +28,6 @@ from app.domains.credit.modules.ai.models import (
     GovernanceAlert,
     KnowledgeAnchor,
     ManagerProfile,
-)
-from app.domains.credit.modules.ai.routes._helpers import (
-    _envelope_from_rows,
-    _limit,
-    _offset,
-    _utcnow,
 )
 from app.domains.credit.modules.ai.schemas import (
     DailyCycleRunResponse,

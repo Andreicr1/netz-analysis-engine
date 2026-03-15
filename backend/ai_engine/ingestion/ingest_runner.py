@@ -76,7 +76,7 @@ def create_ingest_router():
     """Create a FastAPI router for ingest trigger endpoints."""
     from fastapi import APIRouter, BackgroundTasks, Depends, Query
 
-    from app.core.security.auth import Actor
+    from app.core.security.clerk_auth import Actor
     from app.core.security.dependencies import get_actor, require_readonly_allowed
 
     router = APIRouter(prefix="/ai/ingest", tags=["ai-ingest"])

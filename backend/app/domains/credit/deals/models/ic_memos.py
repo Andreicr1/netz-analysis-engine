@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, Text, Uuid
+from sqlalchemy import Integer, String, Text, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db.base import Base
+from app.core.db.base import AuditMetaMixin, Base, IdMixin, OrganizationScopedMixin
 
 
-class ICMemo(Base):
+class ICMemo(Base, IdMixin, OrganizationScopedMixin, AuditMetaMixin):
     """Institutional Investment Committee memo record.
     Stores structured metadata, narrative, recommendation and conditions.
 
@@ -19,10 +18,6 @@ class ICMemo(Base):
     """
 
     __tablename__ = "ic_memos"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4,
-    )
 
     deal_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), index=True, nullable=False,
@@ -94,10 +89,4 @@ class ICMemo(Base):
         String(32),
         nullable=True,
         comment="E-signature workflow status: NOT_SENT|SENT|IN_PROCESS|SIGNED|CANCELLED|ERROR",
-    )
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=datetime.utcnow,
-        nullable=False,
     )

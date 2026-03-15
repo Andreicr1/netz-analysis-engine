@@ -6,11 +6,11 @@ from sqlalchemy import Enum as SAEnum
 from sqlalchemy import ForeignKey, Index, Numeric, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, IdMixin
+from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, IdMixin, OrganizationScopedMixin
 from app.domains.credit.reporting.enums import ValuationMethod
 
 
-class AssetValuationSnapshot(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class AssetValuationSnapshot(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "asset_valuation_snapshots"
 
     nav_snapshot_id: Mapped[uuid.UUID] = mapped_column(

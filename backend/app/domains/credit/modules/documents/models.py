@@ -18,11 +18,11 @@ from sqlalchemy import (
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, IdMixin
+from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, IdMixin, OrganizationScopedMixin
 from app.domains.credit.documents.enums import DocumentDomain, DocumentIngestionStatus
 
 
-class Document(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class Document(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "documents"
 
     # Canonical registry (can cover evidence, dataroom, reporting, etc.)
@@ -48,7 +48,7 @@ class Document(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     )
 
 
-class DocumentVersion(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class DocumentVersion(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "document_versions"
 
     document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), index=True)
@@ -82,7 +82,7 @@ class DocumentVersion(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (Index("ix_doc_versions_doc_ver", "document_id", "version_number", unique=True),)
 
 
-class DocumentAccessPolicy(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class DocumentAccessPolicy(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "document_access_policies"
 
     document_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), index=True)
@@ -91,7 +91,7 @@ class DocumentAccessPolicy(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     rules: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
-class DocumentRootFolder(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class DocumentRootFolder(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """Custom root folders created by ADMINs (rare).
     Canonical roots live in code constants; this table future-proofs governance.
     """
@@ -104,7 +104,7 @@ class DocumentRootFolder(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     __table_args__ = (UniqueConstraint("fund_id", "name", name="uq_document_root_folders_fund_name"),)
 
 
-class DocumentChunk(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class DocumentChunk(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """Append-only chunk store (source of truth) for audit reproducibility.
     New document version => new set of chunks.
     """

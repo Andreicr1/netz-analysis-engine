@@ -5,25 +5,17 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.db.engine import get_db
-from app.core.security.clerk_auth import get_actor, require_role
+from app.core.security.clerk_auth import Actor, get_actor, require_role
+from app.core.tenancy.middleware import get_db_with_rls
 from app.services.blob_storage import generate_read_link, list_blobs
 from app.services.dataroom_ingest import ingest_document_version, upload_dataroom_document
 from app.services.search_index import AzureSearchMetadataClient
 
 router = APIRouter(prefix="/api/dataroom", tags=["Dataroom"])
 data_room_router = APIRouter(prefix="/api/data-room", tags=["Data Room"])
-
-
-def _require_fund_access_from_value(fund_id: uuid.UUID, actor=Depends(get_actor)) -> uuid.UUID:
-    if settings.AUTHZ_BYPASS_ENABLED:
-        return fund_id
-    if not actor.can_access_fund(fund_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden for this fund")
-    return fund_id
 
 
 def _as_of() -> str:
@@ -103,10 +95,12 @@ async def upload_document(
     fund_id: uuid.UUID = Form(...),
     title: str | None = Form(None),
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN"])),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN"])),
 ):
-    _require_fund_access_from_value(fund_id, actor)
+    if not actor.can_access_fund(fund_id) and not settings.AUTHZ_BYPASS_ENABLED:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden for this fund")
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="file is empty")
@@ -129,15 +123,17 @@ async def upload_document(
 
 
 @router.post("/documents/{document_id}/ingest")
-def ingest_document(
+async def ingest_document(
     document_id: uuid.UUID,
     fund_id: uuid.UUID = Query(...),
     version_number: int | None = Query(None),
     store_artifacts_in_evidence: bool = Query(True),
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN"])),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN"])),
 ):
-    _require_fund_access_from_value(fund_id, actor)
+    if not actor.can_access_fund(fund_id) and not settings.AUTHZ_BYPASS_ENABLED:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden for this fund")
     try:
         return ingest_document_version(
             db,
@@ -152,22 +148,25 @@ def ingest_document(
 
 
 @router.get("/search")
-def search(
+async def search(
     fund_id: uuid.UUID = Query(...),
     q: str = Query(..., min_length=2, max_length=400),
     top: int = Query(5, ge=1, le=20),
-    actor=Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN", "AUDITOR"])),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN", "AUDITOR"])),
 ):
-    _require_fund_access_from_value(fund_id, actor)
+    if not actor.can_access_fund(fund_id) and not settings.AUTHZ_BYPASS_ENABLED:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden for this fund")
     client = AzureSearchMetadataClient()
     hits = client.search(q=q, fund_id=str(fund_id), top=top)
     return {"query": q, "count": len(hits), "hits": [h.__dict__ for h in hits]}
 
 
 @router.get("/browse")
-def browse(
+async def browse(
     prefix: str = Query("", max_length=500),
-    actor=Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN", "AUDITOR"])),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN", "AUDITOR"])),
 ):
     """List folders and files in the dataroom blob container.
     Uses virtual directory (delimiter-based) listing.
@@ -189,10 +188,10 @@ def browse(
 
 
 @data_room_router.get("/tree")
-def get_tree(
-    actor=Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN", "AUDITOR"])),
+async def get_tree(
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN", "AUDITOR"])),
 ):
-    _ = actor
     container = settings.AZURE_STORAGE_DATAROOM_CONTAINER
     try:
         folders = _build_folder_tree(container)
@@ -208,11 +207,11 @@ def get_tree(
 
 
 @data_room_router.get("/list")
-def list_items(
+async def list_items(
     path: str = Query("", max_length=500),
-    actor=Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN", "AUDITOR"])),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN", "AUDITOR"])),
 ):
-    _ = actor
     container = settings.AZURE_STORAGE_DATAROOM_CONTAINER
     prefix = _normalize_folder_path(path)
     try:
@@ -235,11 +234,11 @@ def list_items(
 
 
 @data_room_router.get("/file-link")
-def file_link(
+async def file_link(
     path: str = Query(..., max_length=1000),
-    actor=Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN", "AUDITOR"])),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN", "AUDITOR"])),
 ):
-    _ = actor
     normalized = (path or "").strip().lstrip("/")
     if not normalized or normalized.endswith("/"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="path must point to a file")
@@ -278,12 +277,12 @@ def _is_user_visible_pipeline(entry) -> bool:
 
 
 @data_room_router.get("/pipeline/list")
-def list_pipeline_items(
+async def list_pipeline_items(
     path: str = Query("", max_length=500),
-    actor=Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN", "AUDITOR"])),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN", "AUDITOR"])),
 ):
     """List folders and files in the investment-pipeline-intelligence container."""
-    _ = actor
     prefix = _normalize_folder_path(path)
     try:
         entries = list_blobs(container=PIPELINE_CONTAINER, prefix=prefix or None)
@@ -307,12 +306,12 @@ def list_pipeline_items(
 
 
 @data_room_router.get("/pipeline/file-link")
-def pipeline_file_link(
+async def pipeline_file_link(
     path: str = Query(..., max_length=1000),
-    actor=Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN", "AUDITOR"])),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN", "AUDITOR"])),
 ):
     """Generate signed view/download URLs for a file in the pipeline container."""
-    _ = actor
     normalized = (path or "").strip().lstrip("/")
     if not normalized or normalized.endswith("/"):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="path must point to a file")
@@ -340,10 +339,12 @@ async def upload_to_path(
     file: UploadFile = File(...),
     fund_id: uuid.UUID = Form(...),
     metadata: str | None = Form(None),
-    db: Session = Depends(get_db),
-    actor=Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN"])),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN"])),
 ):
-    _require_fund_access_from_value(fund_id, actor)
+    if not actor.can_access_fund(fund_id) and not settings.AUTHZ_BYPASS_ENABLED:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden for this fund")
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="file is empty")
@@ -381,4 +382,3 @@ async def upload_to_path(
         "idempotent": result.idempotent,
         "asOf": _as_of(),
     }
-

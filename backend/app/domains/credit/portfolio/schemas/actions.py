@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
@@ -27,4 +28,7 @@ class ActionOut(BaseModel):
     status: ActionStatus
     evidence_required: bool
     evidence_notes: str | None
+
+    created_at: datetime
+    updated_at: datetime
 

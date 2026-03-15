@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.db.audit import write_audit_event
@@ -29,56 +29,55 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def process_pending_versions(
-    db: Session,
+async def process_pending_versions(
+    db: AsyncSession,
     *,
     fund_id: uuid.UUID,
     limit: int = 10,
     actor_id: str = "ingestion-worker",
 ) -> WorkerResult:
-    vers = (
-        db.execute(
-            select(DocumentVersion)
-            .where(DocumentVersion.fund_id == fund_id, DocumentVersion.ingestion_status == DocumentIngestionStatus.PENDING)
-            .order_by(DocumentVersion.created_at.asc())
-            .limit(limit),
-        )
-        .scalars()
-        .all()
+    result = await db.execute(
+        select(DocumentVersion)
+        .where(DocumentVersion.fund_id == fund_id, DocumentVersion.ingestion_status == DocumentIngestionStatus.PENDING)
+        .order_by(DocumentVersion.created_at.asc())
+        .limit(limit),
     )
+    vers = result.scalars().all()
     processed = indexed = failed = skipped = 0
     for v in vers:
         processed += 1
         try:
-            _process_one(db, fund_id=fund_id, version=v, actor_id=actor_id)
+            await _process_one(db, fund_id=fund_id, version=v, actor_id=actor_id)
             indexed += 1
         except Exception:
             failed += 1
     return WorkerResult(processed=processed, indexed=indexed, failed=failed, skipped=skipped)
 
 
-def process_version(
-    db: Session,
+async def process_version(
+    db: AsyncSession,
     *,
     fund_id: uuid.UUID,
     version_id: uuid.UUID,
     actor_id: str = "ingestion-worker",
 ) -> None:
-    v = db.execute(select(DocumentVersion).where(DocumentVersion.fund_id == fund_id, DocumentVersion.id == version_id)).scalar_one()
-    _process_one(db, fund_id=fund_id, version=v, actor_id=actor_id)
+    result = await db.execute(select(DocumentVersion).where(DocumentVersion.fund_id == fund_id, DocumentVersion.id == version_id))
+    v = result.scalar_one()
+    await _process_one(db, fund_id=fund_id, version=v, actor_id=actor_id)
 
 
-def _process_one(db: Session, *, fund_id: uuid.UUID, version: DocumentVersion, actor_id: str) -> None:
+async def _process_one(db: AsyncSession, *, fund_id: uuid.UUID, version: DocumentVersion, actor_id: str) -> None:
     if version.ingestion_status == DocumentIngestionStatus.INDEXED:
         return
 
     # Mark PROCESSING early
     version.ingestion_status = DocumentIngestionStatus.PROCESSING
     version.updated_by = actor_id
-    db.commit()
+    await db.commit()
 
     try:
-        doc = db.execute(select(Document).where(Document.fund_id == fund_id, Document.id == version.document_id)).scalar_one()
+        result = await db.execute(select(Document).where(Document.fund_id == fund_id, Document.id == version.document_id))
+        doc = result.scalar_one()
 
         if not version.blob_uri:
             raise ValueError("document_version.blob_uri is missing")
@@ -88,7 +87,7 @@ def _process_one(db: Session, *, fund_id: uuid.UUID, version: DocumentVersion, a
         extracted = extract_pdf_pages(data)
         extracted_text = extracted.text
 
-        write_audit_event(
+        await write_audit_event(
             db,
             fund_id=fund_id,
             actor_id=actor_id,
@@ -109,7 +108,7 @@ def _process_one(db: Session, *, fund_id: uuid.UUID, version: DocumentVersion, a
             version.ingestion_status = DocumentIngestionStatus.FAILED
             version.ingest_error = {"reason": "scanned_pdf_or_no_text", "detail": "OCR not implemented yet"}
             version.updated_by = actor_id
-            write_audit_event(
+            await write_audit_event(
                 db,
                 fund_id=fund_id,
                 actor_id=actor_id,
@@ -119,11 +118,12 @@ def _process_one(db: Session, *, fund_id: uuid.UUID, version: DocumentVersion, a
                 before=None,
                 after={"reason": "scanned_pdf_or_no_text"},
             )
-            db.commit()
+            await db.commit()
             return
 
         # Idempotency: if chunks already exist for this version, don't recreate.
-        existing = db.execute(select(func.count(DocumentChunk.id)).where(DocumentChunk.fund_id == fund_id, DocumentChunk.version_id == version.id)).scalar_one()
+        existing_result = await db.execute(select(func.count(DocumentChunk.id)).where(DocumentChunk.fund_id == fund_id, DocumentChunk.version_id == version.id))
+        existing = existing_result.scalar_one()
 
         if existing == 0:
             drafts = chunk_pdf_pages(pages=extracted.pages)
@@ -144,9 +144,9 @@ def _process_one(db: Session, *, fund_id: uuid.UUID, version: DocumentVersion, a
                         updated_by=actor_id,
                     ),
                 )
-            db.flush()
+            await db.flush()
 
-            write_audit_event(
+            await write_audit_event(
                 db,
                 fund_id=fund_id,
                 actor_id=actor_id,
@@ -156,17 +156,14 @@ def _process_one(db: Session, *, fund_id: uuid.UUID, version: DocumentVersion, a
                 before=None,
                 after={"chunks_created": len(drafts), "document_id": str(doc.id), "version_id": str(version.id)},
             )
-            db.commit()
+            await db.commit()
 
-        chunks = (
-            db.execute(
-                select(DocumentChunk)
-                .where(DocumentChunk.fund_id == fund_id, DocumentChunk.version_id == version.id)
-                .order_by(DocumentChunk.chunk_index.asc()),
-            )
-            .scalars()
-            .all()
+        chunks_result = await db.execute(
+            select(DocumentChunk)
+            .where(DocumentChunk.fund_id == fund_id, DocumentChunk.version_id == version.id)
+            .order_by(DocumentChunk.chunk_index.asc()),
         )
+        chunks = chunks_result.scalars().all()
 
         client = AzureSearchChunksClient()
         items = []
@@ -187,7 +184,7 @@ def _process_one(db: Session, *, fund_id: uuid.UUID, version: DocumentVersion, a
             )
         client.upsert_chunks(items=items)
 
-        write_audit_event(
+        await write_audit_event(
             db,
             fund_id=fund_id,
             actor_id=actor_id,
@@ -201,13 +198,13 @@ def _process_one(db: Session, *, fund_id: uuid.UUID, version: DocumentVersion, a
         version.ingestion_status = DocumentIngestionStatus.INDEXED
         version.indexed_at = _utcnow()
         version.updated_by = actor_id
-        db.commit()
+        await db.commit()
 
     except Exception as e:
         version.ingestion_status = DocumentIngestionStatus.FAILED
         version.ingest_error = {"reason": "exception", "detail": str(e)}
         version.updated_by = actor_id
-        write_audit_event(
+        await write_audit_event(
             db,
             fund_id=fund_id,
             actor_id=actor_id,
@@ -217,6 +214,5 @@ def _process_one(db: Session, *, fund_id: uuid.UUID, version: DocumentVersion, a
             before=None,
             after={"reason": "exception", "detail": str(e)},
         )
-        db.commit()
+        await db.commit()
         raise
-

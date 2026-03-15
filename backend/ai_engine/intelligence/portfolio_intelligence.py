@@ -9,7 +9,6 @@ from collections import defaultdict
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from app.domains.credit.cash_management.models.cash import CashTransaction
 from app.domains.credit.deals.models.deals import Deal as PortfolioDeal
 from app.domains.credit.modules.ai.models import (
     ActiveInvestment,
@@ -530,74 +529,21 @@ def evaluate_liquidity_cash_impact(
     as_of: dt.datetime,
     actor_id: str = "ai-engine",
 ) -> list[CashImpactFlag]:
-    investments = list(db.execute(select(ActiveInvestment).where(ActiveInvestment.fund_id == fund_id)).scalars().all())
-    tx_rows = list(
-        db.execute(
-            select(CashTransaction).where(
-                CashTransaction.fund_id == fund_id,
-                CashTransaction.value_date.is_not(None),
-            ),
-        ).scalars().all(),
-    )
+    """Evaluate liquidity/cash impact for investments.
 
+    NOTE: Cash management domain has been removed from scope.
+    This function now returns an empty list. It will be re-implemented
+    when cash management is brought back or replaced by an external
+    cash data feed.
+    """
     db.execute(delete(CashImpactFlag).where(CashImpactFlag.fund_id == fund_id))
-
-    tx_search_fields: dict[int, str] = {}
-    for i, tx in enumerate(tx_rows):
-        tx_search_fields[i] = " ".join([
-            (tx.payment_reference or "").lower(),
-            (tx.beneficiary_name or "").lower(),
-            (tx.notes or "").lower(),
-        ])
-
-    saved: list[CashImpactFlag] = []
-    for inv in investments:
-        inv_name = inv.investment_name.lower()
-        matched_txs = [
-            tx_rows[i]
-            for i, combined in tx_search_fields.items()
-            if inv_name in combined
-        ]
-
-        if not matched_txs:
-            continue
-
-        for tx in matched_txs:
-            amount = _safe_float(tx.amount) or 0.0
-            impact_type = "CAPITAL_CALL" if amount >= 0 else "DISTRIBUTION"
-            abs_amount = abs(amount)
-            severity = "LOW"
-            if abs_amount >= 500000.0:
-                severity = "HIGH"
-            elif abs_amount >= 150000.0:
-                severity = "MEDIUM"
-
-            liquidity_days = max(1, int(abs_amount / 50000.0))
-            message = (
-                f"{impact_type} detected for {inv.investment_name} with transaction {tx.reference_code or tx.id} "
-                f"and amount {amount:.2f} USD; estimated liquidity impact window {liquidity_days} days."
-            )
-
-            row = CashImpactFlag(
-                fund_id=fund_id,
-                access_level="internal",
-                investment_id=inv.id,
-                transaction_id=tx.id,
-                impact_type=impact_type,
-                severity=severity,
-                estimated_impact_usd=abs_amount,
-                liquidity_days=liquidity_days,
-                message=message,
-                resolved_flag=False,
-                as_of=as_of,
-                created_by=actor_id,
-                updated_by=actor_id,
-            )
-            db.add(row)
-            saved.append(row)
-
     db.flush()
-    return saved
+    logger.info(
+        "evaluate_liquidity_cash_impact: cash_management removed from scope, "
+        "returning empty — fund=%s",
+        fund_id,
+    )
+    return []
 
 
 def reclassify_investment_risk(

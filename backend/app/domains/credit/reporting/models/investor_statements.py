@@ -5,10 +5,10 @@ import uuid
 from sqlalchemy import Index, Numeric, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, IdMixin
+from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, IdMixin, OrganizationScopedMixin
 
 
-class InvestorStatement(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class InvestorStatement(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     __tablename__ = "investor_statements"
 
     investor_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True, index=True)

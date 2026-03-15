@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 import re
 
-from app.domains.credit.compliance.ingest.compliance_kb_schema import ComplianceChunk, DocType
+from ai_engine.extraction.kb_schema import ComplianceChunk, DocType
 
 logger = logging.getLogger(__name__)
 

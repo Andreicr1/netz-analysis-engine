@@ -8,10 +8,10 @@ from sqlalchemy import Boolean, Date, DateTime, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, IdMixin
+from app.core.db.base import AuditMetaMixin, Base, FundScopedMixin, IdMixin, OrganizationScopedMixin
 
 
-class ReportSchedule(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class ReportSchedule(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """Defines an automated report generation schedule."""
 
     __tablename__ = "report_schedules"
@@ -54,7 +54,7 @@ class ReportSchedule(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
     )
 
 
-class ReportRun(Base, IdMixin, FundScopedMixin, AuditMetaMixin):
+class ReportRun(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """Immutable record of a scheduled report execution."""
 
     __tablename__ = "report_runs"

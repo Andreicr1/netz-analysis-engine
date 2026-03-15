@@ -9,8 +9,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.db.engine import get_db
-from app.core.security.auth import Actor
-from app.core.security.clerk_auth import require_roles
+from app.core.security.clerk_auth import Actor, require_roles
+from app.domains.credit.modules.ai._helpers import (
+    _limit,
+    _normalize_chapter_content,
+    _offset,
+    _utcnow,
+)
 from app.domains.credit.modules.ai.models import (
     DealDocumentIntelligence,
     DealICBrief,
@@ -20,12 +25,6 @@ from app.domains.credit.modules.ai.models import (
     DocumentRegistry,
     MacroSnapshot,
     PipelineAlert,
-)
-from app.domains.credit.modules.ai.routes._helpers import (
-    _limit,
-    _normalize_chapter_content,
-    _offset,
-    _utcnow,
 )
 from app.domains.credit.modules.ai.schemas import (
     PipelineAlertOut,

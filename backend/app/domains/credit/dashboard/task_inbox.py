@@ -1,15 +1,12 @@
-"""Task Inbox — cross-domain aggregation of pending user actions.
+"""Task Inbox -- cross-domain aggregation of pending user actions.
 
 Endpoint:
-  GET /dashboard/task-inbox → pending tasks across all modules
+  GET /dashboard/task-inbox -> pending tasks across all modules
 
 Aggregates:
-  - Cash transactions awaiting approval/signature
-  - Compliance obligations overdue or in-progress
-  - Signature queue items pending action
   - Execution actions still open
   - Pipeline deals awaiting IC decision
-  - IC Memos with open conditions or pending e-signatures
+  - Document reviews pending action
 """
 from __future__ import annotations
 
@@ -19,20 +16,19 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.db.engine import get_db
-from app.core.security.auth import Actor
-from app.core.security.clerk_auth import get_actor
+from app.core.security.clerk_auth import Actor, get_actor
+from app.core.tenancy.middleware import get_db_with_rls
 from app.shared.enums import Role
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 
 @router.get("/task-inbox")
-def task_inbox(
+async def task_inbox(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     actor: Actor = Depends(get_actor),
 ) -> dict[str, Any]:
     """Return all pending tasks grouped by module, filtered by actor role."""
@@ -42,32 +38,17 @@ def task_inbox(
     sections: list[dict[str, Any]] = []
     total = 0
 
-    cash = _cash_tasks(db, fund_id, roles, is_admin)
-    if cash:
-        sections.append(cash)
-        total += cash["count"]
-
-    compliance = _compliance_tasks(db, fund_id, roles, is_admin)
-    if compliance:
-        sections.append(compliance)
-        total += compliance["count"]
-
-    signatures = _signature_tasks(db, fund_id, roles, is_admin)
-    if signatures:
-        sections.append(signatures)
-        total += signatures["count"]
-
-    actions = _action_tasks(db, fund_id, roles, is_admin)
+    actions = await _action_tasks(db, fund_id, roles, is_admin)
     if actions:
         sections.append(actions)
         total += actions["count"]
 
-    pipeline = _pipeline_tasks(db, fund_id, roles, is_admin)
+    pipeline = await _pipeline_tasks(db, fund_id, roles, is_admin)
     if pipeline:
         sections.append(pipeline)
         total += pipeline["count"]
 
-    doc_reviews = _document_review_tasks(db, fund_id, roles, is_admin, actor)
+    doc_reviews = await _document_review_tasks(db, fund_id, roles, is_admin, actor)
     if doc_reviews:
         sections.append(doc_reviews)
         total += doc_reviews["count"]
@@ -79,214 +60,10 @@ def task_inbox(
     }
 
 
-# ── Cash Management ──────────────────────────────────────────────────
+# -- Execution Actions -------------------------------------------------------
 
-def _cash_tasks(
-    db: Session,
-    fund_id: uuid.UUID,
-    roles: set[str],
-    is_admin: bool,
-) -> dict[str, Any] | None:
-    relevant_roles = {"DIRECTOR", "GP", "INVESTMENT_TEAM", "ADMIN"}
-    if not is_admin and not roles.intersection(relevant_roles):
-        return None
-
-    from app.domains.credit.cash_management.enums import CashTransactionStatus
-    from app.domains.credit.cash_management.models.cash import CashTransaction
-
-    actionable = [
-        CashTransactionStatus.PENDING_APPROVAL,
-        CashTransactionStatus.APPROVED,
-        CashTransactionStatus.SENT_TO_ADMIN,
-    ]
-
-    rows = list(
-        db.execute(
-            select(CashTransaction).where(
-                CashTransaction.fund_id == fund_id,
-                CashTransaction.status.in_(actionable),
-            )
-            .order_by(CashTransaction.created_at.desc())
-            .limit(50),
-        ).scalars().all(),
-    )
-
-    if not rows:
-        return None
-
-    items = []
-    for tx in rows:
-        action = _cash_action_label(tx.status)
-        items.append({
-            "id": str(tx.id),
-            "title": f"{tx.type.value} — {tx.beneficiary_name or 'N/A'}",
-            "subtitle": f"USD {float(tx.amount or 0):,.2f}",
-            "status": tx.status.value,
-            "action": action,
-            "createdAt": tx.created_at.isoformat() if tx.created_at else None,
-            "route": "cash-management",
-        })
-
-    return {
-        "module": "cashManagement",
-        "label": "Cash Management",
-        "icon": "sap-icon://money-bills",
-        "count": len(items),
-        "items": items,
-    }
-
-
-def _cash_action_label(status: Any) -> str:
-    from app.domains.credit.cash_management.enums import CashTransactionStatus
-
-    mapping = {
-        CashTransactionStatus.PENDING_APPROVAL: "approvalRequired",
-        CashTransactionStatus.APPROVED: "sendToAdmin",
-        CashTransactionStatus.SENT_TO_ADMIN: "confirmExecution",
-    }
-    return mapping.get(status, "review")
-
-
-# ── Compliance Obligations ───────────────────────────────────────────
-
-def _compliance_tasks(
-    db: Session,
-    fund_id: uuid.UUID,
-    roles: set[str],
-    is_admin: bool,
-) -> dict[str, Any] | None:
-    relevant_roles = {"COMPLIANCE", "ADMIN", "INVESTMENT_TEAM", "GP"}
-    if not is_admin and not roles.intersection(relevant_roles):
-        return None
-
-    from app.domains.credit.modules.compliance.models import Obligation
-
-    active_obligations = list(
-        db.execute(
-            select(Obligation).where(
-                Obligation.fund_id == fund_id,
-                Obligation.is_active.is_(True),
-            ),
-        ).scalars().all(),
-    )
-
-    if not active_obligations:
-        return None
-
-    obligation_ids = [o.id for o in active_obligations]
-
-    from app.domains.credit.modules.compliance.service import (
-        compute_display_status,
-        get_workflow_status_map,
-    )
-    wf_map = get_workflow_status_map(db, fund_id=fund_id, obligation_ids=obligation_ids)
-
-    today = dt.date.today()
-    items = []
-    for ob in active_obligations:
-        wf_status = wf_map.get(ob.id, "OPEN")
-        display = compute_display_status(wf_status, ob.next_due_date)
-
-        if display in ("COMPLETED",):
-            continue
-
-        priority = "high" if display == "OVERDUE" else "medium"
-        days_left = (ob.next_due_date - today).days if ob.next_due_date else None
-
-        items.append({
-            "id": str(ob.id),
-            "title": ob.name,
-            "subtitle": ob.responsible_party or ob.regulator or "",
-            "status": display,
-            "action": "resolveObligation",
-            "priority": priority,
-            "daysLeft": days_left,
-            "dueDate": ob.next_due_date.isoformat() if ob.next_due_date else None,
-            "route": "compliance",
-        })
-
-    items.sort(key=lambda x: (0 if x["status"] == "OVERDUE" else 1, x.get("daysLeft") or 9999))
-    items = items[:50]
-
-    if not items:
-        return None
-
-    return {
-        "module": "compliance",
-        "label": "Compliance",
-        "icon": "sap-icon://shield",
-        "count": len(items),
-        "items": items,
-    }
-
-
-# ── Signature Queue ──────────────────────────────────────────────────
-
-def _signature_tasks(
-    db: Session,
-    fund_id: uuid.UUID,
-    roles: set[str],
-    is_admin: bool,
-) -> dict[str, Any] | None:
-    relevant_roles = {"DIRECTOR", "GP", "INVESTMENT_TEAM", "ADMIN"}
-    if not is_admin and not roles.intersection(relevant_roles):
-        return None
-
-    from app.domains.credit.modules.signatures.models import (
-        SignatureQueueItem,
-        SignatureQueueStatus,
-    )
-
-    pending_statuses = [
-        SignatureQueueStatus.QUEUED,
-        SignatureQueueStatus.SENT,
-        SignatureQueueStatus.ERROR,
-    ]
-
-    rows = list(
-        db.execute(
-            select(SignatureQueueItem).where(
-                SignatureQueueItem.fund_id == fund_id,
-                SignatureQueueItem.status.in_(pending_statuses),
-            )
-            .order_by(SignatureQueueItem.created_at.desc())
-            .limit(50),
-        ).scalars().all(),
-    )
-
-    if not rows:
-        return None
-
-    items = []
-    for sq in rows:
-        action_map = {
-            SignatureQueueStatus.QUEUED: "sendForSignature",
-            SignatureQueueStatus.SENT: "awaitingSignature",
-            SignatureQueueStatus.ERROR: "resolveError",
-        }
-        items.append({
-            "id": str(sq.id),
-            "title": sq.title,
-            "subtitle": sq.source_page or "",
-            "status": sq.status.value,
-            "action": action_map.get(sq.status, "review"),
-            "createdAt": sq.created_at.isoformat() if sq.created_at else None,
-            "route": "signatures",
-        })
-
-    return {
-        "module": "signatures",
-        "label": "Signatures",
-        "icon": "sap-icon://signature",
-        "count": len(items),
-        "items": items,
-    }
-
-
-# ── Execution Actions ────────────────────────────────────────────────
-
-def _action_tasks(
-    db: Session,
+async def _action_tasks(
+    db: AsyncSession,
     fund_id: uuid.UUID,
     roles: set[str],
     is_admin: bool,
@@ -297,16 +74,15 @@ def _action_tasks(
 
     from app.domains.credit.modules.actions.models import Action
 
-    rows = list(
-        db.execute(
-            select(Action).where(
-                Action.fund_id == fund_id,
-                Action.status.in_(["Open", "In Progress", "Pending Evidence", "Under Review"]),
-            )
-            .order_by(Action.due_date.asc().nullslast(), Action.created_at.desc())
-            .limit(50),
-        ).scalars().all(),
+    result = await db.execute(
+        select(Action).where(
+            Action.fund_id == fund_id,
+            Action.status.in_(["Open", "In Progress", "Pending Evidence", "Under Review"]),
+        )
+        .order_by(Action.due_date.asc().nullslast(), Action.created_at.desc())
+        .limit(50),
     )
+    rows = list(result.scalars().all())
 
     if not rows:
         return None
@@ -335,10 +111,10 @@ def _action_tasks(
     }
 
 
-# ── Pipeline Deals (IC Decision) ────────────────────────────────────
+# -- Pipeline Deals (IC Decision) -------------------------------------------
 
-def _pipeline_tasks(
-    db: Session,
+async def _pipeline_tasks(
+    db: AsyncSession,
     fund_id: uuid.UUID,
     roles: set[str],
     is_admin: bool,
@@ -349,20 +125,17 @@ def _pipeline_tasks(
 
     from app.domains.credit.modules.deals.models import PipelineDeal
 
-    ic_stages = ("IC_REVIEW", "IC Decision", "ic_review", "ic_decision", "CONDITIONAL", "Conditional")
-
-    rows = list(
-        db.execute(
-            select(PipelineDeal).where(
-                PipelineDeal.fund_id == fund_id,
-                PipelineDeal.is_archived.is_(False),
-                PipelineDeal.intelligence_status == "READY",
-                PipelineDeal.approved_deal_id.is_(None),
-            )
-            .order_by(PipelineDeal.created_at.desc())
-            .limit(50),
-        ).scalars().all(),
+    result = await db.execute(
+        select(PipelineDeal).where(
+            PipelineDeal.fund_id == fund_id,
+            PipelineDeal.is_archived.is_(False),
+            PipelineDeal.intelligence_status == "READY",
+            PipelineDeal.approved_deal_id.is_(None),
+        )
+        .order_by(PipelineDeal.created_at.desc())
+        .limit(50),
     )
+    rows = list(result.scalars().all())
 
     if not rows:
         return None
@@ -390,10 +163,10 @@ def _pipeline_tasks(
     }
 
 
-# ── Document Reviews ─────────────────────────────────────────────────
+# -- Document Reviews --------------------------------------------------------
 
-def _document_review_tasks(
-    db: Session,
+async def _document_review_tasks(
+    db: AsyncSession,
     fund_id: uuid.UUID,
     roles: set[str],
     is_admin: bool,
@@ -429,12 +202,11 @@ def _document_review_tasks(
             )
         )
 
-    rows = list(
-        db.execute(
-            stmt.order_by(DocumentReview.due_date.asc().nullslast(), DocumentReview.submitted_at.desc())
-            .limit(50),
-        ).scalars().all(),
+    result = await db.execute(
+        stmt.order_by(DocumentReview.due_date.asc().nullslast(), DocumentReview.submitted_at.desc())
+        .limit(50),
     )
+    rows = list(result.scalars().all())
 
     if not rows:
         return None
@@ -446,7 +218,7 @@ def _document_review_tasks(
         items.append({
             "id": str(r.id),
             "title": r.title,
-            "subtitle": f"{r.document_type} — {r.submitted_by}",
+            "subtitle": f"{r.document_type} -- {r.submitted_by}",
             "status": r.status,
             "action": "reviewDocument",
             "priority": "high" if r.priority == "URGENT" or overdue else ("medium" if r.priority == "HIGH" else "low"),
