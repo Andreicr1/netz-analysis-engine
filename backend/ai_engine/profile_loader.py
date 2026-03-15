@@ -18,6 +18,7 @@ Usage::
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from types import ModuleType
@@ -61,17 +62,16 @@ class AnalysisProfile:
 
 # ── Vertical engine registry ─────────────────────────────────────────────────
 
-# Maps profile name → vertical engine module path.
-# ProfileLoader imports these lazily to avoid circular dependencies.
-_VERTICAL_REGISTRY: dict[str, str] = {
-    "private_credit": "vertical_engines.credit",
-    "liquid_funds": "vertical_engines.wealth",
-}
 
-# Maps profile name → vertical name (for ConfigService lookup).
-_PROFILE_TO_VERTICAL: dict[str, str] = {
-    "private_credit": "private_credit",
-    "liquid_funds": "liquid_funds",
+@dataclass(frozen=True)
+class _VerticalEntry:
+    vertical: str
+    module_path: str
+
+
+_REGISTRY: dict[str, _VerticalEntry] = {
+    "private_credit": _VerticalEntry("private_credit", "vertical_engines.credit"),
+    "liquid_funds": _VerticalEntry("liquid_funds", "vertical_engines.wealth"),
 }
 
 
@@ -105,16 +105,19 @@ class ProfileLoader:
         ValueError
             If the profile name is not in the registry.
         """
-        if profile_name not in _PROFILE_TO_VERTICAL:
+        if profile_name not in _REGISTRY:
             raise ValueError(
                 f"Unknown profile: {profile_name!r}. "
-                f"Available: {sorted(_PROFILE_TO_VERTICAL)}"
+                f"Available: {sorted(_REGISTRY)}"
             )
 
-        vertical = _PROFILE_TO_VERTICAL[profile_name]
+        vertical = _REGISTRY[profile_name].vertical
 
-        # Fetch chapters config (profile definition)
-        chapters_config = await self._config.get(vertical, "chapters", org_id)
+        # Fetch chapters + calibration in parallel
+        chapters_config, calibration = await asyncio.gather(
+            self._config.get(vertical, "chapters", org_id),
+            self._config.get(vertical, "calibration", org_id),
+        )
 
         # Parse chapters
         chapters = tuple(
@@ -127,9 +130,6 @@ class ProfileLoader:
             )
             for ch in chapters_config.get("chapters", [])
         )
-
-        # Fetch calibration config (scoring thresholds, model routing, etc.)
-        calibration = await self._config.get(vertical, "calibration", org_id)
 
         return AnalysisProfile(
             name=chapters_config.get("name", profile_name),
@@ -158,18 +158,18 @@ class ProfileLoader:
         ModuleType
             The vertical engine module (e.g. ``vertical_engines.credit``).
         """
-        if profile_name not in _VERTICAL_REGISTRY:
+        if profile_name not in _REGISTRY:
             raise ValueError(
                 f"No vertical engine registered for profile: {profile_name!r}. "
-                f"Available: {sorted(_VERTICAL_REGISTRY)}"
+                f"Available: {sorted(_REGISTRY)}"
             )
 
         import importlib
 
-        module_path = _VERTICAL_REGISTRY[profile_name]
+        module_path = _REGISTRY[profile_name].module_path
         return importlib.import_module(module_path)
 
     @staticmethod
     def available_profiles() -> list[str]:
         """Return sorted list of registered profile names."""
-        return sorted(_PROFILE_TO_VERTICAL)
+        return sorted(_REGISTRY)

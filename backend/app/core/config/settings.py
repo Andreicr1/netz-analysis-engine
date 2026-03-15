@@ -92,6 +92,11 @@ class Settings(BaseSettings):
             raise RuntimeError("CLERK_JWKS_URL must be set in production.")
         if self.dev_token == "dev-token-change-me":
             raise RuntimeError("DEV_TOKEN must be changed from default in production.")
+        if self.feature_adls_enabled:
+            if not self.adls_account_name:
+                raise RuntimeError("ADLS_ACCOUNT_NAME must be set when FEATURE_ADLS_ENABLED=true.")
+            if not (self.adls_account_key or self.adls_connection_string):
+                raise RuntimeError("ADLS credentials (account key or connection string) must be set when FEATURE_ADLS_ENABLED=true.")
 
 
 settings = Settings()

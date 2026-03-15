@@ -16,26 +16,17 @@ class TestBaseInterfaces:
         abstract_methods = {m for m in BaseAnalyzer.__abstractmethods__}
         assert "run_deal_analysis" in abstract_methods
         assert "run_portfolio_analysis" in abstract_methods
-        assert "run_pipeline_analysis" in abstract_methods
-
-    def test_base_extractor_is_abstract(self):
-        from vertical_engines.base.base_extractor import BaseExtractor
-
-        assert inspect.isabstract(BaseExtractor)
-        assert "extract_structured" in BaseExtractor.__abstractmethods__
-
-    def test_base_critic_is_abstract(self):
-        from vertical_engines.base.base_critic import BaseCritic
-
-        assert inspect.isabstract(BaseCritic)
-        assert "critique" in BaseCritic.__abstractmethods__
+        # run_pipeline_analysis is a concrete default (not abstract)
+        assert "run_pipeline_analysis" not in abstract_methods
 
     def test_base_init_exports(self):
-        from vertical_engines.base import BaseAnalyzer, BaseCritic, BaseExtractor
+        import vertical_engines.base as base_mod
 
-        assert inspect.isabstract(BaseAnalyzer)
-        assert inspect.isabstract(BaseCritic)
-        assert inspect.isabstract(BaseExtractor)
+        assert hasattr(base_mod, "BaseAnalyzer")
+        assert inspect.isabstract(base_mod.BaseAnalyzer)
+        # BaseCritic and BaseExtractor were removed (YAGNI)
+        assert not hasattr(base_mod, "BaseCritic")
+        assert not hasattr(base_mod, "BaseExtractor")
 
 
 # ── Credit module structure tests ─────────────────────────────────────────────

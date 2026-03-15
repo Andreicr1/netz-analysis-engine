@@ -14,7 +14,13 @@ from sqlalchemy.orm import Session
 
 
 class BaseAnalyzer(ABC):
-    """Abstract interface for vertical-specific deal analysis."""
+    """Abstract interface for vertical-specific deal analysis.
+
+    Note: Methods accept sync ``Session`` (not ``AsyncSession``) because
+    vertical engine business logic is CPU-bound and runs in sync context.
+    Callers in async route handlers must dispatch via ``asyncio.to_thread()``
+    or use a sync session obtained outside the async context.
+    """
 
     vertical: str  # e.g. "private_credit", "liquid_funds"
 
@@ -84,7 +90,6 @@ class BaseAnalyzer(ABC):
             Portfolio analysis result.
         """
 
-    @abstractmethod
     def run_pipeline_analysis(
         self,
         db: Session,
@@ -94,6 +99,9 @@ class BaseAnalyzer(ABC):
         config: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Run pipeline-level analysis (discovery, aggregation, ingest).
+
+        Default implementation returns not-applicable. Verticals that have
+        a pipeline concept (e.g. private credit) should override this.
 
         Parameters
         ----------
@@ -111,3 +119,4 @@ class BaseAnalyzer(ABC):
         dict
             Pipeline analysis result.
         """
+        return {"status": "not_applicable", "vertical": self.vertical}

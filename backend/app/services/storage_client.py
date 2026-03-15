@@ -17,8 +17,10 @@ Path convention (both backends):
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
+import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -26,9 +28,34 @@ from app.core.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
+# Matches safe path segments: alphanumeric start, then alphanumeric/dot/dash/underscore/space.
+_SAFE_PATH_SEGMENT_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._\- ]*$")
+
 
 class StorageClient(ABC):
     """Abstract storage client interface."""
+
+    @staticmethod
+    def _validate_path(path: str) -> None:
+        """Reject paths that could escape the storage root.
+
+        Raises ``ValueError`` for:
+        - paths containing ``..`` (directory traversal)
+        - absolute paths (start with ``/`` or a Windows drive letter)
+        - empty paths
+        - null bytes
+        """
+        if not path:
+            raise ValueError("Storage path must not be empty")
+        if "\x00" in path:
+            raise ValueError("Storage path must not contain null bytes")
+        if ".." in path.split("/"):
+            raise ValueError(f"Path traversal detected: {path}")
+        if path.startswith("/") or path.startswith("\\"):
+            raise ValueError(f"Absolute paths are not allowed: {path}")
+        # Windows drive letter detection (e.g. C:\)
+        if len(path) >= 2 and path[1] == ":":
+            raise ValueError(f"Absolute paths are not allowed: {path}")
 
     @abstractmethod
     async def write(self, path: str, data: bytes, *, content_type: str = "application/octet-stream") -> str:
@@ -64,6 +91,12 @@ class LocalStorageClient(StorageClient):
 
     Mirrors ADLS path hierarchy on disk so code under test uses
     the same path conventions as production.
+
+    .. note::
+        Methods use sync ``pathlib.Path`` operations inside ``async def``.
+        This is tolerable for local dev where I/O is fast and there is no
+        concurrent load.  If this backend is ever used in production,
+        wrap calls with ``asyncio.to_thread`` as done in ``ADLSStorageClient``.
     """
 
     def __init__(self, root: str | Path | None = None) -> None:
@@ -154,35 +187,43 @@ class ADLSStorageClient(StorageClient):
         )
 
     async def write(self, path: str, data: bytes, *, content_type: str = "application/octet-stream") -> str:
+        self._validate_path(path)
         file_client = self._fs.get_file_client(path)
-        file_client.upload_data(data, overwrite=True, content_settings={"content_type": content_type})
+        await asyncio.to_thread(
+            file_client.upload_data, data, overwrite=True, content_settings={"content_type": content_type},
+        )
         return path
 
     async def read(self, path: str) -> bytes:
+        self._validate_path(path)
         file_client = self._fs.get_file_client(path)
-        download = file_client.download_file()
-        return download.readall()
+        download = await asyncio.to_thread(file_client.download_file)
+        return await asyncio.to_thread(download.readall)
 
     async def exists(self, path: str) -> bool:
+        self._validate_path(path)
         file_client = self._fs.get_file_client(path)
         try:
-            file_client.get_file_properties()
+            await asyncio.to_thread(file_client.get_file_properties)
             return True
         except Exception:  # noqa: BLE001
             return False
 
     async def delete(self, path: str) -> None:
+        self._validate_path(path)
         file_client = self._fs.get_file_client(path)
         try:
-            file_client.delete_file()
+            await asyncio.to_thread(file_client.delete_file)
         except Exception:  # noqa: BLE001
             pass
 
     async def list_files(self, prefix: str) -> list[str]:
-        paths = self._fs.get_paths(path=prefix)
+        self._validate_path(prefix)
+        paths = await asyncio.to_thread(self._fs.get_paths, path=prefix)
         return [p.name for p in paths if not p.is_directory]
 
     async def generate_read_url(self, path: str, *, expires_in: int = 3600) -> str:
+        self._validate_path(path)
         from datetime import datetime, timedelta, timezone
 
         from azure.storage.filedatalake import generate_file_sas
@@ -199,6 +240,7 @@ class ADLSStorageClient(StorageClient):
         return f"https://{settings.adls_account_name}.dfs.core.windows.net/{settings.adls_container_name}/{path}?{sas}"
 
     async def generate_upload_url(self, path: str, *, expires_in: int = 3600) -> str:
+        self._validate_path(path)
         from datetime import datetime, timedelta, timezone
 
         from azure.storage.filedatalake import generate_file_sas

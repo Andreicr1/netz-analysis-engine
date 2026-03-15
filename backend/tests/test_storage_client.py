@@ -1,4 +1,4 @@
-"""Tests for StorageClient — local filesystem backend."""
+"""Tests for StorageClient — local filesystem backend + path validation."""
 
 from __future__ import annotations
 
@@ -82,6 +82,62 @@ class TestLocalStorageClient:
     async def test_generate_upload_url(self, storage):
         url = await storage.generate_upload_url("bronze/org1/new.txt")
         assert url.startswith("file:///")
+
+
+class TestPathValidation:
+    """Tests for StorageClient._validate_path — rejects traversal and absolute paths."""
+
+    def test_rejects_empty_path(self):
+        with pytest.raises(ValueError, match="must not be empty"):
+            StorageClient._validate_path("")
+
+    def test_rejects_null_bytes(self):
+        with pytest.raises(ValueError, match="null bytes"):
+            StorageClient._validate_path("bronze/org1/file\x00.txt")
+
+    def test_rejects_dot_dot_traversal(self):
+        with pytest.raises(ValueError, match="Path traversal"):
+            StorageClient._validate_path("bronze/../etc/passwd")
+
+    def test_rejects_leading_dot_dot(self):
+        with pytest.raises(ValueError, match="Path traversal"):
+            StorageClient._validate_path("../secret")
+
+    def test_rejects_absolute_unix_path(self):
+        with pytest.raises(ValueError, match="Absolute paths"):
+            StorageClient._validate_path("/etc/passwd")
+
+    def test_rejects_absolute_windows_path(self):
+        with pytest.raises(ValueError, match="Absolute paths"):
+            StorageClient._validate_path("C:\\Windows\\System32\\config")
+
+    def test_rejects_backslash_absolute(self):
+        with pytest.raises(ValueError, match="Absolute paths"):
+            StorageClient._validate_path("\\\\server\\share")
+
+    def test_accepts_valid_path(self):
+        # Should not raise
+        StorageClient._validate_path("bronze/org-123/fund-456/documents/v1/report.pdf")
+
+    def test_accepts_dotfile(self):
+        # Single dots inside segment names are fine (e.g. "file.txt")
+        StorageClient._validate_path("bronze/org1/.gitkeep")
+
+    def test_dot_dot_inside_segment_is_rejected(self):
+        # ".." as a standalone path segment is traversal
+        with pytest.raises(ValueError, match="Path traversal"):
+            StorageClient._validate_path("bronze/org1/../../etc/passwd")
+
+    @pytest.mark.asyncio
+    async def test_local_client_write_rejects_traversal(self, storage):
+        """Ensure LocalStorageClient also catches traversal via _resolve."""
+        with pytest.raises(ValueError):
+            await storage.write("../../etc/passwd", b"malicious")
+
+    @pytest.mark.asyncio
+    async def test_local_client_read_rejects_traversal(self, storage):
+        with pytest.raises(ValueError):
+            await storage.read("../../../etc/shadow")
 
 
 class TestStorageClientFactory:

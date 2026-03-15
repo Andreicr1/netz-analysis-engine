@@ -63,6 +63,7 @@ async def process_pending_versions(
             await _process_one(db, fund_id=fund_id, version=v, actor_id=actor_id)
             indexed += 1
         except Exception:
+            logger.exception("Failed to process version %s", v.id)
             failed += 1
     return WorkerResult(processed=processed, indexed=indexed, failed=failed, skipped=skipped)
 
@@ -234,8 +235,9 @@ async def _process_one(db: AsyncSession, *, fund_id: uuid.UUID, version: Documen
         })
 
     except Exception as e:
+        logger.exception("Ingestion failed for version %s", version.id)
         version.ingestion_status = DocumentIngestionStatus.FAILED
-        version.ingest_error = {"reason": "exception", "detail": str(e)}
+        version.ingest_error = {"reason": "processing_error", "type": type(e).__name__}
         version.updated_by = actor_id
         await write_audit_event(
             db,
@@ -245,8 +247,8 @@ async def _process_one(db: AsyncSession, *, fund_id: uuid.UUID, version: Documen
             entity_type="document_version",
             entity_id=version.id,
             before=None,
-            after={"reason": "exception", "detail": str(e)},
+            after={"reason": "processing_error", "type": type(e).__name__},
         )
         await db.commit()
-        await _emit(job_id, "error", {"reason": "exception", "detail": str(e)})
+        await _emit(job_id, "error", {"reason": "processing_error"})
         raise

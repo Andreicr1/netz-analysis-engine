@@ -76,14 +76,5 @@ class FundAnalyzer(BaseAnalyzer):
             as_of=as_of,
         )
 
-    def run_pipeline_analysis(
-        self,
-        db: Session,
-        *,
-        fund_id: str,
-        actor_id: str,
-        config: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        """Wealth does not have a pipeline concept — returns empty result."""
-        logger.info("Pipeline analysis not applicable for wealth vertical")
-        return {"status": "not_applicable", "vertical": self.vertical}
+    # run_pipeline_analysis: inherits default from BaseAnalyzer
+    # (wealth has no pipeline concept)

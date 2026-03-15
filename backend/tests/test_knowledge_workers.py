@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from worker_app.knowledge_aggregator import (
+    _ALLOWED_SIGNAL_FIELDS,
     _ltv_bucket,
     _tenor_bucket,
     _vix_bucket,
@@ -172,6 +173,27 @@ class TestExtractAnonymousSignal:
         }
         for field in forbidden:
             assert field not in signal, f"PRIVACY: forbidden field {field!r} found in signal"
+
+    def test_signal_keys_match_allowlist(self):
+        """Signal keys must be a subset of the positive allowlist."""
+        signal = extract_anonymous_signal(
+            org_id=ORG_ID,
+            deal_id=DEAL_ID,
+            memo_id=MEMO_ID,
+            profile="private_credit",
+            memo_result={
+                "recommendation": "INVEST",
+                "confidence_score": 0.85,
+                "chapters": [
+                    {"chapter_tag": "ch01_exec", "quality_score": 0.9},
+                ],
+                "risk_flags": [{"flag": "a"}],
+                "critic_result": {"fatal_flaw_count": 1},
+                "quant_profile": {"ltv": 0.55, "tenor_months": 36, "structure_type": "senior_secured"},
+            },
+            macro_snapshot={"regime": "RISK_ON", "vix": 18},
+        )
+        assert set(signal.keys()) <= _ALLOWED_SIGNAL_FIELDS
 
     def test_missing_fields_use_defaults(self):
         signal = extract_anonymous_signal(

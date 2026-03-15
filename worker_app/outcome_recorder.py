@@ -110,7 +110,7 @@ async def record_outcome(
 
     await storage.write(
         path,
-        json.dumps(record, indent=2).encode("utf-8"),
+        json.dumps(record, separators=(",", ":")).encode("utf-8"),
         content_type="application/json",
     )
 

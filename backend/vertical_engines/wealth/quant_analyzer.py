@@ -70,26 +70,3 @@ class QuantAnalyzer:
             "regime": None,
         }
 
-    def analyze_fund_manager(
-        self,
-        *,
-        returns_series: list[float] | None = None,
-        benchmark_series: list[float] | None = None,
-    ) -> dict[str, Any]:
-        """Compute quant metrics for a fund manager evaluation.
-
-        Used by DD report chapter 3 (Performance Analysis).
-
-        Returns
-        -------
-        dict
-            Metrics: sharpe, sortino, max_drawdown, information_ratio, etc.
-        """
-        # TODO(Sprint 5+): Implement actual computations.
-        return {
-            "sharpe_ratio": None,
-            "sortino_ratio": None,
-            "max_drawdown": None,
-            "information_ratio": None,
-            "status": "scaffold",
-        }

@@ -12,6 +12,7 @@ used as the Redis pub/sub channel for SSE progress streaming.
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -30,6 +31,8 @@ from app.services.storage_client import get_storage_client
 from app.shared.enums import Role
 
 logger = logging.getLogger(__name__)
+
+_SAFE_FILENAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._\- ]*$")
 
 router = APIRouter(prefix="/documents", tags=["documents.upload"])
 
@@ -98,8 +101,13 @@ async def generate_upload_url(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    # Sanitize filename — strip traversal characters, reject unsafe names
+    safe_filename = payload.filename.replace("/", "").replace("\\", "").replace("..", "")
+    if not safe_filename or not _SAFE_FILENAME_RE.match(safe_filename):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
     # Generate SAS upload URL
-    blob_path = f"bronze/{actor.organization_id}/{payload.fund_id}/documents/{res.version.id}/{payload.filename}"
+    blob_path = f"bronze/{actor.organization_id}/{payload.fund_id}/documents/{res.version.id}/{safe_filename}"
     upload_url = await storage.generate_upload_url(blob_path)
 
     # Store blob_path on version for later retrieval

@@ -96,6 +96,14 @@ _FORBIDDEN_FIELDS = frozenset({
     "borrower_name", "sponsor_name", "geography", "address",
 })
 
+# Positive allowlist — only these fields may appear in a signal.
+_ALLOWED_SIGNAL_FIELDS = frozenset({
+    "anonymous_hash", "timestamp", "profile", "recommendation",
+    "confidence_score", "chapter_scores", "risk_flags_count",
+    "critic_fatal_flaws", "ltv_bucket", "tenor_bucket",
+    "structure_type", "regime", "vix_bucket",
+})
+
 
 def extract_anonymous_signal(
     *,
@@ -175,10 +183,15 @@ def extract_anonymous_signal(
         "vix_bucket": _vix_bucket(float(vix) if vix is not None else None),
     }
 
-    # Safety: verify no forbidden fields leaked
+    # Safety: verify no forbidden fields leaked (defense-in-depth)
     for key in _FORBIDDEN_FIELDS:
         if key in signal:
             raise RuntimeError(f"PRIVACY VIOLATION: forbidden field {key!r} in signal")
+
+    # Safety: positive allowlist — reject any unexpected fields
+    unexpected = signal.keys() - _ALLOWED_SIGNAL_FIELDS
+    if unexpected:
+        raise RuntimeError(f"PRIVACY VIOLATION: unexpected fields in signal: {unexpected}")
 
     return signal
 
@@ -213,7 +226,7 @@ async def aggregate_memo_signal(
 
     await storage.write(
         path,
-        json.dumps(signal, indent=2).encode("utf-8"),
+        json.dumps(signal, separators=(",", ":")).encode("utf-8"),
         content_type="application/json",
     )
 
