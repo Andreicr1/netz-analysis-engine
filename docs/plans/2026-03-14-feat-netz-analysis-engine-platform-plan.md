@@ -769,12 +769,12 @@ Cross-cutting AI utilities incorrectly housed in compliance were relocated to `a
   - `POST /api/v1/documents/upload-complete` → enqueue to Service Bus, return `job_id`
   - `GET /api/v1/jobs/{job_id}/stream` → SSE events (chunking, OCR, embeddings, indexed, complete)
   - Workers emit progress: `tracker.publish_event(job_id, "ocr_complete", {"pages": 47})`
-- [ ] **Worker unification**
+- [x] **Worker unification**
   - `backend/worker_app/function_app.py` — Azure Functions: extraction, ingest, compliance, memo
   - Workers import from `backend/ai_engine/` and `backend/app/domains/credit/`
   - Progress events emitted to Redis pub/sub → SSE endpoint picks up
 
-- [ ] **Global knowledge aggregation (anonymous market intelligence)**
+- [x] **Global knowledge aggregation (anonymous market intelligence)**
   - `backend/worker_app/knowledge_aggregator.py` — post-memo aggregation worker
     - Triggered async after every IC memo is generated and stored
     - Extracts anonymous signals and writes to `gold/_global/analysis_patterns/`
