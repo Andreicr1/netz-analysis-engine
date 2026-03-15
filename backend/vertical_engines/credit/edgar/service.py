@@ -24,6 +24,7 @@ from vertical_engines.credit.edgar.financials import (
     extract_structured_financials,
 )
 from vertical_engines.credit.edgar.going_concern import check_going_concern
+from vertical_engines.credit.edgar.insider_signals import detect_insider_signals
 from vertical_engines.credit.edgar.models import EdgarEntityResult
 
 logger = structlog.get_logger()
@@ -119,6 +120,14 @@ def fetch_edgar_data(
         except Exception as exc:
             warnings.append(f"Going concern scan failed: {type(exc).__name__}")
             logger.warning("going_concern_failed", entity=entity_name, exc_info=True)
+
+        # Insider signals — only for direct target and sponsor/manager roles
+        if role in ("fund/vehicle", "sponsor/manager"):
+            try:
+                result.insider_signals = detect_insider_signals(company)
+            except Exception as exc:
+                warnings.append(f"Insider signal detection failed: {type(exc).__name__}")
+                logger.warning("insider_signals_failed", entity=entity_name, exc_info=True)
 
     except ImportError:
         warnings.append("edgartools not installed")
