@@ -17,14 +17,19 @@ Config is injected as parameter — no module-level settings reads.
 
 from __future__ import annotations
 
+import logging
 import math
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
 import structlog
+
+# Suppress httpx DEBUG logs that would expose FRED API key in URL parameters
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 logger = structlog.get_logger()
 
@@ -136,6 +141,9 @@ def _classify_error(status_code: int) -> str:
 class FredService:
     """Universal FRED data fetching with rate limiting and error handling.
 
+    Uses a persistent httpx.Client for connection pooling (TLS reuse).
+    Supports context manager protocol for clean resource lifecycle.
+
     Args:
         api_key: FRED API key (from settings.fred_api_key).
         base_url: FRED API base URL.
@@ -153,6 +161,20 @@ class FredService:
         self._api_key = api_key
         self._base_url = base_url
         self._rate_limiter = rate_limiter or TokenBucketRateLimiter()
+        self._client = httpx.Client(
+            timeout=30.0,
+            headers={"Accept": "application/json"},
+        )
+
+    def close(self) -> None:
+        """Close the underlying HTTP client."""
+        self._client.close()
+
+    def __enter__(self) -> FredService:
+        return self
+
+    def __exit__(self, *_: Any) -> None:
+        self.close()
 
     def fetch_series(
         self,
@@ -208,7 +230,7 @@ class FredService:
 
         for attempt in range(max_retries):
             try:
-                response = httpx.get(url, params=params, timeout=30.0)
+                response = self._client.get(url, params=params)
                 response.raise_for_status()
                 data = response.json()
 
@@ -321,6 +343,51 @@ class FredService:
                 results[sid] = []
 
         return results
+
+    def fetch_batch_concurrent(
+        self,
+        domain_batches: dict[str, list[dict[str, Any]]],
+        *,
+        observation_start: str | None = None,
+        max_workers: int = 4,
+    ) -> dict[str, list[FredObservation]]:
+        """Fetch multiple domain batches concurrently.
+
+        Each domain (e.g. "US", "EUROPE", "GLOBAL") runs in its own thread,
+        but all threads share the same TokenBucketRateLimiter — the global
+        FRED rate limit (2 req/s) is respected across all threads.
+
+        With 45 series at 2 req/s (after initial 10-token burst), realistic
+        wall-clock time is ~18s.  Threading overlaps network latency with
+        rate-limiter waits and prevents one slow domain from blocking others.
+
+        Args:
+            domain_batches: Mapping of domain name to list of series configs.
+            observation_start: Default observation_start for all series.
+            max_workers: Max concurrent domain threads.
+
+        Returns:
+            Flat dict mapping series_id to observations list (all domains merged).
+        """
+        merged: dict[str, list[FredObservation]] = {}
+
+        def _fetch_domain(configs: list[dict[str, Any]]) -> dict[str, list[FredObservation]]:
+            return self.fetch_batch(configs, observation_start=observation_start)
+
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {
+                pool.submit(_fetch_domain, configs): domain
+                for domain, configs in domain_batches.items()
+            }
+            for future in as_completed(futures):
+                domain = futures[future]
+                try:
+                    domain_results = future.result()
+                    merged.update(domain_results)
+                except Exception as e:
+                    logger.error("FRED domain fetch failed", domain=domain, error=str(e))
+
+        return merged
 
 
 # ---------------------------------------------------------------------------

@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from app.core.security.clerk_auth import CurrentUser, get_current_user
 from app.domains.wealth.workers.ingestion import run_ingestion
+from app.domains.wealth.workers.macro_ingestion import run_macro_ingestion
 from app.domains.wealth.workers.portfolio_eval import run_portfolio_eval
 from app.domains.wealth.workers.risk_calc import run_risk_calc
 
@@ -79,3 +80,24 @@ async def trigger_run_portfolio_eval(
 ) -> WorkerScheduledResponse:
     background_tasks.add_task(run_portfolio_eval)
     return WorkerScheduledResponse(status="scheduled", worker="run-portfolio-eval")
+
+
+@router.post(
+    "/run-macro-ingestion",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger macro intelligence ingestion",
+    description=(
+        "Schedules the macro ingestion worker as a background task. "
+        "Fetches ~45 FRED series across 4 regions, computes regional macro "
+        "scores via percentile-rank normalization, and stores snapshot in "
+        "macro_regional_snapshots. Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_macro_ingestion(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+) -> WorkerScheduledResponse:
+    background_tasks.add_task(run_macro_ingestion)
+    return WorkerScheduledResponse(status="scheduled", worker="run-macro-ingestion")

@@ -1,5 +1,24 @@
 """FRED data ingestion worker — fetches macro indicators from FRED API.
 
+DEPRECATED — 2026-03-15
+Replaced by: backend/app/domains/wealth/workers/macro_ingestion.py
+Reason: macro_ingestion is a superset (45 series vs 10) with regional scoring,
+concurrent domain fetching, and macro_regional_snapshots persistence.
+
+CUTOVER SEQUENCE (do not skip steps):
+  1. Deploy macro_ingestion.py and verify first successful run
+  2. Confirm macro_data table is being populated by macro_ingestion
+  3. Disable fred_ingestion in the scheduler/Azure Function trigger
+  4. Delete this file in the follow-up cleanup sprint
+
+DO NOT run both workers simultaneously — both write to macro_data
+with the same series IDs.  Last-write-wins, causing non-deterministic
+staleness behavior in regime_service.get_latest_macro_values().
+
+---
+
+Original description:
+
 Usage:
     python -m app.workers.fred_ingestion
 
