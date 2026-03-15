@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MacroDataRead(BaseModel):
@@ -88,3 +88,48 @@ class MacroSnapshotResponse(BaseModel):
     id: UUID
     as_of_date: date
     data_json: dict[str, Any]
+
+
+# ---------------------------------------------------------------------------
+#  Phase 2: Regime Hierarchy + Committee Workflow
+# ---------------------------------------------------------------------------
+
+
+class RegimeHierarchyRead(BaseModel):
+    """Hierarchical regime: global + per-region."""
+
+    global_regime: str
+    regional_regimes: dict[str, str]  # region → regime
+    composition_reasons: dict[str, str] = {}
+    as_of_date: date | None = None
+
+
+class MacroReviewRead(BaseModel):
+    """Macro committee review response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    organization_id: UUID
+    status: str
+    is_emergency: bool
+    as_of_date: date
+    snapshot_id: UUID | None = None
+    report_json: dict[str, Any]
+    approved_by: str | None = None
+    approved_at: datetime | None = None
+    decision_rationale: str | None = None
+    created_at: datetime
+    created_by: str | None = None
+
+
+class MacroReviewApprove(BaseModel):
+    """PATCH body for approving a macro review."""
+
+    decision_rationale: str = Field(max_length=2000)
+
+
+class MacroReviewReject(BaseModel):
+    """PATCH body for rejecting a macro review."""
+
+    decision_rationale: str = Field(max_length=2000)
