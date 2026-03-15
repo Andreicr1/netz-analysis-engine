@@ -171,14 +171,9 @@ def _is_10b5_1_transaction(filing: Any, form4: Any) -> bool:
             if "10b5-1" in text.lower() or "rule 10b5-1" in text.lower():
                 return True
 
-    # Text fallback (more expensive — downloads filing text)
-    try:
-        text = filing.text()
-        if text and "10b5-1" in text[:5000].lower():
-            return True
-    except Exception:
-        pass
-
+    # Skip text fallback — checkbox (2023+) + footnote check are sufficient.
+    # Downloading filing.text() for every pre-2023 Form 4 adds ~30 HTTP
+    # requests per entity with no meaningful precision improvement.
     return False
 
 
@@ -191,8 +186,17 @@ def _check_net_selling(
     threshold: float = 0.10,
 ) -> None:
     """Detect aggregate insider net selling > threshold of holdings in window."""
+    today = datetime.now().isoformat()[:10]
+    window_cutoff = _add_days_str(today, -window_days)
+
     for insider, txns in insider_txns.items():
-        sells = [t for t in txns if t["acquired_disposed"] == "D" and not t["is_planned"]]
+        # Filter to sells within the rolling window
+        sells = [
+            t for t in txns
+            if t["acquired_disposed"] == "D"
+            and not t["is_planned"]
+            and t.get("date", "") >= window_cutoff
+        ]
         if not sells:
             continue
 
@@ -215,7 +219,7 @@ def _check_net_selling(
                 transactions=sells[:10],
                 aggregate_value=agg_value,
                 period_days=window_days,
-                detected_at=datetime.now().isoformat()[:10],
+                detected_at=today,
             ))
 
 

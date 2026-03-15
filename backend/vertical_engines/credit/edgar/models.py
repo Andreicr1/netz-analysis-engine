@@ -96,27 +96,13 @@ class EdgarEntityResult:
     is_direct_target: bool = False
     company_name: str | None = None
     sic: str | None = None
-    sic_description: str | None = None
-    state: str | None = None
     fiscal_year_end: str | None = None
-    recent_filings: list[dict[str, Any]] | None = None
     financials: FinancialStatements | None = None
     bdc_reit_metrics: dict[str, Any] | None = None
     am_platform_metrics: dict[str, Any] | None = None
     going_concern: dict[str, Any] | None = None
     insider_signals: list[InsiderSignal] | None = None
-    form_d: dict[str, Any] | None = None
     warnings: list[str] = field(default_factory=list)
     also_matched_as: list[str] = field(default_factory=list)
     resolution_method: str | None = None
     resolution_confidence: float = 0.0
-
-
-@dataclass
-class EdgarMultiEntityResult:
-    """Batch EDGAR result with cross-entity deduplication."""
-    results: list[EdgarEntityResult] = field(default_factory=list)
-    unique_ciks: list[str] = field(default_factory=list)
-    entities_found: int = 0
-    entities_searched: int = 0
-    combined_warnings: list[str] = field(default_factory=list)

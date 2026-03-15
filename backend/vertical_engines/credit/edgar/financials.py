@@ -48,11 +48,6 @@ _CONCEPTS_TOTAL_REVENUES = [
     "TotalRevenues",
 ]
 
-# SIC codes
-_AM_PLATFORM_SIC_CODES = {"6282", "6726", "6199"}
-_INVESTMENT_SIC_CODES = {"6726", "6798", "6199", "6770"}
-
-
 # ── Structured financials via XBRLS ───────────────────────────────
 
 

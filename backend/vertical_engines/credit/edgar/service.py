@@ -264,8 +264,8 @@ def _to_dict(
     if result.company_name:
         d["entity_metadata"] = {
             "sic": result.sic,
-            "sic_description": result.sic_description or "",
-            "state_of_incorporation": result.state or "",
+            "sic_description": "",
+            "state_of_incorporation": "",
         }
 
     if result.bdc_reit_metrics:
