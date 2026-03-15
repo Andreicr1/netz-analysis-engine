@@ -16,6 +16,7 @@ deepened: 2026-03-15
 **Learnings applied:** 4 (wave1-credit-modularization, vertical-engine-extraction-patterns, unified-pipeline-ingestion, hybrid-classifier)
 
 ### Key Improvements
+
 1. **Phase 0 prerequisite added:** Resolve `async_session_factory` binding before any structural change (Critical — 4 undefined references will NameError after module split)
 2. **`__init__.py` pattern corrected:** PEP 562 lazy imports to match edgar/memo reference implementations (not standard imports)
 3. **Import-linter layers contract:** Concrete `pyproject.toml` config using `layers` contract with `|` pipe-separated independent siblings and `exhaustive = true`
@@ -35,6 +36,7 @@ The simplicity reviewer recommended merging to 7 files (eliminate models.py, dec
 **Verdict:** Keep 11 modules. The complexity is justified by the ~5430 LOC, the three-tier DAG, and the dedup opportunity in persist.py.
 
 ### New Considerations Discovered
+
 - `_PORTFOLIO_REVIEW_SYSTEM` (108-line prompt) is a string literal in `deep_review_prompts.py`, not behind Jinja2 — IP exposure risk
 - Policy compliance at line 382-388 falls back to importing `_call_openai` from the orchestrator — circular dependency when split
 - `search_deal_chunks()` filters by `deal_id` only, no `organization_id` — tenant isolation gap (pre-existing, flag for fix)
@@ -54,6 +56,7 @@ Decompose the deep_review cluster (~5430 LOC, 6 files) into an edgar-style `deep
 ## Problem Statement
 
 The deep_review cluster is the last set of flat files in `backend/vertical_engines/credit/`:
+
 - `deep_review.py` (2990 LOC) — monolithic orchestrator with sync + async variants that are near-identical (~2400 LOC of duplicated logic)
 - `deep_review_corpus.py` (608 LOC) — evidence gathering, RAG retrieval, deal context loading
 - `deep_review_policy.py` (723 LOC) — hard/soft policy checks, decision anchor, legacy confidence
@@ -104,6 +107,7 @@ Tier 5 (bottom): models.py           — pure data, zero sibling imports
 ### Research Insights: DAG Design
 
 **Best Practices:**
+
 - The `|` pipe separator in import-linter's `layers` contract enforces independence between Tier 4 siblings automatically — no separate `independence` contract needed.
 - Use `exhaustive = true` with `exhaustive_ignores = ["__init__"]` to catch undeclared new files.
 - The three-tier DAG (models → domain → persist/portfolio → service) is novel vs Wave 1's two-tier pattern but justified by deep_review's unique role as the persistence orchestrator for all other engines.
@@ -133,6 +137,7 @@ exhaustive_ignores = [
 This is additive to the existing 4 contracts. The existing wildcard contracts (`vertical_engines.credit.*.models` must not import `vertical_engines.credit.*.service`) will also cover the new package automatically.
 
 **Edge Cases:**
+
 - `TYPE_CHECKING` imports are excluded from the graph via `exclude_type_checking_imports = true` (already configured). Use `if TYPE_CHECKING:` blocks freely for type annotations across tiers.
 - PEP 562 `__getattr__` lazy imports are invisible to import-linter (AST-level, not runtime). The layers contract won't flag them.
 - Adding contracts is cheap — all run against the same pre-built grimp graph. No CI slowdown.
@@ -144,6 +149,7 @@ This is additive to the existing 4 contracts. The existing wildcard contracts (`
 ### Research Insights: Error Contracts
 
 **Best Practices:**
+
 - Use the two-function split pattern (from `critic/service.py`): public function is the contract boundary (try/except + fallback), private function contains the logic and is free to raise.
 - Keep defense-in-depth try/except around never-raises sub-engines. When the outer catch fires, log with a distinctive `NEVER_RAISES_CONTRACT_VIOLATION` prefix — set a production alert on this pattern.
 - Consider named `StageOutcome` dataclass for stage results (name-based lookup instead of positional `asyncio.gather` unpacking). Prevents silent breakage on reorder. Deferred to sync/async dedup phase.
@@ -173,6 +179,7 @@ STAGE_CRITICALITY: dict[str, str] = {
 This makes the fatal/non-fatal distinction explicit and grep-able rather than buried in if/else chains. Include in `models.py` but do not refactor the orchestrator to use it in Wave 2 — that is a behavioral change.
 
 **Error Contract Testing (add to Wave 2):**
+
 - Parametrized exception injection for `confidence.py`, `decision.py`, `policy.py::_run_hard_policy_checks()`
 - These are pure deterministic functions — ideal candidates for contract verification tests
 
@@ -185,6 +192,7 @@ This makes the fatal/non-fatal distinction explicit and grep-able rather than bu
 `async_session_factory` appears at lines 278, 1720, 2822, 2917 of `deep_review.py` but is **never imported**. The `F821` (undefined name) ruff error is silently suppressed in `pyproject.toml` line 99. When the code moves to `service.py` and `portfolio.py` in separate modules, the runtime namespace injection will break.
 
 **Investigation steps:**
+
 1. Search for `deep_review.async_session_factory =` and `setattr(deep_review` across the codebase
 2. Search for `async_session_factory` in `app.core.db.engine` — this is the likely source
 3. Determine if it is monkey-patched, passed via closure, or a dead code path
@@ -215,12 +223,14 @@ Create test fixtures with known inputs. Assert outputs match after the move with
 #### 0c. Fix policy compliance circular import
 
 `deep_review_policy.py` lines 382-388 import `_call_openai` from the orchestrator:
+
 ```python
 from vertical_engines.credit import deep_review as _deep_review
 openai_caller = getattr(_deep_review, "_call_openai", _call_openai)
 ```
 
 After the split, `_call_openai` will live in `helpers.py`. Update `policy.py` to import directly from `helpers.py`:
+
 ```python
 from vertical_engines.credit.deep_review.helpers import _call_openai
 ```
@@ -234,6 +244,7 @@ Create `deep_review/` directory and move all 6 files, splitting `deep_review.py`
 #### 1a. Create `deep_review/models.py` (LEAF)
 
 Extract from `deep_review.py`:
+
 - `_LLM_CONCURRENCY` constant (line 89: `max(1, int(os.getenv("NETZ_LLM_CONCURRENCY", "5")))`) — env-read integer, NOT an asyncio primitive
 - `STAGE_CRITICALITY` dict (new — documents fatal/non-fatal stages, used for logging enrichment only)
 - Any shared type aliases
@@ -246,11 +257,11 @@ Extract from `deep_review.py`:
 
 These 4 files are already well-separated — just move into the package directory:
 
-| Source | Target | Changes |
-|---|---|---|
-| `deep_review_helpers.py` (241 LOC) | `deep_review/helpers.py` | Update imports, stdlib→structlog, add `__all__` |
-| `deep_review_corpus.py` (608 LOC) | `deep_review/corpus.py` | Update imports, stdlib→structlog, add `__all__` |
-| `deep_review_prompts.py` (350 LOC) | `deep_review/prompts.py` | Update imports, stdlib→structlog, add `__all__` |
+| Source                                | Target                      | Changes                                         |
+| ------------------------------------- | --------------------------- | ----------------------------------------------- |
+| `deep_review_helpers.py` (241 LOC)    | `deep_review/helpers.py`    | Update imports, stdlib→structlog, add `__all__` |
+| `deep_review_corpus.py` (608 LOC)     | `deep_review/corpus.py`     | Update imports, stdlib→structlog, add `__all__` |
+| `deep_review_prompts.py` (350 LOC)    | `deep_review/prompts.py`    | Update imports, stdlib→structlog, add `__all__` |
 | `deep_review_confidence.py` (518 LOC) | `deep_review/confidence.py` | Update imports, stdlib→structlog, add `__all__` |
 
 **Security requirement (Finding F3):** Define `__all__` in every module. Exclude all prompt constants and template-rendering functions from `__all__`. Specifically, `_DEAL_REVIEW_SYSTEM_LEGACY` and `_PORTFOLIO_REVIEW_SYSTEM` must NOT be in any `__all__`.
@@ -260,12 +271,14 @@ These 4 files are already well-separated — just move into the package director
 `deep_review_policy.py` (723 LOC) has two distinct concerns:
 
 **`deep_review/policy.py`** (~390 LOC):
+
 - `_parse_lockup_to_years()` — utility
 - `_gather_policy_context()` — policy RAG retrieval
 - `_run_hard_policy_checks()` — deterministic arithmetic (4 hard limits)
 - `_run_policy_compliance()` — LLM-assessed soft guideline checks
 
 **`deep_review/decision.py`** (~330 LOC):
+
 - `_compute_decision_anchor()` — authoritative pipeline decision (INVEST/CONDITIONAL/PASS)
 - `_compute_confidence_score()` — two-layer confidence computation
 
@@ -276,6 +289,7 @@ Both are pure functions that receive their inputs as parameters — no shared mu
 #### 1d. Extract `deep_review/persist.py` from `deep_review.py`
 
 Extract all DB persistence logic from `deep_review.py` Stages 13b/c/d (~260 LOC duplicated between sync and async):
+
 - Evidence pack metadata update (analyst_summary, executive_summary into JSONB)
 - Underwriting artifact persist
 - Profile + brief + risk flags persist
@@ -289,11 +303,13 @@ Extract all DB persistence logic from `deep_review.py` Stages 13b/c/d (~260 LOC 
 #### 1e. Extract `deep_review/portfolio.py` from `deep_review.py`
 
 Extract portfolio review functions (~147 LOC):
+
 - `run_portfolio_review()` — single investment periodic AI review
 - `run_all_portfolio_reviews()` — batch runner with ThreadPoolExecutor
 - `get_current_im_draft()` — query API for current IM draft
 
 **Security requirement (Finding F4):** Extract ORM scalars into a plain list of UUIDs before spawning threads:
+
 ```python
 # Before (broken — ORM attributes accessed across session boundaries):
 futures = {executor.submit(_review_investment, inv): inv for inv in investments}
@@ -308,6 +324,7 @@ futures = {executor.submit(_review_investment, inv_id, fund_id): inv_id for inv_
 #### 1f. Create `deep_review/service.py` — orchestrator
 
 The remaining `deep_review.py` logic (~2000 LOC) becomes `service.py`:
+
 - `run_deal_deep_review_v4()` — sync pipeline (13 stages)
 - `async_run_deal_deep_review_v4()` — async pipeline (7 phases)
 - `run_all_deals_deep_review_v4()` — sync batch runner
@@ -316,6 +333,7 @@ The remaining `deep_review.py` logic (~2000 LOC) becomes `service.py`:
 **Important:** The sync/async duplication (~2400 LOC) is preserved as-is in this PR. Deduplication is a separate behavioral change and should be a follow-up PR.
 
 **Research insights:**
+
 - **Keep function-level imports in service.py.** The ~40 function-level imports inside pipeline functions are by design — they keep import time O(1) and prevent circular dependencies. Add a comment at the top: `# NOTE: Sibling engine imports are function-level (not module-scope) by design.`
 - **Defense-in-depth try/except:** Log with `NEVER_RAISES_CONTRACT_VIOLATION` prefix when the outer catch fires around a never-raises engine. This makes contract violations alertable in production.
 
@@ -429,16 +447,16 @@ def __getattr__(name: str) -> Any:
 
 8 files need import path updates:
 
-| Caller | Current Import | New Import |
-|---|---|---|
-| `app/domains/credit/modules/ai/deep_review.py` | `from vertical_engines.credit.deep_review import async_run_all_deals_deep_review_v4` | `from vertical_engines.credit.deep_review import async_run_all_deals_deep_review_v4` (same — package `__init__` now) |
-| `app/domains/credit/modules/ai/portfolio.py` | `from vertical_engines.credit.deep_review import run_portfolio_review, ...` | Same (resolved by package `__init__`) |
-| `app/services/azure/pipeline_dispatch.py` | `from vertical_engines.credit.deep_review import async_run_deal_deep_review_v4` | Same |
-| `ai_engine/ingestion/pipeline_ingest_runner.py` | `from vertical_engines.credit.deep_review import run_all_deals_deep_review_v4` | Same |
-| `ai_engine/validation/eval_runner.py` | `from vertical_engines.credit.deep_review import run_deal_deep_review_v4` | Same |
-| `ai_engine/validation/eval_metrics.py` | `from vertical_engines.credit.deep_review_confidence import compute_underwriting_confidence` | `from vertical_engines.credit.deep_review import compute_underwriting_confidence` |
-| `ai_engine/validation/deep_review_validation_runner.py` | `from vertical_engines.credit.deep_review import run_deal_deep_review_v4` | Same |
-| `worker_app/function_app.py` | `from vertical_engines.credit.deep_review import async_run_deal_deep_review_v4` | Same |
+| Caller                                                  | Current Import                                                                               | New Import                                                                                                           |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `app/domains/credit/modules/ai/deep_review.py`          | `from vertical_engines.credit.deep_review import async_run_all_deals_deep_review_v4`         | `from vertical_engines.credit.deep_review import async_run_all_deals_deep_review_v4` (same — package `__init__` now) |
+| `app/domains/credit/modules/ai/portfolio.py`            | `from vertical_engines.credit.deep_review import run_portfolio_review, ...`                  | Same (resolved by package `__init__`)                                                                                |
+| `app/services/azure/pipeline_dispatch.py`               | `from vertical_engines.credit.deep_review import async_run_deal_deep_review_v4`              | Same                                                                                                                 |
+| `ai_engine/ingestion/pipeline_ingest_runner.py`         | `from vertical_engines.credit.deep_review import run_all_deals_deep_review_v4`               | Same                                                                                                                 |
+| `ai_engine/validation/eval_runner.py`                   | `from vertical_engines.credit.deep_review import run_deal_deep_review_v4`                    | Same                                                                                                                 |
+| `ai_engine/validation/eval_metrics.py`                  | `from vertical_engines.credit.deep_review_confidence import compute_underwriting_confidence` | `from vertical_engines.credit.deep_review import compute_underwriting_confidence`                                    |
+| `ai_engine/validation/deep_review_validation_runner.py` | `from vertical_engines.credit.deep_review import run_deal_deep_review_v4`                    | Same                                                                                                                 |
+| `worker_app/function_app.py`                            | `from vertical_engines.credit.deep_review import async_run_deal_deep_review_v4`              | Same                                                                                                                 |
 
 **Key insight:** Most callers already import `from vertical_engines.credit.deep_review import X`. When `deep_review.py` becomes `deep_review/__init__.py` (with re-exports), these import paths continue to work. Only `eval_metrics.py` (which imports from `deep_review_confidence`) needs a path change.
 
@@ -472,12 +490,12 @@ This ensures `git blame` on `service.py` traces back to the original `deep_revie
 
 Post-Wave 1, these engines have documented never-raises contracts. The defensive try/except in deep_review.py are now redundant safety nets:
 
-| Engine | Sync lines | Async lines | Action |
-|---|---|---|---|
-| EDGAR | 534-566 | 1838-1872 | Keep as non-fatal (already correct) |
-| KYC | 686-729 | 1938-1964 | Keep as non-fatal (already correct) |
-| Tone normalizer | 1162-1244 | 2404-2454 | Keep as non-fatal (already correct) |
-| Market benchmarks | 478-497 | 1734-1758 | Keep (per-chapter) |
+| Engine            | Sync lines | Async lines | Action                              |
+| ----------------- | ---------- | ----------- | ----------------------------------- |
+| EDGAR             | 534-566    | 1838-1872   | Keep as non-fatal (already correct) |
+| KYC               | 686-729    | 1938-1964   | Keep as non-fatal (already correct) |
+| Tone normalizer   | 1162-1244  | 2404-2454   | Keep as non-fatal (already correct) |
+| Market benchmarks | 478-497    | 1734-1758   | Keep (per-chapter)                  |
 
 **Decision:** Leave the try/except blocks in place during Wave 2. They are defense-in-depth and their removal would be a behavioral change, not a structural refactor. Add `NEVER_RAISES_CONTRACT_VIOLATION` log prefix to all outer catches so they are alertable if they ever fire in production.
 
@@ -486,12 +504,14 @@ Post-Wave 1, these engines have documented never-raises contracts. The defensive
 Replace `import logging` / `logging.getLogger(__name__)` with `import structlog` / `structlog.get_logger()` in all 6 files. Log at function boundaries only.
 
 **Research insights:**
+
 - Use `bind()` for context propagation: `log = logger.bind(deal_id=str(deal_id))`
 - Use dot-separated event names: `log.info("deep_review.stage.evidence_gathering.complete")` not `log.info("Evidence gathering completed")`
 - `exc_info=True` is implicit in `logger.exception()` for structlog — no need to pass explicitly
 - Use `contextvars` for request-scoped context in async pipeline: `bind_contextvars(deal_id=str(deal_id), pipeline="deep_review_v4")`
 
 **Migration checklist per file:**
+
 ```
 [ ] Replace `import logging` with `import structlog`
 [ ] Replace `logger = logging.getLogger(__name__)` with `logger = structlog.get_logger()`
@@ -503,6 +523,7 @@ Replace `import logging` / `logging.getLogger(__name__)` with `import structlog`
 #### 1k. Update `test_vertical_engines.py::EXPECTED_MODULES`
 
 Remove the 6 flat file entries:
+
 - `vertical_engines.credit.deep_review`
 - `vertical_engines.credit.deep_review_corpus`
 - `vertical_engines.credit.deep_review_helpers`
@@ -511,6 +532,7 @@ Remove the 6 flat file entries:
 - `vertical_engines.credit.deep_review_confidence`
 
 Replace with single package entry:
+
 - `vertical_engines.credit.deep_review`
 
 (Same module path — but now resolves to a package `__init__.py` instead of a flat file.)
@@ -543,6 +565,7 @@ class TestGoldenOutputs:
 #### 1m. Deletion audit (NEW — Wave 1 convention)
 
 After extraction, verify:
+
 - [ ] No dead functions created by the split (functions only called from one module that are now unreachable)
 - [ ] No stale imports (imports that referenced symbols now in different modules)
 - [ ] `grep -r "deep_review_helpers\|deep_review_corpus\|deep_review_policy\|deep_review_prompts\|deep_review_confidence" backend/` returns zero hits outside `deep_review/`
@@ -552,12 +575,12 @@ After extraction, verify:
 
 Move the 4 `.j2` templates used by deep_review into the package:
 
-| Template | Used by | New location |
-|---|---|---|
-| `structured_legacy.j2` | `deep_review/prompts.py` | `deep_review/templates/structured_legacy.j2` |
+| Template                   | Used by                  | New location                                     |
+| -------------------------- | ------------------------ | ------------------------------------------------ |
+| `structured_legacy.j2`     | `deep_review/prompts.py` | `deep_review/templates/structured_legacy.j2`     |
 | `deal_review_system_v1.j2` | `deep_review/prompts.py` | `deep_review/templates/deal_review_system_v1.j2` |
 | `deal_review_system_v2.j2` | `deep_review/prompts.py` | `deep_review/templates/deal_review_system_v2.j2` |
-| `portfolio_review.j2` | `deep_review/service.py` | `deep_review/templates/portfolio_review.j2` |
+| `portfolio_review.j2`      | `deep_review/service.py` | `deep_review/templates/portfolio_review.j2`      |
 
 **Note:** The remaining 26 `.j2` files in `credit/prompts/` belong to other engines (memo chapter prompts ch01-ch14, critic, tone, evidence_law). They stay in `credit/prompts/` or migrate with their respective engines in a future cleanup.
 
@@ -568,6 +591,7 @@ Update `prompt_registry` search paths to include `deep_review/templates/`. Verif
 ### Phase 3: Future Opportunities (NOT in scope)
 
 These are explicitly deferred:
+
 - **Sync/async deduplication** — The ~2400 LOC of duplicated logic between sync and async pipelines. Research recommends shared-core extraction as the first step (extract pure business logic into sync helpers), then evaluate `unasyncd` if orchestration flow duplication remains burdensome. Separate PR.
 - **Retrieval exception deprecation** — `EvidenceGapError`, `RetrievalScopeError`, `ProvenanceError` in `retrieval/models.py` are backward-compat from Wave 1. Deprecate when callers stop catching them.
 - **Named `StageOutcome` dataclass** — Replace positional `asyncio.gather` + `isinstance(result, BaseException)` unpacking with name-based lookup. Prevents silent breakage on stage reorder. Part of the sync/async dedup effort.
@@ -579,6 +603,7 @@ These are explicitly deferred:
 ### Interaction Graph
 
 `deep_review/service.py` is the central hub — it calls every Wave 1 engine package:
+
 - critic, edgar, memo, quant, sponsor, kyc, market_data, retrieval, underwriting
 - ai_engine (governance, model_config, prompts, portfolio/concentration)
 - app/domains/credit/modules/ai/models (ORM models for persistence)
@@ -592,6 +617,7 @@ The deep_review orchestrator already implements per-stage error isolation. Each 
 ### State Lifecycle Risks
 
 Pure structural refactor. No schema changes, no new tables, no data flow changes. The only risk is import path breakage, mitigated by:
+
 1. Most callers import `from vertical_engines.credit.deep_review import X` — which continues to work since `deep_review/` package `__init__.py` re-exports the same symbols
 2. `make check` (lint + architecture + typecheck + test) gate
 3. `test_vertical_engines.py` structural test
@@ -627,30 +653,30 @@ Pure structural refactor. No schema changes, no new tables, no data flow changes
 
 ## Security Findings (from security audit)
 
-| ID | Severity | Finding | Action |
-|----|----------|---------|--------|
-| F1 | **Critical** | `async_session_factory` unresolved binding — NameError + RLS bypass risk | Phase 0a prerequisite |
-| F2 | **Critical** | Missing `organization_id` in RAG queries (`corpus.py`, `policy.py`) | Phase 3 deferred (stub client) |
-| F3 | **High** | Prompt IP leakage via module exports — no `__all__` in any file | Phase 1b (`__all__` in every module) |
-| F4 | **High** | ORM attributes accessed across thread boundaries in `portfolio.py` | Phase 1e (extract scalars before threading) |
-| F5 | **High** | `search_deal_chunks()` no tenant filter | Phase 3 deferred (stub client) |
-| F6 | Medium | SQL/OData string interpolation (UUID-typed, low exploitability) | Phase 3 deferred |
-| F7 | Medium | LLM output unsanitized before JSONB persist | Phase 3 deferred |
-| F8 | Low | Portfolio prompt injection surface (pre-existing) | Phase 2 (move to Jinja2) |
-| F9 | Low | Error messages leak internal state (`str(exc)`) | Phase 1e (sanitize in portfolio.py) |
-| F10 | Low | Asyncio primitive documentation gap | Phase 1a (comment in models.py) |
+| ID  | Severity     | Finding                                                                  | Action                                      |
+| --- | ------------ | ------------------------------------------------------------------------ | ------------------------------------------- |
+| F1  | **Critical** | `async_session_factory` unresolved binding — NameError + RLS bypass risk | Phase 0a prerequisite                       |
+| F2  | **Critical** | Missing `organization_id` in RAG queries (`corpus.py`, `policy.py`)      | Phase 3 deferred (stub client)              |
+| F3  | **High**     | Prompt IP leakage via module exports — no `__all__` in any file          | Phase 1b (`__all__` in every module)        |
+| F4  | **High**     | ORM attributes accessed across thread boundaries in `portfolio.py`       | Phase 1e (extract scalars before threading) |
+| F5  | **High**     | `search_deal_chunks()` no tenant filter                                  | Phase 3 deferred (stub client)              |
+| F6  | Medium       | SQL/OData string interpolation (UUID-typed, low exploitability)          | Phase 3 deferred                            |
+| F7  | Medium       | LLM output unsanitized before JSONB persist                              | Phase 3 deferred                            |
+| F8  | Low          | Portfolio prompt injection surface (pre-existing)                        | Phase 2 (move to Jinja2)                    |
+| F9  | Low          | Error messages leak internal state (`str(exc)`)                          | Phase 1e (sanitize in portfolio.py)         |
+| F10 | Low          | Asyncio primitive documentation gap                                      | Phase 1a (comment in models.py)             |
 
 ## Risk Analysis & Mitigation
 
-| Risk | Likelihood | Impact | Mitigation |
-|---|---|---|---|
-| Import path breakage for callers | Low | High | Most callers use `from vertical_engines.credit.deep_review import X` which resolves to package `__init__` transparently |
-| `async_session_factory` breaks | ~~Medium~~ **Resolved** | High | Phase 0a resolves before branching |
-| Prompt registry path resolution | Low | Medium | Phase 2 (prompt relocation) is a separate PR. Phase 1 does not touch `.j2` paths. |
-| Cross-module circular imports | Low | Medium | DAG enforced by import-linter layers contract (new) |
-| Sync/async duplication hides divergent behavior | Low | Low | Preserve duplication in Phase 1. Dedup is a separate future effort with its own tests. |
-| Policy compliance circular import on `_call_openai` | ~~Medium~~ **Resolved** | Medium | Phase 0c fixes before branching |
-| Golden test coverage gap | Low | Medium | Phase 0b captures snapshots; Phase 1l adds assertions |
+| Risk                                                | Likelihood              | Impact | Mitigation                                                                                                              |
+| --------------------------------------------------- | ----------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------- |
+| Import path breakage for callers                    | Low                     | High   | Most callers use `from vertical_engines.credit.deep_review import X` which resolves to package `__init__` transparently |
+| `async_session_factory` breaks                      | ~~Medium~~ **Resolved** | High   | Phase 0a resolves before branching                                                                                      |
+| Prompt registry path resolution                     | Low                     | Medium | Phase 2 (prompt relocation) is a separate PR. Phase 1 does not touch `.j2` paths.                                       |
+| Cross-module circular imports                       | Low                     | Medium | DAG enforced by import-linter layers contract (new)                                                                     |
+| Sync/async duplication hides divergent behavior     | Low                     | Low    | Preserve duplication in Phase 1. Dedup is a separate future effort with its own tests.                                  |
+| Policy compliance circular import on `_call_openai` | ~~Medium~~ **Resolved** | Medium | Phase 0c fixes before branching                                                                                         |
+| Golden test coverage gap                            | Low                     | Medium | Phase 0b captures snapshots; Phase 1l adds assertions                                                                   |
 
 ## Dependencies & Prerequisites
 
@@ -661,13 +687,31 @@ Pure structural refactor. No schema changes, no new tables, no data flow changes
 - Phase 0b: Golden test snapshots captured ✅ (12 tests, commit 6b478b7)
 - Phase 0c: Policy compliance circular import fixed ✅ (commit 6b478b7)
 
-### Final Status
+### Final Status — MERGED (PR #23, squash-merged 2026-03-15)
 
-- **Branch:** `refactor/credit-deep-review-wave2` (5 commits ahead of main)
-- **Phase 1 COMPLETE:** All 4 sub-phases committed (1a → 1b → 1c → 1d)
-- **Package:** `backend/vertical_engines/credit/deep_review/` — 11 modules, 6-tier DAG
-- **Validation:** 336 tests pass, 5/5 import-linter contracts, zero old import paths
+- **PR:** https://github.com/Andreicr1/netz-analysis-engine/pull/23
+- **Commits:** 7 (Phase 0 → 1a → 1b → 1c → 1d → review fixes → plan update)
+- **Package:** `backend/vertical_engines/credit/deep_review/` — 11 modules, 6-layer DAG
+- **Validation:** 337 tests pass, 5/5 import-linter contracts, zero old import paths
+- **Code review:** 8 agents (kieran-python, security-sentinel, performance-oracle, architecture-strategist, pattern-recognition, agent-native, learnings-researcher, code-simplicity). 0 P1, 3 P2, 9 P3 — all non-deferred fixed before merge.
+- **Compound doc:** `docs/solutions/architecture-patterns/wave2-deep-review-modularization-MonolithToDAGPackage-20260315.md`
 - **Phase 2 (prompt relocation):** Deferred to follow-up PR as planned
+
+### Review Fixes Applied (commit 29f5e13)
+
+| Finding | Severity | Resolution |
+|---------|----------|------------|
+| `STAGE_CRITICALITY` unused dict in models.py | P2 | Removed (YAGNI) |
+| structlog event naming in policy.py (free-text) | P2 | Standardized to dot-separated |
+| `__init__.py` docstring said "Three-tier" | P2 | Fixed to "Six-layer" |
+| Dead prompt constants in prompts.py (~112 LOC) | P3 | Removed |
+| Dead code in corpus.py (~47 LOC) | P3 | Removed |
+| `noqa:F401` stale re-exports in 3 modules | P3 | Cleaned up |
+| `_build_tone_artifacts()` called twice | P3 | Cached in local variable |
+| `__dir__()` missing from `__init__.py` | P3 | Added |
+| `__all__` import smoke test missing | P3 | Added TestPackagePublicAPI |
+| `__all__` section comments missing | P3 | Added |
+| `async_session_factory` naming confusion | P3 | Added clarifying comment |
 
 ## Per-PR Checklist
 
@@ -718,6 +762,22 @@ Phase 1d — External callers + validation — COMMITTED (0fc2de0):
 [x] Deletion audit — grep confirms zero remaining old import paths
 [x] python -c "import vertical_engines.credit.deep_review" succeeds
 [x] 336 tests pass — lint + architecture (5/5 contracts) + test
+
+Code review fixes — COMMITTED (29f5e13):
+[x] Remove STAGE_CRITICALITY from models.py (YAGNI — zero consumers)
+[x] Fix structlog event naming in policy.py (free-text → dot-separated)
+[x] Fix __init__.py docstring ("Three-tier" → "Six-layer" DAG)
+[x] Remove dead prompt constants from prompts.py (~112 LOC)
+[x] Remove dead code from corpus.py (~47 LOC)
+[x] Clean up noqa:F401 stale re-exports in corpus/policy/prompts
+[x] Cache _build_tone_artifacts() result in service.py (sync + async)
+[x] Add __dir__() to __init__.py for runtime introspection
+[x] Add TestPackagePublicAPI smoke test for __all__ symbols
+[x] Add __all__ section comments + clarifying comment for async_session_factory
+[x] 337 tests pass — lint + architecture (5/5 contracts) + test
+
+PR #23 merged to main (squash) — 2026-03-15
+[x] Compound doc: docs/solutions/architecture-patterns/wave2-deep-review-modularization-MonolithToDAGPackage-20260315.md
 ```
 
 ## Sources & References
