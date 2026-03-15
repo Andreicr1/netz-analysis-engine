@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     # ── Azure AI Search ──────────────────────────────────
     azure_search_endpoint: str = ""
     azure_search_key: str = ""
+    SEARCH_CHUNKS_INDEX_NAME: str = "global-vector-chunks-v2"
+    NETZ_ENV: str = "dev"
+
+    # ── Embedding ─────────────────────────────────────────
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-large"
 
     # ── OpenAI / Azure OpenAI ────────────────────────────
     openai_api_key: str = ""
@@ -86,6 +91,16 @@ class Settings(BaseSettings):
     @property
     def is_development(self) -> bool:
         return self.app_env == "development"
+
+    def prefixed_index(self, base_name: str) -> str:
+        """Apply NETZ_ENV prefix to Azure Search index names.
+
+        Prevents cross-environment contamination (dev/staging/prod).
+        Production uses unprefixed names; dev/staging get ``{env}-`` prefix.
+        """
+        if self.NETZ_ENV in ("prod", "production"):
+            return base_name
+        return f"{self.NETZ_ENV}-{base_name}"
 
     def validate_production_secrets(self) -> None:
         """Reject weak or missing secrets in production."""

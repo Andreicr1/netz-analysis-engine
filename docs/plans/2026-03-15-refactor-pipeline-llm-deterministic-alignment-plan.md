@@ -702,9 +702,9 @@ def gold_memo_path(org_id: UUID, vertical: str, memo_id: str) -> str:
 **`_global/` paths** for reference data (FRED, Yahoo, benchmarks) — no `org_id`, no vertical. Client documents NEVER go to `_global/`.
 
 **Acceptance criteria:**
-- [ ] Path routing functions with `{org_id}/{vertical}/` prefix
-- [ ] Path traversal validation (leverages existing StorageClient protection)
-- [ ] `_global/` path builder for reference data
+- [x] Path routing functions with `{org_id}/{vertical}/` prefix
+- [x] Path traversal validation (leverages existing StorageClient protection)
+- [x] `_global/` path builder for reference data
 
 ##### Task 3.2: Integrate StorageClient into Unified Pipeline
 
@@ -727,10 +727,10 @@ Add `StorageClient.write()` calls to `unified_pipeline.py` at each stage output.
 **Feature flag:** Gated by `FEATURE_ADLS_ENABLED` (default: false). When false, `LocalStorageClient` writes to filesystem (local dev). ADLS paths only materialize in staging/production.
 
 **Acceptance criteria:**
-- [ ] Pipeline writes OCR output to bronze, chunks to silver, metadata to silver
-- [ ] ADLS write happens BEFORE Azure Search upsert
-- [ ] Uses `StorageClient` abstraction (not direct Azure SDK)
-- [ ] Feature-flagged via `FEATURE_ADLS_ENABLED`
+- [x] Pipeline writes OCR output to bronze, chunks to silver, metadata to silver
+- [x] ADLS write happens BEFORE Azure Search upsert
+- [x] Uses `StorageClient` abstraction (not direct Azure SDK)
+- [x] Feature-flagged via `FEATURE_ADLS_ENABLED`
 
 ##### Task 3.3: Search Rebuild Service
 
@@ -758,11 +758,11 @@ async def rebuild_search_index(
 - If embedding model changes, old Parquet files become incompatible. Rebuild service MUST reject files where `embedding_dim != current_model_dim` and log a clear error.
 
 **Acceptance criteria:**
-- [ ] Can rebuild full org's search index from silver layer
-- [ ] Can rebuild specific documents (by doc_id list)
-- [ ] **Rejects Parquet files with `embedding_dim != current_model_dim`** (prevents silent data corruption on model change)
-- [ ] No LLM or OCR calls during rebuild
-- [ ] Works with both `LocalStorageClient` and `ADLSStorageClient`
+- [x] Can rebuild full org's search index from silver layer
+- [x] Can rebuild specific documents (by doc_id list)
+- [x] **Rejects Parquet files with `embedding_dim != current_model_dim`** (prevents silent data corruption on model change)
+- [x] No LLM or OCR calls during rebuild
+- [x] Works with both `LocalStorageClient` and `ADLSStorageClient`
 
 ##### Task 3.4: Migrate Existing Blob Paths (Deferred)
 
@@ -839,8 +839,8 @@ UI Upload → POST /documents/ingestion/process-pending
 - [ ] **Phase 1:** Validation gates catch content loss > 10% between chunking and extraction
 - [ ] **Phase 2:** UI-uploaded documents receive same analytical quality as batch-ingested documents
 - [ ] **Phase 2:** `prepare_pdfs_full.py` deleted
-- [ ] **Phase 3:** Pipeline writes to ADLS bronze/silver/gold via StorageClient
-- [ ] **Phase 3:** Azure Search index can be rebuilt from silver layer
+- [x] **Phase 3:** Pipeline writes to ADLS bronze/silver/gold via StorageClient
+- [x] **Phase 3:** Azure Search index can be rebuilt from silver layer
 
 ### Non-Functional Requirements
 

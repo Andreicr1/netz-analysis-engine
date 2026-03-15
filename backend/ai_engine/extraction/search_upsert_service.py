@@ -57,6 +57,7 @@ def build_search_document(
     key_persons_mentioned: list[str] | None = None,
     financial_metric_type: str | None = None,
     risk_flags: list[str] | None = None,
+    organization_id: "uuid.UUID | None" = None,
 ) -> dict[str, Any]:
     """Build a single document dict matching the global-vector-chunks-v2 schema.
 
@@ -128,6 +129,12 @@ def build_search_document(
         doc["financial_metric_type"] = financial_metric_type
     if risk_flags is not None:
         doc["risk_flags"] = risk_flags
+
+    # ── Tenant isolation (Security F4) ──────────────────────────────
+    # filterable=True, retrievable=False in the Azure Search schema.
+    # All RAG queries MUST include $filter=organization_id eq '{org_id}'.
+    if organization_id is not None:
+        doc["organization_id"] = str(organization_id)
 
     return doc
 
