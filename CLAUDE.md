@@ -25,17 +25,36 @@ backend/
     core/           ← auth (Clerk), tenancy (RLS), DB (asyncpg), config (ConfigService), jobs (SSE)
     domains/
       credit/       ← analytical modules only (deals, portfolio, documents, reporting, dashboard, dataroom, actions, global_agent)
-      wealth/       ← from netz-wealth-os (12 tables, 7 services)
+        modules/ai/ ← IC memos, deep review, extraction, pipeline deals, copilot, compliance
+      wealth/       ← models, routes, schemas, workers (12 tables, 7 services)
     services/
-      storage_client.py ← ADLS abstraction (local filesystem when FEATURE_ADLS_ENABLED=false)
+      storage_client.py ← ADLS abstraction (LocalStorageClient dev, ADLSStorageClient prod)
     shared/         ← enums, exceptions
-  ai_engine/        ← IC memos, extraction, ingestion, validation, prompts, governance
-  quant_engine/     ← CVaR, regime, optimizer, scoring, drift, rebalance
-  vertical_engines/ ← per-vertical analysis specializations
-    base/           ← shared interface all verticals implement
-    credit/         ← Private Credit (moved from ai_engine/intelligence/)
-    wealth/         ← Wealth Management DD reports (Sprint 3+)
-  worker_app/       ← Azure Functions + CLI workers + knowledge_aggregator + outcome_recorder
+  ai_engine/
+    classification/ ← hybrid_classifier (rules → cosine_similarity → LLM), document_classifier (legacy)
+    pipeline/       ← unified_pipeline, validation gates, models, storage_routing, search_rebuild
+    extraction/     ← OCR (Mistral), semantic chunking, embedding, entity bootstrap, search upsert, local reranker, governance detector
+    ingestion/      ← pipeline_ingest_runner, domain_ingest_orchestrator, document_scanner, monitoring
+    validation/     ← vector_integrity_guard, deep_review validation, eval runner, evidence quality
+    prompts/        ← Jinja2 templates (Netz IP — never expose to clients)
+  quant_engine/     ← CVaR, regime, optimizer, scoring, drift, rebalance, FRED, regional macro, stress severity, momentum
+  vertical_engines/
+    base/           ← BaseAnalyzer ABC — shared interface all verticals implement
+    credit/         ← 12 modular packages (Wave 1 complete):
+      critic/       ← IC critic engine
+      deal_conversion/ ← deal conversion engine
+      domain_ai/    ← domain AI engine
+      edgar/        ← SEC EDGAR integration (edgartools)
+      kyc/          ← KYC pipeline screening
+      market_data/  ← market data engine
+      memo/         ← memo book generator, chapter engine, chapter prompts, evidence pack, tone normalizer, batch client
+      pipeline/     ← pipeline engine + pipeline intelligence
+      portfolio/    ← portfolio intelligence
+      quant/        ← IC quant engine, credit scenarios, credit sensitivity, credit backtest
+      retrieval/    ← retrieval governance
+      sponsor/      ← sponsor engine
+      underwriting/ ← underwriting artifact
+    wealth/         ← fund_analyzer, dd_report_engine, macro_committee_engine, quant_analyzer
 profiles/           ← YAML analysis profiles — SEED DATA ONLY (runtime config in PostgreSQL)
 calibration/        ← YAML quant configs — SEED DATA ONLY (runtime config in PostgreSQL)
 packages/ui/        ← @netz/ui (Tailwind tokens, shadcn-svelte, layouts)
@@ -50,7 +69,13 @@ frontends/
 
 **SSE:** `sse-starlette` EventSourceResponse. Redis pub/sub for worker→SSE bridging. Frontend uses `fetch()` + `ReadableStream` (not EventSource — auth headers needed).
 
-**Data Lake (ADLS Gen2):** Feature-flagged (`FEATURE_ADLS_ENABLED=false`). Bronze/silver/gold hierarchy with `{organization_id}/` as first path segment. DuckDB queries ADLS directly for analytics. Local dev uses PostgreSQL only.
+**Data Lake (ADLS Gen2):** Feature-flagged (`FEATURE_ADLS_ENABLED=false`). Bronze/silver/gold hierarchy with `{organization_id}/{vertical}/` as path prefix. Path routing via `ai_engine/pipeline/storage_routing.py`. DuckDB queries ADLS directly for analytics. Local dev uses `LocalStorageClient` (filesystem at `.data/lake/`).
+
+**Unified Pipeline:** Single ingestion path for all sources (UI, batch, API). Stages: pre-filter → OCR → [gate] → classify → [gate] → governance → chunk → [gate] → extract metadata → [gate] → embed → [gate] → storage (ADLS) → index (Azure Search). Dual-write: ADLS is source of truth, Azure Search is derived index. Search can be rebuilt from silver layer Parquet via `search_rebuild.py` without reprocessing PDFs.
+
+**Classification:** Three-layer hybrid classifier (no external ML APIs). Layer 1: filename + keyword rules (~60% of docs). Layer 2: TF-IDF + cosine similarity (~30%). Layer 3: LLM fallback (~10%). Cross-encoder local reranker for IC memo evidence (replaced Cohere).
+
+**324 tests.** All passing. Enforced by `make check` (lint + typecheck + test).
 
 ## Product Scope — Analytical Core Only
 
@@ -84,26 +109,45 @@ The engine contains only analytical domains. Operational modules were intentiona
 - **ConfigService for all config:** Never read `calibration/` or `profiles/` YAML at runtime. Use `ConfigService.get(vertical, config_type, org_id)`. YAML files are seed data only.
 - **Prompts are Netz IP:** Never expose prompt content in client-facing API responses. Use `CLIENT_VISIBLE_TYPES` allowlist in ConfigService. Use `jinja2.SandboxedEnvironment` for all prompt rendering.
 - **StorageClient for all storage:** Never call ADLS SDK directly. Use `StorageClient` abstraction (local filesystem when `FEATURE_ADLS_ENABLED=false`).
+- **Dual-write ordering:** ADLS write (source of truth) BEFORE Azure Search upsert (derived index). If ADLS fails, pipeline continues with warning. If Search fails, data is safe in ADLS and can be rebuilt.
+- **Path routing via `storage_routing.py`:** Never build ADLS paths with f-strings in callers. Use `bronze_document_path()`, `silver_chunks_path()`, `silver_metadata_path()`, `gold_memo_path()`. All paths validated with `_SAFE_PATH_SEGMENT_RE`.
+- **Parquet schema must include embedding metadata:** All silver layer Parquet files must have `embedding_model` and `embedding_dim` columns. `search_rebuild.py` validates dimension match before upserting — prevents silent corruption on model upgrade.
+- **`organization_id` in Azure Search documents:** All search documents must include `organization_id` (Security F4). All RAG queries MUST include `$filter=organization_id eq '{org_id}'`.
+- **No Cohere dependency:** Hybrid classifier (rules → cosine_similarity → LLM) replaced Cohere Rerank. Cross-encoder reranker (`local_reranker.py`) replaced Cohere for IC memo evidence. Zero external ML API calls for classification.
 
 ## Vertical Engines
 
 Two-layer architecture: universal core (`ai_engine/`) + vertical specializations (`vertical_engines/`).
 
-- `ai_engine/` — domain-agnostic: extraction, chunking, embedding, OCR, governance, validation, PDF. Never modified per vertical.
+- `ai_engine/` — domain-agnostic: unified pipeline, hybrid classification, extraction, chunking, embedding, OCR, governance, validation, storage routing, search rebuild. Never modified per vertical.
 - `vertical_engines/{vertical}/` — domain-specific: analysis logic, prompts, scoring. One directory per asset class.
+- `vertical_engines/credit/` — 12 modular packages (Wave 1 complete, PR #9-#19). Each package has `models.py`, `service.py`, and domain helpers. `service.py` is the entry point; helpers must NOT import from `service.py` (enforced by import-linter).
+- `vertical_engines/wealth/` — `fund_analyzer.py` (implements `BaseAnalyzer`), `dd_report_engine.py`, `macro_committee_engine.py`, `quant_analyzer.py`.
 - `ProfileLoader` connects `profiles/` YAML config to `vertical_engines/` code via `ConfigService`.
 - **Do not rewrite vertical_engines/credit/ business logic.** Only session injection allowed (caller provides `db: Session`).
 - `quant_engine/` services receive config as parameter (no YAML loading, no `@lru_cache`). Config resolved once at async entry point via `ConfigService.get()`, passed down to sync functions.
 
+## Import Architecture (import-linter)
+
+Enforced via `import-linter` in `make check`. Contracts in `pyproject.toml`:
+
+1. **Verticals must not import each other:** `vertical_engines.credit` ↔ `vertical_engines.wealth` are independent.
+2. **Models must not import service:** `vertical_engines.credit.*.models` → `vertical_engines.credit.*.service` is forbidden. Prevents circular dependencies.
+3. **Helpers must not import service:** Within each credit package, helpers (parser, classifier, prompts) must not import from `service.py`. `service.py` imports helpers, not the reverse.
+4. **Vertical-agnostic quant services:** `quant_engine.regime_service` and `quant_engine.cvar_service` must not import from `app.domains.wealth`.
+
 ## Data Lake Rules (ADLS Gen2)
 
-1. `{organization_id}/` is ALWAYS the first path segment under `bronze/` and `silver/`
-2. `_global/` is for data with no tenant context — FRED macro, ETF benchmarks
+1. `{organization_id}/{vertical}/` is ALWAYS the path prefix under `bronze/` and `silver/` — enforced by `storage_routing.py`
+2. `_global/` is for data with no tenant context — FRED macro, ETF benchmarks — via `global_reference_path()`
 3. `macro_data` PostgreSQL table = operational use (regime detection, daily pipeline)
 4. `gold/_global/fred_indicators/` = analytics use (backtesting, cross-fund correlation)
 5. All workers must write Parquet with `organization_id` as a column AND as a path segment
 6. DuckDB queries must always include `WHERE organization_id = ?` even when path already isolates
 7. TimescaleDB hypertables: `compress_segmentby = 'organization_id'` on all hypertables
+8. Pipeline writes: OCR → `bronze/.../documents/{doc_id}.json`, chunks → `silver/.../chunks/{doc_id}/chunks.parquet`, metadata → `silver/.../documents/{doc_id}/metadata.json`
+9. Parquet files must use zstd compression and include `embedding_model` + `embedding_dim` columns for rebuild validation
+10. `search_rebuild.py` can reconstruct Azure Search index from silver Parquet — no OCR/LLM calls needed
 
 ## Environment Variables
 
@@ -121,7 +165,14 @@ OPENAI_API_KEY=
 AZURE_OPENAI_ENDPOINT=
 AZURE_OPENAI_API_KEY=
 
-# Data Lake (disabled by default — local dev uses PG only)
+# Search
+SEARCH_CHUNKS_INDEX_NAME=global-vector-chunks-v2
+NETZ_ENV=dev                   # Prefixes search indexes: dev-global-vector-chunks-v2
+
+# Embedding
+OPENAI_EMBEDDING_MODEL=text-embedding-3-large
+
+# Data Lake (disabled by default — local dev uses LocalStorageClient at .data/lake/)
 FEATURE_ADLS_ENABLED=false
 ADLS_ACCOUNT_NAME=
 ADLS_ACCOUNT_KEY=
@@ -143,5 +194,9 @@ Custom skills live in `.claude/skills/`. Each subfolder contains a `SKILL.md` wi
 - **Platform Brainstorm:** `docs/brainstorms/2026-03-14-analysis-engine-platform-brainstorm.md`
 - **ProductConfig Plan:** `docs/plans/2026-03-14-feat-customizable-vertical-config-plan.md` (deepened with 7 review agents)
 - **ProductConfig Brainstorm:** `docs/brainstorms/2026-03-14-customizable-vertical-config-brainstorm.md`
+- **Pipeline Refactor Plan:** `docs/plans/2026-03-15-refactor-pipeline-llm-deterministic-alignment-plan.md` (3 phases, all complete — PRs #20, #21, #22)
+- **Pipeline Refactor Brainstorm:** `docs/brainstorms/2026-03-15-pipeline-llm-deterministic-alignment-brainstorm.md`
+- **Credit Modularization Plan:** `docs/plans/2026-03-15-refactor-credit-deep-review-modularization-wave2-plan.md` (Wave 2 — deep review modules)
+- **Wealth Modularization Plan:** `docs/plans/2026-03-15-feat-wealth-vertical-complete-modularization-plan.md`
 - **Private Credit OS:** `C:\Users\andre\projetos\Netz-Private-Credit-OS` (archived after data migration)
 - **Wealth OS:** `C:\Users\andre\projetos\netz-wealth-os` (archived after migration)
