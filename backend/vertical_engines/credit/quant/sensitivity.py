@@ -1,12 +1,12 @@
 """Credit-specific sensitivity analysis (2D + 3D grids).
 
-Extracted from ic_quant_engine.py for modularity.
 Uses itertools.product for grid iteration with credit-specific axes:
-default_rate_pct × recovery_rate_pct × rate_shock_bps.
+default_rate_pct x recovery_rate_pct x rate_shock_bps.
 
 Sync service — pure computation, no I/O.
-"""
 
+Imports only models.py (leaf).
+"""
 from __future__ import annotations
 
 from typing import Any
@@ -15,7 +15,7 @@ import structlog
 
 logger = structlog.get_logger()
 
-# Default grid axes — hardcoded, configurable via ConfigService in future
+# Default grid axes
 DEFAULT_RATES_GRID = [1.0, 3.0, 5.0, 8.0]
 RECOVERY_RATES_GRID = [80.0, 65.0, 50.0, 35.0]
 RATE_SHOCKS_BPS = [0, 100, 200]
@@ -28,10 +28,10 @@ def build_sensitivity_2d(
     default_rates: list[float] | None = None,
     recovery_rates: list[float] | None = None,
 ) -> list[dict[str, Any]]:
-    """Build 2D sensitivity grid: default_rate × recovery_rate.
+    """Build 2D sensitivity grid: default_rate x recovery_rate.
 
     Args:
-        base_return_pct: Base return percentage. None → empty grid.
+        base_return_pct: Base return percentage. None -> empty grid.
         proxy_flags: Proxy flag list (passed for interface compat, not used).
         default_rates: Override default rate grid axis.
         recovery_rates: Override recovery rate grid axis.
@@ -62,7 +62,7 @@ def build_sensitivity_3d_summary(
     *,
     rate_shocks_bps: list[int] | None = None,
 ) -> dict[str, Any]:
-    """Build 3D summary: default × recovery × rate shocks.
+    """Build 3D summary: default x recovery x rate shocks.
 
     Args:
         base_return_pct: Base return percentage.
@@ -97,7 +97,7 @@ def build_sensitivity_3d_summary(
                 "rate_shock_bps": cell["rate_shock_bps"],
                 "default_rate_pct": cell["default_rate_pct"],
                 "recovery_rate_pct": cell["recovery_rate_pct"],
-                "note": "First combination where net return ≤ 0%",
+                "note": "First combination where net return <= 0%",
             }
             break
 
@@ -126,5 +126,5 @@ def build_sensitivity_3d_summary(
         "break_even_thresholds": break_even,
         "dominant_driver": dominant,
         "rate_shocks_bps": shocks,
-        "note": "3D summary: default_rate × recovery_rate × rate_shock",
+        "note": "3D summary: default_rate x recovery_rate x rate_shock",
     }

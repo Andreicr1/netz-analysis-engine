@@ -1,9 +1,6 @@
 """Credit PD/LGD model validation via cross-validated backtesting.
 
 Credit-specific: uses default_labels, recovery_rates, vintage_years.
-Lives in vertical_engines/credit/ (not quant_engine/) because
-PD/LGD concepts are credit-domain-specific.
-
 Sync service — pure computation, dispatched via asyncio.to_thread().
 
 Uses StratifiedKFold by default (not TimeSeriesSplit) because
@@ -12,57 +9,27 @@ every fold has at least one default. Pipeline with StandardScaler
 prevents data leakage and handles financial ratio scale differences.
 
 Config is injected as parameter — no YAML, no @lru_cache.
-"""
 
+Imports only models.py (leaf).
+"""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from enum import Enum
+from typing import Any
 
 import numpy as np
 import structlog
 
+from vertical_engines.credit.quant.models import (
+    MAX_FEATURES,
+    MAX_OBSERVATIONS,
+    MIN_DEFAULTS,
+    MIN_OBSERVATIONS,
+    BacktestInput,
+    CreditBacktestResult,
+    CVStrategy,
+)
+
 logger = structlog.get_logger()
-
-MAX_OBSERVATIONS = 50_000
-MAX_FEATURES = 100
-MIN_DEFAULTS = 10
-MIN_OBSERVATIONS = 100
-
-
-class CVStrategy(str, Enum):
-    """Cross-validation strategy for PD model validation."""
-
-    STRATIFIED = "stratified"
-    TEMPORAL = "temporal"
-
-
-@dataclass
-class BacktestInput:
-    """Historical default/recovery observations for model validation."""
-
-    features: np.ndarray  # (N, F) financial ratios
-    default_labels: np.ndarray  # (N,) 0/1 default indicator
-    recovery_rates: np.ndarray  # (N,) realized LGD (0-1)
-    vintage_years: np.ndarray  # (N,) origination year
-    cv_strategy: CVStrategy = CVStrategy.STRATIFIED
-    n_splits: int = 5
-
-
-@dataclass
-class CreditBacktestResult:
-    """Backtest result with PD and LGD model metrics."""
-
-    pd_auc_roc: float = 0.0
-    pd_auc_std: float = 0.0  # std across folds
-    pd_brier: float = 0.0
-    lgd_mae: float = 0.0
-    vintage_cohorts: dict[int, dict[str, float]] = field(default_factory=dict)
-    cv_folds: int = 0
-    cv_strategy: str = "stratified"
-    sample_size: int = 0
-    n_defaults: int = 0
-    status: str = "complete"  # complete | insufficient_data
 
 
 def _validate_input(inp: BacktestInput) -> str | None:
@@ -92,11 +59,8 @@ def _validate_input(inp: BacktestInput) -> str | None:
 
 def _select_n_splits(n_obs: int, n_defaults: int, requested: int) -> int:
     """Adaptively choose number of CV folds based on data size."""
-    # Each val fold should have >= 2 defaults
     max_splits = n_defaults // 2
-    # Each val fold should have >= 10 observations
     max_splits = min(max_splits, n_obs // 10)
-    # Cap at requested, floor at 2
     return max(2, min(requested, max_splits))
 
 
@@ -130,7 +94,7 @@ def _build_vintage_cohorts(
 def backtest_pd_model(
     inp: BacktestInput,
     *,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
 ) -> CreditBacktestResult:
     """Run cross-validated PD/LGD model backtest.
 
@@ -141,10 +105,9 @@ def backtest_pd_model(
     Returns:
         CreditBacktestResult with AUC-ROC, Brier, LGD MAE, vintage cohorts.
     """
-    # Input validation
     error = _validate_input(inp)
     if error:
-        logger.warning("Backtest input validation failed", error=error)
+        logger.warning("backtest_input_validation_failed", error=error)
         return CreditBacktestResult(
             status="insufficient_data",
             sample_size=inp.features.shape[0],
@@ -154,7 +117,6 @@ def backtest_pd_model(
     n_obs = inp.features.shape[0]
     n_defaults = int(inp.default_labels.sum())
 
-    # Adaptive fold count
     n_splits = _select_n_splits(n_obs, n_defaults, inp.n_splits)
 
     try:
@@ -165,7 +127,7 @@ def backtest_pd_model(
         from sklearn.pipeline import Pipeline
         from sklearn.preprocessing import StandardScaler
     except ImportError as e:
-        logger.error("scikit-learn not available for backtesting", error=str(e))
+        logger.error("sklearn_not_available", error=str(e))
         return CreditBacktestResult(
             status="insufficient_data",
             sample_size=n_obs,
@@ -175,7 +137,6 @@ def backtest_pd_model(
     X = inp.features
     y = inp.default_labels
 
-    # Build pipeline: scale + logistic regression with balanced class weights
     pipeline = Pipeline([
         ("scaler", StandardScaler()),
         ("classifier", LogisticRegression(
@@ -186,13 +147,11 @@ def backtest_pd_model(
         )),
     ])
 
-    # Select CV strategy
     if inp.cv_strategy == CVStrategy.TEMPORAL:
         cv = TimeSeriesSplit(n_splits=n_splits)
     else:
         cv = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
 
-    # PD model: single-pass cross-validated OOF predictions + per-fold AUC
     try:
         oof_predictions = np.zeros(n_obs)
         fold_aucs = []
@@ -215,21 +174,19 @@ def backtest_pd_model(
         auc_std = float(np.std(fold_aucs)) if fold_aucs else 0.0
 
     except Exception as e:
-        logger.error("PD model backtest failed", error=str(e))
+        logger.error("pd_model_backtest_failed", error=str(e))
         auc_roc = 0.0
         auc_std = 0.0
         brier = 1.0
 
-    # LGD model: simple MAE on recovery rates (only for defaulted loans)
     default_mask = y == 1
     if default_mask.sum() > 0:
         lgd_actual = inp.recovery_rates[default_mask]
-        lgd_predicted = np.full_like(lgd_actual, lgd_actual.mean())  # baseline: mean recovery
+        lgd_predicted = np.full_like(lgd_actual, lgd_actual.mean())
         lgd_mae = float(mean_absolute_error(lgd_actual, lgd_predicted))
     else:
         lgd_mae = 0.0
 
-    # Vintage cohort analysis
     vintage_cohorts = _build_vintage_cohorts(
         inp.vintage_years, inp.default_labels, inp.recovery_rates,
     )
