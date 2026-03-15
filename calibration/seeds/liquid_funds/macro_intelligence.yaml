@@ -36,3 +36,32 @@ regional_scoring:
       fresh_days: 100
       max_useful_days: 180
       floor: 0.50
+
+# Phase 2: Regional regime detection + global composition
+regional_regime:
+  # OAS thresholds (basis points) — ICE BofA credit spreads
+  # HY OAS historical: median ~400bp, 75th ~550bp, 95th ~800bp
+  oas_risk_off_bp: 550
+  oas_crisis_bp: 800
+
+  # Asymmetric hysteresis: confirmation days before transition accepted
+  # Immediate CRISIS entry, slow RISK_ON recovery
+  hysteresis:
+    ANY_TO_CRISIS: 0
+    ANY_TO_RISK_OFF: 3
+    ANY_TO_INFLATION: 5
+    CRISIS_TO_RISK_OFF: 5
+    RISK_OFF_TO_RISK_ON: 5
+    CRISIS_TO_RISK_ON: 10
+
+  # GDP weights for global regime composition
+  gdp_weights:
+    US: 0.25
+    EUROPE: 0.22
+    ASIA: 0.28
+    EM: 0.25
+
+  # Committee workflow
+  committee:
+    emergency_cooldown_hours: 24
+    weekly_score_delta_threshold: 5.0  # Flag score changes > 5 points

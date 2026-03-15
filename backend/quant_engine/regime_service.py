@@ -8,6 +8,11 @@ Classifies market regime using multi-signal approach:
 
 Priority hierarchy: CRISIS > INFLATION > RISK_OFF > RISK_ON
 
+Phase 2 additions:
+- Per-region regime classification using ICE BofA credit spread signals
+- Asymmetric hysteresis (immediate CRISIS entry, slow RISK_ON recovery)
+- GDP-weighted global composition with pessimistic override
+
 Sync/async boundary: Pure classification functions are sync.
 get_latest_macro_values() and get_current_regime() are async (DB access).
 Callers dispatch sync functions via asyncio.to_thread() if needed.
@@ -15,9 +20,11 @@ Callers dispatch sync functions via asyncio.to_thread() if needed.
 Config is injected as parameter by callers via ConfigService.get("liquid_funds", "calibration").
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import date
-from typing import TypedDict
+from typing import Any, TypedDict
 
 import numpy as np
 import structlog
@@ -237,6 +244,300 @@ def detect_regime(
         description=REGIME_DEFINITIONS.get(regime, {}).get("description"),
         reasons={"volatility_proxy": f"annualized_vol={vol:.4f}"},
     )
+
+
+# ---------------------------------------------------------------------------
+#  Regional regime detection (Phase 2)
+# ---------------------------------------------------------------------------
+
+# Primary signals: ICE BofA credit spreads — daily, never discontinued.
+# OAS (Option-Adjusted Spread) measures credit stress relative to Treasuries.
+REGIONAL_REGIME_SIGNALS: dict[str, list[str]] = {
+    "US": ["VIXCLS", "BAMLH0A0HYM2"],       # VIX + US HY OAS
+    "EUROPE": ["BAMLHE00EHYIOAS"],            # Euro HY OAS
+    "ASIA": ["BAMLEMRACRPIASIAOAS"],           # Asia EM Corp OAS
+    "EM": ["BAMLEMCBPIOAS"],                   # EM Corp OAS
+}
+
+# OAS thresholds calibrated from ICE BofA indices (basis points → percentage).
+# HY OAS historical: median ~400bp, 75th ~550bp, 95th ~800bp.
+_OAS_RISK_OFF_BP = 550   # 75th percentile → RISK_OFF
+_OAS_CRISIS_BP = 800     # 95th percentile → CRISIS
+
+# Regime ordering for comparison (higher = more severe)
+_REGIME_SEVERITY: dict[str, int] = {
+    "RISK_ON": 0,
+    "RISK_OFF": 1,
+    "INFLATION": 2,
+    "CRISIS": 3,
+}
+
+# Asymmetric hysteresis: confirmation days before regime transition is accepted.
+# Immediate CRISIS entry (0 days), slow recovery to RISK_ON (5-10 days).
+_DEFAULT_HYSTERESIS: dict[str, int] = {
+    "ANY_TO_CRISIS": 0,
+    "ANY_TO_RISK_OFF": 3,
+    "ANY_TO_INFLATION": 5,
+    "CRISIS_TO_RISK_OFF": 5,
+    "RISK_OFF_TO_RISK_ON": 5,
+    "CRISIS_TO_RISK_ON": 10,
+}
+
+# GDP weights for global regime composition.
+_DEFAULT_GDP_WEIGHTS: dict[str, float] = {
+    "US": 0.25,
+    "EUROPE": 0.22,
+    "ASIA": 0.28,
+    "EM": 0.25,
+}
+
+
+class RegionalRegimeConfig(TypedDict, total=False):
+    """Config for regional regime detection from ConfigService."""
+
+    oas_risk_off_bp: int
+    oas_crisis_bp: int
+    hysteresis: dict[str, int]
+    gdp_weights: dict[str, float]
+
+
+def resolve_regional_regime_config(
+    config: dict[str, Any] | None = None,
+) -> RegionalRegimeConfig:
+    """Extract regional regime config from macro_intelligence config dict."""
+    if config is None:
+        return RegionalRegimeConfig(
+            oas_risk_off_bp=_OAS_RISK_OFF_BP,
+            oas_crisis_bp=_OAS_CRISIS_BP,
+            hysteresis=_DEFAULT_HYSTERESIS,
+            gdp_weights=_DEFAULT_GDP_WEIGHTS,
+        )
+    raw = config.get("regional_regime", {})
+    if not raw:
+        return resolve_regional_regime_config(None)
+    try:
+        return RegionalRegimeConfig(
+            oas_risk_off_bp=int(raw.get("oas_risk_off_bp", _OAS_RISK_OFF_BP)),
+            oas_crisis_bp=int(raw.get("oas_crisis_bp", _OAS_CRISIS_BP)),
+            hysteresis=raw.get("hysteresis", _DEFAULT_HYSTERESIS),
+            gdp_weights=raw.get("gdp_weights", _DEFAULT_GDP_WEIGHTS),
+        )
+    except (KeyError, TypeError, ValueError) as e:
+        logger.error("Malformed regional regime config, using defaults", error=str(e))
+        return resolve_regional_regime_config(None)
+
+
+@dataclass(frozen=True)
+class RegionalRegimeResult:
+    """Regime classification result for a single region."""
+
+    region: str
+    regime: str
+    signal_values: dict[str, float]  # FRED series_id → latest value
+    reasons: dict[str, str]
+
+
+@dataclass(frozen=True)
+class HierarchicalRegimeResult:
+    """Global + per-region regime classification."""
+
+    global_regime: str
+    regional_regimes: dict[str, str]   # region → regime
+    regional_details: dict[str, RegionalRegimeResult]
+    composition_reasons: dict[str, str]
+    as_of_date: date
+
+
+def classify_regional_regime(
+    region: str,
+    signal_values: dict[str, float | None],
+    *,
+    vix: float | None = None,
+    cpi_yoy: float | None = None,
+    config: RegionalRegimeConfig | None = None,
+) -> RegionalRegimeResult:
+    """Classify regime for a single region using credit spread signals.
+
+    US region uses VIX + OAS. Other regions use OAS only.
+    CPI inflation override applies to all regions.
+
+    Args:
+        region: Region key (US, EUROPE, ASIA, EM).
+        signal_values: Mapping FRED series_id → latest value (OAS in bps).
+        vix: VIX value (used for US region only).
+        cpi_yoy: CPI YoY for inflation detection.
+        config: Regional regime config.
+    """
+    if config is None:
+        config = resolve_regional_regime_config(None)
+
+    oas_risk_off = config.get("oas_risk_off_bp", _OAS_RISK_OFF_BP)
+    oas_crisis = config.get("oas_crisis_bp", _OAS_CRISIS_BP)
+
+    reasons: dict[str, str] = {}
+    valid_signals: dict[str, float] = {
+        k: v for k, v in signal_values.items() if v is not None
+    }
+
+    # US: use VIX as primary, OAS as secondary
+    if region == "US" and vix is not None:
+        vix = _validate_plausibility("vix", vix)
+        if vix is not None and vix >= 35:
+            reasons["vix"] = f"VIX={vix:.1f} >= 35 (CRISIS)"
+            return RegionalRegimeResult(
+                region=region, regime="CRISIS",
+                signal_values=valid_signals, reasons=reasons,
+            )
+
+    # Check OAS signals for all regions
+    oas_values = [v for v in valid_signals.values() if v is not None]
+    if oas_values:
+        max_oas = max(oas_values)
+        if max_oas >= oas_crisis:
+            reasons["oas"] = f"OAS={max_oas:.0f}bp >= {oas_crisis}bp (CRISIS)"
+            return RegionalRegimeResult(
+                region=region, regime="CRISIS",
+                signal_values=valid_signals, reasons=reasons,
+            )
+
+    # CPI inflation override (applies to all regions)
+    if cpi_yoy is not None:
+        cpi_yoy = _validate_plausibility("cpi_yoy", cpi_yoy)
+        if cpi_yoy is not None and cpi_yoy >= 4.0:
+            reasons["cpi"] = f"CPI_YoY={cpi_yoy:.1f}% >= 4.0% (INFLATION)"
+            return RegionalRegimeResult(
+                region=region, regime="INFLATION",
+                signal_values=valid_signals, reasons=reasons,
+            )
+
+    # US: VIX RISK_OFF check
+    if region == "US" and vix is not None and vix >= 25:
+        reasons["vix"] = f"VIX={vix:.1f} >= 25 (RISK_OFF)"
+        return RegionalRegimeResult(
+            region=region, regime="RISK_OFF",
+            signal_values=valid_signals, reasons=reasons,
+        )
+
+    # OAS RISK_OFF check
+    if oas_values and max(oas_values) >= oas_risk_off:
+        max_oas = max(oas_values)
+        reasons["oas"] = f"OAS={max_oas:.0f}bp >= {oas_risk_off}bp (RISK_OFF)"
+        return RegionalRegimeResult(
+            region=region, regime="RISK_OFF",
+            signal_values=valid_signals, reasons=reasons,
+        )
+
+    reasons["decision"] = "RISK_ON: no stress signals triggered"
+    return RegionalRegimeResult(
+        region=region, regime="RISK_ON",
+        signal_values=valid_signals, reasons=reasons,
+    )
+
+
+def compose_global_regime(
+    regional_regimes: dict[str, str],
+    *,
+    config: RegionalRegimeConfig | None = None,
+) -> tuple[str, dict[str, str]]:
+    """Compose global regime from regional regimes using GDP-weighted aggregation.
+
+    Pessimistic override rules:
+    - Any region with weight >= 0.20 in CRISIS → global at minimum RISK_OFF
+    - 2+ regions in CRISIS → global CRISIS regardless of weights
+
+    Args:
+        regional_regimes: Mapping region → regime string.
+        config: Regional regime config with GDP weights.
+
+    Returns:
+        Tuple of (global_regime, composition_reasons).
+    """
+    if config is None:
+        config = resolve_regional_regime_config(None)
+
+    gdp_weights = config.get("gdp_weights", _DEFAULT_GDP_WEIGHTS)
+    reasons: dict[str, str] = {}
+
+    # Pessimistic override: 2+ regions in CRISIS → global CRISIS
+    crisis_regions = [r for r, regime in regional_regimes.items() if regime == "CRISIS"]
+    if len(crisis_regions) >= 2:
+        reasons["override"] = (
+            f"2+ regions in CRISIS ({', '.join(crisis_regions)}) → global CRISIS"
+        )
+        return "CRISIS", reasons
+
+    # Pessimistic override: any significant region in CRISIS → minimum RISK_OFF
+    min_regime = "RISK_ON"
+    for region, regime in regional_regimes.items():
+        weight = gdp_weights.get(region, 0)
+        if regime == "CRISIS" and weight >= 0.20:
+            min_regime = "RISK_OFF"
+            reasons["pessimistic"] = (
+                f"{region} (weight={weight:.2f}) in CRISIS → global minimum RISK_OFF"
+            )
+            break
+
+    # GDP-weighted severity score
+    severity_sum = 0.0
+    weight_sum = 0.0
+    for region, regime in regional_regimes.items():
+        weight = gdp_weights.get(region, 0)
+        severity = _REGIME_SEVERITY.get(regime, 0)
+        severity_sum += severity * weight
+        weight_sum += weight
+        reasons[f"region_{region.lower()}"] = f"{region}={regime} (weight={weight:.2f})"
+
+    if weight_sum > 0:
+        avg_severity = severity_sum / weight_sum
+    else:
+        avg_severity = 0.0
+
+    # Map average severity to regime
+    if avg_severity >= 2.5:
+        weighted_regime = "CRISIS"
+    elif avg_severity >= 1.5:
+        weighted_regime = "INFLATION"
+    elif avg_severity >= 0.5:
+        weighted_regime = "RISK_OFF"
+    else:
+        weighted_regime = "RISK_ON"
+
+    # Apply pessimistic floor
+    if _REGIME_SEVERITY.get(min_regime, 0) > _REGIME_SEVERITY.get(weighted_regime, 0):
+        weighted_regime = min_regime
+
+    reasons["decision"] = (
+        f"GDP-weighted severity={avg_severity:.2f} → {weighted_regime}"
+    )
+    return weighted_regime, reasons
+
+
+def get_hysteresis_days(
+    current_regime: str,
+    proposed_regime: str,
+    config: RegionalRegimeConfig | None = None,
+) -> int:
+    """Return confirmation days needed for a regime transition.
+
+    Asymmetric: immediate CRISIS entry, slow RISK_ON recovery.
+    """
+    if config is None:
+        config = resolve_regional_regime_config(None)
+    hysteresis = config.get("hysteresis", _DEFAULT_HYSTERESIS)
+
+    if proposed_regime == "CRISIS":
+        return hysteresis.get("ANY_TO_CRISIS", 0)
+    if proposed_regime == "INFLATION":
+        return hysteresis.get("ANY_TO_INFLATION", 5)
+    if proposed_regime == "RISK_OFF":
+        if current_regime == "CRISIS":
+            return hysteresis.get("CRISIS_TO_RISK_OFF", 5)
+        return hysteresis.get("ANY_TO_RISK_OFF", 3)
+    if proposed_regime == "RISK_ON":
+        if current_regime == "CRISIS":
+            return hysteresis.get("CRISIS_TO_RISK_ON", 10)
+        return hysteresis.get("RISK_OFF_TO_RISK_ON", 5)
+    return 0
 
 
 async def get_latest_macro_values(
