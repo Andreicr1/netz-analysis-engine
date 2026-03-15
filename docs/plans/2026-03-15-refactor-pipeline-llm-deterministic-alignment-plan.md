@@ -396,10 +396,10 @@ Modify `async_run_full_intelligence()` (line 593-766) to use `hybrid_classifier.
 **Do NOT change:** metadata extraction, summarization, governance detection. Those are untouched.
 
 **Acceptance criteria:**
-- [ ] `async_run_full_intelligence()` uses `hybrid_classifier.classify()` for both doc_type and vehicle_type
-- [ ] No imports from `cohere_rerank.py` remain in `document_intelligence.py`
-- [ ] `FullIntelligenceResult` populated correctly with new classifier output
-- [ ] Confidence scale mapped: `HybridClassificationResult.confidence` (0.0–1.0 float) → `FullIntelligenceResult` fields (int 0-100 for legacy consumers)
+- [x] `async_run_full_intelligence()` uses `hybrid_classifier.classify()` for both doc_type and vehicle_type
+- [x] No imports from `cohere_rerank.py` remain in `document_intelligence.py`
+- [x] `FullIntelligenceResult` populated correctly with new classifier output
+- [x] Confidence scale mapped: `HybridClassificationResult.confidence` (0.0–1.0 float) → `FullIntelligenceResult` fields (float 0.0-1.0, same scale)
 - [ ] Existing tests pass (classification results may differ but schema is compatible)
 
 ##### Task 1.5b: Eliminate Cohere from entity_bootstrap.py
@@ -411,8 +411,8 @@ Modify `async_run_full_intelligence()` (line 593-766) to use `hybrid_classifier.
 - Remove Cohere HTTP calls and `COHERE_MODEL` constant
 
 **Acceptance criteria:**
-- [ ] No Cohere HTTP calls in `entity_bootstrap.py`
-- [ ] Vehicle type validation uses hybrid classifier
+- [x] No Cohere HTTP calls in `entity_bootstrap.py`
+- [x] Vehicle type validation uses hybrid classifier
 
 ##### Task 1.6: Wire Local Reranker into IC Memo Pipeline
 
