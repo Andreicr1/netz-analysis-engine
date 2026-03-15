@@ -47,7 +47,7 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────
 
 # MANDATORY: SEC policy requires identifying your application.
-_USER_AGENT = "Previse Capital IC Pipeline tech@previsecapital.com"
+_USER_AGENT = "Netz Analysis Engine tech@netzco.com"
 
 _HEADERS_DATA = {                      # data.sec.gov requires explicit Host
     "User-Agent": _USER_AGENT,

@@ -44,6 +44,9 @@ quant = [
     "statsmodels>=0.14",
     "scikit-learn>=1.6",
 ]
+edgar = [
+    "edgartools>=5.23,<6.0",
+]
 
 [build-system]
 requires = ["setuptools>=75"]
@@ -97,5 +100,5 @@ warn_return_any = true
 warn_unused_configs = true
 
 [[tool.mypy.overrides]]
-module = ["redis.*", "sse_starlette.*"]
+module = ["redis.*", "sse_starlette.*", "edgar.*", "rapidfuzz.*"]
 ignore_missing_imports = true

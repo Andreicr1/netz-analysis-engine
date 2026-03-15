@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     fred_api_key: str = ""
     adobe_sign_integration_key: str = ""
 
+    # ── SEC EDGAR (public identifier — required by SEC policy) ──
+    edgar_identity: str = "Netz Analysis Engine tech@netzco.com"
+
     # ── Feature Flags ────────────────────────────────────
     feature_lipper_enabled: bool = False
     feature_auto_rebalance: bool = False
