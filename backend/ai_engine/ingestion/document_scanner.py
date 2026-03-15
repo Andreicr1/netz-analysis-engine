@@ -8,7 +8,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ai_engine.classification.doc_classifier import classify_registered_documents
+from ai_engine.classification.document_classifier import classify_registered_documents
 from ai_engine.governance.authority_resolver import resolve_authority_profiles
 from ai_engine.knowledge.knowledge_anchor_extractor import extract_knowledge_anchors
 from app.domains.credit.modules.ai.models import DocumentRegistry

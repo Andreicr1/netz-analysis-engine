@@ -7,7 +7,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ai_engine.classification.classifier import classify_documents
+from ai_engine.classification.document_classifier import classify_documents
 from ai_engine.extraction.obligation_extractor import extract_obligation_register
 from ai_engine.knowledge.knowledge_builder import build_manager_profiles
 from app.domains.credit.modules.ai.models import GovernanceAlert, ObligationRegister

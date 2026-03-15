@@ -59,13 +59,13 @@ class TestUploadUrlRouteExists:
 
 
 class TestSSEEventEmission:
-    """Test the _emit helper used by ingestion worker."""
+    """Test the _emit helper used by the unified pipeline."""
 
     @pytest.mark.asyncio
     async def test_emit_publishes_to_redis(self):
-        from app.domains.credit.documents.services.ingestion_worker import _emit
+        from ai_engine.pipeline.unified_pipeline import _emit
 
-        with patch("app.domains.credit.documents.services.ingestion_worker.publish_event", new_callable=AsyncMock) as mock_pub:
+        with patch("app.core.jobs.tracker.publish_event", new_callable=AsyncMock) as mock_pub:
             import uuid
 
             vid = uuid.uuid4()
@@ -75,10 +75,10 @@ class TestSSEEventEmission:
     @pytest.mark.asyncio
     async def test_emit_swallows_redis_errors(self):
         """SSE emission failure should not break ingestion."""
-        from app.domains.credit.documents.services.ingestion_worker import _emit
+        from ai_engine.pipeline.unified_pipeline import _emit
 
         with patch(
-            "app.domains.credit.documents.services.ingestion_worker.publish_event",
+            "app.core.jobs.tracker.publish_event",
             new_callable=AsyncMock,
             side_effect=ConnectionError("Redis down"),
         ):

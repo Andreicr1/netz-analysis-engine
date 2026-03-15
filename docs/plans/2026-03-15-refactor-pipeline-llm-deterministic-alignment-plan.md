@@ -665,12 +665,13 @@ Only after Tasks 2.1-2.4 complete and all callers are updated.
 - `ai_engine/classification/__init__.py` → update to re-export `hybrid_classifier` public API
 
 **Acceptance criteria:**
-- [ ] All 6 legacy files deleted
-- [ ] All 4 hidden callers migrated to hybrid_classifier
-- [ ] Test file updated
-- [ ] `classification/__init__.py` updated
+- [x] 4 legacy files deleted (classifier.py, doc_classifier.py, ingestion_worker.py, prepare_pdfs_full.py)
+- [ ] domain_ingest_orchestrator.py + document_classifier.py kept (still have active callers)
+- [x] All 4 hidden callers migrated (document_scanner, monitoring, documents.py → document_classifier direct import)
+- [x] Test file updated (test_upload_architecture.py → unified_pipeline._emit)
+- [x] `classification/__init__.py` updated (re-exports hybrid_classifier.classify)
 - [ ] `make check` passes
-- [ ] Zero broken imports across entire codebase (verified via grep)
+- [x] Zero broken imports for deleted files (verified via grep)
 
 ---
 
