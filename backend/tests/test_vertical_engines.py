@@ -59,9 +59,7 @@ class TestCreditModuleStructure:
         "vertical_engines.credit.domain_ai_engine",
         "vertical_engines.credit.batch_client",
         "vertical_engines.credit.edgar",
-        "vertical_engines.credit.kyc_client",
-        "vertical_engines.credit.kyc_models",
-        "vertical_engines.credit.kyc_pipeline_screening",
+        "vertical_engines.credit.kyc",
         "vertical_engines.credit.memo_chapter_prompts",
         "vertical_engines.credit.deal_conversion_engine",
     ]

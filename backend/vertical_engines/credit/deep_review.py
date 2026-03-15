@@ -677,7 +677,7 @@ def run_deal_deep_review_v4(
     # ── Stage 9.5: KYC Spider Pipeline Screening ─────────────────
     # Automatically screen all key persons and organisations identified
     # in the deal documentation via KYC Spider API (PEP/Sanctions/AML).
-    from vertical_engines.credit.kyc_pipeline_screening import (
+    from vertical_engines.credit.kyc import (
         build_kyc_appendix,
         persist_kyc_screenings_to_db,
         run_kyc_screenings,
@@ -1936,7 +1936,7 @@ async def async_run_deal_deep_review_v4(
         )
 
     def _run_kyc_sync() -> tuple[dict, str]:
-        from vertical_engines.credit.kyc_pipeline_screening import (
+        from vertical_engines.credit.kyc import (
             build_kyc_appendix,
             run_kyc_screenings,
         )
@@ -2018,7 +2018,7 @@ async def async_run_deal_deep_review_v4(
     # Persist KYC screenings to DB (main thread, main session)
     if kyc_results and kyc_results.get("summary", {}).get("skipped") is not True:
         try:
-            from vertical_engines.credit.kyc_pipeline_screening import (
+            from vertical_engines.credit.kyc import (
                 persist_kyc_screenings_to_db,
             )
             persist_kyc_screenings_to_db(
