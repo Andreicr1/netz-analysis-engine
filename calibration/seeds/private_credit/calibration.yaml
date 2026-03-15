@@ -1,0 +1,151 @@
+# SEED DATA ONLY — loaded by migration 0004. Runtime config is in PostgreSQL.
+# Sources: Moody's Annual Default Study, S&P Recovery Reports, Basel III,
+#          Ares Capital / Blue Owl public filings, institutional practice.
+# These defaults feed ic_critic_engine and ic_quant_engine.
+
+leverage_limits:
+  senior_secured:
+    max_total_leverage: 5.0
+    warning_threshold: 4.5
+    preferred_range: [2.5, 4.0]
+  unitranche:
+    max_total_leverage: 5.5
+    warning_threshold: 5.0
+  second_lien:
+    max_total_leverage: 6.5
+    warning_threshold: 6.0
+
+coverage_ratios:
+  dscr:
+    minimum_hard: 1.10
+    warning: 1.25
+    comfortable: 1.50
+    strong: 2.00
+  interest_coverage:
+    minimum_hard: 1.50
+    warning: 1.75
+    comfortable: 2.50
+    strong: 4.00
+  fixed_charge_coverage:
+    minimum_hard: 1.00
+    warning: 1.15
+    comfortable: 1.30
+
+ltv_limits:
+  senior_secured_ltv:
+    max_hard: 0.65
+    warning: 0.60
+    preferred_range: [0.40, 0.55]
+  unitranche_ltv:
+    max_hard: 0.70
+    warning: 0.65
+  second_lien_ltv:
+    max_hard: 0.80
+    warning: 0.75
+  tev_stress_haircut_pct: 25.0
+
+portfolio_concentration:
+  single_obligor_max_pct: 10.0
+  single_obligor_warning_pct: 7.5
+  top5_obligors_max_pct: 40.0
+  single_sector_max_pct: 25.0
+  single_country_max_pct: 40.0
+  emerging_markets_max_pct: 15.0
+  second_lien_max_pct: 20.0
+  pik_max_pct: 15.0
+
+tenor_limits:
+  max_weighted_avg_life_years: 5.0
+  max_single_deal_tenor_years: 7.0
+  preferred_tenor_range: [3.0, 5.0]
+
+credit_regime_thresholds:
+  hy_oas_normal: 350
+  hy_oas_cautious: 500
+  hy_oas_stress: 700
+  hy_oas_crisis: 1000
+  default_rate_normal: 2.0
+  default_rate_elevated: 4.0
+  default_rate_stress: 6.0
+  default_rate_crisis: 10.0
+  default_regime: NORMAL
+
+credit_regime_definitions:
+  NORMAL:
+    new_deal_adjustment: 0.0
+    spread_premium_bps: 0
+    max_leverage_adj: 0.0
+  CAUTIOUS:
+    new_deal_adjustment: -0.20
+    spread_premium_bps: 50
+    max_leverage_adj: -0.5
+  STRESS:
+    new_deal_adjustment: -0.50
+    spread_premium_bps: 150
+    max_leverage_adj: -1.0
+    covenant_requirement: FULL_MAINTENANCE
+  CRISIS:
+    new_deal_adjustment: -0.80
+    spread_premium_bps: 300
+    max_leverage_adj: -1.5
+    covenant_requirement: FULL_MAINTENANCE
+
+scenario_calibration:
+  base:
+    default_rate_pct: 2.0
+    recovery_rate_pct: 67.0
+    revenue_growth_pct: 3.0
+    ebitda_margin_change_bps: 0
+    rate_shock_bps: 0
+  downside:
+    default_rate_pct: 5.0
+    recovery_rate_pct: 50.0
+    revenue_decline_pct: -10.0
+    ebitda_margin_compression_bps: -200
+    rate_shock_bps: 100
+  severe:
+    default_rate_pct: 10.0
+    recovery_rate_pct: 35.0
+    revenue_decline_pct: -25.0
+    ebitda_margin_compression_bps: -500
+    rate_shock_bps: 200
+  tail:
+    default_rate_pct: 15.0
+    recovery_rate_pct: 25.0
+    revenue_decline_pct: -40.0
+    ebitda_margin_compression_bps: -800
+    rate_shock_bps: -200
+
+return_requirements:
+  min_spread_bps:
+    core_senior_secured: 450
+    unitranche: 550
+    second_lien: 750
+    venture_debt: 800
+    distressed: 1000
+  net_irr_targets:
+    core_direct_lending: [8.0, 12.0]
+    opportunistic: [12.0, 16.0]
+    distressed: [15.0, 20.0]
+
+monitoring_triggers:
+  leverage_deterioration:
+    warning: 0.5
+    critical: 1.0
+  dscr_deterioration:
+    warning: -0.15
+    critical: -0.30
+  revenue_decline:
+    warning_pct: -10.0
+    critical_pct: -20.0
+  payment_delay_days:
+    grace_period: 5
+    watchlist: 15
+    default_event: 30
+  nav_markdown:
+    warning_pct: 5.0
+    critical_pct: 15.0
+  covenant_headroom:
+    comfortable_pct: 25.0
+    tight_pct: 10.0
+    critical_pct: 5.0

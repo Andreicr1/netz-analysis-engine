@@ -6,8 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config.config_service import ConfigService
+from app.core.config.dependencies import get_config_service
 from app.core.config.settings import settings
-from app.core.security.clerk_auth import CurrentUser, get_current_user
+from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.database import get_db
 from app.domains.wealth.models.fund import Fund
 from app.domains.wealth.models.nav import NavTimeseries
@@ -36,6 +38,8 @@ async def get_fund_scoring(
     top_n: int = Query(10, ge=1, le=100, description="Number of top funds to return"),
     db: AsyncSession = Depends(get_db),
     user: CurrentUser = Depends(get_current_user),
+    config_service: ConfigService = Depends(get_config_service),
+    actor: Actor = Depends(get_actor),
 ) -> list[FundScoreRead]:
     # Batch-fetch funds and their latest risk metrics in two queries (no N+1)
     funds_stmt = select(Fund).where(Fund.block_id == block, Fund.is_active == True)
@@ -117,13 +121,15 @@ async def get_fund_scoring(
             else:
                 momentum_map[fid] = nav_score
 
+    scoring_config = await config_service.get("liquid_funds", "scoring", actor.organization_id)
+
     scored: list[FundScoreRead] = []
     for fund in funds:
         risk = risk_map.get(fund.fund_id)
         flows_momentum_score = momentum_map.get(fund.fund_id, 50.0)
         if risk is not None:
             score_val, components = compute_fund_score(
-                risk, flows_momentum_score=flows_momentum_score
+                risk, flows_momentum_score=flows_momentum_score, config=scoring_config
             )
         else:
             score_val, components = 50.0, {}

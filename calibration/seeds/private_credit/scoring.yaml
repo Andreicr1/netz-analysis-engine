@@ -1,0 +1,11 @@
+# SEED DATA ONLY — loaded by migration 0004. Runtime config is in PostgreSQL.
+# Credit deal scoring weights for ic_critic_engine.
+
+credit_scoring_weights:
+  credit_quality: 0.25
+  return_adequacy: 0.20
+  structural_protection: 0.15
+  sponsor_quality: 0.15
+  business_quality: 0.10
+  documentation_completeness: 0.10
+  liquidity_profile: 0.05

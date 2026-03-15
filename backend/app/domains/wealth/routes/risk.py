@@ -8,8 +8,10 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config.config_service import ConfigService
+from app.core.config.dependencies import get_config_service
 from app.core.config.settings import settings
-from app.core.security.clerk_auth import CurrentUser, get_current_user
+from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.database import get_db
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.schemas.macro import MacroIndicators
@@ -115,8 +117,11 @@ async def get_cvar_history(
 async def get_regime(
     db: AsyncSession = Depends(get_db),
     user: CurrentUser = Depends(get_current_user),
+    config_service: ConfigService = Depends(get_config_service),
+    actor: Actor = Depends(get_actor),
 ) -> RegimeRead:
-    return await get_current_regime(db)
+    config = await config_service.get("liquid_funds", "calibration", actor.organization_id)
+    return await get_current_regime(db, config=config)
 
 
 @router.get(

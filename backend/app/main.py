@@ -79,6 +79,50 @@ from app.domains.wealth.routes.workers import router as wealth_workers_router
 logger = logging.getLogger(__name__)
 
 
+async def _verify_config_completeness() -> None:
+    """Verify all expected (vertical, config_type) pairs exist in vertical_config_defaults.
+
+    Logs ERROR for any missing pairs — indicates migration 0004 failure.
+    """
+    from sqlalchemy import select
+
+    from app.core.config.models import VerticalConfigDefault
+    from app.core.db.engine import async_session_factory
+
+    expected_pairs = {
+        ("liquid_funds", "calibration"),
+        ("liquid_funds", "portfolio_profiles"),
+        ("liquid_funds", "scoring"),
+        ("liquid_funds", "blocks"),
+        ("private_credit", "chapters"),
+        ("private_credit", "calibration"),
+        ("private_credit", "scoring"),
+    }
+
+    try:
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(
+                    VerticalConfigDefault.vertical,
+                    VerticalConfigDefault.config_type,
+                )
+            )
+            found = {(row[0], row[1]) for row in result.all()}
+
+        missing = expected_pairs - found
+        if missing:
+            for vertical, config_type in sorted(missing):
+                logger.error(
+                    "Missing config default — check migration 0004",
+                    vertical=vertical,
+                    config_type=config_type,
+                )
+        else:
+            logger.info("Config health check OK — all %d defaults present", len(expected_pairs))
+    except Exception as e:
+        logger.error("Config health check failed — DB may not be migrated: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """App lifespan: validate secrets, log startup, cleanup on shutdown."""
@@ -87,6 +131,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         "Netz Analysis Engine starting — env=%s",
         settings.app_env,
     )
+    await _verify_config_completeness()
     yield
     # Cleanup
     await engine.dispose()

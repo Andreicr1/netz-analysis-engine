@@ -40,9 +40,25 @@ async def run_drift_check() -> dict[str, str]:
             logger.info("Drift check already running, skipping")
             return results
 
+        # Load config once for all profiles (worker context, no RLS)
+        try:
+            from sqlalchemy import select as sa_select
+
+            from app.core.config.models import VerticalConfigDefault
+
+            cfg_result = await db.execute(
+                sa_select(VerticalConfigDefault.config).where(
+                    VerticalConfigDefault.vertical == "liquid_funds",
+                    VerticalConfigDefault.config_type == "calibration",
+                )
+            )
+            config = cfg_result.scalar_one_or_none()
+        except Exception:
+            config = None
+
         try:
             for profile in PROFILES:
-                report = await compute_drift(db, profile)
+                report = await compute_drift(db, profile, config=config)
                 results[profile] = report.overall_status
 
                 logger.info(

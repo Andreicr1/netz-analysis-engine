@@ -2,7 +2,8 @@
 
 Compares current portfolio weights against combined target
 (strategic + tactical) and flags drift beyond configured bands.
-Drift bands from calibration/config/limits.yaml.
+
+Config is injected as parameter by callers via ConfigService.get("liquid_funds", "calibration").
 
 Drift = actual_weight - (strategic_target + tactical_overweight)
 Intentional tactical bets are NOT flagged as drift.
@@ -10,15 +11,12 @@ Intentional tactical bets are NOT flagged as drift.
 
 from dataclasses import dataclass
 from datetime import date
-from functools import lru_cache
 
 import numpy as np
 import structlog
-import yaml
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config.settings import get_calibration_path
 from app.domains.wealth.models.allocation import StrategicAllocation, TacticalPosition
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 
@@ -48,27 +46,47 @@ class DriftReport:
     urgent_trigger: float
 
 
-@lru_cache(maxsize=1)
-def get_drift_thresholds() -> tuple[float, float]:
-    """Load drift band thresholds from limits.yaml.
+def resolve_drift_thresholds(config: dict | None = None) -> tuple[float, float]:
+    """Extract drift band thresholds from calibration config dict.
 
     Returns (maintenance_trigger, urgent_trigger) as decimals.
+    Falls back to hardcoded defaults if config is None or malformed.
     """
+    if config is None:
+        return 0.05, 0.10
+
     try:
-        config_path = get_calibration_path() / "limits.yaml"
-        with open(config_path) as f:
-            data = yaml.safe_load(f)
-        bands = data["drift_bands"]
-        return (
-            float(bands["maintenance_trigger"]),
-            float(bands["urgent_trigger"]),
-        )
-    except FileNotFoundError:
-        logger.warning("limits.yaml not found, using default drift bands")
+        bands = config.get("drift_bands", {})
+        if bands:
+            return (
+                float(bands["maintenance_trigger"]),
+                float(bands["urgent_trigger"]),
+            )
         return 0.05, 0.10
     except (KeyError, TypeError, ValueError) as e:
-        logger.error("limits.yaml malformed for drift_bands", error=str(e))
+        logger.error("Malformed drift config, using defaults", error=str(e))
         return 0.05, 0.10
+
+
+def resolve_dtw_thresholds(config: dict | None = None) -> tuple[float, float]:
+    """Extract DTW divergence thresholds from calibration config dict.
+
+    Returns (warning_threshold, critical_threshold).
+    Falls back to hardcoded defaults if config is None or malformed.
+    """
+    if config is None:
+        return 0.40, 0.90
+
+    try:
+        dtw_cfg = config.get("drift", {}).get("dtw", {})
+        if dtw_cfg:
+            return (
+                float(dtw_cfg["dtw_divergence_warning"]),
+                float(dtw_cfg["dtw_divergence_critical"]),
+            )
+        return 0.40, 0.90
+    except (KeyError, TypeError, ValueError):
+        return 0.40, 0.90
 
 
 def compute_block_drifts(
@@ -114,18 +132,17 @@ async def compute_drift(
     profile: str,
     as_of_date: date | None = None,
     min_trade_threshold: float = 0.005,
+    config: dict | None = None,
 ) -> DriftReport:
     """Compute drift for all blocks in a profile.
 
-    Drift = actual_weight - (strategic_target + tactical_overweight)
-    Intentional tactical bets are NOT flagged as drift.
-
-    Only recommends rebalance when estimated turnover >= 1%.
+    Args:
+        config: Raw calibration config dict from ConfigService.
     """
     if as_of_date is None:
         as_of_date = date.today()
 
-    maintenance_trigger, urgent_trigger = get_drift_thresholds()
+    maintenance_trigger, urgent_trigger = resolve_drift_thresholds(config)
 
     # 1. Get latest snapshot weights
     snap_stmt = (
@@ -169,7 +186,7 @@ async def compute_drift(
     alloc_result = await db.execute(alloc_stmt)
     strategic = {a.block_id: float(a.target_weight) for a in alloc_result.scalars().all()}
 
-    # 3. Get current tactical positions (intentional overweights)
+    # 3. Get current tactical positions
     tact_stmt = (
         select(TacticalPosition)
         .where(
@@ -197,7 +214,6 @@ async def compute_drift(
 
     max_abs = max((abs(d.absolute_drift) for d in drifts), default=0.0)
 
-    # Overall status = worst block
     if any(d.status == "urgent" for d in drifts):
         overall = "urgent"
     elif any(d.status == "maintenance" for d in drifts):
@@ -205,14 +221,12 @@ async def compute_drift(
     else:
         overall = "ok"
 
-    # Estimated turnover (only meaningful trades)
     meaningful_trades = [
         abs(d.absolute_drift) for d in drifts
         if abs(d.absolute_drift) >= min_trade_threshold
     ]
     turnover = sum(meaningful_trades) / 2
 
-    # Only recommend rebalance if turnover justifies trading costs
     rebalance_recommended = overall != "ok" and turnover >= 0.01
 
     return DriftReport(
@@ -232,26 +246,6 @@ async def compute_drift(
 # DTW Drift Detection
 # ─────────────────────────────────────────────────────────────────────────────
 
-@lru_cache(maxsize=1)
-def get_dtw_thresholds() -> tuple[float, float]:
-    """Load DTW divergence thresholds from limits.yaml.
-
-    Returns (warning_threshold, critical_threshold).
-    Thresholds are for derivative DTW (ddtw), length-normalized (raw / window).
-    """
-    try:
-        config_path = get_calibration_path() / "limits.yaml"
-        with open(config_path) as f:
-            data = yaml.safe_load(f)
-        dtw_cfg = data["drift"]["dtw"]
-        return (
-            float(dtw_cfg["dtw_divergence_warning"]),
-            float(dtw_cfg["dtw_divergence_critical"]),
-        )
-    except (FileNotFoundError, KeyError, TypeError, ValueError):
-        # Calibrated defaults for derivative DTW, length-normalized
-        return 0.40, 0.90
-
 
 def compute_dtw_drift(
     fund_returns: list[float],
@@ -262,7 +256,6 @@ def compute_dtw_drift(
 
     Uses ddtw_distance (derivative DTW) — naturally scale-invariant.
     Result is length-normalized (raw / window) for cross-fund comparability.
-    Returns 0.0 if aeon is not installed (neutral fallback).
     """
     try:
         from aeon.distances import ddtw_distance
@@ -278,8 +271,8 @@ def compute_dtw_drift(
         return 0.0
 
     try:
-        raw = ddtw_distance(f, b, window=0.1)  # 10% warping constraint
-        return float(raw / max(len(f), 1))  # length-normalize
+        raw = ddtw_distance(f, b, window=0.1)
+        return float(raw / max(len(f), 1))
     except Exception as e:
         logger.warning("dtw_drift_computation_failed", error=str(e))
         return 0.0
@@ -290,15 +283,7 @@ def compute_dtw_drift_batch(
     benchmark_returns: "np.ndarray",
     window: int = 63,
 ) -> list[float]:
-    """Vectorized DTW distance for all funds vs benchmark.
-
-    Single pairwise_distance call vs sequential loop: ~0.2s vs ~2s for 200 funds.
-    IMPORTANT: Share the DB query with compute_inputs_from_nav — do NOT
-    issue a separate query for DTW drift.
-
-    Returns list of length-normalized ddtw scores (one per fund).
-    Returns list of 0.0 on missing aeon (neutral fallback).
-    """
+    """Vectorized DTW distance for all funds vs benchmark."""
     n_funds = fund_returns_matrix.shape[0]
 
     try:
@@ -309,20 +294,13 @@ def compute_dtw_drift_batch(
         return [0.0] * n_funds
 
     try:
-        # Use last `window` days
         fund_slice = fund_returns_matrix[:, -window:]
         bench_slice = benchmark_returns[-window:].reshape(1, -1)
 
-        # Stack benchmark as last row for pairwise computation
         all_series = np.vstack([fund_slice, bench_slice])
-
-        # pairwise_distance returns (n_funds+1) × (n_funds+1) distance matrix
         dist_matrix = pairwise_distance(all_series, metric="ddtw")
-
-        # Last row = distances to benchmark
         benchmark_distances = dist_matrix[-1, :-1]
 
-        # Length-normalize
         actual_window = fund_slice.shape[1]
         return [float(d / max(actual_window, 1)) for d in benchmark_distances]
 
