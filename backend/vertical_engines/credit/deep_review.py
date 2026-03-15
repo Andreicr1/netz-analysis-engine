@@ -370,7 +370,7 @@ def run_deal_deep_review_v4(
         persist_evidence_pack,
         validate_evidence_pack,
     )
-    from vertical_engines.credit.sponsor_engine import analyze_sponsor
+    from vertical_engines.credit.sponsor import analyze_sponsor
 
     now = _now_utc()
     budget = TokenBudgetTracker(context="deep_review_v4")
@@ -1655,7 +1655,7 @@ async def async_run_deal_deep_review_v4(
         persist_evidence_pack,
         validate_evidence_pack,
     )
-    from vertical_engines.credit.sponsor_engine import analyze_sponsor
+    from vertical_engines.credit.sponsor import analyze_sponsor
 
     now = _now_utc()
     budget = TokenBudgetTracker(context="deep_review_v4")

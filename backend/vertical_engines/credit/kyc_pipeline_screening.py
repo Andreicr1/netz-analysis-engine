@@ -48,7 +48,7 @@ def _extract_persons_from_analysis(
                 raw_names.add(n)
 
     # 3) Corporate structure — extract person names from guarantors / ownership
-    from vertical_engines.credit.sponsor_engine import extract_key_persons_from_analysis
+    from vertical_engines.credit.sponsor import extract_key_persons_from_analysis
 
     for name in extract_key_persons_from_analysis(analysis):
         if name.strip() and len(name.strip()) > 2:
