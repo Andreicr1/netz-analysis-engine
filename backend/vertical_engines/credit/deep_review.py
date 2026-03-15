@@ -42,34 +42,6 @@ from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
 
 from ai_engine.governance.token_budget import TokenBudgetTracker
-from ai_engine.intelligence.deep_review_corpus import (
-    _gather_deal_texts,
-    _gather_investment_texts,
-    _load_deal_context_from_blob,
-)
-
-# ---------------------------------------------------------------------------
-# Import from split modules
-# ---------------------------------------------------------------------------
-from ai_engine.intelligence.deep_review_helpers import (
-    _MODEL,
-    _async_call_openai,
-    _call_openai,
-    _now_utc,
-    _title_case_strategy,
-    _trunc,
-)
-from ai_engine.intelligence.deep_review_policy import (
-    _compute_confidence_score,
-    _compute_decision_anchor,
-    _gather_policy_context,
-    _run_hard_policy_checks,
-    _run_policy_compliance,
-)
-from ai_engine.intelligence.deep_review_prompts import (
-    _build_deal_review_prompt_v2,
-    _pre_classify_from_corpus,
-)
 
 # Cost Governance — multi-model routing + token budget
 from ai_engine.model_config import get_model  # single source of truth for model routing
@@ -83,6 +55,34 @@ from app.domains.credit.modules.ai.models import (
     PeriodicReviewReport,
 )
 from app.domains.credit.modules.deals.models import PipelineDeal as Deal  # pipeline domain
+from vertical_engines.credit.deep_review_corpus import (
+    _gather_deal_texts,
+    _gather_investment_texts,
+    _load_deal_context_from_blob,
+)
+
+# ---------------------------------------------------------------------------
+# Import from split modules
+# ---------------------------------------------------------------------------
+from vertical_engines.credit.deep_review_helpers import (
+    _MODEL,
+    _async_call_openai,
+    _call_openai,
+    _now_utc,
+    _title_case_strategy,
+    _trunc,
+)
+from vertical_engines.credit.deep_review_policy import (
+    _compute_confidence_score,
+    _compute_decision_anchor,
+    _gather_policy_context,
+    _run_hard_policy_checks,
+    _run_policy_compliance,
+)
+from vertical_engines.credit.deep_review_prompts import (
+    _build_deal_review_prompt_v2,
+    _pre_classify_from_corpus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -356,21 +356,21 @@ def run_deal_deep_review_v4(
         artifact_exists_v4,
         load_cached_artifact_v4,
     )
-    from ai_engine.intelligence.ic_critic_engine import critique_intelligence
-    from ai_engine.intelligence.ic_edgar_engine import (
+    from ai_engine.portfolio.concentration_engine import compute_concentration
+    from vertical_engines.credit.ic_critic_engine import critique_intelligence
+    from vertical_engines.credit.ic_edgar_engine import (
         build_edgar_multi_entity_context,
         extract_searchable_entities,
         fetch_edgar_multi_entity,
     )
-    from ai_engine.intelligence.ic_quant_engine import compute_quant_profile
-    from ai_engine.intelligence.memo_book_generator import generate_memo_book
-    from ai_engine.intelligence.memo_evidence_pack import (
+    from vertical_engines.credit.ic_quant_engine import compute_quant_profile
+    from vertical_engines.credit.memo_book_generator import generate_memo_book
+    from vertical_engines.credit.memo_evidence_pack import (
         build_evidence_pack,
         persist_evidence_pack,
         validate_evidence_pack,
     )
-    from ai_engine.intelligence.sponsor_engine import analyze_sponsor
-    from ai_engine.portfolio.concentration_engine import compute_concentration
+    from vertical_engines.credit.sponsor_engine import analyze_sponsor
 
     now = _now_utc()
     budget = TokenBudgetTracker(context="deep_review_v4")
@@ -449,7 +449,7 @@ def run_deal_deep_review_v4(
     )
 
     # ── Stage 4: Macro context injection (deterministic) ─────────
-    from ai_engine.intelligence.market_data_engine import (
+    from vertical_engines.credit.market_data_engine import (
         compute_macro_stress_severity,
         get_macro_snapshot,
     )
@@ -470,7 +470,7 @@ def run_deal_deep_review_v4(
     from ai_engine.governance.policy_loader import (
         SEARCH_ENDPOINT as _SEARCH_ENDPOINT,
     )
-    from ai_engine.intelligence.retrieval_governance import retrieve_market_benchmarks
+    from vertical_engines.credit.retrieval_governance import retrieve_market_benchmarks
 
     _market_benchmarks: list[dict] = []
     _mb_chapters = ("ch03_exit", "ch08_returns", "ch09_downside", "ch12_peers")
@@ -502,7 +502,7 @@ def run_deal_deep_review_v4(
     )
 
     # ── Stage 4.5: Instrument classification (deterministic) ────
-    from ai_engine.intelligence.ic_critic_engine import _classify_instrument_type
+    from vertical_engines.credit.ic_critic_engine import _classify_instrument_type
 
     instrument_type = _classify_instrument_type(analysis)
     logger.info(
@@ -677,7 +677,7 @@ def run_deal_deep_review_v4(
     # ── Stage 9.5: KYC Spider Pipeline Screening ─────────────────
     # Automatically screen all key persons and organisations identified
     # in the deal documentation via KYC Spider API (PEP/Sanctions/AML).
-    from ai_engine.intelligence.kyc_pipeline_screening import (
+    from vertical_engines.credit.kyc_pipeline_screening import (
         build_kyc_appendix,
         persist_kyc_screenings_to_db,
         run_kyc_screenings,
@@ -1022,7 +1022,7 @@ def run_deal_deep_review_v4(
             if ch_tag not in chapter_texts:
                 continue
             try:
-                from ai_engine.intelligence.memo_chapter_engine import (
+                from vertical_engines.credit.memo_chapter_engine import (
                     regenerate_chapter_with_critic,
                 )
 
@@ -1059,7 +1059,7 @@ def run_deal_deep_review_v4(
     # ── Stage 13: Underwriting Reliability Score (deterministic) ──
     # Computed BEFORE Tone Normalizer so narrative adjustments cannot
     # inflate the score.  Uses only structured artifacts.
-    from ai_engine.intelligence.deep_review_confidence import (
+    from vertical_engines.credit.deep_review_confidence import (
         apply_tone_normalizer_adjustment,
         compute_underwriting_confidence,
     )
@@ -1163,7 +1163,7 @@ def run_deal_deep_review_v4(
             import asyncio as _asyncio
             from concurrent.futures import ThreadPoolExecutor as _ToneTPE
 
-            from ai_engine.intelligence.tone_normalizer import (
+            from vertical_engines.credit.tone_normalizer import (
                 run_tone_normalizer as _run_tone_normalizer,
             )
 
@@ -1338,7 +1338,7 @@ def run_deal_deep_review_v4(
     # ── Stage 13c: Persist Unified Underwriting Artifact ─────────
     # This is the SINGLE authoritative IC truth object.  Pipeline Engine
     # must never write to this table.
-    from ai_engine.intelligence.underwriting_artifact import persist_underwriting_artifact
+    from vertical_engines.credit.underwriting_artifact import persist_underwriting_artifact
 
     persist_underwriting_artifact(
         db,
@@ -1372,7 +1372,7 @@ def run_deal_deep_review_v4(
     # V4 must populate these tables so the pipeline deal list endpoint
     # (GET /pipeline/deals) can show strategy_type, risk_band, and
     # recommendation_signal without requiring a separate V3 run.
-    from ai_engine.intelligence.underwriting_artifact import derive_risk_band as _derive_risk_band
+    from vertical_engines.credit.underwriting_artifact import derive_risk_band as _derive_risk_band
 
     _v4_risk_band = _derive_risk_band(analysis)
     _v4_risk_band_label = {"HIGH": "HIGH", "MEDIUM": "MODERATE", "LOW": "LOW"}.get(
@@ -1638,24 +1638,24 @@ async def async_run_deal_deep_review_v4(
         artifact_exists_v4,
         load_cached_artifact_v4,
     )
-    from ai_engine.intelligence.ic_critic_engine import (
+    from ai_engine.portfolio.concentration_engine import compute_concentration
+    from vertical_engines.credit.ic_critic_engine import (
         _classify_instrument_type,
         critique_intelligence,
     )
-    from ai_engine.intelligence.ic_edgar_engine import (
+    from vertical_engines.credit.ic_edgar_engine import (
         build_edgar_multi_entity_context,
         extract_searchable_entities,
         fetch_edgar_multi_entity,
     )
-    from ai_engine.intelligence.ic_quant_engine import compute_quant_profile
-    from ai_engine.intelligence.memo_book_generator import async_generate_memo_book
-    from ai_engine.intelligence.memo_evidence_pack import (
+    from vertical_engines.credit.ic_quant_engine import compute_quant_profile
+    from vertical_engines.credit.memo_book_generator import async_generate_memo_book
+    from vertical_engines.credit.memo_evidence_pack import (
         build_evidence_pack,
         persist_evidence_pack,
         validate_evidence_pack,
     )
-    from ai_engine.intelligence.sponsor_engine import analyze_sponsor
-    from ai_engine.portfolio.concentration_engine import compute_concentration
+    from vertical_engines.credit.sponsor_engine import analyze_sponsor
 
     now = _now_utc()
     budget = TokenBudgetTracker(context="deep_review_v4")
@@ -1727,7 +1727,7 @@ async def async_run_deal_deep_review_v4(
             return _gather_deal_texts(session, fund_id=fund_id, deal=deal_obj)
 
     def _get_macro_threadsafe() -> dict:
-        from ai_engine.intelligence.market_data_engine import get_macro_snapshot
+        from vertical_engines.credit.market_data_engine import get_macro_snapshot
         with SessionLocal() as session:
             return get_macro_snapshot(session, deal_geography=deal_geography)
 
@@ -1738,7 +1738,7 @@ async def async_run_deal_deep_review_v4(
         from ai_engine.governance.policy_loader import (
             SEARCH_ENDPOINT as _SE,
         )
-        from ai_engine.intelligence.retrieval_governance import retrieve_market_benchmarks
+        from vertical_engines.credit.retrieval_governance import retrieve_market_benchmarks
         results: list[dict] = []
         chapters = ("ch03_exit", "ch08_returns", "ch09_downside", "ch12_peers")
 
@@ -1796,7 +1796,7 @@ async def async_run_deal_deep_review_v4(
 
     concentration_dict = concentration_profile.to_dict()
 
-    from ai_engine.intelligence.market_data_engine import compute_macro_stress_severity
+    from vertical_engines.credit.market_data_engine import compute_macro_stress_severity
     macro_stress = compute_macro_stress_severity(macro_snapshot)
     macro_stress_flag = macro_stress["level"] in ("MODERATE", "SEVERE")
 
@@ -1936,7 +1936,7 @@ async def async_run_deal_deep_review_v4(
         )
 
     def _run_kyc_sync() -> tuple[dict, str]:
-        from ai_engine.intelligence.kyc_pipeline_screening import (
+        from vertical_engines.credit.kyc_pipeline_screening import (
             build_kyc_appendix,
             run_kyc_screenings,
         )
@@ -2018,7 +2018,7 @@ async def async_run_deal_deep_review_v4(
     # Persist KYC screenings to DB (main thread, main session)
     if kyc_results and kyc_results.get("summary", {}).get("skipped") is not True:
         try:
-            from ai_engine.intelligence.kyc_pipeline_screening import (
+            from vertical_engines.credit.kyc_pipeline_screening import (
                 persist_kyc_screenings_to_db,
             )
             persist_kyc_screenings_to_db(
@@ -2275,7 +2275,7 @@ async def async_run_deal_deep_review_v4(
             + "\n".join(f"- GAP: {g}" for g in critic_post_dict.get("material_gaps", []))
         )
 
-        from ai_engine.intelligence.memo_chapter_engine import (
+        from vertical_engines.credit.memo_chapter_engine import (
             regenerate_chapter_with_critic,
         )
 
@@ -2326,7 +2326,7 @@ async def async_run_deal_deep_review_v4(
         evidence_pack["critic_output"]["post_memo_review"] = critic_post_dict
 
     # ── Confidence Score (deterministic, before tone) ─────────────
-    from ai_engine.intelligence.deep_review_confidence import (
+    from vertical_engines.credit.deep_review_confidence import (
         apply_tone_normalizer_adjustment,
         compute_underwriting_confidence,
     )
@@ -2403,7 +2403,7 @@ async def async_run_deal_deep_review_v4(
 
     if chapter_texts:
         try:
-            from ai_engine.intelligence.tone_normalizer import (
+            from vertical_engines.credit.tone_normalizer import (
                 run_tone_normalizer as _run_tone_normalizer,
             )
             logger.info(
@@ -2534,10 +2534,10 @@ async def async_run_deal_deep_review_v4(
     )
 
     # ── Persist Unified Underwriting Artifact ─────────────────────
-    from ai_engine.intelligence.underwriting_artifact import (
+    from vertical_engines.credit.underwriting_artifact import (
         derive_risk_band as _derive_risk_band,
     )
-    from ai_engine.intelligence.underwriting_artifact import (
+    from vertical_engines.credit.underwriting_artifact import (
         persist_underwriting_artifact,
     )
 

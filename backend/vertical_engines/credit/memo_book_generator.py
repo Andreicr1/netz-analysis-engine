@@ -28,13 +28,14 @@ from typing import Any, Protocol
 
 from sqlalchemy.orm import Session
 
-from ai_engine.intelligence.batch_client import (
+from ai_engine.model_config import get_model
+from vertical_engines.credit.batch_client import (
     build_chapter_request,
     parse_batch_results,
     poll_batch,
     submit_chapter_batch,
 )
-from ai_engine.intelligence.memo_chapter_engine import (
+from vertical_engines.credit.memo_chapter_engine import (
     _build_appendix_1,
     _build_appendix_2,
     _extract_recommendation_from_text,
@@ -43,7 +44,6 @@ from ai_engine.intelligence.memo_chapter_engine import (
     generate_recommendation_chapter,
     select_chapter_chunks,
 )
-from ai_engine.model_config import get_model
 
 logger = logging.getLogger(__name__)
 

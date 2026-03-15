@@ -8,11 +8,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ai_engine.intelligence.deep_review import (
-    run_all_portfolio_reviews,
-    run_portfolio_review,
-)
-from ai_engine.intelligence.portfolio_intelligence import run_portfolio_ingest
 from app.core.db.engine import get_db
 from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed, require_roles
 from app.domains.credit.deals.models.deals import Deal as PortfolioDeal
@@ -53,6 +48,11 @@ from app.domains.credit.modules.ai.schemas import (
 )
 from app.domains.credit.modules.deals import cashflow_service as cf_svc
 from app.shared.enums import Role
+from vertical_engines.credit.deep_review import (
+    run_all_portfolio_reviews,
+    run_portfolio_review,
+)
+from vertical_engines.credit.portfolio_intelligence import run_portfolio_ingest
 
 router = APIRouter()
 

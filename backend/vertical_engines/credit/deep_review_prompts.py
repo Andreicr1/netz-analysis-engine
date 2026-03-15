@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from ai_engine.intelligence.deep_review_helpers import _call_openai, _trunc  # noqa: F401
 from ai_engine.prompts import prompt_registry
+from vertical_engines.credit.deep_review_helpers import _call_openai, _trunc  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # GPT structured extraction
@@ -25,7 +25,7 @@ def _deal_review_template_context(
     third_party_counterparties: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build shared template context for deal review prompts."""
-    from ai_engine.intelligence.ic_critic_engine import INSTRUMENT_TYPE_PROFILES
+    from vertical_engines.credit.ic_critic_engine import INSTRUMENT_TYPE_PROFILES
 
     profile = INSTRUMENT_TYPE_PROFILES.get(
         instrument_type,

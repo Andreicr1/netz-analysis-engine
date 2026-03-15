@@ -726,11 +726,11 @@ Cross-cutting AI utilities incorrectly housed in compliance were relocated to `a
 
 ##### Tasks
 
-- [ ] **`backend/vertical_engines/base/`** — shared interface
+- [x] **`backend/vertical_engines/base/`** — shared interface
   - `base_analyzer.py` — `BaseAnalyzer` abstract class with `analyze()`, `extract_structured()`, `critique()`
   - `base_extractor.py` — structured extraction base
   - `base_critic.py` — critic base
-- [ ] **`backend/vertical_engines/credit/`** — MOVE from `ai_engine/intelligence/`
+- [x] **`backend/vertical_engines/credit/`** — MOVE from `ai_engine/intelligence/`
   - Move (do NOT rewrite): `deep_review.py`, `ic_critic_engine.py`, `ic_quant_engine.py`, `market_data_engine.py`, `sponsor_engine.py`, `memo_chapter_engine.py`, `deep_review_corpus.py`, `deep_review_helpers.py`, `deep_review_confidence.py`, `deep_review_policy.py`, `memo_evidence_pack.py`, `tone_normalizer.py`, `underwriting_artifact.py`, `retrieval_governance.py`
   - Move `ai_engine/prompts/intelligence/*.j2` → `vertical_engines/credit/prompts/`
   - Apply session injection to all files with Session imports:
@@ -738,7 +738,7 @@ Cross-cutting AI utilities incorrectly housed in compliance were relocated to `a
     - Functions that open sessions → receive session as parameter
     - Caller (route/worker) provides the session
   - Do NOT rewrite business logic. Move + session injection ONLY.
-- [ ] **`backend/ai_engine/`** — keep universal modules only
+- [x] **`backend/ai_engine/`** — keep universal modules only
   - KEEP: `extraction/`, `governance/`, `validation/`, `pdf/`, `knowledge/`, `ingestion/`, `classification/`, `openai_client.py`, `model_config.py`
   - REMOVE from ai_engine: `intelligence/` directory (moved to `vertical_engines/credit/`)
   - REMOVE from ai_engine: `prompts/intelligence/` (moved to `vertical_engines/credit/prompts/`)

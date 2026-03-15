@@ -194,7 +194,7 @@ async def memo_worker(msg: func.ServiceBusMessage) -> None:
             # Async deep-review path: uses the parallel DAG orchestrator.
             import datetime as dt
 
-            from ai_engine.intelligence.deep_review import async_run_deal_deep_review_v4
+            from vertical_engines.credit.deep_review import async_run_deal_deep_review_v4
             from app.core.db.session import get_session_local
             from app.services.azure.pipeline_dispatch import update_deal_intelligence_status
 

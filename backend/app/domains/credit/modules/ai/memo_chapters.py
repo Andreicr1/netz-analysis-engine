@@ -474,7 +474,7 @@ def regenerate_memo_chapter(
 
     log = logging.getLogger("ai.regenerate_chapter")
 
-    from ai_engine.intelligence.memo_book_generator import (
+    from vertical_engines.credit.memo_book_generator import (
         CHAPTER_REGISTRY,
         generate_chapter,
         select_chapter_chunks,
@@ -513,9 +513,12 @@ def regenerate_memo_chapter(
     evidence_pack: dict = pack_row.evidence_json
     evidence_pack_id = pack_row.id
 
-    from ai_engine.intelligence.retrieval_governance import build_ic_corpus, gather_chapter_evidence
     from app.domains.credit.modules.deals.models import Deal
     from app.services.search_index import AzureSearchChunksClient
+    from vertical_engines.credit.retrieval_governance import (
+        build_ic_corpus,
+        gather_chapter_evidence,
+    )
 
     deal_row = db.execute(
         select(Deal).where(Deal.id == deal_id),

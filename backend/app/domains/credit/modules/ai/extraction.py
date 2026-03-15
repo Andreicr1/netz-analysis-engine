@@ -8,11 +8,11 @@ from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Qu
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ai_engine.intelligence.pipeline_intelligence import run_pipeline_ingest
 from app.core.db.engine import get_db
 from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed, require_roles
 from app.domains.credit.modules.ai.schemas import PipelineIngestResponse
 from app.shared.enums import Role
+from vertical_engines.credit.pipeline_intelligence import run_pipeline_ingest
 
 router = APIRouter()
 

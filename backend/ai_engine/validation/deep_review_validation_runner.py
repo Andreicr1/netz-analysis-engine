@@ -185,11 +185,11 @@ def _benchmark_single_deal(
     V3 has been deprecated — v3 fields are set to None for backward
     compatibility with the DealValidationResult schema.
     """
-    from ai_engine.intelligence.deep_review import run_deal_deep_review_v4
     from app.domains.credit.modules.ai.models import (
         MemoChapter,
         MemoEvidencePack,
     )
+    from vertical_engines.credit.deep_review import run_deal_deep_review_v4
 
     deal_name: str | None = None
     v4_result: dict[str, Any] | None = None
