@@ -515,7 +515,7 @@ def regenerate_memo_chapter(
 
     from app.domains.credit.modules.deals.models import Deal
     from app.services.search_index import AzureSearchChunksClient
-    from vertical_engines.credit.retrieval_governance import (
+    from vertical_engines.credit.retrieval import (
         build_ic_corpus,
         gather_chapter_evidence,
     )
