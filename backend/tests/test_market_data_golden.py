@@ -7,7 +7,7 @@ stress_severity_service produces identical outputs.
 
 from __future__ import annotations
 
-from vertical_engines.credit.market_data_engine import compute_macro_stress_severity
+from vertical_engines.credit.market_data import compute_macro_stress_severity
 
 
 class TestStressSeverityGolden:
