@@ -1,85 +1,26 @@
-"""Unified Underwriting Artifact — single IC truth source.
+"""Underwriting persistence — DB access for underwriting artifacts.
 
-This module implements the persistence and query layer for
-``deal_underwriting_artifacts``.  Deep Review V4 is the ONLY
-authorised writer.  The Pipeline Engine MUST NOT call any
-function in this module.
-
-Risk band derivation rule (deterministic, never LLM-decided):
-  • ≥ 1 HIGH severity key risk   → risk_band = HIGH
-  • ≥ 2 MEDIUM severity key risks → risk_band = MEDIUM
-  • Otherwise                      → risk_band = LOW
+Deep Review V4 is the ONLY authorised writer. The Pipeline Engine
+MUST NOT call any function in this module.
 """
 from __future__ import annotations
 
-import hashlib
-import json
-import logging
 import uuid
 from datetime import datetime
 from typing import Any
 
+import structlog
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.domains.credit.modules.ai.models import DealUnderwritingArtifact
+from vertical_engines.credit.underwriting.derivation import (
+    compute_evidence_pack_hash,
+    confidence_to_level,
+    derive_risk_band,
+)
 
-logger = logging.getLogger(__name__)
-
-
-# ── Risk Band derivation (deterministic) ──────────────────────────────
-
-
-def derive_risk_band(analysis: dict[str, Any]) -> str:
-    """Derive risk band from structured analysis risk factors.
-
-    Rule:
-      • ≥ 1 HIGH → HIGH
-      • ≥ 2 MEDIUM → MEDIUM
-      • Otherwise → LOW
-    """
-    risks = analysis.get("riskFactors", [])
-    if not isinstance(risks, list):
-        risks = []
-
-    high_count = sum(
-        1 for r in risks
-        if isinstance(r, dict) and (r.get("severity") or "").upper() == "HIGH"
-    )
-    medium_count = sum(
-        1 for r in risks
-        if isinstance(r, dict) and (r.get("severity") or "").upper() == "MEDIUM"
-    )
-
-    if high_count >= 1:
-        return "HIGH"
-    if medium_count >= 2:
-        return "MEDIUM"
-    return "LOW"
-
-
-# ── Confidence → level mapping ────────────────────────────────────────
-
-
-def confidence_to_level(score: float) -> str:
-    """Map a 0.0–1.0 confidence score to HIGH / MEDIUM / LOW."""
-    if score >= 0.70:
-        return "HIGH"
-    if score >= 0.40:
-        return "MEDIUM"
-    return "LOW"
-
-
-# ── Evidence pack hash (SHA-256 over canonical JSON) ──────────────────
-
-
-def compute_evidence_pack_hash(evidence_pack: dict[str, Any]) -> str:
-    """Compute a stable SHA-256 hash of the evidence pack JSON."""
-    canonical = json.dumps(evidence_pack, sort_keys=True, default=str)
-    return hashlib.sha256(canonical.encode()).hexdigest()
-
-
-# ── Persist underwriting artifact ─────────────────────────────────────
+logger = structlog.get_logger()
 
 
 def persist_underwriting_artifact(
@@ -99,12 +40,10 @@ def persist_underwriting_artifact(
     generated_at: datetime,
     version_tag: str,
     actor_id: str = "ai-engine",
-    # ── NEW: deterministic confidence fields ──
     confidence_score: int | None = None,
     confidence_level: str | None = None,
     confidence_breakdown: dict[str, Any] | None = None,
     confidence_caps: list[str] | None = None,
-    # ── Approval-blocking data gaps (critical_gaps from all memo chapters) ──
     critical_gaps: list[dict[str, Any]] | None = None,
 ) -> DealUnderwritingArtifact:
     """Create a new underwriting artifact and deactivate prior versions.
@@ -112,14 +51,9 @@ def persist_underwriting_artifact(
     This is the ONLY function that may write to ``deal_underwriting_artifacts``.
     It MUST be called exclusively from Deep Review V4 Stage 13.
     """
-
     # ── Compute derived fields ────────────────────────────────────
     risk_band = derive_risk_band(analysis)
-    # Use new deterministic confidence_level when available, fallback to legacy
-    if confidence_level is not None:
-        _confidence_level = confidence_level
-    else:
-        _confidence_level = confidence_to_level(final_confidence)
+    _confidence_level = confidence_level if confidence_level is not None else confidence_to_level(final_confidence)
     pack_hash = compute_evidence_pack_hash(evidence_pack)
 
     # Normalise recommendation
@@ -201,16 +135,16 @@ def persist_underwriting_artifact(
     db.flush()
 
     logger.info(
-        "UNDERWRITING_ARTIFACT_CREATED deal_id=%s version=%d recommendation=%s "
-        "risk_band=%s confidence=%s confidence_score=%s pack_hash=%.16s",
-        deal_id, next_version, rec_upper, risk_band, _confidence_level,
-        confidence_score, pack_hash,
+        "persist_underwriting_artifact.created",
+        deal_id=str(deal_id),
+        version=next_version,
+        recommendation=rec_upper,
+        risk_band=risk_band,
+        confidence_level=_confidence_level,
+        confidence_score=confidence_score,
     )
 
     return artifact
-
-
-# ── Query helpers ─────────────────────────────────────────────────────
 
 
 def get_active_artifact(

@@ -2,8 +2,8 @@
 
 After documents are indexed, this module performs domain-specific AI analysis:
 
-- PIPELINE mode → research output (investment thesis, risk map, etc.)
-- PORTFOLIO mode → monitoring output (covenant flags, performance alerts, etc.)
+- PIPELINE mode -> research output (investment thesis, risk map, etc.)
+- PORTFOLIO mode -> monitoring output (covenant flags, performance alerts, etc.)
 
 Uses hybrid retrieval (BM25 + vector) from global-vector-chunks-v2
 before calling GPT-4o for structured analysis.
@@ -11,10 +11,10 @@ before calling GPT-4o for structured analysis.
 from __future__ import annotations
 
 import json
-import logging
 import uuid
 from typing import Any
 
+import structlog
 from sqlalchemy.orm import Session
 
 from ai_engine.extraction.embedding_service import generate_embeddings
@@ -22,7 +22,7 @@ from ai_engine.extraction.search_upsert_service import search_deal_chunks
 from ai_engine.prompts import prompt_registry
 from app.domains.credit.modules.deals.ai_mode import AIMode
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # ── Context retrieval ─────────────────────────────────────────────────
 
@@ -46,7 +46,7 @@ def _retrieve_context(
         emb = generate_embeddings([query_text])
         query_vector = emb.vectors[0] if emb.vectors else None
     except Exception:
-        logger.warning("Embedding generation failed for context retrieval — falling back to BM25 only")
+        logger.warning("domain_ai.retrieve_context.embedding_failed")
         query_vector = None
         query_text = deal_name
 
@@ -58,7 +58,7 @@ def _retrieve_context(
             top=max_chunks,
         )
     except Exception:
-        logger.warning("Search retrieval failed for deal %s", deal_id, exc_info=True)
+        logger.warning("domain_ai.retrieve_context.search_failed", deal_id=str(deal_id), exc_info=True)
         return ""
 
     if not chunks:
@@ -76,11 +76,7 @@ def _retrieve_context(
 
 
 def _call_gpt(system_prompt: str, user_prompt: str) -> dict[str, Any]:
-    """Call GPT via the centralised openai_client and parse JSON output.
-
-    REFACTOR (Phase 1, Step 2): Migrated from FoundryResponsesClient
-    to openai_client.create_completion() (Responses API).
-    """
+    """Call GPT via the centralised openai_client and parse JSON output."""
     import json as _json
 
     from ai_engine.openai_client import create_completion
@@ -121,9 +117,8 @@ def run_pipeline_analysis(
 ) -> dict[str, Any]:
     """Run PIPELINE-mode AI analysis.
 
-    REFACTOR (Phase 2, Step 5): Delegates to the consolidated
-    intelligence.pipeline_engine which performs a single RAG + GPT pass
-    and writes both research_output AND derived summary columns.
+    Delegates to the consolidated pipeline engine which performs a single
+    RAG + GPT pass and writes both research_output AND derived summary columns.
     """
     from vertical_engines.credit.pipeline import generate_pipeline_intelligence
 
@@ -157,7 +152,7 @@ def run_portfolio_analysis(
     cashflow_summary, performance_summary = _get_portfolio_financials(db, deal_id=deal_id, fund_id=fund_id)
 
     if not context and not cashflow_summary:
-        logger.info("No indexed content or cashflows for portfolio deal %s — skipping analysis", deal_id)
+        logger.info("domain_ai.portfolio_analysis.skipped", deal_id=str(deal_id))
         return {}
 
     system = prompt_registry.render(
@@ -172,7 +167,7 @@ def run_portfolio_analysis(
     try:
         output = _call_gpt(system, user)
     except Exception:
-        logger.error("GPT call failed for portfolio deal %s", deal_id, exc_info=True)
+        logger.error("domain_ai.portfolio_analysis.gpt_failed", deal_id=str(deal_id), exc_info=True)
         return {}
 
     # Writeback to deals
@@ -220,14 +215,14 @@ def _get_portfolio_financials(
         return cashflow_summary, performance_summary
 
     except Exception:
-        logger.warning("Failed to retrieve portfolio financials for deal %s", deal_id, exc_info=True)
+        logger.warning("domain_ai.portfolio_financials.failed", deal_id=str(deal_id), exc_info=True)
         return "", ""
 
 
 def _write_portfolio_output(db: Session, *, deal_id: uuid.UUID, data: dict[str, Any]) -> None:
     """Write monitoring output to deals.monitoring_output JSONB."""
     _write_jsonb_column(db, table="deals", column="monitoring_output", entity_id=deal_id, data=data)
-    logger.info("Portfolio AI analysis written for deal %s", deal_id)
+    logger.info("domain_ai.portfolio_output_written", deal_id=str(deal_id))
 
 
 # ── Shared JSONB writer ──────────────────────────────────────────────
@@ -248,17 +243,15 @@ def _write_jsonb_column(
     entity_id: uuid.UUID,
     data: dict[str, Any],
 ) -> None:
-    """JSONB column writer with allow-list validation.
-
-    REFACTOR (Phase 1, Step 2 / H-2 fix): table and column names are
-    validated against an explicit allow-list to prevent SQL injection.
-    """
+    """JSONB column writer with allow-list validation."""
     from sqlalchemy import text
 
     allowed_cols = _ALLOWED_JSONB_TARGETS.get(table)
     if allowed_cols is None or column not in allowed_cols:
         logger.error(
-            "Blocked JSONB write to disallowed target %s.%s", table, column,
+            "domain_ai.jsonb_write_blocked",
+            table=table,
+            column=column,
         )
         return
 
@@ -270,7 +263,7 @@ def _write_jsonb_column(
         )
         db.flush()
     except Exception:
-        logger.debug("Column %s.%s may not exist yet — skipping writeback", table, column, exc_info=True)
+        logger.debug("domain_ai.jsonb_column_missing", table=table, column=column, exc_info=True)
 
 
 # ── Unified entrypoint ───────────────────────────────────────────────
