@@ -47,11 +47,12 @@ logger = logging.getLogger(__name__)
 #  Configuration
 # ---------------------------------------------------------------------------
 
-_FRED_BASE_URL = getattr(settings, "FRED_BASE_URL", None) or "https://api.stlouisfed.org/fred"
-_FRED_API_KEY  = getattr(settings, "FRED_API_KEY", None) or ""
+_FRED_BASE_URL = "https://api.stlouisfed.org/fred"
+_FRED_API_KEY  = settings.fred_api_key or ""
 
-# FRED rate limit buffer: sleep between calls when bulk-fetching all series
-_FRED_SLEEP_BETWEEN_CALLS = 0.1   # seconds — well within 120 req/min
+# FRED rate limit: 120 requests per 60 seconds (2 req/s).
+# 0.5s matches fred_ingestion.py MIN_REQUEST_INTERVAL.
+_FRED_SLEEP_BETWEEN_CALLS = 0.5
 
 # NFCI threshold for legacy stress flag (v1 compat)
 _NFCI_STRESS_THRESHOLD = 0.0

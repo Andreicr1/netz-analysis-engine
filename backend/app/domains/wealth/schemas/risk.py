@@ -76,11 +76,10 @@ class CVaRPoint(BaseModel):
     trigger_status: str | None = None
 
 
-class RegimeRead(BaseModel):
-    regime: str | None = None
-    as_of_date: date | None = None
-    profiles: dict[str, str] | None = None
-    reasons: dict[str, str] | None = None
+# RegimeRead — backward-compatible re-export.
+# Canonical location: app.shared.schemas.RegimeRead
+# This re-export will be removed after migration is verified.
+from app.shared.schemas import RegimeRead  # noqa: F401
 
 
 class RegimeHistoryPoint(BaseModel):

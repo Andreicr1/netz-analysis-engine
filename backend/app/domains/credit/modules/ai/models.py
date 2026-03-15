@@ -6,7 +6,6 @@ import uuid
 from sqlalchemy import (
     JSON,
     Boolean,
-    Date,
     DateTime,
     Float,
     ForeignKey,
@@ -421,21 +420,10 @@ class BoardMonitoringBrief(Base, IdMixin, OrganizationScopedMixin, FundScopedMix
     __table_args__ = (Index("ix_board_monitoring_briefs_fund_investment", "fund_id", "investment_id", unique=True),)
 
 
-class MacroSnapshot(Base, IdMixin, AuditMetaMixin):
-    """Daily FRED macro data snapshot — one row per calendar day.
-
-    Populated by market_data_engine.py.  Immutable once stored.
-    Global (not fund-scoped): macro conditions are the same for all funds.
-    """
-    __tablename__ = "macro_snapshots"
-
-    as_of_date: Mapped[dt.date] = mapped_column(
-        Date, nullable=False, unique=True, index=True,
-    )
-    data_json: Mapped[dict] = mapped_column(JSON, nullable=False)
-    created_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False,
-    )
+# MacroSnapshot — backward-compatible re-export.
+# Canonical location: app.shared.models.MacroSnapshot
+# This re-export will be removed after migration is verified.
+from app.shared.models import MacroSnapshot  # noqa: F401
 
 
 class InvestmentMemorandumDraft(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
