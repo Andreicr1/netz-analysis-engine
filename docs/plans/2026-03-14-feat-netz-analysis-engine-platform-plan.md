@@ -34,6 +34,8 @@ origin: docs/brainstorms/2026-03-14-analysis-engine-platform-brainstorm.md
 | Module-level `asyncio.Semaphore` | "attached to different event loop" error | Create lazily inside async functions |
 | ORM objects crossing thread boundaries | `DetachedInstanceError` | Extract to frozen dataclasses before crossing |
 | `expire_on_commit=True` (default) | Attribute access after commit fails in async | `expire_on_commit=False` always |
+| ai_engine opening its own DB sessions | Breaks three-phase pattern, ties compute to DB | Session injection — caller provides `db: Session` |
+| Workers writing directly to ADLS SDK | Breaks local dev, untestable | Always use `StorageClient` — never call ADLS SDK directly |
 
 ---
 
@@ -70,9 +72,18 @@ netz-analysis-engine/
 │   │   ├── domains/
 │   │   │   ├── credit/     ← 112 tables, 10 domain modules (from Private Credit OS)
 │   │   │   └── wealth/     ← 12 tables, 7 services (from Wealth OS)
+│   │   ├── services/
+│   │   │   └── storage_client.py ← ADLS abstraction (local filesystem when FEATURE_ADLS_ENABLED=false)
 │   │   └── shared/         ← exceptions, enums, middleware
 │   ├── ai_engine/          ← IC memos, extraction, ingestion, validation, prompts
 │   ├── quant_engine/       ← CVaR, regime, optimizer, scoring, drift, rebalance
+│   ├── vertical_engines/   ← per-vertical analysis specializations
+│   │   ├── base/           ← shared interface all verticals implement
+│   │   ├── credit/         ← Private Credit (moved from ai_engine/intelligence/)
+│   │   ├── wealth/         ← Wealth Management DD reports (Sprint 3+)
+│   │   ├── venture_capital/ ← future
+│   │   ├── private_equity/ ← future
+│   │   └── real_estate/    ← future
 │   └── worker_app/         ← Azure Functions (credit) + CLI workers (wealth)
 ├── profiles/               ← YAML analysis profiles (private_credit, liquid_funds)
 ├── calibration/            ← YAML quant configs (blocks, limits, scoring)
@@ -266,6 +277,129 @@ result = conn.execute("""
 
 # When FEATURE_ADLS_ENABLED=false: query PostgreSQL tables directly
 ```
+
+**StorageClient — ADLS abstraction layer:**
+
+All workers and vertical engines interact with storage via `StorageClient`,
+never directly with ADLS SDK or filesystem paths.
+```python
+# backend/app/services/storage_client.py
+class StorageClient:
+    """
+    Abstracts ADLS Gen2 (FEATURE_ADLS_ENABLED=true)
+    and local filesystem (FEATURE_ADLS_ENABLED=false).
+    Injected as dependency into workers and vertical engines.
+    """
+    async def write_parquet(self, path: str, df: pd.DataFrame) -> None: ...
+    async def read_parquet(self, path: str) -> pd.DataFrame: ...
+    async def write_json(self, path: str, data: dict) -> None: ...
+    async def read_json(self, path: str) -> dict: ...
+    async def write_bytes(self, path: str, data: bytes) -> None: ...
+    async def exists(self, path: str) -> bool: ...
+    async def list_paths(self, prefix: str) -> list[str]: ...
+
+# Usage in vertical engines (credit example):
+async def run_deep_review(
+    deal_id: UUID,
+    db: Session,           # injected — sync session in thread
+    storage: StorageClient # injected — writes memo to gold/
+) -> AnalysisResult:
+    ...
+    await storage.write_json(
+        f"gold/{org_id}/memos/{memo_id}.json",
+        memo_output
+    )
+```
+
+**What goes where via StorageClient:**
+
+| Process | What it writes | ADLS path |
+|---|---|---|
+| OCR + chunking | Chunks + embeddings | `silver/{org_id}/chunks/{doc_id}/` |
+| IC memo generation | Complete memo JSON | `gold/{org_id}/memos/{memo_id}.json` |
+| NAV ingestion | Daily prices | `bronze/_global/yahoo/{date}/batch.parquet` |
+| FRED ingestion | Macro observations | `bronze/_global/fred/{year}/{month}.parquet` |
+| Risk calculation | CVaR metrics | `silver/{org_id}/fund_metrics/{fund_id}/{year}-{month}.parquet` |
+| Knowledge aggregator | Anonymous signals | `gold/_global/analysis_patterns/{profile}/{year}/{month}.parquet` |
+| entity_bootstrap | Entity reference data | `gold/_global/entity_reference/entities.parquet` |
+| fund_data_bootstrap | Fund reference data | `gold/_global/fund_reference/funds.parquet` |
+| market_data_bootstrap | Market reference data | `gold/_global/market_reference/market_data.parquet` |
+
+### Vertical Engines Architecture
+
+The analysis engine is factored into two layers:
+
+**Layer 1 — Universal Core (`ai_engine/`)**
+Logic that is identical across all verticals. Never modified per vertical.
+
+| Module | What it does |
+|---|---|
+| `extraction/semantic_chunker.py` | Text chunking — domain-agnostic |
+| `extraction/embedding_service.py` | Vector generation — domain-agnostic |
+| `extraction/mistral_ocr.py` | OCR — domain-agnostic |
+| `openai_client.py` | LLM provider abstraction |
+| `model_config.py` | Model routing |
+| `governance/` | Token budget, evidence throttle |
+| `validation/eval_judge.py` | Quality evaluation — generic |
+| `pdf/` | PDF generation |
+
+**Layer 2 — Vertical Specializations (`vertical_engines/`)**
+Domain-specific logic. One directory per vertical.
+```
+backend/vertical_engines/
+├── base/
+│   ├── base_analyzer.py        ← interface all verticals implement
+│   │   class BaseAnalyzer:
+│   │     def analyze(self, corpus, profile, db, storage) -> AnalysisResult
+│   │     def extract_structured(self, text) -> dict
+│   │     def critique(self, draft) -> CriticResult
+│   ├── base_extractor.py       ← structured extraction base
+│   └── base_critic.py          ← critic base
+│
+├── credit/                     ← MOVED from ai_engine/intelligence/ (Sprint 3)
+│   ├── deep_review.py          ← 14-chapter IC memo (moved, session injected)
+│   ├── ic_critic_engine.py     ← critic calibrated for credit risk
+│   ├── ic_quant_engine.py      ← LTV, covenants, returns modeling
+│   ├── market_data_engine.py   ← FRED with 40 credit-specific series
+│   ├── sponsor_engine.py       ← sponsor profile analysis
+│   ├── memo_chapter_engine.py  ← chapter generation loop
+│   └── prompts/                ← MOVED from ai_engine/prompts/intelligence/
+│       ├── ch01_exec.j2
+│       └── ... (all 14 chapters + critic + tone)
+│
+├── wealth/                     ← Sprint 3+ (new, not migrated)
+│   ├── fund_analyzer.py        ← fund manager DD report (7 chapters)
+│   ├── dd_report_engine.py     ← report generation loop
+│   ├── quant_analyzer.py       ← CVaR, Sharpe, drawdown, style analysis
+│   └── prompts/
+│       └── ... (wealth-specific prompts)
+│
+├── venture_capital/            ← future
+├── private_equity/             ← future
+└── real_estate/                ← future
+```
+
+**ProfileLoader connects profiles/ YAML to vertical_engines/:**
+```python
+# ai_engine/profile_loader.py
+class ProfileLoader:
+    def load(self, profile_name: str) -> AnalysisProfile:
+        yaml_config = self._load_yaml(f"profiles/{profile_name}/profile.yaml")
+        engine = self._load_engine(profile_name)
+        return AnalysisProfile(config=yaml_config, engine=engine)
+
+    def _load_engine(self, profile_name: str) -> BaseAnalyzer:
+        from vertical_engines.credit.deep_review import CreditAnalyzer
+        from vertical_engines.wealth.fund_analyzer import WealthAnalyzer
+        engines = {
+            "private_credit": CreditAnalyzer,
+            "liquid_funds":   WealthAnalyzer,
+        }
+        return engines.get(profile_name, BaseAnalyzer)()
+```
+
+**profiles/ YAML = declarative config. vertical_engines/ = executable logic.**
+Both are required. Neither replaces the other.
 
 **SSE Streaming:** Redis pub/sub → `sse-starlette` EventSourceResponse
 - Use `sse-starlette` library (NOT raw `StreamingResponse`) — handles event framing, id fields, retry hints, keepalive automatically
@@ -579,28 +713,43 @@ Cross-cutting AI utilities incorrectly housed in compliance were relocated to `a
 
 ##### Tasks
 
-- [ ] **`backend/ai_engine/`** — migrate entire pipeline from Private Credit OS
-  - `intelligence/` — deep_review, memo_chapter_engine, critic, sponsor, quant engines
-  - `extraction/` — OCR, chunking, embedding, classification (semantic_chunker.py preserved exactly)
-  - `ingestion/` — domain ingest orchestrator
-  - `validation/` — 4-layer evaluation framework (preserved exactly)
-  - `governance/` — token budget, evidence throttle, artifact cache
-  - `prompts/` — Jinja2 registry (extended for profile search path)
-  - `pdf/` — ReportLab generation
-  - `model_config.py` — model routing (preserved, extended for profile-prefixed stages)
-  - `openai_client.py` — dual provider (preserved exactly)
-  - Convert sync `_call_openai` to async `_async_call_openai` (already exists in Private Credit)
-  - DB calls via `asyncio.to_thread()` for sync-heavy paths (pattern from Private Credit `async-dag-orchestrator` solution)
-- [ ] **Profile extraction** (see brainstorm Section H)
+- [ ] **`backend/vertical_engines/base/`** — shared interface
+  - `base_analyzer.py` — `BaseAnalyzer` abstract class with `analyze()`, `extract_structured()`, `critique()`
+  - `base_extractor.py` — structured extraction base
+  - `base_critic.py` — critic base
+- [ ] **`backend/vertical_engines/credit/`** — MOVE from `ai_engine/intelligence/`
+  - Move (do NOT rewrite): `deep_review.py`, `ic_critic_engine.py`, `ic_quant_engine.py`, `market_data_engine.py`, `sponsor_engine.py`, `memo_chapter_engine.py`, `deep_review_corpus.py`, `deep_review_helpers.py`, `deep_review_confidence.py`, `deep_review_policy.py`, `memo_evidence_pack.py`, `tone_normalizer.py`, `underwriting_artifact.py`, `retrieval_governance.py`
+  - Move `ai_engine/prompts/intelligence/*.j2` → `vertical_engines/credit/prompts/`
+  - Apply session injection to all files with Session imports:
+    - Replace `SessionLocal()` internal calls with `db: Session` parameter
+    - Functions that open sessions → receive session as parameter
+    - Caller (route/worker) provides the session
+  - Do NOT rewrite business logic. Move + session injection ONLY.
+- [ ] **`backend/ai_engine/`** — keep universal modules only
+  - KEEP: `extraction/`, `governance/`, `validation/`, `pdf/`, `knowledge/`, `ingestion/`, `classification/`, `openai_client.py`, `model_config.py`
+  - REMOVE from ai_engine: `intelligence/` directory (moved to `vertical_engines/credit/`)
+  - REMOVE from ai_engine: `prompts/intelligence/` (moved to `vertical_engines/credit/prompts/`)
+  - KEEP: `prompts/extraction/`, `prompts/loader.py`, `prompts/registry.py` (extraction prompts are universal)
+- [ ] **`backend/app/services/storage_client.py`** — StorageClient implementation
+  - Local filesystem backend (default, `FEATURE_ADLS_ENABLED=false`)
+  - ADLS Gen2 backend (when `FEATURE_ADLS_ENABLED=true`)
+  - Inject as FastAPI dependency and into workers
+- [ ] **`backend/ai_engine/profile_loader.py`** — ProfileLoader
+  - Cascade: `profiles/tenants/{org_id}/{profile}/` → `profiles/{profile}/` → hardcoded
+  - Loads YAML config + instantiates vertical engine class
+  - Registry: `{"private_credit": CreditAnalyzer, "liquid_funds": WealthAnalyzer}`
+- [ ] **`backend/vertical_engines/wealth/`** — NEW (not migrated, built fresh)
+  - `fund_analyzer.py` — 7-chapter fund manager DD report
+  - `dd_report_engine.py` — report generation loop
+  - `quant_analyzer.py` — integrates with `quant_engine/` (CVaR, Sharpe, drawdown)
+  - `prompts/` — wealth-specific Jinja2 prompts
+- [ ] **Profile extraction**
   - `profiles/private_credit/profile.yaml` — 14 chapters with budgets, affinity, model routing
-  - `profiles/private_credit/prompts/*.j2` — copy from `ai_engine/prompts/intelligence/`
+  - `profiles/private_credit/prompts/` — symlink or copy from `vertical_engines/credit/prompts/`
   - `profiles/private_credit/output_schema.json` — formalize IC memo JSON schema
   - `profiles/private_credit/evaluation_criteria.yaml` — extract from validation configs
-  - `backend/ai_engine/intelligence/profile_loader.py` — `ProfileLoader.load("private_credit")`
-  - `memo_chapter_engine.py` — dynamic `_CHAPTER_TAGS` from profile (fallback to hardcoded)
-  - `deep_review.py` — `profile_name` parameter (default: `"private_credit"`)
-  - `model_config.py` — support `get_model("private_credit.ch01_exec")`
-  - `prompts/registry.py` — add `profiles/{profile}/prompts/` to Jinja2 search path
+  - `profiles/liquid_funds/profile.yaml` — 7 chapters for wealth DD
+  - `profiles/liquid_funds/prompts/` — wealth-specific prompts
 - [ ] **Upload architecture** (see brainstorm Section I)
   - `POST /api/v1/documents/upload-url` → generate SAS URL + `upload_id`
   - `POST /api/v1/documents/upload-complete` → enqueue to Service Bus, return `job_id`
@@ -987,6 +1136,8 @@ Top 3 risks:
 | `ai_engine/openai_client.py` interface | Stable provider abstraction |
 | `ai_engine/intelligence/ic_critic_engine.py` logic | Calibrated adversarial review |
 | `ai_engine/governance/` | Token budget management |
+| `vertical_engines/credit/` logic | Core IP — only session injection allowed, no rewrites |
+| `app/services/storage_client.py` interface | Once defined, all workers depend on it |
 | Service Bus topic names | Workers depend on exact names |
 
 ---
