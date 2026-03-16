@@ -13,9 +13,8 @@ Covers:
 from __future__ import annotations
 
 import io
-import math
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -31,14 +30,12 @@ from vertical_engines.wealth.screener.models import (
     ScreeningRunResult,
 )
 from vertical_engines.wealth.screener.quant_metrics import (
-    BondQuantMetrics,
     QuantMetrics,
     composite_score,
     compute_bond_metrics,
     compute_quant_metrics,
 )
 from vertical_engines.wealth.screener.service import ScreenerService
-
 
 # ═══════════════════════════════════════════════════════════════════
 #  Fixtures

@@ -20,7 +20,7 @@ from typing import Any
 import pandas as pd
 import yfinance as yf
 
-from app.services.providers.protocol import InstrumentDataProvider, RawInstrumentData, safe_get
+from app.services.providers.protocol import RawInstrumentData, safe_get
 
 logger = logging.getLogger(__name__)
 

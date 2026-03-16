@@ -163,7 +163,6 @@ async def trigger_run_screening_batch(
 ) -> WorkerScheduledResponse:
     _require_admin_role(actor)
 
-    from app.core.tenancy.middleware import get_org_id
     from app.domains.wealth.workers.screening_batch import run_screening_batch
 
     # org_id needs to be passed to the worker
