@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class ContentSummary(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     id: uuid.UUID
     content_type: str
@@ -31,4 +31,7 @@ class ContentRead(ContentSummary):
 
 class ContentTrigger(BaseModel):
     """Body for content generation trigger endpoints."""
+
+    model_config = ConfigDict(extra="ignore")
+
     config_overrides: dict | None = None

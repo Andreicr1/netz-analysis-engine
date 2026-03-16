@@ -2,7 +2,6 @@
 
 Consumes existing worker events and adds wealth-specific alert conditions:
 - DD Report expiry (>12 months since last DD)
-- Fund watchlist triggers (deactivated funds in portfolios)
 - Rebalance overdue (no rebalance within configured window)
 
 Publishes alerts via Redis pub/sub for SSE consumption.
@@ -15,6 +14,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import structlog
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 logger = structlog.get_logger()
@@ -23,11 +23,11 @@ _DD_EXPIRY_MONTHS = 12
 _REBALANCE_OVERDUE_DAYS = 90
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Alert:
     """A single monitoring alert."""
 
-    alert_type: str  # dd_expiry | fund_watchlist | rebalance_overdue
+    alert_type: str  # dd_expiry | rebalance_overdue
     severity: str  # info | warning | critical
     title: str
     detail: str
@@ -35,7 +35,7 @@ class Alert:
     entity_type: str | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AlertBatch:
     """Batch of alerts from a single scan."""
 
@@ -56,7 +56,6 @@ def scan_alerts(
     alerts: list[Alert] = []
 
     alerts.extend(_check_dd_expiry(db, organization_id))
-    alerts.extend(_check_fund_watchlist(db, organization_id))
     alerts.extend(_check_rebalance_overdue(db, organization_id))
 
     logger.info(
@@ -73,16 +72,26 @@ def scan_alerts(
 
 
 def _check_dd_expiry(db: Session, organization_id: str) -> list[Alert]:
-    """Check for DD Reports older than 12 months."""
+    """Check for DD Reports older than 12 months.
+
+    Uses a single LEFT JOIN query to fetch all active funds with their
+    latest current DDReport, avoiding N+1 per-fund queries.
+    """
     from app.domains.wealth.models.dd_report import DDReport
     from app.domains.wealth.models.fund import Fund
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=_DD_EXPIRY_MONTHS * 30)
     alerts: list[Alert] = []
 
-    # Get all active funds
-    funds = (
-        db.query(Fund)
+    # Single LEFT JOIN: all active funds with their latest current DDReport
+    rows = (
+        db.query(Fund, DDReport)
+        .outerjoin(
+            DDReport,
+            (DDReport.fund_id == Fund.fund_id)
+            & (DDReport.organization_id == organization_id)
+            & (DDReport.is_current.is_(True)),
+        )
         .filter(
             Fund.organization_id == organization_id,
             Fund.is_active.is_(True),
@@ -90,17 +99,7 @@ def _check_dd_expiry(db: Session, organization_id: str) -> list[Alert]:
         .all()
     )
 
-    for fund in funds:
-        latest_report = (
-            db.query(DDReport)
-            .filter(
-                DDReport.fund_id == fund.fund_id,
-                DDReport.organization_id == organization_id,
-                DDReport.is_current.is_(True),
-            )
-            .first()
-        )
-
+    for fund, latest_report in rows:
         if latest_report is None:
             alerts.append(Alert(
                 alert_type="dd_expiry",
@@ -127,64 +126,19 @@ def _check_dd_expiry(db: Session, organization_id: str) -> list[Alert]:
     return alerts
 
 
-def _check_fund_watchlist(db: Session, organization_id: str) -> list[Alert]:
-    """Check for deactivated funds that are still in model portfolios."""
-    from app.domains.wealth.models.fund import Fund
-    from app.domains.wealth.models.model_portfolio import ModelPortfolio
-
-    alerts: list[Alert] = []
-
-    # Get all live portfolios
-    portfolios = (
-        db.query(ModelPortfolio)
-        .filter(
-            ModelPortfolio.organization_id == organization_id,
-            ModelPortfolio.status == "live",
-        )
-        .all()
-    )
-
-    # Get deactivated fund IDs
-    deactivated = (
-        db.query(Fund.fund_id)
-        .filter(
-            Fund.organization_id == organization_id,
-            Fund.is_active.is_(False),
-        )
-        .all()
-    )
-    deactivated_ids = {str(row[0]) for row in deactivated}
-
-    for portfolio in portfolios:
-        fund_selection = portfolio.fund_selection_schema or {}
-        portfolio_funds = fund_selection.get("funds", [])
-
-        for f in portfolio_funds:
-            fid = f.get("fund_id", "")
-            if fid in deactivated_ids:
-                alerts.append(Alert(
-                    alert_type="fund_watchlist",
-                    severity="critical",
-                    title=f"Deactivated fund in {portfolio.display_name}",
-                    detail=(
-                        f"Fund {f.get('fund_name', fid)} is deactivated but still "
-                        f"present in model portfolio '{portfolio.display_name}'."
-                    ),
-                    entity_id=str(portfolio.id),
-                    entity_type="model_portfolio",
-                ))
-
-    return alerts
-
-
 def _check_rebalance_overdue(db: Session, organization_id: str) -> list[Alert]:
-    """Check for portfolios that haven't been rebalanced within threshold."""
+    """Check for portfolios that haven't been rebalanced within threshold.
+
+    Uses a single query to fetch the latest RebalanceEvent per profile,
+    then matches against live portfolios — avoiding N+1 per-portfolio queries.
+    """
     from app.domains.wealth.models.model_portfolio import ModelPortfolio
     from app.domains.wealth.models.rebalance import RebalanceEvent
 
     alerts: list[Alert] = []
     cutoff = date.today() - timedelta(days=_REBALANCE_OVERDUE_DAYS)
 
+    # 1. Get all live portfolios in a single query
     portfolios = (
         db.query(ModelPortfolio)
         .filter(
@@ -194,31 +148,48 @@ def _check_rebalance_overdue(db: Session, organization_id: str) -> list[Alert]:
         .all()
     )
 
-    for portfolio in portfolios:
-        last_rebalance = (
-            db.query(RebalanceEvent)
-            .filter(
-                RebalanceEvent.organization_id == organization_id,
-                RebalanceEvent.profile == portfolio.profile,
-            )
-            .order_by(RebalanceEvent.trigger_date.desc())
-            .first()
-        )
+    if not portfolios:
+        return alerts
 
-        if last_rebalance is None or last_rebalance.trigger_date < cutoff:
-            days_since = (
-                (date.today() - last_rebalance.trigger_date).days
-                if last_rebalance else "never"
-            )
+    # 2. Get latest rebalance date per profile in a single grouped query
+    profile_values = {p.profile for p in portfolios}
+    latest_rebalances = (
+        db.query(
+            RebalanceEvent.profile,
+            func.max(RebalanceEvent.trigger_date).label("latest_date"),
+        )
+        .filter(
+            RebalanceEvent.organization_id == organization_id,
+            RebalanceEvent.profile.in_(profile_values),
+        )
+        .group_by(RebalanceEvent.profile)
+        .all()
+    )
+    rebalance_by_profile: dict[str, date] = {
+        row.profile: row.latest_date for row in latest_rebalances
+    }
+
+    # 3. Match portfolios against the pre-fetched map
+    for portfolio in portfolios:
+        last_date = rebalance_by_profile.get(portfolio.profile)
+
+        if last_date is None or last_date < cutoff:
+            if last_date is None:
+                detail_str = (
+                    f"Portfolio '{portfolio.display_name}' has never been rebalanced "
+                    f"(threshold: {_REBALANCE_OVERDUE_DAYS} days)."
+                )
+            else:
+                days_since = (date.today() - last_date).days
+                detail_str = (
+                    f"Portfolio '{portfolio.display_name}' last rebalanced "
+                    f"{days_since} days ago (threshold: {_REBALANCE_OVERDUE_DAYS} days)."
+                )
             alerts.append(Alert(
                 alert_type="rebalance_overdue",
                 severity="info",
                 title=f"Rebalance overdue for {portfolio.display_name}",
-                detail=(
-                    f"Portfolio '{portfolio.display_name}' (profile: {portfolio.profile}) "
-                    f"last rebalanced {days_since} days ago "
-                    f"(threshold: {_REBALANCE_OVERDUE_DAYS} days)."
-                ),
+                detail=detail_str,
                 entity_id=str(portfolio.id),
                 entity_type="model_portfolio",
             ))

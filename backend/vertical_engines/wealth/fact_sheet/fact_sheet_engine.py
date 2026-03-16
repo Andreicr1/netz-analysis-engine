@@ -14,13 +14,13 @@ Usage::
 
 from __future__ import annotations
 
-import logging
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from io import BytesIO
 from typing import Any, Literal
 
+import structlog
 from sqlalchemy.orm import Session
 
 from vertical_engines.wealth.fact_sheet.i18n import LABELS, Language
@@ -33,7 +33,7 @@ from vertical_engines.wealth.fact_sheet.models import (
     StressRow,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 FactSheetFormat = Literal["executive", "institutional"]
 
@@ -145,9 +145,12 @@ class FactSheetEngine:
             for k, v in sorted(block_weights.items(), key=lambda x: x[1], reverse=True)
         ]
 
+        # Run backtest once, share result with returns + risk
+        backtest_result = self._run_backtest(db, pid, funds_data)
+
         # Build return metrics from backtest results if available
-        returns = self._compute_returns(db, pid, funds_data, as_of)
-        risk = self._compute_risk(db, pid, funds_data)
+        returns = self._compute_returns(as_of, backtest_result)
+        risk = self._compute_risk(backtest_result)
 
         # Build stress results
         stress = self._compute_stress(db, pid, funds_data)
@@ -166,16 +169,15 @@ class FactSheetEngine:
             benchmark_label=portfolio.benchmark_composite or "",
         )
 
-    def _compute_returns(
+    def _run_backtest(
         self,
         db: Session,
         portfolio_id: uuid.UUID,
         funds_data: list[dict[str, Any]],
-        as_of: date,
-    ) -> ReturnMetrics:
-        """Compute period returns from track-record data."""
+    ) -> Any | None:
+        """Run backtest once and return the result (or None on failure)."""
         if not funds_data:
-            return ReturnMetrics()
+            return None
 
         try:
             from vertical_engines.wealth.model_portfolio.track_record import (
@@ -184,15 +186,27 @@ class FactSheetEngine:
 
             fund_ids = [uuid.UUID(f["fund_id"]) for f in funds_data]
             weights = [f["weight"] for f in funds_data]
-
-            result = compute_backtest(
+            return compute_backtest(
                 db, fund_ids=fund_ids, weights=weights, portfolio_id=portfolio_id,
             )
+        except Exception:
+            logger.warning("fact_sheet_backtest_failed", exc_info=True)
+            return None
+
+    def _compute_returns(
+        self,
+        as_of: date,
+        backtest_result: Any | None,
+    ) -> ReturnMetrics:
+        """Compute period returns from pre-computed backtest result."""
+        if backtest_result is None:
+            return ReturnMetrics()
+
+        try:
             return ReturnMetrics(
-                sharpe_mean=result.mean_sharpe,
-                since_inception=result.mean_sharpe,  # Placeholder
+                since_inception=backtest_result.total_return if hasattr(backtest_result, "total_return") else None,
                 is_backtest=True,
-                inception_date=result.inception_date,
+                inception_date=backtest_result.inception_date,
             )
         except Exception:
             logger.warning("fact_sheet_returns_failed", exc_info=True)
@@ -200,30 +214,18 @@ class FactSheetEngine:
 
     def _compute_risk(
         self,
-        db: Session,
-        portfolio_id: uuid.UUID,
-        funds_data: list[dict[str, Any]],
+        backtest_result: Any | None,
     ) -> RiskMetrics:
-        """Extract risk metrics from backtest folds."""
-        if not funds_data:
+        """Extract risk metrics from pre-computed backtest result."""
+        if backtest_result is None:
             return RiskMetrics()
 
         try:
-            from vertical_engines.wealth.model_portfolio.track_record import (
-                compute_backtest,
-            )
-
-            fund_ids = [uuid.UUID(f["fund_id"]) for f in funds_data]
-            weights = [f["weight"] for f in funds_data]
-            result = compute_backtest(
-                db, fund_ids=fund_ids, weights=weights, portfolio_id=portfolio_id,
-            )
-
-            if result.folds:
-                cvar_vals = [f.cvar_95 for f in result.folds if f.cvar_95 is not None]
-                dd_vals = [f.max_drawdown for f in result.folds if f.max_drawdown is not None]
+            if backtest_result.folds:
+                cvar_vals = [f.cvar_95 for f in backtest_result.folds if f.cvar_95 is not None]
+                dd_vals = [f.max_drawdown for f in backtest_result.folds if f.max_drawdown is not None]
                 return RiskMetrics(
-                    sharpe=result.mean_sharpe,
+                    sharpe=backtest_result.mean_sharpe,
                     cvar_95=sum(cvar_vals) / len(cvar_vals) if cvar_vals else None,
                     max_drawdown=min(dd_vals) if dd_vals else None,
                 )

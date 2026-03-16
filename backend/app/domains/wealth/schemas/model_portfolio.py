@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class ModelPortfolioRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     id: uuid.UUID
     profile: str
@@ -27,6 +27,8 @@ class ModelPortfolioRead(BaseModel):
 
 
 class ModelPortfolioCreate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     profile: str
     display_name: str
     description: str | None = None

@@ -9,6 +9,7 @@ Instead, consumes existing drift metrics and adds wealth-specific context.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -22,7 +23,7 @@ logger = structlog.get_logger()
 _DRIFT_THRESHOLD = 0.15
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DriftAlert:
     """A single drift alert for a fund or portfolio."""
 
@@ -34,7 +35,7 @@ class DriftAlert:
     detail: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DriftScanResult:
     """Result of a universe-aware drift scan."""
 
@@ -56,10 +57,17 @@ def scan_drift(
 
     Pure sync function — designed to run in asyncio.to_thread().
     """
+    # Build inverted index once: fund_id -> list[portfolio_display_name]
+    portfolio_map = _build_portfolio_fund_map(db, organization_id)
+
     alerts: list[DriftAlert] = []
 
-    alerts.extend(_check_style_drift(db, organization_id, drift_threshold))
-    alerts.extend(_check_universe_removal_impact(db, organization_id))
+    alerts.extend(
+        _check_style_drift(db, organization_id, drift_threshold, portfolio_map)
+    )
+    alerts.extend(
+        _check_universe_removal_impact(db, organization_id, portfolio_map)
+    )
 
     logger.info(
         "drift_scan_completed",
@@ -74,10 +82,43 @@ def scan_drift(
     )
 
 
+def _build_portfolio_fund_map(
+    db: Session,
+    organization_id: str,
+) -> dict[str, list[str]]:
+    """Load all live portfolios once and build fund_id -> portfolio names map.
+
+    Returns a dict where keys are fund_id strings and values are lists of
+    portfolio display names that hold that fund. O(1) lookup per fund.
+    """
+    from app.domains.wealth.models.model_portfolio import ModelPortfolio
+
+    portfolios = (
+        db.query(ModelPortfolio)
+        .filter(
+            ModelPortfolio.organization_id == organization_id,
+            ModelPortfolio.status == "live",
+        )
+        .all()
+    )
+
+    fund_to_portfolios: dict[str, list[str]] = defaultdict(list)
+    for p in portfolios:
+        portfolio_name = p.display_name or str(p.id)
+        fund_selection = p.fund_selection_schema or {}
+        for f in fund_selection.get("funds", []):
+            fid = f.get("fund_id", "")
+            if fid:
+                fund_to_portfolios[fid].append(portfolio_name)
+
+    return dict(fund_to_portfolios)
+
+
 def _check_style_drift(
     db: Session,
     organization_id: str,
     threshold: float,
+    portfolio_map: dict[str, list[str]],
 ) -> list[DriftAlert]:
     """Check for funds with DTW drift above threshold."""
     from app.domains.wealth.models.fund import Fund
@@ -102,7 +143,7 @@ def _check_style_drift(
     for fund, risk in funds_with_risk:
         dtw_drift = getattr(risk, "dtw_drift", None)
         if dtw_drift is not None and float(dtw_drift) > threshold:
-            affected = _find_affected_portfolios(db, str(fund.fund_id), organization_id)
+            affected = portfolio_map.get(str(fund.fund_id), [])
             alerts.append(DriftAlert(
                 fund_id=str(fund.fund_id),
                 fund_name=fund.name,
@@ -121,6 +162,7 @@ def _check_style_drift(
 def _check_universe_removal_impact(
     db: Session,
     organization_id: str,
+    portfolio_map: dict[str, list[str]],
 ) -> list[DriftAlert]:
     """Check impact of deactivated funds on live portfolios."""
     from app.domains.wealth.models.fund import Fund
@@ -137,7 +179,7 @@ def _check_universe_removal_impact(
     )
 
     for fund in deactivated:
-        affected = _find_affected_portfolios(db, str(fund.fund_id), organization_id)
+        affected = portfolio_map.get(str(fund.fund_id), [])
         if affected:
             alerts.append(DriftAlert(
                 fund_id=str(fund.fund_id),
@@ -152,35 +194,6 @@ def _check_universe_removal_impact(
             ))
 
     return alerts
-
-
-def _find_affected_portfolios(
-    db: Session,
-    fund_id: str,
-    organization_id: str,
-) -> list[str]:
-    """Find live portfolios containing a specific fund."""
-    from app.domains.wealth.models.model_portfolio import ModelPortfolio
-
-    portfolios = (
-        db.query(ModelPortfolio)
-        .filter(
-            ModelPortfolio.organization_id == organization_id,
-            ModelPortfolio.status == "live",
-        )
-        .all()
-    )
-
-    affected: list[str] = []
-    for p in portfolios:
-        fund_selection = p.fund_selection_schema or {}
-        portfolio_funds = fund_selection.get("funds", [])
-        for f in portfolio_funds:
-            if f.get("fund_id") == fund_id:
-                affected.append(p.display_name or str(p.id))
-                break
-
-    return affected
 
 
 def drift_alerts_to_json(result: DriftScanResult) -> list[dict[str, Any]]:

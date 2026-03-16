@@ -32,7 +32,7 @@ _MAX_TOKENS = 3000
 _COOLDOWN_HOURS = 48
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FlashReportResult:
     """Result of flash report generation."""
 
@@ -119,61 +119,14 @@ class FlashReport:
 
     def render_pdf(self, content_md: str, *, language: Language = "pt") -> BytesIO:
         """Render flash report content as PDF."""
-        from datetime import date
-
-        from reportlab.lib.units import mm
-        from reportlab.platypus import HRFlowable, Paragraph, Spacer
-
-        from ai_engine.pdf.pdf_base import (
-            ORANGE,
-            build_netz_styles,
-            create_netz_document,
-            netz_header_footer,
-            safe_text,
-        )
-        from vertical_engines.wealth.fact_sheet.i18n import format_date
+        from vertical_engines.wealth.content_pdf import render_content_pdf
 
         labels = LABELS[language]
-        title = labels["flash_report_title"]
-        styles = build_netz_styles()
-        buf = BytesIO()
-        doc = create_netz_document(buf, title=title)
-        story: list[Any] = []
-
-        # Cover
-        story.append(Paragraph(title, styles["cover_title"]))
-        story.append(Spacer(1, 3 * mm))
-        story.append(HRFlowable(width="45%", thickness=2, color=ORANGE, spaceAfter=5 * mm, hAlign="CENTER"))
-        story.append(Paragraph(format_date(date.today(), language), styles["cover_meta"]))
-        story.append(Spacer(1, 2 * mm))
-        story.append(Paragraph(labels["confidential"], styles["cover_confidential"]))
-        story.append(Spacer(1, 6 * mm))
-
-        # Content
-        for line in content_md.split("\n"):
-            line = line.strip()
-            if not line:
-                story.append(Spacer(1, 2 * mm))
-            elif line.startswith("## "):
-                story.append(Paragraph(safe_text(line[3:]), styles["section_heading"]))
-            elif line.startswith("# "):
-                story.append(Paragraph(safe_text(line[2:]), styles["cover_subtitle"]))
-            else:
-                story.append(Paragraph(safe_text(line), styles["body"]))
-
-        # Disclaimer
-        story.append(Spacer(1, 6 * mm))
-        story.append(Paragraph(labels["content_disclaimer"], styles["disclaimer"]))
-
-        def _on_page(canvas: Any, doc_obj: Any) -> None:
-            netz_header_footer(
-                canvas, doc_obj, report_title=title,
-                confidentiality=labels["confidential"],
-            )
-
-        doc.build(story, onFirstPage=_on_page, onLaterPages=_on_page)
-        buf.seek(0)
-        return buf
+        return render_content_pdf(
+            content_md,
+            title=labels["flash_report_title"],
+            language=language,
+        )
 
     def _get_last_flash_report_time(self, db: Session, organization_id: str) -> Any:
         """Get timestamp of last flash report for cooldown check."""

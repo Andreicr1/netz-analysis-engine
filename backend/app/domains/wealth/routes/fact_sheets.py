@@ -7,6 +7,7 @@ All endpoints use get_db_with_rls and Clerk JWT authentication.
 from __future__ import annotations
 
 import asyncio
+import re
 import uuid
 from datetime import UTC, date, datetime
 from typing import Any, Literal
@@ -162,7 +163,8 @@ async def download_fact_sheet(
     _require_feature()
 
     # Verify path belongs to this org
-    if f"/{org_id}/" not in f"/{fact_sheet_path}":
+    parts = fact_sheet_path.split("/")
+    if len(parts) < 2 or parts[1] != str(org_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied",
@@ -251,7 +253,8 @@ async def download_dd_report_pdf(
         language=language,
     )
 
-    filename = f"dd_report_{fund_name.replace(' ', '_')}_{language}.pdf"
+    safe_name = re.sub(r"[^a-zA-Z0-9_\-]", "_", fund_name)
+    filename = f"dd_report_{safe_name}_{language}.pdf"
     return Response(
         content=pdf_buf.read(),
         media_type="application/pdf",

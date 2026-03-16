@@ -12,13 +12,15 @@ from pydantic import BaseModel, ConfigDict
 class FactSheetGenerate(BaseModel):
     """Request body for fact-sheet generation."""
 
+    model_config = ConfigDict(extra="ignore")
+
     format: Literal["executive", "institutional"] = "executive"
 
 
 class FactSheetSummary(BaseModel):
     """Summary of a generated fact-sheet."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     id: str  # storage path or identifier
     portfolio_id: uuid.UUID
@@ -31,5 +33,7 @@ class FactSheetSummary(BaseModel):
 
 class FactSheetListResponse(BaseModel):
     """Response for listing fact-sheets."""
+
+    model_config = ConfigDict(extra="ignore")
 
     fact_sheets: list[FactSheetSummary] = []

@@ -16,7 +16,7 @@ from typing import Any, Literal
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config.settings import settings
@@ -29,6 +29,15 @@ from app.shared.enums import Role
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/content", tags=["content"])
+
+_content_semaphore: asyncio.Semaphore | None = None
+
+
+def _get_content_semaphore() -> asyncio.Semaphore:
+    global _content_semaphore
+    if _content_semaphore is None:
+        _content_semaphore = asyncio.Semaphore(3)
+    return _content_semaphore
 
 
 def _require_feature() -> None:
@@ -254,7 +263,7 @@ async def approve_content(
     _require_ic_role(actor)
 
     result = await db.execute(
-        select(WealthContent).where(WealthContent.id == content_id)
+        select(WealthContent).where(WealthContent.id == content_id).with_for_update()
     )
     content = result.scalar_one_or_none()
     if content is None:
@@ -359,45 +368,47 @@ async def _run_content_generation(
     fund_id: str | None = None,
 ) -> None:
     """Background task: run content generation in a sync thread."""
-    try:
-        result = await asyncio.to_thread(
-            _sync_generate_content,
-            content_id=content_id,
-            content_type=content_type,
-            org_id=org_id,
-            actor_id=actor_id,
-            language=language,
-            config=config,
-            event_context=event_context,
-            fund_id=fund_id,
-        )
+    async with _get_content_semaphore():
+        try:
+            result = await asyncio.to_thread(
+                _sync_generate_content,
+                content_id=content_id,
+                content_type=content_type,
+                org_id=org_id,
+                actor_id=actor_id,
+                language=language,
+                config=config,
+                event_context=event_context,
+                fund_id=fund_id,
+            )
 
-        # Update content record with result
-        from app.core.db.session import async_session_factory
+            # Update content record with result
+            from app.core.db.session import async_session_factory
 
-        async with async_session_factory() as db:
-            stmt = select(WealthContent).where(WealthContent.id == uuid.UUID(content_id))
-            row = await db.execute(stmt)
-            content = row.scalar_one_or_none()
-            if content:
-                content.content_md = result.get("content_md")
-                content.status = "review" if result.get("content_md") else "draft"
-                content.content_data = result.get("content_data", content.content_data)
-                await db.commit()
+            async with async_session_factory() as db:
+                await db.execute(text(f"SET LOCAL app.current_organization_id = '{org_id}'"))
+                stmt = select(WealthContent).where(WealthContent.id == uuid.UUID(content_id))
+                row = await db.execute(stmt)
+                content = row.scalar_one_or_none()
+                if content:
+                    content.content_md = result.get("content_md")
+                    content.status = "review" if result.get("content_md") else "draft"
+                    content.content_data = result.get("content_data", content.content_data)
+                    await db.commit()
 
-        logger.info(
-            "content_generation_completed",
-            content_id=content_id,
-            content_type=content_type,
-            status=result.get("status"),
-        )
+            logger.info(
+                "content_generation_completed",
+                content_id=content_id,
+                content_type=content_type,
+                status=result.get("status"),
+            )
 
-    except Exception:
-        logger.exception(
-            "content_generation_background_failed",
-            content_id=content_id,
-            content_type=content_type,
-        )
+        except Exception:
+            logger.exception(
+                "content_generation_background_failed",
+                content_id=content_id,
+                content_type=content_type,
+            )
 
 
 def _sync_generate_content(
@@ -412,8 +423,8 @@ def _sync_generate_content(
     fund_id: str | None = None,
 ) -> dict[str, Any]:
     """Sync wrapper: creates sync Session inside thread."""
+    from ai_engine.llm import call_openai as _call_openai
     from app.core.db.session import sync_session_factory
-    from vertical_engines.credit.deep_review.helpers import _call_openai
 
     with sync_session_factory() as db:
         db.expire_on_commit = False
@@ -473,20 +484,28 @@ def _render_content_pdf(
     """Render content PDF based on type."""
     from io import BytesIO
 
-    if content_type == "investment_outlook":
-        from vertical_engines.wealth.investment_outlook import InvestmentOutlook
-        engine = InvestmentOutlook()
-        return engine.render_pdf(content_md, language=language)
+    from vertical_engines.wealth.content_pdf import render_content_pdf
+    from vertical_engines.wealth.fact_sheet.i18n import LABELS
 
-    elif content_type == "flash_report":
-        from vertical_engines.wealth.flash_report import FlashReport
-        engine = FlashReport()
-        return engine.render_pdf(content_md, language=language)
+    labels = LABELS[language]
 
-    elif content_type == "manager_spotlight":
-        from vertical_engines.wealth.manager_spotlight import ManagerSpotlight
-        engine = ManagerSpotlight()
-        return engine.render_pdf(content_md, language=language, fund_name=fund_name)
+    _TITLE_MAP: dict[str, str] = {
+        "investment_outlook": labels["investment_outlook_title"],
+        "flash_report": labels["flash_report_title"],
+        "manager_spotlight": labels["manager_spotlight_title"],
+    }
 
-    # Fallback: empty PDF
-    return BytesIO(b"%PDF-1.4\n")
+    title = _TITLE_MAP.get(content_type)
+    if title is None:
+        return BytesIO(b"%PDF-1.4\n")
+
+    subtitle = ""
+    if content_type == "manager_spotlight":
+        subtitle = fund_name or "Fund Manager Analysis"
+
+    return render_content_pdf(
+        content_md,
+        title=title,
+        subtitle=subtitle,
+        language=language,
+    )

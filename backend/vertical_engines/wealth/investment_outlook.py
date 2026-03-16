@@ -30,7 +30,7 @@ _TEMPLATE = "content/investment_outlook.j2"
 _MAX_TOKENS = 4000
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class OutlookResult:
     """Result of investment outlook generation."""
 
@@ -97,61 +97,14 @@ class InvestmentOutlook:
 
     def render_pdf(self, content_md: str, *, language: Language = "pt") -> BytesIO:
         """Render investment outlook content as PDF."""
-        from datetime import date
-
-        from reportlab.lib.units import mm
-        from reportlab.platypus import HRFlowable, Paragraph, Spacer
-
-        from ai_engine.pdf.pdf_base import (
-            ORANGE,
-            build_netz_styles,
-            create_netz_document,
-            netz_header_footer,
-            safe_text,
-        )
-        from vertical_engines.wealth.fact_sheet.i18n import format_date
+        from vertical_engines.wealth.content_pdf import render_content_pdf
 
         labels = LABELS[language]
-        title = labels["investment_outlook_title"]
-        styles = build_netz_styles()
-        buf = BytesIO()
-        doc = create_netz_document(buf, title=title)
-        story: list[Any] = []
-
-        # Cover
-        story.append(Paragraph(title, styles["cover_title"]))
-        story.append(Spacer(1, 3 * mm))
-        story.append(HRFlowable(width="45%", thickness=2, color=ORANGE, spaceAfter=5 * mm, hAlign="CENTER"))
-        story.append(Paragraph(format_date(date.today(), language), styles["cover_meta"]))
-        story.append(Spacer(1, 2 * mm))
-        story.append(Paragraph(labels["confidential"], styles["cover_confidential"]))
-        story.append(Spacer(1, 6 * mm))
-
-        # Content (split by lines for proper paragraph handling)
-        for line in content_md.split("\n"):
-            line = line.strip()
-            if not line:
-                story.append(Spacer(1, 2 * mm))
-            elif line.startswith("## "):
-                story.append(Paragraph(safe_text(line[3:]), styles["section_heading"]))
-            elif line.startswith("# "):
-                story.append(Paragraph(safe_text(line[2:]), styles["cover_subtitle"]))
-            else:
-                story.append(Paragraph(safe_text(line), styles["body"]))
-
-        # Disclaimer
-        story.append(Spacer(1, 6 * mm))
-        story.append(Paragraph(labels["content_disclaimer"], styles["disclaimer"]))
-
-        def _on_page(canvas: Any, doc_obj: Any) -> None:
-            netz_header_footer(
-                canvas, doc_obj, report_title=title,
-                confidentiality=labels["confidential"],
-            )
-
-        doc.build(story, onFirstPage=_on_page, onLaterPages=_on_page)
-        buf.seek(0)
-        return buf
+        return render_content_pdf(
+            content_md,
+            title=labels["investment_outlook_title"],
+            language=language,
+        )
 
     def _gather_macro_data(self, db: Session, organization_id: str) -> dict[str, Any]:
         """Gather latest macro snapshot data for outlook generation."""

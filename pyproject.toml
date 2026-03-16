@@ -175,3 +175,45 @@ name = "Vertical-agnostic quant services must not import wealth domain models"
 type = "forbidden"
 source_modules = ["quant_engine.regime_service", "quant_engine.cvar_service"]
 forbidden_modules = ["app.domains.wealth"]
+
+[[tool.importlinter.contracts]]
+name = "Wealth engine models must not import service"
+type = "forbidden"
+source_modules = [
+    "vertical_engines.wealth.dd_report.models",
+    "vertical_engines.wealth.dd_report.evidence_pack",
+    "vertical_engines.wealth.dd_report.confidence_scoring",
+    "vertical_engines.wealth.critic.models",
+    "vertical_engines.wealth.asset_universe.models",
+    "vertical_engines.wealth.model_portfolio.models",
+    "vertical_engines.wealth.fact_sheet.models",
+]
+forbidden_modules = [
+    "vertical_engines.wealth.dd_report.dd_report_engine",
+    "vertical_engines.wealth.critic.service",
+    "vertical_engines.wealth.asset_universe.universe_service",
+    "vertical_engines.wealth.fact_sheet.fact_sheet_engine",
+]
+
+[[tool.importlinter.contracts]]
+name = "Wealth domain helpers must not import service within packages"
+type = "forbidden"
+source_modules = [
+    "vertical_engines.wealth.dd_report.chapters",
+    "vertical_engines.wealth.dd_report.quant_injection",
+    "vertical_engines.wealth.critic.parser",
+    "vertical_engines.wealth.critic.prompt_builder",
+    "vertical_engines.wealth.asset_universe.fund_approval",
+    "vertical_engines.wealth.model_portfolio.portfolio_builder",
+    "vertical_engines.wealth.model_portfolio.track_record",
+    "vertical_engines.wealth.model_portfolio.stress_scenarios",
+    "vertical_engines.wealth.fact_sheet.executive_renderer",
+    "vertical_engines.wealth.fact_sheet.institutional_renderer",
+    "vertical_engines.wealth.fact_sheet.chart_builder",
+]
+forbidden_modules = [
+    "vertical_engines.wealth.dd_report.dd_report_engine",
+    "vertical_engines.wealth.critic.service",
+    "vertical_engines.wealth.asset_universe.universe_service",
+    "vertical_engines.wealth.fact_sheet.fact_sheet_engine",
+]

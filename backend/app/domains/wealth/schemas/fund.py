@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class FundRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     fund_id: uuid.UUID
     isin: str | None = None
@@ -31,7 +31,7 @@ class FundRead(BaseModel):
 
 
 class NavPoint(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     nav_date: date
     nav: Decimal | None = None
