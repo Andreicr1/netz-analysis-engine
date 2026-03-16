@@ -102,6 +102,9 @@ class TestWealthModuleStructure:
         "vertical_engines.wealth.dd_report.dd_report_engine",
         "vertical_engines.wealth.quant_analyzer",
         "vertical_engines.wealth.critic",
+        "vertical_engines.wealth.asset_universe",
+        "vertical_engines.wealth.asset_universe.universe_service",
+        "vertical_engines.wealth.asset_universe.fund_approval",
     ]
 
     def test_all_wealth_modules_discoverable(self):

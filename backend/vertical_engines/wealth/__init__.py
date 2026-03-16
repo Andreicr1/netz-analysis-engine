@@ -1,14 +1,16 @@
-"""Wealth Management vertical engine — fund manager DD reports.
+"""Wealth Management vertical engine — fund manager DD reports + asset universe.
 
 Built fresh (not migrated from an existing codebase).  Provides:
   - 8-chapter fund manager due diligence report with adversarial critic
   - Quant analysis integration (CVaR, Sharpe, drawdown via quant_engine)
   - DD report generation loop with confidence scoring
+  - Asset universe fund approval workflow with governance controls
 
 Public entry points:
   - ``FundAnalyzer`` — implements BaseAnalyzer for liquid_funds profile
   - ``DDReportEngine`` — orchestrates chapter generation (dd_report/)
   - ``QuantAnalyzer`` — bridges quant_engine services
+  - ``UniverseService`` — manages approved fund universe (asset_universe/)
 """
 
 from pathlib import Path

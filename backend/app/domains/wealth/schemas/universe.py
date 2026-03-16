@@ -23,6 +23,19 @@ class UniverseApprovalRead(BaseModel):
     created_at: datetime
 
 
+class UniverseAssetRead(BaseModel):
+    """Enriched view of an approved fund in the universe."""
+
+    fund_id: uuid.UUID
+    fund_name: str
+    block_id: str | None = None
+    geography: str | None = None
+    asset_class: str | None = None
+    approval_status: str | None = None
+    approval_decision: str
+    approved_at: datetime | None = None
+
+
 class UniverseApprovalDecision(BaseModel):
     decision: str
     rationale: str | None = None
