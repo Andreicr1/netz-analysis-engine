@@ -28,10 +28,18 @@
 	let voting = $derived(votingStatus as Record<string, unknown> | null);
 	let generating = $state(false);
 	let streamingChapters = $state<Record<string, string>>({});
+	let activeSse = $state<ReturnType<typeof createSSEStream> | null>(null);
 
 	let chapters = $derived(() => {
 		if (!memo?.chapters) return [];
 		return memo.chapters as Array<{ chapter_number: number; title: string; content: string; status: string }>;
+	});
+
+	// Clean up SSE connection on component unmount (#087)
+	$effect(() => {
+		return () => {
+			activeSse?.disconnect();
+		};
 	});
 
 	async function generateMemo() {
@@ -41,7 +49,9 @@
 			const result = await api.post<{ job_id: string }>(`/funds/${fundId}/deals/${dealId}/ic-memo`);
 
 			if (result.job_id) {
-				// Subscribe to SSE for chapter streaming
+				// Disconnect previous SSE if any
+				activeSse?.disconnect();
+
 				const sse = createSSEStream<{ chapter_number: number; content: string; status: string }>({
 					url: `/api/v1/jobs/${result.job_id}/stream`,
 					getToken,
@@ -55,6 +65,7 @@
 					},
 					onError: () => { generating = false; },
 				});
+				activeSse = sse;
 				sse.connect();
 			}
 		} catch {

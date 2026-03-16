@@ -33,6 +33,9 @@ const HEARTBEAT_TIMEOUT = 45000;
 export function createSSEStream<T>(config: SSEConfig<T>): SSEConnection<T> {
 	let status: SSEStatus = $state("disconnected");
 	let error: Error | null = $state(null);
+	// Cap events to prevent unbounded memory growth (#097).
+	// Consumers should use onEvent callback for real-time processing.
+	const MAX_EVENTS = 200;
 	let events: T[] = $state(config.initialState ? [...config.initialState] : []);
 
 	let abortController: AbortController | null = null;
@@ -115,6 +118,9 @@ export function createSSEStream<T>(config: SSEConfig<T>): SSEConnection<T> {
 						// End of event
 						try {
 							const parsed = JSON.parse(currentData) as T;
+							if (events.length >= MAX_EVENTS) {
+								events.splice(0, events.length - MAX_EVENTS + 1);
+							}
 							events.push(parsed);
 							config.onEvent(parsed);
 						} catch {
