@@ -1,7 +1,7 @@
 ---
 title: "refactor: Credit Deep Review Phase 3 — Future Opportunities"
 type: refactor
-status: active
+status: code-complete
 date: 2026-03-15
 origin: docs/brainstorms/2026-03-15-credit-vertical-modular-alignment-brainstorm.md
 deepened: 2026-03-15
@@ -74,11 +74,11 @@ After Wave 2 successfully decomposed the deep_review cluster into 11 modules wit
 
 Security fixes first, then sanitization + cleanup, then dedup:
 
-| Phase | PR | Items | Rationale |
+| Phase | PR | Items | Status |
 |---|---|---|---|
-| Phase 1 | PR #25 (merged) | Tenant isolation (org_id in RAG queries) | F2 Critical + F5 High — **COMPLETE** |
-| Phase 2 | PR B | LLM sanitization + OData hardening + exception deprecation | F6 + F7 Medium + cleanup — combined for reduced review overhead |
-| Phase 3 | PR C | Sync/async dedup + StageOutcome | Biggest refactor — security fixes now in duplicated code get consolidated into extracted helpers |
+| Phase 1 | PR #25 | Tenant isolation (org_id in RAG queries) | **MERGED** — code complete, ops items deferred to Sprint 3 |
+| Phase 2 | PR #26 | LLM sanitization + OData hardening + exception deprecation | **MERGED** |
+| Phase 3 | PR #27 | Sync/async dedup + StageOutcome + PR B review findings | **MERGED** |
 
 ### Research Insights: Phase Ordering
 
@@ -773,25 +773,28 @@ After Phase 1, `run_deal_deep_review_v4()` and `async_run_deal_deep_review_v4()`
 
 ## Acceptance Criteria
 
-### Phase 1: Tenant Isolation (PR A)
+### Phase 1: Tenant Isolation (PR A) — CODE COMPLETE (PR #25 merged)
 
-- [ ] Azure Search index schema has `organization_id` marked as `filterable` *(ops prerequisite)*
-- [ ] Backfill path verified: `search_rebuild.py` works without ADLS, OR `scripts/backfill_search_org_id.py` created (reads from PostgreSQL)
-- [ ] Backfill completes with zero NULL `organization_id` documents in search index
+**Code items (all complete):**
 - [x] `search_deal_chunks()` includes `organization_id eq '{org_id}'` in OData filter
 - [x] `search_fund_chunks()` includes `organization_id eq '{org_id}'` in OData filter
 - [x] `_gather_policy_context()` passes `organization_id` to search client
-- [ ] `AzureSearchChunksClient.search_institutional_hybrid()` includes org filter *(stub — deferred to Sprint 3)*
 - [x] `run_deal_deep_review_v4()` and `async_run_deal_deep_review_v4()` accept `organization_id: str`
 - [x] `domain_ai/service.py` and `pipeline/screening.py` thread `organization_id`
 - [x] `global_agent/agent.py`, `pipeline_kb_adapter.py`, `azure_kb_adapter.py` include org filter
 - [x] `copilot.py` and `dataroom/routes.py` include org filter *(TODO marker — stub clients)*
 - [x] `policy_loader.py` search calls include org filter
 - [x] `_validate_uuid()` normalizes and rejects non-UUID strings
-- [ ] Verification: `grep -r "\.search(" backend/ --include="*.py"` — every call has org_id *(post-Sprint 3)*
 - [x] `make check` passes (364 tests, 5/5 import-linter contracts, ruff clean)
 
-### Phase 2: Sanitization + Exception Cleanup (PR B)
+**Ops/infra items (deferred — require Azure access):**
+- [ ] Azure Search index schema has `organization_id` marked as `filterable` *(ops prerequisite)*
+- [ ] Backfill path verified: `search_rebuild.py` works without ADLS, OR `scripts/backfill_search_org_id.py` created (reads from PostgreSQL)
+- [ ] Backfill completes with zero NULL `organization_id` documents in search index
+- [ ] `AzureSearchChunksClient.search_institutional_hybrid()` includes org filter *(stub — deferred to Sprint 3)*
+- [ ] Verification: `grep -r "\.search(" backend/ --include="*.py"` — every call has org_id *(post-Sprint 3)*
+
+### Phase 2: Sanitization + Exception Cleanup (PR B) — COMPLETE (PR #26 merged)
 
 - [x] `nh3>=0.2.0` added to `pyproject.toml` *(requirements are in pyproject.toml, not requirements.txt)*
 - [x] `sanitize_llm_text()` in `ai_engine/governance/output_safety.py` — nh3 tag allowlist, NFC normalization, injection marker stripping
@@ -803,7 +806,7 @@ After Phase 1, `run_deal_deep_review_v4()` and `async_run_deal_deep_review_v4()`
 - [x] No remaining imports of removed exceptions
 - [x] `make check` passes (393 tests, 5/5 import-linter contracts, ruff clean)
 
-### Phase 3: Sync/Async Dedup (PR C)
+### Phase 3: Sync/Async Dedup (PR C) — COMPLETE (PR #27 merged)
 
 - [x] `StageOutcome` dataclass in `models.py` with `from_gather()` classmethod (`strict=True`)
 - [x] 3 extracted helpers in `persist.py` (return dict, profile metadata, persist artifacts)
@@ -825,11 +828,14 @@ After Phase 1, `run_deal_deep_review_v4()` and `async_run_deal_deep_review_v4()`
 
 ### Quality Gates
 
-- [x] All 324+ tests pass after each phase *(364 tests after Phase 1 — PR #25)*
+- [x] All 324+ tests pass after each phase *(364 → 393 → 407 tests across PRs #25, #26, #27)*
 - [x] Golden tests pass (deterministic outputs unchanged)
 - [x] Import DAG verified: `lint-imports` (5/5 contracts)
-- [ ] Zero Azure Search `.search()` calls without `organization_id` in entire codebase after Phase 1 *(stub clients deferred to Sprint 3)*
 - [x] `service.py` line count reduced: 2802 → 2515 (3 large helpers extracted, 3 small kept inline per simplicity review)
+- [x] Code review: 8 agents, 0 P1 findings, 7 P2/P3 findings all resolved (PR #27 review commit)
+
+**Ops gate (deferred to Sprint 3):**
+- [ ] Zero Azure Search `.search()` calls without `organization_id` in entire codebase *(stub clients deferred to Sprint 3)*
 
 ## Risk Analysis & Mitigation
 

@@ -328,6 +328,7 @@ def run_deal_deep_review_v4(
     # ── Stage 5→6: Concentration engine first (quant may use it) ──
     from ai_engine.governance.policy_loader import load_policy_thresholds as _load_policy
 
+    # TODO(Sprint 3): wire ConfigService when async session migration lands
     policy = _load_policy()
     pending = {
         "deal_name": deal_fields["deal_name"],
@@ -1370,6 +1371,7 @@ async def async_run_deal_deep_review_v4(
 
     def _compute_concentration_threadsafe():
         from ai_engine.governance.policy_loader import load_policy_thresholds as _lp
+        # TODO(Sprint 3): wire ConfigService when async session migration lands
         policy = _lp()
         pending = {
             "deal_name": deal_fields["deal_name"],
@@ -1484,6 +1486,7 @@ async def async_run_deal_deep_review_v4(
 
     def _run_policy_pipeline_sync() -> tuple[dict, dict]:
         from ai_engine.governance.policy_loader import load_policy_thresholds as _lp
+        # TODO(Sprint 3): wire ConfigService when async session migration lands
         policy = _lp()
         hard_checks = _run_hard_policy_checks(
             concentration_dict=concentration_dict,
