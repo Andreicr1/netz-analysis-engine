@@ -105,6 +105,10 @@ class TestWealthModuleStructure:
         "vertical_engines.wealth.asset_universe",
         "vertical_engines.wealth.asset_universe.universe_service",
         "vertical_engines.wealth.asset_universe.fund_approval",
+        "vertical_engines.wealth.model_portfolio",
+        "vertical_engines.wealth.model_portfolio.portfolio_builder",
+        "vertical_engines.wealth.model_portfolio.track_record",
+        "vertical_engines.wealth.model_portfolio.stress_scenarios",
     ]
 
     def test_all_wealth_modules_discoverable(self):

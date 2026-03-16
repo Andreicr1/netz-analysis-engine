@@ -11,6 +11,7 @@ Public entry points:
   - ``DDReportEngine`` — orchestrates chapter generation (dd_report/)
   - ``QuantAnalyzer`` — bridges quant_engine services
   - ``UniverseService`` — manages approved fund universe (asset_universe/)
+  - ``model_portfolio`` — portfolio construction + track-record (model_portfolio/)
 """
 
 from pathlib import Path

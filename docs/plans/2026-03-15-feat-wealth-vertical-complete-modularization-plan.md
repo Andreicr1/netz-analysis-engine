@@ -615,13 +615,13 @@ Replace `import logging` / `logging.getLogger(__name__)` with `structlog.get_log
 - 2022 Rate Hike: 2022-01-01 to 2022-12-31
 
 **Acceptance criteria:**
-- [ ] Portfolio construction produces valid weights summing to 1.0
-- [ ] Score-weighted fund selection within blocks
-- [ ] Backtest uses walk-forward CV from quant_engine
-- [ ] Live NAV computes correctly from constituent returns
-- [ ] Stress scenarios replay through historical windows
-- [ ] Minimum history enforced
-- [ ] All result types are frozen dataclasses
+- [x] Portfolio construction produces valid weights summing to 1.0
+- [x] Score-weighted fund selection within blocks
+- [x] Backtest uses walk-forward CV from quant_engine
+- [x] Live NAV computes correctly from constituent returns
+- [x] Stress scenarios replay through historical windows
+- [x] Minimum history enforced
+- [x] All result types are frozen dataclasses
 
 ##### Task 3.2: Quant Analyzer Rewiring (single file, not package)
 
@@ -638,10 +638,10 @@ Replace `import logging` / `logging.getLogger(__name__)` with `structlog.get_log
 - `peer_comparison_service.compare()` ranks fund against peers — **batch query**: single `WHERE fund_id IN (...)` with `BETWEEN` for AUM filter. Add composite index on `funds_universe(block_id, is_active, approval_status)` in migration.
 
 **Acceptance criteria:**
-- [ ] QuantAnalyzer returns real metrics from quant_engine (not scaffold stubs)
-- [ ] Portfolio metrics aggregate correctly
-- [ ] Peer comparison uses batch query (no N+1)
-- [ ] All results are frozen dataclasses
+- [x] QuantAnalyzer returns real metrics from quant_engine (not scaffold stubs)
+- [x] Portfolio metrics aggregate correctly
+- [x] Peer comparison uses batch query (no N+1)
+- [x] All results are frozen dataclasses
 
 ##### Task 3.3: Attribution Service (deferred — builds skeleton only)
 
@@ -660,10 +660,10 @@ Replace `import logging` / `logging.getLogger(__name__)` with `structlog.get_log
 - Pure sync, config as parameter
 
 **Acceptance criteria:**
-- [ ] Single-period attribution effects sum to total excess return (within 1e-4 tolerance)
-- [ ] Carino linking preserves additivity across periods
-- [ ] Pure function, no I/O
-- [ ] Gracefully returns empty result when benchmark data unavailable
+- [x] Single-period attribution effects sum to total excess return (within 1e-4 tolerance)
+- [x] Carino linking preserves additivity across periods
+- [x] Pure function, no I/O
+- [x] Gracefully returns empty result when benchmark data unavailable
 
 ##### Task 3.4: Rebalance Execution Flow
 
@@ -681,10 +681,10 @@ Replace `import logging` / `logging.getLogger(__name__)` with `structlog.get_log
 **Endpoint:** `POST /api/wealth/portfolios/{profile}/rebalance/{event_id}/execute`
 
 **Acceptance criteria:**
-- [ ] Execution only possible after approval status
-- [ ] New snapshot created with optimizer output
-- [ ] RebalanceEvent status transitions: proposed → approved → executed
-- [ ] SSE notification on execution
+- [x] Execution only possible after approval status
+- [x] New snapshot created with optimizer output
+- [x] RebalanceEvent status transitions: proposed → approved → executed
+- [x] SSE notification on execution
 
 ##### Task 3.5: Model Portfolio API Routes
 
@@ -702,9 +702,9 @@ Replace `import logging` / `logging.getLogger(__name__)` with `structlog.get_log
 - `POST /api/wealth/model-portfolios/{id}/stress` — trigger stress scenarios
 
 **Acceptance criteria:**
-- [ ] All endpoints use `response_model=` and `model_validate()`
-- [ ] IC role required for creation and construction
-- [ ] Track-record endpoint returns all three components with clear delineation
+- [x] All endpoints use `response_model=` and `model_validate()`
+- [x] IC role required for creation and construction
+- [x] Track-record endpoint returns all three components with clear delineation
 
 ---
 
