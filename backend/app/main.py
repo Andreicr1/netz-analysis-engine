@@ -15,7 +15,6 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core.config.pg_notify import get_pg_notify_listener
 from app.core.config.settings import settings
 from app.core.db.engine import engine
 from app.core.jobs.sse import create_job_stream
@@ -23,13 +22,8 @@ from app.core.jobs.tracker import close_redis_pool, publish_event, verify_job_ow
 from app.core.security.clerk_auth import Actor, get_actor
 
 # ── Admin domain routers ─────────────────────────────────────
-from app.domains.admin.routes.asset_admin import router as admin_asset_admin_router
 from app.domains.admin.routes.assets import router as admin_assets_router
 from app.domains.admin.routes.branding import router as admin_branding_router
-from app.domains.admin.routes.configs import router as admin_configs_router
-from app.domains.admin.routes.health import router as admin_health_router
-from app.domains.admin.routes.prompts import router as admin_prompts_router
-from app.domains.admin.routes.tenants import router as admin_tenants_router
 
 # Actions
 from app.domains.credit.actions.routes.actions import router as credit_actions_router
@@ -160,18 +154,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.app_env,
     )
     await _verify_config_completeness()
-
-    # Start pg_notify listener for cross-process cache invalidation
-    pg_listener = get_pg_notify_listener()
-    try:
-        await pg_listener.start()
-    except Exception:
-        logger.warning("PgNotifyListener failed to start — cache invalidation will rely on TTL", exc_info=True)
-
     yield
-
     # Cleanup
-    await pg_listener.stop()
     await engine.dispose()
     await close_redis_pool()
     logger.info("Netz Analysis Engine shutdown complete")
@@ -246,11 +230,6 @@ async def test_emit_event(job_id: str, event_type: str = "test", message: str = 
 
 api_v1.include_router(admin_branding_router)
 api_v1.include_router(admin_assets_router)
-api_v1.include_router(admin_configs_router)
-api_v1.include_router(admin_tenants_router)
-api_v1.include_router(admin_asset_admin_router)
-api_v1.include_router(admin_prompts_router)
-api_v1.include_router(admin_health_router)
 
 # ── Mount wealth domain routes ───────────────────────────────
 

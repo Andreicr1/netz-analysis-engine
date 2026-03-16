@@ -1425,12 +1425,12 @@ backend/app/domains/admin/models.py
   ```
 
 - [x] Add `updated_at` column to `tenant_assets` for ETag computation
-- [x] Expand `config_type` CHECK constraint on `vertical_config_overrides` to include `'branding'` and `'report_styles'`
+- [ ] Expand `config_type` CHECK constraint on `vertical_config_overrides` to include `'branding'` and `'report_styles'`
 - [x] Seed default branding config in `vertical_config_defaults` for each vertical
 
 ##### Acceptance Criteria
 
-- [x] `make migrate` applies migration 0009 without error (migration written, needs running DB to apply)
+- [ ] `make migrate` applies migration 0009 without error (migration written, needs running DB to apply)
 - [x] RLS policies on new tables use subselect pattern
 - [x] `make check` passes (ruff + import-linter 16/16 + mypy clean)
 
@@ -1446,25 +1446,25 @@ backend/app/core/config/pg_notify.py         ← new
 
 ##### Tasks
 
-- [x] `config_writer.py` — `ConfigWriter` class with:
+- [ ] `config_writer.py` — `ConfigWriter` class with:
   - `async put(vertical, config_type, org_id, config, version)` — upsert override. Validate against guardrails from `VerticalConfigDefault.guardrails` (JSON Schema). Optimistic lock via `version` column (409 if stale). After write: `pg_notify('netz_config_changed', json.dumps({vertical, config_type, org_id}))`
   - `async delete(vertical, config_type, org_id)` — remove override (fall back to default)
   - `async put_default(vertical, config_type, config)` — update global default (super-admin only)
   - `async diff(vertical, config_type, org_id)` — return `{default: {...}, override: {...}, merged: {...}}`
-- [x] `pg_notify.py` — `PgNotifyListener` class:
+- [ ] `pg_notify.py` — `PgNotifyListener` class:
   - Registers `LISTEN netz_config_changed` on startup (async background task)
   - On notification: invalidate specific TTLCache key `(vertical, config_type, org_id)`
   - Handles connection loss + reconnect
-- [x] Extend `ConfigService` with `invalidate(vertical, config_type, org_id)` method
-- [x] Register `PgNotifyListener` in FastAPI lifespan (`main.py`)
+- [ ] Extend `ConfigService` with `invalidate(vertical, config_type, org_id)` method
+- [ ] Register `PgNotifyListener` in FastAPI lifespan (`main.py`)
 
 ##### Acceptance Criteria
 
-- [x] Config write triggers `pg_notify`
-- [x] Another API process receives notification and invalidates cache
-- [x] Optimistic locking rejects stale writes (409)
-- [x] Guardrail validation rejects invalid configs (422)
-- [x] `make check` passes
+- [ ] Config write triggers `pg_notify`
+- [ ] Another API process receives notification and invalidates cache
+- [ ] Optimistic locking rejects stale writes (409)
+- [ ] Guardrail validation rejects invalid configs (422)
+- [ ] `make check` passes
 
 #### E3: PromptService
 
@@ -1478,23 +1478,23 @@ backend/app/core/prompts/schemas.py           ← new
 
 ##### Tasks
 
-- [x] `PromptService` with cascade resolution:
+- [ ] `PromptService` with cascade resolution:
   1. `prompt_overrides` WHERE `organization_id = org_id` (org-specific)
   2. `prompt_overrides` WHERE `organization_id IS NULL` (global override)
   3. Filesystem `.j2` via `PromptRegistry` (fallback)
-- [x] `async get(vertical, template_name, org_id)` → returns `{content, source_level, version}`
-- [x] `async put(vertical, template_name, org_id, content, updated_by)` → writes override, bumps version, writes history row
-- [x] `async list(vertical)` → lists all templates with override status per org
-- [x] `async preview(vertical, template_name, content, sample_data)` → render Jinja2 with `SandboxedEnvironment` against sample data
-- [x] `async validate(content)` → parse Jinja2 template, return syntax errors
-- [x] `snapshot_prompts(vertical, org_id, template_names)` → resolve all prompts at job start, return frozen dict (for prompt-snapshot-at-job-start pattern)
+- [ ] `async get(vertical, template_name, org_id)` → returns `{content, source_level, version}`
+- [ ] `async put(vertical, template_name, org_id, content, updated_by)` → writes override, bumps version, writes history row
+- [ ] `async list(vertical)` → lists all templates with override status per org
+- [ ] `async preview(vertical, template_name, content, sample_data)` → render Jinja2 with `SandboxedEnvironment` against sample data
+- [ ] `async validate(content)` → parse Jinja2 template, return syntax errors
+- [ ] `snapshot_prompts(vertical, org_id, template_names)` → resolve all prompts at job start, return frozen dict (for prompt-snapshot-at-job-start pattern)
 
 ##### Acceptance Criteria
 
-- [x] Cascade resolution works correctly (org override > global override > filesystem)
-- [x] Preview renders template with sample data
-- [x] Validation catches Jinja2 syntax errors
-- [x] Snapshot function returns immutable prompt dict for job use
+- [ ] Cascade resolution works correctly (org override > global override > filesystem)
+- [ ] Preview renders template with sample data
+- [ ] Validation catches Jinja2 syntax errors
+- [ ] Snapshot function returns immutable prompt dict for job use
 
 #### E4: Admin Routes
 
@@ -1512,46 +1512,47 @@ backend/app/domains/admin/routes/branding.py
 
 ##### Tasks
 
-- [x] All admin routes require `is_admin` role check
-- [x] **Config routes** (`/api/v1/admin/configs/`):
+- [ ] All admin routes require `is_admin` role check
+- [ ] **Config routes** (`/api/v1/admin/configs/`):
   - `POST /` — create config override
   - `PUT /{vertical}/{type}` — update override (with version for optimistic lock)
   - `DELETE /{vertical}/{type}` — remove override
   - `GET /{vertical}/{type}/diff` — show override vs default
   - `POST /defaults/{vertical}/{type}` — update global default
-- [x] **Tenant routes** (`/api/v1/admin/tenants/`):
+- [ ] **Tenant routes** (`/api/v1/admin/tenants/`):
   - `POST /` — create tenant (Clerk org + seed configs in DB transaction)
   - `GET /` — list all tenants
   - `GET /{org_id}` — tenant detail (configs, assets, usage)
+  - `PATCH /{org_id}` — update metadata
   - `POST /{org_id}/seed` — re-seed default configs
-- [x] **Asset routes**:
+- [ ] **Asset routes**:
   - `POST /api/v1/admin/tenants/{org_id}/assets` — upload logo/favicon (multipart, 512KB max)
   - `GET /api/v1/assets/org/{org_id}/{asset_type}` — serve asset (unauthenticated, ETag + `Cache-Control: max-age=86400`, URL includes `?v={md5[:8]}` cache-buster)
   - `DELETE /api/v1/admin/tenants/{org_id}/assets/{type}` — remove asset
-- [x] **Prompt routes** (`/api/v1/admin/prompts/`):
+- [ ] **Prompt routes** (`/api/v1/admin/prompts/`):
   - `GET /{vertical}` — list all templates with override status
   - `GET /{vertical}/{name}` — get resolved content + source level
   - `PUT /{vertical}/{name}` — update override (auto-version, history)
   - `POST /{vertical}/{name}/preview` — render with sample data
   - `POST /{vertical}/{name}/validate` — Jinja2 syntax check
-- [x] **Health routes** (`/api/v1/admin/health/`):
+- [ ] **Health routes** (`/api/v1/admin/health/`):
   - `GET /workers` — worker status (last run, duration, errors from Redis/DB)
   - `GET /pipelines` — pipeline stats (docs processed, queue depth)
   - `GET /usage` — per-tenant usage (API calls, storage, memos generated)
-- [x] **Branding route** (`/api/v1/branding`) — non-admin, returns merged branding for current org. Logo URLs include `?v={hash}` for cache-busting
-- [x] **Content management additions**:
+- [ ] **Branding route** (`/api/v1/branding`) — non-admin, returns merged branding for current org. Logo URLs include `?v={hash}` for cache-busting
+- [ ] **Content management additions**:
   - Add `unpublish` endpoints where missing (content, report packs): `published → approved`
   - Audit `publish` endpoints exist on all routes that serve investor portals
 
 ##### Acceptance Criteria
 
-- [x] All admin routes require ADMIN role
-- [x] Config writes validate against guardrails
-- [x] Tenant creation seeds all default configs atomically
-- [x] Logo upload enforces 512KB limit and valid content types
-- [x] Asset serve endpoint returns correct ETag and Content-Type
-- [x] Branding endpoint returns merged config for current org
-- [x] `make check` passes (all 416+ tests + new admin tests)
+- [ ] All admin routes require ADMIN role
+- [ ] Config writes validate against guardrails
+- [ ] Tenant creation seeds all default configs atomically
+- [ ] Logo upload enforces 512KB limit and valid content types
+- [ ] Asset serve endpoint returns correct ETag and Content-Type
+- [ ] Branding endpoint returns merged config for current org
+- [ ] `make check` passes (all 416+ tests + new admin tests)
 
 #### E5: Admin Backend Tests
 
@@ -1568,18 +1569,18 @@ backend/tests/admin/test_pg_notify.py
 
 ##### Tasks
 
-- [x] Test config write + guardrail validation + optimistic lock
-- [x] Test prompt cascade resolution (org > global > filesystem)
-- [x] Test prompt preview and validation
-- [x] Test tenant creation atomicity
-- [x] Test asset upload size limit + content type validation
-- [x] Test branding endpoint returns correct merged config
-- [x] Test `pg_notify` triggers cache invalidation
+- [ ] Test config write + guardrail validation + optimistic lock
+- [ ] Test prompt cascade resolution (org > global > filesystem)
+- [ ] Test prompt preview and validation
+- [ ] Test tenant creation atomicity
+- [ ] Test asset upload size limit + content type validation
+- [ ] Test branding endpoint returns correct merged config
+- [ ] Test `pg_notify` triggers cache invalidation
 
 ##### Acceptance Criteria
 
-- [x] All new admin tests pass (40 new tests, 592 total)
-- [x] `make check` passes
+- [ ] All new admin tests pass
+- [ ] `make check` passes
 
 ---
 

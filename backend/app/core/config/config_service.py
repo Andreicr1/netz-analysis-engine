@@ -190,19 +190,6 @@ class ConfigService:
         return result
 
     @staticmethod
-    def invalidate(vertical: str, config_type: str, org_id: UUID | None = None) -> None:
-        """Invalidate cache entry. Called by PgNotifyListener on config change."""
-        if org_id is not None:
-            cache_key = f"config:{vertical}:{config_type}:{org_id}"
-            _config_cache.pop(cache_key, None)
-        else:
-            # Global default changed — invalidate all orgs for this config
-            prefix = f"config:{vertical}:{config_type}:"
-            keys_to_remove = [k for k in _config_cache if k.startswith(prefix)]
-            for key in keys_to_remove:
-                _config_cache.pop(key, None)
-
-    @staticmethod
     def _yaml_fallback(vertical: str, config_type: str) -> dict | None:
         """Emergency YAML fallback. Logged as ERROR — should never happen after migration."""
         yaml_path = _YAML_FALLBACK_MAP.get((vertical, config_type))
