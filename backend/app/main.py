@@ -70,6 +70,7 @@ from app.domains.credit.reporting.routes.reports import router as credit_reports
 from app.domains.credit.reporting.routes.schedules import router as credit_schedules_router
 from app.domains.wealth.routes.allocation import router as wealth_allocation_router
 from app.domains.wealth.routes.analytics import router as wealth_analytics_router
+from app.domains.wealth.routes.content import router as wealth_content_router
 from app.domains.wealth.routes.dd_reports import router as wealth_dd_reports_router
 from app.domains.wealth.routes.fact_sheets import router as wealth_fact_sheets_router
 
@@ -234,6 +235,7 @@ api_v1.include_router(wealth_dd_reports_router)
 api_v1.include_router(wealth_universe_router)
 api_v1.include_router(wealth_model_portfolios_router)
 api_v1.include_router(wealth_fact_sheets_router)
+api_v1.include_router(wealth_content_router)
 
 # ── Mount credit domain routes ───────────────────────────────
 

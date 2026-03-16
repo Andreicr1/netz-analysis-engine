@@ -19,6 +19,7 @@ from app.core.config.config_service import ConfigService
 from app.core.security.clerk_auth import CurrentUser, get_current_user, require_role
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.macro_committee import MacroReview
+from app.domains.wealth.routes.common import _get_content_semaphore, require_content_slot
 from app.domains.wealth.schemas.macro import (
     DataFreshnessRead,
     DimensionScoreRead,
@@ -247,42 +248,48 @@ async def generate_review(
     org_id: UUID | None = Depends(get_org_id),
 ) -> MacroReviewRead:
     """Generate a new macro committee review from current + previous snapshots."""
-    # Get current and previous snapshots
-    stmt = (
-        select(MacroRegionalSnapshot)
-        .order_by(MacroRegionalSnapshot.as_of_date.desc())
-        .limit(2)
-    )
-    result = await db.execute(stmt)
-    snapshots = result.scalars().all()
+    # Backpressure: reject if too many concurrent content tasks
+    await require_content_slot()
 
-    if not snapshots:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No macro snapshot available. Run macro ingestion worker first.",
+    try:
+        # Get current and previous snapshots
+        stmt = (
+            select(MacroRegionalSnapshot)
+            .order_by(MacroRegionalSnapshot.as_of_date.desc())
+            .limit(2)
+        )
+        result = await db.execute(stmt)
+        snapshots = result.scalars().all()
+
+        if not snapshots:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No macro snapshot available. Run macro ingestion worker first.",
+            )
+
+        current = snapshots[0]
+        previous = snapshots[1] if len(snapshots) > 1 else None
+
+        report = generate_weekly_report(
+            current.data_json,
+            previous.data_json if previous else None,
         )
 
-    current = snapshots[0]
-    previous = snapshots[1] if len(snapshots) > 1 else None
+        review = MacroReview(
+            organization_id=org_id,
+            status="pending",
+            is_emergency=False,
+            as_of_date=current.as_of_date,
+            snapshot_id=current.id,
+            report_json=build_report_json(report),
+            created_by=user.actor_id,
+        )
+        db.add(review)
+        await db.flush()
 
-    report = generate_weekly_report(
-        current.data_json,
-        previous.data_json if previous else None,
-    )
-
-    review = MacroReview(
-        organization_id=org_id,
-        status="pending",
-        is_emergency=False,
-        as_of_date=current.as_of_date,
-        snapshot_id=current.id,
-        report_json=build_report_json(report),
-        created_by=user.actor_id,
-    )
-    db.add(review)
-    await db.flush()
-
-    return MacroReviewRead.model_validate(review)
+        return MacroReviewRead.model_validate(review)
+    finally:
+        _get_content_semaphore().release()
 
 
 @router.patch(

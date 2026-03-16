@@ -131,6 +131,8 @@ async def construct_portfolio(
 
         with sync_session_factory() as sync_db:
             sync_db.expire_on_commit = False
+            from sqlalchemy import text
+            sync_db.execute(text("SET LOCAL app.current_organization_id = :oid"), {"oid": org_id})
             return _run_construction(sync_db, portfolio.profile, org_id)
 
     fund_selection = await asyncio.to_thread(_construct)
@@ -203,11 +205,15 @@ async def trigger_backtest(
             detail="Portfolio has no fund selection. Run /construct first.",
         )
 
+    _org_id = portfolio.organization_id
+
     def _backtest() -> dict[str, Any]:
         from app.core.db.session import sync_session_factory
 
         with sync_session_factory() as sync_db:
             sync_db.expire_on_commit = False
+            from sqlalchemy import text
+            sync_db.execute(text("SET LOCAL app.current_organization_id = :oid"), {"oid": _org_id})
             return _run_backtest(sync_db, portfolio.fund_selection_schema, portfolio_id)
 
     backtest_result = await asyncio.to_thread(_backtest)
@@ -248,11 +254,15 @@ async def trigger_stress(
             detail="Portfolio has no fund selection. Run /construct first.",
         )
 
+    _org_id_stress = portfolio.organization_id
+
     def _stress() -> dict[str, Any]:
         from app.core.db.session import sync_session_factory
 
         with sync_session_factory() as sync_db:
             sync_db.expire_on_commit = False
+            from sqlalchemy import text
+            sync_db.execute(text("SET LOCAL app.current_organization_id = :oid"), {"oid": _org_id_stress})
             return _run_stress(sync_db, portfolio.fund_selection_schema, portfolio_id)
 
     stress_result = await asyncio.to_thread(_stress)

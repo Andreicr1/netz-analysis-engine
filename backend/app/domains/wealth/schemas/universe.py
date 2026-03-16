@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class UniverseApprovalRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     id: uuid.UUID
     fund_id: uuid.UUID
@@ -26,6 +26,8 @@ class UniverseApprovalRead(BaseModel):
 class UniverseAssetRead(BaseModel):
     """Enriched view of an approved fund in the universe."""
 
+    model_config = ConfigDict(extra="ignore")
+
     fund_id: uuid.UUID
     fund_name: str
     block_id: str | None = None
@@ -37,5 +39,7 @@ class UniverseAssetRead(BaseModel):
 
 
 class UniverseApprovalDecision(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     decision: str
     rationale: str | None = None

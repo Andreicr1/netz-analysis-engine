@@ -22,6 +22,7 @@ from app.core.jobs.tracker import publish_event, register_job_owner, verify_job_
 from app.core.security.clerk_auth import CurrentUser, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.dd_report import DDReport
+from app.domains.wealth.routes.common import _get_content_semaphore, require_content_slot
 from app.domains.wealth.schemas.dd_report import (
     DDReportCreate,
     DDReportRead,
@@ -116,7 +117,11 @@ async def trigger_dd_report(
     job_id = f"dd:{org_id}:{report_id}"
     await register_job_owner(job_id, org_id)
 
-    # Dispatch generation (fire-and-forget background task)
+    # Backpressure: reject if too many concurrent content tasks
+    await require_content_slot()
+
+    # Dispatch generation (fire-and-forget background task).
+    # The semaphore slot is released inside _run_generation's finally block.
     asyncio.create_task(
         _run_generation(
             report_id=str(report_id),
@@ -215,6 +220,10 @@ async def regenerate_dd_report(
     job_id = f"dd:{org_id}:{report_id}"
     await register_job_owner(job_id, org_id)
 
+    # Backpressure: reject if too many concurrent content tasks
+    await require_content_slot()
+
+    # The semaphore slot is released inside _run_generation's finally block.
     asyncio.create_task(
         _run_generation(
             report_id=str(report_id),
@@ -273,6 +282,7 @@ async def _run_generation(
 
     Creates a sync Session inside the thread (fix #33).
     Publishes SSE events for progress tracking.
+    Releases the content-generation semaphore slot on completion.
     """
     try:
         await publish_event(job_id, "generation_started", {
@@ -315,6 +325,8 @@ async def _run_generation(
             "report_id": report_id,
             "error": str(exc),
         })
+    finally:
+        _get_content_semaphore().release()
 
 
 def _sync_generate(
@@ -335,6 +347,8 @@ def _sync_generate(
 
     with sync_session_factory() as db:
         db.expire_on_commit = False
+        from sqlalchemy import text
+        db.execute(text("SET LOCAL app.current_organization_id = :oid"), {"oid": org_id})
         result = engine.generate(
             db,
             fund_id=fund_id,

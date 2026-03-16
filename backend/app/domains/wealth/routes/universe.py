@@ -140,14 +140,18 @@ async def approve_fund(
                     UniverseApproval.fund_id == fund_id,
                     UniverseApproval.organization_id == org_id,
                     UniverseApproval.is_current.is_(True),
-                    UniverseApproval.decision == "pending",
-                )
+                ).with_for_update()
             )
             approval = result.scalar_one_or_none()
             if approval is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"No pending approval found for fund {fund_id}",
+                )
+            if approval.decision != "pending":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Approval already decided: {approval.decision}",
                 )
 
             decision = body.decision if body.decision in ("approved", "watchlist") else "approved"
@@ -210,14 +214,18 @@ async def reject_fund(
                     UniverseApproval.fund_id == fund_id,
                     UniverseApproval.organization_id == org_id,
                     UniverseApproval.is_current.is_(True),
-                    UniverseApproval.decision == "pending",
-                )
+                ).with_for_update()
             )
             approval = result.scalar_one_or_none()
             if approval is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"No pending approval found for fund {fund_id}",
+                )
+            if approval.decision != "pending":
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Approval already decided: {approval.decision}",
                 )
 
             try:

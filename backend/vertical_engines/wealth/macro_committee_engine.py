@@ -18,7 +18,7 @@ import structlog
 logger = structlog.get_logger()
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ScoreDelta:
     """Change in a regional macro score between two snapshots."""
 
@@ -29,7 +29,7 @@ class ScoreDelta:
     flagged: bool  # True if |delta| > threshold
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class WeeklyReportData:
     """Data for a weekly macro committee report."""
 

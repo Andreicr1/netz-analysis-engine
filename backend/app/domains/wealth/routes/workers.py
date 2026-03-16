@@ -4,16 +4,22 @@ Allows CI pipelines, scheduled jobs, and admin UIs to trigger
 ingestion, risk calculation, and portfolio evaluation via the API.
 """
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from app.core.security.clerk_auth import CurrentUser, get_current_user
+from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.domains.wealth.workers.ingestion import run_ingestion
 from app.domains.wealth.workers.macro_ingestion import run_macro_ingestion
 from app.domains.wealth.workers.portfolio_eval import run_portfolio_eval
 from app.domains.wealth.workers.risk_calc import run_risk_calc
+from app.shared.enums import Role
 
 router = APIRouter(prefix="/workers")
+
+
+def _require_admin_role(actor: Actor) -> None:
+    if not actor.has_role(Role.INVESTMENT_TEAM) and not actor.has_role(Role.ADMIN):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin or IC role required")
 
 
 class WorkerScheduledResponse(BaseModel):
@@ -36,7 +42,9 @@ class WorkerScheduledResponse(BaseModel):
 async def trigger_run_ingestion(
     background_tasks: BackgroundTasks,
     user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
 ) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
     background_tasks.add_task(run_ingestion)
     return WorkerScheduledResponse(status="scheduled", worker="run-ingestion")
 
@@ -56,7 +64,9 @@ async def trigger_run_ingestion(
 async def trigger_run_risk_calc(
     background_tasks: BackgroundTasks,
     user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
 ) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
     background_tasks.add_task(run_risk_calc)
     return WorkerScheduledResponse(status="scheduled", worker="run-risk-calc")
 
@@ -77,7 +87,9 @@ async def trigger_run_risk_calc(
 async def trigger_run_portfolio_eval(
     background_tasks: BackgroundTasks,
     user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
 ) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
     background_tasks.add_task(run_portfolio_eval)
     return WorkerScheduledResponse(status="scheduled", worker="run-portfolio-eval")
 
@@ -98,7 +110,9 @@ async def trigger_run_portfolio_eval(
 async def trigger_run_macro_ingestion(
     background_tasks: BackgroundTasks,
     user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
 ) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
     background_tasks.add_task(run_macro_ingestion)
     return WorkerScheduledResponse(status="scheduled", worker="run-macro-ingestion")
 
@@ -119,7 +133,10 @@ async def trigger_run_macro_ingestion(
 async def trigger_run_fact_sheet_gen(
     background_tasks: BackgroundTasks,
     user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
 ) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
     from app.domains.wealth.workers.fact_sheet_gen import run_monthly_fact_sheets
 
     background_tasks.add_task(run_monthly_fact_sheets)

@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class DDChapterRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     id: uuid.UUID
     chapter_tag: str
@@ -24,7 +24,7 @@ class DDChapterRead(BaseModel):
 
 
 class DDReportSummary(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     id: uuid.UUID
     fund_id: uuid.UUID
@@ -44,8 +44,12 @@ class DDReportRead(DDReportSummary):
 
 
 class DDReportCreate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     config_overrides: dict | None = None
 
 
 class DDReportRegenerate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     chapter_tags: list[str] | None = None

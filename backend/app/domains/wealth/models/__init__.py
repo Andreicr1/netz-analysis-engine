@@ -1,6 +1,7 @@
 from app.domains.wealth.models.allocation import StrategicAllocation, TacticalPosition
 from app.domains.wealth.models.backtest import BacktestRun
 from app.domains.wealth.models.block import AllocationBlock
+from app.domains.wealth.models.content import WealthContent
 from app.domains.wealth.models.dd_report import DDChapter, DDReport
 from app.domains.wealth.models.fund import Fund
 from app.domains.wealth.models.lipper import LipperRating
@@ -28,4 +29,5 @@ __all__ = [
     "StrategicAllocation",
     "TacticalPosition",
     "UniverseApproval",
+    "WealthContent",
 ]

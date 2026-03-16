@@ -19,7 +19,7 @@ class PortfolioSummary(BaseModel):
 
 
 class PortfolioSnapshotRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     snapshot_id: uuid.UUID
     profile: str
@@ -48,7 +48,7 @@ class RebalanceRequest(BaseModel):
 
 
 class RebalanceEventRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     event_id: uuid.UUID
     profile: str

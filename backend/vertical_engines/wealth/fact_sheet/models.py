@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import date
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ReturnMetrics:
     """Period return metrics for a portfolio."""
 
@@ -21,7 +21,7 @@ class ReturnMetrics:
     is_backtest: bool = False
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RiskMetrics:
     """Key risk metrics for display."""
 
@@ -31,7 +31,7 @@ class RiskMetrics:
     cvar_95: float | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class HoldingRow:
     """A single fund holding for the top-holdings table."""
 
@@ -40,7 +40,7 @@ class HoldingRow:
     weight: float
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AllocationBlock:
     """Allocation by block for pie chart."""
 
@@ -48,7 +48,7 @@ class AllocationBlock:
     weight: float
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class AttributionRow:
     """Brinson attribution row for institutional report."""
 
@@ -59,7 +59,7 @@ class AttributionRow:
     total_effect: float
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class StressRow:
     """Stress scenario result for institutional report."""
 
@@ -70,7 +70,7 @@ class StressRow:
     max_drawdown: float
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class NavPoint:
     """Single NAV data point for time series chart."""
 
@@ -79,7 +79,7 @@ class NavPoint:
     benchmark_nav: float | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RegimePoint:
     """Regime data point for overlay chart."""
 
@@ -87,7 +87,7 @@ class RegimePoint:
     regime: str  # "expansion", "contraction", "crisis"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FactSheetData:
     """All data needed to render a fact-sheet PDF.
 

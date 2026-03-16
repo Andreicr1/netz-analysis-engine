@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import date
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class StressScenario:
     """Definition of a historical stress scenario."""
 
