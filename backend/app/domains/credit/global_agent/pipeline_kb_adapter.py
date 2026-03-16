@@ -68,7 +68,6 @@ class PipelineKBAdapter:
 
         """
         from ai_engine.pipeline.storage_routing import _SAFE_PATH_SEGMENT_RE
-
         from app.services.azure.search_client import get_search_client
 
         safe_org = _validate_uuid(organization_id, "organization_id")

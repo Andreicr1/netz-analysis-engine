@@ -18,7 +18,6 @@ from ai_engine.extraction.search_upsert_service import (
     _validate_uuid,
 )
 
-
 # ── UUID validation ───────────────────────────────────────────────────
 
 
