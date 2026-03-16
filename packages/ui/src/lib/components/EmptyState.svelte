@@ -5,6 +5,8 @@
 	interface Props {
 		title: string;
 		message?: string;
+		/** Alias for message — accepts either prop name. */
+		description?: string;
 		actionLabel?: string;
 		onAction?: () => void;
 		class?: string;
@@ -14,11 +16,14 @@
 	let {
 		title,
 		message,
+		description,
 		actionLabel,
 		onAction,
 		class: className,
 		icon,
 	}: Props = $props();
+
+	let displayMessage = $derived(message ?? description);
 </script>
 
 <div
@@ -51,8 +56,8 @@
 		</div>
 	{/if}
 	<h3 class="text-lg font-semibold text-[var(--netz-text-primary)]">{title}</h3>
-	{#if message}
-		<p class="mt-1 max-w-sm text-sm text-[var(--netz-text-muted)]">{message}</p>
+	{#if displayMessage}
+		<p class="mt-1 max-w-sm text-sm text-[var(--netz-text-muted)]">{displayMessage}</p>
 	{/if}
 	{#if actionLabel && onAction}
 		<button

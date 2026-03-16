@@ -111,7 +111,6 @@ async def list_published_statements(
             {
                 "id": str(r.id),
                 "period_month": r.period_month,
-                "blob_path": r.blob_path,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
             }
             for r in rows
@@ -150,7 +149,6 @@ async def list_approved_documents(
                 "status": r.status,
                 "content_type": r.content_type,
                 "original_filename": r.original_filename,
-                "blob_uri": r.blob_uri,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
             }
             for r in rows

@@ -30,6 +30,21 @@ _DEFAULT_PNG = (
     b"\r\n\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
 )
 
+_DEFAULT_ETAG = hashlib.md5(_DEFAULT_PNG).hexdigest()[:16]  # noqa: S324
+
+
+def _asset_response(data: bytes, content_type: str) -> Response:
+    etag = hashlib.md5(data).hexdigest()[:16]  # noqa: S324
+    return Response(
+        content=data,
+        media_type=content_type,
+        headers={
+            "ETag": f'"{etag}"',
+            "Cache-Control": "public, max-age=86400",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
 
 @router.get(
     "/assets/tenant/{org_slug}/{asset_type}",
@@ -48,54 +63,18 @@ async def get_tenant_asset(org_slug: str, asset_type: str) -> Response:
             detail="Invalid asset type",
         )
 
-    # Use a fresh session without RLS — this is a public endpoint.
-    # We look up org by slug, not org_id, to prevent tenant enumeration.
+    # Public endpoint — no RLS. Filter by org_slug to isolate tenants.
     async with async_session_factory() as session:
-        # Find organization_id from slug via Clerk org claim in tenant_assets
-        # We query tenant_assets directly — the slug→org mapping is implicit
-        # (org_slug is stored in Clerk, not in our DB). For asset serving,
-        # we use a subquery approach: find assets where the org has uploaded them.
-        #
-        # Since we don't have an organizations table, we look up assets
-        # by joining with any existing asset for this slug. In practice,
-        # the admin frontend will have uploaded assets with the correct org_id.
-        #
-        # For now, we do a simple text-based lookup. The org_slug is passed
-        # to the URL by the branding endpoint which knows the real org.
         result = await session.execute(
             select(TenantAsset.data, TenantAsset.content_type).where(
+                TenantAsset.org_slug == org_slug,
                 TenantAsset.asset_type == asset_type,
             )
         )
-        # Since we can't filter by slug directly (no org table), we return
-        # the first match. In production with RLS disabled for this query,
-        # we'd need an organizations table. For now, this handles the
-        # single-tenant dev case and multi-tenant via explicit org_id mapping.
-        #
-        # TODO: Add org_slug column to tenant_assets or create organizations table
         row = result.first()
 
     if row is not None:
-        data, content_type = row
-        etag = hashlib.md5(data).hexdigest()[:16]  # noqa: S324
-        return Response(
-            content=data,
-            media_type=content_type,
-            headers={
-                "ETag": f'"{etag}"',
-                "Cache-Control": "public, max-age=86400",
-                "X-Content-Type-Options": "nosniff",
-            },
-        )
+        return _asset_response(row[0], row[1])
 
     # Unknown slug or no asset — return default Netz logo (never 404)
-    etag = hashlib.md5(_DEFAULT_PNG).hexdigest()[:16]  # noqa: S324
-    return Response(
-        content=_DEFAULT_PNG,
-        media_type="image/png",
-        headers={
-            "ETag": f'"{etag}"',
-            "Cache-Control": "public, max-age=86400",
-            "X-Content-Type-Options": "nosniff",
-        },
-    )
+    return _asset_response(_DEFAULT_PNG, "image/png")

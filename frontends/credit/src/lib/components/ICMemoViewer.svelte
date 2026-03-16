@@ -101,8 +101,8 @@
 					<StatusBadge status={chapter.status} type="review" />
 				</button>
 				{#if chapter.content}
-					<div class="mt-3 border-t border-[var(--netz-border)] pt-3 text-sm leading-relaxed text-[var(--netz-text-secondary)]">
-						{@html chapter.content}
+					<div class="mt-3 border-t border-[var(--netz-border)] pt-3 text-sm leading-relaxed whitespace-pre-wrap text-[var(--netz-text-secondary)]">
+						{chapter.content}
 					</div>
 				{:else if streamingChapters[chapter.chapter_number]}
 					<ICMemoStreamingChapter content={streamingChapters[chapter.chapter_number]} />

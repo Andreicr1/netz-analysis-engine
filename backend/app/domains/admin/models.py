@@ -36,6 +36,7 @@ class TenantAsset(Base, IdMixin, OrganizationScopedMixin):
         ),
     )
 
+    org_slug: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
     asset_type: Mapped[str] = mapped_column(Text, nullable=False)
     content_type: Mapped[str] = mapped_column(Text, nullable=False)
     data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
