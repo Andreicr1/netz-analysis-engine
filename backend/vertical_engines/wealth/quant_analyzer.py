@@ -9,12 +9,12 @@ No YAML loading, no @lru_cache — follows the quant_engine refactor pattern.
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
+import structlog
 from sqlalchemy.orm import Session
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 class QuantAnalyzer:
@@ -51,7 +51,7 @@ class QuantAnalyzer:
         dict
             Quant analysis result (CVaR, scores, drift, regime).
         """
-        logger.info("Running quant analysis fund=%s as_of=%s", fund_id, as_of)
+        logger.info("running_quant_analysis", fund_id=fund_id, as_of=as_of)
 
         # TODO(Sprint 5+): Wire to actual quant_engine services.
         # The pattern will be:

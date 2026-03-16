@@ -10,12 +10,12 @@ but with wealth-specific chapters and scoring.
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
+import structlog
 from sqlalchemy.orm import Session
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 # 7-chapter DD report structure
 DD_CHAPTERS = [
@@ -64,10 +64,7 @@ class DDReportEngine:
         dict
             Complete DD report with chapters, scores, and recommendation.
         """
-        logger.info(
-            "Generating DD report fund=%s target=%s actor=%s",
-            fund_id, target_id, actor_id,
-        )
+        logger.info("generating_dd_report", fund_id=fund_id, target_id=target_id, actor_id=actor_id)
 
         # TODO(Sprint 5+): Implement full chapter generation with LLM calls.
         # For now, return the chapter structure as scaffold.
