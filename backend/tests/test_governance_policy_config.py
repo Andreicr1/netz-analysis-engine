@@ -124,19 +124,15 @@ def test_resolve_unknown_fields_in_raw_policy():
 def test_load_with_config_bypasses_module_cache():
     invalidate_cache()
     config = {"single_manager_pct": 15.0}
-    policy = load_policy_thresholds(config=config, org_id="org-123")
+    policy = load_policy_thresholds(config=config)
 
     assert policy.single_manager_pct.value == 15.0
     assert policy.single_manager_pct.source == "ConfigService"
 
-    # Second call with different config for different org
+    # Different config returns different result (no caching — pure function)
     config2 = {"single_manager_pct": 10.0}
-    policy2 = load_policy_thresholds(config=config2, org_id="org-456")
+    policy2 = load_policy_thresholds(config=config2)
     assert policy2.single_manager_pct.value == 10.0
-
-    # Cached: same org returns cached value
-    policy3 = load_policy_thresholds(config=config, org_id="org-123")
-    assert policy3.single_manager_pct.value == 15.0
 
     invalidate_cache()
 

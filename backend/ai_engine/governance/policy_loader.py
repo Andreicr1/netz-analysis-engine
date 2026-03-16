@@ -161,22 +161,13 @@ class ThresholdEntry(BaseModel):
     extracted_by: str = "DEFAULT"
 
 
-# Known field names for summary/to_dict (replaces __dataclass_fields__)
-_KNOWN_THRESHOLD_FIELDS: list[str] = [
-    "single_manager_pct", "single_investment_pct", "single_sector_pct",
-    "single_geography_pct", "top3_names_pct",
-    "non_usd_unhedged_pct", "min_commingled_pct", "max_hard_lockup_pct",
-    "max_lockup_years", "min_quarterly_liquidity_pct",
-    "max_leverage_underlying_pct", "min_manager_track_record_years",
-    "min_manager_aum_usd", "max_manager_default_rate_pct",
-    "board_override_triggers", "watchlist_triggers",
-    "ic_approval_required_above_pct", "review_frequency_days",
-]
+# Known field names — derived from _DEFAULTS (single source of truth)
+_KNOWN_THRESHOLD_FIELDS: list[str] = list(_DEFAULTS.keys())
 
 
 class PolicyThresholds(BaseModel):
     """Full set of thresholds and governance rules for the concentration engine."""
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="ignore")
 
     # Concentration limits (% of total portfolio exposure) — hard limits
     single_manager_pct:    ThresholdEntry = Field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["single_manager_pct"]))
@@ -261,6 +252,10 @@ def resolve_governance_policy(config: dict[str, Any] | None = None) -> PolicyThr
                 raise TypeError(f"boolean not accepted for {field_name}")
             if isinstance(val, list):
                 coerced = [x for x in val if isinstance(x, str)]
+                if len(coerced) != len(val):
+                    logger.warning("POLICY_RESOLVE_LIST_FILTERED",
+                                   extra={"field": field_name, "original_len": len(val),
+                                          "filtered_len": len(coerced)})
             else:
                 coerced = float(val)
             overrides[field_name] = ThresholdEntry(
@@ -281,15 +276,9 @@ def resolve_governance_policy(config: dict[str, Any] | None = None) -> PolicyThr
 _cache: PolicyThresholds | None = None
 _CACHE_TTL_SECONDS = 3600
 
-# Tenant-keyed cache for ConfigService-resolved policies
-_tenant_cache: dict[str, tuple[float, PolicyThresholds]] = {}
-_TENANT_CACHE_TTL_SECONDS = 300
-
-
 def invalidate_cache() -> None:
     global _cache
     _cache = None
-    _tenant_cache.clear()
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -451,7 +440,6 @@ def load_policy_thresholds(
     *,
     force_reload: bool = False,
     config: dict[str, Any] | None = None,
-    org_id: str | None = None,
 ) -> PolicyThresholds:
     """Load policy thresholds from Azure Search indices.
 
@@ -460,24 +448,16 @@ def load_policy_thresholds(
       2. risk-policy-index        (Investment Policy, Credit Policy)
       3. Auditable defaults       (only if documents don't specify the value)
 
-    If ``config`` is provided, uses ConfigService resolver and tenant cache
-    instead of the module-level search-based cache.
+    If ``config`` is provided, uses ConfigService resolver directly
+    (no caching — resolve is a pure function, ~100µs).
 
     Cached for CACHE_TTL_SECONDS. Use force_reload=True to bypass cache.
     """
     global _cache
 
-    # ConfigService path: tenant-keyed cache
+    # ConfigService path: pure computation, no cache needed
     if config is not None:
-        cache_key = org_id or "__no_org__"
-        now = time.time()
-        if not force_reload and cache_key in _tenant_cache:
-            cached_at, cached_policy = _tenant_cache[cache_key]
-            if now - cached_at < _TENANT_CACHE_TTL_SECONDS:
-                return cached_policy
-        policy = resolve_governance_policy(config)
-        _tenant_cache[cache_key] = (now, policy)
-        return policy
+        return resolve_governance_policy(config)
 
     if not force_reload and _cache is not None:
         if time.time() - _cache.loaded_at < _CACHE_TTL_SECONDS:
