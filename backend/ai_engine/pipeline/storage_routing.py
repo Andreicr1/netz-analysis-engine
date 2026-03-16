@@ -84,6 +84,46 @@ def gold_memo_path(org_id: UUID, vertical: str, memo_id: str) -> str:
     return f"gold/{org_id}/{vertical}/memos/{memo_id}.json"
 
 
+def gold_fact_sheet_path(
+    org_id: UUID,
+    vertical: str,
+    portfolio_id: str,
+    as_of_date: str,
+    language: str,
+    filename: str,
+) -> str:
+    """``gold/{org_id}/{vertical}/fact_sheets/{portfolio_id}/{as_of_date}/{language}/{filename}``
+
+    Stores generated fact-sheet PDFs.  Language segment enables caching
+    both PT and EN versions independently.
+    """
+    _validate_vertical(vertical)
+    _validate_segment(portfolio_id, "portfolio_id")
+    _validate_segment(as_of_date, "as_of_date")
+    _validate_segment(language, "language")
+    _validate_segment(filename, "filename")
+    return (
+        f"gold/{org_id}/{vertical}/fact_sheets/"
+        f"{portfolio_id}/{as_of_date}/{language}/{filename}"
+    )
+
+
+def gold_dd_report_path(
+    org_id: UUID,
+    vertical: str,
+    report_id: str,
+    language: str,
+) -> str:
+    """``gold/{org_id}/{vertical}/dd_reports/{report_id}/{language}/report.pdf``
+
+    Stores generated DD Report PDFs.
+    """
+    _validate_vertical(vertical)
+    _validate_segment(report_id, "report_id")
+    _validate_segment(language, "language")
+    return f"gold/{org_id}/{vertical}/dd_reports/{report_id}/{language}/report.pdf"
+
+
 # ── Global paths (no org_id, no vertical) ──────────────────────────
 
 

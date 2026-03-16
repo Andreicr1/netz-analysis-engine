@@ -101,3 +101,26 @@ async def trigger_run_macro_ingestion(
 ) -> WorkerScheduledResponse:
     background_tasks.add_task(run_macro_ingestion)
     return WorkerScheduledResponse(status="scheduled", worker="run-macro-ingestion")
+
+
+@router.post(
+    "/run-fact-sheet-gen",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger monthly fact-sheet generation",
+    description=(
+        "Schedules the fact-sheet generation worker as a background task. "
+        "Generates executive and institutional PDFs for all active model "
+        "portfolios in Portuguese (default language). Uses advisory lock "
+        "to prevent concurrent runs. Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_fact_sheet_gen(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+) -> WorkerScheduledResponse:
+    from app.domains.wealth.workers.fact_sheet_gen import run_monthly_fact_sheets
+
+    background_tasks.add_task(run_monthly_fact_sheets)
+    return WorkerScheduledResponse(status="scheduled", worker="run-fact-sheet-gen")

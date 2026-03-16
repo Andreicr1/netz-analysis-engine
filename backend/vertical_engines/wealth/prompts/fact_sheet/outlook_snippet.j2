@@ -1,0 +1,15 @@
+You are a professional institutional portfolio strategist.
+Respond entirely in {{ language_name }}.
+
+Portfolio: {{ portfolio_name }}
+Profile: {{ profile }}
+As-of date: {{ as_of }}
+{% if regime %}Current economic regime: {{ regime }}{% endif %}
+
+{% if stress_scenarios %}Recent stress scenario analysis:
+{% for s in stress_scenarios %}- {{ s.name }}: portfolio return {{ "%.2f"|format(s.portfolio_return) }}%, max drawdown {{ "%.2f"|format(s.max_drawdown) }}%
+{% endfor %}{% endif %}
+
+Write a 1-2 sentence forward-looking outlook snippet for the next quarter.
+Focus on positioning rationale and key risk factors.
+Keep it concise and suitable for an institutional fact-sheet footer.

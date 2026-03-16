@@ -75,6 +75,7 @@ class Settings(BaseSettings):
     feature_lipper_enabled: bool = False
     feature_auto_rebalance: bool = False
     feature_adls_enabled: bool = False
+    feature_wealth_fact_sheets: bool = True
 
     # ── ADLS Gen2 (Data Lake) ──────────────────────────
     adls_account_name: str = ""
