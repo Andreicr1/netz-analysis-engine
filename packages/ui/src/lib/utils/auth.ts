@@ -187,6 +187,9 @@ export function createClerkHook(options: ClerkHookOptions = {}) {
 			throw redirect(303, "/auth/sign-in");
 		}
 
-		return resolve(event);
+		// Prevent CDN/edge caching of authenticated pages (#092)
+		const response = await resolve(event);
+		response.headers.set("Cache-Control", "private, no-store");
+		return response;
 	};
 }

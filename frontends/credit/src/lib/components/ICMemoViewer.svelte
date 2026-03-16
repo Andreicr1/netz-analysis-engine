@@ -8,6 +8,9 @@
 	import { createSSEStream } from "@netz/ui/utils";
 	import ICMemoStreamingChapter from "./ICMemoStreamingChapter.svelte";
 	import { createClientApiClient } from "$lib/api/client";
+	import { getContext } from "svelte";
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let {
 		icMemo,
@@ -34,14 +37,14 @@
 	async function generateMemo() {
 		generating = true;
 		try {
-			const api = createClientApiClient(() => Promise.resolve("dev-token"));
+			const api = createClientApiClient(getToken);
 			const result = await api.post<{ job_id: string }>(`/funds/${fundId}/deals/${dealId}/ic-memo`);
 
 			if (result.job_id) {
 				// Subscribe to SSE for chapter streaming
 				const sse = createSSEStream<{ chapter_number: number; content: string; status: string }>({
 					url: `/api/v1/jobs/${result.job_id}/stream`,
-					getToken: () => Promise.resolve("dev-token"),
+					getToken,
 					onEvent: (event) => {
 						if (event.chapter_number != null) {
 							streamingChapters = {

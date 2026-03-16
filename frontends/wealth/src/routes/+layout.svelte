@@ -5,9 +5,10 @@
 	import "../app.css";
 	import { page } from "$app/stores";
 	import { AppShell, Sidebar, ErrorBoundary, Toast } from "@netz/ui";
-	import { brandingToCSS, startSessionExpiryMonitor, setConflictHandler, setAuthRedirectHandler } from "@netz/ui/utils";
+	import { injectBranding, startSessionExpiryMonitor, setConflictHandler, setAuthRedirectHandler } from "@netz/ui/utils";
 	import type { NavItem } from "@netz/ui/utils";
 	import { goto, invalidateAll } from "$app/navigation";
+	import { setContext } from "svelte";
 	import type { LayoutData } from "./$types";
 
 	let { data, children }: { data: LayoutData; children: import("svelte").Snippet } = $props();
@@ -16,8 +17,15 @@
 	let showExpiryWarning = $state(false);
 	let conflictMessage = $state<string | null>(null);
 
-	// Branding CSS injection
-	let brandingCSS = $derived(brandingToCSS(data.branding));
+	// Auth context — provides getToken to child components (#084)
+	setContext("netz:getToken", () => Promise.resolve(data.token));
+
+	// Branding CSS injection via DOM API (safe — setProperty auto-escapes values)
+	$effect(() => {
+		if (typeof document !== "undefined") {
+			injectBranding(document.documentElement, data.branding);
+		}
+	});
 
 	// Navigation items — wealth vertical
 	const navItems: NavItem[] = [
@@ -52,10 +60,6 @@
 		});
 	});
 </script>
-
-<svelte:head>
-	{@html `<style>:root { ${brandingCSS} }</style>`}
-</svelte:head>
 
 <ErrorBoundary>
 	<AppShell {sidebarCollapsed}>

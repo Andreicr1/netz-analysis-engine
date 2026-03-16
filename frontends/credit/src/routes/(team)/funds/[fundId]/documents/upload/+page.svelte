@@ -11,7 +11,9 @@
 	import { createSSEStream } from "@netz/ui/utils";
 	import IngestionProgress from "$lib/components/IngestionProgress.svelte";
 	import { createClientApiClient } from "$lib/api/client";
-	import { page } from "$app/stores";
+	import { getContext } from "svelte";
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let file = $state<File | null>(null);
 	let uploading = $state(false);
@@ -39,7 +41,7 @@
 		uploadError = null;
 
 		try {
-			const api = createClientApiClient(() => Promise.resolve("dev-token"));
+			const api = createClientApiClient(getToken);
 
 			// Step 1: Get SAS upload URL
 			const uploadUrl = await api.post<{ upload_url: string; document_id: string }>(
