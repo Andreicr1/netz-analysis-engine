@@ -1,0 +1,54 @@
+{
+  "app": {
+    "name": "Netz Credit Intelligence",
+    "tagline": "Institutional Credit Analysis Platform"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "pipeline": "Pipeline",
+    "portfolio": "Portfolio",
+    "documents": "Documents",
+    "reporting": "Reporting",
+    "copilot": "Copilot"
+  },
+  "deal_stages": {
+    "INTAKE": "Intake",
+    "SCREENING": "Screening",
+    "QUALIFIED": "Qualified",
+    "IC_REVIEW": "IC Review",
+    "APPROVED": "Approved",
+    "REJECTED": "Rejected",
+    "CONVERTED": "Converted",
+    "ARCHIVED": "Archived"
+  },
+  "review_statuses": {
+    "PENDING": "Pending",
+    "UNDER_REVIEW": "Under Review",
+    "APPROVED": "Approved",
+    "REJECTED": "Rejected",
+    "REVISION_REQUESTED": "Revision Requested"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "retry": "Retry",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "download": "Download",
+    "upload": "Upload",
+    "search": "Search",
+    "filter": "Filter",
+    "no_data": "No data available",
+    "confirm": "Confirm",
+    "back": "Back"
+  },
+  "session": {
+    "expiry_title": "Session Expiring",
+    "expiry_message": "Your session expires in 5 minutes. Please save your work and renew your access.",
+    "renew": "Renew Session",
+    "dismiss": "Dismiss"
+  }
+}

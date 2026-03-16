@@ -1,0 +1,54 @@
+{
+  "app": {
+    "name": "Netz Credit Intelligence",
+    "tagline": "Plataforma de Analise de Credito Institucional"
+  },
+  "nav": {
+    "dashboard": "Painel",
+    "pipeline": "Pipeline",
+    "portfolio": "Carteira",
+    "documents": "Documentos",
+    "reporting": "Relatorios",
+    "copilot": "Copilot"
+  },
+  "deal_stages": {
+    "INTAKE": "Entrada",
+    "SCREENING": "Triagem",
+    "QUALIFIED": "Qualificado",
+    "IC_REVIEW": "Revisao IC",
+    "APPROVED": "Aprovado",
+    "REJECTED": "Rejeitado",
+    "CONVERTED": "Convertido",
+    "ARCHIVED": "Arquivado"
+  },
+  "review_statuses": {
+    "PENDING": "Pendente",
+    "UNDER_REVIEW": "Em Revisao",
+    "APPROVED": "Aprovado",
+    "REJECTED": "Rejeitado",
+    "REVISION_REQUESTED": "Revisao Solicitada"
+  },
+  "common": {
+    "loading": "Carregando...",
+    "error": "Ocorreu um erro",
+    "retry": "Tentar novamente",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "delete": "Excluir",
+    "edit": "Editar",
+    "create": "Criar",
+    "download": "Baixar",
+    "upload": "Enviar",
+    "search": "Buscar",
+    "filter": "Filtrar",
+    "no_data": "Nenhum dado disponivel",
+    "confirm": "Confirmar",
+    "back": "Voltar"
+  },
+  "session": {
+    "expiry_title": "Sessao Expirando",
+    "expiry_message": "Sua sessao expira em 5 minutos. Salve seu trabalho e renove seu acesso.",
+    "renew": "Renovar Sessao",
+    "dismiss": "Dispensar"
+  }
+}
