@@ -1,0 +1,39 @@
+/* ============================================================
+ * Netz Design Tokens — Core Colors
+ * All tokens use --netz- prefix and are overridable via CSS
+ * custom properties cascade for tenant branding.
+ * ============================================================ */
+
+:root {
+	/* ── Brand ─────────────────────────────────────────────── */
+	--netz-brand-primary: #1b365d; /* navy */
+	--netz-brand-secondary: #3a7bd5; /* blue */
+	--netz-brand-accent: #8b9daf; /* slate */
+	--netz-brand-light: #d4e4f7; /* light blue */
+	--netz-brand-highlight: #ff975a; /* orange */
+
+	/* ── Surface ───────────────────────────────────────────── */
+	--netz-surface: #ffffff;
+	--netz-surface-alt: #f8fafc;
+
+	/* ── Border ────────────────────────────────────────────── */
+	--netz-border: #e2e8f0;
+
+	/* ── Text ──────────────────────────────────────────────── */
+	--netz-text-primary: #0f172a;
+	--netz-text-secondary: #475569;
+	--netz-text-muted: #94a3b8;
+
+	/* ── Semantic ──────────────────────────────────────────── */
+	--netz-success: #10b981;
+	--netz-warning: #f59e0b;
+	--netz-danger: #ef4444;
+	--netz-info: #3b82f6;
+
+	/* ── Chart palette ─────────────────────────────────────── */
+	--netz-chart-1: #1b365d; /* navy */
+	--netz-chart-2: #3a7bd5; /* blue */
+	--netz-chart-3: #ff975a; /* orange */
+	--netz-chart-4: #8b9daf; /* slate */
+	--netz-chart-5: #d4e4f7; /* light blue */
+}

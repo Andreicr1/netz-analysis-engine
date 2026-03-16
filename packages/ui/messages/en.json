@@ -1,0 +1,93 @@
+{
+	"actions": {
+		"save": "Save",
+		"cancel": "Cancel",
+		"delete": "Delete",
+		"edit": "Edit",
+		"create": "Create",
+		"submit": "Submit",
+		"confirm": "Confirm",
+		"close": "Close",
+		"back": "Back",
+		"next": "Next",
+		"retry": "Retry",
+		"refresh": "Refresh",
+		"search": "Search",
+		"filter": "Filter",
+		"export": "Export",
+		"import": "Import",
+		"download": "Download",
+		"upload": "Upload",
+		"apply": "Apply",
+		"reset": "Reset",
+		"clear": "Clear",
+		"select": "Select",
+		"selectAll": "Select all",
+		"deselectAll": "Deselect all",
+		"copyToClipboard": "Copy to clipboard",
+		"viewDetails": "View details",
+		"showMore": "Show more",
+		"showLess": "Show less",
+		"expandAll": "Expand all",
+		"collapseAll": "Collapse all"
+	},
+	"errors": {
+		"generic": "Something went wrong. Please try again.",
+		"notFound": "Resource not found.",
+		"unauthorized": "You are not authorized to perform this action.",
+		"forbidden": "Access denied.",
+		"validation": "Please check the form for errors.",
+		"network": "Network error. Please check your connection.",
+		"timeout": "Request timed out. Please try again.",
+		"serverError": "Server error. Please try again later.",
+		"fileTooBig": "File exceeds the maximum allowed size.",
+		"unsupportedFormat": "Unsupported file format."
+	},
+	"empty": {
+		"noData": "No data available.",
+		"noResults": "No results found.",
+		"noItems": "No items to display.",
+		"noMatches": "No matches for your search.",
+		"emptyTable": "This table is empty.",
+		"getStarted": "Get started by creating your first item."
+	},
+	"table": {
+		"rowsPerPage": "Rows per page",
+		"of": "of",
+		"showing": "Showing",
+		"to": "to",
+		"entries": "entries",
+		"sortAscending": "Sort ascending",
+		"sortDescending": "Sort descending",
+		"noSort": "Remove sort",
+		"columns": "Columns"
+	},
+	"pagination": {
+		"first": "First",
+		"previous": "Previous",
+		"next": "Next",
+		"last": "Last",
+		"page": "Page",
+		"goToPage": "Go to page"
+	},
+	"status": {
+		"active": "Active",
+		"inactive": "Inactive",
+		"pending": "Pending",
+		"approved": "Approved",
+		"rejected": "Rejected",
+		"draft": "Draft",
+		"published": "Published",
+		"archived": "Archived",
+		"processing": "Processing",
+		"complete": "Complete",
+		"failed": "Failed",
+		"cancelled": "Cancelled",
+		"inReview": "In review",
+		"onHold": "On hold"
+	},
+	"language": {
+		"en": "English",
+		"pt": "Portuguese"
+	}
+}

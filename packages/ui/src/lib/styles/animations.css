@@ -1,0 +1,107 @@
+/* ============================================================
+ * Netz Design Tokens — Animations & Transitions
+ * Duration tokens + reusable @keyframes definitions.
+ * ============================================================ */
+
+:root {
+	/* ── Durations ─────────────────────────────────────────── */
+	--netz-duration-fast: 150ms;
+	--netz-duration-normal: 250ms;
+	--netz-duration-slow: 350ms;
+
+	/* ── Easing ────────────────────────────────────────────── */
+	--netz-ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+	--netz-ease-in: cubic-bezier(0.4, 0, 1, 1);
+	--netz-ease-out: cubic-bezier(0, 0, 0.2, 1);
+	--netz-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Keyframes: slide-in (context panel) ───────────────────── */
+@keyframes netz-slide-in {
+	from {
+		opacity: 0;
+		transform: translateX(100%);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
+}
+
+@keyframes netz-slide-out {
+	from {
+		opacity: 1;
+		transform: translateX(0);
+	}
+	to {
+		opacity: 0;
+		transform: translateX(100%);
+	}
+}
+
+/* ── Keyframes: fade (modals) ──────────────────────────────── */
+@keyframes netz-fade-in {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes netz-fade-out {
+	from {
+		opacity: 1;
+	}
+	to {
+		opacity: 0;
+	}
+}
+
+/* ── Keyframes: scale-in ───────────────────────────────────── */
+@keyframes netz-scale-in {
+	from {
+		opacity: 0;
+		transform: scale(0.95);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+
+@keyframes netz-scale-out {
+	from {
+		opacity: 1;
+		transform: scale(1);
+	}
+	to {
+		opacity: 0;
+		transform: scale(0.95);
+	}
+}
+
+/* ── Utility classes ───────────────────────────────────────── */
+.netz-animate-slide-in {
+	animation: netz-slide-in var(--netz-duration-normal) var(--netz-ease-out) both;
+}
+
+.netz-animate-slide-out {
+	animation: netz-slide-out var(--netz-duration-normal) var(--netz-ease-in) both;
+}
+
+.netz-animate-fade-in {
+	animation: netz-fade-in var(--netz-duration-fast) var(--netz-ease-out) both;
+}
+
+.netz-animate-fade-out {
+	animation: netz-fade-out var(--netz-duration-fast) var(--netz-ease-in) both;
+}
+
+.netz-animate-scale-in {
+	animation: netz-scale-in var(--netz-duration-normal) var(--netz-ease-out) both;
+}
+
+.netz-animate-scale-out {
+	animation: netz-scale-out var(--netz-duration-normal) var(--netz-ease-in) both;
+}

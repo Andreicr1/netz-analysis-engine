@@ -1,0 +1,53 @@
+/* ============================================================
+ * Netz Design Tokens — Typography
+ * Inter Variable for prose, JetBrains Mono for code.
+ * ============================================================ */
+
+@import "@fontsource-variable/inter";
+
+:root {
+	/* ── Font families ─────────────────────────────────────── */
+	--netz-font-sans: "Inter Variable", Inter, system-ui, sans-serif;
+	--netz-font-mono: "JetBrains Mono", monospace;
+
+	/* ── Heading sizes ─────────────────────────────────────── */
+	--netz-text-h1: 2.25rem; /* 36px */
+	--netz-text-h2: 1.875rem; /* 30px */
+	--netz-text-h3: 1.5rem; /* 24px */
+	--netz-text-h4: 1.25rem; /* 20px */
+	--netz-text-h5: 1.125rem; /* 18px */
+	--netz-text-h6: 1rem; /* 16px */
+
+	/* ── Body sizes ────────────────────────────────────────── */
+	--netz-text-body: 0.9375rem; /* 15px */
+	--netz-text-small: 0.8125rem; /* 13px */
+	--netz-text-mono: 0.875rem; /* 14px */
+
+	/* ── Line heights ──────────────────────────────────────── */
+	--netz-leading-h1: 2.5rem; /* 40px */
+	--netz-leading-h2: 2.25rem; /* 36px */
+	--netz-leading-h3: 2rem; /* 32px */
+	--netz-leading-h4: 1.75rem; /* 28px */
+	--netz-leading-h5: 1.5rem; /* 24px */
+	--netz-leading-h6: 1.5rem; /* 24px */
+	--netz-leading-body: 1.625rem; /* 26px */
+	--netz-leading-small: 1.25rem; /* 20px */
+	--netz-leading-mono: 1.5rem; /* 24px */
+
+	/* ── Letter spacing ────────────────────────────────────── */
+	--netz-tracking-h1: -0.025em;
+	--netz-tracking-h2: -0.02em;
+	--netz-tracking-h3: -0.015em;
+	--netz-tracking-h4: -0.01em;
+	--netz-tracking-h5: -0.005em;
+	--netz-tracking-h6: 0em;
+	--netz-tracking-body: 0em;
+	--netz-tracking-small: 0.01em;
+	--netz-tracking-mono: -0.02em;
+
+	/* ── Font weights ──────────────────────────────────────── */
+	--netz-weight-normal: 400;
+	--netz-weight-medium: 500;
+	--netz-weight-semibold: 600;
+	--netz-weight-bold: 700;
+}
