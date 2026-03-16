@@ -10,10 +10,9 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.db.engine import async_session_factory
 from app.core.security.clerk_auth import Actor, require_role
-from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.admin.schemas import PipelineStats, TenantUsage, WorkerStatus
 from app.shared.enums import Role
 
@@ -30,7 +29,6 @@ router = APIRouter(prefix="/admin/health", tags=["admin-health"])
 )
 async def get_worker_status(
     actor: Actor = Depends(require_role(Role.ADMIN)),
-    db: AsyncSession = Depends(get_db_with_rls),
 ) -> list[WorkerStatus]:
     """Worker status from Redis or DB worker registry.
 
@@ -84,7 +82,7 @@ async def get_worker_status(
             )
         return statuses
     except Exception:
-        logger.debug("Redis unavailable for worker status — returning unknown status")
+        logger.warning("Redis unavailable for worker status — returning unknown status")
         return [
             WorkerStatus(name=name, status="unknown")
             for name in workers
@@ -98,7 +96,6 @@ async def get_worker_status(
 )
 async def get_pipeline_stats(
     actor: Actor = Depends(require_role(Role.ADMIN)),
-    db: AsyncSession = Depends(get_db_with_rls),
 ) -> PipelineStats:
     """Pipeline stats from DB counters or Redis.
 
@@ -122,7 +119,7 @@ async def get_pipeline_stats(
             error_rate=round(error_rate, 4),
         )
     except Exception:
-        logger.debug("Redis unavailable for pipeline stats")
+        logger.warning("Redis unavailable for pipeline stats")
         return PipelineStats()
 
 
@@ -133,34 +130,34 @@ async def get_pipeline_stats(
 )
 async def get_tenant_usage(
     actor: Actor = Depends(require_role(Role.ADMIN)),
-    db: AsyncSession = Depends(get_db_with_rls),
 ) -> list[TenantUsage]:
     """Per-tenant usage from DB aggregations.
+
+    Uses async_session_factory directly (no RLS) because this endpoint
+    needs cross-tenant aggregation for admin dashboards.
 
     Currently aggregates document counts as a proxy for usage.
     Expand with API call counts and storage metrics as instrumentation grows.
     """
-    # For now, return a placeholder since we need instrumentation
-    # to track API calls and storage per tenant. We can aggregate
-    # from existing tables (documents, memos) as a starting point.
     try:
-        result = await db.execute(
-            text("""
-                SELECT organization_id, COUNT(*) as doc_count
-                FROM vertical_config_overrides
-                GROUP BY organization_id
-                ORDER BY organization_id
-            """)
-        )
-        return [
-            TenantUsage(
-                organization_id=row[0],
-                api_calls=0,
-                storage_bytes=0,
-                memos_generated=row[1],
+        async with async_session_factory() as session:
+            result = await session.execute(
+                text("""
+                    SELECT organization_id, COUNT(*) as doc_count
+                    FROM vertical_config_overrides
+                    GROUP BY organization_id
+                    ORDER BY organization_id
+                """)
             )
-            for row in result.all()
-        ]
+            return [
+                TenantUsage(
+                    organization_id=row[0],
+                    api_calls=0,
+                    storage_bytes=0,
+                    memos_generated=row[1],
+                )
+                for row in result.all()
+            ]
     except Exception:
-        logger.debug("Failed to query tenant usage")
+        logger.warning("Failed to query tenant usage")
         return []

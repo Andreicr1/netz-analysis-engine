@@ -179,6 +179,15 @@ async def _seed_configs(
 
     Skips entries that already exist (idempotent).
     """
+    # Pre-fetch all existing overrides for this org in one query (avoid N+1)
+    existing_result = await db.execute(
+        select(
+            VerticalConfigOverride.vertical,
+            VerticalConfigOverride.config_type,
+        ).where(VerticalConfigOverride.organization_id == org_id)
+    )
+    existing_keys = {(r[0], r[1]) for r in existing_result.all()}
+
     count = 0
     for vertical in verticals:
         defaults_result = await db.execute(
@@ -189,15 +198,7 @@ async def _seed_configs(
         defaults = defaults_result.scalars().all()
 
         for default in defaults:
-            # Check if override already exists
-            existing = await db.execute(
-                select(VerticalConfigOverride.id).where(
-                    VerticalConfigOverride.organization_id == org_id,
-                    VerticalConfigOverride.vertical == vertical,
-                    VerticalConfigOverride.config_type == default.config_type,
-                )
-            )
-            if existing.scalar_one_or_none() is not None:
+            if (vertical, default.config_type) in existing_keys:
                 continue
 
             # Create override with default config as starting point

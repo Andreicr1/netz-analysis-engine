@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import uuid
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -18,7 +19,7 @@ class PromptInfo(BaseModel):
     description: str | None = None
     has_org_override: bool = False
     has_global_override: bool = False
-    source_level: str  # "org", "global", or "filesystem"
+    source_level: Literal["org", "global", "filesystem"]
 
 
 class PromptContent(BaseModel):
@@ -29,7 +30,7 @@ class PromptContent(BaseModel):
     vertical: str
     template_name: str
     content: str
-    source_level: str  # "org", "global", or "filesystem"
+    source_level: Literal["org", "global", "filesystem"]
     version: int | None = None
 
 
@@ -39,7 +40,6 @@ class PromptUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     content: str
-    org_id: uuid.UUID | None = None  # None = global override
 
 
 class PromptPreviewRequest(BaseModel):
@@ -48,7 +48,7 @@ class PromptPreviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     content: str
-    sample_data: dict
+    sample_data: dict[str, Any]
 
 
 class PromptPreviewResponse(BaseModel):
@@ -67,6 +67,15 @@ class PromptValidateResponse(BaseModel):
 
     valid: bool
     errors: list[str]
+
+
+class PromptWriteResponse(BaseModel):
+    """Response after writing a prompt override."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    version: int
+    message: str
 
 
 class PromptVersionInfo(BaseModel):

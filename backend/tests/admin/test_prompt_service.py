@@ -50,8 +50,7 @@ class TestPromptValidation:
 
 class TestPromptPreview:
     def test_simple_render(self):
-        service = PromptService.__new__(PromptService)
-        result = service.preview(
+        result = PromptService.preview(
             content="Hello {{ name }}, you have {{ count }} items.",
             sample_data={"name": "Alice", "count": 5},
         )
@@ -59,16 +58,14 @@ class TestPromptPreview:
         assert result.errors is None
 
     def test_render_with_loop(self):
-        service = PromptService.__new__(PromptService)
-        result = service.preview(
+        result = PromptService.preview(
             content="{% for item in items %}{{ item }} {% endfor %}",
             sample_data={"items": ["A", "B", "C"]},
         )
         assert result.rendered.strip() == "A B C"
 
     def test_render_syntax_error(self):
-        service = PromptService.__new__(PromptService)
-        result = service.preview(
+        result = PromptService.preview(
             content="Hello {{ name }",
             sample_data={"name": "Alice"},
         )
@@ -77,8 +74,7 @@ class TestPromptPreview:
         assert len(result.errors) > 0
 
     def test_render_blocks_dunder_access(self):
-        service = PromptService.__new__(PromptService)
-        result = service.preview(
+        result = PromptService.preview(
             content="{{ obj.__class__.__mro__ }}",
             sample_data={"obj": "test"},
         )
@@ -88,12 +84,57 @@ class TestPromptPreview:
 
     def test_render_missing_variable(self):
         """Missing variables should render as empty string (Jinja2 default)."""
-        service = PromptService.__new__(PromptService)
-        result = service.preview(
+        result = PromptService.preview(
             content="Hello {{ name }}, welcome.",
             sample_data={},
         )
         assert result.rendered == "Hello , welcome."
+        assert result.errors is None
+
+
+class TestPromptFilterWhitelist:
+    """Verify AdminSandboxedEnvironment enforces _SAFE_FILTERS."""
+
+    def test_safe_filter_allowed(self):
+        result = PromptService.preview(
+            content="{{ name | upper }}",
+            sample_data={"name": "alice"},
+        )
+        assert result.rendered == "ALICE"
+        assert result.errors is None
+
+    def test_safe_filter_default_allowed(self):
+        result = PromptService.preview(
+            content="{{ missing | default('fallback') }}",
+            sample_data={},
+        )
+        assert result.rendered == "fallback"
+        assert result.errors is None
+
+    def test_unsafe_filter_blocked(self):
+        result = PromptService.preview(
+            content="{{ '<b>x</b>' | forceescape }}",
+            sample_data={},
+        )
+        assert result.rendered == ""
+        assert result.errors is not None
+        assert any("filter" in e.lower() for e in result.errors)
+
+    def test_unsafe_filter_xmlattr_blocked(self):
+        result = PromptService.preview(
+            content="{{ items | xmlattr }}",
+            sample_data={"items": {"class": "x"}},
+        )
+        assert result.rendered == ""
+        assert result.errors is not None
+        assert any("filter" in e.lower() for e in result.errors)
+
+    def test_chained_safe_filters_allowed(self):
+        result = PromptService.preview(
+            content="{{ name | lower | capitalize }}",
+            sample_data={"name": "BOB"},
+        )
+        assert result.rendered == "Bob"
         assert result.errors is None
 
 
