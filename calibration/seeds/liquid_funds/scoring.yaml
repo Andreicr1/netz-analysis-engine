@@ -1,0 +1,31 @@
+# SEED DATA ONLY — loaded by migration. Runtime config is in PostgreSQL.
+# Fund scoring weights for the liquid_funds vertical.
+# Sources: internal methodology, scoring_service.py defaults.
+# Schema-free: any key/value can be added via VerticalConfigOverride.
+
+manager_score:
+  weights:
+    return_1y: 0.20
+    sharpe_1y: 0.20
+    sortino_1y: 0.10
+    max_drawdown_1y: 0.15
+    alpha_1y: 0.10
+    information_ratio_1y: 0.10
+    volatility_1y: 0.10
+    dtw_drift_score: 0.05
+
+  # Score normalization ranges (min/max for 0-100 mapping)
+  normalization:
+    return_1y: [-0.20, 0.40]
+    sharpe_1y: [-0.50, 3.00]
+    sortino_1y: [-0.50, 4.00]
+    max_drawdown_1y: [-0.40, 0.00]  # inverted: less drawdown = better
+    alpha_1y: [-0.10, 0.20]
+    information_ratio_1y: [-1.00, 2.00]
+    volatility_1y: [0.30, 0.03]  # inverted: less volatility = better
+    dtw_drift_score: [1.00, 0.00]  # inverted: less drift = better
+
+fund_approval:
+  min_manager_score: 40.0
+  auto_approve_threshold: 75.0
+  watchlist_threshold: 55.0

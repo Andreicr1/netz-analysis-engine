@@ -1,0 +1,67 @@
+# SEED DATA ONLY — loaded by migration. Runtime config is in PostgreSQL.
+# DD Report generation configuration for the liquid_funds vertical.
+# Schema-free: any key/value can be added via VerticalConfigOverride.
+
+chapter_configs:
+  executive_summary:
+    max_tokens: 3000
+    timeout_seconds: 30
+    type: ANALYTICAL
+  investment_strategy:
+    max_tokens: 2500
+    timeout_seconds: 30
+    type: DESCRIPTIVE
+  manager_assessment:
+    max_tokens: 4000
+    timeout_seconds: 30
+    type: ANALYTICAL
+  performance_analysis:
+    max_tokens: 4000
+    timeout_seconds: 30
+    type: ANALYTICAL
+  risk_framework:
+    max_tokens: 4000
+    timeout_seconds: 30
+    type: ANALYTICAL
+  fee_analysis:
+    max_tokens: 2500
+    timeout_seconds: 30
+    type: DESCRIPTIVE
+  operational_dd:
+    max_tokens: 2500
+    timeout_seconds: 30
+    type: DESCRIPTIVE
+  recommendation:
+    max_tokens: 4000
+    timeout_seconds: 45
+    type: ANALYTICAL
+
+critic:
+  max_iterations: 3
+  circuit_breaker_seconds: 180
+  min_chapters_for_recommendation: 5
+  taxonomy:
+    ACCEPT: "Chapter meets quality standards"
+    REVISE: "Specific feedback provided, chapter will be regenerated"
+    ESCALATE: "Human review required"
+
+evidence:
+  max_documents_per_chapter: 20
+  max_chunk_chars: 2000
+  required_sections:
+    - fund_identity
+    - quant_profile
+    - risk_metrics
+
+confidence_scoring:
+  weights:
+    chapter_completeness: 0.30
+    evidence_coverage: 0.25
+    quant_data_quality: 0.25
+    critic_outcome: 0.20
+
+concurrency:
+  llm_semaphore: 5
+  per_chapter_timeout: 30
+  composite_timeout: 180
+  per_call_timeout: 60
