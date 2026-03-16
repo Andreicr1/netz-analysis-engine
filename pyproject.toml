@@ -62,6 +62,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_test_loop_scope = "session"
 testpaths = ["backend/tests"]
 pythonpath = ["backend", "."]
 python_files = ["test_*.py"]
@@ -102,6 +103,8 @@ ignore = [
 
 [tool.mypy]
 python_version = "3.12"
+mypy_path = "backend"
+explicit_package_bases = true
 strict = true
 plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
 warn_return_any = true

@@ -92,7 +92,8 @@ def upgrade() -> None:
     # ═══════════════════════════════════════════════════════════════
     #  SEED: governance_policy config for private_credit
     # ═══════════════════════════════════════════════════════════════
-    op.execute(
+    bind = op.get_bind()
+    bind.execute(
         sa.text("""
             INSERT INTO vertical_config_defaults
                 (id, vertical, config_type, config, description, created_by)
