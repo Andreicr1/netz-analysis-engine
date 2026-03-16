@@ -10,47 +10,134 @@ origin: docs/brainstorms/2026-03-15-wealth-vertical-complete-modularization-brai
 
 ## Enhancement Summary
 
-**Deepened on:** 2026-03-15
-**Review agents used:** Architecture Strategist, Performance Oracle, Security Sentinel, Data Integrity Guardian, Code Simplicity Reviewer, Pattern Recognition Specialist, Best Practices Researcher, Deployment Verification Agent
+**Deepened on:** 2026-03-15 (round 1), 2026-03-16 (round 2 — 12 parallel agents)
+**Round 2 agents:** Architecture Strategist, Performance Oracle, Security Sentinel, Data Integrity Guardian, Code Simplicity Reviewer, Deployment Verification Agent, Credit Pattern Explorer, Learnings Researcher, Best Practices (ReportLab PDF, Async DAG, Brinson-Fachler Attribution, Fund Scoring & Portfolio Construction)
 
-### Critical Fixes Applied
+### Round 1 Fixes (2026-03-15)
 
-1. **Migration numbering collision** — renamed from `0006` to `0007` (`0006_macro_reviews` already exists). Deploying a second `0006` would cause Alembic "multiple heads" error. (Data Integrity)
-2. **DDChapter missing `organization_id`** — added direct column + RLS policy for independent tenant isolation. Join-based RLS through `dd_reports` is insufficient when `DDChapter` is queried directly. (Architecture + Security)
-3. **Chapters reduced from 11 to 8** — removed ESG (no data provider), Peer Comparison (empty universe at launch), Liquidity Risk (folded into Risk Framework for `liquid_funds` vertical). Saves ~50% LLM calls per report. (Simplicity)
-4. **Parallel chapter generation** — DAG pattern matching Credit's `asyncio.gather()` + `Semaphore`. Chapters 1-7 in parallel, chapter 8 (Recommendation) sequential after. Brings worst-case from ~275s to ~90s. (Performance — CRITICAL for <5min target)
-5. **Critic extracted as sibling package** — `wealth/critic/` instead of nested in `dd_report/`. Mirrors Credit's `credit/critic/` exactly. Enables reuse by content production. (Pattern Recognition)
-6. **UniverseApproval: separate nullable FKs** — replaced polymorphic `(asset_type, asset_id)` with `fund_id FK` + `bond_id FK` + CHECK(exactly one non-null). Preserves referential integrity + CASCADE. (Data Integrity)
-7. **Partial unique indexes on `is_current`** — `CREATE UNIQUE INDEX ... WHERE is_current = true` on `dd_reports` and `universe_approvals`. Prevents application-level bugs from creating multiple "current" records. (Data Integrity)
-8. **Security prerequisites added** — (a) Fix `PromptRegistry` to use `SandboxedEnvironment` (currently uses unsandboxed `Environment`). (b) Migrate all existing wealth routes from `get_db` to `get_db_with_rls` (5 routes bypass RLS). Both are pre-existing vulnerabilities. (Security — CRITICAL)
-9. **SSE tenant scoping** — channel naming `wealth:dd:{org_id}:{report_id}`, verify ownership before subscription. (Security)
+1. **Migration numbering collision** — renamed from `0006` to `0007` to `0008` (see fix #25). (Data Integrity)
+2. **DDChapter missing `organization_id`** — added direct column + RLS policy for independent tenant isolation. (Architecture + Security)
+3. **Chapters reduced from 11 to 8** — removed ESG, Peer Comparison, Liquidity Risk (folded into Risk Framework). (Simplicity)
+4. **Parallel chapter generation** — DAG pattern: chapters 1-7 in parallel, chapter 8 sequential. (Performance)
+5. **Critic extracted as sibling package** — `wealth/critic/` mirrors `credit/critic/`. (Pattern Recognition)
+6. **UniverseApproval: separate nullable FKs** — ~~`fund_id FK` + `bond_id FK` + CHECK~~ → simplified in fix #30. (Data Integrity)
+7. **Partial unique indexes on `is_current`** — prevents multiple "current" records. (Data Integrity)
+8. **Security prerequisites** — (a) PromptRegistry SandboxedEnvironment fix, (b) 5 wealth routes → get_db_with_rls. (Security — CRITICAL)
+9. **SSE tenant scoping** — `wealth:dd:{org_id}:{report_id}`, verify ownership before subscription. (Security)
 10. **Self-approval prevention** — enforce `decided_by != created_by` on governance endpoints. (Security)
-11. **Phases compressed from 7 to 5** — merged Phase 1+2 (DD Report is one feature), collapsed Phase 6+7 into Phase 5 (Polish). Bond analysis deferred. (Simplicity)
-12. **Bond analysis deferred** — `Bond` model kept in migration (zero cost), but `bond_analysis/` package, auto-approval flow, and bond API routes deferred until bond data provider exists. (Simplicity — YAGNI)
-13. **Content production dissolved** — replaced 6-file package with standalone files. `investment_outlook.py` extends `macro_committee_engine.py`. `flash_report.py` and `manager_spotlight.py` are independent files. No `client_report.py` scaffold (YAGNI). (Simplicity)
-14. **Feature flags for phased rollout** — `FEATURE_WEALTH_DD_REPORTS`, `FEATURE_WEALTH_UNIVERSE`, etc. Routes return 503 when flag disabled. Avoids all-or-nothing rollback. (Deployment)
-15. **Brinson-Fachler with Carino linking** — upgraded from basic Brinson to Brinson-Fachler (relative benchmark adjustment) with Carino (1999) multi-period linking. Deferred to when benchmark data available. (Best Practices)
-16. **Incremental live NAV** — daily worker stores previous NAV, fetches only latest day's returns. Full recomputation only on-demand. Reduces daily I/O from O(T×F×P) to O(F×P). (Performance)
-17. **Per-chapter token budgets** — defined in `dd_report.yaml` calibration seed. ANALYTICAL chapters: 4000 tokens, DESCRIPTIVE: 2500. Passed as `max_tokens` to OpenAI API. 30s timeout per chapter. (Performance + Best Practices)
-18. **Survivorship bias prevention** — `fetch_returns_matrix()` gets `include_inactive` parameter for bias-free backtests. (Best Practices)
-19. **Chart rendering parallelism** — `ThreadPoolExecutor(max_workers=4)` for matplotlib charts. Cache shared charts between executive/institutional formats. (Performance)
-20. **structlog migration** — existing scaffolds (`fund_analyzer.py`, `dd_report_engine.py`, `quant_analyzer.py`) migrated from `logging` to `structlog` in Phase 1. (Architecture + Pattern)
-21. **Critic circuit breaker** — if total DD Report generation exceeds 3 minutes, remaining critic loops are aborted, chapters marked `critic_status: 'escalated'`, report persisted as-is for human review. Prevents indefinite SSE wait. (User feedback)
-22. **fund_selection_schema versioning** — `schema_version: int` column on `ModelPortfolio`. `portfolio_builder` checks version and has migration path for old schemas. Prevents silent breakage when schema evolves. (User feedback)
-23. **Prereq 0.2 is FIRST COMMIT** — RLS bypass in 5 wealth routes is an active production vulnerability, not a "nice to have" prerequisite. Must ship before any Phase 1 work. (User feedback — escalated priority)
-24. **LiveNAV drift sentinel** — daily worker computes both incremental and spot-check full recompute. If delta exceeds 0.1% for any single day, triggers automatic full recompute + structlog alert. Catches retroactive NAV corrections in UCITS funds. (User feedback)
+11. **Phases compressed from 7 to 5** — merged DD Report phases, collapsed content+monitoring into Polish. (Simplicity)
+12. **Bond analysis deferred** — ~~Bond model kept in migration~~ → removed entirely in fix #30. (Simplicity)
+13. **Content production dissolved** — 3 standalone files, not a package. (Simplicity)
+14. **Feature flags for phased rollout** — ~~5 flags~~ → consolidated to 3 in fix #36. (Deployment)
+15. **Brinson-Fachler with Carino linking** — correct formulas. Deferred to when benchmark data available. (Best Practices)
+16. **Incremental live NAV** — ~~incremental + drift sentinel~~ → simplified in fix #35. (Performance)
+17. **Per-chapter token budgets** — ANALYTICAL: 4000, DESCRIPTIVE: 2500, 30s timeout. (Performance)
+18. **Survivorship bias prevention** — `include_inactive` parameter for bias-free backtests. (Best Practices)
+19. **Chart rendering parallelism** — ThreadPoolExecutor(4) + chart caching between formats. (Performance)
+20. **structlog migration** — scaffolds migrated from logging to structlog. (Architecture)
+21. **Critic circuit breaker** — 3-minute wall-clock, abort remaining critic loops, escalate. (Performance)
+22. **fund_selection_schema versioning** — ~~schema_version column~~ → removed in fix #34. (YAGNI)
+23. **Prereq 0.2 is FIRST COMMIT** — RLS bypass is an active production vulnerability. (Security — CRITICAL)
+24. **LiveNAV drift sentinel** — ~~incremental + spot-check~~ → simplified in fix #35. (Performance)
 
-### Simplification Decisions
+### Round 2 Fixes (2026-03-16) — 12-Agent Deep Review
+
+**CRITICAL — New Vulnerabilities Discovered:**
+
+25. **[CRITICAL] Existing wealth tables have ZERO RLS policies** — Migration 0002 created 9 tenant-scoped tables (`funds_universe`, `nav_timeseries`, `fund_risk_metrics`, `portfolio_snapshots`, `strategic_allocation`, `tactical_positions`, `rebalance_events`, `lipper_ratings`, `backtest_runs`) but NEVER enabled RLS or created policies. Even after Prereq 0.2 (route fix), the DB itself has no enforcement. **Migration 0008 must add RLS to all 9 existing wealth tables as its first operation.** (Data Integrity + Security — confirmed by code audit of `0002_wealth_domain.py`)
+26. **[CRITICAL] Fund.isin unique constraint is cross-tenant** — `funds_universe.isin` has global `unique=True`. Two tenants cannot track the same fund by ISIN (e.g., both tracking BlackRock iShares). Migration 0008 must drop global unique and replace with `UNIQUE(organization_id, isin) WHERE isin IS NOT NULL`. (Data Integrity — confirmed at `0002_wealth_domain.py` line 36)
+27. **[HIGH] SSE risk stream has no tenant scoping** — Existing `risk.py` SSE subscribes to `wealth:alerts:{profile}` with NO `organization_id`. Any authenticated user receives CVaR/regime alerts for ALL organizations. Fix: change channel to `wealth:alerts:{org_id}:{profile}`, verify actor's org before subscription. (Security — confirmed at `risk.py` lines 197-250)
+28. **[HIGH] Worker trigger endpoints lack role authorization** — `workers.py` endpoints (`run-ingestion`, `run-risk-calc`, `run-portfolio-eval`, `run-macro-ingestion`) require only basic auth. Any user (including read-only INVESTOR/AUDITOR roles) can trigger computations. Fix: add `require_role(Role.ADMIN, Role.INVESTMENT_TEAM)`. (Security — confirmed)
+29. **[HIGH] Pre-existing self-approval vulnerabilities** — `macro.py` approve_review and `portfolios.py` approve_rebalance don't check `created_by != approver`. Fix: add self-approval prevention to both (same pattern as new governance endpoints). (Security — confirmed)
+
+**Architecture Fixes:**
+
+30. **[HIGH] Remove Bond table from migration 0008 entirely** — Bond table is NOT zero cost: it adds RLS policies, CHECK constraints on UniverseApproval, and the polymorphic nullable FK pattern. Without Bond, `UniverseApproval.fund_id` becomes a simple non-nullable FK. `dd_report_id` becomes non-nullable. Eliminates `CHECK((fund_id IS NOT NULL AND bond_id IS NULL) OR ...)`. Add Bond in a future migration 0009 when bond data provider exists. Saves ~55 lines in migration, ~15 lines in model. (Simplicity — Code Simplicity Reviewer)
+31. **[HIGH] Add import-linter contracts for wealth packages** — Current contracts only cover `vertical_engines.credit.*`. Add parallel contracts: `vertical_engines.wealth.*.models` must not import `vertical_engines.wealth.*.service`, helpers must not import from sibling `service.py`. Without this, import architecture is unenforced. (Architecture — Architecture Strategist)
+32. **[HIGH] Move `CallOpenAiFn` Protocol to shared location** — If critic must have "no dd_report/ imports" (fix #5), but imports `CallOpenAiFn` from `dd_report/models.py`, that IS a dd_report import. Move Protocol to `wealth/shared_protocols.py`. (Architecture — Architecture Strategist)
+33. **[HIGH] Specify sync Session creation for asyncio.to_thread** — Plan doesn't clarify how sync `Session` is obtained inside the thread. Must explicitly state: create a sync session factory inside the thread (not share AsyncSession across boundary). ORM objects must be converted to frozen dataclasses before crossing back to async context. (Architecture — Architecture Strategist)
+34. **[MEDIUM] Remove schema_version from ModelPortfolio** — YAGNI. Schema v1 is the only version that will exist. When schema changes, add version column + migration then. Saves ~20 LOC of version dispatch logic. (Simplicity — Code Simplicity Reviewer)
+35. **[MEDIUM] Simplify LiveNAV: full daily recompute, no drift sentinel** — At launch scale (<50 funds, <5 years), full recompute is milliseconds of math + 1 DB query. The incremental + sentinel adds ~50 LOC of branching logic for a performance problem that doesn't exist yet. When it becomes slow, add incremental. If periodic validation is desired, use a fixed weekly full recompute (Sunday) instead of random spot-checks. (Simplicity — Code Simplicity Reviewer)
+36. **[MEDIUM] Consolidate feature flags from 5 to 3** — (1) `FEATURE_WEALTH_DD_REPORTS` covers DD Reports + Universe Approval (Phases 1-2, one logical feature), (2) `FEATURE_WEALTH_MODEL_PORTFOLIOS` covers Portfolios + Fact Sheets + Monitoring (Phases 3-4 + 5.3), (3) `FEATURE_WEALTH_CONTENT` covers Content Production (Phase 5.1-5.2). Reduces 64 potential states to 8. (Simplicity)
+37. **[MEDIUM] Flatten asset_universe/ to single module** — Only 3 files (`universe_service.py`, `fund_approval.py`, `models.py`). Fund approval is a single function. Create `asset_universe.py` instead of a package. Promote to package only if it grows. Saves 3 files. (Simplicity)
+38. **[MEDIUM] Dissolve monitoring/ to standalone files** — Only 2 files (`alert_engine.py`, `drift_monitor.py`). Same rationale as content production dissolution. (Simplicity)
+39. **[MEDIUM] Defer manager_spotlight** — Reformats DD Report data that clients can already read. Build when a client asks. Saves 1 engine file + 1 prompt template (~150 LOC). (Simplicity — YAGNI)
+40. **[MEDIUM] Remove attribution_service.py skeleton entirely** — Writing production-grade Brinson-Fachler formulas with no benchmark data to validate against is YAGNI. Institutional fact-sheet shows "Attribution: requires benchmark data feed" as a string literal. Build when benchmark data arrives. (Simplicity — Code Simplicity Reviewer)
+41. **[MEDIUM] Remove peer_comparison_service.py** — Peer comparison requires populated universe with multiple funds per block. At launch, universe is small. DD Report Peer Comparison chapter was already deferred for same reason. (Simplicity — YAGNI)
+42. **[MEDIUM] Merge backtest/stress trigger endpoints into construct** — `POST /model-portfolios/{id}/backtest` and `POST /model-portfolios/{id}/stress` fold into `POST /model-portfolios/{id}/construct`. Construction auto-triggers backtest and stress. Separate trigger endpoints imply a UI workflow that doesn't exist. Saves 2 endpoints. (Simplicity)
+
+**Performance Optimizations:**
+
+43. **[P1] Vectorize returns matrix construction** — Replace O(T×N) dict-loop in `backtest_service.py` (lines 198-201) with pandas pivot. For 200 funds × 5 years = 252K dict lookups → vectorized C. 10-50x faster. (Performance Oracle — confirmed in codebase)
+44. **[P1] Add global LLM concurrency semaphore** — Per-report Semaphore(5) is good, but 10 concurrent reports = 50 simultaneous LLM calls. Add a global `asyncio.Semaphore(15-20)` (lazily created) shared across all DD Report generations to prevent OpenAI rate limit errors. (Performance Oracle)
+45. **[P1] Per-chapter critic time budgeting** — Current: 3-minute total wall-clock. Problem: critic flags 4 chapters × 3 iterations × 20s = 240s for critic alone. Fix: after chapter generation, compute `remaining_budget / num_flagged_chapters` per-chapter budget. If a single critic iteration exceeds 30s, skip further iterations for that chapter. Reduces wasted LLM spend by 40-60% in circuit-breaker scenarios. (Performance Oracle)
+46. **[P2] Parallelize evidence pack build** — RAG retrieval + quant metrics are independent. Use `asyncio.gather(asyncio.to_thread(fetch_documents), asyncio.to_thread(fetch_quant))`. Saves 5-15s per DD Report. (Performance Oracle)
+47. **[P2] Batch daily NAV worker** — Fetch ALL fund returns for yesterday in single query, ALL portfolio compositions in single query, compute all NAVs vectorized, batch-upsert. Reduces DB round-trips from O(P×B) to O(1). (Performance Oracle)
+48. **[P2] Batch chapter persistence** — Persist all 8 chapters in single transaction: one UPDATE (flip is_current) + one `db.add_all()`. 16 round-trips → 2. (Performance Oracle)
+49. **[P2] Partial index for peer comparison** — `CREATE INDEX ... ON funds_universe(block_id, is_active, approval_status, aum_usd) WHERE is_active = true AND approval_status = 'approved'`. Index size reduced ~60%, 2-5x faster peer lookups. Include in migration 0008 alongside approval_status column. (Performance Oracle)
+50. **[P3] Include data hash in chart cache key** — Cache key: `{portfolio_id}:{chart_type}:{as_of_date}:{md5(data)[:8]}`. Prevents stale charts after intraday rebalances. (Performance Oracle)
+51. **[P3] Cache returns matrix across backtest + stress** — Fetch widest window once (2007-present), slice per use case. Eliminates 1-2 redundant queries fetching 50+ MB. (Performance Oracle)
+
+**Data Integrity Additions:**
+
+52. **[MEDIUM] Add composite FK on dd_chapters** — Enforce `dd_chapters(dd_report_id, organization_id)` references `dd_reports(id, organization_id)` via composite FK. Prevents cross-tenant FK references in privileged transactions. Requires composite unique index on `dd_reports(id, organization_id)`. (Data Integrity Guardian)
+53. **[MEDIUM] Add partial unique index for bond approvals** — `UNIQUE(organization_id, bond_id) WHERE is_current = true AND bond_id IS NOT NULL`. Even though bonds are deferred, the migration should be future-proof. NOTE: if fix #30 is applied (remove Bond table), this is deferred to migration 0009. (Data Integrity Guardian)
+54. **[MEDIUM] Add schema_version to dd_reports** — `schema_version: int, server_default=1` on `dd_reports` (not on individual chapters). Governs structure of config_snapshot, evidence_refs, quant_data JSONB fields. (Data Integrity Guardian)
+55. **[MEDIUM] Add nullable model_portfolio_id FK to portfolio_snapshots** — Enables proper referential integrity between snapshots and model portfolios. Nullable for backward compat with existing snapshots. New snapshots always populate FK. (Data Integrity Guardian)
+56. **[LOW] Document is_current transition ordering** — UPDATE old to false BEFORE INSERT new, within same transaction. Partial unique index rejects INSERT-before-UPDATE ordering. Explicitly document in service layer. (Data Integrity Guardian)
+
+**Async/DAG Pattern Refinements:**
+
+57. **Prefer asyncio.TaskGroup over gather for chapter parallelism** — TaskGroup (Python 3.11+) provides structured concurrency: if any task raises, siblings are cancelled. Per-task try/except inside TaskGroup allows partial results. Use `gather(return_exceptions=True)` only for mixed-criticality stages (like credit's EDGAR/KYC pattern). (Async DAG Research)
+58. **Layered timeout architecture** — Layer 1: OpenAI SDK `timeout=60` (per-call HTTP). Layer 2: `asyncio.timeout(45)` per-chapter. Layer 3: `asyncio.timeout(180)` composite operation. Layer 4: critic `max_iterations=3`. (Async DAG Research)
+59. **Chapter 8 minimum threshold** — Only generate Recommendation chapter if ≥5/7 prerequisite chapters succeeded. Prevents synthesizing from insufficient evidence. (Async DAG Research)
+60. **Resume safety: version-tagged idempotency key** — Use `(report_id, chapter_tag, evidence_pack_hash)` as cache key. If evidence changes, chapters regenerate. (Async DAG Research — matches credit's `load_cached_chapter()` pattern)
+
+**PDF Generation Improvements:**
+
+61. **Migrate to NetzDocTemplate (BaseDocTemplate)** — Enables auto-generated Table of Contents with real page numbers, clickable bookmarks, distinct page templates (cover vs body). Uses `multiBuild()` (two-pass rendering). (ReportLab Research)
+62. **"Page N of M" footer** — Standard institutional expectation. Use `NumberedCanvas` subclass with `canvasmaker` parameter. (ReportLab Research)
+63. **KPI row builder for fact-sheets** — Grid of large-font value boxes (AUM, Sharpe, Vol, CVaR) with delta indicators. Standard institutional fact-sheet hero section pattern. (ReportLab Research)
+64. **Add structural PDF tests (P0)** — Currently ZERO test coverage on 4 PDF generators. Add smoke tests: valid PDF header, correct page count, text content assertions via `pikepdf`. Add chart renderer unit tests. (ReportLab Research)
+65. **Vector SVG option for fact-sheet charts** — svglib (already a dependency) can convert matplotlib SVG to ReportLab Drawing. Better zoom/print quality. Fallback to PNG for unsupported features (radar charts with polar projections). (ReportLab Research)
+
+**Security Hardening:**
+
+66. **Sanitize ALL LLM output before persistence** — Call `sanitize_llm_text()` from `ai_engine/governance/output_safety.py` on all DD chapter content, critic verdicts, and content production output. 6-stage pipeline: NFC normalization → control char strip → nh3 HTML sanitize → injection marker strip → entity encoding → JSONB null byte cleanup. (Learnings: `llm-output-sanitization-nh3-persist-boundary-PipelineStorage-20260315.md`)
+67. **Register wealth prompt search path** — Call `prompt_registry.add_search_path(Path(__file__).parent / "prompts")` in `wealth/__init__.py`. Without this, PromptRegistry only searches `ai_engine/prompts/`. (Learnings: `prompt-registry-distributed-search-paths-PromptRelocation-20260315.md`)
+68. **Rate limiting on LLM-intensive endpoints** — Per-organization max 5 DD Reports/hour. Use Redis-based rate limiting. (Security Sentinel)
+69. **Feature flags as router-level dependency** — `Depends(require_feature("WEALTH_DD_REPORTS"))` applied at router level, not individual endpoints. Ensures consistent gating. (Security Sentinel)
+70. **Content-Type + X-Content-Type-Options on downloads** — All PDF download endpoints must set `Content-Type: application/pdf`, `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`. (Security Sentinel)
+71. **Fix module-level asyncio.Lock in risk.py** — `_sse_redis_lock = asyncio.Lock()` at module scope violates CLAUDE.md rule. Move to lazy creation inside async function. (Security Sentinel)
+
+**Deployment Preparation:**
+
+72. **Migration 0008 lock analysis** — ALTER `funds_universe` ADD `approval_status` with `server_default='pending_dd'` + `nullable=True` avoids full table rewrite. Lock held for milliseconds. All CREATE TABLE and CREATE INDEX operations on empty new tables hold no locks on existing tables. (Deployment Verification Agent)
+73. **Pre-deploy baseline SQL** — Record fund counts per org, verify alembic version = 0007, verify no approval_status column exists yet, verify no new tables exist. Save for post-deploy comparison. (Deployment Verification Agent)
+74. **Post-deploy verification SQL** — 14 verification queries: alembic head, table existence, RLS enablement, policy subselect pattern, partial unique indexes, CHECK constraints, FK relationships, fund count comparison with baseline. (Deployment Verification Agent)
+75. **Rollback procedure** — Feature flags are first response (disable flag → 503). Migration rollback: `alembic downgrade 0007`. Drop order: dd_chapters → universe_approvals → dd_reports → model_portfolios → ALTER funds_universe. **Do NOT revert Prereq 0.2** (restores active vulnerability). (Deployment Verification Agent)
+76. **24-hour monitoring plan** — Watch HTTP 500 rate on `/api/wealth/*`, RLS errors, DD Report wall-clock > 3min, advisory lock contention, Redis pub/sub backlog. Hourly: check orphaned dd_chapters (org_id mismatch), is_current uniqueness, approval_status validity. (Deployment Verification Agent)
+
+### Simplification Decisions (Updated)
 
 | Original | Changed To | Reason |
 |---|---|---|
 | 11 DD chapters | 8 chapters | ESG (no data), Peer Comparison (empty universe), Liquidity Risk (folded into Risk Framework) |
 | 7 phases | 5 phases | Merge DD Report phases, collapse content+monitoring into Polish |
-| `bond_analysis/` package | Deferred (Bond model kept) | No bond data provider, vertical is `liquid_funds` |
-| `content_production/` package (6 files) | 3 standalone files | Over-packaged for 3 independent content types |
+| `bond_analysis/` package | Deferred | No bond data provider, vertical is `liquid_funds` |
+| `Bond` table in migration 0008 | **Removed entirely** (fix #30) | Not zero cost: adds RLS, CHECK constraints, polymorphic FK pattern. Simplifies UniverseApproval to non-nullable fund_id. Add in migration 0009 when bond data arrives. |
+| `content_production/` package (6 files) | 3 standalone files → **2 standalone files** (fix #39) | Manager Spotlight deferred — reformats DD Report data |
 | `quant/` package (3 files) | Single `quant_analyzer.py` + functions in `quant_engine/` | Thin bridge doesn't justify a package |
-| `attribution_service.py` in Phase 4 | Deferred | No benchmark constituent data available |
+| `attribution_service.py` skeleton | **Removed entirely** (fix #40) | YAGNI — no benchmark data to validate. Show placeholder text in fact-sheet. |
+| `peer_comparison_service.py` | **Removed entirely** (fix #41) | YAGNI — universe too small for meaningful comparison |
 | `client_report.py` scaffold | Removed | YAGNI — requires client data models that don't exist |
+| `asset_universe/` package (3 files) | **Single module** `asset_universe.py` (fix #37) | Only 3 files, fund_approval is a single function |
+| `monitoring/` package (2 files) | **2 standalone files** (fix #38) | Same rationale as content production dissolution |
+| 5 feature flags | **3 feature flags** (fix #36) | DD_REPORTS+UNIVERSE, MODEL_PORTFOLIOS+FACT_SHEETS+MONITORING, CONTENT |
+| `schema_version` on ModelPortfolio | **Removed** (fix #34) | YAGNI — schema v1 is only version. Add when schema changes. |
+| Incremental NAV + drift sentinel | **Full daily recompute** (fix #35) | At launch scale, full recompute is fast. Add incremental when needed. |
+| Separate backtest/stress endpoints | **Merged into construct** (fix #42) | Construction auto-triggers backtest + stress |
+| `manager_spotlight.py` | **Deferred** (fix #39) | Low value, reformats DD Report data |
 
 ## Overview
 
@@ -469,11 +556,11 @@ Replace `import logging` / `logging.getLogger(__name__)` with `structlog.get_log
 - `UniverseService.deactivate_asset(asset_type, asset_id)` — removes from universe, triggers rebalance evaluation
 
 **Acceptance criteria:**
-- [ ] Fund approval flow: DD Report → pending → approved/rejected
-- [ ] Self-approval prevention enforced (`decided_by != created_by`)
-- [ ] `SELECT FOR UPDATE` on fund row during approval (prevents concurrent state corruption)
-- [ ] Deactivation triggers rebalance evaluation event
-- [ ] Audit trail via UniverseApproval records with partial unique index on `is_current`
+- [x] Fund approval flow: DD Report → pending → approved/rejected
+- [x] Self-approval prevention enforced (`decided_by != created_by`)
+- [x] `SELECT FOR UPDATE` on fund row during approval (prevents concurrent state corruption)
+- [x] Deactivation triggers rebalance evaluation event
+- [x] Audit trail via UniverseApproval records with partial unique index on `is_current`
 
 ##### Task 2.2: Asset Universe API Routes
 
@@ -488,9 +575,9 @@ Replace `import logging` / `logging.getLogger(__name__)` with `structlog.get_log
 - `GET /api/wealth/universe/pending` — list pending approvals
 
 **Acceptance criteria:**
-- [ ] All endpoints use `response_model=`, `model_validate()`, and `get_db_with_rls`
-- [ ] IC role required for approval/rejection
-- [ ] Self-approval prevention: 403 if `decided_by == created_by`
+- [x] All endpoints use `response_model=`, `model_validate()`, and `get_db_with_rls`
+- [x] IC role required for approval/rejection
+- [x] Self-approval prevention: 403 if `decided_by == created_by`
 
 ---
 
@@ -866,7 +953,7 @@ New routes follow existing patterns in `routes/funds.py`, `routes/portfolios.py`
 
 1. **Security Prerequisites (Prereqs 0.1-0.3)** — Fix PromptRegistry SandboxedEnvironment, migrate wealth routes to `get_db_with_rls`, migrate scaffolds to structlog. **Must complete before Phase 1.**
 2. **Pipeline LLM-Deterministic Alignment refactor** (separate branch) — Phase 1 (hybrid classifier) should complete before DD Report document ingestion is fully wired. DD Reports can start with manual document context while pipeline completes.
-3. **Current migration head: `0006_macro_reviews`** — new migration is `0007` with `down_revision = "0006"`.
+3. **Current migration head: `0007_governance_policy_seed`** — new migration is `0008` with `down_revision = "0007"`. (Fixed in round 2 — was stale)
 4. **Existing quant_engine services** — all implemented and tested. New additions: `attribution_service.py`, `portfolio_metrics_service.py`, `peer_comparison_service.py`.
 5. **ReportLab + matplotlib** — already in dependencies (used by credit PDF generation).
 
@@ -929,3 +1016,159 @@ New routes follow existing patterns in `routes/funds.py`, `routes/portfolios.py`
 - Phase 2 > Proprietary Content Production (ID:137) → standalone content files (`investment_outlook.py`, `flash_report.py`, `manager_spotlight.py`)
 - Phase 4 > Institutional Track Record (ID:143) → `model_portfolio/track_record.py`
 - Phase 4 > Professional Client Reporting (ID:144) → `fact_sheet/`
+
+---
+
+## Research Insights (Round 2 Deep Dive)
+
+### Credit Vertical Patterns to Mirror
+
+Based on thorough exploration of `vertical_engines/credit/` (91 files, 13 packages):
+
+**Package hierarchy (enforced by import-linter):**
+- `models.py` (LEAF): zero sibling imports, only dataclasses/enums/protocols
+- Helpers/parsers (LEAF): only model imports
+- `service.py` (ORCHESTRATOR): imports all sibling modules + external engines
+- `__init__.py`: PEP 562 lazy imports via `__getattr__()` — avoids circular deps, keeps boot time O(1)
+
+**Key patterns from credit `deep_review/service.py` (13-stage pipeline):**
+- Token ceilings by mode (`full_mode=True` unlocks higher limits)
+- Cost governance via `TokenBudgetTracker` passed to all `_call_openai()` invocations
+- Model routing via `get_model("structured")`, `get_model("critic")` — single source of truth
+- Function-level imports for sibling engines (not module scope) — prevents circular deps
+- `StageOutcome` frozen dataclass for named unpacking of `asyncio.gather()` results
+
+**Key patterns from credit `memo/chapters.py`:**
+- `CHAPTER_REGISTRY` authoritative table — single source of truth for all chapter metadata
+- Per-chapter evidence filtering via `_SHARED_PACK_SECTIONS | _CHAPTER_EXTRA_SECTIONS[tag]` — reduces input ~60-70%
+- Deterministic evidence summary at system_prompt top for OpenAI prompt caching activation
+- Document diversity enforcement (min 4 unique sources per chapter)
+- `prepare_only=True` mode returns prompts without calling LLM (useful for batch client)
+
+**Key patterns from credit `critic/service.py`:**
+- `CriticVerdict` frozen dataclass with 8 fields + `to_dict()` for serialization
+- Pre-computed deterministic macro-consistency checks merged into LLM verdict via dataclass reconstruction
+- Escalation to stronger model when confidence < 0.75 or fatal flaws exist
+- `call_openai_fn` injected via Protocol — polymorphic LLM behavior
+
+### Async DAG Best Practices
+
+**Prefer `asyncio.TaskGroup` over `asyncio.gather` for chapter parallelism:**
+- TaskGroup cancels siblings on first failure (structured concurrency)
+- No `return_exceptions` ambiguity — per-task try/except allows partial results
+- Reserve `gather(return_exceptions=True)` for mixed-criticality stages
+
+**Layered timeout architecture for DD Report:**
+```
+Layer 1: OpenAI SDK timeout=60        — prevents single API call hang
+Layer 2: asyncio.timeout(45)/chapter  — prevents retry storms
+Layer 3: asyncio.timeout(180) total   — prevents entire report exceeding 3 min
+Layer 4: critic max_iterations=3      — prevents infinite adversarial loops
+```
+
+**CRITICAL: `asyncio.timeout()` only fires at await points.** For true thread-level cancellation, the per-call timeout on the HTTP client (OpenAI SDK `timeout` param) is the defense.
+
+**Error classification (from credit's `StageOutcome` pattern):**
+- Fatal chapters: `executive_summary`, `recommendation` — failure aborts report
+- Degradable chapters: all others — failure logs warning, report continues with partial results
+- Minimum threshold: generate recommendation only if ≥5/7 chapters succeeded
+
+### Fund Scoring Enhancements
+
+**Current scoring (6 factors) — recommended additions:**
+
+| Factor | Weight | Status |
+|---|---|---|
+| `risk_adjusted_return` (Sharpe) | 0.20 | Existing |
+| `downside_risk` (Sortino) | 0.15 | **NEW** — Sharpe penalizes upside volatility equally |
+| `drawdown_control` (Calmar + Max DD) | 0.15 | Enhanced (add Calmar ratio) |
+| `information_ratio` | 0.10 | Existing |
+| `return_consistency` (multi-horizon) | 0.15 | **Enhanced** — score across 6m/1y/3y/5y windows |
+| `flows_momentum` | 0.10 | Existing |
+| `fee_efficiency` (expense ratio rank) | 0.05 | **NEW** |
+| `aum_stability` (AUM growth volatility) | 0.05 | **NEW** |
+| `lipper_rating` | 0.05 | Existing (feature-flagged) |
+
+**Score normalization: percentile rank within peer group** instead of hardcoded min/max bounds. Handles outliers naturally and is more interpretable ("85th percentile of peer group").
+
+**Fund selection edge cases:**
+- Ties: secondary sort by (1) lower expense ratio, (2) higher AUM, (3) longer track record
+- Min weight threshold: positions below 2% eliminated (transaction costs > diversification benefit)
+- Max concentration: existing `ProfileConstraints.max_single_fund_weight` from profiles.yaml
+- Weight clipping: iterative clip-and-redistribute algorithm with max 10 iterations
+
+### Brinson-Fachler Attribution (Reference for Future Implementation)
+
+**Correct formulas (Brinson-Fachler, NOT BHB):**
+```
+Allocation_i  = (w_p_i - w_b_i) * (r_b_i - R_b)    ← relative benchmark adjustment
+Selection_i   = w_b_i * (r_p_i - r_b_i)              ← uses w_b_i, not w_p_i
+Interaction_i = (w_p_i - w_b_i) * (r_p_i - r_b_i)
+Identity:       R_p - R_b = sum(A) + sum(S) + sum(I)  ← must hold exactly
+```
+
+**Carino (1999) multi-period linking:**
+- Period factor: `k_t = (ln(1+r_p_t) - ln(1+r_b_t)) / (r_p_t - r_b_t)` (L'Hopital when equal)
+- Cumulative factor: `K = (ln(1+R_p) - ln(1+R_b)) / (R_p - R_b)`
+- Scaled effects: `A'_t = A_t * (k_t / K)` — guarantees linked effects sum to compounded excess
+- Numerical stability: weight epsilon `1e-10`, return equality epsilon `1e-12`, log clamp `1e-12`
+
+**Testing: property-based with Hypothesis** — effects must sum to excess return (atol=1e-10).
+
+### PDF Generation Best Practices
+
+**P0: Add structural PDF tests** — currently zero coverage on 4 PDF generators:
+- Smoke tests: valid PDF header (`%PDF-`), minimum page count, content assertions via `pikepdf`
+- Chart renderer unit tests: valid PNG output, correct axis count
+- Use `pikepdf` for structural assertions (CI-friendly, no poppler dependency)
+
+**P1: BaseDocTemplate migration** — enables auto-TOC with real page numbers, clickable bookmarks, distinct cover/body page templates. Uses `multiBuild()` (two-pass rendering).
+
+**P1: KPI row builder for fact-sheets** — grid of large-font value boxes (AUM, Sharpe, Vol, CVaR) with delta indicators (green/red). Standard institutional fact-sheet hero section.
+
+**P2: Vector SVG for fact-sheet charts** — svglib (already a dependency) converts matplotlib SVG to ReportLab Drawing. Better zoom/print quality. Fallback to PNG 200 DPI for unsupported features.
+
+### Institutional Learnings Applied (14 of 21 docs/solutions/ files relevant)
+
+| Learning | Applies To | Key Insight |
+|---|---|---|
+| `rls-subselect-1000x-slowdown` | Migration 0008 | Bare `current_setting()` evaluates per-row. Use `(SELECT current_setting(...))` |
+| `alembic-monorepo-migration-fk-rls-ordering` | Migration 0008 | Phased table creation (leaf→parent→edge), bulk RLS generation after all tables |
+| `thread-unsafe-rate-limiter-FredService` | asyncio.to_thread calls | Any sync object shared across threads MUST use `threading.Lock()` |
+| `llm-output-sanitization-nh3-persist-boundary` | DD chapter persistence | Call `sanitize_llm_text()` on ALL LLM output before DB writes |
+| `prompt-registry-distributed-search-paths` | Wealth prompts | Register search path via `add_search_path()` in `wealth/__init__.py` |
+| `azure-search-tenant-isolation` | RAG queries in DD Reports | Every search query MUST include `$filter=organization_id eq '{org_id}'` |
+| `wealth-macro-intelligence-suite` | 4-layer architecture | Proven pattern: routes→engines→quant→ConfigService. Session injection, frozen dataclasses |
+| `wave1-credit-vertical-modularization` | Package structure | 6-8 module split per package, import-linter from day 1, golden tests |
+| `wave2-deep-review-modularization` | DAG extraction | NTFS workaround (staging dir), async/sync dedup, `db.add_all()` batching |
+| `vertical-engine-extraction-patterns` | BaseAnalyzer interface | ProfileLoader + ConfigService + StorageClient exclusively |
+| `phase3-storageclient-adls-dualwrite` | PDF storage | StorageClient abstraction, dual-write ordering (ADLS first, search second) |
+| `pydantic-migration-review-findings` | Config schemas | Use `extra="ignore"` or `extra="forbid"`, never `extra="allow"`, derive field lists from canonical source |
+| `unified-pipeline-ingestion-path` | Content production | Design one canonical pipeline entry point, validation gates between stages |
+| `dead-code-audit-ai-engine-legacy-cleanup` | Scaffold deletion | Clean delete of replaced scaffolds, update __init__.py exports |
+
+### Deployment Checklist Summary
+
+**Pre-deploy baseline (SQL):** Record fund counts per org, verify alembic=0007, verify no new tables/columns.
+
+**Migration 0008 lock risk:** LOW. ALTER `funds_universe` uses `server_default` + `nullable` → no table rewrite, millisecond lock. CREATE TABLE/INDEX on empty tables → no locks on existing tables.
+
+**Rollback ladder:**
+1. Disable feature flag → routes return 503 (instant, no data impact)
+2. Deploy previous code version (if code bugs)
+3. `alembic downgrade 0007` (if migration issues — drops new tables, removes approval_status)
+4. **Never revert Prereq 0.2** (restores active vulnerability)
+
+**Post-deploy monitoring (24h):** HTTP 500 rate, RLS errors, DD Report wall-clock, advisory lock contention, Redis pub/sub backlog. Hourly integrity checks: orphaned chapters, is_current uniqueness, approval_status validity.
+
+### Sources
+
+- [Python 3.14 asyncio-task docs](https://docs.python.org/3/library/asyncio-task.html) — TaskGroup, timeout
+- [ReportLab PDF Accessibility](https://docs.reportlab.com/pdf-accessibility/) — Tagged PDFs, bookmarks
+- [ReportLab Platypus](https://docs.reportlab.com/reportlab/userguide/ch5_platypus/) — BaseDocTemplate, multiBuild
+- [Morningstar Medalist Rating Methodology (May 2024)](https://s21.q4cdn.com/198919461/files/doc_downloads/2024/05/Morningstar-Medalist-Rating-Methodology-Effective-28-May-2024.pdf) — Fund scoring
+- [Vanguard: The Rebalancing Edge (Dec 2024)](https://corporate.vanguard.com/content/dam/corp/research/pdf/the_rebalancing_edge.pdf) — Threshold vs calendar rebalancing
+- [Federal Reserve 2025 Stress Test Scenarios](https://www.federalreserve.gov/publications/2025-stress-test-scenarios.htm) — Stress testing
+- [CFA Level III — Brinson-Fachler Attribution](https://analystprep.com/study-notes/cfa-level-iii/sources-of-portfolio-returns/) — Attribution formulas
+- [R-Finance PortfolioAttribution — Carino.R](https://github.com/R-Finance/PortfolioAttribution/blob/master/R/Carino.R) — Multi-period linking
+- Carl Bacon, *Practical Portfolio Performance Measurement and Attribution* (Wiley, 2nd ed.) — Industry standard reference
