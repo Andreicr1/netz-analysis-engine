@@ -24,7 +24,6 @@ from typing import Any
 import structlog
 from sqlalchemy.orm import Session
 
-from ai_engine.governance.output_safety import sanitize_llm_text
 from vertical_engines.wealth.dd_report.chapters import generate_chapter
 from vertical_engines.wealth.dd_report.confidence_scoring import (
     compute_confidence_score,
@@ -37,7 +36,6 @@ from vertical_engines.wealth.dd_report.evidence_pack import (
 from vertical_engines.wealth.dd_report.models import (
     CHAPTER_REGISTRY,
     MIN_CHAPTERS_FOR_RECOMMENDATION,
-    PARALLEL_CHAPTER_TAGS,
     SEQUENTIAL_CHAPTER_TAG,
     ChapterResult,
     DDReportResult,

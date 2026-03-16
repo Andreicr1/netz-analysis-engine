@@ -21,7 +21,7 @@ from app.core.jobs.sse import create_job_stream
 from app.core.jobs.tracker import publish_event, register_job_owner, verify_job_owner
 from app.core.security.clerk_auth import CurrentUser, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
-from app.domains.wealth.models.dd_report import DDChapter, DDReport
+from app.domains.wealth.models.dd_report import DDReport
 from app.domains.wealth.schemas.dd_report import (
     DDReportCreate,
     DDReportRead,
