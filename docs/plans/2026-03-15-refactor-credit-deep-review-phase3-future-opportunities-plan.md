@@ -813,6 +813,14 @@ After Phase 1, `run_deal_deep_review_v4()` and `async_run_deal_deep_review_v4()`
 - [ ] Golden test snapshot captured before dedup, asserted after
 - [ ] `make check` passes
 
+#### Review findings from PR B to absorb in PR C:
+
+- [ ] Sanitize remaining VARCHAR LLM fields: `liquidity_profile`, `capital_structure_type` (`strip_all_html=True, max_length=80`) — moves into `persist_review_artifacts()` helper *(todo 048)*
+- [ ] Sanitize `key_risks[].mitigation` strings in the risk flag list comprehension *(todo 048)*
+- [ ] Extract `_INJECTION_MARKERS` to `ai_engine/governance/_constants.py` — shared by `prompt_safety.py` + `output_safety.py` *(todo 049)*
+- [ ] Align `SaturationResult` field names with `enforce_evidence_saturation()` dict keys (`is_sufficient` → `all_saturated`, `gaps: list[str]` → `list[dict]`) *(todo 050)*
+- [ ] Remove `strict` parameter from `enforce_evidence_saturation()` (YAGNI — only caller passes `strict=False`)
+
 ### Quality Gates
 
 - [x] All 324+ tests pass after each phase *(364 tests after Phase 1 — PR #25)*
