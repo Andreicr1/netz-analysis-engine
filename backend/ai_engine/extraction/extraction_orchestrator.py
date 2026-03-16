@@ -1,25 +1,25 @@
-"""extraction_orchestrator.py — Cloud-Native Pipeline Orchestrator
-================================================================
-Adapted from cu-pdf-prepare/pipeline_azure.py for use as a module
-inside the FastAPI backend on Azure App Service.
+"""Extraction Orchestrator — DEPRECATED.
 
-All Azure credentials are read at runtime from environment variables
-(Key Vault references via App Service appsettings):
-    AZURE_STORAGE_CONNECTION_STRING — Azure Blob Storage
-    AZURE_SEARCH_ENDPOINT           — Azure AI Search endpoint
-    AZURE_SEARCH_API_KEY            — Azure AI Search admin key
-    MISTRAL_API_KEY                 — Mistral OCR (public API)
-    AZURE_API_KEY                   — Azure AI Foundry (classification now local)
-    OPENAI_API_KEY                  — direct OpenAI primary provider (optional)
-    AZURE_OPENAI_KEY                — Azure OpenAI provider key
-    AZURE_OPENAI_ENDPOINT           — Azure OpenAI provider endpoint
-    AZURE_OPENAI_API_VERSION        — Azure OpenAI API version
+This module is the legacy batch pipeline tied to the pre-ADLS Azure Blob
+Storage model. It will be DELETED when legacy Azure resources are replaced
+by ADLS Gen2.
 
-Public API
-----------
-    run_extraction_pipeline(source, ...) -> str (job_id)
-    get_job_status(job_id)              -> dict
-    list_pipeline_jobs()                -> list[dict]
+Legacy model (this file):
+    Azure Blob containers → download → process → Azure Blob → Search Indexer (pull)
+
+New model (unified_pipeline.py):
+    bronze/{org_id}/credit/documents/ → unified_pipeline
+        → silver/{org_id}/credit/chunks/ → Azure Search upsert (push)
+
+SOURCE_CONFIG below maps to legacy Azure Blob containers and Search indexers.
+These will cease to exist when the new Azure Resource Group is provisioned.
+
+Migration path:
+    - Per-document ingestion: ai_engine.pipeline.unified_pipeline.process()
+    - Batch orchestration: ai_engine.ingestion.pipeline_ingest_runner
+    - Storage routing: ai_engine.pipeline.storage_routing
+
+Do NOT simplify or refactor this file. It will be deleted entirely.
 """
 
 from __future__ import annotations
