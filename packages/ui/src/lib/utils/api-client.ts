@@ -35,6 +35,57 @@ export class ServerError extends Error {
 	}
 }
 
+export class ConflictError extends Error {
+	readonly status = 409;
+	readonly currentVersion: number | undefined;
+	constructor(message: string, currentVersion?: number) {
+		super(message);
+		this.name = "ConflictError";
+		this.currentVersion = currentVersion;
+	}
+}
+
+/**
+ * Single-flight 401 redirect gate.
+ * Prevents multiple concurrent goto('/auth/sign-in') when several
+ * parallel requests all return 401 at the same time.
+ */
+let redirecting = false;
+
+/** Reset redirect gate — called by consuming frontend after navigation completes. */
+export function resetRedirectGate(): void {
+	redirecting = false;
+}
+
+/** Check if a 401 redirect is already in progress. */
+export function isRedirecting(): boolean {
+	return redirecting;
+}
+
+/**
+ * Optional 409 conflict callback. Set by the consuming frontend to
+ * trigger toast + invalidateAll() on optimistic lock conflicts.
+ * Avoids importing \$app/navigation directly from library code.
+ */
+let onConflict: ((message: string) => void) | null = null;
+
+/** Register a handler for 409 conflict responses (call once in root layout). */
+export function setConflictHandler(handler: (message: string) => void): void {
+	onConflict = handler;
+}
+
+/**
+ * Optional 401 redirect callback. Set by the consuming frontend to
+ * trigger goto('/auth/sign-in'). Avoids importing \$app/navigation
+ * directly from library code.
+ */
+let onAuthRedirect: (() => Promise<void> | void) | null = null;
+
+/** Register a handler for 401 auth redirects (call once in root layout). */
+export function setAuthRedirectHandler(handler: () => Promise<void> | void): void {
+	onAuthRedirect = handler;
+}
+
 async function handleResponse<T>(res: Response): Promise<T> {
 	if (res.ok) {
 		if (res.status === 204) return undefined as T;
@@ -51,9 +102,22 @@ async function handleResponse<T>(res: Response): Promise<T> {
 
 	switch (res.status) {
 		case 401:
+			if (!redirecting) {
+				redirecting = true;
+				if (onAuthRedirect) {
+					await onAuthRedirect();
+				}
+				// Reset after a tick to allow the redirect to complete
+				setTimeout(() => { redirecting = false; }, 2000);
+			}
 			throw new AuthError(parsed?.detail as string ?? "Authentication required");
 		case 403:
 			throw new ForbiddenError(parsed?.detail as string ?? "Access denied");
+		case 409: {
+			const message = parsed?.detail as string ?? "Resource was modified by another user";
+			onConflict?.(message);
+			throw new ConflictError(message, parsed?.current_version as number | undefined);
+		}
 		case 422:
 			throw new ValidationError(
 				parsed?.detail as string ?? "Validation failed",

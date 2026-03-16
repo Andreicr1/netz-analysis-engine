@@ -1,6 +1,13 @@
 /** SSE client using fetch + ReadableStream (NOT EventSource — needs auth headers). */
 
+import type { NetzApiClient } from "./api-client.js";
+
 export type SSEStatus = "connecting" | "connected" | "disconnected" | "error";
+
+export interface SSEEvent {
+	type?: string;
+	data: unknown;
+}
 
 export interface SSEConfig<T> {
 	url: string;
@@ -146,5 +153,99 @@ export function createSSEStream<T>(config: SSEConfig<T>): SSEConnection<T> {
 		get events() { return events; },
 		get status() { return status; },
 		get error() { return error; },
+	};
+}
+
+// ── Subscribe-then-Snapshot ─────────────────────────────────────
+// Eliminates event gaps: SSE subscribes first, REST loads snapshot,
+// buffered events merge on top of snapshot, then live tail continues.
+
+export interface SSESnapshotConfig<T> {
+	sseUrl: string;
+	restUrl: string;
+	apiClient: NetzApiClient;
+	getToken: () => Promise<string>;
+	/** Merge REST snapshot with buffered SSE events received during REST call. */
+	merge: (snapshot: T, buffered: SSEEvent[]) => T;
+}
+
+export interface SSESnapshotConnection<T> {
+	readonly state: T | null;
+	readonly status: SSEStatus;
+	readonly error: Error | null;
+	connect: () => Promise<void>;
+	disconnect: () => void;
+}
+
+/**
+ * Subscribe-then-snapshot pattern for SSE + REST data loading.
+ *
+ * 1. Connect SSE first (events buffer while REST loads)
+ * 2. Call REST endpoint for current state (snapshot)
+ * 3. Merge: snapshot is base, buffer has events from the gap
+ * 4. Continue with live SSE tail
+ */
+export function createSSEWithSnapshot<T>(config: SSESnapshotConfig<T>): SSESnapshotConnection<T> {
+	let state: T | null = $state(null);
+	let sseStatus: SSEStatus = $state("disconnected");
+	let sseError: Error | null = $state(null);
+
+	const buffer: SSEEvent[] = [];
+	let snapshotLoaded = false;
+	let innerSSE: SSEConnection<SSEEvent> | null = null;
+
+	async function connect() {
+		snapshotLoaded = false;
+		buffer.length = 0;
+		sseStatus = "connecting";
+		sseError = null;
+
+		// Step 1: Subscribe SSE first — events buffer while REST loads
+		innerSSE = createSSEStream<SSEEvent>({
+			url: config.sseUrl,
+			getToken: config.getToken,
+			onEvent: (event) => {
+				if (!snapshotLoaded) {
+					buffer.push(event);
+				} else {
+					// Live tail: merge single event into state
+					state = config.merge(state as T, [event]);
+				}
+			},
+			onError: (err) => {
+				sseError = err;
+			},
+		});
+		innerSSE.connect();
+
+		try {
+			// Step 2: REST snapshot (current state)
+			const snapshot = await config.apiClient.get<T>(config.restUrl);
+
+			// Step 3: Merge snapshot with buffered events from the gap
+			state = config.merge(snapshot, [...buffer]);
+			snapshotLoaded = true;
+			buffer.length = 0;
+			sseStatus = "connected";
+		} catch (err) {
+			sseError = err instanceof Error ? err : new Error(String(err));
+			sseStatus = "error";
+		}
+	}
+
+	function disconnect() {
+		innerSSE?.disconnect();
+		innerSSE = null;
+		snapshotLoaded = false;
+		buffer.length = 0;
+		sseStatus = "disconnected";
+	}
+
+	return {
+		get state() { return state; },
+		get status() { return sseStatus; },
+		get error() { return sseError; },
+		connect,
+		disconnect,
 	};
 }

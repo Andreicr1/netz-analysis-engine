@@ -11,13 +11,18 @@ export {
 	ForbiddenError,
 	ValidationError,
 	ServerError,
+	ConflictError,
 	createServerApiClient,
 	createClientApiClient,
+	setAuthRedirectHandler,
+	setConflictHandler,
+	resetRedirectGate,
+	isRedirecting,
 } from "./api-client.js";
 
 // SSE client
-export { createSSEStream } from "./sse-client.svelte.js";
-export type { SSEConfig, SSEConnection, SSEStatus } from "./sse-client.svelte.js";
+export { createSSEStream, createSSEWithSnapshot } from "./sse-client.svelte.js";
+export type { SSEConfig, SSEConnection, SSEStatus, SSEEvent, SSESnapshotConfig, SSESnapshotConnection } from "./sse-client.svelte.js";
 
 // Formatting
 export {
@@ -37,9 +42,10 @@ export {
 	getBrandingFromCSS,
 } from "./branding.js";
 
-// Auth stubs
+// Auth stubs + session monitoring
 export {
 	createClerkHook,
 	createRootLayoutLoader,
+	startSessionExpiryMonitor,
 } from "./auth.js";
 export type { ClerkHookOptions, RootLayoutLoaderOptions } from "./auth.js";
