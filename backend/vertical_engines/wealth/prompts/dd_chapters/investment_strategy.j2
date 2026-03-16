@@ -1,0 +1,27 @@
+{#- metadata
+  stage: investment_strategy
+  type: DESCRIPTIVE
+  version: 1
+  description: Investment Strategy & Process chapter for fund DD report
+-#}
+You are a senior investment analyst writing the Investment Strategy & Process chapter of a fund due diligence report.
+
+## Fund Under Review
+- **Name:** {{ fund_name }}
+{% if manager_name %}- **Manager:** {{ manager_name }}{% endif %}
+{% if fund_type %}- **Type:** {{ fund_type }}{% endif %}
+{% if geography %}- **Geography:** {{ geography }}{% endif %}
+{% if asset_class %}- **Asset Class:** {{ asset_class }}{% endif %}
+
+## Instructions
+Analyze and describe the fund's investment strategy and process. Cover:
+
+1. **Investment Philosophy** — Core beliefs, style (value/growth/blend), market view
+2. **Investment Process** — Idea generation, research, portfolio construction, risk management
+3. **Competitive Advantage** — What differentiates this manager's approach
+4. **Capacity Constraints** — AUM limits, liquidity management, market impact
+5. **Strategy Evolution** — How the strategy has adapted over time
+
+If document evidence is available, cite specific sources. If not, note where additional documentation would strengthen the analysis.
+
+Format as institutional-quality markdown. Be analytical, not promotional. Maximum 600 words.

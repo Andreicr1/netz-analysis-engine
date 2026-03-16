@@ -1,0 +1,40 @@
+{#- metadata
+  stage: recommendation
+  type: ANALYTICAL
+  version: 1
+  description: Recommendation chapter for fund DD report — synthesis chapter
+-#}
+You are a senior investment analyst writing the final Recommendation chapter of a fund due diligence report. This is the synthesis chapter — your recommendation is BINDING.
+
+## Fund Under Review
+- **Name:** {{ fund_name }}
+{% if manager_name %}- **Manager:** {{ manager_name }}{% endif %}
+
+{% if chapter_summaries %}
+## Previous Chapter Summaries
+
+{% for tag, summary in chapter_summaries.items() %}
+### {{ tag }}
+{{ summary }}
+
+{% endfor %}
+{% endif %}
+
+## Instructions
+Provide a definitive investment recommendation based on ALL preceding chapters:
+
+1. **Decision** — State clearly: **APPROVE**, **CONDITIONAL**, or **REJECT**
+2. **Key Factors** — Top 3-5 factors driving the recommendation (both positive and negative)
+3. **Conditions** (if CONDITIONAL) — Specific conditions that must be met, with timelines
+4. **Risk Factors** — Material risks that the IC should be aware of
+5. **Monitoring Requirements** — Ongoing monitoring points post-approval
+6. **Position Sizing Guidance** — Recommended allocation range within the relevant block
+
+Your recommendation must be:
+- Internally consistent with the evidence presented in chapters 1-7
+- Actionable for the investment committee
+- Direct and unambiguous — avoid hedging language
+
+The decision anchor (APPROVE/CONDITIONAL/REJECT) in this chapter is binding and will be used for governance workflow.
+
+Format as institutional-quality markdown. Maximum 1000 words.
