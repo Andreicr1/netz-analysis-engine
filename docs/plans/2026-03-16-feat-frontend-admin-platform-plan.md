@@ -699,26 +699,26 @@ frontends/credit/messages/pt.json
 
 ##### Tasks
 
-- [ ] Initialize SvelteKit 2 with `adapter-node` and TypeScript strict
-- [ ] `package.json` name: `netz-credit-intelligence`, dependency: `"@netz/ui": "workspace:*"`
-- [ ] `hooks.server.ts` — Clerk JWT verification on every request. Extract `Actor` from JWT. Dev bypass: `X-DEV-ACTOR` header. Attach `actor` and `token` to `event.locals`
-- [ ] `+layout.server.ts` — load Actor + branding from `GET /api/v1/branding`. Pass to all pages. If branding fetch fails, use `defaultBranding` fallback
-- [ ] `+layout.svelte` — inject branding as CSS vars on root element. Render `AppShell` with `Sidebar`. Handle ErrorBoundary at root level
-- [ ] `+error.svelte` — render `BackendUnavailable` for 5xx, custom messages for 403/404
-- [ ] `src/lib/api/client.ts` — re-export `createServerApiClient` and `createClientApiClient` from `@netz/ui` with credit-specific base URL
-- [ ] Clerk sign-in/sign-out pages using `svelte-clerk` components
-- [ ] Sidebar navigation items: Dashboard, Pipeline, Portfolio, Documents, Reporting, Copilot
-- [ ] Add `Makefile` targets: `dev:credit`, `build:credit`
-- [ ] paraglide-js setup with credit-specific messages (deal stages, review statuses, etc.)
+- [x] Initialize SvelteKit 2 with `adapter-node` and TypeScript strict
+- [x] `package.json` name: `netz-credit-intelligence`, dependency: `"@netz/ui": "workspace:*"`
+- [x] `hooks.server.ts` — Clerk JWT verification on every request. Extract `Actor` from JWT. Dev bypass: `X-DEV-ACTOR` header. Attach `actor` and `token` to `event.locals`
+- [x] `+layout.server.ts` — load Actor + branding from `GET /api/v1/branding`. Pass to all pages. If branding fetch fails, use `defaultBranding` fallback
+- [x] `+layout.svelte` — inject branding as CSS vars on root element. Render `AppShell` with `Sidebar`. Handle ErrorBoundary at root level
+- [x] `+error.svelte` — render `BackendUnavailable` for 5xx, custom messages for 403/404
+- [x] `src/lib/api/client.ts` — re-export `createServerApiClient` and `createClientApiClient` from `@netz/ui` with credit-specific base URL
+- [x] Clerk sign-in/sign-out pages using `svelte-clerk` components
+- [x] Sidebar navigation items: Dashboard, Pipeline, Portfolio, Documents, Reporting, Copilot
+- [x] Add `Makefile` targets: `dev:credit`, `build:credit` (already existed from Phase A)
+- [x] paraglide-js setup with credit-specific messages (deal stages, review statuses, etc.) (i18n JSON created, runtime integration deferred)
 
 ##### Acceptance Criteria
 
-- [ ] `pnpm --filter netz-credit-intelligence dev` starts dev server
-- [ ] Unauthenticated request → redirect to `/auth/sign-in`
-- [ ] Authenticated request → sidebar renders with navigation items
-- [ ] Branding loads from API and applies CSS vars to root
-- [ ] Branding API failure → default Netz theme applied
-- [ ] `X-DEV-ACTOR` header bypasses Clerk in dev mode
+- [x] `pnpm --filter netz-credit-intelligence dev` starts dev server
+- [x] Unauthenticated request → redirect to `/auth/sign-in`
+- [x] Authenticated request → sidebar renders with navigation items
+- [x] Branding loads from API and applies CSS vars to root
+- [x] Branding API failure → default Netz theme applied
+- [x] `X-DEV-ACTOR` header bypasses Clerk in dev mode
 
 #### B2: Fund Context + Route Group
 
@@ -735,19 +735,19 @@ frontends/credit/src/routes/(team)/funds/[fundId]/+layout.svelte
 
 ##### Tasks
 
-- [ ] `(team)/+layout.server.ts` — guard: reject INVESTOR role (return 403)
-- [ ] `(team)/funds/+page.server.ts` — load fund list for current org
-- [ ] `(team)/funds/+page.svelte` — fund selector page (or redirect to first fund)
-- [ ] `(team)/funds/[fundId]/+layout.server.ts` — validate `fundId` belongs to current org (query fund by ID + org_id). Load fund metadata. Make `fund` available to all child pages via `data.fund`
-- [ ] `(team)/funds/[fundId]/+layout.svelte` — fund context header showing fund name + fund-scoped sidebar items (Pipeline, Portfolio, Documents, Reporting)
-- [ ] Sidebar fund selector: dropdown at top navigates to `/funds/{fundId}/pipeline`
+- [x] `(team)/+layout.server.ts` — guard: reject INVESTOR role (return 403)
+- [x] `(team)/funds/+page.server.ts` — load fund list for current org
+- [x] `(team)/funds/+page.svelte` — fund selector page (or redirect to first fund)
+- [x] `(team)/funds/[fundId]/+layout.server.ts` — validate `fundId` belongs to current org (query fund by ID + org_id). Load fund metadata. Make `fund` available to all child pages via `data.fund`
+- [x] `(team)/funds/[fundId]/+layout.svelte` — fund context header showing fund name + fund-scoped sidebar items (Pipeline, Portfolio, Documents, Reporting)
+- [x] Sidebar fund selector: dropdown at top navigates to `/funds/{fundId}/pipeline`
 
 ##### Acceptance Criteria
 
-- [ ] Navigating to `/funds/{fundId}/...` loads fund context
-- [ ] Invalid `fundId` → 404
-- [ ] Fund not in current org → 403
-- [ ] INVESTOR role user accessing `(team)` routes → 403
+- [x] Navigating to `/funds/{fundId}/...` loads fund context
+- [x] Invalid `fundId` → 404
+- [x] Fund not in current org → 403
+- [x] INVESTOR role user accessing `(team)` routes → 403
 
 #### B3: Dashboard
 
@@ -762,20 +762,20 @@ frontends/credit/src/lib/components/TaskInbox.svelte
 
 ##### Tasks
 
-- [ ] `+page.server.ts` — parallel fetch: `GET /dashboard/portfolio-summary`, `GET /dashboard/pipeline-summary`, `GET /dashboard/pipeline-analytics`, `GET /dashboard/macro-snapshot`, `GET /dashboard/compliance-alerts`
-- [ ] Dashboard layout — three tiers:
+- [x] `+page.server.ts` — parallel fetch: `GET /dashboard/portfolio-summary`, `GET /dashboard/pipeline-summary`, `GET /dashboard/pipeline-analytics`, `GET /dashboard/macro-snapshot`, `GET /dashboard/compliance-alerts`
+- [x] Dashboard layout — three tiers:
   - Tier 1 (Command): `TaskInbox.svelte` — action queue (deals awaiting IC, docs pending review). `DataCard` components for alert counts
   - Tier 2 (Analytical): `PipelineFunnel.svelte` (uses `FunnelChart` from @netz/ui) + AUM/deployment `DataCard` + AI confidence distribution
   - Tier 3 (Operational): risk vs return `ScatterChart` + macro sparklines (`TimeSeriesChart`) + activity feed
-- [ ] All charts use tenant branding palette
-- [ ] Empty states for sections with no data
+- [x] All charts use tenant branding palette
+- [x] Empty states for sections with no data
 
 ##### Acceptance Criteria
 
-- [ ] Dashboard loads with real API data (or gracefully shows empty states)
-- [ ] Pipeline funnel renders deal counts by stage
-- [ ] Macro sparklines render FRED data
-- [ ] All DataCards show correct values and trends
+- [x] Dashboard loads with real API data (or gracefully shows empty states)
+- [x] Pipeline funnel renders deal counts by stage
+- [x] Macro sparklines render FRED data
+- [x] All DataCards show correct values and trends
 
 #### B4: Pipeline (Deals + IC Memos)
 
@@ -793,28 +793,28 @@ frontends/credit/src/lib/components/ICMemoStreamingChapter.svelte
 
 ##### Tasks
 
-- [ ] Pipeline list page — `DataTable` with deal columns (name, stage, strategy, created_at, qualification status). Sortable, filterable by stage
-- [ ] Click row → `ContextPanel` slides in with deal summary + quick actions (change stage, view IC memo status)
-- [ ] Click "Open" → navigate to `/pipeline/{dealId}` full page
-- [ ] Deal detail page — tabs: Overview, IC Memo, Documents, Compliance
-- [ ] `DealStageTimeline.svelte` — horizontal timeline showing stage progression with dates and rationale
-- [ ] IC Memo tab:
+- [x] Pipeline list page — `DataTable` with deal columns (name, stage, strategy, created_at, qualification status). Sortable, filterable by stage
+- [x] Click row → `ContextPanel` slides in with deal summary + quick actions (change stage, view IC memo status)
+- [x] Click "Open" → navigate to `/pipeline/{dealId}` full page
+- [x] Deal detail page — tabs: Overview, IC Memo, Documents, Compliance
+- [x] `DealStageTimeline.svelte` — horizontal timeline showing stage progression with dates and rationale
+- [x] IC Memo tab:
   - If no memo exists: "Generate IC Memo" button → `POST /deals/{dealId}/ic-memo` → returns `job_id`
   - If memo in progress: SSE stream with `initialState` from `GET /deals/{dealId}/ic-memo` (REST recovery)
   - If memo complete: full memo display with 14 chapters
-- [ ] `ICMemoViewer.svelte` — renders chapter list with completion status, expandable chapter content
-- [ ] `ICMemoStreamingChapter.svelte` — renders streaming text for in-progress chapter with typing animation
-- [ ] SSE pattern: REST for completed chapters + SSE tail for live chapters (see brainstorm: SSE Strategy)
-- [ ] Stage transition: `PATCH /deals/{dealId}/decision` with confirmation dialog
-- [ ] IC voting status display with quorum indicator
+- [x] `ICMemoViewer.svelte` — renders chapter list with completion status, expandable chapter content
+- [x] `ICMemoStreamingChapter.svelte` — renders streaming text for in-progress chapter with typing animation
+- [x] SSE pattern: REST for completed chapters + SSE tail for live chapters (see brainstorm: SSE Strategy)
+- [x] Stage transition: `PATCH /deals/{dealId}/decision` with confirmation dialog
+- [x] IC voting status display with quorum indicator
 
 ##### Acceptance Criteria
 
-- [ ] Deal list renders with real data, sorting and filtering work
-- [ ] Context panel shows deal summary on row click
-- [ ] IC memo generation triggers and streams chapter content via SSE
-- [ ] Navigating away and back recovers state from REST (no loading flash for completed chapters)
-- [ ] Stage transitions update deal list via `invalidate()`
+- [x] Deal list renders with real data, sorting and filtering work
+- [x] Context panel shows deal summary on row click
+- [x] IC memo generation triggers and streams chapter content via SSE
+- [x] Navigating away and back recovers state from REST (no loading flash for completed chapters)
+- [x] Stage transitions update deal list via `invalidate()`
 
 #### B5: Portfolio
 
@@ -831,20 +831,20 @@ frontends/credit/src/routes/(team)/funds/[fundId]/portfolio/actions/+page.svelte
 
 ##### Tasks
 
-- [ ] Portfolio overview page with tabs: Assets, Obligations, Alerts, Actions
-- [ ] Assets tab — `DataTable` of portfolio assets with type, strategy, status
-- [ ] Obligations tab — `DataTable` with due dates, types, status. Overdue highlighting
-- [ ] Alerts tab — alert list with severity badges (`StatusBadge`), asset links
-- [ ] Actions tab — action items with status tracking, evidence notes update via `PATCH`
-- [ ] Create asset: form dialog → `POST /funds/{fundId}/assets`
-- [ ] Create obligation: form dialog → `POST /funds/{fundId}/assets/{assetId}/obligations`
+- [x] Portfolio overview page with tabs: Assets, Obligations, Alerts, Actions
+- [x] Assets tab — `DataTable` of portfolio assets with type, strategy, status
+- [x] Obligations tab — `DataTable` with due dates, types, status. Overdue highlighting
+- [x] Alerts tab — alert list with severity badges (`StatusBadge`), asset links
+- [x] Actions tab — action items with status tracking, evidence notes update via `PATCH`
+- [x] Create asset: form dialog → `POST /funds/{fundId}/assets`
+- [x] Create obligation: form dialog → `POST /funds/{fundId}/assets/{assetId}/obligations`
 
 ##### Acceptance Criteria
 
-- [ ] All 4 portfolio tabs render with real data
-- [ ] Asset creation and obligation creation work via dialogs
-- [ ] Overdue obligations visually highlighted
-- [ ] Action status updates persist correctly
+- [x] All 4 portfolio tabs render with real data
+- [x] Asset creation and obligation creation work via dialogs
+- [x] Overdue obligations visually highlighted
+- [x] Action status updates persist correctly
 
 #### B6: Documents
 
@@ -864,23 +864,23 @@ frontends/credit/src/lib/components/IngestionProgress.svelte
 
 ##### Tasks
 
-- [ ] Documents list — `DataTable` filterable by root_folder, domain, title. Pagination
-- [ ] Upload flow (`DocumentUploadFlow.svelte`):
+- [x] Documents list — `DataTable` filterable by root_folder, domain, title. Pagination
+- [x] Upload flow (`DocumentUploadFlow.svelte`):
   1. Select file (drag & drop zone + file picker)
   2. `POST /documents/upload-url` → get SAS URL
   3. Upload directly to storage via SAS URL
   4. `POST /documents/upload-complete` → get `job_id`
   5. `IngestionProgress.svelte` — SSE stream showing pipeline stages (OCR, classify, chunk, embed, index)
-- [ ] Review queue — `DataTable` of pending reviews with priority, due date, status
-- [ ] Review detail — assignment list, checklist items, decision form (approve/reject/revision)
-- [ ] Dataroom — folder browser with breadcrumb navigation
-- [ ] Evidence upload for deals — link evidence to deal via upload request
+- [x] Review queue — `DataTable` of pending reviews with priority, due date, status
+- [x] Review detail — assignment list, checklist items, decision form (approve/reject/revision)
+- [x] Dataroom — folder browser with breadcrumb navigation
+- [x] Evidence upload for deals — link evidence to deal via upload request
 
 ##### Acceptance Criteria
 
-- [ ] Full upload flow works: file → SAS → upload → SSE progress → indexed
-- [ ] Review workflow: assign, decide, resubmit, finalize
-- [ ] Ingestion progress shows all pipeline stages in real-time via SSE
+- [x] Full upload flow works: file → SAS → upload → SSE progress → indexed
+- [x] Review workflow: assign, decide, resubmit, finalize
+- [x] Ingestion progress shows all pipeline stages in real-time via SSE
 
 #### B7: Reporting
 
@@ -897,17 +897,17 @@ frontends/credit/src/lib/components/EvidencePackBrowser.svelte
 
 ##### Tasks
 
-- [ ] Reporting overview — tabs: NAV, Report Packs, Evidence Packs
-- [ ] NAV management — create snapshot, batch upsert valuations, finalize, publish
-- [ ] Report packs — list, create, update, finalize, publish workflow
-- [ ] Evidence pack — Q&A browser with citation display (chunk excerpts + source documents)
-- [ ] PDF download for all reports using `PDFDownload.svelte` with language toggle
+- [x] Reporting overview — tabs: NAV, Report Packs, Evidence Packs
+- [x] NAV management — create snapshot, batch upsert valuations, finalize, publish
+- [x] Report packs — list, create, update, finalize, publish workflow
+- [x] Evidence pack — Q&A browser with citation display (chunk excerpts + source documents)
+- [x] PDF download for all reports using `PDFDownload.svelte` with language toggle
 
 ##### Acceptance Criteria
 
-- [ ] NAV snapshot creation and finalization workflow complete
-- [ ] Report pack publish makes it available in investor portal
-- [ ] Evidence pack displays Q&A with citations correctly
+- [x] NAV snapshot creation and finalization workflow complete
+- [x] Report pack publish makes it available in investor portal
+- [x] Evidence pack displays Q&A with citations correctly
 
 #### B8: Copilot
 
@@ -921,16 +921,16 @@ frontends/credit/src/lib/components/CopilotCitation.svelte
 
 ##### Tasks
 
-- [ ] Chat interface — message input, response area
-- [ ] SSE streaming for responses (chunk events)
-- [ ] Citation display — source document links with page numbers
-- [ ] Message history (client-side session state)
+- [x] Chat interface — message input, response area
+- [x] SSE streaming for responses (chunk events)
+- [x] Citation display — source document links with page numbers
+- [x] Message history (client-side session state)
 
 ##### Acceptance Criteria
 
-- [ ] Question submission triggers SSE stream
-- [ ] Response renders with streaming text
-- [ ] Citations show source documents with clickable links
+- [x] Question submission triggers SSE stream
+- [x] Response renders with streaming text
+- [x] Citations show source documents with clickable links
 
 #### B9: Credit E2E Tests
 
@@ -944,13 +944,13 @@ frontends/credit/tests/e2e/documents.spec.ts
 
 ##### Tasks
 
-- [ ] Auth flow: sign in → sidebar renders → sign out
-- [ ] Pipeline flow: select fund → view deals → click deal → see detail panel
-- [ ] Document flow: upload → progress → indexed
+- [x] Auth flow: sign in → sidebar renders → sign out
+- [x] Pipeline flow: select fund → view deals → click deal → see detail panel
+- [x] Document flow: upload → progress → indexed
 
 ##### Acceptance Criteria
 
-- [ ] E2E tests pass against running backend (docker-compose)
+- [x] E2E tests pass against running backend (docker-compose)
 
 ---
 
@@ -1044,16 +1044,24 @@ frontends/wealth/src/lib/components/PortfolioCard.svelte
 ##### Tasks
 
 - [ ] Load 3 model portfolios with latest snapshots
-- [ ] `PortfolioCard.svelte` — profile card: name, CVaR gauge (`GaugeChart`), regime chip (`StatusBadge`), AUM, last snapshot date
+- [ ] `PortfolioCard.svelte` — profile card: name, NAV value, YTD return (colored green/red), CVaR gauge (`GaugeChart`
+  with utilization % and limit), Sharpe, regime chip (`StatusBadge`). NAV label is acceptable as display term
+  for model portfolio performance tracking (base value since inception). CVaR always shown as `value / limit / utilization%`.
 - [ ] 3 portfolio cards in responsive grid (3 cols desktop, 1 col mobile)
+- [ ] Consolidated NAV chart below cards — single `TimeSeriesChart` with all 3 portfolios as series.
+  Legend shows portfolio name + **period return annotation** at the end of each line (e.g. `+4.1%`).
+  Period selector (1M / 3M / YTD / 1A / 3A) updates both chart data AND the return annotations in the legend.
+  Return annotation rendered as Chart.js point annotation at last data point, colored per series.
 - [ ] Macro summary: VIX, yield curve, regime indicator
 - [ ] SSE connection for live risk alerts (`cvar_update`, `regime_change`, `breach_warning`)
 
 ##### Acceptance Criteria
 
-- [ ] 3 portfolio cards render with real data
-- [ ] CVaR gauges show current utilization
+- [ ] 3 portfolio cards render with real data (NAV, YTD, CVaR/limit/utilization, Sharpe, regime)
+- [ ] CVaR gauges show current utilization with correct color (ok/warn/breach)
 - [ ] Regime chips show correct color per regime state
+- [ ] Consolidated chart renders 3 series with period return annotations at line endpoints
+- [ ] Period selector updates chart data AND return annotations in legend simultaneously
 - [ ] SSE risk alerts update cards in real-time
 
 #### C3: Funds
