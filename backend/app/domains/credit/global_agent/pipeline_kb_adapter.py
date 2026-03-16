@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import logging
 import re
+import uuid as _uuid
 
 from ai_engine.extraction.kb_schema import ComplianceChunk, DocType
+from ai_engine.extraction.search_upsert_service import _validate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +38,7 @@ class PipelineKBAdapter:
     @staticmethod
     def search_live(
         query: str,
+        organization_id: _uuid.UUID | str,
         deal_folder: str | None = None,
         top: int = 20,
     ) -> list[ComplianceChunk]:
@@ -45,10 +48,14 @@ class PipelineKBAdapter:
         a broad wildcard search and ensures diverse deal coverage by
         selecting top chunks from each unique deal_folder.
 
+        All queries include organization_id for tenant isolation (Security F2/F5).
+
         Parameters
         ----------
         query : str
             Natural-language search query.
+        organization_id : uuid.UUID | str
+            Tenant isolation — required for all search queries.
         deal_folder : str | None
             If provided, scopes retrieval to a specific deal via OData filter.
         top : int
@@ -60,21 +67,28 @@ class PipelineKBAdapter:
             Sorted by search_score descending.
 
         """
+        from ai_engine.pipeline.storage_routing import _SAFE_PATH_SEGMENT_RE
+
         from app.services.azure.search_client import get_search_client
+
+        safe_org = _validate_uuid(organization_id, "organization_id")
+        org_filter = f"organization_id eq '{safe_org}'"
 
         is_overview = not deal_folder and bool(_OVERVIEW_PATTERNS.search(query))
 
         try:
             client = get_search_client(index_name=PIPELINE_INDEX)
 
-            odata_filter: str | None = None
+            odata_filter = org_filter
             if deal_folder:
-                odata_filter = f"deal_folder eq '{deal_folder}'"
+                if not _SAFE_PATH_SEGMENT_RE.match(deal_folder):
+                    raise ValueError(f"Invalid deal_folder: {deal_folder!r}")
+                odata_filter = f"{org_filter} and deal_folder eq '{deal_folder}'"
 
             if is_overview:
                 # For overview queries: fetch more results with wildcard to
                 # ensure we cover all deals, then diversify per deal_folder
-                chunks = _overview_search(client, query, top)
+                chunks = _overview_search(client, query, top, org_filter)
             else:
                 chunks = _standard_search(client, query, top, odata_filter)
 
@@ -108,7 +122,9 @@ def _standard_search(
     return [_to_chunk(r) for r in results]
 
 
-def _overview_search(client, query: str, top: int) -> list[ComplianceChunk]:
+def _overview_search(
+    client, query: str, top: int, org_filter: str,
+) -> list[ComplianceChunk]:
     """Broad search that ensures coverage of all deals in the index.
 
     Strategy: fetch a large result set with a generic query, then
@@ -122,6 +138,7 @@ def _overview_search(client, query: str, top: int) -> list[ComplianceChunk]:
     results_query = list(client.search(
         search_text=query,
         top=fetch_size,
+        filter=org_filter,
         select=["id", "parent_id", "blob_name", "title", "content",
                 "doc_type", "deal_folder", "deal_id", "last_modified"],
     ))
@@ -130,6 +147,7 @@ def _overview_search(client, query: str, top: int) -> list[ComplianceChunk]:
     results_wildcard = list(client.search(
         search_text="*",
         top=fetch_size,
+        filter=org_filter,
         select=["id", "parent_id", "blob_name", "title", "content",
                 "doc_type", "deal_folder", "deal_id", "last_modified"],
     ))

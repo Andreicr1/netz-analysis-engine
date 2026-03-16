@@ -168,6 +168,8 @@ def retrieve(
 
     try:
         client = AzureSearchChunksClient()
+        # TODO(Phase 3 / Sprint 3): When AzureSearchChunksClient is implemented,
+        # pass organization_id=str(actor.org_id) for tenant isolation (Security F2).
         hits = client.search(q=payload.query, fund_id=str(fund_id), root_folder=payload.root_folder, top=payload.top_k)
     except (RetrievalEmbeddingError, RetrievalExecutionError) as exc:
         raise HTTPException(status_code=502, detail=f"Search backend unavailable: {exc}")
@@ -265,6 +267,8 @@ def answer(
 
     try:
         client = AzureSearchChunksClient()
+        # TODO(Phase 3 / Sprint 3): When AzureSearchChunksClient is implemented,
+        # pass organization_id=str(actor.org_id) for tenant isolation (Security F2).
         hits = client.search(q=payload.question, fund_id=str(fund_id), root_folder=payload.root_folder, top=payload.top_k)
     except (RetrievalEmbeddingError, RetrievalExecutionError) as exc:
         raise HTTPException(status_code=502, detail=f"Search backend unavailable: {exc}")

@@ -27,6 +27,7 @@ def _retrieve_deal_context(
     deal_id: uuid.UUID,
     deal_name: str,
     *,
+    organization_id: uuid.UUID | str,
     max_chunks: int = MAX_RETRIEVAL_CHUNKS,
 ) -> tuple[str, int, list[dict], dict[str, list[str]]]:
     """Hybrid retrieval: embed the deal name as query vector + BM25 text.
@@ -51,6 +52,7 @@ def _retrieve_deal_context(
     try:
         chunks = search_deal_chunks(
             deal_id=deal_id,
+            organization_id=organization_id,
             query_text=query_text,
             query_vector=query_vector,
             top=max_chunks,

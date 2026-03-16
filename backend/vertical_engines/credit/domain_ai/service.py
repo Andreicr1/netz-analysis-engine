@@ -31,6 +31,7 @@ def _retrieve_context(
     deal_id: uuid.UUID,
     deal_name: str,
     *,
+    organization_id: uuid.UUID | str,
     max_chunks: int = 20,
 ) -> str:
     """Hybrid retrieval: embed the deal name as query vector + BM25 text search.
@@ -53,6 +54,7 @@ def _retrieve_context(
     try:
         chunks = search_deal_chunks(
             deal_id=deal_id,
+            organization_id=organization_id,
             query_text=query_text,
             query_vector=query_vector,
             top=max_chunks,
@@ -141,12 +143,13 @@ def run_portfolio_analysis(
     fund_id: uuid.UUID,
     deal_name: str,
     sponsor_name: str | None,
+    organization_id: uuid.UUID | str,
 ) -> dict[str, Any]:
     """Run PORTFOLIO-mode AI analysis: monitoring output.
 
     Retrieves indexed chunks + cashflow data, calls GPT, writes result to deals.
     """
-    context = _retrieve_context(deal_id, deal_name)
+    context = _retrieve_context(deal_id, deal_name, organization_id=organization_id)
 
     # Fetch cashflow and performance data
     cashflow_summary, performance_summary = _get_portfolio_financials(db, deal_id=deal_id, fund_id=fund_id)

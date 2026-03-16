@@ -51,11 +51,14 @@ def _gather_policy_context(
     fund_id: uuid.UUID,
     deal_name: str,
     deal_folder_path: str | None = None,
+    organization_id: uuid.UUID | str | None = None,
 ) -> str:
     """Retrieve fund-level policy/governance chunks via v5 index RAG.
 
     Uses AzureSearchChunksClient with doc_type filter scoped to compliance,
     regulatory, and credit policy documents.
+    organization_id is threaded for tenant isolation when the search client
+    supports it (currently a stub — will enforce when Sprint 3 client ships).
     Returns concatenated policy text or empty string if none found.
     """
     from app.services.search_index import AzureSearchChunksClient

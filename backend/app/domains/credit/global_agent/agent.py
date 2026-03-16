@@ -54,6 +54,7 @@ class NetzGlobalAgent:
         top: int = 10,
         db: Session | None = None,
         actor: Any | None = None,
+        organization_id: uuid.UUID | str | None = None,
         ui_context: dict[str, Any] | None = None,
         system_prompt_override: str | None = None,
     ) -> dict[str, Any]:
@@ -98,8 +99,11 @@ class NetzGlobalAgent:
             # For global pipeline queries, fetch more chunks to ensure deal diversity
             effective_top = max(top, 30)
 
+        # Resolve org_id: explicit parameter > actor.org_id > None
+        org_id = organization_id or (getattr(actor, "org_id", None) if actor else None)
+
         all_chunks = self._parallel_retrieve(
-            question, resolved_domains, deal_folder, effective_top,
+            question, resolved_domains, deal_folder, effective_top, org_id,
         )
 
         # 3. RBAC filter
@@ -206,6 +210,7 @@ class NetzGlobalAgent:
         domains: list[str],
         deal_folder: str | None,
         top: int,
+        organization_id: uuid.UUID | str | None = None,
     ) -> list[Any]:
         """Fan out to relevant adapters concurrently using ThreadPoolExecutor.
         """
@@ -216,7 +221,7 @@ class NetzGlobalAgent:
             # Pipeline retrieval
             if "PIPELINE" in domains:
                 fut = executor.submit(
-                    self._retrieve_pipeline, question, deal_folder, top,
+                    self._retrieve_pipeline, question, deal_folder, top, organization_id,
                 )
                 futures[fut] = "PIPELINE"
 
@@ -224,7 +229,7 @@ class NetzGlobalAgent:
             compliance_domains = [d for d in domains if d in _COMPLIANCE_DOMAINS]
             for d in compliance_domains:
                 fut = executor.submit(
-                    self._retrieve_compliance, question, d, top,
+                    self._retrieve_compliance, question, d, top, organization_id,
                 )
                 futures[fut] = d
 
@@ -244,13 +249,18 @@ class NetzGlobalAgent:
 
     def _retrieve_pipeline(
         self, question: str, deal_folder: str | None, top: int,
+        organization_id: uuid.UUID | str | None = None,
     ) -> list[Any]:
         """Retrieve from global-vector-chunks-v4."""
         from app.domains.credit.global_agent.pipeline_kb_adapter import PipelineKBAdapter
 
+        if organization_id is None:
+            logger.warning("GLOBAL_AGENT pipeline retrieval without organization_id — tenant isolation disabled")
+            return []
+
         try:
             return PipelineKBAdapter.search_live(
-                query=question, deal_folder=deal_folder, top=top,
+                query=question, organization_id=organization_id, deal_folder=deal_folder, top=top,
             )
         except Exception as exc:
             logger.error("GLOBAL_AGENT PIPELINE_RETRIEVAL_ERROR: %s", exc)
@@ -258,15 +268,20 @@ class NetzGlobalAgent:
 
     def _retrieve_compliance(
         self, question: str, domain: str, top: int,
+        organization_id: uuid.UUID | str | None = None,
     ) -> list[Any]:
         """Retrieve from dedicated compliance indexes via AzureComplianceKBAdapter."""
         from ai_engine.extraction.azure_kb_adapter import (
             AzureComplianceKBAdapter,
         )
 
+        if organization_id is None:
+            logger.warning("GLOBAL_AGENT compliance retrieval without organization_id — tenant isolation disabled")
+            return []
+
         try:
             return AzureComplianceKBAdapter.search_live(
-                query=question, domain=domain, top=top,
+                query=question, domain=domain, organization_id=organization_id, top=top,
             )
         except Exception as exc:
             logger.error(
