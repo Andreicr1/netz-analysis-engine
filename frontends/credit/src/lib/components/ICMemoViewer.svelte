@@ -30,7 +30,7 @@
 	let streamingChapters = $state<Record<string, string>>({});
 	let activeSse = $state<ReturnType<typeof createSSEStream> | null>(null);
 
-	let chapters = $derived(() => {
+	let chapters = $derived.by(() => {
 		if (!memo?.chapters) return [];
 		return memo.chapters as Array<{ chapter_number: number; title: string; content: string; status: string }>;
 	});
@@ -100,7 +100,7 @@
 		{/if}
 
 		<!-- Chapter list -->
-		{#each chapters() as chapter (chapter.chapter_number)}
+		{#each chapters as chapter (chapter.chapter_number)}
 			<Card class="p-4">
 				<button
 					class="flex w-full items-center justify-between text-left"
