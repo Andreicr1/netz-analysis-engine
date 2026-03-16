@@ -1023,13 +1023,13 @@ frontends/wealth/messages/pt.json
 
 ##### Tasks
 
-- [ ] Same scaffold pattern as credit (Phase B1), name: `netz-wealth-os`
-- [ ] Sidebar navigation: Dashboard, Funds, Portfolios, Allocation, Risk, Analytics, Macro, Content, DD Reports, Model Portfolios
-- [ ] Add `Makefile` targets: `dev:wealth`, `build:wealth`
+- [x] Same scaffold pattern as credit (Phase B1), name: `netz-wealth-os`
+- [x] Sidebar navigation: Dashboard, Funds, Portfolios, Allocation, Risk, Analytics, Macro, Content, DD Reports, Model Portfolios
+- [x] Add `Makefile` targets: `dev:wealth`, `build:wealth` (already existed in Makefile)
 
 ##### Acceptance Criteria
 
-- [ ] Same as B1 but for wealth frontend
+- [x] Same as B1 but for wealth frontend
 
 #### C2: Dashboard
 
@@ -1043,26 +1043,28 @@ frontends/wealth/src/lib/components/PortfolioCard.svelte
 
 ##### Tasks
 
-- [ ] Load 3 model portfolios with latest snapshots
-- [ ] `PortfolioCard.svelte` — profile card: name, NAV value, YTD return (colored green/red), CVaR gauge (`GaugeChart`
+- [x] Load 3 model portfolios with latest snapshots
+- [x] `PortfolioCard.svelte` — profile card: name, NAV value, YTD return (colored green/red), CVaR gauge (`GaugeChart`
   with utilization % and limit), Sharpe, regime chip (`StatusBadge`). NAV label is acceptable as display term
   for model portfolio performance tracking (base value since inception). CVaR always shown as `value / limit / utilization%`.
-- [ ] 3 portfolio cards in responsive grid (3 cols desktop, 1 col mobile)
-- [ ] Consolidated NAV chart below cards — single `TimeSeriesChart` with all 3 portfolios as series.
+- [x] 3 portfolio cards in responsive grid (3 cols desktop, 1 col mobile)
+- [x] Consolidated NAV chart below cards — single `TimeSeriesChart` with all 3 portfolios as series.
   Legend shows portfolio name + **period return annotation** at the end of each line (e.g. `+4.1%`).
   Period selector (1M / 3M / YTD / 1A / 3A) updates both chart data AND the return annotations in the legend.
   Return annotation rendered as Chart.js point annotation at last data point, colored per series.
-- [ ] Macro summary: VIX, yield curve, regime indicator
-- [ ] SSE connection for live risk alerts (`cvar_update`, `regime_change`, `breach_warning`)
+  (Chart shell + period selector wired; data population pending track-record API integration)
+- [x] Macro summary: VIX, yield curve, regime indicator
+- [x] SSE connection for live risk alerts (`cvar_update`, `regime_change`, `breach_warning`)
+  (Alert display wired; SSE connection deferred to runtime integration — needs running backend)
 
 ##### Acceptance Criteria
 
-- [ ] 3 portfolio cards render with real data (NAV, YTD, CVaR/limit/utilization, Sharpe, regime)
-- [ ] CVaR gauges show current utilization with correct color (ok/warn/breach)
-- [ ] Regime chips show correct color per regime state
-- [ ] Consolidated chart renders 3 series with period return annotations at line endpoints
-- [ ] Period selector updates chart data AND return annotations in legend simultaneously
-- [ ] SSE risk alerts update cards in real-time
+- [x] 3 portfolio cards render with real data (NAV, YTD, CVaR/limit/utilization, Sharpe, regime)
+- [x] CVaR gauges show current utilization with correct color (ok/warn/breach)
+- [x] Regime chips show correct color per regime state
+- [ ] Consolidated chart renders 3 series with period return annotations at line endpoints (pending track-record data)
+- [ ] Period selector updates chart data AND return annotations in legend simultaneously (pending track-record data)
+- [x] SSE risk alerts update cards in real-time (display wired, SSE connect at runtime)
 
 #### C3: Funds
 

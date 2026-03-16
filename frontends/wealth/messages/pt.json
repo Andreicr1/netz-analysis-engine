@@ -1,0 +1,68 @@
+{
+  "app": {
+    "name": "Netz Wealth OS",
+    "tagline": "Plataforma de Gestao Patrimonial Institucional"
+  },
+  "nav": {
+    "dashboard": "Painel",
+    "funds": "Fundos",
+    "model_portfolios": "Carteiras Modelo",
+    "allocation": "Alocacao",
+    "risk": "Risco",
+    "analytics": "Analiticos",
+    "macro": "Macro",
+    "content": "Conteudo",
+    "dd_reports": "Relatorios DD"
+  },
+  "dashboard": {
+    "title": "Painel",
+    "portfolios": "Carteiras Modelo",
+    "nav_chart": "Desempenho Consolidado",
+    "macro_summary": "Resumo Macro",
+    "risk_alerts": "Alertas de Risco",
+    "no_portfolios": "Nenhuma Carteira Modelo",
+    "no_portfolios_desc": "As carteiras modelo aparecerão aqui após criação.",
+    "period_1m": "1M",
+    "period_3m": "3M",
+    "period_ytd": "YTD",
+    "period_1y": "1A",
+    "period_3y": "3A"
+  },
+  "portfolio_card": {
+    "nav": "NAV",
+    "ytd_return": "Retorno YTD",
+    "cvar": "CVaR",
+    "sharpe": "Sharpe",
+    "regime": "Regime",
+    "utilization": "Utilizacao"
+  },
+  "regimes": {
+    "RISK_ON": "Risk On",
+    "RISK_OFF": "Risk Off",
+    "INFLATION": "Inflacao",
+    "CRISIS": "Crise"
+  },
+  "common": {
+    "loading": "Carregando...",
+    "error": "Ocorreu um erro",
+    "retry": "Tentar novamente",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "delete": "Excluir",
+    "edit": "Editar",
+    "create": "Criar",
+    "download": "Baixar",
+    "upload": "Enviar",
+    "search": "Buscar",
+    "filter": "Filtrar",
+    "no_data": "Nenhum dado disponivel",
+    "confirm": "Confirmar",
+    "back": "Voltar"
+  },
+  "session": {
+    "expiry_title": "Sessao Expirando",
+    "expiry_message": "Sua sessao expira em 5 minutos. Salve seu trabalho e renove seu acesso.",
+    "renew": "Renovar Sessao",
+    "dismiss": "Dispensar"
+  }
+}
