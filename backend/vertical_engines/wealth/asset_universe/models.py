@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ApprovalRequest:
     """Input for creating a universe approval."""
 
@@ -17,7 +17,7 @@ class ApprovalRequest:
     organization_id: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ApprovalDecision:
     """Input for deciding on a universe approval."""
 
@@ -27,7 +27,7 @@ class ApprovalDecision:
     decided_by: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class UniverseAsset:
     """Read-only view of an approved fund in the universe."""
 
@@ -41,7 +41,7 @@ class UniverseAsset:
     approved_at: datetime | None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class DeactivationResult:
     """Result of deactivating an asset from the universe."""
 

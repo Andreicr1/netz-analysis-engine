@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class StrategicAllocationRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     allocation_id: uuid.UUID
     profile: str
@@ -51,7 +51,7 @@ class StrategicAllocationUpdate(BaseModel):
 
 
 class TacticalPositionRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     position_id: uuid.UUID
     profile: str

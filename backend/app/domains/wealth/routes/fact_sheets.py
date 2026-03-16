@@ -22,6 +22,7 @@ from app.core.config.settings import settings
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.model_portfolio import ModelPortfolio
+from app.domains.wealth.routes.common import _get_content_semaphore, require_content_slot
 from app.domains.wealth.schemas.fact_sheet import FactSheetGenerate
 from app.shared.enums import Role
 
@@ -87,11 +88,16 @@ async def generate_fact_sheet(
 
     fmt = body.format if body else "executive"
 
+    # Backpressure: reject if too many concurrent content tasks
+    await require_content_slot()
+
     def _generate() -> dict[str, Any]:
         from app.core.db.session import sync_session_factory
 
         with sync_session_factory() as sync_db:
             sync_db.expire_on_commit = False
+            from sqlalchemy import text
+            sync_db.execute(text("SET LOCAL app.current_organization_id = :oid"), {"oid": org_id})
             return _run_fact_sheet_generation(
                 sync_db,
                 portfolio_id=str(portfolio_id),
@@ -100,8 +106,19 @@ async def generate_fact_sheet(
                 language=language,
             )
 
-    gen_result = await asyncio.to_thread(_generate)
-    return gen_result
+    try:
+        gen_result = await asyncio.to_thread(_generate)
+
+        # Async storage write (moved from sync thread — no more throwaway event loop)
+        pdf_bytes = gen_result.pop("_pdf_bytes", None)
+        if pdf_bytes:
+            from app.services.storage_client import get_storage_client
+            storage = get_storage_client()
+            await storage.write(gen_result["storage_path"], pdf_bytes, content_type="application/pdf")
+
+        return gen_result
+    finally:
+        _get_content_semaphore().release()
 
 
 @router.get(
@@ -289,7 +306,7 @@ def _run_fact_sheet_generation(
         as_of=as_of,
     )
 
-    # Store PDF via StorageClient (sync write for local dev)
+    # Build storage path
     storage_path = gold_fact_sheet_path(
         org_id=uuid.UUID(organization_id),
         vertical="wealth",
@@ -299,28 +316,14 @@ def _run_fact_sheet_generation(
         filename=f"{format}.pdf",
     )
 
-    # Write to storage (sync wrapper for local dev)
-    import asyncio
-
-    from app.services.storage_client import get_storage_client
-
-    storage = get_storage_client()
-
-    # Use a new event loop in the sync thread for async storage write
-    loop = asyncio.new_event_loop()
-    try:
-        loop.run_until_complete(
-            storage.write(storage_path, pdf_buf.read(), content_type="application/pdf")
-        )
-    finally:
-        loop.close()
-
+    # Return bytes + path — async storage write happens in the calling async context
     return {
         "portfolio_id": portfolio_id,
         "format": format,
         "language": language,
         "as_of": as_of.isoformat(),
         "storage_path": storage_path,
+        "_pdf_bytes": pdf_buf.read(),
         "generated_at": datetime.now(UTC).isoformat(),
         "status": "completed",
     }

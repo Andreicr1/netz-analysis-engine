@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class MacroDataRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     series_id: str
     obs_date: date
@@ -83,7 +83,7 @@ class MacroScoresResponse(BaseModel):
 class MacroSnapshotResponse(BaseModel):
     """GET /api/wealth/macro/snapshot response."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     id: UUID
     as_of_date: date
@@ -107,7 +107,7 @@ class RegimeHierarchyRead(BaseModel):
 class MacroReviewRead(BaseModel):
     """Macro committee review response."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     id: UUID
     organization_id: UUID

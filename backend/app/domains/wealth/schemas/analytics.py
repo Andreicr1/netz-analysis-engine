@@ -25,7 +25,7 @@ class BacktestRequest(BaseModel):
 
 
 class BacktestRunRead(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     run_id: uuid.UUID
     profile: str

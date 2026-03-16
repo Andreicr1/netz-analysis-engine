@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from datetime import date
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FundWeight:
     """A single fund's weight in a portfolio composition."""
 
@@ -18,7 +18,7 @@ class FundWeight:
     score: float
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class PortfolioComposition:
     """Result of portfolio construction — per-fund weights summing to 1.0."""
 
@@ -31,7 +31,7 @@ class PortfolioComposition:
         return abs(self.total_weight - 1.0) < 1e-6
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class FoldMetrics:
     """Metrics for a single backtest fold."""
 
@@ -42,7 +42,7 @@ class FoldMetrics:
     n_obs: int
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class BacktestResult:
     """Result of walk-forward backtesting."""
 
@@ -57,7 +57,7 @@ class BacktestResult:
     youngest_fund_start: date | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class LiveNAV:
     """Result of live NAV computation."""
 
@@ -68,7 +68,7 @@ class LiveNAV:
     inception_nav: float = 1000.0
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ScenarioResult:
     """Result for a single stress scenario."""
 
@@ -80,7 +80,7 @@ class ScenarioResult:
     recovery_days: int | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class StressResult:
     """Result of stress scenario analysis."""
 

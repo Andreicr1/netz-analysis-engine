@@ -168,6 +168,92 @@ exhaustive_ignores = [
     "__init__",
 ]
 
+# ── Wealth vertical contracts (mirrors credit contracts above) ────────
+
+# Narrow guard: models must never import entry-point modules.
+# Covers critic (service.py) — the only wealth package using the credit naming.
+[[tool.importlinter.contracts]]
+name = "Wealth models must not import service (critic)"
+type = "forbidden"
+source_modules = ["vertical_engines.wealth.critic.models"]
+forbidden_modules = ["vertical_engines.wealth.critic.service"]
+
+# Broad guard: wealth critic helpers must not import service.
+[[tool.importlinter.contracts]]
+name = "Wealth critic helpers must not import service"
+type = "forbidden"
+source_modules = [
+    "vertical_engines.wealth.critic.parser",
+    "vertical_engines.wealth.critic.prompt_builder",
+]
+forbidden_modules = ["vertical_engines.wealth.critic.service"]
+
+# DD report: models must not import engine entry-point.
+[[tool.importlinter.contracts]]
+name = "Wealth dd_report models must not import engine"
+type = "forbidden"
+source_modules = ["vertical_engines.wealth.dd_report.models"]
+forbidden_modules = ["vertical_engines.wealth.dd_report.dd_report_engine"]
+
+# DD report: helpers must not import engine entry-point.
+[[tool.importlinter.contracts]]
+name = "Wealth dd_report helpers must not import engine"
+type = "forbidden"
+source_modules = [
+    "vertical_engines.wealth.dd_report.chapters",
+    "vertical_engines.wealth.dd_report.confidence_scoring",
+    "vertical_engines.wealth.dd_report.evidence_pack",
+    "vertical_engines.wealth.dd_report.quant_injection",
+]
+forbidden_modules = ["vertical_engines.wealth.dd_report.dd_report_engine"]
+
+# Fact sheet: models must not import engine entry-point.
+[[tool.importlinter.contracts]]
+name = "Wealth fact_sheet models must not import engine"
+type = "forbidden"
+source_modules = ["vertical_engines.wealth.fact_sheet.models"]
+forbidden_modules = ["vertical_engines.wealth.fact_sheet.fact_sheet_engine"]
+
+# Fact sheet: helpers must not import engine entry-point.
+[[tool.importlinter.contracts]]
+name = "Wealth fact_sheet helpers must not import engine"
+type = "forbidden"
+source_modules = [
+    "vertical_engines.wealth.fact_sheet.chart_builder",
+    "vertical_engines.wealth.fact_sheet.executive_renderer",
+    "vertical_engines.wealth.fact_sheet.institutional_renderer",
+    "vertical_engines.wealth.fact_sheet.i18n",
+]
+forbidden_modules = ["vertical_engines.wealth.fact_sheet.fact_sheet_engine"]
+
+# Asset universe: models must not import service entry-point.
+[[tool.importlinter.contracts]]
+name = "Wealth asset_universe models must not import service"
+type = "forbidden"
+source_modules = ["vertical_engines.wealth.asset_universe.models"]
+forbidden_modules = ["vertical_engines.wealth.asset_universe.universe_service"]
+
+# Asset universe: helpers must not import service entry-point.
+[[tool.importlinter.contracts]]
+name = "Wealth asset_universe helpers must not import service"
+type = "forbidden"
+source_modules = [
+    "vertical_engines.wealth.asset_universe.fund_approval",
+]
+forbidden_modules = ["vertical_engines.wealth.asset_universe.universe_service"]
+
+# Model portfolio: models must not import helpers (no entry-point service,
+# but models should remain a leaf node).
+[[tool.importlinter.contracts]]
+name = "Wealth model_portfolio models must not import helpers"
+type = "forbidden"
+source_modules = ["vertical_engines.wealth.model_portfolio.models"]
+forbidden_modules = [
+    "vertical_engines.wealth.model_portfolio.portfolio_builder",
+    "vertical_engines.wealth.model_portfolio.stress_scenarios",
+    "vertical_engines.wealth.model_portfolio.track_record",
+]
+
 # Phase A ratchet (bdabdc8): regime + cvar are vertical-agnostic.
 # Other quant services still depend on app.domains.wealth — subsequent phases.
 [[tool.importlinter.contracts]]
