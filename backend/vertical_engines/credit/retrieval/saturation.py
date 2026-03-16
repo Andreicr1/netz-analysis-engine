@@ -83,6 +83,7 @@ def enforce_evidence_saturation(
         coverage_score=round(coverage_score, 4),
         gaps=gaps,
         missing_document_classes=list(set(missing_document_classes)),
+        reason=f"{len(gaps)} of {total_chapters} chapters below threshold" if gaps else "",
     )
 
 

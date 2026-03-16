@@ -2285,14 +2285,16 @@ async def async_run_deal_deep_review_v4(
     if _settings.feature_adls_enabled:
         from app.services.storage_client import get_storage_client
 
-        asyncio.create_task(
+        _gold_task = asyncio.create_task(
             write_gold_memo(
                 get_storage_client(),
                 organization_id=str(organization_id),
                 memo_id=str(evidence_pack_id),
                 result_dict=result,
             ),
+            name=f"gold_memo_{evidence_pack_id}",
         )
+        _gold_task.add_done_callback(lambda t: t.result() if not t.cancelled() else None)
 
     return result
 

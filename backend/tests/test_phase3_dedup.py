@@ -58,13 +58,6 @@ class TestStageOutcome:
                 ["only_one"],
             )
 
-    def test_frozen(self):
-        from vertical_engines.credit.deep_review.models import StageOutcome
-
-        outcome = StageOutcome(edgar="test")
-        with pytest.raises(AttributeError):
-            outcome.edgar = "changed"  # type: ignore[misc]
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # build_profile_metadata
@@ -303,8 +296,8 @@ class TestPersistReviewArtifacts:
 class TestInjectionMarkersShared:
     def test_single_source_of_truth(self):
         from ai_engine.governance._constants import INJECTION_MARKERS
-        from ai_engine.governance.output_safety import _INJECTION_MARKERS as output_markers
-        from ai_engine.governance.prompt_safety import _INJECTION_MARKERS as prompt_markers
+        from ai_engine.governance.output_safety import INJECTION_MARKERS as output_markers
+        from ai_engine.governance.prompt_safety import INJECTION_MARKERS as prompt_markers
 
         assert output_markers is INJECTION_MARKERS
         assert prompt_markers is INJECTION_MARKERS

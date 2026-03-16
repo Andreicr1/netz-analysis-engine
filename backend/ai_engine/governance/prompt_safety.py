@@ -21,8 +21,6 @@ from ai_engine.governance._constants import INJECTION_MARKERS
 
 logger = logging.getLogger(__name__)
 
-_INJECTION_MARKERS = INJECTION_MARKERS
-
 _INJECTION_PATTERN = re.compile(
     r"<\|(?:system|user|assistant|im_start|im_end)\|>",
     re.IGNORECASE,
@@ -64,7 +62,7 @@ def sanitize_user_input(
 
     if strip_injection_markers:
         text_upper = text.upper()
-        for marker in _INJECTION_MARKERS:
+        for marker in INJECTION_MARKERS:
             if marker.upper() in text_upper:
                 text = re.sub(re.escape(marker), "", text, flags=re.IGNORECASE)
                 logger.info(

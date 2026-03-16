@@ -183,13 +183,11 @@ def persist_review_artifacts(
 ) -> None:
     """Persist DealIntelligenceProfile + DealICBrief + DealRiskFlag.
 
-    Sync function:
-    - Sync callers pass their existing db session directly.
-    - Async callers use asyncio.to_thread() with a NEW SessionLocal() session
-      (NOT session.sync_session). The new session must SET LOCAL RLS context.
+    Both sync and async callers pass their db session directly.
+    The async path ensures all to_thread tasks have completed before
+    calling this function, so the session is exclusively owned.
 
     All LLM-sourced string fields sanitized via sanitize_llm_text() before DB write.
-    The caller must NOT have concurrent to_thread calls on the same session.
     """
     # Function-level import to avoid circular dependency (underwriting package)
     from vertical_engines.credit.underwriting import derive_risk_band as _derive_risk_band
@@ -208,13 +206,16 @@ def persist_review_artifacts(
     profile = DealIntelligenceProfile(
         fund_id=fund_id,
         deal_id=deal_id,
-        strategy_type=_title_case_strategy(
-            _trunc(
-                analysis.get("strategyType")
-                or deal_fields.get("strategy_type")
-                or "Private Credit",
-                80,
+        strategy_type=sanitize_llm_text(
+            _title_case_strategy(
+                _trunc(
+                    analysis.get("strategyType")
+                    or deal_fields.get("strategy_type")
+                    or "Private Credit",
+                    80,
+                ),
             ),
+            strip_all_html=True, max_length=80,
         ),
         geography=sanitize_llm_text(
             _trunc(analysis.get("geography") or deal_fields.get("geography"), 120),
@@ -248,7 +249,11 @@ def persist_review_artifacts(
             for r in risks
             if isinstance(r, dict)
         ],
-        differentiators=analysis.get("keyDifferentiators", []),
+        differentiators=[
+            sanitize_llm_text(d, strip_all_html=True, max_length=500) or ""
+            for d in (analysis.get("keyDifferentiators") or [])
+            if isinstance(d, str)
+        ],
         summary_ic_ready=sanitize_llm_text(
             analysis.get("executiveSummary", "AI review pending."),
         ),

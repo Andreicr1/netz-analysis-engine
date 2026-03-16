@@ -39,8 +39,6 @@ _SAFE_ATTRIBUTES: dict[str, set[str]] = {
     "th": {"colspan", "rowspan"},
 }
 
-_INJECTION_MARKERS = INJECTION_MARKERS
-
 _WHITESPACE_COLLAPSE = re.compile(r"\n{3,}")
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
@@ -82,7 +80,7 @@ def sanitize_llm_text(
         text = nh3.clean(text, tags=_SAFE_TAGS, attributes=_SAFE_ATTRIBUTES)
     # 4. Strip prompt injection markers (defense-in-depth against stored indirect injection)
     text_upper = text.upper()
-    for marker in _INJECTION_MARKERS:
+    for marker in INJECTION_MARKERS:
         if marker.upper() in text_upper:
             text = re.sub(re.escape(marker), "", text, flags=re.IGNORECASE)
             logger.warning("stripped_injection_marker", marker=marker)
