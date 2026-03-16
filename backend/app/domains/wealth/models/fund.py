@@ -24,7 +24,7 @@ class Fund(OrganizationScopedMixin, Base):
     fund_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    isin: Mapped[str | None] = mapped_column(String(12), unique=True)
+    isin: Mapped[str | None] = mapped_column(String(12))
     ticker: Mapped[str | None] = mapped_column(String(20))
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     manager_name: Mapped[str | None] = mapped_column(String(255))
@@ -42,6 +42,9 @@ class Fund(OrganizationScopedMixin, Base):
     inception_date: Mapped[date | None] = mapped_column(Date)
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
     data_source: Mapped[str | None] = mapped_column(String(30))
+    approval_status: Mapped[str | None] = mapped_column(
+        String(20), server_default="pending_dd"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

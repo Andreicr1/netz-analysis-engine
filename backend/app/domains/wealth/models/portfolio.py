@@ -13,7 +13,7 @@ from app.core.db.base import Base, OrganizationScopedMixin
 class PortfolioSnapshot(OrganizationScopedMixin, Base):
     __tablename__ = "portfolio_snapshots"
     __table_args__ = (
-        UniqueConstraint("profile", "snapshot_date"),
+        UniqueConstraint("organization_id", "profile", "snapshot_date"),
         Index("ix_portfolio_snapshots_profile_snapshot_date", "profile", "snapshot_date"),
     )
 
