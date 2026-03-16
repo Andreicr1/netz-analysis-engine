@@ -76,6 +76,7 @@ from app.domains.wealth.routes.funds import router as wealth_funds_router
 from app.domains.wealth.routes.macro import router as wealth_macro_router
 from app.domains.wealth.routes.portfolios import router as wealth_portfolios_router
 from app.domains.wealth.routes.risk import router as wealth_risk_router
+from app.domains.wealth.routes.dd_reports import router as wealth_dd_reports_router
 from app.domains.wealth.routes.workers import router as wealth_workers_router
 
 logger = logging.getLogger(__name__)
@@ -226,6 +227,7 @@ api_v1.include_router(wealth_portfolios_router)
 api_v1.include_router(wealth_risk_router)
 api_v1.include_router(wealth_macro_router)
 api_v1.include_router(wealth_workers_router)
+api_v1.include_router(wealth_dd_reports_router)
 
 # ── Mount credit domain routes ───────────────────────────────
 
