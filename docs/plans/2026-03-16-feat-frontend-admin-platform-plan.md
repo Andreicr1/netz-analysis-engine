@@ -46,6 +46,9 @@ origin: docs/brainstorms/2026-03-16-feat-frontend-admin-platform-brainstorm.md
 | `clerk-sveltekit` package | Deprecated, Svelte 4 only | Use `svelte-clerk` (wobsoriano) — Svelte 5 compatible |
 | Org switch without `invalidateAll()` | Server load functions use stale org context | Always call `invalidateAll()` after `setActive()` |
 | Duplicate scaffold across 3 frontends | 18+ near-identical files to maintain | Extract `createClerkHook()` + `RootLayout.svelte` to @netz/ui |
+| Multiple 401s trigger multiple redirects | Race condition: 5 parallel fetches → 5 `goto('/auth/sign-in')` calls | Single-flight boolean gate in `api-client.ts` |
+| Silent session expiry during long ops | IC memo (~3min) or DD report (~3min) silently interrupted | Decode JWT `exp`, warn user 5min before expiry |
+| 409 on approve/config write with no feedback | User retries, gets confused by stale data | Show "Updated by another user" toast + auto-refresh |
 
 ### New Considerations Discovered
 
@@ -56,6 +59,9 @@ origin: docs/brainstorms/2026-03-16-feat-frontend-admin-platform-brainstorm.md
 - **Prompt snapshot at job start** prevents mid-generation inconsistency
 - **Font self-hosting** — use `@fontsource/inter` (variable font, ~300KB woff2) with `font-display: swap`
 - **SSE multiplexing** deferred to post-launch but needed before admin health dashboard
+- **Session expiry warning** — JWT `exp` decode + 5min pre-expiry modal. Critical for IC memo/DD report generation (~3min ops)
+- **Single-flight 401 redirect** — boolean gate in `api-client.ts` prevents concurrent redirect storms
+- **409 conflict UX** — toast + auto-refresh on optimistic lock conflicts (approve/reject, config writes)
 
 ---
 
@@ -133,6 +139,9 @@ The following gaps were identified during SpecFlow analysis and are resolved in 
 | Tenant creation atomicity | DB transaction wraps config seed + asset placeholders. If Clerk org succeeds but DB fails, admin sees error and can retry seed via `POST /tenants/{org_id}/seed`. | E |
 | Role transition mid-session | Clerk JWT lifetime is 60s (default). Acceptable staleness window. Not addressed further. | — |
 | Content retraction flow | Add `unpublish` endpoint: `published → approved` (removes from investor portal but keeps for internal). Already downloaded PDFs are not recalled (institutional norm). | E |
+| Session expiry during long ops | Decode JWT `exp`, warn 5min before. Modal with renew button. Critical for IC memo/DD report generation (~3min). No silent logout. | A (A11) |
+| Multiple 401 redirects | Single-flight boolean gate in `api-client.ts`. 5 concurrent 401s → 1 redirect. | A (A11) |
+| 409 optimistic lock UX | Toast "Updated by another user" + `invalidateAll()`. Used by IC voting, config writes. | A (A11) |
 
 ---
 
@@ -405,9 +414,12 @@ packages/ui/src/lib/utils/index.ts
 ##### Tasks
 
 - [x] `api-client.ts` — `NetzApiClient` class with typed `get<T>`, `post<T>`, `patch<T>`, `delete` methods. Auto-injects `Authorization: Bearer {token}`. Two factory functions: `createServerApiClient(token)` (for `+page.server.ts`) and `createClientApiClient(getToken)` (for client-side, token from Clerk). Error handling: 401 → redirect to sign-in, 403 → show forbidden, 5xx → throw with context
+- [x] **Single-flight 401 redirect** in `api-client.ts` — boolean gate prevents multiple `goto('/auth/sign-in')` when concurrent requests return 401 simultaneously. Pattern: `let redirecting = false; if (res.status === 401 && !redirecting) { redirecting = true; authStore.logout(); }`. Reset after navigation completes. Without this, 5 parallel fetches on a page → 5 redirect calls → broken navigation stack
 - [x] `sse-client.ts` — `createSSEStream<T>(config)` function. Uses `fetch()` + `ReadableStream`. Exponential backoff reconnect (1s → 30s, 5 retries max). Heartbeat detection (45s timeout). **No `Last-Event-ID` replay** (Redis pub/sub is fire-and-forget). Accepts `initialState` prop from REST recovery. Returns object with `connect()`, `disconnect()`, and Svelte 5 reactive state (`$state` for events, status, error)
 - [x] `format.ts` — number formatting (BRL/USD currency, percentage, compact notation), date formatting (PT/EN locale-aware), ISIN formatting. Uses `Intl.NumberFormat` and `Intl.DateTimeFormat`
 - [x] `branding.ts` — `brandingToCSS(config)` converts branding JSONB to CSS custom property string. `injectBranding(element, config)` sets properties on DOM element. `defaultBranding` fallback object (Netz navy theme)
+- [x] **Session expiry warning** in `auth.ts` — decode JWT `exp` claim after login, `setTimeout` for 5min before expiry, show modal "Sessão expira em 5 minutos — renove seu acesso". No silent logout — user always notified before. Critical for: IC memo generation (~3min), DD report (~3min), backtest (~variable) — long-running operations that cannot be silently interrupted
+- [x] **Concurrent 409 handling** in `api-client.ts` — when `PATCH`/`PUT` returns HTTP 409 (optimistic lock conflict), show toast "Updated by another user, refreshing..." and auto-refresh the current data via `invalidate()`. Used by: IC voting approve/reject, config writes (admin panel), any operation with version-based optimistic locking
 
 ##### Acceptance Criteria
 
@@ -415,6 +427,9 @@ packages/ui/src/lib/utils/index.ts
 - [x] SSE client reconnects with backoff, stops after 5 retries, shows ConnectionLost banner
 - [x] Format functions handle PT and EN locales correctly (vitest: 6 tests passing)
 - [x] Branding injection produces valid CSS custom properties (vitest: 4 tests passing)
+- [x] Single-flight redirect: 5 concurrent 401s produce exactly 1 redirect (vitest)
+- [x] Session expiry modal appears 5min before JWT exp (vitest: mock timer)
+- [x] 409 response on PATCH/PUT shows toast + triggers data refresh (vitest)
 
 #### A9: Type Generation + i18n Setup
 
@@ -466,6 +481,190 @@ packages/ui/src/lib/charts/__tests__/ChartContainer.test.ts
 
 - [x] `pnpm --filter @netz/ui test` passes all component tests (24/24 passing)
 - [ ] Test coverage on exported components ≥ 80% (Button/DataCard/StatusBadge/format/branding covered; remaining components need integration tests)
+
+#### A11: Race Conditions & Concurrency Patterns
+
+##### Subscribe-then-Snapshot Ordering
+
+SSE + REST data loading must follow this exact sequence to prevent event gaps:
+
+```typescript
+// sse-client.svelte.ts — subscribe-then-snapshot pattern
+export function createSSEWithSnapshot<T>(config: {
+  sseUrl: string;
+  restUrl: string;
+  apiClient: NetzApiClient;
+  getToken: () => Promise<string>;
+  merge: (snapshot: T, buffered: SSEEvent[]) => T;
+}) {
+  let state = $state<T | null>(null);
+  const buffer: SSEEvent[] = [];
+  let snapshotLoaded = false;
+
+  async function connect() {
+    // Step 1: Subscribe SSE FIRST (events buffer while REST loads)
+    const sse = createSSEStream({
+      url: config.sseUrl,
+      getToken: config.getToken,
+      onEvent: (event) => {
+        if (!snapshotLoaded) {
+          buffer.push(event); // buffer during REST call
+        } else {
+          state = applyEvent(state, event); // apply live
+        }
+      },
+    });
+    sse.connect();
+
+    // Step 2: REST snapshot (current state)
+    const snapshot = await config.apiClient.get<T>(config.restUrl);
+
+    // Step 3: Merge — snapshot is base, buffer has events during gap
+    state = config.merge(snapshot, buffer);
+    snapshotLoaded = true;
+    buffer.length = 0; // clear buffer
+  }
+
+  return { get state() { return state; }, connect };
+}
+```
+
+##### Single-Flight 401 Redirect
+
+Prevents multiple `goto('/auth/sign-in')` when concurrent requests return 401:
+
+```typescript
+// api-client.ts — single-flight redirect gate
+let redirecting = false;
+
+async function handleResponse<T>(res: Response): Promise<T> {
+  if (res.ok) { /* ... */ }
+
+  if (res.status === 401 && !redirecting) {
+    redirecting = true;
+    // Import dynamically to avoid circular dep in server context
+    const { goto } = await import('$app/navigation');
+    await goto('/auth/sign-in');
+    redirecting = false; // reset after navigation completes
+    throw new AuthError();
+  } else if (res.status === 401) {
+    // Already redirecting — just throw, don't navigate again
+    throw new AuthError();
+  }
+  // ... rest of error handling
+}
+```
+
+##### Concurrent 409 Handling (Optimistic Lock Conflicts)
+
+When `PATCH`/`PUT` returns 409, show feedback + auto-refresh:
+
+```typescript
+// api-client.ts — 409 handler
+case 409: {
+  // Import toast reactively (only in browser context)
+  if (typeof window !== 'undefined') {
+    const { addToast } = await import('@netz/ui');
+    addToast({
+      type: 'warning',
+      message: 'Updated by another user, refreshing...',
+      duration: 4000,
+    });
+    // Trigger SvelteKit data refresh
+    const { invalidateAll } = await import('$app/navigation');
+    await invalidateAll();
+  }
+  throw new ConflictError(
+    parsed?.detail as string ?? 'Resource was modified by another user',
+    parsed?.current_version as number,
+  );
+}
+```
+
+```typescript
+// New error class in api-client.ts
+export class ConflictError extends Error {
+  readonly status = 409;
+  readonly currentVersion: number | undefined;
+  constructor(message: string, currentVersion?: number) {
+    super(message);
+    this.name = 'ConflictError';
+    this.currentVersion = currentVersion;
+  }
+}
+```
+
+##### Session Expiry Warning
+
+Decode JWT `exp` and warn user before silent logout:
+
+```typescript
+// auth.ts — session expiry monitor
+const SESSION_WARNING_MS = 5 * 60 * 1000; // 5 minutes before expiry
+
+export function startSessionExpiryMonitor(token: string, onWarning: () => void) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    const expMs = payload.exp * 1000;
+    const warningAt = expMs - SESSION_WARNING_MS;
+    const delay = warningAt - Date.now();
+
+    if (delay <= 0) {
+      // Already within warning window
+      onWarning();
+      return () => {};
+    }
+
+    const timer = setTimeout(onWarning, delay);
+    return () => clearTimeout(timer);
+  } catch {
+    // Malformed token — don't crash, just skip monitoring
+    return () => {};
+  }
+}
+```
+
+Usage in root `+layout.svelte`:
+
+```svelte
+<script>
+  import { startSessionExpiryMonitor } from '@netz/ui/utils';
+  import SessionExpiryModal from './SessionExpiryModal.svelte';
+
+  let { data } = $props();
+  let showExpiryWarning = $state(false);
+
+  $effect(() => {
+    if (data.token) {
+      const cleanup = startSessionExpiryMonitor(data.token, () => {
+        showExpiryWarning = true;
+      });
+      return cleanup;
+    }
+  });
+</script>
+
+{#if showExpiryWarning}
+  <SessionExpiryModal onRenew={() => { /* Clerk getToken({ skipCache: true }) + invalidateAll() */ }} />
+{/if}
+```
+
+##### Tasks
+
+- [x] Implement subscribe-then-snapshot in `sse-client.svelte.ts` (buffer → REST → merge → live tail)
+- [x] Add single-flight 401 redirect gate to `api-client.ts`
+- [x] Add `ConflictError` class and 409 handler with toast + `invalidateAll()` to `api-client.ts`
+- [x] Implement `startSessionExpiryMonitor()` in `auth.ts` with JWT `exp` decode + `setTimeout`
+- [ ] Create `SessionExpiryModal.svelte` — "Sessão expira em 5 minutos — renove seu acesso" with renew button (deferred to Phase B — needs frontend root layout)
+- [ ] Wire session expiry monitor in root `+layout.svelte` of each frontend (deferred to Phase B — needs frontend scaffold)
+
+##### Acceptance Criteria
+
+- [x] SSE subscribe-then-snapshot: events during REST gap are not lost (vitest with mock timers)
+- [x] Single-flight: 5 concurrent 401s → exactly 1 `goto()` call (vitest)
+- [x] 409 on PATCH → toast shown + `invalidateAll()` called (vitest)
+- [x] Session expiry modal appears 5min before JWT exp (vitest with fake timers)
+- [x] Malformed JWT does not crash session monitor (vitest)
 
 ---
 

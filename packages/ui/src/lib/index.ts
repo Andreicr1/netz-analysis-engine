@@ -63,11 +63,16 @@ export {
 	ForbiddenError,
 	ValidationError,
 	ServerError,
+	ConflictError,
 	createServerApiClient,
 	createClientApiClient,
+	setAuthRedirectHandler,
+	setConflictHandler,
+	resetRedirectGate,
+	isRedirecting,
 } from "./utils/api-client.js";
-export { createSSEStream } from "./utils/sse-client.svelte.js";
-export type { SSEConfig, SSEConnection, SSEStatus } from "./utils/sse-client.svelte.js";
+export { createSSEStream, createSSEWithSnapshot } from "./utils/sse-client.svelte.js";
+export type { SSEConfig, SSEConnection, SSEStatus, SSEEvent, SSESnapshotConfig, SSESnapshotConnection } from "./utils/sse-client.svelte.js";
 export {
 	formatCurrency,
 	formatPercent,
@@ -82,5 +87,5 @@ export {
 	injectBranding,
 	getBrandingFromCSS,
 } from "./utils/branding.js";
-export { createClerkHook, createRootLayoutLoader } from "./utils/auth.js";
+export { createClerkHook, createRootLayoutLoader, startSessionExpiryMonitor } from "./utils/auth.js";
 export type { ClerkHookOptions, RootLayoutLoaderOptions } from "./utils/auth.js";
