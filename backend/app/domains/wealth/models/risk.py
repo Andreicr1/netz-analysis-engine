@@ -3,8 +3,8 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Date, ForeignKey, Numeric
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import Date, ForeignKey, Numeric, Uuid
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db.base import Base, OrganizationScopedMixin
@@ -13,8 +13,8 @@ from app.core.db.base import Base, OrganizationScopedMixin
 class FundRiskMetrics(OrganizationScopedMixin, Base):
     __tablename__ = "fund_risk_metrics"
 
-    fund_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("funds_universe.fund_id"), primary_key=True
+    instrument_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("instruments_universe.instrument_id"), primary_key=True
     )
     calc_date: Mapped[date] = mapped_column(Date, primary_key=True)
 

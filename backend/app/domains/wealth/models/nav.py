@@ -2,8 +2,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import Date, ForeignKey, Numeric, String
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Date, ForeignKey, Numeric, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db.base import Base, OrganizationScopedMixin
@@ -12,8 +11,8 @@ from app.core.db.base import Base, OrganizationScopedMixin
 class NavTimeseries(OrganizationScopedMixin, Base):
     __tablename__ = "nav_timeseries"
 
-    fund_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("funds_universe.fund_id"), primary_key=True
+    instrument_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("instruments_universe.instrument_id"), primary_key=True
     )
     nav_date: Mapped[date] = mapped_column(Date, primary_key=True)
     nav: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))

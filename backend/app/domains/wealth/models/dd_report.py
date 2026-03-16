@@ -1,8 +1,9 @@
 """DD Report and DD Chapter ORM models.
 
-DDReport tracks fund due diligence reports with versioning and is_current
-pattern. DDChapter has direct organization_id for independent RLS isolation
-with a composite FK to prevent cross-tenant references.
+DDReport tracks instrument due diligence reports with versioning and is_current
+pattern. Supports both full DD reports (funds/equities) and lighter Bond Briefs
+(2 chapters) via report_type. DDChapter has direct organization_id for
+independent RLS isolation with a composite FK to prevent cross-tenant references.
 """
 
 from __future__ import annotations
@@ -34,11 +35,14 @@ class DDReport(OrganizationScopedMixin, Base):
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    fund_id: Mapped[uuid.UUID] = mapped_column(
+    instrument_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
         nullable=False,
         index=True,
     )
+    report_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="dd_report"
+    )  # dd_report | bond_brief
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     status: Mapped[str] = mapped_column(
         String(30), nullable=False, server_default="draft"
