@@ -21,6 +21,10 @@ from app.core.jobs.sse import create_job_stream
 from app.core.jobs.tracker import close_redis_pool, publish_event, verify_job_owner
 from app.core.security.clerk_auth import Actor, get_actor
 
+# ── Admin domain routers ─────────────────────────────────────
+from app.domains.admin.routes.assets import router as admin_assets_router
+from app.domains.admin.routes.branding import router as admin_branding_router
+
 # Actions
 from app.domains.credit.actions.routes.actions import router as credit_actions_router
 
@@ -221,6 +225,11 @@ async def test_emit_event(job_id: str, event_type: str = "test", message: str = 
     await publish_event(job_id, event_type, {"message": message})
     return {"status": "published", "job_id": job_id, "event": event_type}
 
+
+# ── Mount admin domain routes ────────────────────────────────
+
+api_v1.include_router(admin_branding_router)
+api_v1.include_router(admin_assets_router)
 
 # ── Mount wealth domain routes ───────────────────────────────
 
