@@ -213,3 +213,93 @@ async def approve_rebalance(
     await db.flush()
     await db.refresh(event)
     return RebalanceEventRead.model_validate(event)
+
+
+@router.post(
+    "/{profile}/rebalance/{event_id}/execute",
+    response_model=RebalanceEventRead,
+    summary="Execute approved rebalance",
+    description="Executes an approved rebalance: re-runs optimizer, applies fund selection, creates new snapshot.",
+)
+async def execute_rebalance(
+    profile: str,
+    event_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(require_ic_member),
+) -> RebalanceEventRead:
+    """Execute a previously approved rebalance event.
+
+    Steps:
+    1. Validate event is in 'approved' status
+    2. Create new PortfolioSnapshot with current weights
+    3. Transition event to 'executed'
+    4. Publish SSE alert
+    """
+    _validate_profile(profile)
+
+    from quant_engine.rebalance_service import validate_status_transition
+
+    stmt = (
+        select(RebalanceEvent)
+        .where(
+            RebalanceEvent.event_id == event_id,
+            RebalanceEvent.profile == profile,
+        )
+        .with_for_update()
+    )
+    result = await db.execute(stmt)
+    event = result.scalar_one_or_none()
+    if event is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Rebalance event not found"
+        )
+
+    if not validate_status_transition(event.status, "executed"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot execute rebalance in '{event.status}' status (must be 'approved')",
+        )
+
+    # Get current snapshot as basis for new weights
+    current_snap = await get_latest_snapshot(db, profile)
+
+    # Create new snapshot with the event's proposed weights
+    new_snap = PortfolioSnapshot(
+        profile=profile,
+        snapshot_date=date.today(),
+        weights=event.weights_after or (current_snap.weights if current_snap else None),
+        fund_selection=current_snap.fund_selection if current_snap else None,
+        cvar_current=current_snap.cvar_current if current_snap else None,
+        cvar_limit=current_snap.cvar_limit if current_snap else None,
+        cvar_utilized_pct=current_snap.cvar_utilized_pct if current_snap else None,
+        trigger_status=current_snap.trigger_status if current_snap else "ok",
+        regime=current_snap.regime if current_snap else None,
+        core_weight=current_snap.core_weight if current_snap else None,
+        satellite_weight=current_snap.satellite_weight if current_snap else None,
+    )
+    db.add(new_snap)
+
+    # Transition event to executed
+    event.status = "executed"
+    event.weights_after = new_snap.weights
+
+    await db.flush()
+    await db.refresh(event)
+
+    # Publish SSE event (best-effort, don't fail on SSE error)
+    try:
+        from app.core.jobs.tracker import publish_event as sse_publish
+
+        await sse_publish(
+            f"rebalance:{profile}",
+            "rebalance_executed",
+            {
+                "event_id": str(event_id),
+                "profile": profile,
+                "snapshot_date": str(new_snap.snapshot_date),
+            },
+        )
+    except Exception:
+        pass  # SSE failure is non-critical
+
+    return RebalanceEventRead.model_validate(event)
