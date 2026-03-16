@@ -975,20 +975,20 @@ frontends/credit/src/routes/(investor)/documents/+page.svelte
 
 #### Tasks
 
-- [ ] `(investor)/+layout.server.ts` — guard: require INVESTOR or ADVISOR role
-- [ ] `(investor)/+layout.svelte` — `InvestorShell` layout with tenant branding, language toggle, sign out
-- [ ] Report packs — list published packs with `PDFDownload` for each
-- [ ] Investor statements — list published statements with download
-- [ ] Documents — list approved-for-distribution documents
-- [ ] All content filtered: `status IN ('approved', 'published')` on backend
-- [ ] Language toggle affects download URL param `?language=pt|en`
+- [x] `(investor)/+layout.server.ts` — guard: require INVESTOR or ADVISOR role
+- [x] `(investor)/+layout.svelte` — `InvestorShell` layout with tenant branding, language toggle, sign out
+- [x] Report packs — list published packs with `PDFDownload` for each
+- [x] Investor statements — list published statements with download
+- [x] Documents — list approved-for-distribution documents
+- [x] All content filtered: `status IN ('approved', 'published')` on backend
+- [x] Language toggle affects download URL param `?language=pt|en`
 
 #### Acceptance Criteria
 
-- [ ] INVESTOR role sees only published content
-- [ ] INVESTMENT_TEAM role accessing `/investor/...` → 403
-- [ ] PDF downloads work in both PT and EN
-- [ ] Tenant branding (logo, colors) applied correctly
+- [x] INVESTOR role sees only published content
+- [x] INVESTMENT_TEAM role accessing `/investor/...` → 403
+- [x] PDF downloads work in both PT and EN
+- [x] Tenant branding (logo, colors) applied correctly
 
 ---
 
@@ -1161,6 +1161,86 @@ frontends/wealth/src/lib/components/RegimeTimeline.svelte
 - [ ] CVaR timeline renders with limit lines
 - [ ] Regime bands color-coded correctly
 - [ ] SSE updates appear in charts without page refresh
+
+#### C6b: Exposure Monitor — Geographic & Sector (frontend only, backend deferred)
+
+**Goal:** Consolidated view of geographic and sector exposure across all model portfolios and by individual
+fund manager. Automatic alerts when FRED/macro leading indicators signal deterioration in exposed regions/sectors.
+
+**Data sources:**
+- Portfolio-level exposure: calculated from `AllocationBlock` classifications already in DB — no external data needed
+- Fund-level underlying exposure: sourced from public holdings data. UCITS funds are legally required to disclose
+  holdings (KIID/PRIIPS regulation). US mutual funds via SEC EDGAR Form N-PORT (free public API, 60-day lag).
+  Backend integration deferred — frontend designed to accept this data when available via typed contracts below.
+
+**Note:** Backend services (LSEG Lipper API, SEC EDGAR N-PORT parser, holdings aggregation) are deferred to a
+future sprint. This section specifies **frontend UI only**. Mock data used until backend is ready.
+
+##### Files
+
+```
+frontends/wealth/src/routes/(team)/exposures/+page.server.ts
+frontends/wealth/src/routes/(team)/exposures/+page.svelte
+frontends/wealth/src/routes/(team)/exposures/[fundId]/+page.svelte
+frontends/wealth/src/lib/components/ExposureHeatmap.svelte
+frontends/wealth/src/lib/components/ExposureAlertCard.svelte
+```
+
+##### Tasks
+
+- [ ] Consolidated exposure view — geographic heatmap (`HeatmapChart`):
+  rows = portfolios (Conservative/Moderate/Growth), cols = regions
+  (North America, Europe, EM Asia, EM LatAm, Other). Cell = % weight.
+  Color scale: low (light) → high (dark accent). Hover shows absolute USD value.
+- [ ] Sector heatmap — same pattern with sector cols
+  (Technology, Financials, Healthcare, Energy, Real Estate, Fixed Income, Other)
+- [ ] Toggle: Portfolio view ↔ Fund manager view (fund manager view: individual funds as rows)
+- [ ] By fund manager drill-down table:
+  fund name, block, geography %, sector %, last holdings update date,
+  source indicator (`AllocationBlock` vs `Holdings — public data`)
+  Click fund row → `/exposures/[fundId]` with full holdings breakdown
+- [ ] Leading indicator alerts (`ExposureAlertCard.svelte`) connecting existing FRED
+  macro indicators with exposure positions:
+  - EM Asia exposure + China PMI < 50 → "Monitor: EM Asia drag risk"
+  - Technology exposure + NASDAQ VIX spike → "Alert: Tech sector stress"
+  - Europe exposure + EUR yield spread widening → "Alert: European credit pressure"
+  - Energy exposure + WTI contango → "Monitor: Energy headwinds"
+  Alert shows: affected portfolio(s), affected fund(s), indicator signal,
+  recommended action with "Surgical adjustment" link → allocation editor
+  pre-filtered for that specific fund
+- [ ] Alert severity: INFO / WARNING / ACTION_REQUIRED (existing color semantics)
+- [ ] Holdings freshness badge per fund:
+  green < 30 days, amber 30–90 days, red > 90 days
+- [ ] Data shape contract for backend integration:
+  ```typescript
+  interface FundExposure {
+    fund_id: string;
+    fund_name: string;
+    source: 'block_classification' | 'public_holdings';
+    holdings_date: string | null;
+    geographic: Record<string, number>;
+    sector: Record<string, number>;
+  }
+  interface ExposureAlert {
+    alert_id: string;
+    severity: 'info' | 'warning' | 'action_required';
+    affected_portfolios: string[];
+    affected_funds: string[];
+    indicator: string;
+    signal: string;
+    exposure_pct: number;
+    recommended_action: string;
+  }
+  ```
+
+##### Acceptance Criteria
+
+- [ ] Geographic and sector heatmaps render with portfolio and fund manager views
+- [ ] Alert cards show correct severity colors and link to affected funds
+- [ ] "Surgical adjustment" link navigates to allocation editor with fund pre-selected
+- [ ] Holdings freshness badge correct per staleness threshold
+- [ ] Mock data matches `FundExposure` and `ExposureAlert` TypeScript contracts
+- [ ] Graceful empty states when no data available
 
 #### C7: Analytics
 

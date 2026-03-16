@@ -50,5 +50,21 @@
     "expiry_message": "Sua sessao expira em 5 minutos. Salve seu trabalho e renove seu acesso.",
     "renew": "Renovar Sessao",
     "dismiss": "Dispensar"
+  },
+  "investor": {
+    "report_packs": "Pacotes de Relatorios",
+    "statements": "Extratos",
+    "documents": "Documentos",
+    "no_fund": "Nenhum Fundo Selecionado",
+    "no_fund_desc": "Selecione um fundo para visualizar o conteudo.",
+    "no_report_packs": "Nenhum Pacote de Relatorio",
+    "no_report_packs_desc": "Nenhum pacote de relatorio publicado disponivel.",
+    "no_statements": "Nenhum Extrato",
+    "no_statements_desc": "Nenhum extrato de investidor disponivel.",
+    "no_documents": "Nenhum Documento",
+    "no_documents_desc": "Nenhum documento aprovado disponivel.",
+    "published": "Publicado",
+    "period": "Periodo",
+    "download_pdf": "Baixar PDF"
   }
 }

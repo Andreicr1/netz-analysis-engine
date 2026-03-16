@@ -50,5 +50,21 @@
     "expiry_message": "Your session expires in 5 minutes. Please save your work and renew your access.",
     "renew": "Renew Session",
     "dismiss": "Dismiss"
+  },
+  "investor": {
+    "report_packs": "Report Packs",
+    "statements": "Statements",
+    "documents": "Documents",
+    "no_fund": "No Fund Selected",
+    "no_fund_desc": "Select a fund to view content.",
+    "no_report_packs": "No Report Packs",
+    "no_report_packs_desc": "No published report packs available yet.",
+    "no_statements": "No Statements",
+    "no_statements_desc": "No investor statements available yet.",
+    "no_documents": "No Documents",
+    "no_documents_desc": "No approved documents available yet.",
+    "published": "Published",
+    "period": "Period",
+    "download_pdf": "Download PDF"
   }
 }
