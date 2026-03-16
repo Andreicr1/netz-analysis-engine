@@ -6,6 +6,7 @@ This module has NO imports from sibling modules.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 # ── Evidence Saturation Result ─────────────────────────────────────
 
@@ -23,7 +24,7 @@ class SaturationResult:
     gaps: list[str] = field(default_factory=list)
     reason: str = ""
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """API boundary serialization (Wave 1 convention #3)."""
         return {
             "is_sufficient": self.is_sufficient,

@@ -69,6 +69,7 @@ def sanitize_llm_text(
     if text is None:
         return None
     if not isinstance(text, str):
+        logger.warning("sanitize_llm_text_non_string", text_type=type(text).__name__)
         return text  # type: ignore[return-value]
     if not text:
         return text
@@ -95,7 +96,7 @@ def sanitize_llm_text(
     # 5. Collapse excessive blank lines
     text = _WHITESPACE_COLLAPSE.sub("\n\n", text.strip())
     # 6. Length enforcement
-    effective_max = max_length or _MAX_LLM_TEXT_LENGTH
+    effective_max = max_length if max_length is not None else _MAX_LLM_TEXT_LENGTH
     if len(text) > effective_max:
         text = text[:effective_max]
     return text

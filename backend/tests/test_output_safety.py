@@ -122,6 +122,12 @@ class TestSanitizeLlmText:
         result = sanitize_llm_text(text, max_length=50)
         assert len(result) == 50
 
+    def test_max_length_zero_truncates_to_empty(self):
+        """max_length=0 should not silently fall through to 100KB default."""
+        text = "some text"
+        result = sanitize_llm_text(text, max_length=0)
+        assert result == ""
+
     def test_default_max_length_100kb(self):
         text = "x" * 200_000
         result = sanitize_llm_text(text)
