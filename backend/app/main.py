@@ -80,10 +80,12 @@ from app.domains.wealth.routes.fact_sheets import router as wealth_fact_sheets_r
 
 # ── Wealth domain routers ────────────────────────────────────
 from app.domains.wealth.routes.funds import router as wealth_funds_router
+from app.domains.wealth.routes.instruments import router as wealth_instruments_router
 from app.domains.wealth.routes.macro import router as wealth_macro_router
 from app.domains.wealth.routes.model_portfolios import router as wealth_model_portfolios_router
 from app.domains.wealth.routes.portfolios import router as wealth_portfolios_router
 from app.domains.wealth.routes.risk import router as wealth_risk_router
+from app.domains.wealth.routes.screener import router as wealth_screener_router
 from app.domains.wealth.routes.universe import router as wealth_universe_router
 from app.domains.wealth.routes.workers import router as wealth_workers_router
 
@@ -234,6 +236,7 @@ api_v1.include_router(admin_assets_router)
 # ── Mount wealth domain routes ───────────────────────────────
 
 api_v1.include_router(wealth_funds_router)
+api_v1.include_router(wealth_instruments_router)
 api_v1.include_router(wealth_allocation_router)
 api_v1.include_router(wealth_analytics_router)
 api_v1.include_router(wealth_portfolios_router)
@@ -245,6 +248,7 @@ api_v1.include_router(wealth_universe_router)
 api_v1.include_router(wealth_model_portfolios_router)
 api_v1.include_router(wealth_fact_sheets_router)
 api_v1.include_router(wealth_content_router)
+api_v1.include_router(wealth_screener_router)
 
 # ── Mount credit domain routes ───────────────────────────────
 
