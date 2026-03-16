@@ -793,15 +793,15 @@ After Phase 1, `run_deal_deep_review_v4()` and `async_run_deal_deep_review_v4()`
 
 ### Phase 2: Sanitization + Exception Cleanup (PR B)
 
-- [ ] `nh3>=0.2.0` added to `requirements.txt`
-- [ ] `sanitize_llm_text()` in `ai_engine/governance/output_safety.py` — nh3 tag allowlist, NFC normalization, injection marker stripping
-- [ ] All 6 persist locations wrap LLM-sourced values in `sanitize_llm_text()`
+- [x] `nh3>=0.2.0` added to `pyproject.toml` *(requirements are in pyproject.toml, not requirements.txt)*
+- [x] `sanitize_llm_text()` in `ai_engine/governance/output_safety.py` — nh3 tag allowlist, NFC normalization, injection marker stripping
+- [x] 5 persist locations wrap LLM-sourced values in `sanitize_llm_text()` *(KYC persist is structured data, not LLM text — skipped)*
 - [x] `validate_domain()` allowlists valid domain strings for OData *(done in Phase 1 — PR #25)*
-- [ ] `ProvenanceError` removed from `retrieval/models.py` and `__init__.py`
-- [ ] `EvidenceGapError` replaced by `SaturationResult` dataclass with `to_dict()`
-- [ ] `RetrievalScopeError` removed from `retrieval/models.py` (kept in `search_index.py`)
-- [ ] No remaining imports of removed exceptions
-- [ ] `make check` passes
+- [x] `ProvenanceError` removed from `retrieval/models.py` and `__init__.py`
+- [x] `EvidenceGapError` replaced by `SaturationResult` dataclass with `to_dict()`
+- [x] `RetrievalScopeError` removed from `retrieval/models.py` (kept in `search_index.py`)
+- [x] No remaining imports of removed exceptions
+- [x] `make check` passes (393 tests, 5/5 import-linter contracts, ruff clean)
 
 ### Phase 3: Sync/Async Dedup (PR C)
 

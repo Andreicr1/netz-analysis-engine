@@ -9,11 +9,10 @@ Public API:
     build_chapter_query_map()       — chapter-specialized query expansion
     ic_coverage_rerank()            — coverage-governed reranking
     validate_provenance()           — chunk provenance integrity gate
+    SaturationResult                — evidence saturation assessment dataclass
 
 Error contract: never-raises (orchestration engine called during deep review).
 Returns result dicts with warnings/status fields on failure.
-Exception classes (EvidenceGapError, RetrievalScopeError, ProvenanceError) are
-kept in models.py for backward compat during Wave 1; deprecate in Wave 2.
 """
 from vertical_engines.credit.retrieval.benchmarks import retrieve_market_benchmarks
 from vertical_engines.credit.retrieval.corpus import (
@@ -28,9 +27,7 @@ from vertical_engines.credit.retrieval.models import (
     CHAPTER_DOC_TYPE_FILTERS,
     RETRIEVAL_POLICY_NAME,
     ChapterEvidenceThreshold,
-    EvidenceGapError,
-    ProvenanceError,
-    RetrievalScopeError,
+    SaturationResult,
 )
 from vertical_engines.credit.retrieval.query_map import build_chapter_query_map
 from vertical_engines.credit.retrieval.saturation import (
@@ -47,11 +44,9 @@ __all__ = [
     "build_chapter_query_map",
     "ic_coverage_rerank",
     "validate_provenance",
-    # Models / exceptions (backward compat — Wave 1)
+    # Models
     "CHAPTER_DOC_TYPE_FILTERS",
     "ChapterEvidenceThreshold",
-    "EvidenceGapError",
-    "ProvenanceError",
     "RETRIEVAL_POLICY_NAME",
-    "RetrievalScopeError",
+    "SaturationResult",
 ]

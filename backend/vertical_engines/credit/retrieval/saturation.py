@@ -17,7 +17,6 @@ from vertical_engines.credit.retrieval.models import (
     COVERAGE_MISSING,
     COVERAGE_PARTIAL,
     RETRIEVAL_POLICY_NAME,
-    EvidenceGapError,
 )
 
 logger = structlog.get_logger()
@@ -53,7 +52,18 @@ def enforce_evidence_saturation(
                 missing_document_classes.append("NO_LPA_FOUND")
 
             if strict:
-                raise EvidenceGapError(reason)
+                logger.warning(
+                    "evidence_saturation_strict_fail",
+                    reason=reason,
+                    gaps=len(gaps),
+                )
+                return {
+                    "gaps": gaps,
+                    "missing_document_classes": list(set(missing_document_classes)),
+                    "all_saturated": False,
+                    "strict_fail": True,
+                    "strict_fail_reason": reason,
+                }
 
         elif status == COVERAGE_PARTIAL:
             threshold = CHAPTER_EVIDENCE_THRESHOLDS.get(ch_key)
