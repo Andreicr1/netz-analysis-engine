@@ -710,7 +710,7 @@ Replace `import logging` / `logging.getLogger(__name__)` with `structlog.get_log
 
 #### Phase 4: Fact-Sheet PDF Generation
 
-**Goal:** Two PDF formats for model portfolios — executive summary and institutional complete.
+**Goal:** Two PDF formats for model portfolios — executive summary and institutional complete. All client-facing PDFs support bilingual generation (Portuguese and English); default is `"pt"` (primary market is Brazil).
 
 **Feature flag:** `FEATURE_WEALTH_FACT_SHEETS`
 
@@ -723,8 +723,11 @@ Replace `import logging` / `logging.getLogger(__name__)` with `structlog.get_log
 - CREATE `backend/vertical_engines/wealth/fact_sheet/institutional_renderer.py` — 4-6 page PDF
 - CREATE `backend/vertical_engines/wealth/fact_sheet/chart_builder.py` — chart generation
 - CREATE `backend/vertical_engines/wealth/fact_sheet/models.py` — FactSheetData dataclass
+- CREATE `backend/vertical_engines/wealth/fact_sheet/i18n.py` — bilingual labels, date/number formatting helpers
 
 **PDF stack:** ReportLab (already used by credit PDFs via `ai_engine/pdf/pdf_base.py`). Reuse `pdf_base` building blocks: `create_netz_document()`, `build_netz_styles()`, `netz_header_footer()`, `build_institutional_table()`, `safe_text()`. Charts via matplotlib embedded as PNG at 150 DPI (300 DPI option for print).
+
+**Bilingual support (`i18n.py`):** All static PDF labels (section headers, table headers, footers, disclaimers) rendered via `LABELS[language]` dict — no hardcoded strings in renderers. Date formatting: `"pt"` → `dd/mm/yyyy`, decimal comma (`1.234,56`); `"en"` → `mm/dd/yyyy`, decimal period (`1,234.56`). Implemented as manual formatting helpers — do NOT rely on system locale (not guaranteed in Azure Container Apps). `FactSheetEngine.generate()` accepts `language: Literal["pt", "en"] = "pt"` and passes `labels = LABELS[language]` to all renderers.
 
 **Chart rendering (Performance):** Render all charts in parallel using `ThreadPoolExecutor(max_workers=4)`. Cache shared charts between executive and institutional formats (NAV chart and regime overlay are identical). Use `constrained_layout=True` instead of `tight_layout()`. Use `rasterized=True` for dense time series (>1000 points).
 
@@ -735,7 +738,7 @@ Replace `import logging` / `logging.getLogger(__name__)` with `structlog.get_log
 - Allocation pie chart by AllocationBlock
 - Top 10 holdings table
 - Key risk metrics: Annualized Vol, Sharpe, MaxDD, CVaR 95%
-- LLM-generated manager commentary (2-3 paragraphs)
+- LLM-generated manager commentary (2-3 paragraphs) — receives `{{ language }}` via template context
 
 **Institutional Complete (4-6 pages):**
 - Everything from Executive plus:
@@ -753,6 +756,12 @@ Replace `import logging` / `logging.getLogger(__name__)` with `structlog.get_log
 - [ ] Charts render as high-quality embedded images
 - [ ] Netz branding consistent with credit PDFs
 - [ ] PDFs stored via StorageClient
+- [ ] `FactSheetEngine.generate()` accepts `language="pt"|"en"`, default `"pt"`
+- [ ] All static labels rendered via `i18n.py` `LABELS` dict (no hardcoded strings in renderers)
+- [ ] LLM-generated sections receive `language` parameter via template context
+- [ ] Date and number formatting correct per language (no system locale dependency)
+- [ ] StorageClient paths include language segment: `gold/{org_id}/wealth/fact_sheets/{portfolio_id}/{as_of_date}/{language}/executive.pdf`
+- [ ] Both languages tested with sample portfolio data
 - [ ] `make check` passes
 
 ##### Task 4.2: DD Report PDF Generation
@@ -760,22 +769,27 @@ Replace `import logging` / `logging.getLogger(__name__)` with `structlog.get_log
 **Files:**
 - CREATE `backend/ai_engine/pdf/generate_dd_report_pdf.py`
 
-**Pattern:** Same as `generate_deep_review_pdf.py` — loads DDReport + DDChapter from DB, renders markdown chapters via `memo_md_to_pdf`, uses `pdf_base` building blocks.
+**Pattern:** Same as `generate_deep_review_pdf.py` — loads DDReport + DDChapter from DB, renders markdown chapters via `memo_md_to_pdf`, uses `pdf_base` building blocks. `generate_dd_report_pdf()` accepts `language: Literal["pt", "en"] = "pt"`. Static labels (chapter titles, cover page text, disclaimer) via `i18n.py`. Chapter content is already in the language used at DD Report generation time — the `language` param controls PDF chrome only.
 
 **Acceptance criteria:**
 - [ ] DD Report PDF renders all 8 chapters
 - [ ] Cover page with fund name, decision anchor badge, confidence score
 - [ ] Netz institutional branding
 - [ ] Stored via StorageClient
+- [ ] `generate_dd_report_pdf()` accepts `language` param, default `"pt"`
+- [ ] Static labels (cover, chapter titles, disclaimer) rendered via `i18n.py`
 
-##### Task 4.3: Fact-Sheet Prompts
+##### Task 4.3: Fact-Sheet Prompts (bilingual)
 
 **Files:**
-- CREATE `backend/vertical_engines/wealth/prompts/fact_sheet/manager_commentary.j2`
-- CREATE `backend/vertical_engines/wealth/prompts/fact_sheet/outlook_snippet.j2`
+- CREATE `backend/vertical_engines/wealth/prompts/fact_sheet/manager_commentary.j2` — single template with `{{ language }}` context variable; template instructs LLM to respond in the specified language
+- CREATE `backend/vertical_engines/wealth/prompts/fact_sheet/outlook_snippet.j2` — single template with `{{ language }}` context variable
+
+> **Decision:** Use single templates with `{{ language }}` in the prompt text (e.g., "Respond in {{ language }}") rather than separate `_pt.j2`/`_en.j2` files. The prompts are structurally identical — only the output language differs. Split into per-language files only if template complexity diverges significantly at implementation time.
 
 **Acceptance criteria:**
-- [ ] Commentary prompt receives portfolio metrics + regime context
+- [ ] Commentary prompt receives portfolio metrics + regime context + `language`
+- [ ] Templates instruct LLM to generate text in the specified language
 - [ ] `SandboxedEnvironment` used
 
 ##### Task 4.4: Fact-Sheet API Routes + Worker
@@ -786,17 +800,25 @@ Replace `import logging` / `logging.getLogger(__name__)` with `structlog.get_log
 - MODIFY `backend/app/domains/wealth/routes/__init__.py`
 
 **Endpoints:**
-- `POST /api/wealth/model-portfolios/{id}/fact-sheets` — trigger on-demand generation (exec or institutional)
-- `GET /api/wealth/model-portfolios/{id}/fact-sheets` — list generated fact-sheets
+- `POST /api/wealth/model-portfolios/{id}/fact-sheets?language=pt` — trigger on-demand generation (exec or institutional). Optional `language` query param: `Literal["pt", "en"]`, default `"pt"`.
+- `GET /api/wealth/model-portfolios/{id}/fact-sheets` — list generated fact-sheets (includes `language` field in response)
 - `GET /api/wealth/fact-sheets/{id}/download` — download PDF
+- `GET /api/wealth/dd-reports/{report_id}/download?language=pt` — download DD Report PDF. Optional `language` query param, default `"pt"`.
 
-**Worker:** Monthly scheduled generation for all active model portfolios. Uses PostgreSQL advisory lock to prevent concurrent runs.
+**StorageClient path includes language segment:**
+- `gold/{org_id}/wealth/fact_sheets/{portfolio_id}/{as_of_date}/{language}/executive.pdf`
+- `gold/{org_id}/wealth/fact_sheets/{portfolio_id}/{as_of_date}/{language}/institutional.pdf`
+- Enables caching both language versions independently.
+
+**Worker:** Monthly scheduled generation for all active model portfolios. Uses PostgreSQL advisory lock to prevent concurrent runs. Generates default language (`"pt"`) only — `"en"` generated on-demand.
 
 **Acceptance criteria:**
 - [ ] On-demand generation via API
 - [ ] Scheduled monthly generation via worker
 - [ ] PDF download endpoint serves correct content-type
 - [ ] StorageClient for all PDF storage
+- [ ] API endpoints accept `?language=` query param, default `"pt"`, validated with `Literal` type
+- [ ] StorageClient paths include language segment
 
 ---
 
@@ -814,13 +836,13 @@ Replace `import logging` / `logging.getLogger(__name__)` with `structlog.get_log
 - CREATE `backend/vertical_engines/wealth/investment_outlook.py` — extends `macro_committee_engine.py` with LLM narrative
 - CREATE `backend/vertical_engines/wealth/flash_report.py` — event-driven market flash reports
 - CREATE `backend/vertical_engines/wealth/manager_spotlight.py` — deep-dive on single fund manager
-- CREATE `backend/vertical_engines/wealth/prompts/content/investment_outlook.j2`
-- CREATE `backend/vertical_engines/wealth/prompts/content/flash_report.j2`
+- CREATE `backend/vertical_engines/wealth/prompts/content/investment_outlook.j2` — receives `{{ language }}` context
+- CREATE `backend/vertical_engines/wealth/prompts/content/flash_report.j2` — receives `{{ language }}` context
 - CREATE `backend/vertical_engines/wealth/prompts/content/manager_spotlight.j2`
 
-**Investment Outlook (quarterly):** Extends `macro_committee_engine.py` structured data (WeeklyReportData) with LLM narrative. Sections: Global Macro Summary, Regional Outlook, Asset Class Views, Portfolio Positioning, Key Risks.
+**Investment Outlook (quarterly):** Extends `macro_committee_engine.py` structured data (WeeklyReportData) with LLM narrative. Sections: Global Macro Summary, Regional Outlook, Asset Class Views, Portfolio Positioning, Key Risks. `InvestmentOutlook.generate()` accepts `language: Literal["pt", "en"] = "pt"` — LLM prompt receives `{{ language }}` context, static labels via `i18n.py`.
 
-**Flash Report (event-driven):** Triggered manually or by regime change. 48h cooldown (reuse `check_emergency_cooldown`). **Must require human review before distribution** — download endpoint checks `status == 'approved'` before serving.
+**Flash Report (event-driven):** Triggered manually or by regime change. 48h cooldown (reuse `check_emergency_cooldown`). **Must require human review before distribution** — download endpoint checks `status == 'approved'` before serving. `FlashReport.generate()` accepts `language: Literal["pt", "en"] = "pt"`.
 
 **Manager Spotlight:** Deep-dive using DD Report data + quant metrics + peer comparison.
 
@@ -845,6 +867,9 @@ Replace `import logging` / `logging.getLogger(__name__)` with `structlog.get_log
 - [ ] Download endpoint returns 403 for draft/review content
 - [ ] Approval workflow enforced
 - [ ] Flash report cooldown enforced
+- [ ] Content generation endpoints accept `?language=` query param, default `"pt"`
+- [ ] `InvestmentOutlook.generate()` and `FlashReport.generate()` accept `language` param
+- [ ] LLM prompts receive `{{ language }}` context for bilingual output
 
 ##### Task 5.3: Monitoring Hooks
 
