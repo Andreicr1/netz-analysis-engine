@@ -1,0 +1,51 @@
+"""DD Report Pydantic schemas for API serialization."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from decimal import Decimal
+
+from pydantic import BaseModel, ConfigDict
+
+
+class DDChapterRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    chapter_tag: str
+    chapter_order: int
+    content_md: str | None = None
+    evidence_refs: dict | None = None
+    quant_data: dict | None = None
+    critic_iterations: int
+    critic_status: str
+    generated_at: datetime | None = None
+
+
+class DDReportSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    fund_id: uuid.UUID
+    version: int
+    status: str
+    confidence_score: Decimal | None = None
+    decision_anchor: str | None = None
+    is_current: bool
+    created_at: datetime
+    created_by: str | None = None
+
+
+class DDReportRead(DDReportSummary):
+    config_snapshot: dict | None = None
+    schema_version: int
+    chapters: list[DDChapterRead] = []
+
+
+class DDReportCreate(BaseModel):
+    config_overrides: dict | None = None
+
+
+class DDReportRegenerate(BaseModel):
+    chapter_tags: list[str] | None = None

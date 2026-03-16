@@ -1,15 +1,8 @@
-"""Fund Analyzer — 7-chapter fund manager due diligence report.
+"""Fund Analyzer — 8-chapter fund manager due diligence report.
 
 Implements :class:`BaseAnalyzer` for the ``liquid_funds`` profile.
-Each chapter covers a key dimension of fund manager assessment:
-
-  1. Executive Summary
-  2. Investment Strategy & Process
-  3. Performance Analysis (quant)
-  4. Risk Management Framework
-  5. Operational Due Diligence
-  6. Terms & Fees
-  7. Recommendation
+Delegates to DDReportEngine (dd_report/ package) for chapter generation
+and QuantAnalyzer for portfolio-level quant analysis.
 
 Config is resolved via :class:`ConfigService` — never reads YAML directly.
 """
@@ -41,20 +34,40 @@ class FundAnalyzer(BaseAnalyzer):
         force: bool = False,
         config: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Run fund manager DD report (7-chapter analysis).
+        """Run fund manager DD report (8-chapter analysis).
 
-        In wealth context, "deal" is a fund manager evaluation.
+        In wealth context:
+          - fund_id = org fund context (the Netz fund performing evaluation)
+          - deal_id = target fund being evaluated
         """
-        from vertical_engines.wealth.dd_report_engine import DDReportEngine
+        from vertical_engines.wealth.dd_report import DDReportEngine
 
         engine = DDReportEngine(config=config)
-        return engine.generate(
+        result = engine.generate(
             db,
-            fund_id=fund_id,
-            target_id=deal_id,
+            fund_id=deal_id,  # Target fund being evaluated
             actor_id=actor_id,
+            organization_id=fund_id,  # Org context
             force=force,
         )
+        # Convert frozen dataclass to dict for BaseAnalyzer interface
+        return {
+            "fund_id": result.fund_id,
+            "status": result.status,
+            "confidence_score": result.confidence_score,
+            "decision_anchor": result.decision_anchor,
+            "chapters": [
+                {
+                    "tag": ch.tag,
+                    "title": ch.title,
+                    "status": ch.status,
+                    "content_md": ch.content_md,
+                    "critic_status": ch.critic_status,
+                }
+                for ch in result.chapters
+            ],
+            "error": result.error,
+        }
 
     def run_portfolio_analysis(
         self,

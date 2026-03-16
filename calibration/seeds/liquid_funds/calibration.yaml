@@ -1,0 +1,51 @@
+# SEED DATA ONLY — loaded by migration. Runtime config is in PostgreSQL.
+# Quantitative calibration for the liquid_funds vertical.
+# Sources: internal practice, institutional standards.
+# Schema-free: any key/value can be added via VerticalConfigOverride.
+
+cvar_limits:
+  conservative:
+    cvar_95_3m: -0.04
+    cvar_95_12m: -0.08
+  moderate:
+    cvar_95_3m: -0.08
+    cvar_95_12m: -0.15
+  growth:
+    cvar_95_3m: -0.12
+    cvar_95_12m: -0.22
+
+portfolio_profiles:
+  conservative:
+    core_weight_min: 0.70
+    core_weight_max: 0.90
+    satellite_weight_min: 0.10
+    satellite_weight_max: 0.30
+    max_single_fund_weight: 0.15
+    min_funds: 8
+    max_funds: 20
+  moderate:
+    core_weight_min: 0.50
+    core_weight_max: 0.70
+    satellite_weight_min: 0.30
+    satellite_weight_max: 0.50
+    max_single_fund_weight: 0.12
+    min_funds: 10
+    max_funds: 25
+  growth:
+    core_weight_min: 0.30
+    core_weight_max: 0.50
+    satellite_weight_min: 0.50
+    satellite_weight_max: 0.70
+    max_single_fund_weight: 0.10
+    min_funds: 12
+    max_funds: 30
+
+rebalance:
+  drift_threshold_pct: 5.0
+  min_rebalance_interval_days: 30
+  consecutive_breach_days_trigger: 5
+
+regime_detection:
+  lookback_days: 252
+  n_regimes: 3
+  min_regime_length_days: 20

@@ -25,6 +25,7 @@ class FundRead(BaseModel):
     inception_date: date | None = None
     is_active: bool
     data_source: str | None = None
+    approval_status: str | None = None
     created_at: datetime
     updated_at: datetime
 

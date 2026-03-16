@@ -1,57 +1,73 @@
 # Liquid Funds DD Report Profile
 # ==============================
-# Defines the 7-chapter fund manager due diligence report structure.
+# Defines the 8-chapter fund manager due diligence report structure.
 # Engine reads this at runtime — zero wealth-specific assumptions in core pipeline.
+# SEED DATA ONLY — runtime config is in PostgreSQL via ConfigService.
 
 name: liquid_funds
 display_name: "Fund Manager Due Diligence Report"
-version: 1
+version: 2
 
 chapters:
-  - id: ch01_executive
+  - id: executive_summary
     title: "Executive Summary"
     type: ANALYTICAL
     max_tokens: 3000
     chunk_budget: [15, 3000]
 
-  - id: ch02_strategy
+  - id: investment_strategy
     title: "Investment Strategy & Process"
     type: DESCRIPTIVE
-    max_tokens: 4000
+    max_tokens: 2500
     chunk_budget: [20, 4000]
 
-  - id: ch03_performance
+  - id: manager_assessment
+    title: "Fund Manager Assessment"
+    type: ANALYTICAL
+    max_tokens: 4000
+    chunk_budget: [15, 3000]
+
+  - id: performance_analysis
     title: "Performance Analysis"
     type: ANALYTICAL
     max_tokens: 4000
     chunk_budget: [15, 3000]
 
-  - id: ch04_risk
+  - id: risk_framework
     title: "Risk Management Framework"
     type: ANALYTICAL
     max_tokens: 4000
     chunk_budget: [20, 4000]
 
-  - id: ch05_operations
-    title: "Operational Due Diligence"
+  - id: fee_analysis
+    title: "Fee Analysis"
     type: DESCRIPTIVE
-    max_tokens: 4000
-    chunk_budget: [25, 5000]
-
-  - id: ch06_terms
-    title: "Terms & Fees"
-    type: DESCRIPTIVE
-    max_tokens: 3000
+    max_tokens: 2500
     chunk_budget: [15, 3000]
 
-  - id: ch07_recommendation
+  - id: operational_dd
+    title: "Operational Due Diligence"
+    type: DESCRIPTIVE
+    max_tokens: 2500
+    chunk_budget: [25, 5000]
+
+  - id: recommendation
     title: "Recommendation"
     type: ANALYTICAL
-    max_tokens: 3000
+    max_tokens: 4000
     chunk_budget: [0, 0]  # Synthesis-only, no evidence chunks
 
 tone_normalization:
   descriptive_max_chars: 8000
   analytical_min_chars: 5000
 
-recommendation_chapter: ch07_recommendation
+recommendation_chapter: recommendation
+
+critic:
+  max_iterations: 3
+  circuit_breaker_seconds: 180
+  escalation_threshold: 2
+  taxonomy:
+    - ACCEPT
+    - REVISE
+    - ESCALATE

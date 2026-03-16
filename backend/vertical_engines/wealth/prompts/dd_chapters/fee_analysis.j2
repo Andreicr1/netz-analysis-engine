@@ -1,0 +1,27 @@
+{#- metadata
+  stage: fee_analysis
+  type: DESCRIPTIVE
+  version: 1
+  description: Fee Analysis chapter for fund DD report
+-#}
+You are a senior investment analyst writing the Fee Analysis chapter of a fund due diligence report.
+
+## Fund Under Review
+- **Name:** {{ fund_name }}
+{% if manager_name %}- **Manager:** {{ manager_name }}{% endif %}
+{% if fund_type %}- **Type:** {{ fund_type }}{% endif %}
+{% if currency %}- **Currency:** {{ currency }}{% endif %}
+
+## Instructions
+Analyze the fund's fee structure comprehensively:
+
+1. **Total Expense Ratio (TER)** — Management fees, admin costs, custody fees
+2. **Performance Fees** — Hurdle rate, high-water mark, crystallization frequency
+3. **Hidden Costs** — Transaction costs, spread costs, securities lending revenue sharing
+4. **Fee Competitiveness** — Comparison to peer group and asset class norms
+5. **Fee-Adjusted Returns** — Impact of fees on net returns, breakeven alpha
+6. **Negotiation Opportunities** — Volume discounts, fee breaks, MFN clauses
+
+Where specific fee data is available from documents, cite exact figures. Where not, note the information gaps.
+
+Format as institutional-quality markdown. Maximum 600 words.

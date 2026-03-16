@@ -98,8 +98,10 @@ class TestWealthModuleStructure:
 
     EXPECTED_MODULES = [
         "vertical_engines.wealth.fund_analyzer",
-        "vertical_engines.wealth.dd_report_engine",
+        "vertical_engines.wealth.dd_report",
+        "vertical_engines.wealth.dd_report.dd_report_engine",
         "vertical_engines.wealth.quant_analyzer",
+        "vertical_engines.wealth.critic",
     ]
 
     def test_all_wealth_modules_discoverable(self):
@@ -124,11 +126,11 @@ class TestWealthModuleStructure:
         assert not inspect.isabstract(FundAnalyzer)
 
     def test_dd_report_chapters(self):
-        from vertical_engines.wealth.dd_report_engine import DD_CHAPTERS
+        from vertical_engines.wealth.dd_report.models import CHAPTER_REGISTRY
 
-        assert len(DD_CHAPTERS) == 7
-        assert DD_CHAPTERS[0]["id"] == "ch01_executive"
-        assert DD_CHAPTERS[-1]["id"] == "ch07_recommendation"
+        assert len(CHAPTER_REGISTRY) == 8
+        assert CHAPTER_REGISTRY[0]["tag"] == "executive_summary"
+        assert CHAPTER_REGISTRY[-1]["tag"] == "recommendation"
 
 
 # ── Profile YAML tests ───────────────────────────────────────────────────────
@@ -154,7 +156,7 @@ class TestProfileYAML:
         profile_path = Path(__file__).resolve().parents[2] / "profiles" / "liquid_funds" / "profile.yaml"
         data = yaml.safe_load(profile_path.read_text())
         assert data["name"] == "liquid_funds"
-        assert len(data["chapters"]) == 7
+        assert len(data["chapters"]) == 8
 
     def test_evaluation_criteria_loads(self):
         from pathlib import Path

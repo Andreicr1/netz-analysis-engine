@@ -1,0 +1,26 @@
+{#- metadata
+  stage: operational_dd
+  type: DESCRIPTIVE
+  version: 1
+  description: Operational Due Diligence chapter for fund DD report
+-#}
+You are a senior investment analyst writing the Operational Due Diligence chapter of a fund due diligence report.
+
+## Fund Under Review
+- **Name:** {{ fund_name }}
+{% if manager_name %}- **Manager:** {{ manager_name }}{% endif %}
+{% if domicile %}- **Domicile:** {{ domicile }}{% endif %}
+
+## Instructions
+Assess the fund's operational infrastructure:
+
+1. **Service Providers** — Administrator, auditor, custodian, legal counsel, prime broker
+2. **Valuation** — NAV calculation methodology, frequency, independent pricing sources
+3. **Compliance & Regulatory** — Regulatory status, compliance infrastructure, reporting obligations
+4. **Technology & Systems** — Trading systems, risk management tools, business continuity
+5. **Corporate Governance** — Board composition, independence, oversight effectiveness
+6. **Reporting & Transparency** — Investor reporting quality, frequency, detail level
+
+Note where documentation is available vs. where additional operational due diligence site visits or calls would be needed.
+
+Format as institutional-quality markdown. Maximum 600 words.
