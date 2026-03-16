@@ -1,0 +1,93 @@
+{
+	"actions": {
+		"save": "Salvar",
+		"cancel": "Cancelar",
+		"delete": "Excluir",
+		"edit": "Editar",
+		"create": "Criar",
+		"submit": "Enviar",
+		"confirm": "Confirmar",
+		"close": "Fechar",
+		"back": "Voltar",
+		"next": "Avançar",
+		"retry": "Tentar novamente",
+		"refresh": "Atualizar",
+		"search": "Buscar",
+		"filter": "Filtrar",
+		"export": "Exportar",
+		"import": "Importar",
+		"download": "Baixar",
+		"upload": "Enviar arquivo",
+		"apply": "Aplicar",
+		"reset": "Redefinir",
+		"clear": "Limpar",
+		"select": "Selecionar",
+		"selectAll": "Selecionar tudo",
+		"deselectAll": "Desmarcar tudo",
+		"copyToClipboard": "Copiar para a área de transferência",
+		"viewDetails": "Ver detalhes",
+		"showMore": "Mostrar mais",
+		"showLess": "Mostrar menos",
+		"expandAll": "Expandir tudo",
+		"collapseAll": "Recolher tudo"
+	},
+	"errors": {
+		"generic": "Algo deu errado. Por favor, tente novamente.",
+		"notFound": "Recurso não encontrado.",
+		"unauthorized": "Você não tem autorização para realizar esta ação.",
+		"forbidden": "Acesso negado.",
+		"validation": "Por favor, verifique o formulário quanto a erros.",
+		"network": "Erro de rede. Verifique sua conexão.",
+		"timeout": "A requisição expirou. Por favor, tente novamente.",
+		"serverError": "Erro no servidor. Por favor, tente novamente mais tarde.",
+		"fileTooBig": "O arquivo excede o tamanho máximo permitido.",
+		"unsupportedFormat": "Formato de arquivo não suportado."
+	},
+	"empty": {
+		"noData": "Nenhum dado disponível.",
+		"noResults": "Nenhum resultado encontrado.",
+		"noItems": "Nenhum item para exibir.",
+		"noMatches": "Nenhum resultado para sua busca.",
+		"emptyTable": "Esta tabela está vazia.",
+		"getStarted": "Comece criando seu primeiro item."
+	},
+	"table": {
+		"rowsPerPage": "Linhas por página",
+		"of": "de",
+		"showing": "Exibindo",
+		"to": "a",
+		"entries": "registros",
+		"sortAscending": "Ordem crescente",
+		"sortDescending": "Ordem decrescente",
+		"noSort": "Remover ordenação",
+		"columns": "Colunas"
+	},
+	"pagination": {
+		"first": "Primeiro",
+		"previous": "Anterior",
+		"next": "Próximo",
+		"last": "Último",
+		"page": "Página",
+		"goToPage": "Ir para página"
+	},
+	"status": {
+		"active": "Ativo",
+		"inactive": "Inativo",
+		"pending": "Pendente",
+		"approved": "Aprovado",
+		"rejected": "Rejeitado",
+		"draft": "Rascunho",
+		"published": "Publicado",
+		"archived": "Arquivado",
+		"processing": "Processando",
+		"complete": "Concluído",
+		"failed": "Falhou",
+		"cancelled": "Cancelado",
+		"inReview": "Em revisão",
+		"onHold": "Em espera"
+	},
+	"language": {
+		"en": "Inglês",
+		"pt": "Português"
+	}
+}

@@ -1,0 +1,85 @@
+/* ============================================================
+ * @netz/ui — Design System Entry Point
+ * Import this file to get all tokens, resets, and base styles.
+ * ============================================================ */
+
+/* ── Font ──────────────────────────────────────────────────── */
+@import "@fontsource-variable/inter";
+
+/* ── Tokens ────────────────────────────────────────────────── */
+@import "./tokens.css";
+@import "./typography.css";
+@import "./spacing.css";
+@import "./shadows.css";
+@import "./animations.css";
+
+/* ── Base resets & defaults ────────────────────────────────── */
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+html {
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	text-rendering: optimizeLegibility;
+}
+
+body {
+	margin: 0;
+	font-family: var(--netz-font-sans);
+	font-size: var(--netz-text-body);
+	line-height: var(--netz-leading-body);
+	color: var(--netz-text-primary);
+	background-color: var(--netz-surface);
+}
+
+code,
+kbd,
+pre,
+samp {
+	font-family: var(--netz-font-mono);
+	font-size: var(--netz-text-mono);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	margin: 0;
+	font-weight: var(--netz-weight-semibold);
+}
+
+h1 {
+	font-size: var(--netz-text-h1);
+	line-height: var(--netz-leading-h1);
+	letter-spacing: var(--netz-tracking-h1);
+}
+h2 {
+	font-size: var(--netz-text-h2);
+	line-height: var(--netz-leading-h2);
+	letter-spacing: var(--netz-tracking-h2);
+}
+h3 {
+	font-size: var(--netz-text-h3);
+	line-height: var(--netz-leading-h3);
+	letter-spacing: var(--netz-tracking-h3);
+}
+h4 {
+	font-size: var(--netz-text-h4);
+	line-height: var(--netz-leading-h4);
+	letter-spacing: var(--netz-tracking-h4);
+}
+h5 {
+	font-size: var(--netz-text-h5);
+	line-height: var(--netz-leading-h5);
+	letter-spacing: var(--netz-tracking-h5);
+}
+h6 {
+	font-size: var(--netz-text-h6);
+	line-height: var(--netz-leading-h6);
+	letter-spacing: var(--netz-tracking-h6);
+}

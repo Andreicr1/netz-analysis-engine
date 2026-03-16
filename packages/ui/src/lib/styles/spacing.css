@@ -1,0 +1,25 @@
+/* ============================================================
+ * Netz Design Tokens — Spacing
+ * 4px-based scale. Use --netz-space-{n} in components.
+ * ============================================================ */
+
+:root {
+	--netz-space-px: 1px;
+	--netz-space-0\.5: 2px;
+	--netz-space-1: 4px;
+	--netz-space-2: 8px;
+	--netz-space-3: 12px;
+	--netz-space-4: 16px;
+	--netz-space-5: 20px;
+	--netz-space-6: 24px;
+	--netz-space-7: 28px;
+	--netz-space-8: 32px;
+	--netz-space-9: 36px;
+	--netz-space-10: 40px;
+	--netz-space-11: 44px;
+	--netz-space-12: 48px;
+	--netz-space-13: 52px;
+	--netz-space-14: 56px;
+	--netz-space-15: 60px;
+	--netz-space-16: 64px;
+}
