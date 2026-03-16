@@ -16,10 +16,10 @@ import json
 import logging
 import os
 import time
-from dataclasses import asdict, dataclass, field
 from typing import Any
 
 import httpx
+from pydantic import BaseModel, ConfigDict, Field
 
 from ai_engine.model_config import get_model as _get_model
 from ai_engine.openai_client import create_completion
@@ -151,57 +151,66 @@ _DEFAULTS: dict[str, dict] = {
 # ─────────────────────────────────────────────────────────────────────
 #  Data model
 # ─────────────────────────────────────────────────────────────────────
-@dataclass
-class ThresholdEntry:
+class ThresholdEntry(BaseModel):
     """A single policy threshold with full audit trail."""
-    value: Any
-    source: str           # "fund-constitution-index" | "risk-policy-index" | "DEFAULT"
-    document: str = ""    # filename of source document
-    chunk_id: str = ""    # chunk id in the search index
-    rationale: str = ""   # human-readable policy rationale
-    extracted_by: str = "DEFAULT"  # "llm" | "DEFAULT"
+    value: float | list[str]   # numeric limit or list of trigger names
+    source: str = "DEFAULT"
+    document: str = ""
+    chunk_id: str = ""
+    rationale: str = ""
+    extracted_by: str = "DEFAULT"
 
 
-@dataclass
-class PolicyThresholds:
+# Known field names for summary/to_dict (replaces __dataclass_fields__)
+_KNOWN_THRESHOLD_FIELDS: list[str] = [
+    "single_manager_pct", "single_investment_pct", "single_sector_pct",
+    "single_geography_pct", "top3_names_pct",
+    "non_usd_unhedged_pct", "min_commingled_pct", "max_hard_lockup_pct",
+    "max_lockup_years", "min_quarterly_liquidity_pct",
+    "max_leverage_underlying_pct", "min_manager_track_record_years",
+    "min_manager_aum_usd", "max_manager_default_rate_pct",
+    "board_override_triggers", "watchlist_triggers",
+    "ic_approval_required_above_pct", "review_frequency_days",
+]
+
+
+class PolicyThresholds(BaseModel):
     """Full set of thresholds and governance rules for the concentration engine."""
+    model_config = ConfigDict(extra="allow")
 
     # Concentration limits (% of total portfolio exposure) — hard limits
-    single_manager_pct:    ThresholdEntry = field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["single_manager_pct"]))
-    single_investment_pct: ThresholdEntry = field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["single_investment_pct"]))
-    single_sector_pct:     ThresholdEntry = field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["single_sector_pct"]))
-    single_geography_pct:  ThresholdEntry = field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["single_geography_pct"]))
-    top3_names_pct:        ThresholdEntry = field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["top3_names_pct"]))
+    single_manager_pct:    ThresholdEntry = Field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["single_manager_pct"]))
+    single_investment_pct: ThresholdEntry = Field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["single_investment_pct"]))
+    single_sector_pct:     ThresholdEntry = Field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["single_sector_pct"]))
+    single_geography_pct:  ThresholdEntry = Field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["single_geography_pct"]))
+    top3_names_pct:        ThresholdEntry = Field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["top3_names_pct"]))
 
     # Allocation constraints — hard limits
-    non_usd_unhedged_pct:       ThresholdEntry = field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["non_usd_unhedged_pct"]))
-    min_commingled_pct:         ThresholdEntry = field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["min_commingled_pct"]))
-    max_hard_lockup_pct:        ThresholdEntry = field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["max_hard_lockup_pct"]))
-    max_lockup_years:            ThresholdEntry = field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["max_lockup_years"]))
-    min_quarterly_liquidity_pct: ThresholdEntry = field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["min_quarterly_liquidity_pct"]))
+    non_usd_unhedged_pct:       ThresholdEntry = Field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["non_usd_unhedged_pct"]))
+    min_commingled_pct:         ThresholdEntry = Field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["min_commingled_pct"]))
+    max_hard_lockup_pct:        ThresholdEntry = Field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["max_hard_lockup_pct"]))
+    max_lockup_years:            ThresholdEntry = Field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["max_lockup_years"]))
+    min_quarterly_liquidity_pct: ThresholdEntry = Field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["min_quarterly_liquidity_pct"]))
 
     # Soft limits
-    max_leverage_underlying_pct:   ThresholdEntry = field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["max_leverage_underlying_pct"]))
-    min_manager_track_record_years: ThresholdEntry = field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["min_manager_track_record_years"]))
-    min_manager_aum_usd:            ThresholdEntry = field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["min_manager_aum_usd"]))
-    max_manager_default_rate_pct:   ThresholdEntry = field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["max_manager_default_rate_pct"]))
+    max_leverage_underlying_pct:   ThresholdEntry = Field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["max_leverage_underlying_pct"]))
+    min_manager_track_record_years: ThresholdEntry = Field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["min_manager_track_record_years"]))
+    min_manager_aum_usd:            ThresholdEntry = Field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["min_manager_aum_usd"]))
+    max_manager_default_rate_pct:   ThresholdEntry = Field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["max_manager_default_rate_pct"]))
 
     # Governance rules
-    board_override_triggers:       ThresholdEntry = field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["board_override_triggers"]))
-    watchlist_triggers:            ThresholdEntry = field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["watchlist_triggers"]))
-    ic_approval_required_above_pct: ThresholdEntry = field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["ic_approval_required_above_pct"]))
-    review_frequency_days:         ThresholdEntry = field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["review_frequency_days"]))
+    board_override_triggers:       ThresholdEntry = Field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["board_override_triggers"]))
+    watchlist_triggers:            ThresholdEntry = Field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["watchlist_triggers"]))
+    ic_approval_required_above_pct: ThresholdEntry = Field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["ic_approval_required_above_pct"]))
+    review_frequency_days:         ThresholdEntry = Field(default_factory=lambda: ThresholdEntry(**_DEFAULTS["review_frequency_days"]))
 
     # Metadata
-    loaded_at: float = field(default_factory=time.time)
-    load_errors: list[str] = field(default_factory=list)
+    raw_policy: dict[str, Any] = Field(default_factory=dict)
+    loaded_at: float = Field(default_factory=time.time)
+    load_errors: list[str] = Field(default_factory=list)
 
     def to_dict(self) -> dict:
-        d = {}
-        for f_name in self.__dataclass_fields__:
-            val = getattr(self, f_name)
-            d[f_name] = asdict(val) if isinstance(val, ThresholdEntry) else val
-        return d
+        return self.model_dump()
 
     def summary(self) -> dict:
         """Compact summary for logging and memo injection."""
@@ -212,10 +221,12 @@ class PolicyThresholds:
             "min_quarterly_liquidity_pct", "board_override_triggers",
             "review_frequency_days",
         ]
-        return {
-            f: {"limit": getattr(self, f).value, "source": getattr(self, f).source}
-            for f in fields
-        }
+        result: dict = {}
+        for f in fields:
+            if hasattr(self, f):
+                entry = getattr(self, f)
+                result[f] = {"limit": entry.value, "source": entry.source}
+        return result
 
     def hard_limits_dict(self) -> dict[str, float]:
         """Flat {field: value} for breach checking in concentration engine."""
@@ -232,15 +243,53 @@ class PolicyThresholds:
 
 
 # ─────────────────────────────────────────────────────────────────────
+#  ConfigService resolver
+# ─────────────────────────────────────────────────────────────────────
+def resolve_governance_policy(config: dict[str, Any] | None = None) -> PolicyThresholds:
+    """Build PolicyThresholds from ConfigService JSONB or _DEFAULTS."""
+    if config is None:
+        return PolicyThresholds()
+
+    overrides: dict[str, Any] = {"raw_policy": config}
+
+    for field_name, default in _DEFAULTS.items():
+        val = config.get(field_name)
+        if val is None:
+            continue
+        try:
+            if isinstance(val, bool):
+                raise TypeError(f"boolean not accepted for {field_name}")
+            if isinstance(val, list):
+                coerced = [x for x in val if isinstance(x, str)]
+            else:
+                coerced = float(val)
+            overrides[field_name] = ThresholdEntry(
+                value=coerced,
+                source="ConfigService",
+                rationale=default["rationale"],
+            )
+        except (KeyError, TypeError, ValueError) as e:
+            logger.error("POLICY_RESOLVE_BAD_VALUE",
+                         extra={"field": field_name, "value": val, "error": str(e)})
+
+    return PolicyThresholds(**overrides)
+
+
+# ─────────────────────────────────────────────────────────────────────
 #  Module-level cache
 # ─────────────────────────────────────────────────────────────────────
 _cache: PolicyThresholds | None = None
 _CACHE_TTL_SECONDS = 3600
 
+# Tenant-keyed cache for ConfigService-resolved policies
+_tenant_cache: dict[str, tuple[float, PolicyThresholds]] = {}
+_TENANT_CACHE_TTL_SECONDS = 300
+
 
 def invalidate_cache() -> None:
     global _cache
     _cache = None
+    _tenant_cache.clear()
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -398,7 +447,12 @@ def _apply_extracted(
 # ─────────────────────────────────────────────────────────────────────
 #  Public API
 # ─────────────────────────────────────────────────────────────────────
-def load_policy_thresholds(*, force_reload: bool = False) -> PolicyThresholds:
+def load_policy_thresholds(
+    *,
+    force_reload: bool = False,
+    config: dict[str, Any] | None = None,
+    org_id: str | None = None,
+) -> PolicyThresholds:
     """Load policy thresholds from Azure Search indices.
 
     Lookup order per threshold:
@@ -406,9 +460,24 @@ def load_policy_thresholds(*, force_reload: bool = False) -> PolicyThresholds:
       2. risk-policy-index        (Investment Policy, Credit Policy)
       3. Auditable defaults       (only if documents don't specify the value)
 
+    If ``config`` is provided, uses ConfigService resolver and tenant cache
+    instead of the module-level search-based cache.
+
     Cached for CACHE_TTL_SECONDS. Use force_reload=True to bypass cache.
     """
     global _cache
+
+    # ConfigService path: tenant-keyed cache
+    if config is not None:
+        cache_key = org_id or "__no_org__"
+        now = time.time()
+        if not force_reload and cache_key in _tenant_cache:
+            cached_at, cached_policy = _tenant_cache[cache_key]
+            if now - cached_at < _TENANT_CACHE_TTL_SECONDS:
+                return cached_policy
+        policy = resolve_governance_policy(config)
+        _tenant_cache[cache_key] = (now, policy)
+        return policy
 
     if not force_reload and _cache is not None:
         if time.time() - _cache.loaded_at < _CACHE_TTL_SECONDS:

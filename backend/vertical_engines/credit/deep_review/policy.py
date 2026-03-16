@@ -176,6 +176,7 @@ def _run_hard_policy_checks(
     from ai_engine.governance.policy_loader import load_policy_thresholds
 
     if policy is None:
+        # TODO(Sprint 3): wire ConfigService when async session migration lands
         policy = load_policy_thresholds()
 
     manager_limit = policy.single_manager_pct.value

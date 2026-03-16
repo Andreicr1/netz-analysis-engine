@@ -187,6 +187,7 @@ def compute_concentration(
 
     """
     if policy is None:
+        # TODO(Sprint 3): wire ConfigService when async session migration lands
         policy = load_policy_thresholds()
 
     investments = list(
