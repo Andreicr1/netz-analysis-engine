@@ -4,7 +4,7 @@ Orchestrates the complete ingest lifecycle:
     1. Scan blob containers → DocumentRegistry           (document_scanner)
     2. Discover pipeline deals from folder structure      (pipeline_intelligence)
     3. Bridge DocumentRegistry → DealDocument             (registry_bridge)
-    4. Ingest unindexed documents (chunk → embed → upsert)(domain_ingest_orchestrator)
+    4. (Skipped — per-document ingestion via unified_pipeline at upload time)
     5. Deep Review — AI intelligence for all deals        (deep_review)
 
 Every invocation creates a ``PipelineIngestJob`` row that records counters,
@@ -242,34 +242,13 @@ def run_full_pipeline_ingest(
             logger.error(error, exc_info=True)
             result.errors.append(error)
 
-        # ── Stage 4: Ingest unindexed documents via unified pipeline ─
-        logger.info("[Stage 4/5] Ingesting unindexed documents for fund %s", fund_id)
-        try:
-            from ai_engine.ingestion.domain_ingest_orchestrator import (
-                run_ingest_for_unindexed_documents,
-            )
-
-            ingest = run_ingest_for_unindexed_documents(
-                db,
-                fund_id=fund_id,
-                deal_ids=effective_deal_ids,
-                batch_size=batch_size,
-                run_ai_analysis=run_ai_analysis,
-            )
-            result.documents_ingested = ingest.documents_succeeded
-            result.documents_failed = ingest.documents_failed
-            result.chunks_upserted = ingest.chunks_upserted
-            result.deals_analyzed = ingest.deals_analyzed
-            if ingest.errors:
-                result.errors.extend(ingest.errors)
-            logger.info(
-                "Stage 4 complete: %d ingested, %d failed, %d chunks",
-                result.documents_ingested, result.documents_failed, result.chunks_upserted,
-            )
-        except Exception as exc:
-            error = f"Stage 4 (ingest) failed: {exc}"
-            logger.error(error, exc_info=True)
-            result.errors.append(error)
+        # ── Stage 4: Document ingestion ─────────────────────────────────
+        # NOTE: Individual document ingestion now runs through the unified
+        # pipeline (ai_engine/pipeline/unified_pipeline.process()) which is
+        # triggered per-document at upload time.  Batch re-ingestion of
+        # unindexed documents is handled by Stage 5 (Deep Review) which
+        # processes all deals with pending documents.
+        logger.info("[Stage 4/5] Skipped — document ingestion handled by unified pipeline per-upload")
 
         # ── Stage 5: Deep Review — AI intelligence for all deals ─────
         if run_ai_analysis:
@@ -535,37 +514,16 @@ async def async_run_full_pipeline_ingest(
             logger.error(error, exc_info=True)
             result.errors.append(error)
 
-        # Close the session used for Stages 1-3 before async Stage 4
+        # Close the session used for Stages 1-3 before Stage 5
         db.close()
 
-        # ── Stage 4: Async parallel ingest via unified pipeline ──────
-        logger.info("[Stage 4/5] Async ingesting unindexed documents for fund %s", fund_id)
-        try:
-            from ai_engine.ingestion.domain_ingest_orchestrator import (
-                async_run_ingest_for_unindexed_documents,
-            )
-
-            ingest = await async_run_ingest_for_unindexed_documents(
-                fund_id,
-                deal_ids=effective_deal_ids,
-                batch_size=batch_size,
-                run_ai_analysis=run_ai_analysis,
-                fund_contexts=fund_contexts if fund_contexts else None,
-            )
-            result.documents_ingested = ingest.documents_succeeded
-            result.documents_failed = ingest.documents_failed
-            result.chunks_upserted = ingest.chunks_upserted
-            result.deals_analyzed = ingest.deals_analyzed
-            if ingest.errors:
-                result.errors.extend(ingest.errors)
-            logger.info(
-                "Stage 4 complete: %d ingested, %d failed, %d chunks",
-                result.documents_ingested, result.documents_failed, result.chunks_upserted,
-            )
-        except Exception as exc:
-            error = f"Stage 4 (ingest) failed: {exc}"
-            logger.error(error, exc_info=True)
-            result.errors.append(error)
+        # ── Stage 4: Document ingestion ──────────────────────────────
+        # NOTE: Individual document ingestion now runs through the unified
+        # pipeline (ai_engine/pipeline/unified_pipeline.process()) which is
+        # triggered per-document at upload time.  Batch re-ingestion of
+        # unindexed documents is handled by Stage 5 (Deep Review) which
+        # processes all deals with pending documents.
+        logger.info("[Stage 4/5] Skipped — document ingestion handled by unified pipeline per-upload")
 
         # ── Stage 5: Deep Review ──────────────────────────────────────
         if run_ai_analysis:

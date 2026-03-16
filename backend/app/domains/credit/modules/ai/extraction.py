@@ -8,7 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Qu
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.db.engine import get_db
+from app.core.db.engine import async_session_factory, get_db
 from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed, require_roles
 from app.domains.credit.modules.ai.schemas import PipelineIngestResponse
 from app.shared.enums import Role
@@ -297,10 +297,19 @@ def trigger_deal_reanalyze(
         raise HTTPException(status_code=404, detail="Pipeline deal not found.")
 
     def _run_reanalyze():
-        from ai_engine.ingestion.domain_ingest_orchestrator import reanalyze_deal
+        from app.domains.credit.modules.deals.ai_mode import resolve_ai_mode
+        from vertical_engines.credit.domain_ai import run_deal_ai_analysis
 
         with async_session_factory() as session:
-            reanalyze_deal(session, pipeline_deal_id=deal_id)
+            ctx = resolve_ai_mode(session, pipeline_deal_id=deal_id)
+            run_deal_ai_analysis(
+                session,
+                deal_id=ctx.entity_id,
+                fund_id=ctx.fund_id,
+                domain=ctx.mode.value,
+                deal_name=ctx.deal_name,
+                sponsor_name=ctx.sponsor_name,
+            )
 
     background_tasks.add_task(_run_reanalyze)
 
