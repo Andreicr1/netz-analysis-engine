@@ -2,21 +2,21 @@
 
 import type { BrandingConfig } from "./types.js";
 
-/** Netz navy default branding theme. */
+/** Netz navy default branding theme — matches design tokens in tokens.css. */
 export const defaultBranding: BrandingConfig = {
-	primary_color: "#0F172A",
-	secondary_color: "#1E293B",
-	accent_color: "#3B82F6",
-	light_color: "#F8FAFC",
-	highlight_color: "#DBEAFE",
+	primary_color: "#1B365D",
+	secondary_color: "#3A7BD5",
+	accent_color: "#8B9DAF",
+	light_color: "#D4E4F7",
+	highlight_color: "#FF975A",
 	surface_color: "#FFFFFF",
-	surface_alt_color: "#F1F5F9",
+	surface_alt_color: "#F8FAFC",
 	border_color: "#E2E8F0",
 	text_primary: "#0F172A",
 	text_secondary: "#475569",
 	text_muted: "#94A3B8",
-	font_sans: "Inter Variable, Inter, system-ui, sans-serif",
-	font_mono: "JetBrains Mono, monospace",
+	font_sans: "'Inter Variable', Inter, system-ui, sans-serif",
+	font_mono: "'JetBrains Mono', monospace",
 	logo_light_url: null,
 	logo_dark_url: null,
 	favicon_url: null,
@@ -25,11 +25,11 @@ export const defaultBranding: BrandingConfig = {
 };
 
 const CSS_VAR_MAP: Record<keyof BrandingConfig, string | null> = {
-	primary_color: "--netz-primary",
-	secondary_color: "--netz-secondary",
-	accent_color: "--netz-accent",
-	light_color: "--netz-light",
-	highlight_color: "--netz-highlight",
+	primary_color: "--netz-brand-primary",
+	secondary_color: "--netz-brand-secondary",
+	accent_color: "--netz-brand-accent",
+	light_color: "--netz-brand-light",
+	highlight_color: "--netz-brand-highlight",
 	surface_color: "--netz-surface",
 	surface_alt_color: "--netz-surface-alt",
 	border_color: "--netz-border",
