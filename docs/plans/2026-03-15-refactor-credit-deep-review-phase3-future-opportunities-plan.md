@@ -76,7 +76,7 @@ Security fixes first, then sanitization + cleanup, then dedup:
 
 | Phase | PR | Items | Rationale |
 |---|---|---|---|
-| Phase 1 | PR A | Tenant isolation (org_id in RAG queries) | F2 Critical + F5 High — ship security fix immediately |
+| Phase 1 | PR #25 (merged) | Tenant isolation (org_id in RAG queries) | F2 Critical + F5 High — **COMPLETE** |
 | Phase 2 | PR B | LLM sanitization + OData hardening + exception deprecation | F6 + F7 Medium + cleanup — combined for reduced review overhead |
 | Phase 3 | PR C | Sync/async dedup + StageOutcome | Biggest refactor — security fixes now in duplicated code get consolidated into extracted helpers |
 
@@ -796,7 +796,7 @@ After Phase 1, `run_deal_deep_review_v4()` and `async_run_deal_deep_review_v4()`
 - [ ] `nh3>=0.2.0` added to `requirements.txt`
 - [ ] `sanitize_llm_text()` in `ai_engine/governance/output_safety.py` — nh3 tag allowlist, NFC normalization, injection marker stripping
 - [ ] All 6 persist locations wrap LLM-sourced values in `sanitize_llm_text()`
-- [ ] `_validate_domain()` allowlists valid domain strings for OData
+- [x] `validate_domain()` allowlists valid domain strings for OData *(done in Phase 1 — PR #25)*
 - [ ] `ProvenanceError` removed from `retrieval/models.py` and `__init__.py`
 - [ ] `EvidenceGapError` replaced by `SaturationResult` dataclass with `to_dict()`
 - [ ] `RetrievalScopeError` removed from `retrieval/models.py` (kept in `search_index.py`)
@@ -815,10 +815,10 @@ After Phase 1, `run_deal_deep_review_v4()` and `async_run_deal_deep_review_v4()`
 
 ### Quality Gates
 
-- [ ] All 324+ tests pass after each phase
-- [ ] Golden tests pass (deterministic outputs unchanged)
-- [ ] Import DAG verified: `lint-imports` (5/5 contracts)
-- [ ] Zero Azure Search `.search()` calls without `organization_id` in entire codebase after Phase 1
+- [x] All 324+ tests pass after each phase *(364 tests after Phase 1 — PR #25)*
+- [x] Golden tests pass (deterministic outputs unchanged)
+- [x] Import DAG verified: `lint-imports` (5/5 contracts)
+- [ ] Zero Azure Search `.search()` calls without `organization_id` in entire codebase after Phase 1 *(stub clients deferred to Sprint 3)*
 - [ ] `service.py` line count < 1700 after Phase 3
 
 ## Risk Analysis & Mitigation
