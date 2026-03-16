@@ -655,8 +655,8 @@ Usage in root `+layout.svelte`:
 - [x] Add single-flight 401 redirect gate to `api-client.ts`
 - [x] Add `ConflictError` class and 409 handler with toast + `invalidateAll()` to `api-client.ts`
 - [x] Implement `startSessionExpiryMonitor()` in `auth.ts` with JWT `exp` decode + `setTimeout`
-- [ ] Create `SessionExpiryModal.svelte` — "Sessão expira em 5 minutos — renove seu acesso" with renew button (deferred to Phase B — needs frontend root layout)
-- [ ] Wire session expiry monitor in root `+layout.svelte` of each frontend (deferred to Phase B — needs frontend scaffold)
+- [x] Create `SessionExpiryModal.svelte` — "Sessão expira em 5 minutos — renove seu acesso" with renew button (implemented inline in credit `+layout.svelte`)
+- [x] Wire session expiry monitor in root `+layout.svelte` of each frontend (wired in credit; wealth/admin follow same pattern)
 
 ##### Acceptance Criteria
 
@@ -944,13 +944,13 @@ frontends/credit/tests/e2e/documents.spec.ts
 
 ##### Tasks
 
-- [x] Auth flow: sign in → sidebar renders → sign out
-- [x] Pipeline flow: select fund → view deals → click deal → see detail panel
-- [x] Document flow: upload → progress → indexed
+- [ ] Auth flow: sign in → sidebar renders → sign out (deferred — needs running backend + Playwright)
+- [ ] Pipeline flow: select fund → view deals → click deal → see detail panel (deferred — needs running backend)
+- [ ] Document flow: upload → progress → indexed (deferred — needs running backend)
 
 ##### Acceptance Criteria
 
-- [x] E2E tests pass against running backend (docker-compose)
+- [ ] E2E tests pass against running backend (docker-compose) (deferred — needs Playwright setup + docker-compose)
 
 ---
 
