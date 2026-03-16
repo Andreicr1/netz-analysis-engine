@@ -40,7 +40,7 @@ class SpotlightResult:
     content_md: str | None
     title: str
     language: Language
-    fund_id: str
+    instrument_id: str
     status: str  # completed | failed
     error: str | None = None
 
@@ -60,7 +60,7 @@ class ManagerSpotlight:
         self,
         db: Session,
         *,
-        fund_id: str,
+        instrument_id: str,
         organization_id: str,
         actor_id: str,
         language: Language = "pt",
@@ -75,14 +75,14 @@ class ManagerSpotlight:
         if not self._call_openai_fn:
             return SpotlightResult(
                 content_md=None, title=title, language=language,
-                fund_id=fund_id, status="failed",
+                instrument_id=instrument_id, status="failed",
                 error="No LLM call function provided",
             )
 
         try:
-            fund_data = self._gather_fund_data(db, fund_id)
-            quant_profile = gather_quant_metrics(db, fund_id=fund_id)
-            risk_metrics = gather_risk_metrics(db, fund_id=fund_id)
+            fund_data = self._gather_fund_data(db, instrument_id)
+            quant_profile = gather_quant_metrics(db, instrument_id=instrument_id)
+            risk_metrics = gather_risk_metrics(db, instrument_id=instrument_id)
 
             content_md = self._generate_narrative(
                 fund_data=fund_data,
@@ -93,7 +93,7 @@ class ManagerSpotlight:
 
             logger.info(
                 "manager_spotlight_generated",
-                fund_id=fund_id,
+                instrument_id=instrument_id,
                 organization_id=organization_id,
                 language=language,
                 content_length=len(content_md) if content_md else 0,
@@ -101,14 +101,14 @@ class ManagerSpotlight:
 
             return SpotlightResult(
                 content_md=content_md, title=title,
-                language=language, fund_id=fund_id,
+                language=language, instrument_id=instrument_id,
                 status="completed",
             )
         except Exception as exc:
-            logger.exception("manager_spotlight_failed", fund_id=fund_id)
+            logger.exception("manager_spotlight_failed", instrument_id=instrument_id)
             return SpotlightResult(
                 content_md=None, title=title, language=language,
-                fund_id=fund_id, status="failed", error=str(exc),
+                instrument_id=instrument_id, status="failed", error=str(exc),
             )
 
     def render_pdf(self, content_md: str, *, language: Language = "pt", fund_name: str = "") -> BytesIO:
@@ -123,16 +123,16 @@ class ManagerSpotlight:
             language=language,
         )
 
-    def _gather_fund_data(self, db: Session, fund_id: str) -> dict[str, Any]:
+    def _gather_fund_data(self, db: Session, instrument_id: str) -> dict[str, Any]:
         """Gather fund identity and DD report data."""
         from app.domains.wealth.models.fund import Fund
 
-        fund = db.query(Fund).filter(Fund.fund_id == fund_id).first()
+        fund = db.query(Fund).filter(Fund.fund_id == instrument_id).first()
         if not fund:
-            return {"fund_id": fund_id, "name": "Unknown Fund"}
+            return {"instrument_id": instrument_id, "name": "Unknown Fund"}
 
         return {
-            "fund_id": str(fund.fund_id),
+            "instrument_id": str(fund.fund_id),
             "name": fund.name,
             "isin": fund.isin,
             "ticker": fund.ticker,

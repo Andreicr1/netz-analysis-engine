@@ -28,7 +28,7 @@ class FundAnalyzer(BaseAnalyzer):
         self,
         db: Session,
         *,
-        fund_id: str,
+        instrument_id: str,
         deal_id: str,
         actor_id: str,
         force: bool = False,
@@ -37,7 +37,7 @@ class FundAnalyzer(BaseAnalyzer):
         """Run fund manager DD report (8-chapter analysis).
 
         In wealth context:
-          - fund_id = org fund context (the Netz fund performing evaluation)
+          - instrument_id = org fund context (the Netz fund performing evaluation)
           - deal_id = target fund being evaluated
         """
         from vertical_engines.wealth.dd_report import DDReportEngine
@@ -45,14 +45,14 @@ class FundAnalyzer(BaseAnalyzer):
         engine = DDReportEngine(config=config)
         result = engine.generate(
             db,
-            fund_id=deal_id,  # Target fund being evaluated
+            instrument_id=deal_id,  # Target fund being evaluated
             actor_id=actor_id,
-            organization_id=fund_id,  # Org context
+            organization_id=instrument_id,  # Org context
             force=force,
         )
         # Convert frozen dataclass to dict for BaseAnalyzer interface
         return {
-            "fund_id": result.fund_id,
+            "instrument_id": result.fund_id,
             "status": result.status,
             "confidence_score": result.confidence_score,
             "decision_anchor": result.decision_anchor,
@@ -73,7 +73,7 @@ class FundAnalyzer(BaseAnalyzer):
         self,
         db: Session,
         *,
-        fund_id: str,
+        instrument_id: str,
         actor_id: str,
         as_of: str | None = None,
         config: dict[str, Any] | None = None,
@@ -84,7 +84,7 @@ class FundAnalyzer(BaseAnalyzer):
         analyzer = QuantAnalyzer(config=config)
         return analyzer.analyze_portfolio(
             db,
-            fund_id=fund_id,
+            instrument_id=instrument_id,
             actor_id=actor_id,
             as_of=as_of,
         )

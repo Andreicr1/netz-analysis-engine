@@ -134,12 +134,12 @@ def compute_live_nav(
 
     # Fetch returns for the as_of date
     result = db.execute(
-        select(NavTimeseries.fund_id, NavTimeseries.return_1d).where(
-            NavTimeseries.fund_id.in_(fund_ids),
+        select(NavTimeseries.instrument_id, NavTimeseries.return_1d).where(
+            NavTimeseries.instrument_id.in_(fund_ids),
             NavTimeseries.nav_date == as_of,
         )
     )
-    returns_by_fund = {row.fund_id: float(row.return_1d) for row in result if row.return_1d is not None}
+    returns_by_fund = {row.instrument_id: float(row.return_1d) for row in result if row.return_1d is not None}
 
     # Weighted portfolio return
     portfolio_return = 0.0
@@ -181,12 +181,12 @@ def compute_stress(
     # Fetch all NAV data in one query
     result = db.execute(
         select(
-            NavTimeseries.fund_id,
+            NavTimeseries.instrument_id,
             NavTimeseries.nav_date,
             NavTimeseries.return_1d,
         )
         .where(
-            NavTimeseries.fund_id.in_(fund_ids),
+            NavTimeseries.instrument_id.in_(fund_ids),
             NavTimeseries.nav_date >= earliest,
             NavTimeseries.nav_date <= latest,
             NavTimeseries.return_1d.isnot(None),
@@ -198,7 +198,7 @@ def compute_stress(
     returns_lookup: dict[tuple[uuid.UUID, date], float] = {}
     all_dates: set[date] = set()
     for row in result:
-        returns_lookup[(row.fund_id, row.nav_date)] = float(row.return_1d)
+        returns_lookup[(row.instrument_id, row.nav_date)] = float(row.return_1d)
         all_dates.add(row.nav_date)
 
     scenario_results: list[ScenarioResult] = []
@@ -266,12 +266,12 @@ def _fetch_returns_matrix(
     # Fetch all NAV data in one query
     result = db.execute(
         select(
-            NavTimeseries.fund_id,
+            NavTimeseries.instrument_id,
             NavTimeseries.nav_date,
             NavTimeseries.return_1d,
         )
         .where(
-            NavTimeseries.fund_id.in_(fund_ids),
+            NavTimeseries.instrument_id.in_(fund_ids),
             NavTimeseries.nav_date >= cutoff,
             NavTimeseries.return_1d.isnot(None),
         )
@@ -282,7 +282,7 @@ def _fetch_returns_matrix(
     fund_returns: dict[uuid.UUID, dict[date, float]] = {}
     all_dates: set[date] = set()
     for row in result:
-        fund_returns.setdefault(row.fund_id, {})[row.nav_date] = float(row.return_1d)
+        fund_returns.setdefault(row.instrument_id, {})[row.nav_date] = float(row.return_1d)
         all_dates.add(row.nav_date)
 
     if not all_dates:

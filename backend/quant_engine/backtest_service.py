@@ -171,9 +171,9 @@ async def fetch_returns_matrix(
         raise ValueError(f"Need ≥2 blocks with data, found {len(fund_ids)}")
 
     ret_stmt = (
-        select(NavTimeseries.fund_id, NavTimeseries.nav_date, NavTimeseries.return_1d)
+        select(NavTimeseries.instrument_id, NavTimeseries.nav_date, NavTimeseries.return_1d)
         .where(
-            NavTimeseries.fund_id.in_(fund_uuids),
+            NavTimeseries.instrument_id.in_(fund_uuids),
             NavTimeseries.nav_date >= start_date,
             NavTimeseries.return_1d.is_not(None),
         )

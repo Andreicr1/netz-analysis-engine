@@ -104,21 +104,21 @@ async def _get_fund_returns_by_block(
 
     fund_ids = [f.fund_id for f in block_funds.values()]
     ret_stmt = (
-        select(NavTimeseries.fund_id, NavTimeseries.return_1d)
+        select(NavTimeseries.instrument_id, NavTimeseries.return_1d)
         .where(
-            NavTimeseries.fund_id.in_(fund_ids),
+            NavTimeseries.instrument_id.in_(fund_ids),
             NavTimeseries.nav_date >= start_date,
             NavTimeseries.nav_date <= end_date,
             NavTimeseries.return_1d.is_not(None),
         )
-        .order_by(NavTimeseries.fund_id, NavTimeseries.nav_date)
+        .order_by(NavTimeseries.instrument_id, NavTimeseries.nav_date)
     )
     ret_result = await db.execute(ret_stmt)
 
     from collections import defaultdict
     grouped: dict[str, list[float]] = defaultdict(list)
-    for fund_id, ret in ret_result.all():
-        grouped[str(fund_id)].append(float(ret))
+    for instrument_id, ret in ret_result.all():
+        grouped[str(instrument_id)].append(float(ret))
 
     fund_returns: dict[str, np.ndarray] = {}
     fund_weights: dict[str, float] = {}

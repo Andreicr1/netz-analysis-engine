@@ -244,7 +244,7 @@ async def download_dd_report_pdf(
     from app.domains.wealth.models.fund import Fund
 
     fund_result = await db.execute(
-        select(Fund.name).where(Fund.fund_id == report.fund_id)
+        select(Fund.name).where(Fund.fund_id == report.instrument_id)
     )
     fund_name_row = fund_result.scalar_one_or_none()
     fund_name = fund_name_row or "Unknown Fund"

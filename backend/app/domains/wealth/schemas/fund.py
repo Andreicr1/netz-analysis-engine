@@ -1,3 +1,10 @@
+"""DEPRECATED: Fund schemas — kept for backward compatibility.
+
+The Fund model is being replaced by the Instrument model
+(instruments_universe table). These schemas remain functional
+but new code should use the Instrument equivalents.
+"""
+
 import uuid
 from datetime import date, datetime
 from decimal import Decimal

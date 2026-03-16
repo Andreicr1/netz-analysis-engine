@@ -36,8 +36,8 @@ class UniverseService:
         self,
         db: Session,
         *,
-        fund_id: uuid.UUID,
-        dd_report_id: uuid.UUID,
+        instrument_id: uuid.UUID,
+        analysis_report_id: uuid.UUID,
         created_by: str,
         organization_id: str,
     ) -> UniverseApproval:
@@ -48,20 +48,20 @@ class UniverseService:
         """
         # Verify the fund exists
         fund = db.execute(
-            select(Fund).where(Fund.fund_id == fund_id)
+            select(Fund).where(Fund.fund_id == instrument_id)
         ).scalar_one_or_none()
         if fund is None:
-            raise ValueError(f"Fund {fund_id} not found")
+            raise ValueError(f"Fund {instrument_id} not found")
 
         # Verify DD report is valid
-        validate_dd_report(db, dd_report_id, fund_id)
+        validate_dd_report(db, analysis_report_id, instrument_id)
 
         # Update fund status to indicate DD is complete
         fund.approval_status = "dd_complete"
 
         request = ApprovalRequest(
-            fund_id=fund_id,
-            dd_report_id=dd_report_id,
+            instrument_id=instrument_id,
+            analysis_report_id=analysis_report_id,
             created_by=created_by,
             organization_id=organization_id,
         )
@@ -69,7 +69,7 @@ class UniverseService:
 
         logger.info(
             "universe_fund_submitted",
-            fund_id=str(fund_id),
+            instrument_id=str(instrument_id),
             approval_id=str(approval.id),
             organization_id=organization_id,
         )
@@ -119,7 +119,7 @@ class UniverseService:
             select(Fund, UniverseApproval)
             .join(
                 UniverseApproval,
-                (UniverseApproval.fund_id == Fund.fund_id)
+                (UniverseApproval.instrument_id == Fund.fund_id)
                 & (UniverseApproval.is_current.is_(True))
                 & (UniverseApproval.decision == "approved"),
             )
@@ -141,7 +141,7 @@ class UniverseService:
         rows = db.execute(stmt).all()
         return [
             UniverseAsset(
-                fund_id=fund.fund_id,
+                instrument_id=fund.fund_id,
                 fund_name=fund.name,
                 block_id=fund.block_id,
                 geography=fund.geography,
@@ -173,7 +173,7 @@ class UniverseService:
         self,
         db: Session,
         *,
-        fund_id: uuid.UUID,
+        instrument_id: uuid.UUID,
     ) -> DeactivationResult:
         """Remove a fund from the active universe.
 
@@ -182,11 +182,11 @@ class UniverseService:
         was previously approved).
         """
         fund = db.execute(
-            select(Fund).where(Fund.fund_id == fund_id).with_for_update()
+            select(Fund).where(Fund.fund_id == instrument_id).with_for_update()
         ).scalar_one_or_none()
 
         if fund is None:
-            raise ValueError(f"Fund {fund_id} not found")
+            raise ValueError(f"Fund {instrument_id} not found")
 
         was_active = fund.is_active
         fund.is_active = False
@@ -194,7 +194,7 @@ class UniverseService:
         # Check if fund was approved (rebalance needed)
         approval = db.execute(
             select(UniverseApproval).where(
-                UniverseApproval.fund_id == fund_id,
+                UniverseApproval.instrument_id == instrument_id,
                 UniverseApproval.is_current.is_(True),
                 UniverseApproval.decision == "approved",
             )
@@ -210,13 +210,13 @@ class UniverseService:
 
         logger.info(
             "universe_asset_deactivated",
-            fund_id=str(fund_id),
+            instrument_id=str(instrument_id),
             was_active=was_active,
             rebalance_needed=rebalance_needed,
         )
 
         return DeactivationResult(
-            fund_id=fund_id,
+            instrument_id=instrument_id,
             was_active=was_active,
             rebalance_needed=rebalance_needed,
         )

@@ -40,22 +40,22 @@ class MissingDDReportError(Exception):
     """Raised when the DD report does not exist or is not completed."""
 
 
-def validate_dd_report(db: Session, dd_report_id: uuid.UUID, fund_id: uuid.UUID) -> DDReport:
+def validate_dd_report(db: Session, analysis_report_id: uuid.UUID, instrument_id: uuid.UUID) -> DDReport:
     """Verify DD report exists, belongs to the fund, and is completed."""
     report = db.execute(
         select(DDReport).where(
-            DDReport.id == dd_report_id,
-            DDReport.fund_id == fund_id,
+            DDReport.id == analysis_report_id,
+            DDReport.instrument_id == instrument_id,
         )
     ).scalar_one_or_none()
 
     if report is None:
         raise MissingDDReportError(
-            f"DD Report {dd_report_id} not found for fund {fund_id}"
+            f"DD Report {analysis_report_id} not found for fund {instrument_id}"
         )
     if report.status not in ("completed", "escalated"):
         raise MissingDDReportError(
-            f"DD Report {dd_report_id} has status '{report.status}', expected 'completed' or 'escalated'"
+            f"DD Report {analysis_report_id} has status '{report.status}', expected 'completed' or 'escalated'"
         )
     return report
 
@@ -68,7 +68,7 @@ def create_pending_approval(db: Session, request: ApprovalRequest) -> UniverseAp
     # Mark previous current approval as not current
     existing = db.execute(
         select(UniverseApproval).where(
-            UniverseApproval.fund_id == request.fund_id,
+            UniverseApproval.instrument_id == request.instrument_id,
             UniverseApproval.organization_id == request.organization_id,
             UniverseApproval.is_current.is_(True),
         )
@@ -78,8 +78,8 @@ def create_pending_approval(db: Session, request: ApprovalRequest) -> UniverseAp
         existing.is_current = False
 
     approval = UniverseApproval(
-        fund_id=request.fund_id,
-        dd_report_id=request.dd_report_id,
+        instrument_id=request.instrument_id,
+        analysis_report_id=request.analysis_report_id,
         organization_id=request.organization_id,
         decision="pending",
         created_by=request.created_by,
@@ -126,12 +126,12 @@ def decide_approval(db: Session, decision: ApprovalDecision) -> UniverseApproval
     # Lock the fund row to prevent concurrent state corruption
     fund = db.execute(
         select(Fund)
-        .where(Fund.fund_id == approval.fund_id)
+        .where(Fund.fund_id == approval.instrument_id)
         .with_for_update()
     ).scalar_one_or_none()
 
     if fund is None:
-        raise ValueError(f"Fund {approval.fund_id} not found")
+        raise ValueError(f"Fund {approval.instrument_id} not found")
 
     # Apply decision
     approval.decision = decision.decision

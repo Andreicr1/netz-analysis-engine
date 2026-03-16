@@ -59,7 +59,7 @@ async def list_universe(
             )
             return [
                 UniverseAssetRead(
-                    fund_id=a.fund_id,
+                    instrument_id=a.instrument_id,
                     fund_name=a.fund_name,
                     block_id=a.block_id,
                     geography=a.geography,
@@ -101,12 +101,12 @@ async def list_pending_approvals(
 
 
 @router.post(
-    "/funds/{fund_id}/approve",
+    "/funds/{instrument_id}/approve",
     response_model=UniverseApprovalRead,
     summary="Approve a fund for the universe",
 )
 async def approve_fund(
-    fund_id: uuid.UUID,
+    instrument_id: uuid.UUID,
     body: UniverseApprovalDecision,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
@@ -137,7 +137,7 @@ async def approve_fund(
 
             result = sync_db.execute(
                 select(UniverseApproval).where(
-                    UniverseApproval.fund_id == fund_id,
+                    UniverseApproval.instrument_id == instrument_id,
                     UniverseApproval.organization_id == org_id,
                     UniverseApproval.is_current.is_(True),
                 ).with_for_update()
@@ -146,7 +146,7 @@ async def approve_fund(
             if approval is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"No pending approval found for fund {fund_id}",
+                    detail=f"No pending approval found for fund {instrument_id}",
                 )
             if approval.decision != "pending":
                 raise HTTPException(
@@ -176,12 +176,12 @@ async def approve_fund(
 
 
 @router.post(
-    "/funds/{fund_id}/reject",
+    "/funds/{instrument_id}/reject",
     response_model=UniverseApprovalRead,
     summary="Reject a fund from the universe",
 )
 async def reject_fund(
-    fund_id: uuid.UUID,
+    instrument_id: uuid.UUID,
     body: UniverseApprovalDecision,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
@@ -211,7 +211,7 @@ async def reject_fund(
 
             result = sync_db.execute(
                 select(UniverseApproval).where(
-                    UniverseApproval.fund_id == fund_id,
+                    UniverseApproval.instrument_id == instrument_id,
                     UniverseApproval.organization_id == org_id,
                     UniverseApproval.is_current.is_(True),
                 ).with_for_update()
@@ -220,7 +220,7 @@ async def reject_fund(
             if approval is None:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"No pending approval found for fund {fund_id}",
+                    detail=f"No pending approval found for fund {instrument_id}",
                 )
             if approval.decision != "pending":
                 raise HTTPException(

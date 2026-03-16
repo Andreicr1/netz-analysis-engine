@@ -27,7 +27,7 @@ _DRIFT_THRESHOLD = 0.15
 class DriftAlert:
     """A single drift alert for a fund or portfolio."""
 
-    fund_id: str
+    instrument_id: str
     fund_name: str
     drift_score: float | None
     drift_type: str  # style_drift | universe_removal | tracking_error
@@ -107,7 +107,7 @@ def _build_portfolio_fund_map(
         portfolio_name = p.display_name or str(p.id)
         fund_selection = p.fund_selection_schema or {}
         for f in fund_selection.get("funds", []):
-            fid = f.get("fund_id", "")
+            fid = f.get("instrument_id", "")
             if fid:
                 fund_to_portfolios[fid].append(portfolio_name)
 
@@ -131,7 +131,7 @@ def _check_style_drift(
         db.query(Fund, FundRiskMetrics)
         .join(
             FundRiskMetrics,
-            FundRiskMetrics.fund_id == Fund.fund_id,
+            FundRiskMetrics.instrument_id == Fund.fund_id,
         )
         .filter(
             Fund.organization_id == organization_id,
@@ -145,7 +145,7 @@ def _check_style_drift(
         if dtw_drift is not None and float(dtw_drift) > threshold:
             affected = portfolio_map.get(str(fund.fund_id), [])
             alerts.append(DriftAlert(
-                fund_id=str(fund.fund_id),
+                instrument_id=str(fund.fund_id),
                 fund_name=fund.name,
                 drift_score=float(dtw_drift),
                 drift_type="style_drift",
@@ -182,7 +182,7 @@ def _check_universe_removal_impact(
         affected = portfolio_map.get(str(fund.fund_id), [])
         if affected:
             alerts.append(DriftAlert(
-                fund_id=str(fund.fund_id),
+                instrument_id=str(fund.fund_id),
                 fund_name=fund.name,
                 drift_score=None,
                 drift_type="universe_removal",
@@ -200,7 +200,7 @@ def drift_alerts_to_json(result: DriftScanResult) -> list[dict[str, Any]]:
     """Serialize DriftScanResult to JSON-compatible list."""
     return [
         {
-            "fund_id": a.fund_id,
+            "instrument_id": a.instrument_id,
             "fund_name": a.fund_name,
             "drift_score": a.drift_score,
             "drift_type": a.drift_type,

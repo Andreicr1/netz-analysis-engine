@@ -141,9 +141,9 @@ async def _batch_resolve_return_types(
         return {}
 
     stmt = (
-        select(NavTimeseries.fund_id, NavTimeseries.return_type)
+        select(NavTimeseries.instrument_id, NavTimeseries.return_type)
         .where(
-            NavTimeseries.fund_id.in_(fund_ids),
+            NavTimeseries.instrument_id.in_(fund_ids),
             NavTimeseries.nav_date >= start_date,
             NavTimeseries.nav_date <= as_of_date,
             NavTimeseries.return_1d.is_not(None),
@@ -155,8 +155,8 @@ async def _batch_resolve_return_types(
 
     # Accumulate all return_types seen per fund
     types_by_fund: dict[str, set[str]] = {}
-    for row_fund_id, return_type in rows:
-        fid = str(row_fund_id)
+    for row_instrument_id, return_type in rows:
+        fid = str(row_instrument_id)
         types_by_fund.setdefault(fid, set()).add(return_type)
 
     resolved: dict[str, str] = {}
@@ -202,19 +202,19 @@ async def _batch_fetch_nav_returns(
             continue
 
         stmt = (
-            select(NavTimeseries.fund_id, NavTimeseries.return_1d)
+            select(NavTimeseries.instrument_id, NavTimeseries.return_1d)
             .where(
-                NavTimeseries.fund_id.in_(typed_ids),
+                NavTimeseries.instrument_id.in_(typed_ids),
                 NavTimeseries.nav_date >= start_date,
                 NavTimeseries.nav_date <= as_of_date,
                 NavTimeseries.return_1d.is_not(None),
                 NavTimeseries.return_type == type_label,
             )
-            .order_by(NavTimeseries.fund_id, NavTimeseries.nav_date)
+            .order_by(NavTimeseries.instrument_id, NavTimeseries.nav_date)
         )
         result = await db.execute(stmt)
-        for row_fund_id, return_1d in result.all():
-            fid = str(row_fund_id)
+        for row_instrument_id, return_1d in result.all():
+            fid = str(row_instrument_id)
             raw_by_fund.setdefault(fid, []).append(float(return_1d))
 
     return raw_by_fund
@@ -237,7 +237,7 @@ def _compute_metrics_from_returns(
         return None
 
     returns = np.array(returns_raw)
-    metrics: dict = {"fund_id": fund.fund_id, "calc_date": as_of_date}
+    metrics: dict = {"instrument_id": fund.fund_id, "calc_date": as_of_date}
 
     # CVaR and VaR for each window
     for label, days in WINDOW_CONFIGS.items():
@@ -319,22 +319,22 @@ async def _fetch_block_returns_batch(
 
     start_date = as_of_date - timedelta(days=window_days * 2)  # extra buffer for weekends
     stmt = (
-        select(NavTimeseries.fund_id, NavTimeseries.return_1d, NavTimeseries.return_type)
+        select(NavTimeseries.instrument_id, NavTimeseries.return_1d, NavTimeseries.return_type)
         .where(
-            NavTimeseries.fund_id.in_(fund_ids),
+            NavTimeseries.instrument_id.in_(fund_ids),
             NavTimeseries.nav_date >= start_date,
             NavTimeseries.nav_date <= as_of_date,
             NavTimeseries.return_1d.is_not(None),
         )
-        .order_by(NavTimeseries.fund_id, NavTimeseries.nav_date)
+        .order_by(NavTimeseries.instrument_id, NavTimeseries.nav_date)
     )
     result = await db.execute(stmt)
     rows = result.all()
 
     # Group rows by fund_id; track which return types are present per fund
     raw_by_fund: dict[str, dict[str, list[float]]] = {}
-    for row_fund_id, return_1d, return_type in rows:
-        fid = str(row_fund_id)
+    for row_instrument_id, return_1d, return_type in rows:
+        fid = str(row_instrument_id)
         if fid not in raw_by_fund:
             raw_by_fund[fid] = {"log": [], "arithmetic": []}
         rtype = return_type if return_type in ("log", "arithmetic") else "arithmetic"
@@ -484,8 +484,8 @@ async def run_risk_calc(as_of_date: date | None = None) -> dict[str, int]:
 
                 upsert = pg_insert(FundRiskMetrics).values(**metrics)
                 upsert = upsert.on_conflict_do_update(
-                    index_elements=["fund_id", "calc_date"],
-                    set_={k: upsert.excluded[k] for k in metrics if k not in ("fund_id", "calc_date")},
+                    index_elements=["instrument_id", "calc_date"],
+                    set_={k: upsert.excluded[k] for k in metrics if k not in ("instrument_id", "calc_date")},
                 )
                 await db.execute(upsert)
                 results[fund.ticker or str(fund.fund_id)] = 1

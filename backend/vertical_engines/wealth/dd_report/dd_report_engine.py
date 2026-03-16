@@ -12,7 +12,7 @@ Architecture mirrors credit's memo_book_generator but with:
 Usage (from async route via asyncio.to_thread)::
 
     engine = DDReportEngine(config=config, call_openai_fn=call_fn)
-    result = engine.generate(db, fund_id=fund_id, actor_id=actor_id)
+    result = engine.generate(db, instrument_id=fund_id, actor_id=actor_id)
 """
 
 from __future__ import annotations
@@ -70,7 +70,7 @@ class DDReportEngine:
         self,
         db: Session,
         *,
-        fund_id: str,
+        instrument_id: str,
         actor_id: str,
         organization_id: str,
         force: bool = False,
@@ -84,7 +84,7 @@ class DDReportEngine:
         ----------
         db : Session
             Sync database session (created inside thread).
-        fund_id : str
+        instrument_id : str
             Target fund being evaluated.
         actor_id : str
             User triggering the generation.
@@ -101,14 +101,14 @@ class DDReportEngine:
         """
         logger.info(
             "dd_report_generation_started",
-            fund_id=fund_id,
+            instrument_id=instrument_id,
             actor_id=actor_id,
             organization_id=organization_id,
         )
 
         if not self._call_openai_fn:
             return DDReportResult(
-                fund_id=fund_id,
+                fund_id=instrument_id,
                 chapters=[],
                 confidence_score=0.0,
                 decision_anchor=None,
@@ -120,13 +120,13 @@ class DDReportEngine:
             # 1. Create or load DD Report record
             report_id, existing_chapters = self._ensure_report_record(
                 db,
-                fund_id=fund_id,
+                fund_id=instrument_id,
                 actor_id=actor_id,
                 organization_id=organization_id,
             )
 
             # 2. Gather evidence
-            evidence = self._build_evidence(db, fund_id=fund_id)
+            evidence = self._build_evidence(db, fund_id=instrument_id)
 
             # 3. Generate chapters (parallel 1-7, sequential 8)
             chapters = self._generate_all_chapters(
@@ -161,7 +161,7 @@ class DDReportEngine:
 
             logger.info(
                 "dd_report_generation_completed",
-                fund_id=fund_id,
+                instrument_id=instrument_id,
                 report_id=str(report_id),
                 status=status,
                 confidence=confidence,
@@ -169,7 +169,7 @@ class DDReportEngine:
             )
 
             return DDReportResult(
-                fund_id=fund_id,
+                fund_id=instrument_id,
                 chapters=chapters,
                 confidence_score=confidence,
                 decision_anchor=anchor,
@@ -177,9 +177,9 @@ class DDReportEngine:
             )
 
         except Exception as exc:
-            logger.exception("dd_report_generation_failed", fund_id=fund_id)
+            logger.exception("dd_report_generation_failed", instrument_id=instrument_id)
             return DDReportResult(
-                fund_id=fund_id,
+                fund_id=instrument_id,
                 chapters=[],
                 confidence_score=0.0,
                 decision_anchor=None,
@@ -206,7 +206,7 @@ class DDReportEngine:
         existing = (
             db.query(DDReport)
             .filter(
-                DDReport.fund_id == fund_id,
+                DDReport.instrument_id == fund_id,
                 DDReport.organization_id == organization_id,
                 DDReport.is_current.is_(True),
             )
@@ -234,7 +234,7 @@ class DDReportEngine:
         max_version = (
             db.query(DDReport.version)
             .filter(
-                DDReport.fund_id == fund_id,
+                DDReport.instrument_id == fund_id,
                 DDReport.organization_id == organization_id,
             )
             .order_by(DDReport.version.desc())
@@ -244,13 +244,13 @@ class DDReportEngine:
 
         # Mark previous as not current
         db.query(DDReport).filter(
-            DDReport.fund_id == fund_id,
+            DDReport.instrument_id == fund_id,
             DDReport.organization_id == organization_id,
             DDReport.is_current.is_(True),
         ).update({"is_current": False})
 
         report = DDReport(
-            fund_id=fund_id,
+            instrument_id=fund_id,
             organization_id=organization_id,
             version=next_version,
             status="generating",
@@ -278,7 +278,7 @@ class DDReportEngine:
             return EvidencePack()
 
         fund_data = {
-            "fund_id": str(fund.fund_id),
+            "instrument_id": str(fund.fund_id),
             "name": fund.name,
             "isin": fund.isin,
             "ticker": fund.ticker,
@@ -292,8 +292,8 @@ class DDReportEngine:
             "aum_usd": fund.aum_usd,
         }
 
-        quant_profile = gather_quant_metrics(db, fund_id=fund_id)
-        risk_metrics = gather_risk_metrics(db, fund_id=fund_id)
+        quant_profile = gather_quant_metrics(db, instrument_id=fund_id)
+        risk_metrics = gather_risk_metrics(db, instrument_id=fund_id)
 
         return build_evidence_pack(
             fund_data=fund_data,

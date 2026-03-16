@@ -17,7 +17,7 @@ logger = structlog.get_logger()
 def gather_quant_metrics(
     db: Session,
     *,
-    fund_id: str,
+    instrument_id: str,
     config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Gather quantitative metrics for a fund from the database.
@@ -29,7 +29,7 @@ def gather_quant_metrics(
     ----------
     db : Session
         Sync database session.
-    fund_id : str
+    instrument_id : str
         UUID of the fund to gather metrics for.
     config : dict
         Optional calibration config (token budgets, windows).
@@ -39,20 +39,20 @@ def gather_quant_metrics(
     dict
         Quant profile with CVaR, Sharpe, returns, scoring data.
     """
-    logger.info("gathering_quant_metrics", fund_id=fund_id)
+    logger.info("gathering_quant_metrics", instrument_id=instrument_id)
 
     try:
         from app.domains.wealth.models.risk import FundRiskMetrics
 
         row = (
             db.query(FundRiskMetrics)
-            .filter(FundRiskMetrics.fund_id == fund_id)
+            .filter(FundRiskMetrics.instrument_id == instrument_id)
             .order_by(FundRiskMetrics.calc_date.desc())
             .first()
         )
 
         if not row:
-            logger.warning("no_risk_metrics_found", fund_id=fund_id)
+            logger.warning("no_risk_metrics_found", instrument_id=instrument_id)
             return {}
 
         return {
@@ -83,17 +83,17 @@ def gather_quant_metrics(
         }
 
     except Exception:
-        logger.exception("quant_metrics_gather_failed", fund_id=fund_id)
+        logger.exception("quant_metrics_gather_failed", instrument_id=instrument_id)
         return {}
 
 
 def gather_risk_metrics(
     db: Session,
     *,
-    fund_id: str,
+    instrument_id: str,
 ) -> dict[str, Any]:
     """Gather risk-specific metrics formatted for the risk chapter."""
-    profile = gather_quant_metrics(db, fund_id=fund_id)
+    profile = gather_quant_metrics(db, instrument_id=instrument_id)
     if not profile:
         return {}
 

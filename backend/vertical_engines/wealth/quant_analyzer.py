@@ -35,7 +35,7 @@ class QuantAnalyzer:
         self,
         db: Session,
         *,
-        fund_id: str,
+        instrument_id: str,
         actor_id: str,
         as_of: str | None = None,
     ) -> dict[str, Any]:
@@ -48,11 +48,11 @@ class QuantAnalyzer:
         dict
             Quant analysis result (CVaR, scores, drift, regime).
         """
-        logger.info("running_quant_analysis", fund_id=fund_id, as_of=as_of)
+        logger.info("running_quant_analysis", instrument_id=instrument_id, as_of=as_of)
 
-        fid = uuid.UUID(fund_id)
+        fid = uuid.UUID(instrument_id)
         result: dict[str, Any] = {
-            "fund_id": fund_id,
+            "instrument_id": instrument_id,
             "as_of": as_of,
             "status": "computed",
         }
@@ -73,7 +73,7 @@ class QuantAnalyzer:
         navs = db.execute(
             select(NavTimeseries.return_1d)
             .where(
-                NavTimeseries.fund_id == fund_id,
+                NavTimeseries.instrument_id == fund_id,
                 NavTimeseries.return_1d.isnot(None),
             )
             .order_by(NavTimeseries.nav_date.desc())
@@ -108,7 +108,7 @@ class QuantAnalyzer:
         """Compute fund score using scoring_service."""
         risk = db.execute(
             select(FundRiskMetrics)
-            .where(FundRiskMetrics.fund_id == fund_id)
+            .where(FundRiskMetrics.instrument_id == fund_id)
             .order_by(FundRiskMetrics.calc_date.desc())
             .limit(1)
         ).scalar_one_or_none()

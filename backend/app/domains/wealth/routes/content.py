@@ -161,7 +161,7 @@ async def trigger_flash_report(
     summary="Trigger Manager Spotlight generation",
 )
 async def trigger_spotlight(
-    fund_id: uuid.UUID = Query(..., description="Target fund for spotlight"),
+    instrument_id: uuid.UUID = Query(..., description="Target fund for spotlight"),
     body: ContentTrigger | None = None,
     language: Literal["pt", "en"] = Query(default="pt", description="Content language"),
     db: AsyncSession = Depends(get_db_with_rls),
@@ -177,13 +177,13 @@ async def trigger_spotlight(
     from app.domains.wealth.models.fund import Fund
 
     fund_result = await db.execute(
-        select(Fund).where(Fund.fund_id == fund_id)
+        select(Fund).where(Fund.fund_id == instrument_id)
     )
     fund = fund_result.scalar_one_or_none()
     if not fund:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Fund {fund_id} not found",
+            detail=f"Fund {instrument_id} not found",
         )
 
     content = WealthContent(
@@ -192,7 +192,7 @@ async def trigger_spotlight(
         title=f"Manager Spotlight — {fund.name}",
         language=language,
         status="draft",
-        content_data={"fund_id": str(fund_id)},
+        content_data={"instrument_id": str(instrument_id)},
         created_by=user.user_id,
     )
     db.add(content)
@@ -208,7 +208,7 @@ async def trigger_spotlight(
             actor_id=user.user_id,
             language=language,
             config=body.config_overrides if body else None,
-            fund_id=str(fund_id),
+            instrument_id=str(instrument_id),
         )
     )
 
@@ -365,7 +365,7 @@ async def _run_content_generation(
     language: str,
     config: dict[str, Any] | None = None,
     event_context: dict[str, Any] | None = None,
-    fund_id: str | None = None,
+    instrument_id: str | None = None,
 ) -> None:
     """Background task: run content generation in a sync thread."""
     async with _get_content_semaphore():
@@ -379,7 +379,7 @@ async def _run_content_generation(
                 language=language,
                 config=config,
                 event_context=event_context,
-                fund_id=fund_id,
+                instrument_id=instrument_id,
             )
 
             # Update content record with result
@@ -420,7 +420,7 @@ def _sync_generate_content(
     language: str,
     config: dict[str, Any] | None = None,
     event_context: dict[str, Any] | None = None,
-    fund_id: str | None = None,
+    instrument_id: str | None = None,
 ) -> dict[str, Any]:
     """Sync wrapper: creates sync Session inside thread."""
     from ai_engine.llm import call_openai as _call_openai
@@ -457,17 +457,17 @@ def _sync_generate_content(
         elif content_type == "manager_spotlight":
             from vertical_engines.wealth.manager_spotlight import ManagerSpotlight
 
-            if not fund_id:
+            if not instrument_id:
                 return {"content_md": None, "status": "failed"}
 
             engine = ManagerSpotlight(config=config, call_openai_fn=_call_openai)
             result = engine.generate(
-                db, fund_id=fund_id, organization_id=org_id,
+                db, instrument_id=instrument_id, organization_id=org_id,
                 actor_id=actor_id, language=language,
             )
             return {
                 "content_md": result.content_md,
-                "content_data": {"fund_id": fund_id},
+                "content_data": {"instrument_id": instrument_id},
                 "status": result.status,
             }
 
