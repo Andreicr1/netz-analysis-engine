@@ -1,13 +1,11 @@
 """Registry Bridge — connects DocumentRegistry to DealDocument.
 
 DocumentRegistry (populated by document_scanner) tracks every blob in Azure
-Storage.  DealDocument (consumed by domain_ingest_orchestrator) tracks which
-blobs still need chunking + embedding.
+Storage.  DealDocument tracks which blobs still need chunking + embedding.
 
 This module bridges the gap: for every DocumentRegistry entry in the
 ``investment-pipeline-intelligence`` container that belongs to a known
-PipelineDeal, it creates (idempotently) a corresponding DealDocument row
-so the orchestrator can pick it up.
+PipelineDeal, it creates (idempotently) a corresponding DealDocument row.
 
 Idempotent: relies on ``register_deal_document`` which checks
 ``(deal_id, blob_path)`` uniqueness before insert.

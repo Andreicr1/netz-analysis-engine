@@ -93,6 +93,7 @@ def generate_pipeline_intelligence(
     deal_name: str,
     sponsor_name: str | None = None,
     fund_id: uuid.UUID | None = None,
+    organization_id: uuid.UUID | str | None = None,
     force: bool = False,
 ) -> dict[str, Any]:
     """Generate full pipeline intelligence via institutional two-call flow.
@@ -138,9 +139,12 @@ def generate_pipeline_intelligence(
         deal_name=deal_name,
     )
 
+    # ── Resolve organization_id for tenant isolation (Security F2) ──
+    effective_org_id = organization_id or str(deal.organization_id)
+
     # ── Retrieve context (institutional-scale, 80 chunks) ─────────
     context, chunk_count, raw_chunks, issuer_summary = _retrieve_deal_context(
-        deal_id, deal_name, max_chunks=MAX_RETRIEVAL_CHUNKS,
+        deal_id, deal_name, organization_id=effective_org_id, max_chunks=MAX_RETRIEVAL_CHUNKS,
     )
     if not context:
         logger.warning(

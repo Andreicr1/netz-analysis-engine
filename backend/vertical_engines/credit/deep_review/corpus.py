@@ -257,6 +257,7 @@ def _load_deal_context_from_blob(
 
 def _gather_deal_texts(
     db: Session, *, fund_id: uuid.UUID, deal: Deal,
+    organization_id: uuid.UUID | str,
 ) -> dict[str, Any]:
     """IC-Grade retrieval — per-chapter specialized evidence assembly.
 
@@ -446,6 +447,7 @@ def _gather_deal_texts_legacy(db: Session, *, fund_id: uuid.UUID, deal: Deal) ->
 
 def _gather_investment_texts(
     db: Session, *, fund_id: uuid.UUID, investment: ActiveInvestment,
+    organization_id: uuid.UUID | str,
 ) -> str:
     """Retrieve investment document content via RAG retrieval.
 
@@ -470,6 +472,7 @@ def _gather_investment_texts(
         investment_deal_id = investment.deal_id or investment.id
         chunks = search_deal_chunks(
             deal_id=investment_deal_id,
+            organization_id=organization_id,
             query_text=query_text,
             query_vector=query_vector,
             top=80,

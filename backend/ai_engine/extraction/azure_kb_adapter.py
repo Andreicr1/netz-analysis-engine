@@ -8,8 +8,10 @@ retrieval.
 from __future__ import annotations
 
 import logging
+import uuid as _uuid
 
 from ai_engine.extraction.kb_schema import ComplianceChunk
+from ai_engine.extraction.search_upsert_service import validate_domain, validate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +30,22 @@ class AzureComplianceKBAdapter:
     def search_live(
         query: str,
         domain: str,
+        organization_id: _uuid.UUID | str,
         top: int = 20,
     ) -> list[ComplianceChunk]:
-        """Full-text search against the fund-data-index for a compliance domain."""
+        """Full-text search against the fund-data-index for a compliance domain.
+
+        All queries include organization_id for tenant isolation (Security F2/F5).
+        """
         from app.services.azure.search_client import get_search_client
+
+        safe_org = validate_uuid(organization_id, "organization_id")
+        safe_domain = validate_domain(domain) if domain else None
+        org_filter = f"organization_id eq '{safe_org}'"
+        if safe_domain:
+            odata_filter = f"{org_filter} and category eq '{safe_domain}'"
+        else:
+            odata_filter = org_filter
 
         index_name = FUND_DATA_CATEGORY_MAP.get(domain, "fund-data-index")
         try:
@@ -39,7 +53,7 @@ class AzureComplianceKBAdapter:
             results = client.search(
                 search_text=query,
                 top=top,
-                filter=f"category eq '{domain}'" if domain else None,
+                filter=odata_filter,
             )
 
             chunks = []
@@ -79,9 +93,10 @@ class AzureComplianceKBAdapter:
     @staticmethod
     def fetch_live(
         domain: str,
+        organization_id: _uuid.UUID | str,
         top: int = 50,
     ) -> list[ComplianceChunk]:
         """Fetch chunks for a domain using a broad wildcard query."""
         return AzureComplianceKBAdapter.search_live(
-            query="*", domain=domain, top=top,
+            query="*", domain=domain, organization_id=organization_id, top=top,
         )

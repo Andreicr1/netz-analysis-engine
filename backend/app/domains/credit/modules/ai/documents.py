@@ -8,8 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ai_engine.classification.document_classifier import classify_documents
-from ai_engine.ingestion.document_scanner import run_documents_ingest_pipeline
+from ai_engine.ingestion.document_scanner import classify_documents, run_documents_ingest_pipeline
 from ai_engine.ingestion.monitoring import run_daily_cycle
 from ai_engine.knowledge.knowledge_builder import build_manager_profiles
 from app.core.db.audit import write_audit_event

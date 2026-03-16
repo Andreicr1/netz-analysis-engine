@@ -31,10 +31,10 @@ backend/
       storage_client.py ← ADLS abstraction (LocalStorageClient dev, ADLSStorageClient prod)
     shared/         ← enums, exceptions
   ai_engine/
-    classification/ ← hybrid_classifier (rules → cosine_similarity → LLM), document_classifier (legacy)
+    classification/ ← hybrid_classifier (rules → cosine_similarity → LLM)
     pipeline/       ← unified_pipeline, validation gates, models, storage_routing, search_rebuild
     extraction/     ← OCR (Mistral), semantic chunking, embedding, entity bootstrap, search upsert, local reranker, governance detector
-    ingestion/      ← pipeline_ingest_runner, domain_ingest_orchestrator, document_scanner, monitoring
+    ingestion/      ← pipeline_ingest_runner, document_scanner, registry_bridge, monitoring
     validation/     ← vector_integrity_guard, deep_review validation, eval runner, evidence quality
     prompts/        ← Jinja2 templates (Netz IP — never expose to clients)
   quant_engine/     ← CVaR, regime, optimizer, scoring, drift, rebalance, FRED, regional macro, stress severity, momentum
@@ -200,3 +200,33 @@ Custom skills live in `.claude/skills/`. Each subfolder contains a `SKILL.md` wi
 - **Wealth Modularization Plan:** `docs/plans/2026-03-15-feat-wealth-vertical-complete-modularization-plan.md`
 - **Private Credit OS:** `C:\Users\andre\projetos\Netz-Private-Credit-OS` (archived after data migration)
 - **Wealth OS:** `C:\Users\andre\projetos\netz-wealth-os` (archived after migration)
+
+
+## Svelte MCP
+
+When working on any SvelteKit frontend (`frontends/credit/` or `frontends/wealth/`), the Svelte MCP server is available for documentation lookup and code validation.
+
+**Remote MCP (recommended):**
+```json
+{
+  "mcpServers": {
+    "svelte": {
+      "type": "http",
+      "url": "https://mcp.svelte.dev/mcp"
+    }
+  }
+}
+```
+
+**Local MCP (alternative):**
+```bash
+npx @sveltejs/mcp list-sections
+npx @sveltejs/mcp get-documentation "<section1>,<section2>"
+npx @sveltejs/mcp svelte-autofixer ./src/lib/Component.svelte
+```
+
+**Rules for Svelte work:**
+- ALWAYS run `list-sections` first to find relevant documentation sections
+- ALWAYS run `svelte-autofixer` before finalizing any `.svelte` component
+- Use `fetch()` + `ReadableStream` for SSE — NEVER `EventSource` (cannot send auth headers)
+- Svelte 5 runes syntax (`$state`, `$derived`, `$effect`) — escape `$` as `\$` in terminal

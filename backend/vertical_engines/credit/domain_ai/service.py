@@ -31,6 +31,7 @@ def _retrieve_context(
     deal_id: uuid.UUID,
     deal_name: str,
     *,
+    organization_id: uuid.UUID | str,
     max_chunks: int = 20,
 ) -> str:
     """Hybrid retrieval: embed the deal name as query vector + BM25 text search.
@@ -53,6 +54,7 @@ def _retrieve_context(
     try:
         chunks = search_deal_chunks(
             deal_id=deal_id,
+            organization_id=organization_id,
             query_text=query_text,
             query_vector=query_vector,
             top=max_chunks,
@@ -114,6 +116,7 @@ def run_pipeline_analysis(
     fund_id: uuid.UUID,
     deal_name: str,
     sponsor_name: str | None,
+    organization_id: uuid.UUID | str | None = None,
 ) -> dict[str, Any]:
     """Run PIPELINE-mode AI analysis.
 
@@ -128,6 +131,7 @@ def run_pipeline_analysis(
         deal_name=deal_name,
         sponsor_name=sponsor_name,
         fund_id=fund_id,
+        organization_id=organization_id,
     )
 
 
@@ -141,12 +145,13 @@ def run_portfolio_analysis(
     fund_id: uuid.UUID,
     deal_name: str,
     sponsor_name: str | None,
+    organization_id: uuid.UUID | str,
 ) -> dict[str, Any]:
     """Run PORTFOLIO-mode AI analysis: monitoring output.
 
     Retrieves indexed chunks + cashflow data, calls GPT, writes result to deals.
     """
-    context = _retrieve_context(deal_id, deal_name)
+    context = _retrieve_context(deal_id, deal_name, organization_id=organization_id)
 
     # Fetch cashflow and performance data
     cashflow_summary, performance_summary = _get_portfolio_financials(db, deal_id=deal_id, fund_id=fund_id)
@@ -277,15 +282,18 @@ def run_deal_ai_analysis(
     domain: str,
     deal_name: str,
     sponsor_name: str | None = None,
+    organization_id: uuid.UUID | str | None = None,
 ) -> dict[str, Any]:
     """Unified entrypoint for domain-aware AI analysis."""
     if domain == AIMode.PIPELINE or domain == "pipeline":
         return run_pipeline_analysis(
             db, deal_id=deal_id, fund_id=fund_id, deal_name=deal_name, sponsor_name=sponsor_name,
+            organization_id=organization_id,
         )
     elif domain == AIMode.PORTFOLIO or domain == "portfolio":
         return run_portfolio_analysis(
             db, deal_id=deal_id, fund_id=fund_id, deal_name=deal_name, sponsor_name=sponsor_name,
+            organization_id=organization_id,
         )
     else:
         raise ValueError(f"Unknown domain: {domain}")

@@ -246,13 +246,28 @@ def invalidate_cache() -> None:
 # ─────────────────────────────────────────────────────────────────────
 #  Azure Search helpers
 # ─────────────────────────────────────────────────────────────────────
-def _search(index: str, query: str, top: int = 5, odata_filter: str | None = None) -> list[dict]:
+def _search(
+    index: str, query: str, top: int = 5,
+    odata_filter: str | None = None,
+    organization_id: str | None = None,
+) -> list[dict]:
     if not SEARCH_ENDPOINT or not SEARCH_API_KEY:
         logger.warning("POLICY_LOADER_NO_SEARCH_CONFIG")
         return []
 
     semantic_cfg = index.replace("-index", "-semantic")
     url = f"{SEARCH_ENDPOINT}/indexes/{index}/docs/search?api-version={SEARCH_API_VER}"
+
+    # Build filter with tenant isolation (Security F2)
+    filter_parts: list[str] = []
+    if organization_id is not None:
+        from ai_engine.extraction.search_upsert_service import validate_uuid
+        safe_org = validate_uuid(organization_id, "organization_id")
+        filter_parts.append(f"organization_id eq '{safe_org}'")
+    if odata_filter:
+        filter_parts.append(odata_filter)
+    combined_filter = " and ".join(filter_parts) if filter_parts else None
+
     body: dict = {
         "search": query,
         "queryType": "semantic",
@@ -260,8 +275,8 @@ def _search(index: str, query: str, top: int = 5, odata_filter: str | None = Non
         "top": top,
         "select": "id,title,content,doc_type",
     }
-    if odata_filter:
-        body["filter"] = odata_filter
+    if combined_filter:
+        body["filter"] = combined_filter
     try:
         resp = httpx.post(
             url,

@@ -19,6 +19,35 @@ logger = logging.getLogger(__name__)
 _INDEX_NAME = settings.prefixed_index(settings.SEARCH_CHUNKS_INDEX_NAME or "global-vector-chunks-v2")
 _UPLOAD_BATCH_SIZE = 100
 
+# ── OData injection prevention (Security F2/F5/F6) ──────────────────
+_VALID_DOMAINS = frozenset({
+    "credit", "wealth", "macro", "benchmark",
+    "POLICY", "REGULATORY", "CONSTITUTION", "SERVICE_PROVIDER",
+    "PIPELINE",
+})
+
+
+def validate_uuid(value: str | uuid.UUID, field_name: str = "id") -> str:
+    """Validate and normalize UUID for safe OData filter interpolation.
+
+    Returns lowercase hyphenated canonical form.
+    Raises ValueError on invalid input — prevents OData injection on ID fields.
+    """
+    try:
+        return str(uuid.UUID(str(value)))
+    except (ValueError, AttributeError):
+        raise ValueError(f"Invalid UUID for {field_name}: {value!r}")
+
+
+def validate_domain(domain: str) -> str:
+    """Validate domain against allowlist. Prevents OData injection on string fields.
+
+    Update _VALID_DOMAINS when adding new verticals — see app/shared/enums.py.
+    """
+    if domain not in _VALID_DOMAINS:
+        raise ValueError(f"Invalid domain filter: {domain!r}")
+    return domain
+
 
 def _safe_id(raw: str) -> str:
     """Sanitize a document id for Azure Search (alphanumeric, dash, underscore)."""
@@ -57,7 +86,7 @@ def build_search_document(
     key_persons_mentioned: list[str] | None = None,
     financial_metric_type: str | None = None,
     risk_flags: list[str] | None = None,
-    organization_id: "uuid.UUID | None" = None,
+    organization_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
     """Build a single document dict matching the global-vector-chunks-v2 schema.
 
@@ -201,6 +230,7 @@ def upsert_chunks(documents: list[dict[str, Any]]) -> int:
 def search_deal_chunks(
     *,
     deal_id: uuid.UUID,
+    organization_id: uuid.UUID | str,
     query_text: str | None = None,
     query_vector: list[float] | None = None,
     top: int = 20,
@@ -209,6 +239,7 @@ def search_deal_chunks(
     """Hybrid search (BM25 + vector) for chunks belonging to a deal.
 
     Supports optional domain filtering for cross-domain regulatory references.
+    All queries include organization_id for tenant isolation (Security F2/F5).
     """
     from typing import cast
 
@@ -218,9 +249,12 @@ def search_deal_chunks(
 
     client = get_search_client(index_name=_INDEX_NAME)
 
-    filter_expr = f"deal_id eq '{deal_id}'"
+    safe_deal = validate_uuid(deal_id, "deal_id")
+    safe_org = validate_uuid(organization_id, "organization_id")
+    filter_expr = f"deal_id eq '{safe_deal}' and organization_id eq '{safe_org}'"
     if domain_filter:
-        filter_expr = f"({filter_expr}) and (domain eq '{domain_filter}')"
+        safe_domain = validate_domain(domain_filter)
+        filter_expr = f"({filter_expr}) and (domain eq '{safe_domain}')"
 
     vector_queries: list[VectorQuery] | None = None
     if query_vector:
@@ -249,6 +283,7 @@ def search_deal_chunks(
 def search_fund_policy_chunks(
     *,
     fund_id: uuid.UUID,
+    organization_id: uuid.UUID | str,
     query_text: str | None = None,
     query_vector: list[float] | None = None,
     top: int = 30,
@@ -260,6 +295,7 @@ def search_fund_policy_chunks(
     (00000000-0000-0000-0000-000000000000).  This function filters by
     fund_id + domain rather than by deal_id.
 
+    All queries include organization_id for tenant isolation (Security F2/F5).
     Used by Deep Review v3 Stage 4 (policy compliance).
     """
     from typing import cast
@@ -270,7 +306,10 @@ def search_fund_policy_chunks(
 
     client = get_search_client(index_name=_INDEX_NAME)
 
-    filter_expr = f"fund_id eq '{fund_id}' and domain eq '{domain_filter}'"
+    safe_fund = validate_uuid(fund_id, "fund_id")
+    safe_org = validate_uuid(organization_id, "organization_id")
+    safe_domain = validate_domain(domain_filter)
+    filter_expr = f"fund_id eq '{safe_fund}' and organization_id eq '{safe_org}' and domain eq '{safe_domain}'"
 
     vector_queries: list[VectorQuery] | None = None
     if query_vector:

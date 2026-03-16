@@ -1,9 +1,7 @@
 """AI Engine Classification — unified document classification.
 
 Public API:
-    classify()                     — hybrid three-layer pipeline classifier
-    classify_documents()           — batch DB-level classification for Documents
-    classify_registered_documents() — batch DB-level classification for DocumentRegistry
+    classify() — hybrid three-layer pipeline classifier (rules → cosine → LLM)
 """
 
 from ai_engine.classification.hybrid_classifier import classify

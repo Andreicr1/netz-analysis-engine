@@ -96,6 +96,7 @@ def run_deal_deep_review_v4(
     *,
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
+    organization_id: uuid.UUID | str,
     actor_id: str = "ai-engine",
     force: bool = False,
     full_mode: bool = False,
@@ -104,6 +105,9 @@ def run_deal_deep_review_v4(
 
     Parameters
     ----------
+    organization_id : uuid.UUID | str
+        Tenant isolation — required for all Azure Search queries (Security F2).
+        Extract from ``deal.organization_id`` before calling.
     full_mode : bool
         When ``True``, unlocks higher token ceilings for all LLM stages.
         Standard mode keeps conservative limits for cost control.
@@ -175,7 +179,7 @@ def run_deal_deep_review_v4(
     logger.info("deep_review.v4.start", deal_id=str(deal_id), version=version_tag)
 
     # ── Stage 2: IC-Grade retrieval (per-chapter specialized) ──────
-    context = _gather_deal_texts(db, fund_id=fund_id, deal=deal)
+    context = _gather_deal_texts(db, fund_id=fund_id, deal=deal, organization_id=organization_id)
     corpus = context["corpus_text"]
     evidence_map = context["evidence_map"]
     evidence_chunks = context.get("raw_chunks", [])
@@ -362,6 +366,7 @@ def run_deal_deep_review_v4(
         fund_id,
         deal_fields["deal_name"],
         deal_folder_path=deal.deal_folder_path,
+        organization_id=organization_id,
     )
     policy_dict = _run_policy_compliance(
         corpus,
@@ -1364,6 +1369,7 @@ async def async_run_deal_deep_review_v4(
     *,
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
+    organization_id: uuid.UUID | str,
     actor_id: str = "ai-engine",
     force: bool = False,
     full_mode: bool = False,
@@ -1476,7 +1482,7 @@ async def async_run_deal_deep_review_v4(
             deal_obj = session.execute(
                 select(Deal).where(Deal.id == deal_id, Deal.fund_id == fund_id),
             ).scalar_one()
-            return _gather_deal_texts(session, fund_id=fund_id, deal=deal_obj)
+            return _gather_deal_texts(session, fund_id=fund_id, deal=deal_obj, organization_id=organization_id)
 
     def _get_macro_threadsafe() -> dict:
         from vertical_engines.credit.market_data import get_macro_snapshot
@@ -1636,6 +1642,7 @@ async def async_run_deal_deep_review_v4(
             fund_id,
             deal_fields["deal_name"],
             deal_folder_path=deal_folder_path,
+            organization_id=organization_id,
         )
         policy_result = _run_policy_compliance(
             corpus,
@@ -2565,6 +2572,7 @@ def run_all_deals_deep_review_v4(
     db: Session,
     *,
     fund_id: uuid.UUID,
+    organization_id: uuid.UUID | str,
     actor_id: str = "ai-engine",
     force: bool = False,
     full_mode: bool = False,
@@ -2600,6 +2608,7 @@ def run_all_deals_deep_review_v4(
                     session,
                     fund_id=fund_id,
                     deal_id=deal.id,
+                    organization_id=organization_id,
                     actor_id=actor_id,
                     force=force,
                     full_mode=full_mode,
@@ -2662,6 +2671,7 @@ async def async_run_all_deals_deep_review_v4(
     db: Session,
     *,
     fund_id: uuid.UUID,
+    organization_id: uuid.UUID | str,
     actor_id: str = "ai-engine",
     force: bool = False,
     full_mode: bool = False,
@@ -2699,6 +2709,7 @@ async def async_run_all_deals_deep_review_v4(
                 session,
                 fund_id=fund_id,
                 deal_id=deal_id,
+                organization_id=organization_id,
                 actor_id=actor_id,
                 force=force,
                 full_mode=full_mode,

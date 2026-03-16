@@ -68,6 +68,7 @@ def run_portfolio_review(
     *,
     fund_id: uuid.UUID,
     investment_id: uuid.UUID,
+    organization_id: uuid.UUID | str,
     actor_id: str = "ai-engine",
 ) -> dict[str, Any]:
     """Run a periodic AI review of an active investment."""
@@ -81,7 +82,7 @@ def run_portfolio_review(
     if investment is None:
         return {"error": "Investment not found"}
 
-    corpus = _gather_investment_texts(db, fund_id=fund_id, investment=investment)
+    corpus = _gather_investment_texts(db, fund_id=fund_id, investment=investment, organization_id=organization_id)
     if not corpus.strip():
         return {"error": "No readable documents found for this investment"}
 
@@ -123,6 +124,7 @@ def run_all_portfolio_reviews(
     db: Session,
     *,
     fund_id: uuid.UUID,
+    organization_id: uuid.UUID | str,
     actor_id: str = "ai-engine",
 ) -> dict[str, Any]:
     """Run periodic review for every active investment.
@@ -157,6 +159,7 @@ def run_all_portfolio_reviews(
                     session,
                     fund_id=_fund_id,
                     investment_id=inv_id,
+                    organization_id=organization_id,
                     actor_id=actor_id,
                 )
                 if "error" not in result:
