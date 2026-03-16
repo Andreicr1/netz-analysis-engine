@@ -87,6 +87,19 @@ class LayerEvaluator:
         layer: int,
     ) -> CriterionResult | None:
         """Evaluate a single criterion against attributes."""
+        # Credit rating floor (special case — before generic min_ handler)
+        if criterion == "min_credit_rating":
+            actual_rating = attributes.get("credit_rating_sp", "")
+            actual_rank = _RATING_ORDER.get(str(actual_rating), 0)
+            expected_rank = _RATING_ORDER.get(str(expected), 0)
+            return CriterionResult(
+                criterion=criterion,
+                expected=str(expected),
+                actual=str(actual_rating),
+                passed=actual_rank >= expected_rank,
+                layer=layer,
+            )
+
         # Min thresholds
         if criterion.startswith("min_"):
             field_name = criterion[4:]  # strip "min_"
@@ -156,19 +169,6 @@ class LayerEvaluator:
                 expected=f"not in {expected}",
                 actual=str(actual_val),
                 passed=passed,
-                layer=layer,
-            )
-
-        # Credit rating floor
-        if criterion == "min_credit_rating":
-            actual_rating = attributes.get("credit_rating_sp", "")
-            actual_rank = _RATING_ORDER.get(str(actual_rating), 0)
-            expected_rank = _RATING_ORDER.get(str(expected), 0)
-            return CriterionResult(
-                criterion=criterion,
-                expected=str(expected),
-                actual=str(actual_rating),
-                passed=actual_rank >= expected_rank,
                 layer=layer,
             )
 
