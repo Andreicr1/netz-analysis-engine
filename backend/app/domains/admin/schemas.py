@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -154,7 +154,7 @@ class WorkerStatus(BaseModel):
     name: str
     last_run: datetime | None = None
     duration_seconds: float | None = None
-    status: str  # "healthy", "degraded", "error"
+    status: Literal["healthy", "degraded", "error", "unknown"]
     error_count: int = 0
 
 

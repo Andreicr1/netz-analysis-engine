@@ -1,0 +1,79 @@
+{
+	"app": {
+		"name": "Netz Admin",
+		"tagline": "Gerenciamento de Configuracao Multi-Tenant"
+	},
+	"nav": {
+		"tenants": "Inquilinos",
+		"config": "Configuracao",
+		"prompts": "Prompts",
+		"health": "Saude do Sistema"
+	},
+	"common": {
+		"loading": "Carregando...",
+		"error": "Ocorreu um erro",
+		"save": "Salvar",
+		"cancel": "Cancelar",
+		"delete": "Excluir",
+		"create": "Criar",
+		"edit": "Editar",
+		"retry": "Tentar Novamente",
+		"confirm": "Confirmar",
+		"search": "Buscar...",
+		"noResults": "Nenhum resultado encontrado",
+		"version": "Versao"
+	},
+	"session": {
+		"expiring": "Sua sessao expira em 5 minutos. Salve seu trabalho e renove seu acesso.",
+		"renew": "Renovar Sessao",
+		"dismiss": "Dispensar"
+	},
+	"tenants": {
+		"title": "Gerenciamento de Inquilinos",
+		"createTenant": "Criar Inquilino",
+		"seedConfigs": "Semear Configs",
+		"uploadLogo": "Enviar Logo",
+		"removeLogo": "Remover Logo",
+		"orgName": "Nome da Organizacao",
+		"orgSlug": "Slug da Organizacao",
+		"verticals": "Verticais",
+		"configCount": "Configs",
+		"assetCount": "Assets"
+	},
+	"config": {
+		"title": "Configuracao",
+		"override": "Substituicao",
+		"default": "Padrao",
+		"merged": "Mesclado",
+		"diff": "Visualizacao de Diferenca",
+		"guardrailError": "Validacao falhou",
+		"versionConflict": "Configuracao foi modificada por outro usuario",
+		"removeOverride": "Remover Substituicao",
+		"updateDefault": "Atualizar Padrao"
+	},
+	"prompts": {
+		"title": "Templates de Prompt",
+		"sourceOrg": "Substituicao da Org",
+		"sourceGlobal": "Substituicao Global",
+		"sourceFilesystem": "Sistema de Arquivos (somente leitura)",
+		"preview": "Pre-visualizar",
+		"validate": "Validar",
+		"revert": "Reverter para Padrao",
+		"history": "Historico de Versoes",
+		"syntaxOk": "Sintaxe OK",
+		"syntaxError": "Erro de Sintaxe"
+	},
+	"health": {
+		"title": "Saude do Sistema",
+		"workers": "Status dos Workers",
+		"pipelines": "Estatisticas do Pipeline",
+		"usage": "Uso por Inquilino",
+		"healthy": "Saudavel",
+		"degraded": "Degradado",
+		"error": "Erro",
+		"unknown": "Desconhecido",
+		"lastRun": "Ultima Execucao",
+		"duration": "Duracao",
+		"errors": "Erros"
+	}
+}
