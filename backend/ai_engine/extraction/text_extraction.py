@@ -130,32 +130,6 @@ def _extract_with_document_intelligence(data: bytes) -> list[PageBlock]:
 # ── Public API ────────────────────────────────────────────────────────
 
 
-def extract_text_from_bytes(data: bytes, *, filename: str) -> list[PageBlock]:
-    """Extract text from raw bytes based on file extension.
-
-    Returns list of PageBlock dicts with page_start, page_end, text.
-    """
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-
-    if ext == "pdf":
-        pages = _extract_pdf(data)
-        # If no text found (scanned PDF), try Document Intelligence
-        if not pages:
-            logger.info("PDF yielded no text — attempting Document Intelligence: %s", filename)
-            pages = _extract_with_document_intelligence(data)
-        return pages
-
-    if ext in ("docx", "doc"):
-        return _extract_docx(data)
-
-    if ext in ("txt", "md", "csv"):
-        text = data.decode("utf-8", errors="replace").strip()
-        return [{"page_start": 1, "page_end": 1, "text": text}] if text else []
-
-    logger.warning("Unsupported file extension '%s' for text extraction: %s", ext, filename)
-    return []
-
-
 async def async_extract_text_from_bytes(data: bytes, *, filename: str) -> list[PageBlock]:
     """Async text extraction — routes PDFs through Mistral OCR when available.
 
@@ -204,29 +178,6 @@ async def async_extract_text_from_bytes(data: bytes, *, filename: str) -> list[P
 
 # Supported file extensions for text extraction
 _SUPPORTED_EXTENSIONS = {"pdf", "docx", "doc", "txt", "md", "csv"}
-
-
-def extract_text_from_blob(blob_container: str, blob_path: str) -> list[PageBlock]:
-    """Download blob and extract text.
-
-    Uses the canonical blob client (DefaultAzureCredential).
-    Skips unsupported file types BEFORE downloading to avoid pulling
-    large binaries (e.g. 300 MB video files) into memory.
-    """
-    filename = blob_path.rsplit("/", 1)[-1] if "/" in blob_path else blob_path
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-
-    if ext not in _SUPPORTED_EXTENSIONS:
-        logger.info("Skipping unsupported file type '%s' (no download): %s", ext, blob_path)
-        return []
-
-    from app.services.azure.blob_client import get_blob_service_client
-
-    svc = get_blob_service_client()
-    container = svc.get_container_client(blob_container)
-    blob = container.get_blob_client(blob_path)
-    data = blob.download_blob().readall()
-    return extract_text_from_bytes(data, filename=filename)
 
 
 async def async_extract_text_from_blob(blob_container: str, blob_path: str) -> list[PageBlock]:

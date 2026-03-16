@@ -92,16 +92,6 @@ CANONICAL_TO_AFFINITY: dict[str, frozenset[str]] = {
 }
 
 
-def doc_type_matches_affinity(doc_type: str, affinity_tags: frozenset[str]) -> bool:
-    """Check if a canonical doc_type matches any tag in an affinity set.
-
-    Used by memo_book_generator to score evidence chunks.
-    """
-    mapped = CANONICAL_TO_AFFINITY.get(doc_type, frozenset())
-    # Match on canonical type directly OR via affinity tag mapping
-    return doc_type in affinity_tags or bool(mapped & affinity_tags)
-
-
 # ═══════════════════════════════════════════════════════════════════════
 #  Result Types
 # ═══════════════════════════════════════════════════════════════════════
@@ -148,158 +138,6 @@ class DocumentIntelligenceResult:
 
 
 # ═══════════════════════════════════════════════════════════════════════
-#  Component 1: Smart Classification (gpt-4.1)
-# ═══════════════════════════════════════════════════════════════════════
-
-
-def classify_document(
-    *,
-    title: str,
-    filename: str,
-    container: str,
-    content: str,
-    max_content_chars: int = 6_000,
-) -> ClassificationResult:
-    """Classify a document using gpt-4.1.
-
-    Thin sync wrapper — delegates to ``async_classify_document``.
-    """
-    import asyncio
-
-    return asyncio.run(async_classify_document(
-        title=title, filename=filename, container=container,
-        content=content, max_content_chars=max_content_chars,
-    ))
-
-
-# ═══════════════════════════════════════════════════════════════════════
-#  Component 2: Metadata Extraction (gpt-5.1)
-# ═══════════════════════════════════════════════════════════════════════
-
-
-def extract_metadata(
-    *,
-    title: str,
-    doc_type: str,
-    content: str,
-    max_content_chars: int = 12_000,
-) -> MetadataResult:
-    """Extract structured metadata using gpt-5.1.
-
-    Thin sync wrapper — delegates to ``async_extract_metadata``.
-    """
-    import asyncio
-
-    return asyncio.run(async_extract_metadata(
-        title=title, doc_type=doc_type, content=content,
-        max_content_chars=max_content_chars,
-    ))
-
-
-# ═══════════════════════════════════════════════════════════════════════
-#  Component 3: Document Summary (gpt-4.1)
-# ═══════════════════════════════════════════════════════════════════════
-
-
-def summarize_document(
-    *,
-    title: str,
-    doc_type: str,
-    content: str,
-    max_content_chars: int = 10_000,
-) -> SummaryResult:
-    """Generate a 200-word summary + key findings.
-
-    Thin sync wrapper — delegates to ``async_summarize_document``.
-    """
-    import asyncio
-
-    return asyncio.run(async_summarize_document(
-        title=title, doc_type=doc_type, content=content,
-        max_content_chars=max_content_chars,
-    ))
-
-
-# ═══════════════════════════════════════════════════════════════════════
-#  Orchestrator — runs all 3 components in sequence
-# ═══════════════════════════════════════════════════════════════════════
-
-def run_document_intelligence(
-    *,
-    title: str,
-    filename: str,
-    container: str,
-    content: str,
-) -> DocumentIntelligenceResult:
-    """Run the full Document Intelligence pipeline on a single document.
-
-    Thin sync wrapper — delegates to ``async_run_document_intelligence``.
-    """
-    import asyncio
-
-    return asyncio.run(async_run_document_intelligence(
-        title=title, filename=filename, container=container,
-        content=content,
-    ))
-
-
-# ═══════════════════════════════════════════════════════════════════════
-#  Batch processor (for re-processing existing documents)
-# ═══════════════════════════════════════════════════════════════════════
-
-def run_batch_intelligence(
-    documents: list[dict[str, str]],
-) -> list[DocumentIntelligenceResult]:
-    """Process a batch of documents through document intelligence.
-
-    Each dict must have: title, filename, container, content.
-
-    Returns results in the same order as input.
-    """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
-    total = len(documents)
-    results_map: dict[int, DocumentIntelligenceResult] = {}
-
-    def _run_one(idx: int, doc: dict):
-        logger.info("DOC_INTELLIGENCE_BATCH %d/%d: %s", idx, total, doc.get("title", "?"))
-        return idx, run_document_intelligence(
-            title=doc.get("title", ""),
-            filename=doc.get("filename", ""),
-            container=doc.get("container", ""),
-            content=doc.get("content", ""),
-        )
-
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        futures = {
-            executor.submit(_run_one, i, doc): i
-            for i, doc in enumerate(documents, 1)
-        }
-        for future in as_completed(futures):
-            idx = futures[future]
-            try:
-                returned_idx, result = future.result()
-                results_map[returned_idx] = result
-            except Exception as exc:
-                logger.error("Batch item %d failed: %s", idx, exc, exc_info=True)
-                results_map[idx] = DocumentIntelligenceResult(
-                    classification=ClassificationResult(doc_type="other"),
-                    metadata=MetadataResult(),
-                    summary=SummaryResult(),
-                    success=False,
-                    error=str(exc),
-                )
-
-    results = [results_map[i] for i in sorted(results_map)]
-
-    logger.info(
-        "DOC_INTELLIGENCE_BATCH_COMPLETE total=%d succeeded=%d",
-        total, sum(1 for r in results if r.success),
-    )
-    return results
-
-
-# ═══════════════════════════════════════════════════════════════════════
 #  Async Components — native async using async_create_completion()
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -314,7 +152,7 @@ async def async_classify_document(
     content: str,
     max_content_chars: int = 6_000,
 ) -> ClassificationResult:
-    """Async version of ``classify_document``."""
+    """Classify a document using LLM (async)."""
     truncated = sanitize_user_input(content, max_length=max_content_chars) if content else ""
 
     doc_types_str = "\n".join(f"  • {dt}" for dt in CANONICAL_DOC_TYPES)
@@ -376,7 +214,7 @@ async def async_extract_metadata(
     content: str,
     max_content_chars: int = 12_000,
 ) -> MetadataResult:
-    """Async version of ``extract_metadata``."""
+    """Extract structured metadata from document content (async)."""
     truncated = sanitize_user_input(content, max_length=max_content_chars) if content else ""
 
     system = prompt_registry.render("extraction/extraction_system.j2")
@@ -423,7 +261,7 @@ async def async_summarize_document(
     content: str,
     max_content_chars: int = 10_000,
 ) -> SummaryResult:
-    """Async version of ``summarize_document``."""
+    """Generate a 200-word summary + key findings (async)."""
     truncated = sanitize_user_input(content, max_length=max_content_chars) if content else ""
 
     system = prompt_registry.render("extraction/summary_system.j2")
@@ -465,7 +303,7 @@ async def async_run_document_intelligence(
     container: str,
     content: str,
 ) -> DocumentIntelligenceResult:
-    """Async version of ``run_document_intelligence``.
+    """Run the full Document Intelligence pipeline on a single document (async).
 
     1. Classify (async) → canonical doc_type
     2. Extract metadata + Summarize (parallel via asyncio.gather)

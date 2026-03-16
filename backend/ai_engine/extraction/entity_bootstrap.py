@@ -222,7 +222,7 @@ _FILENAME_VEHICLE_HINTS: list[tuple[re.Pattern, str, str]] = [
 ]
 
 
-def filename_vehicle_hint(filename: str) -> tuple[str | None, str | None]:
+def _filename_vehicle_hint(filename: str) -> tuple[str | None, str | None]:
     for pattern, vehicle, reason in _FILENAME_VEHICLE_HINTS:
         if pattern.search(filename):
             return vehicle, reason
@@ -343,7 +343,7 @@ _SKIP_ALIAS_KEYS = re.compile(
 # REGEX EXTRACTION
 # ============================================================
 
-def extract_entities_regex(text: str, filename: str = "") -> dict:
+def _extract_entities_regex(text: str, filename: str = "") -> dict:
     discovered = {
         "aliases":             {},
         "formerly":            [],
@@ -355,7 +355,7 @@ def extract_entities_regex(text: str, filename: str = "") -> dict:
     }
 
     # Filename hints
-    vh, vr = filename_vehicle_hint(filename)
+    vh, vr = _filename_vehicle_hint(filename)
     if vh:
         discovered["vehicle_hint"] = vh
         discovered["vehicle_hint_reason"] = vr
@@ -533,7 +533,7 @@ def _first_pct_in_range(
     return None
 
 
-def extract_fund_metadata(ocr_text: str) -> dict:
+def _extract_fund_metadata(ocr_text: str) -> dict:
     """Extract structured fund metadata from full OCR text.
     Returns dict with: fund_strategy, fund_jurisdiction, key_terms.
     All regex-based, zero API cost.
@@ -613,14 +613,14 @@ def extract_fund_metadata(ocr_text: str) -> dict:
 # EMBEDDING FILTER
 # ============================================================
 
-def cosine_similarity(a: list[float], b: list[float]) -> float:
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
     import numpy as np  # lazy import - heavy optional dependency
 
     a_arr, b_arr = np.array(a), np.array(b)
     return float(np.dot(a_arr, b_arr) / (np.linalg.norm(a_arr) * np.linalg.norm(b_arr) + 1e-9))
 
 
-def filter_lines_by_embedding(ocr_text: str) -> str:
+def _filter_lines_by_embedding(ocr_text: str) -> str:
     """Embed each OCR line and return the top N lines most similar
     to canonical entity declaration phrases.
     Focuses regex and GPT extraction on entity-bearing content only.
@@ -643,7 +643,7 @@ def filter_lines_by_embedding(ocr_text: str) -> str:
     scored = []
     for i, line_emb in enumerate(line_embeddings):
         max_sim = max(
-            cosine_similarity(line_emb, ce)
+            _cosine_similarity(line_emb, ce)
             for ce in canonical_embeddings
         )
         scored.append((max_sim, lines[i]))
@@ -670,7 +670,7 @@ def _get_entity_gpt_system() -> str:
     return prompt_registry.render("extraction/entity_gpt.j2")
 
 
-def extract_entities_gpt(text: str) -> dict:
+def _extract_entities_gpt(text: str) -> dict:
     try:
         result = create_completion(
             system_prompt=_get_entity_gpt_system(),
@@ -709,7 +709,7 @@ _VEHICLE_TYPE_CANONICAL_MAP: dict[str, str] = {
 }
 
 
-def validate_vehicle_type(
+def _validate_vehicle_type(
     entity_name: str,
     context_text: str,
     filename: str = "",
@@ -748,7 +748,7 @@ def validate_vehicle_type(
 # MISTRAL OCR
 # ============================================================
 
-def ocr_pdf_bootstrap(pdf_path: str, mistral_key: str) -> str:
+def _ocr_pdf_bootstrap(pdf_path: str, mistral_key: str) -> str:
     """OCR the HEAD + TAIL pages of the PDF.
 
     HEAD (first BOOTSTRAP_PAGES_HEAD pages) captures entity declarations in
@@ -826,7 +826,7 @@ def ocr_pdf_bootstrap(pdf_path: str, mistral_key: str) -> str:
 # MERGE + DEDUP
 # ============================================================
 
-def merge_discoveries(results: list[dict]) -> dict:
+def _merge_discoveries(results: list[dict]) -> dict:
     merged = {
         "aliases":       {},
         "formerly":      [],
@@ -932,7 +932,7 @@ def merge_discoveries(results: list[dict]) -> dict:
 # FUND_CONTEXT.JSON
 # ============================================================
 
-def load_seed(folder: Path) -> dict:
+def _load_seed(folder: Path) -> dict:
     ctx_path = folder / "fund_context.json"
     if ctx_path.exists():
         with open(ctx_path, encoding="utf-8") as f:
@@ -945,7 +945,7 @@ def load_seed(folder: Path) -> dict:
     }
 
 
-def write_enriched(folder: Path, seed: dict, discovered: dict,
+def _write_enriched(folder: Path, seed: dict, discovered: dict,
                    validated_vehicles: dict, fund_meta: dict,
                    dry_run: bool) -> None:
     # deal_name = folder name (always stable, user-controlled)
@@ -1068,14 +1068,14 @@ def bootstrap_folder(
         logger.info("PDF: %s", pdf.name)
         t0 = time.time()
 
-        text = ocr_pdf_bootstrap(str(pdf), mistral_key)
+        text = _ocr_pdf_bootstrap(str(pdf), mistral_key)
         if not text.strip():
             logger.info("OCR empty — skip %s", pdf.name)
             return "", None
 
-        filtered = filter_lines_by_embedding(text)
+        filtered = _filter_lines_by_embedding(text)
 
-        regex_result = extract_entities_regex(filtered, pdf.name)
+        regex_result = _extract_entities_regex(filtered, pdf.name)
         entity_count = (
             len(regex_result["aliases"]) +
             len(regex_result["roles"])   +
@@ -1085,7 +1085,7 @@ def bootstrap_folder(
 
         if entity_count < MIN_REGEX_ENTITIES:
             logger.info("-> GPT mini fallback (%s)", pdf.name)
-            discovery = extract_entities_gpt(filtered)
+            discovery = _extract_entities_gpt(filtered)
         else:
             discovery = regex_result
 
@@ -1147,13 +1147,13 @@ def bootstrap_folder(
                                      "roles": {}, "titles": [], "isins": []})
 
     # Merge all discoveries
-    merged = merge_discoveries(all_discoveries)
+    merged = _merge_discoveries(all_discoveries)
 
     # Stage E — Deterministic vehicle_type validation (replaced Cohere Rerank)
     logger.info("Vehicle_type validation:")
     validated_vehicles: dict[str, dict] = {}
     for alias, full_name in list(merged["aliases"].items())[:5]:
-        vehicle, score = validate_vehicle_type(
+        vehicle, score = _validate_vehicle_type(
             full_name, ocr_full_text,
             filename=str(folder.name),
         )
@@ -1165,7 +1165,7 @@ def bootstrap_folder(
         logger.info("%-50s -> %s (%.4f)", full_name[:50], vehicle, score)
 
     # Stage F — Fund metadata extraction (strategy, jurisdiction, key terms)
-    fund_meta = extract_fund_metadata(ocr_full_text) if ocr_full_text else {}
+    fund_meta = _extract_fund_metadata(ocr_full_text) if ocr_full_text else {}
 
     # Summary
     logger.info(
@@ -1181,8 +1181,8 @@ def bootstrap_folder(
     if fund_meta.get("key_terms"):
         logger.info("Key terms: %s", fund_meta["key_terms"])
 
-    seed = load_seed(folder)
-    write_enriched(folder, seed, merged, validated_vehicles, fund_meta, dry_run)
+    seed = _load_seed(folder)
+    _write_enriched(folder, seed, merged, validated_vehicles, fund_meta, dry_run)
     return merged
 
 
@@ -1269,7 +1269,7 @@ async def async_bootstrap_deal(
             if not pages:
                 return ""
 
-            # Head + tail page selection (like ocr_pdf_bootstrap)
+            # Head + tail page selection (like _ocr_pdf_bootstrap)
             total = len(pages)
             head_end = min(BOOTSTRAP_PAGES_HEAD, total)
             tail_start = max(head_end, total - BOOTSTRAP_PAGES_TAIL)
@@ -1298,13 +1298,13 @@ async def async_bootstrap_deal(
 
         # ── Stage B: Embedding filter (sync, runs in thread) ──
         try:
-            filtered = await asyncio.to_thread(filter_lines_by_embedding, ocr_result)
+            filtered = await asyncio.to_thread(_filter_lines_by_embedding, ocr_result)
         except Exception:
             filtered = ocr_result[:GPT_MINI_CHARS]
 
         # ── Stage C: Regex extraction ──
         filename = pdf_blobs[i][1].rsplit("/", 1)[-1] if "/" in pdf_blobs[i][1] else pdf_blobs[i][1]
-        regex_result = extract_entities_regex(filtered, filename)
+        regex_result = _extract_entities_regex(filtered, filename)
         entity_count = (
             len(regex_result.get("aliases", {})) +
             len(regex_result.get("roles", {})) +
@@ -1314,7 +1314,7 @@ async def async_bootstrap_deal(
         # ── Stage D: GPT fallback if regex yield is low ──
         if entity_count < MIN_REGEX_ENTITIES:
             try:
-                discovery = await asyncio.to_thread(extract_entities_gpt, filtered)
+                discovery = await asyncio.to_thread(_extract_entities_gpt, filtered)
             except Exception:
                 discovery = regex_result
         else:
@@ -1331,7 +1331,7 @@ async def async_bootstrap_deal(
         )
 
     # ── Stage E: Merge all discoveries ──
-    merged = merge_discoveries(all_discoveries)
+    merged = _merge_discoveries(all_discoveries)
 
     # ── Stage F: Deterministic vehicle validation (replaced Cohere Rerank) ──
     validated_vehicles: dict[str, dict] = {}
@@ -1339,7 +1339,7 @@ async def async_bootstrap_deal(
         for alias, full_name in list(merged["aliases"].items())[:5]:
             try:
                 vehicle, score = await asyncio.to_thread(
-                    validate_vehicle_type,
+                    _validate_vehicle_type,
                     full_name, ocr_full_text, deal_name,
                 )
                 validated_vehicles[full_name] = {
@@ -1351,7 +1351,7 @@ async def async_bootstrap_deal(
                 logger.warning("[bootstrap] Rerank failed for %s: %s", full_name, exc)
 
     # ── Stage G: Fund metadata (regex, zero cost) ──
-    fund_meta = extract_fund_metadata(ocr_full_text) if ocr_full_text else {}
+    fund_meta = _extract_fund_metadata(ocr_full_text) if ocr_full_text else {}
 
     logger.info(
         "[bootstrap] Deal %s — aliases=%d, roles=%d, vehicles=%d, strategy=%s",

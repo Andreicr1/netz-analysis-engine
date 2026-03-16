@@ -89,7 +89,7 @@ _CHUNK_SIZES: dict[str, tuple[int, int, int]] = {
 }
 
 
-def get_chunk_sizes(doc_type: str) -> tuple[int, int, int]:
+def _get_chunk_sizes(doc_type: str) -> tuple[int, int, int]:
     return _CHUNK_SIZES.get(doc_type, _CHUNK_SIZES["default"])
 
 
@@ -146,7 +146,7 @@ _FINANCIAL_SECTION_TYPES = frozenset({
 })
 
 
-def classify_section_type(
+def _classify_section_type(
     header_text: str,
     content: str = "",
     doc_type: str = "",
@@ -179,7 +179,7 @@ _HAS_NUMBERS = re.compile(
 )
 
 
-def has_financial_figures(text: str) -> bool:
+def _has_financial_figures(text: str) -> bool:
     return bool(_HAS_NUMBERS.search(text))
 
 
@@ -264,7 +264,7 @@ def _split_html_table(table_html: str, max_chars: int) -> list[str]:
     return sub_tables if sub_tables else [table_html]
 
 
-def parse_markdown_blocks(markdown: str) -> list[Block]:
+def _parse_markdown_blocks(markdown: str) -> list[Block]:
     """Parse markdown into structural blocks.
     HTML tables (from Mistral OCR table_format=html) are treated as atomic units.
     Markdown pipe-tables are also collected as single blocks.
@@ -430,7 +430,7 @@ def _estimate_tokens(text: str) -> int:
     return len(text) // 4
 
 
-def chunk_markdown(
+def _chunk_markdown(
     markdown: str,
     doc_id:   str,
     doc_type: str,
@@ -445,8 +445,8 @@ def chunk_markdown(
     - Blocks that alone exceed max_chars produce an oversized chunk (never truncated).
     - Every chunk is prefixed with its breadcrumb for LLM context.
     """
-    min_chars, target_chars, max_chars = get_chunk_sizes(doc_type)
-    blocks      = parse_markdown_blocks(markdown)
+    min_chars, target_chars, max_chars = _get_chunk_sizes(doc_type)
+    blocks      = _parse_markdown_blocks(markdown)
     chunks:     list[Chunk] = []
     chunk_index = 0
 
@@ -470,8 +470,8 @@ def chunk_markdown(
         full_content = f"[{breadcrumb}]\n\n{content}" if breadcrumb else content
 
         has_tbl  = any(b.type == "table" for b in current_blocks)
-        has_nums = has_financial_figures(content)
-        sec_type = classify_section_type(
+        has_nums = _has_financial_figures(content)
+        sec_type = _classify_section_type(
             breadcrumb,
             next((b.text for b in current_blocks if b.type == "paragraph"), ""),
             doc_type=doc_type,
@@ -589,7 +589,7 @@ def chunk_document(
 
     return [
         c.to_dict()
-        for c in chunk_markdown(
+        for c in _chunk_markdown(
             markdown = ocr_markdown,
             doc_id   = doc_id,
             doc_type = doc_type,
@@ -598,28 +598,3 @@ def chunk_document(
     ]
 
 
-def print_chunk_summary(chunks: list[dict], doc_name: str = "") -> None:
-    """Print a human-readable summary of chunking results."""
-    if not chunks:
-        logger.info("[chunks] none produced")
-        return
-
-    total_chars   = sum(c["char_count"] for c in chunks)
-    tables        = sum(1 for c in chunks if c["has_table"])
-    with_numbers  = sum(1 for c in chunks if c["has_numbers"])
-    section_types: dict[str, int] = {}
-    for c in chunks:
-        st = c["section_type"]
-        section_types[st] = section_types.get(st, 0) + 1
-
-    sizes = [c["char_count"] for c in chunks]
-    label = f" ({doc_name})" if doc_name else ""
-    logger.info(
-        "[chunks%s] %d chunks | %s chars | tables:%d | with_numbers:%d",
-        label, len(chunks), f"{total_chars:,}", tables, with_numbers,
-    )
-    logger.info(
-        "[chunks] sizes min=%d avg=%d max=%d | sections: %s",
-        min(sizes), sum(sizes) // len(sizes), max(sizes),
-        dict(sorted(section_types.items(), key=lambda x: -x[1])),
-    )

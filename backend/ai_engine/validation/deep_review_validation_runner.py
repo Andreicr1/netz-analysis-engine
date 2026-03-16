@@ -114,23 +114,18 @@ def run_deep_review_validation_sample(
         )
         return report
 
-    # ── Run per-deal benchmarks (session-isolated) ───────────────
-    SessionLocal = async_session_factory
+    # ── Run per-deal benchmarks (using caller-provided session) ──
     deal_results: list[DealValidationResult] = []
 
     for deal_id in selected_ids:
         try:
-            with SessionLocal() as session:
-                result = _benchmark_single_deal(
-                    session,
-                    fund_id=fund_id,
-                    deal_id=deal_id,
-                    actor_id=actor_id,
-                )
-                # Commit only the V3/V4 runs (if they succeeded and wrote data)
-                if result.v3_error is None or result.v4_error is None:
-                    session.commit()
-                deal_results.append(result)
+            result = _benchmark_single_deal(
+                db,
+                fund_id=fund_id,
+                deal_id=deal_id,
+                actor_id=actor_id,
+            )
+            deal_results.append(result)
         except Exception as exc:
             logger.warning("VALIDATION_DEAL_FAILED deal=%s error=%s", deal_id, exc)
             deal_results.append(

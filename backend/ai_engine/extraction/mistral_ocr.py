@@ -254,15 +254,3 @@ async def async_extract_pdf_with_mistral(
         sum(len(b.text) for b in all_blocks),
     )
     return all_blocks
-
-
-# ── Sync wrapper ─────────────────────────────────────────────────────
-
-
-def extract_pdf_with_mistral(
-    pdf_bytes: bytes,
-    *,
-    api_key: str | None = None,
-) -> list[PageBlock]:
-    """Sync wrapper around ``async_extract_pdf_with_mistral``."""
-    return asyncio.run(async_extract_pdf_with_mistral(pdf_bytes, api_key=api_key))
