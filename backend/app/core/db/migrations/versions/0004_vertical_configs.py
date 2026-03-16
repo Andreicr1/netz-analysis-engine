@@ -19,7 +19,7 @@ branch_labels = None
 depends_on = None
 
 # ── YAML seed file paths (relative to project root) ─────────────────
-_PROJECT_ROOT = Path(__file__).resolve().parents[5]  # backend/app/core/db/migrations/versions → root
+_PROJECT_ROOT = Path(__file__).resolve().parents[6]  # backend/app/core/db/migrations/versions → project root
 
 _SEEDS: list[dict] = [
     {

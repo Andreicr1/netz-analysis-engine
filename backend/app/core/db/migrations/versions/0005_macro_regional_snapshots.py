@@ -20,7 +20,7 @@ down_revision = "0004"
 branch_labels = None
 depends_on = None
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[5]
+_PROJECT_ROOT = Path(__file__).resolve().parents[6]  # backend/app/core/db/migrations/versions → project root
 
 
 def upgrade() -> None:
@@ -84,7 +84,8 @@ def upgrade() -> None:
         with open(yaml_path) as f:
             config_data = yaml.safe_load(f)
 
-        op.execute(
+        bind = op.get_bind()
+        bind.execute(
             sa.text("""
                 INSERT INTO vertical_config_defaults
                     (id, vertical, config_type, config, description)

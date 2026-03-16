@@ -139,20 +139,20 @@ def upgrade() -> None:
     # ═══════════════════════════════════════════════════════════════
 
     op.create_table("portfolio_assets", _id(), _org(), *_fund(),
-        sa.Column("asset_type", sa.Enum(name="asset_type_enum", create_type=False), nullable=False, index=True),
-        sa.Column("strategy", sa.Enum(name="strategy_enum", create_type=False), nullable=False, index=True),
+        sa.Column("asset_type", postgresql.ENUM(name="asset_type_enum", create_type=False), nullable=False, index=True),
+        sa.Column("strategy", postgresql.ENUM(name="strategy_enum", create_type=False), nullable=False, index=True),
         sa.Column("name", sa.String(255), nullable=False, index=True), *_audit())
 
     op.create_table("alerts", _id(), _org(),
         sa.Column("asset_id", sa.Uuid(as_uuid=True), nullable=False, index=True),
         sa.Column("obligation_id", sa.Uuid(as_uuid=True), nullable=True),
-        sa.Column("alert_type", sa.Enum(name="alert_type_enum", create_type=False), nullable=False),
-        sa.Column("severity", sa.Enum(name="alert_severity_enum", create_type=False), nullable=False), *_audit())
+        sa.Column("alert_type", postgresql.ENUM(name="alert_type_enum", create_type=False), nullable=False),
+        sa.Column("severity", postgresql.ENUM(name="alert_severity_enum", create_type=False), nullable=False), *_audit())
 
     op.create_table("asset_obligations", _id(), _org(),
         sa.Column("asset_id", sa.Uuid(as_uuid=True), nullable=False, index=True),
-        sa.Column("obligation_type", sa.Enum(name="obligation_type_enum", create_type=False), nullable=False),
-        sa.Column("status", sa.Enum(name="obligation_status_enum", create_type=False), nullable=False, server_default="OPEN"),
+        sa.Column("obligation_type", postgresql.ENUM(name="obligation_type_enum", create_type=False), nullable=False),
+        sa.Column("status", postgresql.ENUM(name="obligation_status_enum", create_type=False), nullable=False, server_default="OPEN"),
         sa.Column("due_date", sa.Date(), nullable=False), *_audit())
 
     op.create_table("deal_qualifications", _id(), _org(),
@@ -189,7 +189,7 @@ def upgrade() -> None:
         sa.Column("cash_balance_usd", sa.Numeric(20, 2), nullable=False),
         sa.Column("assets_value_usd", sa.Numeric(20, 2), nullable=False),
         sa.Column("liabilities_usd", sa.Numeric(20, 2), nullable=False),
-        sa.Column("status", sa.Enum(name="nav_snapshot_status_enum", create_type=False), nullable=False, index=True),
+        sa.Column("status", postgresql.ENUM(name="nav_snapshot_status_enum", create_type=False), nullable=False, index=True),
         sa.Column("finalized_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("finalized_by", sa.String(128), nullable=True),
         sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
@@ -211,12 +211,12 @@ def upgrade() -> None:
         sa.Column("name", sa.String(300), nullable=False, index=True),
         sa.Column("report_type", sa.String(64), nullable=False, index=True),
         sa.Column("frequency", sa.String(32), nullable=False),
-        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true_(), index=True),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.True_(), index=True),
         sa.Column("next_run_date", sa.Date(), nullable=True, index=True),
         sa.Column("last_run_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_run_status", sa.String(32), nullable=True),
         sa.Column("config", postgresql.JSONB(), nullable=True),
-        sa.Column("auto_distribute", sa.Boolean(), nullable=False, server_default=sa.false_()),
+        sa.Column("auto_distribute", sa.Boolean(), nullable=False, server_default=sa.False_()),
         sa.Column("distribution_list", postgresql.JSONB(), server_default="[]", nullable=True),
         sa.Column("run_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("notes", sa.Text(), nullable=True), *_audit(),
@@ -250,7 +250,7 @@ def upgrade() -> None:
         sa.Column("metadata", sa.JSON(), nullable=True),
         sa.Column("root_folder", sa.String(200), nullable=True, index=True),
         sa.Column("folder_path", sa.String(800), nullable=True, index=True),
-        sa.Column("domain", sa.Enum(name="document_domain_enum", create_type=False), nullable=True, index=True),
+        sa.Column("domain", postgresql.ENUM(name="document_domain_enum", create_type=False), nullable=True, index=True),
         sa.Column("blob_uri", sa.String(800), nullable=True),
         sa.Column("content_type", sa.String(200), nullable=True),
         sa.Column("original_filename", sa.String(512), nullable=True),
@@ -293,7 +293,7 @@ def upgrade() -> None:
         sa.Column("ai_key_terms", postgresql.JSONB(), nullable=True),
         sa.Column("research_output", postgresql.JSONB(), nullable=True),
         sa.Column("marketing_thesis", postgresql.JSONB(), nullable=True),
-        sa.Column("intelligence_status", sa.Enum(name="intelligence_status_enum", create_type=False),
+        sa.Column("intelligence_status", postgresql.ENUM(name="intelligence_status_enum", create_type=False),
                   nullable=False, server_default="PENDING", index=True),
         sa.Column("intelligence_generated_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("approved_deal_id", sa.Uuid(as_uuid=True), nullable=True, index=True),
@@ -304,13 +304,13 @@ def upgrade() -> None:
 
     # deals — pipeline_deal_id deferred (circular with pipeline_deals)
     op.create_table("deals", _id(), _org(), *_fund(),
-        sa.Column("deal_type", sa.Enum(name="deal_type_enum", create_type=False), nullable=False),
-        sa.Column("stage", sa.Enum(name="deal_stage_enum", create_type=False), nullable=False, server_default="INTAKE"),
+        sa.Column("deal_type", postgresql.ENUM(name="deal_type_enum", create_type=False), nullable=False),
+        sa.Column("stage", postgresql.ENUM(name="deal_stage_enum", create_type=False), nullable=False, server_default="INTAKE"),
         sa.Column("asset_id", sa.Uuid(as_uuid=True), nullable=True, index=True),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("sponsor_name", sa.String(255), nullable=True),
         sa.Column("description", sa.Text(), nullable=True),
-        sa.Column("rejection_code", sa.Enum(name="rejection_code_enum", create_type=False), nullable=True),
+        sa.Column("rejection_code", postgresql.ENUM(name="rejection_code_enum", create_type=False), nullable=True),
         sa.Column("rejection_notes", sa.Text(), nullable=True),
         sa.Column("monitoring_output", postgresql.JSONB(), nullable=True),
         sa.Column("marketing_thesis", postgresql.JSONB(), nullable=True),
@@ -336,7 +336,7 @@ def upgrade() -> None:
         sa.Column("blob_path", sa.String(800), nullable=True, index=True),
         sa.Column("uploaded_by", sa.String(200), nullable=True, index=True),
         sa.Column("uploaded_at", sa.DateTime(timezone=True), nullable=True, index=True),
-        sa.Column("ingestion_status", sa.Enum(name="document_ingestion_status_enum", create_type=False),
+        sa.Column("ingestion_status", postgresql.ENUM(name="document_ingestion_status_enum", create_type=False),
                   nullable=False, server_default="PENDING", index=True), *_audit())
     op.create_index("ix_doc_versions_doc_ver", "document_versions", ["document_id", "version_number"], unique=True)
 
@@ -378,8 +378,8 @@ def upgrade() -> None:
         sa.Column("blob_path", sa.String(800), nullable=True),
         sa.Column("generated_at", sa.DateTime(timezone=True), nullable=True, index=True),
         sa.Column("generated_by", sa.String(128), nullable=True),
-        sa.Column("pack_type", sa.Enum(name="monthly_pack_type_enum", create_type=False), nullable=True, index=True),
-        sa.Column("status", sa.Enum(name="report_pack_status_enum", create_type=False), nullable=False, server_default="DRAFT"),
+        sa.Column("pack_type", postgresql.ENUM(name="monthly_pack_type_enum", create_type=False), nullable=True, index=True),
+        sa.Column("status", postgresql.ENUM(name="report_pack_status_enum", create_type=False), nullable=False, server_default="DRAFT"),
         sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("title", sa.String(255), nullable=False, server_default="Monthly Report Pack"), *_audit())
 
@@ -387,7 +387,7 @@ def upgrade() -> None:
         sa.Column("asset_id", sa.Uuid(as_uuid=True), nullable=False, index=True),
         sa.Column("alert_id", sa.Uuid(as_uuid=True), sa.ForeignKey("alerts.id", ondelete="CASCADE"), nullable=False, index=True),
         sa.Column("title", sa.String(255), nullable=False),
-        sa.Column("status", sa.Enum(name="action_status_enum", create_type=False), nullable=False, server_default="OPEN"),
+        sa.Column("status", postgresql.ENUM(name="action_status_enum", create_type=False), nullable=False, server_default="OPEN"),
         sa.Column("evidence_required", sa.Boolean(), nullable=False, server_default="true"),
         sa.Column("evidence_notes", sa.String(500), nullable=True), *_audit())
 
@@ -396,7 +396,7 @@ def upgrade() -> None:
         _org(),
         sa.Column("manager_name", sa.String(255), nullable=False),
         sa.Column("underlying_fund_name", sa.String(255), nullable=False),
-        sa.Column("reporting_frequency", sa.Enum(name="reporting_frequency_enum", create_type=False), nullable=False),
+        sa.Column("reporting_frequency", postgresql.ENUM(name="reporting_frequency_enum", create_type=False), nullable=False),
         sa.Column("nav_source", sa.String(255), nullable=True), *_audit())
 
     op.create_table("pipeline_deal_documents", _id(), _org(), *_fund(),
@@ -506,7 +506,7 @@ def upgrade() -> None:
     # report_pack_sections — Org only, NO Fund
     op.create_table("report_pack_sections", _id(), _org(),
         sa.Column("report_pack_id", sa.Uuid(as_uuid=True), sa.ForeignKey("monthly_report_packs.id", ondelete="CASCADE"), nullable=False, index=True),
-        sa.Column("section_type", sa.Enum(name="report_section_type_enum", create_type=False), nullable=False),
+        sa.Column("section_type", postgresql.ENUM(name="report_section_type_enum", create_type=False), nullable=False),
         sa.Column("snapshot", sa.JSON(), nullable=False), *_audit())
 
     op.create_table("asset_valuation_snapshots", _id(), _org(), *_fund(),
@@ -514,7 +514,7 @@ def upgrade() -> None:
         sa.Column("asset_id", sa.Uuid(as_uuid=True), nullable=False, index=True),
         sa.Column("asset_type", sa.String(64), nullable=False, index=True),
         sa.Column("valuation_usd", sa.Numeric(20, 2), nullable=False),
-        sa.Column("valuation_method", sa.Enum(name="valuation_method_enum", create_type=False), nullable=False, index=True),
+        sa.Column("valuation_method", postgresql.ENUM(name="valuation_method_enum", create_type=False), nullable=False, index=True),
         sa.Column("supporting_document_id", sa.Uuid(as_uuid=True), sa.ForeignKey("documents.id", ondelete="RESTRICT"), nullable=True, index=True), *_audit())
     op.create_index("ix_asset_valuation_snapshots_fund_nav", "asset_valuation_snapshots", ["fund_id", "nav_snapshot_id"])
     op.create_index("ix_asset_valuation_snapshots_nav_asset", "asset_valuation_snapshots", ["nav_snapshot_id", "asset_id"])
@@ -912,7 +912,7 @@ def upgrade() -> None:
     op.create_table("macro_snapshots", _id(),
         sa.Column("as_of_date", sa.Date(), nullable=False, unique=True, index=True),
         sa.Column("data_json", sa.JSON(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False), *_audit())
+        *_audit())
 
     op.create_table("deep_review_validation_runs", _id(),
         sa.Column("fund_id", sa.Uuid(as_uuid=True), nullable=True, index=True),

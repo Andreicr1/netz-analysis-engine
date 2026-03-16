@@ -201,13 +201,24 @@ def upgrade() -> None:
     """)
 
     # ═══════════════════════════════════════════════════════════════
-    #  PHASE C: Seed default branding config
+    #  PHASE C: Expand config_type constraint + seed default branding
     # ═══════════════════════════════════════════════════════════════
+    _CONFIG_TYPES_V3 = (
+        "'calibration', 'scoring', 'blocks', 'chapters', "
+        "'portfolio_profiles', 'prompts', 'model_routing', 'tone', "
+        "'evaluation', 'macro_intelligence', 'governance_policy', 'branding'"
+    )
+    for table in ("vertical_config_defaults", "vertical_config_overrides"):
+        constraint = f"ck_{'defaults' if 'defaults' in table else 'overrides'}_config_type"
+        op.execute(f"ALTER TABLE {table} DROP CONSTRAINT {constraint}")
+        op.execute(f"ALTER TABLE {table} ADD CONSTRAINT {constraint} CHECK (config_type IN ({_CONFIG_TYPES_V3}))")
+
     import json
 
     branding_json = json.dumps(_DEFAULT_BRANDING)
+    bind = op.get_bind()
     for vertical in ("private_credit", "liquid_funds"):
-        op.execute(
+        bind.execute(
             sa.text("""
                 INSERT INTO vertical_config_defaults (vertical, config_type, config, description, version)
                 VALUES (:vertical, 'branding', :config, :description, 1)

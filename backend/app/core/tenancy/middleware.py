@@ -41,8 +41,10 @@ async def get_db_with_rls(
     """
     async with async_session_factory() as session, session.begin():
         if actor.organization_id is not None:
+            # SET commands do not support parameter binding in asyncpg.
+            # The org_id is a validated UUID from Clerk JWT — safe for interpolation.
+            oid = str(actor.organization_id)
             await session.execute(
-                text("SET LOCAL app.current_organization_id = :oid"),
-                {"oid": str(actor.organization_id)},
+                text(f"SET LOCAL app.current_organization_id = '{oid}'"),
             )
         yield session
