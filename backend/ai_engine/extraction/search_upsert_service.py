@@ -86,7 +86,7 @@ def build_search_document(
     key_persons_mentioned: list[str] | None = None,
     financial_metric_type: str | None = None,
     risk_flags: list[str] | None = None,
-    organization_id: "uuid.UUID | None" = None,
+    organization_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
     """Build a single document dict matching the global-vector-chunks-v2 schema.
 

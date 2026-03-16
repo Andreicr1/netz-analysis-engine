@@ -260,7 +260,7 @@ def _search(
 
     # Build filter with tenant isolation (Security F2)
     filter_parts: list[str] = []
-    if organization_id:
+    if organization_id is not None:
         from ai_engine.extraction.search_upsert_service import validate_uuid
         safe_org = validate_uuid(organization_id, "organization_id")
         filter_parts.append(f"organization_id eq '{safe_org}'")

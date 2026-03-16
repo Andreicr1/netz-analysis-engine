@@ -116,6 +116,7 @@ def run_pipeline_analysis(
     fund_id: uuid.UUID,
     deal_name: str,
     sponsor_name: str | None,
+    organization_id: uuid.UUID | str | None = None,
 ) -> dict[str, Any]:
     """Run PIPELINE-mode AI analysis.
 
@@ -130,6 +131,7 @@ def run_pipeline_analysis(
         deal_name=deal_name,
         sponsor_name=sponsor_name,
         fund_id=fund_id,
+        organization_id=organization_id,
     )
 
 
@@ -280,15 +282,18 @@ def run_deal_ai_analysis(
     domain: str,
     deal_name: str,
     sponsor_name: str | None = None,
+    organization_id: uuid.UUID | str | None = None,
 ) -> dict[str, Any]:
     """Unified entrypoint for domain-aware AI analysis."""
     if domain == AIMode.PIPELINE or domain == "pipeline":
         return run_pipeline_analysis(
             db, deal_id=deal_id, fund_id=fund_id, deal_name=deal_name, sponsor_name=sponsor_name,
+            organization_id=organization_id,
         )
     elif domain == AIMode.PORTFOLIO or domain == "portfolio":
         return run_portfolio_analysis(
             db, deal_id=deal_id, fund_id=fund_id, deal_name=deal_name, sponsor_name=sponsor_name,
+            organization_id=organization_id,
         )
     else:
         raise ValueError(f"Unknown domain: {domain}")
