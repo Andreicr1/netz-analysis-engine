@@ -1,0 +1,68 @@
+{
+  "app": {
+    "name": "Netz Wealth OS",
+    "tagline": "Institutional Wealth Management Platform"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "funds": "Funds",
+    "model_portfolios": "Model Portfolios",
+    "allocation": "Allocation",
+    "risk": "Risk",
+    "analytics": "Analytics",
+    "macro": "Macro",
+    "content": "Content",
+    "dd_reports": "DD Reports"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "portfolios": "Model Portfolios",
+    "nav_chart": "Consolidated Performance",
+    "macro_summary": "Macro Summary",
+    "risk_alerts": "Risk Alerts",
+    "no_portfolios": "No Model Portfolios",
+    "no_portfolios_desc": "Model portfolios will appear here once created.",
+    "period_1m": "1M",
+    "period_3m": "3M",
+    "period_ytd": "YTD",
+    "period_1y": "1Y",
+    "period_3y": "3Y"
+  },
+  "portfolio_card": {
+    "nav": "NAV",
+    "ytd_return": "YTD Return",
+    "cvar": "CVaR",
+    "sharpe": "Sharpe",
+    "regime": "Regime",
+    "utilization": "Utilization"
+  },
+  "regimes": {
+    "RISK_ON": "Risk On",
+    "RISK_OFF": "Risk Off",
+    "INFLATION": "Inflation",
+    "CRISIS": "Crisis"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "retry": "Retry",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "download": "Download",
+    "upload": "Upload",
+    "search": "Search",
+    "filter": "Filter",
+    "no_data": "No data available",
+    "confirm": "Confirm",
+    "back": "Back"
+  },
+  "session": {
+    "expiry_title": "Session Expiring",
+    "expiry_message": "Your session expires in 5 minutes. Please save your work and renew your access.",
+    "renew": "Renew Session",
+    "dismiss": "Dismiss"
+  }
+}
