@@ -21,6 +21,7 @@ import structlog
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
 
+from ai_engine.governance.output_safety import sanitize_llm_text
 from ai_engine.governance.token_budget import TokenBudgetTracker
 
 # Cost Governance — multi-model routing + token budget
@@ -959,6 +960,7 @@ def run_deal_deep_review_v4(
 
                 for _ch_tag, _revised in tone_result["chapters"].items():
                     if _revised and _revised.strip():
+                        _sanitized_md = sanitize_llm_text(_revised)
                         db.execute(
                             _sa_update(_MemoChapter)
                             .where(
@@ -966,9 +968,9 @@ def run_deal_deep_review_v4(
                                 _MemoChapter.version_tag == version_tag,
                                 _MemoChapter.chapter_tag == _ch_tag,
                             )
-                            .values(content_md=_revised),
+                            .values(content_md=_sanitized_md),
                         )
-                        post_tone_chapter_texts[_ch_tag] = _revised
+                        post_tone_chapter_texts[_ch_tag] = _sanitized_md
                 db.flush()
                 logger.info(
                     "deep_review.v4.tone_normalizer.db_updated",
@@ -1089,10 +1091,10 @@ def run_deal_deep_review_v4(
                 },
                 "retrieval_audit": retrieval_audit,
                 "saturation_report": saturation_report,
-                "appendix_1_source_index": memo_result.get(
-                    "appendix_1_source_index", "",
+                "appendix_1_source_index": sanitize_llm_text(
+                    memo_result.get("appendix_1_source_index", ""),
                 ),
-                "appendix_kyc_checks": kyc_appendix_text,
+                "appendix_kyc_checks": sanitize_llm_text(kyc_appendix_text),
                 "kyc_screening_summary": kyc_results.get("summary", {}),
                 "tone_artifacts": _tone_artifacts,
             },
@@ -1186,10 +1188,14 @@ def run_deal_deep_review_v4(
                 80,
             ),
         ),
-        geography=_trunc(
-            analysis.get("geography") or deal_fields.get("geography"), 120,
+        geography=sanitize_llm_text(
+            _trunc(analysis.get("geography") or deal_fields.get("geography"), 120),
+            strip_all_html=True, max_length=120,
         ),
-        sector_focus=_trunc(analysis.get("sectorFocus"), 160),
+        sector_focus=sanitize_llm_text(
+            _trunc(analysis.get("sectorFocus"), 160),
+            strip_all_html=True, max_length=160,
+        ),
         target_return=_trunc(
             _v4_returns.get("targetIRR") or _v4_returns.get("couponRate"), 60,
         ),
@@ -1206,7 +1212,9 @@ def run_deal_deep_review_v4(
             if isinstance(r, dict)
         ],
         differentiators=analysis.get("keyDifferentiators", []),
-        summary_ic_ready=analysis.get("executiveSummary", "AI review pending."),
+        summary_ic_ready=sanitize_llm_text(
+            analysis.get("executiveSummary", "AI review pending."),
+        ),
         last_ai_refresh=now,
         metadata_json=_v4_profile_metadata,
         created_by=actor_id,
@@ -1238,12 +1246,12 @@ def run_deal_deep_review_v4(
     _v4_brief = DealICBrief(
         fund_id=fund_id,
         deal_id=deal_id,
-        executive_summary=_exec_summary or "See IC Memorandum.",
-        opportunity_overview=_opp_overview or "See IC Memorandum.",
-        return_profile=_return_profile or "See IC Memorandum.",
-        downside_case=_downside_case or "See IC Memorandum.",
-        risk_summary=_risk_summary or "See IC Memorandum.",
-        comparison_peer_funds=_peer_compare or "See IC Memorandum.",
+        executive_summary=sanitize_llm_text(_exec_summary) or "See IC Memorandum.",
+        opportunity_overview=sanitize_llm_text(_opp_overview) or "See IC Memorandum.",
+        return_profile=sanitize_llm_text(_return_profile) or "See IC Memorandum.",
+        downside_case=sanitize_llm_text(_downside_case) or "See IC Memorandum.",
+        risk_summary=sanitize_llm_text(_risk_summary) or "See IC Memorandum.",
+        comparison_peer_funds=sanitize_llm_text(_peer_compare) or "See IC Memorandum.",
         recommendation_signal=_rec_signal,
         created_by=actor_id,
         updated_by=actor_id,
@@ -1255,7 +1263,10 @@ def run_deal_deep_review_v4(
             deal_id=deal_id,
             risk_type=_trunc(risk.get("factor", "UNKNOWN"), 40),
             severity=_trunc(risk.get("severity", "LOW"), 20),
-            reasoning=f"{risk.get('factor', '')}: {risk.get('mitigation', 'No mitigation identified.')}",
+            reasoning=sanitize_llm_text(
+                f"{risk.get('factor', '')}: {risk.get('mitigation', 'No mitigation identified.')}",
+                strip_all_html=True,
+            ),
             source_document=_trunc(deal.deal_folder_path, 800),
             created_by=actor_id,
             updated_by=actor_id,
@@ -2198,6 +2209,7 @@ async def async_run_deal_deep_review_v4(
                 from app.domains.credit.modules.ai.models import MemoChapter as _MemoChapter
                 for _ch_tag, _revised in tone_result["chapters"].items():
                     if _revised and _revised.strip():
+                        _sanitized_md = sanitize_llm_text(_revised)
                         db.execute(
                             update(_MemoChapter)
                             .where(
@@ -2205,9 +2217,9 @@ async def async_run_deal_deep_review_v4(
                                 _MemoChapter.version_tag == version_tag,
                                 _MemoChapter.chapter_tag == _ch_tag,
                             )
-                            .values(content_md=_revised),
+                            .values(content_md=_sanitized_md),
                         )
-                        post_tone_chapter_texts[_ch_tag] = _revised
+                        post_tone_chapter_texts[_ch_tag] = _sanitized_md
                 db.flush()
 
             if tone_result.get("signal_escalated"):
@@ -2305,10 +2317,10 @@ async def async_run_deal_deep_review_v4(
                 },
                 "retrieval_audit": retrieval_audit,
                 "saturation_report": saturation_report,
-                "appendix_1_source_index": memo_result.get(
-                    "appendix_1_source_index", "",
+                "appendix_1_source_index": sanitize_llm_text(
+                    memo_result.get("appendix_1_source_index", ""),
                 ),
-                "appendix_kyc_checks": kyc_appendix_text,
+                "appendix_kyc_checks": sanitize_llm_text(kyc_appendix_text),
                 "kyc_screening_summary": kyc_results.get("summary", {}),
                 "tone_artifacts": _tone_artifacts,
             },
@@ -2394,10 +2406,14 @@ async def async_run_deal_deep_review_v4(
                 80,
             ),
         ),
-        geography=_trunc(
-            analysis.get("geography") or deal_fields.get("geography"), 120,
+        geography=sanitize_llm_text(
+            _trunc(analysis.get("geography") or deal_fields.get("geography"), 120),
+            strip_all_html=True, max_length=120,
         ),
-        sector_focus=_trunc(analysis.get("sectorFocus"), 160),
+        sector_focus=sanitize_llm_text(
+            _trunc(analysis.get("sectorFocus"), 160),
+            strip_all_html=True, max_length=160,
+        ),
         target_return=_trunc(
             _v4_returns.get("targetIRR") or _v4_returns.get("couponRate"), 60,
         ),
@@ -2414,7 +2430,9 @@ async def async_run_deal_deep_review_v4(
             if isinstance(r, dict)
         ],
         differentiators=analysis.get("keyDifferentiators", []),
-        summary_ic_ready=analysis.get("executiveSummary", "AI review pending."),
+        summary_ic_ready=sanitize_llm_text(
+            analysis.get("executiveSummary", "AI review pending."),
+        ),
         last_ai_refresh=now,
         metadata_json=_v4_profile_metadata,
         created_by=actor_id,
@@ -2445,12 +2463,12 @@ async def async_run_deal_deep_review_v4(
     _v4_brief = DealICBrief(
         fund_id=fund_id,
         deal_id=deal_id,
-        executive_summary=_exec_summary or "See IC Memorandum.",
-        opportunity_overview=_opp_overview or "See IC Memorandum.",
-        return_profile=_return_profile or "See IC Memorandum.",
-        downside_case=_downside_case or "See IC Memorandum.",
-        risk_summary=_risk_summary or "See IC Memorandum.",
-        comparison_peer_funds=_peer_compare or "See IC Memorandum.",
+        executive_summary=sanitize_llm_text(_exec_summary) or "See IC Memorandum.",
+        opportunity_overview=sanitize_llm_text(_opp_overview) or "See IC Memorandum.",
+        return_profile=sanitize_llm_text(_return_profile) or "See IC Memorandum.",
+        downside_case=sanitize_llm_text(_downside_case) or "See IC Memorandum.",
+        risk_summary=sanitize_llm_text(_risk_summary) or "See IC Memorandum.",
+        comparison_peer_funds=sanitize_llm_text(_peer_compare) or "See IC Memorandum.",
         recommendation_signal=_rec_signal,
         created_by=actor_id,
         updated_by=actor_id,
@@ -2462,9 +2480,10 @@ async def async_run_deal_deep_review_v4(
             deal_id=deal_id,
             risk_type=_trunc(risk.get("factor", "UNKNOWN"), 40),
             severity=_trunc(risk.get("severity", "LOW"), 20),
-            reasoning=(
+            reasoning=sanitize_llm_text(
                 f"{risk.get('factor', '')}: "
-                f"{risk.get('mitigation', 'No mitigation identified.')}"
+                f"{risk.get('mitigation', 'No mitigation identified.')}",
+                strip_all_html=True,
             ),
             source_document=_trunc(deal_folder_path, 800),
             created_by=actor_id,

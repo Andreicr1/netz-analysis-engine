@@ -1,32 +1,37 @@
-"""Retrieval governance models, exceptions, and constants (LEAF — zero sibling imports).
+"""Retrieval governance models and constants (LEAF — zero sibling imports).
 
-All data structures, constants, and exception classes used across the retrieval
-package. This module has NO imports from sibling modules.
+All data structures and constants used across the retrieval package.
+This module has NO imports from sibling modules.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
-# ── Retrieval Governance Exceptions ────────────────────────────────
+# ── Evidence Saturation Result ─────────────────────────────────────
 
 
-class EvidenceGapError(RuntimeError):
-    """Chapter evidence saturation threshold not met.
+@dataclass(frozen=True, slots=True)
+class SaturationResult:
+    """Evidence saturation assessment. Replaces EvidenceGapError exception.
 
-    Raised when a chapter cannot assemble enough evidence to meet
-    institutional underwriting minimums.
+    Callers check `is_sufficient` instead of catching exceptions.
+    Follows PipelineStageResult pattern (frozen dataclass with to_dict).
     """
 
+    is_sufficient: bool
+    coverage_score: float
+    gaps: list[str] = field(default_factory=list)
+    reason: str = ""
 
-class RetrievalScopeError(ValueError):
-    """Mandatory institutional scoping constraint violated.
-
-    Raised if fund_id is missing — global retrieval is forbidden.
-    """
-
-
-class ProvenanceError(ValueError):
-    """Chunk provenance is incomplete — chunk must be discarded."""
+    def to_dict(self) -> dict[str, Any]:
+        """API boundary serialization (Wave 1 convention #3)."""
+        return {
+            "is_sufficient": self.is_sufficient,
+            "coverage_score": self.coverage_score,
+            "gaps": self.gaps,
+            "reason": self.reason,
+        }
 
 
 # ── IC-Grade Coverage Constants ────────────────────────────────────
