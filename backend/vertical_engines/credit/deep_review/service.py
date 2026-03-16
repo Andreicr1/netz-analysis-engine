@@ -18,7 +18,7 @@ from collections.abc import Awaitable
 from typing import Any
 
 import structlog
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
 from ai_engine.governance.output_safety import sanitize_llm_text
@@ -26,11 +26,6 @@ from ai_engine.governance.token_budget import TokenBudgetTracker
 
 # Cost Governance — multi-model routing + token budget
 from ai_engine.model_config import get_model  # single source of truth for model routing
-from app.domains.credit.modules.ai.models import (
-    DealICBrief,
-    DealIntelligenceProfile,
-    DealRiskFlag,
-)
 from app.domains.credit.modules.deals.models import PipelineDeal as Deal  # pipeline domain
 from vertical_engines.credit.deep_review.corpus import (
     _gather_deal_texts,
@@ -44,13 +39,15 @@ from vertical_engines.credit.deep_review.helpers import (
     _async_call_openai,
     _call_openai,
     _now_utc,
-    _title_case_strategy,
-    _trunc,
 )
-from vertical_engines.credit.deep_review.models import _LLM_CONCURRENCY
+from vertical_engines.credit.deep_review.models import _LLM_CONCURRENCY, StageOutcome
 from vertical_engines.credit.deep_review.persist import (
     _build_tone_artifacts,
     _index_chapter_citations,
+    build_profile_metadata,
+    build_return_dict,
+    persist_review_artifacts,
+    write_gold_memo,
 )
 from vertical_engines.credit.deep_review.policy import (
     _gather_policy_context,
@@ -1135,239 +1132,84 @@ def run_deal_deep_review_v4(
     )
 
     # ── Stage 13d: Persist DealIntelligenceProfile + DealICBrief ──
-    # V4 must populate these tables so the pipeline deal list endpoint
-    # (GET /pipeline/deals) can show strategy_type, risk_band, and
-    # recommendation_signal without requiring a separate V3 run.
-    from vertical_engines.credit.underwriting import derive_risk_band as _derive_risk_band
-
-    _v4_risk_band = _derive_risk_band(analysis)
-    _v4_risk_band_label = {"HIGH": "HIGH", "MEDIUM": "MODERATE", "LOW": "LOW"}.get(
-        _v4_risk_band, _v4_risk_band,
+    _v4_profile_metadata = build_profile_metadata(
+        evidence_map=evidence_map,
+        quant_dict=quant_dict,
+        concentration_dict=concentration_dict,
+        macro_snapshot=macro_snapshot,
+        macro_stress_flag=macro_stress_flag,
+        critic_dict=critic_dict,
+        policy_dict=policy_dict,
+        decision_anchor=decision_anchor,
+        confidence_score=confidence_score,
+        confidence_level=confidence_level,
+        confidence_breakdown=confidence_breakdown,
+        confidence_caps=confidence_caps,
+        final_confidence=final_confidence,
+        evidence_confidence=evidence_confidence,
+        ic_gate=ic_gate,
+        ic_gate_reasons=ic_gate_reasons,
+        instrument_type=instrument_type,
+        token_summary=token_summary,
+        chapter_citations=chapter_citations,
+        tone_artifacts=_tone_artifacts,
+        tone_signal_original=_tone_signal_original,
+        tone_signal_final=_tone_signal_final,
     )
 
-    _v4_returns = analysis.get("expectedReturns", {})
-    _v4_risks = analysis.get("riskFactors", [])
-    if not isinstance(_v4_risks, list):
-        _v4_risks = []
-
-    _v4_profile_metadata = {
-        "evidence_map": evidence_map,
-        "quant_profile": quant_dict,
-        "sensitivity_matrix": quant_dict.get("sensitivity_matrix", []),
-        "concentration_profile": concentration_dict,
-        "macro_snapshot": macro_snapshot,
-        "macro_stress_flag": macro_stress_flag,
-        "critic_output": critic_dict,
-        "policy_compliance": policy_dict,
-        "decision_anchor": decision_anchor,
-        "confidence_score": confidence_score,
-        "confidence_level": confidence_level,
-        "confidence_breakdown": confidence_breakdown,
-        "confidence_caps_applied": confidence_caps,
-        "legacy_confidence_score": final_confidence,
-        "evidence_confidence": evidence_confidence,
-        "ic_gate": ic_gate,
-        "ic_gate_reasons": ic_gate_reasons,
-        "instrument_type": instrument_type,
-        "pipeline_version": "v4",
-        "token_budget": token_summary,
-        "chapter_citations": chapter_citations,
-        "tone_artifacts": _tone_artifacts,
-        "tone_signal_original": _tone_signal_original,
-        "tone_signal_final": _tone_signal_final,
-    }
-
-    _v4_profile = DealIntelligenceProfile(
+    persist_review_artifacts(
+        db,
         fund_id=fund_id,
         deal_id=deal_id,
-        strategy_type=_title_case_strategy(
-            _trunc(
-                analysis.get("strategyType")
-                or deal_fields.get("strategy_type")
-                or "Private Credit",
-                80,
-            ),
-        ),
-        geography=sanitize_llm_text(
-            _trunc(analysis.get("geography") or deal_fields.get("geography"), 120),
-            strip_all_html=True, max_length=120,
-        ),
-        sector_focus=sanitize_llm_text(
-            _trunc(analysis.get("sectorFocus"), 160),
-            strip_all_html=True, max_length=160,
-        ),
-        target_return=_trunc(
-            _v4_returns.get("targetIRR") or _v4_returns.get("couponRate"), 60,
-        ),
-        risk_band=_trunc(_v4_risk_band_label, 20),
-        liquidity_profile=_trunc(analysis.get("liquidityProfile"), 80),
-        capital_structure_type=_trunc(analysis.get("capitalStructurePosition"), 80),
-        key_risks=[
-            {
-                "riskType": r.get("factor", ""),
-                "severity": r.get("severity", "LOW"),
-                "mitigation": r.get("mitigation", ""),
-            }
-            for r in _v4_risks
-            if isinstance(r, dict)
-        ],
-        differentiators=analysis.get("keyDifferentiators", []),
-        summary_ic_ready=sanitize_llm_text(
-            analysis.get("executiveSummary", "AI review pending."),
-        ),
-        last_ai_refresh=now,
-        metadata_json=_v4_profile_metadata,
-        created_by=actor_id,
-        updated_by=actor_id,
+        analysis=analysis,
+        chapter_texts=chapter_texts,
+        deal_fields=deal_fields,
+        profile_metadata=_v4_profile_metadata,
+        im_recommendation=im_recommendation,
+        decision_anchor=decision_anchor,
+        actor_id=actor_id,
+        deal_folder_path=deal.deal_folder_path,
+        now=now,
     )
 
-    # Build IC brief from chapter texts or analysis
-    _exec_summary = chapter_texts.get(
-        "ch01_executive_summary", analysis.get("executiveSummary", ""),
-    )
-    _opp_overview = chapter_texts.get(
-        "ch02_opportunity", analysis.get("opportunityOverview", ""),
-    )
-    _return_profile = chapter_texts.get(
-        "ch08_returns", analysis.get("returnProfile", ""),
-    )
-    _downside_case = chapter_texts.get(
-        "ch09_downside", analysis.get("downsideCase", ""),
-    )
-    _risk_summary = chapter_texts.get("ch10_risk", analysis.get("riskSummary", ""))
-    _peer_compare = chapter_texts.get("ch12_peers", analysis.get("peerComparison", ""))
-    _rec_signal = _trunc(
-        (
-            im_recommendation or decision_anchor.get("finalDecision", "CONDITIONAL")
-        ).upper(),
-        20,
-    )
-
-    _v4_brief = DealICBrief(
-        fund_id=fund_id,
-        deal_id=deal_id,
-        executive_summary=sanitize_llm_text(_exec_summary) or "See IC Memorandum.",
-        opportunity_overview=sanitize_llm_text(_opp_overview) or "See IC Memorandum.",
-        return_profile=sanitize_llm_text(_return_profile) or "See IC Memorandum.",
-        downside_case=sanitize_llm_text(_downside_case) or "See IC Memorandum.",
-        risk_summary=sanitize_llm_text(_risk_summary) or "See IC Memorandum.",
-        comparison_peer_funds=sanitize_llm_text(_peer_compare) or "See IC Memorandum.",
-        recommendation_signal=_rec_signal,
-        created_by=actor_id,
-        updated_by=actor_id,
-    )
-
-    _v4_risk_flags = [
-        DealRiskFlag(
-            fund_id=fund_id,
-            deal_id=deal_id,
-            risk_type=_trunc(risk.get("factor", "UNKNOWN"), 40),
-            severity=_trunc(risk.get("severity", "LOW"), 20),
-            reasoning=sanitize_llm_text(
-                f"{risk.get('factor', '')}: {risk.get('mitigation', 'No mitigation identified.')}",
-                strip_all_html=True,
-            ),
-            source_document=_trunc(deal.deal_folder_path, 800),
-            created_by=actor_id,
-            updated_by=actor_id,
-        )
-        for risk in _v4_risks
-        if isinstance(risk, dict)
-    ]
-
-    with db.begin_nested():
-        db.execute(
-            delete(DealIntelligenceProfile).where(
-                DealIntelligenceProfile.fund_id == fund_id,
-                DealIntelligenceProfile.deal_id == deal_id,
-            ),
-        )
-        db.execute(
-            delete(DealRiskFlag).where(
-                DealRiskFlag.fund_id == fund_id,
-                DealRiskFlag.deal_id == deal_id,
-            ),
-        )
-        db.execute(
-            delete(DealICBrief).where(
-                DealICBrief.fund_id == fund_id,
-                DealICBrief.deal_id == deal_id,
-            ),
-        )
-        db.flush()
-        db.add(_v4_profile)
-        db.add_all(_v4_risk_flags)
-        db.add(_v4_brief)
-
-    logger.info(
-        "deep_review.v4.profile_brief.persisted",
+    return build_return_dict(
         deal_id=str(deal_id),
-        strategy=_v4_profile.strategy_type,
-        risk_band=_v4_risk_band_label,
-        signal=_rec_signal,
-        flags=len(_v4_risk_flags),
+        deal_name=deal_fields["deal_name"],
+        version_tag=version_tag,
+        evidence_pack_id=str(evidence_pack_id),
+        evidence_pack_tokens=pack_row.token_count,
+        chapters=chapters,
+        critic_dict=critic_dict,
+        critic_dict_default=critic_dict_default,
+        critic_escalated=critic_escalated,
+        full_mode=full_mode,
+        final_confidence=final_confidence,
+        evidence_confidence=evidence_confidence,
+        confidence_score=confidence_score,
+        confidence_level=confidence_level,
+        confidence_breakdown=confidence_breakdown,
+        confidence_caps=confidence_caps,
+        ic_gate=ic_gate,
+        ic_gate_reasons=ic_gate_reasons,
+        instrument_type=instrument_type,
+        quant_dict=quant_dict,
+        concentration_dict=concentration_dict,
+        policy_dict=policy_dict,
+        sponsor_output=sponsor_output,
+        macro_stress_flag=macro_stress_flag,
+        kyc_results=kyc_results,
+        decision_anchor=decision_anchor,
+        token_summary=token_summary,
+        citations_used=citations_used,
+        unsupported_claims_detected=unsupported_claims_detected,
+        tone_review_log=tone_review_log,
+        tone_pass1_changes=tone_pass1_changes,
+        tone_pass2_changes=tone_pass2_changes,
+        tone_signal_original=_tone_signal_original,
+        tone_signal_final=_tone_signal_final,
+        full_memo_text=full_memo_text,
+        now=now,
     )
-
-    return {
-        "dealId": str(deal_id),
-        "dealName": deal_fields["deal_name"],
-        "pipelineVersion": "v4",
-        "versionTag": version_tag,
-        "evidencePackId": str(evidence_pack_id),
-        "evidencePackTokens": pack_row.token_count,
-        "chaptersCompleted": len(chapters),
-        "chaptersTotal": 13,
-        "chapters": [
-            {
-                "chapter_number": ch["chapter_number"],
-                "chapter_tag": ch["chapter_tag"],
-                "chapter_title": ch["chapter_title"],
-            }
-            for ch in chapters
-        ],
-        "criticConfidence": critic_dict.get("confidence_score"),
-        "criticDefaultConfidence": critic_dict_default.get("confidence_score"),
-        "criticFatalFlaws": len(critic_dict.get("fatal_flaws", [])),
-        "criticRewriteRequired": critic_dict.get("rewrite_required", False),
-        "criticEscalated": critic_escalated,
-        "fullMode": full_mode,
-        "finalConfidence": final_confidence,  # backward compat (0.0–1.0)
-        "evidenceConfidence": evidence_confidence,  # novo
-        "confidenceScore": confidence_score,  # NEW deterministic 0-100
-        "confidenceLevel": confidence_level,  # NEW HIGH/MEDIUM/LOW
-        "confidenceBreakdown": confidence_breakdown,  # NEW per-block detail
-        "confidenceCapsApplied": confidence_caps,  # NEW hard-cap list
-        "icGate": ic_gate,  # novo
-        "icGateReasons": ic_gate_reasons,  # novo
-        "instrumentType": instrument_type,  # novo
-        "quantStatus": quant_dict.get("metrics_status"),
-        "concentrationBreached": concentration_dict.get("any_limit_breached", False),
-        "policyStatus": policy_dict.get("overall_status"),
-        "sponsorFlags": len(sponsor_output.get("governance_red_flags", [])),
-        "macroStressFlag": macro_stress_flag,
-        "kycScreeningSummary": kyc_results.get("summary", {}),
-        "decisionAnchor": decision_anchor,
-        "tokenUsage": token_summary,
-        "citationGovernance": {
-            "citationsUsed": len(citations_used),
-            "uniqueChunks": len(
-                {
-                    c.get("chunk_id")
-                    for c in citations_used
-                    if c.get("chunk_id") != "NONE"
-                },
-            ),
-            "unsupportedClaimsDetected": unsupported_claims_detected,
-            "selfAuditPass": not unsupported_claims_detected,
-        },
-        "toneReviewLog": tone_review_log,
-        "tonePass1Changes": tone_pass1_changes,
-        "tonePass2Changes": tone_pass2_changes,
-        "toneSignalOriginal": _tone_signal_original,
-        "toneSignalFinal": _tone_signal_final,
-        "fullMemo": full_memo_text,
-        "asOf": now.isoformat(),
-    }
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1741,52 +1583,54 @@ async def async_run_deal_deep_review_v4(
             concentration_profile=concentration_dict,
         ).to_dict()
 
-    results_3 = await asyncio.gather(
-        asyncio.to_thread(_run_edgar_sync),
-        asyncio.to_thread(_run_policy_pipeline_sync),
-        asyncio.to_thread(_run_sponsor_sync),
-        asyncio.to_thread(_run_kyc_sync),
-        asyncio.to_thread(_run_quant_sync),
-        return_exceptions=True,
+    outcome = StageOutcome.from_gather(
+        ["edgar", "policy", "sponsor", "kyc", "quant"],
+        await asyncio.gather(
+            asyncio.to_thread(_run_edgar_sync),
+            asyncio.to_thread(_run_policy_pipeline_sync),
+            asyncio.to_thread(_run_sponsor_sync),
+            asyncio.to_thread(_run_kyc_sync),
+            asyncio.to_thread(_run_quant_sync),
+            return_exceptions=True,
+        ),
     )
     # INVARIANT: All to_thread tasks completed. Main db session exclusively owned.
 
-    # ── Unpack Phase 3 results with BaseException guards ──────────
-    stage_names = ["EDGAR", "Policy", "Sponsor", "KYC", "Quant"]
-    for i, result in enumerate(results_3):
-        if isinstance(result, BaseException):
-            if stage_names[i] in ("EDGAR", "KYC"):
-                logger.warning(
-                    "NEVER_RAISES_CONTRACT_VIOLATION.deep_review.async_phase3",
-                    stage=stage_names[i],
-                    error=type(result).__name__,
-                    exc_info=True,
-                )
-            else:
-                logger.error(
-                    "deep_review.v4.async.phase3.fatal_stage_failed",
-                    stage=stage_names[i],
-                    error=type(result).__name__,
-                )
-                raise result
+    # ── Check for fatal stage failures ────────────────────────────
+    for stage_name, exc in outcome.errors.items():
+        if stage_name in ("edgar", "kyc"):
+            logger.warning(
+                "NEVER_RAISES_CONTRACT_VIOLATION.deep_review.async_phase3",
+                stage=stage_name,
+                error=type(exc).__name__,
+                exc_info=True,
+            )
+        else:
+            logger.error(
+                "deep_review.v4.async.phase3.fatal_stage_failed",
+                stage=stage_name,
+                error=type(exc).__name__,
+            )
+            raise exc
 
-    edgar_context: str = results_3[0] if not isinstance(results_3[0], BaseException) else ""
+    # ── Unpack named results ──────────────────────────────────────
+    edgar_context: str = outcome.edgar if outcome.edgar is not None else ""
 
-    if isinstance(results_3[1], BaseException):
+    if outcome.policy is not None:
+        hard_check_results, policy_dict = outcome.policy
+    else:
         hard_check_results: dict = {}
         policy_dict: dict = {}
+
+    sponsor_output: dict = outcome.sponsor if outcome.sponsor is not None else {}
+
+    if outcome.kyc is not None:
+        kyc_results, kyc_appendix_text = outcome.kyc
     else:
-        hard_check_results, policy_dict = results_3[1]
-
-    sponsor_output: dict = results_3[2] if not isinstance(results_3[2], BaseException) else {}
-
-    if isinstance(results_3[3], BaseException):
         kyc_results: dict[str, Any] = {}
         kyc_appendix_text: str = ""
-    else:
-        kyc_results, kyc_appendix_text = results_3[3]
 
-    quant_dict: dict = results_3[4] if not isinstance(results_3[4], BaseException) else {}
+    quant_dict: dict = outcome.quant if outcome.quant is not None else {}
 
     # Persist KYC screenings to DB (main thread, main session)
     if kyc_results and kyc_results.get("summary", {}).get("skipped") is not True:
@@ -2329,9 +2173,6 @@ async def async_run_deal_deep_review_v4(
 
     # ── Persist Unified Underwriting Artifact ─────────────────────
     from vertical_engines.credit.underwriting import (
-        derive_risk_band as _derive_risk_band,
-    )
-    from vertical_engines.credit.underwriting import (
         persist_underwriting_artifact,
     )
 
@@ -2359,232 +2200,101 @@ async def async_run_deal_deep_review_v4(
     )
 
     # ── Persist DealIntelligenceProfile + DealICBrief ─────────────
-    _v4_risk_band = _derive_risk_band(analysis)
-    _v4_risk_band_label = {"HIGH": "HIGH", "MEDIUM": "MODERATE", "LOW": "LOW"}.get(
-        _v4_risk_band, _v4_risk_band,
+    _v4_profile_metadata = build_profile_metadata(
+        evidence_map=evidence_map,
+        quant_dict=quant_dict,
+        concentration_dict=concentration_dict,
+        macro_snapshot=macro_snapshot,
+        macro_stress_flag=macro_stress_flag,
+        critic_dict=critic_dict,
+        policy_dict=policy_dict,
+        decision_anchor=decision_anchor,
+        confidence_score=confidence_score,
+        confidence_level=confidence_level,
+        confidence_breakdown=confidence_breakdown,
+        confidence_caps=confidence_caps,
+        final_confidence=final_confidence,
+        evidence_confidence=evidence_confidence,
+        ic_gate=ic_gate,
+        ic_gate_reasons=ic_gate_reasons,
+        instrument_type=instrument_type,
+        token_summary=token_summary,
+        chapter_citations=chapter_citations,
+        tone_artifacts=_tone_artifacts,
+        tone_signal_original=_tone_signal_original,
+        tone_signal_final=_tone_signal_final,
     )
-    _v4_returns = analysis.get("expectedReturns", {})
-    _v4_risks = analysis.get("riskFactors", [])
-    if not isinstance(_v4_risks, list):
-        _v4_risks = []
 
-    _v4_profile_metadata = {
-        "evidence_map": evidence_map,
-        "quant_profile": quant_dict,
-        "sensitivity_matrix": quant_dict.get("sensitivity_matrix", []),
-        "concentration_profile": concentration_dict,
-        "macro_snapshot": macro_snapshot,
-        "macro_stress_flag": macro_stress_flag,
-        "critic_output": critic_dict,
-        "policy_compliance": policy_dict,
-        "decision_anchor": decision_anchor,
-        "confidence_score": confidence_score,
-        "confidence_level": confidence_level,
-        "confidence_breakdown": confidence_breakdown,
-        "confidence_caps_applied": confidence_caps,
-        "legacy_confidence_score": final_confidence,
-        "evidence_confidence": evidence_confidence,
-        "ic_gate": ic_gate,
-        "ic_gate_reasons": ic_gate_reasons,
-        "instrument_type": instrument_type,
-        "pipeline_version": "v4",
-        "token_budget": token_summary,
-        "chapter_citations": chapter_citations,
-        "tone_artifacts": _tone_artifacts,
-        "tone_signal_original": _tone_signal_original,
-        "tone_signal_final": _tone_signal_final,
-    }
-
-    _v4_profile = DealIntelligenceProfile(
+    persist_review_artifacts(
+        db,
         fund_id=fund_id,
         deal_id=deal_id,
-        strategy_type=_title_case_strategy(
-            _trunc(
-                analysis.get("strategyType")
-                or deal_fields.get("strategy_type")
-                or "Private Credit",
-                80,
-            ),
-        ),
-        geography=sanitize_llm_text(
-            _trunc(analysis.get("geography") or deal_fields.get("geography"), 120),
-            strip_all_html=True, max_length=120,
-        ),
-        sector_focus=sanitize_llm_text(
-            _trunc(analysis.get("sectorFocus"), 160),
-            strip_all_html=True, max_length=160,
-        ),
-        target_return=_trunc(
-            _v4_returns.get("targetIRR") or _v4_returns.get("couponRate"), 60,
-        ),
-        risk_band=_trunc(_v4_risk_band_label, 20),
-        liquidity_profile=_trunc(analysis.get("liquidityProfile"), 80),
-        capital_structure_type=_trunc(analysis.get("capitalStructurePosition"), 80),
-        key_risks=[
-            {
-                "riskType": r.get("factor", ""),
-                "severity": r.get("severity", "LOW"),
-                "mitigation": r.get("mitigation", ""),
-            }
-            for r in _v4_risks
-            if isinstance(r, dict)
-        ],
-        differentiators=analysis.get("keyDifferentiators", []),
-        summary_ic_ready=sanitize_llm_text(
-            analysis.get("executiveSummary", "AI review pending."),
-        ),
-        last_ai_refresh=now,
-        metadata_json=_v4_profile_metadata,
-        created_by=actor_id,
-        updated_by=actor_id,
+        analysis=analysis,
+        chapter_texts=chapter_texts,
+        deal_fields=deal_fields,
+        profile_metadata=_v4_profile_metadata,
+        im_recommendation=im_recommendation,
+        decision_anchor=decision_anchor,
+        actor_id=actor_id,
+        deal_folder_path=deal_folder_path,
+        now=now,
     )
 
-    _exec_summary = chapter_texts.get(
-        "ch01_executive_summary", analysis.get("executiveSummary", ""),
-    )
-    _opp_overview = chapter_texts.get(
-        "ch02_opportunity", analysis.get("opportunityOverview", ""),
-    )
-    _return_profile = chapter_texts.get(
-        "ch08_returns", analysis.get("returnProfile", ""),
-    )
-    _downside_case = chapter_texts.get(
-        "ch09_downside", analysis.get("downsideCase", ""),
-    )
-    _risk_summary = chapter_texts.get("ch10_risk", analysis.get("riskSummary", ""))
-    _peer_compare = chapter_texts.get("ch12_peers", analysis.get("peerComparison", ""))
-    _rec_signal = _trunc(
-        (
-            im_recommendation or decision_anchor.get("finalDecision", "CONDITIONAL")
-        ).upper(),
-        20,
-    )
-
-    _v4_brief = DealICBrief(
-        fund_id=fund_id,
-        deal_id=deal_id,
-        executive_summary=sanitize_llm_text(_exec_summary) or "See IC Memorandum.",
-        opportunity_overview=sanitize_llm_text(_opp_overview) or "See IC Memorandum.",
-        return_profile=sanitize_llm_text(_return_profile) or "See IC Memorandum.",
-        downside_case=sanitize_llm_text(_downside_case) or "See IC Memorandum.",
-        risk_summary=sanitize_llm_text(_risk_summary) or "See IC Memorandum.",
-        comparison_peer_funds=sanitize_llm_text(_peer_compare) or "See IC Memorandum.",
-        recommendation_signal=_rec_signal,
-        created_by=actor_id,
-        updated_by=actor_id,
-    )
-
-    _v4_risk_flags = [
-        DealRiskFlag(
-            fund_id=fund_id,
-            deal_id=deal_id,
-            risk_type=_trunc(risk.get("factor", "UNKNOWN"), 40),
-            severity=_trunc(risk.get("severity", "LOW"), 20),
-            reasoning=sanitize_llm_text(
-                f"{risk.get('factor', '')}: "
-                f"{risk.get('mitigation', 'No mitigation identified.')}",
-                strip_all_html=True,
-            ),
-            source_document=_trunc(deal_folder_path, 800),
-            created_by=actor_id,
-            updated_by=actor_id,
-        )
-        for risk in _v4_risks
-        if isinstance(risk, dict)
-    ]
-
-    with db.begin_nested():
-        db.execute(
-            delete(DealIntelligenceProfile).where(
-                DealIntelligenceProfile.fund_id == fund_id,
-                DealIntelligenceProfile.deal_id == deal_id,
-            ),
-        )
-        db.execute(
-            delete(DealRiskFlag).where(
-                DealRiskFlag.fund_id == fund_id,
-                DealRiskFlag.deal_id == deal_id,
-            ),
-        )
-        db.execute(
-            delete(DealICBrief).where(
-                DealICBrief.fund_id == fund_id,
-                DealICBrief.deal_id == deal_id,
-            ),
-        )
-        db.flush()
-        db.add(_v4_profile)
-        db.add_all(_v4_risk_flags)
-        db.add(_v4_brief)
-
-    logger.info(
-        "deep_review.v4.async.profile_persisted",
+    result = build_return_dict(
         deal_id=str(deal_id),
-        strategy=_v4_profile.strategy_type,
-        risk_band=_v4_risk_band_label,
-        signal=_rec_signal,
+        deal_name=deal_fields["deal_name"],
+        version_tag=version_tag,
+        evidence_pack_id=str(evidence_pack_id),
+        evidence_pack_tokens=pack_row.token_count,
+        chapters=chapters,
+        critic_dict=critic_dict,
+        critic_dict_default=critic_dict_default,
+        critic_escalated=critic_escalated,
+        full_mode=full_mode,
+        final_confidence=final_confidence,
+        evidence_confidence=evidence_confidence,
+        confidence_score=confidence_score,
+        confidence_level=confidence_level,
+        confidence_breakdown=confidence_breakdown,
+        confidence_caps=confidence_caps,
+        ic_gate=ic_gate,
+        ic_gate_reasons=ic_gate_reasons,
+        instrument_type=instrument_type,
+        quant_dict=quant_dict,
+        concentration_dict=concentration_dict,
+        policy_dict=policy_dict,
+        sponsor_output=sponsor_output,
+        macro_stress_flag=macro_stress_flag,
+        kyc_results=kyc_results,
+        decision_anchor=decision_anchor,
+        token_summary=token_summary,
+        citations_used=citations_used,
+        unsupported_claims_detected=unsupported_claims_detected,
+        tone_review_log=tone_review_log,
+        tone_pass1_changes=tone_pass1_changes,
+        tone_pass2_changes=tone_pass2_changes,
+        tone_signal_original=_tone_signal_original,
+        tone_signal_final=_tone_signal_final,
+        full_memo_text=full_memo_text,
+        now=now,
     )
 
-    return {
-        "dealId": str(deal_id),
-        "dealName": deal_fields["deal_name"],
-        "pipelineVersion": "v4",
-        "versionTag": version_tag,
-        "evidencePackId": str(evidence_pack_id),
-        "evidencePackTokens": pack_row.token_count,
-        "chaptersCompleted": len(chapters),
-        "chaptersTotal": 13,
-        "chapters": [
-            {
-                "chapter_number": ch["chapter_number"],
-                "chapter_tag": ch["chapter_tag"],
-                "chapter_title": ch["chapter_title"],
-            }
-            for ch in chapters
-        ],
-        "criticConfidence": critic_dict.get("confidence_score"),
-        "criticDefaultConfidence": critic_dict_default.get("confidence_score"),
-        "criticFatalFlaws": len(critic_dict.get("fatal_flaws", [])),
-        "criticRewriteRequired": critic_dict.get("rewrite_required", False),
-        "criticEscalated": critic_escalated,
-        "fullMode": full_mode,
-        "finalConfidence": final_confidence,
-        "evidenceConfidence": evidence_confidence,
-        "confidenceScore": confidence_score,
-        "confidenceLevel": confidence_level,
-        "confidenceBreakdown": confidence_breakdown,
-        "confidenceCapsApplied": confidence_caps,
-        "icGate": ic_gate,
-        "icGateReasons": ic_gate_reasons,
-        "instrumentType": instrument_type,
-        "quantStatus": quant_dict.get("metrics_status"),
-        "concentrationBreached": concentration_dict.get("any_limit_breached", False),
-        "policyStatus": policy_dict.get("overall_status"),
-        "sponsorFlags": len(sponsor_output.get("governance_red_flags", [])),
-        "macroStressFlag": macro_stress_flag,
-        "kycScreeningSummary": kyc_results.get("summary", {}),
-        "decisionAnchor": decision_anchor,
-        "tokenUsage": token_summary,
-        "citationGovernance": {
-            "citationsUsed": len(citations_used),
-            "uniqueChunks": len(
-                {
-                    c.get("chunk_id")
-                    for c in citations_used
-                    if c.get("chunk_id") != "NONE"
-                },
+    # Fire-and-forget gold memo write (non-blocking)
+    from app.core.config import settings as _settings
+
+    if _settings.feature_adls_enabled:
+        from app.services.storage_client import get_storage_client
+
+        asyncio.create_task(
+            write_gold_memo(
+                get_storage_client(),
+                organization_id=str(organization_id),
+                memo_id=str(evidence_pack_id),
+                result_dict=result,
             ),
-            "unsupportedClaimsDetected": unsupported_claims_detected,
-            "selfAuditPass": not unsupported_claims_detected,
-        },
-        "toneReviewLog": tone_review_log,
-        "tonePass1Changes": tone_pass1_changes,
-        "tonePass2Changes": tone_pass2_changes,
-        "toneSignalOriginal": _tone_signal_original,
-        "toneSignalFinal": _tone_signal_final,
-        "fullMemo": full_memo_text,
-        "asOf": now.isoformat(),
-    }
+        )
+
+    return result
 
 
 def run_all_deals_deep_review_v4(

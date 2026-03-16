@@ -15,21 +15,24 @@ from typing import Any
 class SaturationResult:
     """Evidence saturation assessment. Replaces EvidenceGapError exception.
 
-    Callers check `is_sufficient` instead of catching exceptions.
+    Field names align with enforce_evidence_saturation() dict keys.
+    Callers check `all_saturated` instead of catching exceptions.
     Follows PipelineStageResult pattern (frozen dataclass with to_dict).
     """
 
-    is_sufficient: bool
+    all_saturated: bool
     coverage_score: float
-    gaps: list[str] = field(default_factory=list)
+    gaps: list[dict[str, Any]] = field(default_factory=list)
+    missing_document_classes: list[str] = field(default_factory=list)
     reason: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """API boundary serialization (Wave 1 convention #3)."""
         return {
-            "is_sufficient": self.is_sufficient,
+            "all_saturated": self.all_saturated,
             "coverage_score": self.coverage_score,
             "gaps": self.gaps,
+            "missing_document_classes": self.missing_document_classes,
             "reason": self.reason,
         }
 

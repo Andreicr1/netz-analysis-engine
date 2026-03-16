@@ -17,21 +17,11 @@ from __future__ import annotations
 import logging
 import re
 
+from ai_engine.governance._constants import INJECTION_MARKERS
+
 logger = logging.getLogger(__name__)
 
-_INJECTION_MARKERS: list[str] = [
-    "<|system|>",
-    "<|user|>",
-    "<|assistant|>",
-    "<|im_start|>",
-    "<|im_end|>",
-    "IGNORE PREVIOUS",
-    "IGNORE ALL PREVIOUS",
-    "DISREGARD PREVIOUS",
-    "FORGET YOUR INSTRUCTIONS",
-    "NEW INSTRUCTIONS:",
-    "SYSTEM OVERRIDE:",
-]
+_INJECTION_MARKERS = INJECTION_MARKERS
 
 _INJECTION_PATTERN = re.compile(
     r"<\|(?:system|user|assistant|im_start|im_end)\|>",

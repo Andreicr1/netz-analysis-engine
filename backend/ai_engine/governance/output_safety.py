@@ -19,6 +19,8 @@ import unicodedata
 import nh3
 import structlog
 
+from ai_engine.governance._constants import INJECTION_MARKERS
+
 logger = structlog.get_logger()
 
 # Tags safe in Markdown-rendered content (financial notation needs <sup>, tables need <table>)
@@ -37,14 +39,7 @@ _SAFE_ATTRIBUTES: dict[str, set[str]] = {
     "th": {"colspan", "rowspan"},
 }
 
-# Reuse injection markers from prompt_safety.py for output-side defense-in-depth
-_INJECTION_MARKERS: list[str] = [
-    "<|system|>", "<|user|>", "<|assistant|>",
-    "<|im_start|>", "<|im_end|>",
-    "IGNORE PREVIOUS", "IGNORE ALL PREVIOUS",
-    "DISREGARD PREVIOUS", "FORGET YOUR INSTRUCTIONS",
-    "NEW INSTRUCTIONS:", "SYSTEM OVERRIDE:",
-]
+_INJECTION_MARKERS = INJECTION_MARKERS
 
 _WHITESPACE_COLLAPSE = re.compile(r"\n{3,}")
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
