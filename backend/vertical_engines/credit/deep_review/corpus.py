@@ -363,10 +363,10 @@ def _gather_deal_texts(
     corpus_result = build_ic_corpus(chapter_evidence)
 
     # ── Evidence saturation enforcement ───────────────────────────
-    saturation_report = enforce_evidence_saturation(
+    saturation_result = enforce_evidence_saturation(
         corpus_result["chapter_stats"],
-        strict=False,  # Log warnings, don't abort
     )
+    saturation_report = saturation_result.to_dict()
 
     # ── Build audit artifact ──────────────────────────────────────
     retrieval_audit = build_retrieval_audit(

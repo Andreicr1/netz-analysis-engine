@@ -17,21 +17,9 @@ from __future__ import annotations
 import logging
 import re
 
-logger = logging.getLogger(__name__)
+from ai_engine.governance._constants import INJECTION_MARKERS
 
-_INJECTION_MARKERS: list[str] = [
-    "<|system|>",
-    "<|user|>",
-    "<|assistant|>",
-    "<|im_start|>",
-    "<|im_end|>",
-    "IGNORE PREVIOUS",
-    "IGNORE ALL PREVIOUS",
-    "DISREGARD PREVIOUS",
-    "FORGET YOUR INSTRUCTIONS",
-    "NEW INSTRUCTIONS:",
-    "SYSTEM OVERRIDE:",
-]
+logger = logging.getLogger(__name__)
 
 _INJECTION_PATTERN = re.compile(
     r"<\|(?:system|user|assistant|im_start|im_end)\|>",
@@ -74,7 +62,7 @@ def sanitize_user_input(
 
     if strip_injection_markers:
         text_upper = text.upper()
-        for marker in _INJECTION_MARKERS:
+        for marker in INJECTION_MARKERS:
             if marker.upper() in text_upper:
                 text = re.sub(re.escape(marker), "", text, flags=re.IGNORECASE)
                 logger.info(

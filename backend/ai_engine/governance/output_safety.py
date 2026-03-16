@@ -19,6 +19,8 @@ import unicodedata
 import nh3
 import structlog
 
+from ai_engine.governance._constants import INJECTION_MARKERS
+
 logger = structlog.get_logger()
 
 # Tags safe in Markdown-rendered content (financial notation needs <sup>, tables need <table>)
@@ -36,15 +38,6 @@ _SAFE_ATTRIBUTES: dict[str, set[str]] = {
     "td": {"colspan", "rowspan"},
     "th": {"colspan", "rowspan"},
 }
-
-# Reuse injection markers from prompt_safety.py for output-side defense-in-depth
-_INJECTION_MARKERS: list[str] = [
-    "<|system|>", "<|user|>", "<|assistant|>",
-    "<|im_start|>", "<|im_end|>",
-    "IGNORE PREVIOUS", "IGNORE ALL PREVIOUS",
-    "DISREGARD PREVIOUS", "FORGET YOUR INSTRUCTIONS",
-    "NEW INSTRUCTIONS:", "SYSTEM OVERRIDE:",
-]
 
 _WHITESPACE_COLLAPSE = re.compile(r"\n{3,}")
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
@@ -87,7 +80,7 @@ def sanitize_llm_text(
         text = nh3.clean(text, tags=_SAFE_TAGS, attributes=_SAFE_ATTRIBUTES)
     # 4. Strip prompt injection markers (defense-in-depth against stored indirect injection)
     text_upper = text.upper()
-    for marker in _INJECTION_MARKERS:
+    for marker in INJECTION_MARKERS:
         if marker.upper() in text_upper:
             text = re.sub(re.escape(marker), "", text, flags=re.IGNORECASE)
             logger.warning("stripped_injection_marker", marker=marker)

@@ -3,7 +3,7 @@
 Implements enforce_evidence_saturation() (per-chapter minimum thresholds)
 and build_retrieval_audit() (structured audit artifact for compliance).
 
-Error contract: never-raises. Returns result dict with warnings on failure.
+Error contract: never-raises. Returns SaturationResult with warnings on failure.
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from vertical_engines.credit.retrieval.models import (
     COVERAGE_MISSING,
     COVERAGE_PARTIAL,
     RETRIEVAL_POLICY_NAME,
+    SaturationResult,
 )
 
 logger = structlog.get_logger()
@@ -24,10 +25,12 @@ logger = structlog.get_logger()
 
 def enforce_evidence_saturation(
     chapter_stats: dict[str, dict],
-    *,
-    strict: bool = False,
-) -> dict[str, Any]:
-    """Enforce evidence saturation thresholds per chapter."""
+) -> SaturationResult:
+    """Enforce evidence saturation thresholds per chapter.
+
+    Returns a SaturationResult with coverage_score (0.0–1.0) representing
+    the fraction of chapters that are fully saturated.
+    """
     gaps:                    list[dict] = []
     missing_document_classes: list[str] = []
 
@@ -51,20 +54,6 @@ def enforce_evidence_saturation(
             elif ch_key in ("ch05_legal", "ch06_terms"):
                 missing_document_classes.append("NO_LPA_FOUND")
 
-            if strict:
-                logger.warning(
-                    "evidence_saturation_strict_fail",
-                    reason=reason,
-                    gaps=len(gaps),
-                )
-                return {
-                    "gaps": gaps,
-                    "missing_document_classes": list(set(missing_document_classes)),
-                    "all_saturated": False,
-                    "strict_fail": True,
-                    "strict_fail_reason": reason,
-                }
-
         elif status == COVERAGE_PARTIAL:
             threshold = CHAPTER_EVIDENCE_THRESHOLDS.get(ch_key)
             reason = (
@@ -79,6 +68,9 @@ def enforce_evidence_saturation(
             logger.info("evidence_partial", reason=reason)
 
     all_saturated = len(gaps) == 0
+    total_chapters = len(chapter_stats)
+    saturated_count = total_chapters - len(gaps)
+    coverage_score = saturated_count / total_chapters if total_chapters > 0 else 0.0
 
     if missing_document_classes:
         logger.warning(
@@ -86,11 +78,13 @@ def enforce_evidence_saturation(
             classes=missing_document_classes,
         )
 
-    return {
-        "gaps":                    gaps,
-        "missing_document_classes": list(set(missing_document_classes)),
-        "all_saturated":           all_saturated,
-    }
+    return SaturationResult(
+        all_saturated=all_saturated,
+        coverage_score=round(coverage_score, 4),
+        gaps=gaps,
+        missing_document_classes=list(set(missing_document_classes)),
+        reason=f"{len(gaps)} of {total_chapters} chapters below threshold" if gaps else "",
+    )
 
 
 def build_retrieval_audit(

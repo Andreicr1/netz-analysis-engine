@@ -156,12 +156,12 @@ class TestSaturationResult:
         from vertical_engines.credit.retrieval.models import SaturationResult
 
         result = SaturationResult(
-            is_sufficient=False,
+            all_saturated=False,
             coverage_score=0.65,
-            gaps=["ch07_capital: MISSING_FINANCIAL_DISCLOSURE"],
+            gaps=[{"chapter": "ch07_capital", "status": "MISSING_EVIDENCE", "reason": "no data"}],
             reason="Insufficient evidence",
         )
-        assert result.is_sufficient is False
+        assert result.all_saturated is False
         assert result.coverage_score == 0.65
         assert len(result.gaps) == 1
         assert result.reason == "Insufficient evidence"
@@ -170,29 +170,31 @@ class TestSaturationResult:
         from vertical_engines.credit.retrieval.models import SaturationResult
 
         result = SaturationResult(
-            is_sufficient=True,
+            all_saturated=True,
             coverage_score=1.0,
         )
         d = result.to_dict()
         assert d == {
-            "is_sufficient": True,
+            "all_saturated": True,
             "coverage_score": 1.0,
             "gaps": [],
+            "missing_document_classes": [],
             "reason": "",
         }
 
     def test_frozen(self):
         from vertical_engines.credit.retrieval.models import SaturationResult
 
-        result = SaturationResult(is_sufficient=True, coverage_score=1.0)
+        result = SaturationResult(all_saturated=True, coverage_score=1.0)
         with pytest.raises(AttributeError):
-            result.is_sufficient = False  # type: ignore[misc]
+            result.all_saturated = False  # type: ignore[misc]
 
     def test_defaults(self):
         from vertical_engines.credit.retrieval.models import SaturationResult
 
-        result = SaturationResult(is_sufficient=True, coverage_score=0.9)
+        result = SaturationResult(all_saturated=True, coverage_score=0.9)
         assert result.gaps == []
+        assert result.missing_document_classes == []
         assert result.reason == ""
 
 
@@ -228,9 +230,10 @@ class TestExceptionRemoval:
 
 
 class TestEnforceEvidenceSaturation:
-    """Test that enforce_evidence_saturation no longer raises."""
+    """Test that enforce_evidence_saturation returns SaturationResult."""
 
-    def test_strict_mode_returns_dict_not_raises(self):
+    def test_missing_evidence_returns_saturation_result(self):
+        from vertical_engines.credit.retrieval.models import SaturationResult
         from vertical_engines.credit.retrieval.saturation import (
             enforce_evidence_saturation,
         )
@@ -243,13 +246,15 @@ class TestEnforceEvidenceSaturation:
                 "doc_type_filter": "NONE",
             },
         }
-        # Previously this would raise EvidenceGapError
-        result = enforce_evidence_saturation(chapter_stats, strict=True)
-        assert isinstance(result, dict)
-        assert result["all_saturated"] is False
-        assert result.get("strict_fail") is True
+        result = enforce_evidence_saturation(chapter_stats)
+        assert isinstance(result, SaturationResult)
+        assert result.all_saturated is False
+        assert len(result.gaps) == 1
+        assert result.coverage_score == 0.0
+        assert "MISSING_FINANCIAL_DISCLOSURE" in result.missing_document_classes
 
-    def test_non_strict_unchanged(self):
+    def test_all_saturated(self):
+        from vertical_engines.credit.retrieval.models import SaturationResult
         from vertical_engines.credit.retrieval.saturation import (
             enforce_evidence_saturation,
         )
@@ -260,6 +265,29 @@ class TestEnforceEvidenceSaturation:
                 "stats": {"chunk_count": 20, "unique_docs": 5},
             },
         }
-        result = enforce_evidence_saturation(chapter_stats, strict=False)
-        assert result["all_saturated"] is True
-        assert result["gaps"] == []
+        result = enforce_evidence_saturation(chapter_stats)
+        assert isinstance(result, SaturationResult)
+        assert result.all_saturated is True
+        assert result.gaps == []
+        assert result.coverage_score == 1.0
+
+    def test_to_dict_round_trip(self):
+        from vertical_engines.credit.retrieval.saturation import (
+            enforce_evidence_saturation,
+        )
+
+        chapter_stats = {
+            "ch01_exec": {
+                "coverage_status": "SATURATED",
+                "stats": {"chunk_count": 20, "unique_docs": 5},
+            },
+            "ch07_capital": {
+                "coverage_status": "MISSING_EVIDENCE",
+                "stats": {"chunk_count": 0, "unique_docs": 0},
+            },
+        }
+        result = enforce_evidence_saturation(chapter_stats)
+        d = result.to_dict()
+        assert d["all_saturated"] is False
+        assert d["coverage_score"] == 0.5
+        assert len(d["gaps"]) == 1
