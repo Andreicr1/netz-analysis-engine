@@ -16,21 +16,18 @@ Usage::
 """
 from __future__ import annotations
 
-import logging
 import os
 import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+import structlog
 import yaml
-from jinja2 import (  # pyright: ignore[reportMissingImports]
-    Environment,
-    FileSystemLoader,
-    TemplateNotFound,
-)
+from jinja2 import FileSystemLoader, TemplateNotFound  # pyright: ignore[reportMissingImports]
+from jinja2.sandbox import SandboxedEnvironment
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 _PROMPTS_DIR = Path(__file__).parent
 _METADATA_RE = re.compile(r"\{#-\s*metadata\s*\n(.*?)-#\}", re.DOTALL)
@@ -54,7 +51,7 @@ class PromptRegistry:
                 search_paths.append(str(override_dir))
         search_paths.append(str(self._base_dir))
 
-        self._env = Environment(
+        self._env = SandboxedEnvironment(
             loader=FileSystemLoader(search_paths),
             keep_trailing_newline=True,
             trim_blocks=True,

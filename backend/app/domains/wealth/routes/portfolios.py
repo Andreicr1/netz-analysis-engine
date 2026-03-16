@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security.clerk_auth import CurrentUser, get_current_user, require_ic_member
-from app.database import get_db
+from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.models.rebalance import RebalanceEvent
 from app.domains.wealth.schemas.portfolio import (
@@ -43,7 +43,7 @@ def _snapshot_to_summary(profile: str, snap: PortfolioSnapshot | None) -> Portfo
     description="Returns the latest snapshot summary for all 3 model portfolios.",
 )
 async def list_portfolios(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[PortfolioSummary]:
     summaries: list[PortfolioSummary] = []
@@ -61,7 +61,7 @@ async def list_portfolios(
 )
 async def get_portfolio(
     profile: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioSummary:
     _validate_profile(profile)
@@ -77,7 +77,7 @@ async def get_portfolio(
 )
 async def get_snapshot(
     profile: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> PortfolioSnapshotRead | None:
     _validate_profile(profile)
@@ -99,7 +99,7 @@ async def get_history(
     to_date: date | None = Query(None, alias="to"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[PortfolioSnapshotRead]:
     _validate_profile(profile)
@@ -123,7 +123,7 @@ async def get_history(
 async def trigger_rebalance(
     profile: str,
     body: RebalanceRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> RebalanceEventRead:
     _validate_profile(profile)
@@ -154,7 +154,7 @@ async def trigger_rebalance(
 async def get_rebalance_event(
     profile: str,
     event_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> RebalanceEventRead:
     _validate_profile(profile)
@@ -181,7 +181,7 @@ async def approve_rebalance(
     profile: str,
     event_id: uuid.UUID,
     body: RebalanceApproveRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(require_ic_member),
 ) -> RebalanceEventRead:
     _validate_profile(profile)

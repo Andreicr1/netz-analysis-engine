@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security.clerk_auth import CurrentUser, get_current_user
-from app.database import get_db
+from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.allocation import StrategicAllocation
 from app.domains.wealth.models.backtest import BacktestRun
 from app.domains.wealth.schemas.analytics import (
@@ -45,7 +45,7 @@ router = APIRouter(prefix="/analytics")
 )
 async def create_backtest(
     body: BacktestRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> BacktestRunRead:
     _validate_profile(body.profile)
@@ -118,7 +118,7 @@ async def create_backtest(
 )
 async def get_backtest(
     run_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> BacktestRunRead:
     result = await db.execute(select(BacktestRun).where(BacktestRun.run_id == run_id))
@@ -142,7 +142,7 @@ async def get_backtest(
 )
 async def optimize(
     body: OptimizeRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> OptimizeResult:
     _validate_profile(body.profile)
@@ -224,7 +224,7 @@ async def optimize(
 )
 async def optimize_pareto(
     body: OptimizeRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> ParetoOptimizeResult:
     _validate_profile(body.profile)
@@ -305,7 +305,7 @@ async def optimize_pareto(
 )
 async def get_correlation(
     blocks: str = Query(..., description="Comma-separated block IDs"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> CorrelationMatrix:
     block_list = [b.strip() for b in blocks.split(",") if b.strip()]

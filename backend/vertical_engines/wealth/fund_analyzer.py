@@ -16,14 +16,14 @@ Config is resolved via :class:`ConfigService` — never reads YAML directly.
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
+import structlog
 from sqlalchemy.orm import Session
 
 from vertical_engines.base.base_analyzer import BaseAnalyzer
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 
 class FundAnalyzer(BaseAnalyzer):

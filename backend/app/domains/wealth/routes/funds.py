@@ -10,7 +10,7 @@ from app.core.config.config_service import ConfigService
 from app.core.config.dependencies import get_config_service
 from app.core.config.settings import settings
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
-from app.database import get_db
+from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.fund import Fund
 from app.domains.wealth.models.nav import NavTimeseries
 from app.domains.wealth.models.risk import FundRiskMetrics
@@ -36,7 +36,7 @@ router = APIRouter(prefix="/funds")
 async def get_fund_scoring(
     block: str = Query(..., description="Allocation block ID"),
     top_n: int = Query(10, ge=1, le=100, description="Number of top funds to return"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     config_service: ConfigService = Depends(get_config_service),
     actor: Actor = Depends(get_actor),
@@ -163,7 +163,7 @@ async def list_funds(
     is_active: bool | None = Query(True, description="Filter by active status"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[FundRead]:
     stmt = select(Fund)
@@ -188,7 +188,7 @@ async def list_funds(
 )
 async def get_fund(
     fund_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> FundRead:
     result = await db.execute(select(Fund).where(Fund.fund_id == fund_id))
@@ -206,7 +206,7 @@ async def get_fund(
 )
 async def get_fund_risk(
     fund_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> FundRiskRead | None:
     stmt = (
@@ -234,7 +234,7 @@ async def get_fund_nav(
     to_date: date | None = Query(None, alias="to", description="End date"),
     limit: int = Query(1000, ge=1, le=10000, description="Max rows to return"),
     offset: int = Query(0, ge=0, description="Rows to skip"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[NavPoint]:
     stmt = select(NavTimeseries).where(NavTimeseries.fund_id == fund_id)

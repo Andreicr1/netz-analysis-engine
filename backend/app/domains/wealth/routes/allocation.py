@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security.clerk_auth import CurrentUser, get_current_user, require_ic_member
-from app.database import get_db
+from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.allocation import StrategicAllocation, TacticalPosition
 from app.domains.wealth.schemas.allocation import (
     EffectiveAllocationRead,
@@ -28,7 +28,7 @@ router = APIRouter(prefix="/allocation")
 )
 async def get_strategic(
     profile: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[StrategicAllocationRead]:
     _validate_profile(profile)
@@ -56,7 +56,7 @@ async def get_strategic(
 async def update_strategic(
     profile: str,
     body: StrategicAllocationUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(require_ic_member),
 ) -> list[StrategicAllocationRead]:
     _validate_profile(profile)
@@ -104,7 +104,7 @@ async def update_strategic(
 )
 async def get_tactical(
     profile: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[TacticalPositionRead]:
     _validate_profile(profile)
@@ -131,7 +131,7 @@ async def get_tactical(
 async def update_tactical(
     profile: str,
     body: TacticalPositionUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(require_ic_member),
 ) -> list[TacticalPositionRead]:
     _validate_profile(profile)
@@ -176,7 +176,7 @@ async def update_tactical(
 )
 async def get_effective(
     profile: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[EffectiveAllocationRead]:
     _validate_profile(profile)

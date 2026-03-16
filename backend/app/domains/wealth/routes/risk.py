@@ -12,7 +12,7 @@ from app.core.config.config_service import ConfigService
 from app.core.config.dependencies import get_config_service
 from app.core.config.settings import settings
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
-from app.database import get_db
+from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.schemas.macro import MacroIndicators
 from app.domains.wealth.schemas.risk import CVaRPoint, CVaRStatus, RegimeHistoryPoint
@@ -25,12 +25,14 @@ logger = structlog.get_logger()
 
 # Shared Redis connection for SSE pub/sub fan-out
 _sse_redis: aioredis.Redis | None = None
-_sse_redis_lock = asyncio.Lock()
+_sse_redis_lock: asyncio.Lock | None = None
 
 
 async def _get_sse_redis() -> aioredis.Redis:
     """Get or create a shared Redis connection for SSE (async-safe)."""
-    global _sse_redis
+    global _sse_redis, _sse_redis_lock
+    if _sse_redis_lock is None:
+        _sse_redis_lock = asyncio.Lock()
     async with _sse_redis_lock:
         if _sse_redis is None:
             _sse_redis = aioredis.from_url(settings.redis_url)
@@ -55,7 +57,7 @@ router = APIRouter(prefix="/risk")
 )
 async def get_cvar(
     profile: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> CVaRStatus:
     _validate_profile(profile)
@@ -86,7 +88,7 @@ async def get_cvar_history(
     to_date: date | None = Query(None, alias="to"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[CVaRPoint]:
     _validate_profile(profile)
@@ -116,7 +118,7 @@ async def get_cvar_history(
     description="Returns the current market regime based on latest portfolio snapshots.",
 )
 async def get_regime(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     config_service: ConfigService = Depends(get_config_service),
     actor: Actor = Depends(get_actor),
@@ -147,7 +149,7 @@ async def get_regime_history(
     to_date: date | None = Query(None, alias="to"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[RegimeHistoryPoint]:
     stmt = select(PortfolioSnapshot).where(PortfolioSnapshot.regime.is_not(None))
@@ -174,7 +176,7 @@ async def get_regime_history(
     description="Returns the latest VIX, yield curve spread, CPI YoY, and Fed Funds rate from FRED data.",
 )
 async def get_macro(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> MacroIndicators:
     macro = await get_latest_macro_values(db)
