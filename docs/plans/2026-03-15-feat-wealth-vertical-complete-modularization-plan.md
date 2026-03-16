@@ -1,7 +1,7 @@
 ---
 title: "feat: Wealth Vertical Complete Modularization"
 type: feat
-status: active
+status: completed
 date: 2026-03-15
 origin: docs/brainstorms/2026-03-15-wealth-vertical-complete-modularization-brainstorm.md
 ---
@@ -863,13 +863,13 @@ Replace `import logging` / `logging.getLogger(__name__)` with `structlog.get_log
 - `GET /api/wealth/content/{id}/download` — download PDF (**checks `status >= approved` before serving**)
 
 **Acceptance criteria:**
-- [ ] All content types generate structured output + PDF
-- [ ] Download endpoint returns 403 for draft/review content
-- [ ] Approval workflow enforced
-- [ ] Flash report cooldown enforced
-- [ ] Content generation endpoints accept `?language=` query param, default `"pt"`
-- [ ] `InvestmentOutlook.generate()` and `FlashReport.generate()` accept `language` param
-- [ ] LLM prompts receive `{{ language }}` context for bilingual output
+- [x] All content types generate structured output + PDF
+- [x] Download endpoint returns 403 for draft/review content
+- [x] Approval workflow enforced
+- [x] Flash report cooldown enforced
+- [x] Content generation endpoints accept `?language=` query param, default `"pt"`
+- [x] `InvestmentOutlook.generate()` and `FlashReport.generate()` accept `language` param
+- [x] LLM prompts receive `{{ language }}` context for bilingual output
 
 ##### Task 5.3: Monitoring Hooks
 
@@ -895,10 +895,10 @@ Replace `import logging` / `logging.getLogger(__name__)` with `structlog.get_log
 - Document `fund_id`/`deal_id` semantic mapping: `fund_id = org fund context`, `deal_id = target fund being evaluated`
 
 **Acceptance criteria:**
-- [ ] FundAnalyzer delegates to real implementations
-- [ ] `ProfileLoader.get_engine_module("liquid_funds")` returns functional engine
-- [ ] `make check` passes
-- [ ] Integration test: full DD Report generation via FundAnalyzer interface
+- [x] FundAnalyzer delegates to real implementations
+- [x] `ProfileLoader.get_engine_module("liquid_funds")` returns functional engine
+- [x] `make check` passes
+- [x] Integration test: full DD Report generation via FundAnalyzer interface
 
 ---
 

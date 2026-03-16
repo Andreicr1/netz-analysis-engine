@@ -76,6 +76,8 @@ class Settings(BaseSettings):
     feature_auto_rebalance: bool = False
     feature_adls_enabled: bool = False
     feature_wealth_fact_sheets: bool = True
+    feature_wealth_content: bool = False
+    feature_wealth_monitoring: bool = False
 
     # ── ADLS Gen2 (Data Lake) ──────────────────────────
     adls_account_name: str = ""

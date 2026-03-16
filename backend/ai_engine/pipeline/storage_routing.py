@@ -108,6 +108,28 @@ def gold_fact_sheet_path(
     )
 
 
+def gold_content_path(
+    org_id: UUID,
+    vertical: str,
+    content_type: str,
+    content_id: str,
+    language: str,
+) -> str:
+    """``gold/{org_id}/{vertical}/content/{content_type}/{content_id}/{language}/report.pdf``
+
+    Stores generated content PDFs (investment outlooks, flash reports,
+    manager spotlights).
+    """
+    _validate_vertical(vertical)
+    _validate_segment(content_type, "content_type")
+    _validate_segment(content_id, "content_id")
+    _validate_segment(language, "language")
+    return (
+        f"gold/{org_id}/{vertical}/content/"
+        f"{content_type}/{content_id}/{language}/report.pdf"
+    )
+
+
 def gold_dd_report_path(
     org_id: UUID,
     vertical: str,

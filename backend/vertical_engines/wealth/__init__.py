@@ -5,6 +5,8 @@ Built fresh (not migrated from an existing codebase).  Provides:
   - Quant analysis integration (CVaR, Sharpe, drawdown via quant_engine)
   - DD report generation loop with confidence scoring
   - Asset universe fund approval workflow with governance controls
+  - Content production (investment outlook, flash report, manager spotlight)
+  - Monitoring hooks (alert engine, drift monitor)
 
 Public entry points:
   - ``FundAnalyzer`` — implements BaseAnalyzer for liquid_funds profile
@@ -12,6 +14,9 @@ Public entry points:
   - ``QuantAnalyzer`` — bridges quant_engine services
   - ``UniverseService`` — manages approved fund universe (asset_universe/)
   - ``model_portfolio`` — portfolio construction + track-record (model_portfolio/)
+  - ``InvestmentOutlook`` — quarterly macro narrative (standalone)
+  - ``FlashReport`` — event-driven market flash reports (standalone)
+  - ``ManagerSpotlight`` — deep-dive fund manager analysis (standalone)
 """
 
 from pathlib import Path
