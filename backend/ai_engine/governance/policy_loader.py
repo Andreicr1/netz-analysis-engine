@@ -261,8 +261,8 @@ def _search(
     # Build filter with tenant isolation (Security F2)
     filter_parts: list[str] = []
     if organization_id:
-        from ai_engine.extraction.search_upsert_service import _validate_uuid
-        safe_org = _validate_uuid(organization_id, "organization_id")
+        from ai_engine.extraction.search_upsert_service import validate_uuid
+        safe_org = validate_uuid(organization_id, "organization_id")
         filter_parts.append(f"organization_id eq '{safe_org}'")
     if odata_filter:
         filter_parts.append(odata_filter)

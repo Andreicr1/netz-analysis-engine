@@ -139,9 +139,12 @@ def generate_pipeline_intelligence(
         deal_name=deal_name,
     )
 
+    # ── Resolve organization_id for tenant isolation (Security F2) ──
+    effective_org_id = organization_id or str(deal.organization_id)
+
     # ── Retrieve context (institutional-scale, 80 chunks) ─────────
     context, chunk_count, raw_chunks, issuer_summary = _retrieve_deal_context(
-        deal_id, deal_name, organization_id=organization_id or deal_id, max_chunks=MAX_RETRIEVAL_CHUNKS,
+        deal_id, deal_name, organization_id=effective_org_id, max_chunks=MAX_RETRIEVAL_CHUNKS,
     )
     if not context:
         logger.warning(

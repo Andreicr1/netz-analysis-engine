@@ -27,7 +27,7 @@ _VALID_DOMAINS = frozenset({
 })
 
 
-def _validate_uuid(value: str | uuid.UUID, field_name: str = "id") -> str:
+def validate_uuid(value: str | uuid.UUID, field_name: str = "id") -> str:
     """Validate and normalize UUID for safe OData filter interpolation.
 
     Returns lowercase hyphenated canonical form.
@@ -39,7 +39,7 @@ def _validate_uuid(value: str | uuid.UUID, field_name: str = "id") -> str:
         raise ValueError(f"Invalid UUID for {field_name}: {value!r}")
 
 
-def _validate_domain(domain: str) -> str:
+def validate_domain(domain: str) -> str:
     """Validate domain against allowlist. Prevents OData injection on string fields.
 
     Update _VALID_DOMAINS when adding new verticals — see app/shared/enums.py.
@@ -249,11 +249,11 @@ def search_deal_chunks(
 
     client = get_search_client(index_name=_INDEX_NAME)
 
-    safe_deal = _validate_uuid(deal_id, "deal_id")
-    safe_org = _validate_uuid(organization_id, "organization_id")
+    safe_deal = validate_uuid(deal_id, "deal_id")
+    safe_org = validate_uuid(organization_id, "organization_id")
     filter_expr = f"deal_id eq '{safe_deal}' and organization_id eq '{safe_org}'"
     if domain_filter:
-        safe_domain = _validate_domain(domain_filter)
+        safe_domain = validate_domain(domain_filter)
         filter_expr = f"({filter_expr}) and (domain eq '{safe_domain}')"
 
     vector_queries: list[VectorQuery] | None = None
@@ -306,9 +306,9 @@ def search_fund_policy_chunks(
 
     client = get_search_client(index_name=_INDEX_NAME)
 
-    safe_fund = _validate_uuid(fund_id, "fund_id")
-    safe_org = _validate_uuid(organization_id, "organization_id")
-    safe_domain = _validate_domain(domain_filter)
+    safe_fund = validate_uuid(fund_id, "fund_id")
+    safe_org = validate_uuid(organization_id, "organization_id")
+    safe_domain = validate_domain(domain_filter)
     filter_expr = f"fund_id eq '{safe_fund}' and organization_id eq '{safe_org}' and domain eq '{safe_domain}'"
 
     vector_queries: list[VectorQuery] | None = None

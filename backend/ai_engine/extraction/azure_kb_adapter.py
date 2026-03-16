@@ -11,7 +11,7 @@ import logging
 import uuid as _uuid
 
 from ai_engine.extraction.kb_schema import ComplianceChunk
-from ai_engine.extraction.search_upsert_service import _validate_domain, _validate_uuid
+from ai_engine.extraction.search_upsert_service import validate_domain, validate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +39,8 @@ class AzureComplianceKBAdapter:
         """
         from app.services.azure.search_client import get_search_client
 
-        safe_org = _validate_uuid(organization_id, "organization_id")
-        safe_domain = _validate_domain(domain) if domain else None
+        safe_org = validate_uuid(organization_id, "organization_id")
+        safe_domain = validate_domain(domain) if domain else None
         org_filter = f"organization_id eq '{safe_org}'"
         if safe_domain:
             odata_filter = f"{org_filter} and category eq '{safe_domain}'"

@@ -1482,7 +1482,7 @@ async def async_run_deal_deep_review_v4(
             deal_obj = session.execute(
                 select(Deal).where(Deal.id == deal_id, Deal.fund_id == fund_id),
             ).scalar_one()
-            return _gather_deal_texts(session, fund_id=fund_id, deal=deal_obj)
+            return _gather_deal_texts(session, fund_id=fund_id, deal=deal_obj, organization_id=organization_id)
 
     def _get_macro_threadsafe() -> dict:
         from vertical_engines.credit.market_data import get_macro_snapshot

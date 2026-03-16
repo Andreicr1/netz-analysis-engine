@@ -1,8 +1,8 @@
 """Tests for tenant isolation in Azure Search queries (Security F2/F5/F6).
 
 Validates that:
-- _validate_uuid() correctly accepts/rejects UUIDs
-- _validate_domain() accepts valid domains and rejects unknowns
+- validate_uuid() correctly accepts/rejects UUIDs
+- validate_domain() accepts valid domains and rejects unknowns
 - search_deal_chunks() includes organization_id in OData filter
 - search_fund_policy_chunks() includes organization_id in OData filter
 """
@@ -14,57 +14,57 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from ai_engine.extraction.search_upsert_service import (
-    _validate_domain,
-    _validate_uuid,
+    validate_domain,
+    validate_uuid,
 )
 
 # ── UUID validation ───────────────────────────────────────────────────
 
 
 class TestValidateUUID:
-    """_validate_uuid() must normalize valid UUIDs and reject invalid ones."""
+    """validate_uuid() must normalize valid UUIDs and reject invalid ones."""
 
     def test_accepts_lowercase_hyphenated(self):
-        result = _validate_uuid("550e8400-e29b-41d4-a716-446655440000")
+        result = validate_uuid("550e8400-e29b-41d4-a716-446655440000")
         assert result == "550e8400-e29b-41d4-a716-446655440000"
 
     def test_accepts_uppercase(self):
-        result = _validate_uuid("550E8400-E29B-41D4-A716-446655440000")
+        result = validate_uuid("550E8400-E29B-41D4-A716-446655440000")
         # uuid.UUID normalizes to lowercase
         assert result == "550e8400-e29b-41d4-a716-446655440000"
 
     def test_accepts_uuid_object(self):
         u = uuid.UUID("550e8400-e29b-41d4-a716-446655440000")
-        result = _validate_uuid(u)
+        result = validate_uuid(u)
         assert result == "550e8400-e29b-41d4-a716-446655440000"
 
     def test_rejects_empty_string(self):
         with pytest.raises(ValueError, match="Invalid UUID"):
-            _validate_uuid("")
+            validate_uuid("")
 
     def test_rejects_sql_injection(self):
         with pytest.raises(ValueError, match="Invalid UUID"):
-            _validate_uuid("' OR 1=1 --")
+            validate_uuid("' OR 1=1 --")
 
     def test_rejects_odata_injection(self):
         with pytest.raises(ValueError, match="Invalid UUID"):
-            _validate_uuid("' or deal_id ne '")
+            validate_uuid("' or deal_id ne '")
 
     def test_rejects_random_string(self):
         with pytest.raises(ValueError, match="Invalid UUID"):
-            _validate_uuid("not-a-uuid-at-all")
+            validate_uuid("not-a-uuid-at-all")
 
     def test_rejects_none_via_attribute_error(self):
         with pytest.raises(ValueError, match="Invalid UUID"):
-            _validate_uuid(None, "test_field")  # type: ignore[arg-type]
+            validate_uuid(None, "test_field")  # type: ignore[arg-type]
 
     def test_field_name_in_error_message(self):
         with pytest.raises(ValueError, match="organization_id"):
-            _validate_uuid("invalid", "organization_id")
+            validate_uuid("invalid", "organization_id")
 
     def test_normalizes_format(self):
         """Ensures consistent lowercase-hyphenated output for OData filter."""
-        result = _validate_uuid("550E8400E29B41D4A716446655440000")
+        result = validate_uuid("550E8400E29B41D4A716446655440000")
         assert "-" in result
         assert result == result.lower()
 
@@ -73,7 +73,7 @@ class TestValidateUUID:
 
 
 class TestValidateDomain:
-    """_validate_domain() must accept known domains and reject unknowns."""
+    """validate_domain() must accept known domains and reject unknowns."""
 
     @pytest.mark.parametrize("domain", [
         "credit", "wealth", "macro", "benchmark",
@@ -81,19 +81,19 @@ class TestValidateDomain:
         "PIPELINE",
     ])
     def test_accepts_valid_domains(self, domain: str):
-        assert _validate_domain(domain) == domain
+        assert validate_domain(domain) == domain
 
     def test_rejects_unknown_domain(self):
         with pytest.raises(ValueError, match="Invalid domain"):
-            _validate_domain("EVIL_DOMAIN")
+            validate_domain("EVIL_DOMAIN")
 
     def test_rejects_odata_injection_in_domain(self):
         with pytest.raises(ValueError, match="Invalid domain"):
-            _validate_domain("credit' or 1 eq 1 or domain eq '")
+            validate_domain("credit' or 1 eq 1 or domain eq '")
 
     def test_rejects_empty_string(self):
         with pytest.raises(ValueError, match="Invalid domain"):
-            _validate_domain("")
+            validate_domain("")
 
 
 # ── search_deal_chunks org_id filter ───────────────────────────────────

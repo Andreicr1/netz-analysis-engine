@@ -8,7 +8,7 @@ import re
 import uuid as _uuid
 
 from ai_engine.extraction.kb_schema import ComplianceChunk, DocType
-from ai_engine.extraction.search_upsert_service import _validate_uuid
+from ai_engine.extraction.search_upsert_service import validate_uuid
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ class PipelineKBAdapter:
         from ai_engine.pipeline.storage_routing import _SAFE_PATH_SEGMENT_RE
         from app.services.azure.search_client import get_search_client
 
-        safe_org = _validate_uuid(organization_id, "organization_id")
+        safe_org = validate_uuid(organization_id, "organization_id")
         org_filter = f"organization_id eq '{safe_org}'"
 
         is_overview = not deal_folder and bool(_OVERVIEW_PATTERNS.search(query))
