@@ -23,9 +23,9 @@ class TestPortfolioBuilder:
 
     def test_construct_with_single_block(self):
         funds = [
-            {"fund_id": str(uuid.uuid4()), "fund_name": "Fund A", "block_id": "equity", "manager_score": 80},
-            {"fund_id": str(uuid.uuid4()), "fund_name": "Fund B", "block_id": "equity", "manager_score": 60},
-            {"fund_id": str(uuid.uuid4()), "fund_name": "Fund C", "block_id": "equity", "manager_score": 40},
+            {"instrument_id": str(uuid.uuid4()), "fund_name": "Fund A", "block_id": "equity", "manager_score": 80},
+            {"instrument_id": str(uuid.uuid4()), "fund_name": "Fund B", "block_id": "equity", "manager_score": 60},
+            {"instrument_id": str(uuid.uuid4()), "fund_name": "Fund C", "block_id": "equity", "manager_score": 40},
         ]
         allocation = {"equity": 1.0}
         result = construct("moderate", funds, allocation)
@@ -36,9 +36,9 @@ class TestPortfolioBuilder:
 
     def test_construct_with_multiple_blocks(self):
         funds = [
-            {"fund_id": str(uuid.uuid4()), "fund_name": "Eq A", "block_id": "equity", "manager_score": 90},
-            {"fund_id": str(uuid.uuid4()), "fund_name": "Eq B", "block_id": "equity", "manager_score": 70},
-            {"fund_id": str(uuid.uuid4()), "fund_name": "FI A", "block_id": "fixed_income", "manager_score": 85},
+            {"instrument_id": str(uuid.uuid4()), "fund_name": "Eq A", "block_id": "equity", "manager_score": 90},
+            {"instrument_id": str(uuid.uuid4()), "fund_name": "Eq B", "block_id": "equity", "manager_score": 70},
+            {"instrument_id": str(uuid.uuid4()), "fund_name": "FI A", "block_id": "fixed_income", "manager_score": 85},
         ]
         allocation = {"equity": 0.6, "fixed_income": 0.4}
         result = construct("conservative", funds, allocation)
@@ -53,19 +53,19 @@ class TestPortfolioBuilder:
         fid_high = str(uuid.uuid4())
         fid_low = str(uuid.uuid4())
         funds = [
-            {"fund_id": fid_high, "fund_name": "High", "block_id": "eq", "manager_score": 90},
-            {"fund_id": fid_low, "fund_name": "Low", "block_id": "eq", "manager_score": 30},
+            {"instrument_id": fid_high, "fund_name": "High", "block_id": "eq", "manager_score": 90},
+            {"instrument_id": fid_low, "fund_name": "Low", "block_id": "eq", "manager_score": 30},
         ]
         allocation = {"eq": 1.0}
         result = construct("growth", funds, allocation)
 
-        high_w = next(f.weight for f in result.funds if str(f.fund_id) == fid_high)
-        low_w = next(f.weight for f in result.funds if str(f.fund_id) == fid_low)
+        high_w = next(f.weight for f in result.funds if str(f.instrument_id) == fid_high)
+        low_w = next(f.weight for f in result.funds if str(f.instrument_id) == fid_low)
         assert high_w > low_w
 
     def test_construct_respects_top_n(self):
         funds = [
-            {"fund_id": str(uuid.uuid4()), "fund_name": f"Fund {i}", "block_id": "eq", "manager_score": 100 - i * 10}
+            {"instrument_id": str(uuid.uuid4()), "fund_name": f"Fund {i}", "block_id": "eq", "manager_score": 100 - i * 10}
             for i in range(10)
         ]
         allocation = {"eq": 1.0}
@@ -81,7 +81,7 @@ class TestPortfolioBuilder:
 
     def test_construct_empty_allocation(self):
         funds = [
-            {"fund_id": str(uuid.uuid4()), "fund_name": "A", "block_id": "eq", "manager_score": 80},
+            {"instrument_id": str(uuid.uuid4()), "fund_name": "A", "block_id": "eq", "manager_score": 80},
         ]
         result = construct("moderate", funds, {})
         assert len(result.funds) == 0
@@ -91,7 +91,7 @@ class TestPortfolioModels:
     """Test frozen dataclasses."""
 
     def test_fund_weight_frozen(self):
-        fw = FundWeight(fund_id=uuid.uuid4(), fund_name="X", block_id="eq", weight=0.5, score=80.0)
+        fw = FundWeight(instrument_id=uuid.uuid4(), fund_name="X", block_id="eq", weight=0.5, score=80.0)
         with pytest.raises(AttributeError):
             fw.weight = 0.3  # type: ignore[misc]
 

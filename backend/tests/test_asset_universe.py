@@ -26,13 +26,13 @@ class TestApprovalModels:
 
     def test_approval_request_is_frozen(self):
         req = ApprovalRequest(
-            fund_id=uuid.uuid4(),
-            dd_report_id=uuid.uuid4(),
+            instrument_id=uuid.uuid4(),
+            analysis_report_id=uuid.uuid4(),
             created_by="user_1",
             organization_id="org_1",
         )
         with pytest.raises(AttributeError):
-            req.fund_id = uuid.uuid4()  # type: ignore[misc]
+            req.instrument_id = uuid.uuid4()  # type: ignore[misc]
 
     def test_approval_decision_is_frozen(self):
         dec = ApprovalDecision(
@@ -46,7 +46,7 @@ class TestApprovalModels:
 
     def test_universe_asset_is_frozen(self):
         asset = UniverseAsset(
-            fund_id=uuid.uuid4(),
+            instrument_id=uuid.uuid4(),
             fund_name="Test Fund",
             block_id="equity_global",
             geography="US",
@@ -60,7 +60,7 @@ class TestApprovalModels:
 
     def test_deactivation_result_is_frozen(self):
         result = DeactivationResult(
-            fund_id=uuid.uuid4(),
+            instrument_id=uuid.uuid4(),
             was_active=True,
             rebalance_needed=True,
         )
@@ -206,8 +206,8 @@ class TestUniverseSchemas:
 
         mock = MagicMock()
         mock.id = uuid.uuid4()
-        mock.fund_id = uuid.uuid4()
-        mock.dd_report_id = uuid.uuid4()
+        mock.instrument_id = uuid.uuid4()
+        mock.analysis_report_id = uuid.uuid4()
         mock.decision = "pending"
         mock.rationale = None
         mock.created_by = "user_1"

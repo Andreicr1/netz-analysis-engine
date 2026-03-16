@@ -46,10 +46,10 @@ class TestContentResultModels:
 
         r = SpotlightResult(
             content_md="test", title="Spotlight", language="pt",
-            fund_id="abc", status="completed",
+            instrument_id="abc", status="completed",
         )
         with pytest.raises(AttributeError):
-            r.fund_id = "changed"  # type: ignore[misc]
+            r.instrument_id = "changed"  # type: ignore[misc]
 
 
 # ── Content Generation with LLM + Sanitize ────────────────────────────────
@@ -152,10 +152,10 @@ class TestManagerSpotlightGeneration:
         engine = ManagerSpotlight(call_openai_fn=None)
         db = MagicMock()
         result = engine.generate(
-            db, fund_id="f1", organization_id="org-1", actor_id="u1",
+            db, instrument_id="f1", organization_id="org-1", actor_id="u1",
         )
         assert result.status == "failed"
-        assert result.fund_id == "f1"
+        assert result.instrument_id == "f1"
 
 
 # ── Approval Workflow ──────────────────────────────────────────────────────
@@ -303,7 +303,7 @@ class TestFundAnalyzerDelegation:
         ) as mock_gen:
             result = analyzer.run_deal_analysis(
                 MagicMock(),
-                fund_id="org-context",
+                instrument_id="org-context",
                 deal_id="target-fund",
                 actor_id="user-1",
             )
@@ -327,7 +327,7 @@ class TestFundAnalyzerDelegation:
         ) as mock_analyze:
             result = analyzer.run_portfolio_analysis(
                 MagicMock(),
-                fund_id="fund-1",
+                instrument_id="fund-1",
                 actor_id="user-1",
             )
             mock_analyze.assert_called_once()
@@ -391,7 +391,7 @@ class TestDriftMonitor:
         from vertical_engines.wealth.monitoring.drift_monitor import DriftAlert
 
         a = DriftAlert(
-            fund_id="f1", fund_name="Fund A", drift_score=0.2,
+            instrument_id="f1", fund_name="Fund A", drift_score=0.2,
             drift_type="style_drift", affected_portfolios=["Portfolio 1"],
             detail="Drift detected",
         )
@@ -407,7 +407,7 @@ class TestDriftMonitor:
 
         alerts = [
             DriftAlert(
-                fund_id="f1", fund_name="Fund A", drift_score=0.25,
+                instrument_id="f1", fund_name="Fund A", drift_score=0.25,
                 drift_type="style_drift", affected_portfolios=["Port 1"],
                 detail="DTW drift 0.25 > 0.15",
             ),
