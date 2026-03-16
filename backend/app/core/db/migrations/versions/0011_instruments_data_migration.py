@@ -6,14 +6,14 @@ Renames fund_id → instrument_id across all referencing tables. Adds
 report_type to dd_reports. Makes analysis_report_id (formerly dd_report_id)
 nullable on universe_approvals.
 
-depends_on: 0010 (instruments_universe).
+depends_on: 0012 (instruments_universe_additive).
 """
 
 import sqlalchemy as sa
 from alembic import op
 
 revision = "0011"
-down_revision = "0010"
+down_revision = "0012"
 branch_labels = None
 depends_on = None
 
