@@ -1345,22 +1345,22 @@ frontends/wealth/src/routes/(investor)/documents/+page.svelte
 
 #### Tasks
 
-- [ ] Same guard pattern as credit investor (INVESTOR/ADVISOR roles only)
-- [ ] `InvestorShell` layout with tenant branding, language toggle
-- [ ] Portfolios — model portfolios with track-record data (read-only)
-- [ ] Fact-sheets — list published fact-sheets (executive/institutional), download with language toggle
-- [ ] Reports — investment outlooks, flash reports, spotlights (published only)
-- [ ] Documents — published documents for investor distribution
-- [ ] All `PDFDownload.svelte` components with PT/EN language toggle
-- [ ] Visual quality: institutional aesthetic — clean typography, controlled information density
+- [x] Same guard pattern as credit investor (INVESTOR/ADVISOR roles only)
+- [x] `InvestorShell` layout with tenant branding, language toggle
+- [x] Portfolios — model portfolios with track-record data (read-only)
+- [x] Fact-sheets — list published fact-sheets, download with language toggle (PDFDownload)
+- [x] Reports — investment outlooks, flash reports, spotlights (published only)
+- [x] Documents — published documents for investor distribution
+- [x] All `PDFDownload.svelte` components with PT/EN language toggle
+- [x] Visual quality: institutional aesthetic — clean typography, controlled information density, max-w-5xl centered
 
 #### Acceptance Criteria
 
-- [ ] INVESTOR sees only published content
-- [ ] Fact-sheet download works in both PT and EN
-- [ ] Tenant branding (logo, colors, fonts) renders correctly
-- [ ] Layout is responsive and meets institutional quality bar
-- [ ] This portal is demo-ready as the primary client-facing product
+- [x] INVESTOR sees only published content (status filter: approved/published)
+- [x] Fact-sheet download works in both PT and EN (PDFDownload with languages prop)
+- [x] Tenant branding (logo, colors, fonts) renders correctly (InvestorShell)
+- [x] Layout is responsive and meets institutional quality bar
+- [x] This portal is demo-ready as the primary client-facing product
 
 ---
 

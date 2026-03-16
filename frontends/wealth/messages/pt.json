@@ -64,5 +64,24 @@
     "expiry_message": "Sua sessao expira em 5 minutos. Salve seu trabalho e renove seu acesso.",
     "renew": "Renovar Sessao",
     "dismiss": "Dispensar"
+  },
+  "investor": {
+    "portfolios": "Carteiras Modelo",
+    "fact_sheets": "Laminas",
+    "reports": "Relatorios",
+    "documents": "Documentos",
+    "no_portfolios": "Nenhuma Carteira Disponivel",
+    "no_portfolios_desc": "As carteiras modelo estarao disponiveis aqui apos publicacao.",
+    "no_fact_sheets": "Nenhuma Lamina",
+    "no_fact_sheets_desc": "As laminas publicadas aparecerao aqui quando disponiveis.",
+    "no_reports": "Nenhum Relatorio Publicado",
+    "no_reports_desc": "Os relatorios de investimento aparecerao aqui quando publicados.",
+    "no_documents": "Nenhum Documento",
+    "no_documents_desc": "Os documentos publicados aparecerao aqui quando disponiveis.",
+    "annual_return": "Retorno Anual",
+    "volatility": "Volatilidade",
+    "sharpe_ratio": "Indice Sharpe",
+    "max_drawdown": "Drawdown Maximo",
+    "download_pdf": "Baixar PDF"
   }
 }

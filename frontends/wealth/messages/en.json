@@ -64,5 +64,24 @@
     "expiry_message": "Your session expires in 5 minutes. Please save your work and renew your access.",
     "renew": "Renew Session",
     "dismiss": "Dismiss"
+  },
+  "investor": {
+    "portfolios": "Model Portfolios",
+    "fact_sheets": "Fact Sheets",
+    "reports": "Reports",
+    "documents": "Documents",
+    "no_portfolios": "No Portfolios Available",
+    "no_portfolios_desc": "Model portfolio information will be available here once published.",
+    "no_fact_sheets": "No Fact Sheets",
+    "no_fact_sheets_desc": "Published fact-sheets will appear here when available.",
+    "no_reports": "No Published Reports",
+    "no_reports_desc": "Investment reports will appear here when published.",
+    "no_documents": "No Documents",
+    "no_documents_desc": "Published documents will appear here when available.",
+    "annual_return": "Annual Return",
+    "volatility": "Volatility",
+    "sharpe_ratio": "Sharpe Ratio",
+    "max_drawdown": "Max Drawdown",
+    "download_pdf": "Download PDF"
   }
 }
