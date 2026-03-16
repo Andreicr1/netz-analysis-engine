@@ -46,6 +46,49 @@ async def list_configs(
     )
 
 
+@router.post(
+    "",
+    response_model=ConfigWriteResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create config override",
+)
+async def create_config_override(
+    payload: ConfigWriteRequest,
+    actor: Actor = Depends(require_role(Role.ADMIN)),
+    writer: ConfigWriter = Depends(get_config_writer),
+) -> ConfigWriteResponse:
+    if actor.organization_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No active organization",
+        )
+    try:
+        version = await writer.put(
+            vertical=payload.vertical,
+            config_type=payload.config_type,
+            org_id=actor.organization_id,
+            config=payload.config,
+            expected_version=payload.expected_version,
+        )
+    except GuardrailViolation as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": "Guardrail validation failed", "errors": e.errors},
+        ) from e
+    except StaleVersionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Config was modified by another user. Current version: {e.current_version}",
+        ) from e
+
+    return ConfigWriteResponse(
+        vertical=payload.vertical,
+        config_type=payload.config_type,
+        version=version,
+        message="Config override created/updated",
+    )
+
+
 @router.put(
     "/{vertical}/{config_type}",
     response_model=ConfigWriteResponse,

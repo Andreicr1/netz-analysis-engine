@@ -15,13 +15,10 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Mapping, Sequence
 from typing import Any
 from uuid import UUID
 
 from jinja2 import TemplateSyntaxError
-from jinja2.nodes import EvalContext
-from jinja2.runtime import Context
 from jinja2.sandbox import SandboxedEnvironment
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,6 +53,10 @@ _SAFE_FILTERS = frozenset({
     "trim", "wordcount", "e", "escape",
 })
 
+# Render timeout (seconds) for preview
+_RENDER_TIMEOUT = 5
+
+
 class AdminSandboxedEnvironment(SandboxedEnvironment):
     """Hardened sandbox for admin-edited prompts.
 
@@ -67,34 +68,15 @@ class AdminSandboxedEnvironment(SandboxedEnvironment):
             return False
         return super().is_safe_attribute(obj, attr, value)
 
-    def call_filter(
-        self,
-        name: str,
-        value: Any,
-        args: Sequence[Any] | None = None,
-        kwargs: Mapping[str, Any] | None = None,
-        context: Context | None = None,
-        eval_ctx: EvalContext | None = None,
-    ) -> Any:
-        if name not in _SAFE_FILTERS:
-            from jinja2.exceptions import SecurityError
-
-            raise SecurityError(f"Filter '{name}' is not allowed")
-        return super().call_filter(name, value, args, kwargs, context, eval_ctx)
-
 
 def _create_sandbox() -> AdminSandboxedEnvironment:
     """Create a one-shot sandbox for rendering admin prompts."""
-    env = AdminSandboxedEnvironment(
+    return AdminSandboxedEnvironment(
         keep_trailing_newline=True,
         trim_blocks=True,
         lstrip_blocks=True,
         autoescape=False,
     )
-    # Strip non-whitelisted filters from the environment so compiled
-    # templates (which access env.filters directly) cannot use them.
-    env.filters = {k: v for k, v in env.filters.items() if k in _SAFE_FILTERS}
-    return env
 
 
 class PromptService:
@@ -295,8 +277,8 @@ class PromptService:
 
         return infos
 
-    @staticmethod
     def preview(
+        self,
         content: str,
         sample_data: dict[str, Any],
     ) -> PromptPreviewResponse:

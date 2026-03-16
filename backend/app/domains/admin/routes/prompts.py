@@ -6,6 +6,7 @@ All routes require ADMIN role.
 from __future__ import annotations
 
 import logging
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
@@ -19,7 +20,6 @@ from app.core.prompts.schemas import (
     PromptUpdate,
     PromptValidateResponse,
     PromptVersionInfo,
-    PromptWriteResponse,
 )
 from app.core.security.clerk_auth import Actor, require_role
 from app.shared.enums import Role
@@ -67,7 +67,7 @@ async def get_prompt(
 
 @router.put(
     "/{vertical}/{name:path}",
-    response_model=PromptWriteResponse,
+    response_model=dict,
     summary="Update prompt override",
     description="Auto-versions and writes history row.",
 )
@@ -77,14 +77,14 @@ async def update_prompt(
     payload: PromptUpdate,
     actor: Actor = Depends(require_role(Role.ADMIN)),
     prompt_service: PromptService = Depends(get_prompt_service),
-) -> PromptWriteResponse:
+) -> dict:
     try:
         version = await prompt_service.put(
             vertical=vertical,
             template_name=name,
             content=payload.content,
             updated_by=actor.actor_id,
-            org_id=actor.organization_id,
+            org_id=payload.org_id if payload.org_id is not None else actor.organization_id,
         )
     except ValueError as e:
         raise HTTPException(
@@ -92,7 +92,7 @@ async def update_prompt(
             detail=str(e),
         ) from e
 
-    return PromptWriteResponse(version=version, message="Prompt override updated")
+    return {"version": version, "message": "Prompt override updated"}
 
 
 @router.delete(
@@ -103,13 +103,15 @@ async def update_prompt(
 async def delete_prompt(
     vertical: str,
     name: str,
+    org_id: uuid.UUID | None = None,
     actor: Actor = Depends(require_role(Role.ADMIN)),
     prompt_service: PromptService = Depends(get_prompt_service),
 ) -> None:
+    target_org = org_id if org_id is not None else actor.organization_id
     deleted = await prompt_service.delete_override(
         vertical=vertical,
         template_name=name,
-        org_id=actor.organization_id,
+        org_id=target_org,
     )
     if not deleted:
         raise HTTPException(
@@ -160,11 +162,13 @@ async def validate_prompt(
 async def get_prompt_versions(
     vertical: str,
     name: str,
+    org_id: uuid.UUID | None = None,
     actor: Actor = Depends(require_role(Role.ADMIN)),
     prompt_service: PromptService = Depends(get_prompt_service),
 ) -> list[PromptVersionInfo]:
+    target_org = org_id if org_id is not None else actor.organization_id
     return await prompt_service.get_versions(
         vertical=vertical,
         template_name=name,
-        org_id=actor.organization_id,
+        org_id=target_org,
     )

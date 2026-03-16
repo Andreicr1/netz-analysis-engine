@@ -17,10 +17,9 @@ from uuid import UUID
 import jsonschema
 from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config.config_service import ConfigService
+from app.core.config.config_service import ConfigService, _config_cache
 from app.core.config.models import VerticalConfigDefault, VerticalConfigOverride
 
 logger = logging.getLogger(__name__)
@@ -108,14 +107,12 @@ class ConfigWriter:
                 config=config,
                 version=new_version,
             )
-            try:
-                await self._db.execute(stmt)
-            except IntegrityError as e:
-                # Concurrent insert — another process created this override first
-                raise StaleVersionError(current_version=1) from e
+            await self._db.execute(stmt)
 
-        # Notify via pg_notify (transactional — fires after commit).
-        # PgNotifyListener handles same-process + cross-process cache invalidation.
+        # Invalidate in-process cache
+        self._invalidate_cache(vertical, config_type, org_id)
+
+        # Notify other processes via pg_notify
         await self._notify(vertical, config_type, org_id)
 
         return new_version
@@ -139,6 +136,7 @@ class ConfigWriter:
             return False
 
         await self._db.delete(row)
+        self._invalidate_cache(vertical, config_type, org_id)
         await self._notify(vertical, config_type, org_id)
         return True
 
@@ -160,7 +158,7 @@ class ConfigWriter:
             raise ValueError(f"No default config for ({vertical}, {config_type})")
 
         new_version = row.version + 1
-        result = await self._db.execute(
+        await self._db.execute(
             update(VerticalConfigDefault)
             .where(
                 VerticalConfigDefault.id == row.id,
@@ -168,8 +166,8 @@ class ConfigWriter:
             )
             .values(config=config, version=new_version)
         )
-        if result.rowcount == 0:
-            raise StaleVersionError(current_version=row.version)
+        # Invalidate all caches for this config_type (all orgs)
+        self._invalidate_cache_prefix(vertical, config_type)
         await self._notify(vertical, config_type, None)
         return new_version
 
@@ -235,6 +233,22 @@ class ConfigWriter:
             validator = jsonschema.Draft7Validator(guardrails)
             errors = [err.message for err in validator.iter_errors(config)]
             raise GuardrailViolation(errors) from e
+
+    @staticmethod
+    def _invalidate_cache(
+        vertical: str, config_type: str, org_id: UUID | None
+    ) -> None:
+        """Remove specific key from in-process TTLCache."""
+        cache_key = f"config:{vertical}:{config_type}:{org_id or 'default'}"
+        _config_cache.pop(cache_key, None)
+
+    @staticmethod
+    def _invalidate_cache_prefix(vertical: str, config_type: str) -> None:
+        """Remove all cache keys matching vertical+config_type (all orgs)."""
+        prefix = f"config:{vertical}:{config_type}:"
+        keys_to_remove = [k for k in _config_cache if k.startswith(prefix)]
+        for key in keys_to_remove:
+            _config_cache.pop(key, None)
 
     async def _notify(
         self,
