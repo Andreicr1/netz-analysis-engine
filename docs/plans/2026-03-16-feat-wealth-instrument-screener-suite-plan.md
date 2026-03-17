@@ -1220,9 +1220,9 @@ equity:
 | `backend/vertical_engines/wealth/fee_drag/models.py` | CREATE |
 
 **Acceptance criteria:**
-- [ ] Mandate fit correctly filters by risk bucket, ESG, domicile
-- [ ] Fee drag identifies fee-inefficient instruments
-- [ ] Portfolio-level aggregate fee drag calculation
+- [x] Mandate fit correctly filters by risk bucket, ESG, domicile
+- [x] Fee drag identifies fee-inefficient instruments
+- [x] Portfolio-level aggregate fee drag calculation
 
 ---
 

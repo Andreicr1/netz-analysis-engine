@@ -367,3 +367,23 @@ source_modules = [
     "vertical_engines.wealth.watchlist.transition_detector",
 ]
 forbidden_modules = ["vertical_engines.wealth.watchlist.service"]
+
+[[tool.importlinter.contracts]]
+name = "Mandate fit models must not import mandate fit service"
+type = "forbidden"
+source_modules = ["vertical_engines.wealth.mandate_fit.models"]
+forbidden_modules = ["vertical_engines.wealth.mandate_fit.service"]
+
+[[tool.importlinter.contracts]]
+name = "Mandate fit helpers must not import mandate fit service"
+type = "forbidden"
+source_modules = [
+    "vertical_engines.wealth.mandate_fit.constraint_evaluator",
+]
+forbidden_modules = ["vertical_engines.wealth.mandate_fit.service"]
+
+[[tool.importlinter.contracts]]
+name = "Fee drag models must not import fee drag service"
+type = "forbidden"
+source_modules = ["vertical_engines.wealth.fee_drag.models"]
+forbidden_modules = ["vertical_engines.wealth.fee_drag.service"]
