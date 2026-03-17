@@ -1152,11 +1152,11 @@ equity:
 | `backend/vertical_engines/wealth/asset_universe/universe_service.py` | MODIFY (call rebalancing on deactivate) |
 
 **Acceptance criteria:**
-- [ ] `deactivate_asset()` triggers rebalance impact computation
-- [ ] Weight proposals respect CVaR limits and allocation bounds
-- [ ] Infeasible rebalance flagged (not forced)
-- [ ] Regime change detection uses configurable threshold and consecutive count
-- [ ] Reuses existing `optimizer_service` (no duplicate solver)
+- [x] `deactivate_asset()` triggers rebalance impact computation
+- [x] Weight proposals respect CVaR limits and allocation bounds
+- [x] Infeasible rebalance flagged (not forced)
+- [x] Regime change detection uses configurable threshold and consecutive count
+- [x] Reuses existing `optimizer_service` (no duplicate solver)
 
 ---
 
