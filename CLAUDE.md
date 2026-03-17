@@ -5,16 +5,26 @@ Unified multi-tenant analysis engine for institutional investment verticals.
 ## Commands
 
 ```bash
-make check              # Full gate: lint + typecheck + test
+make check              # Full gate: lint + architecture + typecheck + test
 make test               # pytest backend/tests/
 make test ARGS="-k foo" # Run a single test or subset
 make lint               # ruff check
 make typecheck          # mypy
+make architecture       # import-linter DAG enforcement
 make serve              # uvicorn on :8000
 make migrate            # alembic upgrade head
 make migration MSG="…"  # Generate new migration
 make up                 # docker-compose up -d (PG 16 + TimescaleDB + Redis 7)
 make down               # docker-compose down
+
+# Frontend (pnpm + Turborepo)
+make dev:credit         # Credit frontend dev server
+make dev:wealth         # Wealth frontend dev server
+make dev:admin          # Admin frontend dev server
+make dev:all            # All packages in parallel (Turborepo)
+make build:all          # Build all packages (topological order)
+make check:all          # Check all frontend packages
+make types              # Generate TS types from OpenAPI schema (requires running backend)
 ```
 
 ## Architecture

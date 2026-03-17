@@ -45,7 +45,7 @@
 
 	// Branding CSS injection via DOM API (safe — setProperty auto-escapes values)
 	$effect(() => {
-		if (typeof document !== "undefined") {
+		if (typeof document !== "undefined" && branding) {
 			injectBranding(document.documentElement, branding);
 		}
 	});
