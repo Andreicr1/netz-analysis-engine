@@ -521,10 +521,14 @@ class TestRegimeChangeDetection:
         snap1 = _make_snapshot(regime="stress", snapshot_date=date(2026, 3, 16))
         snap2 = _make_snapshot(regime="stress", snapshot_date=date(2026, 3, 15))
 
+        portfolio_id = uuid.uuid4()
+
         db = MagicMock()
-        # First call: distinct profiles
-        db.execute.return_value.all.return_value = [("moderate",)]
-        # Second call: snapshots
+        # Calls return: 1) distinct profiles, 2) snapshots (via scalars), 3) portfolio IDs
+        db.execute.return_value.all.side_effect = [
+            [("moderate",)],          # distinct profiles
+            [(portfolio_id,)],        # ModelPortfolio IDs for this profile
+        ]
         db.execute.return_value.scalars.return_value.all.return_value = [snap1, snap2]
 
         svc = RebalancingService(config={"regime_consecutive_threshold": 2})
@@ -532,6 +536,8 @@ class TestRegimeChangeDetection:
 
         assert len(results) == 1
         assert results[0].impact.trigger == "regime_change"
+        # Bug #114 fix: affected_portfolios contains ModelPortfolio IDs, not snapshot IDs
+        assert results[0].impact.affected_portfolios == (portfolio_id,)
 
     def test_insufficient_consecutive_stress(self):
         from vertical_engines.wealth.rebalancing.service import RebalancingService

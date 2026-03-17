@@ -2,7 +2,7 @@
 
 Session injection pattern: caller provides db session.
 Composes impact_analyzer (identify affected portfolios) and
-weight_proposer (compute new weights via optimizer_service).
+weight_proposer (compute new weights via proportional redistribution).
 
 Regime change detection: sustained regime switch for N consecutive
 evaluations triggers rebalancing. Threshold configurable via ConfigService.
@@ -119,7 +119,10 @@ class RebalancingService:
         Checks PortfolioSnapshot for consecutive regime switches from
         normal/low_vol to stress/crisis. If sustained for >= threshold
         consecutive evaluations, triggers rebalance for affected instruments.
+
+        Will be wired to a scheduler/worker in a follow-up sprint.
         """
+        from app.domains.wealth.models.model_portfolio import ModelPortfolio
         from app.domains.wealth.models.portfolio import PortfolioSnapshot
 
         # Get latest N snapshots per profile to detect consecutive regime changes
@@ -165,11 +168,20 @@ class RebalancingService:
                 organization_id=organization_id,
             )
 
-            # Trigger rebalance with a synthetic instrument_id (regime-based)
-            # Use a nil UUID to signal this is regime-triggered, not instrument-specific
+            # Look up actual ModelPortfolio IDs for this profile
+            portfolio_ids = [
+                row[0] for row in db.execute(
+                    select(ModelPortfolio.id).where(
+                        ModelPortfolio.organization_id == organization_id,
+                        ModelPortfolio.profile == profile,
+                        ModelPortfolio.status == "active",
+                    )
+                ).all()
+            ]
+
             regime_impact = RebalanceImpact(
                 instrument_id=uuid.UUID(int=0),
-                affected_portfolios=tuple(s.snapshot_id for s in snapshots[:1]),
+                affected_portfolios=tuple(portfolio_ids),
                 weight_gap=0.0,
                 trigger="regime_change",
             )
