@@ -8,14 +8,14 @@ Also adds a composite index on nav_timeseries(instrument_id, nav_date DESC)
 filtered by return_1d IS NOT NULL — critical for batch-fetch performance
 in risk_calc, optimizer, backtest, and correlation queries.
 
-depends_on: 0011 (instruments_data_migration).
+depends_on: 0012 (instruments_universe_additive).
 """
 
 import sqlalchemy as sa
 from alembic import op
 
 revision = "0013"
-down_revision = "0011"
+down_revision = "0012"
 branch_labels = None
 depends_on = None
 
