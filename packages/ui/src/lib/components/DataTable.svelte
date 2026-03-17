@@ -37,7 +37,7 @@
 	let sorting = $state<SortingState>([]);
 	let columnFilters = $state<ColumnFiltersState>([]);
 
-	let table = $derived(createTable({
+	let table = createTable({
 		get data() { return data; },
 		get columns() { return columns; },
 		state: {
@@ -58,7 +58,7 @@
 		initialState: {
 			pagination: { pageSize },
 		},
-	}));
+	});
 </script>
 
 <div class={cn("w-full", className)}>

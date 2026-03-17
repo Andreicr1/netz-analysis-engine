@@ -37,6 +37,7 @@ export {
 // Branding
 export {
 	defaultBranding,
+	defaultDarkBranding,
 	brandingToCSS,
 	injectBranding,
 } from "./branding.js";

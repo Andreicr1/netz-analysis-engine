@@ -3,7 +3,7 @@
 -->
 <script lang="ts">
 	import { Card, EmptyState } from "@netz/ui";
-	import { page } from "$app/stores";
+	import { page } from "$app/state";
 
 	// Dataroom will use the /api/data-room/tree and /api/data-room/list endpoints.
 	// For now, render a placeholder that will be wired to the API.

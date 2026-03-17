@@ -19,9 +19,10 @@
 	let abortController: AbortController | null = null;
 
 	function addLog(line: string) {
-		logs.push(line);
-		if (logs.length > MAX_LINES) {
-			logs = logs.slice(-MAX_LINES);
+		if (logs.length >= MAX_LINES) {
+			logs = [...logs.slice(-(MAX_LINES - 1)), line];
+		} else {
+			logs = [...logs, line];
 		}
 	}
 
@@ -127,7 +128,7 @@
 		onscroll={handleScroll}
 		class="h-64 overflow-auto rounded border border-[var(--netz-border)] bg-[var(--netz-surface)] p-2 font-mono text-xs"
 	>
-		{#each logs as line}
+		{#each logs as line, i (i)}
 			<div class="text-[var(--netz-text-secondary)]">{line}</div>
 		{/each}
 		{#if logs.length === 0}

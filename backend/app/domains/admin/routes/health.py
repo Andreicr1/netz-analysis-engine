@@ -170,14 +170,18 @@ async def stream_worker_logs(
 
     sem = _get_worker_log_semaphore()
 
-    if sem.locked():
+    # Non-blocking acquire: if all slots are taken, return 429 immediately.
+    try:
+        await asyncio.wait_for(sem.acquire(), timeout=0)
+    except (asyncio.TimeoutError, TimeoutError):
         return JSONResponse(
             status_code=429,
-            content={"detail": "Too many log streams"},
+            content={"detail": "Too many SSE connections"},
         )
 
+    # Semaphore slot acquired — release it when the generator finishes.
     async def event_generator():
-        async with sem:
+        try:
             pool = get_redis_pool()
             r = aioredis.Redis(connection_pool=pool)
             pubsub = r.pubsub()
@@ -203,6 +207,8 @@ async def stream_worker_logs(
                 await pubsub.unsubscribe("worker:logs")
                 await pubsub.aclose()
                 await r.aclose()
+        finally:
+            sem.release()
 
     return EventSourceResponse(
         event_generator(),

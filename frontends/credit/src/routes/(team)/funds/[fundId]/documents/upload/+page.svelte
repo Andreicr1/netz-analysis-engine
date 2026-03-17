@@ -15,23 +15,68 @@
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
+	const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+
 	let file = $state<File | null>(null);
 	let uploading = $state(false);
 	let jobId = $state<string | null>(null);
 	let uploadError = $state<string | null>(null);
 
-	function handleDrop(event: DragEvent) {
+	/**
+	 * Validate magic bytes to verify file content matches expected document types.
+	 * Returns true if the file header matches a known document signature,
+	 * or if the file is a text format (csv/txt) with no magic bytes.
+	 */
+	async function validateMagicBytes(f: File): Promise<boolean> {
+		const ext = f.name.split(".").pop()?.toLowerCase();
+		// Text formats have no magic bytes — skip validation
+		if (ext === "csv" || ext === "txt") return true;
+
+		const header = new Uint8Array(await f.slice(0, 4).arrayBuffer());
+		const validSignatures = [
+			[0x25, 0x50, 0x44, 0x46], // %PDF
+			[0x50, 0x4b, 0x03, 0x04], // PK (ZIP-based Office: .docx, .xlsx)
+			[0xd0, 0xcf, 0x11, 0xe0], // OLE compound (legacy .doc, .xls)
+		];
+		return validSignatures.some((sig) => sig.every((b, i) => header[i] === b));
+	}
+
+	/** Validate file size and magic bytes. Sets uploadError and returns false on failure. */
+	async function validateFile(f: File): Promise<boolean> {
+		if (f.size > MAX_FILE_SIZE) {
+			uploadError = `File "${f.name}" exceeds 50 MB limit (${(f.size / 1024 / 1024).toFixed(1)} MB)`;
+			return false;
+		}
+		if (!(await validateMagicBytes(f))) {
+			uploadError = `File "${f.name}" does not appear to be a valid document (unrecognised file header)`;
+			return false;
+		}
+		uploadError = null;
+		return true;
+	}
+
+	async function handleDrop(event: DragEvent) {
 		event.preventDefault();
 		const files = event.dataTransfer?.files;
 		if (files && files.length > 0) {
-			file = files[0] ?? null;
+			const candidate = files[0] ?? null;
+			if (candidate && (await validateFile(candidate))) {
+				file = candidate;
+			} else {
+				file = null;
+			}
 		}
 	}
 
-	function handleFileSelect(event: Event) {
+	async function handleFileSelect(event: Event) {
 		const input = event.target as HTMLInputElement;
 		if (input.files && input.files.length > 0) {
-			file = input.files[0] ?? null;
+			const candidate = input.files[0] ?? null;
+			if (candidate && (await validateFile(candidate))) {
+				file = candidate;
+			} else {
+				file = null;
+			}
 		}
 	}
 

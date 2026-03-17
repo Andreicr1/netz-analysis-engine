@@ -5,7 +5,7 @@
 <script lang="ts">
 	import { PageHeader, SectionCard, HeatmapTable, EmptyState } from "@netz/ui";
 	import { goto } from "$app/navigation";
-	import { page } from "$app/stores";
+	import { page } from "$app/state";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();

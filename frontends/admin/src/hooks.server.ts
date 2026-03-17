@@ -1,7 +1,7 @@
 /**
  * SvelteKit server hook — Clerk auth + SUPER_ADMIN guard + theme.
  */
-import { createClerkHook } from "@netz/ui/utils";
+import { createClerkHook, createThemeHook } from "@netz/ui/utils";
 import type { Actor } from "@netz/ui/utils";
 import type { Handle } from "@sveltejs/kit";
 import { redirect } from "@sveltejs/kit";
@@ -29,16 +29,6 @@ const adminGuardHook: Handle = async ({ event, resolve }) => {
 	return resolve(event);
 };
 
-const VALID_THEMES = new Set(["dark", "light"]);
-
-/** Inject data-theme attribute into SSR HTML to prevent FOUC. */
-const themeHook: Handle = async ({ event, resolve }) => {
-	const raw = event.cookies.get("netz-theme") || "light";
-	const theme = VALID_THEMES.has(raw) ? raw : "light";
-	return resolve(event, {
-		transformPageChunk: ({ html }) =>
-			html.replace('data-theme="light"', `data-theme="${theme}"`),
-	});
-};
+const themeHook: Handle = createThemeHook({ defaultTheme: "light" }) as Handle;
 
 export const handle: Handle = sequence(authHook, adminGuardHook, themeHook);

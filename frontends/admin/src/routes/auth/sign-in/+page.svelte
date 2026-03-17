@@ -2,9 +2,9 @@
   Clerk Sign In page for admin panel.
 -->
 <script lang="ts">
-	import { page } from "$app/stores";
+	import { page } from "$app/state";
 
-	const error = $page.url.searchParams.get("error");
+	const error = $derived(page.url.searchParams.get("error"));
 </script>
 
 <div class="flex min-h-screen items-center justify-center bg-[var(--netz-surface)]">

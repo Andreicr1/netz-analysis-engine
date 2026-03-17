@@ -1,6 +1,7 @@
 /** SSE client using fetch + ReadableStream (NOT EventSource — needs auth headers). */
 
 import type { NetzApiClient } from "./api-client.js";
+import { registerSSE, unregisterSSE } from "./sse-registry.svelte.js";
 
 export type SSEStatus = "connecting" | "connected" | "disconnected" | "error";
 
@@ -42,6 +43,7 @@ export function createSSEStream<T>(config: SSEConfig<T>): SSEConnection<T> {
 	let retryCount = 0;
 	let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
 	let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+	let registered = false;
 
 	function resetHeartbeat() {
 		if (heartbeatTimer) clearTimeout(heartbeatTimer);
@@ -69,6 +71,13 @@ export function createSSEStream<T>(config: SSEConfig<T>): SSEConnection<T> {
 
 	async function connect() {
 		disconnect();
+		if (!registerSSE()) {
+			status = "error";
+			error = new Error("SSE connection limit reached (max 4). Try closing other tabs.");
+			config.onError?.(error);
+			return;
+		}
+		registered = true;
 		status = "connecting";
 		error = null;
 		abortController = new AbortController();
@@ -145,6 +154,10 @@ export function createSSEStream<T>(config: SSEConfig<T>): SSEConnection<T> {
 
 	function disconnect() {
 		abortController?.abort();
+		if (registered) {
+			unregisterSSE();
+			registered = false;
+		}
 		abortController = null;
 		if (heartbeatTimer) clearTimeout(heartbeatTimer);
 		if (reconnectTimer) clearTimeout(reconnectTimer);
