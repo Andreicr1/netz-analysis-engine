@@ -22,11 +22,11 @@ def upgrade() -> None:
         CREATE POLICY org_isolation ON tenant_assets
             USING (
                 organization_id = (SELECT current_setting('app.current_organization_id', true))::uuid
-                OR current_setting('app.admin_mode', true) = 'true'
+                OR (SELECT current_setting('app.admin_mode', true)) = 'true'
             )
             WITH CHECK (
                 organization_id = (SELECT current_setting('app.current_organization_id', true))::uuid
-                OR current_setting('app.admin_mode', true) = 'true'
+                OR (SELECT current_setting('app.admin_mode', true)) = 'true'
             )
     """)
 
@@ -37,12 +37,12 @@ def upgrade() -> None:
             USING (
                 organization_id IS NULL
                 OR organization_id = (SELECT current_setting('app.current_organization_id', true))::uuid
-                OR current_setting('app.admin_mode', true) = 'true'
+                OR (SELECT current_setting('app.admin_mode', true)) = 'true'
             )
             WITH CHECK (
                 organization_id IS NULL
                 OR organization_id = (SELECT current_setting('app.current_organization_id', true))::uuid
-                OR current_setting('app.admin_mode', true) = 'true'
+                OR (SELECT current_setting('app.admin_mode', true)) = 'true'
             )
     """)
 
@@ -55,8 +55,22 @@ def upgrade() -> None:
                     SELECT id FROM prompt_overrides
                     WHERE organization_id IS NULL
                     OR organization_id = (SELECT current_setting('app.current_organization_id', true))::uuid
-                    OR current_setting('app.admin_mode', true) = 'true'
+                    OR (SELECT current_setting('app.admin_mode', true)) = 'true'
                 )
+            )
+    """)
+
+    # vertical_config_overrides — CRITICAL: missing from original, blocks all config admin ops
+    op.execute("DROP POLICY IF EXISTS org_isolation ON vertical_config_overrides")
+    op.execute("""
+        CREATE POLICY org_isolation ON vertical_config_overrides
+            USING (
+                organization_id = (SELECT current_setting('app.current_organization_id', true))::uuid
+                OR (SELECT current_setting('app.admin_mode', true)) = 'true'
+            )
+            WITH CHECK (
+                organization_id = (SELECT current_setting('app.current_organization_id', true))::uuid
+                OR (SELECT current_setting('app.admin_mode', true)) = 'true'
             )
     """)
 
@@ -78,12 +92,21 @@ def upgrade() -> None:
     op.execute("""
         CREATE OR REPLACE FUNCTION notify_config_change() RETURNS trigger AS $$
         BEGIN
-            PERFORM pg_notify('config_changed', json_build_object(
-                'vertical', COALESCE(NEW.vertical, OLD.vertical),
-                'config_type', COALESCE(NEW.config_type, OLD.config_type),
-                'organization_id', COALESCE(NEW.organization_id, OLD.organization_id)::text
-            )::text);
-            RETURN NEW;
+            IF TG_OP = 'DELETE' THEN
+                PERFORM pg_notify('config_changed', json_build_object(
+                    'vertical', OLD.vertical,
+                    'config_type', OLD.config_type,
+                    'organization_id', OLD.organization_id::text
+                )::text);
+                RETURN OLD;
+            ELSE
+                PERFORM pg_notify('config_changed', json_build_object(
+                    'vertical', NEW.vertical,
+                    'config_type', NEW.config_type,
+                    'organization_id', NEW.organization_id::text
+                )::text);
+                RETURN NEW;
+            END IF;
         END;
         $$ LANGUAGE plpgsql;
     """)
@@ -134,4 +157,11 @@ def downgrade() -> None:
                     OR organization_id = (SELECT current_setting('app.current_organization_id', true))::uuid
                 )
             )
+    """)
+
+    # Restore vertical_config_overrides to original policy (without admin bypass)
+    op.execute("DROP POLICY IF EXISTS org_isolation ON vertical_config_overrides")
+    op.execute("""
+        CREATE POLICY org_isolation ON vertical_config_overrides
+            USING (organization_id = (SELECT current_setting('app.current_organization_id'))::uuid)
     """)

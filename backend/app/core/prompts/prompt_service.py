@@ -64,7 +64,7 @@ _BLOCKED_ATTRS: frozenset[str] = frozenset({
 _ALLOWED_FILTERS: frozenset[str] = frozenset({
     "default", "upper", "lower", "title", "trim", "round",
     "int", "float", "length", "join", "sort", "reverse",
-    "e", "escape", "safe", "string", "list",
+    "e", "escape", "string", "list",
 })
 
 
