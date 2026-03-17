@@ -6,12 +6,14 @@
 	import {
 		StatusBadge, EmptyState, TimeSeriesChart, PageHeader,
 		PeriodSelector, RegimeBanner, SectionCard, AlertFeed,
+		createSSEStream,
 		type WealthAlert,
 	} from "@netz/ui";
 	import PortfolioCard from "$lib/components/PortfolioCard.svelte";
 	import { regimeLabels } from "$lib/constants/regime";
 	import type { PageData } from "./$types";
 	import type { RegimeData } from "$lib/types/api";
+	import { getContext } from "svelte";
 
 	let { data }: { data: PageData } = $props();
 
@@ -103,8 +105,28 @@
 	const periods = ["1M", "3M", "YTD", "1Y", "3Y"];
 	let selectedPeriod = $state("YTD");
 
+	// SSE token accessor provided by layout
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
+
 	// Risk alerts — capped at 50 entries
 	let riskAlerts = $state<WealthAlert[]>([]);
+
+	// SSE subscription for risk alerts — lazy connect, auto-cleanup
+	$effect(() => {
+		const stream = createSSEStream<WealthAlert>({
+			url: `${import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1"}/risk/stream`,
+			getToken,
+			onEvent: (event) => {
+				// Cap at 50 entries to prevent unbounded growth
+				riskAlerts = [...riskAlerts.slice(-49), event];
+			},
+			onError: (err) => {
+				console.warn("SSE risk stream error:", err);
+			},
+		});
+		stream.connect();
+		return () => stream.disconnect();
+	});
 
 	// Current regime
 	const currentRegime = $derived(
