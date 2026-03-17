@@ -4,12 +4,32 @@
 <script lang="ts">
 	import { Card, StatusBadge, Button } from "@netz/ui";
 	import type { PageData } from "./$types";
-	import type { ReviewDetail, ReviewChecklist, ReviewAssignment, ChecklistItem } from "$lib/types/api";
+	import type { ReviewDetail, ReviewChecklist } from "$lib/types/api";
+	import { createClientApiClient } from "$lib/api/client";
+	import { invalidateAll } from "$app/navigation";
+	import { getContext } from "svelte";
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let { data }: { data: PageData } = $props();
 
 	let review = $derived(data.review as ReviewDetail);
 	let checklist = $derived((data.checklist as ReviewChecklist)?.items ?? []);
+	let loading = $state(false);
+
+	async function submitDecision(decision: "APPROVED" | "REJECTED" | "REVISION_REQUESTED") {
+		loading = true;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post(`/funds/${data.fundId}/document-reviews/${data.reviewId}/decide`, {
+				decision,
+				comments: null,
+			});
+			await invalidateAll();
+		} finally {
+			loading = false;
+		}
+	}
 </script>
 
 <div class="p-6">
@@ -20,11 +40,16 @@
 			</h2>
 			<StatusBadge status={String(review.status)} type="review" />
 		</div>
-		<!-- Review decision buttons — backend endpoints not yet implemented (gap: no POST /reviews/{id}/decision route) -->
 		<div class="flex gap-2">
-			<Button variant="outline" disabled>Approve</Button>
-			<Button variant="outline" disabled>Reject</Button>
-			<Button variant="outline" disabled>Request Revision</Button>
+			<Button variant="outline" onclick={() => submitDecision("APPROVED")} disabled={loading}>
+				{loading ? "..." : "Approve"}
+			</Button>
+			<Button variant="outline" onclick={() => submitDecision("REJECTED")} disabled={loading}>
+				{loading ? "..." : "Reject"}
+			</Button>
+			<Button variant="outline" onclick={() => submitDecision("REVISION_REQUESTED")} disabled={loading}>
+				{loading ? "..." : "Request Revision"}
+			</Button>
 		</div>
 	</div>
 
