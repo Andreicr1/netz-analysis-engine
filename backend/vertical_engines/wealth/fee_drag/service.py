@@ -52,10 +52,14 @@ class FeeDragService:
     ) -> FeeDragResult:
         """Compute fee drag for a single instrument.
 
-        Fee data is extracted from JSONB attributes per instrument type:
-        - fund: management_fee_pct, performance_fee_pct
-        - bond: bid_ask_spread_pct
-        - equity: brokerage_fee_pct
+        Fee data is extracted from JSONB attributes. management_fee_pct and
+        performance_fee_pct are read for ALL instrument types. Additionally:
+        - bond: bid_ask_spread_pct (added as other_fees)
+        - equity: brokerage_fee_pct (added as other_fees)
+
+        Note: performance_fee_pct represents the annualized estimated fee drag
+        from performance fees in percentage points — not the headline rate
+        (e.g., store 4.0 for a "20% of alpha" fee estimated at 4pp drag).
 
         Args:
             instrument_id: UUID of the instrument.
@@ -137,22 +141,23 @@ class FeeDragService:
                 results=(),
             )
 
-        # Compute weighted aggregates
+        # Compute weighted aggregates — normalize to equal-weight if weights
+        # are absent or sum to zero
         n = len(results)
         if weights:
             total_weight = sum(weights.get(r.instrument_id, 0.0) for r in results)
-            if total_weight > 0:
-                w_gross = sum(
-                    r.gross_expected_return * weights.get(r.instrument_id, 0.0)
-                    for r in results
-                ) / total_weight
-                w_net = sum(
-                    r.net_expected_return * weights.get(r.instrument_id, 0.0)
-                    for r in results
-                ) / total_weight
-            else:
-                w_gross = sum(r.gross_expected_return for r in results) / n
-                w_net = sum(r.net_expected_return for r in results) / n
+            if total_weight == 0:
+                weights = None
+
+        if weights:
+            w_gross = sum(
+                r.gross_expected_return * weights.get(r.instrument_id, 0.0)
+                for r in results
+            ) / total_weight
+            w_net = sum(
+                r.net_expected_return * weights.get(r.instrument_id, 0.0)
+                for r in results
+            ) / total_weight
         else:
             w_gross = sum(r.gross_expected_return for r in results) / n
             w_net = sum(r.net_expected_return for r in results) / n
