@@ -8,7 +8,8 @@
 		<script>
 			// FOUC prevention — set theme before first paint
 			(function() {
-				var theme = localStorage.getItem('netz-theme') || 'dark';
+				var theme = localStorage.getItem('netz-theme');
+				if (theme !== 'dark' && theme !== 'light') theme = 'dark';
 				document.documentElement.setAttribute('data-theme', theme);
 			})();
 		</script>
