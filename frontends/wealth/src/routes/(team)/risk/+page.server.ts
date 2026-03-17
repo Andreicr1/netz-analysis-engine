@@ -1,4 +1,4 @@
-/** Risk Monitor — CVaR status, history, regime, and macro for all profiles. */
+/** Risk Monitor — CVaR status, history, regime, macro, and drift alerts. */
 import type { PageServerLoad } from "./$types";
 import { createServerApiClient } from "$lib/api/client";
 
@@ -8,15 +8,16 @@ export const load: PageServerLoad = async ({ parent }) => {
 
 	const profiles = ["conservative", "moderate", "growth"];
 
-	const [regime, regimeHistory, macro, ...cvarResults] = await Promise.allSettled([
+	// Single batch: regime, macro, drift + per-profile CVaR status + history
+	const [regime, regimeHistory, macro, driftAlerts, ...cvarResults] = await Promise.allSettled([
 		api.get("/risk/regime"),
 		api.get("/risk/regime/history"),
 		api.get("/risk/macro"),
+		api.get("/wealth/analytics/strategy-drift/alerts?is_current=true"),
 		...profiles.map((p) => api.get(`/risk/${p}/cvar`)),
 		...profiles.map((p) => api.get(`/risk/${p}/cvar/history`)),
 	]);
 
-	// Unpack CVaR status + history per profile
 	const cvarByProfile: Record<string, unknown> = {};
 	const cvarHistoryByProfile: Record<string, unknown> = {};
 	profiles.forEach((name, i) => {
@@ -34,6 +35,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 		regime: regime.status === "fulfilled" ? regime.value : null,
 		regimeHistory: regimeHistory.status === "fulfilled" ? regimeHistory.value : null,
 		macro: macro.status === "fulfilled" ? macro.value : null,
+		driftAlerts: driftAlerts.status === "fulfilled" ? driftAlerts.value : null,
 		cvarByProfile,
 		cvarHistoryByProfile,
 	};
