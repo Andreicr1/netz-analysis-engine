@@ -197,3 +197,29 @@ async def trigger_run_screening_batch(
     org_id = user.organization_id
     background_tasks.add_task(run_screening_batch, org_id)
     return WorkerScheduledResponse(status="scheduled", worker="run-screening-batch")
+
+
+@router.post(
+    "/run-benchmark-ingest",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger benchmark NAV ingestion",
+    description=(
+        "Schedules the benchmark NAV ingestion worker as a background task. "
+        "Downloads benchmark index data from Yahoo Finance for all allocation "
+        "blocks with a benchmark_ticker, and upserts into benchmark_nav (global). "
+        "Uses advisory lock 900_004 to prevent concurrent runs. Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_benchmark_ingest(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.benchmark_ingest import run_benchmark_ingest
+
+    background_tasks.add_task(run_benchmark_ingest)
+    return WorkerScheduledResponse(status="scheduled", worker="run-benchmark-ingest")

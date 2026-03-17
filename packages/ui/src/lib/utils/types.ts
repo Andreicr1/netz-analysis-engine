@@ -1,4 +1,4 @@
-/** Navigation item for Sidebar component. */
+/** Navigation item for TopNav / Sidebar / ContextSidebar components. */
 export interface NavItem {
 	label: string;
 	href: string;
@@ -16,6 +16,8 @@ export interface BrandingConfig {
 	highlight_color: string;
 	surface_color: string;
 	surface_alt_color: string;
+	surface_elevated_color: string | null;
+	surface_inset_color: string | null;
 	border_color: string;
 	text_primary: string;
 	text_secondary: string;
@@ -27,4 +29,12 @@ export interface BrandingConfig {
 	favicon_url: string | null;
 	org_name: string;
 	org_slug: string;
+}
+
+/** Context navigation for detail pages (fund, portfolio). */
+export interface ContextNav {
+	backHref: string;
+	backLabel: string;
+	items: NavItem[];
+	activeHref: string;
 }

@@ -93,7 +93,7 @@
 	{#if activeTab === "strategic"}
 		{#if strategic.length > 0}
 			<div class="grid gap-4 lg:grid-cols-2">
-				<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5">
+				<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
 					<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Strategic Weights</h3>
 					<div class="space-y-3">
 						{#each strategic as row (row.block)}
@@ -113,7 +113,7 @@
 						{/each}
 					</div>
 				</div>
-				<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5">
+				<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
 					<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Distribution</h3>
 					<div class="h-64">
 						<BarChart data={strategicChartData} orientation="horizontal" />
@@ -128,7 +128,7 @@
 	<!-- Tactical View -->
 	{#if activeTab === "tactical"}
 		{#if tactical.length > 0}
-			<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5">
+			<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
 				<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Tactical Positions</h3>
 				<div class="space-y-3">
 					{#each tactical as pos (pos.block)}
@@ -157,7 +157,7 @@
 	{#if activeTab === "effective"}
 		{#if effective.length > 0}
 			<div class="grid gap-4 lg:grid-cols-2">
-				<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5">
+				<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
 					<div class="mb-4 flex items-center justify-between">
 						<h3 class="text-sm font-semibold text-[var(--netz-text-primary)]">Effective Allocation</h3>
 						<span class="text-xs text-[var(--netz-text-muted)]">
@@ -185,7 +185,7 @@
 						{/each}
 					</div>
 				</div>
-				<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5">
+				<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
 					<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Distribution</h3>
 					<div class="h-64">
 						<BarChart data={effectiveChartData} orientation="horizontal" />

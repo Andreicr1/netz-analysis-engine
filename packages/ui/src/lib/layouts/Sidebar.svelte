@@ -156,8 +156,8 @@
 	}
 
 	.netz-sidebar__item--active {
-		background: color-mix(in srgb, var(--netz-primary, #2563eb) 10%, transparent);
-		color: var(--netz-primary, #2563eb);
+		background: color-mix(in srgb, var(--netz-brand-primary, #2563eb) 10%, transparent);
+		color: var(--netz-brand-primary, #2563eb);
 		font-weight: 600;
 	}
 
@@ -188,7 +188,7 @@
 		font-weight: 600;
 		padding: 1px 6px;
 		border-radius: 9999px;
-		background: var(--netz-primary, #2563eb);
+		background: var(--netz-brand-primary, #2563eb);
 		color: #ffffff;
 		line-height: 1.4;
 	}

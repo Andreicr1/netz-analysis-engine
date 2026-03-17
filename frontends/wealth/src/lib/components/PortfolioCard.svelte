@@ -53,11 +53,11 @@
 	}
 
 	// CVaR gauge thresholds
-	let gaugeThresholds = $derived([
-		{ value: 70, color: "var(--netz-success, #22c55e)" },
-		{ value: 90, color: "var(--netz-warning, #f59e0b)" },
-		{ value: 100, color: "var(--netz-danger, #ef4444)" },
-	]);
+	const gaugeThresholds = [
+		{ value: 70, color: "var(--netz-success)" },
+		{ value: 90, color: "var(--netz-warning)" },
+		{ value: 100, color: "var(--netz-danger)" },
+	];
 
 	let ytdColor = $derived(
 		ytdReturn === null ? "var(--netz-text-secondary)" :
@@ -65,16 +65,10 @@
 		"var(--netz-danger, #ef4444)"
 	);
 
-	// Regime display name mapping
-	const regimeLabels: Record<string, string> = {
-		RISK_ON: "Risk On",
-		RISK_OFF: "Risk Off",
-		INFLATION: "Inflation",
-		CRISIS: "Crisis",
-	};
+	import { regimeLabels } from "$lib/constants/regime";
 </script>
 
-<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5 shadow-sm">
+<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5 shadow-sm">
 	<!-- Header -->
 	<div class="mb-4 flex items-center justify-between">
 		<div>

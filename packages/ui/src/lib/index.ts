@@ -31,11 +31,21 @@ export { default as ConnectionLost } from "./components/ConnectionLost.svelte";
 export { default as BackendUnavailable } from "./components/BackendUnavailable.svelte";
 export { default as Toast } from "./components/Toast.svelte";
 export { default as PageTabs } from "./components/PageTabs.svelte";
+export { default as MetricCard } from "./components/MetricCard.svelte";
+export { default as UtilizationBar } from "./components/UtilizationBar.svelte";
+export { default as RegimeBanner } from "./components/RegimeBanner.svelte";
+export { default as AlertFeed } from "./components/AlertFeed.svelte";
+export type { WealthAlert } from "./components/AlertFeed.svelte";
+export { default as SectionCard } from "./components/SectionCard.svelte";
+export { default as HeatmapTable } from "./components/HeatmapTable.svelte";
+export { default as PeriodSelector } from "./components/PeriodSelector.svelte";
 
 // ── Layouts ─────────────────────────────────────────────────
 export { default as AppLayout } from "./layouts/AppLayout.svelte";
 export { default as AppShell } from "./layouts/AppShell.svelte";
 export { default as Sidebar } from "./layouts/Sidebar.svelte";
+export { default as TopNav } from "./layouts/TopNav.svelte";
+export { default as ContextSidebar } from "./layouts/ContextSidebar.svelte";
 export { default as ContextPanel } from "./layouts/ContextPanel.svelte";
 export { default as InvestorShell } from "./layouts/InvestorShell.svelte";
 export { default as PageHeader } from "./layouts/PageHeader.svelte";
@@ -55,7 +65,7 @@ export type { BaseChartProps } from "./charts/index.js";
 
 // ── Utilities ───────────────────────────────────────────────
 export { cn } from "./utils/cn.js";
-export type { NavItem, BrandingConfig } from "./utils/types.js";
+export type { NavItem, BrandingConfig, ContextNav } from "./utils/types.js";
 export {
 	NetzApiClient,
 	AuthError,
@@ -82,6 +92,7 @@ export {
 } from "./utils/format.js";
 export {
 	defaultBranding,
+	defaultDarkBranding,
 	brandingToCSS,
 	injectBranding,
 } from "./utils/branding.js";

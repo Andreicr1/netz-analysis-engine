@@ -49,7 +49,7 @@
 		/>
 	{:else}
 		{#each portfolios as portfolio (portfolio.id)}
-			<div class="rounded-lg border border-[var(--netz-border)] bg-white shadow-sm">
+			<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] shadow-sm">
 				<!-- Header -->
 				<div class="border-b border-[var(--netz-border)] px-6 py-4">
 					<h2 class="text-lg font-semibold text-[var(--netz-text-primary)]">{portfolio.display_name}</h2>

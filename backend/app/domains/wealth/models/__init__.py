@@ -1,5 +1,6 @@
 from app.domains.wealth.models.allocation import StrategicAllocation, TacticalPosition
 from app.domains.wealth.models.backtest import BacktestRun
+from app.domains.wealth.models.benchmark_nav import BenchmarkNav
 from app.domains.wealth.models.block import AllocationBlock
 from app.domains.wealth.models.content import WealthContent
 from app.domains.wealth.models.dd_report import DDChapter, DDReport
@@ -14,11 +15,13 @@ from app.domains.wealth.models.rebalance import RebalanceEvent
 from app.domains.wealth.models.risk import FundRiskMetrics
 from app.domains.wealth.models.screening_metrics import InstrumentScreeningMetrics
 from app.domains.wealth.models.screening_result import ScreeningResult, ScreeningRun
+from app.domains.wealth.models.strategy_drift_alert import StrategyDriftAlert
 from app.domains.wealth.models.universe_approval import UniverseApproval
 
 __all__ = [
     "AllocationBlock",
     "BacktestRun",
+    "BenchmarkNav",
     "DDChapter",
     "DDReport",
     "Fund",
@@ -33,6 +36,7 @@ __all__ = [
     "RebalanceEvent",
     "ScreeningResult",
     "ScreeningRun",
+    "StrategyDriftAlert",
     "StrategicAllocation",
     "TacticalPosition",
     "UniverseApproval",

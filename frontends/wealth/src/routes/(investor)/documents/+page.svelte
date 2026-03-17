@@ -31,7 +31,7 @@
 	{:else}
 		<div class="space-y-3">
 			{#each documents as doc (doc.id)}
-				<div class="flex items-center justify-between rounded-lg border border-[var(--netz-border)] bg-white p-5 shadow-sm">
+				<div class="flex items-center justify-between rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5 shadow-sm">
 					<div class="flex-1">
 						<p class="font-medium text-[var(--netz-text-primary)]">
 							{doc.title ?? doc.content_type}

@@ -14,8 +14,8 @@
 		matrix,
 		xLabels,
 		yLabels,
-		minColor = "#EFF6FF",
-		maxColor = "#1E40AF",
+		minColor = "var(--netz-surface-alt, #EFF6FF)",
+		maxColor = "var(--netz-brand-primary, #1E40AF)",
 		...rest
 	}: HeatmapChartProps = $props();
 

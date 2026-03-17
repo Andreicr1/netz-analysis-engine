@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from "svelte";
-	import { echarts } from "./echarts-setup.js";
+	import { echarts, initTheme } from "./echarts-setup.js";
 	import { cn } from "../utils/cn.js";
 
 	export interface BaseChartProps {
@@ -31,31 +31,13 @@
 	let containerEl: HTMLDivElement | undefined = $state();
 	let chart: ReturnType<typeof echarts.init> | undefined = $state();
 
-	function readCSSPalette(): string[] {
-		if (typeof document === "undefined") return [];
-		const style = getComputedStyle(document.documentElement);
-		const colors: string[] = [];
-		for (let i = 1; i <= 5; i++) {
-			const c = style.getPropertyValue(`--netz-chart-${i}`).trim();
-			if (c) colors.push(c);
-		}
-		return colors;
-	}
-
-	function buildTheme(colors: string[]): Record<string, unknown> {
-		return {
-			color: colors.length > 0 ? colors : ["#0F172A", "#3B82F6", "#10B981", "#F59E0B", "#EF4444"],
-		};
-	}
-
 	onMount(() => {
 		if (!containerEl) return;
 
-		const themePalette = palette ?? readCSSPalette();
-		const themeName = "netz-theme";
-		echarts.registerTheme(themeName, buildTheme(themePalette));
+		// Global theme registered once in echarts-setup.ts with MutationObserver
+		initTheme();
 
-		chart = echarts.init(containerEl, themeName, { renderer: "canvas" });
+		chart = echarts.init(containerEl, "netz-theme", { renderer: "canvas" });
 
 		const ro = new ResizeObserver(() => {
 			chart?.resize();
@@ -81,14 +63,14 @@
 	style="height: {height}px"
 >
 	{#if loading}
-		<div class="absolute inset-0 z-10 flex items-center justify-center bg-white/80 dark:bg-zinc-900/80">
-			<div class="h-8 w-8 animate-spin rounded-full border-4 border-zinc-200 border-t-blue-600"></div>
+		<div class="absolute inset-0 z-10 flex items-center justify-center bg-[var(--netz-surface)]/80">
+			<div class="h-8 w-8 animate-spin rounded-full border-4 border-[var(--netz-border)] border-t-[var(--netz-brand-secondary)]"></div>
 		</div>
 	{/if}
 
 	{#if empty && !loading}
 		<div class="absolute inset-0 z-10 flex items-center justify-center">
-			<p class="text-sm text-zinc-500 dark:text-zinc-400">{emptyMessage}</p>
+			<p class="text-sm text-[var(--netz-text-muted)]">{emptyMessage}</p>
 		</div>
 	{/if}
 
