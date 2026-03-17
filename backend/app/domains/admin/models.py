@@ -111,3 +111,22 @@ class PromptOverrideVersion(Base, IdMixin):
         back_populates="versions",
         lazy="raise",
     )
+
+
+class AdminAuditLog(Base, IdMixin):
+    """Immutable admin audit trail. No RLS — cross-tenant by design."""
+
+    __tablename__ = "admin_audit_log"
+
+    actor_id: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    resource_type: Mapped[str] = mapped_column(Text, nullable=False)
+    resource_id: Mapped[str] = mapped_column(Text, nullable=False)
+    target_org_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), nullable=True, index=True
+    )
+    before_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    after_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

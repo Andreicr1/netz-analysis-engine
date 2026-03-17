@@ -125,6 +125,7 @@ let _lastBranding: BrandingConfig | null = null;
  * Sanitizes all values before injection.
  */
 export function injectBranding(element: HTMLElement, config: BrandingConfig): void {
+	if (!config) return;
 	if (config === _lastBranding) return;
 	_lastBranding = config;
 

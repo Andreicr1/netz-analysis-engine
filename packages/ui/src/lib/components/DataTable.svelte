@@ -2,12 +2,12 @@
 	import { cn } from "../utils/cn.js";
 	import type { Snippet } from "svelte";
 	import {
-		createSvelteTable,
+		createTable,
+		FlexRender,
 		getCoreRowModel,
 		getSortedRowModel,
 		getFilteredRowModel,
 		getPaginationRowModel,
-		flexRender,
 		type ColumnDef,
 		type SortingState,
 		type ColumnFiltersState,
@@ -37,12 +37,12 @@
 	let sorting = $state<SortingState>([]);
 	let columnFilters = $state<ColumnFiltersState>([]);
 
-	let options = $derived<TableOptions<Record<string, unknown>>>({
-		data,
-		columns,
+	let table = $derived(createTable({
+		get data() { return data; },
+		get columns() { return columns; },
 		state: {
-			sorting,
-			columnFilters,
+			get sorting() { return sorting; },
+			get columnFilters() { return columnFilters; },
 		},
 		onSortingChange: (updater) => {
 			sorting = typeof updater === "function" ? updater(sorting) : updater;
@@ -58,31 +58,10 @@
 		initialState: {
 			pagination: { pageSize },
 		},
-	});
-
-	let tableStore = $derived(createSvelteTable(options));
-
-	/* Unwrap the Readable store via Svelte 5 $derived + subscribe */
-	let tableInstance = $state<ReturnType<typeof unwrapStore> | null>(null);
-
-	function unwrapStore(store: typeof tableStore) {
-		let value: any;
-		const unsub = store.subscribe((v: any) => { value = v; });
-		unsub();
-		return value;
-	}
-
-	$effect(() => {
-		const unsub = tableStore.subscribe((v: any) => {
-			tableInstance = v;
-		});
-		return unsub;
-	});
+	}));
 </script>
 
-{#if tableInstance}
-	{@const table = tableInstance}
-	<div class={cn("w-full", className)}>
+<div class={cn("w-full", className)}>
 		<!-- Toolbar -->
 		{#if toolbar}
 			{@render toolbar(table)}
@@ -120,12 +99,7 @@
 														header.column.getIsSorted() === "asc",
 													)}
 											>
-												<svelte:component
-													this={flexRender(
-														header.column.columnDef.header,
-														header.getContext(),
-													)}
-												/>
+												<FlexRender content={header.column.columnDef.header} context={header.getContext()} />
 												{#if header.column.getIsSorted() === "asc"}
 													<svg
 														xmlns="http://www.w3.org/2000/svg"
@@ -165,12 +139,7 @@
 												{/if}
 											</button>
 										{:else}
-											<svelte:component
-												this={flexRender(
-													header.column.columnDef.header,
-													header.getContext(),
-												)}
-											/>
+<FlexRender content={header.column.columnDef.header} context={header.getContext()} />
 										{/if}
 									{/if}
 								</th>
@@ -185,12 +154,7 @@
 						>
 							{#each row.getVisibleCells() as cell}
 								<td class="px-4 py-3 align-middle text-[var(--netz-text-primary)]">
-									<svelte:component
-										this={flexRender(
-											cell.column.columnDef.cell,
-											cell.getContext(),
-										)}
-									/>
+									<FlexRender content={cell.column.columnDef.cell} context={cell.getContext()} />
 								</td>
 							{/each}
 						</tr>
@@ -276,4 +240,3 @@
 			</div>
 		{/if}
 	</div>
-{/if}

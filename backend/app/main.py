@@ -24,6 +24,10 @@ from app.core.security.clerk_auth import Actor, get_actor
 # ── Admin domain routers ─────────────────────────────────────
 from app.domains.admin.routes.assets import router as admin_assets_router
 from app.domains.admin.routes.branding import router as admin_branding_router
+from app.domains.admin.routes.configs import router as admin_configs_router
+from app.domains.admin.routes.health import router as admin_health_router
+from app.domains.admin.routes.prompts import router as admin_prompts_router
+from app.domains.admin.routes.tenants import router as admin_tenants_router
 
 # Actions
 from app.domains.credit.actions.routes.actions import router as credit_actions_router
@@ -160,8 +164,32 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.app_env,
     )
     await _verify_config_completeness()
+
+    # Start PgNotifier for config cache invalidation
+    from app.core.config.config_service import ConfigService
+    from app.core.config.pg_notify import PgNotifier
+
+    pg_notifier: PgNotifier | None = None
+    if settings.database_url:
+        # Convert async URL to sync for asyncpg (remove +asyncpg suffix)
+        raw_dsn = settings.database_url.replace("postgresql+asyncpg://", "postgresql://")
+        pg_notifier = PgNotifier(raw_dsn)
+
+        def _on_config_changed(data: dict) -> None:
+            ConfigService.invalidate(
+                data.get("vertical", ""),
+                data.get("config_type", ""),
+                data.get("organization_id"),
+            )
+
+        pg_notifier.subscribe("config_changed", _on_config_changed)
+        await pg_notifier.start()
+        logger.info("PgNotifier started — listening for config changes")
+
     yield
     # Cleanup
+    if pg_notifier:
+        await pg_notifier.stop()
     await engine.dispose()
     await close_redis_pool()
     logger.info("Netz Analysis Engine shutdown complete")
@@ -236,6 +264,10 @@ async def test_emit_event(job_id: str, event_type: str = "test", message: str = 
 
 api_v1.include_router(admin_branding_router)
 api_v1.include_router(admin_assets_router)
+api_v1.include_router(admin_configs_router)
+api_v1.include_router(admin_tenants_router)
+api_v1.include_router(admin_prompts_router)
+api_v1.include_router(admin_health_router)
 
 # ── Mount wealth domain routes ───────────────────────────────
 

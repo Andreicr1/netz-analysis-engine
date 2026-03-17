@@ -96,5 +96,5 @@ export {
 	brandingToCSS,
 	injectBranding,
 } from "./utils/branding.js";
-export { createClerkHook, createRootLayoutLoader, startSessionExpiryMonitor } from "./utils/auth.js";
-export type { ClerkHookOptions, RootLayoutLoaderOptions } from "./utils/auth.js";
+export { createClerkHook, startSessionExpiryMonitor } from "./utils/auth.js";
+export type { ClerkHookOptions } from "./utils/auth.js";

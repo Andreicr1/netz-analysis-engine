@@ -190,6 +190,16 @@ export class NetzApiClient {
 		return handleResponse<T>(res);
 	}
 
+	async put<T>(path: string, body?: unknown): Promise<T> {
+		const res = await fetch(buildUrl(this.baseUrl, path), {
+			method: "PUT",
+			headers: await this.headers(),
+			body: body !== undefined ? JSON.stringify(body) : undefined,
+			signal: AbortSignal.timeout(this.timeoutMs),
+		});
+		return handleResponse<T>(res);
+	}
+
 	async patch<T>(path: string, body?: unknown): Promise<T> {
 		const res = await fetch(buildUrl(this.baseUrl, path), {
 			method: "PATCH",

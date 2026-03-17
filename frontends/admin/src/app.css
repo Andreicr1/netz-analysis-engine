@@ -1,0 +1,3 @@
+/* Import @netz/ui design tokens + base reset */
+@import "@netz/ui/styles";
+@import "tailwindcss";
