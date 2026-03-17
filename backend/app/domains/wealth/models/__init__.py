@@ -15,6 +15,7 @@ from app.domains.wealth.models.rebalance import RebalanceEvent
 from app.domains.wealth.models.risk import FundRiskMetrics
 from app.domains.wealth.models.screening_metrics import InstrumentScreeningMetrics
 from app.domains.wealth.models.screening_result import ScreeningResult, ScreeningRun
+from app.domains.wealth.models.strategy_drift_alert import StrategyDriftAlert
 from app.domains.wealth.models.universe_approval import UniverseApproval
 
 __all__ = [
@@ -35,6 +36,7 @@ __all__ = [
     "RebalanceEvent",
     "ScreeningResult",
     "ScreeningRun",
+    "StrategyDriftAlert",
     "StrategicAllocation",
     "TacticalPosition",
     "UniverseApproval",

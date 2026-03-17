@@ -86,6 +86,7 @@ from app.domains.wealth.routes.model_portfolios import router as wealth_model_po
 from app.domains.wealth.routes.portfolios import router as wealth_portfolios_router
 from app.domains.wealth.routes.risk import router as wealth_risk_router
 from app.domains.wealth.routes.screener import router as wealth_screener_router
+from app.domains.wealth.routes.strategy_drift import router as wealth_strategy_drift_router
 from app.domains.wealth.routes.universe import router as wealth_universe_router
 from app.domains.wealth.routes.workers import router as wealth_workers_router
 
@@ -249,6 +250,7 @@ api_v1.include_router(wealth_model_portfolios_router)
 api_v1.include_router(wealth_fact_sheets_router)
 api_v1.include_router(wealth_content_router)
 api_v1.include_router(wealth_screener_router)
+api_v1.include_router(wealth_strategy_drift_router)
 
 # ── Mount credit domain routes ───────────────────────────────
 
