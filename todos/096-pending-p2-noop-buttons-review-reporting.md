@@ -1,5 +1,5 @@
 ---
-status: pending
+status: done
 priority: p2
 issue_id: "096"
 tags: [code-review, bug, frontend, credit, agent-parity]
@@ -53,6 +53,16 @@ The credit frontend has 6 buttons wired to empty `onclick={() => {}}` handlers. 
 ### 2026-03-16 - Code Review Discovery
 
 **By:** Agent-Native Reviewer (ce:review PRs #37-#45)
+
+### 2026-03-16 - Resolution
+
+**By:** Claude Code
+
+**Actions:**
+- Wired 4 reporting buttons to backend endpoints: Create NAV Snapshot → `POST /funds/{fund_id}/reports/nav/snapshots`, Generate Report Pack → `POST /funds/{fund_id}/report-packs`, Export JSON → `POST /funds/{fund_id}/reports/evidence-pack`, Export PDF → `POST /funds/{fund_id}/reports/evidence-pack/pdf`
+- All use `getContext("netz:getToken")` + `createClientApiClient` + `invalidateAll()` pattern
+- Review decision buttons (Approve/Reject/Request Revision): backend has NO review decision endpoints — buttons set to `disabled` with HTML comment documenting the gap
+- Loading states added to all wired buttons
 
 ## Resources
 

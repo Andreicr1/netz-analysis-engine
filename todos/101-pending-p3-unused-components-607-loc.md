@@ -1,5 +1,5 @@
 ---
-status: pending
+status: done
 priority: p3
 issue_id: "101"
 tags: [code-review, simplicity, cleanup, frontend]
@@ -92,3 +92,13 @@ Delete 3 items (~159 LOC). Update barrel exports in `packages/ui/src/lib/index.t
 
 - **PRs:** #37, #38 (Phases A, A.11)
 - **PR #46:** Resolved createClerkHook stub, injectBranding now actively used
+
+### 2026-03-16 - Resolution
+
+**By:** Claude Code
+
+**Actions:**
+- Deleted `DataTableColumnHeader.svelte` (56 LOC) and `DataTablePagination.svelte` (73 LOC)
+- Removed `getBrandingFromCSS()` from `branding.ts` (~30 LOC)
+- Updated barrel exports in `packages/ui/src/lib/index.ts` and `packages/ui/src/lib/utils/index.ts`
+- Verified zero broken imports across packages/ and frontends/
