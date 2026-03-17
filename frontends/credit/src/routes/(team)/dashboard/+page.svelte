@@ -27,7 +27,7 @@
 			<DataCard
 				label="Deals Awaiting IC"
 				value={String(pipeline?.pending_ic ?? 0)}
-				trend={pipeline?.pending_ic_trend as string ?? "flat"}
+				trend={(pipeline?.pending_ic_trend as "up" | "down" | "flat") ?? "flat"}
 			/>
 			<DataCard
 				label="Documents Pending Review"
@@ -59,7 +59,7 @@
 		<div class="grid gap-4 lg:grid-cols-3">
 			<div class="lg:col-span-1">
 				{#if analytics}
-					<PipelineFunnel data={analytics} />
+					<PipelineFunnel data={analytics as unknown as Record<string, unknown>} />
 				{:else}
 					<EmptyState title="No Pipeline Data" description="Pipeline analytics will appear here." />
 				{/if}
@@ -68,7 +68,7 @@
 				<DataCard
 					label="Total AUM"
 					value={String(portfolio?.total_aum ?? "—")}
-					trend={portfolio?.aum_trend as string ?? "flat"}
+					trend={(portfolio?.aum_trend as "up" | "down" | "flat") ?? "flat"}
 				/>
 				<DataCard
 					label="Active Loans"
