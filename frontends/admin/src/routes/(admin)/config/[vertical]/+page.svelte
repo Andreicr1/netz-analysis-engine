@@ -1,5 +1,5 @@
 <!--
-  Config Editor — JSON config editor with guardrail validation and diff viewer.
+  Config Editor — JSON config editor with guardrail validation, diff viewer, and invalid overrides.
 -->
 <script lang="ts">
 	import { SectionCard, StatusBadge, EmptyState } from "@netz/ui";
@@ -37,6 +37,33 @@
 		</div>
 	</div>
 
+	<!-- Invalid Overrides Warning -->
+	{#if data.invalidConfigs?.length > 0}
+		<SectionCard title="Invalid Overrides">
+			<div class="space-y-2">
+				{#each data.invalidConfigs as invalid}
+					<button
+						onclick={() => {
+							selectedConfig = invalid.config_type;
+							showDiff = false;
+						}}
+						class="flex w-full items-center gap-3 rounded-md border border-[var(--netz-danger)]/30 bg-[var(--netz-danger)]/5 px-4 py-2 text-left hover:bg-[var(--netz-danger)]/10"
+					>
+						<StatusBadge status="error" label="Invalid" />
+						<div>
+							<span class="text-sm font-medium text-[var(--netz-text-primary)]">
+								{invalid.vertical}/{invalid.config_type}
+							</span>
+							{#if invalid.reason}
+								<p class="text-xs text-[var(--netz-text-muted)]">{invalid.reason}</p>
+							{/if}
+						</div>
+					</button>
+				{/each}
+			</div>
+		</SectionCard>
+	{/if}
+
 	<!-- Config List -->
 	{#if data.configs.length > 0}
 		<SectionCard title="Config Types">
@@ -47,7 +74,7 @@
 							selectedConfig = config.config_type;
 							showDiff = false;
 						}}
-						class="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[var(--netz-surface-alt)]"
+						class="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[var(--netz-surface-alt)] {selectedConfig === config.config_type ? 'bg-[var(--netz-surface-alt)]' : ''}"
 					>
 						<div>
 							<span class="text-sm font-medium text-[var(--netz-text-primary)]">

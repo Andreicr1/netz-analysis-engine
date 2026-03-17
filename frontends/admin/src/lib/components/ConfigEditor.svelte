@@ -1,19 +1,20 @@
 <!--
-  Config Editor — JSON textarea with validation and save.
-  MVP: textarea instead of CodeMirror (added later).
+  Config Editor — JSON textarea with validation, save (PUT), delete, update default.
 -->
 <script lang="ts">
-	import { SectionCard } from "@netz/ui";
+	import { SectionCard, ActionButton, ConfirmDialog, Button } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 
 	let {
 		vertical,
 		configType,
 		token,
+		orgId,
 	}: {
 		vertical: string;
 		configType: string;
 		token: string;
+		orgId?: string;
 	} = $props();
 
 	let content = $state("{}");
@@ -21,21 +22,31 @@
 	let isDefault = $state(true);
 	let jsonError = $state<string | null>(null);
 	let saveError = $state<string | null>(null);
+	let saveMessage = $state<string | null>(null);
 	let saving = $state(false);
 	let loading = $state(true);
+	let showDeleteConfirm = $state(false);
+	let showDefaultConfirm = $state(false);
+
+	const api = createClientApiClient(() => Promise.resolve(token));
 
 	async function loadConfig() {
 		loading = true;
+		saveError = null;
+		saveMessage = null;
 		try {
-			const api = createClientApiClient(() => Promise.resolve(token));
+			const params = orgId ? `?org_id=${orgId}` : "";
 			const result = await api.get<{
 				config: Record<string, unknown>;
 				vertical: string;
 				config_type: string;
-			}>(`/admin/configs/${vertical}/${configType}`);
+				version?: number;
+				is_default?: boolean;
+			}>(`/admin/configs/${vertical}/${configType}${params}`);
 			content = JSON.stringify(result.config, null, 2);
-			version = 0; // Will be set from override if exists
-			isDefault = true;
+			version = result.version ?? 0;
+			isDefault = result.is_default ?? true;
+			jsonError = null;
 		} catch (e) {
 			saveError = "Failed to load config";
 		} finally {
@@ -47,35 +58,79 @@
 		try {
 			JSON.parse(value);
 			jsonError = null;
-		} catch (e) {
+		} catch {
 			jsonError = "Invalid JSON";
 		}
 		content = value;
 	}
 
 	async function save() {
-		if (jsonError) return;
+		if (jsonError || !orgId) return;
 		saving = true;
 		saveError = null;
+		saveMessage = null;
 		try {
-			const api = createClientApiClient(() => Promise.resolve(token));
 			const parsed = JSON.parse(content);
-			await api.post(`/admin/configs/validate`, parsed);
-		} catch (e: any) {
-			saveError = e.message ?? "Save failed";
+			await api.put(
+				`/admin/configs/${vertical}/${configType}?org_id=${orgId}`,
+				parsed,
+				{ "If-Match": String(version) },
+			);
+			saveMessage = "Saved successfully";
+			setTimeout(() => (saveMessage = null), 3000);
+			await loadConfig(); // Reload to get new version
+		} catch (e: unknown) {
+			if (e instanceof Error) {
+				if (e.message.includes("409") || e.message.includes("modified")) {
+					saveError = "Config was modified by another user. Reloading...";
+					setTimeout(() => loadConfig(), 1500);
+				} else if (e.message.includes("428")) {
+					saveError = "Please reload to get current version";
+				} else {
+					saveError = e.message;
+				}
+			} else {
+				saveError = "Save failed";
+			}
 		} finally {
 			saving = false;
 		}
 	}
 
+	async function deleteOverride() {
+		if (!orgId) return;
+		try {
+			await api.delete(`/admin/configs/${vertical}/${configType}?org_id=${orgId}`);
+			saveMessage = "Override deleted — reverted to default";
+			setTimeout(() => (saveMessage = null), 3000);
+			await loadConfig();
+		} catch (e) {
+			saveError = e instanceof Error ? e.message : "Delete failed";
+		}
+	}
+
+	async function updateDefault() {
+		if (jsonError) return;
+		try {
+			const parsed = JSON.parse(content);
+			await api.put(`/admin/configs/defaults/${vertical}/${configType}`, parsed);
+			saveMessage = "Default updated";
+			setTimeout(() => (saveMessage = null), 3000);
+		} catch (e) {
+			saveError = e instanceof Error ? e.message : "Update default failed";
+		}
+	}
+
 	$effect(() => {
+		const _v = vertical;
+		const _c = configType;
 		void loadConfig();
 	});
 
 	const jsonValid = $derived(jsonError === null);
 </script>
 
-<SectionCard title="{configType} — {isDefault ? 'Default (read-only)' : 'Override'}">
+<SectionCard title="{configType} — {isDefault ? 'Default' : `Override (v${version})`}">
 	{#if loading}
 		<p class="text-sm text-[var(--netz-text-muted)]">Loading...</p>
 	{:else}
@@ -98,24 +153,52 @@
 			></textarea>
 
 			{#if saveError}
-				<p class="text-xs text-red-500">{saveError}</p>
+				<p class="text-xs text-[var(--netz-danger)]">{saveError}</p>
+			{/if}
+			{#if saveMessage}
+				<p class="text-xs text-[var(--netz-brand-primary)]">{saveMessage}</p>
 			{/if}
 
-			<div class="flex justify-end gap-2">
-				<button
-					onclick={() => loadConfig()}
-					class="rounded-md border border-[var(--netz-border)] px-4 py-2 text-sm text-[var(--netz-text-primary)] hover:bg-[var(--netz-surface-alt)]"
-				>
-					Reset
-				</button>
-				<button
-					onclick={save}
-					disabled={!jsonValid || saving}
-					class="rounded-md bg-[var(--netz-brand-primary)] px-4 py-2 text-sm text-white hover:opacity-90 disabled:opacity-50"
-				>
-					{saving ? "Saving..." : "Validate & Save"}
-				</button>
+			<div class="flex items-center justify-between">
+				<div class="flex gap-2">
+					{#if !isDefault}
+						<Button variant="destructive" size="sm" onclick={() => (showDeleteConfirm = true)}>
+							Revert to Default
+						</Button>
+					{/if}
+					<Button variant="ghost" size="sm" onclick={() => (showDefaultConfirm = true)} disabled={!jsonValid}>
+						Update Default
+					</Button>
+				</div>
+				<div class="flex gap-2">
+					<Button variant="outline" onclick={() => loadConfig()}>
+						Reset
+					</Button>
+					{#if orgId}
+						<ActionButton onclick={save} loading={saving} loadingText="Saving..." disabled={!jsonValid}>
+							Save Override
+						</ActionButton>
+					{/if}
+				</div>
 			</div>
 		</div>
 	{/if}
 </SectionCard>
+
+<ConfirmDialog
+	bind:open={showDeleteConfirm}
+	title="Revert to Default"
+	message="This will delete the config override and revert to the global default. Continue?"
+	confirmLabel="Revert"
+	confirmVariant="destructive"
+	onConfirm={deleteOverride}
+/>
+
+<ConfirmDialog
+	bind:open={showDefaultConfirm}
+	title="Update Global Default"
+	message="This will update the global default config for all tenants without overrides. This is a high-impact action."
+	confirmLabel="Update Default"
+	confirmVariant="destructive"
+	onConfirm={updateDefault}
+/>

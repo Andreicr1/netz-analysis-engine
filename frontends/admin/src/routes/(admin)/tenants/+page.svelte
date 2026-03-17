@@ -2,27 +2,63 @@
   Tenant list — grid of TenantCards with Create button.
 -->
 <script lang="ts">
-	import { SectionCard, EmptyState } from "@netz/ui";
+	import { SectionCard, EmptyState, Dialog, Button, ActionButton, FormField } from "@netz/ui";
 	import type { PageData } from "./$types";
 	import TenantCard from "$lib/components/TenantCard.svelte";
+	import { createClientApiClient } from "$lib/api/client";
+	import { goto, invalidateAll } from "$app/navigation";
 
 	let { data }: { data: PageData } = $props();
 	let showCreate = $state(false);
-	let newName = $state("");
-	let newSlug = $state("");
-	let newVertical = $state("liquid_funds");
+	let form = $state({ name: "", slug: "", clerk_org_id: "", plan_tier: "standard" });
 	let creating = $state(false);
+	let error = $state<string | null>(null);
+	let touched = $state<Record<string, boolean>>({});
+
+	const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+	let errors = $derived({
+		name: !form.name ? "Required" : null,
+		slug: !form.slug ? "Required" : !slugRegex.test(form.slug) ? "Lowercase alphanumeric + hyphens only" : null,
+	});
+	let canSubmit = $derived(!errors.name && !errors.slug && !creating);
+
+	function resetForm() {
+		form = { name: "", slug: "", clerk_org_id: "", plan_tier: "standard" };
+		touched = {};
+		error = null;
+	}
+
+	function onOpen() {
+		resetForm();
+		showCreate = true;
+	}
+
+	async function createTenant() {
+		if (!canSubmit) return;
+		creating = true;
+		error = null;
+		try {
+			const api = createClientApiClient(() => Promise.resolve(data.token));
+			const tenant = await api.post<{ organization_id: string }>("/admin/tenants/", {
+				name: form.name,
+				slug: form.slug,
+				clerk_org_id: form.clerk_org_id || undefined,
+				plan_tier: form.plan_tier,
+			});
+			showCreate = false;
+			await goto(`/tenants/${tenant.organization_id}`);
+		} catch (e) {
+			error = e instanceof Error ? e.message : "Failed to create tenant";
+		} finally {
+			creating = false;
+		}
+	}
 </script>
 
 <div class="space-y-6 p-6">
 	<div class="flex items-center justify-between">
 		<h1 class="text-2xl font-bold text-[var(--netz-text-primary)]">Tenants</h1>
-		<button
-			onclick={() => (showCreate = true)}
-			class="rounded-md bg-[var(--netz-brand-primary)] px-4 py-2 text-sm text-white hover:opacity-90"
-		>
-			Create Tenant
-		</button>
+		<Button onclick={onOpen}>Create Tenant</Button>
 	</div>
 
 	{#if data.tenants.length > 0}
@@ -37,84 +73,60 @@
 		</SectionCard>
 	{/if}
 
-	{#if showCreate}
-		<div
-			class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-			onclick={() => (showCreate = false)}
-			onkeydown={(e) => e.key === "Escape" && (showCreate = false)}
-			role="dialog"
-			tabindex="-1"
-		>
-			<div
-				class="w-full max-w-md rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface)] p-6 shadow-xl"
-				onclick={(e) => e.stopPropagation()}
-				onkeydown={() => {}}
-				role="document"
-			>
-				<h2 class="mb-4 text-lg font-semibold text-[var(--netz-text-primary)]">
-					Create Tenant
-				</h2>
-				<div class="space-y-4">
-					<div>
-						<label
-							for="tenant-name"
-							class="mb-1 block text-sm text-[var(--netz-text-secondary)]"
-						>
-							Organization Name
-						</label>
-						<input
-							id="tenant-name"
-							bind:value={newName}
-							class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
-							placeholder="Acme Capital"
-						/>
-					</div>
-					<div>
-						<label
-							for="tenant-slug"
-							class="mb-1 block text-sm text-[var(--netz-text-secondary)]"
-						>
-							Slug
-						</label>
-						<input
-							id="tenant-slug"
-							bind:value={newSlug}
-							class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
-							placeholder="acme-capital"
-						/>
-					</div>
-					<div>
-						<label
-							for="tenant-vertical"
-							class="mb-1 block text-sm text-[var(--netz-text-secondary)]"
-						>
-							Vertical
-						</label>
-						<select
-							id="tenant-vertical"
-							bind:value={newVertical}
-							class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
-						>
-							<option value="liquid_funds">Liquid Funds</option>
-							<option value="private_credit">Private Credit</option>
-						</select>
-					</div>
-					<div class="flex justify-end gap-2">
-						<button
-							onclick={() => (showCreate = false)}
-							class="rounded-md border border-[var(--netz-border)] px-4 py-2 text-sm text-[var(--netz-text-primary)] hover:bg-[var(--netz-surface-alt)]"
-						>
-							Cancel
-						</button>
-						<button
-							disabled={creating || !newName || !newSlug}
-							class="rounded-md bg-[var(--netz-brand-primary)] px-4 py-2 text-sm text-white hover:opacity-90 disabled:opacity-50"
-						>
-							Create
-						</button>
-					</div>
-				</div>
+	<Dialog bind:open={showCreate}>
+		<h2 class="mb-4 text-lg font-semibold text-[var(--netz-text-primary)]">
+			Create Tenant
+		</h2>
+		<div class="space-y-4">
+			<FormField label="Organization Name" required error={touched.name ? errors.name : null}>
+				<input
+					bind:value={form.name}
+					placeholder="Acme Capital"
+					onblur={() => (touched.name = true)}
+					class="flex h-9 w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-1 text-sm text-[var(--netz-text-primary)] placeholder:text-[var(--netz-text-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--netz-brand-secondary)]"
+				/>
+			</FormField>
+
+			<FormField label="Slug" required error={touched.slug ? errors.slug : null} hint="URL-safe identifier">
+				<input
+					bind:value={form.slug}
+					placeholder="acme-capital"
+					onblur={() => (touched.slug = true)}
+					class="flex h-9 w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-1 text-sm text-[var(--netz-text-primary)] placeholder:text-[var(--netz-text-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--netz-brand-secondary)]"
+				/>
+			</FormField>
+
+			<FormField label="Clerk Org ID" hint="Optional — link to Clerk organization">
+				<input
+					bind:value={form.clerk_org_id}
+					placeholder="org_..."
+					class="flex h-9 w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-1 text-sm text-[var(--netz-text-primary)] placeholder:text-[var(--netz-text-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--netz-brand-secondary)]"
+				/>
+			</FormField>
+
+			<FormField label="Plan Tier">
+				<select
+					bind:value={form.plan_tier}
+					class="flex h-9 w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-1 text-sm text-[var(--netz-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--netz-brand-secondary)]"
+				>
+					<option value="standard">Standard</option>
+					<option value="professional">Professional</option>
+					<option value="enterprise">Enterprise</option>
+				</select>
+			</FormField>
+
+			{#if error}
+				<p class="text-xs text-[var(--netz-danger)]">{error}</p>
+			{/if}
+
+			<div class="flex justify-end gap-3">
+				<Button variant="outline" onclick={() => (showCreate = false)} disabled={creating}>
+					Cancel
+				</Button>
+				<ActionButton onclick={createTenant} loading={creating} loadingText="Creating..." disabled={!canSubmit}>
+					Create
+				</ActionButton>
 			</div>
 		</div>
-	{/if}
+	</Dialog>
 </div>
