@@ -1,8 +1,10 @@
 <!--
   Reporting overview — tabs: NAV, Report Packs, Evidence Packs.
+  Actions: Create NAV, Generate/Publish report packs, Export evidence.
 -->
 <script lang="ts">
-	import { PageTabs, DataTable, EmptyState, Button, PDFDownload } from "@netz/ui";
+	import { PageTabs, DataTable, EmptyState, Button, Card, StatusBadge } from "@netz/ui";
+	import { ActionButton, ConfirmDialog } from "@netz/ui";
 	import type { PageData } from "./$types";
 	import type { PaginatedResponse, NavSnapshot, ReportPack } from "$lib/types/api";
 	import { createClientApiClient } from "$lib/api/client";
@@ -14,9 +16,52 @@
 	let { data }: { data: PageData } = $props();
 	let activeTab = $state("nav");
 	let loading = $state(false);
+	let actionError = $state<string | null>(null);
 
 	let navSnapshots = $derived((data.navSnapshots as PaginatedResponse<NavSnapshot>)?.items ?? []);
 	let reportPacks = $derived((data.reportPacks as PaginatedResponse<ReportPack>)?.items ?? []);
+
+	// ── Report Pack Actions ──
+	let generatingPackId = $state<string | null>(null);
+	let publishingPackId = $state<string | null>(null);
+	let showPublishConfirm = $state(false);
+	let packToPublish = $state<string | null>(null);
+
+	async function generatePack(packId: string) {
+		generatingPackId = packId;
+		actionError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post(`/funds/${data.fundId}/report-packs/${packId}/generate`, {});
+			await invalidateAll();
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : "Generation failed";
+		} finally {
+			generatingPackId = null;
+		}
+	}
+
+	function confirmPublish(packId: string) {
+		packToPublish = packId;
+		showPublishConfirm = true;
+	}
+
+	async function publishPack() {
+		if (!packToPublish) return;
+		publishingPackId = packToPublish;
+		actionError = null;
+		showPublishConfirm = false;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post(`/funds/${data.fundId}/report-packs/${packToPublish}/publish`, {});
+			await invalidateAll();
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : "Publish failed";
+		} finally {
+			publishingPackId = null;
+			packToPublish = null;
+		}
+	}
 
 	const navColumns = [
 		{ accessorKey: "reference_date", header: "Date" },
@@ -25,14 +70,9 @@
 		{ accessorKey: "created_at", header: "Created" },
 	];
 
-	const packColumns = [
-		{ accessorKey: "period", header: "Period" },
-		{ accessorKey: "status", header: "Status" },
-		{ accessorKey: "created_at", header: "Generated" },
-	];
-
 	async function createNavSnapshot() {
 		loading = true;
+		actionError = null;
 		try {
 			const api = createClientApiClient(getToken);
 			await api.post(`/funds/${data.fundId}/reports/nav/snapshots`, {
@@ -43,6 +83,8 @@
 				liabilities_usd: 0,
 			});
 			await invalidateAll();
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : "Failed to create NAV snapshot";
 		} finally {
 			loading = false;
 		}
@@ -50,6 +92,7 @@
 
 	async function generateReportPack() {
 		loading = true;
+		actionError = null;
 		try {
 			const api = createClientApiClient(getToken);
 			const now = new Date();
@@ -60,6 +103,8 @@
 				period_end: end,
 			});
 			await invalidateAll();
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : "Failed to create report pack";
 		} finally {
 			loading = false;
 		}
@@ -86,7 +131,7 @@
 		loading = true;
 		try {
 			const api = createClientApiClient(getToken);
-			const response = await api.post<Blob>(`/funds/${data.fundId}/reports/evidence-pack/pdf`, {});
+			const response = await api.getBlob(`/funds/${data.fundId}/reports/evidence-pack/pdf`);
 			const url = URL.createObjectURL(response);
 			const a = document.createElement("a");
 			a.href = url;
@@ -102,10 +147,17 @@
 <div class="p-6">
 	<h2 class="mb-4 text-xl font-semibold text-[var(--netz-text-primary)]">Reporting</h2>
 
+	{#if actionError}
+		<div class="mb-4 rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+			{actionError}
+			<button class="ml-2 underline" onclick={() => actionError = null}>dismiss</button>
+		</div>
+	{/if}
+
 	<PageTabs
 		tabs={[
 			{ id: "nav", label: "NAV" },
-			{ id: "report-packs", label: "Report Packs" },
+			{ id: "report-packs", label: `Report Packs (${reportPacks.length})` },
 			{ id: "evidence", label: "Evidence Packs" },
 		]}
 		active={activeTab}
@@ -115,9 +167,9 @@
 	<div class="mt-4">
 		{#if activeTab === "nav"}
 			<div class="mb-4">
-				<Button onclick={createNavSnapshot} disabled={loading}>
-					{loading ? "Creating..." : "Create NAV Snapshot"}
-				</Button>
+				<ActionButton onclick={createNavSnapshot} loading={loading} loadingText="Creating...">
+					Create NAV Snapshot
+				</ActionButton>
 			</div>
 			{#if navSnapshots.length === 0}
 				<EmptyState title="No NAV Snapshots" description="Create a NAV snapshot to track fund valuation." />
@@ -127,14 +179,53 @@
 
 		{:else if activeTab === "report-packs"}
 			<div class="mb-4">
-				<Button onclick={generateReportPack} disabled={loading}>
-					{loading ? "Generating..." : "Generate Report Pack"}
-				</Button>
+				<ActionButton onclick={generateReportPack} loading={loading} loadingText="Creating...">
+					Create Report Pack
+				</ActionButton>
 			</div>
 			{#if reportPacks.length === 0}
 				<EmptyState title="No Report Packs" description="Monthly report packs will appear here." />
 			{:else}
-				<DataTable data={reportPacks} columns={packColumns} />
+				<div class="space-y-3">
+					{#each reportPacks as pack (pack.id)}
+						<Card class="flex items-center justify-between p-4">
+							<div>
+								<p class="text-sm font-medium text-[var(--netz-text-primary)]">
+									{pack.period_start ?? pack.period} — {pack.period_end ?? ""}
+								</p>
+								<div class="mt-1 flex items-center gap-2">
+									<StatusBadge status={pack.status} type="default" />
+									<span class="text-xs text-[var(--netz-text-muted)]">{pack.created_at}</span>
+								</div>
+							</div>
+							<div class="flex gap-2">
+								{#if pack.status === "DRAFT"}
+									<ActionButton
+										size="sm"
+										onclick={() => generatePack(pack.id)}
+										loading={generatingPackId === pack.id}
+										loadingText="Generating..."
+									>
+										Generate
+									</ActionButton>
+								{:else if pack.status === "GENERATED"}
+									<ActionButton
+										size="sm"
+										onclick={() => confirmPublish(pack.id)}
+										loading={publishingPackId === pack.id}
+										loadingText="Publishing..."
+									>
+										Publish
+									</ActionButton>
+								{:else if pack.status === "PUBLISHED"}
+									<span class="text-xs text-[var(--netz-text-muted)]">
+										Published {pack.published_at ?? ""}
+									</span>
+								{/if}
+							</div>
+						</Card>
+					{/each}
+				</div>
 			{/if}
 
 		{:else if activeTab === "evidence"}
@@ -143,13 +234,24 @@
 				description="Export Q&A evidence packs with citations from the Fund Copilot."
 			/>
 			<div class="mt-4 flex gap-2">
-				<Button onclick={exportEvidenceJSON} disabled={loading}>
-					{loading ? "Exporting..." : "Export JSON"}
-				</Button>
-				<Button variant="outline" onclick={exportEvidencePDF} disabled={loading}>
-					{loading ? "Exporting..." : "Export PDF"}
-				</Button>
+				<ActionButton onclick={exportEvidenceJSON} loading={loading} loadingText="Exporting...">
+					Export JSON
+				</ActionButton>
+				<ActionButton variant="outline" onclick={exportEvidencePDF} loading={loading} loadingText="Exporting...">
+					Export PDF
+				</ActionButton>
 			</div>
 		{/if}
 	</div>
 </div>
+
+<!-- Publish Confirmation -->
+<ConfirmDialog
+	bind:open={showPublishConfirm}
+	title="Publish Report Pack"
+	message="Publishing is permanent. This will make the report available to investors and create an evidence record. Continue?"
+	confirmLabel="Publish"
+	confirmVariant="default"
+	onConfirm={publishPack}
+	onCancel={() => { showPublishConfirm = false; packToPublish = null; }}
+/>

@@ -39,19 +39,129 @@ export interface TaskItem {
 
 // ── Fund / Deal ────────────────────────────────────────────
 
+export type DealType = "DIRECT_LOAN" | "FUND_INVESTMENT" | "EQUITY_STAKE" | "SPV_NOTE";
+
+export type DealStage =
+	| "INTAKE" | "QUALIFIED" | "IC_REVIEW" | "CONDITIONAL"
+	| "APPROVED" | "CONVERTED_TO_ASSET" | "REJECTED" | "CLOSED";
+
+export type RejectionCode =
+	| "OUT_OF_MANDATE" | "TICKET_TOO_SMALL" | "JURISDICTION_EXCLUDED"
+	| "INSUFFICIENT_RETURN" | "WEAK_CREDIT_PROFILE" | "NO_COLLATERAL";
+
 export interface DealDetail {
+	id: string;
+	fund_id: string;
 	name: string;
-	stage: string;
+	deal_type: DealType;
+	stage: DealStage;
 	strategy_type: string | null;
 	borrower_name: string | null;
+	sponsor_name: string | null;
+	description: string | null;
 	amount: string | null;
+	rejection_code: RejectionCode | null;
+	rejection_notes: string | null;
+	asset_id: string | null;
 	created_at: string | null;
+	updated_at: string | null;
+}
+
+/** Valid transitions from each stage — mirrors backend VALID_TRANSITIONS */
+export const VALID_TRANSITIONS: Record<DealStage, DealStage[]> = {
+	INTAKE: ["QUALIFIED", "REJECTED"],
+	QUALIFIED: ["IC_REVIEW", "REJECTED"],
+	IC_REVIEW: ["APPROVED", "CONDITIONAL", "REJECTED"],
+	CONDITIONAL: ["CONDITIONAL", "APPROVED", "REJECTED"],
+	APPROVED: ["CONVERTED_TO_ASSET", "CLOSED"],
+	CONVERTED_TO_ASSET: ["CLOSED"],
+	REJECTED: [],
+	CLOSED: [],
+};
+
+export interface StageTimeline {
+	dealId: string;
+	currentStage: DealStage;
+	nodes: StageTimelineNode[];
+	allowedTransitions: DealStage[];
+	timeline: StageTimelineEvent[];
+}
+
+export interface StageTimelineNode {
+	stage: string;
+	state: "Positive" | "Critical" | "Neutral" | "Negative";
+	reachedAt: string | null;
+	rationale: string | null;
+}
+
+export interface StageTimelineEvent {
+	fromStage: string;
+	toStage: string;
+	changedAt: string | null;
+	rationale: string | null;
 }
 
 export interface StageTimelineEntry {
 	stage: string;
 	entered_at: string;
 	completed_at: string | null;
+}
+
+// ── IC Memo Detail ────────────────────────────────────────
+
+export interface ICMemoDetail {
+	id: string;
+	deal_id: string;
+	executive_summary: string;
+	risks: string | null;
+	mitigants: string | null;
+	recommendation: string | null;
+	conditions: ICCondition[];
+	version: number;
+	condition_history: Record<string, unknown>[];
+	created_at: string;
+	updated_at: string;
+}
+
+export interface ICCondition {
+	id: string;
+	title: string;
+	status: "open" | "resolved" | "waived";
+	resolved_at?: string;
+	resolved_by?: string;
+	notes?: string;
+	evidence_docs?: string[];
+}
+
+export interface VotingStatusDetail {
+	memoId: string;
+	version: number;
+	recommendation: string | null;
+	esignatureStatus: string | null;
+	votingState: string;
+	quorum: {
+		totalMembers: number;
+		majorityRequired: number;
+		votesCast: number;
+		approvals: number;
+		rejections: number;
+		pending: number;
+		quorumReached: boolean;
+	};
+	members: Array<{
+		email: string;
+		vote: string | null;
+		signedAt: string | null;
+		signerStatus: string | null;
+	}>;
+	conditions: {
+		total: number;
+		open: number;
+		resolved: number;
+		allResolved: boolean;
+		items: ICCondition[];
+	};
+	conditionHistory: Record<string, unknown>[];
 }
 
 // ── Portfolio ──────────────────────────────────────────────
@@ -61,18 +171,33 @@ export interface PaginatedResponse<T> {
 	total: number;
 }
 
+export type AssetType = "DIRECT_LOAN" | "FUND_INVESTMENT" | "EQUITY_STAKE" | "SPV_NOTE";
+export type Strategy = "CORE_DIRECT_LENDING" | "OPPORTUNISTIC" | "DISTRESSED" | "VENTURE_DEBT" | "FUND_OF_FUNDS";
+export type ObligationType = "NAV_REPORT" | "COVENANT_TEST" | "FINANCIAL_STATEMENT" | "AUDIT_REPORT" | "COMPLIANCE_CERT";
+export type ObligationStatus = "OPEN" | "FULFILLED" | "OVERDUE" | "WAIVED";
+export type ActionStatus = "OPEN" | "IN_PROGRESS" | "CLOSED";
+
 export interface PortfolioAsset {
+	id: string;
+	fund_id: string;
 	name: string;
-	asset_type: string;
-	strategy: string;
+	asset_type: AssetType;
+	strategy: Strategy;
 	status: string;
+	created_at: string;
+	updated_at: string;
 }
 
 export interface PortfolioObligation {
+	id: string;
+	asset_id: string;
+	obligation_type: ObligationType;
 	type: string;
 	due_date: string;
-	status: string;
+	status: ObligationStatus;
 	asset_name: string;
+	created_at: string;
+	updated_at: string;
 }
 
 export interface PortfolioAlert {
@@ -83,10 +208,14 @@ export interface PortfolioAlert {
 }
 
 export interface PortfolioAction {
+	id: string;
+	asset_id: string;
 	title: string;
-	status: string;
+	status: ActionStatus;
 	due_date: string | null;
 	evidence_notes: string | null;
+	created_at: string;
+	updated_at: string;
 }
 
 // ── Documents ──────────────────────────────────────────────
@@ -146,9 +275,13 @@ export interface NavSnapshot {
 }
 
 export interface ReportPack {
+	id: string;
 	period: string;
-	status: string;
+	period_start: string;
+	period_end: string;
+	status: "DRAFT" | "GENERATED" | "PUBLISHED";
 	created_at: string;
+	published_at: string | null;
 }
 
 // ── IC Memo ────────────────────────────────────────────────
