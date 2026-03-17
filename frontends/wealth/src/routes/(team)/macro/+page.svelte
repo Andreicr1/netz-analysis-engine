@@ -67,12 +67,22 @@
 		}
 	}
 
-	async function rejectReview(reviewId: string) {
-		processingReviewId = reviewId;
+	let showRejectConfirm = $state(false);
+	let rejectTargetId = $state<string | null>(null);
+
+	function confirmRejectReview(reviewId: string) {
+		rejectTargetId = reviewId;
+		showRejectConfirm = true;
+	}
+
+	async function rejectReview() {
+		if (!rejectTargetId) return;
+		processingReviewId = rejectTargetId;
+		showRejectConfirm = false;
 		actionError = null;
 		try {
 			const api = createClientApiClient(getToken);
-			await api.patch(`/macro/reviews/${reviewId}/reject`, {});
+			await api.patch(`/macro/reviews/${rejectTargetId}/reject`, {});
 			await invalidateAll();
 		} catch (e) {
 			actionError = e instanceof Error ? e.message : "Rejection failed";
@@ -164,7 +174,7 @@
 								<ActionButton
 									size="sm"
 									variant="destructive"
-									onclick={() => rejectReview(review.id)}
+									onclick={() => confirmRejectReview(review.id)}
 									loading={processingReviewId === review.id}
 									loadingText="..."
 								>
@@ -180,3 +190,13 @@
 		{/if}
 	</div>
 </div>
+
+<ConfirmDialog
+	bind:open={showRejectConfirm}
+	title="Reject Committee Review"
+	message="This will reject the macro committee review. This action cannot be undone. Continue?"
+	confirmLabel="Reject"
+	confirmVariant="destructive"
+	onConfirm={rejectReview}
+	onCancel={() => { showRejectConfirm = false; rejectTargetId = null; }}
+/>

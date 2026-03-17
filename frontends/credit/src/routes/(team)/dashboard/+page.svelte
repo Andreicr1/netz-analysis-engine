@@ -44,7 +44,7 @@
   let selectedFredSeries = $state<string[]>([]);
   let fredChartData = $state<Record<string, unknown[]> | null>(null);
   let fredSearchTimer: ReturnType<typeof setTimeout> | undefined;
-  let fredAbortController: AbortController | undefined;
+  let fredSearchSeq = 0;
 
   function debounceFredSearch() {
     clearTimeout(fredSearchTimer);
@@ -55,17 +55,22 @@
     const q = fredSearch.trim();
     if (q.length < 2) { fredResults = []; return; }
 
-    fredAbortController?.abort();
-    fredAbortController = new AbortController();
+    const seq = ++fredSearchSeq;
     fredSearching = true;
     try {
       const api = createClientApiClient(getToken);
       const res = await api.get<{ series: Array<{ id: string; title: string }> }>(`/dashboard/fred-search`, { q });
-      fredResults = res.series ?? [];
+      if (seq === fredSearchSeq) {
+        fredResults = res.series ?? [];
+      }
     } catch {
-      fredResults = [];
+      if (seq === fredSearchSeq) {
+        fredResults = [];
+      }
     } finally {
-      fredSearching = false;
+      if (seq === fredSearchSeq) {
+        fredSearching = false;
+      }
     }
   }
 

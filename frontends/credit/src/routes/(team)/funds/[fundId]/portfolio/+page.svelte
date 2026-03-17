@@ -99,6 +99,20 @@
 
 	// ── Update Obligation Status ──
 	let updatingObligationId = $state<string | null>(null);
+	let showWaiveConfirm = $state(false);
+	let waiveTargetId = $state<string | null>(null);
+
+	function confirmWaive(obligationId: string) {
+		waiveTargetId = obligationId;
+		showWaiveConfirm = true;
+	}
+
+	async function executeWaive() {
+		if (!waiveTargetId) return;
+		showWaiveConfirm = false;
+		await updateObligationStatus(waiveTargetId, "WAIVED");
+		waiveTargetId = null;
+	}
 
 	async function updateObligationStatus(obligationId: string, status: ObligationStatus) {
 		updatingObligationId = obligationId;
@@ -232,7 +246,7 @@
 									<ActionButton
 										size="sm"
 										variant="outline"
-										onclick={() => updateObligationStatus(ob.id, "WAIVED")}
+										onclick={() => confirmWaive(ob.id)}
 										loading={updatingObligationId === ob.id}
 										loadingText="..."
 									>
@@ -390,3 +404,14 @@
 		</div>
 	</form>
 </Dialog>
+
+<!-- Waive Obligation Confirmation -->
+<ConfirmDialog
+	bind:open={showWaiveConfirm}
+	title="Waive Obligation"
+	message="Waiving an obligation is a significant business decision and will be recorded in the audit trail. Continue?"
+	confirmLabel="Waive"
+	confirmVariant="destructive"
+	onConfirm={executeWaive}
+	onCancel={() => { showWaiveConfirm = false; waiveTargetId = null; }}
+/>

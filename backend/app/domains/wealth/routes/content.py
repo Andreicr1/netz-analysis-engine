@@ -426,7 +426,7 @@ async def _run_content_generation(
                         content.status = "failed"
                         content.content_data = {
                             **(content.content_data or {}),
-                            "error_message": str(exc),
+                            "error_message": "Content generation failed. Please try again or contact support.",
                         }
                         await err_db.commit()
             except Exception:

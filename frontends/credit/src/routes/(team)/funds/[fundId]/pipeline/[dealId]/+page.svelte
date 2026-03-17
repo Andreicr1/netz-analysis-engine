@@ -13,7 +13,6 @@
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
 	import type { DealStage, RejectionCode, ICCondition, StageTimeline, VotingStatusDetail } from "$lib/types/api";
-	import { VALID_TRANSITIONS } from "$lib/types/api";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 

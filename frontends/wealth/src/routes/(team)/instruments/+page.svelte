@@ -107,8 +107,8 @@
 			const api = createClientApiClient(getToken);
 			await api.post("/instruments/bulk-sync", {});
 			await invalidateAll();
-		} catch {
-			// Handled by api-client
+		} catch (e) {
+			createError = e instanceof Error ? e.message : "Bulk sync failed";
 		} finally {
 			syncing = false;
 		}
@@ -130,8 +130,9 @@
 				query: externalQuery.trim(),
 			}, { timeoutMs: 10_000 });
 			externalResults = res.results ?? [];
-		} catch {
+		} catch (e) {
 			externalResults = [];
+			createError = e instanceof Error ? e.message : "External search failed";
 		} finally {
 			searching = false;
 		}
@@ -149,8 +150,8 @@
 				currency: String(ext.currency ?? "USD"),
 			});
 			await invalidateAll();
-		} catch {
-			// Handled by api-client
+		} catch (e) {
+			createError = e instanceof Error ? e.message : "Import failed";
 		} finally {
 			importingId = null;
 		}

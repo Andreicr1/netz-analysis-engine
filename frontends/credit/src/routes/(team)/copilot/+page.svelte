@@ -25,6 +25,8 @@
 	let loadingHistory = $state(false);
 	let loadingActivity = $state(false);
 
+	let actionError = $state<string | null>(null);
+
 	// ── Retrieve State ──
 	let retrieveQuery = $state("");
 	let retrieveResults = $state<Array<{ title: string; score: number; snippet: string }>>([]);
@@ -69,8 +71,9 @@
 			const res = await api.get<{ items: typeof history }>("/ai/history");
 			history = res.items ?? [];
 			historyLoaded = true;
-		} catch {
+		} catch (e) {
 			history = [];
+			actionError = e instanceof Error ? e.message : "Failed to load history";
 		} finally {
 			loadingHistory = false;
 		}
@@ -84,8 +87,9 @@
 			const res = await api.get<{ items: typeof activity }>("/ai/activity");
 			activity = res.items ?? [];
 			activityLoaded = true;
-		} catch {
+		} catch (e) {
 			activity = [];
+			actionError = e instanceof Error ? e.message : "Failed to load activity";
 		} finally {
 			loadingActivity = false;
 		}
@@ -101,8 +105,9 @@
 				top_k: 10,
 			});
 			retrieveResults = res.results ?? [];
-		} catch {
+		} catch (e) {
 			retrieveResults = [];
+			actionError = e instanceof Error ? e.message : "Search failed";
 		} finally {
 			retrieving = false;
 		}
@@ -132,6 +137,13 @@
 	<div class="mb-4 flex items-center justify-between">
 		<h2 class="text-xl font-semibold text-[var(--netz-text-primary)]">Fund Copilot</h2>
 	</div>
+
+	{#if actionError}
+		<div class="mb-4 rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+			{actionError}
+			<button class="ml-2 underline" onclick={() => actionError = null}>dismiss</button>
+		</div>
+	{/if}
 
 	<!-- Tab bar -->
 	<PageTabs

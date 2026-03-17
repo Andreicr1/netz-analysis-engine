@@ -7,6 +7,15 @@
 	import { SectionCard, ActionButton, ConfirmDialog, Button } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 
+	/** Strip script tags and event handlers from HTML preview to prevent stored XSS. */
+	function sanitizePreview(html: string): string {
+		return html
+			.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+			.replace(/\bon\w+\s*=\s*["'][^"']*["']/gi, "")
+			.replace(/\bon\w+\s*=\s*[^\s>]*/gi, "")
+			.replace(/javascript\s*:/gi, "");
+	}
+
 	let {
 		vertical,
 		templateName,
@@ -273,7 +282,7 @@
 						</div>
 					{:else}
 						<div class="prose prose-sm text-[var(--netz-text-primary)]">
-							{@html preview}
+							{@html sanitizePreview(preview)}
 						</div>
 					{/if}
 				</div>

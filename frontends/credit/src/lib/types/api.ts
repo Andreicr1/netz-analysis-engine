@@ -67,18 +67,6 @@ export interface DealDetail {
 	updated_at: string | null;
 }
 
-/** Valid transitions from each stage — mirrors backend VALID_TRANSITIONS */
-export const VALID_TRANSITIONS: Record<DealStage, DealStage[]> = {
-	INTAKE: ["QUALIFIED", "REJECTED"],
-	QUALIFIED: ["IC_REVIEW", "REJECTED"],
-	IC_REVIEW: ["APPROVED", "CONDITIONAL", "REJECTED"],
-	CONDITIONAL: ["CONDITIONAL", "APPROVED", "REJECTED"],
-	APPROVED: ["CONVERTED_TO_ASSET", "CLOSED"],
-	CONVERTED_TO_ASSET: ["CLOSED"],
-	REJECTED: [],
-	CLOSED: [],
-};
-
 export interface StageTimeline {
 	dealId: string;
 	currentStage: DealStage;
