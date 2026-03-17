@@ -15,10 +15,11 @@
 		{ label: "Portfolios", href: "/model-portfolios" },
 		{ label: "Risk", href: "/risk" },
 		{ label: "Funds", href: "/funds" },
+		{ label: "Screener", href: "/screener" },
 		{ label: "Analytics", href: "/analytics" },
+		{ label: "Exposure", href: "/exposure" },
 		{ label: "Allocation", href: "/allocation" },
 		{ label: "Macro", href: "/macro" },
-		{ label: "DD Reports", href: "/dd-reports" },
 	];
 </script>
 
