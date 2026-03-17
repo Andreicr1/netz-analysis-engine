@@ -17,7 +17,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
+from app.core.security.clerk_auth import CurrentUser, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.risk import FundRiskMetrics
@@ -91,11 +91,14 @@ async def trigger_drift_scan(
     db: AsyncSession = Depends(get_db_with_rls),
     org_id: uuid.UUID = Depends(get_org_id),
     user: CurrentUser = Depends(get_current_user),
-    actor: Actor = Depends(get_actor),
 ) -> StrategyDriftScanRead:
-    # Advisory lock — serialize globally (xact-scoped: auto-releases on commit/rollback)
+    # Advisory lock — per-org serialization via two-argument lock(class, org_hash).
+    # Allows concurrent scans across different organizations.
+    # xact-scoped: auto-releases on commit/rollback.
+    org_lock_id = int.from_bytes(org_id.bytes[:4], "big")
     lock_result = await db.execute(
-        text(f"SELECT pg_try_advisory_xact_lock({DRIFT_SCAN_LOCK_ID})")
+        text("SELECT pg_try_advisory_xact_lock(:cls, :id)"),
+        {"cls": DRIFT_SCAN_LOCK_ID, "id": org_lock_id},
     )
     if not lock_result.scalar():
         raise HTTPException(
@@ -173,27 +176,25 @@ async def _do_drift_scan(
             .values(is_current=False)
         )
 
-    # Insert new alerts for all scanned instruments (not just drift_detected)
+    # Insert new alerts for all scanned instruments — batch upsert
     if scan_result.all_results:
         alert_dicts = [_drift_result_to_alert_dict(r, org_id) for r in scan_result.all_results]
-        for alert_dict in alert_dicts:
-            stmt = pg_insert(StrategyDriftAlert).values(**alert_dict)
-            # On conflict (partial unique index), update existing current
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["organization_id", "instrument_id"],
-                set_={
-                    "status": stmt.excluded.status,
-                    "severity": stmt.excluded.severity,
-                    "anomalous_count": stmt.excluded.anomalous_count,
-                    "total_metrics": stmt.excluded.total_metrics,
-                    "metric_details": stmt.excluded.metric_details,
-                    "detected_at": stmt.excluded.detected_at,
-                    "updated_at": stmt.excluded.updated_at,
-                },
-                where=StrategyDriftAlert.is_current == True,  # noqa: E712
-            )
-            await db.execute(stmt)
-
+        # Batch upsert: single INSERT ... ON CONFLICT for all rows
+        stmt = pg_insert(StrategyDriftAlert).values(alert_dicts)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["organization_id", "instrument_id"],
+            set_={
+                "status": stmt.excluded.status,
+                "severity": stmt.excluded.severity,
+                "anomalous_count": stmt.excluded.anomalous_count,
+                "total_metrics": stmt.excluded.total_metrics,
+                "metric_details": stmt.excluded.metric_details,
+                "detected_at": stmt.excluded.detected_at,
+                "updated_at": stmt.excluded.updated_at,
+            },
+            where=StrategyDriftAlert.is_current == True,  # noqa: E712
+        )
+        await db.execute(stmt)
         await db.commit()
 
     # 5. Build response (filter by severity if requested)
