@@ -12,20 +12,22 @@
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
+	import type { ICMemo, VotingStatus } from "$lib/types/api";
+
 	let {
 		icMemo,
 		votingStatus,
 		fundId,
 		dealId,
 	}: {
-		icMemo: unknown;
-		votingStatus: unknown;
+		icMemo: ICMemo | null;
+		votingStatus: VotingStatus | null;
 		fundId: string;
 		dealId: string;
 	} = $props();
 
-	let memo = $derived(icMemo as Record<string, unknown> | null);
-	let voting = $derived(votingStatus as Record<string, unknown> | null);
+	let memo = $derived(icMemo);
+	let voting = $derived(votingStatus);
 	let generating = $state(false);
 	let streamingChapters = $state<Record<string, string>>({});
 	let activeSse = $state<ReturnType<typeof createSSEStream> | null>(null);

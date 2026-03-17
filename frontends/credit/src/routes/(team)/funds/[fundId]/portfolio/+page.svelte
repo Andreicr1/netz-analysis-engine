@@ -4,14 +4,15 @@
 <script lang="ts">
 	import { PageTabs, DataTable, StatusBadge, EmptyState, Button, Dialog, Card } from "@netz/ui";
 	import type { PageData } from "./$types";
+	import type { PaginatedResponse, PortfolioAsset, PortfolioObligation, PortfolioAlert, PortfolioAction } from "$lib/types/api";
 
 	let { data }: { data: PageData } = $props();
 	let activeTab = $state("assets");
 
-	let assets = $derived((data.assets as Record<string, unknown>)?.items as unknown[] ?? []);
-	let obligations = $derived((data.obligations as Record<string, unknown>)?.items as unknown[] ?? []);
-	let alerts = $derived((data.alerts as Record<string, unknown>)?.items as unknown[] ?? []);
-	let actions = $derived((data.actions as Record<string, unknown>)?.items as unknown[] ?? []);
+	let assets = $derived((data.assets as PaginatedResponse<PortfolioAsset>)?.items ?? []);
+	let obligations = $derived((data.obligations as PaginatedResponse<PortfolioObligation>)?.items ?? []);
+	let alerts = $derived((data.alerts as PaginatedResponse<PortfolioAlert>)?.items ?? []);
+	let actions = $derived((data.actions as PaginatedResponse<PortfolioAction>)?.items ?? []);
 
 	const assetColumns = [
 		{ accessorKey: "name", header: "Name" },

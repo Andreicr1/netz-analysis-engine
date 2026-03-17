@@ -53,6 +53,12 @@ This means the admin vertical is incomplete: the database tables exist but the m
 
 **By:** Claude Code (ce:review PRs #37-#45)
 
+### 2026-03-16 - Status Update
+
+**By:** Claude Code
+
+P1 security findings resolved in PR #46. Admin re-land is separate work requiring cherry-pick of PRs #43/#45 with fixes applied. Blocked until security review PR merges. Separate branch/PR needed.
+
 ## Resources
 
 - **PRs:** #43, #45 (reverted), #44 (closed)

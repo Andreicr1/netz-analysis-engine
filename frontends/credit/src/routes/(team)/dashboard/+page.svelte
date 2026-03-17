@@ -9,14 +9,14 @@
 	import TaskInbox from "$lib/components/TaskInbox.svelte";
 	import PipelineFunnel from "$lib/components/PipelineFunnel.svelte";
 	import type { PageData } from "./$types";
+	import type { PortfolioSummary, PipelineSummary, PipelineAnalytics, MacroSnapshot, TaskItem } from "$lib/types/api";
 
 	let { data }: { data: PageData } = $props();
 
-	// Extract values safely
-	let portfolio = $derived(data.portfolioSummary as Record<string, unknown> | null);
-	let pipeline = $derived(data.pipelineSummary as Record<string, unknown> | null);
-	let analytics = $derived(data.pipelineAnalytics as Record<string, unknown> | null);
-	let macro = $derived(data.macroSnapshot as Record<string, unknown> | null);
+	let portfolio = $derived(data.portfolioSummary as PortfolioSummary | null);
+	let pipeline = $derived(data.pipelineSummary as PipelineSummary | null);
+	let analytics = $derived(data.pipelineAnalytics as PipelineAnalytics | null);
+	let macro = $derived(data.macroSnapshot as MacroSnapshot | null);
 </script>
 
 <div class="space-y-6 p-6">
@@ -41,14 +41,14 @@
 			/>
 			<DataCard
 				label="Compliance Alerts"
-				value={String((data.complianceAlerts as unknown[] | null)?.length ?? 0)}
+				value={String((data.complianceAlerts as string[] | null)?.length ?? 0)}
 				trend="flat"
 			/>
 		</div>
 
 		{#if data.taskInbox}
 			<div class="mt-4">
-				<TaskInbox tasks={data.taskInbox as unknown[]} />
+				<TaskInbox tasks={data.taskInbox as TaskItem[]} />
 			</div>
 		{/if}
 	</section>

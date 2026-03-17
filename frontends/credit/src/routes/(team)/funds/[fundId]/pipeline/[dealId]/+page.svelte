@@ -29,7 +29,7 @@
 
 	{#if data.stageTimeline}
 		<div class="mb-6">
-			<DealStageTimeline timeline={data.stageTimeline as unknown[]} />
+			<DealStageTimeline timeline={data.stageTimeline as import("$lib/types/api").StageTimelineEntry[]} />
 		</div>
 	{/if}
 
