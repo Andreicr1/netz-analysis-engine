@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import numpy as np
 import structlog
@@ -98,15 +98,20 @@ async def get_correlation_regime(
     name_map = {row.instrument_id: row.name for row in inst_result.all()}
 
     # 4. Load NavTimeseries returns — date intersection, NOT forward-fill
+    # Use date floor filter instead of LIMIT to avoid biased results across
+    # instruments with different data density. The date floor bounds equally
+    # for all instruments and enables ix_nav_timeseries_instrument_date index.
+    # DO NOT replace date intersection with forward-fill (see plan G4/D9).
     total_days = baseline_days + window_days
+    date_floor = date.today() - timedelta(days=total_days + 30)
     nav_stmt = (
         select(NavTimeseries.instrument_id, NavTimeseries.nav_date, NavTimeseries.return_1d)
         .where(
             NavTimeseries.instrument_id.in_(instrument_ids),
+            NavTimeseries.nav_date >= date_floor,
             NavTimeseries.return_1d.isnot(None),
         )
-        .order_by(NavTimeseries.nav_date.desc())
-        .limit(total_days * len(instrument_ids))
+        .order_by(NavTimeseries.nav_date)
     )
     nav_result = await db.execute(nav_stmt)
     nav_rows = nav_result.all()
