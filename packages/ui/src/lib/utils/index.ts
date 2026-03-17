@@ -47,3 +47,6 @@ export {
 	startSessionExpiryMonitor,
 } from "./auth.js";
 export type { Actor, ClerkHookOptions } from "./auth.js";
+
+// Theme — SSR theme injection hook
+export { createThemeHook } from "./theme.js";
