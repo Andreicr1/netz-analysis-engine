@@ -4,12 +4,19 @@
 <script lang="ts">
 	import { PageTabs, DataTable, EmptyState, Button, PDFDownload } from "@netz/ui";
 	import type { PageData } from "./$types";
+	import type { PaginatedResponse, NavSnapshot, ReportPack } from "$lib/types/api";
+	import { createClientApiClient } from "$lib/api/client";
+	import { invalidateAll } from "$app/navigation";
+	import { getContext } from "svelte";
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let { data }: { data: PageData } = $props();
 	let activeTab = $state("nav");
+	let loading = $state(false);
 
-	let navSnapshots = $derived((data.navSnapshots as Record<string, unknown>)?.items as unknown[] ?? []);
-	let reportPacks = $derived((data.reportPacks as Record<string, unknown>)?.items as unknown[] ?? []);
+	let navSnapshots = $derived((data.navSnapshots as PaginatedResponse<NavSnapshot>)?.items ?? []);
+	let reportPacks = $derived((data.reportPacks as PaginatedResponse<ReportPack>)?.items ?? []);
 
 	const navColumns = [
 		{ accessorKey: "reference_date", header: "Date" },
@@ -23,6 +30,73 @@
 		{ accessorKey: "status", header: "Status" },
 		{ accessorKey: "created_at", header: "Generated" },
 	];
+
+	async function createNavSnapshot() {
+		loading = true;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post(`/funds/${data.fundId}/reports/nav/snapshots`, {
+				period_month: new Date().toISOString().slice(0, 7),
+				nav_total_usd: 0,
+				cash_balance_usd: 0,
+				assets_value_usd: 0,
+				liabilities_usd: 0,
+			});
+			await invalidateAll();
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function generateReportPack() {
+		loading = true;
+		try {
+			const api = createClientApiClient(getToken);
+			const now = new Date();
+			const start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
+			const end = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split("T")[0];
+			await api.post(`/funds/${data.fundId}/report-packs`, {
+				period_start: start,
+				period_end: end,
+			});
+			await invalidateAll();
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function exportEvidenceJSON() {
+		loading = true;
+		try {
+			const api = createClientApiClient(getToken);
+			const result = await api.post<Record<string, unknown>>(`/funds/${data.fundId}/reports/evidence-pack`, { limit: 50 });
+			const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = `evidence-pack-${data.fundId}.json`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} finally {
+			loading = false;
+		}
+	}
+
+	async function exportEvidencePDF() {
+		loading = true;
+		try {
+			const api = createClientApiClient(getToken);
+			const response = await api.post<Blob>(`/funds/${data.fundId}/reports/evidence-pack/pdf`, {});
+			const url = URL.createObjectURL(response);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = `evidence-pack-${data.fundId}.pdf`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} finally {
+			loading = false;
+		}
+	}
 </script>
 
 <div class="p-6">
@@ -41,7 +115,9 @@
 	<div class="mt-4">
 		{#if activeTab === "nav"}
 			<div class="mb-4">
-				<Button onclick={() => {}}>Create NAV Snapshot</Button>
+				<Button onclick={createNavSnapshot} disabled={loading}>
+					{loading ? "Creating..." : "Create NAV Snapshot"}
+				</Button>
 			</div>
 			{#if navSnapshots.length === 0}
 				<EmptyState title="No NAV Snapshots" description="Create a NAV snapshot to track fund valuation." />
@@ -51,7 +127,9 @@
 
 		{:else if activeTab === "report-packs"}
 			<div class="mb-4">
-				<Button onclick={() => {}}>Generate Report Pack</Button>
+				<Button onclick={generateReportPack} disabled={loading}>
+					{loading ? "Generating..." : "Generate Report Pack"}
+				</Button>
 			</div>
 			{#if reportPacks.length === 0}
 				<EmptyState title="No Report Packs" description="Monthly report packs will appear here." />
@@ -65,8 +143,12 @@
 				description="Export Q&A evidence packs with citations from the Fund Copilot."
 			/>
 			<div class="mt-4 flex gap-2">
-				<Button onclick={() => {}}>Export JSON</Button>
-				<Button variant="outline" onclick={() => {}}>Export PDF</Button>
+				<Button onclick={exportEvidenceJSON} disabled={loading}>
+					{loading ? "Exporting..." : "Export JSON"}
+				</Button>
+				<Button variant="outline" onclick={exportEvidencePDF} disabled={loading}>
+					{loading ? "Exporting..." : "Export PDF"}
+				</Button>
 			</div>
 		{/if}
 	</div>

@@ -1,5 +1,5 @@
 ---
-status: pending
+status: wontfix
 priority: p3
 issue_id: "091"
 tags: [code-review, duplication, frontend]
@@ -48,6 +48,14 @@ These could be shared via @netz/ui or a shared investor layout component.
 ### 2026-03-16 - Code Review Discovery
 
 **By:** Claude Code (ce:review PRs #37-#45)
+
+## Work Log
+
+### 2026-03-16 - Won't Fix
+
+**By:** Claude Code
+
+**Reason:** Investor layouts are ~15 lines each (guard + InvestorShell). The complexity of a shared abstraction exceeds the duplication cost. Not worth extracting.
 
 ## Resources
 

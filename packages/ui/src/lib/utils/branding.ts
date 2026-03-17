@@ -73,23 +73,3 @@ export function injectBranding(element: HTMLElement, config: BrandingConfig): vo
 		}
 	}
 }
-
-/**
- * Read current CSS custom properties from the document and return a partial BrandingConfig.
- */
-export function getBrandingFromCSS(): Partial<BrandingConfig> {
-	if (typeof document === "undefined") return {};
-
-	const style = getComputedStyle(document.documentElement);
-	const result: Partial<BrandingConfig> = {};
-
-	for (const [key, varName] of Object.entries(CSS_VAR_MAP)) {
-		if (!varName) continue;
-		const value = style.getPropertyValue(varName).trim();
-		if (value) {
-			(result as Record<string, string>)[key] = value;
-		}
-	}
-
-	return result;
-}

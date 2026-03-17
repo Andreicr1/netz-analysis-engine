@@ -4,11 +4,12 @@
 <script lang="ts">
 	import { DataTable, Button, EmptyState, PageTabs } from "@netz/ui";
 	import type { PageData } from "./$types";
+	import type { PaginatedResponse, DocumentItem } from "$lib/types/api";
 
 	let { data }: { data: PageData } = $props();
 	let activeTab = $state("all");
 
-	let documents = $derived((data.documents as Record<string, unknown>)?.items as unknown[] ?? []);
+	let documents = $derived((data.documents as PaginatedResponse<DocumentItem>)?.items ?? []);
 
 	const columns = [
 		{ accessorKey: "title", header: "Title" },
