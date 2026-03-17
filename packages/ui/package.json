@@ -42,7 +42,7 @@
     "@sveltejs/kit": "^2.0.0",
     "@sveltejs/package": "^2.0.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
-    "@tanstack/svelte-table": "^8.21.0",
+    "@tanstack/svelte-table": "^9.0.0-alpha.10",
     "@tanstack/svelte-virtual": "^3.0.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/svelte": "^5.0.0",

@@ -108,20 +108,7 @@
 
 	let riskAlerts = $state<RiskAlert[]>([]);
 
-	// Regime display mapping
-	const regimeLabels: Record<string, string> = {
-		RISK_ON: "Risk On",
-		RISK_OFF: "Risk Off",
-		INFLATION: "Inflation",
-		CRISIS: "Crisis",
-	};
-
-	const regimeColors: Record<string, string> = {
-		RISK_ON: "var(--netz-success, #22c55e)",
-		RISK_OFF: "var(--netz-warning, #f59e0b)",
-		INFLATION: "var(--netz-orange, #FF975A)",
-		CRISIS: "var(--netz-danger, #ef4444)",
-	};
+	import { regimeLabels, regimeColors } from "$lib/constants/regime";
 
 	// Current regime from API
 	let currentRegime = $derived(
