@@ -302,6 +302,7 @@ source_modules = [
     "vertical_engines.wealth.fact_sheet.chart_builder",
     "vertical_engines.wealth.screener.layer_evaluator",
     "vertical_engines.wealth.screener.quant_metrics",
+    "vertical_engines.wealth.peer_group.peer_matcher",
 ]
 forbidden_modules = [
     "vertical_engines.wealth.dd_report.dd_report_engine",
@@ -309,6 +310,7 @@ forbidden_modules = [
     "vertical_engines.wealth.asset_universe.universe_service",
     "vertical_engines.wealth.fact_sheet.fact_sheet_engine",
     "vertical_engines.wealth.screener.service",
+    "vertical_engines.wealth.peer_group.service",
 ]
 
 [[tool.importlinter.contracts]]
@@ -316,3 +318,17 @@ name = "Wealth screener models must not import screener service"
 type = "forbidden"
 source_modules = ["vertical_engines.wealth.screener.models"]
 forbidden_modules = ["vertical_engines.wealth.screener.service"]
+
+[[tool.importlinter.contracts]]
+name = "Peer group helpers must not import peer group service"
+type = "forbidden"
+source_modules = [
+    "vertical_engines.wealth.peer_group.peer_matcher",
+]
+forbidden_modules = ["vertical_engines.wealth.peer_group.service"]
+
+[[tool.importlinter.contracts]]
+name = "Peer group models must not import peer group service"
+type = "forbidden"
+source_modules = ["vertical_engines.wealth.peer_group.models"]
+forbidden_modules = ["vertical_engines.wealth.peer_group.service"]
