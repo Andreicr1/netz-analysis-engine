@@ -40,7 +40,8 @@ class StrategyDriftScanResult:
     """Scan results for all instruments."""
 
     scanned_count: int
-    alerts: tuple[StrategyDriftResult, ...]  # only drift_detected items
+    alerts: tuple[StrategyDriftResult, ...]  # only drift_detected items, sorted by anomalous_count desc
+    all_results: tuple[StrategyDriftResult, ...]  # every instrument (stable + insufficient + drift_detected)
     stable_count: int
     insufficient_data_count: int
     scan_timestamp: str

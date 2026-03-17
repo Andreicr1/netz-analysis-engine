@@ -24,12 +24,11 @@ from vertical_engines.wealth.monitoring.strategy_drift_models import (
     StrategyDriftScanResult,
 )
 from vertical_engines.wealth.monitoring.strategy_drift_scanner import (
-    METRICS_TO_CHECK,
     _EPSILON,
+    METRICS_TO_CHECK,
     scan_all_strategy_drift,
     scan_strategy_drift,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════
 #  Helpers
@@ -121,11 +120,13 @@ class TestModels:
         sr = StrategyDriftScanResult(
             scanned_count=0,
             alerts=(),
+            all_results=(),
             stable_count=0,
             insufficient_data_count=0,
             scan_timestamp="2026-01-01T00:00:00Z",
         )
         assert isinstance(sr.alerts, tuple)
+        assert isinstance(sr.all_results, tuple)
 
 
 # ═══════════════════════════════════════════════════════════════════

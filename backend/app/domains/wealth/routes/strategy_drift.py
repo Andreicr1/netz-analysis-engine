@@ -75,71 +75,6 @@ def _drift_result_to_alert_dict(
     }
 
 
-@router.get(
-    "/{instrument_id}",
-    response_model=StrategyDriftRead,
-    summary="Check drift for a single instrument",
-)
-async def get_instrument_drift(
-    instrument_id: uuid.UUID,
-    recent_days: int = Query(90, ge=5, le=365),
-    baseline_days: int = Query(360, ge=20, le=1800),
-    db: AsyncSession = Depends(get_db_with_rls),
-    user: CurrentUser = Depends(get_current_user),
-) -> StrategyDriftRead:
-    # Verify instrument exists
-    inst_result = await db.execute(
-        select(Instrument.name).where(Instrument.instrument_id == instrument_id)
-    )
-    inst_name = inst_result.scalar()
-    if inst_name is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Instrument not found")
-
-    # Load metrics history
-    stmt = (
-        select(FundRiskMetrics)
-        .where(FundRiskMetrics.instrument_id == instrument_id)
-        .order_by(FundRiskMetrics.calc_date.asc())
-        .limit(baseline_days)
-    )
-    result = await db.execute(stmt)
-    metrics_rows = result.scalars().all()
-
-    # Extract to plain dicts for thread-safe processing
-    metrics_dicts = [_metrics_row_to_dict(r) for r in metrics_rows]
-
-    from vertical_engines.wealth.monitoring.strategy_drift_scanner import scan_strategy_drift
-
-    drift_result = await asyncio.to_thread(
-        scan_strategy_drift,
-        metrics_dicts,
-        str(instrument_id),
-        inst_name,
-        {"recent_window_days": recent_days, "baseline_window_days": baseline_days},
-    )
-
-    return StrategyDriftRead(
-        instrument_id=instrument_id,
-        instrument_name=drift_result.instrument_name,
-        status=drift_result.status,
-        anomalous_count=drift_result.anomalous_count,
-        total_metrics=drift_result.total_metrics,
-        metrics=[
-            {
-                "metric_name": m.metric_name,
-                "recent_mean": m.recent_mean,
-                "baseline_mean": m.baseline_mean,
-                "baseline_std": m.baseline_std,
-                "z_score": m.z_score,
-                "is_anomalous": m.is_anomalous,
-            }
-            for m in drift_result.metrics
-        ],
-        severity=drift_result.severity,
-        detected_at=drift_result.detected_at,
-    )
-
-
 @router.post(
     "/scan",
     response_model=StrategyDriftScanRead,
@@ -344,3 +279,72 @@ async def list_drift_alerts(
         )
         for a in alerts
     ]
+
+
+# ── Parameterized route MUST come after literal routes (/alerts, /scan) ──
+# FastAPI matches top-to-bottom; /{instrument_id} would capture "alerts" as UUID.
+
+
+@router.get(
+    "/{instrument_id}",
+    response_model=StrategyDriftRead,
+    summary="Check drift for a single instrument",
+)
+async def get_instrument_drift(
+    instrument_id: uuid.UUID,
+    recent_days: int = Query(90, ge=5, le=365),
+    baseline_days: int = Query(360, ge=20, le=1800),
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> StrategyDriftRead:
+    # Verify instrument exists
+    inst_result = await db.execute(
+        select(Instrument.name).where(Instrument.instrument_id == instrument_id)
+    )
+    inst_name = inst_result.scalar()
+    if inst_name is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Instrument not found")
+
+    # Load metrics history
+    stmt = (
+        select(FundRiskMetrics)
+        .where(FundRiskMetrics.instrument_id == instrument_id)
+        .order_by(FundRiskMetrics.calc_date.asc())
+        .limit(baseline_days)
+    )
+    result = await db.execute(stmt)
+    metrics_rows = result.scalars().all()
+
+    # Extract to plain dicts for thread-safe processing
+    metrics_dicts = [_metrics_row_to_dict(r) for r in metrics_rows]
+
+    from vertical_engines.wealth.monitoring.strategy_drift_scanner import scan_strategy_drift
+
+    drift_result = await asyncio.to_thread(
+        scan_strategy_drift,
+        metrics_dicts,
+        str(instrument_id),
+        inst_name,
+        {"recent_window_days": recent_days, "baseline_window_days": baseline_days},
+    )
+
+    return StrategyDriftRead(
+        instrument_id=instrument_id,
+        instrument_name=drift_result.instrument_name,
+        status=drift_result.status,
+        anomalous_count=drift_result.anomalous_count,
+        total_metrics=drift_result.total_metrics,
+        metrics=[
+            {
+                "metric_name": m.metric_name,
+                "recent_mean": m.recent_mean,
+                "baseline_mean": m.baseline_mean,
+                "baseline_std": m.baseline_std,
+                "z_score": m.z_score,
+                "is_anomalous": m.is_anomalous,
+            }
+            for m in drift_result.metrics
+        ],
+        severity=drift_result.severity,
+        detected_at=drift_result.detected_at,
+    )
