@@ -316,18 +316,8 @@ class TestWeightProposer:
         assert not result.feasible
         assert "allocation" in result.reason.lower()
 
-    @patch("vertical_engines.wealth.rebalancing.weight_proposer.optimize_portfolio")
-    def test_feasible_proposal(self, mock_optimize):
-        from quant_engine.optimizer_service import OptimizationResult
+    def test_feasible_proposal(self):
         from vertical_engines.wealth.rebalancing.weight_proposer import propose_weights
-
-        mock_optimize.return_value = OptimizationResult(
-            weights={"US_EQUITY": 0.5, "FIXED_INCOME": 0.3, "INTL_EQUITY": 0.2},
-            expected_return=0.08,
-            portfolio_volatility=0.12,
-            sharpe_ratio=0.33,
-            status="optimal",
-        )
 
         portfolio = _make_portfolio()
         snapshot = _make_snapshot()
@@ -348,23 +338,21 @@ class TestWeightProposer:
         assert result.feasible
         assert result.reason is None
         assert "US_EQUITY" in result.new_weights
+        # Weights should sum to ~1.0
+        total = sum(result.new_weights.values())
+        assert abs(total - 1.0) < 0.01
 
-    @patch("vertical_engines.wealth.rebalancing.weight_proposer.optimize_portfolio")
-    def test_infeasible_optimizer_result(self, mock_optimize):
-        from quant_engine.optimizer_service import OptimizationResult
+    def test_infeasible_bounds(self):
         from vertical_engines.wealth.rebalancing.weight_proposer import propose_weights
 
-        mock_optimize.return_value = OptimizationResult(
-            weights={},
-            expected_return=0.0,
-            portfolio_volatility=0.0,
-            sharpe_ratio=0.0,
-            status="infeasible: problem infeasible",
-        )
-
         portfolio = _make_portfolio()
-        snapshot = _make_snapshot()
-        allocs = [_make_allocation("US_EQUITY")]
+        # Weights that can't fit in tight bounds
+        snapshot = _make_snapshot(weights={"A": 0.9, "B": 0.1})
+        # Very tight bounds that make redistribution impossible
+        allocs = [
+            _make_allocation("A", min_w=0.95, max_w=0.95),
+            _make_allocation("B", min_w=0.95, max_w=0.95),
+        ]
 
         db = MagicMock()
         db.execute.return_value.scalar_one_or_none.side_effect = [
@@ -375,7 +363,7 @@ class TestWeightProposer:
         result = propose_weights(db, portfolio.id, uuid.uuid4(), "org-1")
 
         assert not result.feasible
-        assert "infeasible" in result.reason.lower()
+        assert "bounds" in result.reason.lower()
 
     def test_weight_gap_calculation_accuracy(self):
         from vertical_engines.wealth.rebalancing.impact_analyzer import compute_impact
@@ -645,8 +633,8 @@ class TestUniverseServiceIntegration:
         assert rebalance is not None
         mock_rebal_instance.compute_rebalance_impact.assert_called_once()
 
-    def test_deactivate_no_rebalance_without_org_id(self):
-        """Without organization_id, rebalancing is skipped."""
+    def test_deactivate_no_rebalance_when_not_approved(self):
+        """When fund was not approved, rebalancing is skipped."""
         from vertical_engines.wealth.asset_universe.universe_service import UniverseService
 
         instrument_id = uuid.uuid4()
@@ -660,7 +648,7 @@ class TestUniverseServiceIntegration:
 
         svc = UniverseService()
         deactivation, rebalance = svc.deactivate_asset(
-            db, instrument_id=instrument_id,
+            db, instrument_id=instrument_id, organization_id="org-1",
         )
 
         assert deactivation.rebalance_needed is False
@@ -668,45 +656,65 @@ class TestUniverseServiceIntegration:
 
 
 # ═══════════════════════════════════════════════════════════════════
-#  CVaR Constraint Tests
+#  Proportional Redistribution Tests
 # ═══════════════════════════════════════════════════════════════════
 
-class TestCVaRConstraintEnforcement:
-    """Test that CVaR limits are respected in proposals."""
+class TestProportionalRedistribution:
+    """Test _redistribute_proportionally logic."""
 
-    @patch("vertical_engines.wealth.rebalancing.weight_proposer.optimize_portfolio")
-    @patch("vertical_engines.wealth.rebalancing.weight_proposer.check_breach_status")
-    def test_cvar_breach_makes_infeasible(self, mock_breach, mock_optimize):
-        from quant_engine.cvar_service import BreachStatus
-        from quant_engine.optimizer_service import OptimizationResult
-        from vertical_engines.wealth.rebalancing.weight_proposer import propose_weights
-
-        mock_optimize.return_value = OptimizationResult(
-            weights={"US_EQUITY": 1.0},
-            expected_return=0.10,
-            portfolio_volatility=0.20,
-            sharpe_ratio=0.30,
-            status="optimal",
-        )
-        mock_breach.return_value = BreachStatus(
-            trigger_status="breach",
-            cvar_current=-0.10,
-            cvar_limit=-0.06,
-            cvar_utilized_pct=166.7,
-            consecutive_breach_days=5,
+    def test_even_redistribution(self):
+        from vertical_engines.wealth.rebalancing.weight_proposer import (
+            _redistribute_proportionally,
         )
 
-        portfolio = _make_portfolio()
-        snapshot = _make_snapshot(cvar_current=-0.10)
-        allocs = [_make_allocation("US_EQUITY")]
+        old = {"A": 0.4, "B": 0.3, "C": 0.3}
+        bounds = {"A": (0.0, 1.0), "B": (0.0, 1.0), "C": (0.0, 1.0)}
+        result = _redistribute_proportionally(old, bounds)
 
-        db = MagicMock()
-        db.execute.return_value.scalar_one_or_none.side_effect = [
-            portfolio, snapshot,
-        ]
-        db.execute.return_value.scalars.return_value.all.return_value = allocs
+        assert result is not None
+        assert abs(sum(result.values()) - 1.0) < 0.01
+        assert result["A"] == pytest.approx(0.4, abs=0.01)
 
-        result = propose_weights(db, portfolio.id, uuid.uuid4(), "org-1")
+    def test_respects_max_bounds(self):
+        from vertical_engines.wealth.rebalancing.weight_proposer import (
+            _redistribute_proportionally,
+        )
 
-        assert not result.feasible
-        assert "CVaR breach" in result.reason
+        old = {"A": 0.8, "B": 0.2}
+        bounds = {"A": (0.0, 0.5), "B": (0.0, 1.0)}
+        result = _redistribute_proportionally(old, bounds)
+
+        assert result is not None
+        assert result["A"] <= 0.5 + 1e-6
+
+    def test_respects_min_bounds(self):
+        from vertical_engines.wealth.rebalancing.weight_proposer import (
+            _redistribute_proportionally,
+        )
+
+        old = {"A": 0.15, "B": 0.55, "C": 0.30}
+        bounds = {"A": (0.20, 0.60), "B": (0.20, 0.60), "C": (0.20, 0.60)}
+        result = _redistribute_proportionally(old, bounds)
+
+        assert result is not None
+        assert result["A"] >= 0.20 - 1e-6
+
+    def test_infeasible_returns_none(self):
+        from vertical_engines.wealth.rebalancing.weight_proposer import (
+            _redistribute_proportionally,
+        )
+
+        # Both blocks need min=0.6 but sum would be 1.2 > 1.0
+        old = {"A": 0.5, "B": 0.5}
+        bounds = {"A": (0.6, 1.0), "B": (0.6, 1.0)}
+        result = _redistribute_proportionally(old, bounds)
+
+        assert result is None
+
+    def test_empty_weights_returns_none(self):
+        from vertical_engines.wealth.rebalancing.weight_proposer import (
+            _redistribute_proportionally,
+        )
+
+        result = _redistribute_proportionally({}, {})
+        assert result is None

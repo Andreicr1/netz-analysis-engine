@@ -175,16 +175,19 @@ class UniverseService:
         db: Session,
         *,
         instrument_id: uuid.UUID,
-        organization_id: str | None = None,
+        organization_id: str,
     ) -> tuple[DeactivationResult, RebalanceResult | None]:
         """Remove a fund from the active universe.
 
         Sets Fund.is_active = False and marks current approval as not current.
-        Returns whether a rebalance evaluation is needed (true if the fund
-        was previously approved).
+        Returns (DeactivationResult, RebalanceResult | None). RebalanceResult
+        is computed when the fund was previously approved.
         """
         fund = db.execute(
-            select(Fund).where(Fund.fund_id == instrument_id).with_for_update()
+            select(Fund).where(
+                Fund.fund_id == instrument_id,
+                Fund.organization_id == organization_id,
+            ).with_for_update()
         ).scalar_one_or_none()
 
         if fund is None:
@@ -197,6 +200,7 @@ class UniverseService:
         approval = db.execute(
             select(UniverseApproval).where(
                 UniverseApproval.instrument_id == instrument_id,
+                UniverseApproval.organization_id == organization_id,
                 UniverseApproval.is_current.is_(True),
                 UniverseApproval.decision == "approved",
             )
@@ -223,9 +227,9 @@ class UniverseService:
             rebalance_needed=rebalance_needed,
         )
 
-        # Trigger rebalancing if fund was approved and org_id is available
+        # Trigger rebalancing if fund was approved
         rebalance_result: RebalanceResult | None = None
-        if rebalance_needed and organization_id:
+        if rebalance_needed:
             from vertical_engines.wealth.rebalancing.service import RebalancingService
 
             svc = RebalancingService()

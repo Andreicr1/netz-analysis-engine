@@ -1,31 +1,87 @@
 """Weight proposer — computes new weight distribution after instrument removal.
 
-Wraps optimizer_service and cvar_service to propose feasible reallocations.
+Uses proportional redistribution within StrategicAllocation bounds.
+Full optimizer-based rebalancing (cvxpy) runs in the daily pipeline where
+real covariance data is available. This module provides a quick, synchronous
+proposal for immediate feedback on deactivation impact.
+
 Must NOT import from service.py (enforced by import-linter).
 """
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 
-import numpy as np
 import structlog
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from quant_engine.cvar_service import (
-    check_breach_status,
-)
-from quant_engine.optimizer_service import (
-    BlockConstraint,
-    OptimizationResult,
-    ProfileConstraints,
-    optimize_portfolio,
-)
 from vertical_engines.wealth.rebalancing.models import WeightProposal
 
 logger = structlog.get_logger()
+
+
+def _redistribute_proportionally(
+    old_weights: dict[str, float],
+    bounds: dict[str, tuple[float, float]],
+) -> dict[str, float] | None:
+    """Redistribute weights proportionally within allocation bounds.
+
+    Spreads removed weight across remaining blocks proportional to their
+    current weights, clamped to min/max bounds. Returns None if infeasible
+    (bounds cannot accommodate the redistribution).
+    """
+    total = sum(old_weights.values())
+    if total <= 0:
+        return None
+
+    # Normalize to sum=1
+    new_weights = {k: v / total for k, v in old_weights.items()}
+
+    # Iteratively clamp to bounds and renormalize unclamped blocks
+    frozen: dict[str, float] = {}  # blocks clamped to a bound
+
+    for _ in range(10):
+        frozen_sum = sum(frozen.values())
+        remaining = 1.0 - frozen_sum
+
+        # Distribute remaining budget across unfrozen blocks proportionally
+        unfrozen = {k: v for k, v in new_weights.items() if k not in frozen}
+        if not unfrozen:
+            break
+
+        unfrozen_total = sum(unfrozen.values())
+        if unfrozen_total < 1e-12:
+            return None
+
+        # Scale unfrozen blocks to fill remaining budget
+        scale = remaining / unfrozen_total
+        for k in unfrozen:
+            new_weights[k] = unfrozen[k] * scale
+
+        # Check bounds and freeze any that violate
+        changed = False
+        for k in list(unfrozen):
+            lo, hi = bounds.get(k, (0.0, 1.0))
+            if new_weights[k] < lo:
+                frozen[k] = lo
+                new_weights[k] = lo
+                changed = True
+            elif new_weights[k] > hi:
+                frozen[k] = hi
+                new_weights[k] = hi
+                changed = True
+
+        if not changed:
+            break
+
+    # Verify feasibility: sum of mins must be <= 1.0 and sum of maxes >= 1.0
+    total_new = sum(new_weights.values())
+    if abs(total_new - 1.0) > 0.01:
+        return None
+
+    # Normalize precisely
+    return {k: round(v / total_new, 6) for k, v in new_weights.items()}
 
 
 def propose_weights(
@@ -38,13 +94,13 @@ def propose_weights(
     """Propose new weights for a portfolio after removing an instrument.
 
     1. Load current weights from PortfolioSnapshot (latest).
-    2. Remove the instrument, calculate weight gap.
-    3. Load StrategicAllocation bounds for the portfolio's profile.
-    4. Call optimizer_service to redistribute within bounds.
-    5. Validate CVaR constraint via cvar_service.
+    2. Load StrategicAllocation bounds for the portfolio's profile.
+    3. Remove the instrument's block weight and redistribute proportionally
+       within min/max bounds.
 
-    Returns WeightProposal with feasible=False if optimizer cannot find
-    a solution (no exception — caller decides what to do).
+    Returns WeightProposal with feasible=False if redistribution cannot
+    satisfy allocation bounds (no exception — caller decides what to do).
+    Full optimizer-based rebalancing runs in the daily pipeline.
     """
     from app.domains.wealth.models.allocation import StrategicAllocation
     from app.domains.wealth.models.model_portfolio import ModelPortfolio
@@ -115,62 +171,19 @@ def propose_weights(
             reason="No strategic allocations defined",
         )
 
-    # 4. Build optimizer inputs — use block-level weights
-    block_ids = [a.block_id for a in allocations]
-    block_constraints = [
-        BlockConstraint(
-            block_id=a.block_id,
-            min_weight=float(a.min_weight),
-            max_weight=float(a.max_weight),
-        )
+    # 4. Build bounds map and redistribute proportionally
+    bounds: dict[str, tuple[float, float]] = {
+        a.block_id: (float(a.min_weight), float(a.max_weight))
         for a in allocations
-    ]
+    }
 
-    # CVaR limit from config or snapshot
-    cvar_config = config or {}
-    cvar_limit = cvar_config.get("cvar_limit")
-    if cvar_limit is None and snapshot.cvar_limit is not None:
-        cvar_limit = float(snapshot.cvar_limit)
+    new_weights = _redistribute_proportionally(old_weights, bounds)
 
-    constraints = ProfileConstraints(
-        blocks=block_constraints,
-        cvar_limit=cvar_limit,
-    )
-
-    # Expected returns: use old weights as proxy (rebalance preserves targets)
-    expected_returns = {bid: old_weights.get(bid, 0.0) for bid in block_ids}
-
-    # Covariance: use identity scaled by volatility as approximation
-    # (Full NAV-based computation requires async — rebalancing is a quick check)
-    n = len(block_ids)
-    cov_matrix = np.eye(n) * 0.04  # 20% vol default assumption
-
-    # 5. Run optimizer (async → sync bridge)
-    try:
-        opt_result: OptimizationResult = asyncio.get_event_loop().run_until_complete(
-            optimize_portfolio(
-                block_ids=block_ids,
-                expected_returns=expected_returns,
-                cov_matrix=cov_matrix,
-                constraints=constraints,
-            )
-        )
-    except RuntimeError:
-        # No running event loop — create one
-        opt_result = asyncio.run(
-            optimize_portfolio(
-                block_ids=block_ids,
-                expected_returns=expected_returns,
-                cov_matrix=cov_matrix,
-                constraints=constraints,
-            )
-        )
-
-    if opt_result.status not in ("optimal", "optimal_inaccurate"):
+    if new_weights is None:
         logger.warning(
             "rebalance_infeasible",
             portfolio_id=str(portfolio_id),
-            status=opt_result.status,
+            profile=profile,
         )
         return WeightProposal(
             portfolio_id=portfolio_id,
@@ -179,27 +192,14 @@ def propose_weights(
             cvar_before=cvar_before,
             cvar_after=0.0,
             feasible=False,
-            reason=f"Optimizer: {opt_result.status}",
+            reason="Cannot redistribute within allocation bounds",
         )
-
-    new_weights = opt_result.weights
-
-    # 6. Check CVaR after rebalancing
-    breach = check_breach_status(
-        profile=profile,
-        cvar_current=cvar_before,  # approximate — full recalc deferred to daily pipeline
-        config=cvar_config.get("portfolio_profiles"),
-    )
-    cvar_after = breach.cvar_current
-
-    feasible = breach.trigger_status != "breach"
-    reason = None if feasible else f"CVaR breach: {breach.cvar_utilized_pct:.1f}% utilized"
 
     logger.info(
         "rebalance_proposal_computed",
         portfolio_id=str(portfolio_id),
         profile=profile,
-        feasible=feasible,
+        feasible=True,
         old_blocks=len(old_weights),
         new_blocks=len(new_weights),
     )
@@ -209,7 +209,7 @@ def propose_weights(
         old_weights=old_weights,
         new_weights=new_weights,
         cvar_before=cvar_before,
-        cvar_after=cvar_after,
-        feasible=feasible,
-        reason=reason,
+        cvar_after=cvar_before,  # CVaR recalculated in daily pipeline
+        feasible=True,
+        reason=None,
     )
