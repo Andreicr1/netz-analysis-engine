@@ -13,7 +13,7 @@ export const load: PageServerLoad = async ({ parent }) => {
 		api.get("/risk/regime"),
 		api.get("/risk/regime/history"),
 		api.get("/risk/macro"),
-		api.get("/wealth/analytics/strategy-drift/alerts?is_current=true"),
+		api.get("/analytics/strategy-drift/alerts?is_current=true"),
 		...profiles.map((p) => api.get(`/risk/${p}/cvar`)),
 		...profiles.map((p) => api.get(`/risk/${p}/cvar/history`)),
 	]);

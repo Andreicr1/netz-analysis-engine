@@ -256,7 +256,7 @@ api_v1.include_router(wealth_screener_router)
 api_v1.include_router(wealth_strategy_drift_router)
 api_v1.include_router(wealth_attribution_router)
 api_v1.include_router(wealth_correlation_regime_router)
-api_v1.include_router(wealth_exposure_router, prefix="/wealth")
+api_v1.include_router(wealth_exposure_router)
 
 # ── Mount credit domain routes ───────────────────────────────
 

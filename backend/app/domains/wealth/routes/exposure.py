@@ -1,7 +1,7 @@
 """Exposure Monitor routes — geographic and sector allocation heatmaps.
 
-GET /exposure/matrix   — returns weighted exposure matrix (geographic or sector)
-GET /exposure/metadata — returns data freshness per fund and leading indicator stubs
+GET /wealth/exposure/matrix   — returns weighted exposure matrix (geographic or sector)
+GET /wealth/exposure/metadata — returns data freshness per fund and leading indicator stubs
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from app.domains.wealth.schemas.exposure import (
 
 logger = structlog.get_logger()
 
-router = APIRouter(prefix="/exposure", tags=["exposure"])
+router = APIRouter(prefix="/wealth/exposure", tags=["exposure"])
 
 
 @router.get(
