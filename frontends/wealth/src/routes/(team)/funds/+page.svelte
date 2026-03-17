@@ -76,8 +76,10 @@
 
 	let selectedFund = $state<FundRow | null>(null);
 	let panelOpen = $state(false);
+	let closingTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	function openPanel(fund: FundRow) {
+		if (closingTimeout) { clearTimeout(closingTimeout); closingTimeout = null; }
 		selectedFund = fund;
 		panelOpen = true;
 	}
@@ -85,8 +87,9 @@
 	function closePanel() {
 		panelOpen = false;
 		// Delay clearing so close animation completes
-		setTimeout(() => {
+		closingTimeout = setTimeout(() => {
 			selectedFund = null;
+			closingTimeout = null;
 		}, 220);
 	}
 
