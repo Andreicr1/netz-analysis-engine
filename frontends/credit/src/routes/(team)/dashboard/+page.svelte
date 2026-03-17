@@ -15,6 +15,8 @@
   } from "@netz/ui";
   import TaskInbox from "$lib/components/TaskInbox.svelte";
   import PipelineFunnel from "$lib/components/PipelineFunnel.svelte";
+  import { createClientApiClient } from "$lib/api/client";
+  import { getContext } from "svelte";
   import type { PageData } from "./$types";
   import type {
     PortfolioSummary,
@@ -24,6 +26,8 @@
     TaskItem,
   } from "$lib/types/api";
 
+  const getToken = getContext<() => Promise<string>>("netz:getToken");
+
   type Trend = "up" | "down" | "flat";
 
   let { data }: { data: PageData } = $props();
@@ -32,6 +36,68 @@
   let pipeline = $derived(data.pipelineSummary as PipelineSummary | null);
   let analytics = $derived(data.pipelineAnalytics as PipelineAnalytics | null);
   let macro = $derived(data.macroSnapshot as MacroSnapshot | null);
+
+  // ── FRED Explorer ──
+  let fredSearch = $state("");
+  let fredSearching = $state(false);
+  let fredResults = $state<Array<{ id: string; title: string }>>([]);
+  let selectedFredSeries = $state<string[]>([]);
+  let fredChartData = $state<Record<string, unknown[]> | null>(null);
+  let fredSearchTimer: ReturnType<typeof setTimeout> | undefined;
+  let fredAbortController: AbortController | undefined;
+
+  function debounceFredSearch() {
+    clearTimeout(fredSearchTimer);
+    fredSearchTimer = setTimeout(() => searchFred(), 300);
+  }
+
+  async function searchFred() {
+    const q = fredSearch.trim();
+    if (q.length < 2) { fredResults = []; return; }
+
+    fredAbortController?.abort();
+    fredAbortController = new AbortController();
+    fredSearching = true;
+    try {
+      const api = createClientApiClient(getToken);
+      const res = await api.get<{ series: Array<{ id: string; title: string }> }>(`/dashboard/fred-search`, { q });
+      fredResults = res.series ?? [];
+    } catch {
+      fredResults = [];
+    } finally {
+      fredSearching = false;
+    }
+  }
+
+  async function toggleFredSeries(id: string) {
+    if (selectedFredSeries.includes(id)) {
+      selectedFredSeries = selectedFredSeries.filter(s => s !== id);
+    } else if (selectedFredSeries.length < 4) {
+      selectedFredSeries = [...selectedFredSeries, id];
+    }
+    await loadFredData();
+  }
+
+  async function loadFredData() {
+    if (selectedFredSeries.length === 0) { fredChartData = null; return; }
+    try {
+      const api = createClientApiClient(getToken);
+      if (selectedFredSeries.length === 1) {
+        const res = await api.get<Record<string, unknown>>(`/dashboard/macro-fred-series`, {
+          series_id: selectedFredSeries[0],
+          period: "6m",
+        });
+        fredChartData = { [selectedFredSeries[0]]: (res.observations as unknown[]) ?? [] };
+      } else {
+        const res = await api.get<Record<string, unknown>>(`/dashboard/macro-fred-multi`, {
+          series_ids: selectedFredSeries.join(","),
+        });
+        fredChartData = (res.series as Record<string, unknown[]>) ?? {};
+      }
+    } catch {
+      fredChartData = null;
+    }
+  }
 </script>
 
 <div class="space-y-6 p-6">
@@ -155,12 +221,61 @@
       {/if}
       <div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface)] p-4">
         <h3 class="mb-3 text-sm font-medium text-[var(--netz-text-secondary)]">
-          Recent Activity
+          FRED Explorer
         </h3>
-        <EmptyState
-          title="No Activity"
-          description="Recent activity will appear here."
-        />
+        <div class="space-y-3">
+          <div class="flex gap-2">
+            <input
+              type="text"
+              bind:value={fredSearch}
+              placeholder="Search FRED series (e.g. GDP, CPI, FEDFUNDS)..."
+              class="flex-1 rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-1.5 text-sm text-[var(--netz-text-primary)]"
+              oninput={debounceFredSearch}
+            />
+          </div>
+          {#if fredSearching}
+            <p class="text-xs text-[var(--netz-text-muted)]">Searching...</p>
+          {/if}
+          {#if fredResults.length > 0}
+            <div class="max-h-48 space-y-1 overflow-y-auto">
+              {#each fredResults as series}
+                <button
+                  class="w-full rounded px-2 py-1.5 text-left text-xs hover:bg-[var(--netz-bg-hover)] {selectedFredSeries.includes(series.id) ? 'bg-[var(--netz-brand-primary)]/10 font-medium' : ''}"
+                  onclick={() => toggleFredSeries(series.id)}
+                >
+                  <span class="font-mono">{series.id}</span> — {series.title}
+                </button>
+              {/each}
+            </div>
+          {/if}
+          {#if selectedFredSeries.length > 0}
+            <div class="flex flex-wrap gap-1">
+              {#each selectedFredSeries as id}
+                <span class="inline-flex items-center gap-1 rounded-full bg-[var(--netz-brand-primary)]/10 px-2 py-0.5 text-xs text-[var(--netz-brand-primary)]">
+                  {id}
+                  <button onclick={() => selectedFredSeries = selectedFredSeries.filter(s => s !== id)}>&times;</button>
+                </span>
+              {/each}
+            </div>
+            {#if fredChartData}
+              <div class="rounded border border-[var(--netz-border)] p-3">
+                <p class="mb-2 text-xs font-medium text-[var(--netz-text-secondary)]">
+                  {selectedFredSeries.join(", ")} — Last 30 observations
+                </p>
+                <div class="space-y-1">
+                  {#each Object.entries(fredChartData) as [seriesId, observations]}
+                    <div class="flex items-center gap-2 text-xs">
+                      <span class="w-24 font-mono">{seriesId}</span>
+                      <span class="text-[var(--netz-text-muted)]">
+                        Latest: {Array.isArray(observations) && observations.length > 0 ? (observations[observations.length - 1] as Record<string, string>)?.value ?? "—" : "—"}
+                      </span>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+          {/if}
+        </div>
       </div>
     </div>
   </section>
