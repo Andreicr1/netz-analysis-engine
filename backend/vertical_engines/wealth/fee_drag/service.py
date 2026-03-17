@@ -7,6 +7,7 @@ Pure logic — no DB access.
 
 from __future__ import annotations
 
+import math
 import uuid
 from typing import Any
 
@@ -22,6 +23,17 @@ logger = structlog.get_logger(__name__)
 
 # Default fee drag threshold — instruments above this are flagged
 DEFAULT_FEE_DRAG_THRESHOLD = 0.50  # 50% of gross return consumed by fees
+
+
+def _safe_float(val: Any, default: float = 0.0) -> float:
+    """Coerce value to float, rejecting inf/nan and non-numeric inputs."""
+    try:
+        f = float(val)
+    except (TypeError, ValueError):
+        return default
+    if not math.isfinite(f):
+        return default
+    return f
 
 
 class FeeDragService:
@@ -59,7 +71,7 @@ class FeeDragService:
         fees = self._extract_fees(instrument_type, attributes)
         gross = gross_expected_return
         if gross is None:
-            gross = float(attributes.get("expected_return_pct", 0.0))
+            gross = _safe_float(attributes.get("expected_return_pct", 0.0))
 
         net = gross - fees.total_fee_pct
 
@@ -163,14 +175,14 @@ class FeeDragService:
         attributes: dict[str, Any],
     ) -> FeeBreakdown:
         """Extract fee components from JSONB attributes by instrument type."""
-        mgmt = float(attributes.get("management_fee_pct", 0.0))
-        perf = float(attributes.get("performance_fee_pct", 0.0))
+        mgmt = _safe_float(attributes.get("management_fee_pct", 0.0))
+        perf = _safe_float(attributes.get("performance_fee_pct", 0.0))
         other = 0.0
 
         if instrument_type == "bond":
-            other = float(attributes.get("bid_ask_spread_pct", 0.0))
+            other = _safe_float(attributes.get("bid_ask_spread_pct", 0.0))
         elif instrument_type == "equity":
-            other = float(attributes.get("brokerage_fee_pct", 0.0))
+            other = _safe_float(attributes.get("brokerage_fee_pct", 0.0))
 
         return FeeBreakdown(
             management_fee_pct=mgmt,

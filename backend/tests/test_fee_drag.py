@@ -11,6 +11,7 @@ Covers:
 
 from __future__ import annotations
 
+import math
 import uuid
 
 import pytest
@@ -162,6 +163,70 @@ class TestFeeDragService:
         )
         assert result.fee_drag_pct == 1.0
         assert result.fee_efficient is False
+
+    def test_inf_fee_defaults_to_zero(self):
+        svc = FeeDragService()
+        result = svc.compute_fee_drag(
+            instrument_id=uuid.uuid4(),
+            instrument_name="Inf Fund",
+            instrument_type="fund",
+            attributes={"management_fee_pct": "inf", "expected_return_pct": 10.0},
+        )
+        assert result.fee_breakdown.management_fee_pct == 0.0
+        assert result.net_expected_return == pytest.approx(10.0)
+
+    def test_nan_fee_defaults_to_zero(self):
+        svc = FeeDragService()
+        result = svc.compute_fee_drag(
+            instrument_id=uuid.uuid4(),
+            instrument_name="NaN Fund",
+            instrument_type="fund",
+            attributes={"management_fee_pct": "nan", "expected_return_pct": 10.0},
+        )
+        assert result.fee_breakdown.management_fee_pct == 0.0
+
+    def test_non_numeric_fee_defaults_to_zero(self):
+        svc = FeeDragService()
+        result = svc.compute_fee_drag(
+            instrument_id=uuid.uuid4(),
+            instrument_name="Bad Fund",
+            instrument_type="fund",
+            attributes={"management_fee_pct": "N/A", "expected_return_pct": 10.0},
+        )
+        assert result.fee_breakdown.management_fee_pct == 0.0
+        assert result.net_expected_return == pytest.approx(10.0)
+
+    def test_none_fee_defaults_to_zero(self):
+        svc = FeeDragService()
+        result = svc.compute_fee_drag(
+            instrument_id=uuid.uuid4(),
+            instrument_name="None Fund",
+            instrument_type="fund",
+            attributes={"management_fee_pct": None, "expected_return_pct": 10.0},
+        )
+        assert result.fee_breakdown.management_fee_pct == 0.0
+
+    def test_inf_does_not_poison_portfolio(self):
+        svc = FeeDragService()
+        id1, id2 = uuid.uuid4(), uuid.uuid4()
+        instruments = [
+            {
+                "instrument_id": id1,
+                "name": "Good Fund",
+                "instrument_type": "fund",
+                "attributes": {"management_fee_pct": 1.0, "expected_return_pct": 10.0},
+            },
+            {
+                "instrument_id": id2,
+                "name": "Poisoned Fund",
+                "instrument_type": "fund",
+                "attributes": {"management_fee_pct": "inf", "expected_return_pct": 10.0},
+            },
+        ]
+        result = svc.compute_portfolio_fee_drag(instruments)
+        assert result.total_instruments == 2
+        assert math.isfinite(result.weighted_gross_return)
+        assert math.isfinite(result.weighted_net_return)
 
     def test_no_fees(self):
         svc = FeeDragService()
