@@ -15,7 +15,7 @@
 			<p class="text-[var(--netz-text-secondary)]">You don't have permission to access this page.</p>
 			<a
 				href="/"
-				class="mt-4 inline-block rounded-md bg-[var(--netz-primary)] px-4 py-2 text-sm text-white hover:opacity-90"
+				class="mt-4 inline-block rounded-md bg-[var(--netz-brand-primary)] px-4 py-2 text-sm text-white hover:opacity-90"
 			>
 				Go to Dashboard
 			</a>
@@ -28,7 +28,7 @@
 			<p class="text-[var(--netz-text-secondary)]">Page not found.</p>
 			<a
 				href="/"
-				class="mt-4 inline-block rounded-md bg-[var(--netz-primary)] px-4 py-2 text-sm text-white hover:opacity-90"
+				class="mt-4 inline-block rounded-md bg-[var(--netz-brand-primary)] px-4 py-2 text-sm text-white hover:opacity-90"
 			>
 				Go to Dashboard
 			</a>
@@ -41,7 +41,7 @@
 			<p class="text-[var(--netz-text-secondary)]">{$page.error?.message ?? "Something went wrong."}</p>
 			<a
 				href="/"
-				class="mt-4 inline-block rounded-md bg-[var(--netz-primary)] px-4 py-2 text-sm text-white hover:opacity-90"
+				class="mt-4 inline-block rounded-md bg-[var(--netz-brand-primary)] px-4 py-2 text-sm text-white hover:opacity-90"
 			>
 				Go to Dashboard
 			</a>

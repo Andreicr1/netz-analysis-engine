@@ -1,47 +1,41 @@
 <!--
-  Fund context layout — shows fund name header + fund-scoped navigation.
+  Fund context layout — sets ContextSidebar for fund-scoped navigation.
 -->
 <script lang="ts">
-	import { page } from "$app/stores";
+	import { page } from "$app/state";
 	import { PageHeader } from "@netz/ui";
+	import { useContextNav } from "$lib/state/context-nav.svelte";
 	import type { Snippet } from "svelte";
 	import type { LayoutData } from "./$types";
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
+	const nav = useContextNav();
 
-	let fundNav = $derived([
-		{ label: "Pipeline", href: `/funds/${data.fund.id}/pipeline` },
-		{ label: "Portfolio", href: `/funds/${data.fund.id}/portfolio` },
-		{ label: "Documents", href: `/funds/${data.fund.id}/documents` },
-		{ label: "Reporting", href: `/funds/${data.fund.id}/reporting` },
-	]);
+	$effect(() => {
+		const fundId = data.fund.id;
+		const fundName = data.fund.name;
+		const pathname = page.url.pathname;
 
-	function isActive(href: string): boolean {
-		return $page.url.pathname.startsWith(href);
-	}
+		nav.current = {
+			backHref: "/funds",
+			backLabel: fundName,
+			items: [
+				{ label: "Pipeline", href: `/funds/${fundId}/pipeline` },
+				{ label: "Portfolio", href: `/funds/${fundId}/portfolio` },
+				{ label: "Documents", href: `/funds/${fundId}/documents` },
+				{ label: "Reporting", href: `/funds/${fundId}/reporting` },
+			],
+			activeHref: pathname,
+		};
+
+		return () => {
+			nav.current = null;
+		};
+	});
 </script>
 
-<div class="flex h-full flex-col">
-	<PageHeader title={data.fund.name}>
-		{#snippet actions()}
-			<nav class="flex gap-1">
-				{#each fundNav as item (item.href)}
-					<a
-						href={item.href}
-						class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
-						class:bg-[var(--netz-primary)]/10={isActive(item.href)}
-						class:text-[var(--netz-primary)]={isActive(item.href)}
-						class:text-[var(--netz-text-secondary)]={!isActive(item.href)}
-						class:hover:bg-[var(--netz-surface-alt)]={!isActive(item.href)}
-					>
-						{item.label}
-					</a>
-				{/each}
-			</nav>
-		{/snippet}
-	</PageHeader>
+<PageHeader title={data.fund.name} />
 
-	<div class="flex-1 overflow-y-auto">
-		{@render children()}
-	</div>
+<div class="flex-1 overflow-y-auto">
+	{@render children()}
 </div>

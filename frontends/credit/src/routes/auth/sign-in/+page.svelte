@@ -7,9 +7,9 @@
 </script>
 
 <div class="flex min-h-screen items-center justify-center bg-[var(--netz-surface-alt)]">
-	<div class="w-full max-w-md rounded-lg bg-white p-8 shadow-lg">
+	<div class="w-full max-w-md rounded-lg bg-[var(--netz-surface)] p-8 shadow-lg">
 		<div class="mb-6 text-center">
-			<h1 class="text-2xl font-bold text-[var(--netz-navy,#1b365d)]">Netz Credit Intelligence</h1>
+			<h1 class="text-2xl font-bold text-[var(--netz-brand-primary)]">Netz Credit Intelligence</h1>
 			<p class="mt-2 text-sm text-[var(--netz-text-secondary)]">Sign in to continue</p>
 		</div>
 
@@ -18,7 +18,7 @@
 				<p class="mb-3 text-xs font-medium text-[var(--netz-text-muted)]">Development Mode</p>
 				<a
 					href="/"
-					class="block w-full rounded-md bg-[var(--netz-primary,#1b365d)] px-4 py-2.5 text-center text-sm font-medium text-white hover:opacity-90"
+					class="block w-full rounded-md bg-[var(--netz-brand-primary)] px-4 py-2.5 text-center text-sm font-medium text-white hover:opacity-90"
 				>
 					Continue as Dev User
 				</a>

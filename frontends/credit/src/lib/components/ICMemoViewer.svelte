@@ -26,15 +26,13 @@
 		dealId: string;
 	} = $props();
 
-	let memo = $derived(icMemo);
-	let voting = $derived(votingStatus);
 	let generating = $state(false);
 	let streamingChapters = $state<Record<string, string>>({});
 	let activeSse = $state<ReturnType<typeof createSSEStream> | null>(null);
 
 	let chapters = $derived.by(() => {
-		if (!memo?.chapters) return [];
-		return memo.chapters as Array<{ chapter_number: number; title: string; content: string; status: string }>;
+		if (!icMemo?.chapters) return [];
+		return icMemo.chapters as Array<{ chapter_number: number; title: string; content: string; status: string }>;
 	});
 
 	// Clean up SSE connection on component unmount (#087)
@@ -76,7 +74,7 @@
 	}
 </script>
 
-{#if !memo}
+{#if !icMemo}
 	<Card class="p-6 text-center">
 		<EmptyState
 			title="No IC Memo"
@@ -89,15 +87,15 @@
 {:else}
 	<div class="space-y-4">
 		<!-- Voting status -->
-		{#if voting}
+		{#if votingStatus}
 			<Card class="flex items-center justify-between p-4">
 				<div>
 					<p class="text-sm font-medium text-[var(--netz-text-primary)]">IC Voting</p>
 					<p class="text-xs text-[var(--netz-text-muted)]">
-						{voting.votes_cast ?? 0} / {voting.quorum ?? 0} votes
+						{votingStatus.votes_cast ?? 0} / {votingStatus.quorum ?? 0} votes
 					</p>
 				</div>
-				<StatusBadge status={String(voting.status ?? "pending")} type="review" />
+				<StatusBadge status={String(votingStatus.status ?? "pending")} type="review" />
 			</Card>
 		{/if}
 
@@ -109,7 +107,7 @@
 					onclick={() => {/* toggle expand */}}
 				>
 					<div class="flex items-center gap-3">
-						<span class="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--netz-primary)]/10 text-xs font-bold text-[var(--netz-primary)]">
+						<span class="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--netz-brand-primary)]/10 text-xs font-bold text-[var(--netz-brand-primary)]">
 							{chapter.chapter_number}
 						</span>
 						<span class="text-sm font-medium">{chapter.title}</span>
