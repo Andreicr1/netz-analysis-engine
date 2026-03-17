@@ -1,5 +1,6 @@
 <!--
   Root layout — delegates to shared AppLayout with wealth-specific nav items.
+  TopNav uses text items (no icons). Nav items match Figma design sections.
 -->
 <script lang="ts">
 	import "../app.css";
@@ -10,21 +11,20 @@
 	let { data, children }: { data: LayoutData; children: import("svelte").Snippet } = $props();
 
 	const navItems: NavItem[] = [
-		{ label: "Dashboard", href: "/dashboard", icon: "\u{1F4CA}" },
-		{ label: "Funds", href: "/funds", icon: "\u{1F4B0}" },
-		{ label: "Model Portfolios", href: "/model-portfolios", icon: "\u{1F3AF}" },
-		{ label: "Allocation", href: "/allocation", icon: "\u{1F4CA}" },
-		{ label: "Risk", href: "/risk", icon: "\u{1F6E1}" },
-		{ label: "Analytics", href: "/analytics", icon: "\u{1F52C}" },
-		{ label: "Macro", href: "/macro", icon: "\u{1F30D}" },
-		{ label: "Content", href: "/content", icon: "\u{1F4DD}" },
-		{ label: "DD Reports", href: "/dd-reports", icon: "\u{1F4CB}" },
+		{ label: "Dashboard", href: "/dashboard" },
+		{ label: "Portfolios", href: "/model-portfolios" },
+		{ label: "Risk", href: "/risk" },
+		{ label: "Funds", href: "/funds" },
+		{ label: "Analytics", href: "/analytics" },
+		{ label: "Allocation", href: "/allocation" },
+		{ label: "Macro", href: "/macro" },
+		{ label: "DD Reports", href: "/dd-reports" },
 	];
 </script>
 
 <AppLayout
 	{navItems}
-	appName="Netz Wealth"
+	appName="Wealth OS"
 	branding={data.branding}
 	token={data.token}
 	{children}

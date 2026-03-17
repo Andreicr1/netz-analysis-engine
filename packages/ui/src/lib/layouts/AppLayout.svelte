@@ -1,13 +1,18 @@
 <!--
   @component AppLayout
-  Shared root layout: AppShell + Sidebar, branding injection, session expiry, conflict toast.
+  Root layout: TopNav + optional ContextSidebar, branding injection, session expiry, conflict toast.
   Used by both credit and wealth frontends.
+
+  Without contextNav: TopNav + main (100% width) — list pages, monitoring
+  With contextNav: TopNav + ContextSidebar + main — detail pages ([fundId], [portfolioId])
 -->
 <script lang="ts">
 	import { page } from "$app/stores";
-	import { AppShell, Sidebar, ErrorBoundary, Toast } from "../index.js";
+	import { ErrorBoundary, Toast } from "../index.js";
+	import TopNav from "./TopNav.svelte";
+	import ContextSidebar from "./ContextSidebar.svelte";
 	import { injectBranding, startSessionExpiryMonitor, setConflictHandler, setAuthRedirectHandler } from "../utils/index.js";
-	import type { NavItem, BrandingConfig } from "../utils/types.js";
+	import type { NavItem, BrandingConfig, ContextNav } from "../utils/types.js";
 	import { goto, invalidateAll } from "$app/navigation";
 	import { setContext } from "svelte";
 	import type { Snippet } from "svelte";
@@ -17,16 +22,21 @@
 		appName,
 		branding,
 		token,
+		contextNav,
+		logo,
+		trailing,
 		children,
 	}: {
 		navItems: NavItem[];
 		appName: string;
 		branding: BrandingConfig;
 		token: string;
+		contextNav?: ContextNav;
+		logo?: Snippet;
+		trailing?: Snippet;
 		children: Snippet;
 	} = $props();
 
-	let sidebarCollapsed = $state(false);
 	let showExpiryWarning = $state(false);
 	let conflictMessage = $state<string | null>(null);
 
@@ -62,44 +72,29 @@
 </script>
 
 <ErrorBoundary>
-	<AppShell {sidebarCollapsed}>
-		{#snippet sidebar()}
-			<Sidebar
-				items={navItems}
-				collapsed={sidebarCollapsed}
-				onToggle={() => sidebarCollapsed = !sidebarCollapsed}
-				activeHref={$page.url.pathname}
-			>
-				{#snippet header()}
-					{#if !sidebarCollapsed}
-						<div class="flex items-center gap-2 px-2">
-							{#if branding.logo_light_url}
-								<img
-									src={branding.logo_light_url}
-									alt={branding.org_name}
-									class="h-8 w-auto"
-								/>
-							{:else}
-								<span class="text-lg font-bold text-[var(--netz-brand-primary)]">{appName}</span>
-							{/if}
-						</div>
-					{:else}
-						<div class="flex justify-center">
-							<span class="text-lg font-bold text-[var(--netz-brand-primary)]">N</span>
-						</div>
-					{/if}
-				{/snippet}
-			</Sidebar>
-		{/snippet}
+	<div class="netz-app-layout">
+		<TopNav
+			items={navItems}
+			{appName}
+			activeHref={$page.url.pathname}
+			{logo}
+			{trailing}
+		/>
 
-		{#snippet main()}
-			{@render children()}
-		{/snippet}
-	</AppShell>
+		<div class="netz-app-layout__body">
+			{#if contextNav}
+				<ContextSidebar {contextNav} />
+			{/if}
+
+			<main class="netz-app-layout__main">
+				{@render children()}
+			</main>
+		</div>
+	</div>
 </ErrorBoundary>
 
 {#if showExpiryWarning}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+	<div class="fixed inset-0 z-50 flex items-center justify-center" style="background: var(--netz-surface-overlay, rgba(0,0,0,0.5))">
 		<div class="mx-4 w-full max-w-md rounded-lg bg-[var(--netz-surface-elevated)] p-6 shadow-xl">
 			<h2 class="mb-2 text-lg font-semibold text-[var(--netz-text-primary)]">Session Expiring</h2>
 			<p class="mb-4 text-sm text-[var(--netz-text-secondary)]">
@@ -126,3 +121,28 @@
 {#if conflictMessage}
 	<Toast message={conflictMessage} type="warning" duration={4000} onDismiss={() => conflictMessage = null} />
 {/if}
+
+<style>
+	.netz-app-layout {
+		display: flex;
+		flex-direction: column;
+		height: 100vh;
+		width: 100vw;
+		overflow: hidden;
+	}
+
+	.netz-app-layout__body {
+		display: flex;
+		flex: 1;
+		min-height: 0;
+		overflow: hidden;
+	}
+
+	.netz-app-layout__main {
+		flex: 1;
+		overflow-y: auto;
+		overflow-x: hidden;
+		background: var(--netz-surface-alt, #f9fafb);
+		min-width: 0;
+	}
+</style>

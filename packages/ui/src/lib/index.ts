@@ -36,6 +36,8 @@ export { default as PageTabs } from "./components/PageTabs.svelte";
 export { default as AppLayout } from "./layouts/AppLayout.svelte";
 export { default as AppShell } from "./layouts/AppShell.svelte";
 export { default as Sidebar } from "./layouts/Sidebar.svelte";
+export { default as TopNav } from "./layouts/TopNav.svelte";
+export { default as ContextSidebar } from "./layouts/ContextSidebar.svelte";
 export { default as ContextPanel } from "./layouts/ContextPanel.svelte";
 export { default as InvestorShell } from "./layouts/InvestorShell.svelte";
 export { default as PageHeader } from "./layouts/PageHeader.svelte";
