@@ -4,7 +4,7 @@
  */
 import type { LayoutServerLoad } from "./$types";
 import { createServerApiClient } from "$lib/api/client";
-import { defaultBranding } from "@netz/ui/utils";
+import { defaultDarkBranding } from "@netz/ui/utils";
 import type { BrandingConfig } from "@netz/ui/utils";
 
 export const load: LayoutServerLoad = async ({ locals }) => {
@@ -16,7 +16,7 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 		const api = createServerApiClient(token);
 		branding = await api.get<BrandingConfig>("/branding", { vertical: "wealth" });
 	} catch {
-		branding = defaultBranding;
+		branding = defaultDarkBranding;
 	}
 
 	return {

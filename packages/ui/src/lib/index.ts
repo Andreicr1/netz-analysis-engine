@@ -55,7 +55,7 @@ export type { BaseChartProps } from "./charts/index.js";
 
 // ── Utilities ───────────────────────────────────────────────
 export { cn } from "./utils/cn.js";
-export type { NavItem, BrandingConfig } from "./utils/types.js";
+export type { NavItem, BrandingConfig, ContextNav } from "./utils/types.js";
 export {
 	NetzApiClient,
 	AuthError,
@@ -82,6 +82,7 @@ export {
 } from "./utils/format.js";
 export {
 	defaultBranding,
+	defaultDarkBranding,
 	brandingToCSS,
 	injectBranding,
 } from "./utils/branding.js";
