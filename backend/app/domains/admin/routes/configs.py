@@ -80,7 +80,12 @@ async def update_config(
     if org_id is None:
         raise HTTPException(status_code=400, detail="org_id query parameter required for override writes")
 
-    version = int(if_match) if if_match else 0
+    if if_match is None:
+        raise HTTPException(
+            status_code=428,
+            detail="If-Match header required. Reload to get current version.",
+        )
+    version = int(if_match)
     writer = ConfigWriter(db)
     return await writer.put(vertical, config_type, org_id, body, version, actor.actor_id)
 

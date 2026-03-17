@@ -10,6 +10,7 @@ from app.core.db.audit import write_audit_event
 from app.core.security.clerk_auth import Actor, get_actor, require_fund_access, require_role
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.credit.documents.models.evidence import EvidenceDocument
+from app.services.storage_client import get_storage_client
 
 router = APIRouter(tags=["Evidence Uploads"], dependencies=[Depends(require_fund_access())])
 
@@ -57,8 +58,11 @@ async def request_evidence_upload(
 
     await db.flush()
 
+    storage = get_storage_client()
+    upload_url = await storage.generate_upload_url(blob_name)
+
     return {
         "evidence_id": str(evidence.id),
         "blob_uri": evidence.blob_uri,
-        "upload_url": evidence.blob_uri + "?SAS_TOKEN_PLACEHOLDER",
+        "upload_url": upload_url,
     }

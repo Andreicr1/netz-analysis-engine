@@ -60,15 +60,15 @@ async def register_job_owner(job_id: str, organization_id: str, ttl_seconds: int
 async def verify_job_owner(job_id: str, organization_id: str) -> bool:
     """Check if job belongs to the given organization.
 
-    Returns True if owned or if no mapping exists (backward compat with
-    jobs created before ownership tracking was added).
+    Returns False when no mapping exists (expired or never set) — deny by default.
     """
     pool = get_redis_pool()
     r = aioredis.Redis(connection_pool=pool)
     try:
         owner = await r.get(f"job:{job_id}:org")
         if owner is None:
-            return True  # No mapping = legacy job, allow (backward compat)
+            logger.warning("job_owner_missing", job_id=job_id, org_id=organization_id)
+            return False
         # Pool uses decode_responses=True, so owner is already str
         return owner == organization_id
     finally:

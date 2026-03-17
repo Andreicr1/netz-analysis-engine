@@ -386,7 +386,10 @@ async def _run_content_generation(
             from app.core.db.session import async_session_factory
 
             async with async_session_factory() as db:
-                await db.execute(text(f"SET LOCAL app.current_organization_id = '{org_id}'"))
+                await db.execute(
+                    text("SET LOCAL app.current_organization_id = :oid"),
+                    {"oid": str(uuid.UUID(org_id))},  # Re-validate UUID
+                )
                 stmt = select(WealthContent).where(WealthContent.id == uuid.UUID(content_id))
                 row = await db.execute(stmt)
                 content = row.scalar_one_or_none()
@@ -403,12 +406,31 @@ async def _run_content_generation(
                 status=result.get("status"),
             )
 
-        except Exception:
+        except Exception as exc:
             logger.exception(
                 "content_generation_background_failed",
                 content_id=content_id,
                 content_type=content_type,
             )
+            # Mark content as failed so the UI can display the error
+            try:
+                async with async_session_factory() as err_db:
+                    await err_db.execute(
+                        text("SET LOCAL app.current_organization_id = :oid"),
+                        {"oid": str(uuid.UUID(org_id))},
+                    )
+                    stmt = select(WealthContent).where(WealthContent.id == uuid.UUID(content_id))
+                    row = await err_db.execute(stmt)
+                    content = row.scalar_one_or_none()
+                    if content:
+                        content.status = "failed"
+                        content.content_data = {
+                            **(content.content_data or {}),
+                            "error_message": str(exc),
+                        }
+                        await err_db.commit()
+            except Exception:
+                logger.exception("content_generation_failed_status_update_error", content_id=content_id)
 
 
 def _sync_generate_content(

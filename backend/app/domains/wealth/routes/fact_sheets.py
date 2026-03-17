@@ -179,6 +179,13 @@ async def download_fact_sheet(
     """Download a fact-sheet PDF by storage path."""
     _require_feature()
 
+    # Prevent path traversal attacks
+    if ".." in fact_sheet_path:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid path",
+        )
+
     # Verify path belongs to this org
     parts = fact_sheet_path.split("/")
     if len(parts) < 2 or parts[1] != str(org_id):

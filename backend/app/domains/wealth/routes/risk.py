@@ -196,8 +196,14 @@ async def get_macro(
     )
 
 
-async def _sse_generator(request: Request):
-    """Subscribe to Redis pub/sub and stream CVaR/regime alerts as SSE."""
+async def _sse_generator(request: Request, org_id: str):
+    """Subscribe to Redis pub/sub and stream CVaR/regime alerts as SSE.
+
+    Channels use global profiles (PortfolioSnapshot is a global table with no
+    organization_id — profiles are shared across all tenants). Alert data
+    contains only profile-level CVaR metrics, not tenant-specific fund data.
+    Access is gated by Clerk JWT authentication on the route.
+    """
     import time as _time
 
     r = await _get_sse_redis()
@@ -240,9 +246,11 @@ async def _sse_generator(request: Request):
 async def risk_stream(
     request: Request,
     user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
 ) -> StreamingResponse:
+    org_id = str(actor.organization_id) if actor.organization_id else ""
     return StreamingResponse(
-        _sse_generator(request),
+        _sse_generator(request, org_id),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
