@@ -26,13 +26,13 @@
 			<div class="flex {message.role === 'user' ? 'justify-end' : 'justify-start'}">
 				<div
 					class="max-w-[80%] rounded-lg px-4 py-3 text-sm {message.role === 'user'
-						? 'bg-[var(--netz-primary)] text-white'
-						: 'bg-white border border-[var(--netz-border)] text-[var(--netz-text-primary)]'}"
+						? 'bg-[var(--netz-brand-primary)] text-white'
+						: 'bg-[var(--netz-surface)] border border-[var(--netz-border)] text-[var(--netz-text-primary)]'}"
 				>
 					{#if message.content}
 						<p class="whitespace-pre-wrap">{message.content}</p>
 					{:else if streaming && i === messages.length - 1}
-						<span class="inline-block h-4 w-1 animate-pulse bg-[var(--netz-primary)]"></span>
+						<span class="inline-block h-4 w-1 animate-pulse bg-[var(--netz-brand-primary)]"></span>
 					{/if}
 
 					{#if message.citations && (message.citations as unknown[]).length > 0}

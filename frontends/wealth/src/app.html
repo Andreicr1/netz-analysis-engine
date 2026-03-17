@@ -1,4 +1,6 @@
 <!doctype html>
+<!-- data-theme="dark" is the SSR baseline. themeHook in hooks.server.ts replaces it. -->
+<!-- Do NOT remove data-theme — it is the sentinel for transformPageChunk. -->
 <html lang="en" data-theme="dark">
 	<head>
 		<meta charset="utf-8" />
@@ -9,7 +11,10 @@
 			// FOUC prevention — set theme before first paint
 			(function() {
 				var theme = localStorage.getItem('netz-theme');
-				if (theme !== 'dark' && theme !== 'light') theme = 'dark';
+				if (theme !== 'dark' && theme !== 'light') {
+					// First-time visitor: respect OS preference, default to dark
+					theme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+				}
 				document.documentElement.setAttribute('data-theme', theme);
 			})();
 		</script>

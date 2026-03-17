@@ -65,7 +65,7 @@
 			type="text"
 			bind:value={query}
 			placeholder="Ask about the fund portfolio, deals, documents..."
-			class="flex-1 rounded-md border border-[var(--netz-border)] bg-white px-4 py-2.5 text-sm outline-none focus:border-[var(--netz-primary)] focus:ring-1 focus:ring-[var(--netz-primary)]"
+			class="flex-1 rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-4 py-2.5 text-sm outline-none focus:border-[var(--netz-brand-primary)] focus:ring-1 focus:ring-[var(--netz-brand-primary)]"
 			onkeydown={handleKeydown}
 			disabled={streaming}
 		/>

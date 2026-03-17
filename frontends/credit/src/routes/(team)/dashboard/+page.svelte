@@ -27,7 +27,7 @@
 			<DataCard
 				label="Deals Awaiting IC"
 				value={String(pipeline?.pending_ic ?? 0)}
-				trend={pipeline?.pending_ic_trend as string ?? "flat"}
+				trend={(pipeline?.pending_ic_trend as "up" | "down" | "flat") ?? "flat"}
 			/>
 			<DataCard
 				label="Documents Pending Review"
@@ -59,7 +59,7 @@
 		<div class="grid gap-4 lg:grid-cols-3">
 			<div class="lg:col-span-1">
 				{#if analytics}
-					<PipelineFunnel data={analytics} />
+					<PipelineFunnel data={analytics as unknown as Record<string, unknown>} />
 				{:else}
 					<EmptyState title="No Pipeline Data" description="Pipeline analytics will appear here." />
 				{/if}
@@ -68,7 +68,7 @@
 				<DataCard
 					label="Total AUM"
 					value={String(portfolio?.total_aum ?? "—")}
-					trend={portfolio?.aum_trend as string ?? "flat"}
+					trend={(portfolio?.aum_trend as "up" | "down" | "flat") ?? "flat"}
 				/>
 				<DataCard
 					label="Active Loans"
@@ -94,7 +94,7 @@
 		<h2 class="mb-4 text-lg font-semibold text-[var(--netz-text-primary)]">Market & Activity</h2>
 		<div class="grid gap-4 lg:grid-cols-2">
 			{#if macro}
-				<div class="rounded-lg border border-[var(--netz-border)] bg-white p-4">
+				<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface)] p-4">
 					<h3 class="mb-3 text-sm font-medium text-[var(--netz-text-secondary)]">Macro Indicators</h3>
 					<div class="grid grid-cols-2 gap-3">
 						<DataCard label="10Y Treasury" value={String(macro.treasury10y ?? "—")} trend="flat" />
@@ -106,7 +106,7 @@
 			{:else}
 				<EmptyState title="No Macro Data" description="FRED macro data will appear here once available." />
 			{/if}
-			<div class="rounded-lg border border-[var(--netz-border)] bg-white p-4">
+			<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface)] p-4">
 				<h3 class="mb-3 text-sm font-medium text-[var(--netz-text-secondary)]">Recent Activity</h3>
 				<EmptyState title="No Activity" description="Recent activity will appear here." />
 			</div>

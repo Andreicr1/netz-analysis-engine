@@ -16,7 +16,7 @@
 	let events = $derived(timeline as StageEvent[]);
 </script>
 
-<div class="flex items-center gap-1 overflow-x-auto rounded-lg border border-[var(--netz-border)] bg-white p-3">
+<div class="flex items-center gap-1 overflow-x-auto rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface)] p-3">
 	{#each events as event, i (i)}
 		<div class="flex shrink-0 items-center gap-2">
 			<div class="flex flex-col items-center gap-1">

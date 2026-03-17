@@ -3,7 +3,7 @@
   Funnel sidebar + status tabs + results table + ContextPanel detail panel.
 -->
 <script lang="ts">
-	import { PageHeader, SectionCard, EmptyState, StatusBadge, ContextPanel } from "@netz/ui";
+	import { PageHeader, Card, EmptyState, StatusBadge, ContextPanel } from "@netz/ui";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
@@ -324,7 +324,7 @@
 
 		<!-- Results Table -->
 		{#if filteredResults.length > 0}
-			<SectionCard>
+			<Card>
 				<div class="table-wrapper">
 					<table class="results-table">
 						<thead>
@@ -373,20 +373,17 @@
 
 									<!-- L1 dot -->
 									<td class="col-layers">
-										{@const s1 = layerDotStatus(result, 1)}
-										<span class="layer-dot layer-dot--{s1}" title="L1: {s1}"></span>
+										<span class="layer-dot layer-dot--{layerDotStatus(result, 1)}" title="L1: {layerDotStatus(result, 1)}"></span>
 									</td>
 
 									<!-- L2 dot -->
 									<td class="col-layers">
-										{@const s2 = layerDotStatus(result, 2)}
-										<span class="layer-dot layer-dot--{s2}" title="L2: {s2}"></span>
+										<span class="layer-dot layer-dot--{layerDotStatus(result, 2)}" title="L2: {layerDotStatus(result, 2)}"></span>
 									</td>
 
 									<!-- L3 dot -->
 									<td class="col-layers">
-										{@const s3 = layerDotStatus(result, 3)}
-										<span class="layer-dot layer-dot--{s3}" title="L3: {s3}"></span>
+										<span class="layer-dot layer-dot--{layerDotStatus(result, 3)}" title="L3: {layerDotStatus(result, 3)}"></span>
 									</td>
 
 									<!-- Score L3 -->
@@ -414,7 +411,7 @@
 						</tbody>
 					</table>
 				</div>
-			</SectionCard>
+			</Card>
 		{:else}
 			<EmptyState
 				title="Sem resultados"

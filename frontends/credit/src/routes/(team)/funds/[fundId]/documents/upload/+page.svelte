@@ -80,7 +80,7 @@
 		<Card class="p-8">
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
-				class="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-[var(--netz-border)] p-12 transition-colors hover:border-[var(--netz-primary)]"
+				class="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-[var(--netz-border)] p-12 transition-colors hover:border-[var(--netz-brand-primary)]"
 				ondrop={handleDrop}
 				ondragover={(e) => e.preventDefault()}
 			>
