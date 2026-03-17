@@ -141,13 +141,18 @@ function buildUrl(base: string, path: string, params?: Record<string, string | n
 	return url.toString();
 }
 
+/** Default request timeout (ms). */
+const DEFAULT_TIMEOUT_MS = 15_000;
+
 export class NetzApiClient {
 	private baseUrl: string;
 	private getToken: () => Promise<string> | string;
+	private timeoutMs: number;
 
-	constructor(baseUrl: string, getToken: () => Promise<string> | string) {
+	constructor(baseUrl: string, getToken: () => Promise<string> | string, timeoutMs = DEFAULT_TIMEOUT_MS) {
 		this.baseUrl = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
 		this.getToken = getToken;
+		this.timeoutMs = timeoutMs;
 	}
 
 	private async headers(): Promise<Record<string, string>> {
@@ -160,8 +165,19 @@ export class NetzApiClient {
 
 	async get<T>(path: string, params?: Record<string, string | number | boolean | undefined>): Promise<T> {
 		const url = buildUrl(this.baseUrl, path, params);
-		const res = await fetch(url, { headers: await this.headers() });
-		return handleResponse<T>(res);
+		const headers = await this.headers();
+		// GET is idempotent — retry once on timeout/network error
+		try {
+			const res = await fetch(url, { headers, signal: AbortSignal.timeout(this.timeoutMs) });
+			return handleResponse<T>(res);
+		} catch (err) {
+			if (err instanceof DOMException && err.name === "TimeoutError") {
+				// Retry once
+				const res = await fetch(url, { headers, signal: AbortSignal.timeout(this.timeoutMs) });
+				return handleResponse<T>(res);
+			}
+			throw err;
+		}
 	}
 
 	async post<T>(path: string, body?: unknown): Promise<T> {
@@ -169,6 +185,7 @@ export class NetzApiClient {
 			method: "POST",
 			headers: await this.headers(),
 			body: body !== undefined ? JSON.stringify(body) : undefined,
+			signal: AbortSignal.timeout(this.timeoutMs),
 		});
 		return handleResponse<T>(res);
 	}
@@ -178,6 +195,7 @@ export class NetzApiClient {
 			method: "PATCH",
 			headers: await this.headers(),
 			body: body !== undefined ? JSON.stringify(body) : undefined,
+			signal: AbortSignal.timeout(this.timeoutMs),
 		});
 		return handleResponse<T>(res);
 	}
@@ -186,6 +204,7 @@ export class NetzApiClient {
 		const res = await fetch(buildUrl(this.baseUrl, path), {
 			method: "DELETE",
 			headers: await this.headers(),
+			signal: AbortSignal.timeout(this.timeoutMs),
 		});
 		await handleResponse<void>(res);
 	}

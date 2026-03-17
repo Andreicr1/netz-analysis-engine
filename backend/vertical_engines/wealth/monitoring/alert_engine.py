@@ -88,7 +88,7 @@ def _check_dd_expiry(db: Session, organization_id: str) -> list[Alert]:
         db.query(Fund, DDReport)
         .outerjoin(
             DDReport,
-            (DDReport.fund_id == Fund.fund_id)
+            (DDReport.instrument_id == Fund.fund_id)
             & (DDReport.organization_id == organization_id)
             & (DDReport.is_current.is_(True)),
         )

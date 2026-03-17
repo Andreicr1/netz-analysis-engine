@@ -5,6 +5,9 @@
 	import { DataCard, HeatmapChart, ScatterChart, PageHeader, EmptyState, Button } from "@netz/ui";
 	import type { PageData } from "./$types";
 	import { createClientApiClient } from "$lib/api/client";
+	import { getContext } from "svelte";
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let { data }: { data: PageData } = $props();
 
@@ -37,7 +40,7 @@
 		backtestRunning = true;
 		backtestResult = null;
 		try {
-			const api = createClientApiClient(async () => "dev-token");
+			const api = createClientApiClient(getToken);
 			const result = await api.post("/analytics/backtest", {
 				profile: backtestProfile,
 			}) as Record<string, unknown>;

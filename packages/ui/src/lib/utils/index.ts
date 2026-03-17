@@ -42,10 +42,9 @@ export {
 	getBrandingFromCSS,
 } from "./branding.js";
 
-// Auth stubs + session monitoring
+// Auth — JWT verification + session monitoring
 export {
 	createClerkHook,
-	createRootLayoutLoader,
 	startSessionExpiryMonitor,
 } from "./auth.js";
-export type { ClerkHookOptions, RootLayoutLoaderOptions } from "./auth.js";
+export type { Actor, ClerkHookOptions } from "./auth.js";

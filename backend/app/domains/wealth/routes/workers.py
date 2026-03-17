@@ -141,3 +141,31 @@ async def trigger_run_fact_sheet_gen(
 
     background_tasks.add_task(run_monthly_fact_sheets)
     return WorkerScheduledResponse(status="scheduled", worker="run-fact-sheet-gen")
+
+
+@router.post(
+    "/run-screening-batch",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger batch instrument screening",
+    description=(
+        "Schedules the screening batch worker as a background task. "
+        "Re-screens all active instruments through 3-layer deterministic "
+        "screening. Uses advisory lock 900_002 to prevent concurrent runs. "
+        "Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_screening_batch(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.screening_batch import run_screening_batch
+
+    # org_id needs to be passed to the worker
+    org_id = user.organization_id
+    background_tasks.add_task(run_screening_batch, org_id)
+    return WorkerScheduledResponse(status="scheduled", worker="run-screening-batch")

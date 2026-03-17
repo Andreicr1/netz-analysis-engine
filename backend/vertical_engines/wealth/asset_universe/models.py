@@ -11,8 +11,8 @@ from datetime import datetime
 class ApprovalRequest:
     """Input for creating a universe approval."""
 
-    fund_id: uuid.UUID
-    dd_report_id: uuid.UUID
+    instrument_id: uuid.UUID
+    analysis_report_id: uuid.UUID
     created_by: str
     organization_id: str
 
@@ -31,7 +31,7 @@ class ApprovalDecision:
 class UniverseAsset:
     """Read-only view of an approved fund in the universe."""
 
-    fund_id: uuid.UUID
+    instrument_id: uuid.UUID
     fund_name: str
     block_id: str | None
     geography: str | None
@@ -45,6 +45,6 @@ class UniverseAsset:
 class DeactivationResult:
     """Result of deactivating an asset from the universe."""
 
-    fund_id: uuid.UUID
+    instrument_id: uuid.UUID
     was_active: bool
     rebalance_needed: bool

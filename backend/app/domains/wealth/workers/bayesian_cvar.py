@@ -210,10 +210,10 @@ async def _fetch_portfolio_returns(
     start_date = cutoff - timedelta(days=lookback_days + 30)
 
     nav_stmt = (
-        select(NavTimeseries.fund_id, NavTimeseries.nav_date, NavTimeseries.return_1d)
+        select(NavTimeseries.instrument_id, NavTimeseries.nav_date, NavTimeseries.return_1d)
         .where(
             and_(
-                NavTimeseries.fund_id.in_(rep_fund_ids),
+                NavTimeseries.instrument_id.in_(rep_fund_ids),
                 NavTimeseries.nav_date >= start_date,
                 NavTimeseries.nav_date <= cutoff,
                 NavTimeseries.return_1d.isnot(None),
@@ -228,7 +228,7 @@ async def _fetch_portfolio_returns(
     # Build a mapping from fund_id → block_id so we can look up the portfolio weight
     fund_id_to_block: dict = {}
     for row in funds:
-        fund_id_to_block[str(row.fund_id)] = str(row.block_id)
+        fund_id_to_block[str(row.fund_id)] = str(row.block_id)  # Fund.fund_id stays
 
     # Aggregate to portfolio return using actual portfolio weights per date.
     # For each date we accumulate:
@@ -242,7 +242,7 @@ async def _fetch_portfolio_returns(
     for row in rows:
         if row.return_1d is not None:
             ret = float(row.return_1d)
-            block = fund_id_to_block.get(str(row.fund_id), "")
+            block = fund_id_to_block.get(str(row.instrument_id), "")
             w = weights.get(block, 0.0)
             date_weighted_sum[row.nav_date] += w * ret
             date_weight_sum[row.nav_date] += w

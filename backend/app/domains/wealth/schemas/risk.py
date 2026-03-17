@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict
 class FundRiskRead(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="ignore")
 
-    fund_id: uuid.UUID
+    instrument_id: uuid.UUID
     calc_date: date
     cvar_95_1m: Decimal | None = None
     cvar_95_3m: Decimal | None = None

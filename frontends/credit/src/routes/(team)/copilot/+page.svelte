@@ -5,6 +5,10 @@
 	import { Card, Button, Input } from "@netz/ui";
 	import { createSSEStream } from "@netz/ui/utils";
 	import CopilotChat from "$lib/components/CopilotChat.svelte";
+	import { createClientApiClient } from "$lib/api/client";
+	import { getContext } from "svelte";
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let query = $state("");
 	let messages = $state<Array<{ role: "user" | "assistant"; content: string; citations?: unknown[] }>>([]);
@@ -21,22 +25,10 @@
 		// Add placeholder for assistant response
 		messages = [...messages, { role: "assistant", content: "", citations: [] }];
 
-		const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
-
 		try {
-			// Use the /ai/answer endpoint for full RAG + LLM
-			const res = await fetch(`${API_BASE}/api/v1/ai/answer`, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-					"Authorization": "Bearer dev-token",
-				},
-				body: JSON.stringify({ question: userMessage }),
-			});
+			const api = createClientApiClient(getToken);
+			const data = await api.post<{ answer?: string; citations?: unknown[] }>("/ai/answer", { question: userMessage });
 
-			if (!res.ok) throw new Error(`API error: ${res.status}`);
-
-			const data = await res.json();
 			// Update last assistant message
 			messages = messages.map((m, i) =>
 				i === messages.length - 1

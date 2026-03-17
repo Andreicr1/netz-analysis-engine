@@ -290,7 +290,7 @@ def _extract_fund_weights(
 ) -> tuple[list[uuid.UUID], list[float]]:
     """Extract fund IDs and weights from fund_selection_schema."""
     funds = fund_selection.get("funds", [])
-    fund_ids = [uuid.UUID(f["fund_id"]) for f in funds]
+    fund_ids = [uuid.UUID(f["instrument_id"]) for f in funds]
     weights = [f["weight"] for f in funds]
     return fund_ids, weights
 
@@ -325,7 +325,7 @@ def _run_construction(
     # Build universe fund list for portfolio builder
     universe_funds = [
         {
-            "fund_id": str(a.fund_id),
+            "instrument_id": str(a.instrument_id),
             "fund_name": a.fund_name,
             "block_id": a.block_id,
             "manager_score": None,  # Would be populated from risk metrics
@@ -341,7 +341,7 @@ def _run_construction(
         "total_weight": composition.total_weight,
         "funds": [
             {
-                "fund_id": str(fw.fund_id),
+                "instrument_id": str(fw.instrument_id),
                 "fund_name": fw.fund_name,
                 "block_id": fw.block_id,
                 "weight": fw.weight,

@@ -37,7 +37,7 @@ def construct(
     profile : str
         Portfolio profile (conservative, moderate, growth).
     universe_funds : list[dict]
-        Approved funds with keys: fund_id, fund_name, block_id, manager_score.
+        Approved funds with keys: instrument_id, fund_name, block_id, manager_score.
     strategic_allocation : dict[str, float]
         Block weights summing to 1.0, e.g. {"equity_global": 0.4, "fixed_income": 0.3, ...}.
     config : dict | None
@@ -83,7 +83,7 @@ def construct(
             fund_weight = block_weight * (score / score_total)
             all_weights.append(
                 FundWeight(
-                    fund_id=uuid.UUID(str(fund["fund_id"])),
+                    instrument_id=uuid.UUID(str(fund["instrument_id"])),
                     fund_name=fund.get("fund_name", ""),
                     block_id=block_id,
                     weight=round(fund_weight, 6),
@@ -99,7 +99,7 @@ def construct(
         for fw in all_weights:
             normalized.append(
                 FundWeight(
-                    fund_id=fw.fund_id,
+                    instrument_id=fw.instrument_id,
                     fund_name=fw.fund_name,
                     block_id=fw.block_id,
                     weight=round(fw.weight * factor, 6),

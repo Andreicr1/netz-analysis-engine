@@ -544,9 +544,9 @@ async def compute_inputs_from_nav(
     # 2. Batch-fetch daily returns for all funds
     fund_ids = [block_funds[bid].fund_id for bid in available_blocks]
     ret_stmt = (
-        select(NavTimeseries.fund_id, NavTimeseries.nav_date, NavTimeseries.return_1d)
+        select(NavTimeseries.instrument_id, NavTimeseries.nav_date, NavTimeseries.return_1d)
         .where(
-            NavTimeseries.fund_id.in_(fund_ids),
+            NavTimeseries.instrument_id.in_(fund_ids),
             NavTimeseries.nav_date >= start_date,
             NavTimeseries.nav_date <= as_of_date,
             NavTimeseries.return_1d.is_not(None),
@@ -557,8 +557,8 @@ async def compute_inputs_from_nav(
 
     # Group returns by fund_id and date
     fund_returns: dict[str, dict[date, float]] = defaultdict(dict)
-    for fund_id, nav_date, return_1d in ret_result.all():
-        fund_returns[str(fund_id)][nav_date] = float(return_1d)
+    for instrument_id, nav_date, return_1d in ret_result.all():
+        fund_returns[str(instrument_id)][nav_date] = float(return_1d)
 
     # 3. Align dates — only dates where ALL funds have data
     fund_id_strs = [str(block_funds[bid].fund_id) for bid in available_blocks]

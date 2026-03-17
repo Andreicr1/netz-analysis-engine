@@ -27,7 +27,8 @@ class DDReportSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     id: uuid.UUID
-    fund_id: uuid.UUID
+    instrument_id: uuid.UUID
+    report_type: str = "dd_report"
     version: int
     status: str
     confidence_score: Decimal | None = None

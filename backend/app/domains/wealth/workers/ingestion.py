@@ -168,7 +168,7 @@ async def run_ingestion(lookback_days: int = 30) -> dict[str, int]:
 
                     prev_close = close_price
                     rows.append({
-                        "fund_id": fund.fund_id,
+                        "instrument_id": fund.fund_id,
                         "nav_date": nav_date,
                         "nav": round(close_price, 6),
                         "return_1d": round(return_1d, 8) if return_1d is not None else None,
@@ -197,7 +197,7 @@ async def run_ingestion(lookback_days: int = 30) -> dict[str, int]:
                 chunk = all_rows[i:i + UPSERT_CHUNK]
                 stmt = pg_insert(NavTimeseries).values(chunk)
                 stmt = stmt.on_conflict_do_update(
-                    index_elements=["fund_id", "nav_date"],
+                    index_elements=["instrument_id", "nav_date"],
                     set_={
                         "nav": stmt.excluded.nav,
                         "return_1d": stmt.excluded.return_1d,

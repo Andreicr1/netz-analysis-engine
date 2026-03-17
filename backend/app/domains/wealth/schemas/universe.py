@@ -12,8 +12,8 @@ class UniverseApprovalRead(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="ignore")
 
     id: uuid.UUID
-    fund_id: uuid.UUID
-    dd_report_id: uuid.UUID
+    instrument_id: uuid.UUID
+    analysis_report_id: uuid.UUID
     decision: str
     rationale: str | None = None
     created_by: str | None = None

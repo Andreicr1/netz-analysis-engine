@@ -184,7 +184,7 @@ class FactSheetEngine:
                 compute_backtest,
             )
 
-            fund_ids = [uuid.UUID(f["fund_id"]) for f in funds_data]
+            fund_ids = [uuid.UUID(f["instrument_id"]) for f in funds_data]
             weights = [f["weight"] for f in funds_data]
             return compute_backtest(
                 db, fund_ids=fund_ids, weights=weights, portfolio_id=portfolio_id,
@@ -249,7 +249,7 @@ class FactSheetEngine:
                 compute_stress,
             )
 
-            fund_ids = [uuid.UUID(f["fund_id"]) for f in funds_data]
+            fund_ids = [uuid.UUID(f["instrument_id"]) for f in funds_data]
             weights = [f["weight"] for f in funds_data]
             result = compute_stress(
                 db, fund_ids=fund_ids, weights=weights, portfolio_id=portfolio_id,

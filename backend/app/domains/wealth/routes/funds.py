@@ -1,3 +1,10 @@
+"""DEPRECATED: Fund CRUD routes — kept for backward compatibility.
+
+The Fund model is being replaced by the Instrument model
+(instruments_universe table). These routes remain functional
+but new code should use the Instrument equivalents.
+"""
+
 import uuid
 from datetime import date
 
@@ -55,12 +62,12 @@ async def get_fund_scoring(
     # Fetch latest risk metrics for all funds in one query using DISTINCT ON
     risk_stmt = (
         select(FundRiskMetrics)
-        .where(FundRiskMetrics.fund_id.in_(fund_ids))
-        .order_by(FundRiskMetrics.fund_id, FundRiskMetrics.calc_date.desc())
-        .distinct(FundRiskMetrics.fund_id)
+        .where(FundRiskMetrics.instrument_id.in_(fund_ids))
+        .order_by(FundRiskMetrics.instrument_id, FundRiskMetrics.calc_date.desc())
+        .distinct(FundRiskMetrics.instrument_id)
     )
     risk_result = await db.execute(risk_stmt)
-    risk_map = {r.fund_id: r for r in risk_result.scalars().all()}
+    risk_map = {r.instrument_id: r for r in risk_result.scalars().all()}
 
     # Pre-fetch NAV data for momentum computation when flag is enabled.
     # Uses a ROW_NUMBER() window function subquery to fetch at most 50 rows
@@ -74,13 +81,13 @@ async def get_fund_scoring(
                 NavTimeseries,
                 func.row_number()
                 .over(
-                    partition_by=NavTimeseries.fund_id,
+                    partition_by=NavTimeseries.instrument_id,
                     order_by=NavTimeseries.nav_date.desc(),
                 )
                 .label("rn"),
             )
             .where(
-                NavTimeseries.fund_id.in_(fund_ids),
+                NavTimeseries.instrument_id.in_(fund_ids),
                 NavTimeseries.nav.isnot(None),
             )
             .subquery()
@@ -89,11 +96,11 @@ async def get_fund_scoring(
             select(NavTimeseries)
             .join(
                 ranked_subq,
-                (NavTimeseries.fund_id == ranked_subq.c.fund_id)
+                (NavTimeseries.instrument_id == ranked_subq.c.instrument_id)
                 & (NavTimeseries.nav_date == ranked_subq.c.nav_date),
             )
             .where(ranked_subq.c.rn <= NAV_MOMENTUM_WINDOW)
-            .order_by(NavTimeseries.fund_id, NavTimeseries.nav_date.desc())
+            .order_by(NavTimeseries.instrument_id, NavTimeseries.nav_date.desc())
         )
         nav_result = await db.execute(nav_stmt)
         nav_rows = nav_result.scalars().all()
@@ -101,7 +108,7 @@ async def get_fund_scoring(
         # Group NAV rows by fund_id (already desc; reverse to get chronological order)
         nav_by_fund: dict[uuid.UUID, list] = {}
         for row in nav_rows:
-            nav_by_fund.setdefault(row.fund_id, []).append(row)
+            nav_by_fund.setdefault(row.instrument_id, []).append(row)
 
         for fid, rows in nav_by_fund.items():
             rows_asc = list(reversed(rows))  # already limited to 50 at DB level; restore chronological order
@@ -211,7 +218,7 @@ async def get_fund_risk(
 ) -> FundRiskRead | None:
     stmt = (
         select(FundRiskMetrics)
-        .where(FundRiskMetrics.fund_id == fund_id)
+        .where(FundRiskMetrics.instrument_id == fund_id)
         .order_by(FundRiskMetrics.calc_date.desc())
         .limit(1)
     )
@@ -237,7 +244,7 @@ async def get_fund_nav(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[NavPoint]:
-    stmt = select(NavTimeseries).where(NavTimeseries.fund_id == fund_id)
+    stmt = select(NavTimeseries).where(NavTimeseries.instrument_id == fund_id)
     if from_date is not None:
         stmt = stmt.where(NavTimeseries.nav_date >= from_date)
     if to_date is not None:

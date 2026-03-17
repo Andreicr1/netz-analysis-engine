@@ -8,6 +8,9 @@
 	import { createSSEStream } from "@netz/ui/utils";
 	import ICMemoStreamingChapter from "./ICMemoStreamingChapter.svelte";
 	import { createClientApiClient } from "$lib/api/client";
+	import { getContext } from "svelte";
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let {
 		icMemo,
@@ -25,23 +28,33 @@
 	let voting = $derived(votingStatus as Record<string, unknown> | null);
 	let generating = $state(false);
 	let streamingChapters = $state<Record<string, string>>({});
+	let activeSse = $state<ReturnType<typeof createSSEStream> | null>(null);
 
-	let chapters = $derived(() => {
+	let chapters = $derived.by(() => {
 		if (!memo?.chapters) return [];
 		return memo.chapters as Array<{ chapter_number: number; title: string; content: string; status: string }>;
+	});
+
+	// Clean up SSE connection on component unmount (#087)
+	$effect(() => {
+		return () => {
+			activeSse?.disconnect();
+		};
 	});
 
 	async function generateMemo() {
 		generating = true;
 		try {
-			const api = createClientApiClient(() => Promise.resolve("dev-token"));
+			const api = createClientApiClient(getToken);
 			const result = await api.post<{ job_id: string }>(`/funds/${fundId}/deals/${dealId}/ic-memo`);
 
 			if (result.job_id) {
-				// Subscribe to SSE for chapter streaming
+				// Disconnect previous SSE if any
+				activeSse?.disconnect();
+
 				const sse = createSSEStream<{ chapter_number: number; content: string; status: string }>({
 					url: `/api/v1/jobs/${result.job_id}/stream`,
-					getToken: () => Promise.resolve("dev-token"),
+					getToken,
 					onEvent: (event) => {
 						if (event.chapter_number != null) {
 							streamingChapters = {
@@ -52,6 +65,7 @@
 					},
 					onError: () => { generating = false; },
 				});
+				activeSse = sse;
 				sse.connect();
 			}
 		} catch {
@@ -86,7 +100,7 @@
 		{/if}
 
 		<!-- Chapter list -->
-		{#each chapters() as chapter (chapter.chapter_number)}
+		{#each chapters as chapter (chapter.chapter_number)}
 			<Card class="p-4">
 				<button
 					class="flex w-full items-center justify-between text-left"
@@ -101,8 +115,8 @@
 					<StatusBadge status={chapter.status} type="review" />
 				</button>
 				{#if chapter.content}
-					<div class="mt-3 border-t border-[var(--netz-border)] pt-3 text-sm leading-relaxed text-[var(--netz-text-secondary)]">
-						{@html chapter.content}
+					<div class="mt-3 border-t border-[var(--netz-border)] pt-3 text-sm leading-relaxed whitespace-pre-wrap text-[var(--netz-text-secondary)]">
+						{chapter.content}
 					</div>
 				{:else if streamingChapters[chapter.chapter_number]}
 					<ICMemoStreamingChapter content={streamingChapters[chapter.chapter_number]} />

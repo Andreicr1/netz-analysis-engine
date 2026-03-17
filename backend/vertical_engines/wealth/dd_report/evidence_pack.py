@@ -27,7 +27,7 @@ class EvidencePack:
     """
 
     # Fund identity
-    fund_id: str = ""
+    instrument_id: str = ""
     fund_name: str = ""
     isin: str | None = None
     ticker: str | None = None
@@ -58,7 +58,7 @@ class EvidencePack:
     def to_context(self) -> dict[str, Any]:
         """Convert to template context dict for Jinja2 rendering."""
         return {
-            "fund_id": self.fund_id,
+            "instrument_id": self.instrument_id,
             "fund_name": self.fund_name,
             "isin": self.isin,
             "ticker": self.ticker,
@@ -132,10 +132,10 @@ def build_evidence_pack(
     EvidencePack
         Frozen, thread-safe evidence surface.
     """
-    logger.info("building_evidence_pack", fund_id=fund_data.get("fund_id"))
+    logger.info("building_evidence_pack", instrument_id=fund_data.get("instrument_id"))
 
     return EvidencePack(
-        fund_id=str(fund_data.get("fund_id", "")),
+        instrument_id=str(fund_data.get("instrument_id", "")),
         fund_name=fund_data.get("name", ""),
         isin=fund_data.get("isin"),
         ticker=fund_data.get("ticker"),

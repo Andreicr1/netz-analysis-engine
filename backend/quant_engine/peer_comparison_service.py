@@ -96,12 +96,12 @@ def compare(
     # Batch fetch latest risk metrics (DISTINCT ON)
     risk_stmt = (
         select(FundRiskMetrics)
-        .where(FundRiskMetrics.fund_id.in_(peer_fund_ids))
-        .order_by(FundRiskMetrics.fund_id, FundRiskMetrics.calc_date.desc())
-        .distinct(FundRiskMetrics.fund_id)
+        .where(FundRiskMetrics.instrument_id.in_(peer_fund_ids))
+        .order_by(FundRiskMetrics.instrument_id, FundRiskMetrics.calc_date.desc())
+        .distinct(FundRiskMetrics.instrument_id)
     )
     risk_result = db.execute(risk_stmt)
-    risk_map = {r.fund_id: r for r in risk_result.scalars().all()}
+    risk_map = {r.instrument_id: r for r in risk_result.scalars().all()}
 
     # Build scored peers
     scored = []

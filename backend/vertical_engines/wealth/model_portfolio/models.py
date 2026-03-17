@@ -11,7 +11,7 @@ from datetime import date
 class FundWeight:
     """A single fund's weight in a portfolio composition."""
 
-    fund_id: uuid.UUID
+    instrument_id: uuid.UUID
     fund_name: str
     block_id: str
     weight: float

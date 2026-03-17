@@ -5,7 +5,9 @@
 <script lang="ts">
 	import { Card, StatusBadge } from "@netz/ui";
 	import { createSSEStream } from "@netz/ui/utils";
-	import { onMount } from "svelte";
+	import { onMount, getContext } from "svelte";
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let { jobId }: { jobId: string } = $props();
 
@@ -25,7 +27,7 @@
 		const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 		const sse = createSSEStream<PipelineEvent>({
 			url: `${API_BASE}/api/v1/jobs/${jobId}/stream`,
-			getToken: () => Promise.resolve("dev-token"),
+			getToken,
 			onEvent: (event) => {
 				events = [...events, event];
 				if (event.status === "completed" || event.status === "failed") {

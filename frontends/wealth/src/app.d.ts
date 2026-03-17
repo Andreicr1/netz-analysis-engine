@@ -1,6 +1,6 @@
 /// <reference types="@sveltejs/kit" />
 
-import type { Actor } from "./hooks.server";
+import type { Actor } from "@netz/ui/utils";
 
 declare global {
 	namespace App {

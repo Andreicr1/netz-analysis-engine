@@ -6,6 +6,9 @@
 	import type { PageData } from "./$types";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll, goto } from "$app/navigation";
+	import { getContext } from "svelte";
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let { data }: { data: PageData } = $props();
 
@@ -39,7 +42,7 @@
 	async function triggerGeneration() {
 		generating = true;
 		try {
-			const api = createClientApiClient(async () => "dev-token");
+			const api = createClientApiClient(getToken);
 			await api.post(`/dd-reports/funds/${data.fundId}`, {});
 			await invalidateAll();
 		} catch {

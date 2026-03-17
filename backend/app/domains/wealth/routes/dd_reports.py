@@ -69,7 +69,7 @@ async def trigger_dd_report(
     # Mark previous report as not current
     existing_result = await db.execute(
         select(DDReport).where(
-            DDReport.fund_id == fund_id,
+            DDReport.instrument_id == fund_id,
             DDReport.organization_id == org_id,
             DDReport.is_current.is_(True),
         )
@@ -89,7 +89,7 @@ async def trigger_dd_report(
     max_version_result = await db.execute(
         select(DDReport.version)
         .where(
-            DDReport.fund_id == fund_id,
+            DDReport.instrument_id == fund_id,
             DDReport.organization_id == org_id,
         )
         .order_by(DDReport.version.desc())
@@ -100,7 +100,7 @@ async def trigger_dd_report(
 
     # Create report record
     report = DDReport(
-        fund_id=fund_id,
+        instrument_id=fund_id,
         organization_id=org_id,
         version=next_version,
         status="generating",
@@ -151,7 +151,7 @@ async def list_dd_reports(
     """List all DD Reports for a fund (version history)."""
     result = await db.execute(
         select(DDReport)
-        .where(DDReport.fund_id == fund_id)
+        .where(DDReport.instrument_id == fund_id)
         .order_by(DDReport.version.desc())
     )
     reports = result.scalars().all()
@@ -227,7 +227,7 @@ async def regenerate_dd_report(
     asyncio.create_task(
         _run_generation(
             report_id=str(report_id),
-            fund_id=str(report.fund_id),
+            fund_id=str(report.instrument_id),
             org_id=str(org_id),
             actor_id=user.user_id,
             config=report.config_snapshot,

@@ -1,8 +1,10 @@
 """Universe Approval ORM model.
 
-Tracks fund approval decisions for the investment universe. Fund approvals
-require a DD Report. The is_current pattern with partial unique index
-ensures only one active approval per fund per organization.
+Tracks instrument approval decisions for the investment universe. Fund/equity
+approvals require a DD Report; bond approvals use lighter Bond Brief.
+analysis_report_id is nullable for instrument types that don't require analysis.
+The is_current pattern with partial unique index ensures only one active
+approval per instrument per organization.
 """
 
 from __future__ import annotations
@@ -22,16 +24,16 @@ class UniverseApproval(OrganizationScopedMixin, Base):
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    fund_id: Mapped[uuid.UUID] = mapped_column(
+    instrument_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
-        ForeignKey("funds_universe.fund_id"),
+        ForeignKey("instruments_universe.instrument_id"),
         nullable=False,
         index=True,
     )
-    dd_report_id: Mapped[uuid.UUID] = mapped_column(
+    analysis_report_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("dd_reports.id"),
-        nullable=False,
+        nullable=True,
     )
     decision: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="pending"

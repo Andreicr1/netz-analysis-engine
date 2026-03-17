@@ -1,3 +1,9 @@
+"""Investor portal routes — external-facing endpoints for LPs and advisors.
+
+All routes use response_model= and model_validate(). No inline dict serialization.
+Investor-facing schemas intentionally exclude internal storage paths (blob_path, blob_uri).
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -16,6 +22,11 @@ from app.domains.credit.modules.documents.models import Document
 from app.domains.credit.reporting.enums import ReportPackStatus
 from app.domains.credit.reporting.models.investor_statements import InvestorStatement
 from app.domains.credit.reporting.models.report_packs import MonthlyReportPack
+from app.domains.credit.reporting.schemas.investor_portal import (
+    InvestorDocumentItem,
+    InvestorReportPackItem,
+    InvestorStatementItem,
+)
 from app.shared.enums import Role
 
 logger = logging.getLogger(__name__)
@@ -32,7 +43,7 @@ async def _fire_audit(
     entity_type: str,
     after: dict[str, Any],
 ) -> None:
-    """Fire-and-forget audit write using a separate session."""
+    """Background audit write using a separate session."""
     from app.core.db.engine import async_session_factory
 
     try:
@@ -52,7 +63,10 @@ async def _fire_audit(
         logger.warning("Background audit write failed for %s", action, exc_info=True)
 
 
-@router.get("/funds/{fund_id}/investor/report-packs")
+@router.get(
+    "/funds/{fund_id}/investor/report-packs",
+    response_model=list[InvestorReportPackItem],
+)
 async def list_published_packs(
     fund_id: uuid.UUID,
     db: AsyncSession = Depends(get_db_with_rls),
@@ -60,7 +74,7 @@ async def list_published_packs(
     _role_guard: Actor = Depends(require_role(*_INVESTOR_ROLES)),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-) -> list[dict[str, Any]]:
+) -> list[InvestorReportPackItem]:
     result = await db.execute(
         select(MonthlyReportPack).where(
             MonthlyReportPack.fund_id == fund_id,
@@ -69,24 +83,27 @@ async def list_published_packs(
     )
     packs = list(result.scalars().all())
 
-    asyncio.ensure_future(
+    asyncio.create_task(
         _fire_audit(fund_id, actor.actor_id, "investor.report_pack.viewed", "MonthlyReportPack", {"count": len(packs)}),
     )
 
     return [
-        {
-            "id": str(p.id),
-            "fund_id": str(p.fund_id),
-            "status": p.status.value if hasattr(p.status, "value") else str(p.status),
-            "period_month": p.period_month if hasattr(p, "period_month") else None,
-            "published_at": p.published_at.isoformat() if hasattr(p, "published_at") and p.published_at else None,
-            "created_at": p.created_at.isoformat() if p.created_at else None,
-        }
+        InvestorReportPackItem(
+            id=p.id,
+            fund_id=p.fund_id,
+            status=p.status.value if hasattr(p.status, "value") else str(p.status),
+            period_month=getattr(p, "period_month", None),
+            published_at=p.published_at,
+            created_at=p.created_at,
+        )
         for p in packs
     ]
 
 
-@router.get("/funds/{fund_id}/investor/statements")
+@router.get(
+    "/funds/{fund_id}/investor/statements",
+    response_model=dict[str, list[InvestorStatementItem]],
+)
 async def list_published_statements(
     fund_id: uuid.UUID,
     db: AsyncSession = Depends(get_db_with_rls),
@@ -94,7 +111,7 @@ async def list_published_statements(
     _role_guard: Actor = Depends(require_role(*_INVESTOR_ROLES)),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-) -> dict[str, Any]:
+) -> dict[str, list[InvestorStatementItem]]:
     result = await db.execute(
         select(InvestorStatement).where(
             InvestorStatement.fund_id == fund_id,
@@ -102,24 +119,22 @@ async def list_published_statements(
     )
     rows = list(result.scalars().all())
 
-    asyncio.ensure_future(
+    asyncio.create_task(
         _fire_audit(fund_id, actor.actor_id, "investor.statement.viewed", "InvestorStatement", {"count": len(rows)}),
     )
 
     return {
         "items": [
-            {
-                "id": str(r.id),
-                "period_month": r.period_month,
-                "blob_path": r.blob_path,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-            }
+            InvestorStatementItem.model_validate(r)
             for r in rows
         ],
     }
 
 
-@router.get("/funds/{fund_id}/investor/documents")
+@router.get(
+    "/funds/{fund_id}/investor/documents",
+    response_model=dict[str, list[InvestorDocumentItem]],
+)
 async def list_approved_documents(
     fund_id: uuid.UUID,
     db: AsyncSession = Depends(get_db_with_rls),
@@ -127,7 +142,7 @@ async def list_approved_documents(
     _role_guard: Actor = Depends(require_role(*_INVESTOR_ROLES)),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-) -> dict[str, Any]:
+) -> dict[str, list[InvestorDocumentItem]]:
     """List documents approved for distribution (status in approved/published)."""
     result = await db.execute(
         select(Document).where(
@@ -137,22 +152,13 @@ async def list_approved_documents(
     )
     rows = list(result.scalars().all())
 
-    asyncio.ensure_future(
+    asyncio.create_task(
         _fire_audit(fund_id, actor.actor_id, "investor.document.viewed", "Document", {"count": len(rows)}),
     )
 
     return {
         "items": [
-            {
-                "id": str(r.id),
-                "title": r.title,
-                "document_type": r.document_type,
-                "status": r.status,
-                "content_type": r.content_type,
-                "original_filename": r.original_filename,
-                "blob_uri": r.blob_uri,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-            }
+            InvestorDocumentItem.model_validate(r)
             for r in rows
         ],
     }
