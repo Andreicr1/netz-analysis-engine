@@ -47,8 +47,7 @@
 		if (detailCache.has(id)) return;
 
 		loadingDetail = true;
-		const token = data.token;
-		const api = createClientApiClient(token);
+		const api = createClientApiClient(getToken);
 
 		Promise.allSettled([
 			api.get(`/model-portfolios/${id}/track-record`),

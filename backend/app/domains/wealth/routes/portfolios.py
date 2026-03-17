@@ -146,6 +146,29 @@ async def trigger_rebalance(
 
 
 @router.get(
+    "/{profile}/rebalance",
+    response_model=list[RebalanceEventRead],
+    summary="List rebalance events",
+    description="Returns rebalance events for a profile, ordered by date descending.",
+)
+async def list_rebalance_events(
+    profile: str,
+    event_status: str | None = Query(None, alias="status", description="Filter by status"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> list[RebalanceEventRead]:
+    _validate_profile(profile)
+    stmt = select(RebalanceEvent).where(RebalanceEvent.profile == profile)
+    if event_status is not None:
+        stmt = stmt.where(RebalanceEvent.status == event_status)
+    stmt = stmt.order_by(RebalanceEvent.event_date.desc()).offset(offset).limit(limit)
+    result = await db.execute(stmt)
+    return [RebalanceEventRead.model_validate(row) for row in result.scalars().all()]
+
+
+@router.get(
     "/{profile}/rebalance/{event_id}",
     response_model=RebalanceEventRead,
     summary="Rebalance event detail",

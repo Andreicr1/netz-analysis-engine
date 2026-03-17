@@ -109,15 +109,23 @@
 	}
 
 	// ── Polling for generating items ──
-	let pollTimer: ReturnType<typeof setTimeout> | undefined;
+	let pollTimer: ReturnType<typeof setInterval> | undefined;
 
 	$effect(() => {
 		if (hasGenerating) {
-			pollTimer = setTimeout(async () => {
+			pollTimer = setInterval(async () => {
 				await invalidateAll();
 			}, 10_000);
+		} else if (pollTimer) {
+			clearInterval(pollTimer);
+			pollTimer = undefined;
 		}
-		return () => clearTimeout(pollTimer);
+		return () => {
+			if (pollTimer) {
+				clearInterval(pollTimer);
+				pollTimer = undefined;
+			}
+		};
 	});
 </script>
 

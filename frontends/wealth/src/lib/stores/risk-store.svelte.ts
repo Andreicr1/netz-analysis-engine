@@ -107,15 +107,15 @@ export function createRiskStore(config: RiskStoreConfig) {
 			// Parallel fetch all risk data
 			const requests = [
 				...profileIds.map((p) =>
-					fetch(`${apiBaseUrl}/risk/cvar/${p}/status`, { headers }).then((r) => r.ok ? r.json() : null),
+					fetch(`${apiBaseUrl}/risk/${p}/cvar`, { headers }).then((r) => r.ok ? r.json() : null),
 				),
 				...profileIds.map((p) =>
-					fetch(`${apiBaseUrl}/risk/cvar/${p}/history`, { headers }).then((r) => r.ok ? r.json() : null),
+					fetch(`${apiBaseUrl}/risk/${p}/cvar/history`, { headers }).then((r) => r.ok ? r.json() : null),
 				),
 				fetch(`${apiBaseUrl}/risk/regime`, { headers }).then((r) => r.ok ? r.json() : null),
 				fetch(`${apiBaseUrl}/risk/regime/history`, { headers }).then((r) => r.ok ? r.json() : null),
 				fetch(`${apiBaseUrl}/analytics/strategy-drift/alerts`, { headers }).then((r) => r.ok ? r.json() : null),
-				fetch(`${apiBaseUrl}/macro/snapshot`, { headers }).then((r) => r.ok ? r.json() : null),
+				fetch(`${apiBaseUrl}/risk/macro`, { headers }).then((r) => r.ok ? r.json() : null),
 			];
 
 			const results = await Promise.allSettled(requests);

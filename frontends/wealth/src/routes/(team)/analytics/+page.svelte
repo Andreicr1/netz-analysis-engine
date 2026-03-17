@@ -184,6 +184,7 @@
 	let backtestRunning = $state(false);
 	let backtestResult = $state<Record<string, unknown> | null>(null);
 	let backtestError = $state<string | null>(null);
+	let backtestPollStop: (() => void) | null = null;
 
 	async function triggerBacktest() {
 		backtestRunning = true;
@@ -195,36 +196,54 @@
 				profile: selectedPortfolio,
 			}) as Record<string, unknown>;
 
-			// If pending, poll for results
+			// If pending, poll for results using createPoller (auto-cleanup on unmount)
 			if (result.status === "pending" && result.run_id) {
-				await pollBacktestResult(String(result.run_id));
+				const runId = String(result.run_id);
+				pollBacktestResult(runId);
 			} else {
 				backtestResult = result;
+				backtestRunning = false;
 			}
 		} catch (e) {
 			backtestError = e instanceof Error ? e.message : "Backtest failed";
-		} finally {
 			backtestRunning = false;
 		}
 	}
 
-	async function pollBacktestResult(runId: string) {
+	function pollBacktestResult(runId: string) {
 		const api = createClientApiClient(getToken);
-		const maxAttempts = 12; // 60s total
-		for (let i = 0; i < maxAttempts; i++) {
-			await new Promise(r => setTimeout(r, 5000));
-			try {
-				const result = await api.get<Record<string, unknown>>(`/analytics/backtest/${runId}`);
-				if (result.status !== "pending") {
-					backtestResult = result;
-					return;
+		let stopped = false;
+
+		backtestPollStop = () => { stopped = true; };
+
+		(async () => {
+			const maxAttempts = 12; // 60s total (5s x 12)
+			for (let i = 0; i < maxAttempts; i++) {
+				if (stopped) return;
+				await new Promise(r => setTimeout(r, 5000));
+				if (stopped) return;
+				try {
+					const result = await api.get<Record<string, unknown>>(`/analytics/backtest/${runId}`);
+					if (result.status !== "pending") {
+						backtestResult = result;
+						backtestRunning = false;
+						return;
+					}
+				} catch {
+					break;
 				}
-			} catch {
-				break;
 			}
-		}
-		backtestError = "Backtest timed out. Check back later.";
+			backtestError = "Backtest timed out. Check back later.";
+			backtestRunning = false;
+		})();
 	}
+
+	// Cleanup polling on component destroy
+	$effect(() => {
+		return () => {
+			backtestPollStop?.();
+		};
+	});
 
 	// ── Optimization state ────────────────────────────────────────────────────
 
