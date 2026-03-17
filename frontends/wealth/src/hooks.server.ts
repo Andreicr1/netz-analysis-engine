@@ -16,9 +16,12 @@ const authHook: Handle = createClerkHook({
 	publicPrefixes: ["/auth/", "/health"],
 }) as Handle;
 
+const VALID_THEMES = new Set(["dark", "light"]);
+
 /** Inject data-theme attribute into SSR HTML to prevent FOUC. */
 const themeHook: Handle = async ({ event, resolve }) => {
-	const theme = event.cookies.get("netz-theme") || "dark";
+	const raw = event.cookies.get("netz-theme") || "dark";
+	const theme = VALID_THEMES.has(raw) ? raw : "dark";
 	return resolve(event, {
 		transformPageChunk: ({ html }) =>
 			html.replace('data-theme="dark"', `data-theme="${theme}"`),
