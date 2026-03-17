@@ -158,9 +158,9 @@ async def trigger_drift_scan(
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
 ) -> StrategyDriftScanRead:
-    # Advisory lock — serialize per-org scans
+    # Advisory lock — serialize globally (xact-scoped: auto-releases on commit/rollback)
     lock_result = await db.execute(
-        text(f"SELECT pg_try_advisory_lock({DRIFT_SCAN_LOCK_ID})")
+        text(f"SELECT pg_try_advisory_xact_lock({DRIFT_SCAN_LOCK_ID})")
     )
     if not lock_result.scalar():
         raise HTTPException(
@@ -168,10 +168,7 @@ async def trigger_drift_scan(
             detail="Drift scan already in progress for this organization",
         )
 
-    try:
-        return await _do_drift_scan(db, org_id, severity_filter, limit)
-    finally:
-        await db.execute(text(f"SELECT pg_advisory_unlock({DRIFT_SCAN_LOCK_ID})"))
+    return await _do_drift_scan(db, org_id, severity_filter, limit)
 
 
 async def _do_drift_scan(
@@ -242,21 +239,8 @@ async def _do_drift_scan(
         )
 
     # Insert new alerts for all scanned instruments (not just drift_detected)
-    all_results = list(scan_result.alerts)
-    # Also include stable/insufficient results for completeness
-    from vertical_engines.wealth.monitoring.strategy_drift_scanner import scan_strategy_drift
-
-    for inst_id_str, metrics_list in metrics_by_instrument.items():
-        # Check if already in alerts
-        if any(a.instrument_id == inst_id_str for a in scan_result.alerts):
-            continue
-        # Compute individual result for persistence
-        name = instrument_names.get(inst_id_str, inst_id_str)
-        individual = scan_strategy_drift(metrics_list, inst_id_str, name)
-        all_results.append(individual)
-
-    if all_results:
-        alert_dicts = [_drift_result_to_alert_dict(r, org_id) for r in all_results]
+    if scan_result.all_results:
+        alert_dicts = [_drift_result_to_alert_dict(r, org_id) for r in scan_result.all_results]
         for alert_dict in alert_dicts:
             stmt = pg_insert(StrategyDriftAlert).values(**alert_dict)
             # On conflict (partial unique index), update existing current
