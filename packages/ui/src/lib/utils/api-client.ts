@@ -180,43 +180,71 @@ export class NetzApiClient {
 		}
 	}
 
-	async post<T>(path: string, body?: unknown): Promise<T> {
+	async post<T>(path: string, body?: unknown, options?: { timeoutMs?: number }): Promise<T> {
+		const timeout = options?.timeoutMs ?? this.timeoutMs;
 		const res = await fetch(buildUrl(this.baseUrl, path), {
 			method: "POST",
 			headers: await this.headers(),
 			body: body !== undefined ? JSON.stringify(body) : undefined,
-			signal: AbortSignal.timeout(this.timeoutMs),
+			signal: AbortSignal.timeout(timeout),
 		});
 		return handleResponse<T>(res);
 	}
 
-	async put<T>(path: string, body?: unknown): Promise<T> {
+	async put<T>(path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
+		const h = { ...await this.headers(), ...extraHeaders };
 		const res = await fetch(buildUrl(this.baseUrl, path), {
 			method: "PUT",
-			headers: await this.headers(),
+			headers: h,
 			body: body !== undefined ? JSON.stringify(body) : undefined,
 			signal: AbortSignal.timeout(this.timeoutMs),
 		});
 		return handleResponse<T>(res);
 	}
 
-	async patch<T>(path: string, body?: unknown): Promise<T> {
+	async patch<T>(path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
+		const h = { ...await this.headers(), ...extraHeaders };
 		const res = await fetch(buildUrl(this.baseUrl, path), {
 			method: "PATCH",
-			headers: await this.headers(),
+			headers: h,
 			body: body !== undefined ? JSON.stringify(body) : undefined,
 			signal: AbortSignal.timeout(this.timeoutMs),
 		});
 		return handleResponse<T>(res);
 	}
 
-	async delete(path: string): Promise<void> {
+	async delete(path: string, extraHeaders?: Record<string, string>): Promise<void> {
+		const h = { ...await this.headers(), ...extraHeaders };
 		const res = await fetch(buildUrl(this.baseUrl, path), {
 			method: "DELETE",
-			headers: await this.headers(),
+			headers: h,
 			signal: AbortSignal.timeout(this.timeoutMs),
 		});
 		await handleResponse<void>(res);
+	}
+
+	async getBlob(path: string): Promise<Blob> {
+		const res = await fetch(buildUrl(this.baseUrl, path), {
+			headers: await this.headers(),
+			signal: AbortSignal.timeout(this.timeoutMs),
+		});
+		if (!res.ok) {
+			// Re-use typed error handling
+			await handleResponse<never>(res);
+		}
+		return res.blob();
+	}
+
+	async upload<T>(path: string, formData: FormData): Promise<T> {
+		const h = await this.headers();
+		delete h["Content-Type"]; // Let browser set multipart boundary
+		const res = await fetch(buildUrl(this.baseUrl, path), {
+			method: "POST",
+			headers: h,
+			body: formData,
+			signal: AbortSignal.timeout(this.timeoutMs),
+		});
+		return handleResponse<T>(res);
 	}
 }
 

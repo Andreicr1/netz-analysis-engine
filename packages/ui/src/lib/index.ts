@@ -20,6 +20,11 @@ export { default as Skeleton } from "./components/Skeleton.svelte";
 export { default as DataTable } from "./components/DataTable.svelte";
 export { default as DataTableToolbar } from "./components/DataTableToolbar.svelte";
 
+// ── Shared Mutation Components ──────────────────────────────
+export { default as ConfirmDialog } from "./components/ConfirmDialog.svelte";
+export { default as ActionButton } from "./components/ActionButton.svelte";
+export { default as FormField } from "./components/FormField.svelte";
+
 // ── Netz Composites ─────────────────────────────────────────
 export { default as DataCard } from "./components/DataCard.svelte";
 export { default as StatusBadge } from "./components/StatusBadge.svelte";
@@ -82,6 +87,9 @@ export {
 } from "./utils/api-client.js";
 export { createSSEStream, createSSEWithSnapshot } from "./utils/sse-client.svelte.js";
 export type { SSEConfig, SSEConnection, SSEStatus, SSEEvent, SSESnapshotConfig, SSESnapshotConnection } from "./utils/sse-client.svelte.js";
+export { createPoller } from "./utils/poller.svelte.js";
+export type { PollerConfig, PollerState } from "./utils/poller.svelte.js";
+export { canOpenSSE, registerSSE, unregisterSSE, getActiveSSECount } from "./utils/sse-registry.svelte.js";
 export {
 	formatCurrency,
 	formatPercent,
