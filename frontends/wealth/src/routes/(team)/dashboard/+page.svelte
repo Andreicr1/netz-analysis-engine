@@ -10,6 +10,7 @@
 		type WealthAlert,
 	} from "@netz/ui";
 	import PortfolioCard from "$lib/components/PortfolioCard.svelte";
+	import MacroChips from "$lib/components/MacroChips.svelte";
 	import { regimeLabels } from "$lib/constants/regime";
 	import type { PageData } from "./$types";
 	import type { RegimeData } from "$lib/types/api";
@@ -220,24 +221,7 @@
 				{/if}
 			{/snippet}
 			{#if macro}
-				<div class="flex flex-wrap gap-3">
-					<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-inset)] px-4 py-3">
-						<p class="text-xs text-[var(--netz-text-muted)]">VIX</p>
-						<p class="text-lg font-semibold text-[var(--netz-text-primary)]">{macro.vix?.toFixed(1) ?? "—"}</p>
-					</div>
-					<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-inset)] px-4 py-3">
-						<p class="text-xs text-[var(--netz-text-muted)]">Yield Curve</p>
-						<p class="text-lg font-semibold" style:color={macro.yield_curve_10y2y !== null && macro.yield_curve_10y2y < 0 ? "var(--netz-danger)" : "var(--netz-text-primary)"}>{macro.yield_curve_10y2y !== null ? `${macro.yield_curve_10y2y.toFixed(2)}%` : "—"}</p>
-					</div>
-					<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-inset)] px-4 py-3">
-						<p class="text-xs text-[var(--netz-text-muted)]">CPI YoY</p>
-						<p class="text-lg font-semibold text-[var(--netz-text-primary)]">{macro.cpi_yoy !== null ? `${macro.cpi_yoy.toFixed(1)}%` : "—"}</p>
-					</div>
-					<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-inset)] px-4 py-3">
-						<p class="text-xs text-[var(--netz-text-muted)]">Fed Funds</p>
-						<p class="text-lg font-semibold text-[var(--netz-text-primary)]">{macro.fed_funds_rate !== null ? `${macro.fed_funds_rate.toFixed(2)}%` : "—"}</p>
-					</div>
-				</div>
+				<MacroChips {macro} />
 			{:else}
 				<EmptyState title="No Macro Data" message="FRED macro data will appear here once available." />
 			{/if}

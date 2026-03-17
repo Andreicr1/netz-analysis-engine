@@ -7,6 +7,7 @@
 		StatusBadge, TimeSeriesChart, RegimeChart, PageHeader, EmptyState,
 		SectionCard, UtilizationBar, PeriodSelector, MetricCard,
 	} from "@netz/ui";
+	import MacroChips from "$lib/components/MacroChips.svelte";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
@@ -172,24 +173,7 @@
 	<!-- Macro Indicator Chips -->
 	{#if macro}
 		<SectionCard title="Macro Indicators">
-			<div class="flex flex-wrap gap-3">
-				<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-inset)] px-4 py-3">
-					<p class="text-xs text-[var(--netz-text-muted)]">VIX</p>
-					<p class="text-lg font-semibold" style:color={macro.vix !== null && macro.vix > 25 ? "var(--netz-danger)" : "var(--netz-success)"}>{macro.vix?.toFixed(1) ?? "—"}</p>
-				</div>
-				<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-inset)] px-4 py-3">
-					<p class="text-xs text-[var(--netz-text-muted)]">Yield Curve</p>
-					<p class="text-lg font-semibold" style:color={macro.yield_curve_10y2y !== null && macro.yield_curve_10y2y < 0 ? "var(--netz-danger)" : "var(--netz-text-primary)"}>{macro.yield_curve_10y2y !== null ? `${macro.yield_curve_10y2y.toFixed(2)}%` : "—"}</p>
-				</div>
-				<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-inset)] px-4 py-3">
-					<p class="text-xs text-[var(--netz-text-muted)]">CPI YoY</p>
-					<p class="text-lg font-semibold text-[var(--netz-text-primary)]">{macro.cpi_yoy?.toFixed(1) ?? "—"}%</p>
-				</div>
-				<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-inset)] px-4 py-3">
-					<p class="text-xs text-[var(--netz-text-muted)]">Fed Funds</p>
-					<p class="text-lg font-semibold text-[var(--netz-text-primary)]">{macro.fed_funds_rate?.toFixed(2) ?? "—"}%</p>
-				</div>
-			</div>
+			<MacroChips {macro} />
 		</SectionCard>
 	{/if}
 </div>
