@@ -1,0 +1,140 @@
+<!--
+  DD Report detail — chapter navigation sidebar + content display.
+  Download PDF, regenerate with confirmation.
+-->
+<script lang="ts">
+	import { Card, Button, EmptyState } from "@netz/ui";
+	import { ActionButton, ConfirmDialog } from "@netz/ui";
+	import { createClientApiClient } from "$lib/api/client";
+	import { invalidateAll } from "$app/navigation";
+	import { getContext } from "svelte";
+	import type { PageData } from "./$types";
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
+
+	let { data }: { data: PageData } = $props();
+
+	type Chapter = {
+		chapter_number: number;
+		title: string;
+		content: string;
+		status: string;
+	};
+
+	let report = $derived(data.report as Record<string, unknown>);
+	let chapters = $derived((report?.chapters ?? []) as Chapter[]);
+	let activeChapter = $state(0);
+	let downloading = $state(false);
+	let showRegenConfirm = $state(false);
+	let regenerating = $state(false);
+	let actionError = $state<string | null>(null);
+
+	async function downloadPDF() {
+		downloading = true;
+		try {
+			const api = createClientApiClient(getToken);
+			const blob = await api.getBlob(`/fact-sheets/dd-reports/${data.reportId}/download`);
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = `dd-report-${data.reportId}.pdf`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : "Download failed";
+		} finally {
+			downloading = false;
+		}
+	}
+
+	async function regenerate() {
+		regenerating = true;
+		showRegenConfirm = false;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post(`/dd-reports/${data.reportId}/regenerate`, {});
+			await invalidateAll();
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : "Regeneration failed";
+		} finally {
+			regenerating = false;
+		}
+	}
+</script>
+
+<div class="flex h-full">
+	<!-- Chapter sidebar -->
+	<aside class="w-64 shrink-0 border-r border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] p-4">
+		<h3 class="mb-3 text-sm font-semibold text-[var(--netz-text-secondary)]">Chapters</h3>
+		{#if chapters.length === 0}
+			<p class="text-xs text-[var(--netz-text-muted)]">No chapters yet.</p>
+		{:else}
+			<nav class="space-y-1">
+				{#each chapters as chapter, i (chapter.chapter_number)}
+					<button
+						class="w-full rounded-md px-3 py-2 text-left text-xs transition-colors
+							{activeChapter === i ? 'bg-[var(--netz-brand-primary)]/10 font-medium text-[var(--netz-brand-primary)]' : 'text-[var(--netz-text-secondary)] hover:bg-[var(--netz-bg-hover)]'}"
+						onclick={() => activeChapter = i}
+					>
+						{chapter.chapter_number}. {chapter.title}
+					</button>
+				{/each}
+			</nav>
+		{/if}
+
+		<div class="mt-6 space-y-2">
+			<ActionButton
+				onclick={downloadPDF}
+				loading={downloading}
+				loadingText="Downloading..."
+				class="w-full"
+				size="sm"
+			>
+				Download PDF
+			</ActionButton>
+			<ActionButton
+				variant="outline"
+				onclick={() => showRegenConfirm = true}
+				loading={regenerating}
+				loadingText="..."
+				class="w-full"
+				size="sm"
+			>
+				Regenerate
+			</ActionButton>
+		</div>
+	</aside>
+
+	<!-- Chapter content -->
+	<main class="flex-1 overflow-y-auto p-6">
+		{#if actionError}
+			<div class="mb-4 rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+				{actionError}
+			</div>
+		{/if}
+
+		{#if chapters.length === 0}
+			<EmptyState title="No Chapters" description="Report chapters will appear here after generation." />
+		{:else if chapters[activeChapter]}
+			<div>
+				<h2 class="mb-4 text-xl font-semibold text-[var(--netz-text-primary)]">
+					{chapters[activeChapter].chapter_number}. {chapters[activeChapter].title}
+				</h2>
+				<Card class="prose prose-sm max-w-none p-6 text-[var(--netz-text-primary)]">
+					<!-- Render chapter content as plain text (no {@html} — XSS safety) -->
+					<div class="whitespace-pre-wrap">{chapters[activeChapter].content}</div>
+				</Card>
+			</div>
+		{/if}
+	</main>
+</div>
+
+<ConfirmDialog
+	bind:open={showRegenConfirm}
+	title="Regenerate Report"
+	message="This will regenerate all chapters. Continue?"
+	confirmLabel="Regenerate"
+	confirmVariant="default"
+	onConfirm={regenerate}
+	onCancel={() => showRegenConfirm = false}
+/>

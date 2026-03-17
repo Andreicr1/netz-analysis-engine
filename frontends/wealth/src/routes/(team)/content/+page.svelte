@@ -1,8 +1,11 @@
 <!--
   Content Production — trigger outlooks/flash reports/spotlights, approve, download.
+  Enhanced: fund picker for spotlights, approval with self-prevention, PDF download,
+  polling for generating status, failed status display.
 -->
 <script lang="ts">
-	import { DataTable, StatusBadge, PageHeader, EmptyState, Button, PDFDownload } from "@netz/ui";
+	import { DataTable, StatusBadge, PageHeader, EmptyState, Button, Card, Dialog } from "@netz/ui";
+	import { ActionButton, ConfirmDialog, FormField } from "@netz/ui";
 	import type { PageData } from "./$types";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll } from "$app/navigation";
@@ -18,67 +21,177 @@
 		status: string;
 		created_at: string;
 		title: string | null;
+		created_by: string | null;
+		error_message: string | null;
 	};
 
 	let contentList = $derived((data.content ?? []) as ContentSummary[]);
+	let hasGenerating = $derived(contentList.some(c => c.status === "generating"));
 
 	let generating = $state(false);
+	let approvingId = $state<string | null>(null);
+	let downloadingId = $state<string | null>(null);
+	let actionError = $state<string | null>(null);
 
-	const columns = [
-		{ accessorKey: "title", header: "Title" },
-		{ accessorKey: "content_type", header: "Type" },
-		{ accessorKey: "status", header: "Status" },
-		{
-			accessorKey: "created_at",
-			header: "Created",
-			cell: (info: { getValue: () => unknown }) =>
-				new Date(info.getValue() as string).toLocaleDateString(),
-		},
-	];
+	// ── Spotlight Fund Picker ──
+	let showSpotlightPicker = $state(false);
+	let spotlightFundId = $state("");
+	let funds = $state<Array<{ id: string; name: string }>>([]);
+	let loadingFunds = $state(false);
 
-	async function triggerGeneration(type: string) {
+	async function openSpotlightPicker() {
+		showSpotlightPicker = true;
+		if (funds.length === 0) {
+			loadingFunds = true;
+			try {
+				const api = createClientApiClient(getToken);
+				const res = await api.get<Array<{ id: string; name: string }>>("/funds");
+				funds = Array.isArray(res) ? res : [];
+			} catch {
+				funds = [];
+			} finally {
+				loadingFunds = false;
+			}
+		}
+	}
+
+	async function triggerGeneration(type: string, extraParams?: string) {
 		generating = true;
+		actionError = null;
 		try {
 			const api = createClientApiClient(getToken);
-			await api.post(`/content/${type}`, {});
+			const url = extraParams ? `/content/${type}?${extraParams}` : `/content/${type}`;
+			await api.post(url, {});
 			await invalidateAll();
-		} catch {
-			// Handled by api-client
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : "Generation failed";
 		} finally {
 			generating = false;
 		}
 	}
 
+	async function triggerSpotlight() {
+		if (!spotlightFundId) return;
+		showSpotlightPicker = false;
+		await triggerGeneration("spotlights", `instrument_id=${spotlightFundId}`);
+	}
+
 	async function approveContent(contentId: string) {
+		approvingId = contentId;
+		actionError = null;
 		try {
 			const api = createClientApiClient(getToken);
 			await api.post(`/content/${contentId}/approve`, {});
 			await invalidateAll();
-		} catch {
-			// Handled by api-client (409 for self-approval blocked)
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : "Approval failed";
+		} finally {
+			approvingId = null;
 		}
 	}
+
+	async function downloadContent(contentId: string, title: string) {
+		downloadingId = contentId;
+		try {
+			const api = createClientApiClient(getToken);
+			const blob = await api.getBlob(`/content/${contentId}/download`);
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = `${title || "content"}.pdf`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : "Download failed";
+		} finally {
+			downloadingId = null;
+		}
+	}
+
+	// ── Polling for generating items ──
+	let pollTimer: ReturnType<typeof setTimeout> | undefined;
+
+	$effect(() => {
+		if (hasGenerating) {
+			pollTimer = setTimeout(async () => {
+				await invalidateAll();
+			}, 10_000);
+		}
+		return () => clearTimeout(pollTimer);
+	});
 </script>
 
 <div class="space-y-6 p-6">
 	<PageHeader title="Content Production">
 		{#snippet actions()}
 			<div class="flex gap-2">
-				<Button onclick={() => triggerGeneration("outlooks")} disabled={generating}>
+				<ActionButton onclick={() => triggerGeneration("outlooks")} loading={generating} loadingText="Generating...">
 					Generate Outlook
-				</Button>
-				<Button onclick={() => triggerGeneration("flash-reports")} disabled={generating}>
+				</ActionButton>
+				<ActionButton onclick={() => triggerGeneration("flash-reports")} loading={generating} loadingText="Generating...">
 					Flash Report
-				</Button>
-				<Button onclick={() => triggerGeneration("spotlights")} disabled={generating}>
+				</ActionButton>
+				<Button onclick={openSpotlightPicker} disabled={generating}>
 					Spotlight
 				</Button>
 			</div>
 		{/snippet}
 	</PageHeader>
 
+	{#if actionError}
+		<div class="rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+			{actionError}
+			<button class="ml-2 underline" onclick={() => actionError = null}>dismiss</button>
+		</div>
+	{/if}
+
 	{#if contentList.length > 0}
-		<DataTable data={contentList} {columns} />
+		<div class="space-y-3">
+			{#each contentList as item (item.id)}
+				<Card class="flex items-center justify-between p-4">
+					<div class="flex-1">
+						<div class="flex items-center gap-2">
+							<p class="text-sm font-medium text-[var(--netz-text-primary)]">
+								{item.title ?? item.content_type}
+							</p>
+							<StatusBadge status={item.status} type="default" />
+						</div>
+						<p class="mt-1 text-xs text-[var(--netz-text-muted)]">
+							{item.content_type} &middot; {new Date(item.created_at).toLocaleDateString()}
+						</p>
+						{#if item.status === "failed" && item.error_message}
+							<p class="mt-1 text-xs text-[var(--netz-status-error)]">{item.error_message}</p>
+						{/if}
+					</div>
+					<div class="ml-4 flex gap-2">
+						{#if item.status === "ready" || item.status === "approved"}
+							<ActionButton
+								size="sm"
+								variant="outline"
+								onclick={() => downloadContent(item.id, item.title ?? item.content_type)}
+								loading={downloadingId === item.id}
+								loadingText="..."
+							>
+								Download PDF
+							</ActionButton>
+						{/if}
+						{#if item.status === "ready"}
+							<ActionButton
+								size="sm"
+								onclick={() => approveContent(item.id)}
+								loading={approvingId === item.id}
+								loadingText="Approving..."
+							>
+								Approve
+							</ActionButton>
+						{/if}
+						{#if item.status === "generating"}
+							<span class="text-xs text-[var(--netz-text-muted)]">Generating...</span>
+						{/if}
+					</div>
+				</Card>
+			{/each}
+		</div>
 	{:else}
 		<EmptyState
 			title="No Content"
@@ -86,3 +199,38 @@
 		/>
 	{/if}
 </div>
+
+<!-- Spotlight Fund Picker Dialog -->
+<Dialog bind:open={showSpotlightPicker} title="Select Fund for Spotlight">
+	<div class="space-y-4">
+		{#if loadingFunds}
+			<p class="text-sm text-[var(--netz-text-muted)]">Loading funds...</p>
+		{:else if funds.length === 0}
+			<p class="text-sm text-[var(--netz-text-muted)]">No funds available.</p>
+		{:else}
+			<FormField label="Fund" required>
+				<select
+					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
+					bind:value={spotlightFundId}
+				>
+					<option value="">Select a fund...</option>
+					{#each funds as fund}
+						<option value={fund.id}>{fund.name}</option>
+					{/each}
+				</select>
+			</FormField>
+		{/if}
+
+		<div class="flex justify-end gap-2 pt-2">
+			<Button variant="outline" onclick={() => showSpotlightPicker = false}>Cancel</Button>
+			<ActionButton
+				onclick={triggerSpotlight}
+				loading={generating}
+				loadingText="Generating..."
+				disabled={!spotlightFundId}
+			>
+				Generate Spotlight
+			</ActionButton>
+		</div>
+	</div>
+</Dialog>
