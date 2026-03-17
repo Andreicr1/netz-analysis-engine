@@ -1,10 +1,23 @@
 <!doctype html>
-<html lang="en">
+<!-- data-theme="light" is the SSR baseline. themeHook in hooks.server.ts replaces it. -->
+<!-- Do NOT remove data-theme — it is the sentinel for transformPageChunk. -->
+<html lang="en" data-theme="light">
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<link rel="icon" href="%sveltekit.assets%/favicon.png" />
 		<title>Netz Credit Intelligence</title>
+		<script>
+			// FOUC prevention — set theme before first paint (Pattern: see D2 in design-decisions)
+			(function() {
+				var theme = localStorage.getItem('netz-theme');
+				if (theme !== 'dark' && theme !== 'light') {
+					// First-time visitor: respect OS preference, default to light
+					theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+				}
+				document.documentElement.setAttribute('data-theme', theme);
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

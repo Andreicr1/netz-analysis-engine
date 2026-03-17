@@ -7,4 +7,7 @@ export default defineConfig({
 		port: 5174,
 		strictPort: false,
 	},
+	ssr: {
+		noExternal: ["@tanstack/svelte-table"],
+	},
 });

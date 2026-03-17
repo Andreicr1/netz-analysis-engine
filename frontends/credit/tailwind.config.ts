@@ -7,15 +7,6 @@ export default {
 	],
 	theme: {
 		extend: {
-			colors: {
-				netz: {
-					navy: "var(--netz-navy)",
-					blue: "var(--netz-blue)",
-					slate: "var(--netz-slate)",
-					light: "var(--netz-light)",
-					orange: "var(--netz-orange)",
-				},
-			},
 			fontFamily: {
 				sans: ["var(--netz-font-sans)", "Inter Variable", "system-ui", "sans-serif"],
 				mono: ["var(--netz-font-mono)", "JetBrains Mono", "monospace"],
