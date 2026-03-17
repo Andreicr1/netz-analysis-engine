@@ -281,6 +281,9 @@ source_modules = [
     "vertical_engines.wealth.watchlist.models",
     "vertical_engines.wealth.mandate_fit.models",
     "vertical_engines.wealth.fee_drag.models",
+    "vertical_engines.wealth.attribution.models",
+    "vertical_engines.wealth.correlation.models",
+    "vertical_engines.wealth.monitoring.strategy_drift_models",
 ]
 forbidden_modules = [
     "vertical_engines.wealth.dd_report.dd_report_engine",
@@ -292,6 +295,9 @@ forbidden_modules = [
     "vertical_engines.wealth.watchlist.service",
     "vertical_engines.wealth.mandate_fit.service",
     "vertical_engines.wealth.fee_drag.service",
+    "vertical_engines.wealth.attribution.service",
+    "vertical_engines.wealth.correlation.service",
+    "vertical_engines.wealth.monitoring.strategy_drift_scanner",
 ]
 
 [[tool.importlinter.contracts]]
@@ -398,3 +404,33 @@ name = "Fee drag models must not import fee drag service"
 type = "forbidden"
 source_modules = ["vertical_engines.wealth.fee_drag.models"]
 forbidden_modules = ["vertical_engines.wealth.fee_drag.service"]
+
+# ── Senior Analyst Engines (Sprint 6) ────────────────────────
+
+# Strategy drift: models must not import scanner
+[[tool.importlinter.contracts]]
+name = "Wealth monitoring drift models must not import scanner"
+type = "forbidden"
+source_modules = ["vertical_engines.wealth.monitoring.strategy_drift_models"]
+forbidden_modules = ["vertical_engines.wealth.monitoring.strategy_drift_scanner"]
+
+# Attribution: models must not import service
+[[tool.importlinter.contracts]]
+name = "Wealth attribution models must not import service"
+type = "forbidden"
+source_modules = ["vertical_engines.wealth.attribution.models"]
+forbidden_modules = ["vertical_engines.wealth.attribution.service"]
+
+# Correlation: models must not import service
+[[tool.importlinter.contracts]]
+name = "Wealth correlation models must not import service"
+type = "forbidden"
+source_modules = ["vertical_engines.wealth.correlation.models"]
+forbidden_modules = ["vertical_engines.wealth.correlation.service"]
+
+# Correlation quant engine must not import wealth domain
+[[tool.importlinter.contracts]]
+name = "Correlation regime service must not import wealth domain"
+type = "forbidden"
+source_modules = ["quant_engine.correlation_regime_service"]
+forbidden_modules = ["app.domains.wealth"]
