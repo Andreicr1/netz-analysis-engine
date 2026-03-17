@@ -1187,10 +1187,10 @@ equity:
 | `backend/app/domains/wealth/routes/workers.py` | MODIFY (add watchlist trigger) |
 
 **Acceptance criteria:**
-- [ ] Weekly job re-screens all watchlisted instruments
-- [ ] Transitions detected correctly (improvement, deterioration, stable)
-- [ ] Alerts published via Redis pub/sub for SSE consumption
-- [ ] Advisory lock prevents concurrent watchlist runs
+- [x] Weekly job re-screens all watchlisted instruments
+- [x] Transitions detected correctly (improvement, deterioration, stable)
+- [x] Alerts published via Redis pub/sub for SSE consumption
+- [x] Advisory lock prevents concurrent watchlist runs
 
 ---
 

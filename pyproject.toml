@@ -353,3 +353,17 @@ source_modules = [
     "vertical_engines.wealth.rebalancing.weight_proposer",
 ]
 forbidden_modules = ["vertical_engines.wealth.rebalancing.service"]
+
+[[tool.importlinter.contracts]]
+name = "Watchlist models must not import watchlist service"
+type = "forbidden"
+source_modules = ["vertical_engines.wealth.watchlist.models"]
+forbidden_modules = ["vertical_engines.wealth.watchlist.service"]
+
+[[tool.importlinter.contracts]]
+name = "Watchlist helpers must not import watchlist service"
+type = "forbidden"
+source_modules = [
+    "vertical_engines.wealth.watchlist.transition_detector",
+]
+forbidden_modules = ["vertical_engines.wealth.watchlist.service"]

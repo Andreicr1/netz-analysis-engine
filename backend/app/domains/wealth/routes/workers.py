@@ -144,6 +144,34 @@ async def trigger_run_fact_sheet_gen(
 
 
 @router.post(
+    "/run-watchlist-check",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger watchlist monitoring check",
+    description=(
+        "Schedules the watchlist monitoring worker as a background task. "
+        "Re-screens all watchlisted instruments through 3-layer screening, "
+        "detects transitions (improvement/deterioration), and publishes "
+        "alerts via Redis pub/sub. Uses advisory lock 900_003 to prevent "
+        "concurrent runs. Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_watchlist_check(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.watchlist_batch import run_watchlist_check
+
+    org_id = user.organization_id
+    background_tasks.add_task(run_watchlist_check, org_id)
+    return WorkerScheduledResponse(status="scheduled", worker="run-watchlist-check")
+
+
+@router.post(
     "/run-screening-batch",
     response_model=WorkerScheduledResponse,
     status_code=status.HTTP_202_ACCEPTED,
