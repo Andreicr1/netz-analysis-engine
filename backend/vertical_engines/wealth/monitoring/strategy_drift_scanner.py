@@ -246,12 +246,14 @@ def scan_all_strategy_drift(
     """
     now_iso = datetime.now(timezone.utc).isoformat()
     alerts: list[StrategyDriftResult] = []
+    all_results: list[StrategyDriftResult] = []
     stable_count = 0
     insufficient_count = 0
 
     for instrument_id, metrics_history in all_instruments_metrics.items():
         name = instrument_names.get(instrument_id, instrument_id)
         result = scan_strategy_drift(metrics_history, instrument_id, name, config)
+        all_results.append(result)
 
         if result.status == "drift_detected":
             alerts.append(result)
@@ -266,6 +268,7 @@ def scan_all_strategy_drift(
     return StrategyDriftScanResult(
         scanned_count=len(all_instruments_metrics),
         alerts=tuple(alerts),
+        all_results=tuple(all_results),
         stable_count=stable_count,
         insufficient_data_count=insufficient_count,
         scan_timestamp=now_iso,
