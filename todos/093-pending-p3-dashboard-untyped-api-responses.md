@@ -1,5 +1,5 @@
 ---
-status: pending
+status: done
 priority: p3
 issue_id: "093"
 tags: [code-review, quality, type-safety, frontend]
@@ -48,6 +48,18 @@ Frontend pages cast API responses to `Record<string, unknown>` and access proper
 ### 2026-03-16 - Code Review Discovery
 
 **By:** Claude Code (ce:review PRs #37-#45)
+
+## Work Log
+
+### 2026-03-16 - Resolution
+
+**By:** Claude Code
+
+**Actions:**
+- Created `frontends/credit/src/lib/types/api.ts` with 20+ interfaces: PortfolioSummary, PipelineSummary, PipelineAnalytics, MacroSnapshot, TaskItem, DealDetail, StageTimelineEntry, PaginatedResponse<T>, PortfolioAsset, PortfolioObligation, PortfolioAlert, PortfolioAction, DocumentItem, ReviewItem, ReviewSummary, ReviewDetail, ReviewAssignment, ReviewChecklist, ChecklistItem, NavSnapshot, ReportPack, ICMemo, ICMemoChapter, VotingStatus, Citation
+- Created `frontends/wealth/src/lib/types/api.ts` with RegimeData (wealth dashboard already had inline types for others)
+- Updated 10 Svelte files to replace `Record<string, unknown>` with typed interfaces
+- ICMemoViewer and CopilotCitation now have properly typed props instead of `unknown`
 
 ## Resources
 

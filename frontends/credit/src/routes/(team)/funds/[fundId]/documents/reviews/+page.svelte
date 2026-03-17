@@ -4,11 +4,12 @@
 <script lang="ts">
 	import { DataTable, DataCard, EmptyState } from "@netz/ui";
 	import type { PageData } from "./$types";
+	import type { PaginatedResponse, ReviewItem, ReviewSummary } from "$lib/types/api";
 
 	let { data }: { data: PageData } = $props();
 
-	let reviews = $derived((data.reviews as Record<string, unknown>)?.items as unknown[] ?? []);
-	let summary = $derived(data.summary as Record<string, unknown> | null);
+	let reviews = $derived((data.reviews as PaginatedResponse<ReviewItem>)?.items ?? []);
+	let summary = $derived(data.summary as ReviewSummary | null);
 
 	const columns = [
 		{ accessorKey: "document_title", header: "Document" },

@@ -18,8 +18,6 @@ export { default as Skeleton } from "./components/Skeleton.svelte";
 
 // ── Data Components ─────────────────────────────────────────
 export { default as DataTable } from "./components/DataTable.svelte";
-export { default as DataTablePagination } from "./components/DataTablePagination.svelte";
-export { default as DataTableColumnHeader } from "./components/DataTableColumnHeader.svelte";
 export { default as DataTableToolbar } from "./components/DataTableToolbar.svelte";
 
 // ── Netz Composites ─────────────────────────────────────────
@@ -35,6 +33,7 @@ export { default as Toast } from "./components/Toast.svelte";
 export { default as PageTabs } from "./components/PageTabs.svelte";
 
 // ── Layouts ─────────────────────────────────────────────────
+export { default as AppLayout } from "./layouts/AppLayout.svelte";
 export { default as AppShell } from "./layouts/AppShell.svelte";
 export { default as Sidebar } from "./layouts/Sidebar.svelte";
 export { default as ContextPanel } from "./layouts/ContextPanel.svelte";
@@ -85,7 +84,6 @@ export {
 	defaultBranding,
 	brandingToCSS,
 	injectBranding,
-	getBrandingFromCSS,
 } from "./utils/branding.js";
 export { createClerkHook, createRootLayoutLoader, startSessionExpiryMonitor } from "./utils/auth.js";
 export type { ClerkHookOptions, RootLayoutLoaderOptions } from "./utils/auth.js";

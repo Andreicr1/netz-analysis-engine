@@ -55,7 +55,8 @@
 	let portfolios = $derived(data.portfolios as PortfolioSummary[] | null);
 	let modelPortfolios = $derived(data.modelPortfolios as ModelPortfolio[] | null);
 	let macro = $derived(data.macro as MacroIndicators | null);
-	let regime = $derived(data.regime as Record<string, unknown> | null);
+	import type { RegimeData } from "$lib/types/api";
+	let regime = $derived(data.regime as RegimeData | null);
 	let cvarByProfile = $derived(data.cvarByProfile as Record<string, CVaRStatus>);
 
 	// Build portfolio cards — merge portfolio summary with model portfolio display names
@@ -124,7 +125,7 @@
 
 	// Current regime from API
 	let currentRegime = $derived(
-		(regime as Record<string, string> | null)?.regime ??
+		regime?.regime ??
 		portfolios?.[0]?.regime ??
 		null
 	);

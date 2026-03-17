@@ -39,7 +39,6 @@ export {
 	defaultBranding,
 	brandingToCSS,
 	injectBranding,
-	getBrandingFromCSS,
 } from "./branding.js";
 
 // Auth — JWT verification + session monitoring

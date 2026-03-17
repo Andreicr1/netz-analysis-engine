@@ -4,11 +4,32 @@
 <script lang="ts">
 	import { Card, StatusBadge, Button } from "@netz/ui";
 	import type { PageData } from "./$types";
+	import type { ReviewDetail, ReviewChecklist } from "$lib/types/api";
+	import { createClientApiClient } from "$lib/api/client";
+	import { invalidateAll } from "$app/navigation";
+	import { getContext } from "svelte";
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let { data }: { data: PageData } = $props();
 
-	let review = $derived(data.review as Record<string, unknown>);
-	let checklist = $derived((data.checklist as Record<string, unknown>)?.items as unknown[] ?? []);
+	let review = $derived(data.review as ReviewDetail);
+	let checklist = $derived((data.checklist as ReviewChecklist)?.items ?? []);
+	let loading = $state(false);
+
+	async function submitDecision(decision: "APPROVED" | "REJECTED" | "REVISION_REQUESTED") {
+		loading = true;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post(`/funds/${data.fundId}/document-reviews/${data.reviewId}/decide`, {
+				decision,
+				comments: null,
+			});
+			await invalidateAll();
+		} finally {
+			loading = false;
+		}
+	}
 </script>
 
 <div class="p-6">
@@ -20,9 +41,15 @@
 			<StatusBadge status={String(review.status)} type="review" />
 		</div>
 		<div class="flex gap-2">
-			<Button variant="outline" onclick={() => {}}>Approve</Button>
-			<Button variant="outline" onclick={() => {}}>Reject</Button>
-			<Button variant="outline" onclick={() => {}}>Request Revision</Button>
+			<Button variant="outline" onclick={() => submitDecision("APPROVED")} disabled={loading}>
+				{loading ? "..." : "Approve"}
+			</Button>
+			<Button variant="outline" onclick={() => submitDecision("REJECTED")} disabled={loading}>
+				{loading ? "..." : "Reject"}
+			</Button>
+			<Button variant="outline" onclick={() => submitDecision("REVISION_REQUESTED")} disabled={loading}>
+				{loading ? "..." : "Request Revision"}
+			</Button>
 		</div>
 	</div>
 
@@ -32,8 +59,8 @@
 		{#if Array.isArray(review.assignments)}
 			{#each review.assignments as assignment}
 				<div class="flex items-center justify-between py-2">
-					<span class="text-sm">{(assignment as Record<string, unknown>).reviewer_name ?? "Unknown"}</span>
-					<StatusBadge status={String((assignment as Record<string, unknown>).decision ?? "pending")} type="review" />
+					<span class="text-sm">{assignment.reviewer_name ?? "Unknown"}</span>
+					<StatusBadge status={String(assignment.decision ?? "pending")} type="review" />
 				</div>
 			{/each}
 		{:else}
@@ -49,8 +76,8 @@
 		{:else}
 			{#each checklist as item}
 				<label class="flex items-center gap-2 py-1.5">
-					<input type="checkbox" checked={(item as Record<string, unknown>).checked === true} disabled />
-					<span class="text-sm">{(item as Record<string, unknown>).description ?? ""}</span>
+					<input type="checkbox" checked={item.checked === true} disabled />
+					<span class="text-sm">{item.description ?? ""}</span>
 				</label>
 			{/each}
 		{/if}

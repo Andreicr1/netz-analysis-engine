@@ -1,5 +1,5 @@
 ---
-status: pending
+status: done
 priority: p3
 issue_id: "090"
 tags: [code-review, duplication, frontend]
@@ -50,6 +50,19 @@ dependencies: ["086"]
 ### 2026-03-16 - Code Review Discovery
 
 **By:** Claude Code (ce:review PRs #37-#45)
+
+## Work Log
+
+### 2026-03-16 - Resolution
+
+**By:** Claude Code
+
+**Actions:**
+- Created `packages/ui/src/lib/layouts/AppLayout.svelte` — shared root layout accepting `navItems`, `appName`, `branding`, `token`, `children` props
+- Credit `+layout.svelte` reduced from ~126 lines to ~26 lines (navItems + AppLayout render)
+- Wealth `+layout.svelte` reduced from ~129 lines to ~30 lines (navItems + AppLayout render)
+- All shared logic (branding injection, session expiry, conflict handler, auth redirect, expiry modal, conflict toast) lives in AppLayout
+- Exported from `@netz/ui` barrel
 
 ## Resources
 

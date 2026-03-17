@@ -3,8 +3,9 @@
   Displays a source document citation with page number.
 -->
 <script lang="ts">
-	let { citation }: { citation: unknown } = $props();
-	let c = $derived(citation as Record<string, unknown>);
+	import type { Citation } from "$lib/types/api";
+	let { citation }: { citation: Citation } = $props();
+	let c = $derived(citation);
 </script>
 
 <a
