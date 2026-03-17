@@ -262,14 +262,14 @@ Document these patterns as a code comment block in `packages/ui/src/lib/utils/PA
 | **SSE** | `createSSEStream` | Preferred for all real-time status — use registry |
 
 **Success criteria:**
-- [ ] ConfirmDialog, ActionButton, FormField added to `@netz/ui` and exported
-- [ ] `NetzApiClient` extended with `getBlob()`, `upload()`, custom headers, per-request timeout
-- [ ] `createPoller` and SSE registry utilities added
+- [x] ConfirmDialog, ActionButton, FormField added to `@netz/ui` and exported
+- [x] `NetzApiClient` extended with `getBlob()`, `upload()`, custom headers, per-request timeout
+- [x] `createPoller` and SSE registry utilities added
 - [ ] TypeScript types generated from OpenAPI
 - [ ] All 95 endpoints verified as mounted
-- [ ] Content generation failure path fixed
-- [ ] All 7 critical security fixes applied
-- [ ] Frontend Mutation Playbook documented
+- [x] Content generation failure path fixed
+- [x] All 7 critical security fixes applied
+- [x] Frontend Mutation Playbook documented
 - [ ] `make check` passes
 
 ---
@@ -366,19 +366,19 @@ New server load: `GET /admin/configs/invalid`. Display as warning list with link
 - File upload: use `URL.createObjectURL()` for instant preview, revoke on component destroy
 
 **Success criteria:**
-- [ ] Create tenant form works with validation
-- [ ] Edit tenant metadata saves via PATCH
-- [ ] Seed tenant triggers with confirmation
-- [ ] Asset upload restricted to PNG/JPEG/ICO, preview shown, magic bytes validated
-- [ ] Asset delete with confirmation
-- [ ] Config editor saves overrides (PUT) with `If-Match` header
-- [ ] Config 409 conflict → Toast + reload (not silent failure)
-- [ ] Config 428 → "Reload to get current version" message
-- [ ] Config delete reverts to default with confirmation
-- [ ] Update default config with confirmation
-- [ ] Invalid configs list shown with links to editor
-- [ ] Prompt version history loaded lazily on tab click
-- [ ] Prompt revert works with confirmation
+- [x] Create tenant form works with validation
+- [x] Edit tenant metadata saves via PATCH
+- [x] Seed tenant triggers with confirmation
+- [x] Asset upload restricted to PNG/JPEG/ICO, preview shown, magic bytes validated
+- [x] Asset delete with confirmation
+- [x] Config editor saves overrides (PUT) with `If-Match` header
+- [x] Config 409 conflict → Toast + reload (not silent failure)
+- [x] Config 428 → "Reload to get current version" message
+- [x] Config delete reverts to default with confirmation
+- [x] Update default config with confirmation
+- [x] Invalid configs list shown with links to editor
+- [x] Prompt version history loaded lazily on tab click
+- [x] Prompt revert works with confirmation
 - [ ] `make check:all` passes
 
 ---
