@@ -1,20 +1,19 @@
+<!--
+  @component AlertFeed
+  Chronological feed with discriminated union WealthAlert types.
+  Each alert type renders contextually: CVaR shows utilization, behavior change lists metrics, etc.
+-->
 <script lang="ts">
 	import { cn } from "../utils/cn.js";
+	import UtilizationBar from "./UtilizationBar.svelte";
 
-	export type WealthAlert = {
-		id: string;
-		timestamp: string;
-		type:
-			| "cvar_breach"
-			| "behavior_change"
-			| "regime_change"
-			| "dtw_drift"
-			| "universe_removal";
-		title: string;
-		description: string;
-		severity: "critical" | "warning" | "info";
-		meta?: Record<string, unknown>;
-	};
+	// ── Discriminated Union ──────────────────────────────────
+	export type WealthAlert =
+		| { type: "cvar_breach"; portfolio: string; utilization: number; ts: Date }
+		| { type: "behavior_change"; instrument: string; severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL"; changed_metrics: string[]; ts: Date }
+		| { type: "dtw_drift"; instrument: string; drift_score: number; ts: Date }
+		| { type: "regime_change"; from: string; to: string; ts: Date }
+		| { type: "universe_removal"; instrument: string; affected_portfolios: string[]; ts: Date };
 
 	interface Props {
 		alerts: WealthAlert[];
@@ -26,16 +25,21 @@
 
 	const visible = $derived(alerts.slice(0, maxItems));
 
-	const severityBorder: Record<WealthAlert["severity"], string> = {
+	// Severity derived from alert type
+	function alertSeverity(alert: WealthAlert): "critical" | "warning" | "info" {
+		switch (alert.type) {
+			case "cvar_breach": return "critical";
+			case "behavior_change": return alert.severity === "CRITICAL" || alert.severity === "HIGH" ? "critical" : "warning";
+			case "dtw_drift": return "warning";
+			case "regime_change": return "warning";
+			case "universe_removal": return "info";
+		}
+	}
+
+	const severityBorder: Record<string, string> = {
 		critical: "var(--netz-danger)",
 		warning: "var(--netz-warning)",
 		info: "var(--netz-info)",
-	};
-
-	const severityIcon: Record<WealthAlert["severity"], string> = {
-		critical: "●",
-		warning: "▲",
-		info: "ℹ",
 	};
 
 	const typeLabel: Record<WealthAlert["type"], string> = {
@@ -46,19 +50,29 @@
 		universe_removal: "Universo",
 	};
 
-	function relativeTime(iso: string): string {
-		try {
-			const diff = Date.now() - new Date(iso).getTime();
-			const mins = Math.floor(diff / 60_000);
-			if (mins < 1) return "agora";
-			if (mins < 60) return `${mins}m atrás`;
-			const hrs = Math.floor(mins / 60);
-			if (hrs < 24) return `${hrs}h atrás`;
-			const days = Math.floor(hrs / 24);
-			return `${days}d atrás`;
-		} catch {
-			return iso;
+	function alertTitle(alert: WealthAlert): string {
+		switch (alert.type) {
+			case "cvar_breach": return `CVaR breach — ${alert.portfolio}`;
+			case "behavior_change": return `Behavior change — ${alert.instrument}`;
+			case "dtw_drift": return `DTW drift — ${alert.instrument}`;
+			case "regime_change": return `Regime: ${alert.from} → ${alert.to}`;
+			case "universe_removal": return `Removido — ${alert.instrument}`;
 		}
+	}
+
+	function alertKey(alert: WealthAlert, i: number): string {
+		return `${alert.type}-${alert.ts.getTime()}-${i}`;
+	}
+
+	function relativeTime(ts: Date): string {
+		const diff = Date.now() - ts.getTime();
+		const mins = Math.floor(diff / 60_000);
+		if (mins < 1) return "agora";
+		if (mins < 60) return `${mins}m atrás`;
+		const hrs = Math.floor(mins / 60);
+		if (hrs < 24) return `${hrs}h atrás`;
+		const days = Math.floor(hrs / 24);
+		return `${days}d atrás`;
 	}
 </script>
 
@@ -66,47 +80,55 @@
 	{#if visible.length === 0}
 		<p class="py-8 text-center text-sm text-[var(--netz-text-muted)]">Nenhum alerta.</p>
 	{:else}
-		{#each visible as alert (alert.id)}
+		{#each visible as alert, i (alertKey(alert, i))}
+			{@const sev = alertSeverity(alert)}
 			<article
 				class="flex gap-3 py-3 pl-4 pr-2"
-				style="border-left: 3px solid {severityBorder[alert.severity]};"
+				style="border-left: 3px solid {severityBorder[sev]};"
 			>
-				<!-- Severity indicator -->
-				<span
-					class="mt-0.5 shrink-0 text-xs leading-none"
-					style="color: {severityBorder[alert.severity]};"
-					aria-hidden="true"
-				>
-					{severityIcon[alert.severity]}
-				</span>
-
 				<div class="min-w-0 flex-1">
-					<!-- Header row -->
+					<!-- Header -->
 					<div class="flex flex-wrap items-center gap-x-2 gap-y-0.5">
 						<span
 							class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-							style="background-color: {severityBorder[alert.severity]}1a; color: {severityBorder[alert.severity]};"
+							style="background-color: {severityBorder[sev]}1a; color: {severityBorder[sev]};"
 						>
 							{typeLabel[alert.type]}
 						</span>
 						<p class="text-sm font-semibold text-[var(--netz-text-primary)]">
-							{alert.title}
+							{alertTitle(alert)}
 						</p>
 					</div>
 
-					<!-- Description -->
-					<p class="mt-0.5 text-xs leading-relaxed text-[var(--netz-text-secondary)]">
-						{alert.description}
-					</p>
+					<!-- Type-specific content -->
+					{#if alert.type === "cvar_breach"}
+						<div class="mt-1.5 max-w-xs">
+							<UtilizationBar current={alert.utilization} limit={100} showValues={false} />
+						</div>
+					{:else if alert.type === "behavior_change"}
+						<p class="mt-0.5 text-xs text-[var(--netz-text-secondary)]">
+							Severidade: {alert.severity} · Métricas: {alert.changed_metrics.join(", ")}
+						</p>
+					{:else if alert.type === "dtw_drift"}
+						<p class="mt-0.5 text-xs text-[var(--netz-text-secondary)]">
+							Drift score: {alert.drift_score.toFixed(3)}
+						</p>
+					{:else if alert.type === "regime_change"}
+						<p class="mt-0.5 text-xs text-[var(--netz-text-secondary)]">
+							Transição de regime detectada
+						</p>
+					{:else if alert.type === "universe_removal"}
+						<p class="mt-0.5 text-xs text-[var(--netz-text-secondary)]">
+							Portfólios afetados: {alert.affected_portfolios.join(", ")}
+						</p>
+					{/if}
 				</div>
 
-				<!-- Timestamp -->
 				<time
 					class="shrink-0 text-xs text-[var(--netz-text-muted)]"
-					datetime={alert.timestamp}
-					title={alert.timestamp}
+					datetime={alert.ts.toISOString()}
 				>
-					{relativeTime(alert.timestamp)}
+					{relativeTime(alert.ts)}
 				</time>
 			</article>
 		{/each}
