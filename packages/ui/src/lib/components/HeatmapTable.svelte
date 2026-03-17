@@ -77,7 +77,7 @@
 					class="min-w-[120px] px-3 py-2 text-left text-[var(--netz-text-muted)]"
 					scope="col"
 				></th>
-				{#each columns as col}
+				{#each columns as col (col)}
 					<th
 						class="min-w-[72px] px-2 py-2 text-center font-medium text-[var(--netz-text-secondary)]"
 						scope="col"
@@ -88,7 +88,7 @@
 			</tr>
 		</thead>
 		<tbody>
-			{#each rows as row, ri}
+			{#each rows as row, ri (row)}
 				<tr class="border-t border-[var(--netz-border)]">
 					<th
 						class="px-3 py-2 text-left font-medium text-[var(--netz-text-secondary)]"
@@ -96,7 +96,7 @@
 					>
 						{row}
 					</th>
-					{#each columns as _col, ci}
+					{#each columns as _col, ci (ci)}
 						{@const val = data[ri]?.[ci] ?? 0}
 						<td
 							class="px-2 py-2 text-center font-mono font-medium tabular-nums"

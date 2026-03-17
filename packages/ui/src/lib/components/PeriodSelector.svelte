@@ -19,7 +19,7 @@
 	role="group"
 	aria-label="Selecionar período"
 >
-	{#each periods as period}
+	{#each periods as period (period)}
 		<button
 			type="button"
 			class={cn(

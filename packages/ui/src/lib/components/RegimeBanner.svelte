@@ -78,7 +78,7 @@
 			<!-- Signal chips -->
 			{#if signals && signals.length > 0}
 				<div class="flex flex-wrap items-center gap-1.5">
-					{#each signals as sig}
+					{#each signals as sig (sig.label)}
 						<span
 							class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
 							style="background-color: {styles.chip}; color: {styles.text};"
