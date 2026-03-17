@@ -278,6 +278,9 @@ source_modules = [
     "vertical_engines.wealth.model_portfolio.models",
     "vertical_engines.wealth.fact_sheet.models",
     "vertical_engines.wealth.rebalancing.models",
+    "vertical_engines.wealth.watchlist.models",
+    "vertical_engines.wealth.mandate_fit.models",
+    "vertical_engines.wealth.fee_drag.models",
 ]
 forbidden_modules = [
     "vertical_engines.wealth.dd_report.dd_report_engine",
@@ -286,6 +289,9 @@ forbidden_modules = [
     "vertical_engines.wealth.fact_sheet.fact_sheet_engine",
     "vertical_engines.wealth.screener.service",
     "vertical_engines.wealth.rebalancing.service",
+    "vertical_engines.wealth.watchlist.service",
+    "vertical_engines.wealth.mandate_fit.service",
+    "vertical_engines.wealth.fee_drag.service",
 ]
 
 [[tool.importlinter.contracts]]
@@ -308,6 +314,8 @@ source_modules = [
     "vertical_engines.wealth.peer_group.peer_matcher",
     "vertical_engines.wealth.rebalancing.impact_analyzer",
     "vertical_engines.wealth.rebalancing.weight_proposer",
+    "vertical_engines.wealth.watchlist.transition_detector",
+    "vertical_engines.wealth.mandate_fit.constraint_evaluator",
 ]
 forbidden_modules = [
     "vertical_engines.wealth.dd_report.dd_report_engine",
@@ -317,6 +325,9 @@ forbidden_modules = [
     "vertical_engines.wealth.screener.service",
     "vertical_engines.wealth.peer_group.service",
     "vertical_engines.wealth.rebalancing.service",
+    "vertical_engines.wealth.watchlist.service",
+    "vertical_engines.wealth.mandate_fit.service",
+    "vertical_engines.wealth.fee_drag.service",
 ]
 
 [[tool.importlinter.contracts]]

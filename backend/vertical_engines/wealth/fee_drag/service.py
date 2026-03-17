@@ -175,14 +175,14 @@ class FeeDragService:
         attributes: dict[str, Any],
     ) -> FeeBreakdown:
         """Extract fee components from JSONB attributes by instrument type."""
-        mgmt = _safe_float(attributes.get("management_fee_pct", 0.0))
-        perf = _safe_float(attributes.get("performance_fee_pct", 0.0))
+        mgmt = max(0.0, _safe_float(attributes.get("management_fee_pct", 0.0)))
+        perf = max(0.0, _safe_float(attributes.get("performance_fee_pct", 0.0)))
         other = 0.0
 
         if instrument_type == "bond":
-            other = _safe_float(attributes.get("bid_ask_spread_pct", 0.0))
+            other = max(0.0, _safe_float(attributes.get("bid_ask_spread_pct", 0.0)))
         elif instrument_type == "equity":
-            other = _safe_float(attributes.get("brokerage_fee_pct", 0.0))
+            other = max(0.0, _safe_float(attributes.get("brokerage_fee_pct", 0.0)))
 
         return FeeBreakdown(
             management_fee_pct=mgmt,

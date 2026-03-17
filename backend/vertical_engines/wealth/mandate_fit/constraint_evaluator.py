@@ -118,7 +118,7 @@ def evaluate_liquidity(
     profile: ClientProfile,
 ) -> ConstraintResult:
     """Check if instrument liquidity meets client requirements."""
-    if profile.min_liquidity_days is None:
+    if profile.max_redemption_days is None:
         return ConstraintResult(
             constraint="liquidity",
             passed=True,
@@ -133,16 +133,25 @@ def evaluate_liquidity(
             reason="No redemption data — assumed liquid",
         )
 
-    if int(redemption_days) <= profile.min_liquidity_days:
+    try:
+        days = int(redemption_days)
+    except (TypeError, ValueError):
         return ConstraintResult(
             constraint="liquidity",
             passed=True,
-            reason=f"Redemption {redemption_days}d within {profile.min_liquidity_days}d limit",
+            reason=f"Invalid redemption data '{redemption_days}' — assumed liquid",
+        )
+
+    if days <= profile.max_redemption_days:
+        return ConstraintResult(
+            constraint="liquidity",
+            passed=True,
+            reason=f"Redemption {days}d within {profile.max_redemption_days}d limit",
         )
     return ConstraintResult(
         constraint="liquidity",
         passed=False,
-        reason=f"Redemption {redemption_days}d exceeds {profile.min_liquidity_days}d limit",
+        reason=f"Redemption {redemption_days}d exceeds {profile.max_redemption_days}d limit",
     )
 
 

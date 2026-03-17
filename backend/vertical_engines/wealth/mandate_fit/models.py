@@ -17,7 +17,7 @@ class ClientProfile:
     risk_bucket: str  # "conservative" | "moderate" | "aggressive"
     esg_required: bool
     domicile_restrictions: tuple[str, ...]  # ISO country codes to EXCLUDE
-    min_liquidity_days: int | None  # max acceptable redemption days
+    max_redemption_days: int | None  # max acceptable redemption notice (days)
     currency_restrictions: tuple[str, ...]  # allowed currencies (empty = no restriction)
 
 

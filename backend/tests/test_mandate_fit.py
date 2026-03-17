@@ -39,7 +39,7 @@ def _conservative_profile() -> ClientProfile:
         risk_bucket="conservative",
         esg_required=True,
         domicile_restrictions=("RU", "CN"),
-        min_liquidity_days=30,
+        max_redemption_days=30,
         currency_restrictions=("USD", "EUR"),
     )
 
@@ -49,7 +49,7 @@ def _aggressive_profile() -> ClientProfile:
         risk_bucket="aggressive",
         esg_required=False,
         domicile_restrictions=(),
-        min_liquidity_days=None,
+        max_redemption_days=None,
         currency_restrictions=(),
     )
 
@@ -184,6 +184,17 @@ class TestLiquidity:
     def test_no_redemption_data(self):
         profile = _conservative_profile()
         r = evaluate_liquidity({}, profile)
+        assert r.passed is True
+
+    def test_non_numeric_redemption_days(self):
+        profile = _conservative_profile()
+        r = evaluate_liquidity({"redemption_days": "N/A"}, profile)
+        assert r.passed is True
+        assert "Invalid" in r.reason
+
+    def test_string_numeric_redemption_days(self):
+        profile = _conservative_profile()
+        r = evaluate_liquidity({"redemption_days": "15"}, profile)
         assert r.passed is True
 
 

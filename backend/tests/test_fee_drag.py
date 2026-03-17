@@ -206,6 +206,17 @@ class TestFeeDragService:
         )
         assert result.fee_breakdown.management_fee_pct == 0.0
 
+    def test_negative_fee_clamped_to_zero(self):
+        svc = FeeDragService()
+        result = svc.compute_fee_drag(
+            instrument_id=uuid.uuid4(),
+            instrument_name="Negative Fee Fund",
+            instrument_type="fund",
+            attributes={"management_fee_pct": -5.0, "expected_return_pct": 10.0},
+        )
+        assert result.fee_breakdown.management_fee_pct == 0.0
+        assert result.net_expected_return == pytest.approx(10.0)
+
     def test_inf_does_not_poison_portfolio(self):
         svc = FeeDragService()
         id1, id2 = uuid.uuid4(), uuid.uuid4()
