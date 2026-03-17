@@ -25,6 +25,7 @@ from vertical_engines.wealth.asset_universe.models import (
     DeactivationResult,
     UniverseAsset,
 )
+from vertical_engines.wealth.rebalancing.models import RebalanceResult
 
 logger = structlog.get_logger()
 
@@ -174,7 +175,8 @@ class UniverseService:
         db: Session,
         *,
         instrument_id: uuid.UUID,
-    ) -> DeactivationResult:
+        organization_id: str | None = None,
+    ) -> tuple[DeactivationResult, RebalanceResult | None]:
         """Remove a fund from the active universe.
 
         Sets Fund.is_active = False and marks current approval as not current.
@@ -215,8 +217,29 @@ class UniverseService:
             rebalance_needed=rebalance_needed,
         )
 
-        return DeactivationResult(
+        deactivation = DeactivationResult(
             instrument_id=instrument_id,
             was_active=was_active,
             rebalance_needed=rebalance_needed,
         )
+
+        # Trigger rebalancing if fund was approved and org_id is available
+        rebalance_result: RebalanceResult | None = None
+        if rebalance_needed and organization_id:
+            from vertical_engines.wealth.rebalancing.service import RebalancingService
+
+            svc = RebalancingService()
+            rebalance_result = svc.compute_rebalance_impact(
+                db=db,
+                instrument_id=instrument_id,
+                organization_id=organization_id,
+                trigger="deactivation",
+            )
+            logger.info(
+                "rebalance_triggered_on_deactivation",
+                instrument_id=str(instrument_id),
+                affected_portfolios=len(rebalance_result.impact.affected_portfolios),
+                all_feasible=rebalance_result.all_feasible,
+            )
+
+        return deactivation, rebalance_result
