@@ -27,7 +27,7 @@ def upgrade() -> None:
     # ═══════════════════════════════════════════════════════════════
     op.create_table(
         "benchmark_nav",
-        sa.Column("block_id", sa.String(80), sa.ForeignKey("allocation_blocks.block_id"), nullable=False),
+        sa.Column("block_id", sa.String(80), sa.ForeignKey("allocation_blocks.block_id", ondelete="RESTRICT"), nullable=False),
         sa.Column("nav_date", sa.Date(), nullable=False),
         sa.Column("nav", sa.Numeric(18, 6), nullable=False),
         sa.Column("return_1d", sa.Numeric(12, 8)),
