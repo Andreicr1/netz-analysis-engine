@@ -76,13 +76,13 @@
 		</div>
 
 		{#if portfolio.description}
-			<div class="rounded-lg border border-[var(--netz-border)] bg-white p-4">
+			<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-4">
 				<p class="text-sm text-[var(--netz-text-secondary)]">{portfolio.description}</p>
 			</div>
 		{/if}
 
 		<!-- Backtest Equity Curve -->
-		<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5">
+		<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
 			<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Backtest Equity Curve</h3>
 			{#if equityCurveSeries.length > 0 && equityCurveSeries[0]!.data.length > 0}
 				<div class="h-80">
@@ -109,7 +109,7 @@
 
 		<!-- Stress Scenarios -->
 		{#if stressData.length > 0}
-			<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5">
+			<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
 				<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Stress Scenarios</h3>
 				<div class="h-64">
 					<BarChart

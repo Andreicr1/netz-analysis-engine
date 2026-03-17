@@ -27,12 +27,12 @@
 <div class="space-y-6 p-6">
 	<PageHeader title="Due Diligence Reports" />
 
-	<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5">
+	<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
 		<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Select Fund</h3>
 		{#if funds.length > 0}
 			<div class="flex items-center gap-3">
 				<select
-					class="flex-1 rounded-md border border-[var(--netz-border)] bg-white px-3 py-2 text-sm"
+					class="flex-1 rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] px-3 py-2 text-sm"
 					bind:value={selectedFundId}
 				>
 					<option value="">Choose a fund...</option>

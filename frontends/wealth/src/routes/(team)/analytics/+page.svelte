@@ -57,11 +57,11 @@
 	<PageHeader title="Analytics" />
 
 	<!-- Backtest Trigger -->
-	<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5">
+	<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
 		<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Backtest</h3>
 		<div class="flex items-center gap-3">
 			<select
-				class="rounded-md border border-[var(--netz-border)] bg-white px-3 py-1.5 text-sm"
+				class="rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] px-3 py-1.5 text-sm"
 				bind:value={backtestProfile}
 			>
 				{#each profiles as p (p)}
@@ -85,7 +85,7 @@
 	</div>
 
 	<!-- Correlation Matrix -->
-	<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5">
+	<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
 		<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Block Correlation Matrix</h3>
 		{#if heatmapData}
 			<div class="h-96">

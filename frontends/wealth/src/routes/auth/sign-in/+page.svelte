@@ -7,7 +7,7 @@
 </script>
 
 <div class="flex min-h-screen items-center justify-center bg-[var(--netz-surface-alt)]">
-	<div class="w-full max-w-md rounded-lg bg-white p-8 shadow-lg">
+	<div class="w-full max-w-md rounded-lg bg-[var(--netz-surface-elevated)] p-8 shadow-lg">
 		<div class="mb-6 text-center">
 			<h1 class="text-2xl font-bold text-[var(--netz-navy,#1b365d)]">Netz Wealth OS</h1>
 			<p class="mt-2 text-sm text-[var(--netz-text-secondary)]">Sign in to continue</p>

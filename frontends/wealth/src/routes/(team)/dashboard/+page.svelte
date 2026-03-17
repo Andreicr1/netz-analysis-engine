@@ -165,14 +165,14 @@
 
 	<!-- Tier 2: Consolidated NAV Chart -->
 	<section>
-		<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5">
+		<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
 			<div class="mb-4 flex items-center justify-between">
 				<h2 class="text-lg font-semibold text-[var(--netz-text-primary)]">Consolidated Performance</h2>
 				<div class="flex gap-1">
 					{#each periods as period (period)}
 						<button
 							class="rounded-md px-3 py-1.5 text-xs font-medium transition-colors {selectedPeriod === period
-								? 'bg-[var(--netz-primary)] text-white'
+								? 'bg-[var(--netz-brand-primary)] text-white'
 								: 'text-[var(--netz-text-secondary)] hover:bg-[var(--netz-surface-alt)]'}"
 							onclick={() => selectedPeriod = period}
 						>
@@ -199,7 +199,7 @@
 	<section>
 		<div class="grid gap-4 lg:grid-cols-2">
 			<!-- Macro Indicators -->
-			<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5">
+			<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
 				<div class="mb-4 flex items-center justify-between">
 					<h3 class="text-sm font-semibold text-[var(--netz-text-primary)]">Macro Summary</h3>
 					{#if currentRegime}
@@ -235,7 +235,7 @@
 			</div>
 
 			<!-- Risk Alerts (SSE) -->
-			<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5">
+			<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
 				<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Risk Alerts</h3>
 				{#if riskAlerts.length > 0}
 					<div class="space-y-2">

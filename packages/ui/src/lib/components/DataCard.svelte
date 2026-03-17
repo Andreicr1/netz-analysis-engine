@@ -23,8 +23,8 @@
 	}: Props = $props();
 
 	const trendColors: Record<Trend, string> = {
-		up: "text-[#10B981]",
-		down: "text-[#EF4444]",
+		up: "text-[var(--netz-success)]",
+		down: "text-[var(--netz-danger)]",
 		flat: "text-[var(--netz-text-muted)]",
 	};
 </script>

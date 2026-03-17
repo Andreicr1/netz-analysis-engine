@@ -32,7 +32,7 @@
 	{:else}
 		<div class="space-y-3">
 			{#each factSheets as fs (fs.path)}
-				<div class="flex items-center justify-between rounded-lg border border-[var(--netz-border)] bg-white p-5 shadow-sm">
+				<div class="flex items-center justify-between rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5 shadow-sm">
 					<div>
 						<p class="font-medium text-[var(--netz-text-primary)]">
 							{fs.portfolio_name}

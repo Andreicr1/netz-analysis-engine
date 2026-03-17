@@ -84,7 +84,7 @@
 		</div>
 
 		<!-- NAV Chart -->
-		<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5">
+		<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
 			<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">NAV History</h3>
 			{#if navSeries.length > 0 && navSeries[0]!.data.length > 0}
 				<div class="h-80">
@@ -101,7 +101,7 @@
 
 		<!-- Risk Metrics -->
 		{#if risk}
-			<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5">
+			<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
 				<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Risk Metrics</h3>
 				<div class="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
 					<DataCard label="CVaR 95%" value={fmtPct(risk.cvar_95)} trend="flat" />

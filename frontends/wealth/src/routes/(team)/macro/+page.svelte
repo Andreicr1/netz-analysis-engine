@@ -53,7 +53,7 @@
 
 	<!-- Regime Hierarchy -->
 	{#if regime?.regions}
-		<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5">
+		<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
 			<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Regional Regime Classification</h3>
 			<div class="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
 				{#each regime.regions as r (r.region)}
@@ -67,7 +67,7 @@
 	{/if}
 
 	<!-- Committee Reviews -->
-	<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5">
+	<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
 		<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Committee Reviews</h3>
 		{#if reviews.length > 0}
 			<div class="space-y-3">

@@ -83,7 +83,7 @@
 	<!-- Filters -->
 	<div class="flex flex-wrap items-center gap-3">
 		<select
-			class="rounded-md border border-[var(--netz-border)] bg-white px-3 py-1.5 text-sm text-[var(--netz-text-primary)]"
+			class="rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] px-3 py-1.5 text-sm text-[var(--netz-text-primary)]"
 			bind:value={blockFilter}
 		>
 			<option value="">All Blocks</option>
@@ -92,7 +92,7 @@
 			{/each}
 		</select>
 		<select
-			class="rounded-md border border-[var(--netz-border)] bg-white px-3 py-1.5 text-sm text-[var(--netz-text-primary)]"
+			class="rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] px-3 py-1.5 text-sm text-[var(--netz-text-primary)]"
 			bind:value={geoFilter}
 		>
 			<option value="">All Geographies</option>
@@ -101,7 +101,7 @@
 			{/each}
 		</select>
 		<select
-			class="rounded-md border border-[var(--netz-border)] bg-white px-3 py-1.5 text-sm text-[var(--netz-text-primary)]"
+			class="rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] px-3 py-1.5 text-sm text-[var(--netz-text-primary)]"
 			bind:value={assetFilter}
 		>
 			<option value="">All Asset Classes</option>

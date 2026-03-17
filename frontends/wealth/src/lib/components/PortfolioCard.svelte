@@ -74,7 +74,7 @@
 	};
 </script>
 
-<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5 shadow-sm">
+<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5 shadow-sm">
 	<!-- Header -->
 	<div class="mb-4 flex items-center justify-between">
 		<div>

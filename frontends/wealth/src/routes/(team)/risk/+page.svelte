@@ -94,7 +94,7 @@
 	<div class="grid gap-4 md:grid-cols-3">
 		{#each profiles as profile (profile)}
 			{@const cvar = cvarByProfile[profile] as CVaRStatus | undefined}
-			<div class="rounded-lg border border-[var(--netz-border)] bg-white p-4">
+			<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-4">
 				<div class="mb-2 flex items-center justify-between">
 					<h3 class="text-sm font-semibold capitalize text-[var(--netz-text-primary)]">{profile}</h3>
 					{#if cvar?.trigger_status}
@@ -127,7 +127,7 @@
 	</div>
 
 	<!-- CVaR Timeline -->
-	<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5">
+	<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
 		<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">CVaR Timeline</h3>
 		{#if cvarSeries.length > 0}
 			<div class="h-80">
@@ -142,7 +142,7 @@
 	</div>
 
 	<!-- Regime Timeline -->
-	<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5">
+	<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
 		<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Regime Timeline</h3>
 		{#if regimeBands.length > 0}
 			<div class="h-48">
@@ -155,7 +155,7 @@
 
 	<!-- Macro Indicators -->
 	{#if macro}
-		<div class="rounded-lg border border-[var(--netz-border)] bg-white p-5">
+		<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
 			<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Macro Indicators</h3>
 			<div class="grid gap-4 md:grid-cols-4">
 				<DataCard label="VIX" value={macro.vix !== null ? macro.vix.toFixed(1) : "—"} trend="flat" />

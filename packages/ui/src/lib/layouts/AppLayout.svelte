@@ -80,12 +80,12 @@
 									class="h-8 w-auto"
 								/>
 							{:else}
-								<span class="text-lg font-bold text-[var(--netz-navy)]">{appName}</span>
+								<span class="text-lg font-bold text-[var(--netz-brand-primary)]">{appName}</span>
 							{/if}
 						</div>
 					{:else}
 						<div class="flex justify-center">
-							<span class="text-lg font-bold text-[var(--netz-navy)]">N</span>
+							<span class="text-lg font-bold text-[var(--netz-brand-primary)]">N</span>
 						</div>
 					{/if}
 				{/snippet}
@@ -100,7 +100,7 @@
 
 {#if showExpiryWarning}
 	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-		<div class="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+		<div class="mx-4 w-full max-w-md rounded-lg bg-[var(--netz-surface-elevated)] p-6 shadow-xl">
 			<h2 class="mb-2 text-lg font-semibold text-[var(--netz-text-primary)]">Session Expiring</h2>
 			<p class="mb-4 text-sm text-[var(--netz-text-secondary)]">
 				Your session expires in 5 minutes. Please save your work and renew your access.
@@ -113,7 +113,7 @@
 					Dismiss
 				</button>
 				<button
-					class="rounded-md bg-[var(--netz-primary)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+					class="rounded-md bg-[var(--netz-brand-primary)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
 					onclick={() => { showExpiryWarning = false; window.location.reload(); }}
 				>
 					Renew Session
