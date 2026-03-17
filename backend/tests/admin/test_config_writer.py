@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.core.config.config_writer import _hash_config, _validate_against_guardrails
+from app.domains.admin.services.config_writer import _hash_config, _validate_against_guardrails
 
 
 class TestHashConfig:

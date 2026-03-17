@@ -7,12 +7,13 @@ import time
 
 import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security.admin_auth import require_super_admin
 from app.core.security.clerk_auth import Actor
-from app.core.tenancy.admin_middleware import get_db_admin_read
+from app.core.tenancy.admin_middleware import get_db_admin
 
 router = APIRouter(
     prefix="/admin/health",
@@ -64,7 +65,7 @@ async def _check_search() -> dict:
 
 @router.get("/services")
 async def get_service_health(
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """Service status -- PostgreSQL, Redis, ADLS, Azure Search."""
@@ -139,42 +140,69 @@ async def get_pipeline_stats(
         return {"docs_processed": 0, "queue_depth": 0, "error_rate": 0.0}
 
 
+# Lazy-initialized semaphore for SSE connection limiting.
+# MUST NOT be created at module level — see CLAUDE.md asyncio primitives rule.
+_worker_log_semaphore: asyncio.Semaphore | None = None
+_MAX_LOG_STREAMS = 10
+
+
+def _get_worker_log_semaphore() -> asyncio.Semaphore:
+    """Return (and lazily create) the worker-log SSE semaphore."""
+    global _worker_log_semaphore  # noqa: PLW0603
+    if _worker_log_semaphore is None:
+        _worker_log_semaphore = asyncio.Semaphore(_MAX_LOG_STREAMS)
+    return _worker_log_semaphore
+
+
 @router.get("/workers/logs")
 async def stream_worker_logs(
     request: Request,
     actor: Actor = Depends(require_super_admin),
 ):
-    """SSE stream of worker logs via Redis pub/sub."""
+    """SSE stream of worker logs via Redis pub/sub.
+
+    Limited to ``_MAX_LOG_STREAMS`` concurrent connections.
+    Returns HTTP 429 when all slots are occupied.
+    """
     from sse_starlette.sse import EventSourceResponse
 
     from app.core.jobs.tracker import get_redis_pool
 
-    async def event_generator():
-        pool = get_redis_pool()
-        r = aioredis.Redis(connection_pool=pool)
-        pubsub = r.pubsub()
-        await pubsub.subscribe("worker:logs")
+    sem = _get_worker_log_semaphore()
 
-        try:
-            while True:
-                if await request.is_disconnected():
-                    break
-                message = await pubsub.get_message(
-                    ignore_subscribe_messages=True,
-                    timeout=1.0,
-                )
-                if message and message["type"] == "message":
-                    raw_data = message["data"]
-                    yield {
-                        "event": "log",
-                        "data": raw_data.decode() if isinstance(raw_data, bytes) else str(raw_data),
-                    }
-                else:
-                    yield {"event": "ping", "data": ""}
-        finally:
-            await pubsub.unsubscribe("worker:logs")
-            await pubsub.aclose()
-            await r.aclose()
+    if sem.locked():
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Too many log streams"},
+        )
+
+    async def event_generator():
+        async with sem:
+            pool = get_redis_pool()
+            r = aioredis.Redis(connection_pool=pool)
+            pubsub = r.pubsub()
+            await pubsub.subscribe("worker:logs")
+
+            try:
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    message = await pubsub.get_message(
+                        ignore_subscribe_messages=True,
+                        timeout=1.0,
+                    )
+                    if message and message["type"] == "message":
+                        raw_data = message["data"]
+                        yield {
+                            "event": "log",
+                            "data": raw_data.decode() if isinstance(raw_data, bytes) else str(raw_data),
+                        }
+                    else:
+                        yield {"event": "ping", "data": ""}
+            finally:
+                await pubsub.unsubscribe("worker:logs")
+                await pubsub.aclose()
+                await r.aclose()
 
     return EventSourceResponse(
         event_generator(),

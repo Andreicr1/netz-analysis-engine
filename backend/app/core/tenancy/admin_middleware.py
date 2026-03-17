@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db.engine import async_session_factory
 
 
-async def get_db_admin_read() -> AsyncGenerator[AsyncSession, None]:
-    """Cross-tenant reads. Sets admin_mode but no org context."""
+async def get_db_admin() -> AsyncGenerator[AsyncSession, None]:
+    """Cross-tenant admin access. Sets admin_mode but no org context."""
     async with async_session_factory() as session, session.begin():
         await session.execute(text("SET LOCAL app.admin_mode = 'true'"))
         yield session

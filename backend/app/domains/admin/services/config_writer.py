@@ -227,6 +227,25 @@ class ConfigWriter:
                 detail=f"No default config for {vertical}/{config_type}",
             )
 
+        # Validate branding specifically
+        if config_type == "branding":
+            from app.domains.admin.validators import validate_branding_tokens
+            errors = validate_branding_tokens(config)
+            if errors:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Branding validation failed: {'; '.join(errors)}",
+                )
+
+        # Validate against guardrails
+        guardrails = current.guardrails
+        errors = _validate_against_guardrails(config, guardrails)
+        if errors:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Guardrail validation failed: {'; '.join(errors)}",
+            )
+
         before_hash = _hash_config(current.config)
 
         await self._db.execute(

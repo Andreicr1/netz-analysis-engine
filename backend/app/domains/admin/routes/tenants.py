@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config.models import VerticalConfigOverride
 from app.core.security.admin_auth import require_super_admin
 from app.core.security.clerk_auth import Actor
-from app.core.tenancy.admin_middleware import get_db_admin_read
+from app.core.tenancy.admin_middleware import get_db_admin
 from app.domains.admin.models import AdminAuditLog, TenantAsset
 from app.domains.admin.validators import strip_exif, validate_image_magic_bytes
 
@@ -43,10 +43,12 @@ class TenantUpdateRequest(BaseModel):
 
 @router.get("/")
 async def list_tenants(
-    db: AsyncSession = Depends(get_db_admin_read),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
-    """List all tenants (cross-tenant read)."""
+    """List all tenants (cross-tenant read) with pagination."""
     # Get unique org_ids from config overrides (tenants with configs)
     result = await db.execute(
         select(
@@ -68,10 +70,14 @@ async def list_tenants(
     tenant_assets = {row[0]: row[1] for row in asset_result.all()}
 
     # Combine unique org_ids
-    all_org_ids = set(tenant_configs.keys()) | set(tenant_assets.keys())
+    all_org_ids = sorted(set(tenant_configs.keys()) | set(tenant_assets.keys()), key=str)
+    total = len(all_org_ids)
+
+    # Apply pagination
+    paginated_ids = all_org_ids[offset : offset + limit]
 
     tenants = []
-    for org_id in sorted(all_org_ids, key=str):
+    for org_id in paginated_ids:
         tenants.append({
             "organization_id": str(org_id),
             "org_name": str(org_id),  # Would come from Clerk in production
@@ -81,13 +87,13 @@ async def list_tenants(
             "asset_count": tenant_assets.get(org_id, 0),
         })
 
-    return tenants
+    return {"tenants": tenants, "total": total, "limit": limit, "offset": offset}
 
 
 @router.post("/")
 async def create_tenant(
     body: TenantCreateRequest,
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """Create tenant -- seed default configs in DB."""
@@ -116,7 +122,7 @@ async def create_tenant(
 @router.get("/{org_id}")
 async def get_tenant(
     org_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """Get tenant detail -- configs, assets, usage."""
@@ -165,7 +171,7 @@ async def get_tenant(
 async def update_tenant(
     org_id: uuid.UUID,
     body: TenantUpdateRequest,
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """Update tenant metadata."""
@@ -183,7 +189,7 @@ async def update_tenant(
 @router.post("/{org_id}/seed")
 async def seed_tenant(
     org_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """Re-seed default configs for tenant (idempotent)."""
@@ -218,7 +224,7 @@ async def upload_asset(
     org_id: uuid.UUID,
     asset_type: str,
     file: UploadFile = File(...),
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """Upload logo/favicon for tenant (multipart, 512KB max, PNG/JPEG/ICO only)."""
@@ -286,7 +292,7 @@ async def upload_asset(
 async def delete_asset(
     org_id: uuid.UUID,
     asset_type: str,
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """Delete a tenant asset."""

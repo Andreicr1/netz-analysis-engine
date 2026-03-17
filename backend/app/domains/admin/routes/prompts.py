@@ -8,10 +8,16 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.prompts.prompt_service import PromptService
-from app.core.prompts.schemas import PromptPreviewRequest
+from app.core.prompts.schemas import (
+    PromptDetailResponse,
+    PromptListItemResponse,
+    PromptPreviewRequest,
+    PromptPreviewResponse,
+    PromptValidateResponse,
+)
 from app.core.security.admin_auth import require_super_admin
 from app.core.security.clerk_auth import Actor
-from app.core.tenancy.admin_middleware import get_db_admin_read
+from app.core.tenancy.admin_middleware import get_db_admin
 
 router = APIRouter(
     prefix="/admin/prompts",
@@ -20,11 +26,11 @@ router = APIRouter(
 )
 
 
-@router.get("/{vertical}")
+@router.get("/{vertical}", response_model=list[PromptListItemResponse])
 async def list_prompts(
     vertical: str,
     org_id: uuid.UUID | None = None,
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """List all templates with override status."""
@@ -32,12 +38,12 @@ async def list_prompts(
     return await svc.list_templates(vertical, org_id)
 
 
-@router.get("/{vertical}/{name}")
+@router.get("/{vertical}/{name}", response_model=PromptDetailResponse)
 async def get_prompt(
     vertical: str,
     name: str,
     org_id: uuid.UUID | None = None,
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """Get resolved prompt content + source level."""
@@ -51,7 +57,7 @@ async def update_prompt(
     name: str,
     body: dict,
     org_id: uuid.UUID | None = None,
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """Update prompt override (auto-version, history)."""
@@ -65,7 +71,7 @@ async def delete_prompt(
     vertical: str,
     name: str,
     org_id: uuid.UUID | None = None,
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """Delete prompt override -- falls back to next cascade level."""
@@ -74,7 +80,7 @@ async def delete_prompt(
     return {"status": "deleted"}
 
 
-@router.post("/{vertical}/{name}/preview")
+@router.post("/{vertical}/{name}/preview", response_model=PromptPreviewResponse)
 async def preview_prompt(
     vertical: str,
     name: str,
@@ -86,7 +92,7 @@ async def preview_prompt(
     return svc.preview(body.content, body.sample_data)
 
 
-@router.post("/{vertical}/{name}/validate")
+@router.post("/{vertical}/{name}/validate", response_model=PromptValidateResponse)
 async def validate_prompt(
     vertical: str,
     name: str,
@@ -104,7 +110,7 @@ async def get_versions(
     vertical: str,
     name: str,
     org_id: uuid.UUID | None = None,
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """Version history (last 50, paginated)."""
@@ -118,7 +124,7 @@ async def revert_prompt(
     name: str,
     version: int,
     org_id: uuid.UUID | None = None,
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """Revert to a specific version."""

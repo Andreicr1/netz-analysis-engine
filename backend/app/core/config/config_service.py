@@ -204,38 +204,33 @@ class ConfigService:
         Used by admin health dashboard to detect guardrail drift after
         default guardrails are updated.
         """
-        from app.core.config.config_writer import _validate_against_guardrails
+        from app.domains.admin.services.config_writer import _validate_against_guardrails
 
-        # Fetch all defaults with guardrails
-        defaults_result = await self._db.execute(
+        # Single JOIN query — avoids N+1 (one query per default with guardrails)
+        result = await self._db.execute(
             select(
-                VerticalConfigDefault.vertical,
-                VerticalConfigDefault.config_type,
+                VerticalConfigOverride.organization_id,
+                VerticalConfigOverride.vertical,
+                VerticalConfigOverride.config_type,
+                VerticalConfigOverride.config,
                 VerticalConfigDefault.guardrails,
+            ).join(
+                VerticalConfigDefault,
+                (VerticalConfigOverride.vertical == VerticalConfigDefault.vertical)
+                & (VerticalConfigOverride.config_type == VerticalConfigDefault.config_type),
             ).where(VerticalConfigDefault.guardrails.isnot(None))
         )
-        defaults_with_guardrails = defaults_result.all()
 
         invalid: list[dict] = []
-        for vertical, config_type, guardrails in defaults_with_guardrails:
-            overrides_result = await self._db.execute(
-                select(
-                    VerticalConfigOverride.organization_id,
-                    VerticalConfigOverride.config,
-                ).where(
-                    VerticalConfigOverride.vertical == vertical,
-                    VerticalConfigOverride.config_type == config_type,
-                )
-            )
-            for org_id, config in overrides_result.all():
-                errors = _validate_against_guardrails(config, guardrails)
-                if errors:
-                    invalid.append({
-                        "vertical": vertical,
-                        "config_type": config_type,
-                        "organization_id": str(org_id),
-                        "errors": errors,
-                    })
+        for org_id, vertical, config_type, config, guardrails in result.all():
+            errors = _validate_against_guardrails(config, guardrails)
+            if errors:
+                invalid.append({
+                    "vertical": vertical,
+                    "config_type": config_type,
+                    "organization_id": str(org_id),
+                    "errors": errors,
+                })
 
         return invalid
 

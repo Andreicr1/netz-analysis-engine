@@ -2,6 +2,7 @@
  * SvelteKit server hook — Clerk auth + SUPER_ADMIN guard + theme.
  */
 import { createClerkHook } from "@netz/ui/utils";
+import type { Actor } from "@netz/ui/utils";
 import type { Handle } from "@sveltejs/kit";
 import { redirect } from "@sveltejs/kit";
 import { sequence } from "@sveltejs/kit/hooks";
@@ -14,15 +15,15 @@ const authHook: Handle = createClerkHook({
 	publicPrefixes: ["/auth/", "/health"],
 }) as Handle;
 
-/** Admin guard — only SUPER_ADMIN can access admin panel. */
+/** Admin guard — only super_admin / admin roles can access admin panel. */
+const ADMIN_ROLES = new Set(["super_admin", "admin", "org:admin"]);
 const PUBLIC_PREFIXES = ["/auth/", "/health"];
 const adminGuardHook: Handle = async ({ event, resolve }) => {
 	if (PUBLIC_PREFIXES.some(p => event.url.pathname.startsWith(p))) {
 		return resolve(event);
 	}
-	const actor = event.locals.actor as { role?: string } | undefined;
-	// In dev mode, the dev actor has role "admin" — allow it
-	if (!actor || (actor.role !== "super_admin" && actor.role !== "admin" && actor.role !== "org:admin")) {
+	const actor = event.locals.actor as Actor | undefined;
+	if (!actor || !ADMIN_ROLES.has(actor.role)) {
 		throw redirect(303, "/auth/sign-in?error=unauthorized");
 	}
 	return resolve(event);

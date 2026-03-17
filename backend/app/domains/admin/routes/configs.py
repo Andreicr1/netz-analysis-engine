@@ -8,10 +8,10 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config.config_service import ConfigService
-from app.core.config.config_writer import ConfigWriter
 from app.core.security.admin_auth import require_super_admin
 from app.core.security.clerk_auth import Actor
-from app.core.tenancy.admin_middleware import get_db_admin_read
+from app.core.tenancy.admin_middleware import get_db_admin
+from app.domains.admin.services.config_writer import ConfigWriter
 
 router = APIRouter(
     prefix="/admin/configs",
@@ -22,7 +22,7 @@ router = APIRouter(
 
 @router.get("/")
 async def list_configs(
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """List all config types across verticals with override status."""
@@ -44,7 +44,7 @@ async def list_configs(
 
 @router.get("/invalid")
 async def list_invalid_configs(
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """List overrides that fail current guardrails (drift detection)."""
@@ -57,7 +57,7 @@ async def get_config(
     vertical: str,
     config_type: str,
     org_id: uuid.UUID | None = None,
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """Get merged config (default + override)."""
@@ -73,7 +73,7 @@ async def update_config(
     body: dict,
     org_id: uuid.UUID | None = None,
     if_match: str | None = Header(None, alias="If-Match"),
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """Update config override with optimistic locking."""
@@ -90,7 +90,7 @@ async def delete_config(
     vertical: str,
     config_type: str,
     org_id: uuid.UUID | None = None,
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """Remove override -- tenant falls back to default."""
@@ -106,7 +106,7 @@ async def get_config_diff(
     vertical: str,
     config_type: str,
     org_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """Show override vs default with changed keys."""
@@ -119,7 +119,7 @@ async def update_default(
     vertical: str,
     config_type: str,
     body: dict,
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """Update global default config (super-admin only)."""
@@ -132,7 +132,7 @@ async def validate_config(
     body: dict,
     vertical: str,
     config_type: str,
-    db: AsyncSession = Depends(get_db_admin_read),
+    db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
     """Dry-run guardrail validation without persisting."""
