@@ -98,7 +98,7 @@ class PeerGroupService:
         if target is None:
             return PeerGroupNotFound(
                 instrument_id=instrument_id,
-                reason="no_block_assigned",
+                reason="instrument_not_found",
             )
 
         if not target.block_id:

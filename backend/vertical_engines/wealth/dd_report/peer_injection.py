@@ -66,7 +66,7 @@ def gather_peer_context(
         annotations: list[str] = []
         for r in result.rankings:
             if r.percentile is not None and r.value is not None:
-                pctile_display = round(100.0 - r.percentile) if not r.lower_is_better else round(r.percentile)
+                pctile_display = round(100.0 - r.percentile)
                 annotations.append(
                     f"{r.metric}: {r.value:.2f} "
                     f"(top {pctile_display}% of {result.peer_count} peers "

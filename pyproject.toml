@@ -207,6 +207,7 @@ source_modules = [
     "vertical_engines.wealth.dd_report.confidence_scoring",
     "vertical_engines.wealth.dd_report.evidence_pack",
     "vertical_engines.wealth.dd_report.quant_injection",
+    "vertical_engines.wealth.dd_report.peer_injection",
 ]
 forbidden_modules = ["vertical_engines.wealth.dd_report.dd_report_engine"]
 

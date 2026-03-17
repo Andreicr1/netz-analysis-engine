@@ -51,4 +51,4 @@ class PeerGroupNotFound:
     """Returned when no valid peer group can be formed."""
 
     instrument_id: uuid.UUID
-    reason: str  # "insufficient_peers" | "no_block_assigned" | "no_metrics"
+    reason: str  # "instrument_not_found" | "insufficient_peers" | "no_block_assigned" | "no_metrics"

@@ -113,7 +113,7 @@ class TestModels:
 
     def test_peer_group_not_found_reasons(self):
         iid = uuid.uuid4()
-        for reason in ("insufficient_peers", "no_block_assigned", "no_metrics"):
+        for reason in ("instrument_not_found", "insufficient_peers", "no_block_assigned", "no_metrics"):
             pgnf = PeerGroupNotFound(instrument_id=iid, reason=reason)
             assert pgnf.reason == reason
 
