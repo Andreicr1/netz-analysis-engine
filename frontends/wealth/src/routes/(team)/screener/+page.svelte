@@ -4,7 +4,12 @@
 -->
 <script lang="ts">
 	import { PageHeader, Card, EmptyState, StatusBadge, ContextPanel } from "@netz/ui";
+	import { ActionButton } from "@netz/ui";
+	import { createClientApiClient } from "$lib/api/client";
+	import { getContext } from "svelte";
 	import type { PageData } from "./$types";
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let { data }: { data: PageData } = $props();
 
@@ -219,6 +224,45 @@
 	// L3 score metrics (layer 3 criteria used as quant metrics)
 	function l3Metrics(r: ScreeningResult): CriterionResult[] {
 		return r.layer_results.filter((c) => c.layer === 3);
+	}
+
+	// ── Run detail drill-down ──────────────────────────────────────────────────
+	let runDetailData = $state<Record<string, unknown> | null>(null);
+	let runDetailLoading = $state(false);
+	let showRunDetail = $state(false);
+
+	async function loadRunDetail(runId: string) {
+		runDetailLoading = true;
+		showRunDetail = true;
+		try {
+			const api = createClientApiClient(getToken);
+			runDetailData = await api.get(`/screener/runs/${runId}`);
+		} catch {
+			runDetailData = null;
+		} finally {
+			runDetailLoading = false;
+		}
+	}
+
+	// ── Instrument screening history ──────────────────────────────────────────
+	let historyData = $state<Array<Record<string, unknown>>>([]);
+	let historyLoading = $state(false);
+	let showHistory = $state(false);
+	let historyInstrumentName = $state("");
+
+	async function loadInstrumentHistory(instrumentId: string, name: string) {
+		historyInstrumentName = name;
+		historyLoading = true;
+		showHistory = true;
+		try {
+			const api = createClientApiClient(getToken);
+			const res = await api.get<{ results?: Array<Record<string, unknown>> }>(`/screener/results/${instrumentId}`);
+			historyData = res.results ?? (Array.isArray(res) ? res : []);
+		} catch {
+			historyData = [];
+		} finally {
+			historyLoading = false;
+		}
 	}
 </script>
 
@@ -558,12 +602,74 @@
 					Iniciar Bond Brief →
 				</a>
 			{/if}
-			<button class="cta-secondary" onclick={closePanel}>
+			<button class="cta-secondary" onclick={() => loadInstrumentHistory(r.instrument_id, instrumentLabel(r))}>
 				Histórico
 			</button>
+			{#if latestRun}
+				<button class="cta-secondary" onclick={() => loadRunDetail(latestRun!.run_id)}>
+					Detalhes do Run
+				</button>
+			{/if}
 		</div>
 	{/if}
 </ContextPanel>
+
+<!-- Run Detail Panel -->
+{#if showRunDetail}
+	<ContextPanel
+		open={showRunDetail}
+		title="Run Detail"
+		onClose={() => { showRunDetail = false; runDetailData = null; }}
+		width="480px"
+	>
+		<div class="p-4">
+			{#if runDetailLoading}
+				<p class="text-sm text-[var(--netz-text-muted)]">Loading...</p>
+			{:else if runDetailData}
+				{#each Object.entries(runDetailData) as [key, value]}
+					<div class="mb-2">
+						<p class="text-xs text-[var(--netz-text-muted)]">{key}</p>
+						<p class="text-sm text-[var(--netz-text-primary)]">{String(value ?? "—")}</p>
+					</div>
+				{/each}
+			{:else}
+				<p class="text-sm text-[var(--netz-text-muted)]">No run data available.</p>
+			{/if}
+		</div>
+	</ContextPanel>
+{/if}
+
+<!-- Instrument History Panel -->
+{#if showHistory}
+	<ContextPanel
+		open={showHistory}
+		title={`Histórico: ${historyInstrumentName}`}
+		onClose={() => { showHistory = false; historyData = []; }}
+		width="480px"
+	>
+		<div class="p-4">
+			{#if historyLoading}
+				<p class="text-sm text-[var(--netz-text-muted)]">Loading...</p>
+			{:else if historyData.length > 0}
+				<div class="space-y-3">
+					{#each historyData as entry}
+						<div class="rounded-md border border-[var(--netz-border)] p-3">
+							<div class="flex items-center justify-between">
+								<StatusBadge status={String(entry.overall_status ?? "")} />
+								<span class="text-xs text-[var(--netz-text-muted)]">{String(entry.screened_at ?? "")}</span>
+							</div>
+							{#if entry.score != null}
+								<p class="mt-1 text-sm font-mono text-[var(--netz-text-secondary)]">Score: {Number(entry.score).toFixed(3)}</p>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			{:else}
+				<p class="text-sm text-[var(--netz-text-muted)]">No screening history for this instrument.</p>
+			{/if}
+		</div>
+	</ContextPanel>
+{/if}
 
 <style>
 	/* ── Layout ───────────────────────────────────────────────────────────── */

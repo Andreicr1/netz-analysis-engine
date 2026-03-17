@@ -3,7 +3,13 @@
 -->
 <script lang="ts">
 	import { DataCard, StatusBadge, PageHeader, EmptyState, Button } from "@netz/ui";
+	import { ActionButton, ConfirmDialog } from "@netz/ui";
+	import { createClientApiClient } from "$lib/api/client";
+	import { invalidateAll } from "$app/navigation";
+	import { getContext } from "svelte";
 	import type { PageData } from "./$types";
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let { data }: { data: PageData } = $props();
 
@@ -27,16 +33,79 @@
 	let scores = $derived(data.scores as MacroScores | null);
 	let regime = $derived(data.regime as RegimeHierarchy | null);
 	let reviews = $derived((data.reviews ?? []) as MacroReview[]);
+
+	// ── Generate + Approve/Reject ──
+	let generating = $state(false);
+	let processingReviewId = $state<string | null>(null);
+	let actionError = $state<string | null>(null);
+
+	async function generateReport() {
+		generating = true;
+		actionError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post("/macro/reviews/generate", {});
+			await invalidateAll();
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : "Generation failed";
+		} finally {
+			generating = false;
+		}
+	}
+
+	async function approveReview(reviewId: string) {
+		processingReviewId = reviewId;
+		actionError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.patch(`/macro/reviews/${reviewId}/approve`, {});
+			await invalidateAll();
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : "Approval failed";
+		} finally {
+			processingReviewId = null;
+		}
+	}
+
+	async function rejectReview(reviewId: string) {
+		processingReviewId = reviewId;
+		actionError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.patch(`/macro/reviews/${reviewId}/reject`, {});
+			await invalidateAll();
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : "Rejection failed";
+		} finally {
+			processingReviewId = null;
+		}
+	}
 </script>
 
 <div class="space-y-6 p-6">
 	<PageHeader title="Macro Intelligence">
 		{#snippet actions()}
-			{#if regime?.global_regime}
-				<StatusBadge status={regime.global_regime} />
-			{/if}
+			<div class="flex items-center gap-2">
+				<ActionButton
+					onclick={generateReport}
+					loading={generating}
+					loadingText="Generating..."
+				>
+					Generate Committee Report
+				</ActionButton>
+				{#if regime?.global_regime}
+					<StatusBadge status={regime.global_regime} />
+				{/if}
+			</div>
 		{/snippet}
 	</PageHeader>
+
+	{#if actionError}
+		<div class="rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+			{actionError}
+			<button class="ml-2 underline" onclick={() => actionError = null}>dismiss</button>
+		</div>
+	{/if}
 
 	<!-- Regional Scores -->
 	{#if scores?.regions}
@@ -81,7 +150,28 @@
 								{new Date(review.created_at).toLocaleDateString()}
 							</p>
 						</div>
-						<StatusBadge status={review.status} />
+						<div class="flex items-center gap-2">
+							<StatusBadge status={review.status} />
+							{#if review.status === "pending" || review.status === "draft"}
+								<ActionButton
+									size="sm"
+									onclick={() => approveReview(review.id)}
+									loading={processingReviewId === review.id}
+									loadingText="..."
+								>
+									Approve
+								</ActionButton>
+								<ActionButton
+									size="sm"
+									variant="destructive"
+									onclick={() => rejectReview(review.id)}
+									loading={processingReviewId === review.id}
+									loadingText="..."
+								>
+									Reject
+								</ActionButton>
+							{/if}
+						</div>
 					</div>
 				{/each}
 			</div>

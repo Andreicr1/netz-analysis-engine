@@ -179,40 +179,134 @@
 		} as Record<string, unknown>;
 	});
 
-	// ── Backtest state ────────────────────────────────────────────────────────
+	// ── Backtest state (with polling for pending results) ─────────────────────
 
 	let backtestRunning = $state(false);
 	let backtestResult = $state<Record<string, unknown> | null>(null);
+	let backtestError = $state<string | null>(null);
 
 	async function triggerBacktest() {
 		backtestRunning = true;
 		backtestResult = null;
+		backtestError = null;
 		try {
 			const api = createClientApiClient(getToken);
 			const result = await api.post("/analytics/backtest", {
 				profile: selectedPortfolio,
 			}) as Record<string, unknown>;
-			backtestResult = result;
-		} catch {
-			// Error handled by api-client
+
+			// If pending, poll for results
+			if (result.status === "pending" && result.run_id) {
+				await pollBacktestResult(String(result.run_id));
+			} else {
+				backtestResult = result;
+			}
+		} catch (e) {
+			backtestError = e instanceof Error ? e.message : "Backtest failed";
 		} finally {
 			backtestRunning = false;
 		}
 	}
 
+	async function pollBacktestResult(runId: string) {
+		const api = createClientApiClient(getToken);
+		const maxAttempts = 12; // 60s total
+		for (let i = 0; i < maxAttempts; i++) {
+			await new Promise(r => setTimeout(r, 5000));
+			try {
+				const result = await api.get<Record<string, unknown>>(`/analytics/backtest/${runId}`);
+				if (result.status !== "pending") {
+					backtestResult = result;
+					return;
+				}
+			} catch {
+				break;
+			}
+		}
+		backtestError = "Backtest timed out. Check back later.";
+	}
+
 	// ── Optimization state ────────────────────────────────────────────────────
 
 	let optimizationRunning = $state(false);
+	let optimizationError = $state<string | null>(null);
 
 	async function runOptimization() {
 		optimizationRunning = true;
+		optimizationError = null;
 		try {
 			const api = createClientApiClient(getToken);
 			await api.post("/analytics/optimize", { profile: selectedPortfolio });
-		} catch {
-			// Error handled by api-client
+			goto(`?portfolio=${selectedPortfolio}`, { replaceState: true, invalidateAll: true });
+		} catch (e) {
+			optimizationError = e instanceof Error ? e.message : "Optimization failed";
 		} finally {
 			optimizationRunning = false;
+		}
+	}
+
+	// ── Pareto optimization (180s timeout, duplicate prevention) ──────────────
+
+	let paretoRunning = $state(false);
+	let paretoError = $state<string | null>(null);
+
+	async function runPareto() {
+		if (paretoRunning) return; // prevent duplicate
+		paretoRunning = true;
+		paretoError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post("/analytics/optimize/pareto", { profile: selectedPortfolio }, { timeoutMs: 180_000 });
+			goto(`?portfolio=${selectedPortfolio}`, { replaceState: true, invalidateAll: true });
+		} catch (e) {
+			if (e instanceof Error && e.message.includes("429")) {
+				paretoError = "Server at capacity. Please try again in a few minutes.";
+			} else if (e instanceof Error && e.message.includes("timeout")) {
+				paretoError = "Optimization timed out. The server may still be processing.";
+			} else {
+				paretoError = e instanceof Error ? e.message : "Pareto optimization failed";
+			}
+		} finally {
+			paretoRunning = false;
+		}
+	}
+
+	// ── Pair correlation drill-down ──────────────────────────────────────────
+
+	let pairDetail = $state<Record<string, unknown> | null>(null);
+	let pairLoading = $state(false);
+	let showPairPanel = $derived(pairDetail !== null);
+
+	async function loadPairCorrelation(instA: string, instB: string) {
+		pairLoading = true;
+		try {
+			const api = createClientApiClient(getToken);
+			pairDetail = await api.get(`/analytics/correlation-regime/${selectedPortfolio}/pair/${encodeURIComponent(instA)}/${encodeURIComponent(instB)}`);
+		} catch {
+			pairDetail = null;
+		} finally {
+			pairLoading = false;
+		}
+	}
+
+	// ── Attribution ──────────────────────────────────────────────────────────
+
+	let attributionData = $state<Record<string, unknown> | null>(null);
+	let attributionLoading = $state(false);
+	let attributionLoaded = $state(false);
+	let selectedFundId = $state("");
+
+	async function loadAttribution() {
+		if (!selectedFundId || attributionLoading) return;
+		attributionLoading = true;
+		try {
+			const api = createClientApiClient(getToken);
+			attributionData = await api.get(`/analytics/attribution/funds/${selectedFundId}/period`);
+			attributionLoaded = true;
+		} catch {
+			attributionData = null;
+		} finally {
+			attributionLoading = false;
 		}
 	}
 </script>
@@ -325,14 +419,32 @@
 								disabled={backtestRunning}
 								size="sm"
 							>
-								{backtestRunning ? "Executando…" : "Executar Backtest"}
+								{backtestRunning ? "Executando… (polling a cada 5s)" : "Executar Backtest"}
 							</Button>
 						</div>
+						{#if backtestError}
+							<div class="mt-4 rounded-md border border-[var(--netz-status-error)] p-3 text-sm text-[var(--netz-status-error)]">
+								{backtestError}
+							</div>
+						{/if}
 						{#if backtestResult}
 							<div class="mt-4 rounded-md bg-[var(--netz-surface-inset)] p-4">
 								<p class="text-sm text-[var(--netz-text-secondary)]">
-									Backtest enviado. Run ID: <span class="font-mono">{backtestResult.run_id ?? "—"}</span>
+									Status: <span class="font-mono font-medium">{backtestResult.status ?? "—"}</span>
+									{#if backtestResult.run_id}
+										| Run ID: <span class="font-mono">{backtestResult.run_id}</span>
+									{/if}
 								</p>
+								{#if backtestResult.metrics}
+									<div class="mt-3 grid gap-2 sm:grid-cols-3">
+										{#each Object.entries(backtestResult.metrics as Record<string, number>) as [key, value]}
+											<div class="rounded bg-[var(--netz-surface)] p-2">
+												<p class="text-xs text-[var(--netz-text-muted)]">{key}</p>
+												<p class="text-sm font-medium text-[var(--netz-text-primary)]">{typeof value === "number" ? value.toFixed(4) : value}</p>
+											</div>
+										{/each}
+									</div>
+								{/if}
 							</div>
 						{/if}
 					</SectionCard>
@@ -352,14 +464,34 @@
 				<div class="space-y-6">
 					<SectionCard title="Fronteira de Pareto — Risco × Retorno" subtitle="CVaR 95% no eixo X · Retorno anualizado no eixo Y">
 						{#snippet actions()}
-							<Button
-								onclick={runOptimization}
-								disabled={optimizationRunning}
-								size="sm"
-							>
-								{optimizationRunning ? "Otimizando…" : "Executar otimização"}
-							</Button>
+							<div class="flex gap-2">
+								<Button
+									onclick={runOptimization}
+									disabled={optimizationRunning}
+									size="sm"
+								>
+									{optimizationRunning ? "Otimizando…" : "Otimização rápida"}
+								</Button>
+								<Button
+									onclick={runPareto}
+									disabled={paretoRunning}
+									size="sm"
+									variant="outline"
+								>
+									{paretoRunning ? "Pareto… (até 2 min)" : "Multi-objetivo (Pareto)"}
+								</Button>
+							</div>
 						{/snippet}
+						{#if paretoError}
+							<div class="mb-3 rounded-md border border-[var(--netz-status-error)] p-3 text-sm text-[var(--netz-status-error)]">
+								{paretoError}
+							</div>
+						{/if}
+						{#if optimizationError}
+							<div class="mb-3 rounded-md border border-[var(--netz-status-error)] p-3 text-sm text-[var(--netz-status-error)]">
+								{optimizationError}
+							</div>
+						{/if}
 
 						<!-- Legend chips -->
 						<div class="mb-4 flex flex-wrap gap-3">
@@ -406,10 +538,38 @@
 			     ═══════════════════════════════════════════════════════════════ -->
 			{:else if activeTab === "atribuicao"}
 				<SectionCard title="Atribuição de Performance" subtitle="Decomposição de retorno por fator e classe de ativo">
-					<EmptyState
-						title="Dados de benchmark necessários"
-						message="Atribuição será habilitada quando benchmark_data_ingestor estiver ativo. Conecte um benchmark de referência nas configurações do portfólio."
-					/>
+					<div class="mb-4 flex items-center gap-3">
+						<input
+							type="text"
+							class="rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] px-3 py-1.5 text-sm text-[var(--netz-text-primary)]"
+							bind:value={selectedFundId}
+							placeholder="Fund ID"
+						/>
+						<Button
+							onclick={loadAttribution}
+							disabled={attributionLoading || !selectedFundId}
+							size="sm"
+						>
+							{attributionLoading ? "Loading..." : "Load Attribution"}
+						</Button>
+					</div>
+					{#if attributionData}
+						<div class="space-y-2">
+							{#each Object.entries(attributionData) as [key, value]}
+								{#if key !== "fund_id" && key !== "period"}
+									<div class="flex items-center justify-between rounded-md bg-[var(--netz-surface-inset)] px-3 py-2 text-sm">
+										<span class="text-[var(--netz-text-primary)]">{key}</span>
+										<span class="font-mono text-[var(--netz-text-secondary)]">{typeof value === "number" ? value.toFixed(4) : String(value ?? "—")}</span>
+									</div>
+								{/if}
+							{/each}
+						</div>
+					{:else if !attributionLoaded}
+						<EmptyState
+							title="Selecione um fundo"
+							message="Insira o Fund ID e clique Load Attribution para ver a decomposição de retorno."
+						/>
+					{/if}
 				</SectionCard>
 			{/if}
 

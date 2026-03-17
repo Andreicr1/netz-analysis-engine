@@ -5,10 +5,16 @@
 <script lang="ts">
 	import {
 		StatusBadge, TimeSeriesChart, RegimeChart, PageHeader, EmptyState,
-		SectionCard, UtilizationBar, PeriodSelector, MetricCard,
+		SectionCard, UtilizationBar, PeriodSelector, MetricCard, ContextPanel, Button,
 	} from "@netz/ui";
+	import { ActionButton, ConfirmDialog } from "@netz/ui";
 	import MacroChips from "$lib/components/MacroChips.svelte";
+	import { createClientApiClient } from "$lib/api/client";
+	import { invalidateAll } from "$app/navigation";
+	import { getContext } from "svelte";
 	import type { PageData } from "./$types";
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let { data }: { data: PageData } = $props();
 
@@ -85,16 +91,72 @@
 		if (v === null) return "—";
 		return `${(v * 100).toFixed(1)}%`;
 	}
+
+	// ── Drift Scan Trigger ──────────────────────────────────────────────────
+	let showDriftScan = $state(false);
+	let driftScanning = $state(false);
+	let driftError = $state<string | null>(null);
+
+	async function runDriftScan() {
+		driftScanning = true;
+		showDriftScan = false;
+		driftError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post("/analytics/strategy-drift/scan", {});
+			await invalidateAll();
+		} catch (e) {
+			driftError = e instanceof Error ? e.message : "Drift scan failed";
+		} finally {
+			driftScanning = false;
+		}
+	}
+
+	// ── Drift Detail Panel ──────────────────────────────────────────────────
+	let driftDetailInstrument = $state<string | null>(null);
+	let driftDetailData = $state<Record<string, unknown> | null>(null);
+	let driftDetailLoading = $state(false);
+	let showDriftDetail = $derived(driftDetailData !== null);
+
+	async function loadDriftDetail(instrumentId: string, instrumentName: string) {
+		driftDetailInstrument = instrumentName;
+		driftDetailLoading = true;
+		try {
+			const api = createClientApiClient(getToken);
+			driftDetailData = await api.get(`/analytics/strategy-drift/${instrumentId}`);
+		} catch {
+			driftDetailData = null;
+		} finally {
+			driftDetailLoading = false;
+		}
+	}
 </script>
 
 <div class="space-y-6 p-6">
 	<PageHeader title="Risk Monitor">
 		{#snippet actions()}
-			{#if currentRegime}
-				<StatusBadge status={currentRegime} />
-			{/if}
+			<div class="flex items-center gap-2">
+				<ActionButton
+					size="sm"
+					variant="outline"
+					onclick={() => showDriftScan = true}
+					loading={driftScanning}
+					loadingText="Scanning..."
+				>
+					Run Drift Scan
+				</ActionButton>
+				{#if currentRegime}
+					<StatusBadge status={currentRegime} />
+				{/if}
+			</div>
 		{/snippet}
 	</PageHeader>
+
+	{#if driftError}
+		<div class="rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+			{driftError}
+		</div>
+	{/if}
 
 	<!-- CVaR 95% — Utilização por Portfólio -->
 	<SectionCard title="CVaR 95% — Utilização por Portfólio" subtitle="Rolling 12M · Limite configurado por perfil de risco">
@@ -177,3 +239,38 @@
 		</SectionCard>
 	{/if}
 </div>
+
+<!-- Drift Scan Confirm Dialog -->
+<ConfirmDialog
+	bind:open={showDriftScan}
+	title="Run Strategy Drift Scan"
+	message="This will analyze all instruments for strategy drift against benchmarks. Continue?"
+	confirmLabel="Run Scan"
+	confirmVariant="default"
+	onConfirm={runDriftScan}
+	onCancel={() => showDriftScan = false}
+/>
+
+<!-- Drift Detail Panel -->
+{#if showDriftDetail}
+	<ContextPanel
+		open={showDriftDetail}
+		title={`Drift: ${driftDetailInstrument ?? "Instrument"}`}
+		onClose={() => { driftDetailData = null; driftDetailInstrument = null; }}
+	>
+		<div class="space-y-3 p-4">
+			{#if driftDetailLoading}
+				<p class="text-sm text-[var(--netz-text-muted)]">Loading...</p>
+			{:else if driftDetailData}
+				{#each Object.entries(driftDetailData) as [key, value]}
+					<div>
+						<p class="text-xs text-[var(--netz-text-muted)]">{key}</p>
+						<p class="text-sm text-[var(--netz-text-primary)]">{typeof value === "number" ? value.toFixed(4) : String(value ?? "—")}</p>
+					</div>
+				{/each}
+			{:else}
+				<p class="text-sm text-[var(--netz-text-muted)]">No drift data available.</p>
+			{/if}
+		</div>
+	</ContextPanel>
+{/if}

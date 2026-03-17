@@ -5,6 +5,39 @@
 **Standard:** Every screen must meet the bar of a Bloomberg terminal — information-dense,
 precise, immediately actionable, never condescending.
 
+**Last updated:** 2026-03-17
+**Architecture decisions incorporated:** ECharts as chart standard, no localStorage for
+portfolio data. See section "Architecture Decisions" for rationale.
+
+---
+
+## Architecture Decisions (non-negotiable)
+
+### Chart library: `svelte-echarts` — no Chart.js
+
+All charts in the wealth frontend use `svelte-echarts`. If any Chart.js instances exist
+in the codebase, migrate them when implementing the corresponding view.
+
+**Rationale:** The specification level required (CVaR timeline with regime background bands,
+markArea for breach zones, markLine for limits, inverted yAxis, synchronized charts,
+Bayesian confidence bands, sparklines without axes) cannot be implemented in Chart.js
+without fighting the library at every step. ECharts has all of this as first-class features.
+
+There are no generic charts in this product. Users are institutional investors.
+
+### No localStorage for portfolio data
+
+The `localStorageKey` pattern is eliminated. Do not implement, adapt, or scope by `org_id`.
+
+**Replacement:** In-memory store via `$state` in the root layout (`+layout.svelte`) +
+SSE as primary source (`/api/v1/risk/stream`, org-scoped after SEC-5 fix) +
+polling fallback (`pollingFallbackMs: 30_000`). Initial data via SvelteKit
+`+page.server.ts` — already the project standard.
+
+**Stale criteria:** Data with `lastUpdated` before 08:00 on the current business day
+(Brasília time, America/Sao_Paulo). Weekends and holidays: stale only if `lastUpdated`
+is before 08:00 of the last Friday.
+
 ---
 
 ## Core Philosophy
@@ -41,6 +74,7 @@ end clients, regulators, and investment committees. It must be:
 Users are professionals with limited time. Do not pad with whitespace for aesthetics.
 Information density should be high. Use ECharts, compact tables, and collapsible
 sections — not large empty cards with one number.
+
 
 ---
 
@@ -132,6 +166,7 @@ Appears ONLY when regime ≠ RISK_ON. Full-width, colored background.
   utilization > 80% and trend is deteriorating
 - "History →" button opens drift history panel inline (not new page)
 
+
 ### Macro Indicators Bar (compact, always visible)
 
 ```
@@ -201,18 +236,26 @@ Click any block → highlights it in the main panel and shows its detail.
 
 ECharts line chart, 12-month history:
 - Line: daily CVaR rolling value
-- Reference line: limit (dashed red)
-- Reference line: warning threshold (dashed amber)
-- Background bands: colored by regime (blue=RISK_ON, amber=RISK_OFF, etc.)
-- Annotations: rebalance events (vertical lines with label)
-- X-axis: dates
-- Y-axis: CVaR % (negative values, scale inverted so "worse" is visually up)
+- Reference line: limit (dashed red, `markLine` with `symbol: 'none'`)
+- Reference line: warning threshold (dashed amber, `markLine` with `symbol: 'none'`)
+- Background bands: colored by regime via `visualMap` or `markArea`
+  (blue=RISK_ON, amber=RISK_OFF, orange=INFLATION, red=CRISIS)
+- Breach zones: `markArea` shaded red when CVaR was in breach, with duration label
+- Rebalance events: `markLine` vertical dashed, labeled "Rebalance"
+- Bayesian bounds: optional toggle — `lower_5`/`upper_95` confidence band as
+  shaded gray area around the CVaR line
+- X-axis: `type: 'time'`
+- Y-axis: `inverse: true` so worse (more negative) is visually higher,
+  `axisLabel.formatter: (v) => v.toFixed(1) + '%'`
+- Hover: shows exact CVaR, VaR, utilization%, regime, and date
+- Time controls: 1m | 3m | 6m | 1y | 2y | All — default 1y
 
 Below chart, compact stats row:
 ```
 Current: -7.2%  │  30d min: -7.8%  │  30d avg: -6.9%  │
 YTD max breach: 0 days  │  Last rebalance: 2026-02-14
 ```
+
 
 **Tab 2 — Allocation Detail**
 
@@ -267,19 +310,23 @@ Date        Block              Event                   Deviation
 **Rules:**
 - Rebalance events shown as full-width rows with distinct styling
 - "Entered OUT" and "Returned to band" are distinct event types
-- Export must include: date, block, event type, current weight, strategic weight, deviation, days_in_breach
+- Export must include: date, block, event type, current weight, strategic weight,
+  deviation, days_in_breach
 - Default period: last 30 days. Options: 30d, 90d, 180d, 1y, All time
 - No pagination — scroll within panel. Maximum 500 rows before requiring filter.
+- Export triggers a separate `fetch` with `limit=500` — do not rely on in-memory
+  state for export, as infinite scroll may not have loaded all rows
 
 **Drift Timeline Chart (above the table)**
 
 ECharts stacked area / line chart:
 - One line per block that has been out of band in the selected period
-- X-axis: dates
+- X-axis: `type: 'time'`
 - Y-axis: deviation from strategic weight (pp)
-- Zero line prominent
-- Band threshold lines (e.g., ±5%) as dashed reference
+- Zero line prominent (`markLine`)
+- Band threshold lines (e.g., ±5%) as dashed reference (`markLine`, `symbol: 'none'`)
 - Hover: shows all deviations on that date
+
 
 ---
 
@@ -331,7 +378,7 @@ Fidelity Contrafund    Fidelity       ███  68  -6.1%    0.79       $140B  
   Lipper Rating         ████░ 4.0/5  Beta vs SPY:    1.00   Alpha 1y:       0.1%
   ─────────────────────────────────────────────────────────────────────────
   CVaR History (12m)                 Drawdown Periods
-  [sparkline chart]                  2020-03: -34.2% | 2022-09: -24.8%
+  [ECharts sparkline — no axes]      2020-03: -34.2% | 2022-09: -24.8%
   ─────────────────────────────────────────────────────────────────────────
   Compatible with:  ✓ Conservative  ✓ Moderate  ✓ Growth
   Currently used in: Moderate (8.2% of block us_equity_broad)
@@ -402,6 +449,7 @@ Cash                0.0%      0.0pp     0.0%      —
 CVaR (effective):  -6.8%  vs. limit -8.0%  →  utilization 85%  ⚠ warning
 ```
 
+
 ---
 
 ## View 5: Risk Monitor (`routes/risk/+page.svelte`)
@@ -426,31 +474,38 @@ For users who want to go deep on risk analytics.
 ### CVaR Timeline Chart — Full Specification
 
 This is the most analytically important chart in the product. It must be precise.
+Implemented with `svelte-echarts`.
 
 - **Primary line:** rolling CVaR (selected profile)
 - **Secondary lines:** other profiles (toggled via legend, lower opacity)
-- **Limit line:** dashed red, labeled "Limit: -8.0%"
-- **Warning band:** shaded amber area between 80% and 100% of limit
-- **Breach zones:** shaded red when CVaR was in breach, with duration label
-- **Regime background:** subtle colored bands (blue/amber/orange/red) by regime
-- **Rebalance events:** vertical dashed lines, labeled "Rebalance"
+- **Limit line:** `markLine`, dashed red, labeled "Limit: -8.0%", `symbol: 'none'`
+- **Warning band:** `markArea` shaded amber between 80% and 100% of limit
+- **Breach zones:** `markArea` shaded red when CVaR was in breach, with duration label
+- **Regime background:** `visualMap` or `markArea` colored bands by regime
+  (RISK_ON=blue #3b82f6, RISK_OFF=amber #f59e0b, INFLATION=orange #f97316,
+  CRISIS=red #ef4444) — low opacity so CVaR line remains readable
+- **Rebalance events:** `markLine` vertical dashed, labeled "Rebalance"
+- **Bayesian bounds:** optional toggle — `lower_5`/`upper_95` as shaded gray band
 - **Hover:** shows exact CVaR, VaR, utilization%, regime, and date
 - **Time controls:** 1m | 3m | 6m | 1y | 2y | All — default 1y
-- **Y-axis:** inverted scale (worse = visually higher), labeled with % values
-- **Bayesian bounds:** optional toggle for CVaR lower_5/upper_95 confidence band
-  (shaded gray area around the CVaR line)
+- **Y-axis:** `inverse: true` (worse = visually higher),
+  `axisLabel.formatter: (v) => v.toFixed(1) + '%'`
+- **X-axis:** `type: 'time'`
+- **Synchronized** with regime timeline chart (same time range via `connect`)
 
 ### Regime Timeline Chart
 
-ECharts bar chart (categorical, time-based):
-- X-axis: dates
-- Each bar segment colored by regime (RISK_ON=blue, RISK_OFF=amber, INFLATION=orange, CRISIS=red)
-- Hover: shows regime name, duration, key signals that triggered it
-- Always synchronized with CVaR chart (same time range)
+ECharts categorical time-based bar chart:
+- X-axis: `type: 'time'`
+- Each segment colored by regime (see color system above)
+- Hover: regime name, duration, key signals that triggered it
+- Synchronized with CVaR chart via `echarts.connect()`
 
 ### Macro Detail
 
-6 sparkline cards in a 3×2 grid:
+6 sparkline cards in a 3×2 grid. Each sparkline: ECharts with no grid, no axes,
+no tooltip, no toolbox — pure shape only (`grid: {show: false}`,
+`xAxis: {show: false}`, `yAxis: {show: false}`).
 
 ```
 ┌───────────────┐  ┌───────────────┐  ┌───────────────┐
@@ -467,11 +522,8 @@ ECharts bar chart (categorical, time-based):
 └───────────────┘  └───────────────┘  └───────────────┘
 ```
 
-Each card:
-- Value + direction arrow + color
-- 12-month sparkline (ECharts, no axes, just the shape)
-- Contextual label in plain language (not "above threshold")
-- Click → opens full chart with full history
+Each card: value + direction arrow + color + 12m sparkline + plain-language label.
+Click → opens full chart with full history.
 
 ---
 
@@ -507,8 +559,22 @@ Ann. Return  Ann. Vol  Sharpe  Sortino  Max DD    CVaR Breaches  Rebalances
    +8.4%      11.2%    0.87    1.24    -18.4%        3 events       12
 ```
 
-All values colored relative to expectation. CVaR Breaches is the key risk metric —
-how often would the system have triggered.
+All values colored relative to expectation. CVaR Breaches is the key risk metric.
+
+### Pareto Optimization
+
+**Never display the Pareto front as a scatter plot of raw points.**
+Use the slider metaphor: a single risk/return slider that moves along the efficient
+frontier, updating portfolio weights and projected metrics in real time.
+The scatter is for quantitative analysts — this product serves portfolio managers.
+
+**Performance note:** Pareto optimization runs 45-135s on the backend.
+- Use 180s frontend timeout (per-request override on `NetzApiClient`)
+- Disable submit button immediately on click, show "This may take up to 2 minutes"
+- Use `AbortController` to cancel if user navigates away
+- Backend uses dedicated `ThreadPoolExecutor(max_workers=2)` — handle 429
+  "Server busy, please try again in a moment"
+
 
 ---
 
@@ -529,7 +595,7 @@ how often would the system have triggered.
 
 4. **Never paginate drift history.**
    Use infinite scroll or a full table with filters. Pagination breaks
-   the audit trail narrative.
+   the audit trail narrative. Export uses a separate fetch with `limit=500`.
 
 5. **Never round CVaR to fewer than 1 decimal place.**
    The difference between -7.9% and -8.0% is a limit breach. Precision matters.
@@ -543,9 +609,19 @@ how often would the system have triggered.
    the signals that caused it. Users need to explain to clients why
    the portfolio changed.
 
-8. **Never show the Pareto front as a scatter plot of 47 points.**
-   Use the slider metaphor described above. The scatter is for quantitative
-   analysts — this product serves portfolio managers.
+8. **Never show the Pareto front as a scatter plot of raw points.**
+   Use the slider metaphor. See View 6: Backtest for the correct implementation.
+
+9. **Never use Chart.js.**
+   This product uses `svelte-echarts` exclusively. If Chart.js instances exist
+   in the codebase, migrate them.
+
+10. **Never use localStorage for portfolio data.**
+    Use in-memory `$state` in the root layout + SSE + polling fallback.
+    See Architecture Decisions section.
+
+11. **Never render LLM-generated content with `{@html rawContent}`.**
+    Always use a sanitizing Markdown renderer (marked + DOMPurify).
 
 ---
 
@@ -582,29 +658,95 @@ const globalChartOptions = {
 - All time series: `xAxis.type: 'time'` (not category)
 - Reference lines: `markLine` with label, always `symbol: 'none'`
 - Breach zones: `markArea` with `itemStyle.color` at low opacity
+- Regime bands: `visualMap` (piecewise, by time range) or `markArea` per segment
+- Synchronized charts: `echarts.connect(groupId)` — CVaR + Regime charts always synced
 - Sparklines: no grid, no axis, no tooltip, no toolbox — pure shape only
+  (`grid: {show:false}`, `xAxis: {show:false}`, `yAxis: {show:false}`)
 - All percentage Y-axes: `axisLabel.formatter: (v) => v.toFixed(1) + '%'`
 - Tabular numbers in all chart labels: `rich` text with `fontVariant: 'tabular-nums'`
 
+
 ---
 
-## API Integration Notes (for Svelte stores)
+## Store Architecture
 
-The stores must handle these specific patterns:
+### No localStorage — in-memory stores only
+
+All stores live in `$state` declared in the root layout (`+layout.svelte` of the wealth
+app). This ensures they survive navigation between routes without creating duplicate
+SSE connections.
 
 ```typescript
-// CVaR store — SSE subscription for live updates
+// +layout.svelte (root wealth layout)
+// Stores are declared once here and passed via Svelte context
+
+const cvarStore = createCVaRStore({
+  profileIds: ['conservative', 'moderate', 'growth'],
+  sseEndpoint: '/api/v1/risk/stream',       // org-scoped after SEC-5 fix
+  pollingFallbackMs: 30_000,
+})
+
+const driftStore = createDriftStore({
+  profileId: 'conservative',
+  historyDays: 90,
+  // NO localStorageKey — eliminated
+})
+
+const regimeStore = createRegimeStore({
+  pollIntervalMs: 60_000,
+  sseEndpoint: '/api/v1/risk/stream',
+})
+```
+
+### All stores must expose
+
+```typescript
+status: 'loading' | 'ready' | 'error' | 'stale'
+lastUpdated: Date | null
+error: string | null
+```
+
+### Stale criteria
+
+Data is considered `stale` when:
+- **Business days (Mon–Fri, non-holiday):** `lastUpdated` is before 08:00 of the
+  current day in `America/Sao_Paulo` timezone
+- **Weekends and Brazilian holidays:** `stale` only if `lastUpdated` is before 08:00
+  of the last Friday
+
+When `status === 'stale'`, display banner:
+```
+"Data may be out of date. Pipeline last ran: [lastUpdated]. [Refresh →]"
+```
+
+### SSE connection management
+
+The SSE registry (`packages/ui/src/lib/utils/sse-registry.svelte.ts`) enforces a
+maximum of 4 concurrent SSE connections per tab. The CVaR, drift, and regime stores
+share the single `/api/v1/risk/stream` connection — they do not open 3 separate
+connections. The registry manages multiplexing.
+
+The risk SSE store is declared once in the root layout and shared between the
+dashboard and risk page via Svelte context (`setContext`/`getContext`). Never
+instantiate it twice — two instances = two connections = registry violation.
+
+---
+
+## API Integration Notes
+
+```typescript
+// CVaR store — SSE subscription for live updates, polling fallback
 export const cvarStore = createCVaRStore({
   profileIds: ['conservative', 'moderate', 'growth'],
   sseEndpoint: '/api/v1/risk/stream',
-  pollingFallbackMs: 30_000,  // fallback if SSE drops
+  pollingFallbackMs: 30_000,
 })
 
-// Drift store — must persist history locally for offline access
+// Drift store — in-memory, 90-day history loaded on mount
 export const driftStore = createDriftStore({
   profileId: 'conservative',
-  historyDays: 90,    // always load 90 days on mount
-  localStorageKey: 'drift_history_conservative',  // persist between sessions
+  historyDays: 90,
+  // No localStorageKey
 })
 
 // Regime store — poll every 60s (regime changes infrequently)
@@ -613,14 +755,6 @@ export const regimeStore = createRegimeStore({
   sseEndpoint: '/api/v1/risk/stream',
 })
 ```
-
-**All stores must expose:**
-- `status: 'loading' | 'ready' | 'error' | 'stale'`
-- `lastUpdated: Date | null`
-- `error: string | null`
-
-When `status === 'stale'` (data older than expected pipeline run), show
-a banner: "Data may be out of date. Pipeline last ran: [time]. [Refresh →]"
 
 ---
 
