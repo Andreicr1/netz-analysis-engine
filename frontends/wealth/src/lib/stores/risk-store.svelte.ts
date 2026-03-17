@@ -91,6 +91,7 @@ export function createRiskStore(config: RiskStoreConfig) {
 	let macroIndicators = $state<Record<string, unknown> | null>(null);
 
 	let pollTimer: ReturnType<typeof setTimeout> | undefined;
+	let fetching = false;
 
 	// Check staleness periodically
 	function checkStale() {
@@ -100,6 +101,8 @@ export function createRiskStore(config: RiskStoreConfig) {
 	}
 
 	async function fetchAll() {
+		if (fetching) return;
+		fetching = true;
 		try {
 			const token = await getToken();
 			const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
@@ -167,6 +170,8 @@ export function createRiskStore(config: RiskStoreConfig) {
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Failed to load risk data";
 			status = "error";
+		} finally {
+			fetching = false;
 		}
 	}
 

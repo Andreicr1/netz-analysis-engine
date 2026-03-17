@@ -4,7 +4,7 @@
 -->
 <script lang="ts">
 	import { DataTable, StatusBadge, ContextPanel, EmptyState, Button, Dialog } from "@netz/ui";
-	import { ActionButton, ConfirmDialog, FormField } from "@netz/ui";
+	import { ActionButton, FormField } from "@netz/ui";
 	import { goto, invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
 	import { createClientApiClient } from "$lib/api/client";

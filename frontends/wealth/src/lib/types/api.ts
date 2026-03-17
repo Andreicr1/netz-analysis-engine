@@ -7,3 +7,77 @@ export interface RegimeData {
 	confidence: number | null;
 	timestamp: string | null;
 }
+
+// ── Content ────────────────────────────────────────────────
+
+export interface ContentSummary {
+	id: string;
+	content_type: string;
+	status: string;
+	created_at: string;
+	title: string | null;
+	created_by: string | null;
+	error_message: string | null;
+}
+
+// ── Macro ──────────────────────────────────────────────────
+
+export interface MacroScores {
+	regions: { region: string; score: number; trend: string }[];
+	global_indicators: Record<string, number>;
+}
+
+export interface RegimeHierarchy {
+	global_regime: string;
+	regions: { region: string; regime: string }[];
+}
+
+export interface MacroReview {
+	id: string;
+	status: string;
+	created_at: string;
+	summary: string | null;
+}
+
+// ── Instruments ────────────────────────────────────────────
+
+export interface Instrument {
+	id: string;
+	ticker: string;
+	name: string;
+	asset_class: string;
+	currency: string;
+	last_price: number | null;
+	exchange: string | null;
+}
+
+// ── DD Reports ─────────────────────────────────────────────
+
+export interface DDReportSummary {
+	report_id: string;
+	status: string;
+	version: number;
+	created_at: string;
+}
+
+export interface DDReportChapter {
+	chapter_number: number;
+	title: string;
+	content: string;
+	status: string;
+}
+
+// ── Fund ───────────────────────────────────────────────────
+
+export interface FundDetail {
+	id: string;
+	name: string;
+	ticker: string | null;
+	block: string | null;
+	geography: string | null;
+	asset_class: string | null;
+	manager_score: number | null;
+	isin: string | null;
+	cnpj: string | null;
+	inception_date: string | null;
+}

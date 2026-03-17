@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
 	import { DataTable, StatusBadge, PageHeader, EmptyState, Button, Card, Dialog } from "@netz/ui";
-	import { ActionButton, ConfirmDialog, FormField } from "@netz/ui";
+	import { ActionButton, FormField } from "@netz/ui";
 	import type { PageData } from "./$types";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll } from "$app/navigation";
@@ -13,17 +13,9 @@
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
-	let { data }: { data: PageData } = $props();
+	import type { ContentSummary } from "$lib/types/api";
 
-	type ContentSummary = {
-		id: string;
-		content_type: string;
-		status: string;
-		created_at: string;
-		title: string | null;
-		created_by: string | null;
-		error_message: string | null;
-	};
+	let { data }: { data: PageData } = $props();
 
 	let contentList = $derived((data.content ?? []) as ContentSummary[]);
 	let hasGenerating = $derived(contentList.some(c => c.status === "generating"));

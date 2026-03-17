@@ -6,6 +6,7 @@
 	import { SectionCard, ActionButton, ConfirmDialog, Button } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll } from "$app/navigation";
+	import { onDestroy } from "svelte";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
@@ -22,6 +23,10 @@
 	let uploadError = $state<string | null>(null);
 	let selectedFile = $state<File | null>(null);
 	let filePreview = $state<string | null>(null);
+
+	onDestroy(() => {
+		if (filePreview) URL.revokeObjectURL(filePreview);
+	});
 	let assetType = $state("logo");
 	let deleteTarget = $state<string | null>(null);
 	let showDeleteConfirm = $state(false);

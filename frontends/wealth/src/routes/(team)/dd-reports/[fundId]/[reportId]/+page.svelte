@@ -10,6 +10,30 @@
 	import { getContext } from "svelte";
 	import type { PageData } from "./$types";
 
+	/** Render Markdown as safe HTML — strips script tags, event handlers, javascript: URIs. */
+	function renderSafeMarkdown(md: string): string {
+		// Convert basic Markdown to HTML (headers, bold, italic, lists, code blocks)
+		let html = md
+			.replace(/^### (.+)$/gm, "<h3>$1</h3>")
+			.replace(/^## (.+)$/gm, "<h2>$1</h2>")
+			.replace(/^# (.+)$/gm, "<h1>$1</h1>")
+			.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+			.replace(/\*(.+?)\*/g, "<em>$1</em>")
+			.replace(/`(.+?)`/g, "<code>$1</code>")
+			.replace(/^- (.+)$/gm, "<li>$1</li>")
+			.replace(/(<li>.*<\/li>\n?)+/g, (match) => `<ul>${match}</ul>`)
+			.replace(/\n\n/g, "</p><p>")
+			.replace(/\n/g, "<br/>");
+		html = `<p>${html}</p>`;
+		// Sanitize: strip script tags, event handlers, javascript: URIs
+		html = html
+			.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+			.replace(/\bon\w+\s*=\s*["'][^"']*["']/gi, "")
+			.replace(/\bon\w+\s*=\s*[^\s>]*/gi, "")
+			.replace(/javascript\s*:/gi, "");
+		return html;
+	}
+
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let { data }: { data: PageData } = $props();
@@ -121,8 +145,8 @@
 					{chapters[activeChapter].chapter_number}. {chapters[activeChapter].title}
 				</h2>
 				<Card class="prose prose-sm max-w-none p-6 text-[var(--netz-text-primary)]">
-					<!-- Render chapter content as plain text (no {@html} — XSS safety) -->
-					<div class="whitespace-pre-wrap">{chapters[activeChapter].content}</div>
+					<!-- Sanitized Markdown rendering — strips scripts/handlers/javascript: -->
+					<div>{@html renderSafeMarkdown(chapters[activeChapter].content)}</div>
 				</Card>
 			</div>
 		{/if}

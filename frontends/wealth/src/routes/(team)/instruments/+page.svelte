@@ -12,17 +12,9 @@
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
-	let { data }: { data: PageData } = $props();
+	import type { Instrument } from "$lib/types/api";
 
-	type Instrument = {
-		id: string;
-		ticker: string;
-		name: string;
-		asset_class: string;
-		currency: string;
-		last_price: number | null;
-		exchange: string | null;
-	};
+	let { data }: { data: PageData } = $props();
 
 	let instruments = $state.raw((data.instruments ?? []) as Instrument[]);
 	$effect(() => {

@@ -11,24 +11,9 @@
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
+	import type { MacroScores, RegimeHierarchy, MacroReview } from "$lib/types/api";
+
 	let { data }: { data: PageData } = $props();
-
-	type MacroScores = {
-		regions: { region: string; score: number; trend: string }[];
-		global_indicators: Record<string, number>;
-	};
-
-	type RegimeHierarchy = {
-		global_regime: string;
-		regions: { region: string; regime: string }[];
-	};
-
-	type MacroReview = {
-		id: string;
-		status: string;
-		created_at: string;
-		summary: string | null;
-	};
 
 	let scores = $derived(data.scores as MacroScores | null);
 	let regime = $derived(data.regime as RegimeHierarchy | null);
