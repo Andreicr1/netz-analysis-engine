@@ -518,36 +518,56 @@ class TestPeerGroupService:
         assert result.reason == "no_block_assigned"
 
     def test_compute_rankings_batch_mixed(self):
+        """Batch with id1 having a peer group and id2 having no block."""
         id1 = uuid.uuid4()
         id2 = uuid.uuid4()
 
-        pg = self._make_peer_group(25, id1)
-        not_found = PeerGroupNotFound(instrument_id=id2, reason="no_block_assigned")
+        # Build a universe of 25 instruments (all funds in same block)
+        # id1 is in the group, id2 has no block
+        universe_instruments = []
+        for i in range(25):
+            inst = MagicMock()
+            inst.instrument_id = id1 if i == 0 else uuid.uuid4()
+            inst.instrument_type = "fund"
+            inst.block_id = "BLK"
+            inst.attributes = {"strategy": "long_only", "aum_usd": 1_000_000_000}
+            inst.is_active = True
+            inst.organization_id = "org-1"
+            universe_instruments.append(inst)
 
+        # id2: fund with no block
+        inst2 = MagicMock()
+        inst2.instrument_id = id2
+        inst2.instrument_type = "fund"
+        inst2.block_id = None
+        inst2.attributes = {"strategy": "long_only"}
+        inst2.is_active = True
+        inst2.organization_id = "org-1"
+        universe_instruments.append(inst2)
+
+        # Metrics for all instruments with blocks
         metrics_by_id = {}
-        for mid in pg.members:
-            metrics_by_id[mid] = {
-                "sharpe_ratio": 1.0,
-                "max_drawdown_pct": -10.0,
-                "annual_return_pct": 8.0,
-                "annual_volatility_pct": 12.0,
-                "pct_positive_months": 0.6,
-            }
+        for inst in universe_instruments:
+            if inst.block_id:
+                metrics_by_id[inst.instrument_id] = {
+                    "sharpe_ratio": 1.0,
+                    "max_drawdown_pct": -10.0,
+                    "annual_return_pct": 8.0,
+                    "annual_volatility_pct": 12.0,
+                    "pct_positive_months": 0.6,
+                }
+
+        db = MagicMock()
+        db.execute.return_value.scalars.return_value.all.return_value = universe_instruments
 
         svc = PeerGroupService()
-
-        def mock_find_peers(db, iid, org):
-            if iid == id1:
-                return pg
-            return not_found
-
-        with patch.object(svc, "find_peers", side_effect=mock_find_peers), \
-             patch.object(svc, "_load_peer_metrics", return_value=metrics_by_id):
-            results = svc.compute_rankings_batch(MagicMock(), [id1, id2], "org-1")
+        with patch.object(svc, "_load_peer_metrics", return_value=metrics_by_id):
+            results = svc.compute_rankings_batch(db, [id1, id2], "org-1")
 
         assert len(results) == 2
         assert isinstance(results[0], PeerRanking)
         assert isinstance(results[1], PeerGroupNotFound)
+        assert results[1].reason == "no_block_assigned"
 
     def test_lower_is_better_metrics_set(self):
         assert "max_drawdown_pct" in LOWER_IS_BETTER

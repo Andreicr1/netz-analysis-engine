@@ -160,6 +160,9 @@ def match_peers(
     the most granular dimension until min_peer_count is met or block-only
     is exhausted.
 
+    Keys are precomputed once for the entire universe (O(N)), then each
+    fallback level is a dict lookup (O(1)).
+
     Args:
         target_instrument_id: UUID of the target instrument.
         target_type: 'fund', 'bond', or 'equity'.
@@ -179,25 +182,33 @@ def match_peers(
 
     key_levels = build_key_levels(target_type, target_block_id, target_attributes)
 
+    # Precompute keys for the entire universe once — O(N)
+    # Map: level_index → key_value → list[instrument_id]
+    level_buckets: dict[int, dict[str, list[uuid.UUID]]] = {}
+    for inst in universe:
+        if inst["instrument_type"] != target_type:
+            continue
+        inst_block = inst.get("block_id")
+        if not inst_block:
+            continue
+
+        inst_keys = build_key_levels(
+            inst["instrument_type"],
+            inst_block,
+            inst.get("attributes", {}),
+        )
+        for level_idx, key_val in enumerate(inst_keys):
+            if level_idx not in level_buckets:
+                level_buckets[level_idx] = {}
+            bucket = level_buckets[level_idx]
+            if key_val not in bucket:
+                bucket[key_val] = []
+            bucket[key_val].append(inst["instrument_id"])
+
+    # Lookup at each fallback level — O(1) per level
+    best_members: list[uuid.UUID] = []
     for fallback_level, target_key in enumerate(key_levels):
-        members: list[uuid.UUID] = []
-
-        for inst in universe:
-            if inst["instrument_type"] != target_type:
-                continue
-            inst_block = inst.get("block_id")
-            if not inst_block:
-                continue
-
-            inst_keys = build_key_levels(
-                inst["instrument_type"],
-                inst_block,
-                inst.get("attributes", {}),
-            )
-
-            # Check if this instrument matches at the current fallback level
-            if fallback_level < len(inst_keys) and inst_keys[fallback_level] == target_key:
-                members.append(inst["instrument_id"])
+        members = level_buckets.get(fallback_level, {}).get(target_key, [])
 
         if len(members) >= min_peer_count:
             logger.debug(
@@ -215,11 +226,12 @@ def match_peers(
                 members=tuple(members),
                 fallback_level=fallback_level,
             )
+        best_members = members
 
     logger.debug(
         "peer_group_insufficient",
         instrument_id=str(target_instrument_id),
-        best_count=len(members) if members else 0,
+        best_count=len(best_members),
     )
     return PeerGroupNotFound(
         instrument_id=target_instrument_id,

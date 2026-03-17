@@ -159,18 +159,89 @@ class PeerGroupService:
         instrument_ids: list[uuid.UUID],
         organization_id: str,
     ) -> list[PeerRanking | PeerGroupNotFound]:
-        """Compute rankings for multiple instruments."""
+        """Compute rankings for multiple instruments.
+
+        Optimized: loads the universe once and shares it across all
+        instruments instead of re-querying per instrument.
+        """
+        from app.domains.wealth.models.instrument import Instrument
+
+        if not instrument_ids:
+            return []
+
+        # 1. Load all active instruments for this org — single query
+        rows = db.execute(
+            select(Instrument).where(
+                Instrument.organization_id == organization_id,
+                Instrument.is_active.is_(True),
+            )
+        ).scalars().all()
+
+        instruments_by_id: dict[uuid.UUID, Any] = {}
+        universe: list[dict[str, Any]] = []
+        for r in rows:
+            instruments_by_id[r.instrument_id] = r
+            universe.append({
+                "instrument_id": r.instrument_id,
+                "instrument_type": r.instrument_type,
+                "block_id": r.block_id,
+                "attributes": r.attributes or {},
+            })
+
+        # 2. Find peer groups for all targets using shared universe
+        peer_groups: dict[uuid.UUID, PeerGroup | PeerGroupNotFound] = {}
+        all_member_ids: set[uuid.UUID] = set()
+
+        for iid in instrument_ids:
+            target = instruments_by_id.get(iid)
+            if target is None:
+                peer_groups[iid] = PeerGroupNotFound(
+                    instrument_id=iid, reason="instrument_not_found",
+                )
+                continue
+            if not target.block_id:
+                peer_groups[iid] = PeerGroupNotFound(
+                    instrument_id=iid, reason="no_block_assigned",
+                )
+                continue
+
+            pg = match_peers(
+                target_instrument_id=iid,
+                target_type=target.instrument_type,
+                target_block_id=target.block_id,
+                target_attributes=target.attributes or {},
+                universe=universe,
+            )
+            peer_groups[iid] = pg
+            if isinstance(pg, PeerGroup):
+                all_member_ids.update(pg.members)
+
+        # 3. Load metrics for ALL peer group members — single query
+        all_metrics = self._load_peer_metrics(
+            db, tuple(all_member_ids), organization_id
+        ) if all_member_ids else {}
+
+        # 4. Rank each instrument using shared metrics
         results: list[PeerRanking | PeerGroupNotFound] = []
         for iid in instrument_ids:
             try:
-                result = self.compute_rankings(db, iid, organization_id)
-                results.append(result)
+                pg = peer_groups[iid]
+                if isinstance(pg, PeerGroupNotFound):
+                    results.append(pg)
+                    continue
+
+                ranking = self._rank_instrument_from_metrics(
+                    instrument_id=iid,
+                    peer_group=pg,
+                    peer_metrics=all_metrics,
+                )
+                results.append(ranking)
             except Exception:
                 logger.exception("peer_ranking_failed", instrument_id=str(iid))
                 results.append(PeerGroupNotFound(
-                    instrument_id=iid,
-                    reason="no_metrics",
+                    instrument_id=iid, reason="no_metrics",
                 ))
+
         return results
 
     def _rank_instrument(
@@ -180,20 +251,33 @@ class PeerGroupService:
         peer_group: PeerGroup,
         organization_id: str,
     ) -> PeerRanking | PeerGroupNotFound:
-        """Compute percentile rankings within a peer group."""
-
-        # Get latest metrics for all peer group members
+        """Compute percentile rankings within a peer group (loads metrics from DB)."""
         peer_metrics = self._load_peer_metrics(
             db, peer_group.members, organization_id
         )
+        return self._rank_instrument_from_metrics(
+            instrument_id=instrument_id,
+            peer_group=peer_group,
+            peer_metrics=peer_metrics,
+        )
 
+    def _rank_instrument_from_metrics(
+        self,
+        instrument_id: uuid.UUID,
+        peer_group: PeerGroup,
+        peer_metrics: dict[uuid.UUID, dict[str, Any]],
+    ) -> PeerRanking | PeerGroupNotFound:
+        """Compute percentile rankings using pre-loaded metrics.
+
+        Used by both single-instrument and batch paths to avoid
+        redundant DB queries.
+        """
         if not peer_metrics:
             return PeerGroupNotFound(
                 instrument_id=instrument_id,
                 reason="no_metrics",
             )
 
-        # Get target instrument's metrics
         target_metrics = peer_metrics.get(instrument_id)
         if not target_metrics:
             return PeerGroupNotFound(
@@ -213,7 +297,7 @@ class PeerGroupService:
                     metric=metric_name,
                     value=None,
                     percentile=None,
-                    lower_is_better=metric_name in self._lower_is_better,
+                    lower_is_better=metric_name in LOWER_IS_BETTER,
                 ))
                 continue
 
@@ -229,7 +313,7 @@ class PeerGroupService:
                     metric=metric_name,
                     value=float(target_value),
                     percentile=None,
-                    lower_is_better=metric_name in self._lower_is_better,
+                    lower_is_better=metric_name in LOWER_IS_BETTER,
                 ))
                 continue
 
@@ -243,7 +327,7 @@ class PeerGroupService:
                     metric=metric_name,
                     value=float(target_value),
                     percentile=50.0,
-                    lower_is_better=metric_name in self._lower_is_better,
+                    lower_is_better=metric_name in LOWER_IS_BETTER,
                 ))
                 weighted_sum += weight * 50.0
                 total_weight += weight
@@ -254,7 +338,7 @@ class PeerGroupService:
 
             pctile = float(percentileofscore(clipped_peers, clipped_val, kind="rank"))
 
-            if metric_name in self._lower_is_better:
+            if metric_name in LOWER_IS_BETTER:
                 pctile = 100.0 - pctile
 
             pctile = round(pctile, 2)
@@ -263,7 +347,7 @@ class PeerGroupService:
                 metric=metric_name,
                 value=float(target_value),
                 percentile=pctile,
-                lower_is_better=metric_name in self._lower_is_better,
+                lower_is_better=metric_name in LOWER_IS_BETTER,
             ))
             weighted_sum += weight * pctile
             total_weight += weight
