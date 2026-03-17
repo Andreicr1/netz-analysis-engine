@@ -31,6 +31,14 @@ export { default as ConnectionLost } from "./components/ConnectionLost.svelte";
 export { default as BackendUnavailable } from "./components/BackendUnavailable.svelte";
 export { default as Toast } from "./components/Toast.svelte";
 export { default as PageTabs } from "./components/PageTabs.svelte";
+export { default as MetricCard } from "./components/MetricCard.svelte";
+export { default as UtilizationBar } from "./components/UtilizationBar.svelte";
+export { default as RegimeBanner } from "./components/RegimeBanner.svelte";
+export { default as AlertFeed } from "./components/AlertFeed.svelte";
+export type { WealthAlert } from "./components/AlertFeed.svelte";
+export { default as SectionCard } from "./components/SectionCard.svelte";
+export { default as HeatmapTable } from "./components/HeatmapTable.svelte";
+export { default as PeriodSelector } from "./components/PeriodSelector.svelte";
 
 // ── Layouts ─────────────────────────────────────────────────
 export { default as AppLayout } from "./layouts/AppLayout.svelte";
