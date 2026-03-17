@@ -14,7 +14,7 @@ from datetime import date, timedelta
 
 import structlog
 import yfinance as yf
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.db.engine import async_session_factory as async_session
@@ -283,22 +283,30 @@ async def _do_ingest(db, lookback_days: int) -> dict[str, int | list[str]]:
             await db.commit()
             total_upserted += len(chunk)
 
-    # 6. Staleness check
+    # 6. Staleness check — single GROUP BY query instead of N+1 per-block selects
     stale_blocks: list[str] = []
     stale_cutoff = date.today() - timedelta(days=_STALE_THRESHOLD_DAYS)
-    for block in blocks:
-        latest_stmt = select(BenchmarkNav.nav_date).where(
-            BenchmarkNav.block_id == block.block_id,
-        ).order_by(BenchmarkNav.nav_date.desc()).limit(1)
-        latest_result = await db.execute(latest_stmt)
-        latest_date = latest_result.scalar()
+    block_ids_all = [b.block_id for b in blocks]
+    stale_stmt = (
+        select(
+            BenchmarkNav.block_id,
+            func.max(BenchmarkNav.nav_date).label("latest_date"),
+        )
+        .where(BenchmarkNav.block_id.in_(block_ids_all))
+        .group_by(BenchmarkNav.block_id)
+    )
+    stale_result = await db.execute(stale_stmt)
+    latest_by_block: dict[str, date | None] = {row.block_id: row.latest_date for row in stale_result}
 
+    block_ticker: dict[str, str] = {b.block_id: b.benchmark_ticker for b in blocks}
+    for block_id in block_ids_all:
+        latest_date = latest_by_block.get(block_id)
         if latest_date is None or latest_date < stale_cutoff:
-            stale_blocks.append(block.block_id)
+            stale_blocks.append(block_id)
             logger.warning(
                 "Stale benchmark data",
-                block_id=block.block_id,
-                ticker=block.benchmark_ticker,
+                block_id=block_id,
+                ticker=block_ticker.get(block_id),
                 latest_date=str(latest_date) if latest_date else "never",
             )
 
