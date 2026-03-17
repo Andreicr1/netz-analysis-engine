@@ -70,10 +70,34 @@ end clients, regulators, and investment committees. It must be:
 - Exportable (CSV minimum)
 - Timestamped to the day
 
-### 5. Density over whitespace
-Users are professionals with limited time. Do not pad with whitespace for aesthetics.
-Information density should be high. Use ECharts, compact tables, and collapsible
-sections — not large empty cards with one number.
+### 5. Density over emptiness, but never over hierarchy
+Users are professionals with limited time. Empty space that carries no meaning is
+waste. But density without hierarchy is illegible — and illegibility costs more time
+than whitespace ever would.
+
+The arbiter is not pixel count but reading speed. A screen is correctly dense when
+a trained user can parse the most important signal in under 3 seconds. If compression
+makes that harder, the compression is wrong.
+
+Concretely:
+- Use ECharts, compact tables, and collapsible sections over large empty cards
+- Every section has a dominant element — the one thing the user reads first
+- Supporting detail is visually subordinate, not visually equal
+- Breathing room between sections is hierarchy, not waste
+
+### 6. Visual tone: premium intelligence layer, not analytical workstation
+The wealth frontend serves private bank and asset management users. The visual
+register should feel like a Bloomberg terminal built by a private bank — precise
+and dense, but with restraint and surface quality that signals institutional trust.
+
+Concretely:
+- Surfaces are discrete: muted backgrounds, controlled contrast, no decorative fills
+- Color is used for semantic meaning only — never for visual interest
+- Charts are the center of evidence — they occupy primary visual weight on every
+  analytical screen, not supporting decoration in a corner
+- Every screen has few dominant blocks — never more than 3 competing for
+  primary attention at once
+- Accents (color, weight, size) mark exceptions and actions — not categories
 
 
 ---
@@ -103,6 +127,33 @@ sections — not large empty cards with one number.
 - Click on any chart element → drilldown (never navigate away, use slide panel)
 - All charts: zoom via scroll, pan via drag, reset via double-click
 - Tables: click column header to sort, shift-click for secondary sort
+
+### Narrative levels — density is not uniform across screen types
+
+Three distinct levels govern how dense a screen should be. Apply the appropriate
+level based on the user's intent, not on the available data volume.
+
+**Level 1 — Overview screens** (Dashboard, Portfolio summary)
+Synthesize and surface exceptions only. The user's question is "do I need to act?"
+- One dominant signal per section (status, alert count, key metric)
+- Supporting detail is collapsed or one click away
+- No tables with more than 5 visible rows by default
+- Whitespace between sections is intentional — it separates decisions
+
+**Level 2 — Workbench screens** (Risk Monitor, Allocation Editor, Fund Browser)
+Operational and analytical. The user is working, comparing, deciding.
+- High density is appropriate and expected
+- Multiple data streams can be visible simultaneously
+- Tables show full columns, charts show full history
+- Controls and actions are immediately accessible without scrolling
+
+**Level 3 — Decision pack screens** (Backtest results, Portfolio snapshot export,
+Fact sheet, DD Report viewer)
+Linear, printable, authoritative. The user is preparing to communicate.
+- Single-column or two-column maximum layout
+- No interactive controls competing with content
+- Typography hierarchy favors readability over density
+- Content must be coherent when printed or exported to PDF
 
 ---
 
