@@ -5,12 +5,16 @@
 <script lang="ts">
 	import {
 		EmptyState, PageHeader, StatusBadge, MetricCard, SectionCard,
-		UtilizationBar, PeriodSelector,
+		UtilizationBar, PeriodSelector, Dialog, Button,
 	} from "@netz/ui";
+	import { ActionButton, ConfirmDialog, FormField } from "@netz/ui";
 	import { page } from "$app/stores";
-	import { goto } from "$app/navigation";
+	import { goto, invalidateAll } from "$app/navigation";
+	import { getContext } from "svelte";
 	import type { PageData } from "./$types";
-	import { createClientApiClient } from "@netz/ui/utils";
+	import { createClientApiClient } from "$lib/api/client";
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let { data }: { data: PageData } = $props();
 
@@ -69,6 +73,95 @@
 		moderate: "var(--netz-info)",
 		growth: "var(--netz-danger)",
 	};
+
+	// ── Create Model Portfolio Dialog ──
+	let showCreate = $state(false);
+	let creating = $state(false);
+	let createError = $state<string | null>(null);
+	let createForm = $state({
+		display_name: "",
+		profile: "moderate",
+		benchmark_composite: "",
+		description: "",
+	});
+
+	function resetCreateForm() {
+		createForm = { display_name: "", profile: "moderate", benchmark_composite: "", description: "" };
+		createError = null;
+	}
+
+	async function createPortfolio() {
+		creating = true;
+		createError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post("/model-portfolios", {
+				display_name: createForm.display_name.trim(),
+				profile: createForm.profile,
+				benchmark_composite: createForm.benchmark_composite.trim() || null,
+				description: createForm.description.trim() || null,
+			});
+			showCreate = false;
+			resetCreateForm();
+			await invalidateAll();
+		} catch (e) {
+			createError = e instanceof Error ? e.message : "Failed to create";
+		} finally {
+			creating = false;
+		}
+	}
+
+	// ── Actions on selected portfolio ──
+	let actionLoading = $state<string | null>(null);
+	let actionError = $state<string | null>(null);
+	let showAllocateConfirm = $state(false);
+	let showRebalanceConfirm = $state(false);
+	let backtestResult = $state<Record<string, unknown> | null>(null);
+
+	async function runBacktest() {
+		if (!selectedPortfolio) return;
+		actionLoading = "backtest";
+		actionError = null;
+		backtestResult = null;
+		try {
+			const api = createClientApiClient(getToken);
+			backtestResult = await api.get(`/model-portfolios/${selectedPortfolio.id}/backtest`);
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : "Backtest failed";
+		} finally {
+			actionLoading = null;
+		}
+	}
+
+	async function allocateToModel() {
+		if (!selectedPortfolio) return;
+		actionLoading = "allocate";
+		showAllocateConfirm = false;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post(`/model-portfolios/${selectedPortfolio.id}/allocate`, {});
+			await invalidateAll();
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : "Allocation failed";
+		} finally {
+			actionLoading = null;
+		}
+	}
+
+	async function rebalanceModel() {
+		if (!selectedPortfolio) return;
+		actionLoading = "rebalance";
+		showRebalanceConfirm = false;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post(`/model-portfolios/${selectedPortfolio.id}/rebalance`, {});
+			await invalidateAll();
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : "Rebalance failed";
+		} finally {
+			actionLoading = null;
+		}
+	}
 </script>
 
 <div class="flex h-full">
@@ -78,6 +171,7 @@
 			<h2 class="text-xs font-semibold uppercase tracking-wider text-[var(--netz-text-muted)]">Portfólios</h2>
 			<button
 				class="rounded-md bg-[var(--netz-brand-primary)] px-2.5 py-1 text-xs font-medium text-white hover:opacity-90"
+				onclick={() => { resetCreateForm(); showCreate = true; }}
 			>
 				+ Novo
 			</button>
@@ -125,15 +219,32 @@
 					</p>
 				</div>
 				<div class="flex gap-2">
-					<button class="rounded-md border border-[var(--netz-border)] px-3 py-1.5 text-xs font-medium text-[var(--netz-text-secondary)] hover:bg-[var(--netz-surface-alt)]">
-						Fact-sheet ↓
-					</button>
-					<button class="rounded-md border border-[var(--netz-border)] px-3 py-1.5 text-xs font-medium text-[var(--netz-text-secondary)] hover:bg-[var(--netz-surface-alt)]">
+					<ActionButton
+						size="sm"
+						variant="outline"
+						onclick={runBacktest}
+						loading={actionLoading === "backtest"}
+						loadingText="Running..."
+					>
+						Backtest
+					</ActionButton>
+					<ActionButton
+						size="sm"
+						variant="outline"
+						onclick={() => showRebalanceConfirm = true}
+						loading={actionLoading === "rebalance"}
+						loadingText="..."
+					>
 						Rebalancear
-					</button>
-					<button class="rounded-md bg-[var(--netz-brand-primary)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90">
+					</ActionButton>
+					<ActionButton
+						size="sm"
+						onclick={() => showAllocateConfirm = true}
+						loading={actionLoading === "allocate"}
+						loadingText="..."
+					>
 						Construir portfólio
-					</button>
+					</ActionButton>
 				</div>
 			</div>
 
@@ -176,5 +287,93 @@
 				message="Crie um model portfolio para começar."
 			/>
 		{/if}
+
+		{#if actionError}
+			<div class="mt-4 rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+				{actionError}
+				<button class="ml-2 underline" onclick={() => actionError = null}>dismiss</button>
+			</div>
+		{/if}
+
+		{#if backtestResult}
+			<SectionCard title="Backtest Results" class="mt-4">
+				<div class="space-y-2">
+					{#each Object.entries(backtestResult) as [key, value]}
+						<div class="flex items-center justify-between text-sm">
+							<span class="text-[var(--netz-text-secondary)]">{key}</span>
+							<span class="font-mono text-[var(--netz-text-primary)]">{typeof value === "number" ? value.toFixed(4) : String(value ?? "—")}</span>
+						</div>
+					{/each}
+				</div>
+			</SectionCard>
+		{/if}
 	</div>
 </div>
+
+<!-- Create Model Portfolio Dialog -->
+<Dialog bind:open={showCreate} title="Create Model Portfolio">
+	<form onsubmit={(e) => { e.preventDefault(); createPortfolio(); }} class="space-y-4">
+		<FormField label="Name" required>
+			<input
+				type="text"
+				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
+				bind:value={createForm.display_name}
+				placeholder="e.g. Conservative Income"
+			/>
+		</FormField>
+		<FormField label="Profile" required>
+			<select
+				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
+				bind:value={createForm.profile}
+			>
+				<option value="conservative">Conservative</option>
+				<option value="moderate">Moderate</option>
+				<option value="growth">Growth</option>
+			</select>
+		</FormField>
+		<FormField label="Benchmark Composite">
+			<input
+				type="text"
+				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
+				bind:value={createForm.benchmark_composite}
+				placeholder="e.g. 60% IVV + 40% AGG"
+			/>
+		</FormField>
+		<FormField label="Description">
+			<textarea
+				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
+				bind:value={createForm.description}
+				rows={2}
+			></textarea>
+		</FormField>
+		{#if createError}
+			<p class="text-sm text-[var(--netz-status-error)]">{createError}</p>
+		{/if}
+		<div class="flex justify-end gap-2 pt-2">
+			<Button variant="outline" onclick={() => showCreate = false}>Cancel</Button>
+			<ActionButton onclick={createPortfolio} loading={creating} loadingText="Creating..." disabled={!createForm.display_name.trim()}>
+				Create
+			</ActionButton>
+		</div>
+	</form>
+</Dialog>
+
+<ConfirmDialog
+	bind:open={showAllocateConfirm}
+	title="Allocate to Model"
+	message="This will allocate funds to the selected model portfolio. Continue?"
+	confirmLabel="Allocate"
+	confirmVariant="default"
+	onConfirm={allocateToModel}
+	onCancel={() => showAllocateConfirm = false}
+/>
+
+<ConfirmDialog
+	bind:open={showRebalanceConfirm}
+	title="Rebalance Model Portfolio"
+	message="This will trigger a rebalance to realign with target allocations. Continue?"
+	confirmLabel="Rebalance"
+	confirmVariant="default"
+	onConfirm={rebalanceModel}
+	onCancel={() => showRebalanceConfirm = false}
+/>

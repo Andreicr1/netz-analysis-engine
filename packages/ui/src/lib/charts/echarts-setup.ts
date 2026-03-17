@@ -15,6 +15,8 @@ import {
 	VisualMapComponent,
 	MarkLineComponent,
 	MarkAreaComponent,
+	ToolboxComponent,
+	TitleComponent,
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 
@@ -32,6 +34,8 @@ echarts.use([
 	VisualMapComponent,
 	MarkLineComponent,
 	MarkAreaComponent,
+	ToolboxComponent,
+	TitleComponent,
 	CanvasRenderer,
 ]);
 
@@ -112,6 +116,58 @@ if (typeof document !== "undefined") {
 		initTheme();
 	}
 }
+
+/**
+ * Global chart options per Wealth Frontend UX Principles.
+ * Merge these into every chart's option object.
+ */
+export const globalChartOptions = {
+	animation: true,
+	animationDuration: 300,
+	backgroundColor: "transparent",
+	textStyle: { fontFamily: "Inter, system-ui, sans-serif", fontSize: 12 },
+	grid: { containLabel: true, left: 8, right: 8, top: 8, bottom: 8 },
+	tooltip: {
+		trigger: "axis" as const,
+		axisPointer: { type: "cross" as const },
+		confine: true,
+	},
+	toolbox: {
+		show: true,
+		feature: {
+			dataZoom: { show: true },
+			restore: { show: true },
+			saveAsImage: { show: true, name: "netz-chart" },
+		},
+	},
+};
+
+/** Sparkline options — no grid, no axes, no tooltip, no toolbox. Pure shape. */
+export const sparklineOptions = {
+	animation: false,
+	backgroundColor: "transparent",
+	grid: { show: false, left: 0, right: 0, top: 0, bottom: 0 },
+	xAxis: { show: false, type: "time" as const },
+	yAxis: { show: false },
+	tooltip: { show: false },
+	toolbox: { show: false },
+};
+
+/** Regime color mapping per UX spec. */
+export const regimeColors: Record<string, string> = {
+	RISK_ON: "#3b82f6",
+	RISK_OFF: "#f59e0b",
+	INFLATION: "#f97316",
+	CRISIS: "#ef4444",
+};
+
+/** Status colors per UX spec. */
+export const statusColors = {
+	ok: "#22c55e",
+	warning: "#f59e0b",
+	breach: "#ef4444",
+	neutral: "#6b7280",
+};
 
 export { echarts, initTheme, registerNetzTheme };
 export type { EChartsOption } from "echarts";

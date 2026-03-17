@@ -2,9 +2,14 @@
   Allocation — strategic, tactical, and effective views with profile selector.
 -->
 <script lang="ts">
-	import { DataCard, BarChart, PageHeader, EmptyState } from "@netz/ui";
+	import { DataCard, BarChart, PageHeader, EmptyState, Button } from "@netz/ui";
+	import { ActionButton } from "@netz/ui";
+	import { createClientApiClient } from "$lib/api/client";
+	import { invalidateAll, goto } from "$app/navigation";
+	import { getContext } from "svelte";
 	import type { PageData } from "./$types";
-	import { goto } from "$app/navigation";
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let { data }: { data: PageData } = $props();
 
@@ -55,6 +60,87 @@
 	let totalWeight = $derived(
 		effective.reduce((sum, r) => sum + r.effective_weight, 0),
 	);
+
+	// ── Edit Mode ──
+	let editing = $state(false);
+	let saving = $state(false);
+	let editError = $state<string | null>(null);
+
+	// Editable copies for strategic weights
+	let editWeights = $state<Record<string, number>>({});
+
+	function startEditing() {
+		editWeights = {};
+		for (const row of strategic) {
+			editWeights[row.block] = row.weight * 100;
+		}
+		editError = null;
+		editing = true;
+	}
+
+	function cancelEditing() {
+		editing = false;
+		editError = null;
+	}
+
+	let editTotal = $derived(
+		Object.values(editWeights).reduce((sum, v) => sum + v, 0),
+	);
+
+	let editDelta = $derived(Math.abs(editTotal - 100));
+	let editValid = $derived(editDelta < 0.1); // must sum to 100%
+
+	async function saveStrategic() {
+		if (!editValid) return;
+		saving = true;
+		editError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			const weights: Record<string, number> = {};
+			for (const [block, w] of Object.entries(editWeights)) {
+				weights[block] = w / 100;
+			}
+			await api.put(`/allocation/${activeProfile}/strategic`, { weights });
+			editing = false;
+			await invalidateAll();
+		} catch (e) {
+			editError = e instanceof Error ? e.message : "Failed to save allocation";
+		} finally {
+			saving = false;
+		}
+	}
+
+	// Tactical save
+	let editTactical = $state<Record<string, number>>({});
+	let editingTactical = $state(false);
+	let savingTactical = $state(false);
+
+	function startEditingTactical() {
+		editTactical = {};
+		for (const pos of tactical) {
+			editTactical[pos.block] = pos.overweight * 100;
+		}
+		editingTactical = true;
+	}
+
+	async function saveTactical() {
+		savingTactical = true;
+		editError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			const tilts: Record<string, number> = {};
+			for (const [block, w] of Object.entries(editTactical)) {
+				tilts[block] = w / 100;
+			}
+			await api.put(`/allocation/${activeProfile}/tactical`, { tilts });
+			editingTactical = false;
+			await invalidateAll();
+		} catch (e) {
+			editError = e instanceof Error ? e.message : "Failed to save tactical allocation";
+		} finally {
+			savingTactical = false;
+		}
+	}
 </script>
 
 <div class="space-y-6 p-6">
@@ -89,12 +175,34 @@
 		{/each}
 	</div>
 
+	{#if editError}
+		<div class="rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+			{editError}
+			<button class="ml-2 underline" onclick={() => editError = null}>dismiss</button>
+		</div>
+	{/if}
+
 	<!-- Strategic View -->
 	{#if activeTab === "strategic"}
 		{#if strategic.length > 0}
 			<div class="grid gap-4 lg:grid-cols-2">
 				<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
-					<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Strategic Weights</h3>
+					<div class="mb-4 flex items-center justify-between">
+						<h3 class="text-sm font-semibold text-[var(--netz-text-primary)]">Strategic Weights</h3>
+						{#if !editing}
+							<Button size="sm" variant="outline" onclick={startEditing}>Edit</Button>
+						{:else}
+							<div class="flex items-center gap-2">
+								<span class="text-xs {editValid ? 'text-[var(--netz-success,#22c55e)]' : 'text-[var(--netz-danger,#ef4444)]'}">
+									Total: {editTotal.toFixed(1)}% {editValid ? "✓" : `(${editDelta > 0 ? "+" : ""}${(editTotal - 100).toFixed(1)}%)`}
+								</span>
+								<Button size="sm" variant="outline" onclick={cancelEditing}>Cancel</Button>
+								<ActionButton size="sm" onclick={saveStrategic} loading={saving} loadingText="Saving..." disabled={!editValid}>
+									Save
+								</ActionButton>
+							</div>
+						{/if}
+					</div>
 					<div class="space-y-3">
 						{#each strategic as row (row.block)}
 							<div class="flex items-center justify-between">
@@ -105,9 +213,20 @@
 											[{(row.min_weight * 100).toFixed(0)}–{(row.max_weight * 100).toFixed(0)}%]
 										</span>
 									{/if}
-									<span class="font-medium text-[var(--netz-text-primary)]">
-										{(row.weight * 100).toFixed(1)}%
-									</span>
+									{#if editing}
+										<input
+											type="number"
+											class="w-20 rounded border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-2 py-1 text-right text-sm font-medium text-[var(--netz-text-primary)]"
+											bind:value={editWeights[row.block]}
+											min={row.min_weight !== null ? row.min_weight * 100 : 0}
+											max={row.max_weight !== null ? row.max_weight * 100 : 100}
+											step="0.1"
+										/>
+									{:else}
+										<span class="font-medium text-[var(--netz-text-primary)]">
+											{(row.weight * 100).toFixed(1)}%
+										</span>
+									{/if}
 								</div>
 							</div>
 						{/each}
@@ -129,7 +248,19 @@
 	{#if activeTab === "tactical"}
 		{#if tactical.length > 0}
 			<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
-				<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Tactical Positions</h3>
+				<div class="mb-4 flex items-center justify-between">
+					<h3 class="text-sm font-semibold text-[var(--netz-text-primary)]">Tactical Positions</h3>
+					{#if !editingTactical}
+						<Button size="sm" variant="outline" onclick={startEditingTactical}>Edit</Button>
+					{:else}
+						<div class="flex gap-2">
+							<Button size="sm" variant="outline" onclick={() => editingTactical = false}>Cancel</Button>
+							<ActionButton size="sm" onclick={saveTactical} loading={savingTactical} loadingText="Saving...">
+								Save
+							</ActionButton>
+						</div>
+					{/if}
+				</div>
 				<div class="space-y-3">
 					{#each tactical as pos (pos.block)}
 						<div class="flex items-center justify-between">
@@ -140,9 +271,18 @@
 										Conviction: {pos.conviction.toFixed(0)}
 									</span>
 								{/if}
-								<span class="font-medium {pos.overweight >= 0 ? 'text-[var(--netz-success,#22c55e)]' : 'text-[var(--netz-danger,#ef4444)]'}">
-									{pos.overweight >= 0 ? "+" : ""}{(pos.overweight * 100).toFixed(1)}%
-								</span>
+								{#if editingTactical}
+									<input
+										type="number"
+										class="w-20 rounded border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-2 py-1 text-right text-sm font-medium text-[var(--netz-text-primary)]"
+										bind:value={editTactical[pos.block]}
+										step="0.1"
+									/>
+								{:else}
+									<span class="font-medium {pos.overweight >= 0 ? 'text-[var(--netz-success,#22c55e)]' : 'text-[var(--netz-danger,#ef4444)]'}">
+										{pos.overweight >= 0 ? "+" : ""}{(pos.overweight * 100).toFixed(1)}%
+									</span>
+								{/if}
 							</div>
 						</div>
 					{/each}
