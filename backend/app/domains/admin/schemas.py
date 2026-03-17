@@ -11,12 +11,11 @@ from pydantic import BaseModel, ConfigDict
 class BrandingResponse(BaseModel):
     """Branding config returned to frontends. Merged default + override.
 
-    Uses extra="allow" so additional config fields (CSS tokens, future
-    extensions) pass through from ConfigService to the frontend. The
-    frontend BrandingConfig interface maps these to CSS custom properties.
+    Uses extra="forbid" to prevent CSS injection via unexpected fields.
+    All branding fields must be explicitly declared here.
     """
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="forbid")
 
     # Identity
     company_name: str = "Netz Capital"

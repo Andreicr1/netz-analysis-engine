@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # In-process cache — not an asyncio primitive, safe at module level.
 # Replaced with Redis L2 in Sprint 5-6 when admin API enables writes.
-_config_cache: TTLCache[str, dict] = TTLCache(maxsize=128, ttl=60)
+_config_cache: TTLCache[str, dict] = TTLCache(maxsize=2048, ttl=60)
 
 # Sentinel for admin-only key deletion in deep_merge.
 _DELETE = object()
@@ -171,20 +171,92 @@ class ConfigService:
 
         return entries
 
+    @classmethod
+    def invalidate(
+        cls,
+        vertical: str,
+        config_type: str,
+        org_id: str | None = None,
+    ) -> None:
+        """Invalidate cached config for a specific key.
+
+        Called by PgNotifier on config_changed events.
+        If org_id is provided, invalidates only the org-specific cache entry.
+        Always also invalidates the default (no-org) cache entry.
+        """
+        if org_id:
+            key = f"config:{vertical}:{config_type}:{org_id}"
+            _config_cache.pop(key, None)
+        # Always invalidate default entry too (may be stale after default update)
+        default_key = f"config:{vertical}:{config_type}:default"
+        _config_cache.pop(default_key, None)
+        logger.debug(
+            "ConfigService cache invalidated: %s/%s org=%s",
+            vertical,
+            config_type,
+            org_id or "default",
+        )
+
+    async def get_invalid_overrides(self) -> list[dict]:
+        """Find overrides that violate their guardrails (drift detection).
+
+        Returns list of {vertical, config_type, organization_id, errors}.
+        Used by admin health dashboard to detect guardrail drift after
+        default guardrails are updated.
+        """
+        from app.core.config.config_writer import _validate_against_guardrails
+
+        # Fetch all defaults with guardrails
+        defaults_result = await self._db.execute(
+            select(
+                VerticalConfigDefault.vertical,
+                VerticalConfigDefault.config_type,
+                VerticalConfigDefault.guardrails,
+            ).where(VerticalConfigDefault.guardrails.isnot(None))
+        )
+        defaults_with_guardrails = defaults_result.all()
+
+        invalid: list[dict] = []
+        for vertical, config_type, guardrails in defaults_with_guardrails:
+            overrides_result = await self._db.execute(
+                select(
+                    VerticalConfigOverride.organization_id,
+                    VerticalConfigOverride.config,
+                ).where(
+                    VerticalConfigOverride.vertical == vertical,
+                    VerticalConfigOverride.config_type == config_type,
+                )
+            )
+            for org_id, config in overrides_result.all():
+                errors = _validate_against_guardrails(config, guardrails)
+                if errors:
+                    invalid.append({
+                        "vertical": vertical,
+                        "config_type": config_type,
+                        "organization_id": str(org_id),
+                        "errors": errors,
+                    })
+
+        return invalid
+
     @staticmethod
-    def deep_merge(base: dict, override: dict) -> dict:
+    def deep_merge(base: dict, override: dict, *, _depth: int = 0) -> dict:
         """Recursive merge. Override values win on scalar conflicts.
 
         Dicts are recursively merged. Lists are REPLACED (not appended).
         _DELETE sentinel removes key (Netz admin only — client API strips None
         before merge).
+
+        Max depth of 20 prevents stack overflow on malicious/cyclic input.
         """
+        if _depth > 20:
+            raise ValueError("deep_merge exceeded max depth of 20 — possible cyclic input")
         result = base.copy()
         for key, value in override.items():
             if value is _DELETE:
                 result.pop(key, None)
             elif isinstance(value, dict) and isinstance(result.get(key), dict):
-                result[key] = ConfigService.deep_merge(result[key], value)
+                result[key] = ConfigService.deep_merge(result[key], value, _depth=_depth + 1)
             else:
                 result[key] = value
         return result

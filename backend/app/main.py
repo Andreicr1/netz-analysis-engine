@@ -160,8 +160,32 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.app_env,
     )
     await _verify_config_completeness()
+
+    # Start PgNotifier for config cache invalidation
+    from app.core.config.pg_notify import PgNotifier
+    from app.core.config.config_service import ConfigService
+
+    pg_notifier: PgNotifier | None = None
+    if settings.database_url:
+        # Convert async URL to sync for asyncpg (remove +asyncpg suffix)
+        raw_dsn = settings.database_url.replace("postgresql+asyncpg://", "postgresql://")
+        pg_notifier = PgNotifier(raw_dsn)
+
+        def _on_config_changed(data: dict) -> None:
+            ConfigService.invalidate(
+                data.get("vertical", ""),
+                data.get("config_type", ""),
+                data.get("organization_id"),
+            )
+
+        pg_notifier.subscribe("config_changed", _on_config_changed)
+        await pg_notifier.start()
+        logger.info("PgNotifier started — listening for config changes")
+
     yield
     # Cleanup
+    if pg_notifier:
+        await pg_notifier.stop()
     await engine.dispose()
     await close_redis_pool()
     logger.info("Netz Analysis Engine shutdown complete")

@@ -31,6 +31,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 # Clerk org role slug → internal Role enum
 CLERK_TO_ROLE: dict[str, Role] = {
+    "org:super_admin": Role.SUPER_ADMIN,
     "org:admin": Role.ADMIN,
     "org:investment_team": Role.INVESTMENT_TEAM,
     "org:gp": Role.GP,
@@ -55,10 +56,10 @@ class Actor:
     fund_ids: list[uuid.UUID] = field(default_factory=list)
 
     def has_role(self, role: Role) -> bool:
-        return Role.ADMIN in self.roles or role in self.roles
+        return Role.SUPER_ADMIN in self.roles or Role.ADMIN in self.roles or role in self.roles
 
     def can_access_fund(self, fund_id: uuid.UUID) -> bool:
-        if Role.ADMIN in self.roles:
+        if Role.ADMIN in self.roles or Role.SUPER_ADMIN in self.roles:
             return True
         return fund_id in self.fund_ids
 
@@ -137,7 +138,7 @@ async def get_actor(
                 actor_id="dev-user",
                 name="Dev User",
                 email="dev@netz.capital",
-                roles=[Role.ADMIN],
+                roles=[Role.ADMIN, Role.SUPER_ADMIN],
                 organization_id=None,
                 fund_ids=[],
             )
@@ -180,7 +181,7 @@ def require_role(*allowed_roles: Role):
     """FastAPI dependency factory: require at least one of the allowed roles."""
 
     async def _check(actor: Actor = Depends(get_actor)) -> Actor:
-        if Role.ADMIN in actor.roles:
+        if Role.ADMIN in actor.roles or Role.SUPER_ADMIN in actor.roles:
             return actor
         if not any(r in actor.roles for r in allowed_roles):
             raise HTTPException(
