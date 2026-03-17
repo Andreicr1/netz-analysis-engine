@@ -39,6 +39,11 @@
 	--netz-chart-3: #ff975a; /* orange */
 	--netz-chart-4: #8b9daf; /* slate */
 	--netz-chart-5: #d4e4f7; /* light blue */
+
+	/* ── Aliases (backward compat) ────────────────────────── */
+	--netz-primary: var(--netz-brand-primary);
+	--netz-primary-foreground: #ffffff;
+	--netz-primary-muted: color-mix(in srgb, var(--netz-brand-primary) 15%, transparent);
 }
 
 /* ── Dark Theme ────────────────────────────────────────────── */
@@ -77,4 +82,9 @@
 	--netz-chart-3: #fbbf24;
 	--netz-chart-4: #f87171;
 	--netz-chart-5: #a78bfa;
+
+	/* ── Aliases (backward compat) ────────────────────────── */
+	--netz-primary: var(--netz-brand-primary);
+	--netz-primary-foreground: #ffffff;
+	--netz-primary-muted: color-mix(in srgb, var(--netz-brand-primary) 15%, transparent);
 }
