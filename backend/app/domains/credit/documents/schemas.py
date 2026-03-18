@@ -59,6 +59,8 @@ class DocumentReviewOut(BaseModel):
     final_decision: str | None = None
     decided_by: str | None = None
     decided_at: datetime | None = None
+    rationale: str | None = None
+    actor_capacity: str | None = None
 
     revision_count: int
     current_round: int
