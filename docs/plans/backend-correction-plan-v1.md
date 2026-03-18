@@ -18,7 +18,7 @@
 
 ## Workstream: canonical-path
 
-- [ ] `CP-01` Align route and worker manifests with the mounted runtime surface _(deps now satisfied: AUTH-01 ✓, CP-02 ✓, SRCH-01 ✓)_
+- [x] `CP-01` Align route and worker manifests with the mounted runtime surface _(deps now satisfied: AUTH-01 ✓, CP-02 ✓, SRCH-01 ✓)_
   **Description:** Replace hand-maintained route and worker descriptions with canonical manifests generated from FastAPI startup and worker registration. Update the system map only after runtime surfaces are stable so route, worker, and topology documentation match deployed code exactly.
   **Files/modules:** `backend/app/main.py`, `backend/app/domains/admin/routes/*.py`, `backend/app/domains/credit/*/routes/*.py`, `backend/app/domains/wealth/routes/workers.py`, `backend/app/domains/wealth/workers/*.py`, `docs/audit/backend-system-map-v1.md`
   **Dependencies:** `AUTH-01`, `CP-02`, `SRCH-01`
@@ -59,7 +59,7 @@
   **Observability checkpoints:** Startup log reports selected vertical registry entries and selector resolution failures. Alert on import-time exceptions or selector fallthrough.
   **Risk level:** Medium
 
-- [ ] `CP-04` Consolidate deep review lifecycle state transitions into one coherent orchestration path _(dep satisfied: FAIL-01 ✓)_
+- [x] `CP-04` Consolidate deep review lifecycle state transitions into one coherent orchestration path _(dep satisfied: FAIL-01 ✓)_
   **Description:** Refactor deep review dispatch so execution, success finalization, and failure finalization use deterministic lifecycle semantics with explicit transactional boundaries instead of unrelated DB sessions that can leave stale state.
   **Files/modules:** `backend/app/services/azure/pipeline_dispatch.py`, `backend/vertical_engines/credit/deep_review/service.py`, `backend/app/core/db/session.py`
   **Dependencies:** `FAIL-01`
@@ -172,7 +172,7 @@
   **Observability checkpoints:** Emit authorization-denial counts by route family and actor class. Alert on sharp increase in denied requests for branding or assets after rollout.
   **Risk level:** Medium
 
-- [ ] `AUTH-02` Resolve authoritative fund membership into `Actor.fund_ids`
+- [x] `AUTH-02` Resolve authoritative fund membership into `Actor.fund_ids`
   **Description:** Populate actor fund scope from the authoritative membership source before authorization checks so non-admin fund access is enforced based on real membership rather than an always-empty list.
   **Files/modules:** `backend/app/core/security/clerk_auth.py`, consumers of `require_fund_access()`, authoritative membership persistence layer
   **Dependencies:** None
@@ -267,7 +267,7 @@
 
 ## Workstream: config
 
-- [ ] `CFG-01` Distinguish required config miss from valid empty config _(deps now satisfied: CFG-03 ✓, CFG-04 ✓)_
+- [x] `CFG-01` Distinguish required config miss from valid empty config _(deps now satisfied: CFG-03 ✓, CFG-04 ✓)_
   **Description:** Replace the current `{}`-on-miss behavior with explicit required-versus-optional config semantics so missing required configuration fails deterministically and optional config misses remain modeled intentionally.
   **Files/modules:** `backend/app/core/config/config_service.py`, `backend/ai_engine/profile_loader.py`, config consumers across engines
   **Dependencies:** `CFG-03`, `CFG-04`
