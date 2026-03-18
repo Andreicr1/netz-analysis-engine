@@ -653,6 +653,7 @@ async def process(
 
     # ── 6. Extract metadata + summarize (parallel) ──────────────
     from ai_engine.extraction.document_intelligence import (
+        ExtractionQuality,
         async_extract_metadata,
         async_summarize_document,
     )
@@ -672,37 +673,57 @@ async def process(
         content=content_for_extraction,
     )
 
-    metadata_result, summary_result = await asyncio.gather(
+    meta_extraction_result, summary_extraction_result = await asyncio.gather(
         meta_task, summary_task, return_exceptions=True,
     )
 
-    # Handle exceptions from gather
+    # Handle exceptions from gather — unwrap ExtractionResult
     extraction_metadata: dict[str, Any] = {}
-    if isinstance(metadata_result, Exception):
-        logger.error("Metadata extraction failed: %s", metadata_result, exc_info=True)
+    meta_quality = ExtractionQuality.SERVICE_OUTAGE
+    summary_quality = ExtractionQuality.SUMMARY_FAILURE
+
+    if isinstance(meta_extraction_result, Exception):
+        logger.error("Metadata extraction failed: %s", meta_extraction_result, exc_info=True)
         warnings.append("Metadata extraction failed")
     else:
+        meta_quality = meta_extraction_result.quality
+        metadata_content = meta_extraction_result.content
         extraction_metadata = {
-            "dates": metadata_result.dates,
-            "amounts": metadata_result.amounts,
-            "parties": metadata_result.parties,
-            "counterparties": metadata_result.counterparties,
-            "jurisdictions": metadata_result.jurisdictions,
+            "dates": metadata_content.dates,
+            "counterparties": metadata_content.counterparties,
+            "jurisdictions": metadata_content.jurisdictions,
         }
+        if meta_quality.is_degraded:
+            warnings.append(f"Metadata extraction degraded: {meta_extraction_result.reason}")
 
     summary_text = ""
-    if isinstance(summary_result, Exception):
-        logger.error("Summarization failed: %s", summary_result, exc_info=True)
+    if isinstance(summary_extraction_result, Exception):
+        logger.error("Summarization failed: %s", summary_extraction_result, exc_info=True)
         warnings.append("Summarization failed")
     else:
-        summary_text = summary_result.summary
+        summary_quality = summary_extraction_result.quality
+        summary_text = summary_extraction_result.content.summary
+        if summary_quality.is_degraded:
+            warnings.append(f"Summarization degraded: {summary_extraction_result.reason}")
+
+    # Collect extraction quality codes for metadata persistence
+    extraction_quality_codes: dict[str, str] = {
+        "metadata": meta_quality.value,
+        "summary": summary_quality.value,
+    }
+    # Track whether any extraction stage is degraded
+    extraction_degraded = meta_quality.is_degraded or summary_quality.is_degraded
 
     metrics["has_metadata"] = bool(extraction_metadata)
     metrics["has_summary"] = bool(summary_text)
+    metrics["extraction_quality"] = extraction_quality_codes
+    metrics["extraction_degraded"] = extraction_degraded
 
     await _emit(request.version_id, "extraction_complete", {
         "has_metadata": bool(extraction_metadata),
         "has_summary": bool(summary_text),
+        "extraction_quality": extraction_quality_codes,
+        "extraction_degraded": extraction_degraded,
     })
 
     # ── 7. Embedding ────────────────────────────────────────────
@@ -759,6 +780,8 @@ async def process(
         "governance_flags": gov_flags,
         "metadata": extraction_metadata,
         "summary": summary_text,
+        "extraction_quality": extraction_quality_codes,
+        "extraction_degraded": extraction_degraded,
     }).encode()
 
     # 8c. Write all three in parallel
@@ -828,6 +851,8 @@ async def process(
                 governance_critical=gov_critical,
                 governance_flags=gov_flags if gov_flags else None,
                 organization_id=request.org_id,
+                extraction_degraded=extraction_degraded if extraction_degraded else None,
+                extraction_quality=extraction_quality_codes if extraction_degraded else None,
             )
             search_docs.append(search_doc)
 
@@ -930,6 +955,8 @@ async def process(
         "retryable": upsert_result.retryable,
         "metadata": extraction_metadata,
         "summary": summary_text,
+        "extraction_quality": extraction_quality_codes,
+        "extraction_degraded": extraction_degraded,
     }
 
     return PipelineStageResult(

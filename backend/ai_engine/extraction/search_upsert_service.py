@@ -6,6 +6,7 @@ Batches uploads for performance.
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 import uuid
@@ -118,6 +119,8 @@ def build_search_document(
     financial_metric_type: str | None = None,
     risk_flags: list[str] | None = None,
     organization_id: uuid.UUID | None = None,
+    extraction_degraded: bool | None = None,
+    extraction_quality: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Build a single document dict matching the canonical chunks schema.
 
@@ -195,6 +198,14 @@ def build_search_document(
     # All RAG queries MUST include $filter=organization_id eq '{org_id}'.
     if organization_id is not None:
         doc["organization_id"] = str(organization_id)
+
+    # ── Extraction quality / degraded marker (FAIL-02) ────────────
+    # Downstream indexing can filter on ``extraction_degraded`` to exclude
+    # degraded outputs or include them with an explicit marker.
+    if extraction_degraded is not None:
+        doc["extraction_degraded"] = extraction_degraded
+    if extraction_quality is not None:
+        doc["extraction_quality"] = json.dumps(extraction_quality)
 
     return doc
 

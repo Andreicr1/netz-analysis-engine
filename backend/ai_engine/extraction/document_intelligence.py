@@ -29,6 +29,7 @@ Model rationale (user directive: "não se preocupe tanto com budget"):
 """
 from __future__ import annotations
 
+import enum
 import json
 import logging
 from dataclasses import dataclass, field
@@ -40,6 +41,51 @@ from ai_engine.prompt_safety import sanitize_user_input
 from ai_engine.prompts import prompt_registry
 
 logger = logging.getLogger(__name__)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Extraction Quality — typed degraded states (FAIL-02)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class ExtractionQuality(str, enum.Enum):
+    """Typed reason codes for extraction outcome quality.
+
+    Upstream outages and low-quality fallback paths remain distinguishable
+    from legitimate empty or low-signal business outputs throughout
+    persistence, indexing, and retrieval.
+    """
+
+    SUCCESS = "success"
+    SERVICE_OUTAGE = "service_outage"
+    PARSE_FAILURE = "parse_failure"
+    SUMMARY_FAILURE = "summary_failure"
+    OCR_FALLBACK = "ocr_fallback"
+    LEGITIMATELY_EMPTY = "legitimately_empty"
+
+    @property
+    def is_degraded(self) -> bool:
+        """True when the extraction result should be marked as degraded.
+
+        SUCCESS and LEGITIMATELY_EMPTY are not degraded — they represent
+        normal pipeline outcomes.  All other codes indicate a fallback path
+        that downstream consumers (indexing, retrieval) should be able to
+        filter on.
+        """
+        return self not in (ExtractionQuality.SUCCESS, ExtractionQuality.LEGITIMATELY_EMPTY)
+
+
+@dataclass
+class ExtractionResult:
+    """Wraps any extraction output with a typed quality reason code.
+
+    Callers use ``quality.is_degraded`` to decide whether to include a
+    degraded marker in persisted metadata and search index documents.
+    """
+
+    quality: ExtractionQuality
+    content: Any = None
+    reason: str = ""
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -135,6 +181,7 @@ class DocumentIntelligenceResult:
     summary: SummaryResult
     success: bool = True
     error: str | None = None
+    extraction_qualities: dict[str, ExtractionQuality] = field(default_factory=dict)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -213,8 +260,12 @@ async def async_extract_metadata(
     doc_type: str,
     content: str,
     max_content_chars: int = 12_000,
-) -> MetadataResult:
-    """Extract structured metadata from document content (async)."""
+) -> ExtractionResult:
+    """Extract structured metadata from document content (async).
+
+    Returns an ``ExtractionResult`` wrapping a ``MetadataResult``.
+    On failure the quality code distinguishes service outage from parse failure.
+    """
     truncated = sanitize_user_input(content, max_length=max_content_chars) if content else ""
 
     system = prompt_registry.render("extraction/extraction_system.j2")
@@ -238,7 +289,7 @@ async def async_extract_metadata(
         )
         data = json.loads(result.text)
 
-        return MetadataResult(
+        metadata = MetadataResult(
             entities=data.get("entities", {}),
             financial_figures=data.get("financial_figures", {}),
             dates=data.get("dates", {}),
@@ -248,10 +299,25 @@ async def async_extract_metadata(
             jurisdictions=data.get("jurisdictions", []),
             raw=data,
         )
+        return ExtractionResult(
+            quality=ExtractionQuality.SUCCESS,
+            content=metadata,
+        )
 
+    except json.JSONDecodeError as exc:
+        logger.error("Metadata extraction parse failure for '%s': %s", title, exc, exc_info=True)
+        return ExtractionResult(
+            quality=ExtractionQuality.PARSE_FAILURE,
+            content=MetadataResult(),
+            reason=f"JSON parse failure: {exc}",
+        )
     except Exception as exc:
         logger.error("Async metadata extraction failed for '%s': %s", title, exc, exc_info=True)
-        return MetadataResult()
+        return ExtractionResult(
+            quality=ExtractionQuality.SERVICE_OUTAGE,
+            content=MetadataResult(),
+            reason=f"Service outage: {exc}",
+        )
 
 
 async def async_summarize_document(
@@ -260,8 +326,12 @@ async def async_summarize_document(
     doc_type: str,
     content: str,
     max_content_chars: int = 10_000,
-) -> SummaryResult:
-    """Generate a 200-word summary + key findings (async)."""
+) -> ExtractionResult:
+    """Generate a 200-word summary + key findings (async).
+
+    Returns an ``ExtractionResult`` wrapping a ``SummaryResult``.
+    On failure the quality code is ``SUMMARY_FAILURE``.
+    """
     truncated = sanitize_user_input(content, max_length=max_content_chars) if content else ""
 
     system = prompt_registry.render("extraction/summary_system.j2")
@@ -285,15 +355,30 @@ async def async_summarize_document(
         )
         data = json.loads(result.text)
 
-        return SummaryResult(
+        summary = SummaryResult(
             summary=data.get("summary", ""),
             key_findings=data.get("key_findings", []),
             deal_relevance_score=min(10, max(0, int(data.get("deal_relevance_score", 5)))),
         )
+        return ExtractionResult(
+            quality=ExtractionQuality.SUCCESS,
+            content=summary,
+        )
 
+    except json.JSONDecodeError as exc:
+        logger.error("Summary parse failure for '%s': %s", title, exc, exc_info=True)
+        return ExtractionResult(
+            quality=ExtractionQuality.SUMMARY_FAILURE,
+            content=SummaryResult(),
+            reason=f"JSON parse failure: {exc}",
+        )
     except Exception as exc:
         logger.error("Async document summarization failed for '%s': %s", title, exc, exc_info=True)
-        return SummaryResult()
+        return ExtractionResult(
+            quality=ExtractionQuality.SUMMARY_FAILURE,
+            content=SummaryResult(),
+            reason=f"Summary service failure: {exc}",
+        )
 
 
 async def async_run_document_intelligence(
@@ -326,7 +411,7 @@ async def async_run_document_intelligence(
     )
 
     # 2 + 3. Metadata extraction & summary run concurrently (native async)
-    metadata, summary = await asyncio.gather(
+    meta_result, summary_result = await asyncio.gather(
         async_extract_metadata(
             title=title,
             doc_type=classification.doc_type,
@@ -339,6 +424,9 @@ async def async_run_document_intelligence(
         ),
     )
 
+    metadata: MetadataResult = meta_result.content
+    summary: SummaryResult = summary_result.content
+
     logger.info(
         "ASYNC_DOC_INTELLIGENCE_COMPLETE title='%s' doc_type=%s relevance=%d findings=%d",
         title, classification.doc_type,
@@ -350,6 +438,10 @@ async def async_run_document_intelligence(
         classification=classification,
         metadata=metadata,
         summary=summary,
+        extraction_qualities={
+            "metadata": meta_result.quality,
+            "summary": summary_result.quality,
+        },
     )
 
 
@@ -370,6 +462,7 @@ class FullIntelligenceResult:
     metadata: MetadataResult
     summary: SummaryResult
     classification_source: str = "hybrid_layer1"  # "hybrid_layer1" | "hybrid_layer2" | "hybrid_layer3"
+    extraction_qualities: dict[str, ExtractionQuality] = field(default_factory=dict)
 
 
 async def async_run_full_intelligence(
@@ -417,10 +510,13 @@ async def async_run_full_intelligence(
             f"[Fund entity aliases: {alias_lines}]\n\n{content}"
         )
 
-    metadata, summary = await asyncio.gather(
+    meta_result, summary_result = await asyncio.gather(
         async_extract_metadata(title=title, doc_type=doc_type, content=meta_content),
         async_summarize_document(title=title, doc_type=doc_type, content=content),
     )
+
+    metadata: MetadataResult = meta_result.content
+    summary: SummaryResult = summary_result.content
 
     # Governance detection (sync, instant, zero-cost)
     gov = detect_governance(content)
@@ -458,4 +554,8 @@ async def async_run_full_intelligence(
         metadata=metadata,
         summary=summary,
         classification_source=classification_source,
+        extraction_qualities={
+            "metadata": meta_result.quality,
+            "summary": summary_result.quality,
+        },
     )
