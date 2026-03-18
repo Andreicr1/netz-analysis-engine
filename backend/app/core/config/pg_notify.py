@@ -9,6 +9,7 @@ On reconnection: flush entire config cache (prevents stale data during reconnect
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 from typing import Any, Callable
@@ -93,7 +94,10 @@ class PgNotifier:
             handlers = self._handlers.get(channel, [])
             for handler in handlers:
                 try:
-                    handler(data)
+                    if inspect.iscoroutinefunction(handler):
+                        asyncio.ensure_future(self._invoke_async_handler(handler, data, channel))
+                    else:
+                        handler(data)
                 except Exception:
                     logger.exception("PgNotifier handler error on channel %s", channel)
 
@@ -104,6 +108,16 @@ class PgNotifier:
         # Keep connection alive — asyncpg listens until connection drops
         while self._running:
             await asyncio.sleep(1)
+
+    @staticmethod
+    async def _invoke_async_handler(
+        handler: Callable[[dict], Any], data: dict, channel: str
+    ) -> None:
+        """Await an async handler and log failures explicitly."""
+        try:
+            await handler(data)
+        except Exception:
+            logger.exception("PgNotifier async handler error on channel %s", channel)
 
     def _flush_all_caches(self) -> None:
         """Flush entire config cache on reconnection."""
