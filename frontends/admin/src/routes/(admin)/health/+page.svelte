@@ -229,7 +229,43 @@
 				pageSize={100}
 				filterColumn="name"
 				filterPlaceholder="Filter workers by name"
-			/>
+			>
+				{#snippet expandedRow(row)}
+					{@const worker = row as HealthWorker}
+					<div class="grid grid-cols-2 gap-4 px-4 py-3 text-sm sm:grid-cols-3">
+						<div>
+							<p class="text-xs text-[var(--netz-text-muted)]">Worker</p>
+							<p class="font-mono font-medium text-[var(--netz-text-primary)]">{worker.name}</p>
+						</div>
+						<div>
+							<p class="text-xs text-[var(--netz-text-muted)]">Status</p>
+							<p class="text-[var(--netz-text-primary)]">{worker.status}</p>
+						</div>
+						<div>
+							<p class="text-xs text-[var(--netz-text-muted)]">Error Count</p>
+							<p class="{worker.error_count > 0 ? "text-[var(--netz-danger)]" : "text-[var(--netz-text-primary)]"}">{worker.error_count}</p>
+						</div>
+						<div>
+							<p class="text-xs text-[var(--netz-text-muted)]">Last Run</p>
+							<p class="text-[var(--netz-text-primary)]">{worker.last_run ? formatDateTime(worker.last_run, "en-US") : "Never"}</p>
+						</div>
+						<div>
+							<p class="text-xs text-[var(--netz-text-muted)]">Checked At</p>
+							<p class="text-[var(--netz-text-primary)]">{worker.checked_at ? formatDateTime(worker.checked_at, "en-US") : "—"}</p>
+						</div>
+						<div>
+							<p class="text-xs text-[var(--netz-text-muted)]">Duration</p>
+							<p class="text-[var(--netz-text-primary)]">{worker.duration_ms !== null ? `${formatNumber(worker.duration_ms, 0, "en-US")}ms` : "—"}</p>
+						</div>
+						{#if worker.error_count > 0}
+							<div class="col-span-2 sm:col-span-3">
+								<p class="text-xs text-[var(--netz-text-muted)]">Note</p>
+								<p class="text-xs text-[var(--netz-warning)]">This worker has recorded errors. Check the log feed below for details.</p>
+							</div>
+						{/if}
+					</div>
+				{/snippet}
+			</DataTable>
 		{:else}
 			<p class="text-[var(--netz-text-muted)]">No workers registered.</p>
 		{/if}
