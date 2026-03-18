@@ -22,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config.models import VerticalConfigDefault, VerticalConfigOverride
+from app.core.config.registry import ConfigRegistry
 from app.core.config.schemas import ConfigEntry
 
 logger = logging.getLogger(__name__)
@@ -78,6 +79,7 @@ class ConfigService:
 
         Cascade: in-process cache → DB override → DB default → YAML fallback.
         """
+        ConfigRegistry.validate_lookup(vertical, config_type)
         cache_key = f"config:{vertical}:{config_type}:{org_id or 'default'}"
 
         cached = _config_cache.get(cache_key)
