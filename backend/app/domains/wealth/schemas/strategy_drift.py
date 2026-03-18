@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -42,3 +42,37 @@ class StrategyDriftScanRead(BaseModel):
     stable_count: int
     insufficient_data_count: int
     scan_timestamp: datetime
+
+
+class DriftEventOut(BaseModel):
+    """Single drift event from strategy_drift_alerts history."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    instrument_id: UUID
+    status: str
+    severity: str
+    anomalous_count: int
+    total_metrics: int
+    metric_details: list[dict[str, Any]] | None = None
+    is_current: bool = False
+    detected_at: datetime
+    created_at: datetime | None = None
+    # TODO: snapshot_date — not in model yet
+    # TODO: drift_magnitude — not in model yet
+    # TODO: threshold — not in model yet
+    # TODO: breached — not in model yet
+    # TODO: rebalance_triggered — not in model yet
+    # TODO: asset_class_breakdown — not in model yet
+
+
+class DriftHistoryOut(BaseModel):
+    """Drift history for a single instrument (mapped from 'profile' concept)."""
+
+    instrument_id: UUID
+    instrument_name: str
+    events: list[DriftEventOut]
+    total: int
+    # TODO: computed_at — no model-level field; using query time instead
+    computed_at: datetime | None = None
