@@ -254,65 +254,16 @@ def dispatch_deep_review(
             "dealId": str(deal_id),
         }
 
-    from app.core.db.session import get_session_local
-    from vertical_engines.credit.deep_review import async_run_deal_deep_review_v4
+    from app.core.db.session import sync_session_factory
 
     async def _run() -> None:
-        log = logging.getLogger("ai.deep_review_v4")
-        log.info("V4_BG_START deal_id=%s", deal_id)
-        db = get_session_local()()
-        try:
-            result = await async_run_deal_deep_review_v4(
-                db, fund_id=fund_id, deal_id=deal_id, actor_id=actor, force=force,
-            )
-            if "error" not in result:
-                db.commit()
-            else:
-                db.rollback()
-        except Exception as exc:
-            log.error("deep-review-v4 FAILED deal_id=%s: %s", deal_id, exc, exc_info=True)
-            db.rollback()
-            try:
-                update_deal_intelligence_status(
-                    db, deal_id=deal_id, fund_id=fund_id, status="FAILED",
-                )
-                db.commit()
-            except Exception:
-                db.rollback()
-            return
-        finally:
-            db.close()
-
-        if "error" not in result:
-            db2 = get_session_local()()
-            try:
-                update_deal_intelligence_status(
-                    db2,
-                    deal_id=deal_id,
-                    fund_id=fund_id,
-                    status="READY",
-                    generated_at=dt.datetime.now(dt.UTC),
-                )
-                db2.commit()
-                log.info("V4_STATUS_READY deal_id=%s", deal_id)
-            except Exception:
-                db2.rollback()
-                log.error("Failed to update status to READY deal_id=%s", deal_id, exc_info=True)
-            finally:
-                db2.close()
-        else:
-            log.warning("deep-review-v4 SOFT_ERROR deal_id=%s error=%s", deal_id, result.get("error"))
-            db2 = get_session_local()()
-            try:
-                update_deal_intelligence_status(
-                    db2, deal_id=deal_id, fund_id=fund_id, status="FAILED",
-                )
-                db2.commit()
-            except Exception:
-                db2.rollback()
-                log.error("Failed to update status to FAILED deal_id=%s", deal_id, exc_info=True)
-            finally:
-                db2.close()
+        await _execute_deep_review_lifecycle(
+            session_factory=sync_session_factory,
+            fund_id=fund_id,
+            deal_id=deal_id,
+            actor=actor,
+            force=force,
+        )
 
     background_tasks.add_task(_run)
     logger.info("Deep review dispatched via BackgroundTasks deal=%s", deal_id)
@@ -321,3 +272,109 @@ def dispatch_deep_review(
         "dispatch": "background_tasks",
         "dealId": str(deal_id),
     }
+
+
+async def _execute_deep_review_lifecycle(
+    *,
+    session_factory: Any,
+    fund_id: uuid.UUID,
+    deal_id: uuid.UUID,
+    actor: str,
+    force: bool,
+) -> None:
+    """Single orchestration path for deep review execution.
+
+    Lifecycle semantics:
+    - Exactly one terminal state is written (READY or FAILED).
+    - A ``finally`` block guarantees no stale PROCESSING state survives.
+    - Success writes READY with ``intelligence_generated_at`` timestamp.
+    - Failure writes FAILED with the reason preserved in logs.
+    - Soft errors (result contains ``"error"`` key) are treated as failures.
+
+    The session used for artifact persistence (inside deep review) is
+    separate from the session used for the terminal status update. This
+    prevents a status-update failure from rolling back persisted artifacts,
+    and vice versa.
+    """
+    from vertical_engines.credit.deep_review import async_run_deal_deep_review_v4
+
+    log = logging.getLogger("ai.deep_review_v4")
+    log.info("V4_BG_START deal_id=%s", deal_id)
+
+    terminal_state_written = False
+    result: dict[str, Any] = {}
+    failure_reason: str = ""
+
+    # ── Phase 1: Execute deep review (artifact persistence) ──────
+    db = session_factory()
+    try:
+        result = await async_run_deal_deep_review_v4(
+            db, fund_id=fund_id, deal_id=deal_id, actor_id=actor, force=force,
+        )
+        if "error" not in result:
+            db.commit()
+        else:
+            failure_reason = result.get("error", "soft_error")
+            db.rollback()
+    except Exception as exc:
+        failure_reason = f"exception: {exc}"
+        log.error("deep-review-v4 FAILED deal_id=%s: %s", deal_id, exc, exc_info=True)
+        db.rollback()
+    finally:
+        db.close()
+
+    # ── Phase 2: Write exactly one terminal status ───────────────
+    db_status = session_factory()
+    try:
+        if not failure_reason:
+            update_deal_intelligence_status(
+                db_status,
+                deal_id=deal_id,
+                fund_id=fund_id,
+                status="READY",
+                generated_at=dt.datetime.now(dt.UTC),
+            )
+            db_status.commit()
+            terminal_state_written = True
+            log.info("V4_STATUS_READY deal_id=%s", deal_id)
+        else:
+            log.warning(
+                "deep-review-v4 TERMINAL_FAILED deal_id=%s reason=%s",
+                deal_id, failure_reason,
+            )
+            update_deal_intelligence_status(
+                db_status, deal_id=deal_id, fund_id=fund_id, status="FAILED",
+            )
+            db_status.commit()
+            terminal_state_written = True
+    except Exception:
+        db_status.rollback()
+        log.error(
+            "Failed to write terminal status deal_id=%s",
+            deal_id, exc_info=True,
+        )
+    finally:
+        db_status.close()
+
+    # ── Phase 3: Safety net — guarantee no stale PROCESSING ──────
+    if not terminal_state_written:
+        log.warning(
+            "V4_SAFETY_NET forcing FAILED status deal_id=%s", deal_id,
+        )
+        db_fallback = session_factory()
+        try:
+            update_deal_intelligence_status(
+                db_fallback,
+                deal_id=deal_id,
+                fund_id=fund_id,
+                status="FAILED",
+            )
+            db_fallback.commit()
+        except Exception:
+            db_fallback.rollback()
+            log.critical(
+                "V4_SAFETY_NET_EXHAUSTED deal_id=%s — manual intervention required",
+                deal_id,
+            )
+        finally:
+            db_fallback.close()
