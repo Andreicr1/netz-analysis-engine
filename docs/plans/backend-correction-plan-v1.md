@@ -130,7 +130,7 @@
   **Observability checkpoints:** Emit module-load report listing required, optional, and degraded modules. Alert on missing required modules or unexpected route-count reduction.
   **Risk level:** Medium
 
-- [ ] `FAIL-02` Introduce typed degraded states for classification, extraction, summary, and OCR fallback paths
+- [x] `FAIL-02` Introduce typed degraded states for classification, extraction, summary, and OCR fallback paths
   **Description:** Ensure upstream outages and low-quality fallback paths remain distinguishable from legitimate empty or low-signal business outputs throughout persistence, indexing, and retrieval.
   **Files/modules:** `backend/ai_engine/extraction/document_intelligence.py`, `backend/ai_engine/extraction/text_extraction.py`
   **Dependencies:** `SRCH-03`
