@@ -4,14 +4,15 @@
 -->
 <script lang="ts">
 	import {
-		StatusBadge, TimeSeriesChart, RegimeChart, PageHeader, EmptyState,
-		SectionCard, UtilizationBar, PeriodSelector, MetricCard, ContextPanel, Button,
+		StatusBadge, RegimeChart, PageHeader, EmptyState,
+		SectionCard, UtilizationBar, PeriodSelector, ContextPanel, formatNumber, formatPercent,
 	} from "@netz/ui";
 	import { ActionButton, ConfirmDialog } from "@netz/ui";
 	import MacroChips from "$lib/components/MacroChips.svelte";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
+	import { resolveWealthStatus } from "$lib/utils/status-maps";
 	import type { PageData } from "./$types";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
@@ -88,8 +89,7 @@
 	let selectedCvarPeriod = $state("12M");
 
 	function fmtPct(v: number | null): string {
-		if (v === null) return "—";
-		return `${(v * 100).toFixed(1)}%`;
+		return formatPercent(v, 1, "en-US");
 	}
 
 	// ── Drift Scan Trigger ──────────────────────────────────────────────────
@@ -146,14 +146,14 @@
 					Run Drift Scan
 				</ActionButton>
 				{#if currentRegime}
-					<StatusBadge status={currentRegime} />
+					<StatusBadge status={currentRegime} resolve={resolveWealthStatus} />
 				{/if}
 			</div>
 		{/snippet}
 	</PageHeader>
 
 	{#if driftError}
-		<div class="rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+		<div class="rounded-md border border-[var(--netz-danger)] bg-[color-mix(in_srgb,var(--netz-danger)_10%,var(--netz-surface))] p-3 text-sm text-[var(--netz-danger)]">
 			{driftError}
 		</div>
 	{/if}
@@ -190,7 +190,7 @@
 		<SectionCard title="Regime de Mercado — FRED Indicators" class="lg:col-span-3">
 			{#if regimeBands.length > 0}
 				<div class="h-64">
-					<RegimeChart series={[]} regimes={regimeBands} />
+					<RegimeChart series={[]} regimes={regimeBands} ariaLabel="Market regime history chart" />
 				</div>
 			{:else}
 				<EmptyState title="Sem histórico de regime" message="Histórico de regimes aparecerá após a detecção de regime executar." />
@@ -206,7 +206,9 @@
 					{#each driftAlerts.dtw_alerts as alert (alert.instrument_name)}
 						<div class="flex items-center justify-between rounded-md bg-[var(--netz-surface-inset)] px-3 py-2 text-sm">
 							<span class="text-[var(--netz-text-primary)]">{alert.instrument_name}</span>
-							<span class="font-mono" style:color={alert.dtw_score > 0.6 ? "var(--netz-danger)" : alert.dtw_score > 0.4 ? "var(--netz-warning)" : "var(--netz-success)"}>{alert.dtw_score.toFixed(3)}</span>
+							<span class="font-mono" style:color={alert.dtw_score > 0.6 ? "var(--netz-danger)" : alert.dtw_score > 0.4 ? "var(--netz-warning)" : "var(--netz-success)"}>
+								{formatNumber(alert.dtw_score, 3, "en-US")}
+							</span>
 						</div>
 					{/each}
 				</div>
@@ -265,7 +267,7 @@
 				{#each Object.entries(driftDetailData) as [key, value]}
 					<div>
 						<p class="text-xs text-[var(--netz-text-muted)]">{key}</p>
-						<p class="text-sm text-[var(--netz-text-primary)]">{typeof value === "number" ? value.toFixed(4) : String(value ?? "—")}</p>
+						<p class="text-sm text-[var(--netz-text-primary)]">{typeof value === "number" ? formatNumber(value, 4, "en-US") : String(value ?? "—")}</p>
 					</div>
 				{/each}
 			{:else}

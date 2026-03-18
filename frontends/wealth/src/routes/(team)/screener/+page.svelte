@@ -3,12 +3,13 @@
   Funnel sidebar + status tabs + results table + ContextPanel detail panel.
 -->
 <script lang="ts">
-	import { PageHeader, Card, EmptyState, StatusBadge, ContextPanel } from "@netz/ui";
+	import { PageHeader, Card, EmptyState, StatusBadge, ContextPanel, formatDateTime, formatNumber } from "@netz/ui";
 	import { ActionButton } from "@netz/ui";
 	import { createVirtualizer } from "@tanstack/svelte-virtual";
 	import { createClientApiClient } from "$lib/api/client";
 	import { getContext } from "svelte";
 	import { get as getStore } from "svelte/store";
+	import { resolveWealthStatus } from "$lib/utils/status-maps";
 	import type { PageData } from "./$types";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
@@ -161,14 +162,7 @@
 	// ── Helpers ────────────────────────────────────────────────────────────────
 
 	function formatDate(iso: string | null | undefined): string {
-		if (!iso) return "—";
-		return new Date(iso).toLocaleDateString("pt-BR", {
-			day: "2-digit",
-			month: "2-digit",
-			year: "numeric",
-			hour: "2-digit",
-			minute: "2-digit",
-		});
+		return formatDateTime(iso);
 	}
 
 	function instrumentLabel(r: ScreeningResult): string {
@@ -454,7 +448,7 @@
 									<td class="col-score">
 										{#if result.score !== null}
 											<span class="score-value" style:color={scoreColor(result.score)}>
-												{result.score.toFixed(3)}
+												{formatNumber(result.score, 3, "en-US")}
 											</span>
 										{:else}
 											<span class="score-value score-value--empty">—</span>
@@ -463,7 +457,7 @@
 
 									<!-- Status badge -->
 									<td class="col-status">
-										<StatusBadge status={result.overall_status} />
+										<StatusBadge status={result.overall_status} resolve={resolveWealthStatus} />
 									</td>
 
 									<!-- DD Requerido -->
@@ -497,21 +491,21 @@
 
 		<!-- Score badge -->
 		<div class="panel-score-section">
-			<div
-				class="score-circle"
-				style:border-color={scoreColor(r.score)}
-				style:color={scoreColor(r.score)}
-			>
-				{#if r.score !== null}
-					<span class="score-circle__value">{r.score.toFixed(3)}</span>
-					<span class="score-circle__label">Score L3</span>
-				{:else}
+				<div
+					class="score-circle"
+					style:border-color={scoreColor(r.score)}
+					style:color={scoreColor(r.score)}
+				>
+					{#if r.score !== null}
+						<span class="score-circle__value">{formatNumber(r.score, 3, "en-US")}</span>
+						<span class="score-circle__label">Score L3</span>
+					{:else}
 					<span class="score-circle__value">—</span>
 					<span class="score-circle__label">N/A</span>
 				{/if}
 			</div>
 			<div class="panel-meta">
-				<StatusBadge status={r.overall_status} />
+				<StatusBadge status={r.overall_status} resolve={resolveWealthStatus} />
 				<span class="panel-meta__type">{typeLabel(r.instrument_type)}</span>
 				{#if r.block_id}
 					<span class="panel-meta__block">{r.block_id}</span>
@@ -675,11 +669,11 @@
 					{#each historyData as entry}
 						<div class="rounded-md border border-[var(--netz-border)] p-3">
 							<div class="flex items-center justify-between">
-								<StatusBadge status={String(entry.overall_status ?? "")} />
+								<StatusBadge status={String(entry.overall_status ?? "")} resolve={resolveWealthStatus} />
 								<span class="text-xs text-[var(--netz-text-muted)]">{String(entry.screened_at ?? "")}</span>
 							</div>
 							{#if entry.score != null}
-								<p class="mt-1 text-sm font-mono text-[var(--netz-text-secondary)]">Score: {Number(entry.score).toFixed(3)}</p>
+								<p class="mt-1 text-sm font-mono text-[var(--netz-text-secondary)]">Score: {formatNumber(Number(entry.score), 3, "en-US")}</p>
 							{/if}
 						</div>
 					{/each}

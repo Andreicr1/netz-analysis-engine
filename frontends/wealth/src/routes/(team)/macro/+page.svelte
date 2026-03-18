@@ -2,11 +2,12 @@
   Macro Intelligence — regional scores, regime hierarchy, committee reviews.
 -->
 <script lang="ts">
-	import { DataCard, StatusBadge, PageHeader, EmptyState, Button } from "@netz/ui";
+	import { DataCard, StatusBadge, PageHeader, EmptyState, Button, formatDate, formatNumber } from "@netz/ui";
 	import { ActionButton, ConfirmDialog } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
+	import { resolveWealthStatus } from "$lib/utils/status-maps";
 	import type { PageData } from "./$types";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
@@ -89,7 +90,7 @@
 					Generate Committee Report
 				</ActionButton>
 				{#if regime?.global_regime}
-					<StatusBadge status={regime.global_regime} />
+					<StatusBadge status={regime.global_regime} resolve={resolveWealthStatus} />
 				{/if}
 			</div>
 		{/snippet}
@@ -108,7 +109,7 @@
 			{#each scores.regions as region (region.region)}
 				<DataCard
 					label={region.region}
-					value={region.score.toFixed(0)}
+					value={formatNumber(region.score, 0, "en-US")}
 					trend={region.trend === "improving" ? "up" : region.trend === "deteriorating" ? "down" : "flat"}
 				/>
 			{/each}
@@ -123,7 +124,7 @@
 				{#each regime.regions as r (r.region)}
 					<div class="flex items-center justify-between rounded-md bg-[var(--netz-surface-alt)] p-3">
 						<span class="text-sm text-[var(--netz-text-primary)]">{r.region}</span>
-						<StatusBadge status={r.regime} />
+						<StatusBadge status={r.regime} resolve={resolveWealthStatus} />
 					</div>
 				{/each}
 			</div>
@@ -142,11 +143,11 @@
 								{review.summary ?? "Macro Committee Review"}
 							</p>
 							<p class="text-xs text-[var(--netz-text-muted)]">
-								{new Date(review.created_at).toLocaleDateString()}
+								{formatDate(review.created_at)}
 							</p>
 						</div>
 						<div class="flex items-center gap-2">
-							<StatusBadge status={review.status} />
+							<StatusBadge status={review.status} resolve={resolveWealthStatus} />
 							{#if review.status === "pending" || review.status === "draft"}
 								<ActionButton
 									size="sm"

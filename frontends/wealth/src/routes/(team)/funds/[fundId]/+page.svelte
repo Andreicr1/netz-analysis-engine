@@ -2,7 +2,8 @@
   Fund Detail — full metrics, NAV chart, risk metrics.
 -->
 <script lang="ts">
-	import { DataCard, StatusBadge, TimeSeriesChart, PageHeader, EmptyState } from "@netz/ui";
+	import { DataCard, StatusBadge, TimeSeriesChart, PageHeader, EmptyState, formatDate, formatNumber, formatPercent, formatRatio } from "@netz/ui";
+	import { resolveWealthStatus } from "$lib/utils/status-maps";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
@@ -49,12 +50,11 @@
 	);
 
 	function fmt(v: number | null, decimals = 2): string {
-		return v !== null ? v.toFixed(decimals) : "—";
+		return formatNumber(v, decimals, "en-US");
 	}
 
 	function fmtPct(v: number | null): string {
-		if (v === null) return "—";
-		return `${(v * 100).toFixed(2)}%`;
+		return formatPercent(v, 2, "en-US");
 	}
 </script>
 
@@ -69,7 +69,7 @@
 						</span>
 					{/if}
 					{#if fund.block}
-						<StatusBadge status={fund.block} />
+						<StatusBadge status={fund.block} resolve={resolveWealthStatus} />
 					{/if}
 				</div>
 			{/snippet}
@@ -80,7 +80,7 @@
 			<DataCard label="Geography" value={fund.geography ?? "—"} trend="flat" />
 			<DataCard label="Asset Class" value={fund.asset_class ?? "—"} trend="flat" />
 			<DataCard label="Manager Score" value={fmt(fund.manager_score, 1)} trend="flat" />
-			<DataCard label="Inception" value={fund.inception_date ?? "—"} trend="flat" />
+			<DataCard label="Inception" value={formatDate(fund.inception_date)} trend="flat" />
 		</div>
 
 		<!-- NAV Chart -->
@@ -92,6 +92,7 @@
 						series={navSeries}
 						yAxisLabel="NAV"
 						area={true}
+						ariaLabel={`${fund.name} NAV history`}
 					/>
 				</div>
 			{:else}
@@ -108,11 +109,11 @@
 					<DataCard label="VaR 95%" value={fmtPct(risk.var_95)} trend="flat" />
 					<DataCard label="Annual Return" value={fmtPct(risk.annual_return)} trend={risk.annual_return !== null && risk.annual_return >= 0 ? "up" : "down"} />
 					<DataCard label="Volatility" value={fmtPct(risk.annual_volatility)} trend="flat" />
-					<DataCard label="Sharpe" value={fmt(risk.sharpe_ratio)} trend="flat" />
+					<DataCard label="Sharpe" value={formatRatio(risk.sharpe_ratio, 2, "", "en-US")} trend="flat" />
 					<DataCard label="Max Drawdown" value={fmtPct(risk.max_drawdown)} trend="flat" />
 					<DataCard label="Recovery Days" value={risk.recovery_days !== null ? String(risk.recovery_days) : "—"} trend="flat" />
-					<DataCard label="Sortino" value={fmt(risk.sortino_ratio)} trend="flat" />
-					<DataCard label="Calmar" value={fmt(risk.calmar_ratio)} trend="flat" />
+					<DataCard label="Sortino" value={formatRatio(risk.sortino_ratio, 2, "", "en-US")} trend="flat" />
+					<DataCard label="Calmar" value={formatRatio(risk.calmar_ratio, 2, "", "en-US")} trend="flat" />
 				</div>
 			</div>
 		{/if}

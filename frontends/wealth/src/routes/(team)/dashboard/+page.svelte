@@ -7,11 +7,13 @@
 		StatusBadge, EmptyState, TimeSeriesChart, PageHeader,
 		PeriodSelector, RegimeBanner, SectionCard, AlertFeed,
 		createSSEStream,
+		formatDateTime,
 		type WealthAlert,
 	} from "@netz/ui";
 	import PortfolioCard from "$lib/components/PortfolioCard.svelte";
 	import MacroChips from "$lib/components/MacroChips.svelte";
 	import { regimeLabels } from "$lib/constants/regime";
+	import { resolveWealthStatus } from "$lib/utils/status-maps";
 	import type { PageData } from "./$types";
 	import type { RegimeData } from "$lib/types/api";
 	import { getContext } from "svelte";
@@ -137,7 +139,7 @@
 	// Format date for subtitle
 	const today = new Date();
 	const subtitle = $derived(
-		`${today.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })} · Atualizado às ${today.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
+		`${formatDateTime(today)} · Atualizado`
 	);
 </script>
 
@@ -152,7 +154,7 @@
 			<p class="mt-1 text-sm text-[var(--netz-text-muted)]">{subtitle}</p>
 		</div>
 		{#if currentRegime && currentRegime !== "RISK_ON"}
-			<StatusBadge status={currentRegime} />
+			<StatusBadge status={currentRegime} resolve={resolveWealthStatus} />
 		{/if}
 	</div>
 
@@ -195,6 +197,7 @@
 					yAxisLabel="NAV"
 					empty={true}
 					emptyMessage="Track-record data not yet available"
+					ariaLabel="Consolidated NAV chart"
 				/>
 			</div>
 		</SectionCard>
@@ -217,7 +220,7 @@
 		<SectionCard title="Macro Summary">
 			{#snippet actions()}
 				{#if currentRegime}
-					<StatusBadge status={currentRegime} />
+					<StatusBadge status={currentRegime} resolve={resolveWealthStatus} />
 				{/if}
 			{/snippet}
 			{#if macro}

@@ -3,12 +3,13 @@
   Row click navigates to detail page. Download PDF. Regenerate.
 -->
 <script lang="ts">
-	import { DataTable, StatusBadge, PageHeader, EmptyState, Button, Card } from "@netz/ui";
+	import { DataTable, StatusBadge, PageHeader, EmptyState, Button, Card, formatDate } from "@netz/ui";
 	import { ActionButton, ConfirmDialog } from "@netz/ui";
 	import type { PageData } from "./$types";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll, goto } from "$app/navigation";
 	import { getContext } from "svelte";
+	import { resolveWealthStatus } from "$lib/utils/status-maps";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -116,10 +117,10 @@
 							<p class="text-sm font-medium text-[var(--netz-text-primary)]">
 								Version {report.version}
 							</p>
-							<StatusBadge status={report.status} type="default" />
+							<StatusBadge status={report.status} type="default" resolve={resolveWealthStatus} />
 						</div>
 						<p class="mt-1 text-xs text-[var(--netz-text-muted)]">
-							{new Date(report.created_at).toLocaleDateString()}
+							{formatDate(report.created_at)}
 						</p>
 					</button>
 					<div class="ml-4 flex gap-2">

@@ -12,6 +12,8 @@
 		HeatmapChart,
 		ChartContainer,
 		Button,
+		formatNumber,
+		formatPercent,
 	} from "@netz/ui";
 	import type { PageData } from "./$types";
 	import { createClientApiClient } from "$lib/api/client";
@@ -82,13 +84,11 @@
 	let stats = $derived(correlation?.stats ?? null);
 
 	function fmtNum(v: number | null | undefined, decimals = 2): string {
-		if (v === null || v === undefined) return "—";
-		return v.toFixed(decimals);
+		return formatNumber(v, decimals, "en-US");
 	}
 
 	function fmtPct(v: number | null | undefined): string {
-		if (v === null || v === undefined) return "—";
-		return `${(v * 100).toFixed(1)}%`;
+		return formatPercent(v, 1, "en-US");
 	}
 
 	// ── Heatmap data ─────────────────────────────────────────────────────────
@@ -124,7 +124,7 @@
 				trigger: "item",
 				formatter: (params: { seriesName?: string; name?: string; value: [number, number] }) => {
 					const label = params.name ? `<strong>${params.name}</strong><br/>` : "";
-					return `${label}CVaR: ${params.value[0].toFixed(2)}%<br/>Retorno: ${params.value[1].toFixed(2)}%`;
+					return `${label}CVaR: ${formatNumber(params.value[0], 2, "en-US")}%<br/>Retorno: ${formatNumber(params.value[1], 2, "en-US")}%`;
 				},
 			},
 			legend: {
@@ -153,7 +153,7 @@
 					type: "scatter",
 					data: fundPoints,
 					symbolSize: 10,
-					itemStyle: { color: "var(--netz-brand-primary, #1E40AF)" },
+					itemStyle: { color: "var(--netz-brand-primary)" },
 				},
 				{
 					name: "Portfólios",
@@ -161,7 +161,7 @@
 					data: portfolioPoints,
 					symbolSize: 14,
 					symbol: "diamond",
-					itemStyle: { color: "var(--netz-warning, #F59E0B)" },
+					itemStyle: { color: "var(--netz-warning)" },
 				},
 				...(hasFrontier
 					? [
@@ -459,7 +459,7 @@
 										{#each Object.entries(backtestResult.metrics as Record<string, number>) as [key, value]}
 											<div class="rounded bg-[var(--netz-surface)] p-2">
 												<p class="text-xs text-[var(--netz-text-muted)]">{key}</p>
-												<p class="text-sm font-medium text-[var(--netz-text-primary)]">{typeof value === "number" ? value.toFixed(4) : value}</p>
+												<p class="text-sm font-medium text-[var(--netz-text-primary)]">{typeof value === "number" ? formatNumber(value, 4, "en-US") : value}</p>
 											</div>
 										{/each}
 									</div>
@@ -530,7 +530,7 @@
 
 						{#if correlationRegime && correlationRegime.points.length > 0}
 							<div class="h-[400px]">
-								<ChartContainer option={paretoOption} height={380} />
+								<ChartContainer option={paretoOption} height={380} ariaLabel="Pareto frontier chart" />
 							</div>
 						{:else}
 							<EmptyState
@@ -578,7 +578,7 @@
 								{#if key !== "fund_id" && key !== "period"}
 									<div class="flex items-center justify-between rounded-md bg-[var(--netz-surface-inset)] px-3 py-2 text-sm">
 										<span class="text-[var(--netz-text-primary)]">{key}</span>
-										<span class="font-mono text-[var(--netz-text-secondary)]">{typeof value === "number" ? value.toFixed(4) : String(value ?? "—")}</span>
+										<span class="font-mono text-[var(--netz-text-secondary)]">{typeof value === "number" ? formatNumber(value, 4, "en-US") : String(value ?? "—")}</span>
 									</div>
 								{/if}
 							{/each}

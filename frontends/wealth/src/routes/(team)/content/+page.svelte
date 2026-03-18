@@ -4,12 +4,13 @@
   polling for generating status, failed status display.
 -->
 <script lang="ts">
-	import { DataTable, StatusBadge, PageHeader, EmptyState, Button, Card, Dialog } from "@netz/ui";
+	import { DataTable, StatusBadge, PageHeader, EmptyState, Button, Card, Dialog, formatDate } from "@netz/ui";
 	import { ActionButton, FormField } from "@netz/ui";
 	import type { PageData } from "./$types";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
+	import { resolveWealthStatus } from "$lib/utils/status-maps";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -154,10 +155,10 @@
 							<p class="text-sm font-medium text-[var(--netz-text-primary)]">
 								{item.title ?? item.content_type}
 							</p>
-							<StatusBadge status={item.status} type="default" />
+							<StatusBadge status={item.status} type="default" resolve={resolveWealthStatus} />
 						</div>
 						<p class="mt-1 text-xs text-[var(--netz-text-muted)]">
-							{item.content_type} &middot; {new Date(item.created_at).toLocaleDateString()}
+							{item.content_type} &middot; {formatDate(item.created_at)}
 						</p>
 						{#if item.status === "failed" && item.error_message}
 							<p class="mt-1 text-xs text-[var(--netz-status-error)]">{item.error_message}</p>

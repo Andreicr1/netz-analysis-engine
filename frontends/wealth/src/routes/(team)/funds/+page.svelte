@@ -4,7 +4,7 @@
   + ContextPanel side panel with FundDetailPanel.
 -->
 <script lang="ts">
-	import { PageHeader, EmptyState } from "@netz/ui";
+	import { PageHeader, EmptyState, formatAUM as formatSharedAUM, formatDate as formatSharedDate, formatNumber } from "@netz/ui";
 	import FundDetailPanel from "$lib/components/FundDetailPanel.svelte";
 	import type { PageData } from "./$types";
 
@@ -159,19 +159,11 @@
 	// ── Format helpers ───────────────────────────────────────────────────────
 
 	function formatAum(value: number | null): string {
-		if (value === null) return "—";
-		if (value >= 1_000_000_000) return `R$ ${(value / 1_000_000_000).toFixed(1)}B`;
-		if (value >= 1_000_000) return `R$ ${(value / 1_000_000).toFixed(0)}M`;
-		return `R$ ${value.toLocaleString("pt-BR")}`;
+		return formatSharedAUM(value, "BRL", "pt-BR");
 	}
 
 	function formatDate(value: string | null): string {
-		if (!value) return "—";
-		return new Date(value).toLocaleDateString("pt-BR", {
-			day: "2-digit",
-			month: "short",
-			year: "numeric",
-		});
+		return formatSharedDate(value);
 	}
 </script>
 
@@ -331,7 +323,7 @@
 											class="font-mono text-sm font-semibold"
 											style="color: {fund.score >= 7 ? 'var(--netz-success)' : fund.score >= 5 ? 'var(--netz-warning)' : 'var(--netz-danger)'};"
 										>
-											{fund.score.toFixed(1)}
+											{formatNumber(fund.score, 1, "en-US")}
 										</span>
 									{:else}
 										<span class="text-[var(--netz-text-muted)]">—</span>

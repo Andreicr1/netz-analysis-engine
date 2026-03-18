@@ -2,7 +2,7 @@
   Investor — Published fact-sheets with PDF download, generation trigger, and language toggle.
 -->
 <script lang="ts">
-	import { PageHeader, EmptyState, Card, Button } from "@netz/ui";
+	import { PageHeader, EmptyState, Card, Button, formatDate } from "@netz/ui";
 	import { ActionButton } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll } from "$app/navigation";
@@ -93,7 +93,7 @@
 								&middot; {fs.period}
 							{/if}
 							{#if fs.created_at}
-								&middot; {new Date(fs.created_at).toLocaleDateString()}
+								&middot; {formatDate(fs.created_at)}
 							{/if}
 						</p>
 					</div>
