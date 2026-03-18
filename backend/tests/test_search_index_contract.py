@@ -124,7 +124,8 @@ async def test_rebuild_search_index_exposes_resolved_name(monkeypatch: pytest.Mo
 
     assert result.documents_processed == 0
     assert result.chunks_upserted == 0
-    assert result.resolved_index_name == resolved_name
+    # After pgvector migration, resolved_index_name is the pgvector table name
+    assert result.resolved_index_name == "vector_chunks (pgvector)"
 
 
 def test_active_backend_paths_do_not_hardcode_v4_chunks_index():

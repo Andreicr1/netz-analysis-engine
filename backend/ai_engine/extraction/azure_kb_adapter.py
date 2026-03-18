@@ -9,7 +9,7 @@ import logging
 import uuid as _uuid
 
 from ai_engine.extraction.kb_schema import ComplianceChunk
-from ai_engine.extraction.search_upsert_service import validate_domain, validate_uuid
+from ai_engine.extraction.pgvector_search_service import validate_domain, validate_uuid
 
 logger = logging.getLogger(__name__)
 

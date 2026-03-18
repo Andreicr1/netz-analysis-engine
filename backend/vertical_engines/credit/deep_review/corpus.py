@@ -455,7 +455,9 @@ def _gather_investment_texts(
     Falls back to blob download if no indexed chunks exist.
     """
     from ai_engine.extraction.embedding_service import generate_embeddings
-    from ai_engine.extraction.search_upsert_service import search_deal_chunks
+    from ai_engine.extraction.pgvector_search_service import (
+        search_deal_chunks_sync as search_deal_chunks,
+    )
 
     inv_name = investment.investment_name or ""
 
