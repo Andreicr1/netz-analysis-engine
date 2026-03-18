@@ -3,17 +3,63 @@
   Auto-refresh via client-side $effect (NOT invalidateAll).
 -->
 <script lang="ts">
-	import { SectionCard, MetricCard, StatusBadge } from "@netz/ui";
-	import type { PageData } from "./$types";
+	import { SectionCard, MetricCard, StatusBadge, formatDate } from "@netz/ui";
 	import ServiceHealthCard from "$lib/components/ServiceHealthCard.svelte";
 	import WorkerLogFeed from "$lib/components/WorkerLogFeed.svelte";
 	import { createClientApiClient } from "$lib/api/client";
 
-	let { data }: { data: PageData } = $props();
+	type HealthService = {
+		name: string;
+		status: string;
+		latency_ms: number | null;
+		error: string | null;
+		checked_at?: string | null;
+	};
+
+	type HealthWorker = {
+		name: string;
+		status: string;
+		last_run: string | null;
+		duration_ms: number | null;
+		error_count: number;
+	};
+
+	type HealthPipeline = {
+		docs_processed: number;
+		queue_depth: number;
+		error_rate: number;
+		checked_at?: string | null;
+	};
+
+	type HealthSectionErrors = {
+		services: string | null;
+		workers: string | null;
+		pipelines: string | null;
+	};
+
+	type HealthPageData = {
+		token: string;
+		services: HealthService[];
+		workers: HealthWorker[];
+		pipelines: HealthPipeline;
+		sectionErrors: HealthSectionErrors;
+		hasDegradedState: boolean;
+	};
+
+	let { data }: { data: HealthPageData } = $props();
 
 	// Client-side auto-refresh (NOT invalidateAll — avoids full SSR round trip)
 	let healthData = $state(data.services);
 	let pipelineData = $state(data.pipelines);
+	let healthErrors = $derived(data.sectionErrors);
+	let hasDegradedState = $derived(data.hasDegradedState);
+	let degradedMessage = $derived(
+		healthErrors.services || healthErrors.workers || healthErrors.pipelines
+			? "Some health sections failed to load. Showing partial results."
+			: hasDegradedState
+				? "System health is degraded. Review the flagged services below."
+				: null,
+	);
 
 	$effect(() => {
 		const interval = setInterval(async () => {
@@ -32,33 +78,80 @@
 <div class="space-y-6 p-6">
 	<h1 class="text-2xl font-bold text-[var(--netz-text-primary)]">System Health</h1>
 
+	{#if degradedMessage}
+		<div
+			class="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+			role="alert"
+		>
+			<p class="font-medium">Degraded state</p>
+			<p class="mt-1">{degradedMessage}</p>
+		</div>
+	{/if}
+
 	<!-- Service Health Grid -->
-	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-		{#each healthData as service}
-			<ServiceHealthCard {service} />
-		{/each}
-		{#if healthData.length === 0}
-			<div class="col-span-full text-center text-[var(--netz-text-muted)]">
+	<SectionCard title="Service Health">
+		{#if healthErrors.services}
+			<div
+				class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+				role="alert"
+			>
+				<p class="font-medium">Service health unavailable</p>
+				<p class="mt-1">{healthErrors.services}</p>
+			</div>
+		{:else if healthData.length > 0}
+			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+				{#each healthData as service}
+					<ServiceHealthCard {service} />
+				{/each}
+			</div>
+		{:else}
+			<div class="rounded-lg border border-dashed border-[var(--netz-border)] px-4 py-3 text-sm text-[var(--netz-text-muted)]">
 				No service health data available.
 			</div>
 		{/if}
-	</div>
+	</SectionCard>
 
 	<!-- Pipeline Stats -->
 	<SectionCard title="Pipeline Stats">
-		<div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-			<MetricCard label="Docs Processed" value={String(pipelineData.docs_processed ?? 0)} />
-			<MetricCard label="Queue Depth" value={String(pipelineData.queue_depth ?? 0)} />
-			<MetricCard
-				label="Error Rate"
-				value={`${((pipelineData.error_rate ?? 0) * 100).toFixed(1)}%`}
-			/>
-		</div>
+		{#if healthErrors.pipelines}
+			<div
+				class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+				role="alert"
+			>
+				<p class="font-medium">Pipeline stats unavailable</p>
+				<p class="mt-1">{healthErrors.pipelines}</p>
+			</div>
+		{:else}
+			<div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+				<MetricCard label="Docs Processed" value={String(pipelineData.docs_processed ?? 0)} />
+				<MetricCard label="Queue Depth" value={String(pipelineData.queue_depth ?? 0)} />
+				<MetricCard
+					label="Error Rate"
+					value={`${((pipelineData.error_rate ?? 0) * 100).toFixed(1)}%`}
+				/>
+			</div>
+			{#if pipelineData.checked_at}
+				<p class="mt-3 text-xs text-[var(--netz-text-muted)]">
+					Checked at
+					<time datetime={pipelineData.checked_at}>
+						{formatDate(pipelineData.checked_at, "medium", "en-US")}
+					</time>
+				</p>
+			{/if}
+		{/if}
 	</SectionCard>
 
 	<!-- Worker Status Table -->
 	<SectionCard title="Workers">
-		{#if data.workers.length > 0}
+		{#if healthErrors.workers}
+			<div
+				class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+				role="alert"
+			>
+				<p class="font-medium">Worker status unavailable</p>
+				<p class="mt-1">{healthErrors.workers}</p>
+			</div>
+		{:else if data.workers.length > 0}
 			<div class="overflow-x-auto">
 				<table class="w-full text-left text-sm">
 					<thead>
