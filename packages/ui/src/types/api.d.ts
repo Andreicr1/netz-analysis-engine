@@ -6357,6 +6357,92 @@ export interface components {
              */
             updated_at: string;
         };
+        /** DocumentReviewListOut */
+        DocumentReviewListOut: {
+            /** Total */
+            total: number;
+            /** Reviews */
+            reviews: components["schemas"]["DocumentReviewOut"][];
+        };
+        /** DocumentReviewOut */
+        DocumentReviewOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Fund Id
+             * Format: uuid
+             */
+            fund_id: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Document Version Id */
+            document_version_id?: string | null;
+            /** Deal Id */
+            deal_id?: string | null;
+            /** Asset Id */
+            asset_id?: string | null;
+            /** Title */
+            title: string;
+            /** Document Type */
+            document_type: string;
+            /** Status */
+            status: string;
+            /** Priority */
+            priority: string;
+            /** Submitted By */
+            submitted_by: string;
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
+            /** Due Date */
+            due_date?: string | null;
+            /** Review Notes */
+            review_notes?: string | null;
+            /** Final Decision */
+            final_decision?: string | null;
+            /** Decided By */
+            decided_by?: string | null;
+            /** Decided At */
+            decided_at?: string | null;
+            /** Rationale */
+            rationale?: string | null;
+            /** Actor Capacity */
+            actor_capacity?: string | null;
+            /** Revision Count */
+            revision_count: number;
+            /** Current Round */
+            current_round: number;
+            /** Routing Basis */
+            routing_basis?: string | null;
+            /** Classification Confidence */
+            classification_confidence?: number | null;
+            /** Classification Layer */
+            classification_layer?: number | null;
+            /** Classification Model */
+            classification_model?: string | null;
+            /** Metadata Json */
+            metadata_json?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** DocumentVersionCreate */
         DocumentVersionCreate: {
             /** Version Number */
@@ -14388,9 +14474,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["DocumentReviewListOut"];
                 };
             };
             /** @description Validation Error */
