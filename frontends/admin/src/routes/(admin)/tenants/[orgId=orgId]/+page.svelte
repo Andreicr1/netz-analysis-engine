@@ -2,28 +2,38 @@
   Tenant Overview — org info, edit metadata, re-seed, config count.
 -->
 <script lang="ts">
-	import { SectionCard, MetricCard, ActionButton, ConfirmDialog, FormField, Button } from "@netz/ui";
+	import { SectionCard, MetricCard, ActionButton, FormField, Button } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll } from "$app/navigation";
-	import type { PageData } from "./$types";
+	import type { ConfigListItem, TenantAsset } from "$lib/types";
+
+type TenantOverview = {
+  organization_id: string;
+  org_name: string;
+  org_slug: string;
+  plan_tier?: string | null;
+  status?: string | null;
+  configs: ConfigListItem[];
+  assets: TenantAsset[];
+};
+
+type PageData = {
+  tenant: TenantOverview | null;
+  orgId: string;
+  token: string;
+};
 
 	let { data }: { data: PageData } = $props();
 	const tenant = $derived(data.tenant);
 	const tenantName = $derived(tenant?.org_name ?? "this tenant");
-	const tenantScope = $derived(
-		tenant
-			? `${tenant.org_name} (${tenant.organization_id})`
-			: `tenant ${data.orgId}`,
-	);
+	const configCount = $derived(tenant?.configs?.length ?? 0);
+	const assetCount = $derived(tenant?.assets?.length ?? 0);
 
 	// Edit state
 	let editing = $state(false);
 	let editForm = $state({ name: "", plan_tier: "standard", status: "active" });
 	let saving = $state(false);
 	let editError = $state<string | null>(null);
-
-	// Seed state
-	let showSeedConfirm = $state(false);
 
 	function startEdit() {
 		editForm = {
@@ -54,26 +64,26 @@
 			saving = false;
 		}
 	}
-
-	async function seedDefaults() {
-		const api = createClientApiClient(() => Promise.resolve(data.token));
-		await api.post(`/admin/tenants/${data.orgId}/seed`);
-		await invalidateAll();
-	}
 </script>
 
 <div class="space-y-6 p-6">
-	<div class="flex items-center justify-between">
-		<h2 class="text-xl font-bold text-[var(--netz-text-primary)]">
-			{tenant?.org_name ?? "Tenant"}
-		</h2>
+	<div class="flex flex-col gap-3 rounded-2xl border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] p-4 md:flex-row md:items-center md:justify-between">
+		<div class="space-y-1">
+			<p class="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--netz-text-muted)]">
+				Tenant workspace
+			</p>
+			<h2 class="text-xl font-bold text-[var(--netz-text-primary)]">{tenant?.org_name ?? "Tenant"}</h2>
+			<p class="text-sm text-[var(--netz-text-secondary)]">
+				{tenant?.organization_id ?? data.orgId}
+			</p>
+		</div>
 		{#if !editing}
 			<Button variant="outline" size="sm" onclick={startEdit}>Edit tenant details</Button>
 		{/if}
 	</div>
 
 	{#if editing}
-			<SectionCard title="Edit tenant">
+		<SectionCard title="Edit tenant">
 			<div class="space-y-4">
 				<FormField label="Name" required>
 					<input
@@ -114,7 +124,7 @@
 		</SectionCard>
 	{:else}
 		<SectionCard title="Details">
-			<div class="grid grid-cols-2 gap-4 text-sm">
+			<div class="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
 				<div>
 					<span class="text-[var(--netz-text-muted)]">Organization ID</span>
 					<p class="font-mono text-[var(--netz-text-primary)]">
@@ -138,24 +148,40 @@
 	{/if}
 
 	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-		<MetricCard label="Config Overrides" value={String(tenant?.configs?.length ?? 0)} />
-		<MetricCard label="Assets" value={String(tenant?.assets?.length ?? 0)} />
+		<MetricCard label="Config Overrides" value={String(configCount)} />
+		<MetricCard label="Assets" value={String(assetCount)} />
 	</div>
 
-	<SectionCard title="Actions">
-		<ActionButton
-			variant="outline"
-			onclick={() => (showSeedConfirm = true)}
-		>
-			Re-seed defaults for this tenant
-		</ActionButton>
+	<SectionCard title="Tenant surfaces">
+		<div class="grid gap-4 md:grid-cols-2">
+			<a
+				href="/tenants/{data.orgId}/setup"
+				class="rounded-xl border border-[var(--netz-border)] bg-[var(--netz-surface)] p-4 transition-colors hover:border-[var(--netz-brand-primary)]"
+			>
+				<p class="text-sm font-semibold text-[var(--netz-text-primary)]">Setup center</p>
+				<p class="mt-2 text-sm text-[var(--netz-text-secondary)]">
+					Move seeding, replacement warnings, and one-time setup actions into a single place.
+				</p>
+			</a>
+			<div class="rounded-xl border border-[var(--netz-border)] bg-[var(--netz-surface)] p-4">
+				<p class="text-sm font-semibold text-[var(--netz-text-primary)]">Scoped workspaces</p>
+				<p class="mt-2 text-sm text-[var(--netz-text-secondary)]">
+					Config and prompt routes below are the tenant-scoped index pages. Open the vertical workspace from there.
+				</p>
+				<div class="mt-4 flex flex-wrap gap-2">
+					<a href="/tenants/{data.orgId}/config" class="text-sm text-[var(--netz-brand-secondary)] hover:underline">
+						Config
+					</a>
+					<a href="/tenants/{data.orgId}/prompts" class="text-sm text-[var(--netz-brand-secondary)] hover:underline">
+						Prompts
+					</a>
+					<a href="/tenants/{data.orgId}/branding" class="text-sm text-[var(--netz-brand-secondary)] hover:underline">
+						Branding
+					</a>
+				</div>
+			</div>
+		</div>
 	</SectionCard>
-
-	<ConfirmDialog
-		bind:open={showSeedConfirm}
-		title={`Seed default configs for ${tenantName}`}
-		message={`This will create default config overrides for ${tenantScope}. Existing overrides will not be affected.`}
-		confirmLabel="Seed for this tenant"
-		onConfirm={seedDefaults}
-	/>
 </div>
+
+

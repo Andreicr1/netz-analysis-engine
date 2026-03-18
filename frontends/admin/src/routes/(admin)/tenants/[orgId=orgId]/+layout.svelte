@@ -30,6 +30,7 @@
 				{ label: "Branding", href: `/tenants/${id}/branding` },
 				{ label: "Config", href: `/tenants/${id}/config` },
 				{ label: "Prompts", href: `/tenants/${id}/prompts` },
+				{ label: "Setup", href: `/tenants/${id}/setup` },
 			],
 		};
 
