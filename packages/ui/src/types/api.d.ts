@@ -8944,6 +8944,82 @@ export interface components {
          * @enum {string}
          */
         ReportingFrequency: "MONTHLY" | "QUARTERLY" | "SEMI_ANNUAL" | "ANNUAL";
+        /**
+         * ReviewAiAnalyzeOut
+         * @description POST /document-reviews/{id}/ai-analyze — AI analysis trigger result.
+         */
+        ReviewAiAnalyzeOut: {
+            /** Review Id */
+            review_id: string;
+            /** Status */
+            status: string;
+            /** Dispatch */
+            dispatch: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * ReviewAssignResultOut
+         * @description POST /document-reviews/{id}/assign — assignment result.
+         */
+        ReviewAssignResultOut: {
+            /** Review Id */
+            review_id: string;
+            /** Status */
+            status: string;
+            /** Assignments Added */
+            assignments_added: number;
+        };
+        /**
+         * ReviewChecklistItemOut
+         * @description POST check/uncheck — single checklist item response.
+         */
+        ReviewChecklistItemOut: {
+            /** Id */
+            id: string;
+            /** Sort Order */
+            sort_order: number;
+            /** Category */
+            category: string;
+            /** Label */
+            label: string;
+            /** Description */
+            description?: string | null;
+            /** Is Required */
+            is_required: boolean;
+            /** Is Checked */
+            is_checked: boolean;
+            /** Checked By */
+            checked_by?: string | null;
+            /** Checked At */
+            checked_at?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Ai Finding */
+            ai_finding?: unknown;
+        };
+        /**
+         * ReviewChecklistOut
+         * @description GET /document-reviews/{id}/checklist — checklist summary + items.
+         */
+        ReviewChecklistOut: {
+            /** Review Id */
+            review_id: string;
+            /** Total */
+            total: number;
+            /** Checked */
+            checked: number;
+            /** Required */
+            required: number;
+            /** Required Checked */
+            required_checked: number;
+            /** All Required Complete */
+            all_required_complete: boolean;
+            /** Completion Pct */
+            completion_pct: number;
+            /** Items */
+            items: unknown[];
+        };
         /** ReviewDecisionPayload */
         ReviewDecisionPayload: {
             /**
@@ -8968,6 +9044,148 @@ export interface components {
              * Format: email
              */
             actor_email: string;
+        };
+        /**
+         * ReviewDecisionResultOut
+         * @description POST /document-reviews/{id}/decide — reviewer decision result.
+         */
+        ReviewDecisionResultOut: {
+            /** Review Id */
+            review_id: string;
+            /** Your Decision */
+            your_decision: string;
+            /** Review Status */
+            review_status: string;
+            /** Final Decision */
+            final_decision?: string | null;
+        };
+        /**
+         * ReviewDetailOut
+         * @description GET /document-reviews/{id} — review + assignments + checklist + events.
+         */
+        ReviewDetailOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Fund Id
+             * Format: uuid
+             */
+            fund_id: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Document Version Id */
+            document_version_id?: string | null;
+            /** Deal Id */
+            deal_id?: string | null;
+            /** Asset Id */
+            asset_id?: string | null;
+            /** Title */
+            title: string;
+            /** Document Type */
+            document_type: string;
+            /** Status */
+            status: string;
+            /** Priority */
+            priority: string;
+            /** Submitted By */
+            submitted_by: string;
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
+            /** Due Date */
+            due_date?: string | null;
+            /** Review Notes */
+            review_notes?: string | null;
+            /** Final Decision */
+            final_decision?: string | null;
+            /** Decided By */
+            decided_by?: string | null;
+            /** Decided At */
+            decided_at?: string | null;
+            /** Rationale */
+            rationale?: string | null;
+            /** Actor Capacity */
+            actor_capacity?: string | null;
+            /** Revision Count */
+            revision_count: number;
+            /** Current Round */
+            current_round: number;
+            /** Routing Basis */
+            routing_basis?: string | null;
+            /** Classification Confidence */
+            classification_confidence?: number | null;
+            /** Classification Layer */
+            classification_layer?: number | null;
+            /** Classification Model */
+            classification_model?: string | null;
+            /** Metadata Json */
+            metadata_json?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Assignments
+             * @default []
+             */
+            assignments: unknown[];
+            /** Checklist */
+            checklist?: unknown;
+            /**
+             * Events
+             * @default []
+             */
+            events: unknown[];
+        };
+        /**
+         * ReviewFinalizeResultOut
+         * @description POST /document-reviews/{id}/finalize — force-decide result.
+         */
+        ReviewFinalizeResultOut: {
+            /** Review Id */
+            review_id: string;
+            /** Status */
+            status: string;
+            /** Final Decision */
+            final_decision: string;
+        };
+        /**
+         * ReviewPendingOut
+         * @description GET /document-reviews/pending — pending reviews for current actor.
+         */
+        ReviewPendingOut: {
+            /** Count */
+            count: number;
+            /** Reviews */
+            reviews: components["schemas"]["DocumentReviewOut"][];
+        };
+        /**
+         * ReviewResubmitResultOut
+         * @description POST /document-reviews/{id}/resubmit — resubmit result.
+         */
+        ReviewResubmitResultOut: {
+            /** Review Id */
+            review_id: string;
+            /** Status */
+            status: string;
+            /** Current Round */
+            current_round: number;
         };
         /** ReviewSubmit */
         ReviewSubmit: {
@@ -8995,6 +9213,113 @@ export interface components {
             due_date?: string | null;
             /** Review Notes */
             review_notes?: string | null;
+        };
+        /**
+         * ReviewSubmitOut
+         * @description POST /document-reviews — submit result + suggested reviewer roles.
+         */
+        ReviewSubmitOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Fund Id
+             * Format: uuid
+             */
+            fund_id: string;
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Document Version Id */
+            document_version_id?: string | null;
+            /** Deal Id */
+            deal_id?: string | null;
+            /** Asset Id */
+            asset_id?: string | null;
+            /** Title */
+            title: string;
+            /** Document Type */
+            document_type: string;
+            /** Status */
+            status: string;
+            /** Priority */
+            priority: string;
+            /** Submitted By */
+            submitted_by: string;
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
+            /** Due Date */
+            due_date?: string | null;
+            /** Review Notes */
+            review_notes?: string | null;
+            /** Final Decision */
+            final_decision?: string | null;
+            /** Decided By */
+            decided_by?: string | null;
+            /** Decided At */
+            decided_at?: string | null;
+            /** Rationale */
+            rationale?: string | null;
+            /** Actor Capacity */
+            actor_capacity?: string | null;
+            /** Revision Count */
+            revision_count: number;
+            /** Current Round */
+            current_round: number;
+            /** Routing Basis */
+            routing_basis?: string | null;
+            /** Classification Confidence */
+            classification_confidence?: number | null;
+            /** Classification Layer */
+            classification_layer?: number | null;
+            /** Classification Model */
+            classification_model?: string | null;
+            /** Metadata Json */
+            metadata_json?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /**
+             * Suggested Reviewer Roles
+             * @default []
+             */
+            suggested_reviewer_roles: string[];
+        };
+        /**
+         * ReviewSummaryOut
+         * @description GET /document-reviews/summary — dashboard counts by status.
+         */
+        ReviewSummaryOut: {
+            /** Total */
+            total: number;
+            /** Submitted */
+            submitted: number;
+            /** Under Review */
+            under_review: number;
+            /** Approved */
+            approved: number;
+            /** Rejected */
+            rejected: number;
+            /** Revision Requested */
+            revision_requested: number;
+            /** Cancelled */
+            cancelled: number;
         };
         /** RiskFlagCoverageDelta */
         RiskFlagCoverageDelta: {
@@ -14669,9 +14994,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ReviewSubmitOut"];
                 };
             };
             /** @description Validation Error */
@@ -14702,9 +15025,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ReviewPendingOut"];
                 };
             };
             /** @description Validation Error */
@@ -14735,9 +15056,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ReviewSummaryOut"];
                 };
             };
             /** @description Validation Error */
@@ -14769,9 +15088,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ReviewDetailOut"];
                 };
             };
             /** @description Validation Error */
@@ -14807,9 +15124,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ReviewAssignResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -14845,9 +15160,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ReviewDecisionResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -14883,9 +15196,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ReviewFinalizeResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -14920,9 +15231,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ReviewResubmitResultOut"];
                 };
             };
             /** @description Validation Error */
@@ -14954,9 +15263,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ReviewAiAnalyzeOut"];
                 };
             };
             /** @description Validation Error */
@@ -14988,9 +15295,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ReviewChecklistOut"];
                 };
             };
             /** @description Validation Error */
@@ -15027,9 +15332,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ReviewChecklistItemOut"];
                 };
             };
             /** @description Validation Error */
@@ -15062,9 +15365,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["ReviewChecklistItemOut"];
                 };
             };
             /** @description Validation Error */
