@@ -285,6 +285,7 @@ class PromptService:
         org_id: UUID | None,
         content: str,
         actor_id: str,
+        change_summary: str | None = None,
     ) -> dict:
         """Write prompt override, bump version, write history row."""
         # Pre-save validation
@@ -325,6 +326,7 @@ class PromptService:
                     version=new_version,
                     content=content,
                     updated_by=actor_id,
+                    change_summary=change_summary,
                 )
             )
         else:
@@ -342,6 +344,7 @@ class PromptService:
                     version=new_version,
                     content=content,
                     updated_by=actor_id,
+                    change_summary=change_summary,
                 )
             ]
             self._db.add(override)
@@ -524,9 +527,12 @@ class PromptService:
         return {
             "versions": [
                 {
+                    "id": v.id,
                     "version": v.version,
                     "content": v.content,
                     "updated_by": v.updated_by,
+                    "actor_id": v.updated_by,
+                    "change_summary": v.change_summary,
                     "created_at": v.created_at.isoformat() if v.created_at else None,
                 }
                 for v in versions

@@ -15,6 +15,7 @@ from app.core.prompts.schemas import (
     PromptPreviewResponse,
     PromptValidateResponse,
 )
+from app.domains.admin.schemas import PromptVersionsResponse
 from app.core.security.admin_auth import require_super_admin
 from app.core.security.clerk_auth import Actor
 from app.core.tenancy.admin_middleware import get_db_admin
@@ -62,8 +63,9 @@ async def update_prompt(
 ):
     """Update prompt override (auto-version, history)."""
     content = body.get("content", "")
+    change_summary = body.get("change_summary")
     svc = PromptService(db)
-    return await svc.put(vertical, name, org_id, content, actor.actor_id)
+    return await svc.put(vertical, name, org_id, content, actor.actor_id, change_summary=change_summary)
 
 
 @router.delete("/{vertical}/{name}")
@@ -105,7 +107,7 @@ async def validate_prompt(
     return {"valid": len(errors) == 0, "errors": errors}
 
 
-@router.get("/{vertical}/{name}/versions")
+@router.get("/{vertical}/{name}/versions", response_model=PromptVersionsResponse)
 async def get_versions(
     vertical: str,
     name: str,
