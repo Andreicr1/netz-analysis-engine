@@ -78,6 +78,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/jobs/{job_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Job Status
+         * @description Poll terminal job state from Redis — fallback when SSE connection drops.
+         *
+         *     Returns the persisted terminal state (success/degraded/failed) with
+         *     chunk counts, or 404 if the job hasn't reached a terminal state yet.
+         *     Clients should poll this when SSE disconnects before receiving a
+         *     terminal event (done/error/ingestion_complete).
+         */
+        get: operations["get_job_status_api_v1_jobs__job_id__status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/test/sse/{job_id}/emit": {
         parameters: {
             query?: never;
@@ -615,8 +640,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Fund scoring within block
-         * @description Returns funds ranked by manager score within an allocation block.
+         * [DEPRECATED] Fund scoring within block
+         * @deprecated
+         * @description DEPRECATED — use /instruments endpoints instead. Returns funds ranked by manager score within an allocation block.
          */
         get: operations["get_fund_scoring_api_v1_funds_scoring_get"];
         put?: never;
@@ -635,8 +661,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List fund universe
-         * @description Returns funds with optional filters by block, geography, asset class.
+         * [DEPRECATED] List fund universe
+         * @deprecated
+         * @description DEPRECATED — use GET /instruments instead. Returns funds with optional filters by block, geography, asset class.
          */
         get: operations["list_funds_api_v1_funds_get"];
         put?: never;
@@ -655,8 +682,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Fund detail
-         * @description Returns full metadata for a single fund.
+         * [DEPRECATED] Fund detail
+         * @deprecated
+         * @description DEPRECATED — use GET /instruments/{instrument_id} instead. Returns full metadata for a single fund.
          */
         get: operations["get_fund_api_v1_funds__fund_id__get"];
         put?: never;
@@ -675,8 +703,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Fund risk metrics
-         * @description Returns the latest risk metrics (CVaR, VaR, returns, ratios) for a fund.
+         * [DEPRECATED] Fund risk metrics
+         * @deprecated
+         * @description DEPRECATED — use /instruments endpoints instead. Returns the latest risk metrics (CVaR, VaR, returns, ratios) for a fund.
          */
         get: operations["get_fund_risk_api_v1_funds__fund_id__risk_get"];
         put?: never;
@@ -695,8 +724,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Fund NAV time-series
-         * @description Returns NAV history for a fund within a date range.
+         * [DEPRECATED] Fund NAV time-series
+         * @deprecated
+         * @description DEPRECATED — use /instruments endpoints instead. Returns NAV history for a fund within a date range.
          */
         get: operations["get_fund_nav_api_v1_funds__fund_id__nav_get"];
         put?: never;
@@ -2140,6 +2170,26 @@ export interface paths {
         };
         /** List persisted drift alerts */
         get: operations["list_drift_alerts_api_v1_analytics_strategy_drift_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analytics/strategy-drift/{instrument_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Drift history for an instrument
+         * @description Returns historical drift alerts for a single instrument, ordered by detected_at descending. Supports date range and severity filtering.
+         */
+        get: operations["get_drift_history_api_v1_analytics_strategy_drift__instrument_id__history_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -6326,6 +6376,65 @@ export interface components {
             /** Knowledgeanchors */
             knowledgeAnchors: number;
         };
+        /**
+         * DriftEventOut
+         * @description Single drift event from strategy_drift_alerts history.
+         */
+        DriftEventOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Instrument Id
+             * Format: uuid
+             */
+            instrument_id: string;
+            /** Status */
+            status: string;
+            /** Severity */
+            severity: string;
+            /** Anomalous Count */
+            anomalous_count: number;
+            /** Total Metrics */
+            total_metrics: number;
+            /** Metric Details */
+            metric_details?: {
+                [key: string]: unknown;
+            }[] | null;
+            /**
+             * Is Current
+             * @default false
+             */
+            is_current: boolean;
+            /**
+             * Detected At
+             * Format: date-time
+             */
+            detected_at: string;
+            /** Created At */
+            created_at?: string | null;
+        };
+        /**
+         * DriftHistoryOut
+         * @description Drift history for a single instrument (mapped from 'profile' concept).
+         */
+        DriftHistoryOut: {
+            /**
+             * Instrument Id
+             * Format: uuid
+             */
+            instrument_id: string;
+            /** Instrument Name */
+            instrument_name: string;
+            /** Events */
+            events: components["schemas"]["DriftEventOut"][];
+            /** Total */
+            total: number;
+            /** Computed At */
+            computed_at?: string | null;
+        };
         /** EffectiveAllocationRead */
         EffectiveAllocationRead: {
             /** Profile */
@@ -6670,6 +6779,21 @@ export interface components {
             decision: string;
             /** Comments */
             comments?: string | null;
+            /**
+             * Rationale
+             * @description Justification for the decision (min 20 chars)
+             */
+            rationale: string;
+            /**
+             * Actor Capacity
+             * @description gp | admin_override
+             */
+            actor_capacity: string;
+            /**
+             * Actor Email
+             * Format: email
+             */
+            actor_email: string;
         };
         /** FundFreshness */
         FundFreshness: {
@@ -8257,6 +8381,42 @@ export interface components {
             /** Errors */
             errors: string[];
         };
+        /**
+         * PromptVersionOut
+         * @description Single version entry from prompt override history.
+         */
+        PromptVersionOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Version */
+            version: number;
+            /** Content */
+            content: string;
+            /** Updated By */
+            updated_by: string;
+            /** Actor Id */
+            actor_id?: string | null;
+            /** Change Summary */
+            change_summary?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /**
+         * PromptVersionsResponse
+         * @description Paginated response for prompt version history.
+         */
+        PromptVersionsResponse: {
+            /** Versions */
+            versions: components["schemas"]["PromptVersionOut"][];
+            /** Has More */
+            has_more: boolean;
+        };
         /** QualificationResultOut */
         QualificationResultOut: {
             /**
@@ -8560,6 +8720,21 @@ export interface components {
             decision: string;
             /** Comments */
             comments?: string | null;
+            /**
+             * Rationale
+             * @description Justification for the decision (min 20 chars)
+             */
+            rationale: string;
+            /**
+             * Actor Capacity
+             * @description reviewer | lead_reviewer | gp_override
+             */
+            actor_capacity: string;
+            /**
+             * Actor Email
+             * Format: email
+             */
+            actor_email: string;
         };
         /** ReviewSubmit */
         ReviewSubmit: {
@@ -9581,6 +9756,37 @@ export interface operations {
             };
         };
     };
+    get_job_status_api_v1_jobs__job_id__status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     test_emit_event_api_v1_test_sse__job_id__emit_post: {
         parameters: {
             query?: {
@@ -10415,7 +10621,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["PromptVersionsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -13117,6 +13323,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StrategyDriftRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_drift_history_api_v1_analytics_strategy_drift__instrument_id__history_get: {
+        parameters: {
+            query?: {
+                /** @description Start date filter (inclusive) */
+                from_date?: string | null;
+                /** @description End date filter (inclusive) */
+                to_date?: string | null;
+                severity?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                instrument_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DriftHistoryOut"];
                 };
             };
             /** @description Validation Error */
