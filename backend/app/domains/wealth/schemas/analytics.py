@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class BacktestParams(BaseModel):
@@ -24,6 +24,28 @@ class BacktestRequest(BaseModel):
     params: BacktestParams = Field(default_factory=BacktestParams)
 
 
+class BacktestFoldMetrics(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    fold: int
+    train_start: date | None = None
+    train_end: date | None = None
+    test_start: date | None = None
+    test_end: date | None = None
+    sharpe: float | None = None
+    cvar_95: float | None = None
+    max_drawdown: float | None = None
+    n_obs: int = 0
+
+
+class BacktestResultDetail(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    folds: list[BacktestFoldMetrics] = []
+    mean_sharpe: float | None = None
+    std_sharpe: float | None = None
+    positive_folds: int = 0
+    n_splits_computed: int = 0
+
+
 class BacktestRunRead(BaseModel):
     model_config = ConfigDict(from_attributes=True, extra="ignore")
 
@@ -31,11 +53,17 @@ class BacktestRunRead(BaseModel):
     profile: str
     params: dict[str, Any]
     status: str
-    results: dict[str, Any] | None = None
+    results: BacktestResultDetail | None = None
     cv_metrics: dict[str, Any] | None = None
     error_message: str | None = None
     started_at: datetime
     completed_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def coerce_results(self) -> "BacktestRunRead":
+        if self.results and isinstance(self.results, dict):
+            self.results = BacktestResultDetail(**self.results)
+        return self
 
 
 class OptimizeRequest(BaseModel):

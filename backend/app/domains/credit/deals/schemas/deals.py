@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator, model_validator
 
 from app.domains.credit.deals.enums import DealStage, DealType, RejectionCode
 
@@ -79,6 +79,23 @@ class DealOut(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class CommitteeMemberOut(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    email: str
+    name: str | None = None
+    role: str | None = None  # "ic_member", "observer", "chair"
+
+
+class CommitteeVoteOut(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    email: str
+    vote: str  # "APPROVED", "REJECTED", "ABSTAINED", "PENDING"
+    signed_at: datetime | None = None
+    signer_status: str | None = None  # "signed", "pending", "declined"
+    actor_capacity: str | None = None
+    rationale: str | None = None
+
+
 class ICMemoOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -95,12 +112,20 @@ class ICMemoOut(BaseModel):
     memo_blob_url: str | None
     condition_history: list[dict[str, Any]]
 
-    committee_members: list[dict[str, Any]] | None = None
-    committee_votes: list[dict[str, Any]] | None = None
+    committee_members: list[CommitteeMemberOut] | None = None
+    committee_votes: list[CommitteeVoteOut] | None = None
     esignature_status: str | None = None
 
     created_at: datetime
     updated_at: datetime
+
+    @model_validator(mode="after")
+    def coerce_committee_fields(self) -> "ICMemoOut":
+        if self.committee_votes and isinstance(self.committee_votes[0], dict):
+            self.committee_votes = [CommitteeVoteOut(**v) for v in self.committee_votes]
+        if self.committee_members and isinstance(self.committee_members[0], dict):
+            self.committee_members = [CommitteeMemberOut(**m) for m in self.committee_members]
+        return self
 
 
 class ConditionResolvePayload(BaseModel):

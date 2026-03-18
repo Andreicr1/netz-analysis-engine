@@ -67,11 +67,18 @@ class DocumentReviewOut(BaseModel):
 
     routing_basis: str | None = None
     classification_confidence: float | None = None
+    classification_layer: int | None = None
+    classification_model: str | None = None
 
     metadata_json: dict[str, Any] | None = None
 
     created_at: datetime
     updated_at: datetime
+
+
+class DocumentReviewListOut(BaseModel):
+    total: int
+    reviews: list[DocumentReviewOut]
 
 
 # ---------------------------------------------------------------------------

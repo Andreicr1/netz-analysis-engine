@@ -98,6 +98,10 @@ class DocumentReview(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, Au
         comment="Why this was routed to specific reviewers (AI classification, manual, etc.)",
     )
     classification_confidence: Mapped[float | None] = mapped_column(nullable=True)
+    classification_layer: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 1=rules, 2=embeddings, 3=llm
+    classification_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # e.g. "rules", "embedding-v2", "gpt-4.1-mini"
 
     metadata_json: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
 

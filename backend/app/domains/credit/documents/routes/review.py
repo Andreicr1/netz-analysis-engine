@@ -26,6 +26,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.audit import write_audit_event
+from app.domains.credit.documents.schemas import DocumentReviewListOut, DocumentReviewOut
 from app.core.security.clerk_auth import Actor, get_actor, require_fund_access, require_role
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.credit.documents.models.review import (
@@ -205,7 +206,7 @@ async def submit_for_review(
 
 # -- List & Detail -----------------------------------------------------------
 
-@router.get("")
+@router.get("", response_model=DocumentReviewListOut)
 async def list_reviews(
     fund_id: uuid.UUID,
     status: str | None = None,
@@ -232,7 +233,7 @@ async def list_reviews(
     )
     rows = list(result.scalars().all())
 
-    return {"total": total, "reviews": [_review_to_dict(r) for r in rows]}
+    return {"total": total, "reviews": [DocumentReviewOut.model_validate(r) for r in rows]}
 
 
 @router.get("/pending")
@@ -897,5 +898,8 @@ def _review_to_dict(r: DocumentReview) -> dict[str, Any]:
         "revisionCount": r.revision_count,
         "currentRound": r.current_round,
         "routingBasis": r.routing_basis,
+        "classificationConfidence": r.classification_confidence,
+        "classificationLayer": r.classification_layer,
+        "classificationModel": r.classification_model,
         "createdAt": r.created_at.isoformat() if r.created_at else None,
     }
