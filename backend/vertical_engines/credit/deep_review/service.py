@@ -486,6 +486,24 @@ def run_deal_deep_review_v4(
             exc_info=True,
         )
 
+    # ── Circuit breaker: abort if too many engines degraded (HC-6) ──
+    _sync_degraded = []
+    if not edgar_context.strip():
+        _sync_degraded.append("edgar")
+    if not kyc_results:
+        _sync_degraded.append("kyc")
+    if len(_sync_degraded) >= 2:
+        logger.error(
+            "deep_review.v4.circuit_breaker.tripped",
+            deal_id=str(deal_id),
+            degraded_stages=_sync_degraded,
+        )
+        return {
+            "error": "Too many engines degraded — memo quality insufficient",
+            "dealId": str(deal_id),
+            "degraded_stages": _sync_degraded,
+        }
+
     # ── Stage 10: Build & freeze EvidencePack (≤ 5 000 tokens) ───
     evidence_pack = build_evidence_pack(
         analysis=analysis,
@@ -1615,6 +1633,22 @@ async def async_run_deal_deep_review_v4(
                 error=type(exc).__name__,
             )
             raise exc
+
+    # ── Circuit breaker: abort if too many engines degraded (HC-6) ──
+    _DEGRADABLE_STAGES = frozenset({"edgar", "kyc"})
+    n_degraded = len(outcome.errors.keys() & _DEGRADABLE_STAGES)
+    if n_degraded >= 2:
+        logger.error(
+            "deep_review.v4.circuit_breaker.tripped",
+            deal_id=str(deal_id),
+            degraded_stages=sorted(outcome.errors.keys() & _DEGRADABLE_STAGES),
+            n_degraded=n_degraded,
+        )
+        return {
+            "error": "Too many engines degraded — memo quality insufficient",
+            "dealId": str(deal_id),
+            "degraded_stages": sorted(outcome.errors.keys() & _DEGRADABLE_STAGES),
+        }
 
     # ── Unpack named results ──────────────────────────────────────
     edgar_context: str = outcome.edgar if outcome.edgar is not None else ""

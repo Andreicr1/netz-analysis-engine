@@ -38,6 +38,23 @@ def _validate_vertical(vertical: str) -> None:
 # ── Bronze layer (raw ingested data) ───────────────────────────────
 
 
+def bronze_upload_blob_path(
+    org_id: UUID,
+    fund_id: UUID,
+    version_id: UUID,
+    filename: str,
+) -> str:
+    """``bronze/{org_id}/{fund_id}/documents/{version_id}/{filename}``
+
+    Stores the raw uploaded file blob (pre-OCR).  The fund_id acts as
+    a namespace within the org, and version_id isolates revisions.
+    """
+    _validate_segment(str(fund_id), "fund_id")
+    _validate_segment(str(version_id), "version_id")
+    _validate_segment(filename, "filename")
+    return f"bronze/{org_id}/{fund_id}/documents/{version_id}/{filename}"
+
+
 def bronze_document_path(org_id: UUID, vertical: str, doc_id: str) -> str:
     """``bronze/{org_id}/{vertical}/documents/{doc_id}.json``
 

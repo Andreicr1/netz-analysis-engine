@@ -4,15 +4,24 @@ Scores funds using externalized weights. Each fund gets a composite
 manager_score (0-100) based on risk-adjusted metrics.
 
 Config is injected as parameter by callers via ConfigService.get("liquid_funds", "scoring").
-
-Note: imports FundRiskMetrics from app.domains.wealth — wealth-vertical-specific dependency.
 """
+
+from __future__ import annotations
+
+from typing import Protocol
 
 import structlog
 
-from app.domains.wealth.models.risk import FundRiskMetrics
-
 logger = structlog.get_logger()
+
+
+class RiskMetrics(Protocol):
+    """Protocol for risk metrics — satisfied by FundRiskMetrics ORM model."""
+
+    return_1y: float | None
+    sharpe_1y: float | None
+    max_drawdown_1y: float | None
+    information_ratio_1y: float | None
 
 
 # Hardcoded fallback — used only if config parameter is not provided.
@@ -54,7 +63,7 @@ def _normalize(value: float | None, min_val: float, max_val: float) -> float:
 
 
 def compute_fund_score(
-    metrics: FundRiskMetrics,
+    metrics: RiskMetrics,
     lipper_score: float = 50.0,
     flows_momentum_score: float = 50.0,
     config: dict | None = None,

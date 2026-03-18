@@ -218,3 +218,71 @@ f-string ADLS path in `upload_url.py` bypasses `storage_routing.py`. Violates CL
 3. **MEDIUM** — M-3: Add import-linter vertical-isolation contracts for remaining 14 quant services
 4. **MEDIUM** — HC-3: Add boot-time assertion for DB config presence
 5. **LOW** — Fix system map numerical inaccuracies (C-1 through C-10)
+
+---
+
+## 7. Remediation Log
+
+All findings from sections 3, 5, and 6 were remediated on **2026-03-18**.
+
+### HC-1: Worker Tenant Context Bypass (CRITICAL) — FIXED
+
+Added `set_rls_context()` reusable helper to `core/tenancy/middleware.py`. 5 wealth workers now receive `org_id` and call `SET LOCAL` at session start and after each `commit()` (SET LOCAL is transaction-scoped). Router `routes/workers.py` passes `user.organization_id` to ingestion, risk_calc, and portfolio_eval. `macro_ingestion` unchanged — only touches global tables.
+
+**Files changed:** `core/tenancy/middleware.py`, `workers/risk_calc.py`, `workers/ingestion.py`, `workers/portfolio_eval.py`, `workers/screening_batch.py`, `workers/watchlist_batch.py`, `routes/workers.py`
+
+### HC-2: Upload URL Path Bypasses storage_routing.py (HIGH) — FIXED
+
+Added `bronze_upload_blob_path()` to `ai_engine/pipeline/storage_routing.py` with `_validate_segment()` checks on fund_id, version_id, and filename. `upload_url.py` now calls this helper instead of constructing paths via f-string.
+
+**Files changed:** `ai_engine/pipeline/storage_routing.py`, `app/domains/credit/documents/routes/upload_url.py`
+
+### HC-3: Config YAML Fallback Masks DB Seed Failure (MEDIUM) — FIXED
+
+`_verify_config_completeness()` in `app/main.py` now raises `RuntimeError` in production if any config defaults are missing from DB. Expected pairs synced with `_YAML_FALLBACK_MAP` (7 → 10 keys). Dev mode continues with warning.
+
+**Files changed:** `app/main.py`
+
+### HC-5: Lazy Semaphore Race Condition (LOW) — FIXED
+
+`_get_llm_semaphore()` in `vertical_engines/credit/memo/tone.py` converted to `async def` with double-checked locking via `asyncio.Lock`. Race-free under any async runtime.
+
+**Files changed:** `vertical_engines/credit/memo/tone.py`
+
+### HC-6: Deep Review Cascading Degradation (LOW) — FIXED
+
+Circuit breaker added to both sync and async pipelines in `deep_review/service.py`. Returns structured error dict when ≥2 degradable engines (EDGAR, KYC) fail simultaneously, preventing low-quality memo generation.
+
+**Files changed:** `vertical_engines/credit/deep_review/service.py`
+
+### M-3: Import-Linter Coverage Gap (MEDIUM) — FIXED
+
+Coverage expanded from **3/16 → 16/16** quant services enforced by vertical-isolation contracts.
+
+**Phase 1:** Added 6 already-clean services (`attribution`, `fred`, `portfolio_metrics`, `regional_macro`, `stress_severity`, `talib_momentum`) to the existing forbidden contract.
+
+**Phase 2:** Extracted DB query functions from 7 remaining services into `app/domains/wealth/services/quant_queries.py`. Pure computation stays in `quant_engine/`; DB access lives in the wealth domain layer. `scoring_service.py` replaced ORM import with `typing.Protocol`.
+
+**Files changed:** `pyproject.toml`, `app/domains/wealth/services/quant_queries.py` (new), `quant_engine/scoring_service.py`, `quant_engine/backtest_service.py`, `quant_engine/optimizer_service.py`, `quant_engine/drift_service.py`, `quant_engine/peer_comparison_service.py`, `quant_engine/rebalance_service.py`, `quant_engine/lipper_service.py`, `app/domains/wealth/routes/analytics.py`, `app/domains/wealth/workers/drift_check.py`, `vertical_engines/wealth/quant_analyzer.py`
+
+### SR-5: Fred Ingestion Dead Code (LOW) — FIXED
+
+`app/domains/wealth/workers/fred_ingestion.py` deleted. Zero imports confirmed — fully disconnected since `macro_ingestion.py` superseded it. Test allowlist references removed from `tests/test_global_table_isolation.py`.
+
+**Files changed:** `app/domains/wealth/workers/fred_ingestion.py` (deleted), `tests/test_global_table_isolation.py`
+
+### Remaining Open Findings
+
+| # | Finding | Severity | Status |
+|---|---------|----------|--------|
+| HC-4 | SSE publish failures silently swallowed | Medium | Open |
+| M-4 | SSE failure recovery — no frontend fallback | Medium | Open |
+| M-6 | Worker idempotency — no DLQ or retry queue | Medium | Open |
+| SR-1 | In-process worker model — no isolation | Medium | Open |
+| SR-2 | Worker tenant context bypass | Critical | **Resolved** (see HC-1) |
+| SR-3 | Stale operational references (18 files) | Low | Open |
+| SR-4 | Dual model path Fund/Instrument | Low | Open |
+| SR-6 | Search index SPOF for RAG | Medium | Open |
+| SR-8 | Import-linter coverage gap | Medium | **Resolved** (see M-3) |
+| SR-9 | Upload URL path construction | High | **Resolved** (see HC-2) |
+| C-1→C-10 | System map numerical inaccuracies | Low | Open |

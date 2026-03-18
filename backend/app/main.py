@@ -109,22 +109,19 @@ logger = logging.getLogger(__name__)
 async def _verify_config_completeness() -> None:
     """Verify all expected (vertical, config_type) pairs exist in vertical_config_defaults.
 
-    Logs ERROR for any missing pairs — indicates migration 0004 failure.
+    Raises RuntimeError in production if any are missing — prevents silent
+    YAML fallback masking a failed migration (HC-3).
+    In development, logs ERROR but allows startup without full DB seed.
     """
     from sqlalchemy import select
 
+    from app.core.config.config_service import _YAML_FALLBACK_MAP
     from app.core.config.models import VerticalConfigDefault
     from app.core.db.engine import async_session_factory
 
-    expected_pairs = {
-        ("liquid_funds", "calibration"),
-        ("liquid_funds", "portfolio_profiles"),
-        ("liquid_funds", "scoring"),
-        ("liquid_funds", "blocks"),
-        ("private_credit", "chapters"),
-        ("private_credit", "calibration"),
-        ("private_credit", "scoring"),
-    }
+    # Expected pairs are exactly the keys in _YAML_FALLBACK_MAP —
+    # these are the configs that would silently degrade to YAML if missing.
+    expected_pairs = set(_YAML_FALLBACK_MAP.keys())
 
     try:
         async with async_session_factory() as session:
@@ -140,13 +137,28 @@ async def _verify_config_completeness() -> None:
         if missing:
             for vertical, config_type in sorted(missing):
                 logger.error(
-                    "Missing config default — check migration 0004",
-                    vertical=vertical,
-                    config_type=config_type,
+                    "Missing config default — check migration 0004: (%s, %s)",
+                    vertical,
+                    config_type,
                 )
+            if not settings.is_development:
+                raise RuntimeError(
+                    f"Boot-time config check failed: {len(missing)} config defaults "
+                    f"missing from DB. Run 'alembic upgrade head' to seed defaults. "
+                    f"Missing: {sorted(missing)}"
+                )
+            logger.warning(
+                "Config defaults missing — continuing in dev mode (YAML fallback active)"
+            )
         else:
             logger.info("Config health check OK — all %d defaults present", len(expected_pairs))
+    except RuntimeError:
+        raise  # re-raise our own RuntimeError
     except Exception as e:
+        if not settings.is_development:
+            raise RuntimeError(
+                f"Boot-time config check failed — DB may not be migrated: {e}"
+            ) from e
         logger.error("Config health check failed — DB may not be migrated: %s", e)
 
 

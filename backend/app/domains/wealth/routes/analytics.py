@@ -21,12 +21,12 @@ from app.domains.wealth.schemas.analytics import (
     OptimizeResult,
     ParetoOptimizeResult,
 )
+from app.domains.wealth.services.quant_queries import compute_inputs_from_nav, fetch_returns_matrix
 from app.routers.common import validate_profile as _validate_profile
-from quant_engine.backtest_service import fetch_returns_matrix, walk_forward_backtest
+from quant_engine.backtest_service import walk_forward_backtest
 from quant_engine.optimizer_service import (
     BlockConstraint,
     ProfileConstraints,
-    compute_inputs_from_nav,
     optimize_portfolio,
     optimize_portfolio_pareto,
 )

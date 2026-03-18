@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai_engine.pipeline.storage_routing import bronze_upload_blob_path
 from app.core.db.audit import write_audit_event
 from app.core.jobs.tracker import publish_event
 from app.core.security.clerk_auth import Actor, get_actor, require_role
@@ -107,7 +108,12 @@ async def generate_upload_url(
         raise HTTPException(status_code=400, detail="Invalid filename")
 
     # Generate SAS upload URL
-    blob_path = f"bronze/{actor.organization_id}/{payload.fund_id}/documents/{res.version.id}/{safe_filename}"
+    blob_path = bronze_upload_blob_path(
+        org_id=actor.organization_id,
+        fund_id=payload.fund_id,
+        version_id=res.version.id,
+        filename=safe_filename,
+    )
     upload_url = await storage.generate_upload_url(blob_path)
 
     # Store blob_path on version for later retrieval

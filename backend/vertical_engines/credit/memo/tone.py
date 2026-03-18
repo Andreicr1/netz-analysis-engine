@@ -43,13 +43,24 @@ from ai_engine.prompts import prompt_registry
 logger = structlog.get_logger()
 
 _LLM_SEMAPHORE: asyncio.Semaphore | None = None
+_LLM_SEMAPHORE_INIT_LOCK: asyncio.Lock | None = None
 
 
-def _get_llm_semaphore() -> asyncio.Semaphore:
-    """Lazy semaphore creation — must not be created at module scope."""
-    global _LLM_SEMAPHORE
-    if _LLM_SEMAPHORE is None:
-        _LLM_SEMAPHORE = asyncio.Semaphore(4)
+async def _get_llm_semaphore() -> asyncio.Semaphore:
+    """Lazy semaphore creation — must not be created at module scope.
+
+    Uses an asyncio.Lock to prevent race conditions during initialization.
+    The lock itself is lazily created, but its creation is atomic under the GIL
+    and only guards the one-time semaphore construction.
+    """
+    global _LLM_SEMAPHORE, _LLM_SEMAPHORE_INIT_LOCK
+    if _LLM_SEMAPHORE is not None:
+        return _LLM_SEMAPHORE
+    if _LLM_SEMAPHORE_INIT_LOCK is None:
+        _LLM_SEMAPHORE_INIT_LOCK = asyncio.Lock()
+    async with _LLM_SEMAPHORE_INIT_LOCK:
+        if _LLM_SEMAPHORE is None:
+            _LLM_SEMAPHORE = asyncio.Semaphore(4)
     return _LLM_SEMAPHORE
 
 
@@ -99,7 +110,7 @@ async def _pass1_async(chapters: dict[str, str]) -> tuple[dict[str, str], dict[s
     """Passe 1: all chapters in parallel via asyncio.to_thread (max 4 concurrent)."""
 
     async def _guarded(ch_tag: str, text: str) -> tuple[str, int]:
-        async with _get_llm_semaphore():
+        async with await _get_llm_semaphore():
             return await asyncio.to_thread(_run_pass1_chapter, ch_tag, text)
 
     tasks = {

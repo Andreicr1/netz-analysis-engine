@@ -8,7 +8,6 @@ Config is injected as parameter by callers via ConfigService.get("liquid_funds",
 Drift = actual_weight - (strategic_target + tactical_overweight)
 Intentional tactical bets are NOT flagged as drift.
 
-Note: imports StrategicAllocation, TacticalPosition, PortfolioSnapshot from app.domains.wealth — wealth-vertical-specific dependency.
 """
 
 from dataclasses import dataclass
@@ -17,11 +16,6 @@ from enum import Enum
 
 import numpy as np
 import structlog
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.domains.wealth.models.allocation import StrategicAllocation, TacticalPosition
-from app.domains.wealth.models.portfolio import PortfolioSnapshot
 
 logger = structlog.get_logger()
 
@@ -164,121 +158,6 @@ def compute_block_drifts(
         ))
 
     return drifts
-
-
-async def compute_drift(
-    db: AsyncSession,
-    profile: str,
-    as_of_date: date | None = None,
-    min_trade_threshold: float = 0.005,
-    config: dict | None = None,
-) -> DriftReport:
-    """Compute drift for all blocks in a profile.
-
-    Args:
-        config: Raw calibration config dict from ConfigService.
-    """
-    if as_of_date is None:
-        as_of_date = date.today()
-
-    maintenance_trigger, urgent_trigger = resolve_drift_thresholds(config)
-
-    # 1. Get latest snapshot weights
-    snap_stmt = (
-        select(PortfolioSnapshot)
-        .where(PortfolioSnapshot.profile == profile)
-        .order_by(PortfolioSnapshot.snapshot_date.desc())
-        .limit(1)
-    )
-    snap_result = await db.execute(snap_stmt)
-    snapshot = snap_result.scalar_one_or_none()
-
-    if snapshot is None or not snapshot.weights:
-        return DriftReport(
-            profile=profile,
-            as_of_date=as_of_date,
-            blocks=[],
-            max_drift_pct=0.0,
-            overall_status="ok",
-            rebalance_recommended=False,
-            estimated_turnover=0.0,
-            maintenance_trigger=maintenance_trigger,
-            urgent_trigger=urgent_trigger,
-        )
-
-    current_weights: dict[str, float] = {
-        k: float(v) for k, v in snapshot.weights.items()
-    }
-
-    # 2. Get current strategic allocation
-    alloc_stmt = (
-        select(StrategicAllocation)
-        .where(
-            StrategicAllocation.profile == profile,
-            StrategicAllocation.effective_from <= as_of_date,
-        )
-        .where(
-            (StrategicAllocation.effective_to.is_(None))
-            | (StrategicAllocation.effective_to >= as_of_date)
-        )
-    )
-    alloc_result = await db.execute(alloc_stmt)
-    strategic = {a.block_id: float(a.target_weight) for a in alloc_result.scalars().all()}
-
-    # 3. Get current tactical positions
-    tact_stmt = (
-        select(TacticalPosition)
-        .where(
-            TacticalPosition.profile == profile,
-            TacticalPosition.valid_from <= as_of_date,
-        )
-        .where(
-            (TacticalPosition.valid_to.is_(None))
-            | (TacticalPosition.valid_to >= as_of_date)
-        )
-    )
-    tact_result = await db.execute(tact_stmt)
-    tactical = {t.block_id: float(t.overweight) for t in tact_result.scalars().all()}
-
-    # 4. Combined target = strategic + tactical
-    target_weights: dict[str, float] = {}
-    for block_id in set(strategic.keys()) | set(tactical.keys()):
-        target_weights[block_id] = strategic.get(block_id, 0.0) + tactical.get(block_id, 0.0)
-
-    # 5. Compute drift
-    drifts = compute_block_drifts(
-        current_weights, target_weights,
-        maintenance_trigger, urgent_trigger,
-    )
-
-    max_abs = max((abs(d.absolute_drift) for d in drifts), default=0.0)
-
-    if any(d.status == "urgent" for d in drifts):
-        overall = "urgent"
-    elif any(d.status == "maintenance" for d in drifts):
-        overall = "maintenance"
-    else:
-        overall = "ok"
-
-    meaningful_trades = [
-        abs(d.absolute_drift) for d in drifts
-        if abs(d.absolute_drift) >= min_trade_threshold
-    ]
-    turnover = sum(meaningful_trades) / 2
-
-    rebalance_recommended = overall != "ok" and turnover >= 0.01
-
-    return DriftReport(
-        profile=profile,
-        as_of_date=as_of_date,
-        blocks=[d for d in drifts if d.status != "ok"],
-        max_drift_pct=round(max_abs, 6),
-        overall_status=overall,
-        rebalance_recommended=rebalance_recommended,
-        estimated_turnover=round(turnover, 6),
-        maintenance_trigger=maintenance_trigger,
-        urgent_trigger=urgent_trigger,
-    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
