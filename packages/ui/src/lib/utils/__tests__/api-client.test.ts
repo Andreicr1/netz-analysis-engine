@@ -38,7 +38,7 @@ describe("NetzApiClient basics", () => {
 		const result = await client.get<{ id: number }>("/items");
 		expect(result).toEqual({ id: 1 });
 		expect(mockFetch).toHaveBeenCalledOnce();
-		const [url, opts] = mockFetch.mock.calls[0];
+		const [url, opts] = mockFetch.mock.calls[0]!;
 		expect(url).toContain("/items");
 		expect(opts.headers.Authorization).toBe("Bearer tok123");
 	});
@@ -47,7 +47,7 @@ describe("NetzApiClient basics", () => {
 		mockFetch.mockResolvedValueOnce(jsonResponse(201, { id: 2 }));
 		const client = createServerApiClient("http://api.test", "tok");
 		await client.post("/items", { name: "test" });
-		const [, opts] = mockFetch.mock.calls[0];
+		const [, opts] = mockFetch.mock.calls[0]!;
 		expect(opts.method).toBe("POST");
 		expect(opts.body).toBe(JSON.stringify({ name: "test" }));
 	});
@@ -171,7 +171,7 @@ describe("createClientApiClient", () => {
 		await client.get("/items");
 
 		expect(getToken).toHaveBeenCalledOnce();
-		const [, opts] = mockFetch.mock.calls[0];
+		const [, opts] = mockFetch.mock.calls[0]!;
 		expect(opts.headers.Authorization).toBe("Bearer dynamic-tok");
 	});
 });

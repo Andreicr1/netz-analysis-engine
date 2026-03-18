@@ -36,13 +36,14 @@
 	)}
 >
 	<!-- Header -->
+	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 	<div
 		class={cn(
 			"flex items-center justify-between gap-3 px-5 py-4",
 			collapsible && "cursor-pointer select-none",
 		)}
 		role={collapsible ? "button" : undefined}
-		tabindex={collapsible ? 0 : undefined}
+		tabindex={collapsible ? 0 : -1}
 		aria-expanded={collapsible ? !collapsed : undefined}
 		onclick={toggle}
 		onkeydown={(e) => {
@@ -64,7 +65,7 @@
 			{#if actions}
 				<!-- svelte-ignore a11y_interactive_supports_focus -->
 				<!-- svelte-ignore a11y_click_events_have_key_events -->
-				<div onclick={(e) => e.stopPropagation()}>
+				<div role="presentation" onclick={(e) => e.stopPropagation()}>
 					{@render actions()}
 				</div>
 			{/if}
