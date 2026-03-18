@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ast
 import asyncio
 import importlib
 import sys
@@ -231,28 +230,11 @@ def test_run_extraction_pipeline_invokes_unified_pipeline_process(monkeypatch):
     assert skip_index is True
 
 
-def test_static_import_guard_blocks_legacy_orchestrator_reachability():
+def test_legacy_orchestrator_is_deleted():
+    """extraction_orchestrator.py was removed in the legacy cleanup.
+
+    This test ensures it stays deleted — no accidental resurrection.
+    """
     repo_root = Path(__file__).resolve().parents[2]
-    production_roots = [
-        repo_root / "backend" / "app",
-        repo_root / "backend" / "ai_engine",
-    ]
-    allowed_paths = {
-        repo_root / "backend" / "ai_engine" / "extraction" / "extraction_orchestrator.py",
-    }
-    violations: list[str] = []
-
-    for root in production_roots:
-        for file_path in root.rglob("*.py"):
-            if file_path in allowed_paths:
-                continue
-            tree = ast.parse(file_path.read_text(encoding="utf-8"))
-            for node in ast.walk(tree):
-                if isinstance(node, ast.ImportFrom) and node.module == "ai_engine.extraction.extraction_orchestrator":
-                    violations.append(str(file_path.relative_to(repo_root)))
-                elif isinstance(node, ast.Import):
-                    for alias in node.names:
-                        if alias.name == "ai_engine.extraction.extraction_orchestrator":
-                            violations.append(str(file_path.relative_to(repo_root)))
-
-    assert violations == []
+    path = repo_root / "backend" / "ai_engine" / "extraction" / "extraction_orchestrator.py"
+    assert not path.exists(), "extraction_orchestrator.py must not exist — it was deleted in the legacy cleanup"

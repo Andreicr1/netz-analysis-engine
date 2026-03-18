@@ -129,9 +129,7 @@ async def test_rebuild_search_index_exposes_resolved_name(monkeypatch: pytest.Mo
 
 def test_active_backend_paths_do_not_hardcode_v4_chunks_index():
     backend_root = Path(__file__).resolve().parents[1]
-    excluded = {
-        backend_root / "ai_engine" / "extraction" / "extraction_orchestrator.py",
-    }
+    excluded: set[Path] = set()
     offenders: list[str] = []
 
     for path in backend_root.rglob("*.py"):
