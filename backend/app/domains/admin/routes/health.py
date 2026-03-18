@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from datetime import UTC, datetime
 
 import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, Request
@@ -14,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security.admin_auth import require_super_admin
 from app.core.security.clerk_auth import Actor
 from app.core.tenancy.admin_middleware import get_db_admin
+from app.domains.admin.schemas import PipelineStatsOut, ServiceHealthOut, WorkerStatusOut
 
 router = APIRouter(
     prefix="/admin/health",
@@ -22,19 +24,21 @@ router = APIRouter(
 )
 
 
-async def _check_postgres(db: AsyncSession) -> dict:
+async def _check_postgres(db: AsyncSession) -> ServiceHealthOut:
     """Check PostgreSQL connection + latency."""
+    checked_at = datetime.now(UTC)
     try:
         start = time.monotonic()
         await db.execute(text("SELECT 1"))
         latency = (time.monotonic() - start) * 1000
-        return {"name": "PostgreSQL", "status": "ok", "latency_ms": round(latency, 2), "error": None}
+        return ServiceHealthOut(name="PostgreSQL", status="ok", latency_ms=round(latency, 2), error=None, checked_at=checked_at)
     except Exception as e:
-        return {"name": "PostgreSQL", "status": "down", "latency_ms": None, "error": str(e)}
+        return ServiceHealthOut(name="PostgreSQL", status="down", latency_ms=None, error=str(e), checked_at=checked_at)
 
 
-async def _check_redis() -> dict:
+async def _check_redis() -> ServiceHealthOut:
     """Check Redis connection + latency."""
+    checked_at = datetime.now(UTC)
     try:
         from app.core.jobs.tracker import get_redis_pool
         start = time.monotonic()
@@ -43,53 +47,57 @@ async def _check_redis() -> dict:
         try:
             await r.ping()
             latency = (time.monotonic() - start) * 1000
-            return {"name": "Redis", "status": "ok", "latency_ms": round(latency, 2), "error": None}
+            return ServiceHealthOut(name="Redis", status="ok", latency_ms=round(latency, 2), error=None, checked_at=checked_at)
         finally:
             await r.aclose()
     except Exception as e:
-        return {"name": "Redis", "status": "down", "latency_ms": None, "error": str(e)}
+        return ServiceHealthOut(name="Redis", status="down", latency_ms=None, error=str(e), checked_at=checked_at)
 
 
-async def _check_adls() -> dict:
+async def _check_adls() -> ServiceHealthOut:
     """Check ADLS availability (feature-flagged)."""
+    checked_at = datetime.now(UTC)
     from app.core.config.settings import settings
     if not getattr(settings, "feature_adls_enabled", False):
-        return {"name": "ADLS", "status": "ok", "latency_ms": None, "error": "Disabled (using local storage)"}
-    return {"name": "ADLS", "status": "ok", "latency_ms": None, "error": None}
+        return ServiceHealthOut(name="ADLS", status="disabled", latency_ms=None, error="Using local storage", checked_at=checked_at)
+    return ServiceHealthOut(name="ADLS", status="ok", latency_ms=None, error=None, checked_at=checked_at)
 
 
-async def _check_search() -> dict:
+async def _check_search() -> ServiceHealthOut:
     """Check Azure Search availability."""
-    return {"name": "Azure Search", "status": "ok", "latency_ms": None, "error": "Check not implemented"}
+    checked_at = datetime.now(UTC)
+    return ServiceHealthOut(name="Azure Search", status="ok", latency_ms=None, error="Check not implemented", checked_at=checked_at)
 
 
-def _check_pg_notifier(request: Request) -> dict:
+def _check_pg_notifier(request: Request) -> ServiceHealthOut:
     """Check PgNotifier listener connection state."""
+    checked_at = datetime.now(UTC)
     from app.core.config.pg_notify import PgNotifier
 
     notifier: PgNotifier | None = getattr(request.app.state, "pg_notifier", None)
     if notifier is None:
-        return {
-            "name": "PgNotifier",
-            "status": "disabled",
-            "connected": False,
-            "last_reconnect_at": None,
-        }
-    reconnect_ts = notifier.last_reconnect_at
-    return {
-        "name": "PgNotifier",
-        "status": "ok" if notifier.is_connected else "disconnected",
-        "connected": notifier.is_connected,
-        "last_reconnect_at": reconnect_ts.isoformat() if reconnect_ts else None,
-    }
+        return ServiceHealthOut(
+            name="PgNotifier",
+            status="disabled",
+            latency_ms=None,
+            error=None,
+            checked_at=checked_at,
+        )
+    return ServiceHealthOut(
+        name="PgNotifier",
+        status="ok" if notifier.is_connected else "disconnected",
+        latency_ms=None,
+        error=None,
+        checked_at=checked_at,
+    )
 
 
-@router.get("/services")
+@router.get("/services", response_model=list[ServiceHealthOut])
 async def get_service_health(
     request: Request,
     db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
-):
+) -> list[ServiceHealthOut]:
     """Service status -- PostgreSQL, Redis, ADLS, Azure Search, PgNotifier."""
     results = await asyncio.gather(
         _check_postgres(db),
@@ -98,10 +106,10 @@ async def get_service_health(
         _check_search(),
         return_exceptions=True,
     )
-    services = []
+    services: list[ServiceHealthOut] = []
     for r in results:
-        if isinstance(r, Exception):
-            services.append({"name": "unknown", "status": "down", "latency_ms": None, "error": str(r)})
+        if isinstance(r, BaseException):
+            services.append(ServiceHealthOut(name="unknown", status="down", latency_ms=None, error=str(r), checked_at=datetime.now(UTC)))
         else:
             services.append(r)
 
@@ -110,17 +118,18 @@ async def get_service_health(
     return services
 
 
-@router.get("/workers")
+@router.get("/workers", response_model=list[WorkerStatusOut])
 async def get_worker_status(
     actor: Actor = Depends(require_super_admin),
-):
+) -> list[WorkerStatusOut]:
     """Worker status -- last run, duration, errors from Redis."""
+    checked_at = datetime.now(UTC)
     try:
         from app.core.jobs.tracker import get_redis_pool
         pool = get_redis_pool()
         r = aioredis.Redis(connection_pool=pool)
         try:
-            workers = []
+            workers: list[WorkerStatusOut] = []
             async for key in r.scan_iter(match="worker:status:*"):
                 data = await r.hgetall(key)
                 if data:
@@ -128,13 +137,20 @@ async def get_worker_status(
                     raw_status = data.get("status", data.get(b"status", "unknown"))
                     if isinstance(raw_status, bytes):
                         raw_status = raw_status.decode()
-                    workers.append({
-                        "name": name,
-                        "last_run": data.get("last_run", data.get(b"last_run")),
-                        "duration_ms": data.get("duration_ms", data.get(b"duration_ms")),
-                        "status": str(raw_status),
-                        "error_count": int(data.get("error_count", data.get(b"error_count", 0))),
-                    })
+                    raw_last_run = data.get("last_run", data.get(b"last_run"))
+                    if isinstance(raw_last_run, bytes):
+                        raw_last_run = raw_last_run.decode()
+                    raw_duration = data.get("duration_ms", data.get(b"duration_ms"))
+                    if isinstance(raw_duration, bytes):
+                        raw_duration = raw_duration.decode()
+                    workers.append(WorkerStatusOut(
+                        name=name,
+                        last_run=raw_last_run,
+                        duration_ms=float(raw_duration) if raw_duration is not None else None,
+                        status=str(raw_status),
+                        error_count=int(data.get("error_count", data.get(b"error_count", 0))),
+                        checked_at=checked_at,
+                    ))
             return workers
         finally:
             await r.aclose()
@@ -142,11 +158,12 @@ async def get_worker_status(
         return []
 
 
-@router.get("/pipelines")
+@router.get("/pipelines", response_model=PipelineStatsOut)
 async def get_pipeline_stats(
     actor: Actor = Depends(require_super_admin),
-):
+) -> PipelineStatsOut:
     """Pipeline stats -- docs processed, queue depth."""
+    checked_at = datetime.now(UTC)
     try:
         from app.core.jobs.tracker import get_redis_pool
         pool = get_redis_pool()
@@ -154,15 +171,16 @@ async def get_pipeline_stats(
         try:
             processed = await r.get("pipeline:docs_processed") or "0"
             queue_depth = await r.llen("pipeline:queue") if await r.exists("pipeline:queue") else 0
-            return {
-                "docs_processed": int(processed),
-                "queue_depth": queue_depth,
-                "error_rate": 0.0,
-            }
+            return PipelineStatsOut(
+                docs_processed=int(processed),
+                queue_depth=queue_depth,
+                error_rate=0.0,
+                checked_at=checked_at,
+            )
         finally:
             await r.aclose()
     except Exception:
-        return {"docs_processed": 0, "queue_depth": 0, "error_rate": 0.0}
+        return PipelineStatsOut(docs_processed=0, queue_depth=0, error_rate=0.0, checked_at=checked_at)
 
 
 # Lazy-initialized semaphore for SSE connection limiting.
