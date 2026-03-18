@@ -5,6 +5,9 @@
 <script lang="ts">
 	import { Card, StatusBadge, Button, Dialog } from "@netz/ui";
 	import { ActionButton, ConfirmDialog, FormField } from "@netz/ui";
+	import { ConsequenceDialog, AuditTrailPanel } from "@netz/ui";
+	import { createOptimisticMutation } from "@netz/ui";
+	import type { AuditTrailEntry } from "@netz/ui";
 	import type { PageData } from "./$types";
 	import type { ReviewDetail, ReviewChecklist } from "$lib/types/api";
 	import { createClientApiClient } from "$lib/api/client";
@@ -17,24 +20,81 @@
 
 	let review = $derived(data.review as ReviewDetail);
 	let checklist = $derived((data.checklist as ReviewChecklist)?.items ?? []);
-	let loading = $state(false);
 	let actionError = $state<string | null>(null);
 
-	// ── Decision ──
-	async function submitDecision(decision: "APPROVED" | "REJECTED" | "REVISION_REQUESTED") {
-		loading = true;
+	// ── Audit Trail ──
+	let auditEntries = $state<AuditTrailEntry[]>([]);
+
+	const auditMutation = createOptimisticMutation<AuditTrailEntry[]>({
+		getState: () => auditEntries,
+		setState: (value) => { auditEntries = value; },
+		request: async (optimisticValue, _previousValue) => optimisticValue,
+	});
+
+	function appendOptimisticAuditEntry(entry: AuditTrailEntry) {
+		const optimistic: AuditTrailEntry = { ...entry, status: "pending" };
+		auditMutation.mutate([...auditEntries, optimistic]).catch(() => {});
+	}
+
+	function confirmAuditEntry(index: number, confirmed: Partial<AuditTrailEntry>) {
+		auditEntries = auditEntries.map((e, i) =>
+			i === index ? { ...e, ...confirmed, status: "success", immutable: true } : e,
+		);
+	}
+
+	// ── Decision Dialog ──
+	let showDecisionDialog = $state(false);
+	let pendingDecision = $state<"APPROVED" | "REJECTED" | "REVISION_REQUESTED" | null>(null);
+	let decisionActorCapacity = $state("");
+
+	function openDecisionDialog(decision: "APPROVED" | "REJECTED" | "REVISION_REQUESTED") {
+		pendingDecision = decision;
+		decisionActorCapacity = "";
 		actionError = null;
+		showDecisionDialog = true;
+	}
+
+	async function submitDecision(payload: { rationale?: string }) {
+		if (!pendingDecision) return;
+		if (!decisionActorCapacity.trim()) {
+			actionError = "Actor capacity is required before submitting a review decision.";
+			throw new Error(actionError);
+		}
+
+		const decision = pendingDecision;
+		const rationale = payload.rationale ?? "";
+		const decisionLabel =
+			decision === "APPROVED"
+				? "Review Approved"
+				: decision === "REJECTED"
+					? "Review Rejected"
+					: "Revision Requested";
+		const pendingIndex = auditEntries.length;
+
+		appendOptimisticAuditEntry({
+			actor: "You",
+			actorCapacity: decisionActorCapacity || undefined,
+			timestamp: new Date().toISOString(),
+			action: decisionLabel,
+			scope: `Review: ${String(review?.document_title ?? data.reviewId)}`,
+			rationale,
+			outcome: "Pending",
+		});
+
 		try {
 			const api = createClientApiClient(getToken);
+			// ReviewDecisionPayload: { decision: string; comments?: string | null }
+			// rationale maps to comments — actor_capacity is audit-local only
 			await api.post(`/funds/${data.fundId}/document-reviews/${data.reviewId}/decide`, {
 				decision,
-				comments: null,
+				comments: rationale || null,
 			});
+			showDecisionDialog = false;
+			confirmAuditEntry(pendingIndex, { outcome: decisionLabel, status: "success", immutable: true });
 			await invalidateAll();
 		} catch (e) {
 			actionError = e instanceof Error ? e.message : "Decision failed";
-		} finally {
-			loading = false;
+			auditEntries = auditEntries.filter((_, i) => i !== pendingIndex);
 		}
 	}
 
@@ -113,18 +173,57 @@
 
 	// ── Interactive Checklist ──
 	let togglingItem = $state<string | null>(null);
+	let showUncheckDialog = $state(false);
+	let pendingUncheckId = $state<string | null>(null);
+
+	function openUncheckDialog(itemId: string) {
+		pendingUncheckId = itemId;
+		actionError = null;
+		showUncheckDialog = true;
+	}
 
 	async function toggleChecklistItem(itemId: string, checked: boolean) {
+		if (!checked) {
+			// Unchecking requires consequence dialog — gate via openUncheckDialog
+			openUncheckDialog(itemId);
+			return;
+		}
 		togglingItem = itemId;
 		try {
 			const api = createClientApiClient(getToken);
-			const endpoint = checked ? "check" : "uncheck";
-			await api.post(`/funds/${data.fundId}/document-reviews/${data.reviewId}/checklist/${itemId}/${endpoint}`, {});
+			await api.post(`/funds/${data.fundId}/document-reviews/${data.reviewId}/checklist/${itemId}/check`, {});
 			await invalidateAll();
 		} catch (e) {
 			actionError = e instanceof Error ? e.message : "Failed to toggle checklist item";
 		} finally {
 			togglingItem = null;
+		}
+	}
+
+	async function submitUncheck(payload: { rationale?: string }) {
+		if (!pendingUncheckId) return;
+		const itemId = pendingUncheckId;
+		togglingItem = itemId;
+		showUncheckDialog = false;
+		const rationale = payload.rationale ?? "";
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post(`/funds/${data.fundId}/document-reviews/${data.reviewId}/checklist/${itemId}/uncheck`, {});
+			appendOptimisticAuditEntry({
+				actor: "You",
+				timestamp: new Date().toISOString(),
+				action: "Checklist Item Unchecked",
+				scope: `Review: ${String(review?.document_title ?? data.reviewId)}`,
+				rationale,
+				outcome: "Checklist Reversed",
+				status: "warning",
+			});
+			await invalidateAll();
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : "Failed to uncheck checklist item";
+		} finally {
+			togglingItem = null;
+			pendingUncheckId = null;
 		}
 	}
 
@@ -134,6 +233,22 @@
 	let canAssign = $derived(status === "PENDING_ASSIGNMENT");
 	let canResubmit = $derived(status === "REVISION_REQUESTED");
 	let canFinalize = $derived(status === "APPROVED" || status === "REJECTED");
+
+	// ── Decision dialog meta ──
+	let decisionTitle = $derived(
+		pendingDecision === "APPROVED"
+			? "Approve Document Review"
+			: pendingDecision === "REJECTED"
+				? "Reject Document Review"
+				: "Request Revision",
+	);
+	let decisionImpact = $derived(
+		pendingDecision === "APPROVED"
+			? "Approving this review will mark the document as reviewed and approved. The decision and rationale will be recorded in the audit trail."
+			: pendingDecision === "REJECTED"
+				? "Rejecting this review will mark it as rejected. The decision and rationale will be recorded in the audit trail."
+				: "Requesting a revision will return this review to the submitter for corrections. Provide a clear rationale.",
+	);
 </script>
 
 <div class="p-6">
@@ -154,13 +269,13 @@
 				<ActionButton size="sm" onclick={triggerAIAnalysis} loading={analyzing} loadingText="Analyzing...">
 					AI Analysis
 				</ActionButton>
-				<Button size="sm" onclick={() => submitDecision("APPROVED")} disabled={loading}>
+				<Button size="sm" onclick={() => openDecisionDialog("APPROVED")}>
 					Approve
 				</Button>
-				<Button size="sm" variant="destructive" onclick={() => submitDecision("REJECTED")} disabled={loading}>
+				<Button size="sm" variant="destructive" onclick={() => openDecisionDialog("REJECTED")}>
 					Reject
 				</Button>
-				<Button size="sm" variant="outline" onclick={() => submitDecision("REVISION_REQUESTED")} disabled={loading}>
+				<Button size="sm" variant="outline" onclick={() => openDecisionDialog("REVISION_REQUESTED")}>
 					Request Revision
 				</Button>
 			{/if}
@@ -218,6 +333,15 @@
 			{/each}
 		{/if}
 	</Card>
+
+	<!-- Audit Trail -->
+	<div class="mt-4">
+		<AuditTrailPanel
+			entries={auditEntries}
+			title="Review Decision History"
+			description="Durable record of all review decisions, checklist reversals, and governance actions for this document review."
+		/>
+	</div>
 </div>
 
 <!-- Assign Reviewer Dialog -->
@@ -249,4 +373,61 @@
 	confirmVariant="destructive"
 	onConfirm={finalizeReview}
 	onCancel={() => showFinalize = false}
+/>
+
+<!-- Decision Dialog (ConsequenceDialog) -->
+<ConsequenceDialog
+	bind:open={showDecisionDialog}
+	title={decisionTitle}
+	impactSummary={decisionImpact}
+	destructive={pendingDecision === "REJECTED"}
+	requireRationale={true}
+	rationaleLabel="Decision Rationale"
+	rationalePlaceholder="Record the compliance or policy basis for this review decision."
+	rationaleMinLength={20}
+	confirmLabel={
+		pendingDecision === "APPROVED"
+			? "Approve Review"
+			: pendingDecision === "REJECTED"
+				? "Reject Review"
+				: "Request Revision"
+	}
+	metadata={[
+		{ label: "Document", value: String(review?.document_title ?? "—"), emphasis: true },
+		{ label: "Decision", value: pendingDecision ?? "—" },
+	]}
+	onConfirm={submitDecision}
+	onCancel={() => { showDecisionDialog = false; }}
+>
+	{#snippet children()}
+		<div class="space-y-4">
+			<FormField label="Actor Capacity" required>
+				<input
+					type="text"
+					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+					bind:value={decisionActorCapacity}
+					placeholder="e.g. Senior Analyst, Compliance Officer"
+					aria-required="true"
+				/>
+			</FormField>
+			{#if actionError}
+				<p class="text-sm text-[var(--netz-status-error)]">{actionError}</p>
+			{/if}
+		</div>
+	{/snippet}
+</ConsequenceDialog>
+
+<!-- Checklist Uncheck Dialog (ConsequenceDialog — gate reversal) -->
+<ConsequenceDialog
+	bind:open={showUncheckDialog}
+	title="Reverse Checklist Item"
+	impactSummary="Unchecking a completed checklist item will mark it as incomplete. This reversal will be recorded in the audit trail. Provide a rationale for the reversal."
+	destructive={false}
+	requireRationale={true}
+	rationaleLabel="Reversal Rationale"
+	rationalePlaceholder="Record the reason for reversing this completed checklist item."
+	rationaleMinLength={20}
+	confirmLabel="Reverse Item"
+	onConfirm={submitUncheck}
+	onCancel={() => { showUncheckDialog = false; pendingUncheckId = null; }}
 />

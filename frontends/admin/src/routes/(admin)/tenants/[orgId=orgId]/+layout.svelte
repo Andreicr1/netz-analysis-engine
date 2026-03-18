@@ -27,8 +27,9 @@
 			activeHref: pathname,
 			items: [
 				{ label: "Overview", href: `/tenants/${id}` },
-				{ label: "Branding", href: `/tenants/${id}/branding` },
 				{ label: "Config", href: `/tenants/${id}/config` },
+				{ label: "Branding", href: `/tenants/${id}/branding` },
+				{ label: "Health", href: `/tenants/${id}/health` },
 				{ label: "Prompts", href: `/tenants/${id}/prompts` },
 				{ label: "Setup", href: `/tenants/${id}/setup` },
 			],

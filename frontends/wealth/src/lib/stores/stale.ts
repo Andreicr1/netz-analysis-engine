@@ -1,15 +1,30 @@
 /**
  * Stale data detection per UX Principles.
  *
- * Business days (Mon-Fri): stale if lastUpdated < 08:00 today (America/Sao_Paulo).
- * Weekends/holidays: stale if lastUpdated < 08:00 last Friday.
+ * Freshness derived exclusively from server computed_at timestamps.
+ * Date.now() is forbidden for freshness determination.
+ *
+ * Business days (Mon-Fri): stale if computed_at < 08:00 today (America/Sao_Paulo).
+ * Weekends/holidays: stale if computed_at < 08:00 last Friday.
  */
 
 const SAO_PAULO_TZ = "America/Sao_Paulo";
 
+/** Cached DateTimeFormat for São Paulo timezone. */
+const saoPauloFormatter = new Intl.DateTimeFormat("en-US", {
+	timeZone: SAO_PAULO_TZ,
+	year: "numeric",
+	month: "2-digit",
+	day: "2-digit",
+	hour: "2-digit",
+	minute: "2-digit",
+	second: "2-digit",
+	hour12: false,
+});
+
 /** Get current date/time in São Paulo timezone. */
 function nowInSaoPaulo(): Date {
-	return new Date(new Date().toLocaleString("en-US", { timeZone: SAO_PAULO_TZ }));
+	return new Date(saoPauloFormatter.format(new Date()));
 }
 
 /** Get the 08:00 threshold for a given date in São Paulo. */
@@ -29,9 +44,19 @@ function lastFriday(date: Date): Date {
 	return d;
 }
 
-/** Check if data is stale based on lastUpdated timestamp. */
-export function isStale(lastUpdated: Date | null): boolean {
-	if (!lastUpdated) return true;
+/**
+ * Check if data is stale based on server computed_at timestamp.
+ *
+ * Accepts either an ISO string (from server computed_at) or a Date object.
+ * Freshness is always derived from the server timestamp, never from client time.
+ */
+export function isStale(computedAt: string | Date | null): boolean {
+	if (!computedAt) return true;
+
+	const lastUpdated = typeof computedAt === "string" ? new Date(computedAt) : computedAt;
+
+	// Invalid date check
+	if (isNaN(lastUpdated.getTime())) return true;
 
 	const now = nowInSaoPaulo();
 	const dayOfWeek = now.getDay(); // 0=Sun, 6=Sat
@@ -46,9 +71,14 @@ export function isStale(lastUpdated: Date | null): boolean {
 	return lastUpdated < threshold08(now);
 }
 
-/** Format a Date for display in stale banner. */
-export function formatLastUpdated(date: Date | null): string {
-	if (!date) return "never";
+/** Format a server computed_at timestamp for display in stale banner. */
+export function formatLastUpdated(computedAt: string | Date | null): string {
+	if (!computedAt) return "never";
+
+	const date = typeof computedAt === "string" ? new Date(computedAt) : computedAt;
+
+	if (isNaN(date.getTime())) return "never";
+
 	const now = new Date();
 	const diffMs = now.getTime() - date.getTime();
 	const diffHours = Math.floor(diffMs / (1000 * 60 * 60));

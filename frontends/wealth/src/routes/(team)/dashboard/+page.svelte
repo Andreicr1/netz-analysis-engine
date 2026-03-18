@@ -1,12 +1,12 @@
 <!--
   Wealth Dashboard — Figma frame "Dashboard com portfólios + NAV chart + alertas"
   Layout: RegimeBanner + Header + 3 PortfolioCards + NAV chart (left) + Alerts (right) + Macro chips
+  Risk data consumed exclusively from the risk store — no page-local SSE.
 -->
 <script lang="ts">
 	import {
 		StatusBadge, EmptyState, TimeSeriesChart, PageHeader,
 		PeriodSelector, RegimeBanner, SectionCard, AlertFeed,
-		createSSEStream,
 		formatDateTime,
 		type WealthAlert,
 	} from "@netz/ui";
@@ -17,8 +17,12 @@
 	import type { PageData } from "./$types";
 	import type { RegimeData } from "$lib/types/api";
 	import { getContext } from "svelte";
+	import type { RiskStore } from "$lib/stores/risk-store.svelte";
 
 	let { data }: { data: PageData } = $props();
+
+	// Risk store — single authoritative source for live risk data
+	const riskStore = getContext<RiskStore>("netz:riskStore");
 
 	// Types
 	type PortfolioSummary = {
@@ -61,14 +65,16 @@
 		regime: string | null;
 	};
 
-	// Derived data — use $state.raw for API data
+	// Derived data — use $state.raw for API data loaded at page level
 	let portfolios = $state.raw(data.portfolios as PortfolioSummary[] | null);
 	let modelPortfolios = $state.raw(data.modelPortfolios as ModelPortfolio[] | null);
-	let macro = $state.raw(data.macro as MacroIndicators | null);
-	let regime = $state.raw(data.regime as RegimeData | null);
-	let cvarByProfile = $state.raw(data.cvarByProfile as Record<string, CVaRStatus>);
 
-	// Portfolio cards
+	// Live risk data from the store — single source of truth
+	const liveCvarByProfile = $derived(riskStore.cvarByProfile);
+	const liveRegime = $derived(riskStore.regime);
+	const liveMacro = $derived(riskStore.macroIndicators as MacroIndicators | null);
+
+	// Portfolio cards — merge page data with live store data
 	interface CardData {
 		id: string;
 		name: string;
@@ -87,7 +93,7 @@
 		if (!portfolios) return [];
 		return portfolios.map((p) => {
 			const mp = modelPortfolios?.find((m) => m.profile === p.profile);
-			const cvar = cvarByProfile[p.profile] as CVaRStatus | undefined;
+			const cvar = liveCvarByProfile[p.profile] as CVaRStatus | undefined;
 			return {
 				id: mp?.id ?? p.profile,
 				name: mp?.display_name ?? p.profile,
@@ -108,38 +114,16 @@
 	const periods = ["1M", "3M", "YTD", "1Y", "3Y"];
 	let selectedPeriod = $state("YTD");
 
-	// SSE token accessor provided by layout
-	const getToken = getContext<() => Promise<string>>("netz:getToken");
-
-	// Risk alerts — capped at 50 entries
-	let riskAlerts = $state<WealthAlert[]>([]);
-
-	// SSE subscription for risk alerts — lazy connect, auto-cleanup
-	$effect(() => {
-		const stream = createSSEStream<WealthAlert>({
-			url: `${import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1"}/risk/stream`,
-			getToken,
-			onEvent: (event) => {
-				// Cap at 50 entries to prevent unbounded growth
-				riskAlerts = [...riskAlerts.slice(-49), event];
-			},
-			onError: (err) => {
-				console.warn("SSE risk stream error:", err);
-			},
-		});
-		stream.connect();
-		return () => stream.disconnect();
-	});
-
-	// Current regime
+	// Current regime — from live store, fallback to page data
 	const currentRegime = $derived(
-		regime?.regime ?? portfolios?.[0]?.regime ?? null
+		liveRegime?.regime ?? portfolios?.[0]?.regime ?? null
 	);
 
-	// Format date for subtitle
-	const today = new Date();
+	// Freshness subtitle — derived from server computed_at
 	const subtitle = $derived(
-		`${formatDateTime(today)} · Atualizado`
+		riskStore.computedAt
+			? `${formatDateTime(riskStore.computedAt)} · Atualizado`
+			: "Aguardando dados..."
 	);
 </script>
 
@@ -204,12 +188,25 @@
 
 		<!-- Alertas Ativos (40%) -->
 		<SectionCard title="Alertas Ativos" class="lg:col-span-2">
-			{#if riskAlerts.length > 0}
-				<AlertFeed alerts={riskAlerts} maxItems={50} />
+			{#if riskStore.driftAlerts.dtw_alerts.length > 0 || riskStore.driftAlerts.behavior_change_alerts.length > 0}
+				<div class="space-y-2 text-sm text-[var(--netz-text-secondary)]">
+					{#each riskStore.driftAlerts.dtw_alerts as alert (alert.instrument_name)}
+						<div class="rounded border border-[var(--netz-border)] p-2">
+							<span class="font-medium">{alert.instrument_name}</span>
+							<span class="ml-2 text-[var(--netz-text-muted)]">DTW: {alert.dtw_score}</span>
+						</div>
+					{/each}
+					{#each riskStore.driftAlerts.behavior_change_alerts as alert (alert.instrument_name)}
+						<div class="rounded border border-[var(--netz-border)] p-2">
+							<span class="font-medium">{alert.instrument_name}</span>
+							<span class="ml-2 text-[var(--netz-text-muted)]">{alert.severity}</span>
+						</div>
+					{/each}
+				</div>
 			{:else}
 				<EmptyState
 					title="Sem alertas ativos"
-					message="Alertas de risco em tempo real aparecerão aqui quando o stream SSE estiver conectado."
+					message="Alertas de risco aparecerão aqui quando detectados pelo motor de análise."
 				/>
 			{/if}
 		</SectionCard>
@@ -223,8 +220,8 @@
 					<StatusBadge status={currentRegime} resolve={resolveWealthStatus} />
 				{/if}
 			{/snippet}
-			{#if macro}
-				<MacroChips {macro} />
+			{#if liveMacro}
+				<MacroChips macro={liveMacro} />
 			{:else}
 				<EmptyState title="No Macro Data" message="FRED macro data will appear here once available." />
 			{/if}

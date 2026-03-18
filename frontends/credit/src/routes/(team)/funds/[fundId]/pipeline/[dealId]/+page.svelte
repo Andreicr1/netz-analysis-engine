@@ -4,8 +4,11 @@
   Overview tab shows deal actions (decide, resolve conditions, convert).
 -->
 <script lang="ts">
-	import { PageTabs, Card, StatusBadge, Button, EmptyState, Dialog } from "@netz/ui";
-	import { ActionButton, ConfirmDialog, FormField } from "@netz/ui";
+	import { PageTabs, Card, StatusBadge, Button, EmptyState } from "@netz/ui";
+	import { ActionButton, FormField } from "@netz/ui";
+	import { ConsequenceDialog, AuditTrailPanel } from "@netz/ui";
+	import { createOptimisticMutation } from "@netz/ui";
+	import type { AuditTrailEntry } from "@netz/ui";
 	import DealStageTimeline from "$lib/components/DealStageTimeline.svelte";
 	import ICMemoViewer from "$lib/components/ICMemoViewer.svelte";
 	import { goto, invalidateAll } from "$app/navigation";
@@ -14,13 +17,22 @@
 	import type { PageData } from "./$types";
 	import type { DealStage, RejectionCode, ICCondition, StageTimeline, VotingStatusDetail } from "$lib/types/api";
 
+	/** Matches components["schemas"]["DealDecision"] from packages/ui/src/types/api.d.ts */
+	interface DealDecisionPayload {
+		stage: string;
+		rationale: string;
+		actor_capacity: string;
+		actor_email: string;
+		rejection_code?: string | null;
+		rejection_notes?: string | null;
+	}
+
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let { data }: { data: PageData } = $props();
 	let activeTab = $state("overview");
 
 	// ── Deal Actions State ──
-	let saving = $state(false);
 	let actionError = $state<string | null>(null);
 
 	// Stage timeline data (typed)
@@ -28,82 +40,172 @@
 	let allowedTransitions = $derived(timeline?.allowedTransitions ?? []);
 	let currentStage = $derived((data.deal.stage as DealStage) ?? "INTAKE");
 
+	// ── Audit Trail ──
+	let auditEntries = $state<AuditTrailEntry[]>([]);
+
+	const auditMutation = createOptimisticMutation<AuditTrailEntry[]>({
+		getState: () => auditEntries,
+		setState: (value) => { auditEntries = value; },
+		request: async (optimisticValue, _previousValue) => optimisticValue,
+	});
+
+	function appendOptimisticAuditEntry(entry: AuditTrailEntry) {
+		const optimistic: AuditTrailEntry = { ...entry, status: "pending" };
+		auditMutation.mutate([...auditEntries, optimistic]).catch(() => {});
+	}
+
+	function confirmAuditEntry(index: number, confirmed: Partial<AuditTrailEntry>) {
+		auditEntries = auditEntries.map((e, i) =>
+			i === index ? { ...e, ...confirmed, status: "success", immutable: true } : e,
+		);
+	}
+
 	// ── Decision Dialog ──
 	let showDecision = $state(false);
 	let decisionTarget = $state<DealStage | null>(null);
-	let decisionNotes = $state("");
 	let rejectionCode = $state<RejectionCode>("OUT_OF_MANDATE");
+	let decisionActorCapacity = $state("");
 
 	function openDecision(stage: DealStage) {
 		decisionTarget = stage;
-		decisionNotes = "";
 		rejectionCode = "OUT_OF_MANDATE";
+		decisionActorCapacity = "";
 		actionError = null;
 		showDecision = true;
 	}
 
-	async function submitDecision() {
+	async function submitDecision(payload: { rationale?: string }) {
 		if (!decisionTarget) return;
-		saving = true;
-		actionError = null;
+		if (!decisionActorCapacity.trim()) {
+			actionError = "Actor capacity is required before submitting a decision.";
+			throw new Error(actionError);
+		}
+
+		const rationale = payload.rationale ?? "";
+		const isRejection = decisionTarget === "REJECTED";
+		const outcomeLabel = stageLabels[decisionTarget] ?? decisionTarget;
+		const pendingIndex = auditEntries.length;
+
+		appendOptimisticAuditEntry({
+			actor: "You",
+			actorCapacity: decisionActorCapacity || undefined,
+			timestamp: new Date().toISOString(),
+			action: outcomeLabel,
+			scope: `Deal: ${String(data.deal.name ?? "")}`,
+			rationale,
+			outcome: "Pending",
+		});
+
 		try {
 			const api = createClientApiClient(getToken);
-			await api.patch(`/funds/${data.fundId}/deals/${data.dealId}/decision`, {
+			const body: DealDecisionPayload = {
 				stage: decisionTarget,
-				...(decisionTarget === "REJECTED" ? {
+				rationale,
+				actor_capacity: decisionActorCapacity,
+				actor_email: "",
+				...(isRejection ? {
 					rejection_code: rejectionCode,
-					rejection_notes: decisionNotes || null,
+					rejection_notes: null,
 				} : {}),
-			});
+			};
+			await api.patch(`/funds/${data.fundId}/deals/${data.dealId}/decision`, body);
 			showDecision = false;
+			confirmAuditEntry(pendingIndex, { outcome: outcomeLabel, status: "success", immutable: true });
 			await invalidateAll();
 		} catch (e) {
 			actionError = e instanceof Error ? e.message : "Decision failed";
-		} finally {
-			saving = false;
+			auditEntries = auditEntries.filter((_, i) => i !== pendingIndex);
 		}
 	}
 
 	// ── Convert Dialog ──
 	let showConvert = $state(false);
-	let convertConfirmName = $state("");
-	let canConvert = $derived(
-		convertConfirmName.trim().toLowerCase() === (data.deal.name as string ?? "").trim().toLowerCase()
-	);
+	let convertActorCapacity = $state("");
 
-	async function convertDeal() {
-		saving = true;
-		actionError = null;
+	async function convertDeal(payload: { rationale?: string }) {
+		if (!convertActorCapacity.trim()) {
+			actionError = "Actor capacity is required before converting a deal.";
+			throw new Error(actionError);
+		}
+		const rationale = payload.rationale ?? "";
+		const pendingIndex = auditEntries.length;
+
+		appendOptimisticAuditEntry({
+			actor: "You",
+			actorCapacity: convertActorCapacity || undefined,
+			timestamp: new Date().toISOString(),
+			action: "Convert to Asset",
+			scope: `Deal: ${String(data.deal.name ?? "")}`,
+			rationale,
+			outcome: "Pending",
+		});
+
 		try {
 			const api = createClientApiClient(getToken);
 			await api.post(`/funds/${data.fundId}/deals/${data.dealId}/convert`, {});
 			showConvert = false;
+			confirmAuditEntry(pendingIndex, { outcome: "Converted", status: "success", immutable: true });
 			await goto(`/funds/${data.fundId}/portfolio`);
 		} catch (e) {
 			actionError = e instanceof Error ? e.message : "Conversion failed";
-		} finally {
-			saving = false;
+			auditEntries = auditEntries.filter((_, i) => i !== pendingIndex);
 		}
 	}
 
 	// ── IC Condition Resolution ──
 	let conditionSaving = $state<Set<string>>(new Set());
+	let showConditionDialog = $state(false);
+	let pendingCondition = $state<{ id: string; status: "resolved" | "waived" } | null>(null);
+	let conditionActorCapacity = $state("");
 	let votingData = $derived(data.votingStatus as VotingStatusDetail | null);
 	let conditions = $derived(votingData?.conditions?.items ?? []);
 
-	async function resolveCondition(conditionId: string, status: "resolved" | "waived") {
+	function openConditionDialog(conditionId: string, status: "resolved" | "waived") {
+		pendingCondition = { id: conditionId, status };
+		conditionActorCapacity = "";
+		actionError = null;
+		showConditionDialog = true;
+	}
+
+	async function submitConditionResolution(payload: { rationale?: string }) {
+		if (!pendingCondition) return;
+		if (!conditionActorCapacity.trim()) {
+			actionError = "Actor capacity is required before resolving a condition.";
+			throw new Error(actionError);
+		}
+
+		const { id: conditionId, status } = pendingCondition;
+		const rationale = payload.rationale ?? "";
+		const outcomeLabel = status === "resolved" ? "Condition Resolved" : "Condition Waived";
+		const condition = conditions.find((c) => c.id === conditionId);
+		const pendingIndex = auditEntries.length;
+
+		appendOptimisticAuditEntry({
+			actor: "You",
+			actorCapacity: conditionActorCapacity || undefined,
+			timestamp: new Date().toISOString(),
+			action: outcomeLabel,
+			scope: `Condition: ${String(condition?.title ?? conditionId)}`,
+			rationale,
+			outcome: "Pending",
+		});
+
 		conditionSaving = new Set([...conditionSaving, conditionId]);
+		showConditionDialog = false;
+
 		try {
 			const api = createClientApiClient(getToken);
 			await api.patch(`/funds/${data.fundId}/deals/${data.dealId}/ic-memo/conditions`, {
 				condition_id: conditionId,
 				status,
 				evidence_docs: [],
-				notes: null,
+				notes: rationale || null,
 			});
+			confirmAuditEntry(pendingIndex, { outcome: outcomeLabel, status: "success", immutable: true });
 			await invalidateAll();
 		} catch (e) {
 			actionError = e instanceof Error ? e.message : "Failed to resolve condition";
+			auditEntries = auditEntries.filter((_, i) => i !== pendingIndex);
 		} finally {
 			const next = new Set(conditionSaving);
 			next.delete(conditionId);
@@ -121,6 +223,15 @@
 		REJECTED: "Reject",
 		CLOSED: "Close",
 	};
+
+	// ── Derived dialog meta ──
+	let decisionIsDestructive = $derived(decisionTarget === "REJECTED" || decisionTarget === "CLOSED");
+	let decisionTitle = $derived(decisionTarget === "REJECTED" ? "Reject Deal" : (stageLabels[decisionTarget ?? ""] ?? "Advance Deal"));
+	let decisionImpact = $derived(
+		decisionTarget === "REJECTED"
+			? "This deal will be permanently marked as rejected. The decision and rationale will be recorded in the audit trail."
+			: `This deal will advance to the ${decisionTarget} stage. This action will be recorded in the audit trail.`,
+	);
 </script>
 
 <div class="p-6">
@@ -147,7 +258,7 @@
 					{#if transition === "CONVERTED_TO_ASSET"}
 						<Button
 							variant="default"
-							onclick={() => { convertConfirmName = ""; actionError = null; showConvert = true; }}
+							onclick={() => { convertActorCapacity = ""; actionError = null; showConvert = true; }}
 						>
 							Convert to Asset
 						</Button>
@@ -183,6 +294,7 @@
 			{ id: "conditions", label: `Conditions${conditions.length > 0 ? ` (${conditions.length})` : ""}` },
 			{ id: "ic-memo", label: "IC Memo" },
 			{ id: "documents", label: "Documents" },
+			{ id: "audit", label: "Audit Trail" },
 		]}
 		active={activeTab}
 		onChange={(tab) => activeTab = tab}
@@ -256,7 +368,7 @@
 								{#if condition.status === "open"}
 									<div class="ml-4 flex gap-2">
 										<ActionButton
-											onclick={() => resolveCondition(condition.id, "resolved")}
+											onclick={() => openConditionDialog(condition.id, "resolved")}
 											loading={conditionSaving.has(condition.id)}
 											loadingText="..."
 											size="sm"
@@ -265,7 +377,7 @@
 										</ActionButton>
 										<ActionButton
 											variant="outline"
-											onclick={() => resolveCondition(condition.id, "waived")}
+											onclick={() => openConditionDialog(condition.id, "waived")}
 											loading={conditionSaving.has(condition.id)}
 											loadingText="..."
 											size="sm"
@@ -293,89 +405,137 @@
 				title="Deal Documents"
 				description="Evidence and supporting documents for this deal."
 			/>
+
+		{:else if activeTab === "audit"}
+			<AuditTrailPanel
+				entries={auditEntries}
+				title="Decision Audit Trail"
+				description="Durable record of all IC decisions, stage transitions, and condition resolutions for this deal."
+			/>
 		{/if}
 	</div>
 </div>
 
-<!-- Decision Dialog -->
-<Dialog bind:open={showDecision} title={decisionTarget === "REJECTED" ? "Reject Deal" : (stageLabels[decisionTarget ?? ""] ?? "Decide")}>
-	<div class="space-y-4">
-		{#if decisionTarget === "REJECTED"}
-			<FormField label="Rejection Code" required>
-				<select
-					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
-					bind:value={rejectionCode}
-				>
-					<option value="OUT_OF_MANDATE">Out of Mandate</option>
-					<option value="TICKET_TOO_SMALL">Ticket Too Small</option>
-					<option value="JURISDICTION_EXCLUDED">Jurisdiction Excluded</option>
-					<option value="INSUFFICIENT_RETURN">Insufficient Return</option>
-					<option value="WEAK_CREDIT_PROFILE">Weak Credit Profile</option>
-					<option value="NO_COLLATERAL">No Collateral</option>
-				</select>
+<!-- Decision Dialog (ConsequenceDialog) -->
+<ConsequenceDialog
+	bind:open={showDecision}
+	title={decisionTitle}
+	impactSummary={decisionImpact}
+	destructive={decisionIsDestructive}
+	requireRationale={true}
+	rationaleLabel="Decision Rationale"
+	rationalePlaceholder="Record the investment or policy basis for this IC decision."
+	rationaleMinLength={20}
+	confirmLabel={decisionTarget === "REJECTED" ? "Reject Deal" : "Confirm Decision"}
+	metadata={[
+		{ label: "Deal", value: String(data.deal.name ?? "—"), emphasis: true },
+		{ label: "Current Stage", value: String(currentStage) },
+		{ label: "Target Stage", value: String(decisionTarget ?? "—") },
+	]}
+	onConfirm={submitDecision}
+	onCancel={() => { showDecision = false; }}
+>
+	{#snippet children()}
+		<div class="space-y-4">
+			{#if decisionTarget === "REJECTED"}
+				<FormField label="Rejection Code" required>
+					<select
+						class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+						bind:value={rejectionCode}
+					>
+						<option value="OUT_OF_MANDATE">Out of Mandate</option>
+						<option value="TICKET_TOO_SMALL">Ticket Too Small</option>
+						<option value="JURISDICTION_EXCLUDED">Jurisdiction Excluded</option>
+						<option value="INSUFFICIENT_RETURN">Insufficient Return</option>
+						<option value="WEAK_CREDIT_PROFILE">Weak Credit Profile</option>
+						<option value="NO_COLLATERAL">No Collateral</option>
+					</select>
+				</FormField>
+			{/if}
+			<FormField label="Actor Capacity" required>
+				<input
+					type="text"
+					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+					bind:value={decisionActorCapacity}
+					placeholder="e.g. Investment Committee Member, Partner"
+					aria-required="true"
+				/>
 			</FormField>
-			<FormField label="Rejection Notes">
-				<textarea
-					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
-					bind:value={decisionNotes}
-					rows={3}
-					placeholder="Reason for rejection..."
-				></textarea>
+			{#if actionError}
+				<p class="text-sm text-[var(--netz-status-error)]">{actionError}</p>
+			{/if}
+		</div>
+	{/snippet}
+</ConsequenceDialog>
+
+<!-- Convert to Asset Dialog (ConsequenceDialog — destructive, typed confirmation) -->
+<ConsequenceDialog
+	bind:open={showConvert}
+	title="Convert Deal to Portfolio Asset"
+	impactSummary="This is an irreversible operation. The deal will be permanently converted to a portfolio asset and removed from the pipeline."
+	destructive={true}
+	requireRationale={true}
+	rationaleLabel="Conversion Rationale"
+	rationalePlaceholder="Record the basis for converting this deal to a portfolio asset."
+	rationaleMinLength={20}
+	typedConfirmationText={String(data.deal.name ?? "")}
+	typedConfirmationLabel="Type the deal name to confirm"
+	confirmLabel="Convert to Asset"
+	metadata={[
+		{ label: "Deal", value: String(data.deal.name ?? "—"), emphasis: true },
+		{ label: "Action", value: "Convert → Portfolio Asset" },
+	]}
+	onConfirm={convertDeal}
+	onCancel={() => { showConvert = false; }}
+>
+	{#snippet children()}
+		<div class="space-y-4">
+			<FormField label="Actor Capacity" required>
+				<input
+					type="text"
+					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+					bind:value={convertActorCapacity}
+					placeholder="e.g. Managing Partner, Investment Committee"
+					aria-required="true"
+				/>
 			</FormField>
-		{:else}
-			<p class="text-sm text-[var(--netz-text-secondary)]">
-				Move this deal to <strong>{decisionTarget}</strong>? This action will be recorded in the audit trail.
-			</p>
-		{/if}
-
-		{#if actionError}
-			<p class="text-sm text-[var(--netz-status-error)]">{actionError}</p>
-		{/if}
-
-		<div class="flex justify-end gap-2 pt-2">
-			<Button variant="outline" onclick={() => showDecision = false}>Cancel</Button>
-			<ActionButton
-				onclick={submitDecision}
-				loading={saving}
-				loadingText="Saving..."
-				variant={decisionTarget === "REJECTED" ? "destructive" : "default"}
-			>
-				{decisionTarget === "REJECTED" ? "Reject Deal" : "Confirm"}
-			</ActionButton>
+			{#if actionError}
+				<p class="text-sm text-[var(--netz-status-error)]">{actionError}</p>
+			{/if}
 		</div>
-	</div>
-</Dialog>
+	{/snippet}
+</ConsequenceDialog>
 
-<!-- Convert to Asset Dialog (double-confirmation) -->
-<Dialog bind:open={showConvert} title="Convert Deal to Portfolio Asset">
-	<div class="space-y-4">
-		<p class="text-sm text-[var(--netz-text-secondary)]">
-			This is an <strong>irreversible</strong> operation. The deal will be converted to a portfolio asset.
-		</p>
-		<FormField label="Type the deal name to confirm" required>
-			<input
-				type="text"
-				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
-				bind:value={convertConfirmName}
-				placeholder={String(data.deal.name)}
-			/>
-		</FormField>
-
-		{#if actionError}
-			<p class="text-sm text-[var(--netz-status-error)]">{actionError}</p>
-		{/if}
-
-		<div class="flex justify-end gap-2 pt-2">
-			<Button variant="outline" onclick={() => showConvert = false}>Cancel</Button>
-			<ActionButton
-				onclick={convertDeal}
-				loading={saving}
-				loadingText="Converting..."
-				disabled={!canConvert}
-				variant="destructive"
-			>
-				Convert to Asset
-			</ActionButton>
+<!-- IC Condition Resolution Dialog (ConsequenceDialog) -->
+<ConsequenceDialog
+	bind:open={showConditionDialog}
+	title={pendingCondition?.status === "waived" ? "Waive IC Condition" : "Resolve IC Condition"}
+	impactSummary={pendingCondition?.status === "waived"
+		? "Waiving this condition removes it from the outstanding IC conditions without evidence of completion. The decision will be recorded in the audit trail."
+		: "Resolving this condition marks it as satisfied. Confirm evidence of completion in the rationale field."}
+	destructive={pendingCondition?.status === "waived"}
+	requireRationale={true}
+	rationaleLabel="Resolution Rationale"
+	rationalePlaceholder="Record the evidence or basis for this condition resolution."
+	rationaleMinLength={20}
+	confirmLabel={pendingCondition?.status === "waived" ? "Waive Condition" : "Resolve Condition"}
+	onConfirm={submitConditionResolution}
+	onCancel={() => { showConditionDialog = false; }}
+>
+	{#snippet children()}
+		<div class="space-y-4">
+			<FormField label="Actor Capacity" required>
+				<input
+					type="text"
+					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+					bind:value={conditionActorCapacity}
+					placeholder="e.g. Investment Committee Member, Partner"
+					aria-required="true"
+				/>
+			</FormField>
+			{#if actionError}
+				<p class="text-sm text-[var(--netz-status-error)]">{actionError}</p>
+			{/if}
 		</div>
-	</div>
-</Dialog>
+	{/snippet}
+</ConsequenceDialog>

@@ -1,16 +1,18 @@
 /**
- * Risk Store — in-memory, SSE primary, polling fallback.
+ * Risk Store — SSE-primary, poll-fallback. Single applyUpdate() gate.
  *
  * Declared once in (team)/+layout.svelte, shared via Svelte context.
- * No localStorage. Status-aware with stale detection.
- *
- * Combines CVaR, drift alerts, and regime from a single SSE connection.
+ * No localStorage. Monotonic version counter prevents stale-poll-overwrite-fresh-SSE.
+ * Freshness derived exclusively from server computed_at — Date.now() is forbidden.
  */
 
 import { createClientApiClient } from "$lib/api/client";
+import { createSSEStream, type SSEStatus } from "@netz/ui";
 import { isStale } from "./stale.js";
 
-export type StoreStatus = "loading" | "ready" | "error" | "stale";
+// ── Types ───────────────────────────────────────────────────
+
+export type ConnectionQuality = "live" | "degraded" | "offline";
 
 export interface CVaRStatus {
 	profile: string;
@@ -21,6 +23,8 @@ export interface CVaRStatus {
 	trigger_status: string | null;
 	regime: string | null;
 	consecutive_breach_days: number;
+	computed_at?: string | null;
+	next_expected_update?: string | null;
 }
 
 export interface CVaRPoint {
@@ -48,9 +52,12 @@ export interface RegimeData {
 	timestamp: string | null;
 }
 
+export type StoreStatus = "loading" | "ready" | "error" | "stale";
+
 export interface RiskStoreState {
 	status: StoreStatus;
-	lastUpdated: Date | null;
+	computedAt: string | null;
+	nextExpectedUpdate: string | null;
 	error: string | null;
 	cvarByProfile: Record<string, CVaRStatus>;
 	cvarHistoryByProfile: Record<string, CVaRPoint[]>;
@@ -70,36 +77,227 @@ export interface RiskStoreConfig {
 	apiBaseUrl?: string;
 	sseEndpoint?: string;
 	pollingFallbackMs?: number;
+	heartbeatTimeoutMs?: number;
 }
+
+// ── Store Factory ───────────────────────────────────────────
 
 /**
  * Create a risk store. Call once in root layout, share via context.
+ *
+ * SSE is the primary transport. Polling activates ONLY when SSE fails or
+ * heartbeat times out. Every update passes through applyUpdate() which
+ * enforces a monotonic version counter — stale poll data can never
+ * overwrite fresh SSE data.
  */
 export function createRiskStore(config: RiskStoreConfig) {
-	const { profileIds, getToken, pollingFallbackMs = 30_000 } = config;
+	const {
+		profileIds,
+		getToken,
+		pollingFallbackMs = 30_000,
+		heartbeatTimeoutMs = 45_000,
+	} = config;
 
-	// Reactive state
+	// ── Monotonic version gate ──────────────────────────────
+	let version = 0;
+
+	// ── Reactive state ──────────────────────────────────────
 	let status = $state<StoreStatus>("loading");
-	let lastUpdated = $state<Date | null>(null);
+	let computedAt = $state<string | null>(null);
+	let nextExpectedUpdate = $state<string | null>(null);
 	let error = $state<string | null>(null);
 	let cvarByProfile = $state<Record<string, CVaRStatus>>({});
-	let cvarHistoryByProfile = $state<Record<string, CVaRPoint[]>>({});
+	// Large arrays use $state.raw to avoid proxy overhead
+	let cvarHistoryByProfile = $state.raw<Record<string, CVaRPoint[]>>({});
 	let regime = $state<RegimeData | null>(null);
-	let regimeHistory = $state<Array<{ date: string; regime: string }>>([]);
-	let driftAlerts = $state<{ dtw_alerts: DriftAlert[]; behavior_change_alerts: BehaviorAlert[] }>({
+	let regimeHistory = $state.raw<Array<{ date: string; regime: string }>>([]);
+	let driftAlerts = $state.raw<{ dtw_alerts: DriftAlert[]; behavior_change_alerts: BehaviorAlert[] }>({
 		dtw_alerts: [],
 		behavior_change_alerts: [],
 	});
 	let macroIndicators = $state<Record<string, unknown> | null>(null);
 
-	let pollTimer: ReturnType<typeof setTimeout> | undefined;
-	let fetching = false;
+	// ── SSE state ───────────────────────────────────────────
+	let sseStatus = $state<SSEStatus>("disconnected");
+	let pollActive = $state(false);
 
-	// Check staleness periodically
-	function checkStale() {
-		if (status === "ready" && isStale(lastUpdated)) {
-			status = "stale";
+	let pollTimer: ReturnType<typeof setTimeout> | undefined;
+	let heartbeatTimer: ReturnType<typeof setTimeout> | undefined;
+	let fetching = false;
+	let sseConnection: ReturnType<typeof createSSEStream> | null = null;
+
+	// ── Derived connection quality ──────────────────────────
+	// Exposed as getter — consumers see $derived-like behavior
+	function getConnectionQuality(): ConnectionQuality {
+		if (sseStatus === "connected") return "live";
+		if ((sseStatus === "connecting" || sseStatus === "error") && pollActive) return "degraded";
+		return "offline";
+	}
+
+	// ── Single applyUpdate() gate ───────────────────────────
+	// Every data source (SSE event, poll response) passes through here.
+	// Monotonic version counter prevents stale-poll overwriting fresh SSE.
+
+	interface RiskUpdate {
+		version: number;
+		cvarByProfile?: Record<string, CVaRStatus>;
+		cvarHistoryByProfile?: Record<string, CVaRPoint[]>;
+		regime?: RegimeData | null;
+		regimeHistory?: Array<{ date: string; regime: string }>;
+		driftAlerts?: { dtw_alerts: DriftAlert[]; behavior_change_alerts: BehaviorAlert[] };
+		macroIndicators?: Record<string, unknown> | null;
+	}
+
+	function applyUpdate(update: RiskUpdate): boolean {
+		// Reject stale updates — monotonic version enforcement
+		if (update.version <= version) {
+			return false;
 		}
+		version = update.version;
+
+		if (update.cvarByProfile !== undefined) {
+			cvarByProfile = update.cvarByProfile;
+			// Extract computed_at from the first profile that has it
+			const firstWithTimestamp = Object.values(update.cvarByProfile).find((c) => c.computed_at);
+			if (firstWithTimestamp) {
+				computedAt = firstWithTimestamp.computed_at ?? null;
+				nextExpectedUpdate = firstWithTimestamp.next_expected_update ?? null;
+			}
+		}
+		if (update.cvarHistoryByProfile !== undefined) {
+			cvarHistoryByProfile = update.cvarHistoryByProfile;
+		}
+		if (update.regime !== undefined) {
+			regime = update.regime;
+		}
+		if (update.regimeHistory !== undefined) {
+			regimeHistory = update.regimeHistory;
+		}
+		if (update.driftAlerts !== undefined) {
+			driftAlerts = update.driftAlerts;
+		}
+		if (update.macroIndicators !== undefined) {
+			macroIndicators = update.macroIndicators;
+		}
+
+		// Staleness check uses server computed_at exclusively
+		if (computedAt && isStale(computedAt)) {
+			status = "stale";
+		} else {
+			status = "ready";
+		}
+		error = null;
+		return true;
+	}
+
+	// ── SSE primary transport ───────────────────────────────
+
+	function startSSE() {
+		const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
+		const sseUrl = config.sseEndpoint ?? `${apiBase}/risk/stream`;
+
+		sseConnection = createSSEStream<Record<string, unknown>>({
+			url: sseUrl,
+			getToken,
+			onEvent: (event) => {
+				resetHeartbeat();
+				// Each SSE event is a partial or full risk update
+				const nextVersion = version + 1;
+				const update: RiskUpdate = { version: nextVersion };
+
+				if (event.cvar_by_profile) {
+					update.cvarByProfile = event.cvar_by_profile as Record<string, CVaRStatus>;
+				}
+				if (event.regime) {
+					update.regime = event.regime as RegimeData;
+				}
+				if (event.drift_alerts) {
+					update.driftAlerts = event.drift_alerts as { dtw_alerts: DriftAlert[]; behavior_change_alerts: BehaviorAlert[] };
+				}
+				if (event.macro_indicators) {
+					update.macroIndicators = event.macro_indicators as Record<string, unknown>;
+				}
+
+				applyUpdate(update);
+			},
+			onError: () => {
+				// SSE failed — activate poll fallback
+				sseStatus = "error";
+				activatePollFallback();
+			},
+		});
+
+		sseConnection.connect();
+		sseStatus = "connecting";
+
+		// Monitor SSE connection status
+		const checkInterval = setInterval(() => {
+			if (!sseConnection) {
+				clearInterval(checkInterval);
+				return;
+			}
+			const newStatus = sseConnection.status;
+			if (newStatus !== sseStatus) {
+				sseStatus = newStatus;
+				if (newStatus === "connected") {
+					// SSE recovered — deactivate poll fallback
+					deactivatePollFallback();
+				} else if (newStatus === "error" || newStatus === "disconnected") {
+					activatePollFallback();
+				}
+			}
+		}, 2000);
+
+		// Store interval cleanup reference
+		const origDisconnect = sseConnection.disconnect.bind(sseConnection);
+		const wrappedConnection = sseConnection;
+		wrappedConnection.disconnect = () => {
+			clearInterval(checkInterval);
+			origDisconnect();
+		};
+		sseConnection = wrappedConnection;
+
+		resetHeartbeat();
+	}
+
+	function stopSSE() {
+		clearHeartbeat();
+		sseConnection?.disconnect();
+		sseConnection = null;
+		sseStatus = "disconnected";
+	}
+
+	// ── Heartbeat monitoring ────────────────────────────────
+
+	function resetHeartbeat() {
+		clearHeartbeat();
+		heartbeatTimer = setTimeout(() => {
+			// No data received within timeout — SSE may be stale
+			if (sseStatus === "connected") {
+				sseStatus = "error";
+				activatePollFallback();
+			}
+		}, heartbeatTimeoutMs);
+	}
+
+	function clearHeartbeat() {
+		if (heartbeatTimer !== undefined) {
+			clearTimeout(heartbeatTimer);
+			heartbeatTimer = undefined;
+		}
+	}
+
+	// ── Poll fallback ───────────────────────────────────────
+
+	function activatePollFallback() {
+		if (pollActive) return;
+		pollActive = true;
+		schedulePoll();
+	}
+
+	function deactivatePollFallback() {
+		pollActive = false;
+		stopPolling();
 	}
 
 	async function fetchAll() {
@@ -108,7 +306,6 @@ export function createRiskStore(config: RiskStoreConfig) {
 		try {
 			const api = createClientApiClient(getToken);
 
-			// Parallel fetch all risk data
 			const requests = [
 				...profileIds.map((p) => api.get(`/risk/${p}/cvar`).catch(() => null)),
 				...profileIds.map((p) => api.get(`/risk/${p}/cvar/history`).catch(() => null)),
@@ -121,7 +318,6 @@ export function createRiskStore(config: RiskStoreConfig) {
 			const results = await Promise.allSettled(requests);
 			const n = profileIds.length;
 
-			// Parse CVaR status per profile
 			const newCvar: Record<string, CVaRStatus> = {};
 			const newHistory: Record<string, CVaRPoint[]> = {};
 
@@ -130,40 +326,48 @@ export function createRiskStore(config: RiskStoreConfig) {
 				const statusResult = results[i];
 				const historyResult = results[n + i];
 				if (statusResult?.status === "fulfilled" && statusResult.value) {
-					newCvar[p] = statusResult.value;
+					newCvar[p] = statusResult.value as CVaRStatus;
 				}
 				if (historyResult?.status === "fulfilled" && historyResult.value) {
-					newHistory[p] = Array.isArray(historyResult.value) ? historyResult.value : historyResult.value.points ?? [];
+					const val = historyResult.value as CVaRPoint[] | { points: CVaRPoint[] };
+					newHistory[p] = Array.isArray(val) ? val : val.points ?? [];
 				}
 			}
-
-			cvarByProfile = newCvar;
-			cvarHistoryByProfile = newHistory;
 
 			const regimeIdx = 2 * n;
 			const regimeResult = results[regimeIdx];
-			if (regimeResult?.status === "fulfilled" && regimeResult.value) {
-				regime = regimeResult.value;
-			}
+			const newRegime = (regimeResult?.status === "fulfilled" && regimeResult.value)
+				? regimeResult.value as RegimeData
+				: undefined;
 
 			const regimeHistResult = results[regimeIdx + 1];
+			let newRegimeHistory: Array<{ date: string; regime: string }> | undefined;
 			if (regimeHistResult?.status === "fulfilled" && regimeHistResult.value) {
-				regimeHistory = Array.isArray(regimeHistResult.value) ? regimeHistResult.value : regimeHistResult.value.history ?? [];
+				const val = regimeHistResult.value as Array<{ date: string; regime: string }> | { history: Array<{ date: string; regime: string }> };
+				newRegimeHistory = Array.isArray(val) ? val : val.history ?? [];
 			}
 
 			const driftResult = results[regimeIdx + 2];
-			if (driftResult?.status === "fulfilled" && driftResult.value) {
-				driftAlerts = driftResult.value;
-			}
+			const newDrift = (driftResult?.status === "fulfilled" && driftResult.value)
+				? driftResult.value as { dtw_alerts: DriftAlert[]; behavior_change_alerts: BehaviorAlert[] }
+				: undefined;
 
 			const macroResult = results[regimeIdx + 3];
-			if (macroResult?.status === "fulfilled" && macroResult.value) {
-				macroIndicators = macroResult.value;
-			}
+			const newMacro = (macroResult?.status === "fulfilled" && macroResult.value)
+				? macroResult.value as Record<string, unknown>
+				: undefined;
 
-			lastUpdated = new Date();
-			status = "ready";
-			error = null;
+			// Use monotonic version — poll update must pass the gate
+			const nextVersion = version + 1;
+			applyUpdate({
+				version: nextVersion,
+				cvarByProfile: newCvar,
+				cvarHistoryByProfile: newHistory,
+				regime: newRegime,
+				regimeHistory: newRegimeHistory,
+				driftAlerts: newDrift,
+				macroIndicators: newMacro,
+			});
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Failed to load risk data";
 			status = "error";
@@ -172,16 +376,11 @@ export function createRiskStore(config: RiskStoreConfig) {
 		}
 	}
 
-	function startPolling() {
-		stopPolling();
-		schedulePoll();
-	}
-
 	function schedulePoll() {
+		stopPolling();
 		pollTimer = setTimeout(async () => {
 			await fetchAll();
-			checkStale();
-			if (pollTimer !== undefined) {
+			if (pollActive) {
 				schedulePoll();
 			}
 		}, pollingFallbackMs);
@@ -194,14 +393,30 @@ export function createRiskStore(config: RiskStoreConfig) {
 		}
 	}
 
+	// ── Public API ──────────────────────────────────────────
+
 	async function refresh() {
 		status = "loading";
+		version = 0; // Reset version to accept next update
 		await fetchAll();
+	}
+
+	function start() {
+		// Initial fetch, then start SSE primary
+		fetchAll().then(() => {
+			startSSE();
+		});
+	}
+
+	function destroy() {
+		stopSSE();
+		deactivatePollFallback();
 	}
 
 	return {
 		get status() { return status; },
-		get lastUpdated() { return lastUpdated; },
+		get computedAt() { return computedAt; },
+		get nextExpectedUpdate() { return nextExpectedUpdate; },
 		get error() { return error; },
 		get cvarByProfile() { return cvarByProfile; },
 		get cvarHistoryByProfile() { return cvarHistoryByProfile; },
@@ -209,10 +424,15 @@ export function createRiskStore(config: RiskStoreConfig) {
 		get regimeHistory() { return regimeHistory; },
 		get driftAlerts() { return driftAlerts; },
 		get macroIndicators() { return macroIndicators; },
+		get connectionQuality(): ConnectionQuality { return getConnectionQuality(); },
+		get sseStatus() { return sseStatus; },
 		fetchAll,
 		refresh,
-		startPolling,
-		stopPolling,
+		start,
+		destroy,
+		// Legacy compat — callers that used startPolling/stopPolling
+		startPolling: start,
+		stopPolling: destroy,
 	};
 }
 

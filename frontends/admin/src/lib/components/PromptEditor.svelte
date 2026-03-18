@@ -1,12 +1,13 @@
 <!--
-  Prompt Editor — split pane with textarea (left) and live preview (right).
-  Validates on debounced keystrokes, shows syntax errors inline.
-  Includes version history panel (lazy-loaded on tab click).
+  Prompt Editor — CodeMirror Jinja2 editor (left) and live preview (right).
+  Explicit Validate and Run Preview controls. Version history with actor and summary.
+  Lazy-loaded CodeMirror via JinjaEditor component.
 -->
 <script lang="ts">
 	import { SectionCard, ActionButton, ConfirmDialog, Button } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import DOMPurify from "dompurify";
+	import JinjaEditor from "$lib/components/JinjaEditor.svelte";
 
 	/** Sanitize HTML preview via DOMPurify to prevent stored XSS. */
 	function sanitizePreview(html: string): string {
@@ -28,6 +29,8 @@
 	let preview = $state("");
 	let previewErrors = $state<string[]>([]);
 	let validationErrors = $state<string[]>([]);
+	let validating = $state(false);
+	let previewing = $state(false);
 	let sourceLevel = $state("filesystem");
 	let version = $state<number | null>(null);
 	let loading = $state(true);
@@ -35,10 +38,22 @@
 	let saveMessage = $state<string | null>(null);
 	let previewDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+	// Version history types.
+	// actor_id and change_summary are pending backend — they are not in PromptDetailResponse yet.
+	type PromptVersionEntry = {
+		version: number;
+		created_at: string;
+		content_preview?: string;
+		// TODO: pending backend — actor_id not returned by /versions endpoint
+		actor_id?: string | null;
+		// TODO: pending backend — change_summary not returned by /versions endpoint
+		change_summary?: string | null;
+	};
+
 	// Version history state
 	let showHistory = $state(false);
 	let historyLoading = $state(false);
-	let versions = $state<{ version: number; created_at: string; content_preview?: string }[]>([]);
+	let versions = $state<PromptVersionEntry[]>([]);
 	let showRevertConfirm = $state(false);
 	let revertTarget = $state<number | null>(null);
 	let showDeleteConfirm = $state(false);
@@ -65,6 +80,7 @@
 	}
 
 	async function doPreview() {
+		previewing = true;
 		try {
 			const result = await api.post<{ rendered: string; errors: string[] }>(
 				`/admin/prompts/${vertical}/${templateName}/preview`,
@@ -74,10 +90,14 @@
 			previewErrors = result.errors;
 		} catch {
 			previewErrors = ["Preview request failed"];
+		} finally {
+			previewing = false;
 		}
 	}
 
 	async function doValidate() {
+		validating = true;
+		validationErrors = [];
 		try {
 			const result = await api.post<{ valid: boolean; errors: string[] }>(
 				`/admin/prompts/${vertical}/${templateName}/validate`,
@@ -86,16 +106,18 @@
 			validationErrors = result.errors;
 		} catch {
 			validationErrors = ["Validation request failed"];
+		} finally {
+			validating = false;
 		}
 	}
 
-	function onInput(value: string) {
-		content = value;
+	function onEditorChange(newValue: string) {
+		content = newValue;
+		// Debounced auto-validate on edit (not auto-preview — preview is explicit)
 		if (previewDebounceTimer) clearTimeout(previewDebounceTimer);
 		previewDebounceTimer = setTimeout(() => {
-			void doPreview();
 			void doValidate();
-		}, 500);
+		}, 600);
 	}
 
 	async function save() {
@@ -204,6 +226,25 @@
 				{#if saveMessage}
 					<span class="text-xs text-[var(--netz-brand-primary)]">{saveMessage}</span>
 				{/if}
+				<!-- Validate: triggers lint from CodeMirror content via backend validate endpoint -->
+				<Button
+					variant="outline"
+					size="sm"
+					onclick={() => void doValidate()}
+					disabled={validating || isReadonly}
+				>
+					{validating ? "Validating…" : "Validate"}
+				</Button>
+				<!-- Run Preview: calls backend preview endpoint explicitly. Disabled if no preview endpoint -->
+				<Button
+					variant="outline"
+					size="sm"
+					onclick={() => void doPreview()}
+					disabled={previewing || isReadonly}
+					title={isReadonly ? "Preview not available for filesystem templates" : "Run preview with empty sample data"}
+				>
+					{previewing ? "Running…" : "Run Preview"}
+				</Button>
 				<Button variant="ghost" size="sm" onclick={toggleHistory}>
 					{showHistory ? "Hide History" : "History"}
 				</Button>
@@ -222,17 +263,27 @@
 					<div class="max-h-48 space-y-2 overflow-y-auto">
 						{#each versions as ver}
 							<div class="flex items-center justify-between rounded border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2">
-								<div>
-									<span class="text-sm font-medium text-[var(--netz-text-primary)]">v{ver.version}</span>
-									<span class="ml-2 text-xs text-[var(--netz-text-muted)]">{ver.created_at}</span>
+								<div class="min-w-0 flex-1">
+									<div class="flex items-center gap-2">
+										<span class="text-sm font-medium text-[var(--netz-text-primary)]">v{ver.version}</span>
+										<span class="text-xs text-[var(--netz-text-muted)]">{ver.created_at}</span>
+										{#if ver.actor_id}
+											<span class="text-xs text-[var(--netz-text-secondary)]">by {ver.actor_id}</span>
+										{/if}
+									</div>
+									{#if ver.change_summary}
+										<p class="mt-0.5 truncate text-xs text-[var(--netz-text-muted)]">{ver.change_summary}</p>
+									{/if}
 								</div>
-								{#if ver.version !== version}
-									<Button variant="outline" size="sm" onclick={() => confirmRevert(ver.version)}>
-										Revert
-									</Button>
-								{:else}
-									<span class="text-xs text-[var(--netz-brand-primary)]">Current</span>
-								{/if}
+								<div class="ml-3 flex-shrink-0">
+									{#if ver.version !== version}
+										<Button variant="outline" size="sm" onclick={() => confirmRevert(ver.version)}>
+											Revert
+										</Button>
+									{:else}
+										<span class="text-xs text-[var(--netz-brand-primary)]">Current</span>
+									{/if}
+								</div>
 							</div>
 						{/each}
 					</div>
@@ -242,21 +293,17 @@
 
 		<!-- Split Pane -->
 		<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-			<!-- Left: Editor -->
+			<!-- Left: CodeMirror Jinja2 Editor -->
 			<div>
 				<label class="mb-1 block text-xs text-[var(--netz-text-muted)]">
 					Template (Jinja2)
 				</label>
-				<textarea
-					value={content}
-					oninput={(e) => onInput(e.currentTarget.value)}
+				<JinjaEditor
+					bind:value={content}
 					readonly={isReadonly}
-					rows={20}
-					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] p-3 font-mono text-xs text-[var(--netz-text-primary)] focus:border-[var(--netz-brand-primary)] focus:outline-none {isReadonly
-						? 'opacity-60'
-						: ''}"
-					spellcheck="false"
-				></textarea>
+					ariaLabel="Jinja2 template editor for {templateName}"
+					onChange={onEditorChange}
+				/>
 				{#if validationErrors.length > 0}
 					<div class="mt-2 space-y-1">
 						{#each validationErrors as err}
