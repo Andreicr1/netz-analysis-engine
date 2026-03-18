@@ -5,7 +5,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config.settings import settings
+from ai_engine.pipeline.storage_routing import bronze_upload_blob_path
 from app.core.db.audit import write_audit_event
 from app.core.security.clerk_auth import Actor, get_actor, require_fund_access, require_role
 from app.core.tenancy.middleware import get_db_with_rls
@@ -28,17 +28,26 @@ async def request_evidence_upload(
 
     filename = payload["filename"]
 
-    if not settings.AZURE_STORAGE_ACCOUNT:
-        raise HTTPException(status_code=501, detail="Azure storage account not configured")
+    # Generate a version ID for path isolation
+    version_id = uuid.uuid4()
 
-    blob_name = f"{fund_id}/{uuid.uuid4()}_{filename}"
+    # Use storage_routing for safe, consistent path construction
+    blob_path = bronze_upload_blob_path(
+        org_id=actor.organization_id,
+        fund_id=fund_id,
+        version_id=version_id,
+        filename=filename,
+    )
+
+    storage = get_storage_client()
+    upload_url = await storage.generate_upload_url(blob_path)
 
     evidence = EvidenceDocument(
         fund_id=fund_id,
         deal_id=payload.get("deal_id"),
         action_id=payload.get("action_id"),
         filename=filename,
-        blob_uri=f"https://{settings.AZURE_STORAGE_ACCOUNT}.blob.core.windows.net/{settings.AZURE_STORAGE_CONTAINER}/{blob_name}",
+        blob_uri=blob_path,
         uploaded_at=None,
     )
 
@@ -57,9 +66,6 @@ async def request_evidence_upload(
     )
 
     await db.flush()
-
-    storage = get_storage_client()
-    upload_url = await storage.generate_upload_url(blob_name)
 
     return {
         "evidence_id": str(evidence.id),

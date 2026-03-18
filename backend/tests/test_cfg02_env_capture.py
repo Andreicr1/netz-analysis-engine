@@ -34,10 +34,9 @@ import pytest
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
-# The four files covered by CFG-02.
+# The three files covered by CFG-02 (extraction_orchestrator deleted in legacy cleanup).
 _TARGET_FILES: dict[str, Path] = {
     "policy_loader": _BACKEND_ROOT / "ai_engine" / "governance" / "policy_loader.py",
-    "extraction_orchestrator": _BACKEND_ROOT / "ai_engine" / "extraction" / "extraction_orchestrator.py",
     "prompt_registry": _BACKEND_ROOT / "ai_engine" / "prompts" / "registry.py",
     "deep_review_models": _BACKEND_ROOT / "vertical_engines" / "credit" / "deep_review" / "models.py",
 }
@@ -199,41 +198,6 @@ def test_settings_has_search_fields() -> None:
     from app.core.config.settings import settings
     assert hasattr(settings, "azure_search_endpoint")
     assert hasattr(settings, "azure_search_key")
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-#  Test 5 — extraction_orchestrator: already uses lazy accessors (regression)
-# ──────────────────────────────────────────────────────────────────────────────
-
-def test_extraction_orchestrator_lazy_accessors_exist() -> None:
-    """extraction_orchestrator must expose the expected lazy accessor functions.
-
-    This file has Azure SDK dependencies not installed in the unit-test
-    environment (azure-storage-blob).  We verify the function signatures
-    via AST rather than by importing the module.
-    """
-    path = _TARGET_FILES["extraction_orchestrator"]
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-
-    # Collect top-level function names
-    top_level_funcs = {
-        node.name
-        for node in ast.iter_child_nodes(tree)
-        if isinstance(node, ast.FunctionDef)
-    }
-
-    expected_accessors = {
-        "_storage_conn_str",
-        "_search_endpoint",
-        "_search_headers",
-        "_openai_key",
-        "_az_openai_key",
-        "_az_openai_ep",
-    }
-    missing = expected_accessors - top_level_funcs
-    assert not missing, (
-        f"extraction_orchestrator.py is missing lazy accessor function(s): {missing}"
-    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────

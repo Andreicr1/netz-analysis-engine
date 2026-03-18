@@ -19,11 +19,4 @@ Module classification
     azure_kb_adapter       — knowledge base adapter for Fund Copilot RAG
     kb_schema              — schema definitions for knowledge base chunks
     text_extraction        — text extraction from Azure Blob (used by entity_bootstrap)
-
-**Deprecated** (will be deleted with legacy Azure Blob resources):
-    extraction_orchestrator — legacy batch pipeline (see module docstring)
-    deals_enrichment        — legacy chunk enrichment (called only by extraction_orchestrator)
-    fund_data_bootstrap     — legacy fund data bootstrap (called only by extraction_orchestrator)
-    fund_data_enrichment    — legacy fund data enrichment (called only by extraction_orchestrator)
-    market_data_bootstrap   — legacy market data bootstrap (called only by extraction_orchestrator)
 """

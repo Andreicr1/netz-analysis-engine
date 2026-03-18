@@ -80,8 +80,7 @@ class IngestRequest:
 
     The ``fund_context`` dict carries entity-bootstrap aliases that
     ``prepare_pdfs_full.py`` stored as global mutable state
-    (``_CONTEXT_DEAL_NAME``, ``_FUND_ALIASES``).  Populated by the batch
-    wrapper (``extraction_orchestrator.py``) after running entity
+    (``_CONTEXT_DEAL_NAME``, ``_FUND_ALIASES``).  Populated by entity
     bootstrap, or from the fund record in the DB for UI uploads.
     If ``None``, metadata extraction proceeds without alias enrichment
     (degraded but functional).
