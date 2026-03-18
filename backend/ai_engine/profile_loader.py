@@ -25,12 +25,14 @@ from types import ModuleType
 from typing import Any
 from uuid import UUID
 
-from app.core.config.config_service import ConfigService
 from ai_engine.vertical_registry import (
     available_profiles as available_vertical_profiles,
+)
+from ai_engine.vertical_registry import (
     get_vertical_entry,
     import_vertical_module,
 )
+from app.core.config.config_service import ConfigService
 
 logger = logging.getLogger(__name__)
 

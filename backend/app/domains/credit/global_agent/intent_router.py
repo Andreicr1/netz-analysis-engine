@@ -40,7 +40,7 @@ DOMAIN_KEYWORDS: dict[str, list[str]] = {
     ],
 }
 
-# Canonical ordering: PIPELINE first, then compliance domains.
+# Canonical ordering: PIPELINE first, then regulatory domains.
 _DOMAIN_ORDER = ["PIPELINE", "REGULATORY", "CONSTITUTION", "SERVICE_PROVIDER"]
 
 ALL_DOMAINS: list[str] = list(_DOMAIN_ORDER)

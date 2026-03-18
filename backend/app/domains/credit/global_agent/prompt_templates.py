@@ -1,6 +1,5 @@
 """Prompt templates for the Netz Global Intelligence Agent.
 
-These prompts are distinct from the compliance-only agent prompts.
 The global agent covers all knowledge domains: Pipeline, Regulatory,
 Constitution, and Service Providers.
 """

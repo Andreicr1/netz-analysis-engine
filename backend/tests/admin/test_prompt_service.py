@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from app.core.prompts.prompt_service import (
-    HardenedPromptEnvironment,
     PromptService,
     SecurityError,
     _create_hardened_env,

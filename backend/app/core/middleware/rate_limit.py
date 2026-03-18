@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 # Path prefixes that map to the "compute" (lower-limit) tier.
 # These correspond to LLM-intensive operations: IC memo generation,
-# AI modules (deep review, extraction, copilot, compliance), and DD reports.
+# AI modules (deep review, extraction, copilot), and DD reports.
 _COMPUTE_HEAVY_PREFIXES: tuple[str, ...] = (
     "/api/v1/ai/",
     "/api/v1/dd-reports/",

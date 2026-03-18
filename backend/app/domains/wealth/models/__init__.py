@@ -4,7 +4,7 @@ from app.domains.wealth.models.benchmark_nav import BenchmarkNav
 from app.domains.wealth.models.block import AllocationBlock
 from app.domains.wealth.models.content import WealthContent
 from app.domains.wealth.models.dd_report import DDChapter, DDReport
-from app.domains.wealth.models.fund import Fund
+from app.domains.wealth.models.fund import Fund  # DEPRECATED: use Instrument (SR-4)
 from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.lipper import LipperRating
 from app.domains.wealth.models.macro import MacroData

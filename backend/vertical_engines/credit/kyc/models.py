@@ -2,9 +2,9 @@
 
 Leaf module — zero sibling imports.
 
-The KYC screening tables were part of the compliance domain which has
-been removed from scope. These stubs keep the kyc package importable.
-The persist_kyc_screenings_to_db function will raise at runtime if
+The KYC screening tables do not yet have backing migrations.
+These stubs keep the kyc package importable. The
+persist_kyc_screenings_to_db function will raise at runtime if
 called without the backing tables.
 """
 from __future__ import annotations
@@ -20,7 +20,7 @@ class _StubModel:
     def __init__(self, **kwargs):
         logger.warning(
             "kyc_model_stub_instantiated",
-            note="compliance domain removed from scope — KYC results will NOT be persisted",
+            note="KYC backing tables not yet migrated — results will NOT be persisted",
         )
         for k, v in kwargs.items():
             setattr(self, k, v)

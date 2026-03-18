@@ -29,7 +29,7 @@ _OVERVIEW_PATTERNS = re.compile(
 class PipelineKBAdapter:
     """Retrieves chunks from the canonical search chunks index.
     Results are mapped to ComplianceChunk so the global agent can merge
-    pipeline evidence with compliance evidence seamlessly.
+    pipeline evidence with regulatory evidence seamlessly.
     """
 
     @staticmethod
@@ -103,8 +103,9 @@ class PipelineKBAdapter:
             return chunks
 
         except Exception as exc:
-            logger.error(
-                "PIPELINE_KB search_live failed: %s: %s",
+            logger.warning(
+                "SEARCH_INDEX_UNAVAILABLE: pipeline search degraded, "
+                "RAG query returned empty results. error=%s: %s",
                 type(exc).__name__,
                 exc,
             )

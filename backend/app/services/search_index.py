@@ -140,24 +140,37 @@ class AzureSearchMetadataClient:
             self.index_name,
             top,
         )
-        results = client.search(
-            search_text=q or "*",
-            top=top,
-            filter=filter_expr,
-            select=[
-                "id",
-                "fund_id",
-                "document_id",
-                "title",
-                "content",
-                "doc_type",
-                "version",
-                "root_folder",
-                "folder_path",
-                "version_blob_path",
-                "uploaded_at",
-            ],
-        )
+
+        try:
+            results = client.search(
+                search_text=q or "*",
+                top=top,
+                filter=filter_expr,
+                select=[
+                    "id",
+                    "fund_id",
+                    "document_id",
+                    "title",
+                    "content",
+                    "doc_type",
+                    "version",
+                    "root_folder",
+                    "folder_path",
+                    "version_blob_path",
+                    "uploaded_at",
+                ],
+            )
+        except Exception as exc:
+            logger.warning(
+                "SEARCH_INDEX_UNAVAILABLE: metadata search degraded, "
+                "RAG query returned empty results. caller=%s index=%s "
+                "error=%s: %s",
+                self.caller,
+                self.index_name,
+                type(exc).__name__,
+                exc,
+            )
+            return []
 
         hits = [
             MetadataSearchHit(

@@ -332,7 +332,7 @@ def answer(
             after={"answer_len": len(ans_text), "citation_count": 0},
         )
         db.commit()
-        # Evidence gap detection removed (compliance domain out of scope)
+        # Evidence gap detection not implemented
         return AIAnswerResponse(answer=ans_text, citations=[])
 
     chunk_rows = (
@@ -397,7 +397,7 @@ def answer(
             after={"reason": "chunks_not_found_in_db"},
         )
         db.commit()
-        # Evidence gap detection removed (compliance domain out of scope)
+        # Evidence gap detection not implemented
         return AIAnswerResponse(answer=ans_text, citations=[])
 
     runtime_context = build_agent_runtime_context(
@@ -466,7 +466,7 @@ def answer(
             after={"reason": "model_returned_no_citations"},
         )
         db.commit()
-        # Evidence gap detection removed (compliance domain out of scope)
+        # Evidence gap detection not implemented
         return AIAnswerResponse(answer="Insufficient evidence in the Data Room", citations=[])
 
     cited_ids: list[str] = []
@@ -487,7 +487,7 @@ def answer(
             after={"reason": "citations_not_in_retrieved_set"},
         )
         db.commit()
-        # Evidence gap detection removed (compliance domain out of scope)
+        # Evidence gap detection not implemented
         return AIAnswerResponse(answer="Insufficient evidence in the Data Room", citations=[])
 
     a_row = AIAnswer(

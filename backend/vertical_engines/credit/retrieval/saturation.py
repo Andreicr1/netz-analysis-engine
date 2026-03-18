@@ -1,7 +1,7 @@
 """Evidence saturation enforcement and retrieval audit artifacts.
 
 Implements enforce_evidence_saturation() (per-chapter minimum thresholds)
-and build_retrieval_audit() (structured audit artifact for compliance).
+and build_retrieval_audit() (structured audit artifact for governance).
 
 Error contract: never-raises. Returns SaturationResult with warnings on failure.
 """

@@ -19,7 +19,6 @@ from app.core.config.registry import ConfigDomain, ConfigRegistry
 from app.core.config.schemas import ConfigResult, ConfigResultState
 from app.shared.exceptions import ConfigMissError
 
-
 # ── ConfigResult dataclass tests ─────────────────────────────────────────────
 
 
@@ -260,7 +259,6 @@ class TestConfigServiceGetIntegration:
     @pytest.mark.asyncio
     async def test_optional_miss_cached(self):
         """Optional miss result is cached so subsequent calls don't re-query."""
-        from app.core.config.config_service import _config_cache
 
         db = AsyncMock()
         mock_result = MagicMock()

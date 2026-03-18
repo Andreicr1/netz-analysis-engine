@@ -12,7 +12,6 @@ import pytest
 
 from ai_engine.extraction.search_upsert_service import UpsertResult, upsert_chunks
 
-
 # ── UpsertResult unit tests ──────────────────────────────────────────
 
 

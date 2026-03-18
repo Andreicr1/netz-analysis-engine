@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import pytest
-
 from app.domains.admin.validators import (
+    strip_exif,
     validate_branding_tokens,
     validate_image_magic_bytes,
-    strip_exif,
 )
 
 

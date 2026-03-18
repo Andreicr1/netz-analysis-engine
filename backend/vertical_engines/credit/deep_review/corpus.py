@@ -273,7 +273,7 @@ def _gather_deal_texts(
            → Coverage is a small corrective, never dominant.
         4. Evidence saturation enforcement per chapter.
         5. Provenance validation — chunks without required fields discarded.
-        6. Structured retrieval audit artifact for compliance.
+        6. Structured retrieval audit artifact for governance.
 
     Returns:
         {

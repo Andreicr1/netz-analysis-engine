@@ -14,7 +14,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-
 # ── Stub modules that trigger heavy import chains ─────────────────────
 # document_intelligence.py imports prompt_safety, prompts, model_config at
 # module level.  We stub those to keep tests fast and isolated.
@@ -53,9 +52,7 @@ from ai_engine.extraction.document_intelligence import (
     ExtractionQuality,
     ExtractionResult,
     MetadataResult,
-    SummaryResult,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════
 #  ExtractionQuality enum — reason codes and degraded flag

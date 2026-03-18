@@ -155,6 +155,14 @@ async def publish_event(
     try:
         payload = json.dumps({"event": event_type, **(data or {})})
         await r.publish(_channel_name(job_id), payload)
+    except Exception:
+        logger.warning(
+            "sse_publish_failed job_id=%s event_type=%s",
+            job_id,
+            event_type,
+            exc_info=True,
+        )
+        raise
     finally:
         await r.aclose()
 

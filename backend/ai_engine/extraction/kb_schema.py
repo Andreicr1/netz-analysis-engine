@@ -1,8 +1,6 @@
 """Knowledge-base chunk schema for AI Search retrieval.
 
-Relocated from app.domains.credit.compliance.ingest.compliance_kb_schema
-after the compliance domain was removed from scope. These are
-cross-cutting retrieval data types used by the pipeline KB adapter
+Cross-cutting retrieval data types used by the pipeline KB adapter
 and global agent.
 """
 from __future__ import annotations

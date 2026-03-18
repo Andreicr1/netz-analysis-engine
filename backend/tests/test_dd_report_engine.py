@@ -9,21 +9,17 @@ Acceptance criteria:
 from __future__ import annotations
 
 import threading
-from typing import Any
-from unittest.mock import MagicMock, call, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from vertical_engines.wealth.dd_report.dd_report_engine import DDReportEngine
 from vertical_engines.wealth.dd_report.evidence_pack import EvidencePack
 from vertical_engines.wealth.dd_report.models import (
     CHAPTER_REGISTRY,
+    MIN_CHAPTERS_FOR_RECOMMENDATION,
     PARALLEL_CHAPTER_TAGS,
     SEQUENTIAL_CHAPTER_TAG,
-    MIN_CHAPTERS_FOR_RECOMMENDATION,
     ChapterResult,
 )
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -475,7 +471,7 @@ class TestModelConstants:
     def test_parallel_chapter_tags_are_orders_1_to_7(self):
         """PARALLEL_CHAPTER_TAGS must be exactly the tags for orders 1-7."""
         expected = [ch["tag"] for ch in CHAPTER_REGISTRY if ch["order"] <= 7]
-        assert PARALLEL_CHAPTER_TAGS == expected, (
+        assert expected == PARALLEL_CHAPTER_TAGS, (
             f"PARALLEL_CHAPTER_TAGS mismatch. Expected {expected}, got {PARALLEL_CHAPTER_TAGS}"
         )
 

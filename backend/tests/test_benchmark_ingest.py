@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import math
 from datetime import date, timedelta
-from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
@@ -21,7 +20,6 @@ import pandas as pd
 import pytest
 
 from app.domains.wealth.models.benchmark_nav import BenchmarkNav
-
 
 # ═══════════════════════════════════════════════════════════════════
 #  Model integrity tests
@@ -114,7 +112,7 @@ class TestBenchmarkIngestValidation:
         # Verify it's the same across imports (deterministic)
         from app.domains.wealth.workers.benchmark_ingest import BENCHMARK_INGEST_LOCK_ID as lock2
 
-        assert BENCHMARK_INGEST_LOCK_ID == lock2
+        assert lock2 == BENCHMARK_INGEST_LOCK_ID
 
     def test_upsert_chunk_size(self):
         """Chunk size should be small to prevent connection pool starvation."""

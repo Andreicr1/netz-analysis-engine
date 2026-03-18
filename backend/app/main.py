@@ -18,17 +18,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config.settings import settings
 from app.core.db.engine import engine
 from app.core.jobs.sse import create_job_stream
-from app.core.jobs.tracker import close_redis_pool, publish_event, verify_job_owner
+from app.core.jobs.tracker import close_redis_pool, get_job_state, publish_event, verify_job_owner
 from app.core.security.clerk_auth import Actor, get_actor
 
 # ── Admin domain routers ─────────────────────────────────────
 from app.domains.admin.routes.assets import router as admin_assets_router
+from app.domains.admin.routes.audit import router as admin_audit_router
 from app.domains.admin.routes.branding import router as admin_branding_router
 from app.domains.admin.routes.configs import router as admin_configs_router
 from app.domains.admin.routes.health import router as admin_health_router
 from app.domains.admin.routes.prompts import router as admin_prompts_router
 from app.domains.admin.routes.tenants import router as admin_tenants_router
-from app.domains.admin.routes.audit import router as admin_audit_router
 
 # Actions
 from app.domains.credit.actions.routes.actions import router as credit_actions_router
@@ -290,6 +290,25 @@ async def stream_job(request: Request, job_id: str, actor: Actor = Depends(get_a
     return await create_job_stream(request, job_id)
 
 
+# ── Job status polling endpoint (SSE fallback) ───────────────
+
+@api_v1.get("/jobs/{job_id}/status", tags=["jobs"])
+async def get_job_status(job_id: str, actor: Actor = Depends(get_actor)):
+    """Poll terminal job state from Redis — fallback when SSE connection drops.
+
+    Returns the persisted terminal state (success/degraded/failed) with
+    chunk counts, or 404 if the job hasn't reached a terminal state yet.
+    Clients should poll this when SSE disconnects before receiving a
+    terminal event (done/error/ingestion_complete).
+    """
+    if not await verify_job_owner(job_id, str(actor.organization_id)):
+        raise HTTPException(status_code=403, detail="Job not found")
+    state = await get_job_state(job_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Job state not available yet")
+    return state
+
+
 # ── SSE test endpoint (dev only) ─────────────────────────────
 
 @api_v1.post("/test/sse/{job_id}/emit", tags=["admin"])
@@ -313,6 +332,7 @@ api_v1.include_router(admin_audit_router)
 
 # ── Mount wealth domain routes ───────────────────────────────
 
+# DEPRECATED: Fund routes kept for backward compat — use /instruments (SR-4)
 api_v1.include_router(wealth_funds_router)
 api_v1.include_router(wealth_instruments_router)
 api_v1.include_router(wealth_allocation_router)

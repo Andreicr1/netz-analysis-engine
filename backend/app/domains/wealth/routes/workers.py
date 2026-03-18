@@ -2,11 +2,30 @@
 
 Allows CI pipelines, scheduled jobs, and admin UIs to trigger
 ingestion, risk calculation, and portfolio evaluation via the API.
+
+SR-1 mitigation: all worker dispatches are wrapped with asyncio.wait_for()
+timeout and structured start/finish/error/timeout logging to prevent stuck
+workers from blocking the event loop and to provide observability.
+
+M-6 mitigation: idempotency guard via Redis — prevents duplicate runs,
+tracks completion/failure status, returns 409 on concurrent triggers.
 """
 
+import asyncio
+import time
+import uuid
+from collections.abc import Awaitable, Callable
+from typing import Any
+
+import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from pydantic import BaseModel
 
+from app.core.jobs.worker_idempotency import (
+    check_worker_status,
+    idempotent_worker_wrapper,
+    mark_worker_running,
+)
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.domains.wealth.workers.ingestion import run_ingestion
 from app.domains.wealth.workers.macro_ingestion import run_macro_ingestion
@@ -14,7 +33,13 @@ from app.domains.wealth.workers.portfolio_eval import run_portfolio_eval
 from app.domains.wealth.workers.risk_calc import run_risk_calc
 from app.shared.enums import Role
 
+logger = structlog.get_logger()
+
 router = APIRouter(prefix="/workers")
+
+# Timeout tiers (seconds)
+_HEAVY_WORKER_TIMEOUT = 600  # 10 min — ingestion, risk calc, macro, fact-sheet, benchmark
+_LIGHT_WORKER_TIMEOUT = 300  # 5 min — screening, watchlist, portfolio eval
 
 
 def _require_admin_role(actor: Actor) -> None:
@@ -22,9 +47,96 @@ def _require_admin_role(actor: Actor) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin or IC role required")
 
 
+async def _run_worker_with_timeout(
+    worker_name: str,
+    coro_fn: Callable[..., Awaitable[Any]],
+    *args: Any,
+    timeout_seconds: int = _HEAVY_WORKER_TIMEOUT,
+    org_id: uuid.UUID | None = None,
+) -> None:
+    """Execute a worker coroutine with timeout and structured logging.
+
+    Wraps the worker call with ``asyncio.wait_for`` to prevent stuck workers
+    from blocking the ASGI event loop indefinitely.  Logs start, success,
+    timeout, and error events with timing information for observability.
+    """
+    log = logger.bind(
+        worker_name=worker_name,
+        org_id=str(org_id) if org_id else None,
+        timeout_seconds=timeout_seconds,
+    )
+    log.info("worker.started")
+    t0 = time.monotonic()
+
+    try:
+        await asyncio.wait_for(coro_fn(*args), timeout=timeout_seconds)
+        duration = round(time.monotonic() - t0, 2)
+        log.info("worker.completed", duration_seconds=duration)
+    except asyncio.TimeoutError:
+        duration = round(time.monotonic() - t0, 2)
+        log.error(
+            "worker.timeout",
+            duration_seconds=duration,
+            detail=f"Worker {worker_name} exceeded {timeout_seconds}s timeout",
+        )
+    except Exception:
+        duration = round(time.monotonic() - t0, 2)
+        log.exception("worker.failed", duration_seconds=duration)
+
+
 class WorkerScheduledResponse(BaseModel):
     status: str
     worker: str
+
+
+async def _dispatch_worker(
+    background_tasks: BackgroundTasks,
+    worker_name: str,
+    scope: str,
+    coro_func: Callable[..., Awaitable[Any]],
+    *args: Any,
+    timeout_seconds: int = _HEAVY_WORKER_TIMEOUT,
+    org_id: uuid.UUID | None = None,
+) -> WorkerScheduledResponse:
+    """Check idempotency, then dispatch a worker with timeout wrapping.
+
+    Raises HTTPException 409 if the worker is already running or recently
+    completed for the given scope.  Otherwise marks it as running in Redis
+    and schedules the background task with both idempotency tracking and
+    the SR-1 timeout wrapper.
+    """
+    existing = await check_worker_status(worker_name, scope)
+    if existing is not None:
+        if existing.get("status") == "running":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Worker '{worker_name}' is already running for scope '{scope}'",
+            )
+        if existing.get("status") == "completed":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Worker '{worker_name}' completed recently for scope '{scope}'. "
+                    "Wait for the cooldown period or check the result."
+                ),
+            )
+
+    # Mark as running BEFORE dispatching to close the race window
+    await mark_worker_running(worker_name, scope)
+
+    # Compose: idempotent wrapper calls the timeout wrapper which calls the worker
+    background_tasks.add_task(
+        idempotent_worker_wrapper,
+        worker_name,
+        scope,
+        _run_worker_with_timeout,
+        worker_name,
+        coro_func,
+        *args,
+        timeout_seconds=timeout_seconds,
+        org_id=org_id,
+    )
+    return WorkerScheduledResponse(status="scheduled", worker=worker_name)
 
 
 @router.post(
@@ -45,8 +157,11 @@ async def trigger_run_ingestion(
     actor: Actor = Depends(get_actor),
 ) -> WorkerScheduledResponse:
     _require_admin_role(actor)
-    background_tasks.add_task(run_ingestion, user.organization_id)
-    return WorkerScheduledResponse(status="scheduled", worker="run-ingestion")
+    return await _dispatch_worker(
+        background_tasks, "run-ingestion", str(user.organization_id),
+        run_ingestion, user.organization_id,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT, org_id=user.organization_id,
+    )
 
 
 @router.post(
@@ -67,8 +182,11 @@ async def trigger_run_risk_calc(
     actor: Actor = Depends(get_actor),
 ) -> WorkerScheduledResponse:
     _require_admin_role(actor)
-    background_tasks.add_task(run_risk_calc, user.organization_id)
-    return WorkerScheduledResponse(status="scheduled", worker="run-risk-calc")
+    return await _dispatch_worker(
+        background_tasks, "run-risk-calc", str(user.organization_id),
+        run_risk_calc, user.organization_id,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT, org_id=user.organization_id,
+    )
 
 
 @router.post(
@@ -90,8 +208,11 @@ async def trigger_run_portfolio_eval(
     actor: Actor = Depends(get_actor),
 ) -> WorkerScheduledResponse:
     _require_admin_role(actor)
-    background_tasks.add_task(run_portfolio_eval, user.organization_id)
-    return WorkerScheduledResponse(status="scheduled", worker="run-portfolio-eval")
+    return await _dispatch_worker(
+        background_tasks, "run-portfolio-eval", str(user.organization_id),
+        run_portfolio_eval, user.organization_id,
+        timeout_seconds=_LIGHT_WORKER_TIMEOUT, org_id=user.organization_id,
+    )
 
 
 @router.post(
@@ -113,8 +234,11 @@ async def trigger_run_macro_ingestion(
     actor: Actor = Depends(get_actor),
 ) -> WorkerScheduledResponse:
     _require_admin_role(actor)
-    background_tasks.add_task(run_macro_ingestion)
-    return WorkerScheduledResponse(status="scheduled", worker="run-macro-ingestion")
+    return await _dispatch_worker(
+        background_tasks, "run-macro-ingestion", "global",
+        run_macro_ingestion,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )
 
 
 @router.post(
@@ -139,8 +263,11 @@ async def trigger_run_fact_sheet_gen(
 
     from app.domains.wealth.workers.fact_sheet_gen import run_monthly_fact_sheets
 
-    background_tasks.add_task(run_monthly_fact_sheets)
-    return WorkerScheduledResponse(status="scheduled", worker="run-fact-sheet-gen")
+    return await _dispatch_worker(
+        background_tasks, "run-fact-sheet-gen", "global",
+        run_monthly_fact_sheets,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )
 
 
 @router.post(
@@ -167,8 +294,11 @@ async def trigger_run_watchlist_check(
     from app.domains.wealth.workers.watchlist_batch import run_watchlist_check
 
     org_id = user.organization_id
-    background_tasks.add_task(run_watchlist_check, org_id)
-    return WorkerScheduledResponse(status="scheduled", worker="run-watchlist-check")
+    return await _dispatch_worker(
+        background_tasks, "run-watchlist-check", str(org_id),
+        run_watchlist_check, org_id,
+        timeout_seconds=_LIGHT_WORKER_TIMEOUT, org_id=org_id,
+    )
 
 
 @router.post(
@@ -193,10 +323,12 @@ async def trigger_run_screening_batch(
 
     from app.domains.wealth.workers.screening_batch import run_screening_batch
 
-    # org_id needs to be passed to the worker
     org_id = user.organization_id
-    background_tasks.add_task(run_screening_batch, org_id)
-    return WorkerScheduledResponse(status="scheduled", worker="run-screening-batch")
+    return await _dispatch_worker(
+        background_tasks, "run-screening-batch", str(org_id),
+        run_screening_batch, org_id,
+        timeout_seconds=_LIGHT_WORKER_TIMEOUT, org_id=org_id,
+    )
 
 
 @router.post(
@@ -221,5 +353,8 @@ async def trigger_run_benchmark_ingest(
 
     from app.domains.wealth.workers.benchmark_ingest import run_benchmark_ingest
 
-    background_tasks.add_task(run_benchmark_ingest)
-    return WorkerScheduledResponse(status="scheduled", worker="run-benchmark-ingest")
+    return await _dispatch_worker(
+        background_tasks, "run-benchmark-ingest", "global",
+        run_benchmark_ingest,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )

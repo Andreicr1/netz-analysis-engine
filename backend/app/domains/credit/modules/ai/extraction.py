@@ -147,7 +147,10 @@ def list_extraction_sources(
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP])),
 ):
     """List item folders currently in the specified Azure Blob input container."""
-    from ai_engine.pipeline.unified_pipeline import EXTRACTION_SOURCE_CONFIG, list_extraction_source_items
+    from ai_engine.pipeline.unified_pipeline import (
+        EXTRACTION_SOURCE_CONFIG,
+        list_extraction_source_items,
+    )
 
     if source not in EXTRACTION_SOURCE_CONFIG:
         raise HTTPException(status_code=422, detail=f"Invalid source '{source}'")

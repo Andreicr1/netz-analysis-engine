@@ -3,6 +3,8 @@
 The Fund model is being replaced by the Instrument model
 (instruments_universe table). These schemas remain functional
 but new code should use the Instrument equivalents.
+
+See SR-4 audit finding (dual model path Fund/Instrument).
 """
 
 import uuid

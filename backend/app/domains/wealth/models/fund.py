@@ -1,4 +1,18 @@
+"""DEPRECATED: Fund ORM model — use Instrument (instrument.py) instead.
+
+The Fund model maps to the legacy ``funds_universe`` table. New code MUST use
+the polymorphic :class:`Instrument` model (``instruments_universe`` table) which
+supports fund, bond, and equity types via ``instrument_type`` + JSONB attributes.
+
+This file is retained only for backward compatibility with existing routes and
+workers that still query ``funds_universe``.  It will be removed alongside
+migration 0012 (``DROP TABLE funds_universe``) in a dedicated cleanup PR.
+
+See also: SR-4 audit finding (dual model path Fund/Instrument).
+"""
+
 import uuid
+import warnings
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -17,8 +31,18 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db.base import Base, OrganizationScopedMixin
 
+# Emit a deprecation warning when this module is imported so that new code
+# referencing Fund is flagged during development / test runs.
+warnings.warn(
+    "Fund model (funds_universe) is deprecated — use Instrument "
+    "(instruments_universe) instead.  See SR-4 audit finding.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 
 class Fund(OrganizationScopedMixin, Base):
+    """DEPRECATED: Use :class:`Instrument` for all new code."""
     __tablename__ = "funds_universe"
 
     fund_id: Mapped[uuid.UUID] = mapped_column(

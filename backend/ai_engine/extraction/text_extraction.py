@@ -16,7 +16,7 @@ import asyncio
 import io
 import logging
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TypedDict
 
 from ai_engine.extraction.document_intelligence import ExtractionQuality

@@ -271,18 +271,74 @@ Coverage expanded from **3/16 → 16/16** quant services enforced by vertical-is
 
 **Files changed:** `app/domains/wealth/workers/fred_ingestion.py` (deleted), `tests/test_global_table_isolation.py`
 
-### Remaining Open Findings
+### HC-4: SSE Publish Failures Silently Swallowed (MEDIUM) — FIXED
+
+`tracker.py:publish_event()` already had structured `logger.warning` with `exc_info=True`. Verified `_emit()`, `_emit_terminal()`, and `_audit()` in `unified_pipeline.py` all log failures. Terminal state is persisted to Redis BEFORE SSE publish (line 936 vs 948), so polling fallback always has data.
+
+Added `GET /api/v1/jobs/{job_id}/status` polling endpoint in `app/main.py` — reads persisted terminal state from Redis via `get_job_state()`. Enforces tenant isolation via `verify_job_owner()`. Returns 404 if job hasn't reached terminal state.
+
+**Files changed:** `app/main.py`, `manifests/routes.json`
+
+### M-4: SSE Failure Recovery (MEDIUM) — FIXED
+
+See HC-4 — the new `/api/v1/jobs/{job_id}/status` polling endpoint provides the documented frontend fallback. Frontends can poll this endpoint when SSE connections drop before receiving a terminal event.
+
+### M-6: Worker Idempotency (MEDIUM) — FIXED
+
+New `app/core/jobs/worker_idempotency.py` provides lightweight Redis-based idempotency guard. Redis key pattern: `worker:{worker_name}:{scope}:status`. All 8 worker endpoints in `routes/workers.py` now check idempotency before dispatch — returns 409 Conflict if already running or recently completed. Failed workers allow immediate re-trigger. TTLs: running=3600s (safety net), completed=300s (cooldown), failed=1800s (visibility). 11 new tests in `test_worker_idempotency.py`.
+
+**Files changed:** `app/core/jobs/worker_idempotency.py` (new), `app/domains/wealth/routes/workers.py`, `tests/test_worker_idempotency.py` (new)
+
+### SR-1: In-Process Worker Model (MEDIUM) — MITIGATED
+
+Added `_run_worker_with_timeout()` wrapper with `asyncio.wait_for()` on all 8 worker dispatches. Two timeout tiers: heavy workers (ingestion, risk calc, macro, fact-sheet, benchmark) = 600s, light workers (screening, watchlist, portfolio eval) = 300s. Structured logging via structlog: `worker.started`, `worker.completed`, `worker.timeout`, `worker.failed` with duration_seconds and org_id. Composes with M-6 idempotency wrapper.
+
+**Files changed:** `app/domains/wealth/routes/workers.py`
+
+### SR-3: Stale Operational References (LOW) — FIXED
+
+Cleaned 13 files referencing removed modules (`compliance` domain, not the legitimate KYC/regulatory usage). Removed stale docstring provenance comments, dead module references in comments, and replaced "compliance" with "governance" or "regulatory" where appropriate. Preserved legitimate uses: `Role.COMPLIANCE` enum, `compliance.py` AI subrouter, `regulatory_compliance` doc type, `covenant_compliance` fields, `adobe_sign_agreement_id` in migration (DB compat).
+
+**Files changed:** `ai_engine/validation/evidence_quality.py`, `ai_engine/validation/citation_formatter.py`, `ai_engine/extraction/kb_schema.py`, `ai_engine/extraction/azure_kb_adapter.py`, `ai_engine/extraction/__init__.py`, `app/core/middleware/rate_limit.py`, `app/domains/credit/modules/ai/copilot.py`, `app/domains/credit/global_agent/intent_router.py`, `app/domains/credit/global_agent/prompt_templates.py`, `app/domains/credit/global_agent/pipeline_kb_adapter.py`, `vertical_engines/credit/kyc/models.py`, `vertical_engines/credit/retrieval/saturation.py`, `vertical_engines/credit/deep_review/corpus.py`
+
+### SR-4: Dual Model Path Fund/Instrument (LOW) — MITIGATED
+
+Fund model and routes marked as deprecated with migration path to Instrument. `fund.py` emits `DeprecationWarning` on import. All 5 Fund route handlers have `deprecated=True` (OpenAPI strikethrough), `[DEPRECATED]` summaries, RFC 8594 `Deprecation` + `Sunset: 2026-06-30` + `Link: rel=successor-version` headers. Router tag changed to `"funds (deprecated)"`. No code deleted — Fund model still imported by ~17 files.
+
+**Files changed:** `app/domains/wealth/models/fund.py`, `app/domains/wealth/routes/funds.py`, `app/domains/wealth/schemas/fund.py`, `app/domains/wealth/models/__init__.py`, `app/main.py`
+
+### SR-6: Search Index SPOF for RAG (MEDIUM) — FIXED
+
+Added graceful degradation to all 3 search query paths. Connection errors and timeouts now return empty results with `SEARCH_INDEX_UNAVAILABLE` structured warning logs instead of raising 500s. Global agent returns `search_degraded: bool` and `search_degraded_domains: list[str]` in response — frontend can display "Search temporarily unavailable" messaging. 9 new tests in `test_search_rag_degradation.py`.
+
+**Files changed:** `app/domains/credit/global_agent/pipeline_kb_adapter.py`, `ai_engine/extraction/azure_kb_adapter.py`, `app/services/search_index.py`, `app/domains/credit/global_agent/agent.py`, `tests/test_search_rag_degradation.py` (new)
+
+### C-1→C-10: System Map Numerical Inaccuracies (LOW) — FIXED
+
+All 10 corrections applied to `docs/audit/backend-system-map-v3.md`: filename patterns 28→26, exemplars 38→37, LLM model gpt-4-1-mini→gpt-4.1, routers 47→51, contracts 35+→30, deep review tiers 5→6, migrations 19→18, rate limiting per-role→per-tier, credit packages 12→13 with deviations noted, fred_ingestion marked DELETED. Also updated quant isolation contracts 3/17→16/16 per M-3 fix.
+
+**Files changed:** `docs/audit/backend-system-map-v3.md`
+
+### All Findings Status
 
 | # | Finding | Severity | Status |
 |---|---------|----------|--------|
-| HC-4 | SSE publish failures silently swallowed | Medium | Open |
-| M-4 | SSE failure recovery — no frontend fallback | Medium | Open |
-| M-6 | Worker idempotency — no DLQ or retry queue | Medium | Open |
-| SR-1 | In-process worker model — no isolation | Medium | Open |
+| HC-1 | Worker tenant context bypass | Critical | **Resolved** |
+| HC-2 | Upload URL path bypass | High | **Resolved** |
+| HC-3 | Config YAML fallback masks DB failure | Medium | **Resolved** |
+| HC-4 | SSE publish failures silently swallowed | Medium | **Resolved** |
+| HC-5 | Lazy semaphore race condition | Low | **Resolved** |
+| HC-6 | Deep review cascading degradation | Low | **Resolved** |
+| M-3 | Import-linter coverage gap | Medium | **Resolved** |
+| M-4 | SSE failure recovery — no frontend fallback | Medium | **Resolved** (see HC-4) |
+| M-6 | Worker idempotency — no DLQ or retry queue | Medium | **Resolved** |
+| SR-1 | In-process worker model — no isolation | Medium | **Mitigated** (timeouts + observability) |
 | SR-2 | Worker tenant context bypass | Critical | **Resolved** (see HC-1) |
-| SR-3 | Stale operational references (18 files) | Low | Open |
-| SR-4 | Dual model path Fund/Instrument | Low | Open |
-| SR-6 | Search index SPOF for RAG | Medium | Open |
+| SR-3 | Stale operational references | Low | **Resolved** |
+| SR-4 | Dual model path Fund/Instrument | Low | **Mitigated** (deprecated, sunset 2026-06-30) |
+| SR-5 | Fred ingestion dead code | Low | **Resolved** |
+| SR-6 | Search index SPOF for RAG | Medium | **Resolved** |
+| SR-7 | Advisory lock TTL | Medium | **Already mitigated** |
 | SR-8 | Import-linter coverage gap | Medium | **Resolved** (see M-3) |
 | SR-9 | Upload URL path construction | High | **Resolved** (see HC-2) |
-| C-1→C-10 | System map numerical inaccuracies | Low | Open |
+| C-1→C-10 | System map numerical inaccuracies | Low | **Resolved** |

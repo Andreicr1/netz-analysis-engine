@@ -7,7 +7,7 @@ import logging
 import pytest
 
 from app.core.config.config_service import ConfigService
-from app.core.config.registry import ConfigDomain, ConfigRegistry
+from app.core.config.registry import ConfigRegistry
 
 
 class TestRegistryCompleteness:

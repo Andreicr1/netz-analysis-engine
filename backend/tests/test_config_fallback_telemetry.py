@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import logging
 
-import pytest
-
 from app.core.config.config_service import (
-    ConfigService,
     _YAML_FALLBACK_DIR,
     _YAML_FALLBACK_MAP,
+    ConfigService,
 )
 
 

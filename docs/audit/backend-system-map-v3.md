@@ -27,7 +27,7 @@ No external task queue (Celery, RQ). All background work dispatched via FastAPI 
 | **Core** | `app/core/` | Auth (Clerk JWT v2), tenancy (RLS), DB (asyncpg), config (ConfigService), jobs (SSE/Redis) |
 | **Domains** | `app/domains/` | REST API surface — admin, credit, wealth route handlers + ORM models + schemas |
 | **AI Engine** | `ai_engine/` | Domain-agnostic document processing — OCR, classification, chunking, embedding, storage, indexing |
-| **Vertical Engines** | `vertical_engines/` | Domain-specific analytical logic — credit (12 packages), wealth (20+ packages) |
+| **Vertical Engines** | `vertical_engines/` | Domain-specific analytical logic — credit (13 packages), wealth (20+ packages) |
 | **Quant Engine** | `quant_engine/` | Shared quantitative services — CVaR, regime, optimizer, drift, scoring, FRED, backtest |
 | **Services** | `app/services/` | Cross-cutting abstractions — StorageClient (ADLS/local), blob storage, search index |
 
@@ -94,9 +94,9 @@ No external task queue (Celery, RQ). All background work dispatched via FastAPI 
 
 | Layer | Method | Coverage | Cost |
 |-------|--------|----------|------|
-| 1 | 28 filename patterns + 13 content regex | ~60% | Free |
-| 2 | TF-IDF cosine similarity (38 synthetic exemplars) | ~30% | Free (sklearn) |
-| 3 | LLM fallback (gpt-4-1-mini) | ~10% | API call |
+| 1 | 26 filename patterns + 13 content regex | ~60% | Free |
+| 2 | TF-IDF cosine similarity (37 synthetic exemplars: 31 doc_type + 6 vehicle) | ~30% | Free (sklearn) |
+| 3 | LLM fallback (gpt-4.1) | ~10% | API call |
 
 Output: `HybridClassificationResult(doc_type, vehicle_type, confidence, layer)` — frozen dataclass.
 31 canonical doc types, 6 vehicle types. No external ML APIs (Cohere removed).
@@ -182,7 +182,7 @@ Key stages: Document collection → Evidence curation (retrieval governance) →
 | `ai_engine/validation/` | Vector integrity, deep review validation, eval runner | Validation functions | — | Canonical |
 | `ai_engine/prompts/` | Jinja2 templates (extraction/) | Template files (.j2) | Jinja2 | Canonical |
 
-### 3.3 Vertical Engine Packages — Credit (12 packages)
+### 3.3 Vertical Engine Packages — Credit (13 packages)
 
 | Package | Purpose | Entry Point | Error Contract | Status |
 |---------|---------|-------------|----------------|--------|
@@ -199,7 +199,7 @@ Key stages: Document collection → Evidence curation (retrieval governance) →
 | `retrieval/` | Evidence saturation + IC-grade corpus | Evidence curation functions | Never-raises | Canonical |
 | `sponsor/` | Sponsor & key person analysis | `analyze_sponsor()` | Never-raises | Canonical |
 
-All follow the same structure: `models.py` (leaf, zero sibling imports) + `service.py` (entry point, imports helpers). Import-linter enforces DAG.
+10 of 13 follow the same structure: `models.py` (leaf, zero sibling imports) + `service.py` (entry point, imports helpers). Exceptions: `domain_ai`, `sponsor`, and `underwriting` deviate from the `models.py + service.py` pattern. Import-linter enforces DAG.
 
 ### 3.4 Vertical Engine Packages — Wealth (20+ packages)
 
@@ -252,10 +252,10 @@ All follow the same structure: `models.py` (leaf, zero sibling imports) + `servi
 | Domain | Router Count | Prefix Pattern | Key Models |
 |--------|-------------|----------------|------------|
 | **Admin** | 7 | `/admin/*` | VerticalConfigDefault, VerticalConfigOverride, AuditEvent |
-| **Credit** | 25+ | `/funds/{fund_id}/*`, `/pipeline/*`, `/ai/*`, `/dashboard/*`, `/documents/*` | Deal, IcMemo, Document, Asset, Obligation, Alert, NavSnapshot, ReportPack |
+| **Credit** | 26 | `/funds/{fund_id}/*`, `/pipeline/*`, `/ai/*`, `/dashboard/*`, `/documents/*` | Deal, IcMemo, Document, Asset, Obligation, Alert, NavSnapshot, ReportPack |
 | **Wealth** | 18 | `/instruments/*`, `/portfolios/*`, `/risk/*`, `/macro/*`, `/screener/*`, `/workers/*` | Instrument (polymorphic), NAV, Portfolio, Risk, Allocation, Macro |
 
-**Total registered routers:** 47 (7 admin + 25 credit + 15 wealth) plus 9 dynamically loaded AI sub-routers.
+**Total registered routers:** 51 (7 admin + 26 credit + 18 wealth) plus 9 dynamically loaded AI sub-routers.
 
 ---
 
@@ -268,7 +268,7 @@ All follow the same structure: `models.py` (leaf, zero sibling imports) + `servi
 | `app/domains/wealth/routes/funds.py` | `instruments.py` | DEPRECATED — kept for backward compatibility | File header: "DEPRECATED: Fund CRUD routes" |
 | `app/domains/wealth/schemas/fund.py` | `instrument.py` schemas | DEPRECATED — kept for backward compatibility | File header: "DEPRECATED: Fund schemas" |
 | `app/domains/wealth/models/fund.py` | `instrument.py` (polymorphic) | DEPRECATED — will be removed | instrument.py header: "This replaces Fund (fund.py)" |
-| `app/domains/wealth/workers/fred_ingestion.py` | `macro_ingestion.py` (45-series superset) | DEPRECATED 2026-03-15 | File header with cutover sequence |
+| ~~`app/domains/wealth/workers/fred_ingestion.py`~~ | `macro_ingestion.py` (45-series superset) | DELETED (SR-5 fix) | File removed — `macro_ingestion.py` is sole FRED worker |
 
 ### 4.2 Legacy Sync Path
 
@@ -409,11 +409,9 @@ Wealth domain maintains both `Fund` (deprecated) and `Instrument` (canonical pol
 
 **Evidence:** `app/domains/wealth/models/fund.py` ("DEPRECATED"), `app/domains/wealth/routes/funds.py` ("DEPRECATED: kept for backward compatibility"), coexisting with `instruments.py`.
 
-### 7.4 Fred Ingestion Worker Overlap Risk
+### 7.4 Fred Ingestion Worker Overlap Risk — RESOLVED
 
-Deprecated `fred_ingestion.py` and canonical `macro_ingestion.py` both write to `macro_data` with the same series IDs. Concurrent execution causes non-deterministic staleness in `regime_service`. Cutover sequence documented but not enforced programmatically.
-
-**Evidence:** `app/domains/wealth/workers/fred_ingestion.py` header: "DO NOT run both workers simultaneously".
+~~Deprecated `fred_ingestion.py` and canonical `macro_ingestion.py` both write to `macro_data` with the same series IDs.~~ `fred_ingestion.py` has been deleted (SR-5 fix). `macro_ingestion.py` is now the sole FRED worker. Overlap risk eliminated.
 
 ### 7.5 Search Index as Single Point of Failure for RAG
 
@@ -429,9 +427,9 @@ Azure Search is the sole retrieval path for RAG queries (Fund Copilot, IC memo e
 
 ### 7.7 Import-Linter Coverage Gaps
 
-Import-linter enforces 35+ contracts across credit and wealth verticals. However, `quant_engine` services beyond `regime_service`, `cvar_service`, and `correlation_regime_service` are NOT covered by vertical-agnosticism contracts. Other quant services could develop accidental wealth domain imports without detection.
+Import-linter enforces 30 contracts across credit and wealth verticals. All 16 quant services now have explicit vertical-agnosticism contracts (expanded from 3 to 16 as part of M-3 remediation).
 
-**Evidence:** `pyproject.toml` — only 3 of 17 quant services have explicit vertical-isolation contracts.
+**Evidence:** `pyproject.toml` — 16 of 16 quant services have explicit vertical-isolation contracts (HC-1/M-3 fix).
 
 ---
 
@@ -449,7 +447,7 @@ Import-linter enforces 35+ contracts across credit and wealth verticals. However
 | `admin_health_router` | `/admin/health` | Standard |
 | `admin_audit_router` | `/admin/audit` | Super-admin |
 
-### 8.2 Credit Domain (25+ routers)
+### 8.2 Credit Domain (26 routers)
 
 **Deals:** 3 routers (`/funds/{fund_id}/deals`, `/funds/{fund_id}/deals/{deal_id}/ic-memo`, `/pipeline/deals/{deal_id}/convert`)
 **Portfolio:** 5 routers (`/funds/{fund_id}/assets`, `/alerts`, `/obligations`, `/portfolio-actions`, `/fund-investments`)
@@ -500,7 +498,7 @@ Import-linter enforces 35+ contracts across credit and wealth verticals. However
 ## 9. Import Architecture (import-linter)
 
 **Root packages:** `vertical_engines`, `quant_engine`, `app`
-**Total contracts:** 35+
+**Total contracts:** 30
 
 ### 9.1 Structural Contracts
 
@@ -509,7 +507,7 @@ Import-linter enforces 35+ contracts across credit and wealth verticals. However
 | Verticals must not import each other | Independence | `vertical_engines.credit` ↔ `vertical_engines.wealth` |
 | Engine models must not import service | Forbidden | All credit packages |
 | Domain helpers must not import service | Forbidden | All credit packages (allows indirect) |
-| Deep review internal DAG | Layers | 5-tier: models → helpers → domain → persist → portfolio → service |
+| Deep review internal DAG | Layers | 6-tier: models → helpers → domain → persist → portfolio → service |
 
 ### 9.2 Vertical-Agnostic Contracts
 
@@ -541,7 +539,7 @@ Mirror credit contracts for all 20+ wealth packages: models → service forbidde
 
 ### 10.4 Latest Migration Head
 
-`0019_audit_events` (19 migrations total)
+`0019_audit_events` (18 migration files: 0001–0019, no 0000)
 
 ---
 
@@ -549,7 +547,7 @@ Mirror credit contracts for all 20+ wealth packages: models → service forbidde
 
 Applied in order:
 1. **CORS** — Origins from `settings.cors_origins`
-2. **Rate Limiting** — `RateLimitMiddleware` (configurable RPM per role)
+2. **Rate Limiting** — `RateLimitMiddleware` (configurable RPM per endpoint tier: compute vs standard)
 3. **Auth** — Clerk JWT v2 via `get_actor()` dependency
 4. **Tenancy** — `get_db_with_rls()` dependency (SET LOCAL)
 5. **Audit** — `AuditMiddleware` (request/response logging)

@@ -3,13 +3,17 @@
 The Fund model is being replaced by the Instrument model
 (instruments_universe table). These routes remain functional
 but new code should use the Instrument equivalents.
+
+All responses include a ``Deprecation`` header (RFC 8594) and
+``Sunset`` header pointing clients to the /instruments endpoints.
+See SR-4 audit finding.
 """
 
 import uuid
 from datetime import date
 
 import numpy as np
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,17 +34,35 @@ from quant_engine.talib_momentum_service import (
     normalize_flow_momentum,
 )
 
-router = APIRouter(prefix="/funds")
+router = APIRouter(prefix="/funds", tags=["funds (deprecated)"])
+
+# ---------------------------------------------------------------------------
+# Deprecation helpers (SR-4 audit finding)
+# ---------------------------------------------------------------------------
+_DEPRECATION_HEADERS = {
+    "Deprecation": "true",
+    "Sunset": "2026-06-30",
+    "Link": '</api/v1/instruments>; rel="successor-version"',
+}
+
+
+def _set_deprecation_headers(response: Response) -> None:
+    """Inject RFC 8594 Deprecation + Sunset headers into the response."""
+    for key, value in _DEPRECATION_HEADERS.items():
+        response.headers[key] = value
 
 
 # IMPORTANT: /scoring must be defined BEFORE /{fund_id} to avoid path shadowing
 @router.get(
     "/scoring",
     response_model=list[FundScoreRead],
-    summary="Fund scoring within block",
-    description="Returns funds ranked by manager score within an allocation block.",
+    summary="[DEPRECATED] Fund scoring within block",
+    description="DEPRECATED — use /instruments endpoints instead. "
+    "Returns funds ranked by manager score within an allocation block.",
+    deprecated=True,
 )
 async def get_fund_scoring(
+    response: Response,
     block: str = Query(..., description="Allocation block ID"),
     top_n: int = Query(10, ge=1, le=100, description="Number of top funds to return"),
     db: AsyncSession = Depends(get_db_with_rls),
@@ -48,6 +70,7 @@ async def get_fund_scoring(
     config_service: ConfigService = Depends(get_config_service),
     actor: Actor = Depends(get_actor),
 ) -> list[FundScoreRead]:
+    _set_deprecation_headers(response)
     # Batch-fetch funds and their latest risk metrics in two queries (no N+1)
     funds_stmt = select(Fund).where(Fund.block_id == block, Fund.is_active == True)
     funds_result = await db.execute(funds_stmt)
@@ -161,10 +184,13 @@ async def get_fund_scoring(
 @router.get(
     "",
     response_model=list[FundRead],
-    summary="List fund universe",
-    description="Returns funds with optional filters by block, geography, asset class.",
+    summary="[DEPRECATED] List fund universe",
+    description="DEPRECATED — use GET /instruments instead. "
+    "Returns funds with optional filters by block, geography, asset class.",
+    deprecated=True,
 )
 async def list_funds(
+    response: Response,
     block_id: str | None = Query(None, description="Filter by allocation block"),
     geography: str | None = Query(None, description="Filter by geography"),
     asset_class: str | None = Query(None, description="Filter by asset class"),
@@ -174,6 +200,7 @@ async def list_funds(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[FundRead]:
+    _set_deprecation_headers(response)
     stmt = select(Fund)
     if block_id is not None:
         stmt = stmt.where(Fund.block_id == block_id)
@@ -191,14 +218,18 @@ async def list_funds(
 @router.get(
     "/{fund_id}",
     response_model=FundRead,
-    summary="Fund detail",
-    description="Returns full metadata for a single fund.",
+    summary="[DEPRECATED] Fund detail",
+    description="DEPRECATED — use GET /instruments/{instrument_id} instead. "
+    "Returns full metadata for a single fund.",
+    deprecated=True,
 )
 async def get_fund(
     fund_id: uuid.UUID,
+    response: Response,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> FundRead:
+    _set_deprecation_headers(response)
     result = await db.execute(select(Fund).where(Fund.fund_id == fund_id))
     fund = result.scalar_one_or_none()
     if fund is None:
@@ -209,14 +240,18 @@ async def get_fund(
 @router.get(
     "/{fund_id}/risk",
     response_model=FundRiskRead | None,
-    summary="Fund risk metrics",
-    description="Returns the latest risk metrics (CVaR, VaR, returns, ratios) for a fund.",
+    summary="[DEPRECATED] Fund risk metrics",
+    description="DEPRECATED — use /instruments endpoints instead. "
+    "Returns the latest risk metrics (CVaR, VaR, returns, ratios) for a fund.",
+    deprecated=True,
 )
 async def get_fund_risk(
     fund_id: uuid.UUID,
+    response: Response,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> FundRiskRead | None:
+    _set_deprecation_headers(response)
     stmt = (
         select(FundRiskMetrics)
         .where(FundRiskMetrics.instrument_id == fund_id)
@@ -233,11 +268,14 @@ async def get_fund_risk(
 @router.get(
     "/{fund_id}/nav",
     response_model=list[NavPoint],
-    summary="Fund NAV time-series",
-    description="Returns NAV history for a fund within a date range.",
+    summary="[DEPRECATED] Fund NAV time-series",
+    description="DEPRECATED — use /instruments endpoints instead. "
+    "Returns NAV history for a fund within a date range.",
+    deprecated=True,
 )
 async def get_fund_nav(
     fund_id: uuid.UUID,
+    response: Response,
     from_date: date | None = Query(None, alias="from", description="Start date"),
     to_date: date | None = Query(None, alias="to", description="End date"),
     limit: int = Query(1000, ge=1, le=10000, description="Max rows to return"),
@@ -245,6 +283,7 @@ async def get_fund_nav(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[NavPoint]:
+    _set_deprecation_headers(response)
     stmt = select(NavTimeseries).where(NavTimeseries.instrument_id == fund_id)
     if from_date is not None:
         stmt = stmt.where(NavTimeseries.nav_date >= from_date)

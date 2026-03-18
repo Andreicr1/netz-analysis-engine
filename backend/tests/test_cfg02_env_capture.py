@@ -24,15 +24,9 @@ Restart requirements (documented here per acceptance criterion 3):
 from __future__ import annotations
 
 import ast
-import importlib
-import os
-import textwrap
 from pathlib import Path
-from typing import Sequence
-from unittest.mock import patch
 
 import pytest
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 #  Helpers
@@ -158,8 +152,8 @@ def test_policy_loader_search_returns_empty_when_no_config(monkeypatch: pytest.M
 
 def test_get_llm_concurrency_reads_from_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     """``get_llm_concurrency()`` must return Settings value, not a frozen constant."""
-    from vertical_engines.credit.deep_review.models import get_llm_concurrency
     from app.core.config.settings import settings
+    from vertical_engines.credit.deep_review.models import get_llm_concurrency
 
     original = settings.netz_llm_concurrency
     try:
@@ -174,8 +168,8 @@ def test_get_llm_concurrency_reads_from_settings(monkeypatch: pytest.MonkeyPatch
 
 def test_get_llm_concurrency_clamps_to_minimum_one(monkeypatch: pytest.MonkeyPatch) -> None:
     """``get_llm_concurrency()`` must return at least 1 even when Settings is 0."""
-    from vertical_engines.credit.deep_review.models import get_llm_concurrency
     from app.core.config.settings import settings
+    from vertical_engines.credit.deep_review.models import get_llm_concurrency
 
     monkeypatch.setattr(settings, "netz_llm_concurrency", 0)
     assert get_llm_concurrency() == 1

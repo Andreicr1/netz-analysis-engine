@@ -1,8 +1,4 @@
-"""Citation formatting utilities for AI engine outputs.
-
-Relocated from app.domains.credit.compliance.agent.citation_formatter
-after the compliance domain was removed from scope.
-"""
+"""Citation formatting utilities for AI engine outputs."""
 from __future__ import annotations
 
 from typing import Any

@@ -9,25 +9,22 @@ Acceptance criteria:
 from __future__ import annotations
 
 import asyncio
-import ast
 import inspect
 import textwrap
 import time
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
-import pytest_asyncio
 
 from app.domains.credit.dashboard.fred_client import (
+    _FRED_ID_RE,
     AsyncFredClient,
     _AsyncCache,
-    _FRED_ID_RE,
     get_telemetry,
     reset_telemetry,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -403,6 +400,7 @@ class TestSettingsAttributeName:
 
     def test_routes_use_lowercase_fred_api_key(self) -> None:
         import inspect
+
         import app.domains.credit.dashboard.routes as routes_module
         src = inspect.getsource(routes_module)
         assert "settings.FRED_API_KEY" not in src, (

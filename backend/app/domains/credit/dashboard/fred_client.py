@@ -346,7 +346,7 @@ class AsyncFredClient:
         # does not cancel the others
         results_list = await asyncio.gather(*tasks.values(), return_exceptions=True)
         out: dict[str, list[dict[str, Any]]] = {}
-        for sid, result in zip(tasks.keys(), results_list):
+        for sid, result in zip(tasks.keys(), results_list, strict=False):
             if isinstance(result, BaseException):
                 logger.warning("fred.multi_fetch_failed", series_id=sid, error=str(result))
                 out[sid] = []

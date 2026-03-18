@@ -1,8 +1,6 @@
-"""Azure AI Search KB adapter for compliance/regulatory indexes.
+"""Azure AI Search KB adapter for regulatory indexes.
 
-Relocated from app.domains.credit.compliance.kb.azure_kb_adapter
-after the compliance domain was removed from scope. This adapter
-is used by the global agent for regulatory/constitution/service-provider
+Used by the global agent for regulatory/constitution/service-provider
 retrieval.
 """
 from __future__ import annotations
@@ -82,8 +80,9 @@ class AzureComplianceKBAdapter:
             return chunks
 
         except Exception as exc:
-            logger.error(
-                "COMPLIANCE_KB search_live failed domain=%s: %s: %s",
+            logger.warning(
+                "SEARCH_INDEX_UNAVAILABLE: compliance search degraded, "
+                "RAG query returned empty results. domain=%s error=%s: %s",
                 domain,
                 type(exc).__name__,
                 exc,

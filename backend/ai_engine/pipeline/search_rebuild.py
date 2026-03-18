@@ -55,14 +55,10 @@ async def rebuild_search_index(
     Returns:
         ``RebuildResult`` with counts and any errors.
     """
-    import asyncio
 
     import redis.asyncio as aioredis
 
-    from ai_engine.pipeline.storage_routing import silver_chunks_path
     from app.core.jobs.tracker import get_redis_pool
-    from app.services.azure.search_client import describe_chunks_index_contract
-    from app.services.storage_client import get_storage_client
 
     # ── Advisory lock: prevent concurrent rebuilds for same org/vertical ──
     lock_key = f"rebuild:{org_id}:{vertical}"

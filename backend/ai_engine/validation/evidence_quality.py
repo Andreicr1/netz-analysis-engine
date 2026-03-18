@@ -1,8 +1,6 @@
 """Evidence quality utilities for AI validation layers.
 
-Relocated from app.domains.credit.compliance.agent.evidence_quality
-after the compliance domain was removed from scope. These functions
-are cross-cutting AI-engine utilities used by eval_metrics and the
+Cross-cutting AI-engine utilities used by eval_metrics and the
 global agent.
 """
 from __future__ import annotations

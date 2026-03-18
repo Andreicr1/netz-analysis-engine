@@ -5,7 +5,6 @@ import sys
 
 import pytest
 
-
 MODULE_NAME = "app.domains.credit.modules.ai"
 EXPECTED_SUBROUTERS = (
     "copilot",

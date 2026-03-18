@@ -102,7 +102,7 @@ class NetzGlobalAgent:
         # Resolve org_id: explicit parameter > actor.org_id > None
         org_id = organization_id or (getattr(actor, "org_id", None) if actor else None)
 
-        all_chunks = self._parallel_retrieve(
+        all_chunks, degraded_domains = self._parallel_retrieve(
             question, resolved_domains, deal_folder, effective_top, org_id,
         )
 
@@ -120,18 +120,36 @@ class NetzGlobalAgent:
                 # Prepend as first chunk (highest priority per source hierarchy)
                 all_chunks = [deal_ctx_chunk] + all_chunks
 
+        search_degraded = len(degraded_domains) > 0
+
         if not all_chunks:
-            logger.warning(
-                "GLOBAL_AGENT NO_CHUNKS question=%r", question[:80],
-            )
+            if search_degraded:
+                logger.warning(
+                    "GLOBAL_AGENT NO_CHUNKS (search degraded) question=%r "
+                    "degraded_domains=%s",
+                    question[:80],
+                    degraded_domains,
+                )
+                answer_text = (
+                    "Search is temporarily unavailable. Results may be "
+                    "incomplete. Please retry in a few minutes."
+                )
+            else:
+                logger.warning(
+                    "GLOBAL_AGENT NO_CHUNKS question=%r", question[:80],
+                )
+                answer_text = "Insufficient evidence in indexed documents."
+
             return {
-                "answer": "Insufficient evidence in indexed documents.",
+                "answer": answer_text,
                 "citations": [],
                 "chunks_used": 0,
                 "domains_queried": resolved_domains,
                 "deal_folder": deal_folder,
                 "retrieval_confidence": 0.0,
                 "confidence_components": {},
+                "search_degraded": search_degraded,
+                "search_degraded_domains": degraded_domains,
                 "cross_validation": {
                     "has_critical_claims": False,
                     "claims": [],
@@ -189,6 +207,15 @@ class NetzGlobalAgent:
             len(all_chunks),
         )
 
+        # If search was partially degraded but we still got some chunks,
+        # append a warning to the answer so the user knows results may be incomplete.
+        if search_degraded:
+            answer_text += (
+                "\n\n---\n*Note: Search is partially unavailable "
+                f"(affected: {', '.join(degraded_domains)}). "
+                "Results may be incomplete.*"
+            )
+
         return {
             "answer": answer_text,
             "citations": citations,
@@ -197,6 +224,8 @@ class NetzGlobalAgent:
             "deal_folder": deal_folder,
             "retrieval_confidence": confidence["retrieval_confidence"],
             "confidence_components": confidence["components"],
+            "search_degraded": search_degraded,
+            "search_degraded_domains": degraded_domains,
             "cross_validation": cross_validation,
             "recency": recency,
         }
@@ -211,11 +240,18 @@ class NetzGlobalAgent:
         deal_folder: str | None,
         top: int,
         organization_id: uuid.UUID | str | None = None,
-    ) -> list[Any]:
+    ) -> tuple[list[Any], list[str]]:
         """Fan out to relevant adapters concurrently using ThreadPoolExecutor.
+
+        Returns
+        -------
+        tuple[list[Any], list[str]]
+            (chunks, degraded_domains) — degraded_domains lists domains where
+            retrieval failed due to search index unavailability.
         """
         futures: dict[Any, str] = {}
         all_chunks: list[Any] = []
+        degraded_domains: list[str] = []
 
         with ThreadPoolExecutor(max_workers=4) as executor:
             # Pipeline retrieval
@@ -239,13 +275,14 @@ class NetzGlobalAgent:
                     chunks = fut.result()
                     all_chunks.extend(chunks)
                 except Exception as exc:
+                    degraded_domains.append(domain_label)
                     logger.warning(
                         "GLOBAL_AGENT retrieval failed for %s: %s",
                         domain_label,
                         exc,
                     )
 
-        return all_chunks
+        return all_chunks, degraded_domains
 
     def _retrieve_pipeline(
         self, question: str, deal_folder: str | None, top: int,
