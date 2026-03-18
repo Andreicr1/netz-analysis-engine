@@ -20,6 +20,7 @@
 		name: string;
 		status: string;
 		last_run: string | null;
+		checked_at?: string | null;
 		duration_ms: number | null;
 		error_count: number;
 	};
@@ -85,6 +86,14 @@
 			cell: (info: any) => {
 				const worker = info.row.original as HealthWorker;
 				return worker.last_run ? formatDateTime(worker.last_run, "en-US") : "Never";
+			},
+		},
+		{
+			accessorKey: "checked_at",
+			header: "Checked At",
+			cell: (info: any) => {
+				const worker = info.row.original as HealthWorker;
+				return worker.checked_at ? formatDateTime(worker.checked_at, "en-US") : "—";
 			},
 		},
 		{

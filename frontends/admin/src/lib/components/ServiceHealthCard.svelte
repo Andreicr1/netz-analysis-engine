@@ -2,7 +2,7 @@
   Service health card — shows status, latency, and error for a single service.
 -->
 <script lang="ts">
-	import { StatusBadge, formatDate } from "@netz/ui";
+	import { StatusBadge, formatDateTime, formatNumber } from "@netz/ui";
 
 	let {
 		service,
@@ -32,7 +32,7 @@
 	</div>
 	{#if service.latency_ms != null}
 		<p class="text-xs text-[var(--netz-text-muted)]">
-			Latency: {service.latency_ms.toFixed(1)}ms
+			Latency: {formatNumber(service.latency_ms, 1, "en-US")}ms
 		</p>
 	{/if}
 	{#if service.error}
@@ -41,7 +41,7 @@
 	{#if service.checked_at}
 		<p class="mt-1 text-xs text-[var(--netz-text-muted)]">
 			Checked at
-			<time datetime={service.checked_at}>{formatDate(service.checked_at, "medium", "en-US")}</time>
+			<time datetime={service.checked_at}>{formatDateTime(service.checked_at, "en-US")}</time>
 		</p>
 	{/if}
 </div>

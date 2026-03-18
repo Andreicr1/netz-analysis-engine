@@ -13,6 +13,7 @@ type WorkerStatusRow = {
 	name: string;
 	status: string;
 	last_run: string | null;
+	checked_at?: string | null;
 	duration_ms: number | null;
 	error_count: number;
 };
@@ -52,7 +53,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 	const pipelines =
 		pipelinesResult.status === "fulfilled"
 			? (pipelinesResult.value as PipelineStats)
-			: { docs_processed: 0, queue_depth: 0, error_rate: 0 };
+			: { docs_processed: 0, queue_depth: 0, error_rate: 0, checked_at: null };
 
 	const sectionErrors: SectionErrors = {
 		services: servicesResult.status === "rejected" ? toErrorMessage(servicesResult.reason) : null,
