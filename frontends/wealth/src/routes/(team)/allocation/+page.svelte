@@ -1,13 +1,37 @@
 <!--
   Allocation — strategic, tactical, and effective views with profile selector.
+  Governed save flow: simulate → preview CVaR → ConsequenceDialog with rationale.
 -->
 <script lang="ts">
-	import { DataCard, BarChart, PageHeader, EmptyState, Button, formatNumber, formatPercent } from "@netz/ui";
+	import {
+		BarChart,
+		PageHeader,
+		EmptyState,
+		Button,
+		formatNumber,
+		formatPercent,
+		formatBps,
+		MetricCard,
+		ConsequenceDialog,
+	} from "@netz/ui";
 	import { ActionButton } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll, goto } from "$app/navigation";
 	import { getContext } from "svelte";
 	import type { PageData } from "./$types";
+
+	// Inline SimulationResult type from API schema
+	type SimulationResult = {
+		profile: string;
+		proposed_cvar_95_3m?: string | null;
+		cvar_limit?: string | null;
+		cvar_utilization_pct?: string | null;
+		cvar_delta_vs_current?: string | null;
+		tracking_error_expected?: string | null;
+		within_limit: boolean;
+		warnings: string[];
+		computed_at: string;
+	};
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -150,6 +174,92 @@
 			savingTactical = false;
 		}
 	}
+
+	// ── Simulation + Governance ──────────────────────────────────
+	let simulationResult = $state<SimulationResult | null>(null);
+	let simulating = $state(false);
+	let simError = $state<string | null>(null);
+	let showConfirmDialog = $state(false);
+
+	/**
+	 * Runs simulation against the proposed strategic weights.
+	 * Returns false if within_limit is false — callers should block submit.
+	 */
+	async function runSimulation(): Promise<boolean> {
+		if (!editValid) return false;
+		simulating = true;
+		simError = null;
+		simulationResult = null;
+		try {
+			const api = createClientApiClient(getToken);
+			const weights: Record<string, number> = {};
+			for (const [block, w] of Object.entries(editWeights)) {
+				weights[block] = w / 100;
+			}
+			const result = await api.post<SimulationResult>(
+				`/allocation/${activeProfile}/simulate`,
+				{ weights, rationale: "pre-save simulation" },
+			);
+			simulationResult = result;
+			return result.within_limit === true;
+		} catch (e) {
+			simError = e instanceof Error ? e.message : "Simulation failed";
+			return false;
+		} finally {
+			simulating = false;
+		}
+	}
+
+	/**
+	 * Called when user clicks "Save" on strategic tab.
+	 * Runs simulation first; opens ConsequenceDialog only when within_limit.
+	 */
+	async function handleSaveStrategicClick() {
+		const withinLimit = await runSimulation();
+		if (!withinLimit) {
+			// Block — simulationResult.within_limit === false, error shown in UI
+			return;
+		}
+		showConfirmDialog = true;
+	}
+
+	/** Final save — called from ConsequenceDialog onConfirm with rationale. */
+	async function confirmSaveStrategic({ rationale }: { rationale?: string }) {
+		if (!editValid) return;
+		saving = true;
+		editError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			const weights: Record<string, number> = {};
+			for (const [block, w] of Object.entries(editWeights)) {
+				weights[block] = w / 100;
+			}
+			await api.put(`/allocation/${activeProfile}/strategic`, {
+				weights,
+				...(rationale ? { rationale } : {}),
+			});
+			editing = false;
+			simulationResult = null;
+			await invalidateAll();
+		} catch (e) {
+			editError = e instanceof Error ? e.message : "Failed to save allocation";
+		} finally {
+			saving = false;
+		}
+	}
+
+	// Simulation metric helpers
+	function fmtSimBps(v: string | number | null | undefined): string {
+		if (v == null) return "—";
+		const n = typeof v === "string" ? parseFloat(v) : v;
+		return isNaN(n) ? "—" : formatBps(n);
+	}
+
+	function fmtSimPct(v: string | number | null | undefined): string {
+		if (v == null) return "—";
+		const n = typeof v === "string" ? parseFloat(v) : v;
+		return isNaN(n) ? "—" : formatPercent(n, 2, "en-US");
+	}
 </script>
 
 <div class="space-y-6 p-6">
@@ -206,8 +316,14 @@
 									Total: {fmtPercentPoint(editTotal)} {editValid ? "✓" : `(${fmtSignedPercentPoint(editTotal - 100)})`}
 								</span>
 								<Button size="sm" variant="outline" onclick={cancelEditing}>Cancel</Button>
-								<ActionButton size="sm" onclick={saveStrategic} loading={saving} loadingText="Saving..." disabled={!editValid}>
-									Save
+								<ActionButton
+									size="sm"
+									onclick={handleSaveStrategicClick}
+									loading={simulating || saving}
+									loadingText={simulating ? "Simulating…" : "Saving…"}
+									disabled={!editValid}
+								>
+									Review & Save
 								</ActionButton>
 							</div>
 						{/if}
@@ -250,6 +366,83 @@
 			</div>
 		{:else}
 			<EmptyState title="No Strategic Allocation" message="Strategic allocation has not been configured." />
+		{/if}
+
+		<!-- Simulation error -->
+		{#if simError}
+			<div class="rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+				{simError}
+				<button class="ml-2 underline" onclick={() => simError = null}>dismiss</button>
+			</div>
+		{/if}
+
+		<!-- Simulation result panel -->
+		{#if simulationResult}
+			<div class="rounded-lg border {simulationResult.within_limit ? 'border-[var(--netz-border)]' : 'border-[var(--netz-status-error)]'} bg-[var(--netz-surface-elevated)] p-5">
+				<div class="mb-3 flex items-center justify-between">
+					<h3 class="text-sm font-semibold text-[var(--netz-text-primary)]">CVaR Simulation Preview</h3>
+					{#if simulationResult.within_limit}
+						<span class="inline-flex items-center gap-1 rounded-full bg-[var(--netz-success,#22c55e)]/15 px-2 py-0.5 text-xs font-medium text-[var(--netz-success,#22c55e)]">
+							Within Limit
+						</span>
+					{:else}
+						<span class="inline-flex items-center gap-1 rounded-full bg-[var(--netz-status-error)]/15 px-2 py-0.5 text-xs font-medium text-[var(--netz-status-error)]">
+							Exceeds CVaR Limit — Submit Blocked
+						</span>
+					{/if}
+				</div>
+				<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+					<MetricCard
+						label="Proposed CVaR 95%"
+						value={fmtSimBps(simulationResult.proposed_cvar_95_3m)}
+						sublabel="3-month horizon"
+						status={simulationResult.within_limit ? undefined : "breach"}
+					/>
+					<MetricCard
+						label="CVaR Utilization"
+						value={fmtSimPct(simulationResult.cvar_utilization_pct)}
+						sublabel="of limit"
+						status={
+							simulationResult.cvar_utilization_pct != null &&
+							parseFloat(String(simulationResult.cvar_utilization_pct)) > 1
+								? "breach"
+								: simulationResult.cvar_utilization_pct != null &&
+								  parseFloat(String(simulationResult.cvar_utilization_pct)) > 0.8
+								? "warn"
+								: undefined
+						}
+					/>
+					<MetricCard
+						label="CVaR Delta vs Current"
+						value={fmtSimBps(simulationResult.cvar_delta_vs_current)}
+						sublabel="change from current"
+					/>
+					<MetricCard
+						label="CVaR Limit"
+						value={fmtSimBps(simulationResult.cvar_limit)}
+						sublabel="hard limit"
+					/>
+				</div>
+
+				<!-- Warnings from simulation -->
+				{#if simulationResult.warnings.length > 0}
+					<div class="mt-4 rounded-md border border-[var(--netz-status-warning,#f59e0b)] bg-[var(--netz-status-warning,#f59e0b)]/10 p-3">
+						<p class="mb-1 text-xs font-semibold uppercase tracking-wider text-[var(--netz-status-warning,#f59e0b)]">Warnings</p>
+						<ul class="space-y-1">
+							{#each simulationResult.warnings as warning, i (i)}
+								<li class="text-sm text-[var(--netz-text-primary)]">• {warning}</li>
+							{/each}
+						</ul>
+					</div>
+				{/if}
+
+				<!-- Block message when limit exceeded -->
+				{#if !simulationResult.within_limit}
+					<p class="mt-3 text-sm font-medium text-[var(--netz-status-error)]">
+						This allocation exceeds the CVaR limit. Adjust weights before submitting.
+					</p>
+				{/if}
+			</div>
 		{/if}
 	{/if}
 
@@ -346,3 +539,26 @@
 		{/if}
 	{/if}
 </div>
+
+<!-- Governed submit: ConsequenceDialog with mandatory rationale -->
+<ConsequenceDialog
+	bind:open={showConfirmDialog}
+	title="Confirm Strategic Allocation Change"
+	impactSummary="This will update the strategic weights for the {activeProfile} profile. The change will affect effective allocation and CVaR calculations for all portfolios using this profile."
+	scopeText="Profile: {activeProfile} — affects all model portfolios using this allocation profile."
+	requireRationale
+	rationaleLabel="Rationale for allocation change"
+	rationalePlaceholder="State the investment thesis, market conditions, or committee direction behind this strategic change."
+	rationaleMinLength={20}
+	confirmLabel="Submit Allocation Change"
+	metadata={simulationResult
+		? [
+				{ label: "Proposed CVaR 95%", value: fmtSimBps(simulationResult.proposed_cvar_95_3m), emphasis: true },
+				{ label: "CVaR Utilization", value: fmtSimPct(simulationResult.cvar_utilization_pct), emphasis: true },
+				{ label: "CVaR Delta vs Current", value: fmtSimBps(simulationResult.cvar_delta_vs_current) },
+				{ label: "Within Limit", value: simulationResult.within_limit ? "Yes" : "No", emphasis: !simulationResult.within_limit },
+		  ]
+		: []}
+	onConfirm={confirmSaveStrategic}
+	onCancel={() => showConfirmDialog = false}
+/>

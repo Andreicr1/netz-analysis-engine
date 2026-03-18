@@ -9,7 +9,7 @@
 	import { createOptimisticMutation } from "@netz/ui";
 	import type { AuditTrailEntry } from "@netz/ui";
 	import type { PageData } from "./$types";
-	import type { ReviewDetail, ReviewChecklist } from "$lib/types/api";
+	import type { ReviewChecklist } from "$lib/types/api";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
@@ -18,12 +18,70 @@
 
 	let { data }: { data: PageData } = $props();
 
-	let review = $derived(data.review as ReviewDetail);
+	// Typed shape from DocumentReviewOut in packages/ui/src/types/api.d.ts
+	interface DocumentReviewOut {
+		document_title?: string | null;
+		title?: string | null;
+		status: string;
+		assignments?: Array<{ reviewer_name?: string | null; decision?: string | null }>;
+		final_decision?: string | null;
+		decided_by?: string | null;
+		decided_at?: string | null;
+		rationale?: string | null;
+		actor_capacity?: string | null;
+		submitted_by?: string;
+		submitted_at?: string;
+	}
+
+	let review = $derived(data.review as DocumentReviewOut);
 	let checklist = $derived((data.checklist as ReviewChecklist)?.items ?? []);
 	let actionError = $state<string | null>(null);
 
-	// ── Audit Trail ──
-	let auditEntries = $state<AuditTrailEntry[]>([]);
+	// ── Audit Trail — initialize from DocumentReviewOut decision fields ──
+	function buildInitialAuditEntries(): AuditTrailEntry[] {
+		const entries: AuditTrailEntry[] = [];
+		const r = data.review as DocumentReviewOut;
+
+		// Submission event
+		if (r?.submitted_at) {
+			entries.push({
+				actor: r.submitted_by ?? "Submitter",
+				timestamp: r.submitted_at,
+				action: "Review Submitted",
+				scope: `Review: ${String(r.title ?? r.document_title ?? data.reviewId)}`,
+				outcome: "Submitted",
+				immutable: true,
+				status: "success",
+			});
+		}
+
+		// Decision event (if already decided)
+		if (r?.final_decision && r.decided_at) {
+			const decisionLabel =
+				r.final_decision === "APPROVED"
+					? "Review Approved"
+					: r.final_decision === "REJECTED"
+						? "Review Rejected"
+						: r.final_decision === "REVISION_REQUESTED"
+							? "Revision Requested"
+							: r.final_decision;
+			entries.push({
+				actor: r.decided_by ?? "Reviewer",
+				actorCapacity: r.actor_capacity ?? undefined,
+				timestamp: r.decided_at,
+				action: decisionLabel,
+				scope: `Review: ${String(r.title ?? r.document_title ?? data.reviewId)}`,
+				rationale: r.rationale ?? undefined,
+				outcome: decisionLabel,
+				immutable: true,
+				status: "success",
+			});
+		}
+
+		return entries;
+	}
+
+	let auditEntries = $state<AuditTrailEntry[]>(buildInitialAuditEntries());
 
 	const auditMutation = createOptimisticMutation<AuditTrailEntry[]>({
 		getState: () => auditEntries,
@@ -76,17 +134,18 @@
 			actorCapacity: decisionActorCapacity || undefined,
 			timestamp: new Date().toISOString(),
 			action: decisionLabel,
-			scope: `Review: ${String(review?.document_title ?? data.reviewId)}`,
+			scope: `Review: ${String(review?.title ?? review?.document_title ?? data.reviewId)}`,
 			rationale,
 			outcome: "Pending",
 		});
 
 		try {
 			const api = createClientApiClient(getToken);
-			// ReviewDecisionPayload: { decision: string; comments?: string | null }
-			// rationale maps to comments — actor_capacity is audit-local only
+			// ReviewDecisionPayload: { decision, rationale, actor_capacity, comments? }
 			await api.post(`/funds/${data.fundId}/document-reviews/${data.reviewId}/decide`, {
 				decision,
+				rationale,
+				actor_capacity: decisionActorCapacity,
 				comments: rationale || null,
 			});
 			showDecisionDialog = false;
@@ -213,7 +272,7 @@
 				actor: "You",
 				timestamp: new Date().toISOString(),
 				action: "Checklist Item Unchecked",
-				scope: `Review: ${String(review?.document_title ?? data.reviewId)}`,
+				scope: `Review: ${String(review?.title ?? review?.document_title ?? data.reviewId)}`,
 				rationale,
 				outcome: "Checklist Reversed",
 				status: "warning",
@@ -255,7 +314,7 @@
 	<div class="mb-4 flex items-center justify-between">
 		<div>
 			<h2 class="text-xl font-semibold text-[var(--netz-text-primary)]">
-				{review.document_title ?? "Review"}
+				{review.title ?? review.document_title ?? "Review"}
 			</h2>
 			<StatusBadge status={status} type="review" />
 		</div>
@@ -393,7 +452,7 @@
 				: "Request Revision"
 	}
 	metadata={[
-		{ label: "Document", value: String(review?.document_title ?? "—"), emphasis: true },
+		{ label: "Document", value: String(review?.title ?? review?.document_title ?? "—"), emphasis: true },
 		{ label: "Decision", value: pendingDecision ?? "—" },
 	]}
 	onConfirm={submitDecision}
@@ -421,7 +480,7 @@
 <ConsequenceDialog
 	bind:open={showUncheckDialog}
 	title="Reverse Checklist Item"
-	impactSummary="Unchecking a completed checklist item will mark it as incomplete. This reversal will be recorded in the audit trail. Provide a rationale for the reversal."
+	impactSummary="Reverter este item exige justificativa. Unchecking a completed checklist item will mark it as incomplete. This reversal will be recorded in the audit trail."
 	destructive={false}
 	requireRationale={true}
 	rationaleLabel="Reversal Rationale"

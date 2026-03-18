@@ -1,15 +1,14 @@
 <!--
-  Config Editor — JSON config editor with guardrail validation, diff viewer, and invalid overrides.
+  Config Editor page — JSON config editor with guardrail validation, consequence-aware
+  save, inline diff view, and audit trail. Section 3.Admin.1.
 -->
 <script lang="ts">
 	import { SectionCard, StatusBadge, EmptyState } from "@netz/ui";
 	import type { PageData } from "./$types";
 	import ConfigEditor from "$lib/components/ConfigEditor.svelte";
-	import ConfigDiffViewer from "$lib/components/ConfigDiffViewer.svelte";
 
 	let { data }: { data: PageData } = $props();
 	let selectedConfig = $state<string | null>(null);
-	let showDiff = $state(false);
 </script>
 
 <div class="space-y-6 p-6">
@@ -45,7 +44,6 @@
 					<button
 						onclick={() => {
 							selectedConfig = invalid.config_type;
-							showDiff = false;
 						}}
 						class="flex w-full items-center gap-3 rounded-md border border-[var(--netz-danger)]/30 bg-[var(--netz-danger)]/5 px-4 py-2 text-left hover:bg-[var(--netz-danger)]/10"
 					>
@@ -72,7 +70,6 @@
 					<button
 						onclick={() => {
 							selectedConfig = config.config_type;
-							showDiff = false;
 						}}
 						class="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[var(--netz-surface-alt)] {selectedConfig === config.config_type ? 'bg-[var(--netz-surface-alt)]' : ''}"
 					>
@@ -97,29 +94,16 @@
 		</SectionCard>
 	{:else}
 		<SectionCard title="Config Types">
-			<EmptyState message="No config types found for {data.vertical}." />
+			<EmptyState title="No config types" message="No config types found for {data.vertical}." />
 		</SectionCard>
 	{/if}
 
-	<!-- Config Editor Panel -->
+	<!-- Config Editor Panel — diff view and audit trail rendered inline by ConfigEditor -->
 	{#if selectedConfig}
-		<ConfigEditor vertical={data.vertical} configType={selectedConfig} token={data.token} />
-
-		<div class="flex justify-start">
-			<button
-				onclick={() => (showDiff = !showDiff)}
-				class="text-sm text-[var(--netz-brand-primary)] hover:underline"
-			>
-				{showDiff ? "Hide Diff" : "Show Diff"}
-			</button>
-		</div>
-
-		{#if showDiff}
-			<ConfigDiffViewer
-				vertical={data.vertical}
-				configType={selectedConfig}
-				token={data.token}
-			/>
-		{/if}
+		<ConfigEditor
+			vertical={data.vertical}
+			configType={selectedConfig}
+			token={data.token}
+		/>
 	{/if}
 </div>

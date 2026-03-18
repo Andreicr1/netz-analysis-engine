@@ -1,9 +1,25 @@
 <!--
-  Config Editor — JSON textarea with validation, save (PUT), delete, update default.
+  Config Editor — CodeMirror JSON editor with consequence-aware save,
+  inline diff view, and audit trail panel.
+  Section 3.Admin.1 — consequence-aware config editing.
 -->
 <script lang="ts">
-	import { SectionCard, ActionButton, ConfirmDialog, Button } from "@netz/ui";
+	import {
+		SectionCard,
+		ActionButton,
+		Button,
+		ConsequenceDialog,
+		AuditTrailPanel,
+	} from "@netz/ui";
+	import type {
+		ConsequenceDialogPayload,
+		ConsequenceDialogMetadataItem,
+		AuditTrailEntry,
+	} from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
+	import CodeEditor from "./CodeEditor.svelte";
+	import ConfigDiffView from "./ConfigDiffView.svelte";
+	import type { ConfigDiffOut } from "./ConfigDiffView.svelte";
 
 	let {
 		vertical,
@@ -30,15 +46,61 @@
 	let content = $state("{}");
 	let version = $state(0);
 	let isDefault = $state(true);
-	let jsonError = $state<string | null>(null);
 	let saveError = $state<string | null>(null);
 	let saveMessage = $state<string | null>(null);
 	let saving = $state(false);
 	let loading = $state(true);
+
+	// Diff state
+	let diff = $state<ConfigDiffOut | null>(null);
+	let diffLoading = $state(false);
+	let diffError = $state<string | null>(null);
+
+	// Consequence dialog state
+	let showSaveDialog = $state(false);
+	let showDefaultDialog = $state(false);
 	let showDeleteConfirm = $state(false);
-	let showDefaultConfirm = $state(false);
+
+	// Audit trail state
+	let auditEntries = $state<AuditTrailEntry[]>([]);
 
 	const api = createClientApiClient(() => Promise.resolve(token));
+
+	// ── Derived: diff metadata for ConsequenceDialog ────────────────────────
+
+	const saveMetadata = $derived<ConsequenceDialogMetadataItem[]>([
+		{ label: "Vertical", value: vertical },
+		{ label: "Config type", value: configType },
+		{ label: "Scope", value: scopeLabel, emphasis: true },
+		...(diff
+			? [
+					{
+						label: "Changed keys",
+						value:
+							diff.changed_keys.length > 0
+								? diff.changed_keys.join(", ")
+								: "No keys changed",
+					},
+					{
+						label: "Tenants affected",
+						value: String(diff.tenant_count_affected),
+						emphasis: diff.tenant_count_affected > 1,
+					},
+				]
+			: []),
+	]);
+
+	const defaultMetadata = $derived<ConsequenceDialogMetadataItem[]>([
+		{ label: "Vertical", value: vertical },
+		{ label: "Config type", value: configType },
+		{
+			label: "Scope",
+			value: "ALL tenants without overrides",
+			emphasis: true,
+		},
+	]);
+
+	// ── Loaders ─────────────────────────────────────────────────────────────
 
 	async function loadConfig() {
 		loading = true;
@@ -56,7 +118,6 @@
 			content = JSON.stringify(result.config, null, 2);
 			version = result.version ?? 0;
 			isDefault = result.is_default ?? true;
-			jsonError = null;
 		} catch (e) {
 			saveError = "Failed to load config";
 		} finally {
@@ -64,18 +125,60 @@
 		}
 	}
 
-	function validateJson(value: string) {
+	async function loadDiff() {
+		if (!orgId) return;
+		diffLoading = true;
+		diffError = null;
 		try {
-			JSON.parse(value);
-			jsonError = null;
-		} catch {
-			jsonError = "Invalid JSON";
+			diff = await api.get<ConfigDiffOut>(
+				`/admin/configs/${vertical}/${configType}/diff`,
+				{ org_id: orgId },
+			);
+		} catch (e: unknown) {
+			diffError = e instanceof Error ? e.message : "Failed to load diff";
+		} finally {
+			diffLoading = false;
 		}
-		content = value;
 	}
 
-	async function save() {
-		if (jsonError || !orgId) return;
+	async function loadAuditTrail() {
+		try {
+			const result = await api.get<{ events: Array<{
+				id: string;
+				actor_id: string;
+				actor_roles: string[];
+				action: string;
+				entity_type: string;
+				entity_id: string;
+				created_at: string;
+				before_state: Record<string, unknown> | null;
+				after_state: Record<string, unknown> | null;
+			}> }>(`/admin/audit`, {
+				entity_type: "Config",
+				action: "UPDATE",
+				...(orgId ? { organization_id: orgId } : {}),
+			});
+			auditEntries = result.events.map((ev) => ({
+				id: ev.id,
+				actor: ev.actor_id,
+				actorCapacity: ev.actor_roles.join(", ") || undefined,
+				timestamp: ev.created_at,
+				action: `${ev.action} — ${ev.entity_type}`,
+				scope: `${vertical}/${configType}`,
+				outcome: ev.after_state ? "Applied" : "Reverted",
+				status: "success" as const,
+				immutable: true,
+				sourceSystem: "config-editor",
+			}));
+		} catch {
+			// Audit trail is optional — failing silently is acceptable
+		}
+	}
+
+	// ── Mutations ────────────────────────────────────────────────────────────
+
+	async function save(_payload: ConsequenceDialogPayload) {
+		if (!orgId) return;
 		saving = true;
 		saveError = null;
 		saveMessage = null;
@@ -88,7 +191,7 @@
 			);
 			saveMessage = "Saved successfully";
 			setTimeout(() => (saveMessage = null), 3000);
-			await loadConfig(); // Reload to get new version
+			await Promise.allSettled([loadConfig(), loadDiff(), loadAuditTrail()]);
 		} catch (e: unknown) {
 			if (e instanceof Error) {
 				if (e.message.includes("409") || e.message.includes("modified")) {
@@ -102,6 +205,7 @@
 			} else {
 				saveError = "Save failed";
 			}
+			throw e; // Let ConsequenceDialog stay open on failure
 		} finally {
 			saving = false;
 		}
@@ -113,57 +217,50 @@
 			await api.delete(`/admin/configs/${vertical}/${configType}?org_id=${orgId}`);
 			saveMessage = "Override deleted — reverted to default";
 			setTimeout(() => (saveMessage = null), 3000);
-			await loadConfig();
+			await Promise.allSettled([loadConfig(), loadDiff(), loadAuditTrail()]);
 		} catch (e) {
 			saveError = e instanceof Error ? e.message : "Delete failed";
 		}
 	}
 
-	async function updateDefault() {
-		if (jsonError) return;
+	async function updateDefault(_payload: ConsequenceDialogPayload) {
 		try {
 			const parsed = JSON.parse(content);
 			await api.put(`/admin/configs/defaults/${vertical}/${configType}`, parsed);
 			saveMessage = "Default updated";
 			setTimeout(() => (saveMessage = null), 3000);
+			await Promise.allSettled([loadDiff(), loadAuditTrail()]);
 		} catch (e) {
 			saveError = e instanceof Error ? e.message : "Update default failed";
+			throw e;
 		}
 	}
+
+	// ── Effects ──────────────────────────────────────────────────────────────
 
 	$effect(() => {
 		const _v = vertical;
 		const _c = configType;
 		void loadConfig();
+		void loadDiff();
+		void loadAuditTrail();
 	});
-
-	const jsonValid = $derived(jsonError === null);
 </script>
 
 <SectionCard title="{configType} — {isDefault ? 'Default' : `Override (v${version})`}">
 	{#if loading}
 		<p class="text-sm text-[var(--netz-text-muted)]">Loading...</p>
 	{:else}
-		<div class="space-y-3">
-			<div class="flex items-center gap-2">
-				<span
-					class="h-2 w-2 rounded-full {jsonValid ? 'bg-green-500' : 'bg-red-500'}"
-				></span>
-				<span class="text-xs text-[var(--netz-text-muted)]">
-					{jsonValid ? "Valid JSON" : jsonError}
-				</span>
-			</div>
-
-			<textarea
-				value={content}
-				oninput={(e) => validateJson(e.currentTarget.value)}
-				rows={20}
-				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] p-3 font-mono text-xs text-[var(--netz-text-primary)] focus:border-[var(--netz-brand-primary)] focus:outline-none"
-				spellcheck="false"
-			></textarea>
+		<div class="space-y-4">
+			<!-- CodeMirror JSON editor (replaces textarea) -->
+			<CodeEditor
+				bind:value={content}
+				schema={{}}
+				ariaLabel="{configType} config JSON editor"
+			/>
 
 			{#if saveError}
-				<p class="text-xs text-[var(--netz-danger)]">{saveError}</p>
+				<p role="alert" class="text-xs text-[var(--netz-danger)]">{saveError}</p>
 			{/if}
 			{#if saveMessage}
 				<p class="text-xs text-[var(--netz-brand-primary)]">{saveMessage}</p>
@@ -172,20 +269,32 @@
 			<div class="flex items-center justify-between">
 				<div class="flex gap-2">
 					{#if !isDefault}
-						<Button variant="destructive" size="sm" onclick={() => (showDeleteConfirm = true)}>
+						<Button
+							variant="destructive"
+							size="sm"
+							onclick={() => (showDeleteConfirm = true)}
+						>
 							Revert to Default
 						</Button>
 					{/if}
-					<Button variant="ghost" size="sm" onclick={() => (showDefaultConfirm = true)} disabled={!jsonValid}>
+					<Button
+						variant="ghost"
+						size="sm"
+						onclick={() => (showDefaultDialog = true)}
+					>
 						Update Default for ALL tenants
 					</Button>
 				</div>
 				<div class="flex gap-2">
-					<Button variant="outline" onclick={() => loadConfig()}>
+					<Button variant="outline" onclick={() => void loadConfig()}>
 						Reset
 					</Button>
 					{#if orgId}
-						<ActionButton onclick={save} loading={saving} loadingText="Saving..." disabled={!jsonValid}>
+						<ActionButton
+							onclick={() => (showSaveDialog = true)}
+							loading={saving}
+							loadingText="Saving..."
+						>
 							Save Override for {tenantName ?? "this tenant"}
 						</ActionButton>
 					{/if}
@@ -195,20 +304,97 @@
 	{/if}
 </SectionCard>
 
-<ConfirmDialog
-	bind:open={showDeleteConfirm}
-	title="Revert to Default"
-	message="This will delete the config override for {scopeLabel} and revert to the global default. Continue?"
-	confirmLabel="Revert for {tenantName ?? 'this tenant'}"
-	confirmVariant="destructive"
-	onConfirm={deleteOverride}
+<!-- Inline diff view (shown when orgId is available) -->
+{#if orgId && diff}
+	<ConfigDiffView {diff} />
+{:else if orgId && diffLoading}
+	<SectionCard title="Diff — {configType}">
+		<p class="text-sm text-[var(--netz-text-muted)]">Loading diff...</p>
+	</SectionCard>
+{:else if orgId && diffError}
+	<SectionCard title="Diff — {configType}">
+		<p class="text-sm text-[var(--netz-danger)]">{diffError}</p>
+	</SectionCard>
+{/if}
+
+<!-- Audit trail panel -->
+<AuditTrailPanel
+	title="Config audit trail"
+	description="Record of consequential config changes for {vertical}/{configType}."
+	entries={auditEntries}
 />
 
-<ConfirmDialog
-	bind:open={showDefaultConfirm}
+<!-- Save override consequence dialog -->
+<ConsequenceDialog
+	bind:open={showSaveDialog}
+	title="Save Config Override"
+	impactSummary="You are about to save a config override for {scopeLabel}. Review the changes below before confirming."
+	scopeText="{configType} override for {scopeLabel}"
+	destructive={false}
+	requireRationale={true}
+	rationaleLabel="Reason for change"
+	rationalePlaceholder="Describe the operational or policy basis for this config change."
+	metadata={saveMetadata}
+	onConfirm={save}
+>
+	{#snippet consequenceList()}
+		<ul class="list-disc space-y-1 pl-4 text-sm">
+			<li>The override will take effect immediately for {scopeLabel}</li>
+			{#if diff && diff.changed_keys.length > 0}
+				<li>
+					{diff.changed_keys.length} propert{diff.changed_keys.length === 1 ? "y" : "ies"} will be changed: {diff.changed_keys.join(", ")}
+				</li>
+			{/if}
+			{#if diff && diff.tenant_count_affected > 1}
+				<li class="font-medium text-[var(--netz-warning)]">
+					This will affect {diff.tenant_count_affected} tenants
+				</li>
+			{/if}
+		</ul>
+	{/snippet}
+</ConsequenceDialog>
+
+<!-- Update default consequence dialog -->
+<ConsequenceDialog
+	bind:open={showDefaultDialog}
 	title="Update Global Default — affects ALL tenants"
-	message="This will update the global default {configType} config for ALL tenants without overrides. Every tenant using the default will receive this change immediately."
-	confirmLabel="Update Default for ALL tenants"
-	confirmVariant="destructive"
+	impactSummary="This will update the global default {configType} config. Every tenant using the default will receive this change immediately."
+	scopeText="Global default — applies to all tenants without overrides"
+	destructive={true}
+	requireRationale={true}
+	rationaleLabel="Reason for global default change"
+	rationalePlaceholder="Describe the operational or policy basis for changing the global default."
+	typedConfirmationText="UPDATE DEFAULT"
+	typedConfirmationLabel="Type UPDATE DEFAULT to confirm"
+	metadata={defaultMetadata}
 	onConfirm={updateDefault}
-/>
+>
+	{#snippet consequenceList()}
+		<ul class="list-disc space-y-1 pl-4 text-sm">
+			<li class="font-medium text-[var(--netz-danger)]">
+				ALL tenants without overrides will be affected immediately
+			</li>
+			<li>This change cannot be undone automatically — a new default must be set to revert</li>
+			<li>Tenants with overrides will not be affected</li>
+		</ul>
+	{/snippet}
+</ConsequenceDialog>
+
+<!-- Delete/revert consequence dialog (using ConsequenceDialog for consistency) -->
+<ConsequenceDialog
+	bind:open={showDeleteConfirm}
+	title="Revert to Default"
+	impactSummary="This will delete the config override for {scopeLabel} and revert to the global default."
+	scopeText="{configType} override for {scopeLabel}"
+	destructive={true}
+	requireRationale={false}
+	confirmLabel="Revert for {tenantName ?? 'this tenant'}"
+	onConfirm={deleteOverride}
+>
+	{#snippet consequenceList()}
+		<ul class="list-disc space-y-1 pl-4 text-sm">
+			<li>The override for {scopeLabel} will be permanently deleted</li>
+			<li>The tenant will revert to the global default immediately</li>
+		</ul>
+	{/snippet}
+</ConsequenceDialog>
