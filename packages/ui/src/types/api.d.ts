@@ -874,6 +874,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/allocation/{profile}/simulate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Simulate allocation change
+         * @description Accepts a proposed weight map and returns projected CVaR impact against the profile's risk limit. Synchronous — no background jobs.
+         */
+        post: operations["simulate_allocation_api_v1_allocation__profile__simulate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/analytics/backtest": {
         parameters: {
             query?: never;
@@ -5013,6 +5033,15 @@ export interface components {
          * @enum {string}
          */
         AlertType: "OBLIGATION_OVERDUE" | "COVENANT_BREACH" | "NAV_DEVIATION" | "MANUAL";
+        /** AllocationProposal */
+        AllocationProposal: {
+            /** Weights */
+            weights: {
+                [key: string]: number | string;
+            };
+            /** Rationale */
+            rationale: string;
+        };
         /**
          * AssetType
          * @enum {string}
@@ -5487,6 +5516,44 @@ export interface components {
             evidence_docs: string[];
             /** Notes */
             notes?: string | null;
+        };
+        /**
+         * ConfigDiffOut
+         * @description Typed response for config diff endpoint (default vs override).
+         */
+        ConfigDiffOut: {
+            /** Vertical */
+            vertical: string;
+            /** Config Type */
+            config_type: string;
+            /** Org Id */
+            org_id?: string | null;
+            /** Default */
+            default: {
+                [key: string]: unknown;
+            };
+            /** Override */
+            override?: {
+                [key: string]: unknown;
+            } | null;
+            /** Merged */
+            merged: {
+                [key: string]: unknown;
+            };
+            /** Changed Keys */
+            changed_keys: string[];
+            /**
+             * Tenant Count Affected
+             * @default 1
+             */
+            tenant_count_affected: number;
+            /** Has Override */
+            has_override: boolean;
+            /**
+             * Computed At
+             * Format: date-time
+             */
+            computed_at: string;
         };
         /** ContentSummary */
         ContentSummary: {
@@ -8954,6 +9021,33 @@ export interface components {
              */
             checked_at: string;
         };
+        /** SimulationResult */
+        SimulationResult: {
+            /** Profile */
+            profile: string;
+            /** Proposed Cvar 95 3M */
+            proposed_cvar_95_3m?: string | null;
+            /** Cvar Limit */
+            cvar_limit?: string | null;
+            /** Cvar Utilization Pct */
+            cvar_utilization_pct?: string | null;
+            /** Cvar Delta Vs Current */
+            cvar_delta_vs_current?: string | null;
+            /** Tracking Error Expected */
+            tracking_error_expected?: string | null;
+            /** Within Limit */
+            within_limit: boolean;
+            /**
+             * Warnings
+             * @default []
+             */
+            warnings: string[];
+            /**
+             * Computed At
+             * Format: date-time
+             */
+            computed_at: string;
+        };
         /** SponsorImpact */
         SponsorImpact: {
             /**
@@ -9509,6 +9603,20 @@ export interface components {
             decided_at?: string | null;
             /** Pipeline Deal Id */
             pipeline_deal_id?: string | null;
+            /** Tenor Months */
+            tenor_months?: number | null;
+            /** Spread Bps */
+            spread_bps?: number | null;
+            /** Covenant Type */
+            covenant_type?: string | null;
+            /** Covenant Frequency */
+            covenant_frequency?: string | null;
+            /** Collateral Description */
+            collateral_description?: string | null;
+            /** Ltv Ratio */
+            ltv_ratio?: string | null;
+            /** Agreement Language */
+            agreement_language?: string | null;
             /**
              * Created At
              * Format: date-time
@@ -10065,7 +10173,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ConfigDiffOut"];
                 };
             };
             /** @description Validation Error */
@@ -11295,6 +11403,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EffectiveAllocationRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    simulate_allocation_api_v1_allocation__profile__simulate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                profile: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AllocationProposal"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulationResult"];
                 };
             };
             /** @description Validation Error */

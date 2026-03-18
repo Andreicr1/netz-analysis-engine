@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
@@ -59,6 +60,15 @@ class DealOut(BaseModel):
     decided_at: datetime | None = None
 
     pipeline_deal_id: uuid.UUID | None = None
+
+    # --- Financial term fields ---
+    tenor_months: int | None = None
+    spread_bps: int | None = None
+    covenant_type: str | None = None
+    covenant_frequency: str | None = None
+    collateral_description: str | None = None
+    ltv_ratio: Decimal | None = None
+    agreement_language: str | None = None
 
     created_at: datetime
     updated_at: datetime

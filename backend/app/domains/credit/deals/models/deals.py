@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import Enum, ForeignKey, String, Text, Uuid
+from decimal import Decimal
+
+from sqlalchemy import Enum, ForeignKey, Integer, Numeric, String, Text, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -65,4 +67,13 @@ class Deal(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMix
         nullable=True,
         index=True,
     )
+
+    # --- Financial term fields (populated during structuring) ---
+    tenor_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    spread_bps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    covenant_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    covenant_frequency: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    collateral_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ltv_ratio: Mapped[Decimal | None] = mapped_column(Numeric(5, 4), nullable=True)
+    agreement_language: Mapped[str | None] = mapped_column(Text, nullable=True)
 

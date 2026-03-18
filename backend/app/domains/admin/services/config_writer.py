@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -19,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config.models import VerticalConfigDefault, VerticalConfigOverride
 from app.domains.admin.models import AdminAuditLog
+from app.domains.admin.schemas import ConfigDiffOut
 
 logger = logging.getLogger(__name__)
 
@@ -275,8 +277,8 @@ class ConfigWriter:
         vertical: str,
         config_type: str,
         org_id: UUID,
-    ) -> dict:
-        """Return {default, override, merged, changed_keys}."""
+    ) -> ConfigDiffOut:
+        """Return typed diff: default vs override with context fields."""
         from app.core.config.config_service import ConfigService
 
         default_row = await self._db.execute(
@@ -299,18 +301,24 @@ class ConfigWriter:
         merged = ConfigService.deep_merge(default_config, override_config) if override_config else default_config
 
         # Calculate changed keys
-        changed_keys = []
+        changed_keys: list[str] = []
         if override_config:
             for key in override_config:
                 if default_config.get(key) != override_config[key]:
                     changed_keys.append(key)
 
-        return {
-            "default": default_config,
-            "override": override_config,
-            "merged": merged,
-            "changed_keys": changed_keys,
-        }
+        return ConfigDiffOut(
+            vertical=vertical,
+            config_type=config_type,
+            org_id=org_id,
+            default=default_config,
+            override=override_config,
+            merged=merged,
+            changed_keys=changed_keys,
+            tenant_count_affected=1,  # TODO: count tenants without override when org_id is None
+            has_override=override_config is not None,
+            computed_at=datetime.now(timezone.utc),
+        )
 
     async def validate_override(
         self,

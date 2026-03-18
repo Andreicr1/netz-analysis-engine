@@ -130,3 +130,23 @@ class PipelineStatsOut(BaseModel):
     queue_depth: int
     error_rate: float
     checked_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Config diff schema
+# ---------------------------------------------------------------------------
+
+
+class ConfigDiffOut(BaseModel):
+    """Typed response for config diff endpoint (default vs override)."""
+
+    vertical: str
+    config_type: str
+    org_id: uuid.UUID | None = None
+    default: dict[str, object]
+    override: dict[str, object] | None = None
+    merged: dict[str, object]
+    changed_keys: list[str]
+    tenant_count_affected: int = 1  # always 1 for now — org_id scoped
+    has_override: bool
+    computed_at: datetime

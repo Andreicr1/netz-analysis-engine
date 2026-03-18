@@ -12,6 +12,7 @@ from app.core.config.registry import ConfigRegistry
 from app.core.security.admin_auth import require_super_admin
 from app.core.security.clerk_auth import Actor
 from app.core.tenancy.admin_middleware import get_db_admin
+from app.domains.admin.schemas import ConfigDiffOut
 from app.domains.admin.services.config_writer import ConfigWriter
 
 router = APIRouter(
@@ -125,7 +126,7 @@ async def delete_config(
     return {"status": "deleted"}
 
 
-@router.get("/{vertical}/{config_type}/diff")
+@router.get("/{vertical}/{config_type}/diff", response_model=ConfigDiffOut)
 async def get_config_diff(
     vertical: str,
     config_type: str,
