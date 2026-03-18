@@ -5129,6 +5129,30 @@ export interface components {
             /** Offset */
             offset: number;
         };
+        /** BacktestFoldMetrics */
+        BacktestFoldMetrics: {
+            /** Fold */
+            fold: number;
+            /** Train Start */
+            train_start?: string | null;
+            /** Train End */
+            train_end?: string | null;
+            /** Test Start */
+            test_start?: string | null;
+            /** Test End */
+            test_end?: string | null;
+            /** Sharpe */
+            sharpe?: number | null;
+            /** Cvar 95 */
+            cvar_95?: number | null;
+            /** Max Drawdown */
+            max_drawdown?: number | null;
+            /**
+             * N Obs
+             * @default 0
+             */
+            n_obs: number;
+        };
         /**
          * BacktestParams
          * @description Typed, bounded parameters for a backtest run.
@@ -5161,6 +5185,28 @@ export interface components {
             profile: string;
             params?: components["schemas"]["BacktestParams"];
         };
+        /** BacktestResultDetail */
+        BacktestResultDetail: {
+            /**
+             * Folds
+             * @default []
+             */
+            folds: components["schemas"]["BacktestFoldMetrics"][];
+            /** Mean Sharpe */
+            mean_sharpe?: number | null;
+            /** Std Sharpe */
+            std_sharpe?: number | null;
+            /**
+             * Positive Folds
+             * @default 0
+             */
+            positive_folds: number;
+            /**
+             * N Splits Computed
+             * @default 0
+             */
+            n_splits_computed: number;
+        };
         /** BacktestRunRead */
         BacktestRunRead: {
             /**
@@ -5176,10 +5222,7 @@ export interface components {
             };
             /** Status */
             status: string;
-            /** Results */
-            results?: {
-                [key: string]: unknown;
-            } | null;
+            results?: components["schemas"]["BacktestResultDetail"] | null;
             /** Cv Metrics */
             cv_metrics?: {
                 [key: string]: unknown;
@@ -5451,6 +5494,30 @@ export interface components {
         CheckItemPayload: {
             /** Notes */
             notes?: string | null;
+        };
+        /** CommitteeMemberOut */
+        CommitteeMemberOut: {
+            /** Email */
+            email: string;
+            /** Name */
+            name?: string | null;
+            /** Role */
+            role?: string | null;
+        };
+        /** CommitteeVoteOut */
+        CommitteeVoteOut: {
+            /** Email */
+            email: string;
+            /** Vote */
+            vote: string;
+            /** Signed At */
+            signed_at?: string | null;
+            /** Signer Status */
+            signer_status?: string | null;
+            /** Actor Capacity */
+            actor_capacity?: string | null;
+            /** Rationale */
+            rationale?: string | null;
         };
         /** ConcentrationRead */
         ConcentrationRead: {
@@ -7061,13 +7128,9 @@ export interface components {
                 [key: string]: unknown;
             }[];
             /** Committee Members */
-            committee_members?: {
-                [key: string]: unknown;
-            }[] | null;
+            committee_members?: components["schemas"]["CommitteeMemberOut"][] | null;
             /** Committee Votes */
-            committee_votes?: {
-                [key: string]: unknown;
-            }[] | null;
+            committee_votes?: components["schemas"]["CommitteeVoteOut"][] | null;
             /** Esignature Status */
             esignature_status?: string | null;
             /**
