@@ -23,6 +23,8 @@ from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.risk import FundRiskMetrics
 from app.domains.wealth.models.strategy_drift_alert import StrategyDriftAlert
 from app.domains.wealth.schemas.strategy_drift import (
+    DriftEventOut,
+    DriftHistoryOut,
     StrategyDriftRead,
     StrategyDriftScanRead,
 )
@@ -280,6 +282,75 @@ async def list_drift_alerts(
         )
         for a in alerts
     ]
+
+
+@router.get(
+    "/{instrument_id}/history",
+    response_model=DriftHistoryOut,
+    summary="Drift history for an instrument",
+    description=(
+        "Returns historical drift alerts for a single instrument, ordered by "
+        "detected_at descending. Supports date range and severity filtering."
+    ),
+)
+async def get_drift_history(
+    instrument_id: uuid.UUID,
+    from_date: datetime | None = Query(None, description="Start date filter (inclusive)"),
+    to_date: datetime | None = Query(None, description="End date filter (inclusive)"),
+    severity: str | None = Query(None, pattern="^(none|moderate|severe)$"),
+    limit: int = Query(100, ge=1, le=500),
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> DriftHistoryOut:
+    # Verify instrument exists
+    inst_result = await db.execute(
+        select(Instrument.name).where(Instrument.instrument_id == instrument_id)
+    )
+    inst_name = inst_result.scalar()
+    if inst_name is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Instrument not found"
+        )
+
+    # Build query with filters
+    stmt = select(StrategyDriftAlert).where(
+        StrategyDriftAlert.instrument_id == instrument_id,
+    )
+    if from_date is not None:
+        stmt = stmt.where(StrategyDriftAlert.detected_at >= from_date)
+    if to_date is not None:
+        stmt = stmt.where(StrategyDriftAlert.detected_at <= to_date)
+    if severity is not None:
+        stmt = stmt.where(StrategyDriftAlert.severity == severity)
+
+    stmt = stmt.order_by(StrategyDriftAlert.detected_at.desc()).limit(limit)
+
+    result = await db.execute(stmt)
+    alerts = result.scalars().all()
+
+    events = [
+        DriftEventOut(
+            id=a.id,
+            instrument_id=a.instrument_id,
+            status=a.status,
+            severity=a.severity,
+            anomalous_count=a.anomalous_count,
+            total_metrics=a.total_metrics,
+            metric_details=a.metric_details,
+            is_current=a.is_current,
+            detected_at=a.detected_at,
+            created_at=a.created_at,
+        )
+        for a in alerts
+    ]
+
+    return DriftHistoryOut(
+        instrument_id=instrument_id,
+        instrument_name=inst_name,
+        events=events,
+        total=len(events),
+        computed_at=datetime.now(timezone.utc),
+    )
 
 
 # ── Parameterized route MUST come after literal routes (/alerts, /scan) ──

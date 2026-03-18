@@ -8,6 +8,27 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
+class PromptVersionOut(BaseModel):
+    """Single version entry from prompt override history."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    version: int
+    content: str
+    updated_by: str
+    actor_id: str | None = None  # alias of updated_by for frontend consistency
+    change_summary: str | None = None
+    created_at: datetime
+
+
+class PromptVersionsResponse(BaseModel):
+    """Paginated response for prompt version history."""
+
+    versions: list[PromptVersionOut]
+    has_more: bool
+
+
 class BrandingResponse(BaseModel):
     """Branding config returned to frontends. Merged default + override.
 

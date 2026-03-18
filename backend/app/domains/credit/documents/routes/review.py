@@ -21,7 +21,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -83,11 +83,49 @@ class AssignReviewer(BaseModel):
 class ReviewDecisionPayload(BaseModel):
     decision: str = Field(description="APPROVED | REJECTED | REVISION_REQUESTED")
     comments: str | None = None
+    rationale: str = Field(min_length=1, description="Justification for the decision (min 20 chars)")
+    actor_capacity: str = Field(description="reviewer | lead_reviewer | gp_override")
+    actor_email: EmailStr
+
+    @field_validator("rationale")
+    @classmethod
+    def rationale_min_length(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 20:
+            raise ValueError("rationale must be at least 20 characters after stripping whitespace")
+        return v
+
+    @field_validator("actor_capacity")
+    @classmethod
+    def validate_actor_capacity(cls, v: str) -> str:
+        allowed = {"reviewer", "lead_reviewer", "gp_override"}
+        if v not in allowed:
+            raise ValueError(f"actor_capacity must be one of {sorted(allowed)}")
+        return v
 
 
 class FinalizePayload(BaseModel):
     decision: str = Field(description="APPROVED | REJECTED")
     comments: str | None = None
+    rationale: str = Field(min_length=1, description="Justification for the decision (min 20 chars)")
+    actor_capacity: str = Field(description="gp | admin_override")
+    actor_email: EmailStr
+
+    @field_validator("rationale")
+    @classmethod
+    def rationale_min_length(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 20:
+            raise ValueError("rationale must be at least 20 characters after stripping whitespace")
+        return v
+
+    @field_validator("actor_capacity")
+    @classmethod
+    def validate_actor_capacity(cls, v: str) -> str:
+        allowed = {"gp", "admin_override"}
+        if v not in allowed:
+            raise ValueError(f"actor_capacity must be one of {sorted(allowed)}")
+        return v
 
 
 # -- Submit ------------------------------------------------------------------
