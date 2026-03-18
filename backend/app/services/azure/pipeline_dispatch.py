@@ -109,6 +109,8 @@ def dispatch_extraction(
         "no_index": no_index,
         "job_id": job_id,
         "triggered_by": actor_id,
+        "pipeline_name": "unified_pipeline",
+        "legacy_path_invoked": False,
     }
 
     if _use_service_bus():
@@ -125,9 +127,10 @@ def dispatch_extraction(
             "deals_filter": deals_filter or "(all)",
             "dry_run": dry_run,
             "triggered_by": actor_id,
+            "pipeline_name": "unified_pipeline",
         }
 
-    from ai_engine.extraction.extraction_orchestrator import run_extraction_pipeline
+    from ai_engine.pipeline.unified_pipeline import run_extraction_pipeline
 
     def _run() -> None:
         try:
@@ -155,6 +158,7 @@ def dispatch_extraction(
         "deals_filter": deals_filter or "(all)",
         "dry_run": dry_run,
         "triggered_by": actor_id,
+        "pipeline_name": "unified_pipeline",
     }
 
 

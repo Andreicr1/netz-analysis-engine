@@ -19,9 +19,12 @@ Storage follows dual-write pattern (Phase 3):
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import json
 import logging
 import time
+import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -41,6 +44,273 @@ from ai_engine.pipeline.validation import (
 )
 
 logger = logging.getLogger(__name__)
+
+EXTRACTION_SOURCE_CONFIG: dict[str, dict[str, str]] = {
+    "deals": {
+        "input_container": "investment-pipeline-intelligence",
+        "description": "Pipeline deal PDFs through unified_pipeline",
+    },
+    "fund-data": {
+        "input_container": "fund-data",
+        "description": "Fund data documents through unified_pipeline",
+    },
+    "market-data": {
+        "input_container": "market-data",
+        "description": "Market data documents through unified_pipeline",
+    },
+}
+
+_EXTRACTION_JOBS: dict[str, dict[str, Any]] = {}
+_MAX_EXTRACTION_JOBS = 50
+
+
+def _utc_now_iso() -> str:
+    return dt.datetime.now(dt.UTC).isoformat()
+
+
+def _trim_extraction_jobs() -> None:
+    if len(_EXTRACTION_JOBS) <= _MAX_EXTRACTION_JOBS:
+        return
+    oldest_job_id = min(
+        _EXTRACTION_JOBS,
+        key=lambda item_job_id: _EXTRACTION_JOBS[item_job_id].get("created_at", ""),
+    )
+    del _EXTRACTION_JOBS[oldest_job_id]
+
+
+def new_extraction_job(source: str, deals_filter: str, *, pipeline_name: str = "unified_pipeline") -> str:
+    """Allocate a tracked extraction job ID for canonical batch ingestion."""
+    job_id = str(uuid.uuid4())
+    _EXTRACTION_JOBS[job_id] = {
+        "job_id": job_id,
+        "source": source,
+        "deals_filter": deals_filter,
+        "pipeline_name": pipeline_name,
+        "legacy_path_invoked": False,
+        "status": "pending",
+        "created_at": _utc_now_iso(),
+        "started_at": None,
+        "finished_at": None,
+        "results": [],
+        "summary": {},
+        "error": None,
+    }
+    _trim_extraction_jobs()
+    return job_id
+
+
+def _update_extraction_job(job_id: str, **kwargs: Any) -> None:
+    if job_id in _EXTRACTION_JOBS:
+        _EXTRACTION_JOBS[job_id].update(kwargs)
+
+
+def get_extraction_job_status(job_id: str) -> dict[str, Any]:
+    """Return canonical extraction job status."""
+    return _EXTRACTION_JOBS.get(job_id, {"error": "Job not found", "job_id": job_id})
+
+
+def list_extraction_jobs() -> list[dict[str, Any]]:
+    """Return tracked extraction jobs, newest first."""
+    return sorted(
+        _EXTRACTION_JOBS.values(),
+        key=lambda job: job.get("created_at") or "",
+        reverse=True,
+    )
+
+
+def _blob_entry_value(entry: Any, field_name: str, *, default: Any = None) -> Any:
+    if isinstance(entry, dict):
+        return entry.get(field_name, default)
+    return getattr(entry, field_name, default)
+
+
+def _resolve_blob_uri(container_name: str, blob_path: str) -> str:
+    from app.services.blob_storage import blob_uri as build_blob_uri
+
+    for args, kwargs in (
+        ((container_name, blob_path), {}),
+        ((), {"container": container_name, "blob_path": blob_path}),
+        ((), {"container_name": container_name, "blob_path": blob_path}),
+    ):
+        try:
+            return build_blob_uri(*args, **kwargs)
+        except TypeError:
+            continue
+    return f"{container_name}/{blob_path}"
+
+
+def list_extraction_source_items(source: str) -> list[str]:
+    """List top-level folders for a canonical extraction source."""
+    source_cfg = EXTRACTION_SOURCE_CONFIG[source]
+
+    from app.services.blob_storage import list_blobs
+
+    seen: set[str] = set()
+    for entry in list_blobs(container=source_cfg["input_container"], prefix=None, delimiter=""):
+        if _blob_entry_value(entry, "is_folder", default=False):
+            continue
+        blob_name = str(_blob_entry_value(entry, "name", default=""))
+        if not blob_name.lower().endswith(".pdf"):
+            continue
+        parts = blob_name.split("/", 1)
+        if len(parts) == 2:
+            seen.add(parts[0])
+    return sorted(seen)
+
+
+async def _run_extraction_pipeline_async(
+    *,
+    source: str,
+    deals_filter: str,
+    dry_run: bool,
+    no_index: bool,
+) -> list[dict[str, Any]]:
+    from app.services.blob_storage import list_blobs
+
+    filters = [item.strip().lower() for item in deals_filter.split(",") if item.strip()]
+    sources_to_run = list(EXTRACTION_SOURCE_CONFIG) if source == "all" else [source]
+    results: list[dict[str, Any]] = []
+
+    for source_key in sources_to_run:
+        source_cfg = EXTRACTION_SOURCE_CONFIG[source_key]
+        entries = list_blobs(container=source_cfg["input_container"], prefix=None, delimiter="")
+        pdf_entries = [
+            entry
+            for entry in entries
+            if not _blob_entry_value(entry, "is_folder", default=False)
+            and str(_blob_entry_value(entry, "name", default="")).lower().endswith(".pdf")
+        ]
+
+        for entry in pdf_entries:
+            blob_path = str(_blob_entry_value(entry, "name", default=""))
+            if filters and not any(filter_value in blob_path.lower() for filter_value in filters):
+                continue
+
+            filename = Path(blob_path).name
+            item_result: dict[str, Any] = {
+                "source": source_key,
+                "blob_path": blob_path,
+                "filename": filename,
+                "pipeline_name": "unified_pipeline",
+                "legacy_path_invoked": False,
+                "status": "dry_run" if dry_run else "pending",
+            }
+
+            if dry_run:
+                results.append(item_result)
+                continue
+
+            request = IngestRequest(
+                source="batch",
+                org_id=uuid.UUID(int=0),
+                vertical="credit",
+                document_id=uuid.uuid5(uuid.NAMESPACE_URL, f"{source_cfg['input_container']}/{blob_path}"),
+                blob_uri=_resolve_blob_uri(source_cfg["input_container"], blob_path),
+                filename=filename,
+            )
+
+            pipeline_result = await process(
+                request,
+                actor_id="unified_pipeline",
+                skip_index=no_index,
+            )
+            item_result["status"] = "ok" if pipeline_result.success else "error"
+            item_result["stage"] = pipeline_result.stage
+            item_result["chunk_count"] = pipeline_result.metrics.get("chunk_count", 0)
+            item_result["duration_ms"] = pipeline_result.metrics.get("duration_ms", 0)
+            if pipeline_result.errors:
+                item_result["errors"] = list(pipeline_result.errors)
+            if pipeline_result.warnings:
+                item_result["warnings"] = list(pipeline_result.warnings)
+            results.append(item_result)
+
+    return results
+
+
+def run_extraction_pipeline(
+    source: str = "deals",
+    deals_filter: str = "",
+    dry_run: bool = False,
+    skip_bootstrap: bool = False,
+    skip_prepare: bool = False,
+    skip_embed: bool = False,
+    skip_enrich: bool = False,
+    no_index: bool = False,
+    poll_timeout: int = 600,
+    job_id: str | None = None,
+) -> str:
+    """Run canonical extraction batch ingestion through ``unified_pipeline``.
+
+    Legacy orchestration flags are accepted for API compatibility and ignored.
+    """
+    del skip_bootstrap, skip_prepare, skip_embed, skip_enrich, poll_timeout
+
+    if source not in EXTRACTION_SOURCE_CONFIG and source != "all":
+        raise ValueError(f"Invalid source {source!r}. Expected one of {sorted(EXTRACTION_SOURCE_CONFIG)} or 'all'.")
+
+    if job_id is None:
+        job_id = new_extraction_job(source, deals_filter)
+    elif job_id not in _EXTRACTION_JOBS:
+        _EXTRACTION_JOBS[job_id] = {
+            "job_id": job_id,
+            "source": source,
+            "deals_filter": deals_filter,
+            "pipeline_name": "unified_pipeline",
+            "legacy_path_invoked": False,
+            "status": "pending",
+            "created_at": _utc_now_iso(),
+            "started_at": None,
+            "finished_at": None,
+            "results": [],
+            "summary": {},
+            "error": None,
+        }
+        _trim_extraction_jobs()
+
+    _update_extraction_job(
+        job_id,
+        source=source,
+        deals_filter=deals_filter,
+        status="running",
+        started_at=_utc_now_iso(),
+        legacy_path_invoked=False,
+        pipeline_name="unified_pipeline",
+    )
+
+    try:
+        results = asyncio.run(
+            _run_extraction_pipeline_async(
+                source=source,
+                deals_filter=deals_filter,
+                dry_run=dry_run,
+                no_index=no_index,
+            )
+        )
+        ok_count = len([item for item in results if item["status"] == "ok"])
+        dry_run_count = len([item for item in results if item["status"] == "dry_run"])
+        error_count = len([item for item in results if item["status"] == "error"])
+        _update_extraction_job(
+            job_id,
+            status="completed",
+            finished_at=_utc_now_iso(),
+            results=results,
+            summary={
+                "total": len(results),
+                "ok": ok_count,
+                "dry_run": dry_run_count,
+                "errors": error_count,
+            },
+        )
+    except Exception as exc:
+        logger.error("Canonical extraction pipeline failed job=%s", job_id, exc_info=True)
+        _update_extraction_job(
+            job_id,
+            status="failed",
+            finished_at=_utc_now_iso(),
+            error=str(exc),
+        )
+
+    return job_id
 
 # ── SSE helpers ─────────────────────────────────────────────────────
 
@@ -205,6 +475,7 @@ async def process(
     *,
     db: AsyncSession | None = None,
     actor_id: str = "unified-pipeline",
+    skip_index: bool = False,
 ) -> PipelineStageResult:
     """Process a single document through the full pipeline.
 
@@ -507,47 +778,51 @@ async def process(
         upsert_chunks as upsert_search_chunks,
     )
 
-    search_docs = []
-    for chunk in chunks:
-        search_doc = build_search_document(
-            deal_id=request.deal_id or request.document_id,
-            # fund_id: use document_id as fallback (not org_id — semantically different).
-            # Batch path may not have fund_id; document_id ensures unique scoping.
-            fund_id=request.fund_id or request.document_id,
-            domain=request.vertical,
-            doc_type=classification.doc_type,
-            authority="unified_pipeline",
-            title=request.filename,
-            chunk_index=chunk.get("chunk_index", 0),
-            content=chunk.get("content", ""),
-            embedding=chunk.get("embedding", []),
-            page_start=chunk.get("page_start", 0),
-            page_end=chunk.get("page_end", 0),
-            document_id=request.document_id,
-            doc_summary=summary_text or None,
-            vehicle_type=classification.vehicle_type,
-            section_type=chunk.get("section_type"),
-            breadcrumb=chunk.get("breadcrumb"),
-            has_table=chunk.get("has_table"),
-            has_numbers=chunk.get("has_numbers"),
-            char_count=chunk.get("char_count"),
-            governance_critical=gov_critical,
-            governance_flags=gov_flags if gov_flags else None,
-            organization_id=request.org_id,
-        )
-        search_docs.append(search_doc)
+    indexed_count = 0
+    if not skip_index:
+        search_docs = []
+        for chunk in chunks:
+            search_doc = build_search_document(
+                deal_id=request.deal_id or request.document_id,
+                # fund_id: use document_id as fallback (not org_id — semantically different).
+                # Batch path may not have fund_id; document_id ensures unique scoping.
+                fund_id=request.fund_id or request.document_id,
+                domain=request.vertical,
+                doc_type=classification.doc_type,
+                authority="unified_pipeline",
+                title=request.filename,
+                chunk_index=chunk.get("chunk_index", 0),
+                content=chunk.get("content", ""),
+                embedding=chunk.get("embedding", []),
+                page_start=chunk.get("page_start", 0),
+                page_end=chunk.get("page_end", 0),
+                document_id=request.document_id,
+                doc_summary=summary_text or None,
+                vehicle_type=classification.vehicle_type,
+                section_type=chunk.get("section_type"),
+                breadcrumb=chunk.get("breadcrumb"),
+                has_table=chunk.get("has_table"),
+                has_numbers=chunk.get("has_numbers"),
+                char_count=chunk.get("char_count"),
+                governance_critical=gov_critical,
+                governance_flags=gov_flags if gov_flags else None,
+                organization_id=request.org_id,
+            )
+            search_docs.append(search_doc)
 
-    # upsert_chunks is synchronous
-    indexed_count = await asyncio.to_thread(upsert_search_chunks, search_docs)
+        # upsert_chunks is synchronous
+        indexed_count = await asyncio.to_thread(upsert_search_chunks, search_docs)
 
     metrics["chunks_indexed"] = indexed_count
+    metrics["index_skipped"] = skip_index
 
     await _emit(request.version_id, "indexing_complete", {
         "chunks_indexed": indexed_count,
+        "index_skipped": skip_index,
     })
     await _audit(db, fund_id=request.fund_id, actor_id=actor_id,
                  action="DOCUMENT_CHUNKS_INDEXED", entity_id=request.document_id,
-                 after={"chunks_indexed": indexed_count})
+                 after={"chunks_indexed": indexed_count, "index_skipped": skip_index})
 
     # ── 10. Done ────────────────────────────────────────────────
     elapsed_ms = int((time.monotonic() - t0) * 1000)

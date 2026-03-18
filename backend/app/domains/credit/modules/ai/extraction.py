@@ -89,13 +89,13 @@ def trigger_extraction_pipeline(
     Dispatches to Service Bus when USE_SERVICE_BUS=True, otherwise runs
     in-process via BackgroundTasks.
     """
-    from ai_engine.extraction.extraction_orchestrator import _new_job
+    from ai_engine.pipeline.unified_pipeline import new_extraction_job
     from app.services.azure.pipeline_dispatch import dispatch_extraction
 
     if source not in ("deals", "fund-data", "market-data", "all"):
         raise HTTPException(status_code=422, detail=f"Invalid source '{source}'. Use: deals | fund-data | market-data | all")
 
-    job_id = _new_job(source, deals_filter)
+    job_id = new_extraction_job(source, deals_filter)
 
     return dispatch_extraction(
         background_tasks=background_tasks,
@@ -118,8 +118,8 @@ def get_extraction_status(
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM])),
 ):
     """Return the current status of an extraction pipeline job."""
-    from ai_engine.extraction.extraction_orchestrator import get_job_status
-    return get_job_status(job_id)
+    from ai_engine.pipeline.unified_pipeline import get_extraction_job_status
+    return get_extraction_job_status(job_id)
 
 
 @router.get("/pipeline/extract/jobs")
@@ -127,8 +127,8 @@ def list_extraction_jobs(
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM])),
 ):
     """Return the last 50 extraction pipeline jobs, most recent first."""
-    from ai_engine.extraction.extraction_orchestrator import list_pipeline_jobs
-    return {"jobs": list_pipeline_jobs()}
+    from ai_engine.pipeline.unified_pipeline import list_extraction_jobs
+    return {"jobs": list_extraction_jobs()}
 
 
 @router.get("/pipeline/extract/sources")
@@ -140,17 +140,13 @@ def list_extraction_sources(
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP])),
 ):
     """List item folders currently in the specified Azure Blob input container."""
-    from ai_engine.extraction.extraction_orchestrator import (
-        SOURCE_CONFIG,
-        get_blob_service,
-        list_source_folders,
-    )
-    if source not in SOURCE_CONFIG:
+    from ai_engine.pipeline.unified_pipeline import EXTRACTION_SOURCE_CONFIG, list_extraction_source_items
+
+    if source not in EXTRACTION_SOURCE_CONFIG:
         raise HTTPException(status_code=422, detail=f"Invalid source '{source}'")
     try:
-        blob_service = get_blob_service()
-        container    = SOURCE_CONFIG[source]["input_container"]
-        items        = list_source_folders(blob_service, container)
+        container = EXTRACTION_SOURCE_CONFIG[source]["input_container"]
+        items = list_extraction_source_items(source)
         return {"source": source, "container": container, "items": items, "count": len(items)}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
