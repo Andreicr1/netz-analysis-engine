@@ -4,11 +4,12 @@
   Overview tab shows deal actions (decide, resolve conditions, convert).
 -->
 <script lang="ts">
-	import { PageTabs, Card, StatusBadge, Button, EmptyState } from "@netz/ui";
+	import { PageTabs, Card, StatusBadge, Button, EmptyState, MetricCard } from "@netz/ui";
 	import { ActionButton, FormField } from "@netz/ui";
 	import { ConsequenceDialog, AuditTrailPanel } from "@netz/ui";
 	import { createOptimisticMutation } from "@netz/ui";
 	import type { AuditTrailEntry } from "@netz/ui";
+	import { formatNumber, formatBps, formatRatio } from "@netz/ui";
 	import DealStageTimeline from "$lib/components/DealStageTimeline.svelte";
 	import ICMemoViewer from "$lib/components/ICMemoViewer.svelte";
 	import { goto, invalidateAll } from "$app/navigation";
@@ -341,6 +342,47 @@
 					{/if}
 				</div>
 			</Card>
+
+			<!-- Financial Terms — fields from app__domains__credit__deals__schemas__deals__DealOut -->
+			{#if data.deal.tenor_months != null || data.deal.spread_bps != null || data.deal.ltv_ratio != null || data.deal.covenant_type != null || data.deal.collateral_description != null || data.deal.agreement_language != null}
+				<Card class="mt-4 p-6">
+					<h3 class="mb-4 text-lg font-semibold">Financial Terms</h3>
+					<!-- Numeric KPIs via MetricCard -->
+					<div class="mb-4 grid gap-4 md:grid-cols-3">
+						<MetricCard
+							label="Tenor"
+							value={data.deal.tenor_months != null ? formatNumber(Number(data.deal.tenor_months), 0) + " mo" : "—"}
+						/>
+						<MetricCard
+							label="Spread"
+							value={data.deal.spread_bps != null ? formatBps(Number(data.deal.spread_bps) / 10_000) : "—"}
+						/>
+						<MetricCard
+							label="LTV Ratio"
+							value={data.deal.ltv_ratio != null ? formatRatio(parseFloat(String(data.deal.ltv_ratio))) : "—"}
+						/>
+					</div>
+					<!-- Text fields -->
+					<div class="grid gap-4 md:grid-cols-2">
+						<div>
+							<p class="text-xs text-[var(--netz-text-muted)]">Covenant Type</p>
+							<p class="text-sm font-medium">{data.deal.covenant_type ?? "—"}</p>
+						</div>
+						<div>
+							<p class="text-xs text-[var(--netz-text-muted)]">Covenant Frequency</p>
+							<p class="text-sm font-medium">{data.deal.covenant_frequency ?? "—"}</p>
+						</div>
+						<div class="md:col-span-2">
+							<p class="text-xs text-[var(--netz-text-muted)]">Collateral Description</p>
+							<p class="text-sm font-medium">{data.deal.collateral_description ?? "—"}</p>
+						</div>
+						<div>
+							<p class="text-xs text-[var(--netz-text-muted)]">Agreement Language</p>
+							<p class="text-sm font-medium">{data.deal.agreement_language ?? "—"}</p>
+						</div>
+					</div>
+				</Card>
+			{/if}
 
 		{:else if activeTab === "conditions"}
 			{#if conditions.length === 0}
