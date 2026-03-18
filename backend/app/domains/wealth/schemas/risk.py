@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -36,6 +36,7 @@ class FundRiskRead(BaseModel):
     tracking_error_1y: Decimal | None = None
     manager_score: Decimal | None = None
     score_components: dict[str, Any] | None = None
+    computed_at: datetime | None = None
 
 
 class FundScoreRead(BaseModel):
@@ -66,6 +67,8 @@ class CVaRStatus(BaseModel):
     # Both are None until the Bayesian CVaR worker has run for the snapshot date.
     cvar_lower_5: Decimal | None = None
     cvar_upper_95: Decimal | None = None
+    computed_at: datetime | None = None  # server-side computation timestamp
+    next_expected_update: datetime | None = None  # next expected update
 
 
 class CVaRPoint(BaseModel):
@@ -80,6 +83,15 @@ class CVaRPoint(BaseModel):
 # Canonical location: app.shared.schemas.RegimeRead
 # This re-export will be removed after migration is verified.
 from app.shared.schemas import RegimeRead  # noqa: F401
+
+
+class RiskSummaryBatch(BaseModel):
+    """Response for GET /risk/summary?profiles=a,b,c"""
+
+    profile: str
+    risk: CVaRStatus | None = None
+    error: str | None = None  # if this profile failed, don't break the whole batch
+    computed_at: datetime | None = None
 
 
 class RegimeHistoryPoint(BaseModel):
