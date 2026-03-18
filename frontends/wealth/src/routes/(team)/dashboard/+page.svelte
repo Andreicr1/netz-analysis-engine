@@ -5,17 +5,14 @@
 -->
 <script lang="ts">
 	import {
-		StatusBadge, EmptyState, TimeSeriesChart, PageHeader,
-		PeriodSelector, RegimeBanner, SectionCard, AlertFeed,
+		StatusBadge, EmptyState, PageHeader,
+		RegimeBanner, SectionCard,
 		formatDateTime,
-		type WealthAlert,
 	} from "@netz/ui";
 	import PortfolioCard from "$lib/components/PortfolioCard.svelte";
 	import MacroChips from "$lib/components/MacroChips.svelte";
-	import { regimeLabels } from "$lib/constants/regime";
 	import { resolveWealthStatus } from "$lib/utils/status-maps";
 	import type { PageData } from "./$types";
-	import type { RegimeData } from "$lib/types/api";
 	import { getContext } from "svelte";
 	import type { RiskStore } from "$lib/stores/risk-store.svelte";
 
@@ -110,10 +107,6 @@
 		});
 	});
 
-	// Period selector
-	const periods = ["1M", "3M", "YTD", "1Y", "3Y"];
-	let selectedPeriod = $state("YTD");
-
 	// Current regime — from live store, fallback to page data
 	const currentRegime = $derived(
 		liveRegime?.regime ?? portfolios?.[0]?.regime ?? null
@@ -147,7 +140,7 @@
 		{#if cards.length > 0}
 			<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
 				{#each cards as card (card.profile)}
-					<a href="/model-portfolios?portfolio={card.id}" class="block transition-transform hover:scale-[1.01]">
+					<a href="/portfolios/{card.profile}" class="block transition-transform hover:scale-[1.01]">
 						<PortfolioCard
 							name={card.name}
 							profile={card.profile}
@@ -168,47 +161,119 @@
 		{/if}
 	</section>
 
-	<!-- NAV Chart + Alerts — side by side -->
+	<!-- Decision Surface — Drift Alerts + Recent Activity -->
 	<section class="grid gap-4 lg:grid-cols-5">
-		<!-- NAV Chart (60%) -->
-		<SectionCard title="NAV — Portfólios Consolidados" class="lg:col-span-3">
+		<!-- Drift Alerts (60%) -->
+		<SectionCard title="Drift Alerts" class="lg:col-span-3">
 			{#snippet actions()}
-				<PeriodSelector {periods} selected={selectedPeriod} onSelect={(p) => selectedPeriod = p} />
+				{#if riskStore.computedAt}
+					<span class="text-xs text-[var(--netz-text-muted)]">
+						{formatDateTime(riskStore.computedAt)}
+					</span>
+				{/if}
 			{/snippet}
-			<div class="h-80">
-				<TimeSeriesChart
-					series={[]}
-					yAxisLabel="NAV"
-					empty={true}
-					emptyMessage="Track-record data not yet available"
-					ariaLabel="Consolidated NAV chart"
-				/>
-			</div>
-		</SectionCard>
-
-		<!-- Alertas Ativos (40%) -->
-		<SectionCard title="Alertas Ativos" class="lg:col-span-2">
 			{#if riskStore.driftAlerts.dtw_alerts.length > 0 || riskStore.driftAlerts.behavior_change_alerts.length > 0}
-				<div class="space-y-2 text-sm text-[var(--netz-text-secondary)]">
+				<div class="space-y-2">
 					{#each riskStore.driftAlerts.dtw_alerts as alert (alert.instrument_name)}
-						<div class="rounded border border-[var(--netz-border)] p-2">
-							<span class="font-medium">{alert.instrument_name}</span>
-							<span class="ml-2 text-[var(--netz-text-muted)]">DTW: {alert.dtw_score}</span>
+						<div class="flex items-center justify-between rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] p-3">
+							<div class="space-y-0.5">
+								<p class="text-sm font-medium text-[var(--netz-text-primary)]">{alert.instrument_name}</p>
+								<p class="text-xs text-[var(--netz-text-muted)]">DTW score: {alert.dtw_score}</p>
+							</div>
+							<div class="flex items-center gap-2">
+								<span class="inline-flex items-center rounded-full bg-[var(--netz-status-warning,#f59e0b)]/15 px-2 py-0.5 text-xs font-medium text-[var(--netz-status-warning,#f59e0b)]">
+									DTW Drift
+								</span>
+								{#if alert.instrument_id}
+									<a
+										href="/portfolios/{alert.instrument_id}"
+										class="inline-flex h-7 items-center rounded-md border border-[var(--netz-border)] px-2 text-xs font-medium text-[var(--netz-text-primary)] hover:bg-[var(--netz-surface-alt)] transition-colors"
+									>
+										Review
+									</a>
+								{/if}
+							</div>
 						</div>
 					{/each}
 					{#each riskStore.driftAlerts.behavior_change_alerts as alert (alert.instrument_name)}
-						<div class="rounded border border-[var(--netz-border)] p-2">
-							<span class="font-medium">{alert.instrument_name}</span>
-							<span class="ml-2 text-[var(--netz-text-muted)]">{alert.severity}</span>
+						<div class="flex items-center justify-between rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] p-3">
+							<div class="space-y-0.5">
+								<p class="text-sm font-medium text-[var(--netz-text-primary)]">{alert.instrument_name}</p>
+								<p class="text-xs text-[var(--netz-text-muted)]">
+									{alert.anomalous_count} / {alert.total_metrics} metrics anomalous
+								</p>
+							</div>
+							<div class="flex items-center gap-2">
+								<span class="inline-flex items-center rounded-full bg-[var(--netz-status-error)]/15 px-2 py-0.5 text-xs font-medium text-[var(--netz-status-error)]">
+									{alert.severity}
+								</span>
+								{#if alert.instrument_id}
+									<a
+										href="/portfolios/{alert.instrument_id}"
+										class="inline-flex h-7 items-center rounded-md border border-[var(--netz-border)] px-2 text-xs font-medium text-[var(--netz-text-primary)] hover:bg-[var(--netz-surface-alt)] transition-colors"
+									>
+										Review
+									</a>
+								{/if}
+							</div>
 						</div>
 					{/each}
 				</div>
 			{:else}
 				<EmptyState
-					title="Sem alertas ativos"
-					message="Alertas de risco aparecerão aqui quando detectados pelo motor de análise."
+					title="No active drift alerts"
+					message="Risk alerts will appear here when detected by the analysis engine."
 				/>
 			{/if}
+		</SectionCard>
+
+		<!-- Recent Activity (40%) -->
+		<SectionCard title="Quick Actions" class="lg:col-span-2">
+			<div class="space-y-2">
+				<!-- Portfolio links -->
+				{#each cards as card (card.profile)}
+					<a
+						href="/portfolios/{card.profile}"
+						class="flex items-center justify-between rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] p-3 transition-colors hover:bg-[var(--netz-surface-elevated)]"
+					>
+						<div class="space-y-0.5">
+							<p class="text-sm font-medium text-[var(--netz-text-primary)]">{card.name}</p>
+							<p class="text-xs text-[var(--netz-text-muted)]">
+								{card.triggerStatus
+									? card.triggerStatus === "breach"
+										? "CVaR Breached"
+										: card.triggerStatus === "warning"
+										? "CVaR Warning"
+										: "Normal"
+									: "Normal"}
+							</p>
+						</div>
+						{#if card.triggerStatus === "breach"}
+							<span class="inline-flex items-center rounded-full bg-[var(--netz-status-error)]/15 px-2 py-0.5 text-xs font-medium text-[var(--netz-status-error)]">
+								Action Required
+							</span>
+						{:else if card.triggerStatus === "warning"}
+							<span class="inline-flex items-center rounded-full bg-[var(--netz-status-warning,#f59e0b)]/15 px-2 py-0.5 text-xs font-medium text-[var(--netz-status-warning,#f59e0b)]">
+								Monitor
+							</span>
+						{:else}
+							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-[var(--netz-text-muted)]"><path d="m9 18 6-6-6-6"/></svg>
+						{/if}
+					</a>
+				{/each}
+
+				<!-- Allocation shortcut -->
+				<a
+					href="/allocation"
+					class="flex items-center justify-between rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] p-3 transition-colors hover:bg-[var(--netz-surface-elevated)]"
+				>
+					<div class="space-y-0.5">
+						<p class="text-sm font-medium text-[var(--netz-text-primary)]">Strategic Allocation</p>
+						<p class="text-xs text-[var(--netz-text-muted)]">Review and update allocation weights</p>
+					</div>
+					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-[var(--netz-text-muted)]"><path d="m9 18 6-6-6-6"/></svg>
+				</a>
+			</div>
 		</SectionCard>
 	</section>
 
