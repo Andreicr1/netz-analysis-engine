@@ -14,6 +14,7 @@
 		globalChartOptions, regimeColors, statusColors,
 	} from "@netz/ui/charts/echarts-setup";
 	import StaleBanner from "$lib/components/StaleBanner.svelte";
+	import DriftHistoryPanel from "$lib/components/DriftHistoryPanel.svelte";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll, goto } from "$app/navigation";
 	import { getContext } from "svelte";
@@ -185,6 +186,12 @@
 	// ── Drift history panel ──
 	let showDriftHistory = $state(false);
 
+	// instrument_id for drift history — from portfolio record if available
+	type PortfolioRecord = { id: string; display_name?: string | null };
+	let portfolioRecord = $derived(data.portfolio as PortfolioRecord | null);
+	let driftInstrumentId = $derived(portfolioRecord?.id ?? profile);
+	let driftInstrumentName = $derived(portfolioRecord?.display_name ?? profile);
+
 	// Load rebalance events on mount
 	$effect(() => { loadRebalanceEvents(); });
 
@@ -355,16 +362,12 @@
 		open={showDriftHistory}
 		title="Drift History — {profile}"
 		onClose={() => showDriftHistory = false}
-		width="560px"
+		width="720px"
 	>
 		<div class="p-4">
-			<p class="text-sm text-[var(--netz-text-muted)]">
-				Drift history with full audit trail. Export to CSV coming soon.
-			</p>
-			<!-- Drift timeline chart and table would go here with ECharts -->
-			<EmptyState
-				title="Loading drift history..."
-				message="Drift events with timestamps, block deviations, and rebalance markers."
+			<DriftHistoryPanel
+				instrumentId={driftInstrumentId}
+				instrumentName={driftInstrumentName}
 			/>
 		</div>
 	</ContextPanel>
