@@ -64,20 +64,29 @@ async def _check_adls() -> ServiceHealthOut:
 
 
 async def _check_search() -> ServiceHealthOut:
-    """Check Azure Search availability."""
+    """Vector search health via pgvector (PostgreSQL)."""
     checked_at = datetime.now(UTC)
     try:
-        from app.services.azure.search_client import health_check_search
-
+        from app.core.db.engine import async_session_factory
         start = time.monotonic()
-        result = await asyncio.to_thread(health_check_search)
+        async with async_session_factory() as session:
+            await session.execute(text("SELECT 1 FROM vector_chunks LIMIT 1"))
         latency = (time.monotonic() - start) * 1000
-
-        if result.ok:
-            return ServiceHealthOut(name="Azure Search", status="ok", latency_ms=round(latency, 2), error=None, checked_at=checked_at)
-        return ServiceHealthOut(name="Azure Search", status="down", latency_ms=round(latency, 2), error=result.detail, checked_at=checked_at)
-    except Exception as e:
-        return ServiceHealthOut(name="Azure Search", status="down", latency_ms=None, error=str(e), checked_at=checked_at)
+        return ServiceHealthOut(
+            name="pgvector",
+            status="ok",
+            latency_ms=round(latency, 2),
+            error=None,
+            checked_at=checked_at,
+        )
+    except Exception as exc:
+        return ServiceHealthOut(
+            name="pgvector",
+            status="degraded",
+            latency_ms=None,
+            error=f"vector_chunks not ready: {exc}",
+            checked_at=checked_at,
+        )
 
 
 def _check_pg_notifier(request: Request) -> ServiceHealthOut:
@@ -109,7 +118,7 @@ async def get_service_health(
     db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ) -> list[ServiceHealthOut]:
-    """Service status -- PostgreSQL, Redis, ADLS, Azure Search, PgNotifier."""
+    """Service status -- PostgreSQL, Redis, ADLS, pgvector, PgNotifier."""
     results = await asyncio.gather(
         _check_postgres(db),
         _check_redis(),
