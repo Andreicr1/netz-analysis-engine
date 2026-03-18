@@ -102,7 +102,7 @@
   **Observability checkpoints:** Emit caller-level metrics for metadata lookup attempts, successes, failures, and backend client selection. Alert on any runtime call into the stub implementation.
   **Risk level:** Medium
 
-- [ ] `SRCH-03` Convert partial indexing failure into an explicit degraded terminal state
+- [x] `SRCH-03` Convert partial indexing failure into an explicit degraded terminal state
   **Description:** Stop treating chunk-level search write failures as log-only events. Persist degraded or failed terminal state with enough retry and rebuild metadata for operators and clients to distinguish full success from partial persistence.
   **Files/modules:** `backend/ai_engine/extraction/search_upsert_service.py`, `backend/app/core/jobs/tracker.py`, pipeline status and event publishers
   **Dependencies:** `CP-04`
@@ -213,7 +213,7 @@
 
 ## Workstream: async-runtime
 
-- [ ] `ASYNC-01` Preserve SSE ownership and reconnect authorization for long-running jobs
+- [x] `ASYNC-01` Preserve SSE ownership and reconnect authorization for long-running jobs
   **Description:** Refresh or redesign job ownership lifecycle so long-running jobs remain stream-authorizable beyond the current one-hour TTL while preserving cleanup after completion or abandonment.
   **Files/modules:** `backend/app/core/jobs/tracker.py`, `backend/app/core/jobs/sse.py`, job-producing dispatchers
   **Dependencies:** `CP-04`
