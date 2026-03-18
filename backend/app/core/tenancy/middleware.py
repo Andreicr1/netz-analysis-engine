@@ -30,6 +30,19 @@ async def get_org_id(actor: Actor = Depends(get_actor)) -> uuid.UUID | None:
     return actor.organization_id
 
 
+async def set_rls_context(session: AsyncSession, org_id: uuid.UUID) -> None:
+    """Set RLS tenant context on an existing session.
+
+    For use in background workers that manage their own sessions.
+    Must be called after session creation and re-called after each commit(),
+    because SET LOCAL is transaction-scoped and lost on commit/rollback.
+    """
+    # asyncpg does not support bind parameters in SET commands — interpolate
+    # the UUID directly. UUIDs are safe to interpolate (hex chars + hyphens only).
+    safe_oid = str(org_id).replace("'", "")
+    await session.execute(text(f"SET LOCAL app.current_organization_id = '{safe_oid}'"))
+
+
 async def get_db_with_rls(
     actor: Actor = Depends(get_actor),
 ) -> AsyncGenerator[AsyncSession, None]:
@@ -41,9 +54,5 @@ async def get_db_with_rls(
     """
     async with async_session_factory() as session, session.begin():
         if actor.organization_id is not None:
-            oid = str(actor.organization_id)
-            await session.execute(
-                text("SET LOCAL app.current_organization_id = :oid"),
-                {"oid": oid},
-            )
+            await set_rls_context(session, actor.organization_id)
         yield session

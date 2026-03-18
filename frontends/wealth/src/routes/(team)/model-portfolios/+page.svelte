@@ -5,7 +5,7 @@
 <script lang="ts">
 	import {
 		EmptyState, PageHeader, StatusBadge, MetricCard, SectionCard,
-		UtilizationBar, PeriodSelector, Dialog, Button,
+		UtilizationBar, PeriodSelector, Dialog, Button, formatDate, formatNumber,
 	} from "@netz/ui";
 	import { ActionButton, ConfirmDialog, FormField } from "@netz/ui";
 	import { page } from "$app/state";
@@ -13,6 +13,7 @@
 	import { getContext } from "svelte";
 	import type { PageData } from "./$types";
 	import { createClientApiClient } from "$lib/api/client";
+	import { resolveWealthStatus } from "$lib/utils/status-maps";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -194,9 +195,9 @@
 						</span>
 					</div>
 					<div class="mt-1 flex items-center gap-2 text-xs text-[var(--netz-text-muted)]">
-						<span>NAV {portfolio.inception_nav.toFixed(0)}</span>
+						<span>NAV {formatNumber(portfolio.inception_nav, 0, "en-US")}</span>
 						<span>·</span>
-						<StatusBadge status={portfolio.status} />
+						<StatusBadge status={portfolio.status} resolve={resolveWealthStatus} />
 					</div>
 				</button>
 			{/each}
@@ -213,7 +214,7 @@
 					<p class="mt-1 text-sm text-[var(--netz-text-muted)]">
 						Model Portfolio · {selectedPortfolio.benchmark_composite ?? "—"}
 						{#if selectedPortfolio.inception_date}
-							· Última revisão: {selectedPortfolio.inception_date}
+							· Última revisão: {formatDate(selectedPortfolio.inception_date)}
 						{/if}
 					</p>
 				</div>
@@ -249,7 +250,7 @@
 
 			<!-- 6 KPI Cards -->
 			<div class="mb-6 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-				<MetricCard label="NAV Atual" value="Base {selectedPortfolio.inception_nav.toFixed(0)}" />
+				<MetricCard label="NAV Atual" value="Base {formatNumber(selectedPortfolio.inception_nav, 0, 'en-US')}" />
 				<MetricCard label="YTD" value="—" status="ok" />
 				<MetricCard label="CVaR 95%" value="—" status="warn" sublabel="lim: —" />
 				<MetricCard label="Sharpe" value="—" />
@@ -300,7 +301,7 @@
 					{#each Object.entries(backtestResult) as [key, value]}
 						<div class="flex items-center justify-between text-sm">
 							<span class="text-[var(--netz-text-secondary)]">{key}</span>
-							<span class="font-mono text-[var(--netz-text-primary)]">{typeof value === "number" ? value.toFixed(4) : String(value ?? "—")}</span>
+							<span class="font-mono text-[var(--netz-text-primary)]">{typeof value === "number" ? formatNumber(value, 4, "en-US") : String(value ?? "—")}</span>
 						</div>
 					{/each}
 				</div>

@@ -1,7 +1,7 @@
-# Auditoria de Endpoints — Netz Analysis Engine
+# Auditoria de Endpoints — netz-analysis-engine
 
-**Data:** 2026-03-17
-**Branch:** `feat/admin-frontend`
+**Data:** 2026-03-18
+**Branch:** `main`
 **Verticals:** Credit, Wealth, Admin
 
 ---
@@ -10,20 +10,20 @@
 
 | Metrica | Valor |
 |---|---|
-| Total de endpoints backend | **186** |
-| Conectados ao frontend | **83** (44.6%) |
-| Desconectados | **95** (51.1%) |
-| Internos/Infra | **4** (2.2%) |
-| Phantom calls (frontend sem backend) | **2** (1.1%) |
+| Total de endpoints backend | **290** |
+| Conectados ao frontend | **115** (39.7%) |
+| Desconectados | **171** (59.0%) |
+| Internos/Infra | **4** (1.4%) |
+| Phantom calls (frontend sem backend) | **53** (27.9%) |
 
 ### Breakdown por Vertical
 
 | Vertical | Total | Conectados | Desconectados | % Cobertura |
 |---|---|---|---|---|
-| Admin | 28 | 16 | 12 | 57% |
-| Credit | 80 | 40 | 40 | 50% |
-| Wealth | 74 | 27 | 47 | 36% |
-| Shared/Core | 4 | 0 | 0 | N/A (infra) |
+| Admin | 29 | 15 | 14 | 52% |
+| Credit | 92 | 48 | 44 | 52% |
+| Wealth | 72 | 50 | 22 | 69% |
+| Shared/Core | 97 | 2 | 0 | N/A (infra) |
 
 ---
 
@@ -31,10 +31,11 @@
 
 | Endpoint | Proposito |
 |---|---|
-| `GET /health` | Health check |
 | `GET /api/health` | Health check (alternate) |
 | `GET /api/v1` | API root/version info |
 | `POST /api/v1/test/sse/{job_id}/emit` | Dev-only SSE test emitter |
+| `GET /health` | Health check |
+
 
 ---
 
@@ -44,104 +45,138 @@
 
 | Endpoint | Credit | Wealth | Admin |
 |---|---|---|---|
-| `GET /branding` | layout | layout | - |
-| `GET /funds` | funds list | funds/dd-reports list | - |
-| `GET /funds/{fund_id}` | fund layout | fund detail | - |
-| `GET /jobs/{job_id}/stream` (SSE) | ingestion + IC memo | - | - |
+| `GET /funds` | - | SSR loader | - |
+| `GET /funds/{fund_id}` | - | SSR loader | - |
 
-### Admin Frontend (16 endpoints conectados)
+### Admin Frontend (15 endpoints conectados)
 
 | Metodo | Endpoint | Componente |
 |---|---|---|
-| `GET` | `/admin/health/services` | Health page (SSR + refresh) |
-| `GET` | `/admin/health/workers` | Health page (SSR) |
-| `GET` | `/admin/health/pipelines` | Health page (SSR + refresh) |
-| `GET` | `/admin/health/workers/logs` | WorkerLogFeed SSE stream |
-| `GET` | `/admin/tenants/` | Tenants list page |
-| `GET` | `/admin/tenants/{org_id}` | Tenant detail layout |
-| `GET` | `/admin/configs/` | Config list page |
-| `GET` | `/admin/configs/{vertical}/{config_type}` | ConfigEditor |
-| `GET` | `/admin/configs/{vertical}/{config_type}/diff` | ConfigDiffViewer |
-| `POST` | `/admin/configs/validate` | ConfigEditor |
-| `GET` | `/admin/prompts/{vertical}` | Prompts list page |
-| `GET` | `/admin/prompts/{vertical}/{name}` | PromptEditor |
-| `PUT` | `/admin/prompts/{vertical}/{name}` | PromptEditor (save) |
-| `DELETE` | `/admin/prompts/{vertical}/{name}` | PromptEditor (revert) |
-| `POST` | `/admin/prompts/{vertical}/{name}/preview` | PromptEditor |
-| `POST` | `/admin/prompts/{vertical}/{name}/validate` | PromptEditor |
+| `DELETE` | `/admin/prompts/{vertical}/{name}` | PromptEditor.svelte |
+| `DELETE` | `/admin/tenants/{org_id}/assets/{asset_type}` | Page |
+| `GET` | `/admin/configs` | SSR loader |
+| `GET` | `/admin/configs/invalid` | SSR loader |
+| `GET` | `/admin/configs/{vertical}/{config_type}/diff` | ConfigDiffViewer.svelte |
+| `GET` | `/admin/health/pipelines` | Page, SSR loader |
+| `GET` | `/admin/health/services` | Page, SSR loader |
+| `GET` | `/admin/health/workers` | SSR loader |
+| `GET` | `/admin/prompts/{vertical}` | SSR loader |
+| `GET` | `/admin/tenants` | SSR loader |
+| `GET` | `/admin/tenants/{org_id}` | +layout.server.ts |
+| `PATCH` | `/admin/tenants/{org_id}` | Page |
+| `POST` | `/admin/prompts/{vertical}/{name}/revert/{version}` | PromptEditor.svelte |
+| `POST` | `/admin/tenants/{org_id}/seed` | Page |
+| `PUT` | `/admin/configs/defaults/{vertical}/{config_type}` | ConfigEditor.svelte |
 
-### Credit Frontend (40 endpoints conectados)
-
-| Metodo | Endpoint | Pagina/Componente |
-|---|---|---|
-| `GET` | `/funds/{fund_id}/deals` | Pipeline list |
-| `GET` | `/funds/{fund_id}/deals/{deal_id}` | Deal detail |
-| `GET` | `/funds/{fund_id}/deals/{deal_id}/stage-timeline` | Deal detail |
-| `POST` | `/funds/{fund_id}/deals/{deal_id}/ic-memo` | ICMemoViewer (generate) |
-| `GET` | `/funds/{fund_id}/deals/{deal_id}/ic-memo` | Deal detail |
-| `GET` | `/funds/{fund_id}/deals/{deal_id}/ic-memo/voting-status` | Deal detail |
-| `GET` | `/funds/{fund_id}/alerts` | Portfolio |
-| `GET` | `/funds/{fund_id}/obligations` | Portfolio |
-| `GET` | `/funds/{fund_id}/portfolio/actions` | Portfolio |
-| `POST` | `/documents/upload-url` | Document upload (step 1) |
-| `POST` | `/documents/upload-complete` | Document upload (step 3) |
-| `GET` | `/documents` | Document list |
-| `GET` | `/funds/{fund_id}/document-reviews` | Reviews list |
-| `GET` | `/funds/{fund_id}/document-reviews/pending` | Reviews pending |
-| `GET` | `/funds/{fund_id}/document-reviews/summary` | Reviews summary |
-| `GET` | `/funds/{fund_id}/document-reviews/{review_id}` | Review detail |
-| `POST` | `/funds/{fund_id}/document-reviews/{review_id}/decide` | Review decision |
-| `GET` | `/funds/{fund_id}/document-reviews/{review_id}/checklist` | Review checklist |
-| `GET` | `/dashboard/portfolio-summary` | Dashboard |
-| `GET` | `/dashboard/pipeline-summary` | Dashboard |
-| `GET` | `/dashboard/macro-snapshot` | Dashboard |
-| `GET` | `/dashboard/compliance-alerts` | Dashboard |
-| `GET` | `/dashboard/pipeline-analytics` | Dashboard |
-| `GET` | `/dashboard/task-inbox` | Dashboard |
-| `POST` | `/funds/{fund_id}/report-packs` | Reporting (create pack) |
-| `POST` | `/funds/{fund_id}/reports/nav/snapshots` | Reporting (create NAV) |
-| `GET` | `/funds/{fund_id}/reports/nav/snapshots` | Reporting |
-| `GET` | `/funds/{fund_id}/reports/monthly-pack/list` | Reporting |
-| `GET` | `/funds/{fund_id}/reports/investor-statements` | Reporting |
-| `POST` | `/funds/{fund_id}/reports/evidence-pack` | Reporting (JSON export) |
-| `POST` | `/funds/{fund_id}/reports/evidence-pack/pdf` | Reporting (PDF export) |
-| `GET` | `/funds/{fund_id}/investor/documents` | Investor portal |
-| `GET` | `/funds/{fund_id}/investor/report-packs` | Investor portal |
-| `GET` | `/funds/{fund_id}/investor/statements` | Investor portal |
-| `POST` | `/ai/answer` | Fund Copilot |
-
-### Wealth Frontend (27 endpoints conectados)
+### Credit Frontend (48 endpoints conectados)
 
 | Metodo | Endpoint | Pagina/Componente |
 |---|---|---|
-| `GET` | `/portfolios` | Dashboard |
-| `GET` | `/risk/{profile}/cvar` | Dashboard + Risk (3x per profile) |
-| `GET` | `/risk/{profile}/cvar/history` | Risk (3x per profile) |
-| `GET` | `/risk/regime` | Dashboard + Risk |
-| `GET` | `/risk/regime/history` | Risk |
-| `GET` | `/risk/macro` | Dashboard + Risk |
-| `GET` | `/macro/scores` | Macro Intelligence |
-| `GET` | `/macro/snapshot` | Macro Intelligence |
-| `GET` | `/macro/regime` | Macro Intelligence |
-| `GET` | `/macro/reviews` | Macro Intelligence |
-| `POST` | `/screener/run` | Screener (client-side batch) |
-| `GET` | `/screener/runs` | Funds + Screener |
-| `GET` | `/screener/results` | Screener |
-| `GET` | `/wealth/exposure/matrix` | Exposure (2x: geo + sector) |
-| `GET` | `/wealth/exposure/metadata` | Exposure |
-| `GET` | `/allocation/{profile}/strategic` | Allocation |
-| `GET` | `/allocation/{profile}/tactical` | Allocation |
-| `GET` | `/allocation/{profile}/effective` | Allocation |
-| `GET` | `/analytics/correlation` | Analytics |
-| `GET` | `/analytics/correlation-regime/{profile}` | Analytics |
-| `GET` | `/analytics/strategy-drift/alerts` | Risk |
-| `GET` | `/content` | Content + Investor (docs/reports) |
-| `GET` | `/dd-reports/funds/{fund_id}` | DD Reports |
-| `GET` | `/dd-reports/{report_id}/stream` (SSE) | FundDetailPanel |
-| `GET` | `/fact-sheets/model-portfolios/{portfolio_id}` | Investor fact-sheets |
-| `GET` | `/model-portfolios` | Dashboard + Model Portfolios + Investor |
-| `GET` | `/model-portfolios/{id}` | Model Portfolio detail |
-| `GET` | `/model-portfolios/{id}/track-record` | Model Portfolio detail + Investor |
+| `GET` | `/dashboard/compliance-alerts` | SSR loader |
+| `GET` | `/dashboard/macro-snapshot` | SSR loader |
+| `GET` | `/dashboard/pipeline-analytics` | SSR loader |
+| `GET` | `/dashboard/pipeline-summary` | SSR loader |
+| `GET` | `/dashboard/portfolio-summary` | SSR loader |
+| `GET` | `/dashboard/task-inbox` | SSR loader |
+| `GET` | `/documents` | SSR loader |
+| `GET` | `/documents/root-folders` | SSR loader |
+| `GET` | `/documents/{doc_id}` | SSR loader |
+| `GET` | `/documents/{document_id}` | SSR loader |
+| `GET` | `/documents/{document_id}/versions` | SSR loader |
+| `GET` | `/funds/{fund_id}/alerts` | SSR loader |
+| `GET` | `/funds/{fund_id}/auditor/evidence` | SSR loader |
+| `GET` | `/funds/{fund_id}/deals` | SSR loader |
+| `GET` | `/funds/{fund_id}/deals/{deal_id}/ic-memo` | SSR loader |
+| `GET` | `/funds/{fund_id}/deals/{deal_id}/ic-memo/voting-status` | SSR loader |
+| `GET` | `/funds/{fund_id}/deals/{deal_id}/stage-timeline` | SSR loader |
+| `GET` | `/funds/{fund_id}/document-reviews` | SSR loader |
+| `GET` | `/funds/{fund_id}/document-reviews/pending` | SSR loader |
+| `GET` | `/funds/{fund_id}/document-reviews/summary` | SSR loader |
+| `GET` | `/funds/{fund_id}/document-reviews/{review_id}` | SSR loader |
+| `GET` | `/funds/{fund_id}/document-reviews/{review_id}/checklist` | SSR loader |
+| `GET` | `/funds/{fund_id}/investor/report-packs` | SSR loader |
+| `GET` | `/funds/{fund_id}/obligations` | SSR loader |
+| `GET` | `/funds/{fund_id}/portfolio/actions` | SSR loader |
+| `GET` | `/funds/{fund_id}/reports/investor-statements` | SSR loader |
+| `GET` | `/funds/{fund_id}/reports/monthly-pack/list` | SSR loader |
+| `GET` | `/funds/{fund_id}/reports/nav/snapshots` | SSR loader |
+| `PATCH` | `/funds/{fund_id}/deals/{deal_id}/decision` | Page |
+| `PATCH` | `/funds/{fund_id}/deals/{deal_id}/ic-memo/conditions` | Page |
+| `PATCH` | `/funds/{fund_id}/evidence/{evidence_id}/complete` | Page |
+| `PATCH` | `/funds/{fund_id}/obligations/{obligation_id}` | Page |
+| `PATCH` | `/funds/{fund_id}/portfolio/actions/{action_id}` | Page |
+| `POST` | `/documents/root-folders` | Page |
+| `POST` | `/funds/{fund_id}/assets` | Page |
+| `POST` | `/funds/{fund_id}/assets/{asset_id}/obligations` | Page |
+| `POST` | `/funds/{fund_id}/deals/{deal_id}/convert` | Page |
+| `POST` | `/funds/{fund_id}/document-reviews` | Page |
+| `POST` | `/funds/{fund_id}/document-reviews/{review_id}/ai-analyze` | Page |
+| `POST` | `/funds/{fund_id}/document-reviews/{review_id}/assign` | Page |
+| `POST` | `/funds/{fund_id}/document-reviews/{review_id}/decide` | Page |
+| `POST` | `/funds/{fund_id}/document-reviews/{review_id}/finalize` | Page |
+| `POST` | `/funds/{fund_id}/document-reviews/{review_id}/resubmit` | Page |
+| `POST` | `/funds/{fund_id}/evidence/upload-request` | Page |
+| `POST` | `/funds/{fund_id}/report-packs` | Page |
+| `POST` | `/funds/{fund_id}/report-packs/{pack_id}/generate` | Page |
+| `POST` | `/funds/{fund_id}/report-packs/{pack_id}/publish` | Page |
+| `POST` | `/funds/{fund_id}/reports/nav/snapshots` | Page |
+
+
+### Wealth Frontend (50 endpoints conectados)
+
+| Metodo | Endpoint | Pagina/Componente |
+|---|---|---|
+| `GET` | `/allocation/{profile}/effective` | SSR loader |
+| `GET` | `/allocation/{profile}/strategic` | SSR loader |
+| `GET` | `/allocation/{profile}/tactical` | SSR loader |
+| `GET` | `/analytics/correlation` | SSR loader |
+| `GET` | `/analytics/correlation-regime/{profile}/pair/{inst_a}/{inst_b}` | Page |
+| `GET` | `/analytics/strategy-drift/alerts` | risk-store.svelte.ts |
+| `GET` | `/analytics/strategy-drift/{instrument_id}` | Page |
+| `GET` | `/content` | SSR loader |
+| `GET` | `/dd-reports/funds/{fund_id}` | SSR loader |
+| `GET` | `/dd-reports/{report_id}` | SSR loader |
+| `GET` | `/fact-sheets/model-portfolios/{portfolio_id}` | SSR loader |
+| `GET` | `/instruments` | SSR loader |
+| `GET` | `/instruments/{instrument_id}` | Page |
+| `GET` | `/macro/regime` | SSR loader |
+| `GET` | `/macro/reviews` | SSR loader |
+| `GET` | `/macro/scores` | SSR loader |
+| `GET` | `/macro/snapshot` | SSR loader |
+| `GET` | `/model-portfolios` | SSR loader |
+| `GET` | `/model-portfolios/{portfolio_id}` | SSR loader |
+| `GET` | `/model-portfolios/{portfolio_id}/track-record` | Page, SSR loader |
+| `GET` | `/portfolios` | SSR loader |
+| `GET` | `/portfolios/{profile}` | SSR loader |
+| `GET` | `/portfolios/{profile}/history` | SSR loader |
+| `GET` | `/portfolios/{profile}/snapshot` | SSR loader |
+| `GET` | `/risk/macro` | SSR loader, risk-store.svelte.ts |
+| `GET` | `/risk/regime` | SSR loader, risk-store.svelte.ts |
+| `GET` | `/risk/regime/history` | SSR loader, risk-store.svelte.ts |
+| `GET` | `/risk/{profile}/cvar` | SSR loader, risk-store.svelte.ts |
+| `GET` | `/risk/{profile}/cvar/history` | SSR loader, risk-store.svelte.ts |
+| `GET` | `/screener/results` | SSR loader |
+| `GET` | `/screener/runs` | SSR loader |
+| `GET` | `/screener/runs/{run_id}` | Page |
+| `GET` | `/wealth/exposure/metadata` | SSR loader |
+| `PATCH` | `/macro/reviews/{review_id}/approve` | Page |
+| `PATCH` | `/macro/reviews/{review_id}/reject` | Page |
+| `POST` | `/analytics/backtest` | Page |
+| `POST` | `/analytics/optimize` | Page |
+| `POST` | `/analytics/optimize/pareto` | Page |
+| `POST` | `/analytics/strategy-drift/scan` | Page |
+| `POST` | `/content/{content_id}/approve` | Page |
+| `POST` | `/dd-reports/{report_id}/regenerate` | Page |
+| `POST` | `/fact-sheets/model-portfolios/{portfolio_id}` | Page |
+| `POST` | `/instruments` | Page |
+| `POST` | `/macro/reviews/generate` | Page |
+| `POST` | `/model-portfolios` | Page |
+| `POST` | `/portfolios/{profile}/rebalance` | Page |
+| `POST` | `/portfolios/{profile}/rebalance/{event_id}/approve` | Page |
+| `POST` | `/portfolios/{profile}/rebalance/{event_id}/execute` | Page |
+| `PUT` | `/allocation/{profile}/strategic` | Page |
+| `PUT` | `/allocation/{profile}/tactical` | Page |
+
 
 ---
 
@@ -149,299 +184,293 @@
 
 ### PRIORIDADE CRITICA — Write Operations sem Frontend
 
-Endpoints com verbos destrutivos/mutativos que nao possuem nenhuma interface no frontend. Representam funcionalidade implementada no backend sem forma de uso pelo usuario.
+#### Shared/Core (91 endpoints)
+> NOTA: A maioria destes são rotas do módulo transitional credit/modules/ai/ (pipeline, deep-review, extraction).
+> Não implementar frontend contra estes — são paths legados ou de uso interno/admin.
+> Ver docs/audit/backend-system-map-v2.md seção 5.2 para classificação definitiva.
 
-#### Admin — Tenant Management (5 endpoints)
+| Metodo | Endpoint |
+|---|---|
+| `GET` | `/activity` |
+| `GET` | `/alerts/daily` |
+| `POST` | `/answer` |
+| `GET` | `/api/data-room/file-link` |
+| `GET` | `/api/data-room/list` |
+| `GET` | `/api/data-room/pipeline/file-link` |
+| `GET` | `/api/data-room/pipeline/list` |
+| `GET` | `/api/data-room/tree` |
+| `POST` | `/api/data-room/upload` |
+| `GET` | `/api/dataroom/browse` |
+| `POST` | `/api/dataroom/documents` |
+| `POST` | `/api/dataroom/documents/{document_id}/ingest` |
+| `GET` | `/api/dataroom/search` |
+| `GET` | `/api/v1/jobs/{job_id}/stream` |
+| `GET` | `/branding` |
+| `GET` | `/history` |
+| `GET` | `/linker/links` |
+| `GET` | `/linker/obligations/status` |
+| `POST` | `/linker/run` |
+| `GET` | `/managers/profile` |
+| `GET` | `/obligations/register` |
+| `GET` | `/pipeline/alerts` |
+| `GET` | `/pipeline/deals` |
+| `POST` | `/pipeline/deals` |
+| `POST` | `/pipeline/deals/qualification/run` |
+| `POST` | `/pipeline/deals/reset-all-stuck` |
+| `GET` | `/pipeline/deals/{deal_id}` |
+| `POST` | `/pipeline/deals/{deal_id}/approve` |
+| `POST` | `/pipeline/deals/{deal_id}/bootstrap` |
+| `PATCH` | `/pipeline/deals/{deal_id}/context` |
+| `GET` | `/pipeline/deals/{deal_id}/critical-gaps` |
+| `POST` | `/pipeline/deals/{deal_id}/decisions` |
+| `GET` | `/pipeline/deals/{deal_id}/deep-review-status` |
+| `POST` | `/pipeline/deals/{deal_id}/deep-review-v4` |
+| `POST` | `/pipeline/deals/{deal_id}/documents` |
+| `GET` | `/pipeline/deals/{deal_id}/events` |
+| `GET` | `/pipeline/deals/{deal_id}/evidence-governance` |
+| `GET` | `/pipeline/deals/{deal_id}/evidence-pack` |
+| `GET` | `/pipeline/deals/{deal_id}/im-draft` |
+| `GET` | `/pipeline/deals/{deal_id}/im-pdf` |
+| `GET` | `/pipeline/deals/{deal_id}/im-pdf/download` |
+| `POST` | `/pipeline/deals/{deal_id}/im-pdf/rebuild` |
+| `GET` | `/pipeline/deals/{deal_id}/memo-chapters` |
+| `GET` | `/pipeline/deals/{deal_id}/memo-chapters/versions` |
+| `POST` | `/pipeline/deals/{deal_id}/memo-chapters/{chapter_number}/regenerate` |
+| `GET` | `/pipeline/deals/{deal_id}/pipeline-memo-pdf` |
+| `POST` | `/pipeline/deals/{deal_id}/reanalyze` |
+| `POST` | `/pipeline/deals/{deal_id}/reset-status` |
+| `PATCH` | `/pipeline/deals/{deal_id}/stage` |
+| `GET` | `/pipeline/deals/{deal_id}/underwriting-artifact` |
+| `GET` | `/pipeline/deals/{deal_id}/underwriting-artifact/history` |
+| `POST` | `/pipeline/deep-review-v4` |
+| `POST` | `/pipeline/deep-review/evaluate` |
+| `POST` | `/pipeline/deep-review/validate-sample` |
+| `GET` | `/pipeline/extract/jobs` |
+| `POST` | `/pipeline/extract/run` |
+| `GET` | `/pipeline/extract/sources` |
+| `GET` | `/pipeline/extract/status/{job_id}` |
+| `POST` | `/pipeline/fact-sheet/generate` |
+| `GET` | `/pipeline/fact-sheet/pdf` |
+| `POST` | `/pipeline/ingest` |
+| `POST` | `/pipeline/ingest/full` |
+| `GET` | `/pipeline/ingest/jobs/latest` |
+| `GET` | `/pipeline/ingest/jobs/{job_id}` |
+| `POST` | `/pipeline/marketing-presentation/generate` |
+| `GET` | `/pipeline/marketing-presentation/pdf` |
+| `GET` | `/portfolio/alerts` |
+| `POST` | `/portfolio/deep-review` |
+| `POST` | `/portfolio/ingest` |
+| `GET` | `/portfolio/investments` |
+| `GET` | `/portfolio/investments/{investment_id}` |
+
+
+#### Credit — Other (25 endpoints)
+
+| Metodo | Endpoint |
+|---|---|
+| `DELETE` | `/admin/configs/{vertical}/{config_type}` |
+| `GET` | `/admin/configs/{vertical}/{config_type}` |
+| `PUT` | `/admin/configs/{vertical}/{config_type}` |
+
+#### Admin — Config Management (4 endpoints)
 
 | Metodo | Endpoint | Impacto |
 |---|---|---|
-| `POST` | `/admin/tenants/` | **Criar tenant** — sem form no admin |
-| `PATCH` | `/admin/tenants/{org_id}` | **Editar tenant** — sem form no admin |
-| `POST` | `/admin/tenants/{org_id}/seed` | **Seed tenant** — sem botao no admin |
-| `POST` | `/admin/tenants/{org_id}/assets` | **Upload logo/asset** — sem upload no admin |
-| `DELETE` | `/admin/tenants/{org_id}/assets/{asset_type}` | **Deletar asset** — sem botao no admin |
+| `DELETE` | `/admin/configs/{vertical}/{config_type}` | sem botao de delete no ConfigEditor |
+| `GET` | `/admin/configs/{vertical}/{config_type}` | sem leitura individual de config |
+| `PUT` | `/admin/configs/{vertical}/{config_type}` | ConfigEditor valida mas nao salva override |
+| `GET` | `/admin/configs/{vertical}/{config_type}/diff` | ConfigDiffViewer existe mas diff nao exibido |
 
-#### Admin — Config Management (3 endpoints)
-
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `PUT` | `/admin/configs/{vertical}/{config_type}` | **Salvar config override** — ConfigEditor le e valida mas NAO salva |
-| `DELETE` | `/admin/configs/{vertical}/{config_type}` | **Deletar config override** — sem botao |
-| `PUT` | `/admin/configs/defaults/{vertical}/{config_type}` | **Atualizar default** — sem interface |
-
-#### Credit — Deal Lifecycle (4 endpoints)
+#### Admin — Prompt Versioning (5 endpoints)
 
 | Metodo | Endpoint | Impacto |
 |---|---|---|
-| `POST` | `/funds/{fund_id}/deals` | **Criar deal** — pipeline so lista, nao cria |
-| `PATCH` | `/funds/{fund_id}/deals/{deal_id}/decision` | **Decidir deal** — sem botao approve/reject |
-| `PATCH` | `/funds/{fund_id}/deals/{deal_id}/ic-memo/conditions` | **Resolver condicao IC** — sem checkbox |
-| `POST` | `/funds/{fund_id}/deals/{deal_id}/convert` | **Converter deal→asset** — sem botao |
+| `GET` | `/admin/prompts/{vertical}/{name}` | sem leitura individual de prompt |
+| `PUT` | `/admin/prompts/{vertical}/{name}` | PromptEditor nao salva |
+| `POST` | `/admin/prompts/{vertical}/{name}/preview` | sem preview no editor |
+| `POST` | `/admin/prompts/{vertical}/{name}/validate` | sem validacao no editor |
+| `GET` | `/admin/prompts/{vertical}/{name}/versions` | sem historico de versoes |
 
-#### Credit — Portfolio Management (4 endpoints)
-
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `POST` | `/funds/{fund_id}/assets` | **Criar asset** — sem form |
-| `POST` | `/funds/{fund_id}/assets/{asset_id}/obligations` | **Criar obligation** — sem form |
-| `PATCH` | `/funds/{fund_id}/obligations/{obligation_id}` | **Atualizar obligation** — sem form |
-| `PATCH` | `/funds/{fund_id}/portfolio/actions/{action_id}` | **Atualizar action** — sem botao |
-
-#### Credit — Document Workflow (10 endpoints)
+#### Admin — Tenant Management (2 endpoints)
 
 | Metodo | Endpoint | Impacto |
 |---|---|---|
-| `POST` | `/documents/upload` | Upload alternativo (nao-SAS) — sem interface |
-| `GET` | `/documents/root-folders` | Listar root folders — sem navegacao |
-| `GET` | `/documents/{document_id}` | Detalhe de documento — sem pagina |
-| `GET` | `/documents/{document_id}/versions` | Versoes de documento — sem interface |
-| `POST` | `/documents/root-folders` | Criar root folder — sem form |
-| `POST` | `/documents/ingestion/process-pending` | Processar pendentes — sem botao |
-| `POST` | `/funds/{fund_id}/evidence/upload-request` | Upload evidence — sem form |
-| `PATCH` | `/funds/{fund_id}/evidence/{evidence_id}/complete` | Marcar evidence — sem interface |
-| `GET` | `/funds/{fund_id}/auditor/evidence` | Auditor view — sem pagina |
-| `POST` | `/funds/{fund_id}/document-reviews` | Submeter para review — sem botao |
+| `POST` | `/admin/tenants` | sem form de criacao de tenant |
+| `POST` | `/admin/tenants/{org_id}/assets` | sem upload de asset de branding |
 
-#### Credit — Document Review Actions (5 endpoints)
+#### Admin — Other (3 endpoints)
 
 | Metodo | Endpoint | Impacto |
 |---|---|---|
-| `POST` | `/funds/{fund_id}/document-reviews/{review_id}/assign` | Atribuir reviewer — sem interface |
-| `POST` | `/funds/{fund_id}/document-reviews/{review_id}/finalize` | Finalizar review — sem botao |
-| `POST` | `/funds/{fund_id}/document-reviews/{review_id}/resubmit` | Resubmeter — sem botao |
-| `POST` | `/funds/{fund_id}/document-reviews/{review_id}/ai-analyze` | Trigger AI analysis — sem botao |
-| `POST` | `/funds/{fund_id}/document-reviews/{review_id}/checklist/{item_id}/check` | Marcar checklist — sem checkbox interativo |
-| `POST` | `/funds/{fund_id}/document-reviews/{review_id}/checklist/{item_id}/uncheck` | Desmarcar checklist — sem checkbox interativo |
+| `GET` | `/admin/audit` | sem pagina de audit trail no admin |
+| `GET` | `/admin/health/workers/logs` | sem log feed em tempo real |
+| `GET` | `/assets/tenant/{org_slug}/{asset_type}` | serve assets de branding mas sem consumer explicito |
+
+#### Credit — Deal Lifecycle (2 endpoints)
+
+| Metodo | Endpoint | Impacto |
+|---|---|---|
+| `POST` | `/funds/{fund_id}/deals` | sem form de criacao de deal |
+| `POST` | `/funds/{fund_id}/deals/{deal_id}/ic-memo` | sem trigger de geracao de IC memo |
+
+#### Credit — Document Review Actions (2 endpoints)
+
+| Metodo | Endpoint | Impacto |
+|---|---|---|
+| `POST` | `/funds/{fund_id}/document-reviews/{review_id}/checklist/{item_id}/check` | checklist nao interativo |
+| `POST` | `/funds/{fund_id}/document-reviews/{review_id}/checklist/{item_id}/uncheck` | checklist nao interativo |
 
 #### Credit — Dashboard FRED/Macro (4 endpoints)
 
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `GET` | `/dashboard/macro-history` | Historico macro — sem pagina |
-| `GET` | `/dashboard/macro-fred-series` | FRED series — sem pagina |
-| `GET` | `/dashboard/fred-search` | Busca FRED — sem interface |
-| `GET` | `/dashboard/macro-fred-multi` | Multi-series FRED — sem interface |
+| Metodo | Endpoint |
+|---|---|
+| `GET` | `/dashboard/fred-search` |
+| `GET` | `/dashboard/macro-fred-multi` |
+| `GET` | `/dashboard/macro-fred-series` |
+| `GET` | `/dashboard/macro-history` |
 
-#### Credit — Report Pack Actions (2 endpoints)
+#### Credit — Portfolio Management (2 endpoints)
 
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `POST` | `/funds/{fund_id}/report-packs/{pack_id}/generate` | Gerar pack — sem botao |
-| `POST` | `/funds/{fund_id}/report-packs/{pack_id}/publish` | Publicar pack — sem botao |
+| Metodo | Endpoint |
+|---|---|
+| `GET` | `/funds/{fund_id}/assets/{asset_id}/fund-investment` |
+| `POST` | `/funds/{fund_id}/assets/{asset_id}/fund-investment` |
 
-#### Credit — AI Module (4 endpoints)
+#### Wealth — Content Generation (4 endpoints)
 
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `POST` | `/ai/query` | Query alternativo — sem interface |
-| `GET` | `/ai/activity` | AI activity log — sem pagina |
-| `GET` | `/ai/history` | Query history — sem pagina |
-| `POST` | `/ai/retrieve` | Document retrieval — sem interface |
+| Metodo | Endpoint |
+|---|---|
+| `POST` | `/content/flash-reports` |
+| `POST` | `/content/outlooks` |
+| `POST` | `/content/spotlights` |
+| `GET` | `/content/{content_id}/download` |
 
-#### Wealth — Portfolio Rebalancing (6 endpoints)
+#### Wealth — DD Reports Actions (2 endpoints)
 
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `GET` | `/portfolios/{profile}` | Profile detail — sem pagina dedicada |
-| `GET` | `/portfolios/{profile}/snapshot` | Portfolio snapshot — sem interface |
-| `GET` | `/portfolios/{profile}/history` | Portfolio history — sem interface |
-| `POST` | `/portfolios/{profile}/rebalance` | Trigger rebalance — sem botao |
-| `POST` | `/portfolios/{profile}/rebalance/{event_id}/approve` | Aprovar rebalance — sem botao |
-| `POST` | `/portfolios/{profile}/rebalance/{event_id}/execute` | Executar rebalance — sem botao |
-| `GET` | `/portfolios/{profile}/rebalance/{event_id}` | Rebalance event detail — sem pagina |
+| Metodo | Endpoint |
+|---|---|
+| `POST` | `/dd-reports/funds/{fund_id}` |
+| `GET` | `/dd-reports/{report_id}/stream` |
 
-#### Wealth — Macro Committee (3 endpoints)
+#### Wealth — Model Portfolio Actions (3 endpoints)
 
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `POST` | `/macro/reviews/generate` | Gerar relatorio comite — sem botao |
-| `PATCH` | `/macro/reviews/{review_id}/approve` | CIO approve — sem botao |
-| `PATCH` | `/macro/reviews/{review_id}/reject` | CIO reject — sem botao |
+| Metodo | Endpoint |
+|---|---|
+| `POST` | `/model-portfolios/{portfolio_id}/backtest` |
+| `POST` | `/model-portfolios/{portfolio_id}/construct` |
+| `POST` | `/model-portfolios/{portfolio_id}/stress` |
 
 #### Wealth — Screener Detail (2 endpoints)
 
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `GET` | `/screener/runs/{run_id}` | Run detail — sem pagina |
-| `GET` | `/screener/results/{instrument_id}` | Instrument screening history — sem interface |
+| Metodo | Endpoint |
+|---|---|
+| `GET` | `/screener/results/{instrument_id}` |
+| `POST` | `/screener/run` |
 
-#### Wealth — Allocation Writes (2 endpoints)
+#### Wealth — Instruments (2 endpoints)
 
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `PUT` | `/allocation/{profile}/strategic` | IC update strategic — sem form |
-| `PUT` | `/allocation/{profile}/tactical` | Update tactical — sem form |
+| Metodo | Endpoint |
+|---|---|
+| `POST` | `/instruments/import/csv` |
+| `POST` | `/instruments/import/yahoo` |
 
-#### Wealth — Analytics (4 endpoints)
+#### Wealth — Analytics (2 endpoints)
 
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `POST` | `/analytics/backtest` | Run backtest — sem interface |
-| `GET` | `/analytics/backtest/{run_id}` | Backtest results — sem pagina |
-| `POST` | `/analytics/optimize` | Portfolio optimization — sem interface |
-| `POST` | `/analytics/optimize/pareto` | Multi-objective optimization — sem interface |
-
-#### Wealth — Analytics Drill-Down (3 endpoints)
-
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `GET` | `/analytics/correlation-regime/{profile}/pair/{inst_a}/{inst_b}` | Pair correlation — sem interface |
-| `POST` | `/analytics/strategy-drift/scan` | Trigger drift scan — sem botao |
-| `GET` | `/analytics/strategy-drift/{instrument_id}` | Instrument drift — sem interface |
+| Metodo | Endpoint |
+|---|---|
+| `GET` | `/analytics/backtest/{run_id}` |
+| `GET` | `/analytics/correlation-regime/{profile}` |
 
 #### Wealth — Attribution (1 endpoint)
 
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `GET` | `/analytics/attribution/funds/{fund_id}/period` | Performance attribution — sem pagina |
+| Metodo | Endpoint |
+|---|---|
+| `GET` | `/analytics/attribution/{profile}` |
 
-#### Wealth — Content Generation (5 endpoints)
+#### Wealth — Fact Sheet Actions (2 endpoints)
 
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `POST` | `/content/outlooks` | Generate Investment Outlook — sem botao |
-| `POST` | `/content/flash-reports` | Generate Flash Report — sem botao |
-| `POST` | `/content/spotlights` | Generate Manager Spotlight — sem botao |
-| `POST` | `/content/{content_id}/approve` | Approve content — sem botao |
-| `GET` | `/content/{content_id}/download` | Download content PDF — sem link |
+| Metodo | Endpoint |
+|---|---|
+| `GET` | `/fact-sheets/dd-reports/{report_id}/download` |
+| `GET` | `/fact-sheets/{fact_sheet_path}/download` |
 
-#### Wealth — DD Reports Actions (3 endpoints)
+#### Wealth — Portfolio Rebalancing (2 endpoints)
 
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `POST` | `/dd-reports/funds/{fund_id}` | Generate DD Report — sem botao |
-| `GET` | `/dd-reports/{report_id}` | DD Report full detail — sem pagina |
-| `POST` | `/dd-reports/{report_id}/regenerate` | Regenerate chapters — sem botao |
-
-#### Wealth — Fact Sheet Actions (3 endpoints)
-
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `POST` | `/fact-sheets/model-portfolios/{portfolio_id}` | Generate fact-sheet — sem botao |
-| `GET` | `/fact-sheets/{path}/download` | Download fact-sheet PDF — sem link |
-| `GET` | `/fact-sheets/dd-reports/{report_id}/download` | Download DD as PDF — sem link |
-
-#### Wealth — Model Portfolio Actions (4 endpoints)
-
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `POST` | `/model-portfolios` | Create model portfolio — sem form |
-| `POST` | `/model-portfolios/validate` | Validate portfolio — sem interface |
-| `GET` | `/model-portfolios/{id}/backtest` | Portfolio backtest — sem interface |
-| `POST` | `/model-portfolios/{id}/allocate` | Allocate portfolio — sem interface |
-| `POST` | `/model-portfolios/{id}/rebalance` | Rebalance portfolio — sem interface |
-
-#### Wealth — Instruments (5 endpoints)
-
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `GET` | `/instruments` | List instruments — sem pagina |
-| `GET` | `/instruments/{instrument_id}` | Instrument detail — sem pagina |
-| `POST` | `/instruments` | Create instrument — sem form |
-| `POST` | `/instruments/bulk-sync` | Bulk sync — sem interface |
-| `POST` | `/instruments/search-external` | External search — sem interface |
-
-#### Wealth — Fund Detail (3 endpoints)
-
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `GET` | `/funds/{fund_id}/stats` | Fund stats — nao chamado por nenhum frontend |
-| `GET` | `/funds/{fund_id}/performance` | Fund performance — nao chamado |
-| `GET` | `/funds/{fund_id}/holdings` | Fund holdings — nao chamado |
+| Metodo | Endpoint |
+|---|---|
+| `GET` | `/portfolios/{profile}/rebalance` |
+| `GET` | `/portfolios/{profile}/rebalance/{event_id}` |
 
 #### Wealth — Risk SSE (1 endpoint)
 
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `GET` | `/risk/stream` | Live risk alerts SSE — nao conectado |
+| Metodo | Endpoint |
+|---|---|
+| `GET` | `/risk/stream` |
 
-#### Admin — Other (2 endpoints)
+#### Wealth — Other (1 endpoint)
 
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `GET` | `/admin/configs/invalid` | List invalid configs — sem pagina |
-| `GET` | `/assets/tenant/{org_slug}/{asset_type}` | Serve tenant asset — possivelmente usado indiretamente por `<img>` tags |
+| Metodo | Endpoint |
+|---|---|
+| `GET` | `/wealth/exposure/matrix` |
 
-#### Admin — Prompt Versioning (2 endpoints)
-
-| Metodo | Endpoint | Impacto |
-|---|---|---|
-| `GET` | `/admin/prompts/{vertical}/{name}/versions` | Prompt version history — sem interface |
-| `POST` | `/admin/prompts/{vertical}/{name}/revert/{version}` | Revert to version — sem interface |
 
 ---
 
 ## Phantom Calls (Frontend sem Backend)
 
-Chamadas no frontend que nao correspondem a nenhum endpoint conhecido no backend:
+### IMPORTANTE — Classificação dos 53 phantom calls
 
-| Frontend | Metodo | Path | Arquivo |
-|---|---|---|---|
-| Wealth | `GET` | `/funds/{fundId}/risk` | `funds/[fundId]/+page.server.ts:12` |
-| Wealth | `GET` | `/funds/{fundId}/nav` | `funds/[fundId]/+page.server.ts:13` |
+A maioria dos phantom calls é FALSO POSITIVO de metodologia:
+- **36 Shared/Core**: quase todos são fixtures de testes (`/a`, `/b`, `/items`, etc. em `api-client.test.ts`)
+  e constantes de auth (`/__session`, `/authorization`, `/x-dev-actor` em `auth.ts`). NÃO são chamadas de produção.
+- **8 Credit**: vários são erros de interpolação de variável — o scanner capturou o nome da variável
+  como path (`/domain`, `/page`, `/stage`, `/fund_id`, `/root_folder`). São bugs reais de código mas
+  não endpoints inexistentes no backend.
 
-> Estas chamadas provavelmente retornam 404 ou sao tratadas por `Promise.allSettled` com fallback silencioso. Verificar se sao endpoints planejados ou residuos de refatoracao.
+### Phantom calls REAIS que requerem correção
 
----
+| Frontend | Metodo | Path | Arquivo | Problema |
+|---|---|---|---|---|
+| Admin | `PUT` | `/admin/configs/{param}/{param}?org_id={param}` | `ConfigEditor.svelte:74` | URL com query param errado — deve ser path param |
+| Admin | `DELETE` | `/admin/configs/{param}/{param}?org_id={param}` | `ConfigEditor.svelte:103` | Mesmo problema — `?org_id=` deve ser parte do path |
+| Admin | `GET` | `/admin/configs/{param}` | `branding/+page.server.ts:8` | Endpoint errado para contexto de branding |
+| Admin | `GET` | `/error` | `auth/sign-in/+page.svelte:7` | Rota de erro inexistente no backend |
+| Credit | `POST` | `/funds/{param}/document-reviews/{param}/checklist/{param}/{param}` | `[reviewId]/+page.svelte:122` | Path malformado — falta `/check` ou `/uncheck` no final |
+| Wealth | `GET` | `/analytics/attribution/funds/{param}/period` | `analytics/+page.svelte:323` | Path errado — endpoint real é `/analytics/attribution/{profile}` |
+| Wealth | `POST` | `/api/screener/run` | `screener/+page.svelte:142` | Prefixo `/api/` incorreto — endpoint real é `/screener/run` |
+| Wealth | `GET` | `/wealth/analytics/correlation-regime/{param}` | `analytics/+page.server.ts:13` | Prefixo `/wealth/` incorreto — endpoint real é `/analytics/correlation-regime/{profile}` |
+| Wealth | `GET` | `/wealth/exposure/matrix?dimension=geographic&aggregation={param}` | `exposure/+page.server.ts:12` | Prefixo `/wealth/` incorreto — endpoint real é `/wealth/exposure/matrix` (verificar) |
 
-## Recomendacoes
+### Phantom calls que são BUGS de variável não interpolada (Credit)
 
-### P1 — Critico (Funcionalidade Core Inacessivel)
+| Arquivo | Path capturado | Problema |
+|---|---|---|
+| `documents/+page.server.ts:9` | `/page` | Variável não interpolada |
+| `documents/+page.server.ts:10` | `/root_folder` | Variável não interpolada |
+| `documents/+page.server.ts:11` | `/domain` | Variável não interpolada |
+| `documents/auditor/+page.server.ts:9` | `/page` | Variável não interpolada |
+| `pipeline/+page.server.ts:9` | `/page` | Variável não interpolada |
+| `pipeline/+page.server.ts:10` | `/stage` | Variável não interpolada |
+| `investor/documents/+page.server.ts:9` | `/fund_id` | Variável não interpolada |
+| `investor/report-packs/+page.server.ts:10` | `/fund_id` | Variável não interpolada |
+| `investor/statements/+page.server.ts:9` | `/fund_id` | Variável não interpolada |
+| `portfolio/+page.server.ts:11` | `/funds/{param}/assets` | Path de assets não existe — endpoint é via portfolio |
+| `[dealId]/+page.server.ts:13` | `/funds/{param}/deals/{param}` | Provavelmente correto mas verificar se DealDetail está sendo usado |
 
-1. **Admin: ConfigEditor nao salva** — O editor de configuracao carrega e valida mas falta o `PUT` para persistir. Adicionar botao "Save" que chame `PUT /admin/configs/{vertical}/{config_type}`.
+### Phantom calls de testes e utilitários (ignorar para cobertura)
 
-2. **Admin: Tenant CRUD incompleto** — Apenas list/detail implementados. Faltam: create, edit, seed, asset upload/delete. Completar o CRUD do tenant management.
-
-3. **Credit: Deal lifecycle sem acoes** — Pipeline lista deals mas nao permite criar, aprovar/rejeitar, resolver condicoes IC, ou converter. Estes sao os workflows core do Private Credit.
-
-4. **Credit: Document review parcialmente interativo** — Review detail mostra dados e permite decidir (approve/reject) mas falta: assign reviewer, finalize, resubmit, AI analyze, checklist toggle. O workflow de review esta incompleto.
-
-5. **Wealth: Content generation sem triggers** — O backend suporta geracao de Investment Outlooks, Flash Reports e Manager Spotlights, mas a pagina de Content so lista — nao permite gerar, aprovar ou baixar.
-
-6. **Wealth: DD Report generation sem trigger** — A pagina lista reports mas nao permite gerar novos. O botao "Generate" precisa chamar `POST /dd-reports/funds/{fund_id}`.
-
-### P2 — Importante (Funcionalidade de Valor)
-
-7. **Wealth: Rebalancing workflow completo desconectado** — 7 endpoints de rebalance portfolio sem interface. Este e um workflow critico para wealth management.
-
-8. **Wealth: Macro Committee actions** — Generate, approve/reject macro reviews nao expostos. CIO precisa de interface para aprovar relatorios do comite macro.
-
-9. **Wealth: Backtest + Optimization engine** — 4 endpoints de analytics avancado sem interface. Representa capacidade analitica significativa nao exposta.
-
-10. **Credit: FRED/Macro explorer** — 4 endpoints de exploracao macro (history, series, search, multi) sem pagina dedicada. Considerar adicionar tab "Macro Explorer" ao dashboard.
-
-11. **Credit: Portfolio asset/obligation CRUD** — Backend suporta criar assets e obligations mas frontend so lista.
-
-12. **Wealth: Instrument management** — 5 endpoints sem pagina. Instruments sao referenciados por screener e portfolios mas nao gerenciados diretamente.
-
-13. **Wealth: Allocation write operations** — Frontend mostra strategic/tactical/effective alocacoes mas nao permite editar (PUT).
-
-### P3 — Nice-to-Have
-
-14. **Admin: Prompt versioning** — Backend suporta version history e revert mas PromptEditor nao expoe historico.
-
-15. **Credit: Document detail/versions** — Backend serve documento individual e versoes mas frontend so tem lista.
-
-16. **Credit: Auditor evidence view** — Endpoint de auditor nao exposto em nenhuma interface.
-
-17. **Wealth: Pair correlation drill-down** — Correlation-regime por par de instrumentos disponivel mas sem interface.
-
-18. **Wealth: Risk SSE stream** — Backend emite alertas de risco em tempo real via SSE mas frontend nao consome.
-
-19. **Phantom calls cleanup** — Remover ou implementar `/funds/{fundId}/risk` e `/funds/{fundId}/nav` no wealth frontend.
+Todos os calls em `packages/ui/src/lib/utils/__tests__/api-client.test.ts` são fixtures de teste.
+Calls em `auth.ts` (`/__session`, `/authorization`, `/x-dev-actor`) são rotas Clerk/auth internas.
+`/netz-theme` em `theme.ts` e `/tab` em `PageTabs.svelte` são rotas de UI interna.
+`/jobs/{param}` em `poller.svelte.ts` é um exemplo genérico no utilitário de polling.
 
 ---
 
 ## Metodologia
 
-### Ferramentas Utilizadas
-- Exploracao automatizada de routers FastAPI (backend)
-- Varredura de `+page.server.ts`, `+page.svelte`, e componentes Svelte (frontends)
-- Rastreamento de `createServerApiClient` e `createClientApiClient` calls
-- Verificacao cruzada de prefixos de router em `main.py`
-
-### Limitacoes
-- Workers e Universe endpoints nao foram individualmente enumerados (estimativa: ~10 endpoints adicionais, todos desconectados)
-- Endpoints de dataroom, schedules, e fund_investments foram parcialmente cobertos
-- Contagem exata pode variar +/- 5 endpoints devido a routers menores nao explorados
-- O endpoint `GET /assets/tenant/{org_slug}/{asset_type}` pode ser usado indiretamente por tags `<img>` no frontend sem chamada programatica explicita
+- Exploração automatizada de routers FastAPI (backend)
+- Varredura de loaders, pages e componentes SvelteKit/Svelte (frontend)
+- Rastreamento de chamadas `.get/.post/.put/.patch/.delete` e `fetch(...)`
+- Verificação de prefixes e `include_router(...)` em arquivos Python
+- A resolução de rotas usa heurísticas AST/regex — construções altamente dinâmicas podem subcontar
+- Componentes associados são inferidos por arquivos consumidores, não por telemetria runtime

@@ -3,7 +3,7 @@
   Auto-refresh via client-side $effect (NOT invalidateAll).
 -->
 <script lang="ts">
-	import { DataTable, MetricCard, SectionCard, formatDate } from "@netz/ui";
+	import { DataTable, MetricCard, SectionCard, formatDateTime, formatNumber, formatPercent } from "@netz/ui";
 	import ServiceHealthCard from "$lib/components/ServiceHealthCard.svelte";
 	import WorkerLogFeed from "$lib/components/WorkerLogFeed.svelte";
 	import { createClientApiClient } from "$lib/api/client";
@@ -20,6 +20,7 @@
 		name: string;
 		status: string;
 		last_run: string | null;
+		checked_at?: string | null;
 		duration_ms: number | null;
 		error_count: number;
 	};
@@ -84,7 +85,15 @@
 			header: "Last Run",
 			cell: (info: any) => {
 				const worker = info.row.original as HealthWorker;
-				return worker.last_run ? formatDate(worker.last_run, "medium", "en-US") : "Never";
+				return worker.last_run ? formatDateTime(worker.last_run, "en-US") : "Never";
+			},
+		},
+		{
+			accessorKey: "checked_at",
+			header: "Checked At",
+			cell: (info: any) => {
+				const worker = info.row.original as HealthWorker;
+				return worker.checked_at ? formatDateTime(worker.checked_at, "en-US") : "—";
 			},
 		},
 		{
@@ -92,7 +101,7 @@
 			header: "Duration",
 			cell: (info: any) => {
 				const worker = info.row.original as HealthWorker;
-				return worker.duration_ms !== null ? `${worker.duration_ms}ms` : "\u2014";
+				return worker.duration_ms !== null ? `${formatNumber(worker.duration_ms, 0, "en-US")}ms` : "\u2014";
 			},
 		},
 		{
@@ -121,10 +130,11 @@
 
 	{#if degradedMessage}
 		<div
-			class="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+			class="rounded-xl border px-4 py-3 text-sm"
+			style="border-color: var(--netz-warning); background-color: color-mix(in srgb, var(--netz-warning) 12%, var(--netz-surface)); color: var(--netz-text-primary);"
 			role="alert"
 		>
-			<p class="font-medium">Degraded state</p>
+			<p class="font-medium text-[var(--netz-warning)]">Degraded state</p>
 			<p class="mt-1">{degradedMessage}</p>
 		</div>
 	{/if}
@@ -133,10 +143,11 @@
 	<SectionCard title="Service Health">
 		{#if healthErrors.services}
 			<div
-				class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+				class="rounded-lg border px-4 py-3 text-sm"
+				style="border-color: var(--netz-warning); background-color: color-mix(in srgb, var(--netz-warning) 12%, var(--netz-surface)); color: var(--netz-text-primary);"
 				role="alert"
 			>
-				<p class="font-medium">Service health unavailable</p>
+				<p class="font-medium text-[var(--netz-warning)]">Service health unavailable</p>
 				<p class="mt-1">{healthErrors.services}</p>
 			</div>
 		{:else if healthData.length > 0}
@@ -156,10 +167,11 @@
 	<SectionCard title="Pipeline Stats">
 		{#if healthErrors.pipelines}
 			<div
-				class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+				class="rounded-lg border px-4 py-3 text-sm"
+				style="border-color: var(--netz-warning); background-color: color-mix(in srgb, var(--netz-warning) 12%, var(--netz-surface)); color: var(--netz-text-primary);"
 				role="alert"
 			>
-				<p class="font-medium">Pipeline stats unavailable</p>
+				<p class="font-medium text-[var(--netz-warning)]">Pipeline stats unavailable</p>
 				<p class="mt-1">{healthErrors.pipelines}</p>
 			</div>
 		{:else}
@@ -168,14 +180,14 @@
 				<MetricCard label="Queue Depth" value={String(pipelineData.queue_depth ?? 0)} />
 				<MetricCard
 					label="Error Rate"
-					value={`${((pipelineData.error_rate ?? 0) * 100).toFixed(1)}%`}
+					value={formatPercent(pipelineData.error_rate ?? 0, 1, "en-US")}
 				/>
 			</div>
 			{#if pipelineData.checked_at}
 				<p class="mt-3 text-xs text-[var(--netz-text-muted)]">
 					Checked at
 					<time datetime={pipelineData.checked_at}>
-						{formatDate(pipelineData.checked_at, "medium", "en-US")}
+						{formatDateTime(pipelineData.checked_at, "en-US")}
 					</time>
 				</p>
 			{/if}
@@ -186,10 +198,11 @@
 	<SectionCard title="Workers">
 		{#if healthErrors.workers}
 			<div
-				class="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+				class="rounded-lg border px-4 py-3 text-sm"
+				style="border-color: var(--netz-warning); background-color: color-mix(in srgb, var(--netz-warning) 12%, var(--netz-surface)); color: var(--netz-text-primary);"
 				role="alert"
 			>
-				<p class="font-medium">Worker status unavailable</p>
+				<p class="font-medium text-[var(--netz-warning)]">Worker status unavailable</p>
 				<p class="mt-1">{healthErrors.workers}</p>
 			</div>
 		{:else if data.workers.length > 0}

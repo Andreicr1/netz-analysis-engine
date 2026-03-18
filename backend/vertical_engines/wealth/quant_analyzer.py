@@ -139,7 +139,7 @@ class QuantAnalyzer:
         if fund is None or not fund.block_id:
             return None
 
-        from quant_engine.peer_comparison_service import compare
+        from app.domains.wealth.services.quant_queries import compare
 
         result = compare(db, fund_id=fund_id, block_id=fund.block_id)
         return {

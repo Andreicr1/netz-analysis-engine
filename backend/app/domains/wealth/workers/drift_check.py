@@ -14,8 +14,7 @@ import structlog
 from sqlalchemy import text
 
 from app.core.db.engine import async_session_factory as async_session
-from quant_engine.drift_service import compute_drift
-from quant_engine.rebalance_service import create_system_rebalance_event
+from app.domains.wealth.services.quant_queries import compute_drift, create_system_rebalance_event
 
 logger = structlog.get_logger()
 

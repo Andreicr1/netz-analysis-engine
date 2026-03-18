@@ -107,7 +107,6 @@ ALLOWLISTED_GLOBAL_TABLE_CONSUMERS: dict[str, str] = {
     "app/domains/wealth/routes/attribution.py": "read — SELECT only on AllocationBlock and BenchmarkNav; no writes",
     "app/domains/wealth/routes/macro.py": "read — SELECT only on MacroRegionalSnapshot; no writes",
     # ── Background workers — use async_session_factory directly (no RLS) ────
-    "app/domains/wealth/workers/fred_ingestion.py": "write — DEPRECATED worker; writes MacroData via async_session_factory (no RLS context)",
     "app/domains/wealth/workers/macro_ingestion.py": "write — writes MacroData and MacroRegionalSnapshot via async_session_factory",
     "app/domains/wealth/workers/regime_fit.py": "read — reads MacroData via async_session_factory for regime fitting",
     "app/domains/wealth/workers/risk_calc.py": "read — reads MacroData via async_session_factory for CVaR computation",
@@ -435,7 +434,6 @@ class TestWorkerSessionIsolation:
     """Background workers that write to global tables must use async_session_factory."""
 
     WORKER_FILES_WITH_GLOBAL_WRITES: set[str] = {
-        "app/domains/wealth/workers/fred_ingestion.py",
         "app/domains/wealth/workers/macro_ingestion.py",
         "app/domains/wealth/workers/benchmark_ingest.py",
     }

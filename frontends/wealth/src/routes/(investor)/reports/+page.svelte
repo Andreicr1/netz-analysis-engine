@@ -2,7 +2,7 @@
   Investor — Published reports: investment outlooks, flash reports, spotlights.
 -->
 <script lang="ts">
-	import { PageHeader, EmptyState, PDFDownload } from "@netz/ui";
+	import { PageHeader, EmptyState, PDFDownload, formatDate } from "@netz/ui";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
@@ -44,7 +44,7 @@
 						</p>
 						<p class="text-sm text-[var(--netz-text-muted)]">
 							{typeLabels[report.content_type] ?? report.content_type}
-							&middot; {new Date(report.created_at).toLocaleDateString()}
+							&middot; {formatDate(report.created_at)}
 						</p>
 					</div>
 					<PDFDownload

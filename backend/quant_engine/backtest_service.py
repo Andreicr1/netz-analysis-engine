@@ -1,7 +1,6 @@
 """Walk-forward backtesting service using TimeSeriesSplit.
 
 Pure computation functions — no I/O.
-DB fetch helper fetches a pre-aligned returns matrix from nav_timeseries.
 
 Requires optional dependency group [timeseries]:
     pip install netz-wealth-os[timeseries]
@@ -12,20 +11,10 @@ Design decisions:
 - test_size=63: fixed 3-month test periods for consistent per-fold Sharpe comparability.
 - Expanding window (TimeSeriesSplit default): superior to rolling for covariance stability.
 - Report fold consistency (N/5 positive Sharpe), NOT p-values. See Finucane (2004).
-
-Note: imports Fund, NavTimeseries from app.domains.wealth — wealth-vertical-specific dependency.
 """
-
-from collections import defaultdict
-from datetime import date, timedelta
 
 import numpy as np
 import structlog
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.domains.wealth.models.fund import Fund
-from app.domains.wealth.models.nav import NavTimeseries
 
 logger = structlog.get_logger()
 
@@ -130,75 +119,3 @@ def walk_forward_backtest(
         "positive_folds": positive_folds,
         "n_splits_computed": len(folds),
     }
-
-
-async def fetch_returns_matrix(
-    db: AsyncSession,
-    block_ids: list[str],
-    lookback_days: int = 756,  # ~3 trading years
-) -> tuple[np.ndarray, list[str], list[float]]:
-    """Fetch aligned daily returns matrix for walk-forward backtesting.
-
-    Returns:
-        (returns_matrix, fund_ids, equal_weights)
-        - returns_matrix: T×N float64 array (only dates where all funds have data)
-        - fund_ids: list of fund UUID strings (columns)
-        - equal_weights: 1/N equal-weight portfolio weights
-
-    Raises:
-        ValueError: If <2 blocks have data or <120 aligned dates.
-    """
-    start_date = date.today() - timedelta(days=int(lookback_days * 1.5))  # buffer for holidays
-
-    # One representative fund per block (same selection as optimizer_service)
-    funds_stmt = (
-        select(Fund)
-        .where(Fund.block_id.in_(block_ids), Fund.is_active == True, Fund.ticker.is_not(None))
-        .distinct(Fund.block_id)
-        .order_by(Fund.block_id, Fund.name)
-    )
-    funds_result = await db.execute(funds_stmt)
-    block_funds = {f.block_id: f for f in funds_result.scalars().all()}
-
-    if not block_funds:
-        raise ValueError("No active funds found for the requested blocks")
-
-    available = [bid for bid in block_ids if bid in block_funds]
-    fund_uuids = [block_funds[bid].fund_id for bid in available]
-    fund_ids = [str(block_funds[bid].fund_id) for bid in available]
-
-    if len(fund_ids) < 2:
-        raise ValueError(f"Need ≥2 blocks with data, found {len(fund_ids)}")
-
-    ret_stmt = (
-        select(NavTimeseries.instrument_id, NavTimeseries.nav_date, NavTimeseries.return_1d)
-        .where(
-            NavTimeseries.instrument_id.in_(fund_uuids),
-            NavTimeseries.nav_date >= start_date,
-            NavTimeseries.return_1d.is_not(None),
-        )
-        .order_by(NavTimeseries.nav_date)
-    )
-    ret_result = await db.execute(ret_stmt)
-
-    # Group by fund, then find common dates
-    grouped: dict[str, dict[str, float]] = defaultdict(dict)
-    for fid, nav_date, ret in ret_result.all():
-        grouped[str(fid)][str(nav_date)] = float(ret)
-
-    date_sets = [set(grouped[fid].keys()) for fid in fund_ids]
-    common_dates = sorted(set.intersection(*date_sets) if date_sets else set())
-
-    if len(common_dates) < 120:
-        raise ValueError(
-            f"Insufficient aligned return data: {len(common_dates)} common dates (need ≥120)"
-        )
-
-    T, N = len(common_dates), len(fund_ids)
-    matrix = np.zeros((T, N), dtype=np.float64)
-    for j, fid in enumerate(fund_ids):
-        for i, d in enumerate(common_dates):
-            matrix[i, j] = grouped[fid][d]
-
-    equal_weights = [1.0 / N] * N
-    return matrix, fund_ids, equal_weights

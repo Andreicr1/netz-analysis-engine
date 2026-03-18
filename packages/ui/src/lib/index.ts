@@ -46,6 +46,7 @@ export { default as SectionCard } from "./components/SectionCard.svelte";
 export { default as HeatmapTable } from "./components/HeatmapTable.svelte";
 export { default as PeriodSelector } from "./components/PeriodSelector.svelte";
 export { default as EntityContextHeader } from "./components/EntityContextHeader.svelte";
+export { default as LongRunningAction } from "./components/LongRunningAction.svelte";
 
 // ── Layouts ─────────────────────────────────────────────────
 export { default as AppLayout } from "./layouts/AppLayout.svelte";

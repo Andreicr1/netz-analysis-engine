@@ -10,6 +10,7 @@
 		loading?: boolean;
 		empty?: boolean;
 		emptyMessage?: string;
+		ariaLabel?: string;
 		optionsOverride?: Record<string, unknown>;
 	}
 
@@ -24,12 +25,15 @@
 		loading = false,
 		empty = false,
 		emptyMessage = "No data available",
+		ariaLabel = "Chart visualization",
 		optionsOverride,
 		option,
 	}: ChartContainerProps = $props();
 
 	let containerEl: HTMLDivElement | undefined = $state();
 	let chart: ReturnType<typeof echarts.init> | undefined = $state();
+	let lastAppliedOption: Record<string, unknown> | null = $state(null);
+	let lastAppliedOverride: Record<string, unknown> | undefined = $state();
 
 	onMount(() => {
 		if (!containerEl) return;
@@ -48,12 +52,17 @@
 			ro.disconnect();
 			chart?.dispose();
 			chart = undefined;
+			lastAppliedOption = null;
+			lastAppliedOverride = undefined;
 		};
 	});
 
 	$effect(() => {
 		if (!chart || loading || empty) return;
+		if (option === lastAppliedOption && optionsOverride === lastAppliedOverride) return;
 		const merged = optionsOverride ? { ...option, ...optionsOverride } : option;
+		lastAppliedOption = option;
+		lastAppliedOverride = optionsOverride;
 		chart.setOption(merged, { notMerge: true });
 	});
 </script>
@@ -74,5 +83,11 @@
 		</div>
 	{/if}
 
-	<div bind:this={containerEl} class="h-full w-full" style:visibility={empty ? "hidden" : "visible"}></div>
+	<div
+		bind:this={containerEl}
+		class="h-full w-full"
+		role="img"
+		aria-label={ariaLabel}
+		style:visibility={empty ? "hidden" : "visible"}
+	></div>
 </div>

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from "svelte";
-	import { formatDate } from "@netz/ui";
+	import { formatDateTime } from "@netz/ui";
 	import { createSSEStream, type SSEConnection } from "@netz/ui/utils";
 
 	type WorkerLogSeverity = "critical" | "error" | "warning" | "info" | "debug";
@@ -31,33 +31,13 @@
 
 	const severityMeta: Record<
 		WorkerLogSeverity,
-		{ label: string; badge: string; accent: string }
+		{ label: string; tone: string }
 	> = {
-		critical: {
-			label: "Critical",
-			badge: "border-red-200 bg-red-50 text-red-800",
-			accent: "border-red-400",
-		},
-		error: {
-			label: "Error",
-			badge: "border-rose-200 bg-rose-50 text-rose-800",
-			accent: "border-rose-400",
-		},
-		warning: {
-			label: "Warning",
-			badge: "border-amber-200 bg-amber-50 text-amber-800",
-			accent: "border-amber-400",
-		},
-		info: {
-			label: "Info",
-			badge: "border-sky-200 bg-sky-50 text-sky-800",
-			accent: "border-sky-400",
-		},
-		debug: {
-			label: "Debug",
-			badge: "border-slate-200 bg-slate-50 text-slate-700",
-			accent: "border-slate-400",
-		},
+		critical: { label: "Critical", tone: "var(--netz-danger)" },
+		error: { label: "Error", tone: "var(--netz-danger)" },
+		warning: { label: "Warning", tone: "var(--netz-warning)" },
+		info: { label: "Info", tone: "var(--netz-info)" },
+		debug: { label: "Debug", tone: "var(--netz-text-secondary)" },
 	};
 
 	function normalizeSeverity(value: unknown): WorkerLogSeverity | null {
@@ -203,6 +183,18 @@
 	const isLive = $derived(
 		connection?.status === "connected" || connection?.status === "connecting",
 	);
+	const connectionTone = $derived.by(() => {
+		switch (connection?.status) {
+			case "connected":
+				return "var(--netz-success)";
+			case "connecting":
+				return "var(--netz-warning)";
+			case "error":
+				return "var(--netz-danger)";
+			default:
+				return "var(--netz-text-muted)";
+		}
+	});
 
 	const logCounts = $derived(
 		logs.reduce(
@@ -229,17 +221,7 @@
 <div class="space-y-3">
 	<div class="flex flex-wrap items-center gap-2">
 		<div class="flex items-center gap-2 rounded-full border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-1 text-xs text-[var(--netz-text-secondary)]">
-			<span
-				class={`h-2 w-2 rounded-full ${
-					connection?.status === "connected"
-						? "bg-emerald-500"
-						: connection?.status === "connecting"
-							? "bg-amber-500"
-							: connection?.status === "error"
-								? "bg-rose-500"
-								: "bg-slate-400"
-				}`}
-			></span>
+			<span class="h-2 w-2 rounded-full" style={`background-color: ${connectionTone};`}></span>
 			<span>{connection?.status ?? "disconnected"}</span>
 			<span>•</span>
 			<span>{visibleLogs.length} shown</span>
@@ -255,7 +237,7 @@
 		</button>
 
 		{#if connection?.error}
-			<p class="text-xs text-rose-600">{connection.error.message}</p>
+			<p class="text-xs text-[var(--netz-danger)]">{connection.error.message}</p>
 		{/if}
 	</div>
 
@@ -297,9 +279,12 @@
 		{#if visibleLogs.length > 0}
 			<div class="divide-y divide-[var(--netz-border)]">
 				{#each visibleLogs as entry (entry.id)}
-					<article class={`border-l-4 px-4 py-3 ${severityMeta[entry.severity].accent}`}>
+					<article class="border-l-4 px-4 py-3" style={`border-left-color: ${severityMeta[entry.severity].tone};`}>
 						<div class="flex flex-wrap items-start gap-3">
-							<span class={`rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${severityMeta[entry.severity].badge}`}>
+							<span
+								class="rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide"
+								style={`border-color: ${severityMeta[entry.severity].tone}; background-color: color-mix(in srgb, ${severityMeta[entry.severity].tone} 12%, var(--netz-surface)); color: ${severityMeta[entry.severity].tone};`}
+							>
 								{severityMeta[entry.severity].label}
 							</span>
 							<div class="min-w-0 flex-1">
@@ -312,7 +297,7 @@
 									{/if}
 									{#if entry.timestamp}
 										<time datetime={entry.timestamp}>
-											{formatDate(entry.timestamp, "medium", "en-US")}
+											{formatDateTime(entry.timestamp, "en-US")}
 										</time>
 									{/if}
 								</div>

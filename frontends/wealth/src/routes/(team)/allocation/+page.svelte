@@ -2,7 +2,7 @@
   Allocation — strategic, tactical, and effective views with profile selector.
 -->
 <script lang="ts">
-	import { DataCard, BarChart, PageHeader, EmptyState, Button } from "@netz/ui";
+	import { DataCard, BarChart, PageHeader, EmptyState, Button, formatNumber, formatPercent } from "@netz/ui";
 	import { ActionButton } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll, goto } from "$app/navigation";
@@ -89,6 +89,15 @@
 
 	let editDelta = $derived(Math.abs(editTotal - 100));
 	let editValid = $derived(editDelta < 0.1); // must sum to 100%
+
+	function fmtPercentPoint(value: number, decimals = 1): string {
+		return `${formatNumber(value, decimals, "en-US")}%`;
+	}
+
+	function fmtSignedPercentPoint(value: number, decimals = 1): string {
+		const formatted = formatNumber(value, decimals, "en-US");
+		return value >= 0 ? `+${formatted}%` : `${formatted}%`;
+	}
 
 	async function saveStrategic() {
 		if (!editValid) return;
@@ -194,7 +203,7 @@
 						{:else}
 							<div class="flex items-center gap-2">
 								<span class="text-xs {editValid ? 'text-[var(--netz-success,#22c55e)]' : 'text-[var(--netz-danger,#ef4444)]'}">
-									Total: {editTotal.toFixed(1)}% {editValid ? "✓" : `(${editDelta > 0 ? "+" : ""}${(editTotal - 100).toFixed(1)}%)`}
+									Total: {fmtPercentPoint(editTotal)} {editValid ? "✓" : `(${fmtSignedPercentPoint(editTotal - 100)})`}
 								</span>
 								<Button size="sm" variant="outline" onclick={cancelEditing}>Cancel</Button>
 								<ActionButton size="sm" onclick={saveStrategic} loading={saving} loadingText="Saving..." disabled={!editValid}>
@@ -210,7 +219,7 @@
 								<div class="flex items-center gap-2">
 									{#if row.min_weight !== null && row.max_weight !== null}
 										<span class="text-xs text-[var(--netz-text-muted)]">
-											[{(row.min_weight * 100).toFixed(0)}–{(row.max_weight * 100).toFixed(0)}%]
+											[{formatPercent(row.min_weight, 0, "en-US")}–{formatPercent(row.max_weight, 0, "en-US")}]
 										</span>
 									{/if}
 									{#if editing}
@@ -224,7 +233,7 @@
 										/>
 									{:else}
 										<span class="font-medium text-[var(--netz-text-primary)]">
-											{(row.weight * 100).toFixed(1)}%
+											{formatPercent(row.weight, 1, "en-US")}
 										</span>
 									{/if}
 								</div>
@@ -268,7 +277,7 @@
 							<div class="flex items-center gap-3">
 								{#if pos.conviction !== null}
 									<span class="text-xs text-[var(--netz-text-muted)]">
-										Conviction: {pos.conviction.toFixed(0)}
+										Conviction: {formatNumber(pos.conviction, 0, "en-US")}
 									</span>
 								{/if}
 								{#if editingTactical}
@@ -280,7 +289,7 @@
 									/>
 								{:else}
 									<span class="font-medium {pos.overweight >= 0 ? 'text-[var(--netz-success,#22c55e)]' : 'text-[var(--netz-danger,#ef4444)]'}">
-										{pos.overweight >= 0 ? "+" : ""}{(pos.overweight * 100).toFixed(1)}%
+										{formatPercent(pos.overweight, 1, "en-US", true)}
 									</span>
 								{/if}
 							</div>
@@ -301,7 +310,7 @@
 					<div class="mb-4 flex items-center justify-between">
 						<h3 class="text-sm font-semibold text-[var(--netz-text-primary)]">Effective Allocation</h3>
 						<span class="text-xs text-[var(--netz-text-muted)]">
-							Total: {(totalWeight * 100).toFixed(1)}%
+							Total: {formatPercent(totalWeight, 1, "en-US")}
 						</span>
 					</div>
 					<div class="space-y-3">
@@ -310,15 +319,15 @@
 								<span class="text-sm text-[var(--netz-text-primary)]">{row.block}</span>
 								<div class="flex items-center gap-2 text-xs">
 									<span class="text-[var(--netz-text-muted)]">
-										{(row.strategic_weight * 100).toFixed(1)}%
+										{formatPercent(row.strategic_weight, 1, "en-US")}
 									</span>
 									{#if row.tactical_overweight !== 0}
 										<span class="{row.tactical_overweight >= 0 ? 'text-[var(--netz-success,#22c55e)]' : 'text-[var(--netz-danger,#ef4444)]'}">
-											{row.tactical_overweight >= 0 ? "+" : ""}{(row.tactical_overweight * 100).toFixed(1)}%
+											{formatPercent(row.tactical_overweight, 1, "en-US", true)}
 										</span>
 									{/if}
 									<span class="font-medium text-[var(--netz-text-primary)]">
-										= {(row.effective_weight * 100).toFixed(1)}%
+										= {formatPercent(row.effective_weight, 1, "en-US")}
 									</span>
 								</div>
 							</div>

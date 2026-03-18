@@ -3,7 +3,7 @@
   Institutional aesthetic: clean typography, controlled information density.
 -->
 <script lang="ts">
-	import { DataCard, TimeSeriesChart, PageHeader, EmptyState } from "@netz/ui";
+	import { DataCard, TimeSeriesChart, PageHeader, EmptyState, formatNumber, formatPercent, formatRatio, plColor } from "@netz/ui";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
@@ -29,13 +29,11 @@
 	let portfolios = $derived((data.portfolios ?? []) as Portfolio[]);
 
 	function fmtPct(v: number | null | undefined): string {
-		if (v == null) return "—";
-		const sign = v >= 0 ? "+" : "";
-		return `${sign}${(v * 100).toFixed(2)}%`;
+		return formatPercent(v, 2, "en-US", true);
 	}
 
 	function fmt(v: number | null | undefined, d = 2): string {
-		return v != null ? v.toFixed(d) : "—";
+		return formatNumber(v, d, "en-US");
 	}
 </script>
 
@@ -67,7 +65,7 @@
 					<div class="grid grid-cols-2 gap-4 border-b border-[var(--netz-border)] px-6 py-4 md:grid-cols-4">
 						<div>
 							<p class="text-xs text-[var(--netz-text-muted)]">Annual Return</p>
-							<p class="text-lg font-semibold {(bt.annual_return ?? 0) >= 0 ? 'text-[var(--netz-success,#22c55e)]' : 'text-[var(--netz-danger,#ef4444)]'}">
+							<p class="text-lg font-semibold" style:color={plColor(bt.annual_return)}>
 								{fmtPct(bt.annual_return)}
 							</p>
 						</div>
@@ -77,7 +75,7 @@
 						</div>
 						<div>
 							<p class="text-xs text-[var(--netz-text-muted)]">Sharpe Ratio</p>
-							<p class="text-lg font-semibold text-[var(--netz-text-primary)]">{fmt(bt.sharpe_ratio)}</p>
+							<p class="text-lg font-semibold text-[var(--netz-text-primary)]">{formatRatio(bt.sharpe_ratio, 2, "", "en-US")}</p>
 						</div>
 						<div>
 							<p class="text-xs text-[var(--netz-text-muted)]">Max Drawdown</p>
@@ -93,6 +91,7 @@
 									series={[{ name: portfolio.display_name, data: bt.equity_curve }]}
 									yAxisLabel="NAV"
 									area={true}
+									ariaLabel={`${portfolio.display_name} equity curve`}
 								/>
 							</div>
 						</div>

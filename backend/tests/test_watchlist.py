@@ -375,39 +375,33 @@ class TestWatchlistWorkerRoute:
         actor.has_role.return_value = False
         return actor
 
-    def test_route_returns_202(self, mock_user, admin_actor):
-        import asyncio
-
+    @pytest.mark.asyncio
+    async def test_route_returns_202(self, mock_user, admin_actor):
         from app.domains.wealth.routes.workers import trigger_run_watchlist_check
 
         bg = MagicMock()
-        result = asyncio.get_event_loop().run_until_complete(
-            trigger_run_watchlist_check(
-                background_tasks=bg,
-                user=mock_user,
-                actor=admin_actor,
-            )
+        result = await trigger_run_watchlist_check(
+            background_tasks=bg,
+            user=mock_user,
+            actor=admin_actor,
         )
 
         assert result.status == "scheduled"
         assert result.worker == "run-watchlist-check"
         bg.add_task.assert_called_once()
 
-    def test_route_rejects_non_admin(self, mock_user, non_admin_actor):
-        import asyncio
-
+    @pytest.mark.asyncio
+    async def test_route_rejects_non_admin(self, mock_user, non_admin_actor):
         from fastapi import HTTPException
 
         from app.domains.wealth.routes.workers import trigger_run_watchlist_check
 
         bg = MagicMock()
         with pytest.raises(HTTPException) as exc_info:
-            asyncio.get_event_loop().run_until_complete(
-                trigger_run_watchlist_check(
-                    background_tasks=bg,
-                    user=mock_user,
-                    actor=non_admin_actor,
-                )
+            await trigger_run_watchlist_check(
+                background_tasks=bg,
+                user=mock_user,
+                actor=non_admin_actor,
             )
         assert exc_info.value.status_code == 403
 

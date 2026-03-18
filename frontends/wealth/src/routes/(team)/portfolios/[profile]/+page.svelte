@@ -6,6 +6,7 @@
 <script lang="ts">
 	import {
 		PageHeader, MetricCard, SectionCard, EmptyState, StatusBadge, Card, Button, ContextPanel,
+		formatCurrency, formatDate, formatPercent, formatNumber,
 	} from "@netz/ui";
 	import { ChartContainer } from "@netz/ui/charts";
 	import { ActionButton, ConfirmDialog } from "@netz/ui";
@@ -18,6 +19,7 @@
 	import { getContext } from "svelte";
 	import type { PageData } from "./$types";
 	import type { RiskStore } from "$lib/stores/risk-store.svelte";
+	import { resolveWealthStatus } from "$lib/utils/status-maps";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const riskStore = getContext<RiskStore>("netz:riskStore");
@@ -59,7 +61,7 @@
 			yAxis: {
 				type: "value",
 				inverse: true, // worse (more negative) visually higher
-				axisLabel: { formatter: (v: number) => `${(v * 100).toFixed(1)}%` },
+				axisLabel: { formatter: (v: number) => formatPercent(v, 1, "en-US") },
 			},
 			series: [
 				{
@@ -75,7 +77,7 @@
 						data: [
 							{
 								yAxis: limit,
-								label: { formatter: `Limit: ${(limit * 100).toFixed(1)}%`, position: "end" },
+								label: { formatter: `Limit: ${formatPercent(limit, 1, "en-US")}`, position: "end" },
 								lineStyle: { color: statusColors.breach, type: "dashed", width: 2 },
 							},
 							{
@@ -187,14 +189,14 @@
 	$effect(() => { loadRebalanceEvents(); });
 
 	function fmtPct(v: number | null | undefined): string {
-		if (v === null || v === undefined) return "—";
-		return `${(v * 100).toFixed(1)}%`;
+		return formatPercent(v, 1, "en-US");
 	}
 
 	function fmtDelta(v: number | null | undefined): string {
 		if (v === null || v === undefined) return "";
 		const pct = v * 100;
-		return pct >= 0 ? `+${pct.toFixed(1)}pp` : `${pct.toFixed(1)}pp`;
+		const formatted = formatNumber(pct, 1, "en-US");
+		return pct >= 0 ? `+${formatted}pp` : `${formatted}pp`;
 	}
 </script>
 
@@ -241,8 +243,8 @@
 		/>
 		<MetricCard
 			label="NAV"
-			value={snapshot?.nav ? `$${snapshot.nav.toLocaleString()}` : "—"}
-			sublabel={snapshot?.updated_at ? `Updated: ${new Date(snapshot.updated_at).toLocaleDateString()}` : ""}
+			value={formatCurrency(snapshot?.nav, "USD", "en-US")}
+			sublabel={snapshot?.updated_at ? `Updated: ${formatDate(snapshot.updated_at)}` : ""}
 		/>
 		<MetricCard
 			label="Return YTD"
@@ -260,7 +262,7 @@
 	<!-- CVaR Timeline Chart -->
 	<SectionCard title="CVaR Timeline" subtitle="Rolling 12M with limit and regime bands">
 		{#if cvarChartOption}
-			<ChartContainer option={cvarChartOption} height={400} />
+			<ChartContainer option={cvarChartOption} height={400} ariaLabel={`${profile} CVaR timeline`} />
 		{:else}
 			<EmptyState
 				title="No CVaR history"
@@ -290,13 +292,13 @@
 					<Card class="flex items-center justify-between p-4">
 						<div>
 							<div class="flex items-center gap-2">
-								<StatusBadge status={String(event.status ?? "")} type="default" />
+								<StatusBadge status={String(event.status ?? "")} type="default" resolve={resolveWealthStatus} />
 								<span class="text-sm font-medium text-[var(--netz-text-primary)]">
 									Event {String(event.id ?? "").slice(0, 8)}
 								</span>
 							</div>
 							<p class="mt-1 text-xs text-[var(--netz-text-muted)]">
-								{event.created_at ? new Date(String(event.created_at)).toLocaleDateString() : ""}
+								{event.created_at ? formatDate(String(event.created_at)) : ""}
 							</p>
 						</div>
 						<div class="flex gap-2">

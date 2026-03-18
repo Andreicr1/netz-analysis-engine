@@ -3,7 +3,8 @@
   Shows: name, NAV, YTD return, CVaR gauge, Sharpe, regime chip.
 -->
 <script lang="ts">
-	import { DataCard, StatusBadge, GaugeChart } from "@netz/ui";
+	import { GaugeChart, StatusBadge, formatNumber, formatPercent, formatRatio, plColor } from "@netz/ui";
+	import { resolveWealthStatus } from "$lib/utils/status-maps";
 
 	interface Props {
 		name: string;
@@ -31,27 +32,6 @@
 		triggerStatus = null,
 	}: Props = $props();
 
-	// Format helpers
-	function formatNav(value: number | null): string {
-		if (value === null) return "—";
-		return new Intl.NumberFormat("en-US", {
-			style: "decimal",
-			minimumFractionDigits: 2,
-			maximumFractionDigits: 2,
-		}).format(value);
-	}
-
-	function formatPercent(value: number | null): string {
-		if (value === null) return "—";
-		const sign = value >= 0 ? "+" : "";
-		return `${sign}${(value * 100).toFixed(2)}%`;
-	}
-
-	function formatCvar(value: number | null): string {
-		if (value === null) return "—";
-		return `${(value * 100).toFixed(2)}%`;
-	}
-
 	// CVaR gauge thresholds
 	const gaugeThresholds = [
 		{ value: 70, color: "var(--netz-success)" },
@@ -60,12 +40,8 @@
 	];
 
 	let ytdColor = $derived(
-		ytdReturn === null ? "var(--netz-text-secondary)" :
-		ytdReturn >= 0 ? "var(--netz-success, #22c55e)" :
-		"var(--netz-danger, #ef4444)"
+		ytdReturn === null ? "var(--netz-text-secondary)" : plColor(ytdReturn),
 	);
-
-	import { regimeLabels } from "$lib/constants/regime";
 </script>
 
 <div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5 shadow-sm">
@@ -76,7 +52,7 @@
 			<span class="text-xs text-[var(--netz-text-muted)] capitalize">{profile}</span>
 		</div>
 		{#if regime}
-			<StatusBadge status={regime} />
+			<StatusBadge status={regime} resolve={resolveWealthStatus} />
 		{/if}
 	</div>
 
@@ -84,11 +60,11 @@
 	<div class="mb-4 grid grid-cols-2 gap-3">
 		<div>
 			<p class="text-xs text-[var(--netz-text-muted)]">NAV</p>
-			<p class="text-xl font-bold text-[var(--netz-text-primary)]">{formatNav(nav)}</p>
+			<p class="text-xl font-bold text-[var(--netz-text-primary)]">{formatNumber(nav, 2, "en-US")}</p>
 		</div>
 		<div>
 			<p class="text-xs text-[var(--netz-text-muted)]">YTD Return</p>
-			<p class="text-xl font-bold" style:color={ytdColor}>{formatPercent(ytdReturn)}</p>
+			<p class="text-xl font-bold" style:color={ytdColor}>{formatPercent(ytdReturn, 2, "en-US", true)}</p>
 		</div>
 	</div>
 
@@ -97,7 +73,7 @@
 		<div class="mb-1 flex items-center justify-between">
 			<p class="text-xs text-[var(--netz-text-muted)]">CVaR Utilization</p>
 			<p class="text-xs text-[var(--netz-text-secondary)]">
-				{formatCvar(cvarCurrent)} / {formatCvar(cvarLimit)}
+				{formatPercent(cvarCurrent, 2, "en-US")} / {formatPercent(cvarLimit, 2, "en-US")}
 			</p>
 		</div>
 		<GaugeChart
@@ -106,9 +82,10 @@
 			max={100}
 			thresholds={gaugeThresholds}
 			height={120}
+			ariaLabel={`CVaR utilization gauge for ${name}`}
 		/>
 		<p class="mt-1 text-center text-sm font-medium text-[var(--netz-text-primary)]">
-			{cvarUtilization !== null ? `${cvarUtilization.toFixed(1)}%` : "—"}
+			{cvarUtilization !== null ? formatPercent(cvarUtilization / 100, 1, "en-US") : "—"}
 		</p>
 	</div>
 
@@ -117,7 +94,7 @@
 		<div>
 			<p class="text-xs text-[var(--netz-text-muted)]">Sharpe</p>
 			<p class="text-sm font-medium text-[var(--netz-text-primary)]">
-				{sharpe !== null ? sharpe.toFixed(2) : "—"}
+				{formatRatio(sharpe, 2, "", "en-US")}
 			</p>
 		</div>
 		<div>

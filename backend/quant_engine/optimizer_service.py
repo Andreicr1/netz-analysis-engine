@@ -3,33 +3,19 @@
 Uses cvxpy with CLARABEL solver to compute optimal portfolio weights.
 Objective: maximize Sharpe ratio (or minimize CVaR for conservative).
 Constraints: weights sum to 1, per-block bounds, portfolio CVaR <= limit, long-only.
-
-Also provides compute_inputs_from_nav() to compute covariance matrix
-and expected returns from historical NAV data.
-
-Note: imports Fund, NavTimeseries from app.domains.wealth — wealth-vertical-specific dependency.
 """
 
 import asyncio
-from collections import defaultdict
 from dataclasses import dataclass
-from datetime import date, timedelta
 from datetime import date as date_type
 
 import cvxpy as cp
 import numpy as np
 import structlog
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domains.wealth.models.fund import Fund
-from app.domains.wealth.models.nav import NavTimeseries
 from app.utils.hashing import compute_input_hash, derive_seed
 
 logger = structlog.get_logger()
-
-TRADING_DAYS_PER_YEAR = 252
-MIN_OBSERVATIONS = 120  # ~6 months minimum for reliable covariance
 
 
 @dataclass
@@ -492,117 +478,3 @@ async def optimize_portfolio_pareto(
         input_hash=input_hash,
         status="optimal",
     )
-
-
-async def compute_inputs_from_nav(
-    db: AsyncSession,
-    block_ids: list[str],
-    lookback_days: int = TRADING_DAYS_PER_YEAR,
-    as_of_date: date | None = None,
-) -> tuple[np.ndarray, dict[str, float]]:
-    """Compute covariance matrix and expected returns from NAV data.
-
-    Uses np.cov() (sample covariance) — sufficient at 16 blocks / 252
-    observations (15:1 ratio). If universe exceeds 100 assets, add
-    Ledoit-Wolf shrinkage.
-
-    Args:
-        db: Database session.
-        block_ids: Ordered list of block IDs.
-        lookback_days: Number of trading days to use.
-        as_of_date: Compute as of this date. Defaults to today.
-
-    Returns:
-        (annualized_cov_matrix, expected_returns_dict)
-
-    Raises:
-        ValueError: If insufficient aligned data (<120 trading days).
-    """
-    if as_of_date is None:
-        as_of_date = date.today()
-
-    start_date = as_of_date - timedelta(days=int(lookback_days * 1.5))  # buffer for holidays
-
-    # 1. Get representative fund per block (batch query)
-    funds_stmt = (
-        select(Fund)
-        .where(Fund.block_id.in_(block_ids), Fund.is_active == True, Fund.ticker.is_not(None))
-        .distinct(Fund.block_id)
-        .order_by(Fund.block_id, Fund.name)
-    )
-    funds_result = await db.execute(funds_stmt)
-    block_funds = {f.block_id: f for f in funds_result.scalars().all()}
-
-    if not block_funds:
-        raise ValueError("No active funds found for the requested blocks")
-
-    # Filter block_ids to those with available funds
-    available_blocks = [bid for bid in block_ids if bid in block_funds]
-    if len(available_blocks) < 2:
-        raise ValueError(f"Need at least 2 blocks with data, found {len(available_blocks)}")
-
-    # 2. Batch-fetch daily returns for all funds
-    fund_ids = [block_funds[bid].fund_id for bid in available_blocks]
-    ret_stmt = (
-        select(NavTimeseries.instrument_id, NavTimeseries.nav_date, NavTimeseries.return_1d)
-        .where(
-            NavTimeseries.instrument_id.in_(fund_ids),
-            NavTimeseries.nav_date >= start_date,
-            NavTimeseries.nav_date <= as_of_date,
-            NavTimeseries.return_1d.is_not(None),
-        )
-        .order_by(NavTimeseries.nav_date)
-    )
-    ret_result = await db.execute(ret_stmt)
-
-    # Group returns by fund_id and date
-    fund_returns: dict[str, dict[date, float]] = defaultdict(dict)
-    for instrument_id, nav_date, return_1d in ret_result.all():
-        fund_returns[str(instrument_id)][nav_date] = float(return_1d)
-
-    # 3. Align dates — only dates where ALL funds have data
-    fund_id_strs = [str(block_funds[bid].fund_id) for bid in available_blocks]
-    all_date_sets = [set(fund_returns[fid].keys()) for fid in fund_id_strs]
-
-    if not all_date_sets:
-        raise ValueError("No return data found for any block")
-
-    common_dates = sorted(set.intersection(*all_date_sets))
-
-    if len(common_dates) < MIN_OBSERVATIONS:
-        raise ValueError(
-            f"Insufficient aligned data: {len(common_dates)} trading days "
-            f"(minimum: {MIN_OBSERVATIONS}). Some funds may have sparse history."
-        )
-
-    # 4. Build returns matrix (T x N)
-    returns_matrix = np.array([
-        [fund_returns[fid][d] for fid in fund_id_strs]
-        for d in common_dates
-    ])
-
-    # 5. Compute sample covariance and annualize
-    daily_cov = np.cov(returns_matrix, rowvar=False)
-    annual_cov = daily_cov * TRADING_DAYS_PER_YEAR
-
-    # Verify positive semi-definiteness (required by cvxpy)
-    eigenvalues = np.linalg.eigvalsh(annual_cov)
-    if eigenvalues.min() < -1e-10:
-        eigvals, eigvecs = np.linalg.eigh(annual_cov)
-        eigvals = np.maximum(eigvals, 1e-10)
-        annual_cov = eigvecs @ np.diag(eigvals) @ eigvecs.T
-        logger.info("Covariance matrix adjusted for PSD", min_eigenvalue=float(eigenvalues.min()))
-
-    # 6. Compute annualized expected returns
-    daily_means = returns_matrix.mean(axis=0)
-    annual_returns = daily_means * TRADING_DAYS_PER_YEAR
-    expected_returns = {bid: float(annual_returns[i]) for i, bid in enumerate(available_blocks)}
-
-    logger.info(
-        "Computed covariance and expected returns",
-        blocks=len(available_blocks),
-        observations=len(common_dates),
-        lookback_days=lookback_days,
-    )
-
-    return annual_cov, expected_returns

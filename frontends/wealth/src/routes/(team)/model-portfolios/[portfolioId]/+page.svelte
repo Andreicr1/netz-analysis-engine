@@ -2,7 +2,8 @@
   Model Portfolio Detail — composition, track record, backtest + stress results.
 -->
 <script lang="ts">
-	import { DataCard, StatusBadge, TimeSeriesChart, BarChart, PageHeader, EmptyState } from "@netz/ui";
+	import { DataCard, StatusBadge, TimeSeriesChart, BarChart, PageHeader, EmptyState, formatDate, formatNumber, formatPercent, formatRatio } from "@netz/ui";
+	import { resolveWealthStatus } from "$lib/utils/status-maps";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
@@ -47,12 +48,11 @@
 	);
 
 	function fmt(v: number | null | undefined, decimals = 2): string {
-		return v != null ? v.toFixed(decimals) : "—";
+		return formatNumber(v, decimals, "en-US");
 	}
 
 	function fmtPct(v: number | null | undefined): string {
-		if (v == null) return "—";
-		return `${(v * 100).toFixed(2)}%`;
+		return formatPercent(v, 2, "en-US");
 	}
 </script>
 
@@ -61,7 +61,7 @@
 		<PageHeader title={portfolio.display_name}>
 			{#snippet actions()}
 				<div class="flex items-center gap-2">
-					<StatusBadge status={portfolio.status} />
+					<StatusBadge status={portfolio.status} resolve={resolveWealthStatus} />
 					<span class="text-sm text-[var(--netz-text-muted)] capitalize">{portfolio.profile}</span>
 				</div>
 			{/snippet}
@@ -71,8 +71,8 @@
 		<div class="grid gap-4 md:grid-cols-4">
 			<DataCard label="Profile" value={portfolio.profile} trend="flat" />
 			<DataCard label="Benchmark" value={portfolio.benchmark_composite ?? "—"} trend="flat" />
-			<DataCard label="Inception" value={portfolio.inception_date ?? "—"} trend="flat" />
-			<DataCard label="Inception NAV" value={portfolio.inception_nav.toFixed(2)} trend="flat" />
+			<DataCard label="Inception" value={formatDate(portfolio.inception_date)} trend="flat" />
+			<DataCard label="Inception NAV" value={formatNumber(portfolio.inception_nav, 2, "en-US")} trend="flat" />
 		</div>
 
 		{#if portfolio.description}
@@ -90,6 +90,7 @@
 						series={equityCurveSeries}
 						yAxisLabel="NAV"
 						area={true}
+						ariaLabel={`${portfolio.display_name} backtest equity curve`}
 					/>
 				</div>
 			{:else}
@@ -102,7 +103,7 @@
 			<div class="grid gap-4 md:grid-cols-4">
 				<DataCard label="Annual Return" value={fmtPct(trackRecord.backtest.annual_return)} trend={trackRecord.backtest.annual_return != null && trackRecord.backtest.annual_return >= 0 ? "up" : "down"} />
 				<DataCard label="Volatility" value={fmtPct(trackRecord.backtest.annual_volatility)} trend="flat" />
-				<DataCard label="Sharpe" value={fmt(trackRecord.backtest.sharpe_ratio)} trend="flat" />
+				<DataCard label="Sharpe" value={formatRatio(trackRecord.backtest.sharpe_ratio, 2, "", "en-US")} trend="flat" />
 				<DataCard label="Max Drawdown" value={fmtPct(trackRecord.backtest.max_drawdown)} trend="flat" />
 			</div>
 		{/if}

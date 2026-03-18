@@ -2,7 +2,7 @@
   Investor — Published documents for distribution.
 -->
 <script lang="ts">
-	import { PageHeader, EmptyState } from "@netz/ui";
+	import { PageHeader, EmptyState, formatDate } from "@netz/ui";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
@@ -38,7 +38,7 @@
 						</p>
 						<p class="text-sm text-[var(--netz-text-muted)]">
 							{doc.content_type}
-							&middot; {new Date(doc.created_at).toLocaleDateString()}
+							&middot; {formatDate(doc.created_at)}
 						</p>
 					</div>
 					<a

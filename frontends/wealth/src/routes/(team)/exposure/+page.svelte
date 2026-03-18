@@ -3,7 +3,7 @@
   Two HeatmapTable grids side-by-side with aggregation toggle + freshness badges.
 -->
 <script lang="ts">
-	import { PageHeader, SectionCard, HeatmapTable, EmptyState } from "@netz/ui";
+	import { PageHeader, SectionCard, HeatmapTable, EmptyState, formatPercent } from "@netz/ui";
 	import { goto } from "$app/navigation";
 	import { page } from "$app/state";
 	import type { PageData } from "./$types";
@@ -50,7 +50,7 @@
 	}
 
 	function fmtWeight(v: number): string {
-		return `${(v * 100).toFixed(1)}%`;
+		return formatPercent(v, 1, "en-US");
 	}
 </script>
 

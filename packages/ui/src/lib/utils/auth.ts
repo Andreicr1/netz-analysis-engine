@@ -40,7 +40,7 @@ export function startSessionExpiryMonitor(
 		const parts = token.split(".");
 		if (parts.length !== 3) return () => {};
 
-		const payload = JSON.parse(atob(parts[1]));
+		const payload = JSON.parse(atob(parts[1]!));
 		const exp = payload.exp;
 		if (typeof exp !== "number") return () => {};
 
@@ -176,7 +176,7 @@ export function createClerkHook(options: ClerkHookOptions = {}) {
 				// Backend still verifies on every API call (defense in depth).
 				const parts = token.split(".");
 				if (parts.length !== 3) throw new Error("Invalid JWT");
-				const payload = JSON.parse(atob(parts[1]));
+				const payload = JSON.parse(atob(parts[1]!));
 				event.locals.actor = actorFromClaims(payload);
 			}
 			event.locals.token = token;
