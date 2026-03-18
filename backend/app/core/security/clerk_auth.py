@@ -53,7 +53,7 @@ class Actor:
     roles: list[Role] = field(default_factory=list)
     organization_id: uuid.UUID | None = None
     organization_slug: str | None = None
-    fund_ids: list[uuid.UUID] = field(default_factory=list)
+    fund_ids: list[uuid.UUID] | None = field(default=None)
 
     def has_role(self, role: Role) -> bool:
         return Role.SUPER_ADMIN in self.roles or Role.ADMIN in self.roles or role in self.roles
@@ -61,7 +61,7 @@ class Actor:
     def can_access_fund(self, fund_id: uuid.UUID) -> bool:
         if Role.ADMIN in self.roles or Role.SUPER_ADMIN in self.roles:
             return True
-        return fund_id in self.fund_ids
+        return self.fund_ids is not None and fund_id in self.fund_ids
 
 
 # JWKS client — lazy init, caches keys automatically
@@ -173,7 +173,7 @@ async def get_actor(
         roles=[internal_role],
         organization_id=uuid.UUID(org_id_str) if org_id_str else None,
         organization_slug=org_claims.get("slg"),
-        fund_ids=[],  # Populated from DB in fund-scoped routes
+        fund_ids=None,  # Resolved from DB on demand in fund-scoped routes
     )
 
 
@@ -236,7 +236,8 @@ def require_fund_access():
             return actor
 
         # Resolve fund_ids from DB if not already populated (e.g. from dev header)
-        if not actor.fund_ids and actor.organization_id is not None:
+        # fund_ids=None means "not resolved yet"; [] means "resolved but empty"
+        if actor.fund_ids is None and actor.organization_id is not None:
             actor.fund_ids = await _resolve_fund_ids(actor.actor_id, actor.organization_id)
 
         if not actor.can_access_fund(fund_id):
