@@ -23,21 +23,23 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # ── Database ──────────────────────────────────────────
+    # ── Core (REQUIRED) ──────────────────────────────────────
+    # database_url: PostgreSQL (Timescale Cloud in prod, docker-compose in dev)
     database_url: str = "postgresql+asyncpg://netz:password@localhost:5434/netz_engine"
     database_url_sync: str = "postgresql+psycopg://netz:password@localhost:5434/netz_engine"
+    # redis_url: Upstash in prod, localhost in dev
     redis_url: str = "redis://localhost:6379/0"
 
-    # ── Auth (Clerk) ─────────────────────────────────────
+    # ── Auth (REQUIRED) ──────────────────────────────────────
     clerk_jwks_url: str = ""
     clerk_publishable_key: str = ""
     clerk_secret_key: str = ""
 
-    # ── Dev bypass ───────────────────────────────────────
+    # ── Dev bypass ───────────────────────────────────────────
     dev_actor_header: str = "X-DEV-ACTOR"
     dev_token: str = "dev-token-change-me"
 
-    # ── App ──────────────────────────────────────────────
+    # ── App ──────────────────────────────────────────────────
     app_env: str = "development"
     log_level: str = "INFO"
     cors_origins: list[str] = [
@@ -52,40 +54,22 @@ class Settings(BaseSettings):
         "http://localhost:4173",
     ]
 
-    # ── Azure Services ───────────────────────────────────
-    storage_account_url: str = ""
-    keyvault_url: str = ""
-    service_bus_namespace: str = ""
-    applicationinsights_connection_string: str = ""
-
-    # ── Azure AI Search ──────────────────────────────────
-    azure_search_endpoint: str = ""
-    azure_search_key: str = ""
-    SEARCH_INDEX_NAME: str = ""
-    SEARCH_CHUNKS_INDEX_NAME: str = "global-vector-chunks-v2"
-    NETZ_ENV: str = "dev"
-
-    # ── Embedding ─────────────────────────────────────────
+    # ── AI (REQUIRED) ────────────────────────────────────────
+    openai_api_key: str = ""
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-large"
 
-    # ── OpenAI / Azure OpenAI ────────────────────────────
-    openai_api_key: str = ""
-    azure_openai_endpoint: str = ""
-    azure_openai_key: str = ""
-    azure_openai_api_version: str = "2025-03-01-preview"
-
-    # ── External APIs ────────────────────────────────────
+    # ── External APIs ────────────────────────────────────────
     fred_api_key: str = ""
 
     # ── SEC EDGAR (public identifier — required by SEC policy) ──
     edgar_identity: str = "Netz Analysis Engine tech@netzco.com"
 
-    # ── Rate Limiting ─────────────────────────────────────
+    # ── Rate Limiting ─────────────────────────────────────────
     rate_limit_enabled: bool = True
     rate_limit_default_rpm: int = 100
     rate_limit_compute_rpm: int = 10
 
-    # ── Feature Flags ────────────────────────────────────
+    # ── Feature Flags ────────────────────────────────────────
     feature_lipper_enabled: bool = False
     feature_auto_rebalance: bool = False
     feature_adls_enabled: bool = False
@@ -93,22 +77,36 @@ class Settings(BaseSettings):
     feature_wealth_content: bool = False
     feature_wealth_monitoring: bool = False
 
-    # ── ADLS Gen2 (Data Lake) ──────────────────────────
-    adls_account_name: str = ""
-    adls_account_key: str = ""
-    adls_container_name: str = "netz-analysis"
-    adls_connection_string: str = ""
-
-    # ── Local Storage (dev) ────────────────────────────
+    # ── Storage ──────────────────────────────────────────────
+    # false = LocalStorageClient (filesystem). Default for dev and Milestone 2 prod.
+    # true = ADLSStorageClient (Azure Blob). Enable at Milestone 3 when data lake > 100GB.
     local_storage_root: str = ""
 
-    # ── Calibration ──────────────────────────────────────
+    # ── Calibration ──────────────────────────────────────────
     calibration_path: str = ""
 
-    # ── LLM concurrency ──────────────────────────────────
+    # ── LLM concurrency ──────────────────────────────────────
     # Controls asyncio.Semaphore slots for concurrent LLM calls in deep_review.
     # Resolved lazily at call-time; never captured at module level.
     netz_llm_concurrency: int = 5
+
+    # ── DEPRECATED (Azure services — kept for rollback, 2026-03-18) ──────────
+    storage_account_url: str = ""  # DEPRECATED: use LocalStorageClient
+    keyvault_url: str = ""  # DEPRECATED: use platform env vars (Railway secrets)
+    service_bus_namespace: str = ""  # DEPRECATED: use Redis pub/sub + BackgroundTasks
+    applicationinsights_connection_string: str = ""  # DEPRECATED: use structlog → stdout
+    azure_openai_endpoint: str = ""  # DEPRECATED: use OpenAI direct + retry
+    azure_openai_key: str = ""  # DEPRECATED
+    azure_openai_api_version: str = "2025-03-01-preview"  # DEPRECATED
+    azure_search_endpoint: str = ""  # DEPRECATED: use pgvector
+    azure_search_key: str = ""  # DEPRECATED
+    SEARCH_INDEX_NAME: str = ""  # DEPRECATED
+    SEARCH_CHUNKS_INDEX_NAME: str = "global-vector-chunks-v2"  # DEPRECATED
+    NETZ_ENV: str = "dev"  # DEPRECATED: search index prefixing no longer needed
+    adls_account_name: str = ""  # DEPRECATED: use LocalStorageClient
+    adls_account_key: str = ""  # DEPRECATED
+    adls_container_name: str = "netz-analysis"  # DEPRECATED
+    adls_connection_string: str = ""  # DEPRECATED
 
     @property
     def is_development(self) -> bool:
@@ -117,15 +115,18 @@ class Settings(BaseSettings):
     def prefixed_index(self, base_name: str) -> str:
         """Apply NETZ_ENV prefix to Azure Search index names.
 
-        Prevents cross-environment contamination (dev/staging/prod).
-        Production uses unprefixed names; dev/staging get ``{env}-`` prefix.
+        DEPRECATED: Azure Search replaced by pgvector (2026-03-18).
+        Kept for rollback compatibility.
         """
         if self.NETZ_ENV in ("prod", "production"):
             return base_name
         return f"{self.NETZ_ENV}-{base_name}"
 
     def canonical_search_chunks_index_name(self) -> str:
-        """Resolve the canonical env-scoped chunks index name."""
+        """Resolve the canonical env-scoped chunks index name.
+
+        DEPRECATED: Azure Search replaced by pgvector (2026-03-18).
+        """
         return self.prefixed_index(
             self.SEARCH_CHUNKS_INDEX_NAME or "global-vector-chunks-v2",
         )
