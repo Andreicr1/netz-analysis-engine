@@ -9,7 +9,7 @@
 	import { getContext } from "svelte";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
-	import type { DealType } from "$lib/types/api";
+	import type { DealStage, DealType } from "$lib/types/api";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -17,6 +17,17 @@
 
 	let selectedDeal = $state<Record<string, unknown> | null>(null);
 	let panelOpen = $derived(selectedDeal !== null);
+	const stageFilters: Array<{ value: DealStage | "ALL"; label: string }> = [
+		{ value: "ALL", label: "All stages" },
+		{ value: "INTAKE", label: "Intake" },
+		{ value: "QUALIFIED", label: "Qualified" },
+		{ value: "IC_REVIEW", label: "IC review" },
+		{ value: "CONDITIONAL", label: "Conditional" },
+		{ value: "APPROVED", label: "Approved" },
+		{ value: "CONVERTED_TO_ASSET", label: "Converted" },
+		{ value: "REJECTED", label: "Rejected" },
+		{ value: "CLOSED", label: "Closed" },
+	];
 
 	// ── Create Deal Dialog ──
 	let showCreate = $state(false);
@@ -72,12 +83,33 @@
 	function handleRowClick(row: Record<string, unknown>) {
 		selectedDeal = row;
 	}
+
+	function selectStageFilter(stage: DealStage | "ALL") {
+		goto(
+			stage === "ALL"
+				? `/funds/${data.fundId}/pipeline`
+				: `/funds/${data.fundId}/pipeline?stage=${encodeURIComponent(stage)}`,
+		);
+	}
 </script>
 
 <div class="flex h-full">
 	<div class="flex-1 p-6">
-		<div class="mb-4 flex items-center justify-between">
-			<h2 class="text-xl font-semibold text-[var(--netz-text-primary)]">Deal Pipeline</h2>
+		<div class="mb-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+			<div class="space-y-3">
+				<h2 class="text-xl font-semibold text-[var(--netz-text-primary)]">Deal Pipeline</h2>
+				<div class="flex flex-wrap gap-2">
+					{#each stageFilters as stage}
+						<Button
+							onclick={() => selectStageFilter(stage.value)}
+							size="sm"
+							variant="outline"
+						>
+							{stage.label}
+						</Button>
+					{/each}
+				</div>
+			</div>
 			<Button onclick={() => { resetForm(); showCreate = true; }}>New Deal</Button>
 		</div>
 

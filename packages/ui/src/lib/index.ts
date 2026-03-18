@@ -28,6 +28,7 @@ export { default as FormField } from "./components/FormField.svelte";
 // ── Netz Composites ─────────────────────────────────────────
 export { default as DataCard } from "./components/DataCard.svelte";
 export { default as StatusBadge } from "./components/StatusBadge.svelte";
+export type { StatusConfig, StatusResolver, StatusSeverity } from "./components/StatusBadge.svelte";
 export { default as EmptyState } from "./components/EmptyState.svelte";
 export { default as PDFDownload } from "./components/PDFDownload.svelte";
 export { default as LanguageToggle } from "./components/LanguageToggle.svelte";
@@ -44,6 +45,7 @@ export type { WealthAlert } from "./components/AlertFeed.svelte";
 export { default as SectionCard } from "./components/SectionCard.svelte";
 export { default as HeatmapTable } from "./components/HeatmapTable.svelte";
 export { default as PeriodSelector } from "./components/PeriodSelector.svelte";
+export { default as EntityContextHeader } from "./components/EntityContextHeader.svelte";
 
 // ── Layouts ─────────────────────────────────────────────────
 export { default as AppLayout } from "./layouts/AppLayout.svelte";
@@ -89,6 +91,8 @@ export { createSSEStream, createSSEWithSnapshot } from "./utils/sse-client.svelt
 export type { SSEConfig, SSEConnection, SSEStatus, SSEEvent, SSESnapshotConfig, SSESnapshotConnection } from "./utils/sse-client.svelte.js";
 export { createPoller } from "./utils/poller.svelte.js";
 export type { PollerConfig, PollerState } from "./utils/poller.svelte.js";
+export { createOptimisticMutation } from "./utils/optimistic.svelte.js";
+export type { OptimisticMutation, OptimisticMutationConfig } from "./utils/optimistic.svelte.js";
 export { canOpenSSE, registerSSE, unregisterSSE, getActiveSSECount } from "./utils/sse-registry.svelte.js";
 export {
 	formatAUM,

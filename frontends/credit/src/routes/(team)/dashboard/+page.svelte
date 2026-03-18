@@ -111,7 +111,13 @@
     <h2 class="mb-4 text-lg font-semibold text-[var(--netz-text-primary)]">
       Action Queue
     </h2>
-    <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    {#if data.taskInbox}
+      <div class="mt-4">
+        <TaskInbox tasks={data.taskInbox as TaskItem[]} />
+      </div>
+    {/if}
+
+    <div class="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       <DataCard
         label="Deals Awaiting IC"
         value={String(pipeline?.pending_ic ?? 0)}
@@ -133,12 +139,6 @@
         trend="flat"
       />
     </div>
-
-    {#if data.taskInbox}
-      <div class="mt-4">
-        <TaskInbox tasks={data.taskInbox as TaskItem[]} />
-      </div>
-    {/if}
   </section>
 
   <!-- Tier 2: Analytical -->
