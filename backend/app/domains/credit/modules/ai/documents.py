@@ -12,7 +12,7 @@ from ai_engine.ingestion.document_scanner import classify_documents, run_documen
 from ai_engine.ingestion.monitoring import run_daily_cycle
 from ai_engine.knowledge.knowledge_builder import build_manager_profiles
 from app.core.db.audit import write_audit_event
-from app.core.db.engine import get_db
+from app.core.db.session import get_sync_db_with_rls
 from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed, require_roles
 from app.domains.credit.modules.ai._helpers import (
     _envelope_from_rows,
@@ -52,7 +52,7 @@ def get_documents_classification(
     fund_id: uuid.UUID,
     path: str | None = Query(default=None),
     refresh: bool = Query(default=False, description="When true, triggers AI re-classification instead of returning cached results"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
     limit: int = Depends(_limit),
@@ -80,7 +80,7 @@ def get_documents_classification(
 def get_manager_profile(
     fund_id: uuid.UUID,
     manager: str,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> ManagerProfileResponse:
@@ -106,7 +106,7 @@ def get_manager_profile(
 @router.get("/alerts/daily", response_model=GovernanceAlertsResponse)
 def get_daily_alerts(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> GovernanceAlertsResponse:
     rows = list(
@@ -125,7 +125,7 @@ def get_daily_alerts(
 @router.post("/run-daily-cycle", response_model=DailyCycleRunResponse)
 def run_ai_daily_cycle(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN])),
@@ -144,7 +144,7 @@ def run_ai_daily_cycle(
 @router.post("/documents/ingest", response_model=DocumentsIngestResponse)
 def ingest_documents_index(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.COMPLIANCE, Role.GP])),
@@ -176,7 +176,7 @@ def get_documents_index(
     fund_id: uuid.UUID,
     limit: int = Query(default=200, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.COMPLIANCE, Role.GP, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> DocumentIndexResponse:
     docs = list(
@@ -252,7 +252,7 @@ def get_documents_index(
 def get_document_detail(
     doc_id: uuid.UUID,
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.COMPLIANCE, Role.GP, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> DocumentDetailResponse:
     doc = db.execute(

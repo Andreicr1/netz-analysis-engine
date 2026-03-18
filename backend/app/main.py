@@ -28,6 +28,7 @@ from app.domains.admin.routes.configs import router as admin_configs_router
 from app.domains.admin.routes.health import router as admin_health_router
 from app.domains.admin.routes.prompts import router as admin_prompts_router
 from app.domains.admin.routes.tenants import router as admin_tenants_router
+from app.domains.admin.routes.audit import router as admin_audit_router
 
 # Actions
 from app.domains.credit.actions.routes.actions import router as credit_actions_router
@@ -57,6 +58,8 @@ from app.domains.credit.documents.routes.uploads import router as credit_uploads
 # Modules — AI (aggregated router), Deals, Documents
 from app.domains.credit.modules.ai import (
     get_ai_router_diagnostics,
+)
+from app.domains.credit.modules.ai import (
     router as credit_ai_router,
 )
 from app.domains.credit.modules.deals.routes import router as credit_pipeline_deals_router
@@ -196,6 +199,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         pg_notifier.subscribe("config_changed", _on_config_changed)
         await pg_notifier.start()
+        app.state.pg_notifier = pg_notifier
         logger.info("PgNotifier started — listening for config changes")
 
     yield
@@ -222,6 +226,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Rate limiting (after CORS so preflight OPTIONS requests are not rate-limited)
+from app.core.middleware.rate_limit import RateLimitMiddleware  # noqa: E402
+
+app.add_middleware(RateLimitMiddleware)
 
 
 # ── Health endpoints ─────────────────────────────────────────
@@ -288,6 +297,7 @@ api_v1.include_router(admin_configs_router)
 api_v1.include_router(admin_tenants_router)
 api_v1.include_router(admin_prompts_router)
 api_v1.include_router(admin_health_router)
+api_v1.include_router(admin_audit_router)
 
 # ── Mount wealth domain routes ───────────────────────────────
 

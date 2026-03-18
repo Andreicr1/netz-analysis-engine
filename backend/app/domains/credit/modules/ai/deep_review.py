@@ -17,7 +17,7 @@ from ai_engine.validation.validation_schema import (
     ValidationSampleRequest,
     ValidationSampleResponse,
 )
-from app.core.db.engine import get_db
+from app.core.db.session import get_sync_db_with_rls
 from app.core.security.clerk_auth import Actor, require_roles
 from app.domains.credit.modules.ai._helpers import _utcnow
 from app.domains.credit.modules.ai.schemas import (
@@ -33,12 +33,12 @@ logger = logging.getLogger(__name__)
 
 
 @router.post("/pipeline/deals/{deal_id}/deep-review-v4")
-def trigger_deal_deep_review_v4(
+async def trigger_deal_deep_review_v4(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
     background_tasks: BackgroundTasks,
     body: DeepReviewV4Request | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.INVESTMENT_TEAM])),
 ) -> dict:
     """Kick off V4 deep review asynchronously."""
@@ -66,13 +66,23 @@ def trigger_deal_deep_review_v4(
 
     from app.services.azure.pipeline_dispatch import dispatch_deep_review
 
-    result = dispatch_deep_review(
+    result = await dispatch_deep_review(
         background_tasks=background_tasks,
         fund_id=fund_id,
         deal_id=deal_id,
         actor=actor,
         force=force,
     )
+
+    if result.get("status") == "already_in_progress":
+        return JSONResponse(
+            status_code=409,
+            content={
+                "dealId": str(deal_id),
+                "status": "already_in_progress",
+                "message": result.get("message", "A deep review is already running for this deal."),
+            },
+        )
 
     return JSONResponse(
         status_code=202,
@@ -89,7 +99,7 @@ def trigger_deal_deep_review_v4(
 async def trigger_pipeline_deep_review_v4(
     fund_id: uuid.UUID,
     body: DeepReviewV4Request | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.INVESTMENT_TEAM])),
 ) -> DeepReviewV4BatchResponse:
     """Run V4 deep review for ALL pipeline deals (async parallel DAG)."""
@@ -119,7 +129,7 @@ async def trigger_pipeline_deep_review_v4(
 def get_deep_review_status(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> dict:
     """Lightweight status check for deep review progress."""
@@ -158,7 +168,7 @@ def get_deep_review_status(
 def reset_deal_intelligence_status(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.INVESTMENT_TEAM])),
 ) -> dict:
     """Reset a stuck deal back to PENDING."""
@@ -203,7 +213,7 @@ def reset_deal_intelligence_status(
 @router.post("/pipeline/deals/reset-all-stuck")
 def reset_all_stuck_deals(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.INVESTMENT_TEAM])),
 ) -> dict:
     """Bulk-reset all deals stuck in PROCESSING back to PENDING."""
@@ -232,7 +242,7 @@ def reset_all_stuck_deals(
 def validate_deep_review_sample(
     fund_id: uuid.UUID,
     body: ValidationSampleRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.INVESTMENT_TEAM])),
 ) -> ValidationSampleResponse:
     """Run V4 deep review quality benchmark for up to 3 deals."""
@@ -250,7 +260,7 @@ def validate_deep_review_sample(
 def evaluate_ic_memo_framework(
     fund_id: uuid.UUID,
     body: EvalRunRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.INVESTMENT_TEAM])),
 ) -> EvalRunResponse:
     """Run the hybrid IC memo eval framework."""

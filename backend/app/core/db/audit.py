@@ -10,6 +10,8 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.db.models import AuditEvent
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,72 +38,67 @@ def _json_safe(value: Any) -> Any:
 async def write_audit_event(
     db: AsyncSession,
     *,
-    fund_id: uuid.UUID,
+    fund_id: uuid.UUID | None = None,
     actor_id: str | None = None,
     actor_roles: list[str] | None = None,
     request_id: str | None = None,
     action: str,
     entity_type: str,
     entity_id: str | uuid.UUID,
-    before: dict[str, Any] | None,
-    after: dict[str, Any] | None,
+    before: dict[str, Any] | None = None,
+    after: dict[str, Any] | None = None,
     access_level: str = "internal",
 ) -> None:
-    """Write an audit event to the database.
+    """Write an audit event to the audit_events table.
 
-    Logs the event details. The actual AuditEvent model insertion is
-    deferred until the model is available in this repo; for now we log
-    and flush a lightweight record if the model exists.
+    The caller must have an active RLS session (organization_id is set
+    via SET LOCAL by get_db_with_rls). The organization_id column is
+    populated automatically by OrganizationScopedMixin — it reads from
+    the current RLS context.
     """
-    try:
-        from app.core.db.models import AuditEvent
-
-        event = AuditEvent(
-            fund_id=fund_id,
-            access_level=access_level,
-            actor_id=actor_id or "unknown",
-            actor_roles=actor_roles or [],
-            action=action,
-            entity_type=entity_type,
-            entity_id=str(entity_id),
-            before=_json_safe(before),
-            after=_json_safe(after),
-            request_id=request_id or "unknown",
-            created_by=actor_id or "unknown",
-            updated_by=actor_id or "unknown",
-        )
-        db.add(event)
-        await db.flush()
-    except ImportError:
-        logger.info(
-            "audit: %s entity=%s/%s actor=%s",
-            action,
-            entity_type,
-            entity_id,
-            actor_id or "unknown",
-        )
+    event = AuditEvent(
+        fund_id=fund_id,
+        access_level=access_level,
+        actor_id=actor_id or "unknown",
+        actor_roles=actor_roles or [],
+        action=action,
+        entity_type=entity_type,
+        entity_id=str(entity_id),
+        before_state=_json_safe(before),
+        after_state=_json_safe(after),
+        request_id=request_id,
+        created_by=actor_id or "unknown",
+        updated_by=actor_id or "unknown",
+    )
+    db.add(event)
+    await db.flush()
+    logger.debug(
+        "audit: %s entity=%s/%s actor=%s",
+        action,
+        entity_type,
+        entity_id,
+        actor_id or "unknown",
+    )
 
 
 async def get_audit_log(
     db: AsyncSession,
     *,
-    fund_id: uuid.UUID,
-    entity_id: str | uuid.UUID,
+    fund_id: uuid.UUID | None = None,
+    entity_id: str | uuid.UUID | None = None,
     entity_type: str | None = None,
     limit: int = 200,
-) -> list:
-    """Retrieve audit events for a given entity."""
-    try:
-        from app.core.db.models import AuditEvent
+) -> list[AuditEvent]:
+    """Retrieve audit events scoped by RLS (organization_id)."""
+    stmt = select(AuditEvent)
 
-        stmt = select(AuditEvent).where(
-            AuditEvent.fund_id == fund_id,
-            AuditEvent.entity_id == str(entity_id),
-        )
-        if entity_type:
-            stmt = stmt.where(AuditEvent.entity_type == entity_type)
-        stmt = stmt.order_by(AuditEvent.created_at.asc()).limit(limit)
-        result = await db.execute(stmt)
-        return list(result.scalars().all())
-    except ImportError:
-        return []
+    if fund_id is not None:
+        stmt = stmt.where(AuditEvent.fund_id == fund_id)
+    if entity_id is not None:
+        stmt = stmt.where(AuditEvent.entity_id == str(entity_id))
+    if entity_type:
+        stmt = stmt.where(AuditEvent.entity_type == entity_type)
+
+    stmt = stmt.order_by(AuditEvent.created_at.desc()).limit(limit)
+    result = await db.execute(stmt)
+    return list(result.scalars().all())

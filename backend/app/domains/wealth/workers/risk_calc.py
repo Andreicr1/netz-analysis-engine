@@ -14,7 +14,7 @@ from datetime import date, timedelta
 
 import numpy as np
 import structlog
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +28,7 @@ from quant_engine.drift_service import DtwDriftResult, DtwDriftStatus, compute_d
 
 logger = structlog.get_logger()
 
+RISK_CALC_LOCK_ID = 900_007
 TRADING_DAYS_PER_YEAR = 252
 RISK_FREE_RATE_FALLBACK = 0.04  # Fallback ~4% if FRED DFF unavailable
 
@@ -440,86 +441,98 @@ async def run_risk_calc(as_of_date: date | None = None) -> dict[str, int]:
     results: dict[str, int] = {}
 
     async with async_session() as db:
-        # Fetch live risk-free rate from FRED DFF (once for all funds)
-        rfr = await get_risk_free_rate(db)
-        logger.info("Risk-free rate for this run", rate=rfr)
-
-        stmt = select(Fund).where(Fund.is_active == True, Fund.ticker.is_not(None))
-        result = await db.execute(stmt)
-        funds = result.scalars().all()
-
-        logger.info("Funds to process", count=len(funds))
-
-        eval_date = as_of_date or date.today()
-        # 3 years + 30-day buffer — same window used in compute_fund_risk_metrics
-        start_date = eval_date - timedelta(days=3 * 365 + 30)
-
-        all_fund_ids = [fund.fund_id for fund in funds]
-
-        # Batch 1: resolve return_type for every fund — 1 query instead of N
-        return_type_by_fund = await _batch_resolve_return_types(
-            db, all_fund_ids, start_date, eval_date
+        lock_result = await db.execute(
+            text(f"SELECT pg_try_advisory_lock({RISK_CALC_LOCK_ID})")
         )
-        logger.info("Return types resolved", n_funds=len(return_type_by_fund))
-
-        # Batch 2: fetch all NAV returns — at most 2 queries instead of N
-        nav_returns_by_fund = await _batch_fetch_nav_returns(
-            db, all_fund_ids, return_type_by_fund, start_date, eval_date
-        )
-        logger.info("NAV returns batch-fetched", n_funds=len(nav_returns_by_fund))
-
-        # Pass 1: compute standard risk metrics from pre-fetched data — no DB queries in loop
-        computed: list[tuple[Fund, dict]] = []
-        for fund in funds:
-            fid_str = str(fund.fund_id)
-            returns_raw = nav_returns_by_fund.get(fid_str, [])
-            metrics = _compute_metrics_from_returns(fund, returns_raw, eval_date, risk_free_rate=rfr)
-            if metrics is None:
-                results[fund.ticker or fid_str] = 0
-                continue
-            computed.append((fund, metrics))
-
-        # Pass 2: compute DTW drift scores per block (reuses DB session, no extra query per fund)
-        logger.info("Computing DTW drift scores", n_funds=len(computed))
-        dtw_scores = await _compute_block_dtw_scores(db, computed, eval_date)
-        logger.info("DTW drift scores computed", n_scores=len(dtw_scores))
-
-        # Pass 3: upsert metrics + dtw_drift_score (all in one transaction)
+        acquired = lock_result.scalar()
+        if not acquired:
+            logger.info("worker_skipped", reason="another instance running")
+            return {"status": "skipped", "reason": "risk calculation already running"}
         try:
-            for fund, metrics in computed:
+            # Fetch live risk-free rate from FRED DFF (once for all funds)
+            rfr = await get_risk_free_rate(db)
+            logger.info("Risk-free rate for this run", rate=rfr)
+
+            stmt = select(Fund).where(Fund.is_active == True, Fund.ticker.is_not(None))
+            result = await db.execute(stmt)
+            funds = result.scalars().all()
+
+            logger.info("Funds to process", count=len(funds))
+
+            eval_date = as_of_date or date.today()
+            # 3 years + 30-day buffer — same window used in compute_fund_risk_metrics
+            start_date = eval_date - timedelta(days=3 * 365 + 30)
+
+            all_fund_ids = [fund.fund_id for fund in funds]
+
+            # Batch 1: resolve return_type for every fund — 1 query instead of N
+            return_type_by_fund = await _batch_resolve_return_types(
+                db, all_fund_ids, start_date, eval_date
+            )
+            logger.info("Return types resolved", n_funds=len(return_type_by_fund))
+
+            # Batch 2: fetch all NAV returns — at most 2 queries instead of N
+            nav_returns_by_fund = await _batch_fetch_nav_returns(
+                db, all_fund_ids, return_type_by_fund, start_date, eval_date
+            )
+            logger.info("NAV returns batch-fetched", n_funds=len(nav_returns_by_fund))
+
+            # Pass 1: compute standard risk metrics from pre-fetched data — no DB queries in loop
+            computed: list[tuple[Fund, dict]] = []
+            for fund in funds:
                 fid_str = str(fund.fund_id)
-                dtw_result = dtw_scores.get(
-                    fid_str,
-                    DtwDriftResult(score=None, status=DtwDriftStatus.degraded, reason="fund not in dtw_scores"),
-                )
-                # Use score_or_default so DB column always gets a float,
-                # but the decision to fall back is explicit, not silent.
-                metrics["dtw_drift_score"] = round(dtw_result.score_or_default(0.0), 6)
-                if not dtw_result.is_usable:
-                    logger.warning(
-                        "dtw_drift_degraded",
-                        fund_id=fid_str,
-                        ticker=fund.ticker,
-                        status=dtw_result.status.value,
-                        reason=dtw_result.reason,
+                returns_raw = nav_returns_by_fund.get(fid_str, [])
+                metrics = _compute_metrics_from_returns(fund, returns_raw, eval_date, risk_free_rate=rfr)
+                if metrics is None:
+                    results[fund.ticker or fid_str] = 0
+                    continue
+                computed.append((fund, metrics))
+
+            # Pass 2: compute DTW drift scores per block (reuses DB session, no extra query per fund)
+            logger.info("Computing DTW drift scores", n_funds=len(computed))
+            dtw_scores = await _compute_block_dtw_scores(db, computed, eval_date)
+            logger.info("DTW drift scores computed", n_scores=len(dtw_scores))
+
+            # Pass 3: upsert metrics + dtw_drift_score (all in one transaction)
+            try:
+                for fund, metrics in computed:
+                    fid_str = str(fund.fund_id)
+                    dtw_result = dtw_scores.get(
+                        fid_str,
+                        DtwDriftResult(score=None, status=DtwDriftStatus.degraded, reason="fund not in dtw_scores"),
                     )
+                    # Use score_or_default so DB column always gets a float,
+                    # but the decision to fall back is explicit, not silent.
+                    metrics["dtw_drift_score"] = round(dtw_result.score_or_default(0.0), 6)
+                    if not dtw_result.is_usable:
+                        logger.warning(
+                            "dtw_drift_degraded",
+                            fund_id=fid_str,
+                            ticker=fund.ticker,
+                            status=dtw_result.status.value,
+                            reason=dtw_result.reason,
+                        )
 
-                upsert = pg_insert(FundRiskMetrics).values(**metrics)
-                upsert = upsert.on_conflict_do_update(
-                    index_elements=["instrument_id", "calc_date"],
-                    set_={k: upsert.excluded[k] for k in metrics if k not in ("instrument_id", "calc_date")},
-                )
-                await db.execute(upsert)
-                results[fund.ticker or str(fund.fund_id)] = 1
-                logger.info("Risk metrics staged", ticker=fund.ticker, dtw_drift=metrics["dtw_drift_score"])
+                    upsert = pg_insert(FundRiskMetrics).values(**metrics)
+                    upsert = upsert.on_conflict_do_update(
+                        index_elements=["instrument_id", "calc_date"],
+                        set_={k: upsert.excluded[k] for k in metrics if k not in ("instrument_id", "calc_date")},
+                    )
+                    await db.execute(upsert)
+                    results[fund.ticker or str(fund.fund_id)] = 1
+                    logger.info("Risk metrics staged", ticker=fund.ticker, dtw_drift=metrics["dtw_drift_score"])
 
-            # Single commit for the entire batch — atomic and WAL-efficient
-            await db.commit()
-            logger.info("Risk metrics batch committed", funds_staged=len(computed))
-        except Exception:
-            await db.rollback()
-            logger.exception("Risk metrics batch failed — transaction rolled back")
-            raise
+                # Single commit for the entire batch — atomic and WAL-efficient
+                await db.commit()
+                logger.info("Risk metrics batch committed", funds_staged=len(computed))
+            except Exception:
+                await db.rollback()
+                logger.exception("Risk metrics batch failed — transaction rolled back")
+                raise
+        finally:
+            await db.execute(
+                text(f"SELECT pg_advisory_unlock({RISK_CALC_LOCK_ID})")
+            )
 
     total = sum(results.values())
     logger.info("Risk calculation complete", funds_computed=total)

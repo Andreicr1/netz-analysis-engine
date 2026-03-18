@@ -63,12 +63,34 @@ async def _check_search() -> dict:
     return {"name": "Azure Search", "status": "ok", "latency_ms": None, "error": "Check not implemented"}
 
 
+def _check_pg_notifier(request: Request) -> dict:
+    """Check PgNotifier listener connection state."""
+    from app.core.config.pg_notify import PgNotifier
+
+    notifier: PgNotifier | None = getattr(request.app.state, "pg_notifier", None)
+    if notifier is None:
+        return {
+            "name": "PgNotifier",
+            "status": "disabled",
+            "connected": False,
+            "last_reconnect_at": None,
+        }
+    reconnect_ts = notifier.last_reconnect_at
+    return {
+        "name": "PgNotifier",
+        "status": "ok" if notifier.is_connected else "disconnected",
+        "connected": notifier.is_connected,
+        "last_reconnect_at": reconnect_ts.isoformat() if reconnect_ts else None,
+    }
+
+
 @router.get("/services")
 async def get_service_health(
+    request: Request,
     db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ):
-    """Service status -- PostgreSQL, Redis, ADLS, Azure Search."""
+    """Service status -- PostgreSQL, Redis, ADLS, Azure Search, PgNotifier."""
     results = await asyncio.gather(
         _check_postgres(db),
         _check_redis(),
@@ -82,6 +104,9 @@ async def get_service_health(
             services.append({"name": "unknown", "status": "down", "latency_ms": None, "error": str(r)})
         else:
             services.append(r)
+
+    # PgNotifier is synchronous — no await needed
+    services.append(_check_pg_notifier(request))
     return services
 
 

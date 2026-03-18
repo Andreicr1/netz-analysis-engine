@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.db.engine import get_db
+from app.core.db.session import get_sync_db_with_rls
 from app.core.security.clerk_auth import Actor, require_roles
 from app.domains.credit.modules.ai._helpers import (
     _limit,
@@ -45,7 +45,7 @@ router = APIRouter()
 @router.get("/pipeline/deals", response_model=PipelineDealsResponse)
 def list_pipeline_deals(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     limit: int = Depends(_limit),
     offset: int = Depends(_offset),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
@@ -134,7 +134,7 @@ def list_pipeline_deals(
 def get_pipeline_deal_detail(
     deal_id: uuid.UUID,
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> PipelineDealDetailResponse:
     deal = db.execute(
@@ -441,7 +441,7 @@ def get_pipeline_deal_detail(
 @router.get("/pipeline/alerts", response_model=PipelineAlertsResponse)
 def get_pipeline_alerts(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> PipelineAlertsResponse:
     rows = list(

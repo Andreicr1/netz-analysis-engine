@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
-from app.core.db.engine import get_db
+from app.core.db.session import get_sync_db_with_rls
 from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed
 from app.domains.credit.modules.documents import service
 from app.domains.credit.modules.documents.schemas import (
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 def create_document(
     fund_id: uuid.UUID,
     payload: DocumentCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
 ) -> DocumentOut:
@@ -36,7 +36,7 @@ def create_document_version(
     fund_id: uuid.UUID,
     document_id: uuid.UUID,
     payload: DocumentVersionCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
 ) -> DocumentVersionOut:

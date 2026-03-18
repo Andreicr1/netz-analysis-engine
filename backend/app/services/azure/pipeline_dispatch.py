@@ -132,7 +132,7 @@ def dispatch_extraction(
 
     from ai_engine.pipeline.unified_pipeline import run_extraction_pipeline
 
-    def _run() -> None:
+    async def _run() -> None:
         try:
             run_extraction_pipeline(
                 source=source,
@@ -145,8 +145,13 @@ def dispatch_extraction(
                 no_index=no_index,
                 job_id=job_id,
             )
-        except Exception:
+        except Exception as exc:
             logger.error("Extraction pipeline failed job=%s source=%s", job_id, source, exc_info=True)
+            try:
+                from app.core.jobs.tracker import publish_terminal_event
+                await publish_terminal_event(job_id, "error", {"error": str(exc)})
+            except Exception:
+                logger.warning("Failed to publish terminal event for job=%s", job_id, exc_info=True)
 
     background_tasks.add_task(_run)
     logger.info("Extraction dispatched via BackgroundTasks job=%s", job_id)
@@ -209,8 +214,8 @@ def dispatch_ingest(
                 run_ai_analysis=True,
                 actor_id=actor_id,
             )
-        except Exception:
-            logger.error("Full pipeline ingest failed for fund %s", fund_id, exc_info=True)
+        except Exception as exc:
+            logger.error("Full pipeline ingest failed for fund %s: %s", fund_id, exc, exc_info=True)
 
     background_tasks.add_task(_run)
     logger.info("Ingest dispatched via BackgroundTasks fund=%s", fund_id)
@@ -226,7 +231,7 @@ def dispatch_ingest(
 
 # ── Deep Review (Memo Generation) ───────────────────────────────────
 
-def dispatch_deep_review(
+async def dispatch_deep_review(
     *,
     background_tasks: BackgroundTasks,
     fund_id: uuid.UUID,
@@ -234,6 +239,29 @@ def dispatch_deep_review(
     actor: str,
     force: bool,
 ) -> dict[str, Any]:
+    # ── Advisory lock: prevent concurrent deep reviews for same deal ──
+    lock_key = f"deep_review:{deal_id}"
+    lock_ttl = 7200  # 2 hours — deep reviews can be long-running
+    lock_acquired = False
+    try:
+        import redis.asyncio as aioredis
+
+        from app.core.jobs.tracker import get_redis_pool
+
+        rconn = aioredis.Redis(connection_pool=get_redis_pool())
+        lock_acquired = bool(await rconn.set(lock_key, "1", nx=True, ex=lock_ttl))
+    except Exception as exc:
+        logger.warning("Redis unavailable for deep_review advisory lock — proceeding without guard: %s", exc)
+        lock_acquired = True  # degrade open
+
+    if not lock_acquired:
+        logger.warning("Deep review already in progress for deal=%s — rejecting dispatch", deal_id)
+        return {
+            "status": "already_in_progress",
+            "dealId": str(deal_id),
+            "message": "A deep review is already running for this deal.",
+        }
+
     payload = {
         "fund_id": str(fund_id),
         "deal_id": str(deal_id),
@@ -378,3 +406,14 @@ async def _execute_deep_review_lifecycle(
             )
         finally:
             db_fallback.close()
+
+    # ── Phase 4: Release advisory lock ─────────────────────────────
+    try:
+        import redis.asyncio as aioredis
+
+        from app.core.jobs.tracker import get_redis_pool
+
+        rconn = aioredis.Redis(connection_pool=get_redis_pool())
+        await rconn.delete(f"deep_review:{deal_id}")
+    except Exception:
+        log.warning("Failed to clear deep_review advisory lock for deal_id=%s", deal_id)

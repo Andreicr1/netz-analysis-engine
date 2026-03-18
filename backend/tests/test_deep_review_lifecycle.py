@@ -278,9 +278,21 @@ async def test_failure_after_artifact_persist_still_writes_terminal(monkeypatch)
     assert fallback_session.executions[0]["params"]["s"] == "FAILED"
 
 
-def test_dispatch_deep_review_background_tasks_path(monkeypatch):
+@pytest.mark.asyncio
+async def test_dispatch_deep_review_background_tasks_path(monkeypatch):
     """dispatch_deep_review schedules the lifecycle coroutine via BackgroundTasks."""
     monkeypatch.setattr(pipeline_dispatch, "_use_service_bus", lambda: False)
+
+    # Mock Redis so advisory lock is always acquired
+    class _FakeRedis:
+        async def set(self, *a, **kw):
+            return True
+
+        async def delete(self, *a, **kw):
+            pass
+
+    import redis.asyncio as aioredis
+    monkeypatch.setattr(aioredis, "Redis", lambda **kw: _FakeRedis())
 
     class DummyBackgroundTasks:
         def __init__(self):
@@ -290,7 +302,7 @@ def test_dispatch_deep_review_background_tasks_path(monkeypatch):
             self.tasks.append(func)
 
     bg = DummyBackgroundTasks()
-    result = pipeline_dispatch.dispatch_deep_review(
+    result = await pipeline_dispatch.dispatch_deep_review(
         background_tasks=bg,
         fund_id=_FUND_ID,
         deal_id=_DEAL_ID,

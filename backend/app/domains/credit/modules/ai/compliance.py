@@ -14,7 +14,7 @@ from ai_engine.knowledge.linker import (
     get_obligation_status_snapshot,
     run_cross_container_linking,
 )
-from app.core.db.engine import get_db
+from app.core.db.session import get_sync_db_with_rls
 from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed, require_roles
 from app.domains.credit.modules.ai._helpers import (
     _envelope_from_rows,
@@ -36,7 +36,7 @@ router = APIRouter()
 def get_obligation_register(
     fund_id: uuid.UUID,
     refresh: bool = Query(default=False, description="When true, triggers AI extraction instead of returning cached results"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
     limit: int = Depends(_limit),
@@ -77,7 +77,7 @@ def get_obligation_register(
 def run_linker(
     fund_id: uuid.UUID,
     as_of: dt.datetime | None = Query(default=None),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM])),
@@ -91,7 +91,7 @@ def get_linker_links(
     fund_id: uuid.UUID,
     entity_id: uuid.UUID,
     as_of: dt.datetime | None = Query(default=None),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> dict:
     effective_as_of = as_of or _utcnow()
@@ -102,7 +102,7 @@ def get_linker_links(
 def get_linker_obligation_status(
     fund_id: uuid.UUID,
     as_of: dt.datetime | None = Query(default=None),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> dict:
     effective_as_of = as_of or _utcnow()

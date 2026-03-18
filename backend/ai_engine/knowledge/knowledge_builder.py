@@ -5,12 +5,16 @@ import re
 import uuid
 from collections import defaultdict
 
+import structlog
 from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
 from app.domains.credit.modules.ai.models import DocumentRegistry, ManagerProfile
 from app.domains.credit.modules.documents.models import DocumentChunk, DocumentVersion
 from app.services.search_index import AzureSearchMetadataClient
+
+_logger = structlog.get_logger()
+
 
 
 def _now_utc() -> dt.datetime:
@@ -228,6 +232,7 @@ def build_manager_profiles(
                 {
                     "id": f"ai-manager-profile-{item.id}",
                     "fund_id": str(item.fund_id),
+                    "organization_id": str(item.organization_id),
                     "title": f"Manager Profile - {item.name}",
                     "content": f"{item.strategy} | {item.region} | {item.reporting_cadence}",
                     "doc_type": "AI_MANAGER_PROFILE",
@@ -239,7 +244,12 @@ def build_manager_profiles(
             AzureSearchMetadataClient(
                 caller="knowledge_builder",
             ).upsert_documents(items=search_docs)
-        except Exception:
+        except Exception as exc:
+            _logger.warning(
+                "knowledge_builder.search_upsert_failed",
+                exc_info=True,
+                error=str(exc),
+            )
             for item in saved:
                 item.data_quality = "DEGRADED"
                 item.updated_by = actor_id

@@ -64,11 +64,10 @@ class ICMemo(Base, IdMixin, OrganizationScopedMixin, AuditMetaMixin):
         comment="Append-only log of condition resolution events",
     )
 
-    # ── Adobe Sign e-signature fields ─────────────────────────────
+    # LEGACY: adobe_sign module removed — column retained for DB compat
     adobe_sign_agreement_id: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True,
-        comment="Adobe Sign agreement ID for committee voting",
     )
 
     committee_members: Mapped[list | None] = mapped_column(

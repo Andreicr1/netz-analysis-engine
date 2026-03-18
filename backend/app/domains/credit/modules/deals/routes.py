@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
-from app.core.db.engine import get_db
+from app.core.db.session import get_sync_db_with_rls
 from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed
 from app.domains.credit.modules.deals import service
 from app.domains.credit.modules.deals.models import DealDocument, PipelineDeal
@@ -48,7 +48,7 @@ def _offset(offset: int = Query(0, ge=0, le=10_000)) -> int:
 @router.get("", response_model=Page[DealOut])
 def list_deals(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     limit: int = Depends(_limit),
     offset: int = Depends(_offset),
     stage: str | None = Query(default=None),
@@ -116,7 +116,7 @@ def _build_and_save_deal_context(deal: PipelineDeal, payload: DealCreate) -> Non
 def create_deal(
     fund_id: uuid.UUID,
     payload: DealCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
 ) -> DealOut:
@@ -163,7 +163,7 @@ async def upload_deal_document(
     deal_id: uuid.UUID,
     category: str = Query(default="other"),
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
 ):
@@ -246,7 +246,7 @@ def patch_deal_context(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
     payload: DealContextPatch,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
 ):
@@ -327,7 +327,7 @@ def patch_deal_stage(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
     payload: DealStagePatch,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
 ) -> DealOut:
@@ -343,7 +343,7 @@ def create_decision(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
     payload: DealDecisionCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
 ) -> DealDecisionOut:
@@ -360,7 +360,7 @@ def create_decision(
 def run_qualification(
     fund_id: uuid.UUID,
     payload: QualificationRunRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
 ) -> QualificationRunResponse:
@@ -378,7 +378,7 @@ def approve_deal(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
     payload: DealApproveRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
 ) -> DealApproveOut:
@@ -403,7 +403,7 @@ def approve_deal(
 def list_pipeline_deal_events(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     limit: int = Depends(_limit),
     offset: int = Depends(_offset),
 ) -> Page[DealEventOut]:

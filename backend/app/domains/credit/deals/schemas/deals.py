@@ -70,7 +70,6 @@ class ICMemoOut(BaseModel):
     memo_blob_url: str | None
     condition_history: list[dict[str, Any]]
 
-    adobe_sign_agreement_id: str | None = None
     committee_members: list[dict[str, Any]] | None = None
     committee_votes: list[dict[str, Any]] | None = None
     esignature_status: str | None = None

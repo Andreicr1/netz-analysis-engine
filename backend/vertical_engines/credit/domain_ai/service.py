@@ -46,8 +46,8 @@ def _retrieve_context(
         query_text = f"{deal_name} credit analysis risk assessment"
         emb = generate_embeddings([query_text])
         query_vector = emb.vectors[0] if emb.vectors else None
-    except Exception:
-        logger.warning("domain_ai.retrieve_context.embedding_failed")
+    except Exception as exc:
+        logger.warning("domain_ai.retrieve_context.embedding_failed", error=str(exc), exc_info=True)
         query_vector = None
         query_text = deal_name
 
@@ -59,8 +59,8 @@ def _retrieve_context(
             query_vector=query_vector,
             top=max_chunks,
         )
-    except Exception:
-        logger.warning("domain_ai.retrieve_context.search_failed", deal_id=str(deal_id), exc_info=True)
+    except Exception as exc:
+        logger.warning("domain_ai.retrieve_context.search_failed", deal_id=str(deal_id), error=str(exc), exc_info=True)
         return ""
 
     if not chunks:
@@ -171,8 +171,8 @@ def run_portfolio_analysis(
 
     try:
         output = _call_gpt(system, user)
-    except Exception:
-        logger.error("domain_ai.portfolio_analysis.gpt_failed", deal_id=str(deal_id), exc_info=True)
+    except Exception as exc:
+        logger.error("domain_ai.portfolio_analysis.gpt_failed", deal_id=str(deal_id), error=str(exc), exc_info=True)
         return {}
 
     # Writeback to deals
@@ -219,8 +219,8 @@ def _get_portfolio_financials(
 
         return cashflow_summary, performance_summary
 
-    except Exception:
-        logger.warning("domain_ai.portfolio_financials.failed", deal_id=str(deal_id), exc_info=True)
+    except Exception as exc:
+        logger.warning("domain_ai.portfolio_financials.failed", deal_id=str(deal_id), error=str(exc), exc_info=True)
         return "", ""
 
 
@@ -267,8 +267,8 @@ def _write_jsonb_column(
             {"data": json.dumps(data), "id": str(entity_id)},
         )
         db.flush()
-    except Exception:
-        logger.debug("domain_ai.jsonb_column_missing", table=table, column=column, exc_info=True)
+    except Exception as exc:
+        logger.debug("domain_ai.jsonb_column_missing", table=table, column=column, error=str(exc), exc_info=True)
 
 
 # ── Unified entrypoint ───────────────────────────────────────────────

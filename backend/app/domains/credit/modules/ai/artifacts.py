@@ -8,7 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.db.engine import get_db
+from app.core.db.session import get_sync_db_with_rls
 from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed, require_roles
 from app.domains.credit.modules.ai._helpers import _utcnow
 from app.domains.credit.modules.ai.models import DealUnderwritingArtifact
@@ -31,7 +31,7 @@ _MARKETING_PRES_CONTAINER = "netz-fund-artifacts"
 def get_deal_evidence_governance(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ):
     """Return evidence governance summary for a pipeline deal."""
@@ -99,7 +99,7 @@ def get_deal_evidence_governance(
 def get_deal_underwriting_artifact(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ):
     """Return the active unified underwriting artifact for a pipeline deal."""
@@ -134,7 +134,7 @@ def get_deal_underwriting_artifact(
 def get_deal_underwriting_artifact_history(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.AUDITOR])),
 ):
     """Return all underwriting artifact versions for audit trail."""
@@ -175,7 +175,7 @@ def get_deal_underwriting_artifact_history(
 def get_deal_critical_gaps(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> CriticalGapsResponse:
     """Return structured critical_gaps (approval-blocking data gaps) for a pipeline deal.
@@ -262,7 +262,7 @@ def generate_fact_sheet(
     fund_id: uuid.UUID,
     request: Request,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP])),
@@ -402,7 +402,7 @@ def generate_marketing_presentation(
     fund_id: uuid.UUID,
     request: Request,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP])),

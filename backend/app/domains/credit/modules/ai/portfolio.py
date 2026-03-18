@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.db.engine import get_db
+from app.core.db.session import get_sync_db_with_rls
 from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed, require_roles
 from app.domains.credit.deals.models.deals import Deal as PortfolioDeal
 from app.domains.credit.modules.ai._helpers import _utcnow
@@ -61,7 +61,7 @@ router = APIRouter()
 def ingest_portfolio_intelligence(
     fund_id: uuid.UUID,
     as_of: dt.datetime | None = Query(default=None),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM])),
@@ -83,7 +83,7 @@ def ingest_portfolio_intelligence(
 @router.get("/portfolio/investments", response_model=PortfolioInvestmentsResponse)
 def list_portfolio_investments(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> PortfolioInvestmentsResponse:
     investments = list(
@@ -128,7 +128,7 @@ def list_portfolio_investments(
 def get_portfolio_investment_detail(
     investment_id: uuid.UUID,
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> PortfolioInvestmentDetailResponse:
     investment = db.execute(
@@ -266,7 +266,7 @@ def get_portfolio_investment_detail(
 @router.get("/portfolio/alerts", response_model=PortfolioAlertsResponse)
 def list_portfolio_alerts(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> PortfolioAlertsResponse:
     drift_rows = list(
@@ -386,7 +386,7 @@ def trigger_portfolio_review(
     fund_id: uuid.UUID,
     investment_id: uuid.UUID,
     body: DeepReviewRequest | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.INVESTMENT_TEAM])),
 ) -> PortfolioReviewResponse:
     """Run AI periodic review for a single active investment."""
@@ -399,7 +399,7 @@ def trigger_portfolio_review(
 def trigger_portfolio_batch_review(
     fund_id: uuid.UUID,
     body: DeepReviewRequest | None = None,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.INVESTMENT_TEAM])),
 ) -> PortfolioBatchReviewResponse:
     """Run AI periodic review for ALL active investments."""
@@ -412,7 +412,7 @@ def trigger_portfolio_batch_review(
 def list_investment_reviews(
     fund_id: uuid.UUID,
     investment_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> PeriodicReviewsListResponse:
     """List all periodic reviews for an investment, newest first."""
@@ -438,7 +438,7 @@ def list_investment_reviews(
 def get_latest_investment_review(
     fund_id: uuid.UUID,
     investment_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> PeriodicReviewResponse:
     """Retrieve the latest periodic review for an investment."""
@@ -467,7 +467,7 @@ def get_latest_investment_review(
 def get_portfolio_deal_monitoring(
     fund_id: uuid.UUID,
     investment_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> PortfolioDealMonitoringResponse:
     """Full portfolio deal monitoring record (capital-at-risk)."""
@@ -635,7 +635,7 @@ def get_periodic_review_pdf(
     fund_id: uuid.UUID,
     investment_id: uuid.UUID,
     review_id: uuid.UUID | None = Query(default=None, description="Optional specific review ID; defaults to latest"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> PeriodicReviewPdfResponse:
     """Generate and return a signed URL for the Periodic Review PDF."""

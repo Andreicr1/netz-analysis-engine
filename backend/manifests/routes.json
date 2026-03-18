@@ -26,6 +26,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/admin/audit/",
+    "name": "list_audit_events"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/admin/configs/",
     "name": "list_configs"
   },

@@ -4,15 +4,18 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
+import structlog
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.db.engine import async_session_factory, get_db
+from app.core.db.session import get_sync_db_with_rls
 from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed, require_roles
 from app.domains.credit.modules.ai.schemas import PipelineIngestResponse
 from app.shared.enums import Role
 from vertical_engines.credit.pipeline import run_pipeline_ingest
+
+logger = structlog.get_logger()
 
 router = APIRouter()
 
@@ -20,11 +23,15 @@ router = APIRouter()
 @router.post("/pipeline/ingest", response_model=PipelineIngestResponse)
 def ingest_pipeline_intelligence(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM])),
 ) -> PipelineIngestResponse:
+    # LEGACY: sync path kept for backward compat — prefer /pipeline/ingest/full
+    logger.warning(
+        "DEPRECATED: /pipeline/ingest is a legacy sync path — use /pipeline/ingest/full for canonical pipeline dispatch"
+    )
     result = run_pipeline_ingest(db, fund_id=fund_id, actor_id=actor.actor_id)
     as_of = dt.datetime.fromisoformat(str(result["asOf"]))
     return PipelineIngestResponse(
@@ -155,7 +162,7 @@ def list_extraction_sources(
 @router.get("/pipeline/ingest/jobs/latest")
 def get_latest_ingest_job(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ):
     """Return the most recent PipelineIngestJob for the given fund."""
@@ -179,7 +186,7 @@ def get_latest_ingest_job(
 def get_ingest_job(
     fund_id: uuid.UUID,
     job_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ):
     """Return a specific PipelineIngestJob by ID."""
@@ -208,7 +215,7 @@ def trigger_deal_bootstrap(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.INVESTMENT_TEAM])),
@@ -246,16 +253,14 @@ def trigger_deal_bootstrap(
     if not blob_pairs:
         raise HTTPException(status_code=404, detail="No PDF documents found for this deal.")
 
-    def _run_bootstrap():
-        import asyncio
-
+    async def _run_bootstrap():
         from ai_engine.extraction.entity_bootstrap import async_bootstrap_deal
 
-        return asyncio.run(async_bootstrap_deal(
+        return await async_bootstrap_deal(
             deal_name=deal_name,
             blob_paths=blob_pairs,
             max_pdfs=5,
-        ))
+        )
 
     background_tasks.add_task(_run_bootstrap)
 
@@ -273,7 +278,7 @@ def trigger_deal_reanalyze(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.INVESTMENT_TEAM])),
@@ -293,10 +298,11 @@ def trigger_deal_reanalyze(
         raise HTTPException(status_code=404, detail="Pipeline deal not found.")
 
     def _run_reanalyze():
+        from app.core.db.session import sync_session_factory
         from app.domains.credit.modules.deals.ai_mode import resolve_ai_mode
         from vertical_engines.credit.domain_ai import run_deal_ai_analysis
 
-        with async_session_factory() as session:
+        with sync_session_factory() as session:
             ctx = resolve_ai_mode(session, pipeline_deal_id=deal_id)
             run_deal_ai_analysis(
                 session,
@@ -306,6 +312,7 @@ def trigger_deal_reanalyze(
                 deal_name=ctx.deal_name,
                 sponsor_name=ctx.sponsor_name,
             )
+            session.commit()
 
     background_tasks.add_task(_run_reanalyze)
 

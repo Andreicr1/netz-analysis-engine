@@ -59,8 +59,8 @@ def analyze_sponsor(
             sponsor_evidence_text=sponsor_evidence_text,
             sponsor_chunks=sponsor_chunks,
         )
-    except Exception:
-        logger.error("sponsor_analysis_failed", exc_info=True)
+    except Exception as exc:
+        logger.error("sponsor_analysis_failed", error=str(exc), exc_info=True)
         return _default_output("Sponsor analysis encountered an unexpected error.")
 
 

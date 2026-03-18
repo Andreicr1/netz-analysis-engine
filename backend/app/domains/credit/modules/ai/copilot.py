@@ -13,7 +13,7 @@ import app.domains.credit.modules.ai.service as service
 from ai_engine.openai_client import create_completion as _llm_completion
 from ai_engine.prompts import prompt_registry
 from app.core.db.audit import write_audit_event
-from app.core.db.engine import get_db
+from app.core.db.session import get_sync_db_with_rls
 from app.core.middleware.audit import get_request_id
 from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed, require_roles
 from app.domains.credit.ai.services.agent_context import AgentUIContext, build_agent_runtime_context
@@ -51,7 +51,7 @@ router = APIRouter()
 @router.get("/activity", response_model=Page[AIActivityItemOut])
 def activity(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     limit: int = Depends(_limit),
     offset: int = Depends(_offset),
     _role_guard: Actor = Depends(require_roles([Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
@@ -110,7 +110,7 @@ def activity(
 def create_query(
     fund_id: uuid.UUID,
     payload: AIQueryCreate,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
 ):
@@ -130,7 +130,7 @@ def create_query(
 @router.get("/history", response_model=Page[AIQueryOut])
 def history(
     fund_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     limit: int = Depends(_limit),
     offset: int = Depends(_offset),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
@@ -143,7 +143,7 @@ def history(
 def retrieve(
     fund_id: uuid.UUID,
     payload: AIRetrieveRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _role_guard: Actor = Depends(require_roles([Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ):
@@ -241,7 +241,7 @@ def retrieve(
 def answer(
     fund_id: uuid.UUID,
     payload: AIAnswerRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ):

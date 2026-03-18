@@ -16,7 +16,7 @@ from datetime import date, timedelta
 
 import numpy as np
 import structlog
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +35,7 @@ from quant_engine.regime_service import detect_regime
 
 logger = structlog.get_logger()
 
+PORTFOLIO_EVAL_LOCK_ID = 900_008
 PROFILES = ["conservative", "moderate", "growth"]
 
 
@@ -258,51 +259,63 @@ async def run_portfolio_eval() -> dict[str, str]:
 
     try:
         async with async_session() as db:
-            # Load config once for all profiles
-            config = await _load_worker_config(db)
+            lock_result = await db.execute(
+                text(f"SELECT pg_try_advisory_lock({PORTFOLIO_EVAL_LOCK_ID})")
+            )
+            acquired = lock_result.scalar()
+            if not acquired:
+                logger.info("worker_skipped", reason="another instance running")
+                return {"status": "skipped", "reason": "portfolio evaluation already running"}
+            try:
+                # Load config once for all profiles
+                config = await _load_worker_config(db)
 
-            for profile in PROFILES:
-                snapshot_data = await evaluate_profile(db, profile, config=config)
-                if snapshot_data is None:
-                    results[profile] = "skipped"
-                    continue
+                for profile in PROFILES:
+                    snapshot_data = await evaluate_profile(db, profile, config=config)
+                    if snapshot_data is None:
+                        results[profile] = "skipped"
+                        continue
 
-                stmt = pg_insert(PortfolioSnapshot).values(
-                    profile=snapshot_data["profile"],
-                    snapshot_date=snapshot_data["snapshot_date"],
-                    weights=snapshot_data["weights"],
-                    cvar_current=snapshot_data["cvar_current"],
-                    cvar_limit=snapshot_data["cvar_limit"],
-                    cvar_utilized_pct=snapshot_data["cvar_utilized_pct"],
-                    trigger_status=snapshot_data["trigger_status"],
-                    consecutive_breach_days=snapshot_data["consecutive_breach_days"],
-                    regime=snapshot_data["regime"],
-                    core_weight=snapshot_data["core_weight"],
-                    satellite_weight=snapshot_data["satellite_weight"],
-                )
-                stmt = stmt.on_conflict_do_update(
-                    index_elements=["profile", "snapshot_date"],
-                    set_={
-                        "weights": stmt.excluded.weights,
-                        "cvar_current": stmt.excluded.cvar_current,
-                        "cvar_limit": stmt.excluded.cvar_limit,
-                        "cvar_utilized_pct": stmt.excluded.cvar_utilized_pct,
-                        "trigger_status": stmt.excluded.trigger_status,
-                        "consecutive_breach_days": stmt.excluded.consecutive_breach_days,
-                        "regime": stmt.excluded.regime,
-                        "core_weight": stmt.excluded.core_weight,
-                        "satellite_weight": stmt.excluded.satellite_weight,
-                    },
-                )
-                await db.execute(stmt)
-                await db.commit()
-                results[profile] = snapshot_data["trigger_status"]
-                logger.info(
-                    "Profile evaluated",
-                    profile=profile,
-                    trigger=snapshot_data["trigger_status"],
-                    regime=snapshot_data["regime"],
-                    cvar_pct=snapshot_data["cvar_utilized_pct"],
+                    stmt = pg_insert(PortfolioSnapshot).values(
+                        profile=snapshot_data["profile"],
+                        snapshot_date=snapshot_data["snapshot_date"],
+                        weights=snapshot_data["weights"],
+                        cvar_current=snapshot_data["cvar_current"],
+                        cvar_limit=snapshot_data["cvar_limit"],
+                        cvar_utilized_pct=snapshot_data["cvar_utilized_pct"],
+                        trigger_status=snapshot_data["trigger_status"],
+                        consecutive_breach_days=snapshot_data["consecutive_breach_days"],
+                        regime=snapshot_data["regime"],
+                        core_weight=snapshot_data["core_weight"],
+                        satellite_weight=snapshot_data["satellite_weight"],
+                    )
+                    stmt = stmt.on_conflict_do_update(
+                        index_elements=["profile", "snapshot_date"],
+                        set_={
+                            "weights": stmt.excluded.weights,
+                            "cvar_current": stmt.excluded.cvar_current,
+                            "cvar_limit": stmt.excluded.cvar_limit,
+                            "cvar_utilized_pct": stmt.excluded.cvar_utilized_pct,
+                            "trigger_status": stmt.excluded.trigger_status,
+                            "consecutive_breach_days": stmt.excluded.consecutive_breach_days,
+                            "regime": stmt.excluded.regime,
+                            "core_weight": stmt.excluded.core_weight,
+                            "satellite_weight": stmt.excluded.satellite_weight,
+                        },
+                    )
+                    await db.execute(stmt)
+                    await db.commit()
+                    results[profile] = snapshot_data["trigger_status"]
+                    logger.info(
+                        "Profile evaluated",
+                        profile=profile,
+                        trigger=snapshot_data["trigger_status"],
+                        regime=snapshot_data["regime"],
+                        cvar_pct=snapshot_data["cvar_utilized_pct"],
+                    )
+            finally:
+                await db.execute(
+                    text(f"SELECT pg_advisory_unlock({PORTFOLIO_EVAL_LOCK_ID})")
                 )
     finally:
         if redis_conn is not None:

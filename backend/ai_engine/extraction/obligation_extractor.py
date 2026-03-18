@@ -185,6 +185,7 @@ def extract_obligation_register(
                 {
                     "id": f"ai-obligation-{item.id}",
                     "fund_id": str(item.fund_id),
+                    "organization_id": str(item.organization_id),
                     "title": item.obligation_id,
                     "content": item.obligation_text[:900],
                     "doc_type": "AI_OBLIGATION_REGISTER",

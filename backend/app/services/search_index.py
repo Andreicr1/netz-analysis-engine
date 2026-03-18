@@ -113,6 +113,7 @@ class AzureSearchMetadataClient:
         top: int = 5,
         root_folder: str | None = None,
         organization_id: str | uuid.UUID | None = None,
+        allow_cross_tenant: bool = False,
     ) -> list[MetadataSearchHit]:
         client = self._client()
         safe_fund_id = _validate_uuid(fund_id, "fund_id")
@@ -121,6 +122,11 @@ class AzureSearchMetadataClient:
         if organization_id is not None:
             safe_org_id = _validate_uuid(organization_id, "organization_id")
             filter_parts.append(f"organization_id eq '{safe_org_id}'")
+        elif not allow_cross_tenant:
+            raise ValueError(
+                "organization_id is required for tenant-scoped search. "
+                "Pass allow_cross_tenant=True for admin/global queries."
+            )
         if root_folder:
             filter_parts.append(
                 f"root_folder eq '{_escape_odata_literal(root_folder)}'",

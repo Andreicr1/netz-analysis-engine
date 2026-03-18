@@ -208,6 +208,7 @@ def classify_documents(
                 {
                     "id": f"ai-doc-registry-{item.id}",
                     "fund_id": str(item.fund_id),
+                    "organization_id": str(item.organization_id),
                     "title": item.title or "Untitled",
                     "content": f"{item.institutional_type} | {(item.root_folder or '')}/{(item.folder_path or '')}",
                     "doc_type": "AI_DOCUMENT_REGISTRY",

@@ -802,11 +802,35 @@ async def process(
     if not meta_ok:
         warnings.append("ADLS silver metadata write failed")
 
+    adls_all_failed = not bronze_ok and not silver_ok and not meta_ok
+    adls_partial_failed = (not bronze_ok or not silver_ok or not meta_ok) and not adls_all_failed
+
+    if adls_partial_failed:
+        failed_writes = [
+            name for name, ok in [("bronze", bronze_ok), ("silver_chunks", silver_ok), ("silver_metadata", meta_ok)]
+            if not ok
+        ]
+        logger.warning(
+            "[pipeline] ADLS partial failure for %s — failed writes: %s; continuing to Search upsert",
+            request.filename,
+            failed_writes,
+        )
+
     await _emit(request.version_id, "storage_complete", {
         "bronze": bronze_ok,
         "silver_chunks": silver_ok,
         "silver_metadata": meta_ok,
+        "adls_all_failed": adls_all_failed,
     })
+
+    # SR-6: If ALL ADLS writes failed, skip Search upsert — source of truth has no data.
+    if adls_all_failed:
+        logger.error(
+            "[pipeline] ALL ADLS writes failed for %s — skipping Search upsert (source of truth missing)",
+            request.filename,
+        )
+        skip_index = True
+        warnings.append("Search upsert skipped — all ADLS writes failed (no source of truth)")
 
     # ── 9. Index to Azure Search (derived index) ────────────────
     from ai_engine.extraction.search_upsert_service import (
@@ -882,12 +906,18 @@ async def process(
     metrics["duration_ms"] = elapsed_ms
 
     # Compute terminal state: degraded when partial, failed when total failure
-    if upsert_result.is_total_failure and not skip_index:
+    if adls_all_failed:
+        terminal_state = "failed"
+        pipeline_success = False
+    elif upsert_result.is_total_failure and not skip_index:
         terminal_state = "failed"
         pipeline_success = False
         warnings.append(
             f"Search indexing failed completely: 0/{upsert_result.attempted_chunk_count} chunks indexed"
         )
+    elif adls_partial_failed:
+        terminal_state = "degraded"
+        pipeline_success = True
     elif upsert_result.is_degraded:
         terminal_state = "degraded"
         pipeline_success = True  # pipeline itself succeeded; indexing is partial

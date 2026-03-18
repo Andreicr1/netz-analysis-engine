@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.db.engine import get_db
+from app.core.db.session import get_sync_db_with_rls
 from app.core.security.clerk_auth import Actor, require_roles
 from app.domains.credit.modules.ai._helpers import (
     _IC_MEMORANDA_CONTAINER,
@@ -39,7 +39,7 @@ router = APIRouter()
 def get_deal_memo_chapters(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> MemoChaptersResponse:
     """Retrieve all chapters of the current V4 memo book for a deal."""
@@ -97,7 +97,7 @@ def get_deal_memo_chapters(
 def get_deal_evidence_pack(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> EvidencePackResponse:
     """Retrieve the current frozen EvidencePack for a deal."""
@@ -137,7 +137,7 @@ def get_deal_evidence_pack(
 def get_deal_im_draft(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> InvestmentMemorandumResponse:
     """Retrieve the latest Investment Memorandum draft for a deal."""
@@ -164,7 +164,7 @@ def get_deal_im_pdf(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> ICMemorandumPdfResponse:
     """Generate IC Memorandum PDF from V4 memo_chapters (Deep Review)."""
@@ -406,7 +406,7 @@ def download_deal_im_pdf(
 def get_memo_chapter_versions(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> MemoChapterVersionsResponse:
     """Return the current chapter versions for a deal's IC Memorandum."""
@@ -462,7 +462,7 @@ def regenerate_memo_chapter(
     deal_id: uuid.UUID,
     chapter_number: int,
     body: MemoChapterRegenerateRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.INVESTMENT_TEAM])),
 ) -> MemoChapterRegenerateResponse:
     """Regenerate a single IC Memorandum chapter and persist the result."""
@@ -653,7 +653,7 @@ def rebuild_deal_im_pdf(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.INVESTMENT_TEAM])),
 ) -> ICMemorandumPdfResponse:
     """Force-rebuild IC Memorandum PDF from the latest chapters."""
@@ -850,7 +850,7 @@ def get_pipeline_memo_pdf(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
     request: Request,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_sync_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ):
     """Generate and stream a Pipeline Intelligence PDF (ReportLab/Unicode)."""

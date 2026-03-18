@@ -8,9 +8,12 @@ environment variables. Uses Pydantic Settings with .env file support.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_log = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -73,10 +76,14 @@ class Settings(BaseSettings):
 
     # ── External APIs ────────────────────────────────────
     fred_api_key: str = ""
-    adobe_sign_integration_key: str = ""
 
     # ── SEC EDGAR (public identifier — required by SEC policy) ──
     edgar_identity: str = "Netz Analysis Engine tech@netzco.com"
+
+    # ── Rate Limiting ─────────────────────────────────────
+    rate_limit_enabled: bool = True
+    rate_limit_default_rpm: int = 100
+    rate_limit_compute_rpm: int = 10
 
     # ── Feature Flags ────────────────────────────────────
     feature_lipper_enabled: bool = False
@@ -125,8 +132,30 @@ class Settings(BaseSettings):
 
     def validate_production_secrets(self) -> None:
         """Reject weak or missing secrets in production."""
+        # SR-8: Guard against APP_ENV defaulting to "development" in a real
+        # deployment.  If production-grade secrets are present the environment
+        # should NOT be "development" — that would silently enable the dev
+        # auth bypass (X-DEV-ACTOR header).
         if self.is_development:
+            _production_secrets_present = bool(
+                self.clerk_secret_key and self.clerk_jwks_url
+            )
+            if _production_secrets_present:
+                _log.critical(
+                    "Production auth secrets detected but APP_ENV is "
+                    "'development'. Set APP_ENV to 'staging' or 'production' "
+                    "to disable the dev auth bypass.",
+                )
+                raise RuntimeError(
+                    "APP_ENV is 'development' but production auth secrets "
+                    "(CLERK_SECRET_KEY, CLERK_JWKS_URL) are set. Refusing to "
+                    "start — set APP_ENV appropriately.",
+                )
             return
+
+        # Non-development: Clerk auth secrets are mandatory.
+        if not self.clerk_secret_key:
+            raise RuntimeError("CLERK_SECRET_KEY must be set in production.")
         if not self.clerk_jwks_url:
             raise RuntimeError("CLERK_JWKS_URL must be set in production.")
         if self.dev_token == "dev-token-change-me":

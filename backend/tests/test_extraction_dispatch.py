@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import ast
+import asyncio
 import importlib
-from pathlib import Path
-from types import SimpleNamespace
-from types import ModuleType
 import sys
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
-from app.services.azure import pipeline_dispatch
 from ai_engine.pipeline import unified_pipeline
+from app.services.azure import pipeline_dispatch
 
 
 class DummyBackgroundTasks:
@@ -60,7 +60,7 @@ def test_dispatch_extraction_background_tasks_uses_unified_pipeline(monkeypatch)
     func, args, kwargs = background_tasks.calls[0]
     assert args == ()
     assert kwargs == {}
-    func()
+    asyncio.get_event_loop().run_until_complete(func())
 
     assert invoked == [{
         "source": "deals",

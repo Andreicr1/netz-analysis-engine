@@ -102,7 +102,7 @@ def _assemble() -> None:
         try:
             router.include_router(_import_subrouter(spec))
             loaded_modules.append(spec.name)
-        except Exception as exc:
+        except (ImportError, ModuleNotFoundError) as exc:
             detail = f"{type(exc).__name__}: {exc}"
             if spec.required:
                 failure_details.append((spec.name, detail))
@@ -113,6 +113,14 @@ def _assemble() -> None:
                     spec.name,
                     detail,
                 )
+        except Exception as exc:
+            # Non-import errors (SyntaxError, AttributeError, etc.) must
+            # always propagate — silencing them hides real bugs.
+            if spec.required:
+                detail = f"{type(exc).__name__}: {exc}"
+                failure_details.append((spec.name, detail))
+            else:
+                raise
 
     status = "healthy"
     if failure_details:

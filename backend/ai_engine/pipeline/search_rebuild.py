@@ -57,6 +57,58 @@ async def rebuild_search_index(
     """
     import asyncio
 
+    import redis.asyncio as aioredis
+
+    from ai_engine.pipeline.storage_routing import silver_chunks_path
+    from app.core.jobs.tracker import get_redis_pool
+    from app.services.azure.search_client import describe_chunks_index_contract
+    from app.services.storage_client import get_storage_client
+
+    # ── Advisory lock: prevent concurrent rebuilds for same org/vertical ──
+    lock_key = f"rebuild:{org_id}:{vertical}"
+    lock_ttl = 3600  # 1 hour
+    rconn = aioredis.Redis(connection_pool=get_redis_pool())
+    try:
+        acquired = await rconn.set(lock_key, "1", nx=True, ex=lock_ttl)
+    except Exception:
+        logger.warning("[rebuild] Redis unavailable — proceeding without advisory lock")
+        acquired = True  # degrade open: allow rebuild if Redis is down
+    if not acquired:
+        logger.warning(
+            "[rebuild] Rebuild already in progress for %s/%s — skipping",
+            org_id,
+            vertical,
+        )
+        return RebuildResult(
+            errors=[f"Rebuild already in progress for {org_id}/{vertical}"],
+        )
+
+    try:
+        return await _do_rebuild(
+            org_id=org_id,
+            vertical=vertical,
+            doc_ids=doc_ids,
+            deal_id=deal_id,
+            fund_id=fund_id,
+        )
+    finally:
+        try:
+            await rconn.delete(lock_key)
+        except Exception:
+            logger.warning("[rebuild] Failed to clear advisory lock key %s", lock_key)
+
+
+async def _do_rebuild(
+    org_id: UUID,
+    vertical: str,
+    *,
+    doc_ids: list[UUID] | None = None,
+    deal_id: UUID | None = None,
+    fund_id: UUID | None = None,
+) -> RebuildResult:
+    """Inner rebuild logic, extracted for advisory-lock wrapper."""
+    import asyncio
+
     from ai_engine.pipeline.storage_routing import silver_chunks_path
     from app.services.azure.search_client import describe_chunks_index_contract
     from app.services.storage_client import get_storage_client

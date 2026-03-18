@@ -12,6 +12,7 @@ import asyncio
 import inspect
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,18 @@ class PgNotifier:
         self._connection: Any = None  # asyncpg.Connection
         self._task: asyncio.Task[None] | None = None
         self._running = False
+        self._connected = False
+        self._last_reconnect_at: datetime | None = None
+
+    @property
+    def is_connected(self) -> bool:
+        """Whether the listener connection is currently active."""
+        return self._connected
+
+    @property
+    def last_reconnect_at(self) -> datetime | None:
+        """Timestamp of the most recent successful (re)connection, or None."""
+        return self._last_reconnect_at
 
     def subscribe(self, channel: str, handler: Callable[[dict], Any]) -> None:
         """Register a handler for a channel. Call before start()."""
@@ -48,11 +61,12 @@ class PgNotifier:
             except asyncio.CancelledError:
                 pass
             self._task = None
+        self._connected = False
         if self._connection:
             try:
                 await self._connection.close()
             except Exception:
-                pass
+                logger.warning("PgNotifier: error closing connection during stop", exc_info=True)
             self._connection = None
 
     async def _listen_loop(self) -> None:
@@ -66,6 +80,7 @@ class PgNotifier:
             except asyncio.CancelledError:
                 break
             except Exception:
+                self._connected = False
                 logger.exception("PgNotifier connection lost, reconnecting in %.1fs", backoff)
                 # Flush all caches on reconnection (prevents stale data)
                 self._flush_all_caches()
@@ -104,6 +119,9 @@ class PgNotifier:
         for channel in self._handlers:
             await self._connection.add_listener(channel, _notification_handler)
             logger.info("PgNotifier: listening on channel '%s'", channel)
+
+        self._connected = True
+        self._last_reconnect_at = datetime.now(timezone.utc)
 
         # Keep connection alive — asyncpg listens until connection drops
         while self._running:
