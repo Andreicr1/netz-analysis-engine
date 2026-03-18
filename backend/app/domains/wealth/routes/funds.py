@@ -128,7 +128,8 @@ async def get_fund_scoring(
             else:
                 momentum_map[fid] = nav_score
 
-    scoring_config = await config_service.get("liquid_funds", "scoring", actor.organization_id)
+    scoring_result = await config_service.get("liquid_funds", "scoring", actor.organization_id)
+    scoring_config = scoring_result.value
 
     scored: list[FundScoreRead] = []
     for fund in funds:

@@ -9,6 +9,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.core.config.dependencies import get_config_service
+from app.core.config.schemas import ConfigResult, ConfigResultState
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.admin.routes import assets as assets_routes
 from app.main import app
@@ -41,10 +42,14 @@ class _FakeSession:
 
 class _FakeConfigService:
     async def get(self, **_kwargs):
-        return {
-            "company_name": "Netz Capital",
-            "primary_color": "#1a1a2e",
-        }
+        return ConfigResult(
+            value={
+                "company_name": "Netz Capital",
+                "primary_color": "#1a1a2e",
+            },
+            state=ConfigResultState.FOUND,
+            source="mock",
+        )
 
 
 class _FakeSessionFactory:

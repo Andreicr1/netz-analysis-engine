@@ -23,13 +23,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config.models import VerticalConfigDefault, VerticalConfigOverride
 from app.core.config.registry import ConfigRegistry
-from app.core.config.schemas import ConfigEntry
+from app.core.config.schemas import ConfigEntry, ConfigResult, ConfigResultState
+from app.shared.exceptions import ConfigMissError
 
 logger = logging.getLogger(__name__)
 
 # In-process cache — not an asyncio primitive, safe at module level.
 # Replaced with Redis L2 in Sprint 5-6 when admin API enables writes.
-_config_cache: TTLCache[str, dict] = TTLCache(maxsize=2048, ttl=60)
+_config_cache: TTLCache[str, ConfigResult] = TTLCache(maxsize=2048, ttl=60)
 
 # Sentinel for admin-only key deletion in deep_merge.
 _DELETE = object()
@@ -75,7 +76,7 @@ class ConfigService:
         vertical: str,
         config_type: str,
         org_id: UUID | None = None,
-    ) -> dict:
+    ) -> ConfigResult:
         """Return deep_merge(default, override) for the given config key.
 
         Config-source hierarchy (verified by tests):
@@ -83,7 +84,20 @@ class ConfigService:
           2. DB override (VerticalConfigOverride, RLS-scoped) — if org_id provided
           3. DB default (VerticalConfigDefault, no RLS)
           4. YAML fallback (_YAML_FALLBACK_MAP) — emergency only, logged as ERROR
-          5. Total miss — logged as ERROR, returns {}
+          5. Total miss:
+             - required config → raises ConfigMissError (CFG-01)
+             - optional config → returns ConfigResult with MISSING_OPTIONAL state
+
+        Returns
+        -------
+        ConfigResult
+            Typed wrapper with .value (dict), .state, and .source.
+            Use .value to access the config dict.
+
+        Raises
+        ------
+        ConfigMissError
+            If the config domain is registered as required and all sources miss.
         """
         ConfigRegistry.validate_lookup(vertical, config_type)
         cache_key = f"config:{vertical}:{config_type}:{org_id or 'default'}"
@@ -107,22 +121,7 @@ class ConfigService:
             # YAML fallback — indicates migration failure or missing seed data
             default_config = self._yaml_fallback(vertical, config_type)
             if default_config is None:
-                resolved_source = "miss"
-                logger.error(
-                    "Config total miss: vertical=%s config_type=%s "
-                    "sources_attempted=db_default,yaml_fallback result_state=miss",
-                    vertical,
-                    config_type,
-                    extra={
-                        "event": "config_lookup",
-                        "vertical": vertical,
-                        "config_type": config_type,
-                        "resolved_source": "miss",
-                        "result_state": "miss",
-                        "sources_attempted": "db_default,yaml_fallback",
-                    },
-                )
-                return {}
+                return self._handle_miss(vertical, config_type, cache_key)
             resolved_source = "yaml_fallback"
 
         # Query override if org_id provided
@@ -139,10 +138,10 @@ class ConfigService:
             override_config = override_row.scalar_one_or_none()
 
         if override_config:
-            result = self.deep_merge(default_config, override_config)
+            merged = self.deep_merge(default_config, override_config)
             resolved_source = f"db_override+{resolved_source}"
         else:
-            result = default_config
+            merged = default_config
 
         logger.debug(
             "Config resolved: vertical=%s config_type=%s resolved_source=%s",
@@ -158,8 +157,67 @@ class ConfigService:
             },
         )
 
+        result = ConfigResult(
+            value=merged,
+            state=ConfigResultState.FOUND,
+            source=resolved_source,
+        )
         _config_cache[cache_key] = result
         return result
+
+    @staticmethod
+    def _handle_miss(
+        vertical: str,
+        config_type: str,
+        cache_key: str,
+    ) -> ConfigResult:
+        """Handle a total miss — required config raises, optional returns typed miss.
+
+        CFG-01: no caller receives a plain ``{}`` that is indistinguishable from
+        valid empty config.
+        """
+        domain = ConfigRegistry.get(vertical, config_type)
+        is_required = domain.required if domain is not None else True
+
+        if is_required:
+            logger.error(
+                "Required config miss: vertical=%s config_type=%s "
+                "sources_attempted=db_default,yaml_fallback — raising ConfigMissError",
+                vertical,
+                config_type,
+                extra={
+                    "event": "config_lookup",
+                    "vertical": vertical,
+                    "config_type": config_type,
+                    "resolved_source": "miss",
+                    "result_state": "missing_required",
+                    "sources_attempted": "db_default,yaml_fallback",
+                },
+            )
+            raise ConfigMissError(vertical, config_type)
+
+        # Optional miss — emit structured warning, return typed result
+        logger.warning(
+            "Optional config miss: vertical=%s config_type=%s "
+            "sources_attempted=db_default,yaml_fallback — returning empty ConfigResult",
+            vertical,
+            config_type,
+            extra={
+                "event": "config_lookup",
+                "vertical": vertical,
+                "config_type": config_type,
+                "resolved_source": "miss",
+                "result_state": "missing_optional",
+                "sources_attempted": "db_default,yaml_fallback",
+            },
+        )
+        miss_result = ConfigResult(
+            value={},
+            state=ConfigResultState.MISSING_OPTIONAL,
+            source="miss",
+        )
+        _config_cache[cache_key] = miss_result
+        return miss_result
 
     async def list_configs(
         self,

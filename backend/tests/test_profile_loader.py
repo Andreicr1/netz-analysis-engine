@@ -16,6 +16,7 @@ from ai_engine.vertical_registry import (
     get_vertical_entry,
     import_vertical_module,
 )
+from app.core.config.schemas import ConfigResult, ConfigResultState
 
 
 @pytest.fixture
@@ -28,9 +29,13 @@ def mock_config_service():
     return service
 
 
+def _wrap(value: dict) -> ConfigResult:
+    return ConfigResult(value=value, state=ConfigResultState.FOUND, source="mock")
+
+
 async def _mock_config_get(vertical: str, config_type: str, org_id=None):
     if vertical == "private_credit" and config_type == "chapters":
-        return {
+        return _wrap({
             "name": "private_credit",
             "display_name": "Private Credit IC Memo",
             "version": 1,
@@ -43,10 +48,10 @@ async def _mock_config_get(vertical: str, config_type: str, org_id=None):
             "tone_normalization": {"descriptive_max_chars": 10000},
             "recommendation_chapter": "ch13_recommendation",
             "evidence_law_template": "evidence_law.j2",
-        }
+        })
     if vertical == "private_credit" and config_type == "calibration":
-        return {"confidence_threshold": 0.7, "max_retries": 3}
-    return {}
+        return _wrap({"confidence_threshold": 0.7, "max_retries": 3})
+    return _wrap({})
 
 
 class TestProfileLoader:

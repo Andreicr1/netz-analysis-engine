@@ -38,11 +38,12 @@ async def get_branding(
     config_service: ConfigService = Depends(get_config_service),
 ) -> BrandingResponse:
     """Return merged branding config (default + org override)."""
-    branding = await config_service.get(
+    branding_result = await config_service.get(
         vertical=vertical,
         config_type="branding",
         org_id=actor.organization_id,
     )
+    branding = branding_result.value
 
     # Resolve logo URLs with cache-busting query param
     org_slug = actor.organization_slug or "default"

@@ -123,7 +123,8 @@ async def get_regime(
     config_service: ConfigService = Depends(get_config_service),
     actor: Actor = Depends(get_actor),
 ) -> RegimeRead:
-    config = await config_service.get("liquid_funds", "calibration", actor.organization_id)
+    config_result = await config_service.get("liquid_funds", "calibration", actor.organization_id)
+    config = config_result.value
 
     # Pre-fetch fallback regime from latest PortfolioSnapshot
     fallback_stmt = (

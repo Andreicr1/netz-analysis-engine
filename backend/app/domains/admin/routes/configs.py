@@ -68,8 +68,8 @@ async def get_config(
             detail=f"Unregistered config domain: ({vertical}, {config_type})",
         )
     svc = ConfigService(db)
-    config = await svc.get(vertical, config_type, org_id)
-    return {"config": config, "vertical": vertical, "config_type": config_type}
+    result = await svc.get(vertical, config_type, org_id)
+    return {"config": result.value, "vertical": vertical, "config_type": config_type}
 
 
 @router.put("/{vertical}/{config_type}")

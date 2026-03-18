@@ -61,9 +61,9 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
     """Execute watchlist check logic."""
     # 2. Fetch config ONCE (frozen for entire run)
     config_svc = ConfigService(db)
-    config_l1 = await config_svc.get("liquid_funds", "screening_layer1", org_id)
-    config_l2 = await config_svc.get("liquid_funds", "screening_layer2", org_id)
-    config_l3 = await config_svc.get("liquid_funds", "screening_layer3", org_id)
+    config_l1 = (await config_svc.get("liquid_funds", "screening_layer1", org_id)).value
+    config_l2 = (await config_svc.get("liquid_funds", "screening_layer2", org_id)).value
+    config_l3 = (await config_svc.get("liquid_funds", "screening_layer3", org_id)).value
 
     # 3. Load all watchlisted instruments
     result = await db.execute(

@@ -169,8 +169,8 @@ async def get_hierarchical_regime(
     """
     macro = await get_latest_macro_values(db)
     config_service = ConfigService(db)
-    raw_config = await config_service.get("liquid_funds", "macro_intelligence", org_id)
-    config = resolve_regional_regime_config(raw_config)
+    raw_result = await config_service.get("liquid_funds", "macro_intelligence", org_id)
+    config = resolve_regional_regime_config(raw_result.value)
 
     vix_val = macro.get("VIXCLS", (None, None))[0]
     cpi_val = macro.get("CPI_YOY", (None, None))[0]

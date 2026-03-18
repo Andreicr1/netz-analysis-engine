@@ -26,6 +26,7 @@ class ConfigDomain:
     ownership: str  # "config_service" | "prompt_service"
     client_visible: bool
     description: str
+    required: bool = True  # CFG-01: required configs raise on miss, optional emit warning
 
 
 # ── Registry ────────────────────────────────────────────────────────────────
@@ -80,6 +81,7 @@ _REGISTRY: tuple[ConfigDomain, ...] = (
         ownership="config_service",
         client_visible=False,
         description="Screener quantitative filter criteria",
+        required=False,
     ),
     ConfigDomain(
         vertical="liquid_funds",
@@ -87,6 +89,7 @@ _REGISTRY: tuple[ConfigDomain, ...] = (
         ownership="config_service",
         client_visible=False,
         description="Screener qualitative filter criteria",
+        required=False,
     ),
     ConfigDomain(
         vertical="liquid_funds",
@@ -94,6 +97,7 @@ _REGISTRY: tuple[ConfigDomain, ...] = (
         ownership="config_service",
         client_visible=False,
         description="Screener AI-assisted deep filter criteria",
+        required=False,
     ),
     # ── private_credit: ConfigService-managed ────────────────────────────
     ConfigDomain(
@@ -131,6 +135,7 @@ _REGISTRY: tuple[ConfigDomain, ...] = (
         ownership="config_service",
         client_visible=False,
         description="Tenant branding: logos, colors, display name",
+        required=False,
     ),
 )
 

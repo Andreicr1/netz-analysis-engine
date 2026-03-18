@@ -105,11 +105,14 @@ class ProfileLoader:
 
         vertical = entry.vertical_name
 
-        # Fetch chapters + calibration in parallel
-        chapters_config, calibration = await asyncio.gather(
+        # Fetch chapters + calibration in parallel — both are required configs,
+        # ConfigMissError propagates if either is missing (CFG-01).
+        chapters_result, calibration_result = await asyncio.gather(
             self._config.get(vertical, "chapters", org_id),
             self._config.get(vertical, "calibration", org_id),
         )
+        chapters_config = chapters_result.value
+        calibration = calibration_result.value
 
         # Parse chapters
         chapters = tuple(
