@@ -1,0 +1,42 @@
+[
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-benchmark-ingest",
+    "name": "trigger_run_benchmark_ingest"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-fact-sheet-gen",
+    "name": "trigger_run_fact_sheet_gen"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-ingestion",
+    "name": "trigger_run_ingestion"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-macro-ingestion",
+    "name": "trigger_run_macro_ingestion"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-portfolio-eval",
+    "name": "trigger_run_portfolio_eval"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-risk-calc",
+    "name": "trigger_run_risk_calc"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-screening-batch",
+    "name": "trigger_run_screening_batch"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-watchlist-check",
+    "name": "trigger_run_watchlist_check"
+  }
+]

@@ -1,0 +1,1392 @@
+[
+  {
+    "method": "DELETE",
+    "path": "/api/v1/admin/configs/{vertical}/{config_type}",
+    "name": "delete_config"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/admin/prompts/{vertical}/{name}",
+    "name": "delete_prompt"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/v1/admin/tenants/{org_id}/assets/{asset_type}",
+    "name": "delete_asset"
+  },
+  {
+    "method": "GET",
+    "path": "/api/health",
+    "name": "health"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/",
+    "name": "api_root"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/configs/",
+    "name": "list_configs"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/configs/invalid",
+    "name": "list_invalid_configs"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/configs/{vertical}/{config_type}",
+    "name": "get_config"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/configs/{vertical}/{config_type}/diff",
+    "name": "get_config_diff"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/health/pipelines",
+    "name": "get_pipeline_stats"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/health/services",
+    "name": "get_service_health"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/health/workers",
+    "name": "get_worker_status"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/health/workers/logs",
+    "name": "stream_worker_logs"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/prompts/{vertical}",
+    "name": "list_prompts"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/prompts/{vertical}/{name}",
+    "name": "get_prompt"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/prompts/{vertical}/{name}/versions",
+    "name": "get_versions"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/tenants/",
+    "name": "list_tenants"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/tenants/{org_id}",
+    "name": "get_tenant"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/activity",
+    "name": "activity"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/alerts/daily",
+    "name": "get_daily_alerts"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/documents/classification",
+    "name": "get_documents_classification"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/documents/index",
+    "name": "get_documents_index"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/documents/{doc_id}",
+    "name": "get_document_detail"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/history",
+    "name": "history"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/linker/links",
+    "name": "get_linker_links"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/linker/obligations/status",
+    "name": "get_linker_obligation_status"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/managers/profile",
+    "name": "get_manager_profile"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/obligations/register",
+    "name": "get_obligation_register"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/pipeline/alerts",
+    "name": "get_pipeline_alerts"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/pipeline/deals",
+    "name": "list_pipeline_deals"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/pipeline/deals/{deal_id}",
+    "name": "get_pipeline_deal_detail"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/pipeline/deals/{deal_id}/critical-gaps",
+    "name": "get_deal_critical_gaps"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/pipeline/deals/{deal_id}/deep-review-status",
+    "name": "get_deep_review_status"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/pipeline/deals/{deal_id}/evidence-governance",
+    "name": "get_deal_evidence_governance"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/pipeline/deals/{deal_id}/evidence-pack",
+    "name": "get_deal_evidence_pack"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/pipeline/deals/{deal_id}/im-draft",
+    "name": "get_deal_im_draft"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/pipeline/deals/{deal_id}/im-pdf",
+    "name": "get_deal_im_pdf"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/pipeline/deals/{deal_id}/im-pdf/download",
+    "name": "download_deal_im_pdf"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/pipeline/deals/{deal_id}/memo-chapters",
+    "name": "get_deal_memo_chapters"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/pipeline/deals/{deal_id}/memo-chapters/versions",
+    "name": "get_memo_chapter_versions"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/pipeline/deals/{deal_id}/pipeline-memo-pdf",
+    "name": "get_pipeline_memo_pdf"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/pipeline/deals/{deal_id}/underwriting-artifact",
+    "name": "get_deal_underwriting_artifact"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/pipeline/deals/{deal_id}/underwriting-artifact/history",
+    "name": "get_deal_underwriting_artifact_history"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/pipeline/fact-sheet/pdf",
+    "name": "get_fact_sheet_pdf"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/pipeline/marketing-presentation/pdf",
+    "name": "get_marketing_presentation_pdf"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/allocation/{profile}/effective",
+    "name": "get_effective"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/allocation/{profile}/strategic",
+    "name": "get_strategic"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/allocation/{profile}/tactical",
+    "name": "get_tactical"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/analytics/attribution/{profile}",
+    "name": "get_attribution"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/analytics/backtest/{run_id}",
+    "name": "get_backtest"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/analytics/correlation",
+    "name": "get_correlation"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/analytics/correlation-regime/{profile}",
+    "name": "get_correlation_regime"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/analytics/correlation-regime/{profile}/pair/{inst_a}/{inst_b}",
+    "name": "get_pair_correlation"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/analytics/strategy-drift/alerts",
+    "name": "list_drift_alerts"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/analytics/strategy-drift/{instrument_id}",
+    "name": "get_instrument_drift"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/api/data-room/file-link",
+    "name": "file_link"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/api/data-room/list",
+    "name": "list_items"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/api/data-room/pipeline/file-link",
+    "name": "pipeline_file_link"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/api/data-room/pipeline/list",
+    "name": "list_pipeline_items"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/api/data-room/tree",
+    "name": "get_tree"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/api/dataroom/browse",
+    "name": "browse"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/api/dataroom/search",
+    "name": "search"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/assets/tenant/{org_slug}/{asset_type}",
+    "name": "get_tenant_asset"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/branding",
+    "name": "get_branding"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/content",
+    "name": "list_content"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/content/{content_id}/download",
+    "name": "download_content"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/dashboard/compliance-alerts",
+    "name": "compliance_alerts"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/dashboard/fred-search",
+    "name": "fred_search"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/dashboard/macro-fred-multi",
+    "name": "macro_fred_multi"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/dashboard/macro-fred-series",
+    "name": "macro_fred_series"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/dashboard/macro-history",
+    "name": "macro_history"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/dashboard/macro-snapshot",
+    "name": "macro_snapshot"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/dashboard/pipeline-analytics",
+    "name": "pipeline_analytics"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/dashboard/pipeline-summary",
+    "name": "pipeline_summary"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/dashboard/portfolio-summary",
+    "name": "portfolio_summary"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/dashboard/task-inbox",
+    "name": "task_inbox"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/dd-reports/funds/{fund_id}",
+    "name": "list_dd_reports"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/dd-reports/{report_id}",
+    "name": "get_dd_report"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/dd-reports/{report_id}/stream",
+    "name": "stream_dd_report"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/documents",
+    "name": "list_docs"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/documents/root-folders",
+    "name": "list_root_folders"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/documents/{document_id}",
+    "name": "get_document"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/documents/{document_id}/versions",
+    "name": "list_document_versions"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/fact-sheets/dd-reports/{report_id}/download",
+    "name": "download_dd_report_pdf"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/fact-sheets/model-portfolios/{portfolio_id}",
+    "name": "list_fact_sheets"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/fact-sheets/{fact_sheet_path:path}/download",
+    "name": "download_fact_sheet"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds",
+    "name": "list_funds"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/scoring",
+    "name": "get_fund_scoring"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}",
+    "name": "get_fund"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/actions",
+    "name": "list_actions"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/alerts",
+    "name": "list_alerts"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/assets/{asset_id}/fund-investment",
+    "name": "get_fund_investment"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/auditor/evidence",
+    "name": "list_all_evidence"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/deals",
+    "name": "list_deals"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/deals/{deal_id}/ic-memo",
+    "name": "get_latest_ic_memo"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/deals/{deal_id}/ic-memo/voting-status",
+    "name": "get_voting_status"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/deals/{deal_id}/stage-timeline",
+    "name": "get_deal_stage_timeline"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/document-reviews",
+    "name": "list_reviews"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/document-reviews/pending",
+    "name": "get_pending_reviews"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/document-reviews/summary",
+    "name": "review_summary"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/document-reviews/{review_id}",
+    "name": "get_review_detail"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/document-reviews/{review_id}/checklist",
+    "name": "get_review_checklist"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/investor/documents",
+    "name": "list_approved_documents"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/investor/report-packs",
+    "name": "list_published_packs"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/investor/statements",
+    "name": "list_published_statements"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/nav",
+    "name": "get_fund_nav"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/obligations",
+    "name": "list_obligations"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/portfolio/actions",
+    "name": "list_actions"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/report-schedules",
+    "name": "list_schedules"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/report-schedules/{schedule_id}/runs",
+    "name": "list_schedule_runs"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/reports/archive",
+    "name": "get_reporting_archive"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/reports/investor-statements",
+    "name": "list_investor_statements"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/reports/investor-statements/{statement_id}/download",
+    "name": "download_investor_statement"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/reports/monthly-pack/list",
+    "name": "list_monthly_packs"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/reports/monthly-pack/{pack_id}/download",
+    "name": "download_monthly_pack"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/reports/nav/snapshots",
+    "name": "list_nav_snapshots"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/reports/nav/snapshots/{snapshot_id}",
+    "name": "get_nav_snapshot"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/reports/nav/snapshots/{snapshot_id}/assets",
+    "name": "list_asset_valuations"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/risk",
+    "name": "get_fund_risk"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/instruments",
+    "name": "list_instruments"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/instruments/{instrument_id}",
+    "name": "get_instrument"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/jobs/{job_id}/stream",
+    "name": "stream_job"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/macro/regime",
+    "name": "get_hierarchical_regime"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/macro/reviews",
+    "name": "list_reviews"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/macro/scores",
+    "name": "get_macro_scores"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/macro/snapshot",
+    "name": "get_macro_snapshot"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/model-portfolios",
+    "name": "list_model_portfolios"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/model-portfolios/{portfolio_id}",
+    "name": "get_model_portfolio"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/track-record",
+    "name": "get_track_record"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/pipeline/deals",
+    "name": "list_deals"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/pipeline/deals/{deal_id}/events",
+    "name": "list_pipeline_deal_events"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/portfolios",
+    "name": "list_portfolios"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/portfolios/{profile}",
+    "name": "get_portfolio"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/portfolios/{profile}/history",
+    "name": "get_history"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/portfolios/{profile}/rebalance",
+    "name": "list_rebalance_events"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/portfolios/{profile}/rebalance/{event_id}",
+    "name": "get_rebalance_event"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/portfolios/{profile}/snapshot",
+    "name": "get_snapshot"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/risk/macro",
+    "name": "get_macro"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/risk/regime",
+    "name": "get_regime"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/risk/regime/history",
+    "name": "get_regime_history"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/risk/stream",
+    "name": "risk_stream"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/risk/{profile}/cvar",
+    "name": "get_cvar"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/risk/{profile}/cvar/history",
+    "name": "get_cvar_history"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/screener/results",
+    "name": "list_results"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/screener/results/{instrument_id}",
+    "name": "get_instrument_results"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/screener/runs",
+    "name": "list_runs"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/screener/runs/{run_id}",
+    "name": "get_run"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/universe",
+    "name": "list_universe"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/universe/pending",
+    "name": "list_pending_approvals"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/wealth/exposure/matrix",
+    "name": "get_exposure_matrix"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/wealth/exposure/metadata",
+    "name": "get_exposure_metadata"
+  },
+  {
+    "method": "GET",
+    "path": "/docs",
+    "name": "swagger_ui_html"
+  },
+  {
+    "method": "GET",
+    "path": "/docs/oauth2-redirect",
+    "name": "swagger_ui_redirect"
+  },
+  {
+    "method": "GET",
+    "path": "/health",
+    "name": "health"
+  },
+  {
+    "method": "GET",
+    "path": "/openapi.json",
+    "name": "openapi"
+  },
+  {
+    "method": "GET",
+    "path": "/redoc",
+    "name": "redoc_html"
+  },
+  {
+    "method": "HEAD",
+    "path": "/docs",
+    "name": "swagger_ui_html"
+  },
+  {
+    "method": "HEAD",
+    "path": "/docs/oauth2-redirect",
+    "name": "swagger_ui_redirect"
+  },
+  {
+    "method": "HEAD",
+    "path": "/openapi.json",
+    "name": "openapi"
+  },
+  {
+    "method": "HEAD",
+    "path": "/redoc",
+    "name": "redoc_html"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/admin/tenants/{org_id}",
+    "name": "update_tenant"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/funds/{fund_id}/actions/{action_id}",
+    "name": "update_action"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/funds/{fund_id}/deals/{deal_id}/decision",
+    "name": "decide_deal"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/funds/{fund_id}/deals/{deal_id}/ic-memo/conditions",
+    "name": "resolve_condition"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/funds/{fund_id}/evidence/{evidence_id}/complete",
+    "name": "mark_uploaded"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/funds/{fund_id}/obligations/{obligation_id}",
+    "name": "update_obligation"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/funds/{fund_id}/portfolio/actions/{action_id}",
+    "name": "update_action"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/funds/{fund_id}/report-schedules/{schedule_id}",
+    "name": "update_schedule"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/macro/reviews/{review_id}/approve",
+    "name": "approve_review"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/macro/reviews/{review_id}/reject",
+    "name": "reject_review"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/pipeline/deals/{deal_id}/context",
+    "name": "patch_deal_context"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/pipeline/deals/{deal_id}/stage",
+    "name": "patch_deal_stage"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/admin/configs/validate",
+    "name": "validate_config"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/admin/prompts/{vertical}/{name}/preview",
+    "name": "preview_prompt"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/admin/prompts/{vertical}/{name}/revert/{version}",
+    "name": "revert_prompt"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/admin/prompts/{vertical}/{name}/validate",
+    "name": "validate_prompt"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/admin/tenants/",
+    "name": "create_tenant"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/admin/tenants/{org_id}/assets",
+    "name": "upload_asset"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/admin/tenants/{org_id}/seed",
+    "name": "seed_tenant"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/answer",
+    "name": "answer"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/documents/ingest",
+    "name": "ingest_documents_index"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/linker/run",
+    "name": "run_linker"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/pipeline/deals/reset-all-stuck",
+    "name": "reset_all_stuck_deals"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/pipeline/deals/{deal_id}/deep-review-v4",
+    "name": "trigger_deal_deep_review_v4"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/pipeline/deals/{deal_id}/im-pdf/rebuild",
+    "name": "rebuild_deal_im_pdf"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/pipeline/deals/{deal_id}/memo-chapters/{chapter_number}/regenerate",
+    "name": "regenerate_memo_chapter"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/pipeline/deals/{deal_id}/reset-status",
+    "name": "reset_deal_intelligence_status"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/pipeline/deep-review-v4",
+    "name": "trigger_pipeline_deep_review_v4"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/pipeline/deep-review/evaluate",
+    "name": "evaluate_ic_memo_framework"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/pipeline/deep-review/validate-sample",
+    "name": "validate_deep_review_sample"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/pipeline/fact-sheet/generate",
+    "name": "generate_fact_sheet"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/pipeline/marketing-presentation/generate",
+    "name": "generate_marketing_presentation"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/query",
+    "name": "create_query"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/retrieve",
+    "name": "retrieve"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/run-daily-cycle",
+    "name": "run_ai_daily_cycle"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/analytics/backtest",
+    "name": "create_backtest"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/analytics/optimize",
+    "name": "optimize"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/analytics/optimize/pareto",
+    "name": "optimize_pareto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/analytics/strategy-drift/scan",
+    "name": "trigger_drift_scan"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/api/data-room/upload",
+    "name": "upload_to_path"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/api/dataroom/documents",
+    "name": "upload_document"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/api/dataroom/documents/{document_id}/ingest",
+    "name": "ingest_document"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/content/flash-reports",
+    "name": "trigger_flash_report"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/content/outlooks",
+    "name": "trigger_outlook"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/content/spotlights",
+    "name": "trigger_spotlight"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/content/{content_id}/approve",
+    "name": "approve_content"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/dd-reports/funds/{fund_id}",
+    "name": "trigger_dd_report"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/dd-reports/{report_id}/regenerate",
+    "name": "regenerate_dd_report"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/documents",
+    "name": "create_document"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/documents/ingestion/process-pending",
+    "name": "process_pending"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/documents/root-folders",
+    "name": "create_root_folder"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/documents/upload",
+    "name": "upload"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/documents/upload-complete",
+    "name": "upload_complete"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/documents/upload-url",
+    "name": "generate_upload_url"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/documents/{document_id}/versions",
+    "name": "create_document_version"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/fact-sheets/model-portfolios/{portfolio_id}",
+    "name": "generate_fact_sheet"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/actions",
+    "name": "create_action"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/assets",
+    "name": "create_asset"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/assets/{asset_id}/fund-investment",
+    "name": "attach_fund_investment"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/assets/{asset_id}/obligations",
+    "name": "create_obligation"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/deals",
+    "name": "create_deal"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/deals/{deal_id}/convert",
+    "name": "convert_deal"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/deals/{deal_id}/ic-memo",
+    "name": "create_ic_memo"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/document-reviews",
+    "name": "submit_for_review"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/document-reviews/{review_id}/ai-analyze",
+    "name": "trigger_ai_analysis"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/document-reviews/{review_id}/assign",
+    "name": "assign_reviewer"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/document-reviews/{review_id}/checklist/{item_id}/check",
+    "name": "check_item"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/document-reviews/{review_id}/checklist/{item_id}/uncheck",
+    "name": "uncheck_item"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/document-reviews/{review_id}/decide",
+    "name": "submit_decision"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/document-reviews/{review_id}/finalize",
+    "name": "finalize_review"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/document-reviews/{review_id}/resubmit",
+    "name": "resubmit_for_review"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/evidence/upload-request",
+    "name": "request_evidence_upload"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/report-packs",
+    "name": "create_pack"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/report-packs/{pack_id}/generate",
+    "name": "generate_pack"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/report-packs/{pack_id}/publish",
+    "name": "publish_pack"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/report-schedules",
+    "name": "create_schedule"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/report-schedules/{schedule_id}/trigger",
+    "name": "trigger_schedule"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/reports/evidence-pack",
+    "name": "export_evidence_pack"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/reports/evidence-pack/pdf",
+    "name": "export_evidence_pack_pdf"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/reports/investor-statements/generate",
+    "name": "generate_investor_statement"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/reports/monthly-pack/generate",
+    "name": "generate_monthly_pack"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/reports/nav/snapshots",
+    "name": "create_nav_snapshot"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/reports/nav/snapshots/{snapshot_id}/assets",
+    "name": "record_asset_valuation"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/reports/nav/snapshots/{snapshot_id}/finalize",
+    "name": "finalize_nav_snapshot"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/funds/{fund_id}/reports/nav/snapshots/{snapshot_id}/publish",
+    "name": "publish_nav_snapshot"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/instruments",
+    "name": "create_instrument"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/instruments/import/csv",
+    "name": "import_from_csv"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/instruments/import/yahoo",
+    "name": "import_from_yahoo"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/macro/reviews/generate",
+    "name": "generate_review"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/model-portfolios",
+    "name": "create_model_portfolio"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/backtest",
+    "name": "trigger_backtest"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/construct",
+    "name": "construct_portfolio"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/stress",
+    "name": "trigger_stress"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/pipeline/deals",
+    "name": "create_deal"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/pipeline/deals/qualification/run",
+    "name": "run_qualification"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/pipeline/deals/{deal_id}/approve",
+    "name": "approve_deal"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/pipeline/deals/{deal_id}/decisions",
+    "name": "create_decision"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/pipeline/deals/{deal_id}/documents",
+    "name": "upload_deal_document"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/portfolios/{profile}/rebalance",
+    "name": "trigger_rebalance"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/portfolios/{profile}/rebalance/{event_id}/approve",
+    "name": "approve_rebalance"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/portfolios/{profile}/rebalance/{event_id}/execute",
+    "name": "execute_rebalance"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/screener/run",
+    "name": "trigger_screening"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/test/sse/{job_id}/emit",
+    "name": "test_emit_event"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/universe/funds/{instrument_id}/approve",
+    "name": "approve_fund"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/universe/funds/{instrument_id}/reject",
+    "name": "reject_fund"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-benchmark-ingest",
+    "name": "trigger_run_benchmark_ingest"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-fact-sheet-gen",
+    "name": "trigger_run_fact_sheet_gen"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-ingestion",
+    "name": "trigger_run_ingestion"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-macro-ingestion",
+    "name": "trigger_run_macro_ingestion"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-portfolio-eval",
+    "name": "trigger_run_portfolio_eval"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-risk-calc",
+    "name": "trigger_run_risk_calc"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-screening-batch",
+    "name": "trigger_run_screening_batch"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-watchlist-check",
+    "name": "trigger_run_watchlist_check"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/admin/configs/defaults/{vertical}/{config_type}",
+    "name": "update_default"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/admin/configs/{vertical}/{config_type}",
+    "name": "update_config"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/admin/prompts/{vertical}/{name}",
+    "name": "update_prompt"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/allocation/{profile}/strategic",
+    "name": "update_strategic"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/v1/allocation/{profile}/tactical",
+    "name": "update_tactical"
+  }
+]
