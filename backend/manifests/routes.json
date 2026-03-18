@@ -281,6 +281,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/analytics/strategy-drift/{instrument_id}/history",
+    "name": "get_drift_history"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/api/data-room/file-link",
     "name": "file_link"
   },
@@ -983,6 +988,11 @@
     "method": "POST",
     "path": "/api/v1/ai/run-daily-cycle",
     "name": "run_ai_daily_cycle"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/allocation/{profile}/simulate",
+    "name": "simulate_allocation"
   },
   {
     "method": "POST",
