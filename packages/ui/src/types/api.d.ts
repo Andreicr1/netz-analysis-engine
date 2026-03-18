@@ -6415,6 +6415,23 @@ export interface components {
             detected_at: string;
             /** Created At */
             created_at?: string | null;
+            /** Snapshot Date */
+            snapshot_date?: string | null;
+            /** Drift Magnitude */
+            drift_magnitude?: string | null;
+            /** Drift Threshold */
+            drift_threshold?: string | null;
+            /** Rebalance Triggered */
+            rebalance_triggered?: boolean | null;
+            /**
+             * Breached
+             * @default false
+             */
+            breached: boolean;
+            /** Asset Class Breakdown */
+            asset_class_breakdown?: {
+                [key: string]: unknown;
+            }[] | null;
         };
         /**
          * DriftHistoryOut
