@@ -1,3 +1,8 @@
+# Local development stack — mirrors Milestone 2 production:
+# - PostgreSQL 16 + TimescaleDB + pgvector (timescale/timescaledb:latest-pg16)
+# - Redis 7
+# No Azure services needed for local development.
+# Production: Timescale Cloud + Upstash Redis
 services:
   db:
     image: timescale/timescaledb:latest-pg16
@@ -6,10 +11,15 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: netz_engine
       POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    command: >
+      postgres
+      -c shared_preload_libraries=timescaledb
     ports:
       - "5434:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./backend/scripts/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U netz -d netz_engine"]
       interval: 5s
