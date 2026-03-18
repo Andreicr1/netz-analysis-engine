@@ -2,7 +2,6 @@
   Tenant card — compact card with org info. Clickable — navigates to detail.
 -->
 <script lang="ts">
-	import { StatusBadge } from "@netz/ui";
 
 	let {
 		tenant,
@@ -32,7 +31,11 @@
 			</p>
 			<span class="block truncate font-medium text-[var(--netz-text-primary)]">{tenant.org_name}</span>
 		</div>
-		<StatusBadge status={tenant.vertical === "liquid_funds" ? "info" : "accent"} label={verticalLabel} />
+		<span
+			class="inline-flex items-center rounded-full border border-[var(--netz-border)] bg-[var(--netz-surface)] px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--netz-text-secondary)]"
+		>
+			{verticalLabel}
+		</span>
 	</div>
 	<div class="mb-3 space-y-1 text-xs text-[var(--netz-text-muted)]">
 		<p class="font-mono">{orgLabel}</p>
