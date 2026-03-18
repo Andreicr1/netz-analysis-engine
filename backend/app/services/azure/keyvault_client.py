@@ -1,5 +1,8 @@
+# DEPRECATED 2026-03-18: Key Vault replaced by platform env vars (Railway secrets, Milestone 2).
+# Retained for rollback capability only.
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 
 from azure.identity import DefaultAzureCredential
@@ -15,6 +18,11 @@ class KeyVaultHealth:
 
 
 def get_secret_client() -> SecretClient:
+    warnings.warn(
+        "keyvault_client.get_secret_client is deprecated — use environment variables (Railway secrets)",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     if not settings.KEYVAULT_URL:
         raise ValueError("KEYVAULT_URL not configured")
     cred = DefaultAzureCredential(exclude_interactive_browser_credential=True)
@@ -22,6 +30,11 @@ def get_secret_client() -> SecretClient:
 
 
 def health_check_keyvault() -> KeyVaultHealth:
+    warnings.warn(
+        "keyvault_client.health_check_keyvault is deprecated — use environment variables",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     try:
         client = get_secret_client()
         # Do not leak values; just confirm we can list/get.
@@ -33,4 +46,3 @@ def health_check_keyvault() -> KeyVaultHealth:
         return KeyVaultHealth(ok=True)
     except Exception as e:
         return KeyVaultHealth(ok=False, detail=str(e))
-

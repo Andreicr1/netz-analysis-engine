@@ -1,10 +1,13 @@
+# DEPRECATED 2026-03-18: Service Bus dispatch path replaced by Redis pub/sub + BackgroundTasks (Milestone 2).
+# The BackgroundTasks path (USE_SERVICE_BUS=False) remains the active code path.
+# Service Bus branching kept for rollback capability only.
 """Pipeline dispatch — route async work to Service Bus or BackgroundTasks.
 
 Centralises the ``USE_SERVICE_BUS`` feature-flag check so every pipeline
 endpoint uses the same branching logic:
 
-* **USE_SERVICE_BUS = True** → enqueue via Service Bus (workers pick up)
-* **USE_SERVICE_BUS = False** → run in-process via FastAPI BackgroundTasks
+* **USE_SERVICE_BUS = True** → enqueue via Service Bus (workers pick up) [DEPRECATED]
+* **USE_SERVICE_BUS = False** → run in-process via FastAPI BackgroundTasks [ACTIVE]
 
 Each ``dispatch_*`` function returns a dict suitable for the HTTP response.
 """

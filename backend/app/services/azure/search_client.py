@@ -1,4 +1,4 @@
-# DEPRECATED: use pgvector_search_service — Azure Search eliminated in favor of pgvector.
+# DEPRECATED 2026-03-18: Azure Search replaced by pgvector (commit 497df51, Milestone 2).
 # Retained for rollback capability during re-ingestion migration.
 from __future__ import annotations
 

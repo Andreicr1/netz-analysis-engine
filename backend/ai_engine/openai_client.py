@@ -1,14 +1,13 @@
-"""OpenAI Provider Layer — direct OpenAI API client with Azure OpenAI fallback.
+"""OpenAI Provider Layer — direct OpenAI API client with retry.
 
 Centralises all OpenAI SDK usage behind two thin helpers:
-  • ``create_completion()``  — Responses API (``client.responses.create``)
-  • ``create_embedding()``   — text-embedding-3-large (3 072 dims)
+  * ``create_completion()``  — Responses API (``client.responses.create``)
+  * ``create_embedding()``   — text-embedding-3-large (3 072 dims)
 
-**Provider strategy — OpenAI first, Azure OpenAI fallback:**
-  When ``OPENAI_API_KEY`` is set, all calls go to OpenAI direct API.
-  If a call fails (auth error, rate limits, server errors) and
-  ``AZURE_OPENAI_ENDPOINT`` + ``AZURE_OPENAI_KEY`` are configured,
-  the request is automatically retried against Azure OpenAI.
+**Provider strategy — OpenAI direct with exponential-backoff retry:**
+  All calls go to OpenAI direct API via ``OPENAI_API_KEY``.
+  Includes exponential-backoff retry (max 5 attempts) with jitter for
+  rate-limit (429) and transient server errors (>=500).
 
 Uses the **Responses API** (``/v1/responses``) instead of the legacy
 Chat Completions endpoint.  Model routing: gpt-5.1 for memo/narrative
@@ -17,13 +16,8 @@ critic escalation.  Reasoning models (o-series) automatically skip
 temperature and accept reasoning_effort.  gpt-5.x models support
 both temperature and optional reasoning_effort.
 
-Includes exponential-backoff retry (max 5 attempts) with jitter for
-rate-limit (429) and transient server errors (>=500).
-
 Environment:
   OPENAI_API_KEY              — primary provider (direct OpenAI)
-  AZURE_OPENAI_ENDPOINT       — fallback provider (Azure OpenAI)
-  AZURE_OPENAI_KEY            — fallback provider (Azure OpenAI)
   OPENAI_MODEL_INTELLIGENCE   — default ``gpt-4.1``
   OPENAI_EMBEDDING_MODEL      — default ``text-embedding-3-large``
 """
@@ -40,97 +34,37 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from httpx import TimeoutException as HttpxTimeout
-from openai import APIStatusError, AsyncAzureOpenAI, AsyncOpenAI, AzureOpenAI, OpenAI
+from openai import APIStatusError, AsyncOpenAI, OpenAI
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Singleton clients — both may be active for provider-level fallback
+# Singleton clients
 # ---------------------------------------------------------------------------
 _client: OpenAI | None = None
-_fallback_client: OpenAI | None = None
 _foundry_client: OpenAI | None = None
-
-_use_azure_openai: bool = False
-_fallback_checked: bool = False
 
 
 def _get_client() -> OpenAI:
-    """Return the **primary** module-level ``OpenAI`` or ``AzureOpenAI`` client.
+    """Return the module-level ``OpenAI`` client.
 
-    Provider priority:
-      1. Direct OpenAI (``OPENAI_API_KEY`` set)
-      2. Azure OpenAI (``AZURE_OPENAI_ENDPOINT`` + ``AZURE_OPENAI_KEY`` set)
-
-    The module-level flag ``_use_azure_openai`` is set so that downstream
-    code can branch on provider when necessary (e.g. Responses API
-    differences).
+    Requires ``OPENAI_API_KEY`` to be set.
     """
-    global _client, _use_azure_openai
+    global _client
     if _client is not None:
         return _client
 
-    # ── Priority 1: Direct OpenAI ─────────────────────────────────────
     api_key = settings.OPENAI_API_KEY
     if api_key:
-        _use_azure_openai = False
         _client = OpenAI(api_key=api_key, timeout=600.0)
         logger.info("AI_PROVIDER=openai (direct API key)")
         return _client
 
-    # ── Priority 2: Azure OpenAI ──────────────────────────────────────
-    azure_endpoint = settings.AZURE_OPENAI_ENDPOINT
-    azure_key = settings.AZURE_OPENAI_KEY
-    if azure_endpoint and azure_key:
-        _use_azure_openai = True
-        _client = AzureOpenAI(
-            azure_endpoint=azure_endpoint,
-            api_key=azure_key,
-            api_version=settings.AZURE_OPENAI_API_VERSION,
-            timeout=600.0,
-        )
-        logger.info("AI_PROVIDER=azure_openai endpoint=%s", azure_endpoint)
-        return _client
-
     raise ValueError(
-        "No AI provider configured. Set OPENAI_API_KEY (direct) "
-        "or AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_KEY (Azure OpenAI).",
+        "No AI provider configured. Set OPENAI_API_KEY.",
     )
-
-
-def _get_fallback_client() -> OpenAI | None:
-    """Return the **fallback** provider client, or ``None`` if unavailable.
-
-    When the primary is direct OpenAI, the fallback is Azure OpenAI
-    (if ``AZURE_OPENAI_ENDPOINT`` and ``AZURE_OPENAI_KEY`` are set).
-    When the primary is already Azure OpenAI (direct key missing),
-    no fallback is offered.
-    """
-    global _fallback_client, _fallback_checked
-    if _fallback_checked:
-        return _fallback_client
-    _fallback_checked = True
-
-    # Fallback only meaningful when primary is direct OpenAI
-    if _use_azure_openai:
-        return None
-
-    azure_endpoint = settings.AZURE_OPENAI_ENDPOINT
-    azure_key = settings.AZURE_OPENAI_KEY
-    if azure_endpoint and azure_key:
-        _fallback_client = AzureOpenAI(
-            azure_endpoint=azure_endpoint,
-            api_key=azure_key,
-            api_version=settings.AZURE_OPENAI_API_VERSION,
-            timeout=600.0,
-        )
-        logger.info("AI_FALLBACK_READY=azure_openai endpoint=%s", azure_endpoint)
-        return _fallback_client
-
-    logger.info("AI_FALLBACK_NONE — Azure OpenAI not configured")
-    return None
 
 
 def _get_foundry_client() -> OpenAI:
@@ -166,12 +100,11 @@ def _get_foundry_client() -> OpenAI:
 # Async singleton clients — lazy initialisation (no module-level asyncio primitives)
 # ---------------------------------------------------------------------------
 _async_client: AsyncOpenAI | None = None
-_async_fallback_client: AsyncOpenAI | None = None
 _async_foundry_client: AsyncOpenAI | None = None
 
 
 def _get_async_client() -> AsyncOpenAI:
-    """Return lazy singleton ``AsyncOpenAI`` or ``AsyncAzureOpenAI`` client.
+    """Return lazy singleton ``AsyncOpenAI`` client.
 
     Safe in single-threaded asyncio — no lock needed.
     """
@@ -185,58 +118,9 @@ def _get_async_client() -> AsyncOpenAI:
         logger.info("ASYNC_AI_PROVIDER=openai (direct API key)")
         return _async_client
 
-    azure_endpoint = settings.AZURE_OPENAI_ENDPOINT
-    azure_key = settings.AZURE_OPENAI_KEY
-    if azure_endpoint and azure_key:
-        _async_client = AsyncAzureOpenAI(
-            azure_endpoint=azure_endpoint,
-            api_key=azure_key,
-            api_version=settings.AZURE_OPENAI_API_VERSION,
-            timeout=600.0,
-            max_retries=0,
-        )
-        logger.info("ASYNC_AI_PROVIDER=azure_openai endpoint=%s", azure_endpoint)
-        return _async_client
-
     raise ValueError(
-        "No AI provider configured. Set OPENAI_API_KEY (direct) "
-        "or AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_KEY (Azure OpenAI).",
+        "No AI provider configured. Set OPENAI_API_KEY.",
     )
-
-
-def _is_primary_azure() -> bool:
-    """Check if the primary AI provider is Azure OpenAI (no direct API key)."""
-    return not bool(settings.OPENAI_API_KEY) and bool(
-        settings.AZURE_OPENAI_ENDPOINT and settings.AZURE_OPENAI_KEY,
-    )
-
-
-def _get_async_fallback_client() -> AsyncOpenAI | None:
-    """Return async fallback provider client, or ``None``.
-
-    Computes provider from settings directly — does NOT depend on
-    ``_use_azure_openai`` (which is only set by the sync initializer).
-    """
-    global _async_fallback_client
-    if _async_fallback_client is not None:
-        return _async_fallback_client
-
-    # Fallback only meaningful when primary is direct OpenAI
-    if _is_primary_azure():
-        return None
-
-    azure_endpoint = settings.AZURE_OPENAI_ENDPOINT
-    azure_key = settings.AZURE_OPENAI_KEY
-    if azure_endpoint and azure_key:
-        _async_fallback_client = AsyncAzureOpenAI(
-            azure_endpoint=azure_endpoint,
-            api_key=azure_key,
-            api_version=settings.AZURE_OPENAI_API_VERSION,
-            timeout=600.0,
-            max_retries=0,
-        )
-        return _async_fallback_client
-    return None
 
 
 def _get_async_foundry_client() -> AsyncOpenAI:
@@ -311,13 +195,12 @@ def _extract_json_from_text(text: str) -> str:
 
 
 # Prefix-based detection for reasoning-class models that do NOT support
-# the ``temperature`` parameter.  On Azure OpenAI, gpt-5.x models also
-# reject temperature (unlike the direct OpenAI API), so they are included.
+# the ``temperature`` parameter.
 _REASONING_MODEL_PREFIXES: tuple[str, ...] = (
     "o1",           # o1, o1-pro, o1-mini, o1-preview
     "o3",           # o3, o3-mini, o3-pro, o3-deep-research
     "o4",           # o4-mini, o4-mini-deep-research
-    "gpt-5",        # gpt-5.x — no temperature support on Azure OpenAI
+    "gpt-5",        # gpt-5.x — no temperature support on some providers
 )
 
 _PREFIX_RE = re.compile(
@@ -708,12 +591,7 @@ def _create_completion_openai(
     stage: str | None = None,
     reasoning_effort: str | None = None,
 ) -> CompletionResult:
-    """OpenAI Responses API path with automatic Azure OpenAI fallback.
-
-    Strategy: try direct OpenAI first.  If the call fails after retries
-    (auth error, rate-limit exhaustion, server error, timeout), fall
-    back transparently to Azure OpenAI — provided it is configured.
-    """
+    """OpenAI Responses API path — direct OpenAI with retry."""
     client = _get_client()
 
     json_mode = bool(response_format and response_format.get("type") == "json_object")
@@ -758,26 +636,8 @@ def _create_completion_openai(
     if response_format:
         kwargs["text"] = {"format": response_format}
 
-    # ── Dispatch with provider fallback ────────────────────────────────
-    try:
-        resp, text = _dispatch_responses(client, kwargs, schema)
-    except Exception as primary_exc:
-        fallback = _get_fallback_client()
-        if fallback is None:
-            raise
-        logger.warning(
-            "OPENAI_PROVIDER_FALLBACK primary failed (%s) — retrying with Azure OpenAI",
-            f"{type(primary_exc).__name__}(status={getattr(primary_exc, 'status_code', 'n/a')})",
-        )
-        try:
-            resp, text = _dispatch_responses(fallback, kwargs, schema)
-            logger.info("OPENAI_FALLBACK_SUCCESS model=%s via Azure OpenAI", model)
-        except Exception as fallback_exc:
-            logger.error(
-                "OPENAI_FALLBACK_ALSO_FAILED azure_error=%s — raising original error",
-                f"{type(fallback_exc).__name__}(status={getattr(fallback_exc, 'status_code', 'n/a')})",
-            )
-            raise primary_exc from fallback_exc
+    # ── Dispatch with retry ───────────────────────────────────────────
+    resp, text = _dispatch_responses(client, kwargs, schema)
 
     actual_model = getattr(resp, "model", None) or model
 
@@ -820,7 +680,7 @@ async def _async_create_completion_openai(
     stage: str | None = None,
     reasoning_effort: str | None = None,
 ) -> CompletionResult:
-    """Async OpenAI Responses API path with automatic Azure OpenAI fallback."""
+    """Async OpenAI Responses API path — direct OpenAI with retry."""
     client = _get_async_client()
 
     json_mode = bool(response_format and response_format.get("type") == "json_object")
@@ -857,25 +717,7 @@ async def _async_create_completion_openai(
     if response_format:
         kwargs["text"] = {"format": response_format}
 
-    try:
-        resp, text = await _async_dispatch_responses(client, kwargs, schema)
-    except Exception as primary_exc:
-        fallback = _get_async_fallback_client()
-        if fallback is None:
-            raise
-        logger.warning(
-            "ASYNC_OPENAI_PROVIDER_FALLBACK primary failed (%s) — retrying with Azure OpenAI",
-            f"{type(primary_exc).__name__}(status={getattr(primary_exc, 'status_code', 'n/a')})",
-        )
-        try:
-            resp, text = await _async_dispatch_responses(fallback, kwargs, schema)
-            logger.info("ASYNC_OPENAI_FALLBACK_SUCCESS model=%s via Azure OpenAI", model)
-        except Exception as fallback_exc:
-            logger.error(
-                "ASYNC_OPENAI_FALLBACK_ALSO_FAILED azure_error=%s — raising original error",
-                type(fallback_exc).__name__,
-            )
-            raise primary_exc from fallback_exc
+    resp, text = await _async_dispatch_responses(client, kwargs, schema)
 
     actual_model = getattr(resp, "model", None) or model
     logger.info(
@@ -944,34 +786,19 @@ def create_embedding(
     inputs: list[str],
     model: str | None = None,
 ) -> EmbeddingResult:
-    """Generate embeddings via OpenAI or Azure AI Foundry Embeddings API.
+    """Generate embeddings via OpenAI Embeddings API.
 
     Parameters
     ----------
     model : str | None
         Defaults to ``settings.OPENAI_EMBEDDING_MODEL`` (``text-embedding-3-large``).
-    When ``OPENAI_API_KEY`` is not set but ``AZURE_AI_FOUNDRY_KEY`` is
-    configured, the Foundry client is used transparently (same embedding
-    model, routed through Azure AI Services).
 
     Raises ``RuntimeError`` if the resolved model does not match the
     canonical ``EMBEDDING_MODEL_NAME`` constant (B2 guard).
-
     """
     from ai_engine.validation.vector_integrity_guard import EMBEDDING_MODEL_NAME
 
-    # ── Pick client: prefer OpenAI direct, then Azure OpenAI, then Foundry ──
-    if settings.OPENAI_API_KEY or (settings.AZURE_OPENAI_ENDPOINT and settings.AZURE_OPENAI_KEY):
-        client = _get_client()
-    elif settings.AZURE_AI_FOUNDRY_KEY:
-        logger.info("EMBEDDING_PROVIDER=foundry (no OpenAI/Azure OpenAI config)")
-        client = _get_foundry_client()
-    else:
-        raise ValueError(
-            "No AI provider configured for embeddings. "
-            "Set OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT+KEY, or AZURE_AI_FOUNDRY_KEY.",
-        )
-
+    client = _get_client()
     mdl = model or settings.OPENAI_EMBEDDING_MODEL
 
     if mdl != EMBEDDING_MODEL_NAME:
@@ -983,26 +810,7 @@ def create_embedding(
 
     logger.info("Creating embedding with model=%s for %d inputs", mdl, len(inputs))
 
-    # ── Dispatch with provider fallback ────────────────────────────────
-    try:
-        resp = _retry(client.embeddings.create, model=mdl, input=inputs)
-    except Exception as primary_exc:
-        fallback = _get_fallback_client()
-        if fallback is None:
-            raise
-        logger.warning(
-            "EMBEDDING_PROVIDER_FALLBACK primary failed (%s) — retrying with Azure OpenAI",
-            f"{type(primary_exc).__name__}(status={getattr(primary_exc, 'status_code', 'n/a')})",
-        )
-        try:
-            resp = _retry(fallback.embeddings.create, model=mdl, input=inputs)
-            logger.info("EMBEDDING_FALLBACK_SUCCESS model=%s via Azure OpenAI", mdl)
-        except Exception as fallback_exc:
-            logger.error(
-                "EMBEDDING_FALLBACK_ALSO_FAILED azure_error=%s — raising original error",
-                f"{type(fallback_exc).__name__}(status={getattr(fallback_exc, 'status_code', 'n/a')})",
-            )
-            raise primary_exc from fallback_exc
+    resp = _retry(client.embeddings.create, model=mdl, input=inputs)
 
     items_sorted = sorted(resp.data, key=lambda x: x.index)
     vectors = [item.embedding for item in items_sorted]
@@ -1017,24 +825,12 @@ async def async_create_embedding(
 ) -> EmbeddingResult:
     """Async equivalent of ``create_embedding``.
 
-    Uses ``AsyncOpenAI`` / ``AsyncAzureOpenAI`` for non-blocking I/O.
-    Replicates the B2 guard (model drift detection) and provider fallback
-    chain from the sync version.
+    Uses ``AsyncOpenAI`` for non-blocking I/O.
+    Replicates the B2 guard (model drift detection) from the sync version.
     """
     from ai_engine.validation.vector_integrity_guard import EMBEDDING_MODEL_NAME
 
-    # ── Pick async client: prefer OpenAI direct, then Azure OpenAI, then Foundry
-    if settings.OPENAI_API_KEY or (settings.AZURE_OPENAI_ENDPOINT and settings.AZURE_OPENAI_KEY):
-        client = _get_async_client()
-    elif settings.AZURE_AI_FOUNDRY_KEY:
-        logger.info("ASYNC_EMBEDDING_PROVIDER=foundry (no OpenAI/Azure OpenAI config)")
-        client = _get_async_foundry_client()
-    else:
-        raise ValueError(
-            "No AI provider configured for embeddings. "
-            "Set OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT+KEY, or AZURE_AI_FOUNDRY_KEY.",
-        )
-
+    client = _get_async_client()
     mdl = model or settings.OPENAI_EMBEDDING_MODEL
 
     if mdl != EMBEDDING_MODEL_NAME:
@@ -1046,26 +842,7 @@ async def async_create_embedding(
 
     logger.info("ASYNC_EMBEDDING_REQUEST model=%s inputs=%d", mdl, len(inputs))
 
-    # ── Dispatch with provider fallback ────────────────────────────────
-    try:
-        resp = await _async_retry(client.embeddings.create, model=mdl, input=inputs)
-    except Exception as primary_exc:
-        fallback = _get_async_fallback_client()
-        if fallback is None:
-            raise
-        logger.warning(
-            "ASYNC_EMBEDDING_PROVIDER_FALLBACK primary failed (%s) — retrying with Azure OpenAI",
-            f"{type(primary_exc).__name__}(status={getattr(primary_exc, 'status_code', 'n/a')})",
-        )
-        try:
-            resp = await _async_retry(fallback.embeddings.create, model=mdl, input=inputs)
-            logger.info("ASYNC_EMBEDDING_FALLBACK_SUCCESS model=%s via Azure OpenAI", mdl)
-        except Exception as fallback_exc:
-            logger.error(
-                "ASYNC_EMBEDDING_FALLBACK_ALSO_FAILED azure_error=%s — raising original error",
-                f"{type(fallback_exc).__name__}(status={getattr(fallback_exc, 'status_code', 'n/a')})",
-            )
-            raise primary_exc from fallback_exc
+    resp = await _async_retry(client.embeddings.create, model=mdl, input=inputs)
 
     items_sorted = sorted(resp.data, key=lambda x: x.index)
     vectors = [item.embedding for item in items_sorted]
