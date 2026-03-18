@@ -236,7 +236,9 @@ def build_manager_profiles(
                 }
                 for item in saved
             ]
-            AzureSearchMetadataClient().upsert_documents(items=search_docs)
+            AzureSearchMetadataClient(
+                caller="knowledge_builder",
+            ).upsert_documents(items=search_docs)
         except Exception:
             for item in saved:
                 item.data_quality = "DEGRADED"

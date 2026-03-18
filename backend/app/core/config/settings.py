@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     # ── Azure AI Search ──────────────────────────────────
     azure_search_endpoint: str = ""
     azure_search_key: str = ""
+    SEARCH_INDEX_NAME: str = ""
     SEARCH_CHUNKS_INDEX_NAME: str = "global-vector-chunks-v2"
     NETZ_ENV: str = "dev"
 
