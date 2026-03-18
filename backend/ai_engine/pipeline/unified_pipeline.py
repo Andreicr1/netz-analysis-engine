@@ -418,7 +418,7 @@ async def _write_to_lake(path: str, data: bytes, *, content_type: str = "applica
         return False
 
 
-def _build_chunks_parquet(chunks: list[dict[str, Any]], doc_id: str) -> bytes:
+def _build_chunks_parquet(chunks: list[dict[str, Any]], doc_id: str, org_id: str) -> bytes:
     """Serialize chunks + embeddings to Parquet bytes.
 
     Schema includes ``embedding_model`` and ``embedding_dim`` so the
@@ -452,6 +452,7 @@ def _build_chunks_parquet(chunks: list[dict[str, Any]], doc_id: str) -> bytes:
             "embedding": chunk.get("embedding", []),
             "embedding_model": EMBEDDING_MODEL_NAME,
             "embedding_dim": EMBEDDING_DIMENSIONS,
+            "organization_id": org_id,
         })
 
     table = pa.table({
@@ -475,6 +476,7 @@ def _build_chunks_parquet(chunks: list[dict[str, Any]], doc_id: str) -> bytes:
         ),
         "embedding_model": pa.array([r["embedding_model"] for r in rows], type=pa.string()),
         "embedding_dim": pa.array([r["embedding_dim"] for r in rows], type=pa.int32()),
+        "organization_id": pa.array([r["organization_id"] for r in rows], type=pa.string()),
     })
 
     buf = pa.BufferOutputStream()
@@ -771,7 +773,9 @@ async def process(
         "ocr_text": ocr_text,
         "page_count": page_count,
     }).encode()
-    parquet_bytes = await asyncio.to_thread(_build_chunks_parquet, chunks, doc_id_str)
+    parquet_bytes = await asyncio.to_thread(
+        _build_chunks_parquet, chunks, doc_id_str, str(request.org_id)
+    )
     meta_payload = json.dumps({
         "document_id": doc_id_str,
         "filename": request.filename,
