@@ -1,5 +1,8 @@
+# DEPRECATED 2026-03-18: Azure Blob Storage replaced by LocalStorageClient + StorageClient abstraction (Milestone 2).
+# Retained for rollback capability only. Use StorageClient for all new storage operations.
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 
 from azure.identity import DefaultAzureCredential
@@ -15,6 +18,11 @@ class StorageHealth:
 
 
 def get_blob_service_client() -> BlobServiceClient:
+    warnings.warn(
+        "blob_client.get_blob_service_client is deprecated — use StorageClient abstraction",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     if not settings.STORAGE_ACCOUNT_URL:
         raise ValueError("STORAGE_ACCOUNT_URL not configured")
     if settings.AZURE_STORAGE_ACCOUNT_KEY:
@@ -25,6 +33,11 @@ def get_blob_service_client() -> BlobServiceClient:
 
 
 def health_check_storage() -> StorageHealth:
+    warnings.warn(
+        "blob_client.health_check_storage is deprecated — use StorageClient abstraction",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     try:
         svc = get_blob_service_client()
         # Validate containers are reachable (existence/permissions)
@@ -37,4 +50,3 @@ def health_check_storage() -> StorageHealth:
         return StorageHealth(ok=True)
     except Exception as e:
         return StorageHealth(ok=False, detail=str(e))
-

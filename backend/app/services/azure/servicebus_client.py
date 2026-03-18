@@ -1,24 +1,17 @@
+# DEPRECATED 2026-03-18: Azure Service Bus replaced by Redis pub/sub + BackgroundTasks (Milestone 2).
+# Retained for rollback capability only.
 """Azure Service Bus producer — enqueue pipeline jobs.
 
-Usage::
-
-    from app.services.azure.servicebus_client import send_to_topic, send_to_queue
-
-    send_to_topic("document-pipeline", payload, stage="extraction")
-    send_to_queue("memo-generation", payload)
-
-Authentication uses ``DefaultAzureCredential`` (Managed Identity in
-production, ``az login`` locally).  The namespace FQDN is read from
-``settings.SERVICE_BUS_NAMESPACE``.
-
-If ``SERVICE_BUS_NAMESPACE`` is not set (local dev without Service Bus),
-all send operations are no-ops and log a warning.
+DEPRECATED: Use Redis pub/sub + BackgroundTasks instead. This module is
+kept for rollback capability only. All send operations were already no-ops
+in local dev (when SERVICE_BUS_NAMESPACE is not set).
 """
 from __future__ import annotations
 
 import json
 import logging
 import uuid
+import warnings
 from datetime import UTC, datetime
 
 from app.core.config import settings
@@ -68,9 +61,16 @@ def _build_message(payload: dict, stage: str | None = None) -> dict:
 def send_to_topic(topic: str, payload: dict, *, stage: str) -> str | None:
     """Publish a message to a Service Bus topic.
 
+    DEPRECATED: Use Redis pub/sub + BackgroundTasks instead.
+
     Returns the ``job_id`` on success, or ``None`` if Service Bus is
     not configured.
     """
+    warnings.warn(
+        "servicebus_client.send_to_topic is deprecated — use Redis pub/sub + BackgroundTasks",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     client = _get_client()
     if client is None:
         logger.warning("Service Bus not available — skipping send_to_topic(%s)", topic)
@@ -99,9 +99,16 @@ def send_to_topic(topic: str, payload: dict, *, stage: str) -> str | None:
 def send_to_queue(queue: str, payload: dict, *, stage: str = "memo") -> str | None:
     """Publish a message to a Service Bus queue.
 
+    DEPRECATED: Use Redis pub/sub + BackgroundTasks instead.
+
     Returns the ``job_id`` on success, or ``None`` if Service Bus is
     not configured.
     """
+    warnings.warn(
+        "servicebus_client.send_to_queue is deprecated — use Redis pub/sub + BackgroundTasks",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     client = _get_client()
     if client is None:
         logger.warning("Service Bus not available — skipping send_to_queue(%s)", queue)
