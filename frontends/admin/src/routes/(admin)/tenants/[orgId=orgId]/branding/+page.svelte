@@ -10,6 +10,12 @@
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
+	const tenantName = $derived(data.tenant?.org_name ?? "this tenant");
+	const tenantScope = $derived(
+		data.tenant
+			? `${data.tenant.org_name} (${data.tenant.organization_id})`
+			: `tenant ${data.orgId}`,
+	);
 
 	// Asset upload state
 	const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/x-icon"];
@@ -125,7 +131,7 @@
 				<div class="flex items-center gap-4">
 					<img src={filePreview} alt="Preview" class="h-16 w-16 rounded border border-[var(--netz-border)] object-contain" />
 					<ActionButton onclick={uploadAsset} loading={uploading} loadingText="Uploading...">
-						Upload {assetType}
+						Upload {assetType} to this tenant
 					</ActionButton>
 				</div>
 			{/if}
@@ -142,7 +148,7 @@
 						<div class="flex items-center justify-between rounded border border-[var(--netz-border)] p-3">
 							<span class="text-sm text-[var(--netz-text-primary)]">{asset.asset_type ?? asset.type ?? "unknown"}</span>
 							<Button variant="destructive" size="sm" onclick={() => confirmDelete(asset.asset_type ?? asset.type)}>
-								Delete
+								Delete from this tenant
 							</Button>
 						</div>
 					{/each}
@@ -153,9 +159,9 @@
 
 	<ConfirmDialog
 		bind:open={showDeleteConfirm}
-		title="Delete Asset"
-		message="This will permanently remove this branding asset. Continue?"
-		confirmLabel="Delete"
+		title={`Delete asset from ${tenantName}`}
+		message={`This will permanently remove this branding asset from ${tenantScope}. Continue?`}
+		confirmLabel="Delete from this tenant"
 		confirmVariant="destructive"
 		onConfirm={deleteAsset}
 	/>

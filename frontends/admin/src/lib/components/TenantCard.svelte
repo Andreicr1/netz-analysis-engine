@@ -16,20 +16,28 @@
 			asset_count: number;
 		};
 	} = $props();
+
+	const orgLabel = $derived(`Org ID: ${tenant.organization_id}`);
+	const verticalLabel = $derived(tenant.vertical.replace("_", " "));
 </script>
 
 <a
 	href="/tenants/{tenant.organization_id}"
 	class="block rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] p-4 transition-colors hover:border-[var(--netz-brand-primary)]"
 >
-	<div class="mb-2 flex items-center justify-between">
-		<span class="font-medium text-[var(--netz-text-primary)]">{tenant.org_name}</span>
-		<StatusBadge
-			status={tenant.vertical === "liquid_funds" ? "info" : "accent"}
-			label={tenant.vertical.replace("_", " ")}
-		/>
+	<div class="mb-2 flex items-start justify-between gap-3">
+		<div class="min-w-0">
+			<p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--netz-text-muted)]">
+				Tenant
+			</p>
+			<span class="block truncate font-medium text-[var(--netz-text-primary)]">{tenant.org_name}</span>
+		</div>
+		<StatusBadge status={tenant.vertical === "liquid_funds" ? "info" : "accent"} label={verticalLabel} />
 	</div>
-	<p class="mb-3 text-xs text-[var(--netz-text-muted)]">{tenant.org_slug}</p>
+	<div class="mb-3 space-y-1 text-xs text-[var(--netz-text-muted)]">
+		<p class="font-mono">{orgLabel}</p>
+		<p>Slug: {tenant.org_slug}</p>
+	</div>
 	<div class="flex gap-4 text-xs text-[var(--netz-text-secondary)]">
 		<span>{tenant.config_count} configs</span>
 		<span>{tenant.asset_count} assets</span>

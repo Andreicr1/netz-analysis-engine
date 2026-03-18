@@ -9,6 +9,12 @@
 
 	let { data }: { data: PageData } = $props();
 	const tenant = $derived(data.tenant);
+	const tenantName = $derived(tenant?.org_name ?? "this tenant");
+	const tenantScope = $derived(
+		tenant
+			? `${tenant.org_name} (${tenant.organization_id})`
+			: `tenant ${data.orgId}`,
+	);
 
 	// Edit state
 	let editing = $state(false);
@@ -62,12 +68,12 @@
 			{tenant?.org_name ?? "Tenant"}
 		</h2>
 		{#if !editing}
-			<Button variant="outline" size="sm" onclick={startEdit}>Edit</Button>
+			<Button variant="outline" size="sm" onclick={startEdit}>Edit tenant details</Button>
 		{/if}
 	</div>
 
 	{#if editing}
-		<SectionCard title="Edit Tenant">
+			<SectionCard title="Edit tenant">
 			<div class="space-y-4">
 				<FormField label="Name" required>
 					<input
@@ -101,7 +107,7 @@
 				<div class="flex justify-end gap-3">
 					<Button variant="outline" onclick={cancelEdit} disabled={saving}>Cancel</Button>
 					<ActionButton onclick={saveEdit} loading={saving} loadingText="Saving..." disabled={!editForm.name}>
-						Save Changes
+						Save for this tenant
 					</ActionButton>
 				</div>
 			</div>
@@ -141,15 +147,15 @@
 			variant="outline"
 			onclick={() => (showSeedConfirm = true)}
 		>
-			Re-seed Default Configs
+			Re-seed defaults for this tenant
 		</ActionButton>
 	</SectionCard>
 
 	<ConfirmDialog
 		bind:open={showSeedConfirm}
-		title="Seed Default Configs"
-		message="This will create default config overrides for this tenant. Existing overrides will not be affected."
-		confirmLabel="Seed"
+		title={`Seed default configs for ${tenantName}`}
+		message={`This will create default config overrides for ${tenantScope}. Existing overrides will not be affected.`}
+		confirmLabel="Seed for this tenant"
 		onConfirm={seedDefaults}
 	/>
 </div>

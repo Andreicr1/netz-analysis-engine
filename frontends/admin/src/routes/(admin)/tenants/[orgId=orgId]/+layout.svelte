@@ -5,11 +5,17 @@
 <script lang="ts">
 	import { page } from "$app/state";
 	import { useContextNav } from "$lib/state/context-nav.svelte";
+	import EntityContextHeader from "../../../../../../../packages/ui/src/lib/components/EntityContextHeader.svelte";
 
 	let { children }: { children: import("svelte").Snippet } = $props();
 	const nav = useContextNav();
 
+	const tenant = $derived(page.data.tenant);
 	const orgId = $derived(page.params.orgId);
+	const tenantTitle = $derived(tenant?.org_name ?? "Tenant");
+	const tenantSlug = $derived(tenant?.org_slug ?? null);
+	const tenantPlan = $derived(tenant?.plan_tier ?? null);
+	const tenantStatus = $derived(tenant?.status ?? null);
 
 	$effect(() => {
 		const id = orgId;
@@ -34,5 +40,12 @@
 </script>
 
 <div class="flex-1 overflow-auto">
+	<EntityContextHeader
+		title={tenantTitle}
+		orgId={tenant?.organization_id ?? orgId}
+		slug={tenantSlug}
+		planTier={tenantPlan}
+		status={tenantStatus}
+	/>
 	{@render children()}
 </div>
