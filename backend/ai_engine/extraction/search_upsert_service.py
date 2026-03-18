@@ -1,3 +1,5 @@
+# DEPRECATED: use pgvector_search_service — Azure Search eliminated in favor of pgvector.
+# Retained for rollback capability during re-ingestion migration.
 """Azure AI Search upsert service for the canonical env-scoped chunks index.
 
 Uses mergeOrUpload action for idempotent upserts.

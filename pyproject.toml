@@ -22,6 +22,7 @@ dependencies = [
     "pyyaml>=6.0",
     "jinja2>=3.1",
     "nh3>=0.2.0",
+    "pgvector>=0.4",
 ]
 
 [project.optional-dependencies]
@@ -39,6 +40,7 @@ ai = [
     "numpy>=2.0",
     "scikit-learn>=1.6",
     "pyarrow>=15.0",
+    "duckdb>=0.10",
 ]
 reranker = [
     "sentence-transformers>=3.0,<4.0",
@@ -114,7 +116,7 @@ warn_return_any = true
 warn_unused_configs = true
 
 [[tool.mypy.overrides]]
-module = ["redis.*", "sse_starlette.*", "edgar.*", "rapidfuzz.*", "pyarrow.*"]
+module = ["redis.*", "sse_starlette.*", "edgar.*", "rapidfuzz.*", "pyarrow.*", "duckdb.*", "pgvector.*"]
 ignore_missing_imports = true
 
 # ── Import architecture enforcement (import-linter) ──────────────────

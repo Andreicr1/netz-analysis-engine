@@ -153,7 +153,7 @@ class TestChunksParquet:
             },
         ]
 
-        parquet_bytes = _build_chunks_parquet(chunks, "doc-test-123")
+        parquet_bytes = _build_chunks_parquet(chunks, "doc-test-123", "org-abc-123")
         assert isinstance(parquet_bytes, bytes)
         assert len(parquet_bytes) > 0
 
@@ -163,6 +163,7 @@ class TestChunksParquet:
         assert set(table.column_names) >= {
             "doc_id", "chunk_index", "content", "embedding",
             "embedding_model", "embedding_dim", "doc_type", "vehicle_type",
+            "organization_id",
         }
 
         # Verify data
@@ -175,10 +176,11 @@ class TestChunksParquet:
         assert table.column("embedding")[0].as_py() == pytest.approx([0.1, 0.2, 0.3])
         assert table.column("embedding_model")[0].as_py() == "text-embedding-3-large"
         assert table.column("embedding_dim")[0].as_py() == 3072
+        assert table.column("organization_id")[0].as_py() == "org-abc-123"
 
     def test_empty_chunks(self):
         from ai_engine.pipeline.unified_pipeline import _build_chunks_parquet
-        parquet_bytes = _build_chunks_parquet([], "doc-empty")
+        parquet_bytes = _build_chunks_parquet([], "doc-empty", "org-abc-123")
         assert isinstance(parquet_bytes, bytes)
 
 
@@ -274,7 +276,7 @@ class TestSearchRebuildValidation:
             embedding_values=[0.1] * EMBEDDING_DIMENSIONS,
         )
 
-        from ai_engine.extraction.search_upsert_service import UpsertResult
+        from ai_engine.extraction.pgvector_search_service import UpsertResult
 
         mock_result = UpsertResult(
             attempted_chunk_count=1,
@@ -285,7 +287,7 @@ class TestSearchRebuildValidation:
         mock_upsert = MagicMock(return_value=mock_result)
 
         with patch(
-            "ai_engine.extraction.search_upsert_service.upsert_chunks",
+            "ai_engine.extraction.pgvector_search_service.upsert_chunks_sync",
             mock_upsert,
         ):
             count = _rebuild_single_document(

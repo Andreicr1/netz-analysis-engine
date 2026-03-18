@@ -1,3 +1,5 @@
+# DEPRECATED: use pgvector_search_service — Azure Search eliminated in favor of pgvector.
+# Retained for rollback capability during re-ingestion migration.
 """Azure AI Search metadata helpers for retained production metadata paths."""
 
 from __future__ import annotations

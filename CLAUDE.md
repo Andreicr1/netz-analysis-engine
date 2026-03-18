@@ -79,9 +79,9 @@ frontends/
 
 **SSE:** `sse-starlette` EventSourceResponse. Redis pub/sub for worker→SSE bridging. Frontend uses `fetch()` + `ReadableStream` (not EventSource — auth headers needed).
 
-**Data Lake (ADLS Gen2):** Feature-flagged (`FEATURE_ADLS_ENABLED=false`). Bronze/silver/gold hierarchy with `{organization_id}/{vertical}/` as path prefix. Path routing via `ai_engine/pipeline/storage_routing.py`. DuckDB queries ADLS directly for analytics. Local dev uses `LocalStorageClient` (filesystem at `.data/lake/`).
+**Data Lake (LocalStorage/ADLS Gen2):** Feature-flagged (`FEATURE_ADLS_ENABLED=false` — LocalStorageClient in dev and production until Milestone 3). Bronze/silver/gold hierarchy with `{organization_id}/{vertical}/` as path prefix. Path routing via `ai_engine/pipeline/storage_routing.py`. DuckDB queries LocalStorage filesystem for analytics (Phase 1). When `FEATURE_ADLS_ENABLED=true`, DuckDB will query ADLS directly (Phase 3 — requires `ADLSStorageClient.get_duckdb_path()` implementation).
 
-**Unified Pipeline:** Single ingestion path for all sources (UI, batch, API). Stages: pre-filter → OCR → [gate] → classify → [gate] → governance → chunk → [gate] → extract metadata → [gate] → embed → [gate] → storage (ADLS) → index (Azure Search). Dual-write: ADLS is source of truth, Azure Search is derived index. Search can be rebuilt from silver layer Parquet via `search_rebuild.py` without reprocessing PDFs.
+**Unified Pipeline:** Single ingestion path for all sources (UI, batch, API). Stages: pre-filter → OCR → [gate] → classify → [gate] → governance → chunk → [gate] → extract metadata → [gate] → embed → [gate] → storage (LocalStorage/ADLS) → index (pgvector). Dual-write: LocalStorage/ADLS is source of truth, pgvector is derived index. pgvector index can be rebuilt from silver layer Parquet via `search_rebuild.py` without reprocessing PDFs.
 
 **Classification:** Three-layer hybrid classifier (no external ML APIs). Layer 1: filename + keyword rules (~60% of docs). Layer 2: TF-IDF + cosine similarity (~30%). Layer 3: LLM fallback (~10%). Cross-encoder local reranker for IC memo evidence (replaced Cohere).
 
@@ -119,10 +119,10 @@ The engine contains only analytical domains. Operational modules were intentiona
 - **ConfigService for all config:** Never read `calibration/` or `profiles/` YAML at runtime. Use `ConfigService.get(vertical, config_type, org_id)`. YAML files are seed data only.
 - **Prompts are Netz IP:** Never expose prompt content in client-facing API responses. Use `CLIENT_VISIBLE_TYPES` allowlist in ConfigService. Use `jinja2.SandboxedEnvironment` for all prompt rendering.
 - **StorageClient for all storage:** Never call ADLS SDK directly. Use `StorageClient` abstraction (local filesystem when `FEATURE_ADLS_ENABLED=false`).
-- **Dual-write ordering:** ADLS write (source of truth) BEFORE Azure Search upsert (derived index). If ADLS fails, pipeline continues with warning. If Search fails, data is safe in ADLS and can be rebuilt.
+- **Dual-write ordering:** ADLS write (source of truth) BEFORE pgvector upsert (derived index). If ADLS fails, pipeline continues with warning. If pgvector upsert fails, data is safe in ADLS/LocalStorage and can be rebuilt via `search_rebuild.py`. Azure Search files kept as deprecated fallback — see `feat/pgvector-replace-azure-search` branch.
 - **Path routing via `storage_routing.py`:** Never build ADLS paths with f-strings in callers. Use `bronze_document_path()`, `silver_chunks_path()`, `silver_metadata_path()`, `gold_memo_path()`. All paths validated with `_SAFE_PATH_SEGMENT_RE`.
 - **Parquet schema must include embedding metadata:** All silver layer Parquet files must have `embedding_model` and `embedding_dim` columns. `search_rebuild.py` validates dimension match before upserting — prevents silent corruption on model upgrade.
-- **`organization_id` in Azure Search documents:** All search documents must include `organization_id` (Security F4). All RAG queries MUST include `$filter=organization_id eq '{org_id}'`.
+- **`organization_id` in vector search:** All pgvector queries MUST include `WHERE organization_id = :org_id` (SQL parameterized). All Parquet DuckDB queries MUST include `WHERE organization_id = ?`. Never query without tenant filter. (Azure Search files deprecated — `$filter=organization_id eq '{org_id}'` pattern no longer applies.)
 - **No Cohere dependency:** Hybrid classifier (rules → cosine_similarity → LLM) replaced Cohere Rerank. Cross-encoder reranker (`local_reranker.py`) replaced Cohere for IC memo evidence. Zero external ML API calls for classification.
 
 ## Vertical Engines
@@ -157,7 +157,7 @@ Enforced via `import-linter` in `make check`. Contracts in `pyproject.toml`:
 7. TimescaleDB hypertables: `compress_segmentby = 'organization_id'` on all hypertables
 8. Pipeline writes: OCR → `bronze/.../documents/{doc_id}.json`, chunks → `silver/.../chunks/{doc_id}/chunks.parquet`, metadata → `silver/.../documents/{doc_id}/metadata.json`
 9. Parquet files must use zstd compression and include `embedding_model` + `embedding_dim` columns for rebuild validation
-10. `search_rebuild.py` can reconstruct Azure Search index from silver Parquet — no OCR/LLM calls needed
+10. `search_rebuild.py` can reconstruct pgvector `vector_chunks` table from silver Parquet — no OCR/LLM calls needed. (Azure Search index rebuild is deprecated — Azure Search files kept for rollback only.)
 
 ## Environment Variables
 
@@ -172,22 +172,26 @@ CLERK_JWKS_URL=
 
 # AI
 OPENAI_API_KEY=
-AZURE_OPENAI_ENDPOINT=
-AZURE_OPENAI_API_KEY=
-
-# Search
-SEARCH_CHUNKS_INDEX_NAME=global-vector-chunks-v2
-NETZ_ENV=dev                   # Prefixes search indexes: dev-global-vector-chunks-v2
-
-# Embedding
 OPENAI_EMBEDDING_MODEL=text-embedding-3-large
 
-# Data Lake (disabled by default — local dev uses LocalStorageClient at .data/lake/)
+# Mistral (OCR)
+MISTRAL_API_KEY=
+
+# Data Lake (disabled by default — LocalStorageClient at .data/lake/ in dev and production until Milestone 3)
 FEATURE_ADLS_ENABLED=false
 ADLS_ACCOUNT_NAME=
 ADLS_ACCOUNT_KEY=
 ADLS_CONTAINER_NAME=netz-analysis
 ADLS_CONNECTION_STRING=
+
+# ── DEPRECATED (Azure services eliminated — Milestone 2 simplification, 2026-03-18) ──
+# AZURE_OPENAI_ENDPOINT=        # replaced by OpenAI direct with retry backoff
+# AZURE_OPENAI_API_KEY=         # replaced by OpenAI direct with retry backoff
+# SEARCH_CHUNKS_INDEX_NAME=     # replaced by pgvector (feat/pgvector-replace-azure-search)
+# NETZ_ENV=                     # search index prefixing no longer needed
+# KEYVAULT_URL=                 # replaced by platform env vars
+# SERVICE_BUS_NAMESPACE=        # replaced by Redis pub/sub + BackgroundTasks
+# APPLICATIONINSIGHTS_CONNECTION_STRING=  # replaced by structlog → stdout
 ```
 
 ## Clerk SvelteKit SDK Note
@@ -197,6 +201,31 @@ No official Clerk SvelteKit SDK exists. Use community packages: `clerk-sveltekit
 ## Skills
 
 Custom skills live in `.claude/skills/`. Each subfolder contains a `SKILL.md` with frontmatter (`name`, `description`) that describes when to use it. **Do not maintain a hardcoded list here.** To discover available skills, glob `.claude/skills/**/SKILL.md` and read the frontmatter to find the best match for the current task. Invoke via the `Skill` tool or `/skill-name`.
+
+## Infrastructure (Milestone 2 — up to 50 tenants)
+
+Simplified stack (2026-03-18):
+- **PostgreSQL** (pgvector + TimescaleDB) — vector search, time-series, RLS, all data
+- **Redis** — SSE pub/sub, job tracking, worker idempotency, advisory locks
+- **OpenAI API** (direct, with retry backoff) — LLM + embeddings
+- **Mistral** — OCR
+- **Clerk** — auth (JWT v2)
+- **LocalStorageClient** (filesystem with persistent volume) — data lake (bronze/silver/gold Parquet)
+
+Deprecated Azure services (files kept for rollback, not actively used):
+- Azure Key Vault → platform env vars
+- Azure Service Bus → Redis + BackgroundTasks
+- Application Insights → structlog → stdout
+- Azure OpenAI → OpenAI direct (retry replaces fallback)
+- Azure AI Search → pgvector (migration in `feat/pgvector-replace-azure-search` branch)
+- ADLS Gen2 → LocalStorageClient with persistent volume (re-enables at Milestone 3)
+
+Scale triggers for re-adding services (Milestone 3+, >50 tenants):
+- **Key Vault:** regulatory requirement for secret rotation audit trail (SOC2)
+- **ADLS:** data lake > 1TB or data residency requirements
+- **Service Bus:** guaranteed delivery needed for financial transactions
+- **Application Insights:** distributed tracing across microservices (if/when decomposed)
+- **Azure AI Search:** only if pgvector HNSW performance becomes bottleneck at scale (unlikely before 10M+ chunks)
 
 ## Origins
 

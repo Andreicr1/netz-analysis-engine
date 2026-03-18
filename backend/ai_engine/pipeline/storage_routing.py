@@ -88,6 +88,17 @@ def silver_metadata_path(org_id: UUID, vertical: str, doc_id: str) -> str:
     return f"silver/{org_id}/{vertical}/documents/{doc_id}/metadata.json"
 
 
+def silver_chunks_glob(org_id: UUID, vertical: str) -> str:
+    """Glob pattern for all silver chunk Parquet files for a tenant.
+
+    Used by DuckDBClient to scan the silver layer without enumerating
+    individual document paths.
+    """
+    _validate_segment(str(org_id), "org_id")
+    _validate_vertical(vertical)
+    return f"silver/{org_id}/{vertical}/chunks/*/chunks.parquet"
+
+
 # ── Gold layer (analytical outputs) ────────────────────────────────
 
 

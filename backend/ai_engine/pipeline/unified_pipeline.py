@@ -6,15 +6,15 @@ feedback (SSE events), not analytical quality.
 
 Stages: pre-filter → OCR → [gate] → classify → [gate] → governance
         → chunk → [gate] → extract metadata → [gate] → embed → [gate]
-        → storage (ADLS) → index (Azure Search) → done
+        → storage (ADLS) → index (pgvector) → done
 
 Each gate returns ``PipelineStageResult``. On failure the pipeline halts
 for this document (other documents in a batch continue).
 
 Storage follows dual-write pattern (Phase 3):
   1. Write to ADLS (StorageClient) — source of truth
-  2. Upsert to Azure AI Search — derived index
-  3. If ADLS succeeds but Search fails → document is safe, warning logged
+  2. Upsert to pgvector (PostgreSQL) — derived index
+  3. If ADLS succeeds but pgvector fails → document is safe, warning logged
 """
 from __future__ import annotations
 
@@ -418,7 +418,7 @@ async def _write_to_lake(path: str, data: bytes, *, content_type: str = "applica
         return False
 
 
-def _build_chunks_parquet(chunks: list[dict[str, Any]], doc_id: str) -> bytes:
+def _build_chunks_parquet(chunks: list[dict[str, Any]], doc_id: str, org_id: str) -> bytes:
     """Serialize chunks + embeddings to Parquet bytes.
 
     Schema includes ``embedding_model`` and ``embedding_dim`` so the
@@ -452,6 +452,7 @@ def _build_chunks_parquet(chunks: list[dict[str, Any]], doc_id: str) -> bytes:
             "embedding": chunk.get("embedding", []),
             "embedding_model": EMBEDDING_MODEL_NAME,
             "embedding_dim": EMBEDDING_DIMENSIONS,
+            "organization_id": org_id,
         })
 
     table = pa.table({
@@ -475,6 +476,7 @@ def _build_chunks_parquet(chunks: list[dict[str, Any]], doc_id: str) -> bytes:
         ),
         "embedding_model": pa.array([r["embedding_model"] for r in rows], type=pa.string()),
         "embedding_dim": pa.array([r["embedding_dim"] for r in rows], type=pa.int32()),
+        "organization_id": pa.array([r["organization_id"] for r in rows], type=pa.string()),
     })
 
     buf = pa.BufferOutputStream()
@@ -771,7 +773,9 @@ async def process(
         "ocr_text": ocr_text,
         "page_count": page_count,
     }).encode()
-    parquet_bytes = await asyncio.to_thread(_build_chunks_parquet, chunks, doc_id_str)
+    parquet_bytes = await asyncio.to_thread(
+        _build_chunks_parquet, chunks, doc_id_str, str(request.org_id)
+    )
     meta_payload = json.dumps({
         "document_id": doc_id_str,
         "filename": request.filename,
@@ -836,13 +840,13 @@ async def process(
         skip_index = True
         warnings.append("Search upsert skipped — all ADLS writes failed (no source of truth)")
 
-    # ── 9. Index to Azure Search (derived index) ────────────────
-    from ai_engine.extraction.search_upsert_service import (
+    # ── 9. Index to pgvector (derived index) ─────────────────────
+    from ai_engine.extraction.pgvector_search_service import (
         UpsertResult,
         build_search_document,
     )
-    from ai_engine.extraction.search_upsert_service import (
-        upsert_chunks as upsert_search_chunks,
+    from ai_engine.extraction.pgvector_search_service import (
+        upsert_chunks as pgvector_upsert,
     )
 
     upsert_result = UpsertResult(
@@ -884,8 +888,18 @@ async def process(
             )
             search_docs.append(search_doc)
 
-        # upsert_chunks is synchronous — returns UpsertResult
-        upsert_result = await asyncio.to_thread(upsert_search_chunks, search_docs)
+        # pgvector upsert is async — requires db session
+        if db is not None:
+            upsert_result = await pgvector_upsert(db, search_docs)
+        else:
+            logger.warning("[pipeline] No db session — skipping pgvector upsert")
+            upsert_result = UpsertResult(
+                attempted_chunk_count=len(search_docs),
+                successful_chunk_count=0,
+                failed_chunk_count=len(search_docs),
+                retryable=True,
+                batch_errors=["No database session available for pgvector upsert"],
+            )
 
     indexed_count = upsert_result.successful_chunk_count
     metrics["chunks_indexed"] = indexed_count
