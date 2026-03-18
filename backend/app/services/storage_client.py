@@ -85,6 +85,24 @@ class StorageClient(ABC):
     async def generate_upload_url(self, path: str, *, expires_in: int = 3600) -> str:
         """Generate a time-limited upload URL (SAS for ADLS, file:// for local)."""
 
+    def get_duckdb_path(
+        self,
+        tier: str,
+        org_id: str,
+        vertical: str,
+    ) -> str:
+        """Return a path readable by DuckDB for a tenant's data tier.
+
+        Concrete method with NotImplementedError default — avoids breaking
+        existing mocks and test doubles. Subclasses override.
+
+        LocalStorageClient  → filesystem path (.data/lake/{tier}/{org_id}/{vertical}/)
+        ADLSStorageClient   → raises NotImplementedError (Phase 3: abfss://)
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support DuckDB path resolution"
+        )
+
 
 class LocalStorageClient(StorageClient):
     """Local filesystem backend for development.
@@ -157,6 +175,15 @@ class LocalStorageClient(StorageClient):
         target = self._resolve(path)
         target.parent.mkdir(parents=True, exist_ok=True)
         return target.as_uri()
+
+    def get_duckdb_path(self, tier: str, org_id: str, vertical: str) -> str:
+        from ai_engine.pipeline.storage_routing import _validate_segment, _validate_vertical
+
+        _validate_segment(org_id, "org_id")
+        _validate_vertical(vertical)
+        _validate_segment(tier, "tier")
+        resolved = self._resolve(f"{tier}/{org_id}/{vertical}")
+        return str(resolved).replace("\\", "/") + "/"
 
 
 class ADLSStorageClient(StorageClient):
