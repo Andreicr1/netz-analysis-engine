@@ -18,7 +18,9 @@ import structlog
 from sqlalchemy.orm import Session
 
 from ai_engine.extraction.embedding_service import generate_embeddings
-from ai_engine.extraction.search_upsert_service import search_deal_chunks
+from ai_engine.extraction.pgvector_search_service import (
+    search_deal_chunks_sync as search_deal_chunks,
+)
 from ai_engine.prompts import prompt_registry
 from app.domains.credit.modules.deals.ai_mode import AIMode
 

@@ -1,14 +1,14 @@
-"""Rebuild Azure AI Search index from silver layer Parquet files.
+"""Rebuild pgvector index from silver layer Parquet files.
 
 Reads ``chunks.parquet`` from ``silver/{org_id}/{vertical}/chunks/{doc_id}/``
-and upserts each chunk + embedding to Azure AI Search.  No OCR, no
+and upserts each chunk + embedding to pgvector.  No OCR, no
 classification, no LLM calls — purely data movement.
 
 Use cases:
   - Search schema changes
   - Embedding model upgrades (will reject incompatible files)
   - Index corruption recovery
-  - Re-indexing after search service migration
+  - Re-indexing after vector store migration
 """
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ async def rebuild_search_index(
     deal_id: UUID | None = None,
     fund_id: UUID | None = None,
 ) -> RebuildResult:
-    """Rebuild Azure Search from silver layer chunks.
+    """Rebuild pgvector index from silver layer chunks.
 
     Args:
         org_id: Organization ID (tenant).
@@ -106,18 +106,15 @@ async def _do_rebuild(
     import asyncio
 
     from ai_engine.pipeline.storage_routing import silver_chunks_path
-    from app.services.azure.search_client import describe_chunks_index_contract
     from app.services.storage_client import get_storage_client
 
     storage = get_storage_client()
-    contract = describe_chunks_index_contract()
-    result = RebuildResult(resolved_index_name=contract.resolved_name)
+    result = RebuildResult(resolved_index_name="vector_chunks (pgvector)")
 
     logger.info(
-        "[rebuild] Starting rebuild for %s/%s using index %s",
+        "[rebuild] Starting rebuild for %s/%s using pgvector",
         org_id,
         vertical,
-        contract.resolved_name,
     )
 
     # Determine which doc_ids to process
@@ -192,7 +189,7 @@ def _rebuild_single_document(
     deal_id: UUID | None,
     fund_id: UUID | None,
 ) -> int:
-    """Read Parquet, validate embedding dims, upsert to Azure Search.
+    """Read Parquet, validate embedding dims, upsert to pgvector.
 
     This is a sync function — called via ``asyncio.to_thread()``.
     Raises ``ValueError`` if embedding dimensions don't match.
@@ -202,9 +199,9 @@ def _rebuild_single_document(
 
     import pyarrow.parquet as pq
 
-    from ai_engine.extraction.search_upsert_service import (
+    from ai_engine.extraction.pgvector_search_service import (
         build_search_document,
-        upsert_chunks,
+        upsert_chunks_sync,
     )
 
     table = pq.read_table(io.BytesIO(parquet_bytes))
@@ -255,5 +252,5 @@ def _rebuild_single_document(
     if not search_docs:
         return 0
 
-    result = upsert_chunks(search_docs)
+    result = upsert_chunks_sync(search_docs)
     return result.successful_chunk_count

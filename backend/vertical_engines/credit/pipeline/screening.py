@@ -11,7 +11,9 @@ from typing import Any
 import structlog
 
 from ai_engine.extraction.embedding_service import generate_embeddings
-from ai_engine.extraction.search_upsert_service import search_deal_chunks
+from ai_engine.extraction.pgvector_search_service import (
+    search_deal_chunks_sync as search_deal_chunks,
+)
 from ai_engine.governance.authority_resolver import enrich_chunks_with_authority
 from vertical_engines.credit.pipeline.models import (
     MAX_CHARS_PER_CHUNK,
