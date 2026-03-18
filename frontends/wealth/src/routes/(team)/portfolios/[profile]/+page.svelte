@@ -244,7 +244,7 @@
 			value={fmtPct(cvarStatus?.cvar_current ?? snapshot?.cvar_current)}
 			sublabel="Limit: {fmtPct(cvarStatus?.cvar_limit ?? snapshot?.cvar_limit)} | Util: {fmtPct(cvarStatus?.cvar_utilized_pct ?? snapshot?.cvar_utilized_pct)}"
 			status={
-				(cvarStatus?.cvar_utilized_pct ?? 0) > 1 ? "error" :
+				(cvarStatus?.cvar_utilized_pct ?? 0) > 1 ? "breach" :
 				(cvarStatus?.cvar_utilized_pct ?? 0) > 0.8 ? "warn" : undefined
 			}
 		/>
@@ -262,7 +262,7 @@
 			label="Regime"
 			value={cvarStatus?.regime ?? snapshot?.regime ?? "—"}
 			sublabel="Breach days: {cvarStatus?.consecutive_breach_days ?? 0}"
-			status={cvarStatus?.trigger_status === "warning" ? "warn" : cvarStatus?.trigger_status === "breach" ? "error" : undefined}
+			status={cvarStatus?.trigger_status === "warning" ? "warn" : cvarStatus?.trigger_status === "breach" ? "breach" : undefined}
 		/>
 	</div>
 
