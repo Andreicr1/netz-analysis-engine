@@ -9,14 +9,32 @@ Import hierarchy:
 """
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from typing import Any
 
 # ── LLM concurrency limit ─────────────────────────────────────────────
-# Plain integer — NOT an asyncio.Semaphore.  Safe at module scope.
+# Resolved lazily at call-time via Settings so that env-var changes
+# between process startup and first use are honoured (e.g. test fixtures).
 # The asyncio.Semaphore is created lazily inside async functions.
-_LLM_CONCURRENCY: int = max(1, int(os.getenv("NETZ_LLM_CONCURRENCY", "5")))
+
+
+def get_llm_concurrency() -> int:
+    """Return the configured LLM concurrency limit, resolved through Settings.
+
+    Always read through the Settings singleton rather than a module-level
+    capture so that test fixtures that override NETZ_LLM_CONCURRENCY are
+    respected without requiring a process restart.
+    """
+    from app.core.config.settings import settings
+    return max(1, settings.netz_llm_concurrency)
+
+
+# _LLM_CONCURRENCY is kept for import compatibility with any code that
+# imports it directly.  It captures the Settings value at import time
+# (no bare os.getenv at module level).  Callers that need a fresh value
+# at call-time — e.g. when creating asyncio.Semaphore — MUST call
+# get_llm_concurrency() instead, as service.py now does.
+_LLM_CONCURRENCY: int = get_llm_concurrency()
 
 
 # ── StageOutcome — named results for asyncio.gather ───────────────────
@@ -60,5 +78,6 @@ class StageOutcome:
 
 __all__: list[str] = [
     "_LLM_CONCURRENCY",
+    "get_llm_concurrency",
     "StageOutcome",
 ]

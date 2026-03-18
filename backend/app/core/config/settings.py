@@ -98,6 +98,11 @@ class Settings(BaseSettings):
     # ── Calibration ──────────────────────────────────────
     calibration_path: str = ""
 
+    # ── LLM concurrency ──────────────────────────────────
+    # Controls asyncio.Semaphore slots for concurrent LLM calls in deep_review.
+    # Resolved lazily at call-time; never captured at module level.
+    netz_llm_concurrency: int = 5
+
     @property
     def is_development(self) -> bool:
         return self.app_env == "development"
