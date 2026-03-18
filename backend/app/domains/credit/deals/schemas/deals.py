@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
 
 from app.domains.credit.deals.enums import DealStage, DealType, RejectionCode
 
@@ -18,8 +18,19 @@ class DealCreate(BaseModel):
 
 class DealDecision(BaseModel):
     stage: DealStage
+    rationale: str  # min 20 chars enforced below
+    actor_capacity: str  # e.g. "portfolio_manager", "ic_member", "analyst"
+    actor_email: EmailStr
     rejection_code: RejectionCode | None = None
     rejection_notes: str | None = None
+
+    @field_validator("rationale")
+    @classmethod
+    def rationale_min_length(cls, v: str) -> str:
+        if len(v) < 20:
+            msg = "rationale must be at least 20 characters"
+            raise ValueError(msg)
+        return v
 
 
 class DealOut(BaseModel):
@@ -42,6 +53,10 @@ class DealOut(BaseModel):
 
     monitoring_output: dict[str, Any] | None = None
     marketing_thesis: dict[str, Any] | None = None
+
+    rationale: str | None = None
+    actor_capacity: str | None = None
+    decided_at: datetime | None = None
 
     pipeline_deal_id: uuid.UUID | None = None
 

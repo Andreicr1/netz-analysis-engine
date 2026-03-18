@@ -74,3 +74,38 @@ class TenantAssetResponse(BaseModel):
     content_type: str
     created_at: datetime
     updated_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Health monitoring schemas
+# ---------------------------------------------------------------------------
+
+
+class ServiceHealthOut(BaseModel):
+    """Health status for an infrastructure service (DB, Redis, ADLS, etc.)."""
+
+    name: str
+    status: str  # "ok" | "down" | "degraded" | "disabled" | "disconnected"
+    latency_ms: float | None = None
+    error: str | None = None
+    checked_at: datetime
+
+
+class WorkerStatusOut(BaseModel):
+    """Status snapshot for a background worker."""
+
+    name: str
+    status: str
+    last_run: datetime | None = None
+    duration_ms: float | None = None
+    error_count: int = 0
+    checked_at: datetime
+
+
+class PipelineStatsOut(BaseModel):
+    """Aggregate pipeline processing statistics."""
+
+    docs_processed: int
+    queue_depth: int
+    error_rate: float
+    checked_at: datetime

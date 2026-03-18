@@ -24,6 +24,12 @@ class ActionOut(BaseModel):
     status: str
     description: str | None = None
 
+    rationale: str | None = None
+    actor_capacity: str | None = None
+    actor_email: str | None = None
+    immutable: bool = True  # audit entries are always immutable
+    source_system: str | None = None  # "ic-workflow", "pipeline-engine", "manual"
+
     created_at: datetime
     updated_at: datetime
     created_by: str | None = None
