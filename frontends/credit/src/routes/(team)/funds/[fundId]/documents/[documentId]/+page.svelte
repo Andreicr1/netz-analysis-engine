@@ -2,9 +2,9 @@
   Document detail — metadata, version history, submit for review.
 -->
 <script lang="ts">
-	import { Card, StatusBadge, Button, EmptyState } from "@netz/ui";
-	import { ActionButton } from "@netz/ui";
+	import { Card, StatusBadge, Button, EmptyState, ActionButton, formatDate } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
+	import { resolveCreditStatus } from "$lib/utils/status-maps";
 	import { invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
 	import type { PageData } from "./$types";
@@ -40,7 +40,7 @@
 				{doc.title ?? "Document"}
 			</h2>
 			<div class="mt-1 flex items-center gap-2">
-				<StatusBadge status={String(doc.status ?? "")} type="default" />
+				<StatusBadge status={String(doc.status ?? "")} type="default" resolve={resolveCreditStatus} />
 				<span class="text-sm text-[var(--netz-text-muted)]">{doc.classification ?? doc.domain ?? ""}</span>
 			</div>
 		</div>
@@ -82,10 +82,10 @@
 								Version {version.version ?? version.version_number ?? ""}
 							</p>
 							<p class="text-xs text-[var(--netz-text-muted)]">
-								{version.created_at ? new Date(String(version.created_at)).toLocaleDateString() : ""}
+								{version.created_at ? formatDate(String(version.created_at)) : ""}
 							</p>
 						</div>
-						<StatusBadge status={String(version.status ?? "")} type="default" />
+						<StatusBadge status={String(version.status ?? "")} type="default" resolve={resolveCreditStatus} />
 					</div>
 				{/each}
 			</div>
