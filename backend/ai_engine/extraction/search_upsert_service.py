@@ -1,4 +1,4 @@
-"""Azure AI Search upsert service — writes chunks to global-vector-chunks-v2.
+"""Azure AI Search upsert service for the canonical env-scoped chunks index.
 
 Uses mergeOrUpload action for idempotent upserts.
 Handles id constraints (no colons or special characters).
@@ -12,11 +12,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from app.core.config import settings
-
 logger = logging.getLogger(__name__)
 
-_INDEX_NAME = settings.prefixed_index(settings.SEARCH_CHUNKS_INDEX_NAME or "global-vector-chunks-v2")
 _UPLOAD_BATCH_SIZE = 100
 
 # ── OData injection prevention (Security F2/F5/F6) ──────────────────
@@ -54,6 +51,12 @@ def _safe_id(raw: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_-]", "_", raw)
 
 
+def _chunks_index_name() -> str:
+    from app.services.azure.search_client import resolve_chunks_index_name
+
+    return resolve_chunks_index_name()
+
+
 def build_search_document(
     *,
     deal_id: uuid.UUID,
@@ -88,7 +91,7 @@ def build_search_document(
     risk_flags: list[str] | None = None,
     organization_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
-    """Build a single document dict matching the global-vector-chunks-v2 schema.
+    """Build a single document dict matching the canonical chunks schema.
 
     Chunk ID formula (v2): ``{deal_id}_{document_id}_{chunk_index}``
     Previous (v1) used ``{deal_id}_{doc_type}_{chunk_index}`` which caused
@@ -169,7 +172,7 @@ def build_search_document(
 
 
 def upsert_chunks(documents: list[dict[str, Any]]) -> int:
-    """Upsert a list of search documents into global-vector-chunks-v2.
+    """Upsert a list of search documents into the canonical chunks index.
 
     Returns the count of successfully uploaded documents.
     Validates that all chunk IDs within the batch are unique before uploading.
@@ -198,7 +201,8 @@ def upsert_chunks(documents: list[dict[str, Any]]) -> int:
 
     from app.services.azure.search_client import get_search_client
 
-    client = get_search_client(index_name=_INDEX_NAME)
+    index_name = _chunks_index_name()
+    client = get_search_client(index_name=index_name)
     total_uploaded = 0
 
     for i in range(0, len(documents), _UPLOAD_BATCH_SIZE):
@@ -223,7 +227,7 @@ def upsert_chunks(documents: list[dict[str, Any]]) -> int:
                 exc_info=True,
             )
 
-    logger.info("Upserted %d/%d chunks to %s", total_uploaded, len(documents), _INDEX_NAME)
+    logger.info("Upserted %d/%d chunks to %s", total_uploaded, len(documents), index_name)
     return total_uploaded
 
 
@@ -247,7 +251,7 @@ def search_deal_chunks(
 
     from app.services.azure.search_client import get_search_client
 
-    client = get_search_client(index_name=_INDEX_NAME)
+    client = get_search_client(index_name=_chunks_index_name())
 
     safe_deal = validate_uuid(deal_id, "deal_id")
     safe_org = validate_uuid(organization_id, "organization_id")
@@ -304,7 +308,7 @@ def search_fund_policy_chunks(
 
     from app.services.azure.search_client import get_search_client
 
-    client = get_search_client(index_name=_INDEX_NAME)
+    client = get_search_client(index_name=_chunks_index_name())
 
     safe_fund = validate_uuid(fund_id, "fund_id")
     safe_org = validate_uuid(organization_id, "organization_id")

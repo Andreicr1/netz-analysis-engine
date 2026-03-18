@@ -28,6 +28,7 @@ class RebuildResult:
     documents_processed: int = 0
     chunks_upserted: int = 0
     documents_skipped: int = 0
+    resolved_index_name: str = ""
     errors: list[str] = field(default_factory=list)
 
 
@@ -57,10 +58,19 @@ async def rebuild_search_index(
     import asyncio
 
     from ai_engine.pipeline.storage_routing import silver_chunks_path
+    from app.services.azure.search_client import describe_chunks_index_contract
     from app.services.storage_client import get_storage_client
 
     storage = get_storage_client()
-    result = RebuildResult()
+    contract = describe_chunks_index_contract()
+    result = RebuildResult(resolved_index_name=contract.resolved_name)
+
+    logger.info(
+        "[rebuild] Starting rebuild for %s/%s using index %s",
+        org_id,
+        vertical,
+        contract.resolved_name,
+    )
 
     # Determine which doc_ids to process
     if doc_ids is not None:

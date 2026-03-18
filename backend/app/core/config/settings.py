@@ -111,6 +111,12 @@ class Settings(BaseSettings):
             return base_name
         return f"{self.NETZ_ENV}-{base_name}"
 
+    def canonical_search_chunks_index_name(self) -> str:
+        """Resolve the canonical env-scoped chunks index name."""
+        return self.prefixed_index(
+            self.SEARCH_CHUNKS_INDEX_NAME or "global-vector-chunks-v2",
+        )
+
     def validate_production_secrets(self) -> None:
         """Reject weak or missing secrets in production."""
         if self.is_development:

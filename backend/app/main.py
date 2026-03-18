@@ -163,6 +163,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         "Netz Analysis Engine starting — env=%s",
         settings.app_env,
     )
+    from app.services.azure.search_client import describe_chunks_index_contract
+
+    chunks_index_contract = describe_chunks_index_contract()
+    logger.info(
+        "Search chunks contract resolved — env=%s base=%s resolved=%s",
+        chunks_index_contract.env_name,
+        chunks_index_contract.configured_base_name,
+        chunks_index_contract.resolved_name,
+    )
     await _verify_config_completeness()
 
     # Start PgNotifier for config cache invalidation
