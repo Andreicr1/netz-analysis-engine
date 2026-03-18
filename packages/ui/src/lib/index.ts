@@ -28,6 +28,7 @@ export { default as FormField } from "./components/FormField.svelte";
 // ── Netz Composites ─────────────────────────────────────────
 export { default as DataCard } from "./components/DataCard.svelte";
 export { default as StatusBadge } from "./components/StatusBadge.svelte";
+export type { StatusConfig, StatusResolver, StatusSeverity } from "./components/StatusBadge.svelte";
 export { default as EmptyState } from "./components/EmptyState.svelte";
 export { default as PDFDownload } from "./components/PDFDownload.svelte";
 export { default as LanguageToggle } from "./components/LanguageToggle.svelte";

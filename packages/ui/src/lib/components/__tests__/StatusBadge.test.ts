@@ -8,7 +8,7 @@ describe("StatusBadge", () => {
 		expect(screen.getByText("Approved")).toBeTruthy();
 	});
 
-	it("renders with deal_stage type", () => {
+	it("keeps compatibility with legacy type props", () => {
 		const { container } = render(StatusBadge, {
 			props: { status: "qualified", type: "deal_stage" },
 		});
@@ -16,29 +16,32 @@ describe("StatusBadge", () => {
 		expect(screen.getByText("Qualified")).toBeTruthy();
 	});
 
-	it("renders with regime type (uppercase preserved)", () => {
-		render(StatusBadge, { props: { status: "RISK_ON", type: "regime" } });
-		// formatLabel: "RISK_ON" → "RISK ON" → first letter caps → "RISK ON"
-		expect(screen.getByText("RISK ON")).toBeTruthy();
+	it("uses an explicit label override when provided", () => {
+		render(StatusBadge, { props: { status: "warning", label: "Override" } });
+		expect(screen.getByText("Override")).toBeTruthy();
 	});
 
-	it("renders with risk type", () => {
-		render(StatusBadge, { props: { status: "high", type: "risk" } });
-		expect(screen.getByText("High")).toBeTruthy();
-	});
-
-	it("renders with review type", () => {
-		render(StatusBadge, { props: { status: "pending", type: "review" } });
-		expect(screen.getByText("Pending")).toBeTruthy();
-	});
-
-	it("renders with content type", () => {
-		render(StatusBadge, { props: { status: "published", type: "content" } });
-		expect(screen.getByText("Published")).toBeTruthy();
+	it("uses the resolver output when provided", () => {
+		render(StatusBadge, {
+			props: {
+				status: "qualified",
+				resolve: () => ({
+					label: "Qualified for IC",
+					severity: "info",
+					color: "var(--netz-info)",
+				}),
+			},
+		});
+		expect(screen.getByText("Qualified for IC")).toBeTruthy();
 	});
 
 	it("renders unknown status with default styling", () => {
 		render(StatusBadge, { props: { status: "unknown_status" } });
 		expect(screen.getByText("Unknown Status")).toBeTruthy();
+	});
+
+	it("infers severity attributes from generic status tokens", () => {
+		const { container } = render(StatusBadge, { props: { status: "approved" } });
+		expect(container.querySelector("[data-status-severity='success']")).toBeTruthy();
 	});
 });
