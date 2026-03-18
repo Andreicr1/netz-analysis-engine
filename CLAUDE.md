@@ -73,7 +73,7 @@ frontends/
   wealth/           ← SvelteKit "netz-wealth-os"
 ```
 
-**Database:** PostgreSQL 16 + TimescaleDB + Redis 7. Migrations via Alembic. App uses async asyncpg. Current migration head: `0004_vertical_configs`.
+**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0004_vertical_configs`.
 
 **Auth:** Clerk JWT v2. `organization_id` from `o.id` claim. RLS via `SET LOCAL app.current_organization_id`. Dev bypass: `X-DEV-ACTOR` header.
 
@@ -163,8 +163,8 @@ Enforced via `import-linter` in `make check`. Contracts in `pyproject.toml`:
 
 ```bash
 # Core
-DATABASE_URL=postgresql+asyncpg://...
-REDIS_URL=redis://localhost:6379/0
+DATABASE_URL=postgresql+asyncpg://...  # Timescale Cloud (prod), docker-compose (dev)
+REDIS_URL=redis://localhost:6379/0     # Upstash (prod), docker-compose (dev)
 
 # Auth
 CLERK_SECRET_KEY=
@@ -177,21 +177,23 @@ OPENAI_EMBEDDING_MODEL=text-embedding-3-large
 # Mistral (OCR)
 MISTRAL_API_KEY=
 
-# Data Lake (disabled by default — LocalStorageClient at .data/lake/ in dev and production until Milestone 3)
+# Storage (LocalStorageClient at .data/lake/ in dev and production until Milestone 3)
 FEATURE_ADLS_ENABLED=false
-ADLS_ACCOUNT_NAME=
-ADLS_ACCOUNT_KEY=
-ADLS_CONTAINER_NAME=netz-analysis
-ADLS_CONNECTION_STRING=
 
 # ── DEPRECATED (Azure services eliminated — Milestone 2 simplification, 2026-03-18) ──
 # AZURE_OPENAI_ENDPOINT=        # replaced by OpenAI direct with retry backoff
-# AZURE_OPENAI_API_KEY=         # replaced by OpenAI direct with retry backoff
-# SEARCH_CHUNKS_INDEX_NAME=     # replaced by pgvector (feat/pgvector-replace-azure-search)
+# AZURE_OPENAI_KEY=             # replaced by OpenAI direct with retry backoff
+# AZURE_SEARCH_ENDPOINT=        # replaced by pgvector (commit 497df51)
+# AZURE_SEARCH_KEY=             # replaced by pgvector
+# SEARCH_CHUNKS_INDEX_NAME=     # replaced by pgvector
 # NETZ_ENV=                     # search index prefixing no longer needed
-# KEYVAULT_URL=                 # replaced by platform env vars
+# KEYVAULT_URL=                 # replaced by platform env vars (Railway secrets)
 # SERVICE_BUS_NAMESPACE=        # replaced by Redis pub/sub + BackgroundTasks
 # APPLICATIONINSIGHTS_CONNECTION_STRING=  # replaced by structlog → stdout
+# ADLS_ACCOUNT_NAME=            # replaced by LocalStorageClient + persistent volume
+# ADLS_ACCOUNT_KEY=
+# ADLS_CONTAINER_NAME=
+# ADLS_CONNECTION_STRING=
 ```
 
 ## Clerk SvelteKit SDK Note
@@ -204,28 +206,36 @@ Custom skills live in `.claude/skills/`. Each subfolder contains a `SKILL.md` wi
 
 ## Infrastructure (Milestone 2 — up to 50 tenants)
 
-Simplified stack (2026-03-18):
-- **PostgreSQL** (pgvector + TimescaleDB) — vector search, time-series, RLS, all data
-- **Redis** — SSE pub/sub, job tracking, worker idempotency, advisory locks
+Simplified stack (2026-03-18), ~$100-200/month:
+- **Timescale Cloud** — managed PostgreSQL 16 (pgvector + TimescaleDB nativo)
+- **Railway** — container hosting (FastAPI backend + 3 SvelteKit frontends)
+- **Upstash** — serverless Redis (SSE pub/sub, job tracking, worker idempotency, advisory locks)
 - **OpenAI API** (direct, with retry backoff) — LLM + embeddings
 - **Mistral** — OCR
 - **Clerk** — auth (JWT v2)
 - **LocalStorageClient** (filesystem with persistent volume) — data lake (bronze/silver/gold Parquet)
 
 Deprecated Azure services (files kept for rollback, not actively used):
-- Azure Key Vault → platform env vars
+- Azure Key Vault → platform env vars (Railway secrets)
 - Azure Service Bus → Redis + BackgroundTasks
 - Application Insights → structlog → stdout
 - Azure OpenAI → OpenAI direct (retry replaces fallback)
-- Azure AI Search → pgvector (migration in `feat/pgvector-replace-azure-search` branch)
+- Azure AI Search → pgvector (commit 497df51)
 - ADLS Gen2 → LocalStorageClient with persistent volume (re-enables at Milestone 3)
 
 Scale triggers for re-adding services (Milestone 3+, >50 tenants):
-- **Key Vault:** regulatory requirement for secret rotation audit trail (SOC2)
-- **ADLS:** data lake > 1TB or data residency requirements
-- **Service Bus:** guaranteed delivery needed for financial transactions
+- **Key Vault / HashiCorp Vault:** regulatory requirement for secret rotation audit trail (SOC2)
+- **Cloudflare R2 or ADLS:** data lake > 1TB or data residency requirements
+- **Redis Streams:** guaranteed delivery needed for financial transactions
 - **Application Insights:** distributed tracing across microservices (if/when decomposed)
-- **Azure AI Search:** only if pgvector HNSW performance becomes bottleneck at scale (unlikely before 10M+ chunks)
+- **Qdrant or Weaviate:** only if pgvector HNSW performance becomes bottleneck at scale (unlikely before 10M+ chunks)
+
+## Deployment
+
+- **Backend:** `railway.toml` at repo root. Health check: `/api/v1/admin/health`.
+- **Frontends:** Railway or Vercel/Cloudflare Pages with SvelteKit adapter.
+- **Database:** Timescale Cloud managed PostgreSQL 16 with pgvector + TimescaleDB.
+- **Local dev:** `docker-compose up` (PostgreSQL 16 + TimescaleDB + pgvector + Redis 7).
 
 ## Origins
 
@@ -237,6 +247,7 @@ Scale triggers for re-adding services (Milestone 3+, >50 tenants):
 - **Pipeline Refactor Brainstorm:** `docs/brainstorms/2026-03-15-pipeline-llm-deterministic-alignment-brainstorm.md`
 - **Credit Modularization Plan:** `docs/plans/2026-03-15-refactor-credit-deep-review-modularization-wave2-plan.md` (Wave 2 — deep review modules)
 - **Wealth Modularization Plan:** `docs/plans/2026-03-15-feat-wealth-vertical-complete-modularization-plan.md`
+- **Infrastructure Completion Plan:** `docs/plans/2026-03-18-feat-duckdb-data-lake-inspection-layer-plan.md`
 - **Private Credit OS:** `C:\Users\andre\projetos\Netz-Private-Credit-OS` (archived after data migration)
 - **Wealth OS:** `C:\Users\andre\projetos\netz-wealth-os` (archived after migration)
 
