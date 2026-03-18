@@ -1,12 +1,21 @@
 """DD Report Engine — orchestrator for 8-chapter fund DD reports.
 
-Generates chapters 1-7 in parallel (TaskGroup + Semaphore), then chapter 8
-(Recommendation) sequentially. Implements resume safety, layered timeouts,
-and the never-raises contract.
+Generates all 8 chapters sequentially (chapters 1-7 first, then chapter 8
+Recommendation). This engine runs inside asyncio.to_thread() on a sync
+Session, so concurrency is provided at the caller level (the async route
+may dispatch multiple reports in parallel via TaskGroup), not inside the
+engine itself.
 
-Architecture mirrors credit's memo_book_generator but with:
-- Frozen dataclass evidence pack (not dict)
-- TaskGroup structured concurrency (not asyncio.gather)
+Chapter generation mode: SEQUENTIAL
+- Chapters 1-7 generated one at a time in registry order.
+- Chapter 8 (Recommendation) generated after chapters 1-7 complete,
+  consuming summaries from the preceding chapters.
+- Resume safety: cached chapters are skipped when force=False.
+- Never raises — returns DDReportResult with status='failed' on error.
+
+Architecture:
+- Frozen dataclass evidence pack (EvidencePack) — safe to cross thread boundary
+- Sync SQLAlchemy Session — must be created inside the worker thread
 - Direct organization_id on chapters for independent RLS
 
 Usage (from async route via asyncio.to_thread)::
