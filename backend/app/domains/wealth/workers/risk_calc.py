@@ -24,7 +24,7 @@ from app.domains.wealth.models.macro import MacroData
 from app.domains.wealth.models.nav import NavTimeseries
 from app.domains.wealth.models.risk import FundRiskMetrics
 from quant_engine.cvar_service import compute_cvar_from_returns
-from quant_engine.drift_service import compute_dtw_drift_batch
+from quant_engine.drift_service import DtwDriftResult, DtwDriftStatus, compute_dtw_drift_batch
 
 logger = structlog.get_logger()
 
@@ -361,26 +361,30 @@ async def _compute_block_dtw_scores(
     funds_with_metrics: list[tuple["Fund", dict]],
     as_of_date: date,
     dtw_window: int = 63,
-) -> dict[str, float]:
+) -> dict[str, DtwDriftResult]:
     """Compute DTW drift scores for all funds, grouped by block.
 
     Each fund is compared against the equal-weight average of all fund returns
-    in the same block. If a block has fewer than 2 funds, drift = 0.0.
+    in the same block. If a block has fewer than 2 funds, returns a degraded result.
 
-    Returns a dict mapping fund_id (str) → dtw_drift_score (float).
+    Returns a dict mapping fund_id (str) → DtwDriftResult.
     """
     # Group funds by block_id
     block_funds: dict[str | None, list[tuple[Fund, dict]]] = defaultdict(list)
     for fund, metrics in funds_with_metrics:
         block_funds[fund.block_id].append((fund, metrics))
 
-    dtw_scores: dict[str, float] = {}
+    dtw_scores: dict[str, DtwDriftResult] = {}
 
     for block_id, block_fund_list in block_funds.items():
         if len(block_fund_list) < 2:
-            # Can't compute meaningful drift vs self — use 0.0
+            # Can't compute meaningful drift vs self — degraded, not fake zero
             for fund, _ in block_fund_list:
-                dtw_scores[str(fund.fund_id)] = 0.0
+                dtw_scores[str(fund.fund_id)] = DtwDriftResult(
+                    score=None,
+                    status=DtwDriftStatus.degraded,
+                    reason="single fund in block — no peer comparison possible",
+                )
             continue
 
         # Batch-fetch returns for all funds in this block — single query, no N+1
@@ -402,7 +406,11 @@ async def _compute_block_dtw_scores(
         if min_len < 10:
             # Insufficient data for DTW
             for fid in fund_ids:
-                dtw_scores[fid] = 0.0
+                dtw_scores[fid] = DtwDriftResult(
+                    score=None,
+                    status=DtwDriftStatus.degraded,
+                    reason=f"insufficient data for DTW: {min_len} points (min 10)",
+                )
             continue
 
         # Build returns matrix (n_funds × min_len)
@@ -412,9 +420,9 @@ async def _compute_block_dtw_scores(
         benchmark = matrix.mean(axis=0)
 
         # Batch DTW computation
-        scores = compute_dtw_drift_batch(matrix, benchmark, window=min_len)
-        for fid, score in zip(fund_ids, scores, strict=False):
-            dtw_scores[fid] = score
+        results = compute_dtw_drift_batch(matrix, benchmark, window=min_len)
+        for fid, result in zip(fund_ids, results, strict=False):
+            dtw_scores[fid] = result
 
         logger.debug(
             "DTW drift computed for block",
@@ -480,7 +488,21 @@ async def run_risk_calc(as_of_date: date | None = None) -> dict[str, int]:
         try:
             for fund, metrics in computed:
                 fid_str = str(fund.fund_id)
-                metrics["dtw_drift_score"] = round(dtw_scores.get(fid_str, 0.0), 6)
+                dtw_result = dtw_scores.get(
+                    fid_str,
+                    DtwDriftResult(score=None, status=DtwDriftStatus.degraded, reason="fund not in dtw_scores"),
+                )
+                # Use score_or_default so DB column always gets a float,
+                # but the decision to fall back is explicit, not silent.
+                metrics["dtw_drift_score"] = round(dtw_result.score_or_default(0.0), 6)
+                if not dtw_result.is_usable:
+                    logger.warning(
+                        "dtw_drift_degraded",
+                        fund_id=fid_str,
+                        ticker=fund.ticker,
+                        status=dtw_result.status.value,
+                        reason=dtw_result.reason,
+                    )
 
                 upsert = pg_insert(FundRiskMetrics).values(**metrics)
                 upsert = upsert.on_conflict_do_update(
