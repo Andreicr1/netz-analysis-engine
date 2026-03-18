@@ -16,10 +16,34 @@
 	import { ChartContainer } from "@netz/ui/charts";
 	import { createClientApiClient } from "$lib/api/client";
 	import { getContext } from "svelte";
-	import type { components } from "@netz/ui/types/api";
 
-	type DriftEvent = components["schemas"]["DriftEventOut"];
-	type DriftHistory = components["schemas"]["DriftHistoryOut"];
+	// Inline types from API schema (DriftEventOut / DriftHistoryOut)
+	type DriftEvent = {
+		id: string;
+		instrument_id: string;
+		status: string;
+		severity: string;
+		anomalous_count: number;
+		total_metrics: number;
+		metric_details?: Record<string, unknown>[] | null;
+		is_current: boolean;
+		detected_at: string;
+		created_at?: string | null;
+		snapshot_date?: string | null;
+		drift_magnitude?: string | null;
+		drift_threshold?: string | null;
+		rebalance_triggered?: boolean | null;
+		breached: boolean;
+		asset_class_breakdown?: Record<string, unknown>[] | null;
+	};
+
+	type DriftHistory = {
+		instrument_id: string;
+		instrument_name: string;
+		events: DriftEvent[];
+		total: number;
+		computed_at?: string | null;
+	};
 
 	interface Props {
 		instrumentId: string;
@@ -107,7 +131,8 @@
 				return v === true ? "Yes" : v === false ? "No" : "—";
 			},
 		},
-	] as import("@tanstack/svelte-table").ColumnDef<Record<string, unknown>, unknown>[];
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	] as any[];
 
 	// ── Scatter chart option ────────────────────────────────────
 	let scatterOption = $derived.by(() => {
