@@ -17,7 +17,7 @@ import logging
 from fastapi import Request
 from sse_starlette.sse import EventSourceResponse, ServerSentEvent
 
-from app.core.jobs.tracker import subscribe_job
+from app.core.jobs.tracker import TERMINAL_EVENT_TYPES, subscribe_job
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ async def create_job_stream(request: Request, job_id: str) -> EventSourceRespons
                 event=event_type,
             )
 
-            if event_type in ("done", "error", "ingestion_complete", "memo_complete"):
+            if event_type in TERMINAL_EVENT_TYPES:
                 break
 
     return EventSourceResponse(
