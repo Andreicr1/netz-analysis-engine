@@ -65,9 +65,11 @@ def test_upsert_chunks_uses_resolved_name(monkeypatch: pytest.MonkeyPatch):
         "app.services.azure.search_client.get_search_client",
         return_value=mock_client,
     ) as mock_get_client:
-        uploaded = upsert_chunks([{"id": "chunk-1"}])
+        result = upsert_chunks([{"id": "chunk-1"}])
 
-    assert uploaded == 1
+    assert result.successful_chunk_count == 1
+    assert result.failed_chunk_count == 0
+    assert result.is_full_success
     mock_get_client.assert_called_once_with(index_name=resolved_name)
 
 

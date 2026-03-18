@@ -326,6 +326,21 @@ async def _emit(version_id: UUID | None, event_type: str, data: dict | None = No
         logger.warning("SSE publish failed: %s for %s", event_type, version_id, exc_info=True)
 
 
+async def _emit_terminal(version_id: UUID | None, event_type: str, data: dict | None = None) -> None:
+    """Publish a terminal SSE event and schedule ownership cleanup (ASYNC-01).
+
+    Same as _emit but uses publish_terminal_event so the ownership key
+    is set to a short grace TTL after the terminal event is published.
+    """
+    if version_id is None:
+        return
+    try:
+        from app.core.jobs.tracker import publish_terminal_event
+        await publish_terminal_event(str(version_id), event_type, data)
+    except Exception:
+        logger.warning("SSE terminal publish failed: %s for %s", event_type, version_id, exc_info=True)
+
+
 # ── Audit trail helper ──────────────────────────────────────────────
 
 
@@ -374,7 +389,7 @@ async def _check_gate(
     warnings.extend(gate.warnings)
     if gate.success:
         return None
-    await _emit(request.version_id, "error", {"stage": stage, "errors": gate.errors})
+    await _emit_terminal(request.version_id, "error", {"stage": stage, "errors": gate.errors})
     await _audit(db, fund_id=request.fund_id, actor_id=actor_id,
                  action="INGESTION_FAILED", entity_id=request.document_id,
                  after={"stage": stage, "errors": gate.errors})
@@ -772,13 +787,19 @@ async def process(
 
     # ── 9. Index to Azure Search (derived index) ────────────────
     from ai_engine.extraction.search_upsert_service import (
+        UpsertResult,
         build_search_document,
     )
     from ai_engine.extraction.search_upsert_service import (
         upsert_chunks as upsert_search_chunks,
     )
 
-    indexed_count = 0
+    upsert_result = UpsertResult(
+        attempted_chunk_count=0,
+        successful_chunk_count=0,
+        failed_chunk_count=0,
+        retryable=False,
+    )
     if not skip_index:
         search_docs = []
         for chunk in chunks:
@@ -810,36 +831,85 @@ async def process(
             )
             search_docs.append(search_doc)
 
-        # upsert_chunks is synchronous
-        indexed_count = await asyncio.to_thread(upsert_search_chunks, search_docs)
+        # upsert_chunks is synchronous — returns UpsertResult
+        upsert_result = await asyncio.to_thread(upsert_search_chunks, search_docs)
 
+    indexed_count = upsert_result.successful_chunk_count
     metrics["chunks_indexed"] = indexed_count
+    metrics["attempted_chunk_count"] = upsert_result.attempted_chunk_count
+    metrics["successful_chunk_count"] = upsert_result.successful_chunk_count
+    metrics["failed_chunk_count"] = upsert_result.failed_chunk_count
     metrics["index_skipped"] = skip_index
 
     await _emit(request.version_id, "indexing_complete", {
         "chunks_indexed": indexed_count,
+        "attempted_chunk_count": upsert_result.attempted_chunk_count,
+        "successful_chunk_count": upsert_result.successful_chunk_count,
+        "failed_chunk_count": upsert_result.failed_chunk_count,
         "index_skipped": skip_index,
     })
     await _audit(db, fund_id=request.fund_id, actor_id=actor_id,
                  action="DOCUMENT_CHUNKS_INDEXED", entity_id=request.document_id,
                  after={"chunks_indexed": indexed_count, "index_skipped": skip_index})
 
-    # ── 10. Done ────────────────────────────────────────────────
+    # ── 10. Determine terminal state ───────────────────────────
     elapsed_ms = int((time.monotonic() - t0) * 1000)
     metrics["duration_ms"] = elapsed_ms
 
-    await _emit(request.version_id, "ingestion_complete", {
+    # Compute terminal state: degraded when partial, failed when total failure
+    if upsert_result.is_total_failure and not skip_index:
+        terminal_state = "failed"
+        pipeline_success = False
+        warnings.append(
+            f"Search indexing failed completely: 0/{upsert_result.attempted_chunk_count} chunks indexed"
+        )
+    elif upsert_result.is_degraded:
+        terminal_state = "degraded"
+        pipeline_success = True  # pipeline itself succeeded; indexing is partial
+        warnings.append(
+            f"Search indexing degraded: {upsert_result.successful_chunk_count}/"
+            f"{upsert_result.attempted_chunk_count} chunks indexed"
+        )
+    else:
+        terminal_state = "success"
+        pipeline_success = True
+
+    # Persist terminal state and emit final event with chunk counts
+    if request.version_id:
+        try:
+            from app.core.jobs.tracker import persist_job_state
+            await persist_job_state(
+                str(request.version_id),
+                terminal_state=terminal_state,
+                attempted_chunk_count=upsert_result.attempted_chunk_count,
+                successful_chunk_count=upsert_result.successful_chunk_count,
+                failed_chunk_count=upsert_result.failed_chunk_count,
+                retryable=upsert_result.retryable,
+                errors=upsert_result.batch_errors if upsert_result.batch_errors else None,
+            )
+        except Exception:
+            logger.warning("Failed to persist job state for %s", request.version_id, exc_info=True)
+
+    await _emit_terminal(request.version_id, "ingestion_complete", {
         "document_id": str(request.document_id),
+        "terminal_state": terminal_state,
         "chunks_indexed": indexed_count,
+        "attempted_chunk_count": upsert_result.attempted_chunk_count,
+        "successful_chunk_count": upsert_result.successful_chunk_count,
+        "failed_chunk_count": upsert_result.failed_chunk_count,
+        "retryable": upsert_result.retryable,
         "duration_ms": elapsed_ms,
     })
 
     logger.info(
-        "[pipeline] OK %s → %s (%s) | %d chunks | %dms",
+        "[pipeline] %s %s → %s (%s) | %d chunks | %d/%d indexed | %dms",
+        terminal_state.upper(),
         request.filename,
         classification.doc_type,
         f"L{classification.layer}",
         len(chunks),
+        indexed_count,
+        upsert_result.attempted_chunk_count,
         elapsed_ms,
     )
 
@@ -853,13 +923,18 @@ async def process(
         "governance_flags": gov_flags,
         "chunk_count": len(chunks),
         "chunks_indexed": indexed_count,
+        "attempted_chunk_count": upsert_result.attempted_chunk_count,
+        "successful_chunk_count": upsert_result.successful_chunk_count,
+        "failed_chunk_count": upsert_result.failed_chunk_count,
+        "terminal_state": terminal_state,
+        "retryable": upsert_result.retryable,
         "metadata": extraction_metadata,
         "summary": summary_text,
     }
 
     return PipelineStageResult(
         stage="complete",
-        success=True,
+        success=pipeline_success,
         data=pipeline_data,
         metrics=metrics,
         warnings=warnings,

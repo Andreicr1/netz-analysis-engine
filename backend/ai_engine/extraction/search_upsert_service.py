@@ -9,12 +9,40 @@ from __future__ import annotations
 import logging
 import re
 import uuid
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
 _UPLOAD_BATCH_SIZE = 100
+
+
+@dataclass(frozen=True)
+class UpsertResult:
+    """Structured result from a search upsert operation.
+
+    Callers use this to distinguish full success, partial (degraded), and
+    total failure without inspecting logs.
+    """
+
+    attempted_chunk_count: int
+    successful_chunk_count: int
+    failed_chunk_count: int
+    retryable: bool
+    batch_errors: list[str] = field(default_factory=list)
+
+    @property
+    def is_full_success(self) -> bool:
+        return self.failed_chunk_count == 0 and self.successful_chunk_count > 0
+
+    @property
+    def is_degraded(self) -> bool:
+        return self.failed_chunk_count > 0 and self.successful_chunk_count > 0
+
+    @property
+    def is_total_failure(self) -> bool:
+        return self.successful_chunk_count == 0 and self.attempted_chunk_count > 0
 
 # ── OData injection prevention (Security F2/F5/F6) ──────────────────
 _VALID_DOMAINS = frozenset({
@@ -171,14 +199,20 @@ def build_search_document(
     return doc
 
 
-def upsert_chunks(documents: list[dict[str, Any]]) -> int:
+def upsert_chunks(documents: list[dict[str, Any]]) -> UpsertResult:
     """Upsert a list of search documents into the canonical chunks index.
 
-    Returns the count of successfully uploaded documents.
+    Returns an ``UpsertResult`` with attempted/successful/failed counts so
+    callers can distinguish full success from partial (degraded) persistence.
     Validates that all chunk IDs within the batch are unique before uploading.
     """
     if not documents:
-        return 0
+        return UpsertResult(
+            attempted_chunk_count=0,
+            successful_chunk_count=0,
+            failed_chunk_count=0,
+            retryable=False,
+        )
 
     # ── Duplicate ID guard ────────────────────────────────────────────
     ids = [d["id"] for d in documents]
@@ -204,6 +238,9 @@ def upsert_chunks(documents: list[dict[str, Any]]) -> int:
     index_name = _chunks_index_name()
     client = get_search_client(index_name=index_name)
     total_uploaded = 0
+    total_failed = 0
+    batch_errors: list[str] = []
+    has_transient_error = False
 
     for i in range(0, len(documents), _UPLOAD_BATCH_SIZE):
         batch = documents[i : i + _UPLOAD_BATCH_SIZE]
@@ -212,6 +249,7 @@ def upsert_chunks(documents: list[dict[str, Any]]) -> int:
             succeeded = sum(1 for r in result if r.succeeded)
             failed = len(batch) - succeeded
             total_uploaded += succeeded
+            total_failed += failed
             if failed > 0:
                 logger.warning(
                     "Search upsert batch %d: %d succeeded, %d failed",
@@ -219,16 +257,33 @@ def upsert_chunks(documents: list[dict[str, Any]]) -> int:
                     succeeded,
                     failed,
                 )
-        except Exception:
+                batch_errors.append(
+                    f"batch {i // _UPLOAD_BATCH_SIZE}: {failed}/{len(batch)} chunks failed"
+                )
+                # Partial batch failures are retryable (individual doc issues)
+                has_transient_error = True
+        except Exception as exc:
             logger.error(
                 "Search upsert batch %d failed entirely (%d docs)",
                 i // _UPLOAD_BATCH_SIZE,
                 len(batch),
                 exc_info=True,
             )
+            total_failed += len(batch)
+            batch_errors.append(
+                f"batch {i // _UPLOAD_BATCH_SIZE}: entire batch of {len(batch)} failed — {type(exc).__name__}"
+            )
+            # Entire batch exception is typically transient (network, throttle)
+            has_transient_error = True
 
     logger.info("Upserted %d/%d chunks to %s", total_uploaded, len(documents), index_name)
-    return total_uploaded
+    return UpsertResult(
+        attempted_chunk_count=len(documents),
+        successful_chunk_count=total_uploaded,
+        failed_chunk_count=total_failed,
+        retryable=has_transient_error,
+        batch_errors=batch_errors,
+    )
 
 
 def search_deal_chunks(

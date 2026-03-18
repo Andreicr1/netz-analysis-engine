@@ -207,4 +207,5 @@ def _rebuild_single_document(
     if not search_docs:
         return 0
 
-    return upsert_chunks(search_docs)
+    result = upsert_chunks(search_docs)
+    return result.successful_chunk_count

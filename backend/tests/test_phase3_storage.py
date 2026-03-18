@@ -274,7 +274,15 @@ class TestSearchRebuildValidation:
             embedding_values=[0.1] * EMBEDDING_DIMENSIONS,
         )
 
-        mock_upsert = MagicMock(return_value=1)
+        from ai_engine.extraction.search_upsert_service import UpsertResult
+
+        mock_result = UpsertResult(
+            attempted_chunk_count=1,
+            successful_chunk_count=1,
+            failed_chunk_count=0,
+            retryable=False,
+        )
+        mock_upsert = MagicMock(return_value=mock_result)
 
         with patch(
             "ai_engine.extraction.search_upsert_service.upsert_chunks",
