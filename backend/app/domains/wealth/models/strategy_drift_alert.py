@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import datetime as dt
 import uuid
+from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Uuid, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, Numeric, String, Uuid, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -39,6 +40,10 @@ class StrategyDriftAlert(OrganizationScopedMixin, Base):
     detected_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
+    snapshot_date: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
+    drift_magnitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
+    drift_threshold: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
+    rebalance_triggered: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
