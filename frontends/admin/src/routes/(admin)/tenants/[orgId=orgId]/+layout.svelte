@@ -5,7 +5,7 @@
 <script lang="ts">
 	import { page } from "$app/state";
 	import { useContextNav } from "$lib/state/context-nav.svelte";
-	import EntityContextHeader from "../../../../../../../packages/ui/src/lib/components/EntityContextHeader.svelte";
+	import { EntityContextHeader } from "@netz/ui";
 
 	let { children }: { children: import("svelte").Snippet } = $props();
 	const nav = useContextNav();

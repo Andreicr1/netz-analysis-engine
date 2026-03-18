@@ -294,7 +294,7 @@
 					Revert Override
 				</Button>
 				<ActionButton onclick={save} loading={saving} loadingText="Saving..." disabled={!syntaxValid}>
-					Save
+					Save for ALL tenants
 				</ActionButton>
 			</div>
 		{/if}
@@ -303,18 +303,18 @@
 
 <ConfirmDialog
 	bind:open={showRevertConfirm}
-	title="Revert to Version"
-	message="This will revert the prompt to version {revertTarget}. Current content will be overwritten."
-	confirmLabel="Revert"
+	title="Revert to Version — affects ALL tenants"
+	message="This will revert the {templateName} prompt to version {revertTarget} for ALL tenants. Current content will be overwritten."
+	confirmLabel="Revert for ALL tenants"
 	confirmVariant="destructive"
 	onConfirm={doRevertToVersion}
 />
 
 <ConfirmDialog
 	bind:open={showDeleteConfirm}
-	title="Remove Override"
-	message="This will remove the override. The prompt will fall back to the next cascade level."
-	confirmLabel="Remove"
+	title="Remove Override — affects ALL tenants"
+	message="This will remove the {templateName} prompt override for {vertical}. All tenants will fall back to the filesystem template. This is a global-impact action."
+	confirmLabel="Remove for ALL tenants"
 	confirmVariant="destructive"
 	onConfirm={deleteOverride}
 />

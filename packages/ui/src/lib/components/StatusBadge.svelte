@@ -1,58 +1,92 @@
 <script lang="ts">
 	import { cn } from "../utils/cn.js";
 
-	type StatusType = "deal_stage" | "regime" | "risk" | "review" | "content";
+	export type StatusSeverity = "neutral" | "info" | "success" | "warning" | "danger";
+
+	export interface StatusConfig {
+		label: string;
+		severity: StatusSeverity;
+		color: string;
+	}
+
+	export type StatusResolver = (token: string) => StatusConfig | undefined;
 
 	interface Props {
 		status: string;
-		type?: StatusType;
+		type?: string;
+		label?: string;
+		resolve?: StatusResolver;
 		class?: string;
 	}
 
-	let { status, type = "risk", class: className }: Props = $props();
+	let { status, type = "default", label, resolve, class: className }: Props = $props();
 
-	const colorMaps: Record<StatusType, Record<string, string>> = {
-		deal_stage: {
-			screening: "#94A3B8",
-			qualified: "#3B82F6",
-			ic_review: "#8B5CF6",
-			approved: "#10B981",
-			declined: "#EF4444",
-		},
-		regime: {
-			RISK_ON: "#10B981",
-			RISK_OFF: "#F59E0B",
-			INFLATION: "#F97316",
-			CRISIS: "#EF4444",
-		},
-		risk: {
-			low: "#10B981",
-			medium: "#F59E0B",
-			high: "#EF4444",
-			critical: "#991B1B",
-		},
-		review: {
-			pending: "#94A3B8",
-			in_progress: "#3B82F6",
-			approved: "#10B981",
-			rejected: "#EF4444",
-		},
-		content: {
-			draft: "#94A3B8",
-			generated: "#3B82F6",
-			approved: "#10B981",
-			published: "#059669",
-		},
+	const severityColorMap: Record<StatusSeverity, string> = {
+		neutral: "var(--netz-text-secondary)",
+		info: "var(--netz-info)",
+		success: "var(--netz-success)",
+		warning: "var(--netz-warning)",
+		danger: "var(--netz-danger)",
 	};
 
-	let color = $derived(colorMaps[type]?.[status] ?? "#94A3B8");
+	const successTokens = new Set([
+		"approved",
+		"completed",
+		"healthy",
+		"ok",
+		"pass",
+		"published",
+		"ready",
+		"resolved",
+		"success",
+	]);
+	const warningTokens = new Set(["pending", "warning", "warn"]);
+	const dangerTokens = new Set(["critical", "declined", "danger", "error", "failed", "rejected"]);
+	const infoTokens = new Set(["active", "generated", "in_progress", "info", "processing", "running"]);
 
-	/** Format label: replace underscores, capitalize first letter */
-	function formatLabel(s: string): string {
-		return s
-			.replace(/_/g, " ")
-			.replace(/\b\w/g, (c) => c.toUpperCase());
+	function formatLabel(value: string): string {
+		if (!value) {
+			return "Unknown";
+		}
+
+		return value.replace(/_/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
 	}
+
+	function inferSeverity(token: string): StatusSeverity {
+		const normalizedToken = token.trim().toLowerCase();
+
+		if (dangerTokens.has(normalizedToken)) {
+			return "danger";
+		}
+
+		if (warningTokens.has(normalizedToken)) {
+			return "warning";
+		}
+
+		if (successTokens.has(normalizedToken)) {
+			return "success";
+		}
+
+		if (infoTokens.has(normalizedToken)) {
+			return "info";
+		}
+
+		return "neutral";
+	}
+
+	let fallbackConfig = $derived.by<StatusConfig>(() => {
+		const resolvedLabel = label ?? formatLabel(status);
+		const severity = inferSeverity(status);
+
+		return {
+			label: resolvedLabel,
+			severity,
+			color: severityColorMap[severity],
+		};
+	});
+
+	let config = $derived.by<StatusConfig>(() => resolve?.(status) ?? fallbackConfig);
+	let badgeColor = $derived(config.color || severityColorMap[config.severity]);
 </script>
 
 <span
@@ -60,11 +94,10 @@
 		"inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium",
 		className,
 	)}
-	style="background-color: {color}20; color: {color};"
+	data-status-type={type}
+	data-status-severity={config.severity}
+	style={`background-color: color-mix(in srgb, ${badgeColor} 14%, transparent); color: ${badgeColor};`}
 >
-	<span
-		class="h-1.5 w-1.5 rounded-full"
-		style="background-color: {color};"
-	></span>
-	{formatLabel(status)}
+	<span class="h-1.5 w-1.5 rounded-full" style={`background-color: ${badgeColor};`}></span>
+	{config.label}
 </span>

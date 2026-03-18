@@ -10,12 +10,22 @@
 		configType,
 		token,
 		orgId,
+		tenantName,
 	}: {
 		vertical: string;
 		configType: string;
 		token: string;
 		orgId?: string;
+		tenantName?: string;
 	} = $props();
+
+	const scopeLabel = $derived(
+		orgId && tenantName
+			? `${tenantName} (${orgId})`
+			: orgId
+				? orgId
+				: "ALL tenants",
+	);
 
 	let content = $state("{}");
 	let version = $state(0);
@@ -167,7 +177,7 @@
 						</Button>
 					{/if}
 					<Button variant="ghost" size="sm" onclick={() => (showDefaultConfirm = true)} disabled={!jsonValid}>
-						Update Default
+						Update Default for ALL tenants
 					</Button>
 				</div>
 				<div class="flex gap-2">
@@ -176,7 +186,7 @@
 					</Button>
 					{#if orgId}
 						<ActionButton onclick={save} loading={saving} loadingText="Saving..." disabled={!jsonValid}>
-							Save Override
+							Save Override for {tenantName ?? "this tenant"}
 						</ActionButton>
 					{/if}
 				</div>
@@ -188,17 +198,17 @@
 <ConfirmDialog
 	bind:open={showDeleteConfirm}
 	title="Revert to Default"
-	message="This will delete the config override and revert to the global default. Continue?"
-	confirmLabel="Revert"
+	message="This will delete the config override for {scopeLabel} and revert to the global default. Continue?"
+	confirmLabel="Revert for {tenantName ?? 'this tenant'}"
 	confirmVariant="destructive"
 	onConfirm={deleteOverride}
 />
 
 <ConfirmDialog
 	bind:open={showDefaultConfirm}
-	title="Update Global Default"
-	message="This will update the global default config for all tenants without overrides. This is a high-impact action."
-	confirmLabel="Update Default"
+	title="Update Global Default — affects ALL tenants"
+	message="This will update the global default {configType} config for ALL tenants without overrides. Every tenant using the default will receive this change immediately."
+	confirmLabel="Update Default for ALL tenants"
 	confirmVariant="destructive"
 	onConfirm={updateDefault}
 />

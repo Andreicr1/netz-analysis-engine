@@ -60,3 +60,7 @@ export type { Actor, ClerkHookOptions } from "./auth.js";
 
 // Theme — SSR theme injection hook
 export { createThemeHook } from "./theme.js";
+
+// Optimistic mutations
+export { createOptimisticMutation } from "./optimistic.svelte.js";
+export type { OptimisticMutation, OptimisticMutationConfig } from "./optimistic.svelte.js";
