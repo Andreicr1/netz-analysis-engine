@@ -19,6 +19,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.engine import async_session_factory as async_session
+from app.core.tenancy.middleware import set_rls_context
 from app.domains.wealth.models.fund import Fund
 from app.domains.wealth.models.macro import MacroData
 from app.domains.wealth.models.nav import NavTimeseries
@@ -435,12 +436,13 @@ async def _compute_block_dtw_scores(
     return dtw_scores
 
 
-async def run_risk_calc(as_of_date: date | None = None) -> dict[str, int]:
+async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> dict[str, int]:
     """Compute risk metrics for all active funds with NAV data."""
     logger.info("Starting risk calculation", as_of_date=str(as_of_date))
     results: dict[str, int] = {}
 
     async with async_session() as db:
+        await set_rls_context(db, org_id)
         lock_result = await db.execute(
             text(f"SELECT pg_try_advisory_lock({RISK_CALC_LOCK_ID})")
         )

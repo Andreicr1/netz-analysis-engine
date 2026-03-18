@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config.config_service import ConfigService
 from app.core.db.engine import async_session_factory
+from app.core.tenancy.middleware import set_rls_context
 from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.screening_result import ScreeningResult, ScreeningRun
 
@@ -40,6 +41,7 @@ async def run_watchlist_check(org_id: uuid.UUID) -> dict:
     Returns dict with status, counts, or skip reason.
     """
     async with async_session_factory() as db:
+        await set_rls_context(db, org_id)
         # 1. Non-blocking advisory lock
         lock_result = await db.execute(
             text(f"SELECT pg_try_advisory_lock({WATCHLIST_BATCH_LOCK_ID})")
@@ -166,11 +168,13 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
             db.add(screening_result)
 
         await db.commit()
+        await set_rls_context(db, org_id)
 
     # 8. Mark run completed
     run.status = "completed"
     run.completed_at = datetime.now(timezone.utc)
     await db.commit()
+    await set_rls_context(db, org_id)
 
     # 9. Publish alerts via Redis pub/sub
     if alerts:

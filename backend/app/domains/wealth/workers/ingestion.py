@@ -10,6 +10,7 @@ then upserts results per-fund into nav_timeseries with a single commit.
 import asyncio
 import concurrent.futures
 import math
+import uuid
 from datetime import date, timedelta
 
 import structlog
@@ -18,6 +19,7 @@ from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.db.engine import async_session_factory as async_session
+from app.core.tenancy.middleware import set_rls_context
 from app.domains.wealth.models.fund import Fund
 from app.domains.wealth.models.nav import NavTimeseries
 
@@ -50,7 +52,7 @@ def _batch_download(tickers: list[str], start: str, end: str):
     )
 
 
-async def run_ingestion(lookback_days: int = 30) -> dict[str, int]:
+async def run_ingestion(org_id: uuid.UUID, lookback_days: int = 30) -> dict[str, int]:
     """Fetch latest NAV/prices for all active funds using batch download.
 
     Uses yf.download() for efficient batch HTTP, then iterates per-fund
@@ -60,6 +62,7 @@ async def run_ingestion(lookback_days: int = 30) -> dict[str, int]:
     results: dict[str, int] = {}
 
     async with async_session() as db:
+        await set_rls_context(db, org_id)
         lock_result = await db.execute(
             text(f"SELECT pg_try_advisory_lock({NAV_INGESTION_LOCK_ID})")
         )
@@ -216,6 +219,7 @@ async def run_ingestion(lookback_days: int = 30) -> dict[str, int]:
                     )
                     await db.execute(stmt)
                     await db.commit()
+                    await set_rls_context(db, org_id)
         finally:
             await db.execute(
                 text(f"SELECT pg_advisory_unlock({NAV_INGESTION_LOCK_ID})")

@@ -12,6 +12,7 @@ when running standalone without RLS context).
 
 import asyncio
 import json
+import uuid
 from datetime import date, timedelta
 
 import numpy as np
@@ -21,6 +22,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.engine import async_session_factory as async_session
+from app.core.tenancy.middleware import set_rls_context
 from app.domains.wealth.models.allocation import StrategicAllocation
 from app.domains.wealth.models.fund import Fund
 from app.domains.wealth.models.nav import NavTimeseries
@@ -243,7 +245,7 @@ async def evaluate_profile(
     }
 
 
-async def run_portfolio_eval() -> dict[str, str]:
+async def run_portfolio_eval(org_id: uuid.UUID) -> dict[str, str]:
     """Evaluate all 3 profiles and create daily snapshots."""
     logger.info("Starting portfolio evaluation")
     results: dict[str, str] = {}
@@ -259,6 +261,7 @@ async def run_portfolio_eval() -> dict[str, str]:
 
     try:
         async with async_session() as db:
+            await set_rls_context(db, org_id)
             lock_result = await db.execute(
                 text(f"SELECT pg_try_advisory_lock({PORTFOLIO_EVAL_LOCK_ID})")
             )
@@ -305,6 +308,7 @@ async def run_portfolio_eval() -> dict[str, str]:
                     )
                     await db.execute(stmt)
                     await db.commit()
+                    await set_rls_context(db, org_id)
                     results[profile] = snapshot_data["trigger_status"]
                     logger.info(
                         "Profile evaluated",

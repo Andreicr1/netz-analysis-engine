@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config.config_service import ConfigService
 from app.core.db.session import async_session_factory
+from app.core.tenancy.middleware import set_rls_context
 from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.screening_result import ScreeningResult, ScreeningRun
 
@@ -41,6 +42,7 @@ async def run_screening_batch(org_id: uuid.UUID) -> dict:
     Returns dict with status, counts, or skip reason.
     """
     async with async_session_factory() as db:
+        await set_rls_context(db, org_id)
         # 1. Non-blocking advisory lock
         lock_result = await db.execute(
             text(f"SELECT pg_try_advisory_lock({SCREENING_BATCH_LOCK_ID})")
@@ -142,11 +144,13 @@ async def _execute_batch(db: AsyncSession, org_id: uuid.UUID) -> dict:
             db.add(screening_result)
 
         await db.commit()
+        await set_rls_context(db, org_id)
 
     # 7. Mark run as completed
     run.status = "completed"
     run.completed_at = datetime.now(timezone.utc)
     await db.commit()
+    await set_rls_context(db, org_id)
 
     passed = sum(1 for r in screening_results if r.overall_status == "PASS")
     failed = sum(1 for r in screening_results if r.overall_status == "FAIL")
