@@ -1,6 +1,4 @@
-"""Azure AI Search adapter for the global-vector-chunks-v4 index.
-Mirrors AzureComplianceKBAdapter but targets the pipeline deal chunks index.
-"""
+"""Azure AI Search adapter for the canonical env-scoped chunks index."""
 from __future__ import annotations
 
 import logging
@@ -12,7 +10,6 @@ from ai_engine.extraction.search_upsert_service import validate_uuid
 
 logger = logging.getLogger(__name__)
 
-PIPELINE_INDEX: str = "global-vector-chunks-v4"
 PIPELINE_DOMAIN: str = "PIPELINE"
 
 # Pre-compute the set of accepted DocType values for fast lookup
@@ -30,7 +27,7 @@ _OVERVIEW_PATTERNS = re.compile(
 
 
 class PipelineKBAdapter:
-    """Retrieves chunks from global-vector-chunks-v4 in Azure AI Search.
+    """Retrieves chunks from the canonical search chunks index.
     Results are mapped to ComplianceChunk so the global agent can merge
     pipeline evidence with compliance evidence seamlessly.
     """
@@ -42,7 +39,7 @@ class PipelineKBAdapter:
         deal_folder: str | None = None,
         top: int = 20,
     ) -> list[ComplianceChunk]:
-        """Full-text search against global-vector-chunks-v4.
+        """Full-text search against the canonical search chunks index.
 
         For overview questions (pipeline summary, all deals, etc.), performs
         a broad wildcard search and ensures diverse deal coverage by
@@ -68,7 +65,10 @@ class PipelineKBAdapter:
 
         """
         from ai_engine.pipeline.storage_routing import _SAFE_PATH_SEGMENT_RE
-        from app.services.azure.search_client import get_search_client
+        from app.services.azure.search_client import (
+            get_search_client,
+            resolve_chunks_index_name,
+        )
 
         safe_org = validate_uuid(organization_id, "organization_id")
         org_filter = f"organization_id eq '{safe_org}'"
@@ -76,7 +76,8 @@ class PipelineKBAdapter:
         is_overview = not deal_folder and bool(_OVERVIEW_PATTERNS.search(query))
 
         try:
-            client = get_search_client(index_name=PIPELINE_INDEX)
+            index_name = resolve_chunks_index_name()
+            client = get_search_client(index_name=index_name)
 
             odata_filter = org_filter
             if deal_folder:
@@ -92,10 +93,11 @@ class PipelineKBAdapter:
                 chunks = _standard_search(client, query, top, odata_filter)
 
             logger.info(
-                "PIPELINE_KB query=%r deal_folder=%s is_overview=%s hits=%d",
+                "PIPELINE_KB query=%r deal_folder=%s is_overview=%s index=%s hits=%d",
                 query[:80],
                 deal_folder,
                 is_overview,
+                index_name,
                 len(chunks),
             )
             return chunks

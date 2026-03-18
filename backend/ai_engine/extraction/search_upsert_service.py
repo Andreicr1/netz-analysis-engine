@@ -1,4 +1,4 @@
-"""Azure AI Search upsert service — writes chunks to global-vector-chunks-v2.
+"""Azure AI Search upsert service for the canonical env-scoped chunks index.
 
 Uses mergeOrUpload action for idempotent upserts.
 Handles id constraints (no colons or special characters).
@@ -6,18 +6,44 @@ Batches uploads for performance.
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 import uuid
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
-from app.core.config import settings
-
 logger = logging.getLogger(__name__)
 
-_INDEX_NAME = settings.prefixed_index(settings.SEARCH_CHUNKS_INDEX_NAME or "global-vector-chunks-v2")
 _UPLOAD_BATCH_SIZE = 100
+
+
+@dataclass(frozen=True)
+class UpsertResult:
+    """Structured result from a search upsert operation.
+
+    Callers use this to distinguish full success, partial (degraded), and
+    total failure without inspecting logs.
+    """
+
+    attempted_chunk_count: int
+    successful_chunk_count: int
+    failed_chunk_count: int
+    retryable: bool
+    batch_errors: list[str] = field(default_factory=list)
+
+    @property
+    def is_full_success(self) -> bool:
+        return self.failed_chunk_count == 0 and self.successful_chunk_count > 0
+
+    @property
+    def is_degraded(self) -> bool:
+        return self.failed_chunk_count > 0 and self.successful_chunk_count > 0
+
+    @property
+    def is_total_failure(self) -> bool:
+        return self.successful_chunk_count == 0 and self.attempted_chunk_count > 0
 
 # ── OData injection prevention (Security F2/F5/F6) ──────────────────
 _VALID_DOMAINS = frozenset({
@@ -54,6 +80,12 @@ def _safe_id(raw: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_-]", "_", raw)
 
 
+def _chunks_index_name() -> str:
+    from app.services.azure.search_client import resolve_chunks_index_name
+
+    return resolve_chunks_index_name()
+
+
 def build_search_document(
     *,
     deal_id: uuid.UUID,
@@ -87,8 +119,10 @@ def build_search_document(
     financial_metric_type: str | None = None,
     risk_flags: list[str] | None = None,
     organization_id: uuid.UUID | None = None,
+    extraction_degraded: bool | None = None,
+    extraction_quality: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Build a single document dict matching the global-vector-chunks-v2 schema.
+    """Build a single document dict matching the canonical chunks schema.
 
     Chunk ID formula (v2): ``{deal_id}_{document_id}_{chunk_index}``
     Previous (v1) used ``{deal_id}_{doc_type}_{chunk_index}`` which caused
@@ -165,17 +199,31 @@ def build_search_document(
     if organization_id is not None:
         doc["organization_id"] = str(organization_id)
 
+    # ── Extraction quality / degraded marker (FAIL-02) ────────────
+    # Downstream indexing can filter on ``extraction_degraded`` to exclude
+    # degraded outputs or include them with an explicit marker.
+    if extraction_degraded is not None:
+        doc["extraction_degraded"] = extraction_degraded
+    if extraction_quality is not None:
+        doc["extraction_quality"] = json.dumps(extraction_quality)
+
     return doc
 
 
-def upsert_chunks(documents: list[dict[str, Any]]) -> int:
-    """Upsert a list of search documents into global-vector-chunks-v2.
+def upsert_chunks(documents: list[dict[str, Any]]) -> UpsertResult:
+    """Upsert a list of search documents into the canonical chunks index.
 
-    Returns the count of successfully uploaded documents.
+    Returns an ``UpsertResult`` with attempted/successful/failed counts so
+    callers can distinguish full success from partial (degraded) persistence.
     Validates that all chunk IDs within the batch are unique before uploading.
     """
     if not documents:
-        return 0
+        return UpsertResult(
+            attempted_chunk_count=0,
+            successful_chunk_count=0,
+            failed_chunk_count=0,
+            retryable=False,
+        )
 
     # ── Duplicate ID guard ────────────────────────────────────────────
     ids = [d["id"] for d in documents]
@@ -198,8 +246,12 @@ def upsert_chunks(documents: list[dict[str, Any]]) -> int:
 
     from app.services.azure.search_client import get_search_client
 
-    client = get_search_client(index_name=_INDEX_NAME)
+    index_name = _chunks_index_name()
+    client = get_search_client(index_name=index_name)
     total_uploaded = 0
+    total_failed = 0
+    batch_errors: list[str] = []
+    has_transient_error = False
 
     for i in range(0, len(documents), _UPLOAD_BATCH_SIZE):
         batch = documents[i : i + _UPLOAD_BATCH_SIZE]
@@ -208,6 +260,7 @@ def upsert_chunks(documents: list[dict[str, Any]]) -> int:
             succeeded = sum(1 for r in result if r.succeeded)
             failed = len(batch) - succeeded
             total_uploaded += succeeded
+            total_failed += failed
             if failed > 0:
                 logger.warning(
                     "Search upsert batch %d: %d succeeded, %d failed",
@@ -215,16 +268,33 @@ def upsert_chunks(documents: list[dict[str, Any]]) -> int:
                     succeeded,
                     failed,
                 )
-        except Exception:
+                batch_errors.append(
+                    f"batch {i // _UPLOAD_BATCH_SIZE}: {failed}/{len(batch)} chunks failed"
+                )
+                # Partial batch failures are retryable (individual doc issues)
+                has_transient_error = True
+        except Exception as exc:
             logger.error(
                 "Search upsert batch %d failed entirely (%d docs)",
                 i // _UPLOAD_BATCH_SIZE,
                 len(batch),
                 exc_info=True,
             )
+            total_failed += len(batch)
+            batch_errors.append(
+                f"batch {i // _UPLOAD_BATCH_SIZE}: entire batch of {len(batch)} failed — {type(exc).__name__}"
+            )
+            # Entire batch exception is typically transient (network, throttle)
+            has_transient_error = True
 
-    logger.info("Upserted %d/%d chunks to %s", total_uploaded, len(documents), _INDEX_NAME)
-    return total_uploaded
+    logger.info("Upserted %d/%d chunks to %s", total_uploaded, len(documents), index_name)
+    return UpsertResult(
+        attempted_chunk_count=len(documents),
+        successful_chunk_count=total_uploaded,
+        failed_chunk_count=total_failed,
+        retryable=has_transient_error,
+        batch_errors=batch_errors,
+    )
 
 
 def search_deal_chunks(
@@ -247,7 +317,7 @@ def search_deal_chunks(
 
     from app.services.azure.search_client import get_search_client
 
-    client = get_search_client(index_name=_INDEX_NAME)
+    client = get_search_client(index_name=_chunks_index_name())
 
     safe_deal = validate_uuid(deal_id, "deal_id")
     safe_org = validate_uuid(organization_id, "organization_id")
@@ -304,7 +374,7 @@ def search_fund_policy_chunks(
 
     from app.services.azure.search_client import get_search_client
 
-    client = get_search_client(index_name=_INDEX_NAME)
+    client = get_search_client(index_name=_chunks_index_name())
 
     safe_fund = validate_uuid(fund_id, "fund_id")
     safe_org = validate_uuid(organization_id, "organization_id")

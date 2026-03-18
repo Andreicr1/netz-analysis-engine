@@ -157,10 +157,19 @@ async def search(
 ):
     if not actor.can_access_fund(fund_id) and not settings.AUTHZ_BYPASS_ENABLED:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden for this fund")
-    client = AzureSearchMetadataClient()
-    # TODO(Phase 3 / Sprint 3): When AzureSearchMetadataClient is implemented,
-    # pass organization_id=str(actor.org_id) for tenant isolation (Security F2).
-    hits = client.search(q=q, fund_id=str(fund_id), top=top)
+    client = AzureSearchMetadataClient(caller="dataroom_search_route")
+    try:
+        hits = client.search(
+            q=q,
+            fund_id=str(fund_id),
+            top=top,
+            organization_id=str(actor.organization_id) if actor.organization_id else None,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Search backend unavailable: {exc}",
+        ) from exc
     return {"query": q, "count": len(hits), "hits": [h.__dict__ for h in hits]}
 
 

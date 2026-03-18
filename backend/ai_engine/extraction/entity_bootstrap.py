@@ -1265,7 +1265,8 @@ async def async_bootstrap_deal(
         try:
             from ai_engine.extraction.text_extraction import async_extract_text_from_blob
 
-            pages = await async_extract_text_from_blob(container, blob_path)
+            extraction_result = await async_extract_text_from_blob(container, blob_path)
+            pages = extraction_result.pages
             if not pages:
                 return ""
 

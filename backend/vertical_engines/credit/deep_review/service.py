@@ -40,7 +40,7 @@ from vertical_engines.credit.deep_review.helpers import (
     _call_openai,
     _now_utc,
 )
-from vertical_engines.credit.deep_review.models import _LLM_CONCURRENCY, StageOutcome
+from vertical_engines.credit.deep_review.models import StageOutcome, get_llm_concurrency
 from vertical_engines.credit.deep_review.persist import (
     _build_tone_artifacts,
     _index_chapter_citations,
@@ -1269,7 +1269,7 @@ async def async_run_deal_deep_review_v4(
 
     now = _now_utc()
     budget = TokenBudgetTracker(context="deep_review_v4")
-    sem = asyncio.Semaphore(_LLM_CONCURRENCY)
+    sem = asyncio.Semaphore(get_llm_concurrency())
 
     async def guarded(coro: Awaitable[Any]) -> Any:
         async with sem:

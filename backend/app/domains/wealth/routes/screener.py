@@ -77,9 +77,9 @@ async def trigger_screening(
 
     # Load screening config
     config_svc = ConfigService(db)
-    config_l1 = await config_svc.get("liquid_funds", "screening_layer1", org_id)
-    config_l2 = await config_svc.get("liquid_funds", "screening_layer2", org_id)
-    config_l3 = await config_svc.get("liquid_funds", "screening_layer3", org_id)
+    config_l1 = (await config_svc.get("liquid_funds", "screening_layer1", org_id)).value
+    config_l2 = (await config_svc.get("liquid_funds", "screening_layer2", org_id)).value
+    config_l3 = (await config_svc.get("liquid_funds", "screening_layer3", org_id)).value
 
     config_hash = hashlib.sha256(
         json.dumps({"l1": config_l1, "l2": config_l2, "l3": config_l3}, sort_keys=True).encode()

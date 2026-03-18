@@ -34,10 +34,12 @@
 		emptyState?: Snippet;
 	} = $props();
 
+	let effectivePageSize = $derived(Math.min(Math.max(pageSize, 1), 100));
+
 	let sorting = $state<SortingState>([]);
 	let columnFilters = $state<ColumnFiltersState>([]);
 
-	let table = $derived(createTable({
+	let table = createTable({
 		get data() { return data; },
 		get columns() { return columns; },
 		state: {
@@ -56,9 +58,9 @@
 		getFilteredRowModel: getFilteredRowModel(),
 		getPaginationRowModel: getPaginationRowModel(),
 		initialState: {
-			pagination: { pageSize },
+			pagination: { pageSize: effectivePageSize },
 		},
-	}));
+	});
 </script>
 
 <div class={cn("w-full", className)}>

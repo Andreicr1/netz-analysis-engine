@@ -251,7 +251,7 @@ class NetzGlobalAgent:
         self, question: str, deal_folder: str | None, top: int,
         organization_id: uuid.UUID | str | None = None,
     ) -> list[Any]:
-        """Retrieve from global-vector-chunks-v4."""
+        """Retrieve from the canonical env-scoped chunks index."""
         from app.domains.credit.global_agent.pipeline_kb_adapter import PipelineKBAdapter
 
         if organization_id is None:

@@ -193,7 +193,9 @@ def extract_obligation_register(
                 }
                 for item in saved
             ]
-            AzureSearchMetadataClient().upsert_documents(items=search_docs)
+            AzureSearchMetadataClient(
+                caller="obligation_extractor",
+            ).upsert_documents(items=search_docs)
         except Exception:
             for item in saved:
                 item.data_quality = "DEGRADED"

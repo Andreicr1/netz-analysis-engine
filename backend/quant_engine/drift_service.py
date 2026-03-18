@@ -13,6 +13,7 @@ Note: imports StrategicAllocation, TacticalPosition, PortfolioSnapshot from app.
 
 from dataclasses import dataclass
 from datetime import date
+from enum import Enum
 
 import numpy as np
 import structlog
@@ -46,6 +47,42 @@ class DriftReport:
     estimated_turnover: float
     maintenance_trigger: float
     urgent_trigger: float
+
+
+class DtwDriftStatus(str, Enum):
+    """Status of a DTW drift computation."""
+
+    ok = "ok"
+    degraded = "degraded"
+    failed = "failed"
+
+
+@dataclass(frozen=True, slots=True)
+class DtwDriftResult:
+    """Typed result for DTW drift computation.
+
+    Distinguishes genuine zero drift (status=ok, score=0.0) from
+    computation failures (status=degraded/failed, score=None).
+    """
+
+    score: float | None
+    status: DtwDriftStatus
+    reason: str | None = None
+
+    @property
+    def is_usable(self) -> bool:
+        """Whether the score can be used for downstream decisions."""
+        return self.status == DtwDriftStatus.ok
+
+    def score_or_default(self, default: float = 0.0) -> float:
+        """Return score if usable, otherwise the caller-chosen default.
+
+        Consumers that need a float (e.g. DB upsert) call this explicitly,
+        making the fallback intentional rather than silent.
+        """
+        if self.score is not None and self.is_usable:
+            return self.score
+        return default
 
 
 def resolve_drift_thresholds(config: dict | None = None) -> tuple[float, float]:
@@ -253,47 +290,76 @@ def compute_dtw_drift(
     fund_returns: list[float],
     benchmark_returns: list[float],
     window: int = 63,
-) -> float:
+) -> DtwDriftResult:
     """Compute derivative DTW distance between fund and benchmark return series.
 
     Uses ddtw_distance (derivative DTW) — naturally scale-invariant.
     Result is length-normalized (raw / window) for cross-fund comparability.
+
+    Returns a typed DtwDriftResult instead of a bare float, so that
+    computation failures are never silently encoded as 0.0.
     """
     try:
         from aeon.distances import ddtw_distance
     except ImportError:
-        logger.warning("aeon not installed; DTW drift score will be 0.0 (neutral). "
+        logger.warning("aeon not installed; DTW drift returns degraded result. "
                        "Install with: pip install netz-wealth-os[timeseries]")
-        return 0.0
+        return DtwDriftResult(
+            score=None,
+            status=DtwDriftStatus.degraded,
+            reason="aeon library not installed",
+        )
 
     f = np.array(fund_returns[-window:], dtype=float)
     b = np.array(benchmark_returns[-window:], dtype=float)
 
     if len(f) < 10 or len(b) < 10:
-        return 0.0
+        return DtwDriftResult(
+            score=None,
+            status=DtwDriftStatus.degraded,
+            reason=f"insufficient data: fund={len(f)}, benchmark={len(b)} (min 10)",
+        )
 
     try:
         raw = ddtw_distance(f, b, window=0.1)
-        return float(raw / max(len(f), 1))
+        return DtwDriftResult(
+            score=float(raw / max(len(f), 1)),
+            status=DtwDriftStatus.ok,
+        )
     except Exception as e:
         logger.warning("dtw_drift_computation_failed", error=str(e))
-        return 0.0
+        return DtwDriftResult(
+            score=None,
+            status=DtwDriftStatus.failed,
+            reason=str(e),
+        )
 
 
 def compute_dtw_drift_batch(
     fund_returns_matrix: "np.ndarray",
     benchmark_returns: "np.ndarray",
     window: int = 63,
-) -> list[float]:
-    """Vectorized DTW distance for all funds vs benchmark."""
+) -> list[DtwDriftResult]:
+    """Vectorized DTW distance for all funds vs benchmark.
+
+    Returns a list of typed DtwDriftResult instead of bare floats,
+    so that computation failures are never silently encoded as 0.0.
+    """
     n_funds = fund_returns_matrix.shape[0]
 
     try:
         from aeon.distances import pairwise_distance
     except ImportError:
-        logger.warning("aeon not installed; DTW drift scores will be 0.0 (neutral). "
+        logger.warning("aeon not installed; DTW drift returns degraded results. "
                        "Install with: pip install netz-wealth-os[timeseries]")
-        return [0.0] * n_funds
+        return [
+            DtwDriftResult(
+                score=None,
+                status=DtwDriftStatus.degraded,
+                reason="aeon library not installed",
+            )
+            for _ in range(n_funds)
+        ]
 
     try:
         fund_slice = fund_returns_matrix[:, -window:]
@@ -304,8 +370,21 @@ def compute_dtw_drift_batch(
         benchmark_distances = dist_matrix[-1, :-1]
 
         actual_window = fund_slice.shape[1]
-        return [float(d / max(actual_window, 1)) for d in benchmark_distances]
+        return [
+            DtwDriftResult(
+                score=float(d / max(actual_window, 1)),
+                status=DtwDriftStatus.ok,
+            )
+            for d in benchmark_distances
+        ]
 
     except Exception as e:
         logger.warning("dtw_drift_batch_failed", error=str(e))
-        return [0.0] * n_funds
+        return [
+            DtwDriftResult(
+                score=None,
+                status=DtwDriftStatus.failed,
+                reason=str(e),
+            )
+            for _ in range(n_funds)
+        ]

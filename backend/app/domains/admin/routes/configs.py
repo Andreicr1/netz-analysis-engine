@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config.config_service import ConfigService
+from app.core.config.registry import ConfigRegistry
 from app.core.security.admin_auth import require_super_admin
 from app.core.security.clerk_auth import Actor
 from app.core.tenancy.admin_middleware import get_db_admin
@@ -61,9 +62,14 @@ async def get_config(
     actor: Actor = Depends(require_super_admin),
 ):
     """Get merged config (default + override)."""
+    if not ConfigRegistry.is_registered(vertical, config_type):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unregistered config domain: ({vertical}, {config_type})",
+        )
     svc = ConfigService(db)
-    config = await svc.get(vertical, config_type, org_id)
-    return {"config": config, "vertical": vertical, "config_type": config_type}
+    result = await svc.get(vertical, config_type, org_id)
+    return {"config": result.value, "vertical": vertical, "config_type": config_type}
 
 
 @router.put("/{vertical}/{config_type}")
@@ -77,6 +83,11 @@ async def update_config(
     actor: Actor = Depends(require_super_admin),
 ):
     """Update config override with optimistic locking."""
+    if not ConfigRegistry.is_registered(vertical, config_type):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unregistered config domain: ({vertical}, {config_type})",
+        )
     if org_id is None:
         raise HTTPException(status_code=400, detail="org_id query parameter required for override writes")
 
@@ -102,6 +113,11 @@ async def delete_config(
     actor: Actor = Depends(require_super_admin),
 ):
     """Remove override -- tenant falls back to default."""
+    if not ConfigRegistry.is_registered(vertical, config_type):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unregistered config domain: ({vertical}, {config_type})",
+        )
     if org_id is None:
         raise HTTPException(status_code=400, detail="org_id required")
     writer = ConfigWriter(db)
@@ -118,6 +134,11 @@ async def get_config_diff(
     actor: Actor = Depends(require_super_admin),
 ):
     """Show override vs default with changed keys."""
+    if not ConfigRegistry.is_registered(vertical, config_type):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unregistered config domain: ({vertical}, {config_type})",
+        )
     writer = ConfigWriter(db)
     return await writer.diff(vertical, config_type, org_id)
 
@@ -131,6 +152,11 @@ async def update_default(
     actor: Actor = Depends(require_super_admin),
 ):
     """Update global default config (super-admin only)."""
+    if not ConfigRegistry.is_registered(vertical, config_type):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unregistered config domain: ({vertical}, {config_type})",
+        )
     writer = ConfigWriter(db)
     return await writer.put_default(vertical, config_type, body, actor.actor_id)
 

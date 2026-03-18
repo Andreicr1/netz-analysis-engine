@@ -9,8 +9,9 @@
 	import { invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
 	import type { PageData } from "./$types";
+	import DOMPurify from "dompurify";
 
-	/** Render Markdown as safe HTML — strips script tags, event handlers, javascript: URIs. */
+	/** Render Markdown as safe HTML — converts basic Markdown then sanitizes with DOMPurify. */
 	function renderSafeMarkdown(md: string): string {
 		// Convert basic Markdown to HTML (headers, bold, italic, lists, code blocks)
 		let html = md
@@ -25,12 +26,10 @@
 			.replace(/\n\n/g, "</p><p>")
 			.replace(/\n/g, "<br/>");
 		html = `<p>${html}</p>`;
-		// Sanitize: strip script tags, event handlers, javascript: URIs
-		html = html
-			.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-			.replace(/\bon\w+\s*=\s*["'][^"']*["']/gi, "")
-			.replace(/\bon\w+\s*=\s*[^\s>]*/gi, "")
-			.replace(/javascript\s*:/gi, "");
+		// Sanitize with DOMPurify — handles mXSS, namespace escapes, all known bypass vectors
+		if (typeof window !== "undefined") {
+			html = DOMPurify.sanitize(html);
+		}
 		return html;
 	}
 

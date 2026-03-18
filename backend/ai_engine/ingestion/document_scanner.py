@@ -216,7 +216,9 @@ def classify_documents(
                 }
                 for item in saved
             ]
-            AzureSearchMetadataClient().upsert_documents(items=search_docs)
+            AzureSearchMetadataClient(
+                caller="document_scanner",
+            ).upsert_documents(items=search_docs)
         except Exception:
             for item in saved:
                 item.data_quality = "DEGRADED"

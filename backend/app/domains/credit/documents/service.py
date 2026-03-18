@@ -356,14 +356,17 @@ async def upload_document(
     )
 
     indexed = False
-    if settings.AZURE_SEARCH_ENDPOINT and settings.SEARCH_INDEX_NAME:
+    metadata_index_name = settings.SEARCH_INDEX_NAME
+    if settings.azure_search_endpoint and metadata_index_name:
         from app.services.search_index import AzureSearchMetadataClient
-        client = AzureSearchMetadataClient()
+
+        client = AzureSearchMetadataClient(caller="documents_service")
         client.upsert_dataroom_metadata(
             items=[
                 {
                     "id": f"{fund_id}:{doc.id}:v{next_ver}",
                     "fund_id": str(fund_id),
+                    "organization_id": str(actor.organization_id) if actor.organization_id else None,
                     "document_id": str(doc.id),
                     "title": doc.title,
                     "root_folder": doc.root_folder,
@@ -386,7 +389,7 @@ async def upload_document(
         before=None,
         after={
             "indexed": indexed,
-            "index": settings.SEARCH_INDEX_NAME,
+            "index": metadata_index_name,
             "id": f"{fund_id}:{doc.id}:v{next_ver}",
             "blob_path": ver.blob_path,
         },

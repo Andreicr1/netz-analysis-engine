@@ -26,17 +26,27 @@ export type { SSEConfig, SSEConnection, SSEStatus, SSEEvent, SSESnapshotConfig, 
 
 // Formatting
 export {
+	formatAUM,
+	formatBps,
+	formatNAV,
+	formatNumber,
+	formatRatio,
 	formatCurrency,
 	formatPercent,
 	formatCompact,
 	formatDate,
+	formatDateTime,
 	formatDateRange,
+	formatRelativeDate,
 	formatISIN,
+	plColor,
+	plDirection,
 } from "./format.js";
 
 // Branding
 export {
 	defaultBranding,
+	defaultDarkBranding,
 	brandingToCSS,
 	injectBranding,
 } from "./branding.js";

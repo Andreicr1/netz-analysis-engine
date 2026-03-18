@@ -91,12 +91,21 @@ export { createPoller } from "./utils/poller.svelte.js";
 export type { PollerConfig, PollerState } from "./utils/poller.svelte.js";
 export { canOpenSSE, registerSSE, unregisterSSE, getActiveSSECount } from "./utils/sse-registry.svelte.js";
 export {
+	formatAUM,
+	formatBps,
+	formatNAV,
+	formatNumber,
+	formatRatio,
 	formatCurrency,
 	formatPercent,
 	formatCompact,
 	formatDate,
+	formatDateTime,
 	formatDateRange,
+	formatRelativeDate,
 	formatISIN,
+	plColor,
+	plDirection,
 } from "./utils/format.js";
 export {
 	defaultBranding,

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from typing import Any
 
@@ -23,15 +22,27 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from ai_engine.model_config import get_model as _get_model
 from ai_engine.openai_client import create_completion
+from app.core.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────
-#  Configuration (from environment — search credentials only)
+#  Configuration (from Settings — never captured at module level)
 # ─────────────────────────────────────────────────────────────────────
-SEARCH_ENDPOINT   = os.environ.get("AZURE_SEARCH_ENDPOINT", "")
-SEARCH_API_KEY    = os.environ.get("AZURE_SEARCH_API_KEY", "")
+# SEARCH_ENDPOINT and SEARCH_API_KEY are resolved lazily at call-time
+# via the Settings singleton so that env-var changes between process
+# startup and first use (e.g. test fixtures overriding env) are honoured.
 SEARCH_API_VER    = "2024-07-01"
+
+
+def _search_endpoint() -> str:
+    """Lazy accessor — reads AZURE_SEARCH_ENDPOINT through Settings."""
+    return settings.azure_search_endpoint
+
+
+def _search_api_key() -> str:
+    """Lazy accessor — reads AZURE_SEARCH_KEY through Settings."""
+    return settings.azure_search_key
 
 RISK_POLICY_INDEX       = "risk-policy-index"
 FUND_CONSTITUTION_INDEX = "fund-constitution-index"
@@ -289,12 +300,14 @@ def _search(
     odata_filter: str | None = None,
     organization_id: str | None = None,
 ) -> list[dict]:
-    if not SEARCH_ENDPOINT or not SEARCH_API_KEY:
+    endpoint = _search_endpoint()
+    api_key = _search_api_key()
+    if not endpoint or not api_key:
         logger.warning("POLICY_LOADER_NO_SEARCH_CONFIG")
         return []
 
     semantic_cfg = index.replace("-index", "-semantic")
-    url = f"{SEARCH_ENDPOINT}/indexes/{index}/docs/search?api-version={SEARCH_API_VER}"
+    url = f"{endpoint}/indexes/{index}/docs/search?api-version={SEARCH_API_VER}"
 
     # Build filter with tenant isolation (Security F2)
     filter_parts: list[str] = []
@@ -318,7 +331,7 @@ def _search(
     try:
         resp = httpx.post(
             url,
-            headers={"Content-Type": "application/json", "api-key": SEARCH_API_KEY},
+            headers={"Content-Type": "application/json", "api-key": api_key},
             json=body,
             timeout=15.0,
         )

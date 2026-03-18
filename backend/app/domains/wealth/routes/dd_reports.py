@@ -18,7 +18,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.jobs.sse import create_job_stream
-from app.core.jobs.tracker import publish_event, register_job_owner, verify_job_owner
+from app.core.jobs.tracker import (
+    publish_event,
+    publish_terminal_event,
+    refresh_job_owner_ttl,
+    register_job_owner,
+    verify_job_owner,
+)
 from app.core.security.clerk_auth import CurrentUser, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.dd_report import DDReport
@@ -283,8 +289,27 @@ async def _run_generation(
     Creates a sync Session inside the thread (fix #33).
     Publishes SSE events for progress tracking.
     Releases the content-generation semaphore slot on completion.
+
+    ASYNC-01: Refreshes ownership TTL every 20 minutes so long-running
+    DD reports remain stream-authorizable beyond the default 1-hour TTL.
+    Terminal events use publish_terminal_event() to schedule cleanup.
     """
+    # ASYNC-01: background task that refreshes the ownership TTL every
+    # 20 minutes while the job is active.  Cancelled in the finally block.
+    ttl_refresh_task: asyncio.Task[None] | None = None
+
+    async def _periodic_ttl_refresh() -> None:
+        """Refresh ownership TTL every 20 min until cancelled."""
+        try:
+            while True:
+                await asyncio.sleep(20 * 60)  # 20 minutes
+                await refresh_job_owner_ttl(job_id)
+        except asyncio.CancelledError:
+            pass
+
     try:
+        ttl_refresh_task = asyncio.create_task(_periodic_ttl_refresh())
+
         await publish_event(job_id, "generation_started", {
             "report_id": report_id,
             "fund_id": fund_id,
@@ -307,12 +332,12 @@ async def _run_generation(
         )
 
         if result.status == "failed":
-            await publish_event(job_id, "report_failed", {
+            await publish_terminal_event(job_id, "report_failed", {
                 "report_id": report_id,
                 "error": result.error or "Generation failed",
             })
         else:
-            await publish_event(job_id, "report_completed", {
+            await publish_terminal_event(job_id, "report_completed", {
                 "report_id": report_id,
                 "status": result.status,
                 "confidence_score": result.confidence_score,
@@ -321,11 +346,13 @@ async def _run_generation(
 
     except Exception as exc:
         logger.exception("dd_report_background_failed", report_id=report_id)
-        await publish_event(job_id, "report_failed", {
+        await publish_terminal_event(job_id, "report_failed", {
             "report_id": report_id,
             "error": str(exc),
         })
     finally:
+        if ttl_refresh_task is not None:
+            ttl_refresh_task.cancel()
         _get_content_semaphore().release()
 
 

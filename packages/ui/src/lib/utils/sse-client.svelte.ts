@@ -1,6 +1,7 @@
 /** SSE client using fetch + ReadableStream (NOT EventSource — needs auth headers). */
 
 import type { NetzApiClient } from "./api-client.js";
+import { registerSSE, unregisterSSE } from "./sse-registry.svelte.js";
 
 export type SSEStatus = "connecting" | "connected" | "disconnected" | "error";
 
@@ -15,6 +16,7 @@ export interface SSEConfig<T> {
 	onEvent: (event: T) => void;
 	onError?: (error: Error) => void;
 	initialState?: T[];
+	parseEvent?: (rawData: string) => T | null | undefined;
 }
 
 export interface SSEConnection<T> {
@@ -30,6 +32,20 @@ const BACKOFF_MAX = 30000;
 const MAX_RETRIES = 5;
 const HEARTBEAT_TIMEOUT = 45000;
 
+function parseSSEEvent<T>(rawData: string, config: SSEConfig<T>): T | null {
+	if (!rawData || rawData.trim().length === 0) return null;
+
+	try {
+		if (config.parseEvent) {
+			return config.parseEvent(rawData) ?? null;
+		}
+
+		return JSON.parse(rawData) as T;
+	} catch {
+		return null;
+	}
+}
+
 export function createSSEStream<T>(config: SSEConfig<T>): SSEConnection<T> {
 	let status: SSEStatus = $state("disconnected");
 	let error: Error | null = $state(null);
@@ -42,6 +58,7 @@ export function createSSEStream<T>(config: SSEConfig<T>): SSEConnection<T> {
 	let retryCount = 0;
 	let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
 	let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+	let registered = false;
 
 	function resetHeartbeat() {
 		if (heartbeatTimer) clearTimeout(heartbeatTimer);
@@ -69,6 +86,13 @@ export function createSSEStream<T>(config: SSEConfig<T>): SSEConnection<T> {
 
 	async function connect() {
 		disconnect();
+		if (!registerSSE()) {
+			status = "error";
+			error = new Error("SSE connection limit reached (max 4). Try closing other tabs.");
+			config.onError?.(error);
+			return;
+		}
+		registered = true;
 		status = "connecting";
 		error = null;
 		abortController = new AbortController();
@@ -98,6 +122,7 @@ export function createSSEStream<T>(config: SSEConfig<T>): SSEConnection<T> {
 			const reader = res.body.getReader();
 			const decoder = new TextDecoder();
 			let buffer = "";
+			let currentData = "";
 
 			while (true) {
 				const { done, value } = await reader.read();
@@ -105,26 +130,28 @@ export function createSSEStream<T>(config: SSEConfig<T>): SSEConnection<T> {
 
 				resetHeartbeat();
 				buffer += decoder.decode(value, { stream: true });
+				buffer = buffer.replace(/\r\n/g, "\n");
 
 				const lines = buffer.split("\n");
 				// Keep incomplete last line in buffer
 				buffer = lines.pop() ?? "";
 
-				let currentData = "";
 				for (const line of lines) {
-					if (line.startsWith("data: ")) {
-						currentData += line.slice(6);
-					} else if (line === "" && currentData) {
+					if (line.startsWith("data:")) {
+						const dataLine = line.slice(5).replace(/^ /, "");
+						currentData += currentData ? `\n${dataLine}` : dataLine;
+					} else if (line.startsWith("event:")) {
+						// Event type is not currently surfaced, but keep parsing spec-compliant frames.
+						continue;
+					} else if (line === "") {
 						// End of event
-						try {
-							const parsed = JSON.parse(currentData) as T;
+						const parsed = parseSSEEvent(currentData, config);
+						if (parsed !== null) {
 							if (events.length >= MAX_EVENTS) {
 								events.splice(0, events.length - MAX_EVENTS + 1);
 							}
 							events.push(parsed);
 							config.onEvent(parsed);
-						} catch {
-							// Skip malformed events
 						}
 						currentData = "";
 					}
@@ -145,6 +172,10 @@ export function createSSEStream<T>(config: SSEConfig<T>): SSEConnection<T> {
 
 	function disconnect() {
 		abortController?.abort();
+		if (registered) {
+			unregisterSSE();
+			registered = false;
+		}
 		abortController = null;
 		if (heartbeatTimer) clearTimeout(heartbeatTimer);
 		if (reconnectTimer) clearTimeout(reconnectTimer);

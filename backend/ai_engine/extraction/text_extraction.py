@@ -16,7 +16,10 @@ import asyncio
 import io
 import logging
 import os
+from dataclasses import dataclass, field
 from typing import TypedDict
+
+from ai_engine.extraction.document_intelligence import ExtractionQuality
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +28,20 @@ class PageBlock(TypedDict):
     page_start: int
     page_end: int
     text: str
+
+
+@dataclass
+class TextExtractionResult:
+    """Wraps page blocks with a quality reason code for OCR fallback tracking.
+
+    Downstream callers use ``quality.is_degraded`` to annotate metadata
+    and search documents so OCR fallback outputs remain distinguishable
+    from primary-path (Mistral) extractions.
+    """
+
+    pages: list[PageBlock]
+    quality: ExtractionQuality = ExtractionQuality.SUCCESS
+    reason: str = ""
 
 
 # ── PDF extraction (pypdf) ───────────────────────────────────────────
@@ -130,13 +147,16 @@ def _extract_with_document_intelligence(data: bytes) -> list[PageBlock]:
 # ── Public API ────────────────────────────────────────────────────────
 
 
-async def async_extract_text_from_bytes(data: bytes, *, filename: str) -> list[PageBlock]:
+async def async_extract_text_from_bytes(data: bytes, *, filename: str) -> TextExtractionResult:
     """Async text extraction — routes PDFs through Mistral OCR when available.
+
+    Returns a ``TextExtractionResult`` with a typed quality code so callers
+    can distinguish primary OCR success from fallback paths.
 
     Fallback chain for PDFs:
     1. Mistral OCR (if MISTRAL_API_KEY configured) → markdown with HTML tables
-    2. pypdf (if Mistral unavailable or fails) → plain text
-    3. Azure Document Intelligence (if pypdf yields nothing) → scanned PDF OCR
+    2. pypdf (if Mistral unavailable or fails) → plain text  (OCR_FALLBACK)
+    3. Azure Document Intelligence (if pypdf yields nothing) → scanned PDF OCR (OCR_FALLBACK)
     """
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
@@ -150,7 +170,10 @@ async def async_extract_text_from_bytes(data: bytes, *, filename: str) -> list[P
                         "Mistral OCR extracted %d pages from %s",
                         len(pages), filename,
                     )
-                    return pages
+                    return TextExtractionResult(
+                        pages=pages,
+                        quality=ExtractionQuality.SUCCESS,
+                    )
                 logger.warning("Mistral OCR returned empty — falling back to pypdf: %s", filename)
             except Exception:
                 logger.warning(
@@ -160,27 +183,66 @@ async def async_extract_text_from_bytes(data: bytes, *, filename: str) -> list[P
 
         # Fallback to pypdf
         pages = _extract_pdf(data)
-        if not pages:
-            logger.info("PDF yielded no text — attempting Document Intelligence: %s", filename)
-            pages = _extract_with_document_intelligence(data)
-        return pages
+        if pages:
+            return TextExtractionResult(
+                pages=pages,
+                quality=ExtractionQuality.OCR_FALLBACK,
+                reason="Fell back to pypdf (Mistral OCR unavailable or failed)",
+            )
+
+        # Fallback to Azure Document Intelligence
+        logger.info("PDF yielded no text — attempting Document Intelligence: %s", filename)
+        pages = _extract_with_document_intelligence(data)
+        if pages:
+            return TextExtractionResult(
+                pages=pages,
+                quality=ExtractionQuality.OCR_FALLBACK,
+                reason="Fell back to Azure Document Intelligence (pypdf yielded no text)",
+            )
+
+        # All extraction methods yielded nothing
+        return TextExtractionResult(
+            pages=[],
+            quality=ExtractionQuality.LEGITIMATELY_EMPTY,
+            reason="All OCR methods yielded no text",
+        )
 
     if ext in ("docx", "doc"):
-        return _extract_docx(data)
+        pages = _extract_docx(data)
+        if not pages:
+            return TextExtractionResult(
+                pages=[],
+                quality=ExtractionQuality.LEGITIMATELY_EMPTY,
+                reason="DOCX contained no extractable text",
+            )
+        return TextExtractionResult(pages=pages, quality=ExtractionQuality.SUCCESS)
 
     if ext in ("txt", "md", "csv"):
         text = data.decode("utf-8", errors="replace").strip()
-        return [{"page_start": 1, "page_end": 1, "text": text}] if text else []
+        if not text:
+            return TextExtractionResult(
+                pages=[],
+                quality=ExtractionQuality.LEGITIMATELY_EMPTY,
+                reason="Text file was empty",
+            )
+        return TextExtractionResult(
+            pages=[{"page_start": 1, "page_end": 1, "text": text}],
+            quality=ExtractionQuality.SUCCESS,
+        )
 
     logger.warning("Unsupported file extension '%s' for text extraction: %s", ext, filename)
-    return []
+    return TextExtractionResult(
+        pages=[],
+        quality=ExtractionQuality.PARSE_FAILURE,
+        reason=f"Unsupported file extension: {ext}",
+    )
 
 
 # Supported file extensions for text extraction
 _SUPPORTED_EXTENSIONS = {"pdf", "docx", "doc", "txt", "md", "csv"}
 
 
-async def async_extract_text_from_blob(blob_container: str, blob_path: str) -> list[PageBlock]:
+async def async_extract_text_from_blob(blob_container: str, blob_path: str) -> TextExtractionResult:
     """Async version of extract_text_from_blob.
 
     Downloads blob synchronously (Azure SDK limitation) then routes
@@ -191,7 +253,11 @@ async def async_extract_text_from_blob(blob_container: str, blob_path: str) -> l
 
     if ext not in _SUPPORTED_EXTENSIONS:
         logger.info("Skipping unsupported file type '%s' (no download): %s", ext, blob_path)
-        return []
+        return TextExtractionResult(
+            pages=[],
+            quality=ExtractionQuality.PARSE_FAILURE,
+            reason=f"Unsupported file extension: {ext}",
+        )
 
     from app.services.azure.blob_client import get_blob_service_client
 

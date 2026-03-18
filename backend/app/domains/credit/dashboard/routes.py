@@ -15,11 +15,8 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import re
-import threading
-import time
 import uuid
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -514,15 +511,21 @@ async def macro_fred_series(
     series_id: str = "DGS10",
     period: str = "1Y",
 ) -> dict[str, Any]:
-    """Proxy to FRED API -- hides the API key from the frontend bundle."""
-    import requests as http_requests
+    """Proxy to FRED API -- hides the API key from the frontend bundle.
 
+    Uses httpx.AsyncClient — does not block the event loop.
+    """
     from app.core.config.settings import settings
+    from app.domains.credit.dashboard.fred_client import (
+        _FRED_ID_RE,
+        _PERIOD_MONTHS,
+        get_shared_client,
+    )
 
     if not _FRED_ID_RE.match(series_id):
         return {"seriesId": series_id, "period": period, "observations": [], "error": "Invalid series ID format"}
 
-    api_key = settings.FRED_API_KEY
+    api_key = settings.fred_api_key
     if not api_key:
         return {
             "seriesId": series_id,
@@ -532,33 +535,15 @@ async def macro_fred_series(
         }
 
     months = _PERIOD_MONTHS.get(period, 12)
-
     end_date = dt.date.today()
     start_date = end_date - dt.timedelta(days=months * 30)
 
-    try:
-        resp = http_requests.get(
-            "https://api.stlouisfed.org/fred/series/observations",
-            params={
-                "series_id": series_id,
-                "observation_start": start_date.isoformat(),
-                "observation_end": end_date.isoformat(),
-                "frequency": "w",
-                "file_type": "json",
-                "api_key": api_key,
-            },
-            timeout=15,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-        observations = [
-            {"date": o["date"], "value": float(o["value"])}
-            for o in data.get("observations", [])
-            if o.get("value") and o["value"] != "."
-        ]
-    except Exception:
-        observations = []
+    client = await get_shared_client(api_key)
+    observations = await client.fetch_observations(
+        series_id,
+        start_date=start_date.isoformat(),
+        end_date=end_date.isoformat(),
+    )
 
     return {
         "seriesId": series_id,
@@ -571,39 +556,9 @@ async def macro_fred_series(
 #  FRED Search Proxy -- server-side cached series search
 # ---------------------------------------------------------------------------
 
-# Simple in-memory cache: key -> (expire_time, data)
-_fred_cache: dict[str, tuple[float, Any]] = {}
-_fred_cache_lock = threading.Lock()
-_FRED_CACHE_MAX_SIZE = 500
-_FRED_SEARCH_TTL = 300  # 5 minutes
-_FRED_OBS_TTL = 3600  # 1 hour
-_FRED_ID_RE = re.compile(r"^[A-Z0-9_]{1,20}$")
-_PERIOD_MONTHS = {"3M": 3, "6M": 6, "1Y": 12, "3Y": 36, "5Y": 60, "10Y": 120, "MAX": 600}
-_fred_executor = ThreadPoolExecutor(max_workers=4)
-
-
-def _cache_get(key: str) -> Any | None:
-    with _fred_cache_lock:
-        entry = _fred_cache.get(key)
-        if entry and entry[0] > time.time():
-            return entry[1]
-        if entry:
-            del _fred_cache[key]
-        return None
-
-
-def _cache_set(key: str, value: Any, ttl: int) -> None:
-    with _fred_cache_lock:
-        if len(_fred_cache) >= _FRED_CACHE_MAX_SIZE:
-            now = time.time()
-            expired = [k for k, (exp, _) in _fred_cache.items() if exp <= now]
-            for k in expired:
-                del _fred_cache[k]
-            if len(_fred_cache) >= _FRED_CACHE_MAX_SIZE:
-                oldest = min(_fred_cache, key=lambda k: _fred_cache[k][0])
-                del _fred_cache[oldest]
-        _fred_cache[key] = (time.time() + ttl, value)
-
+# ---------------------------------------------------------------------------
+#  FRED Search Proxy -- server-side cached series search
+# ---------------------------------------------------------------------------
 
 @router.get("/fred-search")
 async def fred_search(
@@ -612,100 +567,27 @@ async def fred_search(
     q: str = Query(..., min_length=2, max_length=100),
     limit: int = Query(default=20, le=50),
 ) -> dict[str, Any]:
-    """Proxy FRED series/search with server-side caching."""
-    import requests as http_requests
+    """Proxy FRED series/search with server-side caching.
 
+    Uses httpx.AsyncClient — does not block the event loop.
+    """
     from app.core.config.settings import settings
+    from app.domains.credit.dashboard.fred_client import get_shared_client
 
-    api_key = settings.FRED_API_KEY
+    api_key = settings.fred_api_key
     if not api_key:
         return {"series": [], "error": "FRED_API_KEY not configured"}
 
-    cache_key = f"fred_search:{q.lower()}:{limit}"
-    cached = _cache_get(cache_key)
-    if cached is not None:
-        return cached
-
-    try:
-        resp = http_requests.get(
-            "https://api.stlouisfed.org/fred/series/search",
-            params={
-                "search_text": q,
-                "api_key": api_key,
-                "file_type": "json",
-                "limit": limit,
-                "order_by": "popularity",
-                "sort_order": "desc",
-            },
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-
-        result: dict[str, Any] = {
-            "series": [
-                {
-                    "id": s["id"],
-                    "title": s["title"],
-                    "frequency": s.get("frequency_short", ""),
-                    "units": s.get("units_short", ""),
-                    "popularity": s.get("popularity", 0),
-                    "last_updated": s.get("last_updated", ""),
-                }
-                for s in data.get("seriess", [])
-            ],
-        }
-        _cache_set(cache_key, result, _FRED_SEARCH_TTL)
-        return result
-    except Exception:
-        logger.warning("FRED search failed for q=%s", q, exc_info=True)
+    client = await get_shared_client(api_key)
+    series = await client.search_series(q, limit=limit)
+    if not series:
         return {"series": [], "error": "FRED search unavailable"}
+    return {"series": series}
 
 
 # ---------------------------------------------------------------------------
-#  Multi-series FRED observations -- up to 4 series in one call
+#  Multi-series FRED observations -- up to 4 series in one call (async)
 # ---------------------------------------------------------------------------
-
-def _fetch_fred_observations(
-    api_key: str,
-    series_id: str,
-    start_date: str,
-    end_date: str,
-) -> list[dict[str, Any]]:
-    """Fetch observations for a single FRED series (with caching)."""
-    import requests as http_requests
-
-    cache_key = f"fred_obs:{series_id}:{start_date}:{end_date}"
-    cached = _cache_get(cache_key)
-    if cached is not None:
-        return cached
-
-    try:
-        resp = http_requests.get(
-            "https://api.stlouisfed.org/fred/series/observations",
-            params={
-                "series_id": series_id,
-                "observation_start": start_date,
-                "observation_end": end_date,
-                "frequency": "w",
-                "file_type": "json",
-                "api_key": api_key,
-            },
-            timeout=15,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        observations = [
-            {"date": o["date"], "value": float(o["value"])}
-            for o in data.get("observations", [])
-            if o.get("value") and o["value"] != "."
-        ]
-        _cache_set(cache_key, observations, _FRED_OBS_TTL)
-        return observations
-    except Exception:
-        logger.warning("FRED observations failed for %s", series_id, exc_info=True)
-        return []
-
 
 @router.get("/macro-fred-multi")
 async def macro_fred_multi(
@@ -714,10 +596,20 @@ async def macro_fred_multi(
     series_ids: str = Query(..., description="Comma-separated FRED series IDs (max 4)"),
     period: str = Query(default="1Y"),
 ) -> dict[str, Any]:
-    """Fetch observations for multiple FRED series -- max 4 concurrent."""
-    from app.core.config.settings import settings
+    """Fetch observations for multiple FRED series concurrently.
 
-    api_key = settings.FRED_API_KEY
+    Uses asyncio.gather via AsyncFredClient.fetch_multi — does not block
+    the event loop. All series fetched concurrently within the same
+    event loop iteration.
+    """
+    from app.core.config.settings import settings
+    from app.domains.credit.dashboard.fred_client import (
+        _FRED_ID_RE,
+        _PERIOD_MONTHS,
+        get_shared_client,
+    )
+
+    api_key = settings.fred_api_key
     if not api_key:
         return {"series": {}, "error": "FRED_API_KEY not configured"}
 
@@ -730,22 +622,10 @@ async def macro_fred_multi(
     end_date = dt.date.today()
     start_date = end_date - dt.timedelta(days=months * 30)
 
-    results: dict[str, list[dict[str, Any]]] = {}
-    futures = {
-        sid: _fred_executor.submit(
-            _fetch_fred_observations,
-            api_key,
-            sid,
-            start_date.isoformat(),
-            end_date.isoformat(),
-        )
-        for sid in ids
-    }
-    for sid, future in futures.items():
-        try:
-            results[sid] = future.result(timeout=20)
-        except Exception:
-            logger.warning("FRED fetch timed out for %s", sid)
-            results[sid] = []
-
+    client = await get_shared_client(api_key)
+    results = await client.fetch_multi(
+        ids,
+        start_date=start_date.isoformat(),
+        end_date=end_date.isoformat(),
+    )
     return {"series": results}

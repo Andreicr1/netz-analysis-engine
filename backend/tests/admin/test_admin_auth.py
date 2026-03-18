@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import uuid
+from unittest.mock import Mock
 
 import pytest
+from fastapi import Request
+from fastapi.security import HTTPAuthorizationCredentials
 
-from app.core.security.clerk_auth import CLERK_TO_ROLE, Actor
+from app.core.security import clerk_auth
+from app.core.security.clerk_auth import CLERK_TO_ROLE, Actor, get_actor
 from app.shared.enums import Role
 
 
@@ -126,3 +130,86 @@ class TestClerkRoleMapping:
 
     def test_unknown_role_returns_none(self):
         assert CLERK_TO_ROLE.get("org:unknown") is None
+
+
+class TestGetActorPrecedence:
+    """Test get_actor precedence across development and JWT paths."""
+
+    @pytest.mark.asyncio
+    async def test_dev_header_takes_precedence_over_static_dev_token(self, monkeypatch):
+        monkeypatch.setattr(clerk_auth.settings, "app_env", "development")
+        monkeypatch.setattr(clerk_auth.settings, "dev_token", "dev-token")
+
+        request = Request(
+            {
+                "type": "http",
+                "headers": [
+                    (
+                        clerk_auth.settings.dev_actor_header.lower().encode(),
+                        b'{"actor_id":"header-user","roles":["SUPER_ADMIN"]}',
+                    )
+                ],
+            }
+        )
+        credentials = HTTPAuthorizationCredentials(
+            scheme="Bearer",
+            credentials="dev-token",
+        )
+
+        actor = await get_actor(request=request, credentials=credentials)
+
+        assert actor.actor_id == "header-user"
+        assert actor.roles == [Role.SUPER_ADMIN]
+
+    @pytest.mark.asyncio
+    async def test_static_dev_token_takes_precedence_over_clerk_jwt(self, monkeypatch):
+        monkeypatch.setattr(clerk_auth.settings, "app_env", "development")
+        monkeypatch.setattr(clerk_auth.settings, "dev_token", "dev-token")
+        verify_mock = Mock(
+            return_value={
+                "sub": "jwt-user",
+                "o": {"id": str(uuid.uuid4()), "rol": "org:investor", "slg": "acme"},
+            }
+        )
+        monkeypatch.setattr(clerk_auth, "_verify_clerk_jwt", verify_mock)
+
+        request = Request({"type": "http", "headers": []})
+        credentials = HTTPAuthorizationCredentials(
+            scheme="Bearer",
+            credentials="dev-token",
+        )
+
+        actor = await get_actor(request=request, credentials=credentials)
+
+        assert actor.actor_id == "dev-user"
+        assert Role.SUPER_ADMIN in actor.roles
+        verify_mock.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_clerk_jwt_used_when_no_dev_header_or_static_token(self, monkeypatch):
+        monkeypatch.setattr(clerk_auth.settings, "app_env", "development")
+        monkeypatch.setattr(clerk_auth.settings, "dev_token", "dev-token")
+        org_id = str(uuid.uuid4())
+        verify_mock = Mock(
+            return_value={
+                "sub": "jwt-user",
+                "name": "JWT User",
+                "email": "jwt@example.com",
+                "o": {"id": org_id, "rol": "org:admin", "slg": "acme"},
+            }
+        )
+        monkeypatch.setattr(clerk_auth, "_verify_clerk_jwt", verify_mock)
+
+        request = Request({"type": "http", "headers": []})
+        credentials = HTTPAuthorizationCredentials(
+            scheme="Bearer",
+            credentials="jwt-token",
+        )
+
+        actor = await get_actor(request=request, credentials=credentials)
+
+        assert actor.actor_id == "jwt-user"
+        assert actor.organization_id == uuid.UUID(org_id)
+        assert actor.organization_slug == "acme"
+        assert actor.roles == [Role.ADMIN]
+        verify_mock.assert_called_once_with("jwt-token")

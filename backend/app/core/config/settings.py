@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     # ── Azure AI Search ──────────────────────────────────
     azure_search_endpoint: str = ""
     azure_search_key: str = ""
+    SEARCH_INDEX_NAME: str = ""
     SEARCH_CHUNKS_INDEX_NAME: str = "global-vector-chunks-v2"
     NETZ_ENV: str = "dev"
 
@@ -97,6 +98,11 @@ class Settings(BaseSettings):
     # ── Calibration ──────────────────────────────────────
     calibration_path: str = ""
 
+    # ── LLM concurrency ──────────────────────────────────
+    # Controls asyncio.Semaphore slots for concurrent LLM calls in deep_review.
+    # Resolved lazily at call-time; never captured at module level.
+    netz_llm_concurrency: int = 5
+
     @property
     def is_development(self) -> bool:
         return self.app_env == "development"
@@ -110,6 +116,12 @@ class Settings(BaseSettings):
         if self.NETZ_ENV in ("prod", "production"):
             return base_name
         return f"{self.NETZ_ENV}-{base_name}"
+
+    def canonical_search_chunks_index_name(self) -> str:
+        """Resolve the canonical env-scoped chunks index name."""
+        return self.prefixed_index(
+            self.SEARCH_CHUNKS_INDEX_NAME or "global-vector-chunks-v2",
+        )
 
     def validate_production_secrets(self) -> None:
         """Reject weak or missing secrets in production."""

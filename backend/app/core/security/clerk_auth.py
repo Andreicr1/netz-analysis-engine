@@ -213,7 +213,12 @@ def require_ic_member():
 
 
 def require_fund_access():
-    """FastAPI dependency factory: validate fund_id access + organization context."""
+    """FastAPI dependency factory: validate fund_id access + organization context.
+
+    For non-admin actors whose fund_ids were not provided via dev header,
+    resolves fund membership from the fund_memberships table. Admin and
+    super-admin roles bypass membership lookup entirely.
+    """
 
     async def _check(
         fund_id: uuid.UUID,
@@ -225,6 +230,15 @@ def require_fund_access():
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No active organization",
             )
+
+        # Admin/super-admin bypass — no DB lookup needed
+        if Role.ADMIN in actor.roles or Role.SUPER_ADMIN in actor.roles:
+            return actor
+
+        # Resolve fund_ids from DB if not already populated (e.g. from dev header)
+        if not actor.fund_ids and actor.organization_id is not None:
+            actor.fund_ids = await _resolve_fund_ids(actor.actor_id, actor.organization_id)
+
         if not actor.can_access_fund(fund_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -233,3 +247,24 @@ def require_fund_access():
         return actor
 
     return _check
+
+
+async def _resolve_fund_ids(actor_id: str, organization_id: uuid.UUID) -> list[uuid.UUID]:
+    """Load fund memberships from DB for the given actor + organization.
+
+    Uses a dedicated session (no RLS) because this runs during actor
+    resolution, before tenant context is established.
+    """
+    from sqlalchemy import select
+
+    from app.core.db.engine import async_session_factory
+    from app.core.security.models import FundMembership
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(FundMembership.fund_id).where(
+                FundMembership.actor_id == actor_id,
+                FundMembership.organization_id == organization_id,
+            )
+        )
+        return list(result.scalars().all())

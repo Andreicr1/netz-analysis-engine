@@ -9,6 +9,19 @@ const config = {
 		alias: {
 			$lib: "src/lib",
 		},
+		csp: {
+			directives: {
+				"default-src": ["self"],
+				"script-src": ["self"],
+				"style-src": ["self", "unsafe-inline"],
+				"img-src": ["self", "data:", "blob:", "https:"],
+				"connect-src": ["self", "https://*.clerk.com", "wss:"],
+				"font-src": ["self", "data:"],
+				"frame-ancestors": ["none"],
+				"base-uri": ["self"],
+				"form-action": ["self"],
+			},
+		},
 	},
 };
 

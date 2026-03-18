@@ -11,4 +11,14 @@ export default defineConfig({
 	ssr: {
 		noExternal: ["@tanstack/svelte-table"],
 	},
+	build: {
+		rollupOptions: {
+			output: {
+				manualChunks: {
+					echarts: ["echarts/core", "echarts/charts", "echarts/components", "echarts/renderers"],
+					table: ["@tanstack/svelte-table"],
+				},
+			},
+		},
+	},
 });

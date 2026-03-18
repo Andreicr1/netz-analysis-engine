@@ -6,14 +6,12 @@
 <script lang="ts">
 	import { SectionCard, ActionButton, ConfirmDialog, Button } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
+	import DOMPurify from "dompurify";
 
-	/** Strip script tags and event handlers from HTML preview to prevent stored XSS. */
+	/** Sanitize HTML preview via DOMPurify to prevent stored XSS. */
 	function sanitizePreview(html: string): string {
-		return html
-			.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
-			.replace(/\bon\w+\s*=\s*["'][^"']*["']/gi, "")
-			.replace(/\bon\w+\s*=\s*[^\s>]*/gi, "")
-			.replace(/javascript\s*:/gi, "");
+		if (typeof window === "undefined") return "";
+		return DOMPurify.sanitize(html);
 	}
 
 	let {

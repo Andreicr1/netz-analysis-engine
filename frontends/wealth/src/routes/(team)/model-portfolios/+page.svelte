@@ -8,7 +8,7 @@
 		UtilizationBar, PeriodSelector, Dialog, Button,
 	} from "@netz/ui";
 	import { ActionButton, ConfirmDialog, FormField } from "@netz/ui";
-	import { page } from "$app/stores";
+	import { page } from "$app/state";
 	import { goto, invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
 	import type { PageData } from "./$types";
@@ -33,7 +33,7 @@
 	let portfolios = $state.raw((data.modelPortfolios ?? []) as ModelPortfolio[]);
 
 	// Selected portfolio from URL param
-	const selectedId = $derived($page.url.searchParams.get("portfolio"));
+	const selectedId = $derived(page.url.searchParams.get("portfolio"));
 	const selectedPortfolio = $derived(portfolios.find((p) => p.id === selectedId) ?? portfolios[0] ?? null);
 
 	// Detail cache

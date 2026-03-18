@@ -5,8 +5,10 @@
 <script lang="ts">
 	import { PageHeader, Card, EmptyState, StatusBadge, ContextPanel } from "@netz/ui";
 	import { ActionButton } from "@netz/ui";
+	import { createVirtualizer } from "@tanstack/svelte-virtual";
 	import { createClientApiClient } from "$lib/api/client";
 	import { getContext } from "svelte";
+	import { get as getStore } from "svelte/store";
 	import type { PageData } from "./$types";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
@@ -96,6 +98,22 @@
 			? results
 			: results.filter((r) => r.overall_status === activeTab)
 	);
+
+	// ── Row virtualization ─────────────────────────────────────────────────────
+
+	let scrollContainer = $state<HTMLDivElement>(null!);
+	const virtualizerStore = $derived(
+		createVirtualizer({
+			get count() {
+				return filteredResults.length;
+			},
+			getScrollElement: () => scrollContainer,
+			estimateSize: () => 44,
+			overscan: 10,
+		})
+	);
+	// Unwrap the Svelte readable store to get the virtualizer instance
+	let virtualizer = $derived(getStore(virtualizerStore));
 
 	// ── Detail panel state ─────────────────────────────────────────────────────
 
@@ -366,10 +384,10 @@
 			{/each}
 		</div>
 
-		<!-- Results Table -->
+		<!-- Results Table (virtualized) -->
 		{#if filteredResults.length > 0}
 			<Card>
-				<div class="table-wrapper">
+				<div bind:this={scrollContainer} class="table-scroll-container">
 					<table class="results-table">
 						<thead>
 							<tr>
@@ -384,10 +402,12 @@
 								<th class="col-dd">DD Requerido</th>
 							</tr>
 						</thead>
-						<tbody>
-							{#each filteredResults as result (result.id)}
+						<tbody style="height: {virtualizer.getTotalSize()}px; position: relative;">
+							{#each virtualizer.getVirtualItems() as virtualRow (virtualRow.index)}
+								{@const result = filteredResults[virtualRow.index]!}
 								<tr
-									class="result-row"
+									class="result-row virtual-row"
+									style="position: absolute; top: 0; left: 0; width: 100%; height: {virtualRow.size}px; transform: translateY({virtualRow.start}px);"
 									onclick={() => openPanel(result)}
 									role="button"
 									tabindex="0"
@@ -919,8 +939,9 @@
 
 	/* ── Results table ────────────────────────────────────────────────────── */
 
-	.table-wrapper {
-		overflow-x: auto;
+	.table-scroll-container {
+		height: 600px;
+		overflow: auto;
 	}
 
 	.results-table {
@@ -955,6 +976,16 @@
 
 	.result-row:hover td {
 		background: var(--netz-surface-inset);
+	}
+
+	.virtual-row {
+		display: table-row;
+	}
+
+	.results-table thead {
+		position: sticky;
+		top: 0;
+		z-index: 1;
 	}
 
 	/* Instrumento cell */

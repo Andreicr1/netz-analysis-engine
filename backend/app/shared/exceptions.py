@@ -28,3 +28,22 @@ class ValidationError(AppError):
 
     status_code = 422
 
+
+class ConfigMissError(AppError):
+    """Raised when a required config is missing from all sources (DB + YAML).
+
+    CFG-01: deterministic failure for required config miss.
+    Callers must not catch this silently — it indicates broken seed data
+    or missing migration.
+    """
+
+    status_code = 500
+
+    def __init__(self, vertical: str, config_type: str):
+        self.vertical = vertical
+        self.config_type = config_type
+        super().__init__(
+            f"Required config missing: ({vertical}, {config_type}). "
+            f"Check migration 0004 seed data."
+        )
+

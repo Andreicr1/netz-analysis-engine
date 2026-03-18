@@ -1,6 +1,6 @@
 ---
 id: 171
-status: pending
+status: complete
 priority: p2
 tags: [code-review, security, admin]
 created: 2026-03-17

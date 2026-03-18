@@ -7,6 +7,7 @@
  * Combines CVaR, drift alerts, and regime from a single SSE connection.
  */
 
+import { createClientApiClient } from "$lib/api/client";
 import { isStale } from "./stale.js";
 
 export type StoreStatus = "loading" | "ready" | "error" | "stale";
@@ -65,7 +66,8 @@ export interface RiskStoreState {
 export interface RiskStoreConfig {
 	profileIds: string[];
 	getToken: () => Promise<string>;
-	apiBaseUrl: string;
+	/** @deprecated Ignored — NetzApiClient resolves base URL internally. */
+	apiBaseUrl?: string;
 	sseEndpoint?: string;
 	pollingFallbackMs?: number;
 }
@@ -74,7 +76,7 @@ export interface RiskStoreConfig {
  * Create a risk store. Call once in root layout, share via context.
  */
 export function createRiskStore(config: RiskStoreConfig) {
-	const { profileIds, getToken, apiBaseUrl, pollingFallbackMs = 30_000 } = config;
+	const { profileIds, getToken, pollingFallbackMs = 30_000 } = config;
 
 	// Reactive state
 	let status = $state<StoreStatus>("loading");
@@ -104,21 +106,16 @@ export function createRiskStore(config: RiskStoreConfig) {
 		if (fetching) return;
 		fetching = true;
 		try {
-			const token = await getToken();
-			const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
+			const api = createClientApiClient(getToken);
 
 			// Parallel fetch all risk data
 			const requests = [
-				...profileIds.map((p) =>
-					fetch(`${apiBaseUrl}/risk/${p}/cvar`, { headers }).then((r) => r.ok ? r.json() : null),
-				),
-				...profileIds.map((p) =>
-					fetch(`${apiBaseUrl}/risk/${p}/cvar/history`, { headers }).then((r) => r.ok ? r.json() : null),
-				),
-				fetch(`${apiBaseUrl}/risk/regime`, { headers }).then((r) => r.ok ? r.json() : null),
-				fetch(`${apiBaseUrl}/risk/regime/history`, { headers }).then((r) => r.ok ? r.json() : null),
-				fetch(`${apiBaseUrl}/analytics/strategy-drift/alerts`, { headers }).then((r) => r.ok ? r.json() : null),
-				fetch(`${apiBaseUrl}/risk/macro`, { headers }).then((r) => r.ok ? r.json() : null),
+				...profileIds.map((p) => api.get(`/risk/${p}/cvar`).catch(() => null)),
+				...profileIds.map((p) => api.get(`/risk/${p}/cvar/history`).catch(() => null)),
+				api.get("/risk/regime").catch(() => null),
+				api.get("/risk/regime/history").catch(() => null),
+				api.get("/analytics/strategy-drift/alerts").catch(() => null),
+				api.get("/risk/macro").catch(() => null),
 			];
 
 			const results = await Promise.allSettled(requests);
@@ -177,15 +174,22 @@ export function createRiskStore(config: RiskStoreConfig) {
 
 	function startPolling() {
 		stopPolling();
-		pollTimer = setInterval(() => {
-			fetchAll();
+		schedulePoll();
+	}
+
+	function schedulePoll() {
+		pollTimer = setTimeout(async () => {
+			await fetchAll();
 			checkStale();
+			if (pollTimer !== undefined) {
+				schedulePoll();
+			}
 		}, pollingFallbackMs);
 	}
 
 	function stopPolling() {
-		if (pollTimer) {
-			clearInterval(pollTimer);
+		if (pollTimer !== undefined) {
+			clearTimeout(pollTimer);
 			pollTimer = undefined;
 		}
 	}

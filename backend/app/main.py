@@ -55,7 +55,10 @@ from app.domains.credit.documents.routes.upload_url import router as credit_uplo
 from app.domains.credit.documents.routes.uploads import router as credit_uploads_router
 
 # Modules — AI (aggregated router), Deals, Documents
-from app.domains.credit.modules.ai import router as credit_ai_router
+from app.domains.credit.modules.ai import (
+    get_ai_router_diagnostics,
+    router as credit_ai_router,
+)
 from app.domains.credit.modules.deals.routes import router as credit_pipeline_deals_router
 from app.domains.credit.modules.documents.routes import router as credit_module_documents_router
 from app.domains.credit.portfolio.routes.actions import router as credit_portfolio_actions_router
@@ -163,6 +166,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         "Netz Analysis Engine starting — env=%s",
         settings.app_env,
     )
+    from app.services.azure.search_client import describe_chunks_index_contract
+
+    chunks_index_contract = describe_chunks_index_contract()
+    logger.info(
+        "Search chunks contract resolved — env=%s base=%s resolved=%s",
+        chunks_index_contract.env_name,
+        chunks_index_contract.configured_base_name,
+        chunks_index_contract.resolved_name,
+    )
     await _verify_config_completeness()
 
     # Start PgNotifier for config cache invalidation
@@ -217,8 +229,16 @@ app.add_middleware(
 
 @app.get("/health", tags=["admin"])
 @app.get("/api/health", tags=["admin"])
-async def health() -> dict[str, str]:
-    return {"status": "ok", "service": "netz-analysis-engine"}
+async def health() -> dict[str, object]:
+    ai_router = get_ai_router_diagnostics()
+    status = "ok" if ai_router.status == "healthy" else "degraded"
+    return {
+        "status": status,
+        "service": "netz-analysis-engine",
+        "ai_router_status": ai_router.status,
+        "ai_router_loaded_modules": list(ai_router.loaded_modules),
+        "ai_router_degraded_modules": list(ai_router.degraded_modules),
+    }
 
 
 # ── API v1 router ────────────────────────────────────────────

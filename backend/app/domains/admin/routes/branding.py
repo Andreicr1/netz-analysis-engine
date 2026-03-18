@@ -14,14 +14,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config.config_service import ConfigService
 from app.core.config.dependencies import get_config_service
-from app.core.security.clerk_auth import Actor, get_actor
+from app.core.security.admin_auth import require_super_admin
+from app.core.security.clerk_auth import Actor
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.admin.models import TenantAsset
 from app.domains.admin.schemas import BrandingResponse
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["admin"])
+router = APIRouter(tags=["admin"], dependencies=[Depends(require_super_admin)])
 
 
 @router.get(
@@ -32,16 +33,17 @@ router = APIRouter(tags=["admin"])
 )
 async def get_branding(
     vertical: str = Query("liquid_funds", description="Vertical to get branding for"),
-    actor: Actor = Depends(get_actor),
+    actor: Actor = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db_with_rls),
     config_service: ConfigService = Depends(get_config_service),
 ) -> BrandingResponse:
     """Return merged branding config (default + org override)."""
-    branding = await config_service.get(
+    branding_result = await config_service.get(
         vertical=vertical,
         config_type="branding",
         org_id=actor.organization_id,
     )
+    branding = branding_result.value
 
     # Resolve logo URLs with cache-busting query param
     org_slug = actor.organization_slug or "default"
