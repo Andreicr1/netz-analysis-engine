@@ -19,9 +19,19 @@
 	import { invalidateAll, goto } from "$app/navigation";
 	import { getContext } from "svelte";
 	import type { PageData } from "./$types";
-	import type { components } from "@netz/ui/types/api";
 
-	type SimulationResult = components["schemas"]["SimulationResult"];
+	// Inline SimulationResult type from API schema
+	type SimulationResult = {
+		profile: string;
+		proposed_cvar_95_3m?: string | null;
+		cvar_limit?: string | null;
+		cvar_utilization_pct?: string | null;
+		cvar_delta_vs_current?: string | null;
+		tracking_error_expected?: string | null;
+		within_limit: boolean;
+		warnings: string[];
+		computed_at: string;
+	};
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -386,7 +396,7 @@
 						label="Proposed CVaR 95%"
 						value={fmtSimBps(simulationResult.proposed_cvar_95_3m)}
 						sublabel="3-month horizon"
-						status={simulationResult.within_limit ? undefined : "error"}
+						status={simulationResult.within_limit ? undefined : "breach"}
 					/>
 					<MetricCard
 						label="CVaR Utilization"
@@ -395,7 +405,7 @@
 						status={
 							simulationResult.cvar_utilization_pct != null &&
 							parseFloat(String(simulationResult.cvar_utilization_pct)) > 1
-								? "error"
+								? "breach"
 								: simulationResult.cvar_utilization_pct != null &&
 								  parseFloat(String(simulationResult.cvar_utilization_pct)) > 0.8
 								? "warn"
