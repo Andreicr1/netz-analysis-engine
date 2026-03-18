@@ -30,6 +30,19 @@ async def get_org_id(actor: Actor = Depends(get_actor)) -> uuid.UUID | None:
     return actor.organization_id
 
 
+async def set_rls_context(session: AsyncSession, org_id: uuid.UUID) -> None:
+    """Set RLS tenant context on an existing session.
+
+    For use in background workers that manage their own sessions.
+    Must be called after session creation and re-called after each commit(),
+    because SET LOCAL is transaction-scoped and lost on commit/rollback.
+    """
+    await session.execute(
+        text("SET LOCAL app.current_organization_id = :oid"),
+        {"oid": str(org_id)},
+    )
+
+
 async def get_db_with_rls(
     actor: Actor = Depends(get_actor),
 ) -> AsyncGenerator[AsyncSession, None]:

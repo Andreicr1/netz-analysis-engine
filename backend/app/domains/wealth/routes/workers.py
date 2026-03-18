@@ -45,7 +45,7 @@ async def trigger_run_ingestion(
     actor: Actor = Depends(get_actor),
 ) -> WorkerScheduledResponse:
     _require_admin_role(actor)
-    background_tasks.add_task(run_ingestion)
+    background_tasks.add_task(run_ingestion, user.organization_id)
     return WorkerScheduledResponse(status="scheduled", worker="run-ingestion")
 
 
@@ -67,7 +67,7 @@ async def trigger_run_risk_calc(
     actor: Actor = Depends(get_actor),
 ) -> WorkerScheduledResponse:
     _require_admin_role(actor)
-    background_tasks.add_task(run_risk_calc)
+    background_tasks.add_task(run_risk_calc, user.organization_id)
     return WorkerScheduledResponse(status="scheduled", worker="run-risk-calc")
 
 
@@ -90,7 +90,7 @@ async def trigger_run_portfolio_eval(
     actor: Actor = Depends(get_actor),
 ) -> WorkerScheduledResponse:
     _require_admin_role(actor)
-    background_tasks.add_task(run_portfolio_eval)
+    background_tasks.add_task(run_portfolio_eval, user.organization_id)
     return WorkerScheduledResponse(status="scheduled", worker="run-portfolio-eval")
 
 
