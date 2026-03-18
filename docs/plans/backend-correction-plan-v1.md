@@ -143,7 +143,7 @@
   **Observability checkpoints:** Emit reason-coded counters for classifier failures, metadata failures, summary failures, OCR fallback usage, and degraded document suppression or admission. Alert on degraded outputs entering the searchable corpus without markers.
   **Risk level:** Medium
 
-- [ ] `FAIL-03` Stop encoding quant drift computation failures as neutral values
+- [x] `FAIL-03` Stop encoding quant drift computation failures as neutral values
   **Description:** Replace `0.0` and zero-filled sentinel outputs on DTW failure with explicit failure or degraded semantics so downstream consumers cannot confuse computation failure with valid low-risk output.
   **Files/modules:** `backend/quant_engine/drift_service.py`
   **Dependencies:** None
@@ -185,7 +185,7 @@
   **Observability checkpoints:** Emit membership resolution hit rate, empty-membership rate, allow or deny counts by route family, and denial reason. Alert on sudden denial-rate increase for non-admin fund users after enforcement.
   **Risk level:** High
 
-- [ ] `AUTH-03` Enforce global-table isolation beyond route-level discipline _(dep satisfied: AUTH-01 ✓)_
+- [x] `AUTH-03` Enforce global-table isolation beyond route-level discipline _(dep satisfied: AUTH-01 ✓)_
   **Description:** Prevent accidental read or write access to global-effect tables through tenant-scoped dependencies by adding explicit privileged data-path controls, guardrails, and tests.
   **Files/modules:** `backend/app/core/tenancy/admin_middleware.py`, `backend/app/core/tenancy/middleware.py`, `backend/app/core/db/migrations/versions/*.py`, consumers of `macro_data`, `allocation_blocks`, and `vertical_config_defaults`
   **Dependencies:** `AUTH-01`
@@ -226,7 +226,7 @@
   **Observability checkpoints:** Emit owner-key TTL refresh count, refresh failures, reconnect denials, running-job age, and orphaned ownership count. Alert when active jobs approach expiry without successful refresh.
   **Risk level:** Medium
 
-- [ ] `ASYNC-02` Remove blocking HTTP from async FRED handlers
+- [x] `ASYNC-02` Remove blocking HTTP from async FRED handlers
   **Description:** Replace synchronous `requests.get()` calls inside async request handlers with async HTTP client usage or explicit thread offload plus bounded timeout and cancellation semantics.
   **Files/modules:** `backend/app/domains/credit/dashboard/routes.py`, shared FRED client abstraction
   **Dependencies:** None
@@ -239,7 +239,7 @@
   **Observability checkpoints:** Emit upstream latency, timeout count, cancellation count, and event-loop blocking warnings. Alert on request-starvation patterns under slow upstream conditions.
   **Risk level:** Low
 
-- [ ] `ASYNC-03` Align DD report concurrency contract with actual implementation
+- [x] `ASYNC-03` Align DD report concurrency contract with actual implementation
   **Description:** Resolve the mismatch between documented parallel chapter generation and actual sequential execution by either implementing safe bounded parallelism or correcting the documented contract to sequential behavior.
   **Files/modules:** `backend/vertical_engines/wealth/dd_report/dd_report_engine.py`
   **Dependencies:** None
@@ -252,7 +252,7 @@
   **Observability checkpoints:** Emit chapter-generation duration, concurrent task count, and output ordering validation failures. Alert on concurrency above the configured cap.
   **Risk level:** Low
 
-- [ ] `ASYNC-04` Normalize `PgNotifier` callback execution for sync and async handlers
+- [x] `ASYNC-04` Normalize `PgNotifier` callback execution for sync and async handlers
   **Description:** Make notification dispatch explicit and deterministic for both sync and async handlers so future async callbacks do not create unawaited coroutines or silent invalidation failures.
   **Files/modules:** `backend/app/core/config/pg_notify.py`
   **Dependencies:** None
@@ -280,7 +280,7 @@
   **Observability checkpoints:** Emit `config_type`, `lookup_sources_attempted`, `resolved_source`, and `result_state` for every lookup. Alert on required-config misses and callers continuing after required-config failure.
   **Risk level:** High
 
-- [ ] `CFG-02` Eliminate module-level capture of runtime-critical environment variables
+- [x] `CFG-02` Eliminate module-level capture of runtime-critical environment variables
   **Description:** Move environment-derived runtime configuration out of module globals and into `Settings` or explicit initialization boundaries so configuration changes are governed by documented process restart semantics.
   **Files/modules:** `backend/ai_engine/governance/policy_loader.py`, `backend/ai_engine/extraction/extraction_orchestrator.py`, `backend/ai_engine/prompts/registry.py`, `backend/vertical_engines/credit/deep_review/models.py`
   **Dependencies:** None
