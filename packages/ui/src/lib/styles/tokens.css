@@ -11,6 +11,13 @@
 	--netz-brand-accent: #8b9daf; /* slate */
 	--netz-brand-light: #d4e4f7; /* light blue */
 	--netz-brand-highlight: #ff975a; /* orange */
+	--netz-navy: var(--netz-brand-primary);
+	--netz-blue: var(--netz-brand-secondary);
+	--netz-slate: var(--netz-brand-accent);
+	--netz-light: var(--netz-brand-light);
+	--netz-orange: var(--netz-brand-highlight);
+	--netz-font-sans: "Inter Variable", system-ui, sans-serif;
+	--netz-font-mono: "JetBrains Mono", monospace;
 
 	/* ── Surface ───────────────────────────────────────────── */
 	--netz-surface: #ffffff;
@@ -54,6 +61,13 @@
 	--netz-brand-accent: #94a3b8;
 	--netz-brand-light: #1e3a5f;
 	--netz-brand-highlight: #ff975a;
+	--netz-navy: var(--netz-brand-primary);
+	--netz-blue: var(--netz-brand-secondary);
+	--netz-slate: var(--netz-brand-accent);
+	--netz-light: var(--netz-brand-light);
+	--netz-orange: var(--netz-brand-highlight);
+	--netz-font-sans: "Inter Variable", system-ui, sans-serif;
+	--netz-font-mono: "JetBrains Mono", monospace;
 
 	/* ── Surface ───────────────────────────────────────────── */
 	--netz-surface: #0f1117;
