@@ -91,6 +91,8 @@ export { createSSEStream, createSSEWithSnapshot } from "./utils/sse-client.svelt
 export type { SSEConfig, SSEConnection, SSEStatus, SSEEvent, SSESnapshotConfig, SSESnapshotConnection } from "./utils/sse-client.svelte.js";
 export { createPoller } from "./utils/poller.svelte.js";
 export type { PollerConfig, PollerState } from "./utils/poller.svelte.js";
+export { createOptimisticMutation } from "./utils/optimistic.svelte.js";
+export type { OptimisticMutation, OptimisticMutationConfig } from "./utils/optimistic.svelte.js";
 export { canOpenSSE, registerSSE, unregisterSSE, getActiveSSECount } from "./utils/sse-registry.svelte.js";
 export {
 	formatAUM,
