@@ -150,10 +150,35 @@ class PromptRegistry:
             return {}
 
         try:
-            return yaml.safe_load(match.group(1)) or {}
-        except yaml.YAMLError:
-            logger.warning("Invalid YAML metadata in template %s", template_name)
+            parsed = yaml.safe_load(match.group(1))
+        except yaml.YAMLError as exc:
+            logger.error(
+                "Prompt metadata parse failure: template=%s error=%s",
+                template_name,
+                exc,
+                extra={
+                    "event": "prompt_metadata_parse_failure",
+                    "template_name": template_name,
+                    "result_state": "degraded",
+                },
+            )
+            return {"_metadata_parse_error": True}
+
+        if parsed is None:
             return {}
+        if not isinstance(parsed, dict):
+            logger.error(
+                "Prompt metadata returned non-dict: template=%s type=%s",
+                template_name,
+                type(parsed).__name__,
+                extra={
+                    "event": "prompt_metadata_parse_failure",
+                    "template_name": template_name,
+                    "result_state": "invalid_type",
+                },
+            )
+            return {"_metadata_parse_error": True}
+        return parsed
 
     def add_search_path(self, path: Path | str) -> None:
         """Append a directory to the Jinja2 template search paths.
