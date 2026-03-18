@@ -26,6 +26,11 @@ from typing import Any
 from uuid import UUID
 
 from app.core.config.config_service import ConfigService
+from ai_engine.vertical_registry import (
+    available_profiles as available_vertical_profiles,
+    get_vertical_entry,
+    import_vertical_module,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -60,21 +65,6 @@ class AnalysisProfile:
     evidence_law_ch13_template: str = ""
 
 
-# ── Vertical engine registry ─────────────────────────────────────────────────
-
-
-@dataclass(frozen=True)
-class _VerticalEntry:
-    vertical: str
-    module_path: str
-
-
-_REGISTRY: dict[str, _VerticalEntry] = {
-    "private_credit": _VerticalEntry("private_credit", "vertical_engines.credit"),
-    "liquid_funds": _VerticalEntry("liquid_funds", "vertical_engines.wealth"),
-}
-
-
 class ProfileLoader:
     """Loads analysis profiles from ConfigService and resolves vertical engines."""
 
@@ -105,13 +95,15 @@ class ProfileLoader:
         ValueError
             If the profile name is not in the registry.
         """
-        if profile_name not in _REGISTRY:
+        try:
+            entry = get_vertical_entry(profile_name)
+        except ValueError as exc:
             raise ValueError(
                 f"Unknown profile: {profile_name!r}. "
-                f"Available: {sorted(_REGISTRY)}"
-            )
+                f"Available: {available_vertical_profiles()}"
+            ) from exc
 
-        vertical = _REGISTRY[profile_name].vertical
+        vertical = entry.vertical_name
 
         # Fetch chapters + calibration in parallel
         chapters_config, calibration = await asyncio.gather(
@@ -158,18 +150,9 @@ class ProfileLoader:
         ModuleType
             The vertical engine module (e.g. ``vertical_engines.credit``).
         """
-        if profile_name not in _REGISTRY:
-            raise ValueError(
-                f"No vertical engine registered for profile: {profile_name!r}. "
-                f"Available: {sorted(_REGISTRY)}"
-            )
-
-        import importlib
-
-        module_path = _REGISTRY[profile_name].module_path
-        return importlib.import_module(module_path)
+        return import_vertical_module(profile_name)
 
     @staticmethod
     def available_profiles() -> list[str]:
         """Return sorted list of registered profile names."""
-        return sorted(_REGISTRY)
+        return available_vertical_profiles()
