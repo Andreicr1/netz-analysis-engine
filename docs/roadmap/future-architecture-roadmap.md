@@ -33,40 +33,67 @@ Future components must:
 
 ---
 
-# 1. Infrastructure Rebuild (Post-Legacy AI Engine)
+# 1. Infrastructure Simplification — Milestone 2 (2026-03-18)
+
+### Decision
+
+Replaced Azure enterprise stack (~$1,500/month) with lean Milestone 2 stack (~$100-200/month).
+
+### Stack
+
+| Layer | Service | Why |
+|-------|---------|-----|
+| Database | Timescale Cloud (PostgreSQL 16 + pgvector + TimescaleDB) | Native TimescaleDB + pgvector, managed |
+| Compute | Railway | Simple DX, persistent volumes, container-native |
+| Cache | Upstash Redis | Serverless, free tier for Milestone 1 |
+| Storage | LocalStorageClient (filesystem, persistent volume) | Data lake < 10GB |
+| Future Storage | Cloudflare R2 | S3-compatible, zero egress, when > 100GB |
+
+### What Was Eliminated
+
+| Service | Replacement | Reason |
+|---------|-------------|--------|
+| Azure AI Search | pgvector (PostgreSQL) | RLS-native, hybrid queries, no OData filters |
+| Azure OpenAI fallback | OpenAI direct + retry backoff | Single provider + retry sufficient |
+| Azure Key Vault | Platform env vars (Railway secrets) | No rotation audit trail requirement yet |
+| Azure Service Bus | Redis pub/sub + BackgroundTasks | No guaranteed delivery requirement yet |
+| Application Insights | structlog → stdout | Railway log aggregation sufficient |
+| ADLS Gen2 | LocalStorageClient (filesystem) | Data lake < 10GB |
+
+### Scale Triggers (Milestone 3+, >50 tenants)
+
+| Trigger | Service |
+|---------|---------|
+| SOC2 secret rotation audit | HashiCorp Vault or Key Vault |
+| Data lake > 1TB or data residency | Cloudflare R2 or ADLS Gen2 |
+| Financial transaction guaranteed delivery | Redis Streams |
+| pgvector > 500K chunks, p99 > 200ms | Qdrant or Weaviate |
 
 ### Current State (2026-03-18)
 
-- `StorageClient` abstraction complete: `LocalStorageClient` (dev) + `ADLSStorageClient` (prod)
-- `FEATURE_ADLS_ENABLED=false` by default — local dev writes to `.data/lake/`
+- `StorageClient` abstraction complete: `LocalStorageClient` (dev + prod) + `ADLSStorageClient` (Milestone 3)
+- `FEATURE_ADLS_ENABLED=false` by default — writes to `.data/lake/` (persistent volume in prod)
 - `storage_routing.py` enforces `{tier}/{org_id}/{vertical}/` path hierarchy
 - All pipeline writes routed through `StorageClient` (HC-2 fixed f-string paths)
 - Silver Parquet includes `embedding_model` + `embedding_dim` columns for rebuild validation
+- pgvector replaces Azure Search for all vector operations (commit 497df51)
 
 ### Remaining Work
 
 - Migrate remaining direct Azure Blob SDK calls to `StorageClient`
-- Enable ADLS in staging environment for integration testing
 - Bronze/silver/gold hierarchy not yet enforced on all write paths (some legacy flows)
-
-### Target Direction
-
-- Full migration to **StorageClient + ADLS Gen2**
-- Bronze / silver / gold hierarchy enforced everywhere
-- Azure Search as **derived index only** (rebuildable from silver Parquet)
-- Elimination of ALL direct Blob SDK usage
-- `search_rebuild.py` as the canonical rebuild path
 
 ### Key Principle
 
-> **ADLS = source of truth**
-> **Search = derived**
+> **LocalStorage/ADLS = source of truth**
+> **pgvector = derived index (rebuildable from silver Parquet)**
 > **Everything else = stateless compute**
 
 ### References
 
 - Pipeline Alignment Refactor: [`docs/plans/2026-03-15-refactor-pipeline-llm-deterministic-alignment-plan.md`](../plans/2026-03-15-refactor-pipeline-llm-deterministic-alignment-plan.md)
 - Extraction/Ingestion Cleanup: [`docs/plans/2026-03-15-refactor-ai-engine-extraction-ingestion-cleanup-plan.md`](../plans/2026-03-15-refactor-ai-engine-extraction-ingestion-cleanup-plan.md)
+- DuckDB Data Lake Inspection: [`docs/plans/2026-03-18-feat-duckdb-data-lake-inspection-layer-plan.md`](../plans/2026-03-18-feat-duckdb-data-lake-inspection-layer-plan.md)
 
 ---
 
@@ -76,7 +103,8 @@ Future components must:
 
 | Layer | Role |
 |-------|------|
-| ADLS Gen2 | Persistent data (bronze/silver/gold) |
+| LocalStorage/ADLS Gen2 | Persistent data (bronze/silver/gold) |
+| pgvector | Vector search index (derived, rebuildable) |
 | DuckDB | Query layer — analytics directly on Parquet |
 | `quant_engine/` | Quantitative analytics (CVaR, regime, optimizer) |
 | `ai_engine/` | Reasoning (classification, extraction, embedding) |
@@ -326,29 +354,30 @@ Move to external queue when: (a) workers routinely timeout, (b) >10 concurrent w
 
 ### Current State (2026-03-18)
 
-Azure Search is the sole RAG query backend. Mitigations applied:
+pgvector (PostgreSQL) is the sole RAG query backend, replacing Azure Search (commit 497df51). Mitigations applied:
 
 | Mitigation | Status |
 |------------|--------|
 | Graceful degradation — empty results + warning on connection errors | DONE (SR-6) |
 | `search_degraded` flag in agent responses for frontend messaging | DONE (SR-6) |
 | `search_rebuild.py` — manual index reconstruction from silver Parquet | EXISTS |
+| pgvector health check in `/admin/health/services` | DONE (Milestone 2) |
 
 ### Remaining Limitations
 
-- **No automatic failover:** If Azure Search is down, RAG returns empty results (not errors, but no data)
-- **No read replica:** Single index instance
+- **No automatic failover:** If PostgreSQL is down, RAG returns empty results (not errors, but no data)
+- **No read replica:** Single PostgreSQL instance (Timescale Cloud)
 - **Manual rebuild only:** `search_rebuild.py` requires operator intervention
 
 ### Target Direction (FUTURE)
 
-- Read replica or secondary index for failover
+- Read replica (Timescale Cloud supports replicas) for failover
 - Automated health check + rebuild trigger on sustained failures
-- Local vector store fallback (e.g., ChromaDB) for critical-path queries
+- Dedicated vector database (Qdrant, Weaviate) if pgvector HNSW becomes bottleneck (>10M chunks)
 
 ### Trigger
 
-Move to redundant search when: (a) SLA requires >99.9% RAG availability, or (b) Azure Search outages impact production users.
+Move to redundant search when: (a) SLA requires >99.9% RAG availability, or (b) pgvector query latency p99 > 200ms at scale.
 
 ---
 
@@ -422,7 +451,7 @@ Implement when: (a) `nav_timeseries` exceeds 10M rows, or (b) time-series query 
 | Component | Current | Target |
 |-----------|---------|--------|
 | Extraction orchestrator | Sync loop | `asyncio.Semaphore(8) + gather` |
-| Document upload | Inline processing | Azure Service Bus or Redis queue |
+| Document upload | Inline processing | Redis queue or ARQ |
 | Deep review config | Sync ConfigService calls | Async session with `await ConfigService.get()` |
 
 ### Trigger
@@ -463,7 +492,7 @@ Items that exist in code but should be replaced or removed:
 
 | Legacy Pattern | Target | Priority | Status |
 |----------------|--------|----------|--------|
-| Direct Azure Blob SDK calls | StorageClient abstraction | HIGH | Open |
+| Direct Azure Blob SDK calls | StorageClient abstraction | HIGH | Open (blob_client.py deprecated 2026-03-18) |
 | Cohere API references | Local cross-encoder reranker | MEDIUM | **Resolved** (zero references remain) |
 | `cash_management/` references | Remove (out of scope) | LOW | **Resolved** (SR-3, 2026-03-18) |
 | `compliance/` domain references | Remove (out of scope) | LOW | **Resolved** (SR-3, 2026-03-18) |
