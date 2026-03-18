@@ -24,6 +24,10 @@ export { default as DataTableToolbar } from "./components/DataTableToolbar.svelt
 export { default as ConfirmDialog } from "./components/ConfirmDialog.svelte";
 export { default as ActionButton } from "./components/ActionButton.svelte";
 export { default as FormField } from "./components/FormField.svelte";
+export { default as ConsequenceDialog } from "./components/ConsequenceDialog.svelte";
+export type { ConsequenceDialogMetadataItem, ConsequenceDialogPayload } from "./components/ConsequenceDialog.svelte";
+export { default as AuditTrailPanel } from "./components/AuditTrailPanel.svelte";
+export type { AuditTrailEntry, AuditTrailStatus, AuditTrailFieldChange } from "./components/AuditTrailPanel.svelte";
 
 // ── Netz Composites ─────────────────────────────────────────
 export { default as DataCard } from "./components/DataCard.svelte";
