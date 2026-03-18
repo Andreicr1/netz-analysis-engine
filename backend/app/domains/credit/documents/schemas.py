@@ -76,6 +76,11 @@ class DocumentReviewOut(BaseModel):
     updated_at: datetime
 
 
+class DocumentReviewListOut(BaseModel):
+    total: int
+    reviews: list[DocumentReviewOut]
+
+
 # ---------------------------------------------------------------------------
 # ReviewAssignment schemas
 # ---------------------------------------------------------------------------
