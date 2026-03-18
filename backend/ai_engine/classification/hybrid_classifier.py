@@ -698,6 +698,7 @@ async def classify(
     vehicle_type: str = "other"
     confidence: float = 1.0
     layer: int = 1
+    model_name: str = "rules"
 
     # ── Layer 1: Filename rules ──────────────────────────────────────
     for pattern, dt in _FILENAME_RULES:
@@ -718,6 +719,7 @@ async def classify(
     # ── Layer 2: TF-IDF cosine similarity ────────────────────────────
     if doc_type is None and text:
         layer = 2
+        model_name = "embedding-v2"
         window = _ocr_window(text)
         query = f"Filename: {filename}\n\n{window}"
 
@@ -744,6 +746,7 @@ async def classify(
     # ── Layer 3: LLM fallback ────────────────────────────────────────
     if doc_type is None:
         layer = 3
+        model_name = "gpt-4.1-mini"
         doc_type, confidence = await _classify_llm(
             text, filename, title=title, container=container,
         )
@@ -783,4 +786,5 @@ async def classify(
         vehicle_type=vehicle_type,
         confidence=confidence,
         layer=layer,
+        model_name=model_name,
     )

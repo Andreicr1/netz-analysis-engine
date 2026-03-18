@@ -572,19 +572,22 @@ async def process(
     metrics["vehicle_type"] = classification.vehicle_type
     metrics["classification_confidence"] = classification.confidence
     metrics["classification_layer"] = classification.layer
+    metrics["classification_model"] = classification.model_name
 
     await _emit(request.version_id, "classification_complete", {
         "doc_type": classification.doc_type,
         "vehicle_type": classification.vehicle_type,
         "confidence": classification.confidence,
         "layer": classification.layer,
+        "model_name": classification.model_name,
     })
     await _audit(db, fund_id=request.fund_id, actor_id=actor_id,
                  action="DOCUMENT_CLASSIFIED", entity_id=request.document_id,
                  after={"doc_type": classification.doc_type,
                         "vehicle_type": classification.vehicle_type,
                         "confidence": classification.confidence,
-                        "layer": classification.layer})
+                        "layer": classification.layer,
+                        "model_name": classification.model_name})
 
     # ── Gate: Classification validation ─────────────────────────
     cls_gate = validate_classification(classification)
@@ -776,6 +779,7 @@ async def process(
         "vehicle_type": classification.vehicle_type,
         "classification_confidence": classification.confidence,
         "classification_layer": classification.layer,
+        "classification_model": classification.model_name,
         "governance_critical": gov_critical,
         "governance_flags": gov_flags,
         "metadata": extraction_metadata,
@@ -974,6 +978,7 @@ async def process(
         "vehicle_type": classification.vehicle_type,
         "classification_confidence": classification.confidence,
         "classification_layer": classification.layer,
+        "classification_model": classification.model_name,
         "governance_critical": gov_critical,
         "governance_flags": gov_flags,
         "chunk_count": len(chunks),

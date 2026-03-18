@@ -67,6 +67,7 @@ class HybridClassificationResult:
     vehicle_type: str
     confidence: float             # 0.0–1.0 unified scale
     layer: int                    # 1=rules, 2=cosine_similarity, 3=LLM
+    model_name: str               # e.g. "rules", "embedding-v2", "gpt-4.1-mini"
 
 
 @dataclass(frozen=True)
