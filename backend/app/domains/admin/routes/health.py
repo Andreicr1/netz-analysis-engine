@@ -66,7 +66,18 @@ async def _check_adls() -> ServiceHealthOut:
 async def _check_search() -> ServiceHealthOut:
     """Check Azure Search availability."""
     checked_at = datetime.now(UTC)
-    return ServiceHealthOut(name="Azure Search", status="ok", latency_ms=None, error="Check not implemented", checked_at=checked_at)
+    try:
+        from app.services.azure.search_client import health_check_search
+
+        start = time.monotonic()
+        result = await asyncio.to_thread(health_check_search)
+        latency = (time.monotonic() - start) * 1000
+
+        if result.ok:
+            return ServiceHealthOut(name="Azure Search", status="ok", latency_ms=round(latency, 2), error=None, checked_at=checked_at)
+        return ServiceHealthOut(name="Azure Search", status="down", latency_ms=round(latency, 2), error=result.detail, checked_at=checked_at)
+    except Exception as e:
+        return ServiceHealthOut(name="Azure Search", status="down", latency_ms=None, error=str(e), checked_at=checked_at)
 
 
 def _check_pg_notifier(request: Request) -> ServiceHealthOut:
