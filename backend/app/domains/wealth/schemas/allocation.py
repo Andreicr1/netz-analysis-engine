@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class StrategicAllocationRead(BaseModel):
@@ -85,3 +85,27 @@ class EffectiveAllocationRead(BaseModel):
     effective_weight: Decimal | None = None
     min_weight: Decimal | None = None
     max_weight: Decimal | None = None
+
+
+class AllocationProposal(BaseModel):
+    weights: dict[str, Decimal]  # instrument_id -> weight (0-1, sum must ~ 1.0)
+    rationale: str  # min 20 chars
+
+    @field_validator("rationale")
+    @classmethod
+    def rationale_min_length(cls, v: str) -> str:
+        if len(v.strip()) < 20:
+            raise ValueError("rationale must be at least 20 characters (after stripping whitespace)")
+        return v.strip()
+
+
+class SimulationResult(BaseModel):
+    profile: str
+    proposed_cvar_95_3m: Decimal | None = None
+    cvar_limit: Decimal | None = None
+    cvar_utilization_pct: Decimal | None = None
+    cvar_delta_vs_current: Decimal | None = None  # positive = worse
+    tracking_error_expected: Decimal | None = None
+    within_limit: bool
+    warnings: list[str] = []
+    computed_at: datetime

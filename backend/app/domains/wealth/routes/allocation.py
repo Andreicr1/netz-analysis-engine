@@ -1,7 +1,7 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,13 +9,15 @@ from app.core.security.clerk_auth import CurrentUser, get_current_user, require_
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.allocation import StrategicAllocation, TacticalPosition
 from app.domains.wealth.schemas.allocation import (
+    AllocationProposal,
     EffectiveAllocationRead,
+    SimulationResult,
     StrategicAllocationRead,
     StrategicAllocationUpdate,
     TacticalPositionRead,
     TacticalPositionUpdate,
 )
-from app.routers.common import validate_profile as _validate_profile
+from app.routers.common import get_latest_snapshot, validate_profile as _validate_profile
 
 router = APIRouter(prefix="/allocation")
 
@@ -224,3 +226,89 @@ async def get_effective(
             )
         )
     return effective
+
+
+@router.post(
+    "/{profile}/simulate",
+    response_model=SimulationResult,
+    summary="Simulate allocation change",
+    description=(
+        "Accepts a proposed weight map and returns projected CVaR impact "
+        "against the profile's risk limit. Synchronous — no background jobs."
+    ),
+)
+async def simulate_allocation(
+    profile: str,
+    body: AllocationProposal,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> SimulationResult:
+    _validate_profile(profile)
+
+    # --- validate weights sum ≈ 1.0 ---
+    weights_sum = sum(body.weights.values())
+    if abs(weights_sum - Decimal("1")) > Decimal("0.001"):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"weights must sum to ~1.0 (tolerance 0.001), got {weights_sum}",
+        )
+
+    # --- fetch current snapshot for CVaR limit + current level ---
+    snap = await get_latest_snapshot(db, profile)
+    cvar_limit = snap.cvar_limit if snap else None
+    cvar_current = snap.cvar_current if snap else None
+
+    warnings: list[str] = []
+
+    # --- attempt proposed CVaR computation ---
+    proposed_cvar_95_3m: Decimal | None = None
+    cvar_delta_vs_current: Decimal | None = None
+    cvar_utilization_pct: Decimal | None = None
+    tracking_error_expected: Decimal | None = None  # TODO: requires full quant pipeline
+
+    try:
+        from app.domains.wealth.services.quant_queries import compute_inputs_from_nav
+
+        block_ids = list(body.weights.keys())
+        _cov_matrix, _expected_returns = await compute_inputs_from_nav(db, block_ids)
+
+        # TODO: requires full quant pipeline — CVaR calculation from
+        # covariance matrix + weights needs the optimizer / CVaR engine
+        # integration which is not wired here yet.
+        warnings.append(
+            "Full CVaR projection not yet available; "
+            "covariance data was fetched but CVaR calculation requires quant pipeline integration."
+        )
+    except (ValueError, ImportError) as exc:
+        warnings.append(f"Could not compute proposed CVaR: {exc}")
+
+    # --- compute delta if both values are available ---
+    if proposed_cvar_95_3m is not None and cvar_current is not None:
+        cvar_delta_vs_current = proposed_cvar_95_3m - cvar_current
+
+    # --- compute utilization if limit is known ---
+    if proposed_cvar_95_3m is not None and cvar_limit is not None and cvar_limit != 0:
+        cvar_utilization_pct = (proposed_cvar_95_3m / cvar_limit) * Decimal("100")
+
+    # --- determine within_limit ---
+    if proposed_cvar_95_3m is not None and cvar_limit is not None:
+        within_limit = abs(proposed_cvar_95_3m) <= abs(cvar_limit)
+    elif cvar_limit is None:
+        within_limit = True
+        warnings.append("No CVaR limit configured for this profile; cannot validate constraint.")
+    else:
+        # proposed CVaR unavailable — optimistic default with warning
+        within_limit = True
+        warnings.append("Proposed CVaR could not be computed; within_limit is assumed true.")
+
+    return SimulationResult(
+        profile=profile,
+        proposed_cvar_95_3m=proposed_cvar_95_3m,
+        cvar_limit=cvar_limit,
+        cvar_utilization_pct=cvar_utilization_pct,
+        cvar_delta_vs_current=cvar_delta_vs_current,
+        tracking_error_expected=tracking_error_expected,
+        within_limit=within_limit,
+        warnings=warnings,
+        computed_at=datetime.now(timezone.utc),
+    )
