@@ -5,7 +5,7 @@
 - **Type:** Strategic roadmap (non-binding)
 - **Source:** Brainstorms + architectural direction from Andrei
 - **Not validated against runtime**
-- **Last updated:** 2026-03-17
+- **Last updated:** 2026-03-18
 
 ---
 
@@ -35,14 +35,19 @@ Future components must:
 
 # 1. Infrastructure Rebuild (Post-Legacy AI Engine)
 
-### Problem
+### Current State (2026-03-18)
 
-The current backend inherits patterns from a **legacy AI Engine** (Private Credit OS), resulting in:
+- `StorageClient` abstraction complete: `LocalStorageClient` (dev) + `ADLSStorageClient` (prod)
+- `FEATURE_ADLS_ENABLED=false` by default — local dev writes to `.data/lake/`
+- `storage_routing.py` enforces `{tier}/{org_id}/{vertical}/` path hierarchy
+- All pipeline writes routed through `StorageClient` (HC-2 fixed f-string paths)
+- Silver Parquet includes `embedding_model` + `embedding_dim` columns for rebuild validation
 
-- Azure Blob direct usage (should be ADLS via StorageClient)
-- Inconsistent ingestion paths
-- Missing bronze/silver/gold hierarchy in some flows
-- Duplicated pipeline logic
+### Remaining Work
+
+- Migrate remaining direct Azure Blob SDK calls to `StorageClient`
+- Enable ADLS in staging environment for integration testing
+- Bronze/silver/gold hierarchy not yet enforced on all write paths (some legacy flows)
 
 ### Target Direction
 
@@ -83,12 +88,22 @@ Eliminate:
 - In-memory-only analytics that can't be reproduced
 - Non-reproducible results (all inputs must be traceable to ADLS artifacts)
 
+### Current State (2026-03-18)
+
+- DuckDB is **NOT yet implemented** — zero imports, zero code, not in `pyproject.toml`
+- Quant analytics currently use in-memory pandas/numpy/scipy
+- ADLS Parquet files exist (silver layer) but no query layer reads them directly
+
 ### Future: DuckDB Query Layer
 
 - DuckDB reads directly from silver/gold Parquet in ADLS
 - Replaces ad-hoc pandas aggregations
 - Enables cross-fund correlation, backtesting, time-series analytics
 - Path: `gold/_global/` for cross-tenant aggregates, `gold/{org_id}/{vertical}/` for tenant-specific
+
+### Trigger
+
+Implement when: (a) cross-fund analytics are needed, (b) in-memory pandas cannot scale to tenant data volume, or (c) backtesting requires historical Parquet scans.
 
 ---
 
@@ -275,29 +290,211 @@ Wave 1 (12 packages) is DONE. Wave 2 (deep review) is planned.
 
 ---
 
-# 10. Legacy Cleanup Inventory
+# 10. Worker Infrastructure Evolution
+
+### Current State (2026-03-18)
+
+All 8 wealth workers run in-process via `BackgroundTasks`. Mitigations applied:
+
+| Mitigation | Status |
+|------------|--------|
+| RLS context (`SET LOCAL`) on all tenant-scoped workers | DONE (HC-1) |
+| `asyncio.wait_for()` timeouts — 600s heavy, 300s light | DONE (SR-1) |
+| Redis idempotency guard — 409 on duplicates, TTL safety nets | DONE (M-6) |
+| Structured logging — start/complete/timeout/fail with duration | DONE (SR-1) |
+
+### Remaining Limitations
+
+- **No process isolation:** A stuck worker blocks the ASGI event loop (timeout mitigates but doesn't isolate)
+- **No DLQ/retry:** Failed workers require manual re-trigger (idempotency guard makes failure visible, not recoverable)
+- **No backpressure:** No limit on concurrent workers per tenant
+
+### Target Direction (FUTURE)
+
+- Migrate to **ARQ** (async Redis queue) or **Celery** when worker volume justifies
+- Process isolation via separate worker dyno/container
+- Dead-letter queue for failed jobs with configurable retry policy
+- Per-tenant concurrency limits
+
+### Trigger
+
+Move to external queue when: (a) workers routinely timeout, (b) >10 concurrent worker requests, or (c) worker failures need auto-retry.
+
+---
+
+# 11. Search Resilience
+
+### Current State (2026-03-18)
+
+Azure Search is the sole RAG query backend. Mitigations applied:
+
+| Mitigation | Status |
+|------------|--------|
+| Graceful degradation — empty results + warning on connection errors | DONE (SR-6) |
+| `search_degraded` flag in agent responses for frontend messaging | DONE (SR-6) |
+| `search_rebuild.py` — manual index reconstruction from silver Parquet | EXISTS |
+
+### Remaining Limitations
+
+- **No automatic failover:** If Azure Search is down, RAG returns empty results (not errors, but no data)
+- **No read replica:** Single index instance
+- **Manual rebuild only:** `search_rebuild.py` requires operator intervention
+
+### Target Direction (FUTURE)
+
+- Read replica or secondary index for failover
+- Automated health check + rebuild trigger on sustained failures
+- Local vector store fallback (e.g., ChromaDB) for critical-path queries
+
+### Trigger
+
+Move to redundant search when: (a) SLA requires >99.9% RAG availability, or (b) Azure Search outages impact production users.
+
+---
+
+# 12. Fund Model Sunset
+
+### Current State (2026-03-18)
+
+Deprecated `Fund` model coexists with polymorphic `Instrument` model. Deprecation markers applied:
+
+| Marker | Status |
+|--------|--------|
+| `DeprecationWarning` on Fund model import | DONE (SR-4) |
+| OpenAPI `deprecated=true` on all 5 Fund routes | DONE (SR-4) |
+| RFC 8594 `Sunset: 2026-06-30` + `Link: rel=successor-version` headers | DONE (SR-4) |
+| Router tag `"funds (deprecated)"` | DONE (SR-4) |
+
+### Sunset Plan
+
+1. **2026-04 → 2026-05:** Migrate all Fund consumers to Instrument queries
+2. **2026-06-01:** Remove Fund routes from frontend code
+3. **2026-06-30:** Delete Fund model, routes, schemas, and migration
+
+### Dependencies
+
+- All ~17 files importing Fund must be migrated to Instrument
+- Frontend fund list/detail pages must use Instrument endpoints
+- Data migration: existing `funds` rows → `instruments_universe` entries
+
+---
+
+# 13. TimescaleDB Compression & Optimization
+
+### Current State (2026-03-18)
+
+Two hypertables exist (migration `0002`):
+
+| Hypertable | Time Dimension | RLS Index |
+|------------|---------------|-----------|
+| `nav_timeseries` | `nav_date` | `organization_id` |
+| `fund_risk_metrics` | `calc_date` | `organization_id` |
+
+### Missing Configuration
+
+- **`compress_segmentby = 'organization_id'`** — CLAUDE.md mandates this on all hypertables, but **no compression policies are configured** in any migration
+- **Chunk interval tuning** — default TimescaleDB chunk intervals, not optimized for query patterns
+- **Continuous aggregates** — no materialized views for common time-series rollups (daily → weekly → monthly)
+
+### Target Direction (FUTURE)
+
+- Add compression policies via migration: `ALTER TABLE ... SET (timescaledb.compress, timescaledb.compress_segmentby = 'organization_id')`
+- Schedule compression: `SELECT add_compression_policy('nav_timeseries', INTERVAL '30 days')`
+- Evaluate continuous aggregates for NAV rollups and risk metric summaries
+- Monitor chunk sizes and adjust intervals based on query patterns
+
+### Trigger
+
+Implement when: (a) `nav_timeseries` exceeds 10M rows, or (b) time-series query latency degrades.
+
+---
+
+# 14. Pipeline Concurrency & Queueing
+
+### Current State (2026-03-18)
+
+- Extraction orchestration uses sync `run_item()` loop — TODO in code for `async + Semaphore(8) + gather`
+- Document upload processing runs inline in request handler — TODO for Azure Service Bus queueing
+- Deep review ConfigService integration still uses sync patterns — TODO for async session migration
+
+### Target Direction (FUTURE)
+
+| Component | Current | Target |
+|-----------|---------|--------|
+| Extraction orchestrator | Sync loop | `asyncio.Semaphore(8) + gather` |
+| Document upload | Inline processing | Azure Service Bus or Redis queue |
+| Deep review config | Sync ConfigService calls | Async session with `await ConfigService.get()` |
+
+### Trigger
+
+Implement when: (a) pipeline throughput is bottlenecked by sequential extraction, or (b) upload latency exceeds acceptable UX threshold.
+
+---
+
+# 15. Operational Add-On Modules
+
+### Context
+
+The analysis engine intentionally excludes operational modules. These will be developed as **separate acoplable add-ons** that connect via API:
+
+| Module | Purpose | Status |
+|--------|---------|--------|
+| Cash Management | Accounts, transactions, reconciliation | FUTURE — separate service |
+| Compliance Engine | KYC obligation engine, AML workflows | FUTURE — separate service |
+| Signatures | Adobe Sign integration, queue | FUTURE — separate service |
+| Counterparties | CRUD, bank accounts, four-eyes approval | FUTURE — separate service |
+
+### Architecture Principle
+
+> **Analysis engine = read-heavy, compute-heavy**
+> **Operational modules = write-heavy, workflow-heavy**
+> **Never co-deploy** — different scaling profiles, different SLA requirements.
+
+Each add-on connects to the analysis engine via:
+- REST API for data reads (portfolio state, risk metrics, fund data)
+- Webhooks or events for state change notifications
+- Shared PostgreSQL for tenant context (same Clerk JWT, same RLS)
+
+---
+
+# 16. Legacy Cleanup Inventory
 
 Items that exist in code but should be replaced or removed:
 
-| Legacy Pattern | Target | Priority |
-|----------------|--------|----------|
-| Direct Azure Blob SDK calls | StorageClient abstraction | HIGH |
-| Cohere API references (if any remain) | Local cross-encoder reranker | MEDIUM |
-| `cash_management/` references | Remove (out of scope) | LOW |
-| `compliance/` references | Remove (out of scope) | LOW |
-| `signatures/` references | Remove (out of scope) | LOW |
-| `counterparties/` references | Remove (out of scope) | LOW |
-| Inline f-string ADLS paths | `storage_routing.py` functions | HIGH |
-| `profiles/` YAML direct reads | `ConfigService.get()` | MEDIUM |
+| Legacy Pattern | Target | Priority | Status |
+|----------------|--------|----------|--------|
+| Direct Azure Blob SDK calls | StorageClient abstraction | HIGH | Open |
+| Cohere API references | Local cross-encoder reranker | MEDIUM | **Resolved** (zero references remain) |
+| `cash_management/` references | Remove (out of scope) | LOW | **Resolved** (SR-3, 2026-03-18) |
+| `compliance/` domain references | Remove (out of scope) | LOW | **Resolved** (SR-3, 2026-03-18) |
+| `signatures/` references | Remove (out of scope) | LOW | No references found |
+| `counterparties/` references | Remove (out of scope) | LOW | No references found |
+| Inline f-string ADLS paths | `storage_routing.py` functions | HIGH | **Resolved** (HC-2, 2026-03-18) |
+| `profiles/` YAML direct reads | `ConfigService.get()` | MEDIUM | Open |
+| `fred_ingestion.py` dead code | Delete | LOW | **Resolved** (SR-5, 2026-03-18) |
+| Fund model + routes | Instrument model | LOW | **Deprecated** (SR-4, sunset 2026-06-30) |
 
 ---
 
 # Summary
 
 This roadmap defines:
-- **Infrastructure evolution** (ADLS, DuckDB, StorageClient)
+- **Infrastructure evolution** (ADLS migration, DuckDB query layer, TimescaleDB compression, worker queue, search resilience)
+- **Pipeline maturity** (extraction concurrency, upload queueing, async config)
 - **Analytical expansion** (senior analyst, macro intelligence, content production)
-- **Architectural convergence** (instrument-centric, cross-vertical patterns)
+- **Architectural convergence** (instrument-centric, Fund sunset, cross-vertical patterns)
+- **Operational add-ons** (cash management, compliance, signatures, counterparties — separate services)
+
+### Backend Health Snapshot (2026-03-18)
+
+| Metric | Value |
+|--------|-------|
+| Tests | 1304 passing |
+| Import-linter contracts | 30 (16/16 quant services covered) |
+| Audit v3 findings | 0 open (17 resolved, 2 mitigated) |
+| Migrations | 18 files (head: `0019_audit_events`) |
+| Routers | 51 (7 admin + 26 credit + 18 wealth) |
+| Vertical engines | credit (13 packages) + wealth (4 modules) |
 
 > **This is NOT a commitment.**
 > **It is a directional map** for decisions that haven't been scheduled yet.
