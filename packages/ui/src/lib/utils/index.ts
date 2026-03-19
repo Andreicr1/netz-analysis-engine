@@ -2,7 +2,7 @@
 // ===========================
 
 export { cn } from "./cn.js";
-export type { NavItem, BrandingConfig } from "./types.js";
+export type { NavItem, BrandingConfig, ContextNav } from "./types.js";
 
 // API client
 export {

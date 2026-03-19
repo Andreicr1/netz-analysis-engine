@@ -2,7 +2,7 @@
   Dataroom — folder browser with breadcrumb navigation.
 -->
 <script lang="ts">
-	import { Card, EmptyState, PageHeader } from "@netz/ui";
+	import { SectionCard, EmptyState, PageHeader } from "@netz/ui";
 </script>
 
 <div class="px-6">
@@ -10,10 +10,10 @@
 		title="Dataroom"
 		breadcrumbs={[{ label: "Funds", href: "/funds" }, { label: "Documents" }, { label: "Dataroom" }]}
 	/>
-	<Card class="p-6">
+	<SectionCard title="Dataroom Browser">
 		<EmptyState
-			title="Dataroom Browser"
+			title="No Documents"
 			description="Browse and manage documents in the virtual data room. Folder tree and file browser will connect to the dataroom API."
 		/>
-	</Card>
+	</SectionCard>
 </div>

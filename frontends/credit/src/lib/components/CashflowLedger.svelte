@@ -71,7 +71,7 @@
 	let registerFlowType = $state("disbursement");
 	let registerAmount = $state("");
 	let registerCurrency = $state("USD");
-	let registerDate = $state(new Date().toISOString().split("T")[0]);
+	let registerDate = $state(new Date().toISOString().split("T")[0] ?? "");
 	let registerDescription = $state("");
 	let registerReference = $state("");
 
@@ -267,12 +267,13 @@
 		registerFlowType = "disbursement";
 		registerAmount = "";
 		registerCurrency = "USD";
-		registerDate = new Date().toISOString().split("T")[0];
+		registerDate = new Date().toISOString().split("T")[0] ?? "";
 		registerDescription = "";
 		registerReference = "";
 	}
 
-	let tableData = $derived(cashflows as Record<string, unknown>[]);
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	let tableData = $derived(cashflows as any as Record<string, unknown>[]);
 </script>
 
 <div class="space-y-4">

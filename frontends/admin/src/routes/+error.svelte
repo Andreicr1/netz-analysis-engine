@@ -27,10 +27,10 @@
 			<h1 class="mb-2 text-4xl font-bold text-(--netz-text-primary)">404</h1>
 			<p class="text-(--netz-text-secondary)">Page not found.</p>
 			<a
-				href="/health"
+				href="/"
 				class="mt-4 inline-block rounded-md bg-(--netz-brand-primary) px-4 py-2 text-sm text-white hover:opacity-90"
 			>
-				Go to Dashboard
+				Go Home
 			</a>
 		</div>
 	</div>
@@ -40,10 +40,10 @@
 			<h1 class="mb-2 text-4xl font-bold text-(--netz-text-primary)">{page.status}</h1>
 			<p class="text-(--netz-text-secondary)">{page.error?.message ?? "Something went wrong."}</p>
 			<a
-				href="/health"
+				href="/"
 				class="mt-4 inline-block rounded-md bg-(--netz-brand-primary) px-4 py-2 text-sm text-white hover:opacity-90"
 			>
-				Go to Dashboard
+				Go Home
 			</a>
 		</div>
 	</div>

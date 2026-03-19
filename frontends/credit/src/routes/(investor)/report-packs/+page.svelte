@@ -40,7 +40,7 @@
 						</p>
 						{#if pack.published_at}
 							<p class="text-sm text-(--netz-text-muted)">
-								Published: {formatDate(pack.published_at)}
+								Published: {formatDate(pack.published_at as string)}
 							</p>
 						{/if}
 					</div>

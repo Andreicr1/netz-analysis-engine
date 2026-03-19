@@ -93,6 +93,16 @@
 		}, 220);
 	}
 
+	// Clean up timeout on unmount
+	$effect(() => {
+		return () => {
+			if (closingTimeout) {
+				clearTimeout(closingTimeout);
+				closingTimeout = null;
+			}
+		};
+	});
+
 	// ── Strategy badge colors ────────────────────────────────────────────────
 
 	const strategyColors: Record<string, { bg: string; text: string }> = {

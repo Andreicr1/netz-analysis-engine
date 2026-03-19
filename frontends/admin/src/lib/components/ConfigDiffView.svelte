@@ -127,18 +127,11 @@
 	}
 
 	$effect(() => {
-		if (mergeHost) {
-			void mountView(viewMode);
-		}
-	});
-
-	// Re-mount when diff content changes
-	$effect(() => {
-		// Depend on the actual content to trigger re-mount
+		const _mode = viewMode;
 		const _before = beforeDoc;
 		const _after = afterDoc;
-		if (mergeView && mergeHost) {
-			void mountView(viewMode);
+		if (mergeHost) {
+			void mountView(_mode);
 		}
 	});
 

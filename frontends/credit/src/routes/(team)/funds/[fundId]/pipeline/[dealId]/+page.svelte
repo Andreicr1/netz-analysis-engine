@@ -18,7 +18,7 @@
 	import { getContext } from "svelte";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
-	import type { DealStage, RejectionCode, ICCondition, StageTimeline, VotingStatusDetail } from "$lib/types/api";
+	import type { DealStage, RejectionCode, ICCondition, StageTimeline, VotingStatusDetail, ICMemo, VotingStatus } from "$lib/types/api";
 	import { resolveCreditStatus } from "$lib/utils/status-maps";
 
 	/** Matches components["schemas"]["DealDecision"] from packages/ui/src/types/api.d.ts */
@@ -327,7 +327,7 @@
 
 	{#if timeline}
 		<div class="mb-6">
-			<DealStageTimeline timeline={timeline.nodes as import("$lib/types/api").StageTimelineEntry[]} />
+			<DealStageTimeline timeline={timeline.nodes} />
 		</div>
 	{/if}
 
@@ -479,8 +479,8 @@
 
 		{:else if activeTab === "ic-memo"}
 			<ICMemoViewer
-				icMemo={data.icMemo}
-				votingStatus={data.votingStatus}
+				icMemo={data.icMemo as ICMemo | null}
+				votingStatus={data.votingStatus as VotingStatus | null}
 				fundId={data.fundId}
 				dealId={data.dealId}
 			/>

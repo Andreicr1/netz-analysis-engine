@@ -5,6 +5,7 @@
  * startSessionExpiryMonitor(): client-side session expiry warning.
  */
 
+import type { Handle } from "@sveltejs/kit";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
 // ── Types ───────────────────────────────────────────────────────
@@ -112,27 +113,16 @@ let cachedJWKS: ReturnType<typeof createRemoteJWKSet> | null = null;
  * In production: JWKS verification → Actor in event.locals.
  * In dev mode with devBypass: X-DEV-ACTOR header or default dev actor.
  */
-export function createClerkHook(options: ClerkHookOptions = {}) {
+export function createClerkHook(options: ClerkHookOptions = {}): Handle {
 	const {
 		jwksUrl,
 		devBypass = false,
 		publicPrefixes = ["/auth/", "/health"],
 	} = options;
 
-	// SvelteKit Handle type — defined inline to avoid importing @sveltejs/kit in library code.
-	type HandleEvent = {
-		url: { pathname: string };
-		request: { headers: { get: (name: string) => string | null } };
-		cookies: { get: (name: string) => string | undefined };
-		locals: Record<string, unknown>;
-	};
-	type HandleParams = {
-		event: HandleEvent;
-		resolve: (event: HandleEvent) => Promise<Response>;
-	};
-
-	return async ({ event, resolve }: HandleParams) => {
+	const hook: Handle = async ({ event, resolve }) => {
 		const { pathname } = event.url;
+		const locals = event.locals as Record<string, unknown>;
 
 		// Public routes — skip auth
 		if (publicPrefixes.some((p) => pathname.startsWith(p))) {
@@ -142,8 +132,8 @@ export function createClerkHook(options: ClerkHookOptions = {}) {
 		// Dev bypass via X-DEV-ACTOR header
 		const devActorHeader = event.request.headers.get("x-dev-actor");
 		if (devBypass && devActorHeader) {
-			event.locals.actor = parseDevActor(devActorHeader);
-			event.locals.token = "dev-token";
+			locals.actor = parseDevActor(devActorHeader);
+			locals.token = "dev-token";
 			return resolve(event);
 		}
 
@@ -154,8 +144,8 @@ export function createClerkHook(options: ClerkHookOptions = {}) {
 
 		if (!token) {
 			if (devBypass) {
-				event.locals.actor = DEFAULT_DEV_ACTOR;
-				event.locals.token = "dev-token";
+				locals.actor = DEFAULT_DEV_ACTOR;
+				locals.token = "dev-token";
 				return resolve(event);
 			}
 			// Dynamic import to avoid importing @sveltejs/kit at module level
@@ -170,16 +160,16 @@ export function createClerkHook(options: ClerkHookOptions = {}) {
 					cachedJWKS = createRemoteJWKSet(new URL(jwksUrl));
 				}
 				const { payload } = await jwtVerify(token, cachedJWKS);
-				event.locals.actor = actorFromClaims(payload as Record<string, unknown>);
+				locals.actor = actorFromClaims(payload as Record<string, unknown>);
 			} else {
 				// No JWKS configured — decode without verification (dev fallback).
 				// Backend still verifies on every API call (defense in depth).
 				const parts = token.split(".");
 				if (parts.length !== 3) throw new Error("Invalid JWT");
 				const payload = JSON.parse(atob(parts[1]!));
-				event.locals.actor = actorFromClaims(payload);
+				locals.actor = actorFromClaims(payload);
 			}
-			event.locals.token = token;
+			locals.token = token;
 		} catch (err) {
 			// Check if it's a SvelteKit redirect (re-throw it)
 			if (err && typeof err === "object" && "status" in err) throw err;
@@ -192,4 +182,5 @@ export function createClerkHook(options: ClerkHookOptions = {}) {
 		response.headers.set("Cache-Control", "private, no-store");
 		return response;
 	};
+	return hook;
 }

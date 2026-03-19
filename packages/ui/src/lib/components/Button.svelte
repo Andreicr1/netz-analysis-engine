@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { cn } from "../utils/cn.js";
 	import type { Snippet } from "svelte";
-	import type { HTMLButtonAttributes } from "svelte/elements";
+	import type { HTMLButtonAttributes, HTMLAnchorAttributes } from "svelte/elements";
 
 	type Variant = "default" | "secondary" | "destructive" | "outline" | "ghost" | "link";
 	type Size = "sm" | "default" | "lg";
@@ -9,12 +9,14 @@
 	interface Props extends HTMLButtonAttributes {
 		variant?: Variant;
 		size?: Size;
+		href?: HTMLAnchorAttributes["href"];
 		children?: Snippet;
 	}
 
 	let {
 		variant = "default",
 		size = "default",
+		href,
 		class: className,
 		children,
 		...rest
@@ -41,6 +43,19 @@
 	};
 </script>
 
+{#if href}
+<a
+	{href}
+	class={cn(
+		"inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium tracking-[-0.01em] transition-[color,background-color,border-color,box-shadow,transform] duration-(--netz-duration-fast) ease-(--netz-ease-out) focus-visible:outline-none focus-visible:shadow-(--netz-shadow-focus)",
+		variantStyles[variant],
+		sizeStyles[size],
+		className,
+	)}
+>
+	{@render children?.()}
+</a>
+{:else}
 <button
 	class={cn(
 		"inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium tracking-[-0.01em] transition-[color,background-color,border-color,box-shadow,transform] duration-(--netz-duration-fast) ease-(--netz-ease-out) focus-visible:outline-none focus-visible:shadow-(--netz-shadow-focus) disabled:pointer-events-none disabled:translate-y-0 disabled:shadow-none disabled:opacity-50",
@@ -52,3 +67,4 @@
 >
 	{@render children?.()}
 </button>
+{/if}

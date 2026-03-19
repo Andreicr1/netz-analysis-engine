@@ -105,7 +105,7 @@
 
 <div class="space-y-6 p-6">
 	<PageHeader title="Branding" />
-	<BrandingEditor branding={data.branding} orgId={data.orgId} />
+	<BrandingEditor branding={data.branding} orgId={data.orgId} token={data.token} />
 
 	<!-- Asset Upload -->
 	<SectionCard title="Brand Assets">

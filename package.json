@@ -9,11 +9,14 @@
     "test": "turbo run test"
   },
   "devDependencies": {
-    "turbo": "^2.0.0",
-    "openapi-typescript": "^7.0.0"
+    "csstype": "^3.2.3",
+    "openapi-typescript": "^7.0.0",
+    "turbo": "^2.0.0"
   },
   "packageManager": "pnpm@10.28.1",
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

@@ -5,6 +5,7 @@
 <script lang="ts">
 	import { Card, EmptyState } from "@netz/ui";
 	import CopilotCitation from "./CopilotCitation.svelte";
+	import type { Citation } from "$lib/types/api";
 
 	interface Message {
 		role: "user" | "assistant";
@@ -39,7 +40,7 @@
 						<div class="mt-2 border-t border-(--netz-border) pt-2">
 							<p class="mb-1 text-xs font-medium text-(--netz-text-muted)">Sources:</p>
 							{#each message.citations as citation, ci (ci)}
-								<CopilotCitation {citation} />
+								<CopilotCitation citation={citation as Citation} />
 							{/each}
 						</div>
 					{/if}

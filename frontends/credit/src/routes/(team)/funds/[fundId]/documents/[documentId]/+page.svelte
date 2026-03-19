@@ -40,6 +40,29 @@
 		return "—";
 	});
 
+	const keyLabels: Record<string, string> = {
+		created_at: "Created At",
+		updated_at: "Updated At",
+		blob_uri: "File Location",
+		root_folder: "Root Folder",
+		file_name: "File Name",
+		file_size: "File Size",
+		mime_type: "MIME Type",
+		classification: "Classification",
+		confidence: "Confidence",
+		page_count: "Page Count",
+		organization_id: "Organization",
+		title: "Title",
+		status: "Status",
+		domain: "Domain",
+		deal_id: "Deal",
+		fund_id: "Fund",
+	};
+
+	function humanizeKey(key: string): string {
+		return keyLabels[key] ?? key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+	}
+
 	const classificationModel = $derived(
 		(doc.classification_model as string | null | undefined) ?? "—",
 	);
@@ -149,7 +172,7 @@
 			<div class="grid gap-4 md:grid-cols-2">
 				{#each Object.entries(doc).filter(([k]) => !["id", "organization_id", "content", "embedding", "classification_layer", "classification_model", "classification_confidence", "classification_layer_label"].includes(k)) as [key, value]}
 					<div>
-						<p class="text-xs text-(--netz-text-muted)">{key}</p>
+						<p class="text-xs text-(--netz-text-muted)">{humanizeKey(key)}</p>
 						<p class="text-sm font-medium text-(--netz-text-primary)">{String(value ?? "—")}</p>
 					</div>
 				{/each}

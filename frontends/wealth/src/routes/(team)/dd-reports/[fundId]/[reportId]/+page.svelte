@@ -3,7 +3,7 @@
   Download PDF, regenerate with confirmation.
 -->
 <script lang="ts">
-	import { Card, Button, EmptyState } from "@netz/ui";
+	import { Card, Button, EmptyState, cn } from "@netz/ui";
 	import { ActionButton, ConfirmDialog } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll } from "$app/navigation";
@@ -95,8 +95,12 @@
 			<nav class="space-y-1">
 				{#each chapters as chapter, i (chapter.chapter_number)}
 					<button
-						class="w-full rounded-md px-3 py-2 text-left text-xs transition-colors
-							{activeChapter === i ? 'bg-(--netz-brand-primary)/10 font-medium text-(--netz-brand-primary)' : 'text-(--netz-text-secondary) hover:bg-(--netz-surface-highlight)'}"
+						class={cn(
+							"w-full rounded-md px-3 py-2 text-left text-xs transition-colors",
+							activeChapter === i
+								? "bg-(--netz-brand-primary)/10 text-(--netz-brand-primary) font-medium"
+								: "text-(--netz-text-secondary) hover:bg-(--netz-surface-highlight)"
+						)}
 						onclick={() => activeChapter = i}
 					>
 						{chapter.chapter_number}. {chapter.title}
@@ -141,11 +145,11 @@
 		{:else if chapters[activeChapter]}
 			<div>
 				<h2 class="mb-4 text-xl font-semibold text-(--netz-text-primary)">
-					{chapters[activeChapter].chapter_number}. {chapters[activeChapter].title}
+					{chapters[activeChapter]!.chapter_number}. {chapters[activeChapter]!.title}
 				</h2>
 				<Card class="prose prose-sm max-w-none p-6 text-(--netz-text-primary)">
 					<!-- Sanitized Markdown rendering — strips scripts/handlers/javascript: -->
-					<div>{@html renderSafeMarkdown(chapters[activeChapter].content)}</div>
+					<div>{@html renderSafeMarkdown(chapters[activeChapter]!.content)}</div>
 				</Card>
 			</div>
 		{/if}

@@ -11,11 +11,15 @@
 	let reviews = $derived((data.reviews as PaginatedResponse<ReviewItem>)?.items ?? []);
 	let summary = $derived(data.summary as ReviewSummary | null);
 
+	function humanizeEnum(value: string): string {
+		return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+	}
+
 	const columns = [
 		{ accessorKey: "document_title", header: "Document" },
-		{ accessorKey: "document_type", header: "Type" },
-		{ accessorKey: "status", header: "Status" },
-		{ accessorKey: "priority", header: "Priority" },
+		{ accessorKey: "document_type", header: "Type", cell: (info: { getValue: () => string }) => humanizeEnum(info.getValue() ?? "") },
+		{ accessorKey: "status", header: "Status", cell: (info: { getValue: () => string }) => humanizeEnum(info.getValue() ?? "") },
+		{ accessorKey: "priority", header: "Priority", cell: (info: { getValue: () => string }) => humanizeEnum(info.getValue() ?? "") },
 		{ accessorKey: "created_at", header: "Submitted" },
 	];
 </script>

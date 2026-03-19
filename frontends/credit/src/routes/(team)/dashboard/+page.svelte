@@ -7,11 +7,7 @@
 <script lang="ts">
   import {
     DataCard,
-    StatusBadge,
     EmptyState,
-    FunnelChart,
-    ScatterChart,
-    TimeSeriesChart,
     PageHeader,
     SectionCard,
     Skeleton,
@@ -88,6 +84,18 @@
     await loadFredData();
   }
 
+  function handleResultsKeydown(e: KeyboardEvent) {
+    const items = (e.currentTarget as HTMLElement).querySelectorAll('[role="option"]');
+    const current = Array.from(items).indexOf(document.activeElement as Element);
+    if (e.key === 'ArrowDown' && current < items.length - 1) {
+      (items[current + 1] as HTMLElement).focus();
+      e.preventDefault();
+    } else if (e.key === 'ArrowUp' && current > 0) {
+      (items[current - 1] as HTMLElement).focus();
+      e.preventDefault();
+    }
+  }
+
   async function loadFredData() {
     if (selectedFredSeries.length === 0) { fredChartData = null; return; }
     try {
@@ -97,7 +105,7 @@
           series_id: selectedFredSeries[0],
           period: "6m",
         });
-        fredChartData = { [selectedFredSeries[0]]: (res.observations as unknown[]) ?? [] };
+        fredChartData = { [selectedFredSeries[0]!]: (res.observations as unknown[]) ?? [] };
       } else {
         const res = await api.get<Record<string, unknown>>(`/dashboard/macro-fred-multi`, {
           series_ids: selectedFredSeries.join(","),
@@ -169,7 +177,7 @@
       <div class="grid gap-4 lg:col-span-2 lg:grid-cols-2">
         <DataCard
           label="Total AUM"
-          value={portfolio?.total_aum != null ? formatCurrency(portfolio.total_aum) : "—"}
+          value={portfolio?.total_aum != null ? formatCurrency(Number(portfolio.total_aum)) : "—"}
           trend={(portfolio?.aum_trend ?? "flat") as Trend}
         />
         <DataCard
@@ -240,9 +248,11 @@
           <p class="text-xs text-(--netz-text-muted)">Searching...</p>
         {/if}
         {#if fredResults.length > 0}
-          <div class="max-h-48 space-y-1 overflow-y-auto">
+          <div class="max-h-48 space-y-1 overflow-y-auto" role="listbox" aria-label="FRED search results" onkeydown={handleResultsKeydown}>
             {#each fredResults as series}
               <button
+                role="option"
+                aria-selected={selectedFredSeries.includes(series.id)}
                 class="w-full rounded px-2 py-1.5 text-left text-xs hover:bg-(--netz-surface-alt) {selectedFredSeries.includes(series.id) ? 'bg-(--netz-brand-primary)/10 font-medium' : ''}"
                 onclick={() => toggleFredSeries(series.id)}
               >
@@ -256,7 +266,11 @@
             {#each selectedFredSeries as id}
               <span class="inline-flex items-center gap-1 rounded-full bg-(--netz-brand-primary)/10 px-2 py-0.5 text-xs text-(--netz-brand-primary)">
                 {id}
-                <button onclick={() => selectedFredSeries = selectedFredSeries.filter(s => s !== id)}>&times;</button>
+                <button onclick={() => selectedFredSeries = selectedFredSeries.filter(s => s !== id)} aria-label="Remove {id}" class="ml-1 opacity-60 hover:opacity-100">
+                  <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
               </span>
             {/each}
           </div>

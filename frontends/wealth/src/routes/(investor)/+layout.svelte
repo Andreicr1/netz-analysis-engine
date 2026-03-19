@@ -8,7 +8,21 @@
 
 	let { data, children }: { data: LayoutData; children: import("svelte").Snippet } = $props();
 
-	let language = $state<"pt" | "en">("pt");
+	function getInitialLanguage(): "pt" | "en" {
+		if (typeof localStorage !== 'undefined') {
+			const saved = localStorage.getItem('netz-investor-language');
+			if (saved === 'pt' || saved === 'en') return saved;
+		}
+		return 'pt';
+	}
+
+	let language = $state<"pt" | "en">(getInitialLanguage());
+
+	$effect(() => {
+		if (typeof localStorage !== 'undefined') {
+			localStorage.setItem('netz-investor-language', language);
+		}
+	});
 
 	function handleLanguageChange(lang: string) {
 		language = lang as "pt" | "en";

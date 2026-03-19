@@ -100,7 +100,7 @@
 
 	.netz-page-header__title {
 		margin: 0;
-		font-size: 24px;
+		font-size: var(--netz-text-h2, 1.5rem);
 		font-weight: 700;
 		color: var(--netz-text-primary, #111827);
 		line-height: 1.3;

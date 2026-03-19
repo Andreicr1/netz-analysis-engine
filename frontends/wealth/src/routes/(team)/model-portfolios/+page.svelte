@@ -5,7 +5,7 @@
 <script lang="ts">
 	import {
 		Badge, EmptyState, PageHeader, StatusBadge, MetricCard, SectionCard,
-		UtilizationBar, PeriodSelector, Dialog, Button, Input, Select, Textarea, formatDate, formatNumber,
+		Dialog, Button, Input, Select, Textarea, formatDate, formatNumber,
 	} from "@netz/ui";
 	import { ActionButton, ConfirmDialog, FormField } from "@netz/ui";
 	import { page } from "$app/state";

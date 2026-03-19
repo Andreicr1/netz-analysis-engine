@@ -4,10 +4,10 @@
 -->
 <script lang="ts">
 	import { dndzone, TRIGGERS, SHADOW_ITEM_MARKER_PROPERTY_NAME } from "svelte-dnd-action";
-	import { StatusBadge, ConsequenceDialog } from "@netz/ui";
+	import { ConsequenceDialog } from "@netz/ui";
+	import { fade } from "svelte/transition";
 	import { invalidateAll } from "$app/navigation";
 	import { createClientApiClient } from "$lib/api/client";
-	import { resolveCreditStatus } from "$lib/utils/status-maps";
 	import type { DealStage } from "$lib/types/api";
 
 	interface DealItem {
@@ -86,16 +86,16 @@
 	let moveError = $state<string | null>(null);
 
 	function handleConsider(stageIdx: number, e: CustomEvent<{ items: KanbanCard[]; info: { trigger: string } }>) {
-		columns[stageIdx].items = e.detail.items;
+		columns[stageIdx]!.items = e.detail.items;
 	}
 
 	function handleFinalize(stageIdx: number, e: CustomEvent<{ items: KanbanCard[]; info: { trigger: string; id: string } }>) {
-		const targetStage = columns[stageIdx].stage;
+		const targetStage = columns[stageIdx]!.stage;
 		const movedCard = e.detail.items.find(
 			(item) => item.stage !== targetStage && !item[SHADOW_ITEM_MARKER_PROPERTY_NAME],
 		);
 
-		columns[stageIdx].items = e.detail.items;
+		columns[stageIdx]!.items = e.detail.items;
 
 		if (movedCard && movedCard.stage !== targetStage) {
 			const snapshot = buildColumns(deals);
@@ -183,9 +183,6 @@
 						<p class="text-sm font-medium text-(--netz-text-primary) line-clamp-2">
 							{card.name}
 						</p>
-						<div class="mt-2 flex items-center gap-2">
-							<StatusBadge status={card.stage} type="deal" resolve={resolveCreditStatus} />
-						</div>
 						{#if card.deal_type || card.sponsor_name}
 							<p class="mt-1.5 text-xs text-(--netz-text-muted) line-clamp-1">
 								{[card.deal_type, card.sponsor_name].filter(Boolean).join(" · ")}
@@ -200,7 +197,7 @@
 
 <!-- Error toast -->
 {#if moveError}
-	<div class="fixed bottom-4 right-4 z-50 rounded-lg border border-(--netz-danger) bg-(--netz-surface) px-4 py-3 shadow-lg">
+	<div transition:fade={{ duration: 200 }} class="fixed bottom-4 right-4 z-50 rounded-lg border border-(--netz-danger) bg-(--netz-surface) px-4 py-3 shadow-lg" role="alert">
 		<p class="text-sm text-(--netz-danger)">{moveError}</p>
 	</div>
 {/if}

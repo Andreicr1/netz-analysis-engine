@@ -243,7 +243,7 @@
 							{chapter.content}
 						</div>
 					{:else if streamingChapters[chapter.chapter_number]}
-						<ICMemoStreamingChapter content={streamingChapters[chapter.chapter_number]} />
+						<ICMemoStreamingChapter content={streamingChapters[chapter.chapter_number] ?? ""} />
 					{/if}
 				</Card>
 			{/each}

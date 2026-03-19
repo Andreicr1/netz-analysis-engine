@@ -140,7 +140,7 @@
 		align-items: center;
 		gap: 12px;
 		padding: 8px 12px;
-		border-radius: 6px;
+		border-radius: var(--netz-radius-sm, 6px);
 		color: var(--netz-text-secondary, #6b7280);
 		text-decoration: none;
 		font-size: 14px;

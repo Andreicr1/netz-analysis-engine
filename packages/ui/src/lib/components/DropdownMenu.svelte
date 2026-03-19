@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { cn } from "../utils/cn.js";
-	import { DropdownMenu } from "bits-ui";
+	import { DropdownMenu as BitsDropdownMenu } from "bits-ui";
 	import type { Snippet } from "svelte";
 
 	interface MenuItem {
@@ -18,15 +18,15 @@
 	let { items, class: className, children }: Props = $props();
 </script>
 
-<DropdownMenu.Root>
-	<DropdownMenu.Trigger>
+<BitsDropdownMenu.Root>
+	<BitsDropdownMenu.Trigger>
 		{#snippet child({ props })}
 			<span {...props} class="inline-flex">
 				{@render children?.()}
 			</span>
 		{/snippet}
-	</DropdownMenu.Trigger>
-	<DropdownMenu.Content
+	</BitsDropdownMenu.Trigger>
+	<BitsDropdownMenu.Content
 		class={cn(
 			"z-50 min-w-[10rem] overflow-hidden rounded-(--netz-radius-lg) border border-(--netz-border-subtle) bg-(--netz-surface-panel) p-1.5 shadow-(--netz-shadow-floating) netz-animate-scale-in",
 			className,
@@ -34,7 +34,7 @@
 		sideOffset={4}
 	>
 		{#each items as item}
-			<DropdownMenu.Item
+			<BitsDropdownMenu.Item
 				class={cn(
 					"relative flex min-h-9 cursor-pointer select-none items-center rounded-(--netz-radius-md) px-3 py-2 text-[13px] font-medium outline-none transition-[color,background-color] duration-(--netz-duration-fast) hover:bg-(--netz-accent-soft) focus:bg-(--netz-accent-soft)",
 					item.destructive
@@ -44,7 +44,7 @@
 				onSelect={item.onclick}
 			>
 				{item.label}
-			</DropdownMenu.Item>
+			</BitsDropdownMenu.Item>
 		{/each}
-	</DropdownMenu.Content>
-</DropdownMenu.Root>
+	</BitsDropdownMenu.Content>
+</BitsDropdownMenu.Root>

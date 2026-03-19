@@ -8,17 +8,17 @@ export default {
 		extend: {
 			colors: {
 				netz: {
-					navy: "var(--netz-brand-primary, #1B365D)",
-					blue: "var(--netz-brand-secondary, #3A7BD5)",
-					slate: "var(--netz-brand-accent, #8B9DAF)",
-					light: "var(--netz-brand-light, #D4E4F7)",
-					orange: "var(--netz-brand-highlight, #FF975A)",
-					surface: "var(--netz-surface, #FFFFFF)",
-					"surface-alt": "var(--netz-surface-alt, #F8FAFC)",
-					border: "var(--netz-border, #E2E8F0)",
-					"text-primary": "var(--netz-text-primary, #0F172A)",
-					"text-secondary": "var(--netz-text-secondary, #475569)",
-					"text-muted": "var(--netz-text-muted, #94A3B8)",
+					navy: "var(--netz-brand-primary, #18324d)",
+					blue: "var(--netz-brand-secondary, #3e628d)",
+					slate: "var(--netz-brand-accent, #8395a8)",
+					light: "var(--netz-brand-light, #e6edf6)",
+					orange: "var(--netz-brand-highlight, #c58757)",
+					surface: "var(--netz-surface, #f4f7fb)",
+					"surface-alt": "var(--netz-surface-alt, #edf2f7)",
+					border: "var(--netz-border, #c5d0de)",
+					"text-primary": "var(--netz-text-primary, #122033)",
+					"text-secondary": "var(--netz-text-secondary, #48586b)",
+					"text-muted": "var(--netz-text-muted, #6f7f93)",
 				},
 			},
 			fontFamily: {

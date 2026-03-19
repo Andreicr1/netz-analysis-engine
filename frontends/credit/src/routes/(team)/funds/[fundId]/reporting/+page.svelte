@@ -63,9 +63,13 @@
 		}
 	}
 
+	function humanizeEnum(value: string): string {
+		return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+	}
+
 	const navColumns = [
 		{ accessorKey: "reference_date", header: "Date" },
-		{ accessorKey: "status", header: "Status" },
+		{ accessorKey: "status", header: "Status", cell: (info: { getValue: () => unknown }) => humanizeEnum(String(info.getValue() ?? "")) },
 		{ accessorKey: "total_nav", header: "Total NAV" },
 		{ accessorKey: "created_at", header: "Created" },
 	];

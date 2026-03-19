@@ -7,6 +7,7 @@
 	import { ActionButton } from "@netz/ui";
 	import { createVirtualizer } from "@tanstack/svelte-virtual";
 	import { createClientApiClient } from "$lib/api/client";
+	import { invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
 	import { get as getStore } from "svelte/store";
 	import { resolveWealthStatus } from "$lib/utils/status-maps";
@@ -149,8 +150,8 @@
 				const err = await res.json().catch(() => ({}));
 				runError = (err as { detail?: string }).detail ?? "Failed to execute screening";
 			} else {
-				// Reload page to pick up new results
-				window.location.reload();
+				// Reload data via SvelteKit to pick up new results
+				await invalidateAll();
 			}
 		} catch {
 			runError = "Network error executing screening";

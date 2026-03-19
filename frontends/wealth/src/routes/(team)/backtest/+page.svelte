@@ -90,7 +90,6 @@
 	};
 
 	let paretoData = $state<ParetoFrontierData | null>(null);
-	let paretoComputedAt = $state<string | null>(null);
 
 	// Derived: recommended portfolio on frontier closest to slider position
 	let recommendedPoint = $derived.by(() => {
@@ -429,7 +428,7 @@
 		     No SSE stream needed — polling via createPoller provides progress. -->
 		<LongRunningAction
 			title="Executar Backtest"
-			description="Submete job assíncrono de backtest. Faz polling em GET /analytics/backtest/{run_id} até resultado terminal."
+			description="Submete job assíncrono de backtest. Faz polling em GET /analytics/backtest/[run_id] até resultado terminal."
 			startLabel="Executar Backtest"
 			retryLabel="Re-executar"
 			idleMessage="Selecione o perfil e clique em Executar para iniciar o backtest histórico."
@@ -609,11 +608,6 @@
 			<div class="h-[420px]">
 				<ChartContainer option={paretoChartOption} height={400} ariaLabel="Pareto frontier — risco vs. retorno" />
 			</div>
-			{#if paretoComputedAt}
-				<p class="mt-2 text-right text-xs text-(--netz-text-muted)">
-					Calculado: <time datetime={paretoComputedAt}>{formatDateTime(paretoComputedAt)}</time>
-				</p>
-			{/if}
 		{:else}
 			<EmptyState
 				title="Sem dados de otimização"

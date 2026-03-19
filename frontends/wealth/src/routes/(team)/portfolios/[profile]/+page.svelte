@@ -104,7 +104,7 @@
 	let selectedRegion = $state<Region | "all">("all");
 
 	// Weights from snapshot — typed as record
-	let weights = $derived<Record<string, number>>(() => {
+	let weights: Record<string, number> = $derived.by(() => {
 		const raw = snapshot?.weights ?? {};
 		const out: Record<string, number> = {};
 		for (const [k, v] of Object.entries(raw)) {
@@ -436,7 +436,7 @@
 
 	<!-- Stale banner — server computed_at only -->
 	{#if riskStore?.status === "stale"}
-		<StaleBanner lastUpdated={riskStore.lastUpdated} onRefresh={() => riskStore.refresh()} />
+		<StaleBanner lastUpdated={riskStore.computedAt ? new Date(riskStore.computedAt) : null} onRefresh={() => riskStore.refresh()} />
 	{/if}
 
 	<!-- Page header -->

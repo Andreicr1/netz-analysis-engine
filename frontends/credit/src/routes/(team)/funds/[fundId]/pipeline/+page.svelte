@@ -79,10 +79,32 @@
 		}
 	}
 
+	const stageLabels: Record<string, string> = {
+		INTAKE: "Intake",
+		QUALIFIED: "Qualified",
+		IC_REVIEW: "IC Review",
+		CONDITIONAL: "Conditional",
+		APPROVED: "Approved",
+		CONVERTED_TO_ASSET: "Converted",
+		REJECTED: "Rejected",
+		CLOSED: "Closed",
+	};
+
+	const dealTypeLabels: Record<string, string> = {
+		DIRECT_LOAN: "Direct Loan",
+		FUND_INVESTMENT: "Fund Investment",
+		EQUITY_STAKE: "Equity Stake",
+		SPV_NOTE: "SPV Note",
+	};
+
+	function humanizeEnum(value: string, labels: Record<string, string>): string {
+		return labels[value] ?? value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+	}
+
 	const columns = [
 		{ accessorKey: "name", header: "Deal Name" },
-		{ accessorKey: "stage", header: "Stage", cell: (info: { getValue: () => string }) => info.getValue() },
-		{ accessorKey: "deal_type", header: "Type" },
+		{ accessorKey: "stage", header: "Stage", cell: (info: { getValue: () => string }) => humanizeEnum(info.getValue(), stageLabels) },
+		{ accessorKey: "deal_type", header: "Type", cell: (info: { getValue: () => string }) => humanizeEnum(info.getValue(), dealTypeLabels) },
 		{ accessorKey: "sponsor_name", header: "Sponsor" },
 		{ accessorKey: "created_at", header: "Created" },
 	];
@@ -108,12 +130,14 @@
 		>
 			{#snippet actions()}
 				<div class="flex items-center gap-3">
-					<div class="flex rounded-md border border-(--netz-border)">
+					<div class="flex rounded-md border border-(--netz-border)" role="group" aria-label="View mode">
 						<button
 							class="px-3 py-1 text-xs font-medium transition-colors {viewMode === 'list'
 								? 'bg-(--netz-brand-primary) text-white'
 								: 'bg-(--netz-surface) text-(--netz-text-secondary) hover:bg-(--netz-surface-alt)'} rounded-l-md"
 							onclick={() => (viewMode = "list")}
+							aria-label="List view"
+							aria-pressed={viewMode === "list"}
 						>
 							List
 						</button>
@@ -122,6 +146,8 @@
 								? 'bg-(--netz-brand-primary) text-white'
 								: 'bg-(--netz-surface) text-(--netz-text-secondary) hover:bg-(--netz-surface-alt)'} rounded-r-md"
 							onclick={() => (viewMode = "kanban")}
+							aria-label="Kanban view"
+							aria-pressed={viewMode === "kanban"}
 						>
 							Kanban
 						</button>

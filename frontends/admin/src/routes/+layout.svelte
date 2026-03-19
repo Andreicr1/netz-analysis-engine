@@ -26,6 +26,6 @@
 	appName="Admin"
 	branding={data.branding}
 	token={data.token}
-	contextNav={contextNavState.current}
+	contextNav={contextNavState.current ?? undefined}
 	{children}
 />

@@ -52,7 +52,7 @@
 	{:else}
 		<div class="space-y-3">
 			{#each documents as doc (doc.id)}
-				<div class="flex items-center justify-between rounded-lg border border-(--netz-border) bg-(--netz-surface-elevated) p-5 shadow-sm">
+				<div class="flex items-center justify-between rounded-lg border border-(--netz-border) bg-(--netz-surface-elevated) p-5 shadow-(--netz-shadow-1)">
 					<div class="flex-1">
 						<p class="font-medium text-(--netz-text-primary)">
 							{doc.title ?? doc.content_type}

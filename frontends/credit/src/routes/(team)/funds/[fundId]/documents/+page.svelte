@@ -162,7 +162,7 @@
 
 		{#if ingestionJobId}
 			<div class="mb-4">
-				<IngestionProgress jobId={ingestionJobId} fundId={data.fundId} />
+				<IngestionProgress jobId={ingestionJobId} />
 			</div>
 		{/if}
 

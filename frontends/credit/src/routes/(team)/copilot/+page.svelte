@@ -163,14 +163,15 @@
 				</div>
 
 				<div class="mt-4 flex gap-2">
-					<input
-						type="text"
+					<textarea
 						bind:value={query}
 						placeholder="Ask about the fund portfolio, deals, documents..."
-						class="flex-1 rounded-md border border-(--netz-border) bg-(--netz-surface) px-4 py-2.5 text-sm outline-none focus:border-(--netz-brand-primary) focus:ring-1 focus:ring-(--netz-brand-primary)"
+						class="flex-1 resize-none overflow-hidden rounded-md border border-(--netz-border) bg-(--netz-surface) px-4 py-2.5 text-sm outline-none focus:border-(--netz-brand-primary) focus:ring-1 focus:ring-(--netz-brand-primary)"
+						rows={1}
 						onkeydown={handleKeydown}
+						oninput={(e) => { const t = e.currentTarget as HTMLTextAreaElement; t.style.height = "auto"; t.style.height = t.scrollHeight + "px"; }}
 						disabled={streaming}
-					/>
+					></textarea>
 					<Button onclick={submitQuery} disabled={!query.trim() || streaming}>
 						{streaming ? "Thinking..." : "Ask"}
 					</Button>

@@ -37,7 +37,7 @@
 	{:else}
 		<div class="space-y-3">
 			{#each reports as report (report.id)}
-				<div class="flex items-center justify-between rounded-lg border border-(--netz-border) bg-(--netz-surface-elevated) p-5 shadow-sm">
+				<div class="flex items-center justify-between rounded-lg border border-(--netz-border) bg-(--netz-surface-elevated) p-5 shadow-(--netz-shadow-1)">
 					<div>
 						<p class="font-medium text-(--netz-text-primary)">
 							{report.title ?? typeLabels[report.content_type] ?? report.content_type}

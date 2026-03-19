@@ -17,7 +17,7 @@
 	} = $props();
 
 	const orgLabel = $derived(`Org ID: ${tenant.organization_id}`);
-	const verticalLabel = $derived(tenant.vertical.replace("_", " "));
+	const verticalLabel = $derived(tenant.vertical.replace(/_/g, " "));
 </script>
 
 <a

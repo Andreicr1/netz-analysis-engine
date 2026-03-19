@@ -67,7 +67,7 @@
 					class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
 					class:bg-(--netz-surface-elevated)={aggregation === "portfolio"}
 					class:text-(--netz-text-primary)={aggregation === "portfolio"}
-					class:shadow-sm={aggregation === "portfolio"}
+					class:shadow-(--netz-shadow-1)={aggregation === "portfolio"}
 					class:text-(--netz-text-muted)={aggregation !== "portfolio"}
 					onclick={() => setAggregation("portfolio")}
 				>
@@ -77,7 +77,7 @@
 					class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
 					class:bg-(--netz-surface-elevated)={aggregation === "manager"}
 					class:text-(--netz-text-primary)={aggregation === "manager"}
-					class:shadow-sm={aggregation === "manager"}
+					class:shadow-(--netz-shadow-1)={aggregation === "manager"}
 					class:text-(--netz-text-muted)={aggregation !== "manager"}
 					onclick={() => setAggregation("manager")}
 				>

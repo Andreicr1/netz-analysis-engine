@@ -15,7 +15,8 @@
 		type SortingState,
 	} from "@tanstack/svelte-table";
 
-	type RowData = Record<string, unknown>;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	type RowData = Record<string, any>;
 
 	function clampPageSize(value: number): number {
 		return Math.min(Math.max(value, 1), 100);
@@ -33,9 +34,12 @@
 		toolbar,
 		emptyState,
 		expandedRow,
+		onRowClick,
 	}: {
-		data: RowData[];
-		columns: ColumnDef<RowData, unknown>[];
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		data: RowData[] | any[];
+		// eslint-disable-next-line @typescript-eslint/no-explicit-any
+		columns: ColumnDef<any, any>[];
 		class?: string;
 		pageSize?: number;
 		filterColumn?: string;
@@ -46,6 +50,8 @@
 		toolbar?: Snippet<[unknown]>;
 		emptyState?: Snippet;
 		expandedRow?: Snippet<[RowData]>;
+		/** Called when a table row is clicked. */
+		onRowClick?: (row: RowData) => void;
 	} = $props();
 
 	let sorting = $state<SortingState>([]);
@@ -206,7 +212,12 @@
 			</thead>
 			<tbody>
 				{#each table.getRowModel().rows as row}
-					<tr class="border-b border-(--netz-border-subtle) bg-(--netz-surface-elevated) transition-colors last:border-b-0 hover:bg-(--netz-accent-soft)">
+					<!-- svelte-ignore a11y_click_events_have_key_events -->
+					<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+					<tr
+						class="border-b border-(--netz-border-subtle) bg-(--netz-surface-elevated) transition-colors last:border-b-0 hover:bg-(--netz-accent-soft) {onRowClick ? 'cursor-pointer' : ''}"
+						onclick={() => onRowClick?.(row.original)}
+					>
 						{#each row.getVisibleCells() as cell}
 							<td class="px-4 py-3.5 align-middle text-(--netz-text-primary)">
 								<FlexRender content={cell.column.columnDef.cell} context={cell.getContext()} />

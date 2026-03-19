@@ -8,6 +8,9 @@ importers:
 
   .:
     devDependencies:
+      csstype:
+        specifier: ^3.2.3
+        version: 3.2.3
       openapi-typescript:
         specifier: ^7.0.0
         version: 7.13.0(typescript@5.9.3)
@@ -87,6 +90,9 @@ importers:
       '@netz/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@tanstack/svelte-table':
+        specifier: ^8.21.3
+        version: 8.21.3(svelte@5.53.12)
       svelte-dnd-action:
         specifier: ^0.9.0
         version: 0.9.69(svelte@5.53.12)
@@ -866,6 +872,12 @@ packages:
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7
 
+  '@tanstack/svelte-table@8.21.3':
+    resolution: {integrity: sha512-VwLt2xfsYHdchdYdFfcl9bxlJts1I6JK50xqhH+KMB9co98rnIyL4pRhTMSDfuB448yQR9E7d6oBLjx8r69cVg==}
+    engines: {node: '>=12'}
+    peerDependencies:
+      svelte: ^4.0.0 || ^3.49.0
+
   '@tanstack/svelte-table@9.0.0-alpha.10':
     resolution: {integrity: sha512-H0eAQlpXgK9JYYrgc0cWXVqEJywxkhuYODnVobUZGskFg6J+5PP+7UCjzrY9ftMge6s1hwb2Ipq3u4wPYJz7HA==}
     engines: {node: '>=12'}
@@ -876,6 +888,10 @@ packages:
     resolution: {integrity: sha512-kUFdKtevYPhuv9bN2/NhE8zCr6pO3lP2a4xYwyzwqvNZim0EMHdq9nKMFgS4rMHE9Iacdj4+PwMYDfRZ45a/+Q==}
     peerDependencies:
       svelte: ^3.48.0 || ^4.0.0 || ^5.0.0
+
+  '@tanstack/table-core@8.21.3':
+    resolution: {integrity: sha512-ldZXEhOBb8Is7xLs01fR3YEc3DERiz5silj8tnGkFZytt1abEvl/GhUmCE0PMLaMPTa3Jk4HbKmRlHmu+gCftg==}
+    engines: {node: '>=12'}
 
   '@tanstack/table-core@9.0.0-alpha.10':
     resolution: {integrity: sha512-f2kEGGL+d+I7evkhU926cID2MyH7nPI8acAPcwpaAR1DrgTNStAMp3NS+tgMDyrYtc8zd+RyTxC8m+NBhHhFmA==}
@@ -1128,6 +1144,9 @@ packages:
   cssstyle@4.6.0:
     resolution: {integrity: sha512-2z+rWdzbbSZv6/rhtvzvqeZQHrBaqgogqt85sqFNbabZOuFbCVFb8kPeEtZjiKkbrm395irpNKiYeFeLiQnFPg==}
     engines: {node: '>=18'}
+
+  csstype@3.2.3:
+    resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
 
   data-urls@5.0.0:
     resolution: {integrity: sha512-ZYP5VBHshaDAiVZxjbRVcFJpc+4xGgT0bK3vzy1HLN8jTO975HEbuYzZJcHoQEY5K1a0z8YayJkyVETa08eNTg==}
@@ -2663,6 +2682,11 @@ snapshots:
       tailwindcss: 4.2.1
       vite: 6.4.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.31.1)(yaml@2.8.2)
 
+  '@tanstack/svelte-table@8.21.3(svelte@5.53.12)':
+    dependencies:
+      '@tanstack/table-core': 8.21.3
+      svelte: 5.53.12
+
   '@tanstack/svelte-table@9.0.0-alpha.10(svelte@5.53.12)':
     dependencies:
       '@tanstack/table-core': 9.0.0-alpha.10
@@ -2672,6 +2696,8 @@ snapshots:
     dependencies:
       '@tanstack/virtual-core': 3.13.23
       svelte: 5.53.12
+
+  '@tanstack/table-core@8.21.3': {}
 
   '@tanstack/table-core@9.0.0-alpha.10': {}
 
@@ -2932,6 +2958,8 @@ snapshots:
     dependencies:
       '@asamuzakjp/css-color': 3.2.0
       rrweb-cssom: 0.8.0
+
+  csstype@3.2.3: {}
 
   data-urls@5.0.0:
     dependencies:

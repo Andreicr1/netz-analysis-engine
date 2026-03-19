@@ -505,7 +505,7 @@
 <ConsequenceDialog
 	bind:open={showUncheckDialog}
 	title="Reverse Checklist Item"
-	impactSummary="Reverter este item exige justificativa. Unchecking a completed checklist item will mark it as incomplete. This reversal will be recorded in the audit trail."
+	impactSummary="Reversing this item requires justification. Unchecking a completed checklist item will mark it as incomplete. This reversal will be recorded in the audit trail."
 	destructive={false}
 	requireRationale={true}
 	rationaleLabel="Reversal Rationale"
