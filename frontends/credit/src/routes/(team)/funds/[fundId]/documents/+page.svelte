@@ -7,7 +7,7 @@
 	import IngestionProgress from "$lib/components/IngestionProgress.svelte";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll, goto } from "$app/navigation";
-	import { getContext } from "svelte";
+	import { getContext, createRawSnippet } from "svelte";
 	import type { PageData } from "./$types";
 	import type { PaginatedResponse, DocumentItem } from "$lib/types/api";
 
@@ -88,11 +88,40 @@
 		}
 	}
 
+	// ── Classification Layer ──
+	type LayerSeverity = "success" | "info" | "warning";
+
+	const LAYER_CONFIG: Record<number, { label: string; severity: LayerSeverity; color: string }> = {
+		1: { label: "Rules", severity: "success", color: "var(--netz-success)" },
+		2: { label: "Embeddings", severity: "info", color: "var(--netz-info)" },
+		3: { label: "LLM", severity: "warning", color: "var(--netz-warning)" },
+	};
+
+	const classificationLayerCell = createRawSnippet<[number | null | undefined]>((getLayer) => {
+		return {
+			render() {
+				const layer = getLayer();
+				const cfg = layer != null ? LAYER_CONFIG[layer] : undefined;
+				if (!cfg) return `<span class="text-xs text-(--netz-text-muted)">—</span>`;
+				return `<span
+					class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
+					style="background-color: color-mix(in srgb, ${cfg.color} 14%, transparent); color: ${cfg.color};"
+				><span class="h-1.5 w-1.5 rounded-full" style="background-color: ${cfg.color};"></span>${cfg.label}</span>`;
+			},
+		};
+	});
+
 	const columns = [
 		{ accessorKey: "title", header: "Title" },
 		{ accessorKey: "root_folder", header: "Folder" },
 		{ accessorKey: "domain", header: "Domain" },
 		{ accessorKey: "status", header: "Status" },
+		{
+			accessorKey: "classification_layer",
+			header: "Source",
+			cell: (info: { getValue: () => unknown }) =>
+				classificationLayerCell(info.getValue() as number | null | undefined),
+		},
 		{ accessorKey: "created_at", header: "Uploaded" },
 	];
 </script>

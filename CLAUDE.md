@@ -36,9 +36,9 @@ backend/
     domains/
       credit/       ← analytical modules only (deals, portfolio, documents, reporting, dashboard, dataroom, actions, global_agent)
         modules/ai/ ← IC memos, deep review, extraction, pipeline deals, copilot, compliance
-      wealth/       ← models, routes, schemas, workers (12 tables, 7 services)
+      wealth/       ← models, routes, schemas, workers (24 tables, 13 workers, 18 route modules)
     services/
-      storage_client.py ← ADLS abstraction (LocalStorageClient dev, ADLSStorageClient prod)
+      storage_client.py ← StorageClient abstraction (LocalStorage dev, R2 prod, ADLS deprecated)
     shared/         ← enums, exceptions
   ai_engine/
     classification/ ← hybrid_classifier (rules → cosine_similarity → LLM)
@@ -64,7 +64,27 @@ backend/
       retrieval/    ← retrieval governance
       sponsor/      ← sponsor engine
       underwriting/ ← underwriting artifact
-    wealth/         ← fund_analyzer, dd_report_engine, macro_committee_engine, quant_analyzer
+    wealth/         ← 14 modular packages + 6 standalone engines:
+      dd_report/    ← 8-chapter DD report engine (evidence, confidence scoring, critic)
+      fact_sheet/   ← PDF renderers (Executive/Institutional, PT/EN i18n)
+      screener/     ← 3-layer deterministic screening (eliminatory → mandate fit → quant)
+      correlation/  ← rolling correlation, Marchenko-Pastur denoising, absorption ratio
+      attribution/  ← Brinson-Fachler policy benchmark attribution
+      fee_drag/     ← fee drag ratio, efficiency analysis
+      monitoring/   ← drift monitor, strategy drift scanner, alert engine
+      watchlist/    ← PASS→FAIL transition detection
+      mandate_fit/  ← constraint evaluator for client mandates
+      peer_group/   ← peer matcher for fund comparison
+      rebalancing/  ← weight proposer, impact analyzer
+      asset_universe/ ← fund universe management, approval workflow
+      model_portfolio/ ← portfolio builder, stress scenarios, track record
+      critic/       ← adversarial chapter review (circuit-breaker, 3min timeout)
+      fund_analyzer.py       ← BaseAnalyzer implementation (orchestrator)
+      macro_committee_engine.py ← weekly regional macro reports
+      quant_analyzer.py      ← CVaR, scoring, peer comparison
+      flash_report.py        ← event-driven market flash (48h cooldown)
+      investment_outlook.py  ← quarterly macro narrative
+      manager_spotlight.py   ← deep-dive single fund manager analysis
 profiles/           ← YAML analysis profiles — SEED DATA ONLY (runtime config in PostgreSQL)
 calibration/        ← YAML quant configs — SEED DATA ONLY (runtime config in PostgreSQL)
 packages/ui/        ← @netz/ui (Tailwind tokens, shadcn-svelte, layouts)
@@ -79,9 +99,9 @@ frontends/
 
 **SSE:** `sse-starlette` EventSourceResponse. Redis pub/sub for worker→SSE bridging. Frontend uses `fetch()` + `ReadableStream` (not EventSource — auth headers needed).
 
-**Data Lake (LocalStorage/ADLS Gen2):** Feature-flagged (`FEATURE_ADLS_ENABLED=false` — LocalStorageClient in dev and production until Milestone 3). Bronze/silver/gold hierarchy with `{organization_id}/{vertical}/` as path prefix. Path routing via `ai_engine/pipeline/storage_routing.py`. DuckDB queries LocalStorage filesystem for analytics (Phase 1). When `FEATURE_ADLS_ENABLED=true`, DuckDB will query ADLS directly (Phase 3 — requires `ADLSStorageClient.get_duckdb_path()` implementation).
+**Data Lake:** Three-tier storage abstraction with priority R2 > ADLS > LocalStorage. `LocalStorageClient` (filesystem at `.data/lake/`) is default for dev. `R2StorageClient` (Cloudflare R2 via S3-compatible API) is production target (`FEATURE_R2_ENABLED`). `ADLSStorageClient` is deprecated (2026-03-18), kept for rollback. Bronze/silver/gold hierarchy with `{organization_id}/{vertical}/` as path prefix. Path routing via `ai_engine/pipeline/storage_routing.py`. DuckDB queries LocalStorage filesystem for analytics.
 
-**Unified Pipeline:** Single ingestion path for all sources (UI, batch, API). Stages: pre-filter → OCR → [gate] → classify → [gate] → governance → chunk → [gate] → extract metadata → [gate] → embed → [gate] → storage (LocalStorage/ADLS) → index (pgvector). Dual-write: LocalStorage/ADLS is source of truth, pgvector is derived index. pgvector index can be rebuilt from silver layer Parquet via `search_rebuild.py` without reprocessing PDFs.
+**Unified Pipeline:** Single ingestion path for all sources (UI, batch, API). Stages: pre-filter → OCR → [gate] → classify → [gate] → governance → chunk → [gate] → extract metadata → [gate] → embed → [gate] → storage (StorageClient) → index (pgvector). Dual-write: StorageClient is source of truth, pgvector is derived index. pgvector index can be rebuilt from silver layer Parquet via `search_rebuild.py` without reprocessing PDFs.
 
 **Classification:** Three-layer hybrid classifier (no external ML APIs). Layer 1: filename + keyword rules (~60% of docs). Layer 2: TF-IDF + cosine similarity (~30%). Layer 3: LLM fallback (~10%). Cross-encoder local reranker for IC memo evidence (replaced Cohere).
 
@@ -115,16 +135,16 @@ The engine contains only analytical domains. Operational modules were intentiona
 - **expire_on_commit=False:** Always. Prevents implicit I/O in async context.
 - **lazy="raise":** Set on ALL relationships. Forces explicit `selectinload()`/`joinedload()`.
 - **RLS subselect:** All RLS policies must use `(SELECT current_setting(...))` not bare `current_setting()`. Without subselect, per-row evaluation causes 1000x slowdown.
-- **Global tables:** `macro_data`, `allocation_blocks`, `vertical_config_defaults` have NO `organization_id`, NO RLS. They are shared across all tenants.
+- **Global tables:** `macro_data`, `allocation_blocks`, `vertical_config_defaults`, `benchmark_nav`, `macro_regional_snapshots` have NO `organization_id`, NO RLS. They are shared across all tenants.
 - **No module-level asyncio primitives:** Create `Semaphore`, `Lock`, `Event` lazily inside async functions. Module-level causes "attached to different event loop" errors.
 - **ORM thread safety:** Extract scalar attributes into frozen dataclasses before crossing any async/thread boundary.
 - **SET LOCAL not SET:** RLS context must use `SET LOCAL` (transaction-scoped). `SET` leaks across pooled connections.
 - **Frontends never cross-import:** `frontends/credit/` and `frontends/wealth/` share only via `@netz/ui` and the backend API.
 - **ConfigService for all config:** Never read `calibration/` or `profiles/` YAML at runtime. Use `ConfigService.get(vertical, config_type, org_id)`. YAML files are seed data only.
 - **Prompts are Netz IP:** Never expose prompt content in client-facing API responses. Use `CLIENT_VISIBLE_TYPES` allowlist in ConfigService. Use `jinja2.SandboxedEnvironment` for all prompt rendering.
-- **StorageClient for all storage:** Never call ADLS SDK directly. Use `StorageClient` abstraction (local filesystem when `FEATURE_ADLS_ENABLED=false`).
-- **Dual-write ordering:** ADLS write (source of truth) BEFORE pgvector upsert (derived index). If ADLS fails, pipeline continues with warning. If pgvector upsert fails, data is safe in ADLS/LocalStorage and can be rebuilt via `search_rebuild.py`. Azure Search files kept as deprecated fallback — see `feat/pgvector-replace-azure-search` branch.
-- **Path routing via `storage_routing.py`:** Never build ADLS paths with f-strings in callers. Use `bronze_document_path()`, `silver_chunks_path()`, `silver_metadata_path()`, `gold_memo_path()`. All paths validated with `_SAFE_PATH_SEGMENT_RE`.
+- **StorageClient for all storage:** Never call R2/ADLS SDK directly. Use `StorageClient` abstraction (`create_storage_client()` resolves R2 > ADLS > LocalStorage based on feature flags).
+- **Dual-write ordering:** StorageClient write (source of truth) BEFORE pgvector upsert (derived index). If storage write fails, pipeline continues with warning. If pgvector upsert fails, data is safe in storage and can be rebuilt via `search_rebuild.py`.
+- **Path routing via `storage_routing.py`:** Never build storage paths with f-strings in callers. Use `bronze_document_path()`, `silver_chunks_path()`, `silver_metadata_path()`, `gold_memo_path()`. All paths validated with `_SAFE_PATH_SEGMENT_RE`.
 - **Parquet schema must include embedding metadata:** All silver layer Parquet files must have `embedding_model` and `embedding_dim` columns. `search_rebuild.py` validates dimension match before upserting — prevents silent corruption on model upgrade.
 - **`organization_id` in vector search:** All pgvector queries MUST include `WHERE organization_id = :org_id` (SQL parameterized). All Parquet DuckDB queries MUST include `WHERE organization_id = ?`. Never query without tenant filter. (Azure Search files deprecated — `$filter=organization_id eq '{org_id}'` pattern no longer applies.)
 - **No Cohere dependency:** Hybrid classifier (rules → cosine_similarity → LLM) replaced Cohere Rerank. Cross-encoder reranker (`local_reranker.py`) replaced Cohere for IC memo evidence. Zero external ML API calls for classification.
@@ -137,7 +157,7 @@ Two-layer architecture: universal core (`ai_engine/`) + vertical specializations
 - `ai_engine/` — domain-agnostic: unified pipeline, hybrid classification, extraction, chunking, embedding, OCR, governance, validation, storage routing, search rebuild. Never modified per vertical.
 - `vertical_engines/{vertical}/` — domain-specific: analysis logic, prompts, scoring. One directory per asset class.
 - `vertical_engines/credit/` — 12 modular packages (Wave 1 complete, PR #9-#19). Each package has `models.py`, `service.py`, and domain helpers. `service.py` is the entry point; helpers must NOT import from `service.py` (enforced by import-linter).
-- `vertical_engines/wealth/` — `fund_analyzer.py` (implements `BaseAnalyzer`), `dd_report_engine.py`, `macro_committee_engine.py`, `quant_analyzer.py`.
+- `vertical_engines/wealth/` — 14 modular packages (dd_report, fact_sheet, screener, correlation, attribution, fee_drag, monitoring, watchlist, mandate_fit, peer_group, rebalancing, asset_universe, model_portfolio, critic) + 6 standalone engines (fund_analyzer, macro_committee_engine, quant_analyzer, flash_report, investment_outlook, manager_spotlight). Each package follows same structure as credit: `models.py`, `service.py`, domain helpers.
 - `ProfileLoader` connects `profiles/` YAML config to `vertical_engines/` code via `ConfigService`.
 - **Do not rewrite vertical_engines/credit/ business logic.** Only session injection allowed (caller provides `db: Session`).
 - `quant_engine/` services receive config as parameter (no YAML loading, no `@lru_cache`). Config resolved once at async entry point via `ConfigService.get()`, passed down to sync functions.
@@ -151,7 +171,7 @@ Enforced via `import-linter` in `make check`. Contracts in `pyproject.toml`:
 3. **Helpers must not import service:** Within each credit package, helpers (parser, classifier, prompts) must not import from `service.py`. `service.py` imports helpers, not the reverse.
 4. **Vertical-agnostic quant services:** `quant_engine.regime_service` and `quant_engine.cvar_service` must not import from `app.domains.wealth`.
 
-## Data Lake Rules (ADLS Gen2)
+## Data Lake Rules
 
 1. `{organization_id}/{vertical}/` is ALWAYS the path prefix under `bronze/` and `silver/` — enforced by `storage_routing.py`
 2. `_global/` is for data with no tenant context — FRED macro, ETF benchmarks — via `global_reference_path()`
@@ -182,10 +202,16 @@ OPENAI_EMBEDDING_MODEL=text-embedding-3-large
 # Mistral (OCR)
 MISTRAL_API_KEY=
 
-# Storage (LocalStorageClient at .data/lake/ in dev and production until Milestone 3)
-FEATURE_ADLS_ENABLED=false
+# Storage (LocalStorageClient at .data/lake/ in dev; R2StorageClient in prod)
+FEATURE_R2_ENABLED=false          # Cloudflare R2 (production target)
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=
+R2_ENDPOINT_URL=
 
 # ── DEPRECATED (Azure services eliminated — Milestone 2 simplification, 2026-03-18) ──
+# FEATURE_ADLS_ENABLED=false    # replaced by FEATURE_R2_ENABLED (R2StorageClient)
 # AZURE_OPENAI_ENDPOINT=        # replaced by OpenAI direct with retry backoff
 # AZURE_OPENAI_KEY=             # replaced by OpenAI direct with retry backoff
 # AZURE_SEARCH_ENDPOINT=        # replaced by pgvector (commit 497df51)
@@ -195,7 +221,7 @@ FEATURE_ADLS_ENABLED=false
 # KEYVAULT_URL=                 # replaced by platform env vars (Railway secrets)
 # SERVICE_BUS_NAMESPACE=        # replaced by Redis pub/sub + BackgroundTasks
 # APPLICATIONINSIGHTS_CONNECTION_STRING=  # replaced by structlog → stdout
-# ADLS_ACCOUNT_NAME=            # replaced by LocalStorageClient + persistent volume
+# ADLS_ACCOUNT_NAME=            # replaced by R2StorageClient
 # ADLS_ACCOUNT_KEY=
 # ADLS_CONTAINER_NAME=
 # ADLS_CONNECTION_STRING=
@@ -218,7 +244,7 @@ Simplified stack (2026-03-18), ~$100-200/month:
 - **OpenAI API** (direct, with retry backoff) — LLM + embeddings
 - **Mistral** — OCR
 - **Clerk** — auth (JWT v2)
-- **LocalStorageClient** (filesystem with persistent volume) — data lake (bronze/silver/gold Parquet)
+- **StorageClient** — LocalStorageClient (dev, filesystem at `.data/lake/`), R2StorageClient (prod target, Cloudflare R2 S3-compatible)
 
 Deprecated Azure services (files kept for rollback, not actively used):
 - Azure Key Vault → platform env vars (Railway secrets)
@@ -226,11 +252,10 @@ Deprecated Azure services (files kept for rollback, not actively used):
 - Application Insights → structlog → stdout
 - Azure OpenAI → OpenAI direct (retry replaces fallback)
 - Azure AI Search → pgvector (commit 497df51)
-- ADLS Gen2 → LocalStorageClient with persistent volume (re-enables at Milestone 3)
+- ADLS Gen2 → R2StorageClient (ADLSStorageClient kept for rollback)
 
 Scale triggers for re-adding services (Milestone 3+, >50 tenants):
 - **Key Vault / HashiCorp Vault:** regulatory requirement for secret rotation audit trail (SOC2)
-- **Cloudflare R2 or ADLS:** data lake > 1TB or data residency requirements
 - **Redis Streams:** guaranteed delivery needed for financial transactions
 - **Application Insights:** distributed tracing across microservices (if/when decomposed)
 - **Qdrant or Weaviate:** only if pgvector HNSW performance becomes bottleneck at scale (unlikely before 10M+ chunks)
@@ -292,12 +317,10 @@ npx @sveltejs/mcp svelte-autofixer ./src/lib/Component.svelte
 
 The portfolio view (`frontends/credit/src/routes/(team)/funds/[fundId]/portfolio/+page.svelte`) is asset-centric post-conversion. Assets are identified by name, type, and strategy with tabs for obligations, alerts, and actions. Fields like tenor, basis, and covenant are deal-level contract fields that live in `deal_context.json` on the deal entity — NOT on portfolio assets. Displaying them per asset row would cross the deal/asset boundary and create misleading attribution (one deal can map to one asset, but deal terms do not become asset attributes post-conversion). Do not add tenor/basis/covenant to the portfolio asset view. If deal-level contract terms need to be visible post-conversion, add a "Source Deal" link from the asset to the originating deal's detail page.
 
-### C.4 — Kanban pipeline board: BLOCKED on `svelte-dnd-action` dependency
+### C.4 — Kanban pipeline board: IMPLEMENTED
 
-Backend endpoint exists: `PATCH /pipeline/deals/{deal_id}/stage` with payload `{ to_stage: string, rationale?: string }` (defined in `backend/app/domains/credit/modules/deals/routes.py:332` and schemas `DealStagePatch`). Implementation is unblocked from a backend contract standpoint.
+`PipelineKanban.svelte` component with `svelte-dnd-action@^0.9.0`. 8 stage columns, drag-drop with ConsequenceDialog + rationale, PATCH to `/pipeline/deals/{deal_id}/stage`. Toggle between list/kanban view modes in PageHeader.
 
-However, `svelte-dnd-action` is NOT in `frontends/credit/package.json`. The Kanban board requires this package for drag-and-drop column interaction. Do NOT implement the Kanban board with a different DnD mechanism or inline implementation — this would diverge from the plan spec. To unblock: add `svelte-dnd-action` to the credit frontend dependencies (`pnpm add svelte-dnd-action` in `frontends/credit/`), then implement:
-1. Columns per `DealStage` enum value
-2. Deal cards draggable between columns
-3. On drop: open `ConsequenceDialog` with rationale field, PATCH on confirm
-4. `invalidateAll()` on success
+## Audit Trail
+
+Immutable audit logging via `write_audit_event()` in `backend/app/core/db/audit.py`. Records CREATE/UPDATE/DELETE with before/after JSONB snapshots, correlated via `request_id`. Model: `AuditEvent` in `backend/app/core/db/models.py` (RLS-scoped). Used across 17+ modules for entity-level change tracking.

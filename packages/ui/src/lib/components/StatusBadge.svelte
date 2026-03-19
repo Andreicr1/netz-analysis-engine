@@ -44,6 +44,25 @@
 	const dangerTokens = new Set(["critical", "declined", "danger", "error", "failed", "rejected"]);
 	const infoTokens = new Set(["active", "generated", "in_progress", "info", "processing", "running"]);
 
+	/** Tokens that are intentionally neutral — suppress dev warning for these. */
+	const NEUTRAL_STATUSES = new Set([
+		"inactive",
+		"archived",
+		"draft",
+		"unknown",
+		"none",
+		"default",
+		"neutral",
+		"n/a",
+		"na",
+		"cancelled",
+		"closed",
+		"expired",
+		"paused",
+		"suspended",
+		"disabled",
+	]);
+
 	function formatLabel(value: string): string {
 		if (!value) {
 			return "Unknown";
@@ -71,6 +90,10 @@
 			return "info";
 		}
 
+		if (import.meta.env.DEV && !NEUTRAL_STATUSES.has(normalizedToken)) {
+			console.warn(`StatusBadge: unrecognized status "${token}"`);
+		}
+
 		return "neutral";
 	}
 
@@ -87,16 +110,32 @@
 
 	let config = $derived.by<StatusConfig>(() => resolve?.(status) ?? fallbackConfig);
 	let badgeColor = $derived(config.color || severityColorMap[config.severity]);
+
+	/** In dev mode, flag unrecognized tokens (those that triggered the neutral fallback via inferSeverity) with a dashed border. */
+	let isDevUnknown = $derived.by(() => {
+		if (!import.meta.env.DEV) return false;
+		// Only flag when using the fallback (no custom resolver) and severity resolved to neutral
+		if (resolve) return false;
+		const normalizedToken = status.trim().toLowerCase();
+		const known =
+			successTokens.has(normalizedToken) ||
+			warningTokens.has(normalizedToken) ||
+			dangerTokens.has(normalizedToken) ||
+			infoTokens.has(normalizedToken) ||
+			NEUTRAL_STATUSES.has(normalizedToken);
+		return !known;
+	});
 </script>
 
 <span
 	class={cn(
 		"inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium",
+		isDevUnknown && "dev-unknown",
 		className,
 	)}
 	data-status-type={type}
 	data-status-severity={config.severity}
-	style={`background-color: color-mix(in srgb, ${badgeColor} 14%, transparent); color: ${badgeColor};`}
+	style={`background-color: color-mix(in srgb, ${badgeColor} 14%, transparent); color: ${badgeColor};${isDevUnknown ? " border: 1px dashed currentColor;" : ""}`}
 >
 	<span class="h-1.5 w-1.5 rounded-full" style={`background-color: ${badgeColor};`}></span>
 	{config.label}

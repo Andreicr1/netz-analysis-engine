@@ -48,7 +48,6 @@ pgdata/
 **/.turbo/
 **/.codex-*.txt
 
-# Project-local data & docs (not versioned)
+# Project-local data
 Deals/
 scripts/
-docs/

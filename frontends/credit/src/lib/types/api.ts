@@ -209,11 +209,13 @@ export interface PortfolioAction {
 // ── Documents ──────────────────────────────────────────────
 
 export interface DocumentItem {
+	id: string;
 	title: string;
 	root_folder: string;
 	domain: string;
 	status: string;
 	created_at: string;
+	classification_layer: number | null;
 }
 
 // ── Reviews ────────────────────────────────────────────────
@@ -296,6 +298,32 @@ export interface ICMemoChapter {
 	title: string;
 	content: string;
 	status: string;
+	model_version?: string | null;
+	generated_at?: string | null;
+}
+
+// ── Evidence Pack ───────────────────────────────────────────
+
+export interface EvidenceCitation {
+	blob_name: string;
+	doc_type: string;
+	page_start: number | null;
+	page_end: number | null;
+	chunk_id: string;
+	score: number | null;
+}
+
+export interface EvidencePack {
+	dealId: string;
+	evidencePackId: string;
+	versionTag: string | null;
+	tokenCount: number | null;
+	generatedAt: string | null;
+	modelVersion: string | null;
+	evidenceJson: {
+		citations?: EvidenceCitation[];
+		[key: string]: unknown;
+	};
 }
 
 export interface VotingStatus {
