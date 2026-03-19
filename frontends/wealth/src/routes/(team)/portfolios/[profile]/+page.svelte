@@ -392,27 +392,14 @@
 		exportingDrift = true;
 		try {
 			const api = createClientApiClient(getToken);
-			// GET /portfolios/{profile}/drift-history/export
-			const res = await api.get<{ download_url?: string; url?: string }>(
-				`/portfolios/${profile}/drift-history/export`
-			);
-			const url = res.download_url ?? res.url;
-			if (url) {
-				window.open(url, "_blank");
-			}
-		} catch {
-			// fallback: strategy-drift export endpoint
-			const token = await getToken();
-			const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
-			const exportUrl = `${apiBase}/analytics/strategy-drift/${driftInstrumentId}/export?format=csv`;
-			const resp = await fetch(exportUrl, { headers: { Authorization: `Bearer ${token}` } });
-			if (resp.ok) {
-				const blob = await resp.blob();
-				const a = document.createElement("a");
-				a.href = URL.createObjectURL(blob);
-				a.download = `drift-history-${profile}.csv`;
-				a.click();
-			}
+			const blob = await api.getBlob(`/analytics/strategy-drift/${driftInstrumentId}/export?format=csv`);
+			const a = document.createElement("a");
+			a.href = URL.createObjectURL(blob);
+			a.download = `drift-history-${profile}.csv`;
+			a.click();
+			URL.revokeObjectURL(a.href);
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : "Export failed";
 		} finally {
 			exportingDrift = false;
 		}

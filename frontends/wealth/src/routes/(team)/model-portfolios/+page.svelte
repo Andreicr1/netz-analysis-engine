@@ -115,7 +115,6 @@
 	let actionLoading = $state<string | null>(null);
 	let actionError = $state<string | null>(null);
 	let showAllocateConfirm = $state(false);
-	let showRebalanceConfirm = $state(false);
 	let backtestResult = $state<Record<string, unknown> | null>(null);
 
 	async function runBacktest() {
@@ -125,7 +124,7 @@
 		backtestResult = null;
 		try {
 			const api = createClientApiClient(getToken);
-			backtestResult = await api.get(`/model-portfolios/${selectedPortfolio.id}/backtest`);
+			backtestResult = await api.post(`/model-portfolios/${selectedPortfolio.id}/backtest`, {});
 		} catch (e) {
 			actionError = e instanceof Error ? e.message : "Backtest failed";
 		} finally {
@@ -139,7 +138,7 @@
 		showAllocateConfirm = false;
 		try {
 			const api = createClientApiClient(getToken);
-			await api.post(`/model-portfolios/${selectedPortfolio.id}/allocate`, {});
+			await api.post(`/model-portfolios/${selectedPortfolio.id}/construct`, {});
 			await invalidateAll();
 		} catch (e) {
 			actionError = e instanceof Error ? e.message : "Allocation failed";
@@ -148,20 +147,8 @@
 		}
 	}
 
-	async function rebalanceModel() {
-		if (!selectedPortfolio) return;
-		actionLoading = "rebalance";
-		showRebalanceConfirm = false;
-		try {
-			const api = createClientApiClient(getToken);
-			await api.post(`/model-portfolios/${selectedPortfolio.id}/rebalance`, {});
-			await invalidateAll();
-		} catch (e) {
-			actionError = e instanceof Error ? e.message : "Rebalance failed";
-		} finally {
-			actionLoading = null;
-		}
-	}
+	// Note: rebalance is available on the Portfolios page, not on model portfolios
+	let rebalanceDisabled = true;
 </script>
 
 <div class="flex h-full bg-transparent">
@@ -219,22 +206,21 @@
 					>
 						Backtest
 					</ActionButton>
-					<ActionButton
+					<Button
 						size="sm"
 						variant="outline"
-						onclick={() => showRebalanceConfirm = true}
-						loading={actionLoading === "rebalance"}
-						loadingText="..."
+						disabled={rebalanceDisabled}
+						title="Rebalance is available on the Portfolios page"
 					>
 						Rebalance
-					</ActionButton>
+					</Button>
 					<ActionButton
 						size="sm"
 						onclick={() => showAllocateConfirm = true}
 						loading={actionLoading === "allocate"}
 						loadingText="..."
 					>
-						Build Portfolio
+						Construct Portfolio
 					</ActionButton>
 				{/snippet}
 			</PageHeader>
@@ -373,20 +359,10 @@
 
 <ConfirmDialog
 	bind:open={showAllocateConfirm}
-	title="Allocate to Model"
-	message="This will allocate funds to the selected model portfolio. Continue?"
-	confirmLabel="Allocate"
+	title="Construct Portfolio"
+	message="This will run fund selection from the approved universe for the selected model portfolio. Continue?"
+	confirmLabel="Construct"
 	confirmVariant="default"
 	onConfirm={allocateToModel}
 	onCancel={() => showAllocateConfirm = false}
-/>
-
-<ConfirmDialog
-	bind:open={showRebalanceConfirm}
-	title="Rebalance Model Portfolio"
-	message="This will trigger a rebalance to realign with target allocations. Continue?"
-	confirmLabel="Rebalance"
-	confirmVariant="default"
-	onConfirm={rebalanceModel}
-	onCancel={() => showRebalanceConfirm = false}
 />

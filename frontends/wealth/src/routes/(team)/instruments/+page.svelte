@@ -1,10 +1,10 @@
 <!--
-  Instruments Management — list, create, bulk sync, external search + import.
+  Instruments Management — list, create, Yahoo import, CSV import.
   Uses $state.raw for performance with 500+ items.
 -->
 <script lang="ts">
-	import { DataTable, PageHeader, EmptyState, Button, Card, Dialog, ContextPanel, Input, Select } from "@netz/ui";
-	import { ActionButton, ConfirmDialog, FormField } from "@netz/ui";
+	import { DataTable, PageHeader, EmptyState, Button, Card, Dialog, ContextPanel, Input, Select, Textarea } from "@netz/ui";
+	import { ActionButton, ConfirmDialog, FormField, Toast } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
@@ -85,7 +85,7 @@
 		}
 	}
 
-	// ── Bulk Sync ──
+	// ── Bulk Sync (via Yahoo Finance import) ──
 	let showBulkSync = $state(false);
 	let syncing = $state(false);
 
@@ -94,57 +94,117 @@
 		showBulkSync = false;
 		try {
 			const api = createClientApiClient(getToken);
-			await api.post("/instruments/bulk-sync", {});
+			const tickers = instruments.filter(i => i.ticker).map(i => i.ticker);
+			if (tickers.length === 0) {
+				toast = { message: "No instruments with tickers to sync", type: "warning" };
+				return;
+			}
+			await api.post("/instruments/import/yahoo", { tickers });
+			toast = { message: `${tickers.length} instruments refreshed from Yahoo Finance`, type: "success" };
 			await invalidateAll();
 		} catch (e) {
-			createError = e instanceof Error ? e.message : "Bulk sync failed";
+			toast = { message: e instanceof Error ? e.message : "Bulk sync failed", type: "error" };
 		} finally {
 			syncing = false;
 		}
 	}
 
-	// ── External Search ──
-	let showExternalSearch = $state(false);
-	let externalQuery = $state("");
-	let searching = $state(false);
-	let externalResults = $state<Array<Record<string, unknown>>>([]);
-	let importingId = $state<string | null>(null);
+	// ── Import from Yahoo Finance ──
+	let showImportYahoo = $state(false);
+	let importTickers = $state("");
+	let importing = $state(false);
+	let importError = $state<string | null>(null);
+	let parsedTickers = $derived(
+		importTickers
+			.split(/[,\n\s]+/)
+			.map(t => t.trim().toUpperCase())
+			.filter(t => t.length > 0)
+	);
 
-	async function searchExternal() {
-		if (!externalQuery.trim()) return;
-		searching = true;
-		try {
-			const api = createClientApiClient(getToken);
-			const res = await api.post<{ results: Array<Record<string, unknown>> }>("/instruments/search-external", {
-				query: externalQuery.trim(),
-			}, { timeoutMs: 10_000 });
-			externalResults = res.results ?? [];
-		} catch (e) {
-			externalResults = [];
-			createError = e instanceof Error ? e.message : "External search failed";
-		} finally {
-			searching = false;
+	async function importFromYahoo() {
+		if (parsedTickers.length === 0 || parsedTickers.length > 50) {
+			importError = "Enter between 1 and 50 tickers";
+			return;
 		}
-	}
-
-	async function importInstrument(ext: Record<string, unknown>) {
-		const id = String(ext.id ?? ext.ticker ?? "");
-		importingId = id;
+		importing = true;
+		importError = null;
 		try {
 			const api = createClientApiClient(getToken);
-			await api.post("/instruments", {
-				ticker: String(ext.ticker ?? "").toUpperCase(),
-				name: String(ext.name ?? ""),
-				asset_class: String(ext.asset_class ?? "equity"),
-				currency: String(ext.currency ?? "USD"),
-			});
+			await api.post("/instruments/import/yahoo", { tickers: parsedTickers });
+			showImportYahoo = false;
+			importTickers = "";
+			toast = { message: `${parsedTickers.length} instruments imported from Yahoo Finance`, type: "success" };
 			await invalidateAll();
 		} catch (e) {
-			createError = e instanceof Error ? e.message : "Import failed";
+			importError = e instanceof Error ? e.message : "Import failed";
 		} finally {
-			importingId = null;
+			importing = false;
 		}
 	}
+
+	// ── Import from CSV ──
+	let showImportCsv = $state(false);
+	let csvFile = $state<File | null>(null);
+	let csvInstrumentType = $state("fund");
+	let csvPreview = $state<string[][] | null>(null);
+	let importingCsv = $state(false);
+	let csvError = $state<string | null>(null);
+
+	function handleCsvSelect(e: Event) {
+		const input = e.target as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file) return;
+		csvFile = file;
+		csvError = null;
+
+		// Parse preview (first 5 rows)
+		const reader = new FileReader();
+		reader.onload = () => {
+			const text = reader.result as string;
+			const lines = text.split(/\r?\n/).filter(l => l.trim());
+			csvPreview = lines.slice(0, 6).map(l =>
+				l.split(",").map(c => c.trim().replace(/^"|"$/g, ""))
+			);
+		};
+		reader.readAsText(file);
+	}
+
+	function resetCsvForm() {
+		csvFile = null;
+		csvPreview = null;
+		csvError = null;
+		csvInstrumentType = "fund";
+	}
+
+	async function importFromCsv() {
+		if (!csvFile) return;
+		importingCsv = true;
+		csvError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			const formData = new FormData();
+			formData.append("file", csvFile);
+			const result = await api.upload<{ imported: number; skipped: number; errors: Array<Record<string, unknown>> }>(
+				`/instruments/import/csv?instrument_type=${encodeURIComponent(csvInstrumentType)}`,
+				formData,
+			);
+			showImportCsv = false;
+			const parts = [];
+			if (result.imported > 0) parts.push(`${result.imported} imported`);
+			if (result.skipped > 0) parts.push(`${result.skipped} skipped`);
+			if (result.errors.length > 0) parts.push(`${result.errors.length} errors`);
+			toast = { message: `CSV import: ${parts.join(", ")}`, type: result.errors.length > 0 ? "warning" : "success" };
+			resetCsvForm();
+			await invalidateAll();
+		} catch (e) {
+			csvError = e instanceof Error ? e.message : "CSV import failed";
+		} finally {
+			importingCsv = false;
+		}
+	}
+
+	// ── Toast ──
+	let toast = $state<{ message: string; type: "success" | "error" | "warning" | "info" } | null>(null);
 
 	const columns = [
 		{ accessorKey: "ticker", header: "Ticker" },
@@ -161,12 +221,15 @@
 		<PageHeader title="Instruments ({instruments.length})">
 			{#snippet actions()}
 				<div class="flex gap-2">
-					<Button onclick={() => { resetCreateForm(); showCreate = true; }}>Add Instrument</Button>
-					<Button variant="outline" onclick={() => showBulkSync = true} disabled={syncing}>
-						{syncing ? "Syncing..." : "Bulk Sync"}
+					<Button onclick={() => { resetCreateForm(); showCreate = true; }}>Add Manual</Button>
+					<Button variant="outline" onclick={() => { importTickers = ""; importError = null; showImportYahoo = true; }}>
+						Import from Yahoo
 					</Button>
-					<Button variant="outline" onclick={() => { externalResults = []; showExternalSearch = true; }}>
-						Search External
+					<Button variant="outline" onclick={() => { resetCsvForm(); showImportCsv = true; }}>
+						Import CSV
+					</Button>
+					<Button variant="outline" onclick={() => showBulkSync = true} disabled={syncing}>
+						{syncing ? "Syncing..." : "Refresh from Yahoo"}
 					</Button>
 				</div>
 			{/snippet}
@@ -286,55 +349,123 @@
 <!-- Bulk Sync Confirmation -->
 <ConfirmDialog
 	bind:open={showBulkSync}
-	title="Bulk Sync Instruments"
-	message="This will sync instrument data from external providers. Existing instruments will be updated. Continue?"
-	confirmLabel="Sync"
+	title="Refresh Instrument Data"
+	message="This will refresh metadata for all instruments with tickers from Yahoo Finance. Existing data will be updated. Continue?"
+	confirmLabel="Refresh"
 	confirmVariant="default"
 	onConfirm={bulkSync}
 	onCancel={() => showBulkSync = false}
 />
 
-<!-- External Search Dialog -->
-<Dialog bind:open={showExternalSearch} title="Search External Providers">
+<!-- Import from Yahoo Finance Dialog -->
+<Dialog bind:open={showImportYahoo} title="Import from Yahoo Finance">
 	<div class="space-y-4">
-		<div class="flex gap-2">
-			<Input
-				type="text"
-				bind:value={externalQuery}
-				placeholder="Search by ticker or name..."
-				class="flex-1"
-				onkeydown={(e) => { if (e.key === "Enter") searchExternal(); }}
+		<FormField label="Tickers" required>
+			<Textarea
+				bind:value={importTickers}
+				placeholder="SPY, AGG, GLD, VWO, ARKK"
+				rows={4}
 			/>
-			<ActionButton onclick={searchExternal} loading={searching} loadingText="Searching...">
-				Search
+		</FormField>
+		<p class="text-xs text-(--netz-text-muted)">
+			Enter up to 50 tickers, separated by commas, spaces, or newlines.
+			{#if parsedTickers.length > 0}
+				<span class="font-medium text-(--netz-text-primary)">
+					{parsedTickers.length} ticker{parsedTickers.length !== 1 ? "s" : ""} detected
+				</span>
+			{/if}
+		</p>
+		{#if importError}
+			<p class="text-sm text-(--netz-status-error)">{importError}</p>
+		{/if}
+		<div class="flex justify-end gap-2">
+			<Button variant="outline" onclick={() => showImportYahoo = false}>Cancel</Button>
+			<ActionButton
+				onclick={importFromYahoo}
+				loading={importing}
+				loadingText="Importing..."
+				disabled={parsedTickers.length === 0 || parsedTickers.length > 50}
+			>
+				Import
 			</ActionButton>
 		</div>
-
-		{#if externalResults.length > 0}
-			<div class="max-h-64 space-y-2 overflow-y-auto">
-				{#each externalResults as result}
-					<Card class="flex items-center justify-between p-3">
-						<div>
-							<p class="text-sm font-medium text-(--netz-text-primary)">
-								{result.ticker ?? "—"} — {result.name ?? "—"}
-							</p>
-							<p class="text-xs text-(--netz-text-muted)">
-								{result.asset_class ?? ""} | {result.currency ?? ""} | {result.exchange ?? ""}
-							</p>
-						</div>
-						<ActionButton
-							size="sm"
-							onclick={() => importInstrument(result)}
-							loading={importingId === String(result.id ?? result.ticker)}
-							loadingText="..."
-						>
-							Import
-						</ActionButton>
-					</Card>
-				{/each}
-			</div>
-		{:else if externalQuery && !searching}
-			<p class="text-sm text-(--netz-text-muted)">No results found.</p>
-		{/if}
 	</div>
 </Dialog>
+
+<!-- Import from CSV Dialog -->
+<Dialog bind:open={showImportCsv} title="Import from CSV">
+	<div class="space-y-4">
+		<FormField label="Instrument Type" required>
+			<Select
+				bind:value={csvInstrumentType}
+				options={[
+					{ value: "fund", label: "Fund" },
+					{ value: "bond", label: "Bond" },
+					{ value: "equity", label: "Equity" },
+				]}
+			/>
+		</FormField>
+		<FormField label="CSV File" required>
+			<input
+				type="file"
+				accept=".csv"
+				onchange={handleCsvSelect}
+				class="block w-full text-sm text-(--netz-text-primary) file:mr-4 file:rounded-md file:border-0 file:bg-(--netz-surface-highlight) file:px-4 file:py-2 file:text-sm file:font-medium file:text-(--netz-text-primary) hover:file:bg-(--netz-surface-hover)"
+			/>
+		</FormField>
+		<p class="text-xs text-(--netz-text-muted)">
+			CSV must have columns: <code class="font-mono">ticker, name, asset_class, currency</code>.
+			Optional: <code class="font-mono">isin, geography, block_id</code>. Max 5 MB.
+		</p>
+
+		{#if csvPreview && csvPreview.length > 0}
+			<div class="overflow-x-auto rounded-md border border-(--netz-border)">
+				<table class="w-full text-xs">
+					<thead>
+						<tr class="bg-(--netz-surface-highlight)">
+							{#each csvPreview[0] as header}
+								<th class="px-3 py-1.5 text-left font-medium text-(--netz-text-secondary)">{header}</th>
+							{/each}
+						</tr>
+					</thead>
+					<tbody>
+						{#each csvPreview.slice(1, 6) as row, i}
+							<tr class="{i % 2 === 0 ? '' : 'bg-(--netz-surface-highlight/50)'}">
+								{#each row as cell}
+									<td class="px-3 py-1 text-(--netz-text-primary)">{cell}</td>
+								{/each}
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+			<p class="text-xs text-(--netz-text-muted)">
+				Showing first {Math.min(csvPreview.length - 1, 5)} row{csvPreview.length - 1 !== 1 ? "s" : ""} (header + data).
+			</p>
+		{/if}
+
+		{#if csvError}
+			<p class="text-sm text-(--netz-status-error)">{csvError}</p>
+		{/if}
+		<div class="flex justify-end gap-2">
+			<Button variant="outline" onclick={() => showImportCsv = false}>Cancel</Button>
+			<ActionButton
+				onclick={importFromCsv}
+				loading={importingCsv}
+				loadingText="Importing..."
+				disabled={!csvFile}
+			>
+				Import
+			</ActionButton>
+		</div>
+	</div>
+</Dialog>
+
+<!-- Toast notification -->
+{#if toast}
+	<Toast
+		message={toast.message}
+		type={toast.type}
+		onDismiss={() => toast = null}
+	/>
+{/if}

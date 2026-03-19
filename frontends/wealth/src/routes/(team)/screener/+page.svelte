@@ -141,20 +141,11 @@
 		isRunning = true;
 		runError = null;
 		try {
-			const res = await fetch("/api/screener/run", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({}),
-			});
-			if (!res.ok) {
-				const err = await res.json().catch(() => ({}));
-				runError = (err as { detail?: string }).detail ?? "Failed to execute screening";
-			} else {
-				// Reload data via SvelteKit to pick up new results
-				await invalidateAll();
-			}
-		} catch {
-			runError = "Network error executing screening";
+			const api = createClientApiClient(getToken);
+			await api.post("/screener/run", {});
+			await invalidateAll();
+		} catch (e) {
+			runError = e instanceof Error ? e.message : "Failed to execute screening";
 		} finally {
 			isRunning = false;
 		}

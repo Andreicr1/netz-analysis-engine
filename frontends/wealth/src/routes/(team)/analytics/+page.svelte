@@ -336,7 +336,7 @@
 		attributionLoading = true;
 		try {
 			const api = createClientApiClient(getToken);
-			attributionData = await api.get(`/analytics/attribution/funds/${selectedFundId}/period`);
+			attributionData = await api.get(`/analytics/attribution/${selectedPortfolio}`);
 			attributionLoaded = true;
 		} catch {
 			attributionData = null;
