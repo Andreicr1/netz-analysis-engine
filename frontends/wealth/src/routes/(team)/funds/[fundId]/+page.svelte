@@ -39,13 +39,16 @@
 	};
 
 	let fund = $derived(data.fund as FundDetail | null);
-	let risk = $derived(data.risk as FundRisk | null);
-	let navHistory = $derived(data.nav as NavPoint[] | null);
+
+	// Risk and NAV data will be provided by SSE-primary risk store (Sprint 1, Wealth.1).
+	// Previous phantom API calls (/stats, /performance, /holdings) never returned data.
+	let risk: FundRisk | null = null;
+	let navHistory: NavPoint[] | null = null;
 
 	// NAV chart series
 	let navSeries = $derived(
 		navHistory
-			? [{ name: fund?.name ?? "NAV", data: navHistory.map((p) => [p.date, p.value] as [string, number]) }]
+			? [{ name: fund?.name ?? "NAV", data: navHistory.map((p: NavPoint) => [p.date, p.value] as [string, number]) }]
 			: [],
 	);
 
