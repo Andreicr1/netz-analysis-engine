@@ -7,5 +7,14 @@
     "module": "ES2022",
     "verbatimModuleSyntax": true,
     "noUncheckedIndexedAccess": true
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "../../backend",
+    "../../docs",
+    "../../profiles",
+    "../../calibration",
+    "../../frontends/credit",
+    "../../frontends/admin"
+  ]
 }
