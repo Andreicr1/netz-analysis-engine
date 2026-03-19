@@ -10,6 +10,7 @@
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
 	import type { DealStage, DealType } from "$lib/types/api";
+	import { resolveCreditStatus } from "$lib/utils/status-maps";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -137,7 +138,7 @@
 			<div class="space-y-4 p-4">
 				<div>
 					<p class="text-xs text-[var(--netz-text-muted)]">Stage</p>
-					<StatusBadge status={String(selectedDeal.stage)} type="deal" />
+					<StatusBadge status={String(selectedDeal.stage)} type="deal" resolve={resolveCreditStatus} />
 				</div>
 				<div>
 					<p class="text-xs text-[var(--netz-text-muted)]">Type</p>

@@ -3,6 +3,7 @@
 -->
 <script lang="ts">
 	import { PageHeader, EmptyState, StatusBadge, formatDate } from "@netz/ui";
+	import { resolveCreditStatus } from "$lib/utils/status-maps";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
@@ -39,7 +40,7 @@
 							<p class="font-medium text-[var(--netz-text-primary)]">
 								{doc.title}
 							</p>
-							<StatusBadge status={doc.status as string} />
+							<StatusBadge status={doc.status as string} resolve={resolveCreditStatus} />
 						</div>
 						<p class="mt-1 text-sm text-[var(--netz-text-muted)]">
 							{doc.document_type}

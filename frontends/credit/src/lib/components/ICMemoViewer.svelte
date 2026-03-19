@@ -13,6 +13,7 @@
 	import { createClientApiClient } from "$lib/api/client";
 	import { getContext } from "svelte";
 	import { formatDateTime } from "@netz/ui";
+	import { resolveCreditStatus } from "$lib/utils/status-maps";
 
 	import type { ICMemo, VotingStatus, CommitteeVoteOut } from "$lib/types/api";
 
@@ -146,7 +147,7 @@
 			<Card class="p-4">
 				<div class="mb-3 flex items-center justify-between">
 					<p class="text-sm font-semibold text-[var(--netz-text-primary)]">IC Committee Voting</p>
-					<StatusBadge status={String(votingStatus.status ?? "pending")} type="review" />
+					<StatusBadge status={String(votingStatus.status ?? "pending")} type="review" resolve={resolveCreditStatus} />
 				</div>
 				<p class="mb-4 text-xs text-[var(--netz-text-muted)]">
 					{votingStatus.votes_cast ?? 0} / {votingStatus.quorum ?? 0} votes cast
@@ -235,7 +236,7 @@
 							</span>
 							<span class="text-sm font-medium">{chapter.title}</span>
 						</div>
-						<StatusBadge status={chapter.status} type="review" />
+						<StatusBadge status={chapter.status} type="review" resolve={resolveCreditStatus} />
 					</button>
 					{#if chapter.content}
 						<div class="mt-3 border-t border-[var(--netz-border)] pt-3 text-sm leading-relaxed whitespace-pre-wrap text-[var(--netz-text-secondary)]">
