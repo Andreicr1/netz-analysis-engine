@@ -486,8 +486,23 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/deals/{deal_id}/decision-audit",
+    "name": "get_decision_audit"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/deals/{deal_id}/documents/{document_id}/ai-provenance",
+    "name": "get_ai_provenance"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/funds/{fund_id}/deals/{deal_id}/ic-memo",
     "name": "get_latest_ic_memo"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/deals/{deal_id}/ic-memo/timeline",
+    "name": "get_memo_timeline"
   },
   {
     "method": "GET",
