@@ -536,7 +536,7 @@ export interface paths {
         };
         /**
          * Get Service Health
-         * @description Service status -- PostgreSQL, Redis, ADLS, Azure Search, PgNotifier.
+         * @description Service status -- PostgreSQL, Redis, ADLS, pgvector, PgNotifier.
          */
         get: operations["get_service_health_api_v1_admin_health_services_get"];
         put?: never;
@@ -624,6 +624,91 @@ export interface paths {
          *     Cross-tenant read (no RLS) -- requires super_admin role.
          */
         get: operations["list_audit_events_api_v1_admin_audit__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/inspect/{org_id}/{vertical}/stale-embeddings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Stale Embeddings */
+        get: operations["get_stale_embeddings_api_v1_admin_inspect__org_id___vertical__stale_embeddings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/inspect/{org_id}/{vertical}/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Document Coverage */
+        get: operations["get_document_coverage_api_v1_admin_inspect__org_id___vertical__coverage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/inspect/{org_id}/{vertical}/extraction-quality": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Extraction Quality */
+        get: operations["get_extraction_quality_api_v1_admin_inspect__org_id___vertical__extraction_quality_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/inspect/{org_id}/{vertical}/chunk-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Chunk Stats */
+        get: operations["get_chunk_stats_api_v1_admin_inspect__org_id___vertical__chunk_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/inspect/{org_id}/{vertical}/embedding-audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Embedding Audit */
+        get: operations["get_embedding_audit_api_v1_admin_inspect__org_id___vertical__embedding_audit_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1152,6 +1237,23 @@ export interface paths {
          * @description Executes an approved rebalance: re-runs optimizer, applies fund selection, creates new snapshot.
          */
         post: operations["execute_rebalance_api_v1_portfolios__profile__rebalance__event_id__execute_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/risk/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Batched risk summary for multiple profiles */
+        get: operations["get_risk_summary_batch_api_v1_risk_summary_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2218,6 +2320,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/analytics/strategy-drift/{instrument_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Export drift history as CSV or JSON */
+        get: operations["export_drift_history_api_v1_analytics_strategy_drift__instrument_id__export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/analytics/strategy-drift/{instrument_id}": {
         parameters: {
             query?: never;
@@ -2434,6 +2553,57 @@ export interface paths {
          * @description Return structured IC Committee voting status with quorum tracking.
          */
         get: operations["get_voting_status_api_v1_funds__fund_id__deals__deal_id__ic_memo_voting_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/funds/{fund_id}/deals/{deal_id}/documents/{document_id}/ai-provenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Document AI classification provenance */
+        get: operations["get_ai_provenance_api_v1_funds__fund_id__deals__deal_id__documents__document_id__ai_provenance_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/funds/{fund_id}/deals/{deal_id}/ic-memo/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** IC memo version and review timeline */
+        get: operations["get_memo_timeline_api_v1_funds__fund_id__deals__deal_id__ic_memo_timeline_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/funds/{fund_id}/deals/{deal_id}/decision-audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Deal decision and stage change audit trail */
+        get: operations["get_decision_audit_api_v1_funds__fund_id__deals__deal_id__decision_audit_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3683,7 +3853,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Upload Document */
+        /**
+         * [DEPRECATED 2026-06-30] Upload dataroom document
+         * @deprecated
+         */
         post: operations["upload_document_api_v1_api_dataroom_documents_post"];
         delete?: never;
         options?: never;
@@ -3700,7 +3873,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Ingest Document */
+        /**
+         * [DEPRECATED 2026-06-30] Ingest dataroom document
+         * @deprecated
+         */
         post: operations["ingest_document_api_v1_api_dataroom_documents__document_id__ingest_post"];
         delete?: never;
         options?: never;
@@ -3715,7 +3891,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Search */
+        /**
+         * [DEPRECATED 2026-06-30] Search dataroom
+         * @deprecated
+         */
         get: operations["search_api_v1_api_dataroom_search_get"];
         put?: never;
         post?: never;
@@ -3733,9 +3912,9 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Browse
+         * [DEPRECATED 2026-06-30] Browse dataroom
+         * @deprecated
          * @description List folders and files in the dataroom blob container.
-         *     Uses virtual directory (delimiter-based) listing.
          */
         get: operations["browse_api_v1_api_dataroom_browse_get"];
         put?: never;
@@ -3753,7 +3932,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Tree */
+        /**
+         * [DEPRECATED 2026-06-30] Get folder tree
+         * @deprecated
+         */
         get: operations["get_tree_api_v1_api_data_room_tree_get"];
         put?: never;
         post?: never;
@@ -3770,7 +3952,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Items */
+        /**
+         * [DEPRECATED 2026-06-30] List items
+         * @deprecated
+         */
         get: operations["list_items_api_v1_api_data_room_list_get"];
         put?: never;
         post?: never;
@@ -3787,7 +3972,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** File Link */
+        /**
+         * [DEPRECATED 2026-06-30] Get file link
+         * @deprecated
+         */
         get: operations["file_link_api_v1_api_data_room_file_link_get"];
         put?: never;
         post?: never;
@@ -3805,7 +3993,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Pipeline Items
+         * [DEPRECATED 2026-06-30] List pipeline items
+         * @deprecated
          * @description List folders and files in the investment-pipeline-intelligence container.
          */
         get: operations["list_pipeline_items_api_v1_api_data_room_pipeline_list_get"];
@@ -3825,7 +4014,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Pipeline File Link
+         * [DEPRECATED 2026-06-30] Get pipeline file link
+         * @deprecated
          * @description Generate signed view/download URLs for a file in the pipeline container.
          */
         get: operations["pipeline_file_link_api_v1_api_data_room_pipeline_file_link_get"];
@@ -3846,7 +4036,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Upload To Path */
+        /**
+         * [DEPRECATED 2026-06-30] Upload to data room
+         * @deprecated
+         */
         post: operations["upload_to_path_api_v1_api_data_room_upload_post"];
         delete?: never;
         options?: never;
@@ -4917,6 +5110,39 @@ export interface components {
             /** Citations */
             citations: components["schemas"]["AIAnswerCitationOut"][];
         };
+        /** AIProvenanceOut */
+        AIProvenanceOut: {
+            /**
+             * Document Id
+             * Format: uuid
+             */
+            document_id: string;
+            /** Classification Result */
+            classification_result: string;
+            /** Classification Confidence */
+            classification_confidence?: number | null;
+            /** Classification Layer */
+            classification_layer?: number | null;
+            /** Classification Layer Label */
+            classification_layer_label?: string | null;
+            /** Classification Model */
+            classification_model?: string | null;
+            /** Routing Basis */
+            routing_basis?: string | null;
+            /** Embedding Model */
+            embedding_model?: string | null;
+            /** Embedding Dim */
+            embedding_dim?: number | null;
+            /** Processed At */
+            processed_at?: string | null;
+            /**
+             * Review Count
+             * @default 0
+             */
+            review_count: number;
+            /** Current Review Status */
+            current_review_status?: string | null;
+        };
         /** AIQueryCreate */
         AIQueryCreate: {
             /** Query Text */
@@ -5287,6 +5513,23 @@ export interface components {
             /** Comparison Warning */
             comparison_warning?: string | null;
         };
+        /**
+         * BatchRiskSummaryOut
+         * @description Aggregated risk summary for multiple profiles in a single request.
+         */
+        BatchRiskSummaryOut: {
+            /** Profiles */
+            profiles: {
+                [key: string]: components["schemas"]["CVaRStatus"] | null;
+            };
+            /**
+             * Computed At
+             * Format: date-time
+             */
+            computed_at: string;
+            /** Profile Count */
+            profile_count: number;
+        };
         /** Body_import_from_csv_api_v1_instruments_import_csv_post */
         Body_import_from_csv_api_v1_instruments_import_csv_post: {
             /** File */
@@ -5523,6 +5766,37 @@ export interface components {
         CheckItemPayload: {
             /** Notes */
             notes?: string | null;
+        };
+        /** ChunkStatsOut */
+        ChunkStatsOut: {
+            /** Total Chunks */
+            total_chunks: number;
+            /** Total Documents */
+            total_documents: number;
+            /** Total Chars */
+            total_chars: number;
+            /** Avg Chunk Chars */
+            avg_chunk_chars: number;
+            /** Median Chunk Chars */
+            median_chunk_chars: number;
+            /** P95 Chunk Chars */
+            p95_chunk_chars: number;
+            /** Doc Type Distribution */
+            doc_type_distribution: {
+                [key: string]: number;
+            };
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /** Vertical */
+            vertical: string;
+            /**
+             * Queried At
+             * Format: date-time
+             */
+            queried_at: string;
         };
         /** CommitteeMemberOut */
         CommitteeMemberOut: {
@@ -6164,6 +6438,51 @@ export interface components {
             delta?: components["schemas"]["DeepReviewDeltaReport"] | null;
             engine_score?: components["schemas"]["EngineScore"] | null;
         };
+        /** DecisionAuditEventOut */
+        DecisionAuditEventOut: {
+            /** Event Type */
+            event_type: string;
+            /** From Stage */
+            from_stage?: string | null;
+            /** To Stage */
+            to_stage?: string | null;
+            /** Action */
+            action: string;
+            /** Actor Id */
+            actor_id?: string | null;
+            /** Actor Email */
+            actor_email?: string | null;
+            /** Actor Capacity */
+            actor_capacity?: string | null;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * Timestamp
+             * Format: date-time
+             */
+            timestamp: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** DecisionAuditOut */
+        DecisionAuditOut: {
+            /**
+             * Deal Id
+             * Format: uuid
+             */
+            deal_id: string;
+            /** Events */
+            events: components["schemas"]["DecisionAuditEventOut"][];
+            /** Total Events */
+            total_events: number;
+            /**
+             * Computed At
+             * Format: date-time
+             */
+            computed_at: string;
+        };
         /** DeepReviewDeltaReport */
         DeepReviewDeltaReport: {
             /** Deal Id */
@@ -6227,6 +6546,15 @@ export interface components {
              */
             force: boolean;
         };
+        /** DimensionMismatchOut */
+        DimensionMismatchOut: {
+            /** Doc Id */
+            doc_id: string;
+            /** Chunk Count */
+            chunk_count: number;
+            /** Embedding Dim */
+            embedding_dim: number;
+        };
         /**
          * DimensionScoreRead
          * @description Score for a single macro dimension.
@@ -6278,6 +6606,19 @@ export interface components {
             dataQuality?: string | null;
             /** Items */
             items: components["schemas"]["DocumentClassificationItem"][];
+        };
+        /** DocumentCoverageOut */
+        DocumentCoverageOut: {
+            /** Doc Id */
+            doc_id: string;
+            /** Doc Type */
+            doc_type: string;
+            /** Chunk Count */
+            chunk_count: number;
+            /** Total Chars */
+            total_chars: number;
+            /** Has Embeddings */
+            has_embeddings: boolean;
         };
         /** DocumentCreate */
         DocumentCreate: {
@@ -6981,6 +7322,21 @@ export interface components {
             /** Freshness */
             freshness: components["schemas"]["FundFreshness"][];
         };
+        /** ExtractionQualityOut */
+        ExtractionQualityOut: {
+            /** Doc Id */
+            doc_id: string;
+            /** Doc Type */
+            doc_type: string;
+            /** Total Chunks */
+            total_chunks: number;
+            /** Empty Chunks */
+            empty_chunks: number;
+            /** Governance Flagged */
+            governance_flagged: number;
+            /** Avg Char Count */
+            avg_char_count: number;
+        };
         /**
          * FactSheetGenerate
          * @description Request body for fact-sheet generation.
@@ -7331,6 +7687,82 @@ export interface components {
             available: boolean;
             /** Message */
             message?: string | null;
+        };
+        /** InspectResultOut[DimensionMismatchOut] */
+        InspectResultOut_DimensionMismatchOut_: {
+            /** Results */
+            results: components["schemas"]["DimensionMismatchOut"][];
+            /** Count */
+            count: number;
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /** Vertical */
+            vertical: string;
+            /**
+             * Queried At
+             * Format: date-time
+             */
+            queried_at: string;
+        };
+        /** InspectResultOut[DocumentCoverageOut] */
+        InspectResultOut_DocumentCoverageOut_: {
+            /** Results */
+            results: components["schemas"]["DocumentCoverageOut"][];
+            /** Count */
+            count: number;
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /** Vertical */
+            vertical: string;
+            /**
+             * Queried At
+             * Format: date-time
+             */
+            queried_at: string;
+        };
+        /** InspectResultOut[ExtractionQualityOut] */
+        InspectResultOut_ExtractionQualityOut_: {
+            /** Results */
+            results: components["schemas"]["ExtractionQualityOut"][];
+            /** Count */
+            count: number;
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /** Vertical */
+            vertical: string;
+            /**
+             * Queried At
+             * Format: date-time
+             */
+            queried_at: string;
+        };
+        /** InspectResultOut[StaleEmbeddingOut] */
+        InspectResultOut_StaleEmbeddingOut_: {
+            /** Results */
+            results: components["schemas"]["StaleEmbeddingOut"][];
+            /** Count */
+            count: number;
+            /**
+             * Org Id
+             * Format: uuid
+             */
+            org_id: string;
+            /** Vertical */
+            vertical: string;
+            /**
+             * Queried At
+             * Format: date-time
+             */
+            queried_at: string;
         };
         /** InstrumentCorrelationRead */
         InstrumentCorrelationRead: {
@@ -7931,6 +8363,47 @@ export interface components {
              */
             chapters: components["schemas"]["MemoChapterOut"][];
         };
+        /** MemoTimelineEventOut */
+        MemoTimelineEventOut: {
+            /** Event Type */
+            event_type: string;
+            /** Version */
+            version?: number | null;
+            /** Actor Id */
+            actor_id?: string | null;
+            /** Actor Email */
+            actor_email?: string | null;
+            /** Actor Capacity */
+            actor_capacity?: string | null;
+            /** Rationale */
+            rationale?: string | null;
+            /**
+             * Timestamp
+             * Format: date-time
+             */
+            timestamp: string;
+            /** Metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** MemoTimelineOut */
+        MemoTimelineOut: {
+            /**
+             * Deal Id
+             * Format: uuid
+             */
+            deal_id: string;
+            /** Memo Count */
+            memo_count: number;
+            /** Events */
+            events: components["schemas"]["MemoTimelineEventOut"][];
+            /**
+             * Computed At
+             * Format: date-time
+             */
+            computed_at: string;
+        };
         /** MetricDriftRead */
         MetricDriftRead: {
             /** Metric Name */
@@ -8526,6 +8999,8 @@ export interface components {
             cvar_lower_5?: string | null;
             /** Cvar Upper 95 */
             cvar_upper_95?: string | null;
+            /** Computed At */
+            computed_at?: string | null;
         };
         /** PortfolioSummary */
         PortfolioSummary: {
@@ -8547,6 +9022,8 @@ export interface components {
             core_weight?: string | null;
             /** Satellite Weight */
             satellite_weight?: string | null;
+            /** Computed At */
+            computed_at?: string | null;
         };
         /** ProcessPendingRequest */
         ProcessPendingRequest: {
@@ -9557,6 +10034,15 @@ export interface components {
              * @default none
              */
             impact_on_final: string;
+        };
+        /** StaleEmbeddingOut */
+        StaleEmbeddingOut: {
+            /** Doc Id */
+            doc_id: string;
+            /** Chunk Count */
+            chunk_count: number;
+            /** Embedding Model */
+            embedding_model: string;
         };
         /** StrategicAllocationItem */
         StrategicAllocationItem: {
@@ -11397,6 +11883,173 @@ export interface operations {
             };
         };
     };
+    get_stale_embeddings_api_v1_admin_inspect__org_id___vertical__stale_embeddings_get: {
+        parameters: {
+            query?: {
+                current_model?: string;
+                expected_dim?: number;
+            };
+            header?: never;
+            path: {
+                org_id: string;
+                vertical: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InspectResultOut_StaleEmbeddingOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_document_coverage_api_v1_admin_inspect__org_id___vertical__coverage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+                vertical: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InspectResultOut_DocumentCoverageOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_extraction_quality_api_v1_admin_inspect__org_id___vertical__extraction_quality_get: {
+        parameters: {
+            query?: {
+                min_chars?: number;
+            };
+            header?: never;
+            path: {
+                org_id: string;
+                vertical: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InspectResultOut_ExtractionQualityOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_chunk_stats_api_v1_admin_inspect__org_id___vertical__chunk_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                org_id: string;
+                vertical: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChunkStatsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_embedding_audit_api_v1_admin_inspect__org_id___vertical__embedding_audit_get: {
+        parameters: {
+            query?: {
+                expected_dim?: number;
+            };
+            header?: never;
+            path: {
+                org_id: string;
+                vertical: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InspectResultOut_DimensionMismatchOut_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_fund_scoring_api_v1_funds_scoring_get: {
         parameters: {
             query: {
@@ -12380,6 +13033,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RebalanceEventRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_risk_summary_batch_api_v1_risk_summary_get: {
+        parameters: {
+            query: {
+                /** @description Comma-separated profile names */
+                profiles: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchRiskSummaryOut"];
                 };
             };
             /** @description Validation Error */
@@ -14008,6 +14693,45 @@ export interface operations {
             };
         };
     };
+    export_drift_history_api_v1_analytics_strategy_drift__instrument_id__export_get: {
+        parameters: {
+            query?: {
+                format?: "csv" | "json";
+                /** @description Start date filter (inclusive) */
+                from_date?: string | null;
+                /** @description End date filter (inclusive) */
+                to_date?: string | null;
+                severity?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                instrument_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_instrument_drift_api_v1_analytics_strategy_drift__instrument_id__get: {
         parameters: {
             query?: {
@@ -14473,6 +15197,103 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ai_provenance_api_v1_funds__fund_id__deals__deal_id__documents__document_id__ai_provenance_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fund_id: string;
+                deal_id: string;
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIProvenanceOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_memo_timeline_api_v1_funds__fund_id__deals__deal_id__ic_memo_timeline_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fund_id: string;
+                deal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoTimelineOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_decision_audit_api_v1_funds__fund_id__deals__deal_id__decision_audit_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                fund_id: string;
+                deal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionAuditOut"];
                 };
             };
             /** @description Validation Error */
