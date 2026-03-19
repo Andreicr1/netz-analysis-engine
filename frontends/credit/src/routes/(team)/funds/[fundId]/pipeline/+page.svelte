@@ -8,6 +8,7 @@
 	import { goto, invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
 	import { createClientApiClient } from "$lib/api/client";
+	import PipelineKanban from "$lib/components/PipelineKanban.svelte";
 	import type { PageData } from "./$types";
 	import type { DealStage, DealType } from "$lib/types/api";
 
@@ -15,6 +16,7 @@
 
 	let { data }: { data: PageData } = $props();
 
+	let viewMode = $state<"list" | "kanban">("list");
 	let selectedDeal = $state<Record<string, unknown> | null>(null);
 	let panelOpen = $derived(selectedDeal !== null);
 	const stageFilters: Array<{ value: DealStage | "ALL"; label: string }> = [
@@ -97,18 +99,40 @@
 	<div class="flex-1 p-6">
 		<div class="mb-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
 			<div class="space-y-3">
-				<h2 class="text-xl font-semibold text-[var(--netz-text-primary)]">Deal Pipeline</h2>
-				<div class="flex flex-wrap gap-2">
-					{#each stageFilters as stage}
-						<Button
-							onclick={() => selectStageFilter(stage.value)}
-							size="sm"
-							variant="outline"
+				<div class="flex items-center gap-4">
+					<h2 class="text-xl font-semibold text-[var(--netz-text-primary)]">Deal Pipeline</h2>
+					<div class="flex rounded-md border border-[var(--netz-border)]">
+						<button
+							class="px-3 py-1 text-xs font-medium transition-colors {viewMode === 'list'
+								? 'bg-[var(--netz-brand-primary)] text-white'
+								: 'bg-[var(--netz-surface)] text-[var(--netz-text-secondary)] hover:bg-[var(--netz-surface-alt)]'} rounded-l-md"
+							onclick={() => (viewMode = "list")}
 						>
-							{stage.label}
-						</Button>
-					{/each}
+							List
+						</button>
+						<button
+							class="px-3 py-1 text-xs font-medium transition-colors {viewMode === 'kanban'
+								? 'bg-[var(--netz-brand-primary)] text-white'
+								: 'bg-[var(--netz-surface)] text-[var(--netz-text-secondary)] hover:bg-[var(--netz-surface-alt)]'} rounded-r-md"
+							onclick={() => (viewMode = "kanban")}
+						>
+							Kanban
+						</button>
+					</div>
 				</div>
+				{#if viewMode === "list"}
+					<div class="flex flex-wrap gap-2">
+						{#each stageFilters as stage}
+							<Button
+								onclick={() => selectStageFilter(stage.value)}
+								size="sm"
+								variant="outline"
+							>
+								{stage.label}
+							</Button>
+						{/each}
+					</div>
+				{/if}
 			</div>
 			<Button onclick={() => { resetForm(); showCreate = true; }}>New Deal</Button>
 		</div>
@@ -118,12 +142,14 @@
 				title="No Deals"
 				description="Create your first deal to get started with the pipeline."
 			/>
-		{:else}
+		{:else if viewMode === "list"}
 			<DataTable
 				data={data.deals.items}
 				{columns}
 				onRowClick={handleRowClick}
 			/>
+		{:else}
+			<PipelineKanban deals={data.deals.items} fundId={data.fundId} {getToken} />
 		{/if}
 	</div>
 
