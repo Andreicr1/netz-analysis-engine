@@ -1,11 +1,9 @@
 # DEPRECATED 2026-03-18: Azure Search replaced by pgvector (commit 497df51, Milestone 2).
 # Retained for rollback capability during re-ingestion migration.
+# All azure imports are lazy to avoid breaking CI when azure SDK is not installed.
 from __future__ import annotations
 
 from dataclasses import dataclass
-
-from azure.identity import DefaultAzureCredential
-from azure.search.documents import SearchClient
 
 from app.core.config import settings
 
@@ -27,7 +25,10 @@ def _search_credential():
     """Return AzureKeyCredential if AZURE_SEARCH_KEY is set, else DefaultAzureCredential."""
     if settings.azure_search_key:
         from azure.core.credentials import AzureKeyCredential
+
         return AzureKeyCredential(settings.azure_search_key)
+    from azure.identity import DefaultAzureCredential
+
     return DefaultAzureCredential(exclude_interactive_browser_credential=True)
 
 
@@ -46,7 +47,9 @@ def describe_chunks_index_contract() -> ChunksIndexContract:
     )
 
 
-def get_search_client(*, index_name: str) -> SearchClient:
+def get_search_client(*, index_name: str):
+    from azure.search.documents import SearchClient
+
     if not settings.azure_search_endpoint:
         raise ValueError("AZURE_SEARCH_ENDPOINT not configured")
     cred = _search_credential()
@@ -57,14 +60,14 @@ def get_search_client(*, index_name: str) -> SearchClient:
     )
 
 
-def get_metadata_index_client() -> SearchClient:
+def get_metadata_index_client():
     metadata_index_name = getattr(settings, "SEARCH_INDEX_NAME", "")
     if not metadata_index_name:
         raise ValueError("SEARCH_INDEX_NAME not configured")
     return get_search_client(index_name=metadata_index_name)
 
 
-def get_chunks_index_client() -> SearchClient:
+def get_chunks_index_client():
     if not settings.SEARCH_CHUNKS_INDEX_NAME:
         raise ValueError("SEARCH_CHUNKS_INDEX_NAME not configured")
     return get_search_client(index_name=resolve_chunks_index_name())
