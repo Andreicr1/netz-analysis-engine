@@ -379,7 +379,7 @@ New server load: `GET /admin/configs/invalid`. Display as warning list with link
 - [x] Invalid configs list shown with links to editor
 - [x] Prompt version history loaded lazily on tab click
 - [x] Prompt revert works with confirmation
-- [ ] `make check:all` passes
+- [ ] `make check-all` passes
 
 ---
 
@@ -470,7 +470,7 @@ Per report pack row:
 - [ ] Update obligation inline
 - [ ] Update action status
 - [ ] Report pack generate/publish buttons with role guard
-- [ ] `make check:all` passes
+- [ ] `make check-all` passes
 
 ---
 
@@ -578,7 +578,7 @@ AI Analysis: ActionButton "Run AI Analysis" → `POST /ai-analyze`. Returns job_
 - [ ] Resubmit for review
 - [ ] AI analysis trigger with SSE progress
 - [ ] Interactive checklist toggles with optimistic UI
-- [ ] `make check:all` passes
+- [ ] `make check-all` passes
 
 ---
 
@@ -637,7 +637,7 @@ Or add as a tab/section within the existing dashboard. Components:
 - [ ] AI query history sidebar (lazy-loaded on tab click)
 - [ ] AI activity log
 - [ ] Document retrieval interface
-- [ ] `make check:all` passes
+- [ ] `make check-all` passes
 
 ---
 
@@ -727,7 +727,7 @@ Per model portfolio:
 - [ ] Fact sheet generation with "server busy" handling
 - [ ] Fact sheet PDF download
 - [ ] All Markdown rendered via sanitizing renderer (no `{@html}` with raw content)
-- [ ] `make check:all` passes
+- [ ] `make check-all` passes
 
 ---
 
@@ -828,7 +828,7 @@ Add to parallel fetch: `GET /funds/{fund_id}/stats`, `GET /funds/{fund_id}/perfo
 - [ ] Model portfolio backtest display
 - [ ] Model portfolio allocate/rebalance
 - [ ] Fund detail with stats, performance, holdings (non-critical, graceful fallback)
-- [ ] `make check:all` passes
+- [ ] `make check-all` passes
 
 ---
 
@@ -973,7 +973,7 @@ Handle 429 (max connections) with fallback message. (see todo: `todos/138-pendin
 - [ ] Risk SSE in `(team)/+layout.svelte` via `setContext`, consumed by dashboard + risk via `getContext`
 - [ ] Screener run detail in ContextPanel
 - [ ] Instrument screening history
-- [ ] `make check:all` passes
+- [ ] `make check-all` passes
 
 ---
 
@@ -1023,7 +1023,7 @@ Loads: `GET /instruments?limit=500`
 - [ ] Bulk sync with confirmation + loading state
 - [ ] External search with results table + per-row "Import" button
 - [ ] Instrument detail in ContextPanel
-- [ ] `make check:all` passes
+- [ ] `make check-all` passes
 
 ---
 

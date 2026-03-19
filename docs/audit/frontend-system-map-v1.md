@@ -290,7 +290,7 @@ All tokens mapped via `@theme` block in each frontend's `app.css`:
 
 ```
 build    → depends on ^build (topological: @netz/ui first)
-dev      → persistent, uncached (parallel via make dev:all)
+dev      → persistent, uncached (parallel via make dev-all)
 check    → depends on ^build
 types    → openapi-typescript from running backend
 ```

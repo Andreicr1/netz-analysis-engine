@@ -18,12 +18,12 @@ make up                 # docker-compose up -d (PG 16 + TimescaleDB + Redis 7)
 make down               # docker-compose down
 
 # Frontend (pnpm + Turborepo)
-make dev:credit         # Credit frontend dev server
-make dev:wealth         # Wealth frontend dev server
-make dev:admin          # Admin frontend dev server
-make dev:all            # All packages in parallel (Turborepo)
-make build:all          # Build all packages (topological order)
-make check:all          # Check all frontend packages
+make dev-credit         # Credit frontend dev server
+make dev-wealth         # Wealth frontend dev server
+make dev-admin          # Admin frontend dev server
+make dev-all            # All packages in parallel (Turborepo)
+make build-all          # Build all packages (topological order)
+make check-all          # Check all frontend packages
 make types              # Generate TS types from OpenAPI schema (requires running backend)
 ```
 
