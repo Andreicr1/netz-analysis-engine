@@ -1,0 +1,3130 @@
+openapi: 3.0.0
+info:
+  title: Public Fund Data APIs - Dynamic Data - Performance
+  description: >-
+    Assess how funds perform over time with our Performance API, providing
+    comprehensive insights and historical data.
+  version: 1.0.0
+servers:
+  - url: https://api.fefundinfo.com/funds/DynamicPerformance/1.0.0
+    description: Production
+security:
+  - Production: []
+paths:
+  /CumulativePerformance:
+    get:
+      tags:
+        - Dynamic Data Performance
+      summary: >-
+        Returns the cumulative performance data and the rankings over a group of
+        pre-defined periods for the given instrument(s)(i.e. one or more funds,
+        sectors and indexes). The performance figures are pre-calculated and
+        updated at least once a day, overnight. The rankings (which are within a
+        sector) are only valid for "Fund" instruments and are done at the fund
+        level.
+      description: >
+        Use this end point to fetch cumlative performance Data based on the
+        identifierType like citicodes, isins and apirs.
+      operationId: GetCumlativePerformance
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: fieldSelections
+          in: query
+          description: Provide field names to filter in response.
+          required: false
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: identifierType
+          in: query
+          description: Currently supported identifierTypes are citicodes, isins and apirs.
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: string
+            default: ''
+        - name: identifierValue
+          in: query
+          description: Value for the identifier type. Provide maximum 10 values.
+          required: true
+          style: form
+          explode: false
+          schema:
+            maxItems: 10
+            minItems: 1
+            uniqueItems: true
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: PerformanceEndType
+          in: query
+          description: |
+            Performace End Types:
+             * `1` - DayEnd
+             * `2` - MonthEnd
+             * `3` - QuarterEnd
+             * `4` - YearEnd
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: integer
+            enum:
+              - 1
+              - 2
+              - 3
+              - 4
+        - name: MethodType
+          in: query
+          description: |
+            Performace Method Types:
+             * `1` - BidToBid
+             * `3` - OfferToBid
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: integer
+            enum:
+              - 1
+              - 3
+        - name: Currency
+          in: query
+          description: Value for currency. It will be default to GBP if nothing specified.
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+            default: GBP
+        - name: PriceType
+          in: query
+          description: |
+            Performace Price Types:
+             * `1` - NetTotalReturn
+             * `2` - GrossTotalReturn
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: integer
+            enum:
+              - 1
+              - 2
+      responses:
+        '200':
+          description: Get Cumulative Performance Data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+        '206':
+          description: Get Cumulative Performance Data. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-performance-read
+        - Sandbox:
+            - dynamic-data-performance-read
+        - Development:
+            - dynamic-data-performance-read
+    post:
+      tags:
+        - Dynamic Data Performance
+      summary: >-
+        Returns the cumulative performance data and the rankings over a group of
+        pre-defined periods for the given instrument(s)(i.e. one or more funds,
+        sectors and indexes). The performance figures are pre-calculated and
+        updated at least once a day, overnight. The rankings (which are within a
+        sector) are only valid for "Fund" instruments and are done at the fund
+        level.
+      description: >
+        Use this end point to fetch cumlative performance Data based on the
+        identifierType like citicodes, isins and apirs.
+      operationId: PostCumlativePerformance
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+      requestBody:
+        description: Provide inputs as JSON
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostCumulativePerformanceRequestBody'
+        required: true
+      responses:
+        '200':
+          description: Get Cumulative Performance Data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+        '206':
+          description: Get Cumulative Performance Data. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-performance-read
+        - Sandbox:
+            - dynamic-data-performance-read
+        - Development:
+            - dynamic-data-performance-read
+  /AnnualisedPerformance:
+    get:
+      tags:
+        - Dynamic Data Performance
+      summary: >-
+        Annualised fund performance data over a group of pre-defined periods to
+        given end date.
+      description: >
+        Use this end point to fetch Annualized Performance Data based on the
+        identifierType like citicodes.
+      operationId: AnnualisedPerformanceData
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: fieldSelections
+          in: query
+          description: Provide field names to filter in response.
+          required: false
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: identifierType
+          in: query
+          description: Currently supported identifierTypes are citicodes, isins and apirs.
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: string
+        - name: identifierValue
+          in: query
+          description: Value for the identifier type. Provide maximum 10 values.
+          required: true
+          style: form
+          explode: false
+          schema:
+            maxItems: 10
+            minItems: 1
+            uniqueItems: true
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: PerformanceEndType
+          in: query
+          description: |
+            Performace End Types:
+             * `1` - DayEnd
+             * `2` - MonthEnd
+             * `3` - QuarterEnd
+             * `4` - YearEnd
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: integer
+            enum:
+              - 1
+              - 2
+              - 3
+              - 4
+        - name: MethodType
+          in: query
+          description: |
+            Performace Method Types:
+             * `1` - BidToBid
+             * `3` - OfferToBid
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: integer
+            enum:
+              - 1
+              - 3
+        - name: Currency
+          in: query
+          description: Value for currency. It will be default to GBP if nothing specified.
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+            default: GBP
+        - name: PriceType
+          in: query
+          description: |
+            Performace Price Types:
+             * `1` - NetTotalReturn
+             * `2` - GrossTotalReturn
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: integer
+            enum:
+              - 1
+              - 2
+      responses:
+        '200':
+          description: Get annualized Performance Data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnnualizedData'
+        '206':
+          description: Get annualized Performance Data. Partial Content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnnualizedData'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-performance-read
+        - Sandbox:
+            - dynamic-data-performance-read
+        - Development:
+            - dynamic-data-performance-read
+    post:
+      tags:
+        - Dynamic Data Performance
+      summary: >-
+        Annualised fund performance data over a group of pre-defined periods to
+        given end date.
+      description: >
+        Use this end point to fetch Annualized Performance Data based on the
+        identifierType like fundcodes.
+      operationId: Post_AnnualisedPerformanceData
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+      requestBody:
+        description: Provide inputs as JSON
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostAnnualisedRequestBody'
+        required: true
+      responses:
+        '200':
+          description: Get Annualized Performance Data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_1'
+        '206':
+          description: Get Annualized Performance Data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_1'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-performance-read
+        - Sandbox:
+            - dynamic-data-performance-read
+        - Development:
+            - dynamic-data-performance-read
+  /CalendarPerformance:
+    get:
+      tags:
+        - Dynamic Data Performance
+      summary: Fund performance data over a group of calendar year periods.
+      description: >
+        Use this end point to fetch Calendar Performance Data based on the
+        identifierType like citicodes.
+      operationId: CalendarPerformanceData
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: fieldSelections
+          in: query
+          description: Provide field names to filter in response.
+          required: false
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: identifierType
+          in: query
+          description: Currently supported identifierTypes are citicodes, isins and apirs.
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: string
+        - name: identifierValue
+          in: query
+          description: Value for the identifier type. Provide maximum 10 values.
+          required: true
+          style: form
+          explode: false
+          schema:
+            maxItems: 10
+            minItems: 1
+            uniqueItems: true
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: PerformanceEndType
+          in: query
+          description: |
+            Performance End Types:
+             * `1` - DayEnd
+             * `2` - MonthEnd
+             * `3` - QuarterEnd
+             * `4` - YearEnd
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: integer
+            enum:
+              - 1
+              - 2
+              - 3
+              - 4
+        - name: MethodType
+          in: query
+          description: |
+            Performance Method Types:
+             * `1` - BidToBid
+             * `3` - OfferToBid
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: integer
+            enum:
+              - 1
+              - 3
+        - name: Currency
+          in: query
+          description: Value for currency. It will be default to GBP if nothing specified.
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+            default: GBP
+        - name: PriceType
+          in: query
+          description: |
+            Performance Price Types:
+             * `1` - NetTotalReturn
+             * `2` - GrossTotalReturn
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: integer
+            enum:
+              - 1
+              - 2
+      responses:
+        '200':
+          description: Get Calendar Performance Data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarData'
+        '206':
+          description: Get Calendar Performance Data. Partial Content
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarData'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-performance-read
+        - Sandbox:
+            - dynamic-data-performance-read
+        - Development:
+            - dynamic-data-performance-read
+    post:
+      tags:
+        - Dynamic Data Performance
+      summary: Fund performance data over a group of calendar year periods.
+      description: >
+        Use this end point to fetch Calendar Performance Data based on the
+        identifierType like fundcodes.
+      operationId: Post_CalendarPerformanceData
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+      requestBody:
+        description: Provide inputs as JSON
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostCalendarRequestBody'
+        required: true
+      responses:
+        '200':
+          description: Get Calendar Performance Data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_2'
+        '206':
+          description: Get Calendar Performance Data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_2'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-performance-read
+        - Sandbox:
+            - dynamic-data-performance-read
+        - Development:
+            - dynamic-data-performance-read
+  /DiscretePerformance:
+    get:
+      tags:
+        - Dynamic Data Performance
+      summary: >-
+        Fund performance data over a group of consecutive discrete 12-month
+        periods to a given end date
+      description: >
+        Use this end point to fetch discrete performance Data based on the
+        identifierType like citicodes, isins and apirs.
+      operationId: GetDiscretePerformance
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: fieldSelections
+          in: query
+          description: Provide field names to filter in response.
+          required: false
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: identifierType
+          in: query
+          description: Currently supported identifierTypes are citicodes, isins and apirs.
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: string
+            default: ''
+        - name: identifierValue
+          in: query
+          description: Value for the identifier type. Provide maximum 10 values.
+          required: true
+          style: form
+          explode: false
+          schema:
+            maxItems: 10
+            minItems: 1
+            uniqueItems: true
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: PerformanceEndType
+          in: query
+          description: |
+            Performace End Types:
+             * `1` - DayEnd
+             * `2` - MonthEnd
+             * `3` - QuarterEnd
+             * `4` - YearEnd
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: integer
+            enum:
+              - 1
+              - 2
+              - 3
+              - 4
+        - name: MethodType
+          in: query
+          description: |
+            Performace Method Types:
+             * `1` - BidToBid
+             * `3` - OfferToBid
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: integer
+            enum:
+              - 1
+              - 3
+        - name: Currency
+          in: query
+          description: Value for currency. It will be default to GBP if nothing specified.
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+            default: GBP
+        - name: PriceType
+          in: query
+          description: |
+            Performace Price Types:
+             * `1` - NetTotalReturn
+             * `2` - GrossTotalReturn
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: integer
+            enum:
+              - 1
+              - 2
+      responses:
+        '200':
+          description: Get Discrete Performance Data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_3'
+        '206':
+          description: Get Discrete Performance Data. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_3'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-performance-read
+        - Sandbox:
+            - dynamic-data-performance-read
+        - Development:
+            - dynamic-data-performance-read
+    post:
+      tags:
+        - Dynamic Data Performance
+      summary: >-
+        Fund performance data over a group of consecutive discrete 12-month
+        periods to a given end date.
+      description: >
+        Use this end point to fetch discrete performance Data based on the
+        identifierType like citicodes, isins and apirs.
+      operationId: PostDiscretePerformance
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+      requestBody:
+        description: Provide inputs as JSON
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostDiscretePerformanceRequestBody'
+        required: true
+      responses:
+        '200':
+          description: Get Discrete Performance Data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_3'
+        '206':
+          description: Get Discrete Performance Data. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_3'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-performance-read
+        - Sandbox:
+            - dynamic-data-performance-read
+        - Development:
+            - dynamic-data-performance-read
+components:
+  schemas:
+    CumulativePerformanceData:
+      type: object
+      properties:
+        Message:
+          type: string
+          description: response message
+        IsSuccess:
+          type: boolean
+          description: based on the response value will be set.
+        Request:
+          $ref: '#/components/schemas/CumulativePerformanceData_Request'
+        Result:
+          type: array
+          description: response result will be assign to result.
+          items:
+            $ref: '#/components/schemas/CumulativePerformanceDataResult'
+    CumulativePerformanceDataResult:
+      type: object
+      properties:
+        Isin:
+          type: string
+        Apir:
+          type: string
+        instrumentCode:
+          type: string
+          description: >-
+            The code for identifying the requested instrument (i.e. fund,
+            sector, benchmark) on the FEfundinfo database Table or function is :
+            input object; dbField Name is :-
+        fundCitiCode:
+          type: string
+          description: >-
+            The FEfundinfo identifier for the co-instrument provided in the
+            request Table or function is : LuInstrument; dbField Name is
+            :Citicode
+        citiCode:
+          type: string
+          description: >-
+            The FE internal identifier code for the instrument Table or function
+            is : whUnits..FxUnit; dbField Name is :Citicode
+        cumulativePerfAsAt:
+          type: string
+          description: >-
+            The as at date of the cumulative performance of the instrument Table
+            or function is : dbPerformance..PerformanceDayEnd; dbField Name is
+            :PToDate; logic is :
+          format: date-time
+        cumulativeHistEndDate:
+          type: string
+          description: >-
+            The date of the end price point, from the history series, used to
+            calculate the cumulative performance Table or function is :
+            dbPerformance.dbo.PerformanceDayEnd; dbField Name is
+            :MaximumPriceHistoryDate; logic is :
+          format: date-time
+        cumulativeYtd:
+          type: number
+          description: >-
+            The cumulative performance of the instrument since the beginning of
+            the current calendar year Table or function is : whUnits..fnPerfFld;
+            dbField Name is :-; logic is :dbo.fnPerfFld(PS.YTD, @LastYearEnd,
+            P.MaximumPriceHistoryDate, a.PerfTrackRecordDate, IP.CurrencyCode,
+            @Currency)
+          format: double
+        cumulativeYtdQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's cumulative performance in its respective
+            sector (or requested universe sector) since the beginning of the
+            current calendar year Table or function is : whUnits..fnRank;
+            dbField Name is :-; logic is :dbo.fnRank(PR.RYearToDate,
+            PR.TYearToDate,4)
+          format: int32
+        cumulativeYtdRank:
+          type: integer
+          description: >-
+            The rank of the unit's cumulative performance in its respective
+            sector (or requested universe sector) since the beginning of the
+            current calendar year Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is
+            :RYearToDate
+          format: int32
+        cumulativeYtdTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's cumulative performance sector
+            since the beginning of the current calendar year Table or function
+            is : dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is
+            :TYearToDate
+          format: int32
+        cumulativeYtdPercentile:
+          type: integer
+          description: ''
+          format: int32
+        cumulative1W:
+          type: number
+          description: >-
+            The cumulative performance of the instrument over 1 week Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P1W, P.D1W, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        cumulative1WQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 1 week Table or function
+            is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R1W, PR.T1W, 4)
+          format: int32
+        cumulative1WRank:
+          type: integer
+          description: >-
+            The rank of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 1 week Table or function
+            is : dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :R1W
+          format: int32
+        cumulative1WTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's cumulative performance sector
+            over 1 week Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T1W
+          format: int32
+        cumulative1WPercentile:
+          type: integer
+          description: ''
+          format: int32
+        cumulative1M:
+          type: number
+          description: >-
+            The cumulative performance of the instrument over 1 month Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P1M, P.D1M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        cumulative1MQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 1 month Table or function
+            is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R1M, PR.T1M, 4)
+          format: int32
+        cumulative1MRank:
+          type: integer
+          description: >-
+            The rank of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 1 month Table or function
+            is : dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :R1M
+          format: int32
+        cumulative1MTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's cumulative performance sector
+            over 1 month Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T1M
+          format: int32
+        cumulative1MPercentile:
+          type: integer
+          description: ''
+          format: int32
+        cumulative3M:
+          type: number
+          description: >-
+            The cumulative performance of the instrument over 3 months Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P3M, P.D3M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        cumulative3MQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 3 months Table or
+            function is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R3M, PR.T3M, 4)
+          format: int32
+        cumulative3MRank:
+          type: integer
+          description: >-
+            The rank of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 3 months Table or
+            function is : dbPerformance.dbo.PerformanceRankDayEnd; dbField Name
+            is :R3M
+          format: int32
+        cumulative3MTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's cumulative performance sector
+            over 3 months Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T3M
+          format: int32
+        cumulative3MPercentile:
+          type: integer
+          description: ''
+          format: int32
+        cumulative6M:
+          type: number
+          description: >-
+            The cumulative performance of the instrument over 6 months Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P6M, P.D6M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        cumulative6MQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 6 months Table or
+            function is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R6M, PR.T6M, 4)
+          format: int32
+        cumulative6MRank:
+          type: integer
+          description: >-
+            The rank of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 6 months Table or
+            function is : dbPerformance.dbo.PerformanceRankDayEnd; dbField Name
+            is :R6M
+          format: int32
+        cumulative6MTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's cumulative performance sector
+            over 6 months Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T6M
+          format: int32
+        cumulative6MPercentile:
+          type: integer
+          description: ''
+          format: int32
+        cumulative1Y:
+          type: number
+          description: >-
+            The cumulative performance of the instrument over 1 year Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P12M, P.D12M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        cumulative1YQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 1 year Table or function
+            is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R12M, PR.T12M, 4)
+          format: int32
+        cumulative1YRank:
+          type: integer
+          description: >-
+            The rank of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 1 year Table or function
+            is : dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :R12M
+          format: int32
+        cumulative1YTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's cumulative performance sector
+            over 1 year Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T12M
+          format: int32
+        cumulative1YPercentile:
+          type: integer
+          description: ''
+          format: int32
+        cumulative2Y:
+          type: number
+          description: >-
+            The cumulative performance of the instrument over 2 years Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P24M, P.D24M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        cumulative2YQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 2 years Table or function
+            is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R24M, PR.T24M, 4)
+          format: int32
+        cumulative2YRank:
+          type: integer
+          description: >-
+            The rank of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 2 years Table or function
+            is : dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :R24M
+          format: int32
+        cumulative2YTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's cumulative performance sector
+            over 2 years Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T24M
+          format: int32
+        cumulative2YPercentile:
+          type: integer
+          description: ''
+          format: int32
+        cumulative3Y:
+          type: number
+          description: >-
+            The cumulative performance of the instrument over 3 years Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is :
+          format: double
+        cumulative3YQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 3 years Table or function
+            is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R36M, PR.T36M, 4)
+          format: int32
+        cumulative3YRank:
+          type: integer
+          description: >-
+            The rank of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 3 years Table or function
+            is : dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :R36M
+          format: int32
+        cumulative3YTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's cumulative performance sector
+            over 3 years Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T36M
+          format: int32
+        cumulative3YPercentile:
+          type: integer
+          description: >-
+            The percentile of the unit's cumulative performance in its
+            respective sector (or requested universe sector) over 3 years Table
+            or function is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R36M, PR.T36M, 100)
+          format: int32
+        cumulative4Y:
+          type: number
+          description: >-
+            The cumulative performance of the instrument over 4 years Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P48M, P.D48M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        cumulative4YQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 4 years Table or function
+            is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R48M, PR.T48M, 4)
+          format: int32
+        cumulative4YRank:
+          type: integer
+          description: >-
+            The rank of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 4 years Table or function
+            is : dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :R48M
+          format: int32
+        cumulative4YTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's cumulative performance sector
+            over 4 years Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T48M
+          format: int32
+        cumulative4YPercentile:
+          type: integer
+          description: ''
+          format: int32
+        cumulative5Y:
+          type: number
+          description: >-
+            The cumulative performance of the instrument over 5 years Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P60M, P.D60M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        cumulative5YQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 5 years Table or function
+            is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R60M, PR.T60M, 4)
+          format: int32
+        cumulative5YRank:
+          type: integer
+          description: >-
+            The rank of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 5 years Table or function
+            is : dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :R60M
+          format: int32
+        cumulative5YTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's cumulative performance sector
+            over 5 years Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T60M
+          format: int32
+        cumulative5YPercentile:
+          type: integer
+          description: ''
+          format: int32
+        cumulative6Y:
+          type: number
+          description: >-
+            The cumulative performance of the instrument over 6 years Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P72M, P.D72M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        cumulative6YQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 6 years Table or function
+            is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R72M, PR.T72M, 4)
+          format: int32
+        cumulative6YRank:
+          type: integer
+          description: >-
+            The rank of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 6 years Table or function
+            is : dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :R72M
+          format: int32
+        cumulative6YTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's cumulative performance sector
+            over 6 years Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T72M
+          format: int32
+        cumulative6YPercentile:
+          type: integer
+          description: ''
+          format: int32
+        cumulative7Y:
+          type: number
+          description: >-
+            The cumulative performance of the instrument over 7 years Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P84M, P.D84M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        cumulative7YQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 7 years. Table or
+            function is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R84M, PR.T84M, 4)
+          format: int32
+        cumulative7YRank:
+          type: integer
+          description: >-
+            The rank of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 7 years Table or function
+            is : dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :R84M
+          format: int32
+        cumulative7YTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's cumulative performance sector
+            over 7 years Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T84M
+          format: int32
+        cumulative7YPercentile:
+          type: integer
+          description: ''
+          format: int32
+        cumulative8Y:
+          type: number
+          description: >-
+            The cumulative performance of the instrument over 8 years Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P96M, P.D96M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        cumulative8YQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 8 years Table or function
+            is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R96M, PR.T96M, 4)
+          format: int32
+        cumulative8YRank:
+          type: integer
+          description: >-
+            The rank of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 8 years Table or function
+            is : dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :R96M
+          format: int32
+        cumulative8YTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's cumulative performance sector
+            over 8 years Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T96M
+          format: int32
+        cumulative8YPercentile:
+          type: integer
+          description: ''
+          format: int32
+        cumulative9Y:
+          type: number
+          description: >-
+            The cumulative performance of the instrument over 9 years Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P108M, P.D108M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        cumulative9YQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 9 years Table or function
+            is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R108M, PR.T108M, 4)
+          format: int32
+        cumulative9YRank:
+          type: integer
+          description: >-
+            The rank of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 9 years Table or function
+            is : dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :R108M
+          format: int32
+        cumulative9YTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's cumulative performance sector
+            over 9 years Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T108M
+          format: int32
+        cumulative9YPercentile:
+          type: integer
+          description: ''
+          format: int32
+        cumulative10Y:
+          type: number
+          description: >-
+            The cumulative performance of the instrument over 10 years Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P120M, P.D120M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        cumulative10YQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 10 years Table or
+            function is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R120M, PR.T120M, 4)
+          format: int32
+        cumulative10YRank:
+          type: integer
+          description: >-
+            The rank of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 10 years Table or
+            function is : dbPerformance.dbo.PerformanceRankDayEnd; dbField Name
+            is :R120M
+          format: int32
+        cumulative10YTotalRank:
+          type: integer
+          description: >-
+            The rank of the unit's cumulative performance in its respective
+            sector (or requested universe sector) over 10 years Table or
+            function is : dbPerformance.dbo.PerformanceRankDayEnd; dbField Name
+            is :T120M
+          format: int32
+        cumulative10YPercentile:
+          type: integer
+          description: ''
+          format: int32
+        cumulativeSinceLaunch:
+          type: number
+          description: >-
+            The cumulative performance of the instrument since its inception
+            Table or function is : whUnits..fnPerfFld; dbField Name is :-; logic
+            is :dbo.fnPerfFld(P.PBase
+          format: double
+        toCurrency:
+          type: string
+          description: This property is only populated by v2.1 endpoint
+        p12MHigh:
+          type: number
+          description: >-
+            The highest price of this instrument in 12 month period Table or
+            function is : -; dbField Name is :PerformanceYearEnd.P12MHigh; logic
+            is :-
+          format: double
+        p12MLow:
+          type: number
+          description: >-
+            The lowest price of this instrument in 12 month period Table or
+            function is : -; dbField Name is :PerformanceYearEnd.P12MLow; logic
+            is :-
+          format: double
+        sinceLaunchHighValue:
+          type: number
+          description: >-
+            The highest price of this instrument ever achieved Table or function
+            is : -; dbField Name is :PerformanceYearEnd.SinceLaunchHighValue;
+            logic is :-
+          format: double
+        sinceLaunchLowValue:
+          type: number
+          description: >-
+            The lowest price of this instrument ever got to Table or function is
+            : -; dbField Name is :PerformanceYearEnd.SinceLaunchLowValue; logic
+            is :-
+          format: double
+        ytdHigh:
+          type: number
+          description: >-
+            The highest price of this instrument achieved in this calender year
+            Table or function is : -; dbField Name is
+            :PerformanceYearEndSummary.YTDHigh; logic is :-
+          format: double
+        ytdHighDate:
+          type: string
+          description: >-
+            The highest price of this instrument achieved in this calender year
+            Table or function is : -; dbField Name is
+            :PerformanceYearEndSummary.YTDHigh; logic is :-
+          format: date-time
+        ytdLow:
+          type: number
+          description: >-
+            The lowest price of this instrument went to in this calender year
+            Table or function is : -; dbField Name is
+            :PerformanceYearEndSummary.YTDLow; logic is :-
+          format: double
+        ytdLowDate:
+          type: string
+          description: >-
+            The lowest price of this instrument went to in this calender year
+            Table or function is : -; dbField Name is
+            :PerformanceYearEndSummary.YTDLow; logic is :-
+          format: date-time
+    AnnualizedData:
+      type: object
+      properties:
+        Message:
+          type: string
+          description: response message
+        IsSuccess:
+          type: boolean
+          description: based on the response value will be set.
+        Request:
+          $ref: '#/components/schemas/CumulativePerformanceData_Request'
+        Result:
+          type: array
+          description: response result will be assign to result.
+          items:
+            $ref: '#/components/schemas/AnnualizedDataResult'
+    AnnualizedDataResult:
+      type: object
+      properties:
+        Isin:
+          type: string
+        Apir:
+          type: string
+        instrumentCode:
+          type: string
+          description: >-
+            The code for identifying the requested instrument (i.e. fund,
+            sector, benchmark) on the FEfundinfo database Table or function is :
+            input object; dbField Name is :-
+        citiCode:
+          type: string
+          description: >-
+            The FE internal identifier code for the instrument Table or function
+            is : whUnits..FxUnit; dbField Name is :Citicode
+        fundCitiCode:
+          type: string
+          description: >-
+            The FEfundinfo identifier for the co-instrument provided in the
+            request Table or function is : LuInstrument; dbField Name is
+            :Citicode
+        annualisedPerfAsAt:
+          type: string
+          description: >-
+            The as at date of the annualised performance of the instrument Table
+            or function is : PerformanceDayEnd; dbField Name is :PToDate; logic
+            is :
+          format: date-time
+        annualisedHistEndDate:
+          type: string
+          description: >-
+            The date of the end price point, from the history series, used to
+            calculate the annualised performance Table or function is :
+            dbPerformance.dbo.PerformanceDayEnd; dbField Name is
+            :MaximumPriceHistoryDate; logic is :
+          format: date-time
+        annualised1Y:
+          type: number
+          description: >-
+            The annualised performance of the instrument over 1 year Table or
+            function is : fnPerfFld; dbField Name is :-; logic is
+            :fnPerfFld(P.P12M, P.D12M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        annualised1YQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's annualised performance in its respective
+            sector (or requested universe sector) over 1 year Table or function
+            is : dbo.fnRank; dbField Name is : - ; logic is :
+          format: int32
+        annualised1YRank:
+          type: integer
+          description: >-
+            The rank of the unit's annualised performance in its respective
+            sector (or requested universe sector) over 1 year Table or function
+            is : whPerformance..PerformanceRankDayEnd; dbField Name is :R12M;
+            logic is :
+          format: int32
+        annualised1YTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's annualised performance sector
+            over 1 year Table or function is :
+            whPerformance..PerformanceRankDayEnd; dbField Name is :T12M; logic
+            is :
+          format: int32
+        annualised1YPercentile:
+          type: integer
+          description: >-
+            The percentile of the unit's annualised performance in its
+            respective sector (or requested universe sector) over 1 year Table
+            or function is : dbo.fnRank; dbField Name is : - ; logic is :
+          format: int32
+        annualised2Y:
+          type: number
+          description: >-
+            The annualised performance of the instrument over 2 years Table or
+            function is : fnAnnualisePerformance(dbo.fnPerfFld; dbField Name is
+            :-; logic is :fnAnnualisePerformance(dbo.fnPerfFld(P.P24M, P.D24M,
+            P.MaximumPriceHistoryDate, a.PerfTrackRecordDate, IP.CurrencyCode,
+            @Currency), 12.0 / 24, 0)
+          format: double
+        annualised2YQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's annualised performance in its respective
+            sector (or requested universe sector) over 2 years Table or function
+            is : dbo.fnRank; dbField Name is : - ; logic is :
+          format: int32
+        annualised2YRank:
+          type: integer
+          description: >-
+            The rank of the unit's annualised performance in its respective
+            sector (or requested universe sector) over 2 years Table or function
+            is : whPerformance..PerformanceRankDayEnd; dbField Name is :R24M;
+            logic is :
+          format: int32
+        annualised2YTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's annualised performance sector
+            over 2 years Table or function is :
+            whPerformance..PerformanceRankDayEnd; dbField Name is :T24M; logic
+            is :
+          format: int32
+        annualised2YPercentile:
+          type: integer
+          description: >-
+            The percentile of the unit's annualised performance in its
+            respective sector (or requested universe sector) over 2 years Table
+            or function is : dbo.fnRank; dbField Name is : - ; logic is :
+          format: int32
+        annualised3Y:
+          type: number
+          description: >-
+            The annualised performance of the instrument over 3 years Table or
+            function is : fnAnnualisePerformance(dbo.fnPerfFld; dbField Name is
+            :-; logic is :fnAnnualisePerformance(dbo.fnPerfFld(P.P36M, P.D36M,
+            P.MaximumPriceHistoryDate, a.PerfTrackRecordDate, IP.CurrencyCode,
+            @Currency), 12.0 / 36, 0)
+          format: double
+        annualised3YQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's annualised performance in its respective
+            sector (or requested universe sector) over 3 years Table or function
+            is : dbo.fnRank; dbField Name is : - ; logic is :
+          format: int32
+        annualised3YRank:
+          type: integer
+          description: >-
+            The rank of the unit's annualised performance in its respective
+            sector (or requested universe sector) over 3 years Table or function
+            is : whPerformance..PerformanceRankDayEnd; dbField Name is :R36M;
+            logic is :
+          format: int32
+        annualised3YTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's annualised performance sector
+            over 3 years Table or function is :
+            whPerformance..PerformanceRankDayEnd; dbField Name is :T36M; logic
+            is :
+          format: int32
+        annualised3YPercentile:
+          type: integer
+          description: >-
+            The percentile of the unit's annualised performance in its
+            respective sector (or requested universe sector) over 3 years Table
+            or function is : dbo.fnRank; dbField Name is : - ; logic is :
+          format: int32
+        annualised4Y:
+          type: number
+          description: >-
+            The annualised performance of the instrument over 4years Table or
+            function is : fnAnnualisePerformance(dbo.fnPerfFld; dbField Name is
+            :-; logic is :fnAnnualisePerformance(dbo.fnPerfFld(P.P48M, P.D48M,
+            P.MaximumPriceHistoryDate, a.PerfTrackRecordDate, IP.CurrencyCode,
+            @Currency), 12.0 / 48, 0)
+          format: double
+        annualised4YQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's annualised performance in its respective
+            sector (or requested universe sector) over 4 years Table or function
+            is : dbo.fnRank; dbField Name is : - ; logic is :
+          format: int32
+        annualised4YRank:
+          type: integer
+          description: >-
+            The rank of the unit's annualised performance in its respective
+            sector (or requested universe sector) over 4 years Table or function
+            is : whPerformance..PerformanceRankDayEnd; dbField Name is :R48M;
+            logic is :
+          format: int32
+        annualised4YTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's annualised performance sector
+            over 4 years Table or function is :
+            whPerformance..PerformanceRankDayEnd; dbField Name is :T48M; logic
+            is :
+          format: int32
+        annualised4YPercentile:
+          type: integer
+          description: >-
+            The percentile of the unit's annualised performance in its
+            respective sector (or requested universe sector) over 4 years Table
+            or function is : dbo.fnRank; dbField Name is : - ; logic is :
+          format: int32
+        annualised5Y:
+          type: number
+          description: >-
+            The annualised performance of the instrument over 5 years Table or
+            function is : fnAnnualisePerformance(dbo.fnPerfFld; dbField Name is
+            :-; logic is :fnAnnualisePerformance(dbo.fnPerfFld(P.P60M, P.D60M,
+            P.MaximumPriceHistoryDate, a.PerfTrackRecordDate, IP.CurrencyCode,
+            @Currency), 12.0 / 60, 0)
+          format: double
+        annualised5YQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's annualised performance in its respective
+            sector (or requested universe sector) over 5 years Table or function
+            is : dbo.fnRank; dbField Name is : - ; logic is :
+          format: int32
+        annualised5YRank:
+          type: integer
+          description: >-
+            The rank of the unit's annualised performance in its respective
+            sector (or requested universe sector) over 5 years Table or function
+            is : whPerformance..PerformanceRankDayEnd; dbField Name is :R60M;
+            logic is :
+          format: int32
+        annualised5YTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's annualised performance sector
+            over 5 years Table or function is :
+            whPerformance..PerformanceRankDayEnd; dbField Name is :T60M; logic
+            is :
+          format: int32
+        annualised5YPercentile:
+          type: integer
+          description: >-
+            The percentile of the unit's annualised performance in its
+            respective sector (or requested universe sector) over 5 years Table
+            or function is : dbo.fnRank; dbField Name is : - ; logic is :
+          format: int32
+        annualised6Y:
+          type: number
+          description: >-
+            The annualised performance of the instrument over 6 years Table or
+            function is : fnAnnualisePerformance(dbo.fnPerfFld; dbField Name is
+            :-; logic is :fnAnnualisePerformance(dbo.fnPerfFld(P.P72M, P.D72M,
+            P.MaximumPriceHistoryDate, a.PerfTrackRecordDate, IP.CurrencyCode,
+            @Currency), 12.0 / 72, 0)
+          format: double
+        annualised6YQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's annualised performance in its respective
+            sector (or requested universe sector) over 6 years Table or function
+            is : dbo.fnRank; dbField Name is : - ; logic is :
+          format: int32
+        annualised6YRank:
+          type: integer
+          description: >-
+            The rank of the unit's annualised performance in its respective
+            sector (or requested universe sector) over 6 years Table or function
+            is : whPerformance..PerformanceRankDayEnd; dbField Name is :R72M;
+            logic is :
+          format: int32
+        annualised6YTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's annualised performance sector
+            over 6 years Table or function is :
+            whPerformance..PerformanceRankDayEnd; dbField Name is :T72M; logic
+            is :
+          format: int32
+        annualised6YPercentile:
+          type: integer
+          description: >-
+            The percentile of the unit's annualised performance in its
+            respective sector (or requested universe sector) over 6 years Table
+            or function is : dbo.fnRank; dbField Name is : - ; logic is :
+          format: int32
+        annualised7Y:
+          type: number
+          description: >-
+            The annualised performance of the instrument over 7 years Table or
+            function is : fnAnnualisePerformance(dbo.fnPerfFld; dbField Name is
+            :-; logic is :fnAnnualisePerformance(dbo.fnPerfFld(P.P84M, P.D84M,
+            P.MaximumPriceHistoryDate, a.PerfTrackRecordDate, IP.CurrencyCode,
+            @Currency), 12.0 / 84, 0)
+          format: double
+        annualised7YQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's annualised performance in its respective
+            sector (or requested universe sector) over 7 years Table or function
+            is : dbo.fnRank; dbField Name is : - ; logic is :
+          format: int32
+        annualised7YRank:
+          type: integer
+          description: >-
+            The rank of the unit's annualised performance in its respective
+            sector (or requested universe sector) over 7 years Table or function
+            is : whPerformance..PerformanceRankDayEnd; dbField Name is :R84M;
+            logic is :
+          format: int32
+        annualised7YTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's annualised performance sector
+            over 7 years Table or function is :
+            whPerformance..PerformanceRankDayEnd; dbField Name is :T84M; logic
+            is :
+          format: int32
+        annualised7YPercentile:
+          type: integer
+          description: >-
+            The percentile of the unit's annualised performance in its
+            respective sector (or requested universe sector) over 7 years Table
+            or function is : dbo.fnRank; dbField Name is : - ; logic is :
+          format: int32
+        annualised8Y:
+          type: number
+          description: >-
+            The annualised performance of the instrument over 8 years Table or
+            function is : fnAnnualisePerformance(dbo.fnPerfFld; dbField Name is
+            :-; logic is :fnAnnualisePerformance(dbo.fnPerfFld(P.P96M, P.D96M,
+            P.MaximumPriceHistoryDate, a.PerfTrackRecordDate, IP.CurrencyCode,
+            @Currency), 12.0 / 96, 0)
+          format: double
+        annualised8YQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's annualised performance in its respective
+            sector (or requested universe sector) over 8 years Table or function
+            is : dbo.fnRank; dbField Name is : - ; logic is :
+          format: int32
+        annualised8YRank:
+          type: integer
+          description: >-
+            The rank of the unit's annualised performance in its respective
+            sector (or requested universe sector) over 8 years Table or function
+            is : whPerformance..PerformanceRankDayEnd; dbField Name is :R96M;
+            logic is :
+          format: int32
+        annualised8YTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's annualised performance sector
+            over 8 years Table or function is :
+            whPerformance..PerformanceRankDayEnd; dbField Name is :T96M; logic
+            is :
+          format: int32
+        annualised8YPercentile:
+          type: integer
+          description: >-
+            The percentile of the unit's annualised performance in its
+            respective sector (or requested universe sector) over 8 years Table
+            or function is : dbo.fnRank; dbField Name is : - ; logic is :
+          format: int32
+        annualised9Y:
+          type: number
+          description: >-
+            The annualised performance of the instrument over 9 years Table or
+            function is : fnAnnualisePerformance(dbo.fnPerfFld; dbField Name is
+            :-; logic is :fnAnnualisePerformance(dbo.fnPerfFld(P.P108M, P.D108M,
+            P.MaximumPriceHistoryDate, a.PerfTrackRecordDate, IP.CurrencyCode,
+            @Currency), 12.0 / 108, 0)
+          format: double
+        annualised9YQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's annualised performance in its respective
+            sector (or requested universe sector) over 9 years Table or function
+            is : dbo.fnRank; dbField Name is : - ; logic is :
+          format: int32
+        annualised9YRank:
+          type: integer
+          description: >-
+            The rank of the unit's annualised performance in its respective
+            sector (or requested universe sector) over 9 years Table or function
+            is : whPerformance..PerformanceRankDayEnd; dbField Name is :R108M;
+            logic is :
+          format: int32
+        annualised9YTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's annualised performance sector
+            over 9 years Table or function is :
+            whPerformance..PerformanceRankDayEnd; dbField Name is :T108M; logic
+            is :
+          format: int32
+        annualised9YPercentile:
+          type: integer
+          description: >-
+            The percentile of the unit's annualised performance in its
+            respective sector (or requested universe sector) over 9 years Table
+            or function is : dbo.fnRank; dbField Name is : - ; logic is :
+          format: int32
+        annualised10Y:
+          type: number
+          description: >-
+            The annualised performance of the instrument over 10 years Table or
+            function is : fnAnnualisePerformance(dbo.fnPerfFld; dbField Name is
+            :-; logic is :fnAnnualisePerformance(dbo.fnPerfFld(P.P120M, P.D120M,
+            P.MaximumPriceHistoryDate, a.PerfTrackRecordDate, IP.CurrencyCode,
+            @Currency), 12.0 / 120, 0)
+          format: double
+        annualised10YQuart:
+          type: integer
+          description: >-
+            The quartile of the unit's annualised performance in its respective
+            sector (or requested universe sector) over 10 years Table or
+            function is : dbo.fnRank; dbField Name is : - ; logic is :
+          format: int32
+        annualised10YRank:
+          type: integer
+          description: >-
+            The rank of the unit's annualised performance in its respective
+            sector (or requested universe sector) over 10 years Table or
+            function is : whPerformance..PerformanceRankDayEnd; dbField Name is
+            :R120M; logic is :
+          format: int32
+        annualised10YTotalRank:
+          type: integer
+          description: >-
+            The total ranked units in the unit's annualised performance sector
+            over 10 years Table or function is :
+            whPerformance..PerformanceRankDayEnd; dbField Name is :T120M; logic
+            is :
+          format: int32
+        annualised10YPercentile:
+          type: integer
+          description: >-
+            The percentile of the unit's annualised performance in its
+            respective sector (or requested universe sector) over 10 years Table
+            or function is : dbo.fnRank; dbField Name is : - ; logic is :
+          format: int32
+        annualisedSinceLaunch:
+          type: number
+          description: >-
+            The annualised performance of the instrument since its inception
+            Table or function is : fnAnnualisePerformance(dbo.fnPerfFld; dbField
+            Name is :-; logic is :fnAnnualisePerformance(dbo.fnPerfFld(P.PBase,
+            P.MinimumPriceHistoryDate, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency),
+            365.0000/NULLIF(DATEDIFF(d, P.MinimumPriceHistoryDate,
+            P.MaximumPriceHistoryDate), 0), 0)
+          format: double
+        toCurrency:
+          type: string
+          description: >-
+            To identify the performance value aginst currency, but this only
+            applicable from V2.1 onwards
+        p12MHigh:
+          type: number
+          description: ''
+          format: double
+        p12MLow:
+          type: number
+          description: ''
+          format: double
+        sinceLaunchHighValue:
+          type: number
+          description: ''
+          format: double
+        sinceLaunchLowValue:
+          type: number
+          description: ''
+          format: double
+        ytdHigh:
+          type: number
+          description: ''
+          format: double
+        ytdHighDate:
+          type: string
+          description: ''
+          format: date-time
+        ytdLow:
+          type: number
+          description: ''
+          format: double
+        ytdLowDate:
+          type: string
+          description: ''
+          format: date-time
+    CalendarData:
+      type: object
+      properties:
+        Message:
+          type: string
+          description: response message
+        IsSuccess:
+          type: boolean
+          description: based on the response value will be set.
+        Request:
+          $ref: '#/components/schemas/CumulativePerformanceData_Request'
+        Result:
+          type: array
+          description: response result will be assign to result.
+          items:
+            $ref: '#/components/schemas/CalendarDataResult'
+    CalendarDataResult:
+      type: object
+      properties:
+        Isin:
+          type: string
+        Apir:
+          type: string
+        instrumentCode:
+          type: string
+          description: >-
+            The code for identifying the requested instrument (i.e. fund,
+            sector, benchmark) on the FEfundinfo database
+          nullable: true
+        fundCitiCode:
+          type: string
+          description: >-
+            The FEfundinfo identifier for the co-instrument provided in the
+            request
+          nullable: true
+        citiCode:
+          type: string
+          description: The FE internal identifier code for the instrument
+          nullable: true
+        calendarYr1:
+          type: number
+          description: The performance of the instrument over the previous calendar year
+          format: double
+          nullable: true
+        calendarYr1Quart:
+          type: integer
+          description: >-
+            The quartile in which the discrete performance of the primary share
+            class of the fund over the previous calendar year falls within its
+            sector
+          format: int32
+          nullable: true
+        calendarYr1Rank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            previous calendar year within its sector
+          format: int32
+          nullable: true
+        calendarYr1TotalRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            previous calendar year, across all instruments of its type
+          format: int32
+          nullable: true
+        calendarYr2:
+          type: number
+          description: The performance of the instrument over the calendar year before last
+          format: double
+          nullable: true
+        calendarYr2Quart:
+          type: integer
+          description: >-
+            The quartile in which the discrete performance of the primary share
+            class of the fund over the calendar year before last falls within
+            its sector
+          format: int32
+          nullable: true
+        calendarYr2Rank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            calendar year before last within its sector
+          format: int32
+          nullable: true
+        calendarYr2TotalRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            calendar year before last, across all instruments of its type
+          format: int32
+          nullable: true
+        calendarYr3:
+          type: number
+          description: The performance of the instrument over the calendar year 3 years ago
+          format: double
+          nullable: true
+        calendarYr3Quart:
+          type: integer
+          description: >-
+            The quartile in which the discrete performance of the primary share
+            class of the fund over the calendar year 3 years ago falls within
+            its sector
+          format: int32
+          nullable: true
+        calendarYr3Rank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            calendar year 3 years ago within its sector
+          format: int32
+          nullable: true
+        calendarYr3TotalRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            calendar year 3 years ago, across all instruments of its type
+          format: int32
+          nullable: true
+        calendarYr4:
+          type: number
+          description: The performance of the instrument over the calendar year 4 years ago
+          format: double
+          nullable: true
+        calendarYr4Quart:
+          type: integer
+          description: >-
+            The quartile in which the discrete performance of the primary share
+            class of the fund over the calendar year 4 years ago falls within
+            its sector
+          format: int32
+          nullable: true
+        calendarYr4Rank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            calendar year 4 years ago within its sector
+          format: int32
+          nullable: true
+        calendarYr4TotalRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            calendar year 4 years ago, across all instruments of its type
+          format: int32
+          nullable: true
+        calendarYr5:
+          type: number
+          description: The performance of the instrument over the calendar year 5 years ago
+          format: double
+          nullable: true
+        calendarYr5Quart:
+          type: integer
+          description: >-
+            The quartile in which the discrete performance of the primary share
+            class of the fund over the calendar year 5 years ago falls within
+            its sector
+          format: int32
+          nullable: true
+        calendarYr5Rank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            calendar year 5 years ago within its sector
+          format: int32
+          nullable: true
+        calendarYr5TotalRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            calendar year 5 years ago, across all instruments of its type
+          format: int32
+          nullable: true
+        calendarYr6:
+          type: number
+          description: The performance of the instrument over the calendar year 6 years ago
+          format: double
+          nullable: true
+        calendarYr6Quart:
+          type: integer
+          description: >-
+            The quartile in which the discrete performance of the primary share
+            class of the fund over the calendar year 6 years ago falls within
+            its sector
+          format: int32
+          nullable: true
+        calendarYr6Rank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            calendar year 6 years ago within its sector
+          format: int32
+          nullable: true
+        calendarYr6TotalRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            calendar year 6 years ago, across all instruments of its type
+          format: int32
+          nullable: true
+        calendarYr7:
+          type: number
+          description: The performance of the instrument over the calendar year 7 years ago
+          format: double
+          nullable: true
+        calendarYr7Quart:
+          type: integer
+          description: >-
+            The quartile in which the discrete performance of the primary share
+            class of the fund over the calendar year 7 years ago falls within
+            its sector
+          format: int32
+          nullable: true
+        calendarYr7Rank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            calendar year 7 years ago within its sector
+          format: int32
+          nullable: true
+        calendarYr7TotalRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            calendar year 7 years ago, across all instruments of its type
+          format: int32
+          nullable: true
+        calendarYr8:
+          type: number
+          description: The performance of the instrument over the calendar year 8 years ago
+          format: double
+          nullable: true
+        calendarYr8Quart:
+          type: integer
+          description: >-
+            The quartile in which the discrete performance of the primary share
+            class of the fund over the calendar year 8 years ago falls within
+            its sector
+          format: int32
+          nullable: true
+        calendarYr8Rank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            calendar year 8 years ago within its sector
+          format: int32
+          nullable: true
+        calendarYr8TotalRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            calendar year 8 years ago, across all instruments of its type
+          format: int32
+          nullable: true
+        calendarYr9:
+          type: number
+          description: The performance of the instrument over the calendar year 9 years ago
+          format: double
+          nullable: true
+        calendarYr9Quart:
+          type: integer
+          description: >-
+            The quartile in which the discrete performance of the primary share
+            class of the fund over the calendar year 9 years ago falls within
+            its sector
+          format: int32
+          nullable: true
+        calendarYr9Rank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            calendar year 9 years ago within its sector
+          format: int32
+          nullable: true
+        calendarYr9TotalRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            calendar year 9 years ago, across all instruments of its type
+          format: int32
+          nullable: true
+        calendarYr10:
+          type: number
+          description: >-
+            The performance of the instrument over the calendar year 10 years
+            ago
+          format: double
+          nullable: true
+        calendarYr10Quart:
+          type: integer
+          description: >-
+            The quartile in which the discrete performance of the primary share
+            class of the fund over the calendar year 10 years ago falls within
+            its sector
+          format: int32
+          nullable: true
+        calendarYr10Rank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            calendar year 10 years ago within its sector
+          format: int32
+          nullable: true
+        calendarYr10TotalRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            calendar year 10 years ago, across all instruments of its type
+          format: int32
+          nullable: true
+        toCurrency:
+          type: string
+          description: This property is only populated by v2.1 endpoint
+          nullable: true
+        p12MHigh:
+          type: number
+          format: double
+          nullable: true
+        p12MLow:
+          type: number
+          format: double
+          nullable: true
+        sinceLaunchHighValue:
+          type: number
+          format: double
+          nullable: true
+        sinceLaunchLowValue:
+          type: number
+          format: double
+          nullable: true
+        ytdHigh:
+          type: number
+          format: double
+          nullable: true
+        ytdHighDate:
+          type: string
+          format: date-time
+          nullable: true
+        ytdLow:
+          type: number
+          format: double
+          nullable: true
+        ytdLowDate:
+          type: string
+          format: date-time
+          nullable: true
+    DiscretePerformanceData:
+      type: object
+      properties:
+        Message:
+          type: string
+          description: response message
+        IsSuccess:
+          type: boolean
+          description: based on the response value will be set.
+        Request:
+          $ref: '#/components/schemas/CumulativePerformanceData_Request'
+        Result:
+          type: array
+          description: response result will be assign to result.
+          items:
+            $ref: '#/components/schemas/DiscretePerformanceDataResult'
+    DiscretePerformanceDataResult:
+      type: object
+      properties:
+        Isin:
+          type: string
+        Apir:
+          type: string
+        instrumentCode:
+          type: string
+          description: >-
+            The code for identifying the requested instrument (i.e. fund,
+            sector, benchmark) on the FEfundinfo database Table or function is :
+            input object; dbField Name is :-
+        fundCitiCode:
+          type: string
+          description: >-
+            The FEfundinfo identifier for the co-instrument provided in the
+            request Table or function is : LuInstrument; dbField Name is
+            :Citicode
+        citiCode:
+          type: string
+          description: >-
+            The FE internal identifier code for the instrument Table or function
+            is : whUnits..FxUnit; dbField Name is :Citicode
+        discretePerfAsAt:
+          type: string
+          description: >-
+            The as at date of the discrete performance of the instrument Table
+            or function is : dbPerformance.dbo.PerformanceDayEnd; dbField Name
+            is :PToDate; logic is :
+          format: date-time
+        discreteHistEndDate:
+          type: string
+          description: >-
+            The date of the end price point, from the history series, used to
+            calculate the discrete performance Table or function is :
+            dbPerformance.dbo.PerformanceDayEnd; dbField Name is
+            :MaximumPriceHistoryDate; logic is :
+          format: date-time
+        discrete0To12M:
+          type: number
+          description: >-
+            The discrete performance of the instrument over the previous 12
+            months (to the defined end point) Table or function is :
+            whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P12M, P.D12M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        discrete0To12MQuart:
+          type: integer
+          description: >-
+            The quartile in which the discrete performance of the primary share
+            class of the fund over the previous 12 months (to the defined end
+            point) falls within its sector Table or function is :
+            whUnits..fnRank; dbField Name is :-; logic is :dbo.fnRank(PR.R12M,
+            PR.T12M, 4)
+          format: int32
+        discrete0To12MRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            previous 12 months (to the defined end point) within its sector
+            Table or function is : dbPerformance.dbo.PerformanceRankDayEnd;
+            dbField Name is :R12M
+          format: int32
+        discrete0To12MTotalRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument over the
+            previous 12 months (to the defined end point), across all
+            instruments of its type Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T12M
+          format: int32
+        discrete12MTo24M:
+          type: number
+          description: >-
+            The discrete performance of the instrument between the 12th and 24th
+            previous months (relative to the defined end point) Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P12MTo24M, P.D12MTo24M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        discrete12MTo24MQuart:
+          type: integer
+          description: >-
+            The quartile in which the discrete performance of the primary share
+            class of the fund between the 12th and 24th previous months
+            (relative to the defined end point) falls within its sector Table or
+            function is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R12MTo24M, PR.T12MTo24M, 4)
+          format: int32
+        discrete12MTo24MRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument between the
+            12th and 24th previous months (relative to the defined end point)
+            within its sector Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :R12MTo24M
+          format: int32
+        discrete12MTo24MTotalRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument between the
+            12th and 24th previous months (relative to the defined end point),
+            across all instruments of its type Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T12MTo24M
+          format: int32
+        discrete24MTo36M:
+          type: number
+          description: >-
+            The discrete performance of the instrument between the 24th and 36th
+            previous months (relative to the defined end point) Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P24MTo36M, P.D24MTo36M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        discrete24MTo36MQuart:
+          type: integer
+          description: >-
+            The quartile in which the discrete performance of the primary share
+            class of the fund between the 24th and 36th previous months
+            (relative to the defined end point) falls within its sector Table or
+            function is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R24MTo36M, PR.T24MTo36M, 4)
+          format: int32
+        discrete24MTo36MRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument between the
+            24th and 36th previous months (relative to the defined end point)
+            within its sector Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :R24MTo36M
+          format: int32
+        discrete24MTo36MTotalRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument between the
+            24th and 36th previous months (relative to the defined end point),
+            across all instruments of its type Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T24MTo36M
+          format: int32
+        discrete36MTo48M:
+          type: number
+          description: >-
+            The discrete performance of the instrument between the 36th and 48th
+            previous months (relative to the defined end point) Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P36MTo48M, P.D36MTo48M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        discrete36MTo48MQuart:
+          type: integer
+          description: >-
+            The quartile in which the discrete performance of the primary share
+            class of the fund between the 36th and 48th previous months
+            (relative to the defined end point) falls within its sector Table or
+            function is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R36MTo48M, PR.T36MTo48M, 4)
+          format: int32
+        discrete36MTo48MRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument between the
+            36th and 48th previous months (relative to the defined end point)
+            within its sector Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :R36MTo48M
+          format: int32
+        discrete36MTo48MTotalRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument between the
+            36th and 48th previous months (relative to the defined end point),
+            across all instruments of its type Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T36MTo48M
+          format: int32
+        discrete48MTo60M:
+          type: number
+          description: >-
+            The discrete performance of the instrument between the 48th and 60th
+            previous months (relative to the defined end point) Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P48MTo60M, P.D48MTo60M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        discrete48MTo60MQuart:
+          type: integer
+          description: >-
+            The quartile in which the discrete performance of the primary share
+            class of the fund between the 48th and 60th previous months
+            (relative to the defined end point) falls within its sector Table or
+            function is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R48MTo60M, PR.T48MTo60M, 4)
+          format: int32
+        discrete48MTo60MRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument between the
+            48th and 60th previous months (relative to the defined end point)
+            within its sector Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :R48MTo60M
+          format: int32
+        discrete48MTo60MTotalRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument between the
+            48th and 60th previous months (relative to the defined end point),
+            across all instruments of its type Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T48MTo60M
+          format: int32
+        discrete60MTo72M:
+          type: number
+          description: >-
+            The discrete performance of the instrument between the 60th and 72nd
+            previous months (relative to the defined end point) Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P60MTo72M, P.D60MTo72M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        discrete60MTo72MQuart:
+          type: integer
+          description: >-
+            The quartile in which the discrete performance of the primary share
+            class of the fund between the 60th and 72nd previous months
+            (relative to the defined end point) falls within its sector Table or
+            function is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R60MTo72M, PR.T60MTo72M, 4)
+          format: int32
+        discrete60MTo72MRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument between the
+            60th and 72nd previous months (relative to the defined end point)
+            within its sector Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :R60MTo72M
+          format: int32
+        discrete60MTo72MTotalRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument between the
+            60th and 72nd previous months (relative to the defined end point),
+            across all instruments of its type Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T60MTo72M
+          format: int32
+        discrete72MTo84M:
+          type: number
+          description: >-
+            The discrete performance of the instrument between the 72nd and 84th
+            previous months (relative to the defined end point) Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P72MTo84M, P.D72MTo84M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        discrete72MTo84MQuart:
+          type: integer
+          description: >-
+            The quartile in which the discrete performance of the primary share
+            class of the fund between the 72nd and 84th previous months
+            (relative to the defined end point) falls within its sector Table or
+            function is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R72MTo84M, PR.T72MTo84M, 4)
+          format: int32
+        discrete72MTo84MRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument between the
+            72nd and 84th previous months (relative to the defined end point)
+            within its sector Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :R72MTo84M
+          format: int32
+        discrete72MTo84MTotalRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument between the
+            72nd and 84th previous months (relative to the defined end point),
+            across all instruments of its type Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T72MTo84M
+          format: int32
+        discrete84MTo96M:
+          type: number
+          description: >-
+            The discrete performance of the instrument between the 84th and 96th
+            previous months (relative to the defined end point) Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P84MTo96M, P.D84MTo96M, P.MaximumPriceHistoryDate,
+            a.PerfTrackRecordDate, IP.CurrencyCode, @Currency)
+          format: double
+        discrete84MTo96MQuart:
+          type: integer
+          description: >-
+            The quartile in which the discrete performance of the primary share
+            class of the fund between the 84th and 96th previous months
+            (relative to the defined end point) falls within its sector Table or
+            function is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R84MTo96M, PR.T84MTo96M, 4)
+          format: int32
+        discrete84MTo96MRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument between the
+            84th and 96th previous months (relative to the defined end point)
+            within its sector Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :R84MTo96M
+          format: int32
+        discrete84MTo96MTotalRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument between the
+            84th and 96th previous months (relative to the defined end point),
+            across all instruments of its type Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T84MTo96M
+          format: int32
+        discrete96MTo108M:
+          type: number
+          description: >-
+            The discrete performance of the instrument between the 96th and
+            108th previous months (relative to the defined end point) Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P96MTo108M, P.D96MTo108M,
+            P.MaximumPriceHistoryDate, a.PerfTrackRecordDate, IP.CurrencyCode,
+            @Currency)
+          format: double
+        discrete96MTo108MQuart:
+          type: integer
+          description: >-
+            The quartile in which the discrete performance of the primary share
+            class of the fund between the 96th and 108th previous months
+            (relative to the defined end point) falls within its sector Table or
+            function is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R96MTo108M, PR.T96MTo108M, 4)
+          format: int32
+        discrete96MTo108MRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument between the
+            96th and 108th previous months (relative to the defined end point)
+            within its sector Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :R96MTo108M
+          format: int32
+        discrete96MTo108MTotalRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument between the
+            96th and 108th previous months (relative to the defined end point),
+            across all instruments of its type Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is :T96MTo108M
+          format: int32
+        discrete108MTo120M:
+          type: number
+          description: >-
+            The discrete performance of the instrument between the 108th and
+            120th previous months (relative to the defined end point) Table or
+            function is : whUnits..fnPerfFld; dbField Name is :-; logic is
+            :dbo.fnPerfFld(P.P108MTo120M, P.D108MTo120M,
+            P.MaximumPriceHistoryDate, a.PerfTrackRecordDate, IP.CurrencyCode,
+            @Currency)
+          format: double
+        discrete108MTo120MQuart:
+          type: integer
+          description: >-
+            The quartile in which the discrete performance of the primary share
+            class of the fund between the 108th and 120th previous months
+            (relative to the defined end point) falls within its sector Table or
+            function is : whUnits..fnRank; dbField Name is :-; logic is
+            :dbo.fnRank(PR.R108MTo120M, PR.T108MTo120M, 4)
+          format: int32
+        discrete108MTo120MRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument between the
+            108th and 120th previous months (relative to the defined end point)
+            within its sector Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is
+            :R108MTo120M
+          format: int32
+        discrete108MTo120MTotalRank:
+          type: integer
+          description: >-
+            The rank of the discrete performance of the instrument between the
+            108th and 120th previous months (relative to the defined end point),
+            across all instruments of its type Table or function is :
+            dbPerformance.dbo.PerformanceRankDayEnd; dbField Name is
+            :T108MTo120M
+          format: int32
+        toCurrency:
+          type: string
+          description: This property is only populated by v2.1 endpoint
+        p12MHigh:
+          type: number
+          description: ''
+          format: double
+        p12MLow:
+          type: number
+          description: ''
+          format: double
+        sinceLaunchHighValue:
+          type: number
+          description: ''
+          format: double
+        sinceLaunchLowValue:
+          type: number
+          description: ''
+          format: double
+        ytdHigh:
+          type: number
+          description: ''
+          format: double
+        ytdHighDate:
+          type: string
+          description: ''
+          format: date-time
+        ytdLow:
+          type: number
+          description: ''
+          format: double
+        ytdLowDate:
+          type: string
+          description: ''
+          format: date-time
+    PostAnnualisedRequestBody:
+      allOf:
+        - $ref: '#/components/schemas/PostRequestBody'
+        - type: object
+          properties:
+            IdentifierType:
+              type: string
+              description: >-
+                Currently supported identifierTypes are citicodes, isins and
+                apirs.
+              default: ''
+            Filters:
+              $ref: '#/components/schemas/PostAnnualisedRequestBody_Filters'
+    PostCalendarRequestBody:
+      allOf:
+        - $ref: '#/components/schemas/PostRequestBody'
+        - type: object
+          properties:
+            IdentifierType:
+              type: string
+              description: >-
+                Currently supported identifierTypes are citicodes, isins and
+                apirs.
+              default: ''
+            Filters:
+              $ref: '#/components/schemas/PostAnnualisedRequestBody_Filters'
+    PostCumulativePerformanceRequestBody:
+      allOf:
+        - $ref: '#/components/schemas/PostRequestBody'
+        - type: object
+          properties:
+            IdentifierType:
+              type: string
+              description: >-
+                Currently supported identifierTypes are citicodes, isins and
+                apirs.
+              default: ''
+            Filters:
+              $ref: '#/components/schemas/PostAnnualisedRequestBody_Filters'
+    PostDiscretePerformanceRequestBody:
+      allOf:
+        - $ref: '#/components/schemas/PostRequestBody'
+        - type: object
+          properties:
+            IdentifierType:
+              type: string
+              description: >-
+                Currently supported identifierTypes are citicodes, isins and
+                apirs.
+              default: ''
+            Filters:
+              $ref: '#/components/schemas/PostAnnualisedRequestBody_Filters'
+    PostRequestBody:
+      type: object
+      properties:
+        IdentifierValues:
+          maxItems: 10
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: Provide identifier values. Provide maximum 10 values.
+          items:
+            type: string
+        FieldSelections:
+          uniqueItems: true
+          type: array
+          description: Provide the fields name to return in response
+          items:
+            type: string
+            description: Field name
+    ErrorResponse:
+      type: object
+      properties:
+        Message:
+          type: string
+          description: response message
+        IsSuccess:
+          type: boolean
+          description: based on the response value will be set.
+        Result:
+          type: array
+          description: response result will be assign to result.
+          items:
+            $ref: '#/components/schemas/ErrorItem'
+    ErrorItem:
+      type: object
+    inline_response_200:
+      anyOf:
+        - $ref: '#/components/schemas/CumulativePerformanceData'
+    inline_response_401:
+      anyOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+    inline_response_200_1:
+      anyOf:
+        - $ref: '#/components/schemas/AnnualizedData'
+    inline_response_200_2:
+      anyOf:
+        - $ref: '#/components/schemas/CalendarData'
+    inline_response_200_3:
+      anyOf:
+        - $ref: '#/components/schemas/DiscretePerformanceData'
+    CumulativePerformanceData_Request:
+      type: object
+      properties:
+        identifierType:
+          type: string
+        identifierValue:
+          type: string
+        PerformanceEndType:
+          type: integer
+        MethodType:
+          type: integer
+        Currency:
+          type: string
+        PriceType:
+          type: integer
+        fieldSelections:
+          type: string
+      description: It contains the request input data
+    PostAnnualisedRequestBody_Filters:
+      type: object
+      properties:
+        PerformanceEndType:
+          type: integer
+          description: |
+            Performace End Types:
+             * `1` - DayEnd
+             * `2` - MonthEnd 
+             * `3` - QuarterEnd
+             * `4` - YearEnd 
+          enum:
+            - 1
+            - 2
+            - 3
+            - 4
+        MethodType:
+          type: integer
+          description: |
+            Performace Method Types:
+             * `1` - BidToBid
+             * `3` - OfferToBid 
+          enum:
+            - 1
+            - 3
+        PriceType:
+          type: integer
+          description: |
+            Performace Price Types:
+             * `1` - NetTotalReturn
+             * `2` - GrossTotalReturn 
+          enum:
+            - 1
+            - 2
+        Currency:
+          type: string
+          description: Value for currency. It will be default to GBP if nothing specified.
+          default: GBP
+  responses:
+    '400':
+      description: Bad request, Please check your inputs.
+      content: {}
+    '401':
+      description: Unauthorized.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/inline_response_401'
+    '404':
+      description: No data for this identifierValue.
+      content: {}
+    '408':
+      description: Your request has timed out. Please try again.
+      content: {}
+    '500':
+      description: >-
+        Internal Server error, please raise a ticket with the FEFundinfo support
+        team if you experience this.
+      content: {}
+  parameters:
+    subscriptionHeaderParam:
+      name: Fefi-Apim-Subscription-Key
+      in: header
+      description: Fefi APIM Subscription key
+      required: true
+      style: simple
+      explode: false
+      schema:
+        type: string
+        default: ''
+    correlationIdParam:
+      name: x-correlation-id
+      in: header
+      description: >-
+        x-correlation-id is used to trace the log. It is unique guid id. API
+        will generate new id if it is not passed explicitly.
+      required: false
+      style: simple
+      explode: false
+      schema:
+        type: string
+        default: ''
+    identifierValueParam:
+      name: identifierValue
+      in: query
+      description: Value for the identifier type. Provide maximum 10 values.
+      required: true
+      style: form
+      explode: false
+      schema:
+        maxItems: 10
+        minItems: 1
+        uniqueItems: true
+        type: array
+        items:
+          type: string
+          default: ''
+    fieldSelectionsParam:
+      name: fieldSelections
+      in: query
+      description: Provide field names to filter in response.
+      required: false
+      style: form
+      explode: false
+      schema:
+        type: array
+        items:
+          type: string
+          default: ''
+  securitySchemes:
+    Production:
+      type: oauth2
+      description: Using AAD to get an OAuth2 token for a registered app as a client.
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.fefundinfo.com/connect/token
+          scopes:
+            dynamic-data-performance-read: Access to read dynamic performance data
+        authorizationCode:
+          authorizationUrl: https://auth.fefundinfo.com/connect/authorize
+          tokenUrl: https://auth.fefundinfo.com/connect/token
+          scopes:
+            dynamic-data-performance-read: Access to read dynamic performance data

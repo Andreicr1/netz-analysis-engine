@@ -1,0 +1,815 @@
+openapi: 3.0.0
+info:
+  title: Public Fund APIs - Dynamic Data - Series API
+  description: >-
+    Retrieve data on how values change over time, which can be used to make
+    charts or find out returns for a specific time period.
+  version: 1.0.0
+servers:
+  - url: https://api.fefundinfo.com/funds/DynamicDataSeries/1.0.0
+    description: Production
+security:
+  - Production: []
+paths:
+  /Delta:
+    get:
+      tags:
+        - Dynamic Data Series
+      summary: Delta Dynamic Series data updates
+      description: >
+        Use this end point to fetch dynamic series data based on the
+        identifierType like citicodes and isin.
+      operationId: FundDynamicSeriesDeltaData
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: identifierType
+          in: query
+          description: Currently supported identifierTypes are citicodes and isins.
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: string
+        - name: identifierValue
+          in: query
+          description: Value for the identifier type. Provide maximum 10 values.
+          required: true
+          style: form
+          explode: false
+          schema:
+            maxItems: 10
+            minItems: 1
+            uniqueItems: true
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: seriesType
+          in: query
+          description: |
+            Series Types:
+              * `1` -  Bid 
+              * `2` -  BidTr 
+              * `3` -  BidGtr 
+              * `4` -  Offer 
+              * `5` -  OfferTr 
+              * `6` -  OfferGtr 
+              * `7` -  NavPublished 
+              * `8` -  NavEstimated 
+              * `9` -  NavTr 
+              * `10` -  PriceExDividend 
+              * `11` -  NavPremiumDiscount 
+              * `12` -  FeRiskScore 
+              * `13` -  OfferToBid 
+              * `14` -  OfferToBidTr 
+              * `15` -  OfferToBidGtr 
+              * `16` -  DividendNet 
+              * `17` -  GrossAMCCharge 
+              * `18` -  Mid 
+              * `19` -  MidTr 
+              * `20` -  MidGtr 
+              * `21` -  FundSize 
+              * `22` -  UnitSize 
+              * `23` -  NumberOfSharesAmountFund 
+              * `24` -  NumberOfSharesAmountUnit 
+              * `25` -  SubscriptionPrice 
+              * `26` -  RedemptionPrice 
+              * `27` -  VolumeOfSubscribedShares 
+              * `28` -  VolumeOfRedeemedShares 
+              * `29` -  NumberOfSubscribedShares 
+              * `30` -  NumberOfRedeemedShares 
+              * `31` -  VolumeOfSubscriptionsInsideFund 
+              * `32` -  VolumeOfRedemptionsInsideFund 
+              * `33` -  NumberOfSubscribedSharesInFund 
+              * `34` -  NumberOfRedeemedSharesInFund 
+              * `35` -  TaxableIncomePerShareBelgium 
+              * `36` -  TaxableIncomePerShareSwitzerland 
+              * `37` -  TaxableIncomePerShareEU 
+              * `38` -  GermanyEquityParticipationRatio 
+              * `39` -  GermanyTotalFundAssetShare 
+              * `40` -  GermanyNonGermanRealEstateRatio 
+              * `41` -  ER 
+              * `42` -  FundIndexOffset 
+              * `43` -  FV 
+              * `44` -  StrictBidOnly 
+              * `45` -  StrictBidOnlyTr 
+              * `46` -  StrictBidOnlyGtr 
+              * `47` -  StrictOfferOnly 
+              * `48` -  StrictOfferOnlyTr 
+              * `49` -  StrictOfferOnlyGtr
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: integer
+            enum:
+              - 1
+              - 2
+              - 3
+              - 4
+              - 5
+              - 6
+              - 7
+              - 8
+              - 9
+              - 10
+              - 11
+              - 12
+              - 13
+              - 14
+              - 15
+              - 16
+              - 17
+              - 18
+              - 19
+              - 20
+              - 21
+              - 22
+              - 23
+              - 24
+              - 25
+              - 26
+              - 27
+              - 28
+              - 29
+              - 30
+              - 31
+              - 32
+              - 33
+              - 34
+              - 35
+              - 36
+              - 37
+              - 38
+              - 39
+              - 40
+              - 41
+              - 42
+              - 43
+              - 44
+              - 45
+              - 46
+              - 47
+              - 48
+              - 49
+        - name: currency
+          in: query
+          description: Value for currency. It will be default to GBP if nothing specified.
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+            default: GBP
+        - name: dataFrom
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+            format: dateTime
+        - name: deltaFrom
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+            format: dateTime
+        - name: deltaTo
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+            format: dateTime
+            default: ''
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+        '206':
+          description: Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-series-read
+        - Sandbox:
+            - dynamic-data-series-read
+        - Development:
+            - dynamic-data-series-read
+  /Series:
+    get:
+      tags:
+        - Dynamic Data Series
+      summary: |
+        Dynamic series data, either of price, performance, or risk score.
+      description: >
+        Use this end point to fetch static query data based on the
+        identifierType like citicodes and isin.
+      operationId: FundDynamicSeriesData
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+        - name: identifierType
+          in: query
+          description: Currently supported identifierTypes are citicodes and isins.
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: string
+        - name: identifierValue
+          in: query
+          description: Value for the identifier type. Provide maximum 10 values.
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: string
+        - name: period
+          in: query
+          description: >-
+            Supported period values are Daily, Weekly, Monthly, Quarterly,
+            Yearly
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: string
+            enum:
+              - Daily
+              - Weekly
+              - Monthly
+              - Quarterly
+              - Yearly
+        - name: seriesType
+          in: query
+          description: |
+            The methodology used for the price series. Series Types:
+              * `1` -  Bid 
+              * `2` -  BidTr 
+              * `3` -  BidGtr 
+              * `4` -  Offer 
+              * `5` -  OfferTr 
+              * `6` -  OfferGtr 
+              * `7` -  NavPublished
+              * `8` -  NavEstimated 
+              * `9` -  NavTr 
+              * `10` -  PriceExDividend 
+              * `11` -  NavPremiumDiscount 
+              * `12` -  FeRiskScore 
+              * `13` -  OfferToBid 
+              * `14` -  OfferToBidTr 
+              * `15` -  OfferToBidGtr 
+              * `16` -  DividendNet 
+              * `17` -  GrossAMCCharge 
+              * `18` -  Mid 
+              * `19` -  MidTr 
+              * `20` -  MidGtr 
+              * `21` -  FundSize 
+              * `22` -  UnitSize 
+              * `23` -  NumberOfSharesAmountFund 
+              * `24` -  NumberOfSharesAmountUnit 
+              * `25` -  SubscriptionPrice 
+              * `26` -  RedemptionPrice 
+              * `27` -  VolumeOfSubscribedShares 
+              * `28` -  VolumeOfRedeemedShares 
+              * `29` -  NumberOfSubscribedShares 
+              * `30` -  NumberOfRedeemedShares 
+              * `31` -  VolumeOfSubscriptionsInsideFund 
+              * `32` -  VolumeOfRedemptionsInsideFund 
+              * `33` -  NumberOfSubscribedSharesInFund 
+              * `34` -  NumberOfRedeemedSharesInFund 
+              * `35` -  TaxableIncomePerShareBelgium 
+              * `36` -  TaxableIncomePerShareSwitzerland 
+              * `37` -  TaxableIncomePerShareEU 
+              * `38` -  GermanyEquityParticipationRatio
+              * `39` -  GermanyTotalFundAssetShare 
+              * `40` -  GermanyNonGermanRealEstateRatio 
+              * `41` -  ER 
+              * `42` -  FundIndexOffset 
+              * `43` -  FV 
+              * `44` -  StrictBidOnly 
+              * `45` -  StrictBidOnlyTr 
+              * `46` -  StrictBidOnlyGtr 
+              * `47` -  StrictOfferOnly 
+              * `48` -  StrictOfferOnlyTr 
+              * `49` -  StrictOfferOnlyGtr
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: integer
+            enum:
+              - 1
+              - 2
+              - 3
+              - 4
+              - 5
+              - 6
+              - 7
+              - 8
+              - 9
+              - 10
+              - 11
+              - 12
+              - 13
+              - 14
+              - 15
+              - 16
+              - 17
+              - 18
+              - 19
+              - 20
+              - 21
+              - 22
+              - 23
+              - 24
+              - 25
+              - 26
+              - 27
+              - 28
+              - 29
+              - 30
+              - 31
+              - 32
+              - 33
+              - 34
+              - 35
+              - 36
+              - 37
+              - 38
+              - 39
+              - 40
+              - 41
+              - 42
+              - 43
+              - 44
+              - 45
+              - 46
+              - 47
+              - 48
+              - 49
+        - name: endType
+          in: query
+          description: >
+            Currently supported endtypes:  LatestAsDefault:0, DayEnd:1,
+            WeekEnd:2, MonthEnd:3, QuarterEnd:4, YearEnd:5
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: integer
+            enum:
+              - 1
+              - 2
+              - 3
+              - 4
+              - 5
+        - name: fillForward
+          in: query
+          description: >
+            Whether dates with no price should be populated with the price as at
+            the previous populated date.
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: boolean
+        - name: currency
+          in: query
+          description: Value for Currency.
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+        - name: baseValue
+          in: query
+          description: >-
+            The Initial value that should be set on the first date in the
+            series.
+          required: false
+          style: form
+          explode: true
+          schema:
+            maxLength: 10000
+            minLength: 0
+            type: string
+        - name: dateFrom
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+            format: dateTime
+        - name: dateTo
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+            format: dateTime
+        - name: riskScoreRegion
+          in: query
+          description: >-
+            Used to determine which country the risk score series is relevant
+            to.
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+        - name: excludeHolidaysCountryCode
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Get dynamic series data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_1'
+        '206':
+          description: Get history series data. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_1'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-series-read
+        - Sandbox:
+            - dynamic-data-series-read
+        - Development:
+            - dynamic-data-series-read
+components:
+  schemas:
+    DeltaData:
+      type: object
+      properties:
+        Message:
+          type: string
+          description: response message
+        IsSuccess:
+          type: boolean
+          description: based on the response value will be set.
+        Request:
+          $ref: '#/components/schemas/DeltaData_Request'
+        Result:
+          type: array
+          description: response result will be assign to result.
+          items:
+            $ref: '#/components/schemas/DeltaDataResult'
+    DeltaDataResult:
+      type: object
+      properties:
+        Citicode:
+          type: string
+          description: The FE internal identifier code for the instrument
+        Isin:
+          type: string
+        SeriesType:
+          type: integer
+          description: |
+            Series Types:
+              * '1' -  Bid * '2' -  BidTr * '3' -  BidGtr * '4' -  Offer * '5' -  OfferTr * '6' -  OfferGtr * '7' -  NavPublished * '8' -  NavEstimated * '9' -  NavTr * '10' -  PriceExDividend * '11' -  NavPremiumDiscount * '12' -  FeRiskScore * '13' -  OfferToBid * '14' -  OfferToBidTr * '15' -  OfferToBidGtr * '16' -  DividendNet * '17' -  GrossAMCCharge * '18' -  Mid * '19' -  MidTr * '20' -  MidGtr * '21' -  FundSize * '22' -  UnitSize * '23' -  NumberOfSharesAmountFund * '24' -  NumberOfSharesAmountUnit * '25' -  SubscriptionPrice * '26' -  RedemptionPrice * '27' -  VolumeOfSubscribedShares * '28' -  VolumeOfRedeemedShares * '29' -  NumberOfSubscribedShares * '30' -  NumberOfRedeemedShares * '31' -  VolumeOfSubscriptionsInsideFund * '32' -  VolumeOfRedemptionsInsideFund * '33' -  NumberOfSubscribedSharesInFund * '34' -  NumberOfRedeemedSharesInFund * '35' -  TaxableIncomePerShareBelgium * '36' -  TaxableIncomePerShareSwitzerland * '37' -  TaxableIncomePerShareEU * '38' -  GermanyEquityParticipationRatio * '39' -  GermanyTotalFundAssetShare * '40' -  GermanyNonGermanRealEstateRatio * '41' -  ER * '42' -  FundIndexOffset * '43' -  FV * '44' -  StrictBidOnly * '45' -  StrictBidOnlyTr * '46' -  StrictBidOnlyGtr * '47' -  StrictOfferOnly * '48' -  StrictOfferOnlyTr * '49' -  StrictOfferOnlyGtr
+        CurrencyCode:
+          type: string
+          description: The ISO-4217 code for the currency of the share unit
+        Deltas:
+          type: array
+          items:
+            $ref: '#/components/schemas/SeriesDelta'
+    SeriesDelta:
+      type: object
+      properties:
+        SeriesDate:
+          type: string
+          description: The date of the value in the price/performance series
+          format: date-time
+        SeriesValue:
+          type: number
+          description: >-
+            The value of the instrument at a given date in the price/performance
+            series
+          format: double
+          example: 328.5735
+        UpdateStatus:
+          type: integer
+          description: |
+            Unchanged:0, Added:1, Updated:2, Deleted:3
+    SeriesData:
+      type: object
+      properties:
+        Message:
+          type: string
+          description: response message
+        IsSuccess:
+          type: boolean
+          description: based on the response value will be set.
+        Request:
+          $ref: '#/components/schemas/SeriesData_Request'
+        Result:
+          type: array
+          description: response result will be assign to result.
+          items:
+            $ref: '#/components/schemas/SeriesDataResult'
+    SeriesDataResult:
+      type: object
+      properties:
+        HistoryData:
+          $ref: '#/components/schemas/HistoryData'
+    HistoryData:
+      type: object
+      properties:
+        Instrument:
+          type: array
+          description: An array of series instruments
+          items:
+            $ref: '#/components/schemas/InstrumentData'
+    InstrumentData:
+      type: object
+      properties:
+        Isin:
+          type: string
+        CitiCode:
+          type: string
+        InstrumentCode:
+          type: string
+          description: >-
+            The code for identifying the requested instrument (i.e. fund,
+            sector, benchmark)
+        InstrumentTypeCode:
+          type: string
+          description: The type of instrument in the series
+        SeriesList:
+          type: array
+          items:
+            $ref: '#/components/schemas/Series'
+    Series:
+      type: object
+      properties:
+        SeriesType:
+          type: string
+          description: The price type of the series
+        SeriesCurrency:
+          type: string
+        SeriesData:
+          type: array
+          items:
+            $ref: '#/components/schemas/SeriesDataItem'
+    SeriesDataItem:
+      type: object
+      properties:
+        seriesData:
+          type: string
+          description: The date of the value in the price/performance series
+        seriesValue:
+          type: string
+          description: >-
+            The value of the instrument at a given date in the price/performance
+            series
+        seriesCurrency:
+          type: string
+    ErrorResponse:
+      type: object
+      properties:
+        Message:
+          type: string
+          description: response message
+        IsSuccess:
+          type: boolean
+          description: based on the response value will be set.
+        Result:
+          type: array
+          description: response result will be assign to result.
+          items:
+            $ref: '#/components/schemas/ErrorItem'
+    ErrorItem:
+      type: object
+    inline_response_200:
+      anyOf:
+        - $ref: '#/components/schemas/DeltaData'
+    inline_response_401:
+      anyOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+    inline_response_200_1:
+      anyOf:
+        - $ref: '#/components/schemas/SeriesData'
+    DeltaData_Request:
+      type: object
+      properties:
+        identifierType:
+          type: string
+        identifierValue:
+          type: string
+        seriesType:
+          type: integer
+        currency:
+          type: string
+        dataFrom:
+          type: string
+          format: date-time
+        deltaFrom:
+          type: string
+          format: date-time
+        deltaTo:
+          type: string
+          format: date-time
+      description: It contains the request input data
+    SeriesData_Request:
+      type: object
+      properties:
+        identifierType:
+          type: string
+        identifierValue:
+          type: string
+        period:
+          type: string
+        seriesType:
+          type: integer
+        endType:
+          type: integer
+        fillForward:
+          type: boolean
+        currency:
+          type: string
+        baseValue:
+          type: string
+        dateFrom:
+          type: string
+          format: date-time
+        dateTo:
+          type: string
+          format: date-time
+        riskScoreRegion:
+          type: string
+        excludeHolidaysCountryCode:
+          type: string
+      description: It contains the request input data
+  responses:
+    '400':
+      description: Bad request, Please check your inputs.
+      content: {}
+    '401':
+      description: Unauthorized.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/inline_response_401'
+    '404':
+      description: No data for this identifierValue.
+      content: {}
+    '408':
+      description: Your request has timed out. Please try again.
+      content: {}
+    '500':
+      description: >-
+        Internal Server error, please raise a ticket with the FEFundinfo support
+        team if you experience this.
+      content: {}
+  parameters:
+    subscriptionHeaderParam:
+      name: Fefi-Apim-Subscription-Key
+      in: header
+      description: Fefi APIM Subscription key
+      required: true
+      style: simple
+      explode: false
+      schema:
+        type: string
+        default: ''
+    correlationIdParam:
+      name: x-correlation-id
+      in: header
+      description: >-
+        x-correlation-id is used to trace the log. It is unique guid id. API
+        will generate new id if it is not passed explicitly.
+      required: false
+      style: simple
+      explode: false
+      schema:
+        type: string
+        default: ''
+    identifierValueParam:
+      name: identifierValue
+      in: query
+      description: Value for the identifier type. Provide maximum 10 values.
+      required: true
+      style: form
+      explode: false
+      schema:
+        maxItems: 10
+        minItems: 1
+        uniqueItems: true
+        type: array
+        items:
+          type: string
+          default: ''
+  securitySchemes:
+    Production:
+      type: oauth2
+      description: >-
+        Using Enterprise Auth to get an OAuth2 token for a registered app as a
+        client.
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.fefundinfo.com/connect/token
+          scopes:
+            dynamic-data-series-read: Dynamic Data Series Read Access
+        authorizationCode:
+          authorizationUrl: https://auth.fefundinfo.com/connect/authorize
+          tokenUrl: https://auth.fefundinfo.com/connect/token
+          scopes:
+            dynamic-data-series-read: Dynamic Data Series Read Access

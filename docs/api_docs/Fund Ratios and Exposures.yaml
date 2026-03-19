@@ -1,0 +1,1465 @@
+openapi: 3.0.0
+info:
+  title: Public Fund Data APIs - Fund Ratios and Exposures API
+  description: Public Fund Data APIs - Fund Ratios and Exposures API
+  version: 1.0.0
+servers:
+  - url: https://api.fefundinfo.com/funds/RatiosAndExposures/1.0.0
+    description: Production
+security:
+  - Production: []
+paths:
+  /RatiosBreakdowns:
+    get:
+      tags:
+        - Fund Ratios and Exposures Data
+      summary: Holding breakdown data in Openfunds format
+      description: >
+        Use this end point to fetch Fund Ratios and Exposures data based on the
+        identifierType like citicodes, isins and apirs.
+      operationId: GetRatiosBreakdownsData
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: fieldSelections
+          in: query
+          description: Provide field names to filter in response.
+          required: false
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: identifierType
+          in: query
+          description: Currently supported identifierTypes are citicodes and isins.
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: string
+        - name: identifierValue
+          in: query
+          description: Value for the identifier type. Provide maximum 10 values.
+          required: true
+          style: form
+          explode: false
+          schema:
+            maxItems: 10
+            minItems: 1
+            uniqueItems: true
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: BreakdownTypes
+          in: query
+          description: >-
+            The type of breakdown to show mapping for: AS - asset class, AR -
+            region, CP - capitalisation, CR - credit rating, CU - currency, FH -
+            full holdings, HD - top 10 holdings, MP - maturity period, SC -
+            sector, EB - Bond Sector, ES - Equity Sector Sector.
+          required: true
+          style: form
+          explode: false
+          schema:
+            minItems: 1
+            uniqueItems: true
+            type: array
+            items:
+              type: string
+              default: HD
+      responses:
+        '200':
+          description: Get Ratios breakdowns data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RatiosBreakdownsData'
+        '206':
+          description: Get Ratios breakdowns data. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RatiosBreakdownsData'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - fund-ratios-exposure-read
+        - Sandbox:
+            - fund-ratios-exposure-read
+        - Development:
+            - fund-ratios-exposure-read
+    post:
+      tags:
+        - Fund Ratios and Exposures Data
+      summary: Holding breakdown data in Openfunds format
+      description: >
+        Use this end point to fetch Fund Ratios and Exposures data based on the
+        identifierType like like citicodes, isins and apirs.
+      operationId: PostRatiosBreakdownsData
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+      requestBody:
+        description: Provide inputs as JSON
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostRatiosBreakdownsRequestBody'
+        required: true
+      responses:
+        '200':
+          description: Get Ratios breakdowns data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RatiosBreakdownsData'
+        '206':
+          description: Get Ratios breakdowns data. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RatiosBreakdownsData'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - fund-ratios-exposure-read
+        - Sandbox:
+            - fund-ratios-exposure-read
+        - Development:
+            - fund-ratios-exposure-read
+  /ExposuresBreakdowns:
+    get:
+      tags:
+        - Fund Ratios and Exposures Data
+      summary: Returns fund portfolio exposure details in openfund format.
+      description: >
+        Use this end point to fetch Fund Exposures data based on the
+        identifierType like citicodes, isins and apirs.
+      operationId: GetExposuresBreakdownData
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: fieldSelections
+          in: query
+          description: Provide field names to filter in response.
+          required: false
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: identifierType
+          in: query
+          description: Currently supported identifierTypes are citicodes and isins.
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: string
+        - name: identifierValue
+          in: query
+          description: Value for the identifier type. Provide maximum 10 values.
+          required: true
+          style: form
+          explode: false
+          schema:
+            maxItems: 10
+            minItems: 1
+            uniqueItems: true
+            type: array
+            items:
+              type: string
+              default: ''
+      responses:
+        '200':
+          description: Get fund exposure data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExposuresBreakdownData'
+        '206':
+          description: Get Ratios breakdowns data. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExposuresBreakdownData'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - fund-ratios-exposure-read
+        - Sandbox:
+            - fund-ratios-exposure-read
+        - Development:
+            - fund-ratios-exposure-read
+    post:
+      tags:
+        - Fund Ratios and Exposures Data
+      summary: Returns fund portfolio exposure details in openfund format.
+      description: >
+        Use this end point to fetch Fund Exposures data based on the
+        identifierType like citicodes, isins and apirs.
+      operationId: PostExposuresBreakdownData
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+      requestBody:
+        description: Provide inputs as JSON
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostExposuresBreakdownRequestBody'
+        required: true
+      responses:
+        '200':
+          description: Get fund exposure data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExposuresBreakdownData'
+        '206':
+          description: Get fund exposure data. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExposuresBreakdownData'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - fund-ratios-exposure-read
+        - Sandbox:
+            - fund-ratios-exposure-read
+        - Development:
+            - fund-ratios-exposure-read
+  /FEFIExposuresBreakdowns:
+    get:
+      tags:
+        - Fund Ratios and Exposures Data
+      summary: Holding breakdown data in FE fundinfo internal format
+      description: >
+        Use this end point to fetch Fund Ratios and Exposures data based on the
+        identifierType like citicodes, isins and apirs.
+      operationId: GetFEFIExposuresBreakdownsData
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: fieldSelections
+          in: query
+          description: Provide field names to filter in response.
+          required: false
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: identifierType
+          in: query
+          description: Currently supported identifierTypes are citicodes and isins.
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: string
+        - name: identifierValue
+          in: query
+          description: Value for the identifier type. Provide maximum 10 values.
+          required: true
+          style: form
+          explode: false
+          schema:
+            maxItems: 10
+            minItems: 1
+            uniqueItems: true
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: BreakdownTypes
+          in: query
+          description: >-
+            The type of breakdown to show mapping for: AS - asset class, AR -
+            region, CP - capitalisation, CR - credit rating, CU - currency, HD -
+            top 10 holdings, MP - maturity period, SC - sector, EB - Bond
+            Sector, ES - Equity Sector Sector.
+          required: true
+          style: form
+          explode: false
+          schema:
+            type: string
+            default: HD
+        - name: Aggregations
+          in: query
+          description: >-
+            The lowest level of breakdown data desired.<br> **Note:** that where
+            data is unavailable at your specified level, but available at a
+            higher level, the lowest available level of data will be output
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: integer
+            default: 4
+        - name: BreakdownDate
+          in: query
+          description: The latest desired date of the breakdown data (optional)
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: LanguageId
+          in: query
+          description: The language of the breakdown data (optional)
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: integer
+              default: 1
+      responses:
+        '200':
+          description: Get Ratios breakdowns data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FEFIRatioAndExposureData'
+        '206':
+          description: Get Ratios breakdowns data. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FEFIRatioAndExposureData'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - fund-ratios-exposure-read
+        - Sandbox:
+            - fund-ratios-exposure-read
+        - Development:
+            - fund-ratios-exposure-read
+    post:
+      tags:
+        - Fund Ratios and Exposures Data
+      summary: Holding breakdown data in FE fundinfo internal format
+      description: >
+        Use this end point to fetch Fund Ratios and Exposures data based on the
+        identifierType like like citicodes, isins and apirs.
+      operationId: PostFEFIExposuresBreakdownsData
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+      requestBody:
+        description: Provide inputs as JSON
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostFEFIBreakdownRequestBody'
+        required: true
+      responses:
+        '200':
+          description: Get Ratios breakdowns data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FEFIRatioAndExposureData'
+        '206':
+          description: Get Ratios breakdowns data. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FEFIRatioAndExposureData'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - fund-ratios-exposure-read
+        - Sandbox:
+            - fund-ratios-exposure-read
+        - Development:
+            - fund-ratios-exposure-read
+components:
+  schemas:
+    RatiosBreakdownsData:
+      type: object
+      properties:
+        Message:
+          type: string
+          description: response message
+        IsSuccess:
+          type: boolean
+          description: based on the response value will be set.
+        Request:
+          $ref: '#/components/schemas/RatiosBreakdownsData_Request'
+        Result:
+          type: array
+          description: response result will be assign to result.
+          items:
+            $ref: '#/components/schemas/RatiosBreakdownsDataResult'
+    RatiosBreakdownsDataResult:
+      type: object
+      properties:
+        CitiCode:
+          type: string
+          description: >-
+            FE fundinfo unit identifier, called Citi Code. The field is allowed
+            to be up to 15 characters in length, but all current codes used are
+            4-5 characters long.
+        Isin:
+          type: string
+          description: >-
+            International Securities Identification Number (ISIN) of the share
+            class (e.g. LU0000000000). Please take good care, that an ISIN may
+            include only upper case letters.)
+        Apir:
+          type: string
+        OFRE000500:
+          type: string
+          description: >-
+            Sorted enumeration in descending order (by weight) of the 10 biggest
+            single positions within the fund and their weight within the
+            portfolio, sorted in descending order. In order to identify the
+            holding, the name and the ISIN of each position should be provided
+            (if available). cash-related positions (such as bank accounts and FX
+            forwards) and hedges should be excluded no look-through in case of
+            funds investing in single securities and funds look-through in case
+            of index funds and ETFs top ten index positions in case of
+            synthetically replicating ETFs top ten funds in case of pure fund of
+            funds For this breakdown, "OFRE100108 Fund Ratios And Exposures
+            Value Type" is mandatory and should contain the name of each
+            position. "OFRE100109 Fund Ratios And Exposures Value Type ID" must
+            also be included if available and should contain the holding ISIN.
+            Please refer to the "Fund Ratios and Exposures whitepaper
+            (https://www.openfunds.org/knowledge/whitepapers/fund-ratios-and-exposures)
+            for an example of the provision of this data. We would expect a
+            table of maximal 10 rows, each with the holding name and ISIN.
+        OFRE000520:
+          type: string
+          description: >-
+            A breakdown of the single country exposure of the fund. To ensure
+            that the figures represent the effective exposure, the country of
+            company headquarters/head office should be used (issuer country in
+            case of bond funds). The two-letter ISO codes are used as country
+            identifier. Corresponds to the “Solvency II Tripartite Template TPT
+            Version 4.0, field 52_Issuer_country”. country assignment should be
+            based on country of the headquarters/head office (risk country)
+            two-letter ISO codes should be used for countries cash holdings
+            should be assigned "Cash" if no country is applicable and the
+            position is not cash, "Other" should be used For this breakdown,
+            "OFRE100108 Fund Ratios And Exposures Value Type" is mandatory and
+            should contain the ISO 3166-2 code of each country represented in
+            the portfolio. Please refer to the "Fund Ratios and Exposures
+            whitepaper
+            (https://www.openfunds.org/knowledge/whitepapers/fund-ratios-and-exposures)
+            for an example of the provision of this data. We would expect a
+            table of data, each with the holding country code.
+        OFRE000540:
+          type: string
+          description: >-
+            A breakdown of the risk currencies held by the fund before share
+            class hedging (e.g. NAV). Active currency views implemented via
+            derivatives (on fund level) should be considered. The related
+            exposures are also derivable from TPT (Solvency II Tripartite
+            Template). currency views implemented via derivatives (on fund
+            level) shall be considered three-letter ISO 4217 codes should be
+            used for currencies XXX should be used for "no currency" For this
+            breakdown, "OFRE100108 Fund Ratios And Exposures Value Type" is
+            mandatory and should contain the ISO 4217 code of each currency
+            represented in the portfolio (using XXX for “no currency” and
+            XAU/XAG etc. for gold and other materials). Please refer to the
+            "Fund Ratios and Exposures whitepaper
+            (https://www.openfunds.org/knowledge/whitepapers/fund-ratios-and-exposures)
+            for an example of the provision of this data. We would expect a
+            table of maximal 10 rows, each with the holding name and ISIN.
+        OFRE000550:
+          type: string
+          description: >-
+            //No longer supported.// A breakdown of the risk currencies held by
+            the fund after currency hedging (as well as options etc.). For
+            example, for a full USD hedge, the breakdown would be 100% USD. The
+            related exposures are also derivable from TPT (Solvency II
+            Tripartite Template). three-letter ISO 4217 codes should be used for
+            currencies XXX should be used for "no currency" For this breakdown,
+            "OFRE100108 Fund Ratios And Exposures Value Type" is mandatory and
+            should contain the ISO 4217 code of each currency represented in the
+            portfolio (using XXX for “no currency” and XAU/XAG etc. for gold and
+            other materials). Please refer to the "Fund Ratios and Exposures
+            whitepaper
+            (https://www.openfunds.org/knowledge/whitepapers/fund-ratios-and-exposures)
+            for an example of the provision of this data. We would expect a
+            table of maximal 10 rows, each with the holding name and ISIN.
+        OFRE000560:
+          type: string
+          description: >-
+            A breakdown of the effective sector exposure of the fund
+            (delta-adjusted), applicable to equity funds only. ABS should
+            include sub asset classes such as MBS (Mortgage Backed Securities).
+            Corporate covered bonds (e.g. Swiss or German Pfandbriefe) should be
+            assigned to the Financials sector. For this breakdown, "OFRE100108
+            Fund Ratios And Exposures Value Type" is mandatory and should
+            contain the name of each sector represented in the portfolio, from
+            the following list: "Communication Services" / "Consumer
+            Discretionary" / "Consumer Staples" / "Energy" / "Financials" /
+            "Health Care" / "Industrials" / "Technology" / "Materials" / "Real
+            Estate" / "Utilities" / "Cash" / "Other" To provide a secondary
+            confirmation of the sector, "OFRE100109 Fund Ratios And Exposures
+            Value Type ID" may also be provided (optionally) and the following
+            codes should be used, corresponding to the names above: "COMM" /
+            "COND" / "CONS" / "ENER" / "FINA" / "HLTC" / "INDS" / "TECH" /
+            "MTRL" / "REAL" / "UTIL" / "CASH" / "OTHR" Please refer to the "Fund
+            Ratios and Exposures whitepaper
+            (https://www.openfunds.org/knowledge/whitepapers/fund-ratios-and-exposures)
+            for an example of the provision of this data. We would expect a
+            table of maximal 10 rows, each with the holding name and ISIN.
+        OFRE000565:
+          type: string
+          description: >-
+            A breakdown of the effective sector exposure of the fund
+            (delta-adjusted), applicable to bond funds only. ABS should include
+            sub asset classes such as MBS (Mortgage Backed Securities).
+            Corporate covered bonds (e.g. Swiss or German Pfandbriefe) should be
+            assigned to the Financials sector. For this breakdown, "OFRE100108
+            Fund Ratios And Exposures Value Type" is mandatory and should
+            contain the name of each sector represented in the portfolio, from
+            the following list: "Communication Services" / "Consumer
+            Discretionary" / "Consumer Staples" / "Energy" / "Financials" /
+            "Health Care" / "Industrials" / "Technology" / "Materials" / "Real
+            Estate" / "Utilities" / "Government" / "Government-Related Regional
+            and Local" / "Government-Related Development Bank and Supranational"
+            / "ABS (Asset Backed Securities)" / "Cash" / "Other" To provide a
+            secondary confirmation of the sector, "OFRE100109 Fund Ratios And
+            Exposures Value Type ID" may also be provided (optionally) and the
+            following codes should be used, corresponding to the names above:
+            "COMM" / "COND" / "CONS" / "ENER" / "FINA" / "HLTC" / "INDS" /
+            "TECH" / "MTRL" / "REAL" / "UTIL" / "GOVN" / "GOVR" / "GOVB" /
+            "MBSE" / "CASH" / "OTHR" Please refer to the "Fund Ratios and
+            Exposures whitepaper
+            (https://www.openfunds.org/knowledge/whitepapers/fund-ratios-and-exposures)
+            for an example of the provision of this data. We would expect a
+            table of maximal 10 rows, each with the holding name and ISIN.
+        OFRE000580:
+          type: string
+          description: >-
+            Applicable to fixed income funds. A breakdown of the exposure per
+            rating category. Please refer to the field "OFRE000310 Instrument
+            Credit Quality Methodology" if a single bond is rated by more than
+            one agency. The related exposures are also derivable from TPT
+            (Solvency II Tripartite Template). TPT uses the “EU Regulation
+            (Solvency II)”- methodology to aggregate ratings. For this
+            breakdown, "OFRE100108 Fund Ratios And Exposures Value Type" is
+            mandatory and should contain the name of each rating represented in
+            the portfolio, from the following list: AAA / AA+ / AA / AA- / A+ /
+            A / A- / BBB+ / BBB / BBB- / BB+ / BB / BB- / B+ / B / B- / CCC+ /
+            CCC / CCC- / CC+ / CC / CC- / C+ / C / C- / D / Not Rated / Cash /
+            Other Please refer to the "Fund Ratios and Exposures whitepaper
+            (https://www.openfunds.org/knowledge/whitepapers/fund-ratios-and-exposures)
+            for an example of the provision of this data. We would expect a
+            table of maximal 10 rows, each with the holding name and ISIN.
+        OFRE000590:
+          type: string
+          description: >-
+            A breakdown of the effective maturities of the underlying
+            investments in the fund. Different maturity periods should be used
+            for bond and money market funds. In case of callable assets, the
+            first call date should be used. For this breakdown, "OFRE100108 Fund
+            Ratios And Exposures Value Type" is mandatory and should contain the
+            name of each maturity bracket represented in the portfolio, from the
+            following lists: Fixed Income Funds: 0-1y / 1-2y / 2-3y / 3-4y /
+            4-5y / 5-6y / 6-7y / 7-8y / 8-9y / 9-10y / 10-15y / 15-20y / 20-25y
+            / 25-30y / >30y / Cash / Other Money Market Funds: Overnight / 0-1w
+            / 1-4w / 1-2m / 2-3m / 3-4m / 4-5m / 5-6m / 6-7m / 7-8m / 8-9m /
+            9-10m / 10-11m / 11-12m / >12m / Cash / Other Please refer to the
+            "Fund Ratios and Exposures whitepaper
+            (https://www.openfunds.org/knowledge/whitepapers/fund-ratios-and-exposures)
+            for an example of the provision of this data. We would expect a
+            table of maximal 10 rows, each with the holding name and ISIN.
+        OFRE000570:
+          type: string
+          description: >-
+            Applicable to equity funds. A breakdown of the market capitalization
+            of the underlying equity exposure (excluding cash and other
+            positions). If possible, the methodology/thresholds of the benchmark
+            provider of the fund (defined in field "OFST023200 Benchmark")
+            should be used to define Large, Mid and Small Caps. If the fund does
+            not have a benchmark, the categories are based on standards
+            applicable to the equity market(s) that the fund is invested in.
+            Major index providers covering the local markets may also provide
+            further guidance on the classification. For the Swiss Market, the
+            index structure of the Swiss Performance Index (SPI®) provided by ©
+            SIX Group could be used. The index is divided into the sub-indices
+            SPI® Large, SPI® Mid and SPI® Small. Further details can be found in
+            the SPI Family Factsheet . For this breakdown, "OFRE100108 Fund
+            Ratios And Exposures Value Type" is mandatory and should contain the
+            name of each capitalisation bracket represented in the portfolio,
+            from the following list: "Large Cap" / "Mid Cap" / "Small Cap" /
+            "Cash" / "Other" To provide a secondary confirmation of the
+            capitalisation bracket, "OFRE100109 Fund Ratios And Exposures Value
+            Type ID" may also be provided (optionally) and the following codes
+            should be used, corresponding to the names above: "LCAP" / "MCAP" /
+            "SCAP" / "CASH" / "OTHR" Please refer to the "Fund Ratios and
+            Exposures whitepaper
+            (https://www.openfunds.org/knowledge/whitepapers/fund-ratios-and-exposures)
+            for an example of the provision of this data. We would expect a
+            table of maximal 10 rows, each with the holding name and ISIN.
+    FEFIRatioAndExposureData:
+      type: object
+      properties:
+        Message:
+          type: string
+          description: response message
+        IsSuccess:
+          type: boolean
+          description: based on the response value will be set.
+        Request:
+          $ref: '#/components/schemas/FEFIRatioAndExposureData_Request'
+        Result:
+          type: array
+          description: response result will be assign to result.
+          items:
+            $ref: '#/components/schemas/FEFIRatioAndExposureResult'
+    ExposuresBreakdownData:
+      type: object
+      properties:
+        Message:
+          type: string
+          description: response message
+        IsSuccess:
+          type: boolean
+          description: based on the response value will be set.
+        Request:
+          $ref: '#/components/schemas/ExposuresBreakdownData_Request'
+        Result:
+          type: array
+          description: response result will be assign to result.
+          items:
+            $ref: '#/components/schemas/ExposuresBreakdownDataResult'
+    FEFIRatioAndExposureResult:
+      type: object
+      properties:
+        citiCode:
+          type: string
+          description: >-
+            FE fundinfo unit identifier, called Citi Code. The field is allowed
+            to be up to 15 characters in length, but all current codes used are
+            4-5 characters long
+        Isin:
+          type: string
+          description: >-
+            International Securities Identification Number (ISIN) of the share
+            class (e.g. LU0000000000). Please take good care, that an ISIN may
+            include only upper case letters. 
+        BreakdownInfos:
+          type: array
+          items:
+            $ref: '#/components/schemas/FEFIRatioAndExposureBreakDownInfoData'
+    FEFIRatioAndExposureBreakDownInfoData:
+      type: object
+      properties:
+        BreakdownType:
+          type: string
+        BreakdownDate:
+          type: string
+        Breakdowns:
+          type: array
+          items:
+            $ref: '#/components/schemas/FEFIRatioAndExposureBreakDownData'
+    FEFIRatioAndExposureBreakDownData:
+      type: object
+      properties:
+        BreakdownCode:
+          type: string
+        BreakdownName:
+          type: string
+        BreakdownWeight:
+          type: number
+        BreakdownDisplayName:
+          type: string
+        GrossShortWeight:
+          type: number
+        GrossLongWeight:
+          type: number
+        BreakdownGross:
+          type: number
+    ExposuresBreakdownDataResult:
+      type: object
+      properties:
+        CitiCode:
+          type: string
+          description: >-
+            FE fundinfo unit identifier, called Citi Code. The field is allowed
+            to be up to 15 characters in length, but all current codes used are
+            4-5 characters long.
+        Isin:
+          type: string
+          description: >-
+            International Securities Identification Number (ISIN) of the share
+            class (e.g. LU0000000000). Please take good care, that an ISIN may
+            include only upper case letters.)
+        Apir:
+          type: string
+        OFRE000010:
+          type: string
+          description: >-
+            Number of positions held by the fund. - in case of funds investing
+            in single securities: number of securities - in case of funds
+            investing in single securities and funds: no look-through - in case
+            of index funds and ETFs: look-through applied - not applicable to
+            synthetically replicating ETFs: refer to the field "Number of Index
+            Holdings" - not applicable to pure fund of funds: refer to the field
+            "Number Of Target Fund Positions" Cash related positions (such as
+            bank accounts and FX forwards) shall be excluded from the count.
+            This field is applicable to funds investing a) purely in direct
+            investments or b) direct investments and collective investments.  If
+            the portfolio includes direct investments and collective
+            investments, the number should not be delivered on a look-through
+            basis.  In exceptional cases such as physically replicating index
+            trackers,the asset manager should deliver the number on a
+            look-through basis. This figure is provided on Fund Level. Share
+            Class-specific positions (e.g. due to currency hedging) are
+            excluded.
+        OFRE000015:
+          type: string
+          description: >-
+            The count of the underlying funds (not on a look-through basis). The
+            field is applicable to fund of fund structures in which fund
+            positions comprise more than 10% of the net assets. This field is
+            also applicable to funds investing in direct investments and
+            collective investments. This figure is provided on Fund Level. Share
+            Class-specific positions (e.g. due to currency hedging) are
+            excluded.
+        OFRE000020:
+          type: string
+          description: >-
+            The field Number Of Index Holdings is only applicable to passive
+            solutions tracking an index (ETFs and Index Funds / physical and
+            synthetic) and shows the count of fund holdings within the
+            underlying benchmark. This figure is provided on Fund Level. Share
+            Class-specific positions (e.g. due to currency hedging) are
+            excluded.
+        OFRE000025:
+          type: string
+          description: >-
+            The share (in %) of the 10 largest positions held by the fund based
+            on the gross market exposure. The ratio gives an indication of the
+            fund’s concentration risk. This should be calculated as the gross
+            market exposure of Top 10 investments (excluding cash) divided by
+            fund’s total net assets. This figure is provided on Fund Level.
+            Share Class-specific positions (e.g. due to currency hedging) are
+            excluded.
+        OFRE000030:
+          type: string
+          description: >-
+            The share (in %) of the 25 largest positions held by the fund based
+            on the gross market exposure. The ratio gives an indication of the
+            fund’s concentration risk. This should be calculated as the gross
+            market exposure of Top 25 investments (excluding cash) divided by
+            fund’s total net assets. This figure is provided on Fund Level.
+            Share Class-specific positions (e.g. due to currency hedging) are
+            excluded.
+        OFRE000100:
+          type: string
+          description: >-
+            //No longer supported. Please use "OFST020430 Annual Distribution At
+            Fiscal Year End" instead.// The effective cash distribution of net
+            income (before taxes) for the fiscal year (12 months) per fund
+            share, as an absolute figure in share class currency, as at Fiscal
+            Year End (OFST010440). Applicable to distributing share classes and
+            delivered on an annual basis.
+        OFRE000110:
+          type: string
+          description: >-
+            //No longer supported. Please use "OFST020435 Annual Distribution
+            Yield At Fiscal Year End" instead.// The effective distribution
+            yield in % (before taxes) for the fiscal year (12 months). The
+            distribution yield is calculated by dividing the Annual Distribution
+            at Fiscal Year End (absolute / share Class currency) by the NAV at
+            Fiscal Year End (OFST010440). Applicable to distributing share
+            classes and delivered on an annual basis.
+        OFRE000200:
+          type: string
+          description: >-
+            The fund exposure to cash (liquidity) as a percentage. Cash
+            represents the net cash exposure on liquidity accounts based on the
+            fund’s P&L. The field corresponds to the CIC field 71 “Cash” (Notes
+            and coins in circulation that are commonly used to make payments).
+            Calculations such as Basel III HQLA (High Quality Liquid Assets) are
+            not required. Cash amounts on Subscription and Redemption accounts
+            will not be included. This field is intended to show the
+            non-invested part of the portfolio, which is the same for all share
+            classes in a fund.
+        OFRE000250:
+          type: string
+          description: >-
+            The weighted Dividend Yield of the equity investments held by the
+            fund (excluding non-dividend paying instruments such as Cash).
+            Aligned to the traditional methodology, the dividend yield of a
+            single stock is calculated by dividing the effective dividends paid
+            over the last 12 months by the last stock price. This field is
+            applicable to equity funds. //Please note, as mentioned in the Fund
+            Ratios and Exposures whitepaper, figures for multi-asset funds are
+            not the focus of the first version of the openfunds Fund Ratios and
+            Exposures standard and will be addressed in a later version.//
+        OFRE000300:
+          type: string
+          description: >-
+            The linear average rating of the bonds held by the fund. The
+            exposure to cash and other investment types that are not applicable
+            to the related average ratio should be excluded from the calculation
+            of this average. Applicable to bond funds. Further details can be
+            found in the white paper "Fund Ratios and Exposures"
+            (https://www.openfunds.org/knowledge/whitepapers/fund-ratios-and-exposures).
+        OFRE000305:
+          type: string
+          description: >-
+            The weighted average rating of the bonds held by the fund, using a
+            methodology decided by the fund manager. There are different default
+            rates available over various periods, e.g. Moody’s Idealized
+            Cumulative Default Probabilities over 10 years or default rates
+            defined by Morningstar (“New Methodology for Average Credit Quality”
+            2010). The exposure to cash and other investment types that are not
+            applicable to the related average ratio should be excluded from the
+            calculation of this average. Applicable to bond funds.
+        OFRE000310:
+          type: string
+          description: >-
+            Applicable to bond funds. Methodology used for aggregating the
+            rating of single bonds rated by various authorized rating agencies
+            (lists are available in regulatory publications such as the mapping
+            of ECAIs’ credit assessments under Article 136(1) and (3) of
+            Regulation (EU) No 575/2013). Methodologies: Method 1: Solvency II -
+            2nd best rating Method 2: Average Rating Use of the average of
+            various ratings. If the average does not correspond to one of the
+            available categories (e.g. average between AA / AA- / A), the worse
+            rating should be used (“adjust downward”). Method 3: Most Frequently
+            Used Use of the most frequently used rating. If there are
+            inconsistent ratings (e.g. AA / A+ / A), the worst rating should be
+            used. Method 4: Worst Rating Use of the worst rating Further details
+            can be found in the white paper "Fund Ratios and Exposures"
+            (https://www.openfunds.org/knowledge/whitepapers/fund-ratios-and-exposures).
+        OFRE000320:
+          type: string
+          description: >-
+            Whether the credit ratings of the underlying bond investments have
+            been assigned by accredited or non-accredited rating agencies. The
+            registered and certified credit rating agencies in accordance with
+            Regulation (EC) No 1060/2009 of the European Parliament and of the
+            Council of 16 September 2009 on credit rating agencies (the Credit
+            Rating Agencies Regulation) is available on the webpage of ESMA
+            (https://www.esma.europa.eu/supervision/credit-rating-agencies/risk).
+
+            In case of non-accredited rating agencies, we distinguish between
+            Third-party ratings (e.g. Swiss bonds are rated by Swiss banks) and
+            internal ratings (e.g. by the Asset Manager). Accordingly, this
+            field has the values Accredited rating agencies / Third-party
+            ratings / Accredited and third-party ratings / Internal ratings /
+            Mixed ratings – mixed ratings should be selected if the sources of
+            the different instrument ratings in the fund portfolio are from all
+            three main rating sources (accredited, third-party and internal).
+
+            Further details can be found in the white paper "Fund Ratios and
+            Exposures"
+            (https://www.openfunds.org/knowledge/whitepapers/fund-ratios-and-exposures).
+        OFRE000330:
+          type: string
+          description: >-
+            The effective maturity (net / option-adjusted, in years) of the
+            fund, considering the expected call date of callable bonds.
+            Applicable to bond funds investing in bonds (including convertibles)
+            with a fix maturity/call date. Average effective maturity estimates
+            the true maturity of bonds, considering the first call date of
+            callable bonds / convertibles. Option-adjusted (net) figures.
+            Calculation methodology should be aligned to the standards of the
+            asset manager and the resulting fixture should be aligned to other
+            publications (e.g. Factsheets). The definition available on
+            “Investopedia” can be used as a reference
+            (https://www.investopedia.com/terms/a/average-effective-maturity.asp).
+        OFRE000335:
+          type: string
+          description: >-
+            A measure of the interest rate sensitivity (net / option-adjusted)
+            of the fund. Applicable to bond funds investing in bonds (including
+            convertibles) with a fix maturity/call date. Option-adjusted (net)
+            figures. Calculation methodology should be in line with the
+            standards of the asset manager and the resulting fixture should be
+            aligned to other publications (e.g. Factsheets). If the underlying
+            bonds do not include embedded options, the modified duration can be
+            used. In case of callable bonds, the first call date should be used
+            for the calculation.
+
+            The Morningstar definition (as per 30.04.2018) can be used as a
+            reference: “A holding weighted average of effective duration, a
+            measure of duration that accounts for embedded options, which
+            measures the percentage change in value of the portfolio for a
+            change in interest rates or yield, expressed as a ratio.” If the
+            bonds do not include embedded options, the modified duration can be
+            used. The CFI (Corporate Finance Institute®) provides further
+            details on its webpage
+            (https://corporatefinanceinstitute.com/resources/knowledge/finance/duration/).
+        OFRE000340:
+          type: string
+          description: >-
+            A measure of the difference between the average interest rates of
+            underlying bond portfolio and related risk-free rates (appropriate
+            for market and currency, e.g. US Treasury bonds or LIBOR money
+            market/related replacement), expressed in basis points. Applicable
+            to bond funds. Option-adjusted (net) figures. Calculation
+            methodology should be in line with the standards of the asset
+            manager and the resulting fixture should be aligned to other
+            publications (e.g. Factsheets). The definition available on
+            “Investopedia” can be used as a reference
+            (https://www.investopedia.com/terms/c/creditspread.asp). This is
+            applicable to traditional bond funds.
+        OFRE000345:
+          type: string
+          description: >-
+            Highlights the sensitivity of the underlying corporate bond
+            portfolio to changes in credit spreads. For example, floating rate
+            notes may have a marginal effective duration but a very meaningful
+            spread duration. In case of callable bonds, the first call date
+            should be used for the calculation. The credit spread is the
+            difference between the yield of a security and the yield of a
+            benchmark rate, such as a cash interest rate or government bond
+            yield.
+
+            Applicable to bond funds investing in corporate bonds (including
+            convertibles) with a fix maturity/call date. Option-adjusted (net)
+            figures. Calculation methodology should be in line with the
+            standards of the asset manager and the resulting fixture should be
+            aligned to other publications (e.g. Factsheets).
+        OFRE000350:
+          type: string
+          description: >-
+            The yield to maturity (YTM) or redemption yield of a bond or other
+            fixed-interest security, such as gilts, is the internal rate of
+            return (IRR, overall interest rate) earned by an investor who buys
+            the bond today at the market price, assuming that the bond will be
+            held until maturity, and that all coupon and principal payments will
+            be made on schedule.  Yield to maturity is actually an estimation of
+            future return, as the rate at which coupon payments can be
+            reinvested when received is unknown. The figure is given before
+            taking into account cost such as currency hedging or management fee.
+
+            Applicable to bond funds investing in bonds (including convertibles)
+            with a fix maturity/call date. Calculation methodology should be in
+            line with the standards of the asset manager and the resulting
+            fixture should be aligned to other publications (e.g. Factsheets).
+        OFRE000355:
+          type: string
+          description: >-
+            The lowest of yields to all call dates, to put dates, or the yield
+            to maturity. Effective YTW before taking into account cost such as
+            currency hedging or management fee.
+
+            Applicable to bond funds investing in bonds (including convertibles)
+            with a fix maturity/call date. Calculation methodology should be in
+            line with the standards of the asset manager and the resulting
+            fixture should be aligned to other publications (e.g. Factsheets).
+        OFRE000360:
+          type: string
+          description: >-
+            A measure of the weighted coupon of the bond investments held by the
+            fund (excluding non-coupon paying instruments such as Cash). This is
+            applicable to traditional bond funds.
+
+            Calculation methodology should be aligned to the standards of the
+            asset manager and the resulting fixture should be aligned to other
+            publications (e.g. Factsheets).
+        OFRE000370:
+          type: string
+          description: >-
+            A measure of the allocation that is subject to any technical
+            loss-absorption triggers or write downs (like AT1 CoCos). Further
+            details can be found in the Basel III requirements for total
+            loss-absorbing capacity (TLAC). The field is applicable to bond
+            funds.
+        OFRE000400:
+          type: string
+          description: >-
+            Weighted Average Maturity (WAM) is a measure of the average length
+            of time to maturity (in days) of all of the underlying securities in
+            the fund weighted to reflect the relative holdings in each
+            instrument, assuming that the maturity of a floating rate instrument
+            is the time remaining until the next interest rate reset to the
+            money market rate, rather than the time remaining before the
+            principal value of the security must be repaid. In practice, WAM is
+            used to measure the sensitivity of a money market fund to changing
+            money market interest rates.  Definitions are available from both
+            CESR’s Guidelines on a common definition of European money market
+            funds and the EU regulation 2017/1131.
+        OFRE000405:
+          type: string
+          description: >-
+            WAL (Weighted Average Life) is the weighted average of the remaining
+            life (maturity) of each security held in a fund, meaning the time
+            until the principal is repaid in full (disregarding interest and not
+            discounting). Contrary to what is done in the calculation of the
+            WAM, the calculation of the WAL for floating rate securities and
+            structured financial instruments does not permit the use of interest
+            rate reset dates and instead only uses a security’s stated final
+            maturity. WAL is used to measure the credit risk, as the longer the
+            reimbursement of principal is postponed, the higher is the credit
+            risk.  WAL is also used to limit the liquidity risk. Definitions are
+            available from both CESR’s Guidelines on a common definition of
+            European money market funds and the EU regulation 2017/1131.
+    PostFEFIBreakdownRequestBody:
+      allOf:
+        - $ref: '#/components/schemas/PostRequestBody'
+        - type: object
+          properties:
+            IdentifierType:
+              type: string
+              description: Currently supported identifierTypes are citicodes and isins.
+              default: ''
+            Filters:
+              $ref: '#/components/schemas/PostFEFIBreakdownRequestBody_Filters'
+    PostRatiosBreakdownsRequestBody:
+      allOf:
+        - $ref: '#/components/schemas/PostRequestBody'
+        - type: object
+          properties:
+            IdentifierType:
+              type: string
+              description: Currently supported identifierTypes are citicodes and isins.
+              default: ''
+            Filters:
+              $ref: '#/components/schemas/PostRatiosBreakdownsRequestBody_Filters'
+    PostExposuresBreakdownRequestBody:
+      allOf:
+        - $ref: '#/components/schemas/PostRequestBody'
+        - type: object
+          properties:
+            IdentifierType:
+              type: string
+              description: Currently supported identifierTypes are citicodes and isins.
+              default: ''
+    PostRequestBody:
+      type: object
+      properties:
+        IdentifierValues:
+          maxItems: 10
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: Provide identifier values. Provide maximum 10 values.
+          items:
+            type: string
+          default: []
+        FieldSelections:
+          uniqueItems: true
+          type: array
+          description: Provide the fields name to return in response
+          items:
+            type: string
+            description: Field name
+          default: []
+    ErrorResponse:
+      type: object
+      properties:
+        Message:
+          type: string
+          description: response message
+        IsSuccess:
+          type: boolean
+          description: based on the response value will be set.
+        Result:
+          type: array
+          description: response result will be assign to result.
+          items:
+            $ref: '#/components/schemas/ErrorItem'
+    ErrorItem:
+      type: object
+    inline_response_401:
+      anyOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+    RatiosBreakdownsData_Request:
+      type: object
+      properties:
+        identifierType:
+          type: string
+        identifierValue:
+          type: string
+        BreakdownTypes:
+          type: array
+          items:
+            type: string
+        fieldSelections:
+          type: string
+      description: It contains the request input data
+    FEFIRatioAndExposureData_Request:
+      type: object
+      properties:
+        identifierType:
+          type: string
+        identifierValue:
+          type: string
+        fieldSelections:
+          type: string
+        Aggregations:
+          type: integer
+        BreakdownDate:
+          type: string
+        LanguageId:
+          type: integer
+      description: It contains the request input data
+    ExposuresBreakdownData_Request:
+      type: object
+      properties:
+        identifierType:
+          type: string
+        identifierValue:
+          type: string
+        fieldSelections:
+          type: string
+      description: It contains the request input data
+    PostFEFIBreakdownRequestBody_Filters:
+      type: object
+      properties:
+        BreakdownDate:
+          type: string
+          default: ''
+        LanguageId:
+          type: integer
+          default: 1
+        BreakdownType:
+          minItems: 1
+          uniqueItems: true
+          type: array
+          items:
+            type: string
+        Aggregations:
+          type: integer
+          default: 4
+    PostRatiosBreakdownsRequestBody_Filters:
+      type: object
+      properties:
+        BreakdownTypes:
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: >-
+            The type of breakdown to show mapping for: AS - asset class, AR -
+            region, CP - capitalisation, CR - credit rating, CU - currency, FH -
+            full holdings, HD - top 10 holdings, MP - maturity period, SC -
+            sector, EB - Bond Sector, ES - Equity Sector Sector.
+          items:
+            type: string
+            default: HD
+  responses:
+    '400':
+      description: Bad request, Please check your inputs.
+      content: {}
+    '401':
+      description: Unauthorized.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/inline_response_401'
+    '404':
+      description: No data for this identifierValue.
+      content: {}
+    '408':
+      description: Your request has timed out. Please try again.
+      content: {}
+    '500':
+      description: >-
+        Internal Server error, please raise a ticket with the FEFundinfo support
+        team if you experience this.
+      content: {}
+  parameters:
+    subscriptionHeaderParam:
+      name: Fefi-Apim-Subscription-Key
+      in: header
+      description: Fefi APIM Subscription key
+      required: true
+      style: simple
+      explode: false
+      schema:
+        type: string
+        default: ''
+    correlationIdParam:
+      name: x-correlation-id
+      in: header
+      description: >-
+        x-correlation-id is used to trace the log. It is unique guid id. API
+        will generate new id if it is not passed explicitly.
+      required: false
+      style: simple
+      explode: false
+      schema:
+        type: string
+        default: ''
+    identifierValueParam:
+      name: identifierValue
+      in: query
+      description: Value for the identifier type. Provide maximum 10 values.
+      required: true
+      style: form
+      explode: false
+      schema:
+        maxItems: 10
+        minItems: 1
+        uniqueItems: true
+        type: array
+        items:
+          type: string
+          default: ''
+    fieldSelectionsParam:
+      name: fieldSelections
+      in: query
+      description: Provide field names to filter in response.
+      required: false
+      style: form
+      explode: false
+      schema:
+        type: array
+        items:
+          type: string
+          default: ''
+  securitySchemes:
+    Production:
+      type: oauth2
+      description: >-
+        Using enterprise auth to get an OAuth2 token for a registered app as a
+        client.
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.fefundinfo.com/connect/token
+          scopes:
+            fund-ratios-exposure-read: Access to read Fund Ratios and Exposures data
+        authorizationCode:
+          authorizationUrl: https://auth.fefundinfo.com/connect/authorize
+          tokenUrl: https://auth.fefundinfo.com/connect/token
+          scopes:
+            fund-ratios-exposure-read: Access to read Fund Ratios and Exposures data
