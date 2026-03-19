@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
 	import { SectionCard, StatusBadge, EmptyState } from "@netz/ui";
+	import { resolveAdminStatus } from "$lib/utils/status-maps.js";
 	import type { PageData } from "./$types";
 	import ConfigEditor from "$lib/components/ConfigEditor.svelte";
 
@@ -47,7 +48,7 @@
 						}}
 						class="flex w-full items-center gap-3 rounded-md border border-[var(--netz-danger)]/30 bg-[var(--netz-danger)]/5 px-4 py-2 text-left hover:bg-[var(--netz-danger)]/10"
 					>
-						<StatusBadge status="error" label="Invalid" />
+						<StatusBadge status="error" label="Invalid" resolve={resolveAdminStatus} />
 						<div>
 							<span class="text-sm font-medium text-[var(--netz-text-primary)]">
 								{invalid.vertical}/{invalid.config_type}
@@ -83,9 +84,9 @@
 						</div>
 						<div class="flex items-center gap-2">
 							{#if config.has_override}
-								<StatusBadge status="warning" label="Override" />
+								<StatusBadge status="warning" label="Override" resolve={resolveAdminStatus} />
 							{:else}
-								<StatusBadge status="success" label="Default" />
+								<StatusBadge status="success" label="Default" resolve={resolveAdminStatus} />
 							{/if}
 						</div>
 					</button>

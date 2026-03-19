@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { MetricCard, SectionCard, StatusBadge } from "@netz/ui";
+	import { resolveAdminStatus } from "$lib/utils/status-maps.js";
 	import type { TenantDetail } from "$lib/types";
 
 type PageData = {
@@ -55,7 +56,7 @@ type PageData = {
 							</p>
 						</div>
 						<div class="flex items-center gap-3">
-							<StatusBadge status="success" />
+							<StatusBadge status="success" resolve={resolveAdminStatus} />
 							<a href="/prompts/{vertical}" class="inline-flex h-8 items-center justify-center rounded-md border border-[var(--netz-border)] bg-transparent px-3 text-xs font-medium text-[var(--netz-text-primary)] transition-colors hover:bg-[var(--netz-surface-alt)]">Open {humanize(vertical)} prompts</a>
 						</div>
 					</div>

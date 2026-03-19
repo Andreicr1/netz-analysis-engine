@@ -3,6 +3,7 @@
 -->
 <script lang="ts">
 	import { SectionCard, StatusBadge, EmptyState } from "@netz/ui";
+	import { resolveAdminStatus } from "$lib/utils/status-maps.js";
 	import type { PageData } from "./$types";
 	import PromptEditor from "$lib/components/PromptEditor.svelte";
 
@@ -63,6 +64,7 @@
 										? "warning"
 										: "success"}
 								label={prompt.source_level}
+								resolve={resolveAdminStatus}
 							/>
 							{#if prompt.version}
 								<span class="text-xs text-[var(--netz-text-muted)]">v{prompt.version}</span>
