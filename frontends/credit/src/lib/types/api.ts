@@ -274,9 +274,21 @@ export interface ReportPack {
 
 // ── IC Memo ────────────────────────────────────────────────
 
+/** Mirrors components["schemas"]["CommitteeVoteOut"] from api.d.ts */
+export interface CommitteeVoteOut {
+	email: string;
+	vote: string;
+	signed_at?: string | null;
+	signer_status?: string | null;
+	actor_capacity?: string | null;
+	rationale?: string | null;
+}
+
 export interface ICMemo {
 	status: string;
 	chapters: ICMemoChapter[];
+	committee_votes?: CommitteeVoteOut[] | null;
+	esignature_status?: string | null;
 }
 
 export interface ICMemoChapter {
