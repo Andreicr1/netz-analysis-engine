@@ -22,7 +22,7 @@ from app.domains.wealth.schemas.analytics import (
     ParetoOptimizeResult,
 )
 from app.domains.wealth.services.quant_queries import compute_inputs_from_nav, fetch_returns_matrix
-from app.routers.common import validate_profile as _validate_profile
+from app.domains.wealth.routes.common import validate_profile as _validate_profile
 from quant_engine.backtest_service import walk_forward_backtest
 from quant_engine.optimizer_service import (
     BlockConstraint,
