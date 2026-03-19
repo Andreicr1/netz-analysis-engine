@@ -31,6 +31,7 @@ from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.dd_report import DDReport
 from app.domains.wealth.routes.common import _get_content_semaphore, require_content_slot
 from app.domains.wealth.schemas.dd_report import (
+    DDReportApproveRequest,
     DDReportCreate,
     DDReportRead,
     DDReportRegenerate,
@@ -257,6 +258,7 @@ async def regenerate_dd_report(
 )
 async def approve_dd_report(
     report_id: uuid.UUID,
+    body: DDReportApproveRequest,
     db: AsyncSession = Depends(get_db_with_rls),
     actor: Actor = Depends(require_role(Role.INVESTMENT_TEAM)),
 ) -> DDReportSummary:
@@ -289,6 +291,12 @@ async def approve_dd_report(
     report.approved_by = actor.actor_id
     report.approved_at = datetime.now(UTC)
     report.rejection_reason = None
+    logger.info(
+        "dd_report_approved",
+        report_id=str(report_id),
+        approved_by=actor.actor_id,
+        rationale=body.rationale,
+    )
     await db.commit()
 
     return DDReportSummary.model_validate(report)

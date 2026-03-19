@@ -101,7 +101,10 @@ class TestApproveEndpoint:
         mock_db = _mock_db_with_report(report)
         _setup_overrides(mock_db, _actor("ic-reviewer"))
 
-        resp = await client.post(f"/api/v1/dd-reports/{report.id}/approve")
+        resp = await client.post(
+            f"/api/v1/dd-reports/{report.id}/approve",
+            json={"rationale": "Report meets all evidence standards for investor distribution."},
+        )
 
         assert resp.status_code == 200
         assert report.status == "approved"
@@ -114,7 +117,10 @@ class TestApproveEndpoint:
         mock_db = _mock_db_with_report(report)
         _setup_overrides(mock_db, _actor("report-creator"))
 
-        resp = await client.post(f"/api/v1/dd-reports/{report.id}/approve")
+        resp = await client.post(
+            f"/api/v1/dd-reports/{report.id}/approve",
+            json={"rationale": "Attempting to self-approve this report."},
+        )
 
         assert resp.status_code == 403
         assert "Self-approval" in resp.json()["detail"]
@@ -124,7 +130,10 @@ class TestApproveEndpoint:
         mock_db = _mock_db_with_report(report)
         _setup_overrides(mock_db, _actor("ic-reviewer"))
 
-        resp = await client.post(f"/api/v1/dd-reports/{report.id}/approve")
+        resp = await client.post(
+            f"/api/v1/dd-reports/{report.id}/approve",
+            json={"rationale": "This should fail because report is in draft status."},
+        )
 
         assert resp.status_code == 409
 
@@ -134,7 +143,10 @@ class TestApproveEndpoint:
         mock_db = _mock_db_with_report(report)
         _setup_overrides(mock_db, _actor("investor-user", roles=[Role.INVESTOR]))
 
-        resp = await client.post(f"/api/v1/dd-reports/{report.id}/approve")
+        resp = await client.post(
+            f"/api/v1/dd-reports/{report.id}/approve",
+            json={"rationale": "Investor attempting to approve."},
+        )
 
         assert resp.status_code == 403
 
@@ -145,7 +157,10 @@ class TestApproveEndpoint:
         mock_db.execute.return_value = mock_result
         _setup_overrides(mock_db, _actor("ic-reviewer"))
 
-        resp = await client.post(f"/api/v1/dd-reports/{uuid.uuid4()}/approve")
+        resp = await client.post(
+            f"/api/v1/dd-reports/{uuid.uuid4()}/approve",
+            json={"rationale": "Approving report that does not exist."},
+        )
 
         assert resp.status_code == 404
 

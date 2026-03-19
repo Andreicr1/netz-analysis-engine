@@ -188,13 +188,14 @@ async def main() -> None:
             fail("1.2 Redis", str(e))
 
         # 1.3 Cloudflare R2
-        if has_key("R2_ACCESS_KEY_ID") and has_key("R2_ENDPOINT_URL"):
+        if has_key("R2_ACCESS_KEY_ID") and (has_key("R2_ENDPOINT_URL") or has_key("R2_ACCOUNT_ID")):
             try:
                 import boto3
 
+                endpoint_url = os.environ.get("R2_ENDPOINT_URL") or f"https://{os.environ['R2_ACCOUNT_ID']}.r2.cloudflarestorage.com"
                 s3 = boto3.client(
                     "s3",
-                    endpoint_url=os.environ["R2_ENDPOINT_URL"],
+                    endpoint_url=endpoint_url,
                     aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
                     aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
                     region_name="auto",
@@ -206,7 +207,7 @@ async def main() -> None:
             except Exception as e:
                 fail("1.3 Cloudflare R2", str(e))
         else:
-            skip("1.3 Cloudflare R2", "R2_ACCESS_KEY_ID or R2_ENDPOINT_URL not set")
+            skip("1.3 Cloudflare R2", "R2_ACCESS_KEY_ID and R2_ENDPOINT_URL/R2_ACCOUNT_ID not set")
 
         print(f"  [TIME] Group 1: {time.time() - g1:.1f}s")
 
@@ -751,6 +752,7 @@ async def main() -> None:
                         resp = await ac.post(
                             f"/api/v1/dd-reports/{dd_report_id}/approve",
                             headers=dev_header("smoke-reviewer"),
+                            json={"rationale": "Report meets evidence standards for distribution."},
                         )
                         if resp.status_code == 200:
                             body = resp.json()
@@ -776,6 +778,7 @@ async def main() -> None:
                         resp = await ac.post(
                             f"/api/v1/dd-reports/{dd_report_id}/approve",
                             headers=dev_header("smoke-creator"),
+                            json={"rationale": "Self-approval attempt for testing."},
                         )
                         if resp.status_code == 403:
                             ok("7.4 Self-approval blocked", f"403, detail={resp.json().get('detail', '')[:80]}")
@@ -798,6 +801,7 @@ async def main() -> None:
                         resp = await ac.post(
                             f"/api/v1/dd-reports/{dd_report_id}/approve",
                             headers=dev_header("smoke-reviewer"),
+                            json={"rationale": "Attempting approve on already-approved report."},
                         )
                         if resp.status_code == 409:
                             ok("7.5 Wrong status 409", f"409, detail={resp.json().get('detail', '')[:80]}")
@@ -1265,6 +1269,258 @@ Sharpe Ratio: 1.85
 
         print(f"  [TIME] Group 8: {time.time() - g8:.1f}s")
 
+        # =============================================================
+        # GROUP 9: Vector Store & Semantic Quality
+        # =============================================================
+        group_header("Group 9: Vector Store & Semantic Quality")
+        g9 = time.time()
+
+        if has_key("OPENAI_API_KEY"):
+            SMOKE_DEAL_ID = uuid.UUID("00000000-0000-0000-0000-d00000dea101")
+            SMOKE_FUND_ID = uuid.UUID("00000000-0000-0000-0000-f00000fd0001")
+
+            # Corpus: 5 semantically distinct credit document chunks
+            corpus = [
+                {
+                    "doc_type": "legal_lpa",
+                    "title": "Fund VI LPA",
+                    "content": (
+                        "The General Partner shall have full power and authority to manage "
+                        "the Fund. Limited Partners commit capital contributions of no less "
+                        "than $5,000,000. The GP management fee is 1.5% of committed capital "
+                        "per annum, payable quarterly in advance."
+                    ),
+                },
+                {
+                    "doc_type": "financial_model",
+                    "title": "Borrower Cashflow Projections",
+                    "content": (
+                        "Revenue is projected to grow at 8% CAGR through 2028. EBITDA margin "
+                        "expands from 22% to 27% driven by operating leverage. Free cash flow "
+                        "reaches $45M by Year 3, providing 2.8x debt service coverage. Capex "
+                        "averages 12% of revenue annually."
+                    ),
+                },
+                {
+                    "doc_type": "risk_assessment",
+                    "title": "Environmental Risk Report",
+                    "content": (
+                        "Phase II environmental site assessment identified no recognized "
+                        "environmental conditions. Soil and groundwater sampling results are "
+                        "within regulatory limits. No remediation required. The borrower "
+                        "maintains environmental liability insurance of $10M."
+                    ),
+                },
+                {
+                    "doc_type": "legal_opinion",
+                    "title": "Security Interest Opinion",
+                    "content": (
+                        "Counsel confirms a first-priority perfected security interest in all "
+                        "assets of the borrower. UCC-1 financing statements have been filed "
+                        "in Delaware. The collateral package includes real property, equipment, "
+                        "accounts receivable, and intellectual property."
+                    ),
+                },
+                {
+                    "doc_type": "fund_presentation",
+                    "title": "Q1 2026 Investor Update",
+                    "content": (
+                        "Net IRR of 14.2% since inception. Portfolio NAV reached $1.8B with "
+                        "12 active investments. Two exits in Q1 delivered 2.1x and 1.7x MOIC "
+                        "respectively. Pipeline includes three new opportunities in healthcare "
+                        "and technology sectors totaling $200M."
+                    ),
+                },
+            ]
+
+            # 9.1 Generate embeddings for corpus
+            try:
+                from ai_engine.extraction.embedding_service import async_generate_embeddings
+
+                corpus_texts = [c["content"] for c in corpus]
+                emb_batch = await with_timeout(async_generate_embeddings(corpus_texts), 30)
+                assert len(emb_batch.vectors) == len(corpus), f"Expected {len(corpus)} vectors, got {len(emb_batch.vectors)}"
+                ok("9.1 Corpus Embeddings", f"count={emb_batch.count}, dim={len(emb_batch.vectors[0])}")
+            except Exception as e:
+                fail("9.1 Corpus Embeddings", str(e))
+                # Can't continue without embeddings
+                print(f"  [TIME] Group 9: {time.time() - g9:.1f}s")
+                raise  # Will be caught by outer try/finally
+
+            # 9.2 Upsert to vector_chunks
+            try:
+                from ai_engine.extraction.pgvector_search_service import (
+                    build_search_document,
+                    upsert_chunks,
+                )
+
+                search_docs = []
+                for i, (chunk, embedding) in enumerate(zip(corpus, emb_batch.vectors)):
+                    doc = build_search_document(
+                        deal_id=SMOKE_DEAL_ID,
+                        fund_id=SMOKE_FUND_ID,
+                        domain="credit",
+                        doc_type=chunk["doc_type"],
+                        authority="smoke_test",
+                        title=chunk["title"],
+                        chunk_index=i,
+                        content=chunk["content"],
+                        embedding=embedding,
+                        page_start=1,
+                        page_end=1,
+                        organization_id=TEST_ORG,
+                    )
+                    doc["embedding_model"] = "text-embedding-3-large"
+                    search_docs.append(doc)
+
+                async with async_session_factory() as session:
+                    async with session.begin():
+                        await set_rls(session)
+                        result = await upsert_chunks(session, search_docs)
+
+                ok("9.2 Vector Upsert", f"attempted={result.attempted_chunk_count}, succeeded={result.successful_chunk_count}, failed={result.failed_chunk_count}")
+            except Exception as e:
+                fail("9.2 Vector Upsert", f"{e}\n{traceback.format_exc()}")
+
+            # 9.3 Verify row count in DB
+            try:
+                async with async_session_factory() as session:
+                    async with session.begin():
+                        await set_rls(session)
+                        row = await session.execute(text(
+                            "SELECT count(*) FROM vector_chunks WHERE organization_id = :org AND deal_id = :deal"
+                        ), {"org": TEST_ORG, "deal": str(SMOKE_DEAL_ID)})
+                        count = row.scalar()
+                assert count == len(corpus), f"Expected {len(corpus)} rows, got {count}"
+                ok("9.3 Row Count", f"vector_chunks={count}")
+            except Exception as e:
+                fail("9.3 Row Count", str(e))
+
+            # 9.4 Semantic search — relevant query should rank correct chunk highest
+            try:
+                from ai_engine.extraction.pgvector_search_service import search_deal_chunks
+
+                # Query about financial projections → should match financial_model chunk
+                q_emb = await with_timeout(async_generate_embeddings(
+                    ["What are the revenue projections and EBITDA margins for the borrower?"]
+                ), 15)
+
+                async with async_session_factory() as session:
+                    async with session.begin():
+                        await set_rls(session)
+                        results = await search_deal_chunks(
+                            session,
+                            deal_id=SMOKE_DEAL_ID,
+                            organization_id=TEST_ORG,
+                            query_vector=q_emb.vectors[0],
+                            top=5,
+                        )
+
+                top_result = results[0]
+                top_score = top_result["score"]
+                top_type = top_result["doc_type"]
+                correct_rank = top_type == "financial_model"
+                ok("9.4 Semantic Relevance (financial)", f"top={top_type}, score={top_score:.4f}, correct={correct_rank}")
+                if not correct_rank:
+                    fail("9.4 Semantic Relevance (financial)", f"Expected financial_model at rank 1, got {top_type}")
+            except Exception as e:
+                fail("9.4 Semantic Relevance (financial)", str(e))
+
+            # 9.5 Semantic search — legal query should rank legal chunks highest
+            try:
+                q_emb2 = await with_timeout(async_generate_embeddings(
+                    ["What is the collateral package and security interest perfection status?"]
+                ), 15)
+
+                async with async_session_factory() as session:
+                    async with session.begin():
+                        await set_rls(session)
+                        results2 = await search_deal_chunks(
+                            session,
+                            deal_id=SMOKE_DEAL_ID,
+                            organization_id=TEST_ORG,
+                            query_vector=q_emb2.vectors[0],
+                            top=5,
+                        )
+
+                top2 = results2[0]
+                correct2 = top2["doc_type"] == "legal_opinion"
+                ok("9.5 Semantic Relevance (legal)", f"top={top2['doc_type']}, score={top2['score']:.4f}, correct={correct2}")
+                if not correct2:
+                    fail("9.5 Semantic Relevance (legal)", f"Expected legal_opinion at rank 1, got {top2['doc_type']}")
+            except Exception as e:
+                fail("9.5 Semantic Relevance (legal)", str(e))
+
+            # 9.6 Semantic search — environmental query
+            try:
+                q_emb3 = await with_timeout(async_generate_embeddings(
+                    ["Were there any environmental contamination issues found in the site assessment?"]
+                ), 15)
+
+                async with async_session_factory() as session:
+                    async with session.begin():
+                        await set_rls(session)
+                        results3 = await search_deal_chunks(
+                            session,
+                            deal_id=SMOKE_DEAL_ID,
+                            organization_id=TEST_ORG,
+                            query_vector=q_emb3.vectors[0],
+                            top=5,
+                        )
+
+                top3 = results3[0]
+                correct3 = top3["doc_type"] == "risk_assessment"
+                ok("9.6 Semantic Relevance (environmental)", f"top={top3['doc_type']}, score={top3['score']:.4f}, correct={correct3}")
+                if not correct3:
+                    fail("9.6 Semantic Relevance (environmental)", f"Expected risk_assessment at rank 1, got {top3['doc_type']}")
+            except Exception as e:
+                fail("9.6 Semantic Relevance (environmental)", str(e))
+
+            # 9.7 Score distribution — top result should be significantly better than last
+            try:
+                if results3 and len(results3) >= 3:
+                    score_top = results3[0]["score"]
+                    score_last = results3[-1]["score"]
+                    gap = score_top - score_last
+                    ok("9.7 Score Distribution", f"top={score_top:.4f}, bottom={score_last:.4f}, gap={gap:.4f}")
+                else:
+                    skip("9.7 Score Distribution", "Not enough results")
+            except Exception as e:
+                fail("9.7 Score Distribution", str(e))
+
+            # 9.8 Tenant isolation — different org should see zero results
+            try:
+                OTHER_ORG = uuid.UUID("00000000-0000-0000-0000-000000000099")
+
+                async with async_session_factory() as session:
+                    async with session.begin():
+                        # Set RLS to OTHER org (f-string like set_rls helper)
+                        await session.execute(text(
+                            f"SET LOCAL app.current_organization_id = '{OTHER_ORG}'"
+                        ))
+                        results_other = await search_deal_chunks(
+                            session,
+                            deal_id=SMOKE_DEAL_ID,
+                            organization_id=OTHER_ORG,
+                            query_vector=q_emb.vectors[0],
+                            top=5,
+                        )
+
+                ok("9.8 Tenant Isolation", f"other_org_results={len(results_other)}, expected=0")
+                if len(results_other) > 0:
+                    fail("9.8 Tenant Isolation", f"OTHER ORG returned {len(results_other)} results — RLS BREACH")
+            except Exception as e:
+                fail("9.8 Tenant Isolation", str(e))
+
+        else:
+            for t in ["9.1 Corpus Embeddings", "9.2 Vector Upsert", "9.3 Row Count",
+                       "9.4 Semantic Relevance (financial)", "9.5 Semantic Relevance (legal)",
+                       "9.6 Semantic Relevance (environmental)", "9.7 Score Distribution",
+                       "9.8 Tenant Isolation"]:
+                skip(t, "OPENAI_API_KEY not set")
+
+        print(f"  [TIME] Group 9: {time.time() - g9:.1f}s")
+
     finally:
         # =============================================================
         # CLEANUP
@@ -1291,8 +1547,11 @@ Sharpe Ratio: 1.85
                     r4 = await session.execute(text(
                         "DELETE FROM instruments_universe WHERE organization_id = :org"
                     ), {"org": TEST_ORG})
+                    r5 = await session.execute(text(
+                        "DELETE FROM vector_chunks WHERE organization_id = :org"
+                    ), {"org": TEST_ORG})
 
-            print(f"  Cleaned up TEST_ORG rows: chapters={r1.rowcount}, reports={r2.rowcount}, nav={r3.rowcount}, instruments={r4.rowcount}")
+            print(f"  Cleaned up TEST_ORG rows: chapters={r1.rowcount}, reports={r2.rowcount}, nav={r3.rowcount}, instruments={r4.rowcount}, vectors={r5.rowcount}")
         except Exception as e:
             print(f"  [WARN] Cleanup failed: {e}")
 

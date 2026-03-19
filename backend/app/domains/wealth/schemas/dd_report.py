@@ -57,6 +57,10 @@ class DDReportRejectRequest(BaseModel):
     reason: str = Field(..., min_length=10, max_length=2000)
 
 
+class DDReportApproveRequest(BaseModel):
+    rationale: str = Field(..., min_length=10, max_length=2000)
+
+
 class DDReportRegenerate(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

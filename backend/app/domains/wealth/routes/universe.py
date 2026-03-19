@@ -26,6 +26,8 @@ logger = structlog.get_logger()
 
 router = APIRouter(prefix="/universe", tags=["universe"])
 
+_APPROVE_DECISIONS = {"approved", "watchlist"}
+
 
 @router.get(
     "",
@@ -154,7 +156,12 @@ async def approve_fund(
                     detail=f"Approval already decided: {approval.decision}",
                 )
 
-            decision = body.decision if body.decision in ("approved", "watchlist") else "approved"
+            if body.decision not in _APPROVE_DECISIONS:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Invalid decision '{body.decision}'. Allowed values: {sorted(_APPROVE_DECISIONS)}",
+                )
+            decision = body.decision
             try:
                 updated = svc.approve_fund(
                     sync_db,
@@ -194,6 +201,12 @@ async def reject_fund(
     Self-approval prevention applies: the submitter cannot reject.
     """
     _require_ic_role(actor)
+
+    if body.decision != "rejected":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid decision '{body.decision}' for reject endpoint. Expected 'rejected'.",
+        )
 
     from vertical_engines.wealth.asset_universe import UniverseService
     from vertical_engines.wealth.asset_universe.fund_approval import SelfApprovalError

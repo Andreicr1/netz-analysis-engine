@@ -3,8 +3,8 @@
   Download PDF, regenerate with confirmation. Approval bar for IC members.
 -->
 <script lang="ts">
-	import { Card, Button, EmptyState, cn, StatusBadge, Dialog } from "@netz/ui";
-	import { ActionButton, ConfirmDialog, FormField } from "@netz/ui";
+	import { Card, Button, EmptyState, cn, StatusBadge } from "@netz/ui";
+	import { ActionButton, ConfirmDialog, ConsequenceDialog } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
@@ -57,8 +57,8 @@
 	let showRegenConfirm = $state(false);
 	let regenerating = $state(false);
 	let approving = $state(false);
+	let showApproveDialog = $state(false);
 	let showRejectDialog = $state(false);
-	let rejectReason = $state("");
 	let rejecting = $state(false);
 	let actionError = $state<string | null>(null);
 
@@ -105,12 +105,15 @@
 		}
 	}
 
-	async function approveReport() {
+	async function approveReport(payload: { rationale?: string }) {
 		approving = true;
 		actionError = null;
 		try {
 			const api = createClientApiClient(getToken);
-			await api.post(`/dd-reports/${data.reportId}/approve`, {});
+			await api.post(`/dd-reports/${data.reportId}/approve`, {
+				rationale: payload.rationale,
+			});
+			showApproveDialog = false;
 			await invalidateAll();
 		} catch (e) {
 			actionError = e instanceof Error ? e.message : "Approval failed";
@@ -119,15 +122,15 @@
 		}
 	}
 
-	async function rejectReport() {
-		if (rejectReason.length < 10) return;
+	async function rejectReport(payload: { rationale?: string }) {
 		rejecting = true;
 		actionError = null;
 		try {
 			const api = createClientApiClient(getToken);
-			await api.post(`/dd-reports/${data.reportId}/reject`, { reason: rejectReason });
+			await api.post(`/dd-reports/${data.reportId}/reject`, {
+				reason: payload.rationale,
+			});
 			showRejectDialog = false;
-			rejectReason = "";
 			await invalidateAll();
 		} catch (e) {
 			actionError = e instanceof Error ? e.message : "Rejection failed";
@@ -160,14 +163,9 @@
 			{#if reportStatus === "pending_approval"}
 				<div class="flex gap-2">
 					{#if canApprove}
-						<ActionButton
-							size="sm"
-							onclick={approveReport}
-							loading={approving}
-							loadingText="Approving..."
-						>
+						<Button size="sm" onclick={() => showApproveDialog = true} disabled={approving}>
 							Approve
-						</ActionButton>
+						</Button>
 					{/if}
 					{#if canReject}
 						<Button size="sm" variant="outline" onclick={() => showRejectDialog = true}>
@@ -267,33 +265,45 @@
 	onCancel={() => showRegenConfirm = false}
 />
 
-<!-- Reject Dialog -->
-<Dialog bind:open={showRejectDialog} title="Reject DD Report">
-	<div class="space-y-4">
-		<p class="text-sm text-(--netz-text-secondary)">
-			Provide a rationale for rejecting this report. The author will see this feedback.
-		</p>
-		<FormField label="Rejection Reason" required>
-			<textarea
-				class="w-full rounded-md border border-(--netz-border) bg-(--netz-bg-secondary) px-3 py-2 text-sm text-(--netz-text-primary)"
-				rows={4}
-				placeholder="Minimum 10 characters..."
-				bind:value={rejectReason}
-			></textarea>
-		</FormField>
-		{#if rejectReason.length > 0 && rejectReason.length < 10}
-			<p class="text-xs text-(--netz-status-error)">Reason must be at least 10 characters.</p>
-		{/if}
-		<div class="flex justify-end gap-2 pt-2">
-			<Button variant="outline" onclick={() => { showRejectDialog = false; rejectReason = ""; }}>Cancel</Button>
-			<ActionButton
-				onclick={rejectReport}
-				loading={rejecting}
-				loadingText="Rejecting..."
-				disabled={rejectReason.length < 10}
-			>
-				Reject Report
-			</ActionButton>
-		</div>
-	</div>
-</Dialog>
+<!-- Approve DD Report -->
+<ConsequenceDialog
+	bind:open={showApproveDialog}
+	title="Approve DD Report"
+	impactSummary="This report will become visible to investors upon approval."
+	confirmLabel="Approve for Distribution"
+	requireRationale={true}
+	rationaleMinLength={10}
+	rationalePlaceholder="Explain why this report is ready for investor distribution..."
+	onConfirm={approveReport}
+	onCancel={() => showApproveDialog = false}
+>
+	{#snippet consequenceList()}
+		<ul class="list-disc space-y-1 pl-4 text-sm text-(--netz-text-secondary)">
+			<li>Report will be published to investor portal</li>
+			<li>Approval decision is recorded in audit trail</li>
+			<li>This action cannot be undone without admin intervention</li>
+		</ul>
+	{/snippet}
+</ConsequenceDialog>
+
+<!-- Reject DD Report -->
+<ConsequenceDialog
+	bind:open={showRejectDialog}
+	title="Reject DD Report"
+	impactSummary="This report will return to draft status."
+	destructive={true}
+	confirmLabel="Confirm Rejection"
+	requireRationale={true}
+	rationaleMinLength={10}
+	rationalePlaceholder="Explain what needs to be revised..."
+	onConfirm={rejectReport}
+	onCancel={() => showRejectDialog = false}
+>
+	{#snippet consequenceList()}
+		<ul class="list-disc space-y-1 pl-4 text-sm text-(--netz-text-secondary)">
+			<li>Report returns to draft status</li>
+			<li>Author will be notified of rejection</li>
+			<li>Investor distribution is blocked until re-approval</li>
+		</ul>
+	{/snippet}
+</ConsequenceDialog>

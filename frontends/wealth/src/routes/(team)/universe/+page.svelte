@@ -7,7 +7,7 @@
 		DataTable, PageHeader, EmptyState, Badge, Button,
 		formatDate,
 	} from "@netz/ui";
-	import { ActionButton, ConfirmDialog } from "@netz/ui";
+	import { ActionButton, ConsequenceDialog } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
@@ -57,7 +57,6 @@
 	let actionTarget = $state<PendingApproval | null>(null);
 	let showApproveDialog = $state(false);
 	let showRejectDialog = $state(false);
-	let rejectRationale = $state("");
 	let approving = $state(false);
 	let rejecting = $state(false);
 
@@ -68,20 +67,20 @@
 
 	function openReject(item: PendingApproval) {
 		actionTarget = item;
-		rejectRationale = "";
 		showRejectDialog = true;
 	}
 
-	async function approveInstrument() {
+	async function approveInstrument(payload: { rationale?: string }) {
 		if (!actionTarget) return;
 		approving = true;
 		actionError = null;
-		showApproveDialog = false;
 		try {
 			const api = createClientApiClient(getToken);
 			await api.post(`/universe/funds/${actionTarget.instrument_id}/approve`, {
 				decision: "approved",
+				rationale: payload.rationale,
 			});
+			showApproveDialog = false;
 			await invalidateAll();
 		} catch (e) {
 			actionError = e instanceof Error ? e.message : "Approval failed";
@@ -91,24 +90,23 @@
 		}
 	}
 
-	async function rejectInstrument() {
+	async function rejectInstrument(payload: { rationale?: string }) {
 		if (!actionTarget) return;
 		rejecting = true;
 		actionError = null;
-		showRejectDialog = false;
 		try {
 			const api = createClientApiClient(getToken);
 			await api.post(`/universe/funds/${actionTarget.instrument_id}/reject`, {
 				decision: "rejected",
-				rationale: rejectRationale.trim() || undefined,
+				rationale: payload.rationale,
 			});
+			showRejectDialog = false;
 			await invalidateAll();
 		} catch (e) {
 			actionError = e instanceof Error ? e.message : "Rejection failed";
 		} finally {
 			rejecting = false;
 			actionTarget = null;
-			rejectRationale = "";
 		}
 	}
 
@@ -247,26 +245,43 @@
 	{/if}
 </div>
 
-<!-- Approve confirmation -->
-<ConfirmDialog
+<!-- Approve Instrument -->
+<ConsequenceDialog
 	bind:open={showApproveDialog}
-	title="Approve Instrument"
-	message={actionTarget ? `Approve "${actionTarget.instrument_name}" for the investment universe?` : ""}
-	confirmLabel="Approve"
-	confirmVariant="default"
+	title="Approve Fund into Universe"
+	impactSummary={actionTarget ? `"${actionTarget.instrument_name}" will become eligible for portfolio allocation.` : ""}
+	confirmLabel="Approve for Universe"
+	requireRationale={true}
+	rationaleMinLength={10}
+	rationalePlaceholder="Explain why this instrument should be in the investable universe..."
 	onConfirm={approveInstrument}
 	onCancel={() => { showApproveDialog = false; actionTarget = null; }}
-/>
+>
+	{#snippet consequenceList()}
+		<ul class="list-disc space-y-1 pl-4 text-sm text-(--netz-text-secondary)">
+			<li>Instrument becomes eligible for portfolio allocation</li>
+			<li>Decision is recorded in audit trail</li>
+		</ul>
+	{/snippet}
+</ConsequenceDialog>
 
-<!-- Reject confirmation with rationale -->
-{#if showRejectDialog && actionTarget}
-	<ConfirmDialog
-		bind:open={showRejectDialog}
-		title="Reject Instrument"
-		message={`Reject "${actionTarget.instrument_name}" from the investment universe?`}
-		confirmLabel="Reject"
-		confirmVariant="destructive"
-		onConfirm={rejectInstrument}
-		onCancel={() => { showRejectDialog = false; actionTarget = null; rejectRationale = ""; }}
-	/>
-{/if}
+<!-- Reject Instrument -->
+<ConsequenceDialog
+	bind:open={showRejectDialog}
+	title="Reject Fund from Universe"
+	impactSummary={actionTarget ? `"${actionTarget.instrument_name}" will be excluded from the investable universe.` : ""}
+	destructive={true}
+	confirmLabel="Confirm Rejection"
+	requireRationale={true}
+	rationaleMinLength={10}
+	rationalePlaceholder="Explain why this instrument should be excluded..."
+	onConfirm={rejectInstrument}
+	onCancel={() => { showRejectDialog = false; actionTarget = null; }}
+>
+	{#snippet consequenceList()}
+		<ul class="list-disc space-y-1 pl-4 text-sm text-(--netz-text-secondary)">
+			<li>Instrument is excluded from the investable universe</li>
+			<li>Rejection rationale is recorded for compliance</li>
+		</ul>
+	{/snippet}
+</ConsequenceDialog>
