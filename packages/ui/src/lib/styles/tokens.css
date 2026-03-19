@@ -51,6 +51,18 @@
 	--netz-primary: var(--netz-brand-primary);
 	--netz-primary-foreground: #ffffff;
 	--netz-primary-muted: color-mix(in srgb, var(--netz-brand-primary) 15%, transparent);
+
+	/* ── Extended semantic tokens ──────────────────────────── */
+	--netz-bg-hover: color-mix(in srgb, var(--netz-surface-alt) 80%, transparent);
+	--netz-bg-secondary: var(--netz-surface-alt);
+	--netz-status-error: var(--netz-danger);
+	--netz-danger-subtle: color-mix(in srgb, var(--netz-danger) 12%, transparent);
+	--netz-success-subtle: color-mix(in srgb, var(--netz-success) 12%, transparent);
+	--netz-warning-subtle: color-mix(in srgb, var(--netz-warning) 12%, transparent);
+	--netz-error-surface: var(--netz-danger-subtle);
+	--netz-error-on-surface: var(--netz-danger);
+	--netz-warning-surface: var(--netz-warning-subtle);
+	--netz-warning-on-surface: var(--netz-warning);
 }
 
 /* ── Dark Theme ────────────────────────────────────────────── */
@@ -101,4 +113,16 @@
 	--netz-primary: var(--netz-brand-primary);
 	--netz-primary-foreground: #ffffff;
 	--netz-primary-muted: color-mix(in srgb, var(--netz-brand-primary) 15%, transparent);
+
+	/* ── Extended semantic tokens ──────────────────────────── */
+	--netz-bg-hover: color-mix(in srgb, var(--netz-surface-alt) 80%, transparent);
+	--netz-bg-secondary: var(--netz-surface-alt);
+	--netz-status-error: var(--netz-danger);
+	--netz-danger-subtle: color-mix(in srgb, var(--netz-danger) 12%, transparent);
+	--netz-success-subtle: color-mix(in srgb, var(--netz-success) 12%, transparent);
+	--netz-warning-subtle: color-mix(in srgb, var(--netz-warning) 12%, transparent);
+	--netz-error-surface: var(--netz-danger-subtle);
+	--netz-error-on-surface: var(--netz-danger);
+	--netz-warning-surface: var(--netz-warning-subtle);
+	--netz-warning-on-surface: var(--netz-warning);
 }

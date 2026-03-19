@@ -85,7 +85,7 @@ frontends/
 
 **Classification:** Three-layer hybrid classifier (no external ML APIs). Layer 1: filename + keyword rules (~60% of docs). Layer 2: TF-IDF + cosine similarity (~30%). Layer 3: LLM fallback (~10%). Cross-encoder local reranker for IC memo evidence (replaced Cohere).
 
-**324 tests.** All passing. Enforced by `make check` (lint + typecheck + test).
+**1405 tests.** All passing. Enforced by `make check` (lint + typecheck + test). CI: GitHub Actions (`pip install -e ".[dev,ai,quant]"`).
 
 ## Product Scope — Analytical Core Only
 
@@ -285,3 +285,19 @@ npx @sveltejs/mcp svelte-autofixer ./src/lib/Component.svelte
 - ALWAYS run `svelte-autofixer` before finalizing any `.svelte` component
 - Use `fetch()` + `ReadableStream` for SSE — NEVER `EventSource` (cannot send auth headers)
 - Svelte 5 runes syntax (`$state`, `$derived`, `$effect`) — escape `$` as `\$` in terminal
+
+## UX Sprint 7 — Scope Decisions (2026-03-19)
+
+### C.3 — Portfolio deal-level contract fields: NOT IMPLEMENTED (architecture decision)
+
+The portfolio view (`frontends/credit/src/routes/(team)/funds/[fundId]/portfolio/+page.svelte`) is asset-centric post-conversion. Assets are identified by name, type, and strategy with tabs for obligations, alerts, and actions. Fields like tenor, basis, and covenant are deal-level contract fields that live in `deal_context.json` on the deal entity — NOT on portfolio assets. Displaying them per asset row would cross the deal/asset boundary and create misleading attribution (one deal can map to one asset, but deal terms do not become asset attributes post-conversion). Do not add tenor/basis/covenant to the portfolio asset view. If deal-level contract terms need to be visible post-conversion, add a "Source Deal" link from the asset to the originating deal's detail page.
+
+### C.4 — Kanban pipeline board: BLOCKED on `svelte-dnd-action` dependency
+
+Backend endpoint exists: `PATCH /pipeline/deals/{deal_id}/stage` with payload `{ to_stage: string, rationale?: string }` (defined in `backend/app/domains/credit/modules/deals/routes.py:332` and schemas `DealStagePatch`). Implementation is unblocked from a backend contract standpoint.
+
+However, `svelte-dnd-action` is NOT in `frontends/credit/package.json`. The Kanban board requires this package for drag-and-drop column interaction. Do NOT implement the Kanban board with a different DnD mechanism or inline implementation — this would diverge from the plan spec. To unblock: add `svelte-dnd-action` to the credit frontend dependencies (`pnpm add svelte-dnd-action` in `frontends/credit/`), then implement:
+1. Columns per `DealStage` enum value
+2. Deal cards draggable between columns
+3. On drop: open `ConsequenceDialog` with rationale field, PATCH on confirm
+4. `invalidateAll()` on success

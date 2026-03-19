@@ -3,6 +3,7 @@
 -->
 <script lang="ts">
 	import { StatusBadge, formatDateTime, formatNumber } from "@netz/ui";
+	import { resolveAdminStatus } from "$lib/utils/status-maps.js";
 
 	let {
 		service,
@@ -28,7 +29,7 @@
 <div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] p-4">
 	<div class="mb-2 flex items-center justify-between">
 		<span class="text-sm font-medium text-[var(--netz-text-primary)]">{service.name}</span>
-		<StatusBadge status={statusType} type="risk" />
+		<StatusBadge status={statusType} type="risk" resolve={resolveAdminStatus} />
 	</div>
 	{#if service.latency_ms != null}
 		<p class="text-xs text-[var(--netz-text-muted)]">

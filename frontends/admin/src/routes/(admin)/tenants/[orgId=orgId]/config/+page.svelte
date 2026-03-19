@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { MetricCard, SectionCard, StatusBadge } from "@netz/ui";
+	import { resolveAdminStatus } from "$lib/utils/status-maps.js";
 	import type { TenantDetail } from "$lib/types";
 
 type PageData = {
@@ -73,7 +74,7 @@ type PageData = {
 											<p class="text-sm font-medium text-[var(--netz-text-primary)]">{config.config_type}</p>
 											<p class="text-xs text-[var(--netz-text-secondary)]">Version {config.version ?? "\u2014"}</p>
 										</div>
-										<StatusBadge status={config.has_override ? "warning" : "success"} />
+										<StatusBadge status={config.has_override ? "warning" : "success"} resolve={resolveAdminStatus} />
 									</div>
 								</div>
 							{/each}
