@@ -4,7 +4,7 @@
   DD report progress subscribes via SSE when an active report ID is available.
 -->
 <script lang="ts">
-	import { ContextPanel, EmptyState, SectionCard, MetricCard } from "@netz/ui";
+	import { ContextPanel, EmptyState, SectionCard, MetricCard, formatAUM, formatNumber, formatPercent, formatDate } from "@netz/ui";
 	import { getContext } from "svelte";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
@@ -158,21 +158,11 @@
 	// ── Format helpers ─────────────────────────────────────────────────────
 
 	function formatAum(value: number | null): string {
-		if (value === null) return "—";
-		if (value >= 1_000_000_000) return `R$ ${(value / 1_000_000_000).toFixed(1)}B`;
-		if (value >= 1_000_000) return `R$ ${(value / 1_000_000).toFixed(0)}M`;
-		return `R$ ${value.toLocaleString("pt-BR")}`;
+		return formatAUM(value, "BRL", "pt-BR");
 	}
 
 	function formatPct(value: number | null): string {
-		if (value === null) return "—";
-		const sign = value >= 0 ? "+" : "";
-		return `${sign}${(value * 100).toFixed(2)}%`;
-	}
-
-	function formatDate(value: string | null): string {
-		if (!value) return "—";
-		return new Date(value).toLocaleDateString("pt-BR");
+		return formatPercent(value, 2, "pt-BR", true);
 	}
 </script>
 
@@ -189,7 +179,7 @@
 			<div class="flex shrink-0 flex-col items-end gap-1">
 				{#if fund.score !== null}
 					<span class="text-lg font-bold text-[var(--netz-text-primary)]">
-						{fund.score.toFixed(1)}
+						{formatNumber(fund.score, 1, "pt-BR")}
 					</span>
 					<span class="text-xs text-[var(--netz-text-muted)]">Score</span>
 				{/if}
@@ -221,7 +211,7 @@
 					<MetricCard label="AUM" value={formatAum(fund.aum)} />
 					<MetricCard
 						label="Score Geral"
-						value={fund.score !== null ? fund.score.toFixed(1) : "—"}
+						value={formatNumber(fund.score, 1, "pt-BR")}
 					/>
 					{#if fund.annual_return !== undefined}
 						<MetricCard
@@ -232,7 +222,7 @@
 					{#if fund.sharpe_ratio !== undefined}
 						<MetricCard
 							label="Sharpe"
-							value={fund.sharpe_ratio !== null ? fund.sharpe_ratio.toFixed(2) : "—"}
+							value={formatNumber(fund.sharpe_ratio, 2, "pt-BR")}
 						/>
 					{/if}
 					{#if fund.max_drawdown !== undefined}
@@ -275,12 +265,12 @@
 							</div>
 							<div class="flex justify-between">
 								<dt class="text-[var(--netz-text-muted)]">Atualizado</dt>
-								<dd class="text-[var(--netz-text-primary)]">{formatDate(fund.updated_at)}</dd>
+								<dd class="text-[var(--netz-text-primary)]">{formatDate(fund.updated_at, "short", "pt-BR")}</dd>
 							</div>
 							{#if fund.inception_date}
 								<div class="flex justify-between">
 									<dt class="text-[var(--netz-text-muted)]">Início</dt>
-									<dd class="text-[var(--netz-text-primary)]">{formatDate(fund.inception_date)}</dd>
+									<dd class="text-[var(--netz-text-primary)]">{formatDate(fund.inception_date, "short", "pt-BR")}</dd>
 								</div>
 							{/if}
 						</dl>

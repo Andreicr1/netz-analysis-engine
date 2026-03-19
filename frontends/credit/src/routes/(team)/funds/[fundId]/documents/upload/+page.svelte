@@ -7,7 +7,7 @@
   5. SSE stream showing pipeline stages
 -->
 <script lang="ts">
-	import { Card, Button, EmptyState } from "@netz/ui";
+	import { Card, Button, EmptyState, formatNumber } from "@netz/ui";
 	import { createSSEStream } from "@netz/ui/utils";
 	import IngestionProgress from "$lib/components/IngestionProgress.svelte";
 	import { createClientApiClient } from "$lib/api/client";
@@ -44,7 +44,7 @@
 	/** Validate file size and magic bytes. Sets uploadError and returns false on failure. */
 	async function validateFile(f: File): Promise<boolean> {
 		if (f.size > MAX_FILE_SIZE) {
-			uploadError = `File "${f.name}" exceeds 50 MB limit (${(f.size / 1024 / 1024).toFixed(1)} MB)`;
+			uploadError = `File "${f.name}" exceeds 50 MB limit (${formatNumber(f.size / 1024 / 1024, 1)} MB)`;
 			return false;
 		}
 		if (!(await validateMagicBytes(f))) {
@@ -132,7 +132,7 @@
 				{#if file}
 					<p class="text-sm font-medium text-[var(--netz-text-primary)]">{file.name}</p>
 					<p class="text-xs text-[var(--netz-text-muted)]">
-						{(file.size / 1024 / 1024).toFixed(2)} MB
+						{formatNumber(file.size / 1024 / 1024, 2)} MB
 					</p>
 				{:else}
 					<p class="mb-2 text-sm text-[var(--netz-text-secondary)]">

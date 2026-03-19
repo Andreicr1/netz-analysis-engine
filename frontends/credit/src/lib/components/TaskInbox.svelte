@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
 	import { StatusBadge, Card } from "@netz/ui";
+	import { resolveCreditStatus } from "$lib/utils/status-maps";
 
 	interface Task {
 		id: string;
@@ -31,7 +32,7 @@
 				class="flex items-center justify-between px-4 py-3 transition-colors hover:bg-[var(--netz-surface-alt)]"
 			>
 				<div class="flex items-center gap-3">
-					<StatusBadge status={task.priority} type="risk" />
+					<StatusBadge status={task.priority} type="risk" resolve={resolveCreditStatus} />
 					<div>
 						<p class="text-sm font-medium text-[var(--netz-text-primary)]">{task.title}</p>
 						<p class="text-xs text-[var(--netz-text-muted)]">{task.type}</p>

@@ -19,6 +19,7 @@
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
 	import type { DealStage, RejectionCode, ICCondition, StageTimeline, VotingStatusDetail } from "$lib/types/api";
+	import { resolveCreditStatus } from "$lib/utils/status-maps";
 
 	/** Matches components["schemas"]["DealDecision"] from packages/ui/src/types/api.d.ts */
 	interface DealDecisionPayload {
@@ -280,7 +281,7 @@
 				{data.deal.name ?? "Deal"}
 			</h2>
 			<div class="mt-1 flex items-center gap-2">
-				<StatusBadge status={String(data.deal.stage)} type="deal" />
+				<StatusBadge status={String(data.deal.stage)} type="deal" resolve={resolveCreditStatus} />
 				{#if data.deal.deal_type}
 					<span class="text-sm text-[var(--netz-text-muted)]">{data.deal.deal_type}</span>
 				{/if}
@@ -440,7 +441,7 @@
 										{condition.title}
 									</p>
 									<p class="mt-1 text-xs text-[var(--netz-text-muted)]">
-										Status: <StatusBadge status={condition.status} type="default" />
+										Status: <StatusBadge status={condition.status} type="default" resolve={resolveCreditStatus} />
 									</p>
 									{#if condition.notes}
 										<p class="mt-1 text-xs text-[var(--netz-text-muted)]">{condition.notes}</p>

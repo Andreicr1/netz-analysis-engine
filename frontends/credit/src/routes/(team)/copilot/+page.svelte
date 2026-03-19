@@ -3,7 +3,7 @@
   Enhanced: History sidebar, Activity log, Document retrieval.
 -->
 <script lang="ts">
-	import { Card, Button, PageTabs, EmptyState, DataTable } from "@netz/ui";
+	import { Card, Button, PageTabs, EmptyState, DataTable, formatPercent } from "@netz/ui";
 	import { ActionButton } from "@netz/ui";
 	import CopilotChat from "$lib/components/CopilotChat.svelte";
 	import { createClientApiClient } from "$lib/api/client";
@@ -235,7 +235,7 @@
 								<div class="flex items-start justify-between">
 									<p class="text-sm font-medium text-[var(--netz-text-primary)]">{doc.title}</p>
 									<span class="ml-2 shrink-0 rounded-full bg-[var(--netz-brand-primary)]/10 px-2 py-0.5 text-xs text-[var(--netz-brand-primary)]">
-										{(doc.score * 100).toFixed(0)}%
+										{formatPercent(doc.score)}
 									</span>
 								</div>
 								<p class="mt-1 line-clamp-3 text-xs text-[var(--netz-text-muted)]">{doc.snippet}</p>

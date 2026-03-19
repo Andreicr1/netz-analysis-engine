@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
 	import { Card, StatusBadge, Button, Dialog } from "@netz/ui";
+	import { resolveCreditStatus } from "$lib/utils/status-maps";
 	import { ActionButton, ConfirmDialog, FormField } from "@netz/ui";
 	import { ConsequenceDialog, AuditTrailPanel } from "@netz/ui";
 	import { createOptimisticMutation } from "@netz/ui";
@@ -319,7 +320,7 @@
 			<h2 class="text-xl font-semibold text-[var(--netz-text-primary)]">
 				{review.title ?? review.document_title ?? "Review"}
 			</h2>
-			<StatusBadge status={status} type="review" />
+			<StatusBadge status={status} type="review" resolve={resolveCreditStatus} />
 		</div>
 		<div class="flex gap-2">
 			{#if canAssign}
@@ -368,7 +369,7 @@
 			{#each review.assignments as assignment}
 				<div class="flex items-center justify-between py-2">
 					<span class="text-sm">{assignment.reviewer_name ?? "Unknown"}</span>
-					<StatusBadge status={String(assignment.decision ?? "pending")} type="review" />
+					<StatusBadge status={String(assignment.decision ?? "pending")} type="review" resolve={resolveCreditStatus} />
 				</div>
 			{/each}
 		{:else}

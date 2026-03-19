@@ -6,6 +6,7 @@
 	import { Card, StatusBadge } from "@netz/ui";
 	import { createSSEStream } from "@netz/ui/utils";
 	import { onMount, getContext } from "svelte";
+	import { resolveCreditStatus } from "$lib/utils/status-maps";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -55,7 +56,7 @@
 		{#each STAGES as stage (stage)}
 			<div class="flex items-center justify-between">
 				<span class="text-sm capitalize text-[var(--netz-text-secondary)]">{stage}</span>
-				<StatusBadge status={stageStatus(stage)} type="review" />
+				<StatusBadge status={stageStatus(stage)} type="review" resolve={resolveCreditStatus} />
 			</div>
 		{/each}
 	</div>

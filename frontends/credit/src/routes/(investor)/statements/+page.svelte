@@ -2,7 +2,7 @@
   Investor — Published statements with download.
 -->
 <script lang="ts">
-	import { PageHeader, EmptyState, PDFDownload } from "@netz/ui";
+	import { PageHeader, EmptyState, PDFDownload, formatDate } from "@netz/ui";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
@@ -34,7 +34,7 @@
 						</p>
 						{#if stmt.created_at}
 							<p class="text-sm text-[var(--netz-text-muted)]">
-								Created: {new Date(stmt.created_at as string).toLocaleDateString()}
+								Created: {formatDate(stmt.created_at as string)}
 							</p>
 						{/if}
 					</div>
