@@ -16,6 +16,11 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/workers/run-instrument-ingestion",
+    "name": "trigger_run_instrument_ingestion"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/workers/run-macro-ingestion",
     "name": "trigger_run_macro_ingestion"
   },

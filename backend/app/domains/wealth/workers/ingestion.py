@@ -58,6 +58,9 @@ async def run_ingestion(org_id: uuid.UUID, lookback_days: int = 30) -> dict[str,
     Uses yf.download() for efficient batch HTTP, then iterates per-fund
     for upsert. Single commit after all funds processed.
     """
+    logger.warning(
+        "run_ingestion is deprecated — use run_instrument_ingestion instead"
+    )
     logger.info("Starting NAV ingestion", lookback_days=lookback_days)
     results: dict[str, int] = {}
 

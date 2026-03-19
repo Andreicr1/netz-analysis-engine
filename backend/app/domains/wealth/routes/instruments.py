@@ -136,9 +136,9 @@ async def import_from_yahoo(
 
     import asyncio
 
-    from app.services.providers.yahoo_finance_provider import YahooFinanceProvider
+    from app.services.providers import get_instrument_provider
 
-    provider = YahooFinanceProvider()
+    provider = get_instrument_provider()
     raw_data = await asyncio.to_thread(provider.fetch_batch, body.tickers)
 
     created: list[Instrument] = []

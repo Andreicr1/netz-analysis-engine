@@ -18,7 +18,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.core.jobs.worker_idempotency import (
@@ -328,6 +328,37 @@ async def trigger_run_screening_batch(
         background_tasks, "run-screening-batch", str(org_id),
         run_screening_batch, org_id,
         timeout_seconds=_LIGHT_WORKER_TIMEOUT, org_id=org_id,
+    )
+
+
+@router.post(
+    "/run-instrument-ingestion",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger instrument universe NAV ingestion",
+    description=(
+        "Schedules the instrument NAV ingestion worker as a background task. "
+        "Fetches NAV history from the configured provider for all active "
+        "instruments in instruments_universe and upserts into nav_timeseries. "
+        "Uses advisory lock 900_010 to prevent concurrent runs. Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_instrument_ingestion(
+    background_tasks: BackgroundTasks,
+    lookback_days: int = Query(default=30, ge=1, le=1095),
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.instrument_ingestion import run_instrument_ingestion
+
+    org_id = user.organization_id
+    return await _dispatch_worker(
+        background_tasks, "run-instrument-ingestion", str(org_id),
+        run_instrument_ingestion, org_id, lookback_days,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT, org_id=org_id,
     )
 
 
