@@ -246,13 +246,73 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/ai/pipeline/extract/jobs",
+    "name": "list_extraction_jobs"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/pipeline/extract/sources",
+    "name": "list_extraction_sources"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/pipeline/extract/status/{job_id}",
+    "name": "get_extraction_status"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/ai/pipeline/fact-sheet/pdf",
     "name": "get_fact_sheet_pdf"
   },
   {
     "method": "GET",
+    "path": "/api/v1/ai/pipeline/ingest/jobs/latest",
+    "name": "get_latest_ingest_job"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/pipeline/ingest/jobs/{job_id}",
+    "name": "get_ingest_job"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/ai/pipeline/marketing-presentation/pdf",
     "name": "get_marketing_presentation_pdf"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/portfolio/alerts",
+    "name": "list_portfolio_alerts"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/portfolio/investments",
+    "name": "list_portfolio_investments"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/portfolio/investments/{investment_id}",
+    "name": "get_portfolio_investment_detail"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/portfolio/investments/{investment_id}/monitoring",
+    "name": "get_portfolio_deal_monitoring"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/portfolio/investments/{investment_id}/review-pdf",
+    "name": "get_periodic_review_pdf"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/portfolio/investments/{investment_id}/reviews",
+    "name": "list_investment_reviews"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/ai/portfolio/investments/{investment_id}/reviews/latest",
+    "name": "get_latest_investment_review"
   },
   {
     "method": "GET",
@@ -981,6 +1041,11 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/ai/pipeline/deals/{deal_id}/bootstrap",
+    "name": "trigger_deal_bootstrap"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/ai/pipeline/deals/{deal_id}/deep-review-v4",
     "name": "trigger_deal_deep_review_v4"
   },
@@ -993,6 +1058,11 @@
     "method": "POST",
     "path": "/api/v1/ai/pipeline/deals/{deal_id}/memo-chapters/{chapter_number}/regenerate",
     "name": "regenerate_memo_chapter"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/pipeline/deals/{deal_id}/reanalyze",
+    "name": "trigger_deal_reanalyze"
   },
   {
     "method": "POST",
@@ -1016,13 +1086,43 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/ai/pipeline/extract/run",
+    "name": "trigger_extraction_pipeline"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/ai/pipeline/fact-sheet/generate",
     "name": "generate_fact_sheet"
   },
   {
     "method": "POST",
+    "path": "/api/v1/ai/pipeline/ingest",
+    "name": "ingest_pipeline_intelligence"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/pipeline/ingest/full",
+    "name": "trigger_full_pipeline_ingest"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/ai/pipeline/marketing-presentation/generate",
     "name": "generate_marketing_presentation"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/portfolio/deep-review",
+    "name": "trigger_portfolio_batch_review"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/portfolio/ingest",
+    "name": "ingest_portfolio_intelligence"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/ai/portfolio/investments/{investment_id}/review",
+    "name": "trigger_portfolio_review"
   },
   {
     "method": "POST",

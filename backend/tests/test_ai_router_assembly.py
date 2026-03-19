@@ -11,13 +11,11 @@ EXPECTED_SUBROUTERS = (
     "documents",
     "compliance",
     "pipeline_deals",
+    "extraction",
+    "portfolio",
     "deep_review",
     "memo_chapters",
     "artifacts",
-)
-EXPECTED_OPTIONAL_SUBROUTERS = (
-    "extraction",
-    "portfolio",
 )
 
 
@@ -45,10 +43,9 @@ def test_ai_router_diagnostics_expose_exact_loaded_subrouter_set(
 
     diagnostics = module.get_ai_router_diagnostics()
 
-    assert diagnostics.status == "degraded"
-    assert diagnostics.loaded_modules == EXPECTED_SUBROUTERS
-    assert diagnostics.required_modules == EXPECTED_SUBROUTERS
-    assert diagnostics.degraded_modules == EXPECTED_OPTIONAL_SUBROUTERS
+    assert diagnostics.status == "healthy"
+    assert set(diagnostics.loaded_modules) == set(EXPECTED_SUBROUTERS)
+    assert diagnostics.degraded_modules == ()
     assert diagnostics.failure_details == ()
     assert diagnostics.route_count == len(module.router.routes)
 

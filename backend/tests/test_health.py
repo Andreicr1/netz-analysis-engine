@@ -13,10 +13,10 @@ async def test_health(client: AsyncClient):
     response = await client.get("/health")
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "degraded"
+    assert data["status"] == "ok"
     assert data["service"] == "netz-analysis-engine"
-    assert data["ai_router_status"] == "degraded"
-    assert data["ai_router_degraded_modules"] == ["extraction", "portfolio"]
+    assert data["ai_router_status"] == "healthy"
+    assert data["ai_router_degraded_modules"] == []
 
 
 @pytest.mark.asyncio
@@ -24,8 +24,8 @@ async def test_health_api_prefix(client: AsyncClient):
     response = await client.get("/api/health")
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "degraded"
-    assert data["ai_router_status"] == "degraded"
+    assert data["status"] == "ok"
+    assert data["ai_router_status"] == "healthy"
 
 
 @pytest.mark.asyncio
