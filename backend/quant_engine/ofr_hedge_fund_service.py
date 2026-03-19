@@ -139,8 +139,8 @@ def _classify_error(status_code: int) -> str:
 #  OFRHedgeFundService
 # ---------------------------------------------------------------------------
 
-# Strategy names used in FPF mnemonic patterns.
-_STRATEGIES = ("EQUITY", "CREDIT", "MACRO", "MULTI", "RELATIVEVALUE")
+# Strategy names used in FPF mnemonic patterns (must match OFR mnemonics exactly).
+_STRATEGIES = ("EQUITY", "CREDIT", "MACRO", "MULTI", "RV", "EVENT", "FOF", "FUTURES", "OTHER")
 
 
 class OFRHedgeFundService:
@@ -248,30 +248,35 @@ class OFRHedgeFundService:
     async def fetch_industry_leverage(self, start_date: str) -> list[LeverageSnapshot]:
         """Hedge fund industry leverage ratios over time.
 
-        Fetches GAV-weighted mean plus P5, P50, P95 distribution.
+        OFR provides leverage by size cohort (top 10, 11-50, 51+),
+        not as a single all-fund aggregate. We fetch all three cohorts.
         """
         mnemonics = [
-            "FPF-ALLQHF_LEVERAGERATIO_GAVWMEAN",
-            "FPF-ALLQHF_LEVERAGERATIO_P5",
-            "FPF-ALLQHF_LEVERAGERATIO_P50",
-            "FPF-ALLQHF_LEVERAGERATIO_P95",
+            "FPF-ALLQHF_GAVN10_LEVERAGERATIO_AVERAGE",
+            "FPF-ALLQHF_GAVN11TO50_LEVERAGERATIO_AVERAGE",
+            "FPF-ALLQHF_GAVN51_LEVERAGERATIO_AVERAGE",
         ]
         data = await self._fetch_multi(mnemonics, start_date)
 
         # Index by date for merging
+        labels = {
+            "FPF-ALLQHF_GAVN10_LEVERAGERATIO_AVERAGE": "top10",
+            "FPF-ALLQHF_GAVN11TO50_LEVERAGERATIO_AVERAGE": "mid",
+            "FPF-ALLQHF_GAVN51_LEVERAGERATIO_AVERAGE": "rest",
+        }
         by_date: dict[str, dict[str, float | None]] = {}
         for mne, series in data.items():
-            suffix = mne.rsplit("_", 1)[-1].lower()
+            key = labels.get(mne, mne)
             for date_str, val in series:
-                by_date.setdefault(date_str, {})[suffix] = val
+                by_date.setdefault(date_str, {})[key] = val
 
         return [
             LeverageSnapshot(
                 date=d,
-                gav_weighted_mean=vals.get("gavwmean"),
-                p5=vals.get("p5"),
-                p50=vals.get("p50"),
-                p95=vals.get("p95"),
+                gav_weighted_mean=vals.get("top10"),
+                p5=vals.get("rest"),
+                p50=vals.get("mid"),
+                p95=vals.get("top10"),
             )
             for d, vals in sorted(by_date.items(), reverse=True)
         ]
@@ -317,15 +322,14 @@ class OFRHedgeFundService:
     async def fetch_counterparty_concentration(
         self, start_date: str
     ) -> list[CounterpartySnapshot]:
-        """Prime broker concentration and counterparty risk metrics."""
-        # Search for counterparty-related mnemonics
+        """Counterparty risk metrics from SCOOS (FRB dealer financing survey)."""
         mnemonics = [
-            "FPF-ALLQHF_COUNTERPARTY_TOP5LENDERS_GAVWMEAN",
-            "FPF-ALLQHF_COUNTERPARTY_TOP5LENDERS_P50",
+            "SCOOS-NET_LENDERCOMPET",
+            "SCOOS-NET_LENDERWILLINGNESS",
         ]
         results: list[CounterpartySnapshot] = []
         for mne in mnemonics:
-            series = await self.fetch_timeseries(mne, start_date)
+            series = await self.fetch_timeseries(mne, start_date, periodicity="Q")
             for date_str, val in series:
                 results.append(CounterpartySnapshot(date=date_str, mnemonic=mne, value=val))
         return sorted(results, key=lambda s: s.date, reverse=True)
@@ -338,12 +342,12 @@ class OFRHedgeFundService:
         return [RepoVolumeSnapshot(date=d, volume=v) for d, v in series]
 
     async def fetch_risk_scenarios(self, start_date: str) -> list[RiskScenarioSnapshot]:
-        """Stress test results: CDS spread, equity decline, rate shock, FX scenarios."""
+        """Stress test results: CDS spread scenarios (P5, P50 percentiles)."""
         scenario_mnemonics = [
-            ("cds_up_250bps", "FPF-ALLQHF_CDSUP250BPS_GAVWMEAN"),
-            ("equity_down_15pct", "FPF-ALLQHF_EQUITYDOWN15PCT_GAVWMEAN"),
-            ("rate_up_250bps", "FPF-ALLQHF_RATEUP250BPS_GAVWMEAN"),
-            ("fx_down_10pct", "FPF-ALLQHF_FXDOWN10PCT_GAVWMEAN"),
+            ("cds_down_250bps_p5", "FPF-ALLQHF_CDSDOWN250BPS_P5"),
+            ("cds_down_250bps_p50", "FPF-ALLQHF_CDSDOWN250BPS_P50"),
+            ("cds_up_250bps_p5", "FPF-ALLQHF_CDSUP250BPS_P5"),
+            ("cds_up_250bps_p50", "FPF-ALLQHF_CDSUP250BPS_P50"),
         ]
         results: list[RiskScenarioSnapshot] = []
         for scenario_name, mne in scenario_mnemonics:
@@ -358,6 +362,7 @@ class OFRHedgeFundService:
         """Search available mnemonics by keyword.
 
         Endpoint: /metadata/search?query={query}
+        Use wildcards: ``*leverage*`` matches all leverage-related series.
         """
         await self._rate_limiter.acquire()
         url = f"{self._base_url}/metadata/search"
@@ -366,17 +371,29 @@ class OFRHedgeFundService:
             response.raise_for_status()
             body = response.json()
 
-            results: list[SeriesMetadata] = []
+            # Response is list of {mnemonic, dataset, field, value, type}.
+            # Group by mnemonic, extract description from field="description/name".
+            meta_map: dict[str, dict[str, str]] = {}
             for item in body if isinstance(body, list) else []:
-                results.append(
-                    SeriesMetadata(
-                        mnemonic=item.get("mnemonic", ""),
-                        description=item.get("description", ""),
-                        dataset=item.get("dataset", ""),
-                        frequency=item.get("frequency", ""),
-                    )
+                mne = item.get("mnemonic", "")
+                if not mne:
+                    continue
+                entry = meta_map.setdefault(mne, {"mnemonic": mne, "dataset": item.get("dataset", "")})
+                field = item.get("field", "")
+                if field == "description/name":
+                    entry["description"] = item.get("value", "")
+                elif field == "frequency":
+                    entry["frequency"] = item.get("value", "")
+
+            return [
+                SeriesMetadata(
+                    mnemonic=v["mnemonic"],
+                    description=v.get("description", ""),
+                    dataset=v.get("dataset", ""),
+                    frequency=v.get("frequency", ""),
                 )
-            return results
+                for v in meta_map.values()
+            ]
         except Exception as e:
             logger.warning("ofr search failed", query=query, error=str(e))
             return []

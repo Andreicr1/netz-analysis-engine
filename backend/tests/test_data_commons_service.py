@@ -39,20 +39,25 @@ class TestFetchEconomicIndicators:
         svc = DataCommonsService(api_key="test-key")
 
         mock_response = MagicMock()
-        mock_response.to_observations_as_records.return_value = [
-            {
-                "entity": "geoId/06",
-                "variable": "UnemploymentRate_Person",
-                "date": "2025",
-                "value": 4.2,
+        mock_response.to_dict.return_value = {
+            "byVariable": {
+                "UnemploymentRate_Person": {
+                    "byEntity": {
+                        "geoId/06": {
+                            "orderedFacets": [{"observations": [{"date": "2025", "value": 4.2}]}]
+                        }
+                    }
+                },
+                "Count_Person": {
+                    "byEntity": {
+                        "geoId/06": {
+                            "orderedFacets": [{"observations": [{"date": "2025", "value": 39_500_000}]}]
+                        }
+                    }
+                },
             },
-            {
-                "entity": "geoId/06",
-                "variable": "Count_Person",
-                "date": "2025",
-                "value": 39_500_000,
-            },
-        ]
+            "facets": {},
+        }
 
         mock_dc = _mock_client()
         mock_dc.observation.fetch.return_value = mock_response
@@ -95,15 +100,20 @@ class TestFetchDemographicProfile:
     async def test_aggregates_profile(self) -> None:
         svc = DataCommonsService(api_key="test-key")
 
-        mock_name_response = {"geoId/06": "California"}
+        mock_name_obj = MagicMock()
+        mock_name_obj.value = "California"
+        mock_name_response = {"geoId/06": mock_name_obj}
 
         mock_obs_response = MagicMock()
-        mock_obs_response.to_observations_as_records.return_value = [
-            {"variable": "Count_Person", "value": 39_500_000},
-            {"variable": "Median_Age_Person", "value": 37.0},
-            {"variable": "Median_Income_Household", "value": 78_000},
-            {"variable": "UnemploymentRate_Person", "value": 4.2},
-        ]
+        mock_obs_response.to_dict.return_value = {
+            "byVariable": {
+                "Count_Person": {"byEntity": {"geoId/06": {"orderedFacets": [{"observations": [{"date": "2025", "value": 39_500_000}]}]}}},
+                "Median_Age_Person": {"byEntity": {"geoId/06": {"orderedFacets": [{"observations": [{"date": "2025", "value": 37.0}]}]}}},
+                "Median_Income_Household": {"byEntity": {"geoId/06": {"orderedFacets": [{"observations": [{"date": "2025", "value": 78_000}]}]}}},
+                "UnemploymentRate_Person": {"byEntity": {"geoId/06": {"orderedFacets": [{"observations": [{"date": "2025", "value": 4.2}]}]}}},
+            },
+            "facets": {},
+        }
 
         mock_dc = _mock_client()
         mock_dc.node.fetch_entity_names.return_value = mock_name_response
@@ -145,14 +155,15 @@ class TestResolveEntity:
     async def test_resolves_name(self) -> None:
         svc = DataCommonsService(api_key="test-key")
 
-        mock_dc = _mock_client()
-        mock_dc.resolve.fetch_dcids_by_name.return_value = {
-            "California": {
-                "candidates": [
-                    {"dcid": "geoId/06", "dominantType": "State"},
-                ]
-            }
+        mock_resolve_response = MagicMock()
+        mock_resolve_response.to_dict.return_value = {
+            "entities": [
+                {"node": "California", "candidates": [{"dcid": "geoId/06"}]}
+            ]
         }
+
+        mock_dc = _mock_client()
+        mock_dc.resolve.fetch_dcids_by_name.return_value = mock_resolve_response
 
         with patch.object(svc, "_get_client", return_value=mock_dc):
             result = await svc.resolve_entity("California", "State")
@@ -163,10 +174,13 @@ class TestResolveEntity:
     async def test_returns_none_on_no_match(self) -> None:
         svc = DataCommonsService(api_key="test-key")
 
-        mock_dc = _mock_client()
-        mock_dc.resolve.fetch_dcids_by_name.return_value = {
-            "Atlantis": {"candidates": []}
+        mock_resolve_response = MagicMock()
+        mock_resolve_response.to_dict.return_value = {
+            "entities": [{"node": "Atlantis", "candidates": []}]
         }
+
+        mock_dc = _mock_client()
+        mock_dc.resolve.fetch_dcids_by_name.return_value = mock_resolve_response
 
         with patch.object(svc, "_get_client", return_value=mock_dc):
             result = await svc.resolve_entity("Atlantis", "State")

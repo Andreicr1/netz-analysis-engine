@@ -116,10 +116,9 @@ class TestFetchIndustryLeverage:
     @pytest.mark.asyncio
     async def test_merges_leverage_metrics(self) -> None:
         responses = {
-            "FPF-ALLQHF_LEVERAGERATIO_GAVWMEAN": [["2026-03-31", 1.85]],
-            "FPF-ALLQHF_LEVERAGERATIO_P5": [["2026-03-31", 1.02]],
-            "FPF-ALLQHF_LEVERAGERATIO_P50": [["2026-03-31", 1.55]],
-            "FPF-ALLQHF_LEVERAGERATIO_P95": [["2026-03-31", 5.20]],
+            "FPF-ALLQHF_GAVN10_LEVERAGERATIO_AVERAGE": [["2026-03-31", 18.16]],
+            "FPF-ALLQHF_GAVN11TO50_LEVERAGERATIO_AVERAGE": [["2026-03-31", 12.11]],
+            "FPF-ALLQHF_GAVN51_LEVERAGERATIO_AVERAGE": [["2026-03-31", 1.81]],
         }
 
         async def handler(request: httpx.Request) -> httpx.Response:
@@ -132,10 +131,9 @@ class TestFetchIndustryLeverage:
 
         assert len(result) == 1
         assert isinstance(result[0], LeverageSnapshot)
-        assert result[0].gav_weighted_mean == 1.85
-        assert result[0].p5 == 1.02
-        assert result[0].p50 == 1.55
-        assert result[0].p95 == 5.20
+        assert result[0].gav_weighted_mean == 18.16  # top10
+        assert result[0].p50 == 12.11  # mid (11-50)
+        assert result[0].p5 == 1.81  # rest (51+)
 
 
 # ---------------------------------------------------------------------------
@@ -182,11 +180,12 @@ class TestFetchStrategyBreakdown:
         svc = OFRHedgeFundService(client, rate_limiter=AsyncTokenBucketRateLimiter())
         result = await svc.fetch_strategy_breakdown("2025-01-01")
 
-        assert len(result) == 5  # 5 strategies
+        assert len(result) == 9  # 9 strategies
         assert all(isinstance(r, StrategySnapshot) for r in result)
         strategies = {r.strategy for r in result}
         assert "equity" in strategies
         assert "credit" in strategies
+        assert "rv" in strategies
 
 
 # ---------------------------------------------------------------------------
@@ -230,8 +229,8 @@ class TestFetchRiskScenarios:
         assert len(result) == 4  # 4 scenarios
         assert all(isinstance(r, RiskScenarioSnapshot) for r in result)
         scenarios = {r.scenario for r in result}
-        assert "cds_up_250bps" in scenarios
-        assert "equity_down_15pct" in scenarios
+        assert "cds_up_250bps_p5" in scenarios
+        assert "cds_down_250bps_p50" in scenarios
 
 
 # ---------------------------------------------------------------------------
@@ -246,9 +245,17 @@ class TestSearchSeries:
             return _json_response([
                 {
                     "mnemonic": "FPF-ALLQHF_NAV_SUM",
-                    "description": "Total NAV",
+                    "field": "mnemonic",
+                    "value": "FPF-ALLQHF_NAV_SUM",
                     "dataset": "fpf",
-                    "frequency": "Q",
+                    "type": "str",
+                },
+                {
+                    "mnemonic": "FPF-ALLQHF_NAV_SUM",
+                    "field": "description/name",
+                    "value": "Total NAV",
+                    "dataset": "fpf",
+                    "type": "str",
                 },
             ])
 
@@ -259,6 +266,7 @@ class TestSearchSeries:
         assert len(result) == 1
         assert isinstance(result[0], SeriesMetadata)
         assert result[0].mnemonic == "FPF-ALLQHF_NAV_SUM"
+        assert result[0].description == "Total NAV"
 
     @pytest.mark.asyncio
     async def test_returns_empty_on_error(self) -> None:

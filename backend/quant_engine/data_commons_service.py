@@ -130,27 +130,21 @@ class DataCommonsService:
                 entity_dcids=entity_dcids,
                 date=date,
             )
-            # Convert to list of dicts for cross-thread safety
+            # Parse response.to_dict() → {byVariable: {var: {byEntity: {entity: {orderedFacets: [...]}}}} }
             records: list[dict[str, Any]] = []
-            try:
-                # Try to get records via to_observations_as_records()
-                raw_records = response.to_observations_as_records()
-                for rec in raw_records:
-                    records.append(dict(rec))
-            except (AttributeError, TypeError):
-                # Fallback: iterate response data structure
-                if hasattr(response, "data") and isinstance(response.data, dict):
-                    for variable, entities in response.data.items():
-                        if isinstance(entities, dict):
-                            for entity, obs_list in entities.items():
-                                if isinstance(obs_list, dict):
-                                    for obs_date, obs_val in obs_list.items():
-                                        records.append({
-                                            "entity": entity,
-                                            "variable": variable,
-                                            "date": obs_date,
-                                            "value": obs_val,
-                                        })
+            data = response.to_dict()
+            by_variable = data.get("byVariable", {})
+            for variable, var_data in by_variable.items():
+                by_entity = var_data.get("byEntity", {})
+                for entity, entity_data in by_entity.items():
+                    for facet in entity_data.get("orderedFacets", []):
+                        for obs in facet.get("observations", []):
+                            records.append({
+                                "entity": entity,
+                                "variable": variable,
+                                "date": obs.get("date", ""),
+                                "value": obs.get("value"),
+                            })
             return records
         except Exception as e:
             logger.warning("data_commons observation fetch failed", error=str(e))
@@ -164,17 +158,13 @@ class DataCommonsService:
                 names=[name],
                 entity_type=entity_type,
             )
-            # Response is dict: {name: {candidates: [{dcid, dominantType}]}}
-            if isinstance(response, dict):
-                candidates_data = response.get(name, {})
-                if isinstance(candidates_data, dict):
-                    candidates = candidates_data.get("candidates", [])
-                elif isinstance(candidates_data, list):
-                    candidates = candidates_data
-                else:
-                    candidates = []
-                if candidates and isinstance(candidates[0], dict):
-                    return candidates[0].get("dcid")
+            # ResolveResponse.to_dict() → {entities: [{node: name, candidates: [{dcid: ...}]}]}
+            data = response.to_dict()
+            for entity in data.get("entities", []):
+                if entity.get("node") == name:
+                    candidates = entity.get("candidates", [])
+                    if candidates and isinstance(candidates[0], dict):
+                        return candidates[0].get("dcid")
             return None
         except Exception as e:
             logger.warning("data_commons resolve failed", name=name, error=str(e))
@@ -187,8 +177,8 @@ class DataCommonsService:
         try:
             client = self._get_client()
             response = client.node.fetch_place_children(
-                node_dcids=[parent_dcid],
-                child_type=child_type,
+                place_dcids=[parent_dcid],
+                children_type=child_type,
             )
             results: list[dict[str, str]] = []
             if isinstance(response, dict):
@@ -218,32 +208,27 @@ class DataCommonsService:
             client = self._get_client()
 
             # Fetch entity name
-            name_response = client.node.fetch_entity_names(node_dcids=[geo_dcid])
+            name_response = client.node.fetch_entity_names(entity_dcids=[geo_dcid])
             geo_name = ""
             if isinstance(name_response, dict):
-                geo_name = name_response.get(geo_dcid, "")
+                name_obj = name_response.get(geo_dcid)
+                if hasattr(name_obj, "value"):
+                    geo_name = name_obj.value
+                elif isinstance(name_obj, str):
+                    geo_name = name_obj
 
-            # Fetch demographic observations
-            obs_response = client.observation.fetch(
-                variable_dcids=_DEMOGRAPHIC_VARIABLES,
-                entity_dcids=[geo_dcid],
-                date="latest",
-            )
+            # Fetch demographic observations — reuse _fetch_observations_sync
+            records = self._fetch_observations_sync([geo_dcid], _DEMOGRAPHIC_VARIABLES)
 
             values: dict[str, float | None] = {}
-            try:
-                records = obs_response.to_observations_as_records()
-                for rec in records:
-                    rec_dict = dict(rec) if not isinstance(rec, dict) else rec
-                    var = rec_dict.get("variable", "")
-                    val = rec_dict.get("value")
-                    if val is not None:
-                        try:
-                            values[var] = float(val)
-                        except (ValueError, TypeError):
-                            pass
-            except (AttributeError, TypeError):
-                pass
+            for rec in records:
+                var = rec.get("variable", "")
+                val = rec.get("value")
+                if val is not None:
+                    try:
+                        values[var] = float(val)
+                    except (ValueError, TypeError):
+                        pass
 
             return {
                 "geo_dcid": geo_dcid,
