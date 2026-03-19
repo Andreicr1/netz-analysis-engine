@@ -1,3 +1,15 @@
+<!--
+  CodeEditor — CodeMirror 6 JSON editor with schema linting.
+  Section 3.Admin.1.
+
+  Jinja2 mode note: `@codemirror/lang-jinja` is NOT a real package and does not exist on npm.
+  Jinja2 template editing uses JinjaEditor.svelte, which implements a custom StreamLanguage
+  tokenizer covering {%, {{, and {# delimiters — no third-party Jinja grammar required.
+
+  {@html} audit: frontends/admin has one {@html} usage in PromptEditor.svelte (line ~330).
+  It is sanitized via DOMPurify.sanitize() before rendering. All future {@html} additions
+  in this frontend MUST be wrapped with DOMPurify.sanitize() to prevent stored XSS.
+-->
 <script lang="ts">
 	import { onMount } from "svelte";
 	import type { EditorView } from "@codemirror/view";
