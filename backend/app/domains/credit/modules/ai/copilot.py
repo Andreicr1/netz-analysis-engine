@@ -1,7 +1,6 @@
 """AI Copilot sub-router — activity, query, history, retrieve, answer."""
 from __future__ import annotations
 
-import functools
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -17,7 +16,7 @@ from app.core.db.session import get_sync_db_with_rls
 from app.core.middleware.audit import get_request_id
 from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed, require_roles
 from app.domains.credit.ai.services.agent_context import AgentUIContext, build_agent_runtime_context
-from app.domains.credit.ai.services.ai_scope import enforce_root_folder_scope, filter_hits_by_scope
+from app.domains.credit.ai.services.ai_scope import enforce_root_folder_scope
 from app.domains.credit.modules.ai._helpers import (
     _blob_path_for_response,
     _limit,
@@ -37,12 +36,6 @@ from app.domains.credit.modules.ai.schemas import (
     Page,
 )
 from app.domains.credit.modules.documents.models import Document, DocumentChunk, DocumentVersion
-from app.services.search_index import (
-    AzureSearchChunksClient,
-    RetrievalEmbeddingError,
-    RetrievalExecutionError,
-    RetrievalScopeError,
-)
 from app.shared.enums import Role
 
 router = APIRouter()
@@ -166,60 +159,93 @@ def retrieve(
     )
     db.commit()
 
+    # ── pgvector search + cross-encoder rerank ──────────────────────
+    from ai_engine.extraction.embedding_service import generate_embeddings
+    from ai_engine.extraction.pgvector_search_service import search_and_rerank_fund_sync
+
+    if not actor.organization_id:
+        raise HTTPException(status_code=403, detail="Organization context required")
+
     try:
-        client = AzureSearchChunksClient()
-        # TODO(Phase 3 / Sprint 3): When AzureSearchChunksClient is implemented,
-        # pass organization_id=str(actor.org_id) for tenant isolation (Security F2).
-        hits = client.search(q=payload.query, fund_id=str(fund_id), root_folder=payload.root_folder, top=payload.top_k)
-    except (RetrievalEmbeddingError, RetrievalExecutionError) as exc:
-        raise HTTPException(status_code=502, detail=f"Search backend unavailable: {exc}")
-    except RetrievalScopeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        emb = generate_embeddings([payload.query])
+        query_vector = emb.vectors[0] if emb.vectors else None
+    except Exception:
+        query_vector = None
+
+    try:
+        chunks = search_and_rerank_fund_sync(
+            fund_id=fund_id,
+            organization_id=actor.organization_id,
+            query_text=payload.query,
+            query_vector=query_vector,
+            top=payload.top_k,
+            candidates=payload.top_k * 3,
+        )
     except Exception:
         raise HTTPException(status_code=502, detail="Search backend unavailable")
 
-    hits = filter_hits_by_scope(actor=actor, hits=hits, get_root_folder=lambda h: getattr(h, "root_folder", None))
-
-    version_ids = [uuid.UUID(h.version_id) for h in hits if h.version_id]
-    if version_ids:
+    # Join with Document/DocumentVersion for metadata
+    doc_ids = list({c["doc_id"] for c in chunks if c.get("doc_id")})
+    by_doc: dict[str, tuple[Document, DocumentVersion]] = {}
+    if doc_ids:
         rows = (
             db.execute(
-                select(DocumentVersion, Document)
-                .join(Document, Document.id == DocumentVersion.document_id)
+                select(Document, DocumentVersion)
+                .join(DocumentVersion, DocumentVersion.document_id == Document.id)
                 .where(
-                    DocumentVersion.fund_id == fund_id,
                     Document.fund_id == fund_id,
-                    DocumentVersion.id.in_(version_ids),
-                ),
+                    Document.id.in_([uuid.UUID(d) for d in doc_ids]),
+                )
+                .order_by(DocumentVersion.version_number.desc()),
             )
             .all()
         )
-        by_version: dict[uuid.UUID, tuple[DocumentVersion, Document]] = {r[0].id: (r[0], r[1]) for r in rows}
-    else:
-        by_version = {}
+        for d, v in rows:
+            if str(d.id) not in by_doc:
+                by_doc[str(d.id)] = (d, v)
+
+    # Filter by root_folder scope if requested
+    if payload.root_folder:
+        chunks = [
+            c for c in chunks
+            if c.get("doc_id") in by_doc
+            and by_doc[c["doc_id"]][0].root_folder == payload.root_folder
+        ]
 
     results: list[AIRetrieveResult] = []
-    for h in hits:
-        vid = uuid.UUID(h.version_id) if h.version_id else None
-        pair = by_version.get(vid) if vid else None
-        if not pair:
-            continue
-        v, d = pair
-        text = (h.content_text or "").strip()
-        excerpt = text[:600] + ("..." if len(text) > 600 else "")
-        results.append(
-            AIRetrieveResult(
-                chunk_id=h.chunk_id,
-                document_title=d.title,
-                root_folder=d.root_folder,
-                folder_path=d.folder_path,
-                version_id=str(v.id),
-                version_number=int(v.version_number),
-                chunk_index=h.chunk_index,
-                excerpt=excerpt,
-                source_blob=_blob_path_for_response(v),
-            ),
-        )
+    for c in chunks:
+        pair = by_doc.get(c.get("doc_id", ""))
+        content = (c.get("content") or "").strip()
+        excerpt = content[:600] + ("..." if len(content) > 600 else "")
+        if pair:
+            d, v = pair
+            results.append(
+                AIRetrieveResult(
+                    chunk_id=str(c["id"]),
+                    document_title=d.title,
+                    root_folder=d.root_folder,
+                    folder_path=d.folder_path,
+                    version_id=str(v.id),
+                    version_number=int(v.version_number),
+                    chunk_index=c.get("chunk_index"),
+                    excerpt=excerpt,
+                    source_blob=_blob_path_for_response(v),
+                ),
+            )
+        else:
+            results.append(
+                AIRetrieveResult(
+                    chunk_id=str(c["id"]),
+                    document_title=c.get("title") or "Unknown",
+                    root_folder=None,
+                    folder_path=None,
+                    version_id="",
+                    version_number=0,
+                    chunk_index=c.get("chunk_index"),
+                    excerpt=excerpt,
+                    source_blob=None,
+                ),
+            )
 
     write_audit_event(
         db,
@@ -236,7 +262,6 @@ def retrieve(
     return AIRetrieveResponse(results=results)
 
 
-@functools.lru_cache(maxsize=1)
 @router.post("/answer", response_model=AIAnswerResponse)
 def answer(
     fund_id: uuid.UUID,
@@ -245,7 +270,7 @@ def answer(
     actor: Actor = Depends(get_actor),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ):
-    """Fund Copilot — RAG retrieval + LLM answer generation."""
+    """Fund Copilot — RAG retrieval (pgvector + rerank) + LLM answer generation."""
     request_id = get_request_id() or "unknown"
 
     try:
@@ -265,21 +290,32 @@ def answer(
     )
     db.commit()
 
+    # ── pgvector search + cross-encoder rerank ──────────────────────
+    from ai_engine.extraction.embedding_service import generate_embeddings
+    from ai_engine.extraction.pgvector_search_service import search_and_rerank_fund_sync
+
+    if not actor.organization_id:
+        raise HTTPException(status_code=403, detail="Organization context required")
+
     try:
-        client = AzureSearchChunksClient()
-        # TODO(Phase 3 / Sprint 3): When AzureSearchChunksClient is implemented,
-        # pass organization_id=str(actor.org_id) for tenant isolation (Security F2).
-        hits = client.search(q=payload.question, fund_id=str(fund_id), root_folder=payload.root_folder, top=payload.top_k)
-    except (RetrievalEmbeddingError, RetrievalExecutionError) as exc:
-        raise HTTPException(status_code=502, detail=f"Search backend unavailable: {exc}")
-    except RetrievalScopeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        emb = generate_embeddings([payload.question])
+        query_vector = emb.vectors[0] if emb.vectors else None
+    except Exception:
+        query_vector = None
+
+    try:
+        chunks = search_and_rerank_fund_sync(
+            fund_id=fund_id,
+            organization_id=actor.organization_id,
+            query_text=payload.question,
+            query_vector=query_vector,
+            top=payload.top_k,
+            candidates=payload.top_k * 3,
+        )
     except Exception:
         raise HTTPException(status_code=502, detail="Search backend unavailable")
 
-    hits = filter_hits_by_scope(actor=actor, hits=hits, get_root_folder=lambda h: getattr(h, "root_folder", None))
-
-    retrieved_chunk_ids = [h.chunk_id for h in hits if getattr(h, "chunk_id", None)]
+    retrieved_chunk_ids = [str(c["id"]) for c in chunks]
 
     q_row = AIQuestion(
         fund_id=fund_id,
@@ -296,7 +332,7 @@ def answer(
     db.add(q_row)
     db.flush()
 
-    if not retrieved_chunk_ids:
+    if not chunks:
         ans_text = "Insufficient evidence in the Data Room"
         a_row = AIAnswer(
             fund_id=fund_id,
@@ -310,7 +346,6 @@ def answer(
         )
         db.add(a_row)
         db.flush()
-
         write_audit_event(
             db,
             fund_id=fund_id,
@@ -321,56 +356,58 @@ def answer(
             before=None,
             after={"reason": "no_retrieval_hits"},
         )
-        write_audit_event(
-            db,
-            fund_id=fund_id,
-            actor_id=actor.actor_id,
-            action="AI_ANSWER_RETURNED",
-            entity_type="ai_answer",
-            entity_id=a_row.id,
-            before=None,
-            after={"answer_len": len(ans_text), "citation_count": 0},
-        )
         db.commit()
-        # Evidence gap detection not implemented
         return AIAnswerResponse(answer=ans_text, citations=[])
 
-    chunk_rows = (
-        db.execute(
-            select(DocumentChunk, DocumentVersion, Document)
-            .join(DocumentVersion, DocumentVersion.id == DocumentChunk.version_id)
-            .join(Document, Document.id == DocumentChunk.document_id)
-            .where(
-                DocumentChunk.fund_id == fund_id,
-                DocumentVersion.fund_id == fund_id,
-                Document.fund_id == fund_id,
-                DocumentChunk.id.in_([uuid.UUID(x) for x in retrieved_chunk_ids]),
-            ),
+    # Resolve Document metadata for enrichment + citations
+    doc_ids = list({c["doc_id"] for c in chunks if c.get("doc_id")})
+    by_doc: dict[str, tuple[Document, DocumentVersion]] = {}
+    if doc_ids:
+        rows = (
+            db.execute(
+                select(Document, DocumentVersion)
+                .join(DocumentVersion, DocumentVersion.document_id == Document.id)
+                .where(
+                    Document.fund_id == fund_id,
+                    Document.id.in_([uuid.UUID(d) for d in doc_ids]),
+                )
+                .order_by(DocumentVersion.version_number.desc()),
+            )
+            .all()
         )
-        .all()
-    )
-    by_chunk_id = {str(r[0].id): (r[0], r[1], r[2]) for r in chunk_rows}
+        for d, v in rows:
+            if str(d.id) not in by_doc:
+                by_doc[str(d.id)] = (d, v)
 
-    evidence_items = []
-    for cid in retrieved_chunk_ids:
-        triple = by_chunk_id.get(cid)
-        if not triple:
-            continue
-        c, v, d = triple
-        evidence_items.append(
-            {
-                "chunk_id": str(c.id),
-                "document_id": str(d.id),
-                "version_id": str(v.id),
-                "title": d.title,
-                "root_folder": d.root_folder,
-                "folder_path": d.folder_path,
-                "page_start": c.page_start,
-                "page_end": c.page_end,
-                "excerpt": (c.text[:800] + ("..." if len(c.text) > 800 else "")),
-                "source_blob": _blob_path_for_response(v),
-            },
-        )
+    # Filter by root_folder scope if requested
+    if payload.root_folder:
+        chunks = [
+            c for c in chunks
+            if c.get("doc_id") in by_doc
+            and by_doc[c["doc_id"]][0].root_folder == payload.root_folder
+        ]
+
+    # Build evidence items from pgvector content (no DocumentChunk dependency)
+    evidence_items: list[dict] = []
+    by_chunk_id: dict[str, dict] = {}
+    for c in chunks:
+        chunk_id = str(c["id"])
+        content = (c.get("content") or "").strip()
+        doc_pair = by_doc.get(c.get("doc_id", ""))
+        item = {
+            "chunk_id": chunk_id,
+            "document_id": c.get("doc_id") or "",
+            "version_id": str(doc_pair[1].id) if doc_pair else "",
+            "title": doc_pair[0].title if doc_pair else (c.get("title") or "Unknown"),
+            "root_folder": doc_pair[0].root_folder if doc_pair else None,
+            "folder_path": doc_pair[0].folder_path if doc_pair else None,
+            "page_start": c.get("page_start"),
+            "page_end": c.get("page_end"),
+            "excerpt": content[:800] + ("..." if len(content) > 800 else ""),
+            "source_blob": _blob_path_for_response(doc_pair[1]) if doc_pair else None,
+        }
+        evidence_items.append(item)
+        by_chunk_id[chunk_id] = item
 
     if not evidence_items:
         ans_text = "Insufficient evidence in the Data Room"
@@ -397,7 +434,6 @@ def answer(
             after={"reason": "chunks_not_found_in_db"},
         )
         db.commit()
-        # Evidence gap detection not implemented
         return AIAnswerResponse(answer=ans_text, citations=[])
 
     runtime_context = build_agent_runtime_context(
@@ -466,9 +502,9 @@ def answer(
             after={"reason": "model_returned_no_citations"},
         )
         db.commit()
-        # Evidence gap detection not implemented
         return AIAnswerResponse(answer="Insufficient evidence in the Data Room", citations=[])
 
+    # Match LLM-cited chunk_ids to our retrieved set
     cited_ids: list[str] = []
     for c in cites:
         if isinstance(c, dict) and c.get("chunk_id"):
@@ -487,7 +523,6 @@ def answer(
             after={"reason": "citations_not_in_retrieved_set"},
         )
         db.commit()
-        # Evidence gap detection not implemented
         return AIAnswerResponse(answer="Insufficient evidence in the Data Room", citations=[])
 
     a_row = AIAnswer(
@@ -507,36 +542,52 @@ def answer(
     db.add(a_row)
     db.flush()
 
+    # Build citation response; persist AIAnswerCitation only when DocumentChunk exists
     out_citations: list[AIAnswerCitationOut] = []
     for cid in cited_ids:
-        c_row, v_row, d_row = by_chunk_id[cid]
-        excerpt = (c_row.text[:600] + ("..." if len(c_row.text) > 600 else ""))
-        src = _blob_path_for_response(v_row)
-        db.add(
-            AIAnswerCitation(
-                fund_id=fund_id,
-                access_level="internal",
-                answer_id=a_row.id,
-                chunk_id=c_row.id,
-                document_id=d_row.id,
-                version_id=v_row.id,
-                page_start=c_row.page_start,
-                page_end=c_row.page_end,
-                excerpt=excerpt,
-                source_blob=src,
-                created_by=actor.actor_id,
-                updated_by=actor.actor_id,
-            ),
-        )
+        item = by_chunk_id[cid]
+        excerpt = item["excerpt"][:600] + ("..." if len(item["excerpt"]) > 600 else "")
+
+        # Try to persist citation if Document metadata available
+        doc_pair = by_doc.get(item.get("document_id", ""))
+        if doc_pair:
+            d, v = doc_pair
+            # Find matching DocumentChunk for FK constraint
+            dc_row = db.execute(
+                select(DocumentChunk).where(
+                    DocumentChunk.fund_id == fund_id,
+                    DocumentChunk.document_id == d.id,
+                    DocumentChunk.chunk_index == (item.get("page_start") or 0),
+                ).limit(1),
+            ).scalar_one_or_none()
+
+            if dc_row:
+                db.add(
+                    AIAnswerCitation(
+                        fund_id=fund_id,
+                        access_level="internal",
+                        answer_id=a_row.id,
+                        chunk_id=dc_row.id,
+                        document_id=d.id,
+                        version_id=v.id,
+                        page_start=item.get("page_start"),
+                        page_end=item.get("page_end"),
+                        excerpt=excerpt,
+                        source_blob=item.get("source_blob"),
+                        created_by=actor.actor_id,
+                        updated_by=actor.actor_id,
+                    ),
+                )
+
         out_citations.append(
             AIAnswerCitationOut(
-                chunk_id=str(c_row.id),
-                document_id=str(d_row.id),
-                version_id=str(v_row.id),
-                page_start=c_row.page_start,
-                page_end=c_row.page_end,
+                chunk_id=cid,
+                document_id=item.get("document_id") or "",
+                version_id=item.get("version_id") or "",
+                page_start=item.get("page_start"),
+                page_end=item.get("page_end"),
                 excerpt=excerpt,
-                source_blob=src,
+                source_blob=item.get("source_blob"),
             ),
         )
 

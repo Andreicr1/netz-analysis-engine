@@ -55,8 +55,14 @@ DOC_TYPE_DESCRIPTIONS: dict[str, str] = {
         "investment objectives, capital commitments, distributions, and fund termination. "
         "Contains legal boilerplate: WHEREAS, NOW THEREFORE, capital accounts, clawback "
         "provisions, distribution waterfall, management fee, carried interest allocation. "
+        "PPM and CIM sections include: risk factors, investor suitability requirements, "
+        "offering terms, subscription procedures, regulatory disclosures, tax considerations, "
+        "ERISA status, conflicts of interest, use of proceeds, investment restrictions, "
+        "redemption provisions, eligible investor representations, placement agent fees, "
+        "anti-money laundering, FATCA/CRS compliance, indemnification, and confidentiality. "
         "Typically 30-100+ pages of dense legal text with numbered articles and sections. "
-        "NOT a quarterly update deck. NOT a pitch book. NOT a fund profile."
+        "NOT a quarterly update deck. NOT a pitch book. NOT a fund profile. "
+        "NOT a subscription agreement or side letter (those are separate documents)."
     ),
     "legal_side_letter": (
         "Side letter agreement between a fund and a specific investor granting "

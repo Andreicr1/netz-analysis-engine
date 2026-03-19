@@ -851,6 +851,9 @@ def create_embedding(
 
     Raises ``RuntimeError`` if the resolved model does not match the
     canonical ``EMBEDDING_MODEL_NAME`` constant (B2 guard).
+
+    When ``ENABLE_PIPELINE_CACHE=true``, cached embeddings are returned
+    without an API call.  Only cache misses are sent to OpenAI.
     """
     from ai_engine.validation.vector_integrity_guard import EMBEDDING_MODEL_NAME
 
@@ -864,14 +867,41 @@ def create_embedding(
             f"Dynamic switching is not allowed.",
         )
 
-    logger.info("Creating embedding with model=%s for %d inputs", mdl, len(inputs))
+    # ── Cache layer: check for cached vectors ────────────────────────
+    from ai_engine.cache.provider_cache import embedding_cache
 
-    resp = _retry(client.embeddings.create, model=mdl, input=inputs)
+    cached = embedding_cache.get_batch(inputs)
+    miss_indices = [i for i, v in enumerate(cached) if v is None]
+
+    if not miss_indices:
+        # Full cache hit — zero API cost
+        logger.info("EMBEDDING_FULL_CACHE_HIT inputs=%d", len(inputs))
+        return EmbeddingResult(
+            vectors=[v for v in cached if v is not None],
+            model=mdl,
+            count=len(inputs),
+        )
+
+    # Partial or full miss — call API only for misses
+    miss_texts = [inputs[i] for i in miss_indices]
+    logger.info("Creating embedding with model=%s for %d inputs (%d cached, %d to embed)",
+                mdl, len(inputs), len(inputs) - len(miss_indices), len(miss_indices))
+
+    resp = _retry(client.embeddings.create, model=mdl, input=miss_texts)
 
     items_sorted = sorted(resp.data, key=lambda x: x.index)
-    vectors = [item.embedding for item in items_sorted]
+    new_vectors = [item.embedding for item in items_sorted]
     actual_model = getattr(resp, "model", None) or mdl
-    return EmbeddingResult(vectors=vectors, model=str(actual_model), count=len(vectors))
+
+    # Store new vectors in cache
+    embedding_cache.put_batch(miss_texts, new_vectors, model=str(actual_model))
+
+    # Merge cached + new vectors into original order
+    all_vectors: list[list[float]] = list(cached)  # type: ignore[arg-type]
+    for idx, vec in zip(miss_indices, new_vectors, strict=True):
+        all_vectors[idx] = vec
+
+    return EmbeddingResult(vectors=all_vectors, model=str(actual_model), count=len(all_vectors))
 
 
 async def async_create_embedding(

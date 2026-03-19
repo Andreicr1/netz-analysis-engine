@@ -4,6 +4,7 @@ Exposes the same function signatures as search_upsert_service.py:
 - upsert_chunks()
 - search_deal_chunks()
 - search_fund_policy_chunks()
+- search_fund_chunks() (all domains — copilot RAG)
 
 All queries enforce organization_id filter (RLS complement).
 """
@@ -669,6 +670,91 @@ def search_and_rerank_deal_sync(
     """Sync variant: pgvector cosine → cross-encoder rerank for deals."""
     raw = search_deal_chunks_sync(
         deal_id=deal_id,
+        organization_id=organization_id,
+        query_text=query_text,
+        query_vector=query_vector,
+        top=candidates,
+        domain_filter=domain_filter,
+    )
+    if not raw:
+        return raw
+
+    from ai_engine.extraction.local_reranker import rerank_sync
+
+    return rerank_sync(query_text, raw, top_k=top)
+
+
+def search_fund_chunks_sync(
+    *,
+    fund_id: uuid.UUID,
+    organization_id: uuid.UUID | str,
+    query_text: str | None = None,
+    query_vector: list[float] | None = None,
+    top: int = 20,
+    domain_filter: str | None = None,
+) -> list[dict[str, Any]]:
+    """Sync search over ALL fund chunks (any domain) — for copilot RAG."""
+    safe_fund = validate_uuid(fund_id, "fund_id")
+    safe_org = validate_uuid(organization_id, "organization_id")
+
+    if query_vector is None:
+        return []
+
+    params: dict[str, Any] = {
+        "embedding": str(query_vector),
+        "org_id": safe_org,
+        "fund_id": safe_fund,
+        "top": top,
+    }
+
+    if domain_filter:
+        safe_domain = validate_domain(domain_filter)
+        params["domain"] = safe_domain
+        query = text("""
+            SELECT id, deal_id, fund_id, domain, doc_type, doc_id, title, content,
+                   page_start, page_end, chunk_index,
+                   1 - (embedding <=> CAST(:embedding AS vector)) AS score
+            FROM vector_chunks
+            WHERE organization_id = CAST(:org_id AS uuid)
+              AND fund_id = :fund_id
+              AND domain = :domain
+              AND embedding IS NOT NULL
+            ORDER BY embedding <=> CAST(:embedding AS vector)
+            LIMIT :top
+        """)
+    else:
+        query = text("""
+            SELECT id, deal_id, fund_id, domain, doc_type, doc_id, title, content,
+                   page_start, page_end, chunk_index,
+                   1 - (embedding <=> CAST(:embedding AS vector)) AS score
+            FROM vector_chunks
+            WHERE organization_id = CAST(:org_id AS uuid)
+              AND fund_id = :fund_id
+              AND embedding IS NOT NULL
+            ORDER BY embedding <=> CAST(:embedding AS vector)
+            LIMIT :top
+        """)
+
+    engine = _get_sync_engine()
+    with engine.connect() as conn:
+        result = conn.execute(query, params)
+        rows = result.mappings().all()
+        return [dict(row) for row in rows]
+
+
+def search_and_rerank_fund_sync(
+    *,
+    fund_id: uuid.UUID,
+    organization_id: uuid.UUID | str,
+    query_text: str,
+    query_vector: list[float] | None = None,
+    top: int = 10,
+    candidates: int = 50,
+    domain_filter: str | None = None,
+) -> list[dict[str, Any]]:
+    """Sync variant: pgvector cosine → cross-encoder rerank for fund (all domains)."""
+    raw = search_fund_chunks_sync(
+        fund_id=fund_id,
         organization_id=organization_id,
         query_text=query_text,
         query_vector=query_vector,

@@ -114,6 +114,22 @@ class Settings(BaseSettings):
     use_local_ocr: bool = False
     local_ocr_provider: str = "pymupdf"  # pymupdf | qwen2vl
 
+    # ── Pipeline cache (reduces API costs during development) ──
+    # Caches OCR text and embedding vectors in a local SQLite DB.
+    # Cache hit = zero API cost for that step.
+    enable_pipeline_cache: bool = False
+    pipeline_cache_dir: str = ".data/cache"
+
+    # ── Pipeline mode ─────────────────────────────────────────
+    # dry    — local LLM + cached OCR/embeddings, zero paid API calls
+    # golden — external providers (Mistral/OpenAI), small curated dataset
+    # standard — whatever providers are configured (default)
+    pipeline_mode: str = "standard"  # standard | dry | golden
+
+    # ── Confidence fallback (dry mode) ────────────────────────
+    # If local LLM classification confidence < threshold, escalate to OpenAI
+    local_confidence_threshold: float = 0.0  # 0.0 = never escalate
+
     # ── Calibration ──────────────────────────────────────────
     calibration_path: str = ""
 

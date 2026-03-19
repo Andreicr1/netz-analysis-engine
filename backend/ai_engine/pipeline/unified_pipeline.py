@@ -22,6 +22,7 @@ import asyncio
 import datetime as dt
 import json
 import logging
+import os
 import time
 import uuid
 from pathlib import Path
@@ -62,6 +63,29 @@ EXTRACTION_SOURCE_CONFIG: dict[str, dict[str, str]] = {
 
 _EXTRACTION_JOBS: dict[str, dict[str, Any]] = {}
 _MAX_EXTRACTION_JOBS = 50
+
+
+def _extract_text_pymupdf(pdf_bytes: bytes) -> list:
+    """Zero-cost text extraction via PyMuPDF (no external API call).
+
+    Works well for text-based PDFs. Scanned images will return empty text.
+    Returns list[PageBlock] matching mistral_ocr format.
+    """
+    import fitz
+
+    from ai_engine.extraction.mistral_ocr import PageBlock
+
+    blocks: list = []
+    with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+        for i, page in enumerate(doc):
+            text = page.get_text("text")
+            if text.strip():
+                blocks.append(PageBlock(
+                    page_start=i + 1,
+                    page_end=i + 1,
+                    text=text.strip(),
+                ))
+    return blocks
 
 
 def _utc_now_iso() -> str:
@@ -536,15 +560,34 @@ async def process(
         )
 
     # ── 2. OCR ──────────────────────────────────────────────────
-    from ai_engine.extraction.mistral_ocr import async_extract_pdf_with_mistral
     from app.services.blob_storage import download_bytes
 
     pdf_bytes = await asyncio.to_thread(download_bytes, blob_uri=request.blob_uri)
-    page_blocks = await async_extract_pdf_with_mistral(pdf_bytes)
-    del pdf_bytes  # release potentially large PDF from memory
-    ocr_text = "\n\n".join(pb.text for pb in page_blocks)
-    page_count = len(page_blocks)
-    del page_blocks  # release OCR page blocks from memory
+
+    # Check OCR cache first (avoids paid API call on cache hit)
+    from ai_engine.cache.provider_cache import ocr_cache
+
+    cached_ocr = ocr_cache.get(pdf_bytes, filename=request.filename)
+    if cached_ocr is not None:
+        ocr_text = cached_ocr
+        page_count = cached_ocr.count("\n\n") + 1  # approximate from cached text
+        del pdf_bytes
+    else:
+        ocr_provider = os.environ.get("OCR_PROVIDER", "mistral")
+        if ocr_provider == "local_vlm":
+            from ai_engine.extraction.local_vlm_ocr import async_extract_pdf_with_local_vlm
+            page_blocks = await async_extract_pdf_with_local_vlm(pdf_bytes)
+        elif ocr_provider == "pymupdf":
+            page_blocks = await asyncio.to_thread(_extract_text_pymupdf, pdf_bytes)
+        else:
+            from ai_engine.extraction.mistral_ocr import async_extract_pdf_with_mistral
+            page_blocks = await async_extract_pdf_with_mistral(pdf_bytes)
+        ocr_text = "\n\n".join(pb.text for pb in page_blocks)
+        page_count = len(page_blocks)
+        # Store in cache for future runs
+        ocr_cache.put(pdf_bytes, ocr_text, filename=request.filename, page_count=page_count)
+        del pdf_bytes  # release potentially large PDF from memory
+        del page_blocks  # release OCR page blocks from memory
 
     metrics["ocr_chars"] = len(ocr_text)
     metrics["page_count"] = page_count
