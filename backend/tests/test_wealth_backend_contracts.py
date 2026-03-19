@@ -6,7 +6,7 @@ import csv
 import io
 import json
 import uuid
-from datetime import UTC, date, datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 

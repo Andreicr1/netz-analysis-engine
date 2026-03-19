@@ -35,9 +35,10 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+from ai_engine.prompt_safety import sanitize_user_input
+
 from ai_engine.model_config import get_model
 from ai_engine.pipeline.models import CANONICAL_DOC_TYPES
-from ai_engine.prompt_safety import sanitize_user_input
 from ai_engine.prompts import prompt_registry
 
 logger = logging.getLogger(__name__)

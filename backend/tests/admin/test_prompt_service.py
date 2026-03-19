@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import jinja2.exceptions
 import pytest
 
 from app.core.prompts.prompt_service import (
@@ -89,12 +90,12 @@ class TestHardenedPromptEnvironment:
 
     def test_blocked_filter_fails(self, env):
         """Filters not in allowlist should fail."""
-        with pytest.raises(Exception):
+        with pytest.raises(jinja2.exceptions.SecurityError):
             self._render(env, "{{ name|pprint }}", name="test")
 
     def test_attr_filter_removed(self, env):
         """attr filter must be removed — used in SSTI vectors."""
-        with pytest.raises(Exception):
+        with pytest.raises(jinja2.exceptions.SecurityError):
             self._render(env, "{{ ''|attr('__class__') }}")
 
     def test_string_format_caught_by_validate(self):

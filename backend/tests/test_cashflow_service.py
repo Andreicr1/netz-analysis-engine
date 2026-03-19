@@ -10,9 +10,9 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.domains.credit.modules.deals.cashflow_service import (
-    CashflowEntry,
     _INFLOW_TYPES,
     _OUTFLOW_TYPES,
+    CashflowEntry,
     calculate_performance,
     calculate_portfolio_monitoring_metrics,
     list_cashflows,
@@ -198,4 +198,4 @@ class TestFlowTypeCategories:
         assert "distribution" in _INFLOW_TYPES
 
     def test_no_overlap(self):
-        assert _OUTFLOW_TYPES & _INFLOW_TYPES == set()
+        assert set() == _OUTFLOW_TYPES & _INFLOW_TYPES

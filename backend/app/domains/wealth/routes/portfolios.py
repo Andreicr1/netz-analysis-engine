@@ -9,6 +9,8 @@ from app.core.security.clerk_auth import CurrentUser, get_current_user, require_
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.models.rebalance import RebalanceEvent
+from app.domains.wealth.routes.common import VALID_PROFILES, get_latest_snapshot
+from app.domains.wealth.routes.common import validate_profile as _validate_profile
 from app.domains.wealth.schemas.portfolio import (
     PortfolioSnapshotRead,
     PortfolioSummary,
@@ -16,8 +18,6 @@ from app.domains.wealth.schemas.portfolio import (
     RebalanceEventRead,
     RebalanceRequest,
 )
-from app.domains.wealth.routes.common import VALID_PROFILES, get_latest_snapshot
-from app.domains.wealth.routes.common import validate_profile as _validate_profile
 
 router = APIRouter(prefix="/portfolios")
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-
 from decimal import Decimal
 
 from sqlalchemy import Enum, ForeignKey, Integer, Numeric, String, Text, Uuid

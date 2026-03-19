@@ -15,10 +15,10 @@ from app.core.prompts.schemas import (
     PromptPreviewResponse,
     PromptValidateResponse,
 )
-from app.domains.admin.schemas import PromptVersionsResponse
 from app.core.security.admin_auth import require_super_admin
 from app.core.security.clerk_auth import Actor
 from app.core.tenancy.admin_middleware import get_db_admin
+from app.domains.admin.schemas import PromptVersionsResponse
 
 router = APIRouter(
     prefix="/admin/prompts",
