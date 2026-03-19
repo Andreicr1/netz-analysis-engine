@@ -8,11 +8,16 @@ GET  /analytics/strategy-drift/{instrument_id} — single instrument drift check
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
+import json
 import uuid
 from datetime import datetime, timezone
+from typing import Literal
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -284,6 +289,61 @@ async def list_drift_alerts(
     ]
 
 
+async def _query_drift_history(
+    db: AsyncSession,
+    instrument_id: uuid.UUID,
+    from_date: datetime | None,
+    to_date: datetime | None,
+    severity: str | None,
+    limit: int,
+) -> tuple[str, list[StrategyDriftAlert]]:
+    """Shared query logic for drift history and export.
+
+    Returns (instrument_name, alerts). Raises 404 if instrument not found.
+    """
+    inst_result = await db.execute(
+        select(Instrument.name).where(Instrument.instrument_id == instrument_id)
+    )
+    inst_name = inst_result.scalar()
+    if inst_name is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Instrument not found"
+        )
+
+    stmt = select(StrategyDriftAlert).where(
+        StrategyDriftAlert.instrument_id == instrument_id,
+    )
+    if from_date is not None:
+        stmt = stmt.where(StrategyDriftAlert.detected_at >= from_date)
+    if to_date is not None:
+        stmt = stmt.where(StrategyDriftAlert.detected_at <= to_date)
+    if severity is not None:
+        stmt = stmt.where(StrategyDriftAlert.severity == severity)
+
+    stmt = stmt.order_by(StrategyDriftAlert.detected_at.desc()).limit(limit)
+
+    result = await db.execute(stmt)
+    return inst_name, list(result.scalars().all())
+
+
+def _alerts_to_events(alerts: list[StrategyDriftAlert]) -> list[DriftEventOut]:
+    return [
+        DriftEventOut(
+            id=a.id,
+            instrument_id=a.instrument_id,
+            status=a.status,
+            severity=a.severity,
+            anomalous_count=a.anomalous_count,
+            total_metrics=a.total_metrics,
+            metric_details=a.metric_details,
+            is_current=a.is_current,
+            detected_at=a.detected_at,
+            created_at=a.created_at,
+        )
+        for a in alerts
+    ]
+
+
 @router.get(
     "/{instrument_id}/history",
     response_model=DriftHistoryOut,
@@ -302,47 +362,10 @@ async def get_drift_history(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> DriftHistoryOut:
-    # Verify instrument exists
-    inst_result = await db.execute(
-        select(Instrument.name).where(Instrument.instrument_id == instrument_id)
+    inst_name, alerts = await _query_drift_history(
+        db, instrument_id, from_date, to_date, severity, limit,
     )
-    inst_name = inst_result.scalar()
-    if inst_name is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Instrument not found"
-        )
-
-    # Build query with filters
-    stmt = select(StrategyDriftAlert).where(
-        StrategyDriftAlert.instrument_id == instrument_id,
-    )
-    if from_date is not None:
-        stmt = stmt.where(StrategyDriftAlert.detected_at >= from_date)
-    if to_date is not None:
-        stmt = stmt.where(StrategyDriftAlert.detected_at <= to_date)
-    if severity is not None:
-        stmt = stmt.where(StrategyDriftAlert.severity == severity)
-
-    stmt = stmt.order_by(StrategyDriftAlert.detected_at.desc()).limit(limit)
-
-    result = await db.execute(stmt)
-    alerts = result.scalars().all()
-
-    events = [
-        DriftEventOut(
-            id=a.id,
-            instrument_id=a.instrument_id,
-            status=a.status,
-            severity=a.severity,
-            anomalous_count=a.anomalous_count,
-            total_metrics=a.total_metrics,
-            metric_details=a.metric_details,
-            is_current=a.is_current,
-            detected_at=a.detected_at,
-            created_at=a.created_at,
-        )
-        for a in alerts
-    ]
+    events = _alerts_to_events(alerts)
 
     return DriftHistoryOut(
         instrument_id=instrument_id,
@@ -350,6 +373,58 @@ async def get_drift_history(
         events=events,
         total=len(events),
         computed_at=datetime.now(timezone.utc),
+    )
+
+
+@router.get(
+    "/{instrument_id}/export",
+    summary="Export drift history as CSV or JSON",
+)
+async def export_drift_history(
+    instrument_id: uuid.UUID,
+    format: Literal["csv", "json"] = Query("csv"),
+    from_date: datetime | None = Query(None, description="Start date filter (inclusive)"),
+    to_date: datetime | None = Query(None, description="End date filter (inclusive)"),
+    severity: str | None = Query(None, pattern="^(none|moderate|severe)$"),
+    limit: int = Query(500, ge=1, le=5000),
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    inst_name, alerts = await _query_drift_history(
+        db, instrument_id, from_date, to_date, severity, limit,
+    )
+
+    rows = [
+        {
+            "detected_at": a.detected_at.isoformat() if a.detected_at else "",
+            "status": a.status,
+            "severity": a.severity,
+            "anomalous_count": a.anomalous_count,
+            "metric_details": json.dumps(a.metric_details) if a.metric_details else "",
+        }
+        for a in alerts
+    ]
+
+    filename = f"drift-history-{instrument_id}"
+
+    if format == "json":
+        return Response(
+            content=json.dumps(rows, ensure_ascii=False),
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{filename}.json"'},
+        )
+
+    # CSV
+    fieldnames = ["detected_at", "status", "severity", "anomalous_count", "metric_details"]
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=fieldnames)
+    writer.writeheader()
+    writer.writerows(rows)
+
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}.csv"'},
     )
 
 

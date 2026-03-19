@@ -9,8 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security.clerk_auth import CurrentUser, get_current_user, require_ic_member
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.allocation import StrategicAllocation, TacticalPosition
-from app.domains.wealth.routes.common import get_latest_snapshot
-from app.domains.wealth.routes.common import validate_profile as _validate_profile
 from app.domains.wealth.schemas.allocation import (
     AllocationProposal,
     EffectiveAllocationRead,
@@ -20,6 +18,7 @@ from app.domains.wealth.schemas.allocation import (
     TacticalPositionRead,
     TacticalPositionUpdate,
 )
+from app.domains.wealth.routes.common import get_latest_snapshot, validate_profile as _validate_profile
 
 router = APIRouter(prefix="/allocation")
 

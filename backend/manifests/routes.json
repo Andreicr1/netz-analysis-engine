@@ -306,6 +306,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/analytics/strategy-drift/{instrument_id}/export",
+    "name": "export_drift_history"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/analytics/strategy-drift/{instrument_id}/history",
     "name": "get_drift_history"
   },
@@ -506,8 +511,23 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/deals/{deal_id}/decision-audit",
+    "name": "get_decision_audit"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/deals/{deal_id}/documents/{document_id}/ai-provenance",
+    "name": "get_ai_provenance"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/funds/{fund_id}/deals/{deal_id}/ic-memo",
     "name": "get_latest_ic_memo"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/funds/{fund_id}/deals/{deal_id}/ic-memo/timeline",
+    "name": "get_memo_timeline"
   },
   {
     "method": "GET",
@@ -743,6 +763,11 @@
     "method": "GET",
     "path": "/api/v1/risk/stream",
     "name": "risk_stream"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/risk/summary",
+    "name": "get_risk_summary_batch"
   },
   {
     "method": "GET",
