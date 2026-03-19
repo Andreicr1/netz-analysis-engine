@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
 	import { onMount } from "svelte";
+	import { renderComponent } from "@tanstack/svelte-table";
 	import {
 		DataTable,
 		EmptyState,
@@ -15,6 +16,7 @@
 	} from "@netz/ui";
 	import { ChartContainer } from "@netz/ui/charts";
 	import { createClientApiClient } from "$lib/api/client";
+	import { resolveWealthStatus } from "$lib/utils/status-maps";
 	import { getContext } from "svelte";
 
 	// Inline types from API schema (DriftEventOut / DriftHistoryOut)
@@ -99,6 +101,10 @@
 			id: "severity",
 			accessorKey: "severity",
 			header: "Severity",
+			cell: (info: { getValue: () => unknown }) => {
+				const val = (info.getValue() as string) ?? "";
+				return renderComponent(StatusBadge, { status: val, resolve: resolveWealthStatus });
+			},
 		},
 		{
 			id: "status",
@@ -115,6 +121,17 @@
 			id: "drift_magnitude",
 			accessorKey: "drift_magnitude",
 			header: "Drift Magnitude",
+			cell: (info: { getValue: () => unknown }) => {
+				const v = info.getValue();
+				if (v == null) return "—";
+				const num = typeof v === "string" ? parseFloat(v) : (v as number);
+				return isNaN(num) ? "—" : formatNumber(num, 4);
+			},
+		},
+		{
+			id: "drift_threshold",
+			accessorKey: "drift_threshold",
+			header: "Threshold",
 			cell: (info: { getValue: () => unknown }) => {
 				const v = info.getValue();
 				if (v == null) return "—";
@@ -177,6 +194,7 @@
 				{
 					type: "scatter",
 					large: true,
+					largeThreshold: 500,
 					data: pts.map(([x, y]) => [x, y]),
 					symbolSize: 8,
 					itemStyle: { opacity: 0.75 },
@@ -212,7 +230,7 @@
 
 	// ── CSV export ──────────────────────────────────────────────
 	function exportCSV() {
-		const header = ["detected_at", "severity", "status", "anomalous_count", "drift_magnitude", "rebalance_triggered"].join(",");
+		const header = ["detected_at", "severity", "status", "anomalous_count", "drift_magnitude", "drift_threshold", "rebalance_triggered"].join(",");
 		const rows = filteredEvents.map((e) =>
 			[
 				e.detected_at,
@@ -220,6 +238,7 @@
 				e.status,
 				e.anomalous_count,
 				e.drift_magnitude ?? "",
+				e.drift_threshold ?? "",
 				e.rebalance_triggered ?? "",
 			]
 				.map((v) => `"${String(v).replace(/"/g, '""')}"`)
