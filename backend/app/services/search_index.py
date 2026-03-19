@@ -1,5 +1,6 @@
 # DEPRECATED: use pgvector_search_service — Azure Search eliminated in favor of pgvector.
 # Retained for rollback capability during re-ingestion migration.
+# Top-level azure imports removed to avoid breaking CI when azure SDK is not installed.
 """Azure AI Search metadata helpers for retained production metadata paths."""
 
 from __future__ import annotations
@@ -10,10 +11,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.core.config import settings
-from app.services.azure.search_client import (
-    get_metadata_index_client,
-    get_search_client,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +63,11 @@ class AzureSearchMetadataClient:
         self.index_name = index_name or settings.SEARCH_INDEX_NAME
 
     def _client(self):
+        from app.services.azure.search_client import (
+            get_metadata_index_client,
+            get_search_client,
+        )
+
         if self.index_name and self.index_name != settings.SEARCH_INDEX_NAME:
             return get_search_client(index_name=self.index_name)
         return get_metadata_index_client()
