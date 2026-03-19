@@ -82,6 +82,9 @@
 	}
 
 	let auditEntries = $state<AuditTrailEntry[]>(buildInitialAuditEntries());
+	// NOTE: No dedicated audit-trail GET endpoint exists for document reviews in the current API spec.
+	// When the endpoint becomes available (e.g. GET /funds/{fundId}/document-reviews/{reviewId}/audit),
+	// wire it here with the same $effect pattern used in the deal detail page.
 
 	const auditMutation = createOptimisticMutation<AuditTrailEntry[]>({
 		getState: () => auditEntries,
@@ -458,6 +461,19 @@
 	onConfirm={submitDecision}
 	onCancel={() => { showDecisionDialog = false; }}
 >
+	{#snippet consequenceList()}
+		<ul class="list-disc space-y-1 pl-4">
+			<li>Review will be marked as <strong>{pendingDecision}</strong></li>
+			<li>Decision recorded permanently in audit trail</li>
+			{#if pendingDecision === "REVISION_REQUESTED"}
+				<li>Review returned to submitter for corrections</li>
+			{:else if pendingDecision === "APPROVED"}
+				<li>Document will be cleared for use in IC materials</li>
+			{:else if pendingDecision === "REJECTED"}
+				<li>Document review will be locked and marked rejected</li>
+			{/if}
+		</ul>
+	{/snippet}
 	{#snippet children()}
 		<div class="space-y-4">
 			<FormField label="Actor Capacity" required>
@@ -489,4 +505,11 @@
 	confirmLabel="Reverse Item"
 	onConfirm={submitUncheck}
 	onCancel={() => { showUncheckDialog = false; pendingUncheckId = null; }}
-/>
+>
+	{#snippet consequenceList()}
+		<ul class="list-disc space-y-1 pl-4">
+			<li>This will revert the checklist item and require re-review</li>
+			<li>Reversal will be recorded in the audit trail</li>
+		</ul>
+	{/snippet}
+</ConsequenceDialog>
