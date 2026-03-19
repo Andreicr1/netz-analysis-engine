@@ -319,6 +319,51 @@ _REASONING_EFFORT: dict[str, str] = {
 }
 
 
+def _create_completion_local(
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    model: str,
+    temperature: float = 0.2,
+    max_tokens: int = 4096,
+    response_format: dict[str, str] | None = None,
+) -> "CompletionResult":
+    """Route completion request to local LM Studio server.
+
+    DEV ONLY — never call in production (gated by settings.use_local_llm).
+    LM Studio exposes OpenAI-compatible /v1/chat/completions at LOCAL_LLM_URL.
+    """
+    import httpx
+
+    payload: dict = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "stream": False,
+    }
+    if response_format:
+        payload["response_format"] = response_format
+
+    url = f"{settings.local_llm_url}/chat/completions"
+    response = httpx.post(url, json=payload, timeout=180.0)
+    response.raise_for_status()
+    data = response.json()
+
+    content = data["choices"][0]["message"]["content"]
+    usage = data.get("usage", {})
+    return CompletionResult(
+        content=content,
+        model=data.get("model", model),
+        input_tokens=usage.get("prompt_tokens", 0),
+        output_tokens=usage.get("completion_tokens", 0),
+        provider="local_lmstudio",
+    )
+
+
 def create_completion(
     *,
     system_prompt: str,
@@ -361,6 +406,17 @@ def create_completion(
 
     """
     mdl = model or settings.OPENAI_MODEL_INTELLIGENCE
+
+    # ── Route: Local LLM (LM Studio) — dev only ──────────────────────────────
+    if settings.use_local_llm:
+        return _create_completion_local(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            model=mdl,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format=response_format,
+        )
 
     # ── Route: Azure AI Foundry (Chat Completions) vs OpenAI (Responses)
     if _is_foundry_model(mdl):

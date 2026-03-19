@@ -19,6 +19,9 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # ── Drop legacy audit_events from 0001 (no RLS, fewer columns) ──
+    op.execute("DROP TABLE IF EXISTS audit_events CASCADE")
+
     # ── audit_events table ─────────────────────────────────────────
     op.create_table(
         "audit_events",

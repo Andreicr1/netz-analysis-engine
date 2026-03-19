@@ -246,10 +246,10 @@ def upgrade() -> None:
         config_json = json.dumps(config_value)
         bind.execute(
             sa.text("""
-                INSERT INTO vertical_config_defaults (vertical, config_type, config_value)
-                VALUES ('liquid_funds', :config_type, :config_value::jsonb)
+                INSERT INTO vertical_config_defaults (vertical, config_type, config)
+                VALUES ('liquid_funds', :config_type, CAST(:config_value AS jsonb))
                 ON CONFLICT (vertical, config_type) DO UPDATE
-                SET config_value = EXCLUDED.config_value
+                SET config = EXCLUDED.config
             """),
             {"config_type": config_type, "config_value": config_json},
         )
@@ -332,7 +332,7 @@ def _drop_fk_by_column(bind, table_name: str, column_name: str) -> None:
     result = bind.execute(
         sa.text("""
             SELECT conname FROM pg_constraint
-            WHERE conrelid = :table::regclass
+            WHERE conrelid = CAST(:table_name AS regclass)
             AND contype = 'f'
             AND EXISTS (
                 SELECT 1 FROM unnest(conkey) AS k
@@ -340,7 +340,7 @@ def _drop_fk_by_column(bind, table_name: str, column_name: str) -> None:
                 WHERE a.attname = :column
             )
         """),
-        {"table": table_name, "column": column_name},
+        {"table_name": table_name, "column": column_name},
     ).fetchone()
     if result:
         op.execute(f"ALTER TABLE {table_name} DROP CONSTRAINT {result[0]}")

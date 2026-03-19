@@ -44,7 +44,7 @@ The framing is **data lake inspection**, not analytics engine. It answers operat
 
 ## Problem Statement
 
-The silver layer Parquet exists (14 credit deals indexed, wealth data growing). The only access paths are Azure Search (derived index — no operational metadata) and `search_rebuild.py` (manual full-scan). Simple operational questions have no answer:
+The silver layer Parquet exists (14 credit deals indexed, wealth data growing). The only access paths are pgvector (derived index — no operational metadata, replaced Azure Search in commit 497df51) and `search_rebuild.py` (manual full-scan). Simple operational questions have no answer:
 
 - "Which chunks have an outdated `embedding_model`?"
 - "How many documents per deal are in the silver layer?"
@@ -583,3 +583,4 @@ At 100+ documents, consider upgrading to cached read-only connection (eliminates
 - "Parquet schema must include embedding metadata" → validated via `embedding_dimension_audit()`
 - "No module-level asyncio primitives" → Semaphore lazy-created inside async methods
 - "ORM thread safety: frozen dataclasses across async/thread boundary" → all results are `@dataclass(frozen=True)`
+

@@ -82,6 +82,19 @@ class Settings(BaseSettings):
     # true = ADLSStorageClient (Azure Blob). Enable at Milestone 3 when data lake > 100GB.
     local_storage_root: str = ""
 
+    # ── Local dev providers (NEVER use in production) ─────────
+    # LLM: routes pipeline through LM Studio instead of OpenAI API
+    use_local_llm: bool = False
+    local_llm_url: str = "http://localhost:1234/v1"  # LM Studio default port
+    # Embeddings: routes embedding generation through Ollama
+    use_local_embeddings: bool = False
+    local_embedding_model: str = "nomic-embed-text"
+    local_embedding_url: str = "http://localhost:11434"
+    local_embedding_dimensions: int = 768
+    # OCR: routes document extraction through local provider
+    use_local_ocr: bool = False
+    local_ocr_provider: str = "pymupdf"  # pymupdf | qwen2vl
+
     # ── Calibration ──────────────────────────────────────────
     calibration_path: str = ""
 

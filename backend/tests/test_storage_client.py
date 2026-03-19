@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 
 from app.services.storage_client import LocalStorageClient, StorageClient, create_storage_client
@@ -138,6 +140,67 @@ class TestPathValidation:
     async def test_local_client_read_rejects_traversal(self, storage):
         with pytest.raises(ValueError):
             await storage.read("../../../etc/shadow")
+
+
+class TestGetDuckdbPath:
+    """Tests for LocalStorageClient.get_duckdb_path and ADLS fallback."""
+
+    def test_local_returns_correct_path(self, storage, tmp_path):
+        org_id = uuid.UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+        path = storage.get_duckdb_path("silver", org_id, "credit")
+        assert "silver" in path
+        assert str(org_id) in path
+        assert "credit" in path
+        assert path.endswith("/")
+
+    def test_rejects_invalid_vertical(self, storage):
+        org_id = uuid.UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+        with pytest.raises(ValueError, match="Invalid vertical"):
+            storage.get_duckdb_path("silver", org_id, "hacked")
+
+    def test_all_valid_tiers(self, storage):
+        org_id = uuid.UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+        for tier in ("bronze", "silver", "gold"):
+            path = storage.get_duckdb_path(tier, org_id, "credit")
+            assert tier in path
+
+    def test_base_class_raises_not_implemented(self):
+        """Base StorageClient.get_duckdb_path raises NotImplementedError."""
+
+        class StubStorage(StorageClient):
+            async def write(self, *a, **kw): pass  # type: ignore[override]
+            async def read(self, *a, **kw): return b""  # type: ignore[override]
+            async def exists(self, *a, **kw): return False  # type: ignore[override]
+            async def delete(self, *a, **kw): pass  # type: ignore[override]
+            async def list_files(self, *a, **kw): return []  # type: ignore[override]
+            async def generate_read_url(self, *a, **kw): return ""  # type: ignore[override]
+            async def generate_upload_url(self, *a, **kw): return ""  # type: ignore[override]
+
+        stub = StubStorage()
+        org_id = uuid.UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+        with pytest.raises(NotImplementedError):
+            stub.get_duckdb_path("silver", org_id, "credit")
+
+
+class TestSilverChunksGlob:
+    """Tests for silver_chunks_glob from storage_routing."""
+
+    def test_correct_pattern(self):
+        import uuid as uuid_mod
+
+        from ai_engine.pipeline.storage_routing import silver_chunks_glob
+
+        org = uuid_mod.UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+        result = silver_chunks_glob(org, "credit")
+        assert result == "silver/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/credit/chunks/*/chunks.parquet"
+
+    def test_invalid_vertical_rejected(self):
+        import uuid as uuid_mod
+
+        from ai_engine.pipeline.storage_routing import silver_chunks_glob
+
+        with pytest.raises(ValueError, match="Invalid vertical"):
+            silver_chunks_glob(uuid_mod.uuid4(), "insurance")
 
 
 class TestStorageClientFactory:
