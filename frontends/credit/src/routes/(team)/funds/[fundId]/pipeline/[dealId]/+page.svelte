@@ -46,6 +46,42 @@
 	// ── Audit Trail ──
 	let auditEntries = $state<AuditTrailEntry[]>([]);
 
+	// Fetch existing audit entries from API on mount.
+	// Endpoint: GET /funds/{fundId}/pipeline/{dealId}/audit → DecisionAuditOut
+	// Maps DecisionAuditEventOut to AuditTrailEntry for display.
+	$effect(() => {
+		const api = createClientApiClient(getToken);
+		api.get(`/funds/${data.fundId}/deals/${data.dealId}/decision-audit`)
+			.then((res: unknown) => {
+				const result = res as { events?: Array<{
+					event_type: string;
+					action: string;
+					actor_email?: string | null;
+					actor_capacity?: string | null;
+					rationale?: string | null;
+					timestamp: string;
+					from_stage?: string | null;
+					to_stage?: string | null;
+				}> };
+				if (Array.isArray(result?.events)) {
+					auditEntries = result.events.map((evt) => ({
+						actor: evt.actor_email ?? "System",
+						actorCapacity: evt.actor_capacity ?? undefined,
+						timestamp: evt.timestamp,
+						action: evt.action,
+						scope: evt.to_stage ? `${evt.from_stage ?? "—"} → ${evt.to_stage}` : `Deal: ${String(data.deal.name ?? "")}`,
+						rationale: evt.rationale ?? undefined,
+						outcome: evt.action,
+						immutable: true,
+						status: "success" as const,
+					}));
+				}
+			})
+			.catch(() => {
+				// Non-fatal: audit entries remain empty until actions are taken in this session.
+			});
+	});
+
 	const auditMutation = createOptimisticMutation<AuditTrailEntry[]>({
 		getState: () => auditEntries,
 		setState: (value) => { auditEntries = value; },
@@ -494,6 +530,18 @@
 	onConfirm={submitDecision}
 	onCancel={() => { showDecision = false; }}
 >
+	{#snippet consequenceList()}
+		<ul class="list-disc space-y-1 pl-4">
+			<li>Deal moves to <strong>{decisionTarget}</strong> stage</li>
+			<li>Decision recorded permanently in audit trail</li>
+			<li>IC members will be notified of the outcome</li>
+			{#if decisionTarget === "REJECTED"}
+				<li>Deal will be locked and removed from active pipeline</li>
+			{:else if decisionTarget === "CONDITIONAL"}
+				<li>Outstanding conditions must be resolved before conversion</li>
+			{/if}
+		</ul>
+	{/snippet}
 	{#snippet children()}
 		<div class="space-y-4">
 			{#if decisionTarget === "REJECTED"}
