@@ -15,6 +15,7 @@
 
 	const navItems: NavItem[] = [
 		{ label: "Health", href: "/health" },
+		{ label: "Inspect", href: "/inspect" },
 		{ label: "Tenants", href: "/tenants" },
 		{ label: "Config", href: "/config/liquid_funds" },
 		{ label: "Prompts", href: "/prompts/private_credit" },

@@ -1,9 +1,10 @@
 <!--
   Health Dashboard — System health monitoring with live worker logs.
   Auto-refresh via client-side $effect (NOT invalidateAll).
+  Worker trigger buttons call wealth backend endpoints.
 -->
 <script lang="ts">
-	import { DataTable, MetricCard, PageHeader, SectionCard, formatDateTime, formatNumber, formatPercent } from "@netz/ui";
+	import { DataTable, MetricCard, PageHeader, SectionCard, Button, Input, ConfirmDialog, Toast, formatDateTime, formatNumber, formatPercent } from "@netz/ui";
 	import ServiceHealthCard from "$lib/components/ServiceHealthCard.svelte";
 	import WorkerLogFeed from "$lib/components/WorkerLogFeed.svelte";
 	import { createClientApiClient } from "$lib/api/client";
@@ -54,6 +55,8 @@
 	let healthData = $state(data.services);
 	// svelte-ignore state_referenced_locally
 	let pipelineData = $state(data.pipelines);
+	// svelte-ignore state_referenced_locally
+	let workerData = $state(data.workers);
 	let workerStatusFilter = $state("all");
 	let healthErrors = $derived(data.sectionErrors);
 	let hasDegradedState = $derived(data.hasDegradedState);
@@ -64,12 +67,70 @@
 				? "System health is degraded. Review the flagged services below."
 			: null,
 	);
-	let workerStatusOptions = $derived(Array.from(new Set(data.workers.map((worker) => worker.status))).sort());
+	let workerStatusOptions = $derived(Array.from(new Set(workerData.map((worker) => worker.status))).sort());
 	let workerRows = $derived(
 		workerStatusFilter === "all"
-			? data.workers
-			: data.workers.filter((worker) => worker.status === workerStatusFilter),
+			? workerData
+			: workerData.filter((worker) => worker.status === workerStatusFilter),
 	);
+
+	// ── Worker triggers ──
+	type WorkerTrigger = {
+		name: string;
+		label: string;
+		endpoint: string;
+		scope: "wealth" | "global";
+		hasParams?: boolean;
+	};
+
+	const WORKER_TRIGGERS: WorkerTrigger[] = [
+		{ name: "ingestion", label: "NAV Ingestion (legacy)", endpoint: "/workers/run-ingestion", scope: "wealth" },
+		{ name: "instrument_ingestion", label: "Instrument NAV Ingestion", endpoint: "/workers/run-instrument-ingestion", scope: "wealth", hasParams: true },
+		{ name: "macro_ingestion", label: "Macro Data (FRED)", endpoint: "/workers/run-macro-ingestion", scope: "global" },
+		{ name: "benchmark_ingest", label: "Benchmark NAV", endpoint: "/workers/run-benchmark-ingest", scope: "global" },
+		{ name: "risk_calc", label: "Risk Calculation", endpoint: "/workers/run-risk-calc", scope: "wealth" },
+		{ name: "portfolio_eval", label: "Portfolio Evaluation", endpoint: "/workers/run-portfolio-eval", scope: "wealth" },
+		{ name: "screening_batch", label: "Screening Batch", endpoint: "/workers/run-screening-batch", scope: "wealth" },
+		{ name: "watchlist_check", label: "Watchlist Check", endpoint: "/workers/run-watchlist-check", scope: "wealth" },
+		{ name: "fact_sheet_gen", label: "Fact Sheet Generation", endpoint: "/workers/run-fact-sheet-gen", scope: "global" },
+	];
+
+	let triggeringWorker = $state<string | null>(null);
+	let confirmTrigger = $state<WorkerTrigger | null>(null);
+	let showConfirmTrigger = $state(false);
+	let lookbackDays = $state(30);
+	let toast = $state<{ message: string; type: "success" | "error" | "warning" | "info" } | null>(null);
+
+	function findTrigger(workerName: string): WorkerTrigger | undefined {
+		return WORKER_TRIGGERS.find(w => w.name === workerName);
+	}
+
+	async function triggerWorker(workerName: string) {
+		const trigger = findTrigger(workerName);
+		if (!trigger) return;
+
+		triggeringWorker = workerName;
+		try {
+			const api = createClientApiClient(() => Promise.resolve(data.token));
+			let endpoint = trigger.endpoint;
+			if (trigger.name === "instrument_ingestion") {
+				endpoint += `?lookback_days=${lookbackDays}`;
+			}
+			await api.post(endpoint, {});
+			toast = { message: `${trigger.label} scheduled`, type: "success" };
+			// Refresh worker status after delay for backend to register the job
+			setTimeout(async () => {
+				try {
+					const refreshApi = createClientApiClient(() => Promise.resolve(data.token));
+					workerData = await refreshApi.get("/admin/health/workers");
+				} catch { /* silent */ }
+				triggeringWorker = null;
+			}, 2000);
+		} catch (e) {
+			toast = { message: `Failed to trigger ${trigger.label}: ${e instanceof Error ? e.message : "Unknown error"}`, type: "error" };
+			triggeringWorker = null;
+		}
+	}
 
 	const workerColumns = [
 		{
@@ -119,6 +180,7 @@
 				const api = createClientApiClient(() => Promise.resolve(data.token));
 				healthData = await api.get("/admin/health/services");
 				pipelineData = await api.get("/admin/health/pipelines");
+				workerData = await api.get("/admin/health/workers");
 			} catch {
 				/* silent refresh failure */
 			}
@@ -207,7 +269,7 @@
 				<p class="font-medium text-(--netz-warning)">Worker status unavailable</p>
 				<p class="mt-1">{healthErrors.workers}</p>
 			</div>
-		{:else if data.workers.length > 0}
+		{:else if workerData.length > 0}
 			<div class="mb-4 flex flex-wrap items-center gap-3">
 				<label class="text-sm text-(--netz-text-secondary)">
 					<span class="mr-2 font-medium text-(--netz-text-primary)">Status</span>
@@ -222,7 +284,7 @@
 					</select>
 				</label>
 				<p class="text-xs text-(--netz-text-muted)">
-					{workerRows.length} of {data.workers.length} workers
+					{workerRows.length} of {workerData.length} workers
 				</p>
 			</div>
 			<DataTable
@@ -234,6 +296,7 @@
 			>
 				{#snippet expandedRow(row)}
 					{@const worker = row as HealthWorker}
+					{@const trigger = findTrigger(worker.name)}
 					<div class="grid grid-cols-2 gap-4 px-4 py-3 text-sm sm:grid-cols-3">
 						<div>
 							<p class="text-xs text-(--netz-text-muted)">Worker</p>
@@ -265,6 +328,30 @@
 								<p class="text-xs text-(--netz-warning)">This worker has recorded errors. Check the log feed below for details.</p>
 							</div>
 						{/if}
+						{#if trigger}
+							<div class="col-span-2 flex items-center gap-3 border-t border-(--netz-border) pt-3 sm:col-span-3">
+								{#if trigger.name === "instrument_ingestion"}
+									<label class="flex items-center gap-2 text-xs text-(--netz-text-secondary)">
+										Lookback days
+										<input
+											type="number"
+											min="1"
+											max="1095"
+											bind:value={lookbackDays}
+											class="w-20 rounded-md border border-(--netz-border) bg-(--netz-surface) px-2 py-1 text-sm text-(--netz-text-primary)"
+										/>
+									</label>
+								{/if}
+								<Button
+									size="sm"
+									variant="outline"
+									disabled={worker.status === "running" || triggeringWorker === worker.name}
+									onclick={() => { confirmTrigger = trigger; showConfirmTrigger = true; }}
+								>
+									{triggeringWorker === worker.name ? "Starting..." : "Run Now"}
+								</Button>
+							</div>
+						{/if}
 					</div>
 				{/snippet}
 			</DataTable>
@@ -278,3 +365,23 @@
 		<WorkerLogFeed token={data.token} />
 	</SectionCard>
 </div>
+
+<!-- Worker Trigger Confirmation -->
+<ConfirmDialog
+	bind:open={showConfirmTrigger}
+	title="Run Worker"
+	message={confirmTrigger ? `Trigger "${confirmTrigger.label}"? This may take several minutes.` : ""}
+	confirmLabel="Run"
+	confirmVariant="default"
+	onConfirm={() => { if (confirmTrigger) { triggerWorker(confirmTrigger.name); } showConfirmTrigger = false; confirmTrigger = null; }}
+	onCancel={() => { showConfirmTrigger = false; confirmTrigger = null; }}
+/>
+
+<!-- Toast notification -->
+{#if toast}
+	<Toast
+		message={toast.message}
+		type={toast.type}
+		onDismiss={() => toast = null}
+	/>
+{/if}
