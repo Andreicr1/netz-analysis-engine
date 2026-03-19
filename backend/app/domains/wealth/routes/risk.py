@@ -1,9 +1,9 @@
 import asyncio
-from datetime import date
+from datetime import date, datetime, timezone
 
 import redis.asyncio as aioredis
 import structlog
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,10 +14,15 @@ from app.core.config.settings import settings
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
-from app.domains.wealth.schemas.macro import MacroIndicators
-from app.domains.wealth.schemas.risk import CVaRPoint, CVaRStatus, RegimeHistoryPoint
 from app.domains.wealth.routes.common import VALID_PROFILES, get_latest_snapshot
 from app.domains.wealth.routes.common import validate_profile as _validate_profile
+from app.domains.wealth.schemas.macro import MacroIndicators
+from app.domains.wealth.schemas.risk import (
+    BatchRiskSummaryOut,
+    CVaRPoint,
+    CVaRStatus,
+    RegimeHistoryPoint,
+)
 from app.shared.schemas import RegimeRead
 from quant_engine.regime_service import get_current_regime, get_latest_macro_values
 
@@ -48,6 +53,86 @@ async def close_sse_redis() -> None:
 
 router = APIRouter(prefix="/risk")
 
+_MAX_BATCH_PROFILES = 20
+
+
+def _snap_to_cvar(profile: str, snap: PortfolioSnapshot | None) -> CVaRStatus:
+    return CVaRStatus(
+        profile=profile,
+        calc_date=snap.snapshot_date if snap else None,
+        cvar_current=snap.cvar_current if snap else None,
+        cvar_limit=snap.cvar_limit if snap else None,
+        cvar_utilized_pct=snap.cvar_utilized_pct if snap else None,
+        trigger_status=snap.trigger_status if snap else None,
+        consecutive_breach_days=snap.consecutive_breach_days if snap else 0,
+        regime=snap.regime if snap else None,
+        cvar_lower_5=float(snap.cvar_lower_5) if snap and snap.cvar_lower_5 is not None else None,
+        cvar_upper_95=float(snap.cvar_upper_95) if snap and snap.cvar_upper_95 is not None else None,
+    )
+
+
+# ── Batched summary (MUST come before /{profile}/* to avoid path capture) ──
+
+
+@router.get(
+    "/summary",
+    response_model=BatchRiskSummaryOut,
+    summary="Batched risk summary for multiple profiles",
+)
+async def get_risk_summary_batch(
+    profiles: str = Query(..., description="Comma-separated profile names"),
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> BatchRiskSummaryOut:
+    names = [p.strip() for p in profiles.split(",") if p.strip()]
+    if not names:
+        raise HTTPException(status_code=422, detail="profiles parameter must not be empty")
+    if len(names) > _MAX_BATCH_PROFILES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Too many profiles (max {_MAX_BATCH_PROFILES})",
+        )
+
+    # Single query: latest snapshot per requested profile
+    from sqlalchemy import func as sa_func
+
+    latest_subq = (
+        select(
+            PortfolioSnapshot.profile,
+            sa_func.max(PortfolioSnapshot.snapshot_date).label("max_date"),
+        )
+        .where(PortfolioSnapshot.profile.in_(names))
+        .group_by(PortfolioSnapshot.profile)
+        .subquery()
+    )
+    stmt = (
+        select(PortfolioSnapshot)
+        .join(
+            latest_subq,
+            (PortfolioSnapshot.profile == latest_subq.c.profile)
+            & (PortfolioSnapshot.snapshot_date == latest_subq.c.max_date),
+        )
+    )
+    result = await db.execute(stmt)
+    snaps_by_profile = {s.profile: s for s in result.scalars().all()}
+
+    results: dict[str, CVaRStatus | None] = {}
+    for name in names:
+        if name not in VALID_PROFILES:
+            results[name] = None
+        else:
+            snap = snaps_by_profile.get(name)
+            results[name] = _snap_to_cvar(name, snap)
+
+    return BatchRiskSummaryOut(
+        profiles=results,
+        computed_at=datetime.now(timezone.utc),
+        profile_count=len(results),
+    )
+
+
+# ── Single-profile endpoints ──────────────────────────────────────
+
 
 @router.get(
     "/{profile}/cvar",
@@ -62,18 +147,7 @@ async def get_cvar(
 ) -> CVaRStatus:
     _validate_profile(profile)
     snap = await get_latest_snapshot(db, profile)
-    return CVaRStatus(
-        profile=profile,
-        calc_date=snap.snapshot_date if snap else None,
-        cvar_current=snap.cvar_current if snap else None,
-        cvar_limit=snap.cvar_limit if snap else None,
-        cvar_utilized_pct=snap.cvar_utilized_pct if snap else None,
-        trigger_status=snap.trigger_status if snap else None,
-        consecutive_breach_days=snap.consecutive_breach_days if snap else 0,
-        regime=snap.regime if snap else None,
-        cvar_lower_5=float(snap.cvar_lower_5) if snap and snap.cvar_lower_5 is not None else None,
-        cvar_upper_95=float(snap.cvar_upper_95) if snap and snap.cvar_upper_95 is not None else None,
-    )
+    return _snap_to_cvar(profile, snap)
 
 
 @router.get(
