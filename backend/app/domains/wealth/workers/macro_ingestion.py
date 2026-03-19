@@ -20,6 +20,7 @@ import asyncio
 import logging
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
+from functools import lru_cache
 
 import structlog
 from sqlalchemy import text
@@ -56,9 +57,14 @@ def _obs_to_macro_data_rows(
                 val = Decimal(str(obs.value))
             except (InvalidOperation, ValueError):
                 continue
+            # asyncpg requires datetime.date, not str
+            try:
+                obs_date = date.fromisoformat(obs.date)
+            except (ValueError, TypeError):
+                continue
             rows.append({
                 "series_id": series_id,
-                "obs_date": obs.date,
+                "obs_date": obs_date,
                 "value": val,
                 "source": "fred",
                 "is_derived": False,
