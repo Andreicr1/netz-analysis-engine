@@ -496,6 +496,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/dd-reports/{report_id}/audit-trail",
+    "name": "get_dd_report_audit_trail"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/dd-reports/{report_id}/stream",
     "name": "stream_dd_report"
   },
@@ -883,6 +888,11 @@
     "method": "GET",
     "path": "/api/v1/universe",
     "name": "list_universe"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/universe/funds/{instrument_id}/audit-trail",
+    "name": "get_universe_audit_trail"
   },
   {
     "method": "GET",

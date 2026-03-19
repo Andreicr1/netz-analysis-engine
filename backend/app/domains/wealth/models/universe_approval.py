@@ -16,6 +16,7 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db.base import Base, OrganizationScopedMixin
+from app.domains.wealth.enums import UniverseDecision  # noqa: F401 — used as column doc reference
 
 
 class UniverseApproval(OrganizationScopedMixin, Base):
@@ -37,7 +38,7 @@ class UniverseApproval(OrganizationScopedMixin, Base):
     )
     decision: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="pending"
-    )
+    )  # values: see UniverseDecision enum
     rationale: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[str | None] = mapped_column(String(128))
     decided_by: Mapped[str | None] = mapped_column(String(128))

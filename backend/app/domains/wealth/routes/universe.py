@@ -13,8 +13,11 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.db.audit import get_audit_log, write_audit_event
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
+from app.domains.wealth.enums import UniverseDecision
+from app.domains.wealth.schemas.dd_report import AuditEventRead
 from app.domains.wealth.schemas.universe import (
     UniverseApprovalDecision,
     UniverseApprovalRead,
@@ -26,7 +29,7 @@ logger = structlog.get_logger()
 
 router = APIRouter(prefix="/universe", tags=["universe"])
 
-_APPROVE_DECISIONS = {"approved", "watchlist"}
+_APPROVE_DECISIONS = {UniverseDecision.approved.value, UniverseDecision.watchlist.value}
 
 
 @router.get(
@@ -127,7 +130,7 @@ async def approve_fund(
 
     svc = UniverseService()
 
-    def _approve() -> UniverseApprovalRead:
+    def _approve() -> tuple[UniverseApprovalRead, str]:
         from app.core.db.session import sync_session_factory
 
         with sync_session_factory() as sync_db:
@@ -150,7 +153,7 @@ async def approve_fund(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"No pending approval found for fund {instrument_id}",
                 )
-            if approval.decision != "pending":
+            if approval.decision != UniverseDecision.pending:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"Approval already decided: {approval.decision}",
@@ -161,6 +164,7 @@ async def approve_fund(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=f"Invalid decision '{body.decision}'. Allowed values: {sorted(_APPROVE_DECISIONS)}",
                 )
+            old_decision = str(approval.decision)
             decision = body.decision
             try:
                 updated = svc.approve_fund(
@@ -177,9 +181,20 @@ async def approve_fund(
                 )
 
             sync_db.commit()
-            return UniverseApprovalRead.model_validate(updated)
+            return UniverseApprovalRead.model_validate(updated), old_decision
 
-    return await asyncio.to_thread(_approve)
+    approval_result, old_decision = await asyncio.to_thread(_approve)
+    await write_audit_event(
+        db,
+        actor_id=actor.actor_id,
+        action="universe.approve",
+        entity_type="UniverseApproval",
+        entity_id=str(instrument_id),
+        before={"decision": old_decision},
+        after={"decision": body.decision, "rationale": body.rationale},
+    )
+    await db.commit()
+    return approval_result
 
 
 @router.post(
@@ -202,7 +217,7 @@ async def reject_fund(
     """
     _require_ic_role(actor)
 
-    if body.decision != "rejected":
+    if body.decision != UniverseDecision.rejected.value:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Invalid decision '{body.decision}' for reject endpoint. Expected 'rejected'.",
@@ -213,7 +228,7 @@ async def reject_fund(
 
     svc = UniverseService()
 
-    def _reject() -> UniverseApprovalRead:
+    def _reject() -> tuple[UniverseApprovalRead, str]:
         from app.core.db.session import sync_session_factory
 
         with sync_session_factory() as sync_db:
@@ -235,17 +250,18 @@ async def reject_fund(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"No pending approval found for fund {instrument_id}",
                 )
-            if approval.decision != "pending":
+            if approval.decision != UniverseDecision.pending:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=f"Approval already decided: {approval.decision}",
                 )
 
+            old_decision = str(approval.decision)
             try:
                 updated = svc.approve_fund(
                     sync_db,
                     approval_id=approval.id,
-                    decision="rejected",
+                    decision=UniverseDecision.rejected.value,
                     rationale=body.rationale,
                     decided_by=actor.actor_id,
                 )
@@ -256,9 +272,46 @@ async def reject_fund(
                 )
 
             sync_db.commit()
-            return UniverseApprovalRead.model_validate(updated)
+            return UniverseApprovalRead.model_validate(updated), old_decision
 
-    return await asyncio.to_thread(_reject)
+    rejection_result, old_decision = await asyncio.to_thread(_reject)
+    await write_audit_event(
+        db,
+        actor_id=actor.actor_id,
+        action="universe.reject",
+        entity_type="UniverseApproval",
+        entity_id=str(instrument_id),
+        before={"decision": old_decision},
+        after={"decision": "rejected", "rationale": body.rationale},
+    )
+    await db.commit()
+    return rejection_result
+
+
+@router.get(
+    "/funds/{instrument_id}/audit-trail",
+    response_model=list[AuditEventRead],
+    summary="Get audit trail for a universe fund approval",
+)
+async def get_universe_audit_trail(
+    instrument_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> list[AuditEventRead]:
+    """Get the full audit trail for a universe fund (approve/reject history)."""
+    _require_ic_role(actor)
+    events = await get_audit_log(db, entity_id=str(instrument_id), entity_type="UniverseApproval")
+    return [
+        AuditEventRead(
+            id=str(e.id),
+            action=e.action,
+            actor_id=e.actor_id,
+            before=e.before_state,
+            after=e.after_state,
+            created_at=e.created_at.isoformat() if e.created_at else None,
+        )
+        for e in events
+    ]
 
 
 def _require_ic_role(actor: Actor) -> None:

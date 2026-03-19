@@ -27,6 +27,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db.base import Base, OrganizationScopedMixin
+from app.domains.wealth.enums import DDReportStatus  # noqa: F401 — used as column doc reference
 
 
 class DDReport(OrganizationScopedMixin, Base):
@@ -46,7 +47,7 @@ class DDReport(OrganizationScopedMixin, Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     status: Mapped[str] = mapped_column(
         String(30), nullable=False, server_default="draft"
-    )
+    )  # values: see DDReportStatus enum
     config_snapshot: Mapped[dict | None] = mapped_column(JSONB)
     confidence_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     decision_anchor: Mapped[str | None] = mapped_column(String(20))

@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.db.audit import get_audit_log, write_audit_event
 from app.core.jobs.sse import create_job_stream
 from app.core.jobs.tracker import (
     publish_event,
@@ -28,9 +29,11 @@ from app.core.jobs.tracker import (
 )
 from app.core.security.clerk_auth import Actor, CurrentUser, get_current_user, require_role
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
+from app.domains.wealth.enums import DDReportStatus
 from app.domains.wealth.models.dd_report import DDReport
 from app.domains.wealth.routes.common import _get_content_semaphore, require_content_slot
 from app.domains.wealth.schemas.dd_report import (
+    AuditEventRead,
     DDReportApproveRequest,
     DDReportCreate,
     DDReportRead,
@@ -86,7 +89,7 @@ async def trigger_dd_report(
     )
     existing = existing_result.scalar_one_or_none()
 
-    if existing and existing.status == "generating":
+    if existing and existing.status == DDReportStatus.generating:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="DD Report generation already in progress for this fund",
@@ -113,7 +116,7 @@ async def trigger_dd_report(
         instrument_id=fund_id,
         organization_id=org_id,
         version=next_version,
-        status="generating",
+        status=DDReportStatus.generating.value,
         is_current=True,
         config_snapshot=body.config_overrides if body else None,
         created_by=user.user_id,
@@ -170,6 +173,31 @@ async def list_dd_reports(
 
 
 @router.get(
+    "/{report_id}/audit-trail",
+    response_model=list[AuditEventRead],
+    summary="Get audit trail for a DD Report",
+)
+async def get_dd_report_audit_trail(
+    report_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    _actor: Actor = Depends(require_role(Role.INVESTMENT_TEAM)),
+) -> list[AuditEventRead]:
+    """Get the full audit trail for a DD Report (approve/reject history)."""
+    events = await get_audit_log(db, entity_id=str(report_id), entity_type="DDReport")
+    return [
+        AuditEventRead(
+            id=str(e.id),
+            action=e.action,
+            actor_id=e.actor_id,
+            before=e.before_state,
+            after=e.after_state,
+            created_at=e.created_at.isoformat() if e.created_at else None,
+        )
+        for e in events
+    ]
+
+
+@router.get(
     "/{report_id}",
     response_model=DDReportRead,
     summary="Get full DD Report with chapters",
@@ -219,13 +247,13 @@ async def regenerate_dd_report(
             detail=f"DD Report {report_id} not found",
         )
 
-    if report.status == "generating":
+    if report.status == DDReportStatus.generating:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="DD Report generation already in progress",
         )
 
-    report.status = "generating"
+    report.status = DDReportStatus.generating.value
     await db.flush()
 
     job_id = f"dd:{org_id}:{report_id}"
@@ -275,7 +303,7 @@ async def approve_dd_report(
             detail=f"DD Report {report_id} not found",
         )
 
-    if report.status != "pending_approval":
+    if report.status != DDReportStatus.pending_approval:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Report status is '{report.status}', expected 'pending_approval'",
@@ -287,7 +315,8 @@ async def approve_dd_report(
             detail="Self-approval is not allowed",
         )
 
-    report.status = "approved"
+    old_status = report.status
+    report.status = DDReportStatus.approved.value
     report.approved_by = actor.actor_id
     report.approved_at = datetime.now(UTC)
     report.rejection_reason = None
@@ -296,6 +325,15 @@ async def approve_dd_report(
         report_id=str(report_id),
         approved_by=actor.actor_id,
         rationale=body.rationale,
+    )
+    await write_audit_event(
+        db,
+        actor_id=actor.actor_id,
+        action="dd_report.approve",
+        entity_type="DDReport",
+        entity_id=str(report.id),
+        before={"status": old_status},
+        after={"status": "approved", "rationale": body.rationale},
     )
     await db.commit()
 
@@ -324,16 +362,26 @@ async def reject_dd_report(
             detail=f"DD Report {report_id} not found",
         )
 
-    if report.status != "pending_approval":
+    if report.status != DDReportStatus.pending_approval:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Report status is '{report.status}', expected 'pending_approval'",
         )
 
-    report.status = "draft"
+    old_status = report.status
+    report.status = DDReportStatus.draft.value
     report.rejection_reason = body.reason
     report.approved_by = None
     report.approved_at = None
+    await write_audit_event(
+        db,
+        actor_id=actor.actor_id,
+        action="dd_report.reject",
+        entity_type="DDReport",
+        entity_id=str(report.id),
+        before={"status": old_status},
+        after={"status": "draft", "rejection_reason": body.reason},
+    )
     await db.commit()
 
     return DDReportSummary.model_validate(report)

@@ -65,3 +65,14 @@ class DDReportRegenerate(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     chapter_tags: list[str] | None = None
+
+
+class AuditEventRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    action: str
+    actor_id: str | None
+    before: dict | None
+    after: dict | None
+    created_at: str | None
