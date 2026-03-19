@@ -45,7 +45,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev,ai,quant]"
       - name: Lint
         run: python -m ruff check .
         working-directory: backend
