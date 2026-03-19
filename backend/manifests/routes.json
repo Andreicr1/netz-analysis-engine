@@ -281,6 +281,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/analytics/strategy-drift/{instrument_id}/export",
+    "name": "export_drift_history"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/analytics/strategy-drift/{instrument_id}/history",
     "name": "get_drift_history"
   },

@@ -16,6 +16,7 @@ class PortfolioSummary(BaseModel):
     regime: str | None = None
     core_weight: Decimal | None = None
     satellite_weight: Decimal | None = None
+    computed_at: datetime | None = None
 
 
 class PortfolioSnapshotRead(BaseModel):
@@ -41,6 +42,7 @@ class PortfolioSnapshotRead(BaseModel):
     # Both are None until the Bayesian CVaR worker has run for the snapshot date.
     cvar_lower_5: Decimal | None = None
     cvar_upper_95: Decimal | None = None
+    computed_at: datetime | None = None
 
 
 class RebalanceRequest(BaseModel):

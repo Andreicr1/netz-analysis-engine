@@ -18,7 +18,7 @@ from app.domains.wealth.schemas.allocation import (
     TacticalPositionRead,
     TacticalPositionUpdate,
 )
-from app.routers.common import get_latest_snapshot, validate_profile as _validate_profile
+from app.domains.wealth.routes.common import get_latest_snapshot, validate_profile as _validate_profile
 
 router = APIRouter(prefix="/allocation")
 

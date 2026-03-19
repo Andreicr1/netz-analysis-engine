@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -16,8 +16,8 @@ from app.domains.wealth.schemas.portfolio import (
     RebalanceEventRead,
     RebalanceRequest,
 )
-from app.routers.common import VALID_PROFILES, get_latest_snapshot
-from app.routers.common import validate_profile as _validate_profile
+from app.domains.wealth.routes.common import VALID_PROFILES, get_latest_snapshot
+from app.domains.wealth.routes.common import validate_profile as _validate_profile
 
 router = APIRouter(prefix="/portfolios")
 
@@ -33,6 +33,7 @@ def _snapshot_to_summary(profile: str, snap: PortfolioSnapshot | None) -> Portfo
         regime=snap.regime if snap else None,
         core_weight=snap.core_weight if snap else None,
         satellite_weight=snap.satellite_weight if snap else None,
+        computed_at=datetime.combine(snap.snapshot_date, datetime.min.time(), tzinfo=UTC) if snap else None,
     )
 
 
@@ -84,7 +85,9 @@ async def get_snapshot(
     snap = await get_latest_snapshot(db, profile)
     if snap is None:
         return None
-    return PortfolioSnapshotRead.model_validate(snap)
+    result = PortfolioSnapshotRead.model_validate(snap)
+    result.computed_at = datetime.combine(snap.snapshot_date, datetime.min.time(), tzinfo=UTC)
+    return result
 
 
 @router.get(
@@ -110,7 +113,12 @@ async def get_history(
         stmt = stmt.where(PortfolioSnapshot.snapshot_date <= to_date)
     stmt = stmt.order_by(PortfolioSnapshot.snapshot_date).offset(offset).limit(limit)
     result = await db.execute(stmt)
-    return [PortfolioSnapshotRead.model_validate(row) for row in result.scalars().all()]
+    snapshots = []
+    for row in result.scalars().all():
+        out = PortfolioSnapshotRead.model_validate(row)
+        out.computed_at = datetime.combine(row.snapshot_date, datetime.min.time(), tzinfo=UTC)
+        snapshots.append(out)
+    return snapshots
 
 
 @router.post(
