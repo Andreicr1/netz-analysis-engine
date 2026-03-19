@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
 	import {
-		StatusBadge, EmptyState, PageHeader,
+		Badge, StatusBadge, EmptyState, PageHeader,
 		RegimeBanner, SectionCard,
 		formatDateTime,
 	} from "@netz/ui";
@@ -62,9 +62,9 @@
 		regime: string | null;
 	};
 
-	// Derived data — use $state.raw for API data loaded at page level
-	let portfolios = $state.raw(data.portfolios as PortfolioSummary[] | null);
-	let modelPortfolios = $state.raw(data.modelPortfolios as ModelPortfolio[] | null);
+	// Derived data from server load
+	let portfolios = $derived(data.portfolios as PortfolioSummary[] | null);
+	let modelPortfolios = $derived(data.modelPortfolios as ModelPortfolio[] | null);
 
 	// Live risk data from the store — single source of truth
 	const liveCvarByProfile = $derived(riskStore.cvarByProfile);
@@ -120,27 +120,29 @@
 	);
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-[var(--netz-space-section-gap)] p-[var(--netz-space-page-gutter)]">
 	<!-- Regime Banner (renders nothing when RISK_ON) -->
 	<RegimeBanner regime={currentRegime} macroHref="/macro" />
 
 	<!-- Page Header -->
-	<div class="flex items-center justify-between">
-		<div>
-			<h1 class="text-2xl font-bold text-[var(--netz-text-primary)]">Wealth OS — Dashboard</h1>
-			<p class="mt-1 text-sm text-[var(--netz-text-muted)]">{subtitle}</p>
-		</div>
-		{#if currentRegime && currentRegime !== "RISK_ON"}
-			<StatusBadge status={currentRegime} resolve={resolveWealthStatus} />
-		{/if}
-	</div>
+	<PageHeader title="Wealth OS - Dashboard">
+		{#snippet actions()}
+			{#if currentRegime && currentRegime !== "RISK_ON"}
+				<StatusBadge status={currentRegime} resolve={resolveWealthStatus} />
+			{/if}
+		{/snippet}
+	</PageHeader>
+	<p class="-mt-3 text-sm text-[var(--netz-text-muted)]">{subtitle}</p>
 
 	<!-- Portfolio Cards -->
 	<section>
 		{#if cards.length > 0}
 			<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
 				{#each cards as card (card.profile)}
-					<a href="/portfolios/{card.profile}" class="block transition-transform hover:scale-[1.01]">
+					<a
+						href="/portfolios/{card.profile}"
+						class="block rounded-[var(--netz-radius-xl)] transition-transform duration-[var(--netz-duration-fast)] hover:-translate-y-0.5"
+					>
 						<PortfolioCard
 							name={card.name}
 							profile={card.profile}
@@ -167,27 +169,25 @@
 		<SectionCard title="Drift Alerts" class="lg:col-span-3">
 			{#snippet actions()}
 				{#if riskStore.computedAt}
-					<span class="text-xs text-[var(--netz-text-muted)]">
+					<span class="text-xs font-medium uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">
 						{formatDateTime(riskStore.computedAt)}
 					</span>
 				{/if}
 			{/snippet}
 			{#if riskStore.driftAlerts.dtw_alerts.length > 0 || riskStore.driftAlerts.behavior_change_alerts.length > 0}
-				<div class="space-y-2">
+				<div class="space-y-3">
 					{#each riskStore.driftAlerts.dtw_alerts as alert (alert.instrument_name)}
-						<div class="flex items-center justify-between rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] p-3">
+						<div class="flex items-center justify-between rounded-[var(--netz-radius-lg)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] p-4 shadow-[var(--netz-shadow-1)]">
 							<div class="space-y-0.5">
 								<p class="text-sm font-medium text-[var(--netz-text-primary)]">{alert.instrument_name}</p>
 								<p class="text-xs text-[var(--netz-text-muted)]">DTW score: {alert.dtw_score}</p>
 							</div>
 							<div class="flex items-center gap-2">
-								<span class="inline-flex items-center rounded-full bg-[var(--netz-status-warning,#f59e0b)]/15 px-2 py-0.5 text-xs font-medium text-[var(--netz-status-warning,#f59e0b)]">
-									DTW Drift
-								</span>
+								<Badge variant="outline">DTW Drift</Badge>
 								{#if alert.instrument_id}
 									<a
 										href="/portfolios/{alert.instrument_id}"
-										class="inline-flex h-7 items-center rounded-md border border-[var(--netz-border)] px-2 text-xs font-medium text-[var(--netz-text-primary)] hover:bg-[var(--netz-surface-alt)] transition-colors"
+										class="inline-flex h-[var(--netz-space-control-height-sm)] items-center rounded-[var(--netz-radius-md)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] px-3 text-xs font-medium text-[var(--netz-text-primary)] shadow-[var(--netz-shadow-1)] transition-[background-color,border-color,color] duration-[var(--netz-duration-fast)] hover:border-[var(--netz-border)] hover:bg-[var(--netz-surface-highlight)]"
 									>
 										Review
 									</a>
@@ -196,7 +196,7 @@
 						</div>
 					{/each}
 					{#each riskStore.driftAlerts.behavior_change_alerts as alert (alert.instrument_name)}
-						<div class="flex items-center justify-between rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] p-3">
+						<div class="flex items-center justify-between rounded-[var(--netz-radius-lg)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] p-4 shadow-[var(--netz-shadow-1)]">
 							<div class="space-y-0.5">
 								<p class="text-sm font-medium text-[var(--netz-text-primary)]">{alert.instrument_name}</p>
 								<p class="text-xs text-[var(--netz-text-muted)]">
@@ -204,13 +204,11 @@
 								</p>
 							</div>
 							<div class="flex items-center gap-2">
-								<span class="inline-flex items-center rounded-full bg-[var(--netz-status-error)]/15 px-2 py-0.5 text-xs font-medium text-[var(--netz-status-error)]">
-									{alert.severity}
-								</span>
+								<Badge variant="destructive">{alert.severity}</Badge>
 								{#if alert.instrument_id}
 									<a
 										href="/portfolios/{alert.instrument_id}"
-										class="inline-flex h-7 items-center rounded-md border border-[var(--netz-border)] px-2 text-xs font-medium text-[var(--netz-text-primary)] hover:bg-[var(--netz-surface-alt)] transition-colors"
+										class="inline-flex h-[var(--netz-space-control-height-sm)] items-center rounded-[var(--netz-radius-md)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] px-3 text-xs font-medium text-[var(--netz-text-primary)] shadow-[var(--netz-shadow-1)] transition-[background-color,border-color,color] duration-[var(--netz-duration-fast)] hover:border-[var(--netz-border)] hover:bg-[var(--netz-surface-highlight)]"
 									>
 										Review
 									</a>
@@ -229,12 +227,12 @@
 
 		<!-- Recent Activity (40%) -->
 		<SectionCard title="Quick Actions" class="lg:col-span-2">
-			<div class="space-y-2">
+			<div class="space-y-3">
 				<!-- Portfolio links -->
 				{#each cards as card (card.profile)}
 					<a
 						href="/portfolios/{card.profile}"
-						class="flex items-center justify-between rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] p-3 transition-colors hover:bg-[var(--netz-surface-elevated)]"
+						class="flex items-center justify-between rounded-[var(--netz-radius-lg)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] p-4 shadow-[var(--netz-shadow-1)] transition-[background-color,border-color,transform] duration-[var(--netz-duration-fast)] hover:border-[var(--netz-border)] hover:bg-[var(--netz-surface-highlight)]"
 					>
 						<div class="space-y-0.5">
 							<p class="text-sm font-medium text-[var(--netz-text-primary)]">{card.name}</p>
@@ -249,13 +247,9 @@
 							</p>
 						</div>
 						{#if card.triggerStatus === "breach"}
-							<span class="inline-flex items-center rounded-full bg-[var(--netz-status-error)]/15 px-2 py-0.5 text-xs font-medium text-[var(--netz-status-error)]">
-								Action Required
-							</span>
+							<Badge variant="destructive">Action Required</Badge>
 						{:else if card.triggerStatus === "warning"}
-							<span class="inline-flex items-center rounded-full bg-[var(--netz-status-warning,#f59e0b)]/15 px-2 py-0.5 text-xs font-medium text-[var(--netz-status-warning,#f59e0b)]">
-								Monitor
-							</span>
+							<Badge variant="outline">Monitor</Badge>
 						{:else}
 							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-[var(--netz-text-muted)]"><path d="m9 18 6-6-6-6"/></svg>
 						{/if}
@@ -265,7 +259,7 @@
 				<!-- Allocation shortcut -->
 				<a
 					href="/allocation"
-					class="flex items-center justify-between rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] p-3 transition-colors hover:bg-[var(--netz-surface-elevated)]"
+					class="flex items-center justify-between rounded-[var(--netz-radius-lg)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] p-4 shadow-[var(--netz-shadow-1)] transition-[background-color,border-color,transform] duration-[var(--netz-duration-fast)] hover:border-[var(--netz-border)] hover:bg-[var(--netz-surface-highlight)]"
 				>
 					<div class="space-y-0.5">
 						<p class="text-sm font-medium text-[var(--netz-text-primary)]">Strategic Allocation</p>

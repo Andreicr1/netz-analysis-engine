@@ -4,8 +4,8 @@
 -->
 <script lang="ts">
 	import {
-		EmptyState, PageHeader, StatusBadge, MetricCard, SectionCard,
-		UtilizationBar, PeriodSelector, Dialog, Button, formatDate, formatNumber,
+		Badge, EmptyState, PageHeader, StatusBadge, MetricCard, SectionCard,
+		UtilizationBar, PeriodSelector, Dialog, Button, Input, Select, Textarea, formatDate, formatNumber,
 	} from "@netz/ui";
 	import { ActionButton, ConfirmDialog, FormField } from "@netz/ui";
 	import { page } from "$app/state";
@@ -31,7 +31,7 @@
 		created_at: string;
 	};
 
-	let portfolios = $state.raw((data.modelPortfolios ?? []) as ModelPortfolio[]);
+	let portfolios = $derived((data.modelPortfolios ?? []) as ModelPortfolio[]);
 
 	// Selected portfolio from URL param
 	const selectedId = $derived(page.url.searchParams.get("portfolio"));
@@ -164,35 +164,35 @@
 	}
 </script>
 
-<div class="flex h-full">
+<div class="flex h-full bg-transparent">
 	<!-- Sidebar: portfolio list (240px) -->
-	<div class="flex w-60 shrink-0 flex-col border-r border-[var(--netz-border)] bg-[var(--netz-surface)]">
-		<div class="flex items-center justify-between border-b border-[var(--netz-border)] px-4 py-3">
-			<h2 class="text-xs font-semibold uppercase tracking-wider text-[var(--netz-text-muted)]">Portfólios</h2>
-			<button
-				class="rounded-md bg-[var(--netz-brand-primary)] px-2.5 py-1 text-xs font-medium text-white hover:opacity-90"
+	<div class="flex w-72 shrink-0 flex-col border-r border-[var(--netz-border-subtle)] bg-[var(--netz-surface-panel)]">
+		<div class="flex items-center justify-between border-b border-[var(--netz-border-subtle)] bg-[var(--netz-surface-highlight)] px-5 py-4">
+			<div>
+				<p class="netz-ui-kicker">Library</p>
+				<h2 class="mt-2 text-sm font-semibold text-[var(--netz-text-primary)]">Model Portfolios</h2>
+			</div>
+			<Button
+				size="sm"
 				onclick={() => { resetCreateForm(); showCreate = true; }}
 			>
 				+ Novo
-			</button>
+			</Button>
 		</div>
 
-		<div class="flex-1 overflow-y-auto p-2">
+		<div class="flex-1 overflow-y-auto p-3">
 			{#each portfolios as portfolio (portfolio.id)}
 				<button
-					class="mb-1 w-full rounded-lg p-3 text-left transition-colors {portfolio.id === selectedPortfolio?.id
-						? 'border-l-2 border-[var(--netz-brand-primary)] bg-[var(--netz-surface-alt)]'
-						: 'hover:bg-[var(--netz-surface-alt)]'}"
+					class="mb-2 w-full rounded-[var(--netz-radius-lg)] border p-4 text-left transition-[background-color,border-color,box-shadow] duration-[var(--netz-duration-fast)] {portfolio.id === selectedPortfolio?.id
+						? 'border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] shadow-[var(--netz-shadow-2)]'
+						: 'border-transparent bg-transparent hover:border-[var(--netz-border-subtle)] hover:bg-[var(--netz-accent-soft)]'}"
 					onclick={() => selectPortfolio(portfolio.id)}
 				>
 					<div class="flex items-center justify-between">
 						<p class="text-sm font-semibold text-[var(--netz-text-primary)]">{portfolio.display_name}</p>
-						<span
-							class="rounded-full px-1.5 py-0.5 text-[10px] font-semibold capitalize"
-							style="color: {profileColors[portfolio.profile] ?? 'var(--netz-text-muted)'}; border: 1px solid currentColor;"
-						>
+						<Badge variant="secondary" class="capitalize">
 							{portfolio.profile}
-						</span>
+						</Badge>
 					</div>
 					<div class="mt-1 flex items-center gap-2 text-xs text-[var(--netz-text-muted)]">
 						<span>NAV {formatNumber(portfolio.inception_nav, 0, "en-US")}</span>
@@ -205,20 +205,11 @@
 	</div>
 
 	<!-- Main: portfolio detail -->
-	<div class="flex-1 overflow-y-auto p-6">
+	<div class="flex-1 overflow-y-auto p-[var(--netz-space-page-gutter)]">
 		{#if selectedPortfolio}
 			<!-- Header -->
-			<div class="mb-6 flex items-start justify-between">
-				<div>
-					<h1 class="text-2xl font-bold text-[var(--netz-text-primary)]">{selectedPortfolio.display_name}</h1>
-					<p class="mt-1 text-sm text-[var(--netz-text-muted)]">
-						Model Portfolio · {selectedPortfolio.benchmark_composite ?? "—"}
-						{#if selectedPortfolio.inception_date}
-							· Última revisão: {formatDate(selectedPortfolio.inception_date)}
-						{/if}
-					</p>
-				</div>
-				<div class="flex gap-2">
+			<PageHeader title={selectedPortfolio.display_name} class="pt-0">
+				{#snippet actions()}
 					<ActionButton
 						size="sm"
 						variant="outline"
@@ -245,8 +236,14 @@
 					>
 						Construir portfólio
 					</ActionButton>
-				</div>
-			</div>
+				{/snippet}
+			</PageHeader>
+			<p class="mb-6 -mt-2 text-sm text-[var(--netz-text-muted)]">
+				Model Portfolio · {selectedPortfolio.benchmark_composite ?? "—"}
+				{#if selectedPortfolio.inception_date}
+					· Última revisão: {formatDate(selectedPortfolio.inception_date)}
+				{/if}
+			</p>
 
 			<!-- 6 KPI Cards -->
 			<div class="mb-6 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
@@ -311,40 +308,56 @@
 </div>
 
 <!-- Create Model Portfolio Dialog -->
-<Dialog bind:open={showCreate} title="Create Model Portfolio">
+<Dialog bind:open={showCreate}>
 	<form onsubmit={(e) => { e.preventDefault(); createPortfolio(); }} class="space-y-4">
+		<div class="space-y-2">
+			<p class="netz-ui-kicker">Create</p>
+			<h2 class="text-lg font-semibold tracking-[-0.02em] text-[var(--netz-text-primary)]">
+				Create Model Portfolio
+			</h2>
+		</div>
 		<FormField label="Name" required>
-			<input
+			<Input
 				type="text"
-				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
-				bind:value={createForm.display_name}
+				value={createForm.display_name}
+				oninput={(event) => {
+					createForm = { ...createForm, display_name: (event.currentTarget as HTMLInputElement).value };
+				}}
 				placeholder="e.g. Conservative Income"
 			/>
 		</FormField>
 		<FormField label="Profile" required>
-			<select
-				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
+			<Select
 				bind:value={createForm.profile}
+				options={[
+					{ value: "conservative", label: "Conservative" },
+					{ value: "moderate", label: "Moderate" },
+					{ value: "growth", label: "Growth" },
+				]}
 			>
-				<option value="conservative">Conservative</option>
-				<option value="moderate">Moderate</option>
-				<option value="growth">Growth</option>
-			</select>
+			</Select>
 		</FormField>
 		<FormField label="Benchmark Composite">
-			<input
+			<Input
 				type="text"
-				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
-				bind:value={createForm.benchmark_composite}
+				value={createForm.benchmark_composite}
+				oninput={(event) => {
+					createForm = {
+						...createForm,
+						benchmark_composite: (event.currentTarget as HTMLInputElement).value,
+					};
+				}}
 				placeholder="e.g. 60% IVV + 40% AGG"
 			/>
 		</FormField>
 		<FormField label="Description">
-			<textarea
-				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
-				bind:value={createForm.description}
+			<Textarea
+				value={createForm.description}
+				oninput={(event) => {
+					createForm = { ...createForm, description: (event.currentTarget as HTMLTextAreaElement).value };
+				}}
 				rows={2}
-			></textarea>
+			></Textarea>
 		</FormField>
 		{#if createError}
 			<p class="text-sm text-[var(--netz-status-error)]">{createError}</p>

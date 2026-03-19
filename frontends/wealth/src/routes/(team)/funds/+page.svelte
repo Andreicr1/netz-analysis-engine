@@ -4,7 +4,7 @@
   + ContextPanel side panel with FundDetailPanel.
 -->
 <script lang="ts">
-	import { PageHeader, EmptyState, formatAUM as formatSharedAUM, formatDate as formatSharedDate, formatNumber } from "@netz/ui";
+	import { Badge, Button, EmptyState, PageHeader, formatAUM as formatSharedAUM, formatDate as formatSharedDate, formatNumber } from "@netz/ui";
 	import FundDetailPanel from "$lib/components/FundDetailPanel.svelte";
 	import type { PageData } from "./$types";
 
@@ -35,7 +35,7 @@
 
 	// ── Data ────────────────────────────────────────────────────────────────
 
-	let funds = $state.raw((data.funds ?? []) as FundRow[]);
+	let funds = $derived((data.funds ?? []) as FundRow[]);
 
 	// ── Status tabs ─────────────────────────────────────────────────────────
 
@@ -167,80 +167,76 @@
 	}
 </script>
 
-<div class="space-y-0 p-6">
+<div class="space-y-6 p-[var(--netz-space-page-gutter)]">
 	<!-- Page Header -->
 	<PageHeader title="Fund Universe">
 		{#snippet actions()}
-			<button
-				class="inline-flex h-9 items-center gap-1.5 rounded-md bg-[var(--netz-brand-primary)] px-4 text-sm font-medium text-white transition-colors hover:opacity-90 active:opacity-80"
-			>
+			<Button class="gap-1.5">
 				<svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
 					<path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
 				</svg>
 				Adicionar fundo
-			</button>
+			</Button>
 		{/snippet}
 	</PageHeader>
 
-	<!-- Status Tabs -->
-	<div class="flex items-center gap-1 border-b border-[var(--netz-border)] pb-0">
-		{#each statusTabs as tab (tab.value)}
-			<button
-				class="relative flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors"
-				class:text-[var(--netz-brand-primary)]={activeStatusTab === tab.value}
-				class:text-[var(--netz-text-muted)]={activeStatusTab !== tab.value}
-				onclick={() => (activeStatusTab = tab.value)}
-			>
-				{tab.label}
-				<!-- Count badge -->
-				{#if tabCounts[tab.value] > 0}
-					<span
-						class="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-xs font-semibold"
-						class:bg-[var(--netz-brand-primary)]={activeStatusTab === tab.value}
-						class:text-white={activeStatusTab === tab.value}
-						class:bg-[var(--netz-surface-inset)]={activeStatusTab !== tab.value}
-						class:text-[var(--netz-text-muted)]={activeStatusTab !== tab.value}
-					>
-						{tabCounts[tab.value]}
-					</span>
-				{/if}
-				<!-- Active underline -->
-				{#if activeStatusTab === tab.value}
-					<span class="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--netz-brand-primary)]"></span>
-				{/if}
-			</button>
-		{/each}
-	</div>
-
 	<!-- Fund Table -->
-	<div class="rounded-b-lg border-x border-b border-[var(--netz-border)] bg-[var(--netz-surface-elevated)]">
+	<div class="overflow-hidden rounded-[var(--netz-radius-xl)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-panel)] shadow-[var(--netz-shadow-card)]">
+		<!-- Status Tabs -->
+		<div class="border-b border-[var(--netz-border-subtle)] bg-[var(--netz-surface-highlight)] px-3 py-3">
+			<div class="flex flex-wrap items-center gap-2">
+				{#each statusTabs as tab (tab.value)}
+					<button
+						class="inline-flex min-h-[var(--netz-space-control-height-md)] items-center gap-2 rounded-[var(--netz-radius-md)] border px-3.5 py-2 text-sm font-medium tracking-[-0.01em] transition-[color,background-color,border-color,box-shadow] duration-[var(--netz-duration-fast)]"
+						class:border-[var(--netz-border)]={activeStatusTab === tab.value}
+						class:bg-[var(--netz-surface-elevated)]={activeStatusTab === tab.value}
+						class:text-[var(--netz-text-primary)]={activeStatusTab === tab.value}
+						class:shadow-[var(--netz-shadow-1)]={activeStatusTab === tab.value}
+						class:border-transparent={activeStatusTab !== tab.value}
+						class:bg-transparent={activeStatusTab !== tab.value}
+						class:text-[var(--netz-text-muted)]={activeStatusTab !== tab.value}
+						class:hover:bg-[var(--netz-accent-soft)]={activeStatusTab !== tab.value}
+						class:hover:text-[var(--netz-text-secondary)]={activeStatusTab !== tab.value}
+						onclick={() => (activeStatusTab = tab.value)}
+					>
+						{tab.label}
+						{#if tabCounts[tab.value] > 0}
+							<Badge variant={activeStatusTab === tab.value ? "default" : "secondary"}>
+								{tabCounts[tab.value]}
+							</Badge>
+						{/if}
+					</button>
+				{/each}
+			</div>
+		</div>
+
 		{#if filteredFunds.length > 0}
 			<div class="overflow-x-auto">
 				<table class="w-full min-w-[800px] text-sm">
 					<thead>
-						<tr class="border-b border-[var(--netz-border)]">
-							<th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--netz-text-muted)]">
+						<tr class="border-b border-[var(--netz-border-subtle)] bg-[var(--netz-surface-highlight)]">
+							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">
 								Fundo
 							</th>
-							<th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--netz-text-muted)]">
+							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">
 								Gestor
 							</th>
-							<th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-[var(--netz-text-muted)]">
+							<th class="px-4 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">
 								AUM
 							</th>
-							<th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--netz-text-muted)]">
+							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">
 								Estratégia
 							</th>
-							<th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--netz-text-muted)]">
+							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">
 								Status
 							</th>
-							<th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--netz-text-muted)]">
+							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">
 								DD Report
 							</th>
-							<th class="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-[var(--netz-text-muted)]">
+							<th class="px-4 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">
 								Score
 							</th>
-							<th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--netz-text-muted)]">
+							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">
 								Atualizado
 							</th>
 						</tr>
@@ -248,8 +244,8 @@
 					<tbody>
 						{#each filteredFunds as fund (fund.id)}
 							<tr
-								class="cursor-pointer border-b border-[var(--netz-border)] transition-colors last:border-b-0 hover:bg-[var(--netz-surface-inset)]"
-								class:bg-[var(--netz-surface-inset)]={selectedFund?.id === fund.id && panelOpen}
+								class="cursor-pointer border-b border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] transition-colors last:border-b-0 hover:bg-[var(--netz-accent-soft)]"
+								class:bg-[var(--netz-accent-soft)]={selectedFund?.id === fund.id && panelOpen}
 								onclick={() => openPanel(fund)}
 							>
 								<!-- Fundo: name + subcategory -->
@@ -276,7 +272,7 @@
 								<td class="px-4 py-3">
 									{#if fund.strategy}
 										<span
-											class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+											class="inline-flex items-center rounded-[var(--netz-radius-pill)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]"
 											style={getStrategyStyle(fund.strategy)}
 										>
 											{fund.strategy}
@@ -289,7 +285,7 @@
 								<!-- Status badge -->
 								<td class="px-4 py-3">
 									<span
-										class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
+										class="inline-flex items-center gap-1.5 rounded-[var(--netz-radius-pill)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]"
 										style={getStatusStyle(fund.status)}
 									>
 										<span
@@ -303,7 +299,7 @@
 								<!-- DD Report status -->
 								<td class="px-4 py-3">
 									<span
-										class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
+										class="inline-flex items-center gap-1.5 rounded-[var(--netz-radius-pill)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]"
 										style={getDDReportStyle(fund.dd_report_status)}
 									>
 										{#if fund.dd_report_status === "generating"}
