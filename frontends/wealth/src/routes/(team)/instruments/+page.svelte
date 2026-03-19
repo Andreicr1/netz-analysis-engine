@@ -3,7 +3,7 @@
   Uses $state.raw for performance with 500+ items.
 -->
 <script lang="ts">
-	import { DataTable, PageHeader, EmptyState, Button, Card, Dialog, ContextPanel } from "@netz/ui";
+	import { DataTable, PageHeader, EmptyState, Button, Card, Dialog, ContextPanel, Input, Select } from "@netz/ui";
 	import { ActionButton, ConfirmDialog, FormField } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll } from "$app/navigation";
@@ -16,10 +16,7 @@
 
 	let { data }: { data: PageData } = $props();
 
-	let instruments = $state.raw((data.instruments ?? []) as Instrument[]);
-	$effect(() => {
-		instruments = (data.instruments ?? []) as Instrument[];
-	});
+	let instruments = $derived((data.instruments ?? []) as Instrument[]);
 
 	// ── Search filter ──
 	let searchQuery = $state("");
@@ -176,11 +173,11 @@
 		</PageHeader>
 
 		<!-- Search filter -->
-		<input
+		<Input
 			type="text"
 			bind:value={searchQuery}
 			placeholder="Filter by ticker or name..."
-			class="w-full max-w-sm rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
+			class="max-w-sm"
 		/>
 
 		{#if filtered.length === 0}
@@ -206,30 +203,30 @@
 		>
 			<div class="space-y-4 p-4">
 				{#if loadingDetail}
-					<p class="text-sm text-[var(--netz-text-muted)]">Loading...</p>
+					<p class="text-sm text-(--netz-text-muted)">Loading...</p>
 				{:else if instrumentDetail}
 					<div>
-						<p class="text-xs text-[var(--netz-text-muted)]">Name</p>
+						<p class="text-xs text-(--netz-text-muted)">Name</p>
 						<p class="text-sm font-medium">{instrumentDetail.name ?? "—"}</p>
 					</div>
 					<div>
-						<p class="text-xs text-[var(--netz-text-muted)]">Asset Class</p>
+						<p class="text-xs text-(--netz-text-muted)">Asset Class</p>
 						<p class="text-sm">{instrumentDetail.asset_class ?? "—"}</p>
 					</div>
 					<div>
-						<p class="text-xs text-[var(--netz-text-muted)]">Currency</p>
+						<p class="text-xs text-(--netz-text-muted)">Currency</p>
 						<p class="text-sm">{instrumentDetail.currency ?? "—"}</p>
 					</div>
 					<div>
-						<p class="text-xs text-[var(--netz-text-muted)]">Last Price</p>
+						<p class="text-xs text-(--netz-text-muted)">Last Price</p>
 						<p class="text-sm">{instrumentDetail.last_price ?? "—"}</p>
 					</div>
 					<div>
-						<p class="text-xs text-[var(--netz-text-muted)]">Exchange</p>
+						<p class="text-xs text-(--netz-text-muted)">Exchange</p>
 						<p class="text-sm">{instrumentDetail.exchange ?? "—"}</p>
 					</div>
 				{:else}
-					<p class="text-sm text-[var(--netz-text-muted)]">Details unavailable.</p>
+					<p class="text-sm text-(--netz-text-muted)">Details unavailable.</p>
 				{/if}
 			</div>
 		</ContextPanel>
@@ -240,43 +237,42 @@
 <Dialog bind:open={showCreate} title="Add Instrument">
 	<form onsubmit={(e) => { e.preventDefault(); createInstrument(); }} class="space-y-4">
 		<FormField label="Ticker" required>
-			<input
+			<Input
 				type="text"
-				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)] uppercase"
+				class="uppercase"
 				bind:value={createForm.ticker}
 				placeholder="e.g. AAPL"
 			/>
 		</FormField>
 		<FormField label="Name" required>
-			<input
+			<Input
 				type="text"
-				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
 				bind:value={createForm.name}
 				placeholder="e.g. Apple Inc."
 			/>
 		</FormField>
 		<FormField label="Asset Class">
-			<select
-				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
+			<Select
 				bind:value={createForm.asset_class}
-			>
-				<option value="equity">Equity</option>
-				<option value="fixed_income">Fixed Income</option>
-				<option value="commodity">Commodity</option>
-				<option value="fx">FX</option>
-				<option value="alternative">Alternative</option>
-			</select>
+				options={[
+					{ value: "equity", label: "Equity" },
+					{ value: "fixed_income", label: "Fixed Income" },
+					{ value: "commodity", label: "Commodity" },
+					{ value: "fx", label: "FX" },
+					{ value: "alternative", label: "Alternative" },
+				]}
+			/>
 		</FormField>
 		<FormField label="Currency">
-			<input
+			<Input
 				type="text"
-				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)] uppercase"
+				class="uppercase"
 				bind:value={createForm.currency}
 				placeholder="USD"
 			/>
 		</FormField>
 		{#if createError}
-			<p class="text-sm text-[var(--netz-status-error)]">{createError}</p>
+			<p class="text-sm text-(--netz-status-error)">{createError}</p>
 		{/if}
 		<div class="flex justify-end gap-2 pt-2">
 			<Button variant="outline" onclick={() => showCreate = false}>Cancel</Button>
@@ -302,11 +298,11 @@
 <Dialog bind:open={showExternalSearch} title="Search External Providers">
 	<div class="space-y-4">
 		<div class="flex gap-2">
-			<input
+			<Input
 				type="text"
 				bind:value={externalQuery}
 				placeholder="Search by ticker or name..."
-				class="flex-1 rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
+				class="flex-1"
 				onkeydown={(e) => { if (e.key === "Enter") searchExternal(); }}
 			/>
 			<ActionButton onclick={searchExternal} loading={searching} loadingText="Searching...">
@@ -319,10 +315,10 @@
 				{#each externalResults as result}
 					<Card class="flex items-center justify-between p-3">
 						<div>
-							<p class="text-sm font-medium text-[var(--netz-text-primary)]">
+							<p class="text-sm font-medium text-(--netz-text-primary)">
 								{result.ticker ?? "—"} — {result.name ?? "—"}
 							</p>
-							<p class="text-xs text-[var(--netz-text-muted)]">
+							<p class="text-xs text-(--netz-text-muted)">
 								{result.asset_class ?? ""} | {result.currency ?? ""} | {result.exchange ?? ""}
 							</p>
 						</div>
@@ -338,7 +334,7 @@
 				{/each}
 			</div>
 		{:else if externalQuery && !searching}
-			<p class="text-sm text-[var(--netz-text-muted)]">No results found.</p>
+			<p class="text-sm text-(--netz-text-muted)">No results found.</p>
 		{/if}
 	</div>
 </Dialog>

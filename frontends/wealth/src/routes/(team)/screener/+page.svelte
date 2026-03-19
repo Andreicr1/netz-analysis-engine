@@ -3,7 +3,7 @@
   Funnel sidebar + status tabs + results table + ContextPanel detail panel.
 -->
 <script lang="ts">
-	import { PageHeader, Card, EmptyState, StatusBadge, ContextPanel, formatDateTime, formatNumber } from "@netz/ui";
+	import { PageHeader, Card, EmptyState, StatusBadge, ContextPanel, Button, formatDateTime, formatNumber } from "@netz/ui";
 	import { ActionButton } from "@netz/ui";
 	import { createVirtualizer } from "@tanstack/svelte-virtual";
 	import { createClientApiClient } from "$lib/api/client";
@@ -56,8 +56,8 @@
 
 	// ── Raw API data ───────────────────────────────────────────────────────────
 
-	let results = $state.raw((data.results ?? []) as ScreeningResult[]);
-	let latestRun = $state.raw(data.latestRun as ScreeningRun | null);
+	let results = $derived((data.results ?? []) as ScreeningResult[]);
+	let latestRun = $derived(data.latestRun as ScreeningRun | null);
 
 	// ── Status tab state ───────────────────────────────────────────────────────
 
@@ -351,13 +351,13 @@
 					{#if runError}
 						<span class="header-meta__error">{runError}</span>
 					{/if}
-					<button
-						class="btn-batch"
+					<Button
+						size="sm"
 						onclick={executeBatch}
 						disabled={isRunning}
 					>
 						{isRunning ? "Executando..." : "Executar batch"}
-					</button>
+					</Button>
 				</div>
 			{/snippet}
 		</PageHeader>
@@ -638,16 +638,16 @@
 	>
 		<div class="p-4">
 			{#if runDetailLoading}
-				<p class="text-sm text-[var(--netz-text-muted)]">Loading...</p>
+				<p class="text-sm text-(--netz-text-muted)">Loading...</p>
 			{:else if runDetailData}
 				{#each Object.entries(runDetailData) as [key, value]}
 					<div class="mb-2">
-						<p class="text-xs text-[var(--netz-text-muted)]">{key}</p>
-						<p class="text-sm text-[var(--netz-text-primary)]">{String(value ?? "—")}</p>
+						<p class="text-xs text-(--netz-text-muted)">{key}</p>
+						<p class="text-sm text-(--netz-text-primary)">{String(value ?? "—")}</p>
 					</div>
 				{/each}
 			{:else}
-				<p class="text-sm text-[var(--netz-text-muted)]">No run data available.</p>
+				<p class="text-sm text-(--netz-text-muted)">No run data available.</p>
 			{/if}
 		</div>
 	</ContextPanel>
@@ -663,23 +663,23 @@
 	>
 		<div class="p-4">
 			{#if historyLoading}
-				<p class="text-sm text-[var(--netz-text-muted)]">Loading...</p>
+				<p class="text-sm text-(--netz-text-muted)">Loading...</p>
 			{:else if historyData.length > 0}
 				<div class="space-y-3">
 					{#each historyData as entry}
-						<div class="rounded-md border border-[var(--netz-border)] p-3">
+						<div class="rounded-md border border-(--netz-border) p-3">
 							<div class="flex items-center justify-between">
 								<StatusBadge status={String(entry.overall_status ?? "")} resolve={resolveWealthStatus} />
-								<span class="text-xs text-[var(--netz-text-muted)]">{String(entry.screened_at ?? "")}</span>
+								<span class="text-xs text-(--netz-text-muted)">{String(entry.screened_at ?? "")}</span>
 							</div>
 							{#if entry.score != null}
-								<p class="mt-1 text-sm font-mono text-[var(--netz-text-secondary)]">Score: {formatNumber(Number(entry.score), 3, "en-US")}</p>
+								<p class="mt-1 text-sm font-mono text-(--netz-text-secondary)">Score: {formatNumber(Number(entry.score), 3, "en-US")}</p>
 							{/if}
 						</div>
 					{/each}
 				</div>
 			{:else}
-				<p class="text-sm text-[var(--netz-text-muted)]">No screening history for this instrument.</p>
+				<p class="text-sm text-(--netz-text-muted)">No screening history for this instrument.</p>
 			{/if}
 		</div>
 	</ContextPanel>
@@ -852,28 +852,6 @@
 	.header-meta__error {
 		font-size: 12px;
 		color: var(--netz-danger);
-	}
-
-	.btn-batch {
-		padding: 6px 14px;
-		border-radius: 6px;
-		border: 1px solid var(--netz-primary);
-		background: var(--netz-primary);
-		color: var(--netz-primary-foreground, #fff);
-		font-size: 13px;
-		font-weight: 500;
-		cursor: pointer;
-		transition: opacity 120ms ease;
-		white-space: nowrap;
-	}
-
-	.btn-batch:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.btn-batch:not(:disabled):hover {
-		opacity: 0.88;
 	}
 
 	/* ── Status tabs ──────────────────────────────────────────────────────── */

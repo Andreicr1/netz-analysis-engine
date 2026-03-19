@@ -6,8 +6,10 @@
 	import {
 		BarChart,
 		PageHeader,
+		PageTabs,
 		EmptyState,
 		Button,
+		Input,
 		formatNumber,
 		formatPercent,
 		formatBps,
@@ -61,11 +63,21 @@
 	let tactical = $derived((data.tactical ?? []) as TacticalPosition[]);
 	let effective = $derived((data.effective ?? []) as EffectiveRow[]);
 
+	// svelte-ignore state_referenced_locally
 	let activeProfile = $state(data.profile as string);
 	const profiles = ["conservative", "moderate", "growth"];
+	const profileLabels: Record<string, string> = {
+		conservative: "Conservative",
+		moderate: "Moderate",
+		growth: "Growth",
+	};
 
 	type Tab = "strategic" | "tactical" | "effective";
-	let activeTab = $state<Tab>("effective");
+	const tabs: { value: Tab; label: string }[] = [
+		{ value: "strategic", label: "Strategic" },
+		{ value: "tactical", label: "Tactical" },
+		{ value: "effective", label: "Effective" },
+	];
 
 	function switchProfile(profile: string) {
 		activeProfile = profile;
@@ -84,6 +96,14 @@
 	let totalWeight = $derived(
 		effective.reduce((sum, r) => sum + r.effective_weight, 0),
 	);
+
+	let activeProfileLabel = $derived(profileLabels[activeProfile] ?? activeProfile);
+	let tacticalCount = $derived(tactical.length);
+	let activeBlockCount = $derived(strategic.length);
+	let largestTacticalTilt = $derived.by(() => {
+		if (tactical.length === 0) return null;
+		return [...tactical].sort((left, right) => Math.abs(right.overweight) - Math.abs(left.overweight))[0] ?? null;
+	});
 
 	// ── Edit Mode ──
 	let editing = $state(false);
@@ -121,26 +141,6 @@
 	function fmtSignedPercentPoint(value: number, decimals = 1): string {
 		const formatted = formatNumber(value, decimals, "en-US");
 		return value >= 0 ? `+${formatted}%` : `${formatted}%`;
-	}
-
-	async function saveStrategic() {
-		if (!editValid) return;
-		saving = true;
-		editError = null;
-		try {
-			const api = createClientApiClient(getToken);
-			const weights: Record<string, number> = {};
-			for (const [block, w] of Object.entries(editWeights)) {
-				weights[block] = w / 100;
-			}
-			await api.put(`/allocation/${activeProfile}/strategic`, { weights });
-			editing = false;
-			await invalidateAll();
-		} catch (e) {
-			editError = e instanceof Error ? e.message : "Failed to save allocation";
-		} finally {
-			saving = false;
-		}
 	}
 
 	// Tactical save
@@ -270,17 +270,29 @@
 		const n = typeof v === "string" ? parseFloat(v) : v;
 		return isNaN(n) ? "—" : formatPercent(n, 2, "en-US");
 	}
+
+	function convictionWidth(conviction: number | null): string {
+		if (conviction == null) return "0%";
+		return `${Math.min(Math.max(conviction, 0), 5) * 20}%`;
+	}
+
+	function convictionLabel(conviction: number | null): string {
+		if (conviction == null) return "Unspecified";
+		if (conviction >= 4) return "High";
+		if (conviction >= 2.5) return "Medium";
+		return "Low";
+	}
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	<PageHeader title="Allocation">
 		{#snippet actions()}
 			<div class="flex gap-1">
 				{#each profiles as profile (profile)}
 					<button
 						class="rounded-md px-3 py-1.5 text-xs font-medium capitalize transition-colors {activeProfile === profile
-							? 'bg-[var(--netz-primary)] text-white'
-							: 'text-[var(--netz-text-secondary)] hover:bg-[var(--netz-surface-alt)]'}"
+							? 'bg-(--netz-primary) text-white'
+							: 'text-(--netz-text-secondary) hover:bg-(--netz-surface-alt)'}"
 						onclick={() => switchProfile(profile)}
 					>
 						{profile}
@@ -289,40 +301,44 @@
 			</div>
 		{/snippet}
 	</PageHeader>
+	<p class="-mt-3 text-sm text-(--netz-text-muted)">
+		Strategic targets, tactical tilts, and effective exposure for the {activeProfileLabel} profile.
+	</p>
 
-	<!-- Tab selector -->
-	<div class="flex gap-1 border-b border-[var(--netz-border)]">
-		{#each (["strategic", "tactical", "effective"] as Tab[]) as tab (tab)}
-			<button
-				class="border-b-2 px-4 py-2 text-sm font-medium capitalize transition-colors {activeTab === tab
-					? 'border-[var(--netz-primary)] text-[var(--netz-primary)]'
-					: 'border-transparent text-[var(--netz-text-secondary)] hover:text-[var(--netz-text-primary)]'}"
-				onclick={() => activeTab = tab}
-			>
-				{tab}
-			</button>
-		{/each}
+	<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+		<MetricCard label="Active Profile" value={activeProfileLabel} sublabel="Current allocation lens" />
+		<MetricCard label="Strategic Blocks" value={String(activeBlockCount)} sublabel="Configured allocation buckets" />
+		<MetricCard label="Tactical Tilts" value={String(tacticalCount)} sublabel="Live model adjustments" />
+		<MetricCard
+			label="Largest Tilt"
+			value={largestTacticalTilt ? fmtSignedPercentPoint(largestTacticalTilt.overweight, 1) : "—"}
+			sublabel={largestTacticalTilt?.block ?? "No tactical positions"}
+			status={largestTacticalTilt && Math.abs(largestTacticalTilt.overweight) >= 0.03 ? "warn" : undefined}
+		/>
 	</div>
 
 	{#if editError}
-		<div class="rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+		<div class="rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
 			{editError}
 			<button class="ml-2 underline" onclick={() => editError = null}>dismiss</button>
 		</div>
 	{/if}
 
+	<PageTabs tabs={tabs} defaultTab="effective">
+		{#snippet children(activeTab)}
+
 	<!-- Strategic View -->
 	{#if activeTab === "strategic"}
 		{#if strategic.length > 0}
 			<div class="grid gap-4 lg:grid-cols-2">
-				<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
+				<div class="rounded-lg border border-(--netz-border) bg-(--netz-surface-elevated) p-5">
 					<div class="mb-4 flex items-center justify-between">
-						<h3 class="text-sm font-semibold text-[var(--netz-text-primary)]">Strategic Weights</h3>
+						<h3 class="text-sm font-semibold text-(--netz-text-primary)">Strategic Weights</h3>
 						{#if !editing}
 							<Button size="sm" variant="outline" onclick={startEditing}>Edit</Button>
 						{:else}
 							<div class="flex items-center gap-2">
-								<span class="text-xs {editValid ? 'text-[var(--netz-success,#22c55e)]' : 'text-[var(--netz-danger,#ef4444)]'}">
+								<span class="text-xs {editValid ? 'text-(--netz-success,#22c55e)' : 'text-(--netz-danger,#ef4444)'}">
 									Total: {fmtPercentPoint(editTotal)} {editValid ? "✓" : `(${fmtSignedPercentPoint(editTotal - 100)})`}
 								</span>
 								<Button size="sm" variant="outline" onclick={cancelEditing}>Cancel</Button>
@@ -341,10 +357,10 @@
 					<div class="space-y-3">
 						{#each strategic as row (row.block)}
 							<div class="flex items-center justify-between">
-								<span class="text-sm text-[var(--netz-text-primary)]">{row.block}</span>
+								<span class="text-sm text-(--netz-text-primary)">{row.block}</span>
 								<div class="flex items-center gap-2">
 									{#if row.min_weight !== null && row.max_weight !== null}
-										<span class="text-xs text-[var(--netz-text-muted)]">
+										<span class="text-xs text-(--netz-text-muted)">
 											[{formatPercent(row.min_weight, 0, "en-US")}–{formatPercent(row.max_weight, 0, "en-US")}]
 										</span>
 									{/if}
@@ -353,9 +369,9 @@
 										{@const belowMin = row.min_weight !== null && blockWeight < row.min_weight * 100}
 										{@const aboveMax = row.max_weight !== null && blockWeight > row.max_weight * 100}
 										{@const outOfBounds = belowMin || aboveMax}
-										<input
+										<Input
 											type="number"
-											class="w-20 rounded border px-2 py-1 text-right text-sm font-medium text-[var(--netz-text-primary)] bg-[var(--netz-bg-secondary)] {outOfBounds ? 'border-[var(--netz-danger)]' : 'border-[var(--netz-border)]'}"
+											class="w-20 text-right {outOfBounds ? 'border-(--netz-danger)' : ''}"
 											bind:value={editWeights[row.block]}
 											min={row.min_weight !== null ? row.min_weight * 100 : 0}
 											max={row.max_weight !== null ? row.max_weight * 100 : 100}
@@ -363,10 +379,10 @@
 											title={outOfBounds ? `Out of bounds: min ${row.min_weight !== null ? row.min_weight * 100 : 0}% — max ${row.max_weight !== null ? row.max_weight * 100 : 100}%` : undefined}
 										/>
 										{#if outOfBounds}
-											<span class="text-xs text-[var(--netz-danger)]">{belowMin ? "↓ min" : "↑ max"}</span>
+											<span class="text-xs text-(--netz-danger)">{belowMin ? "↓ min" : "↑ max"}</span>
 										{/if}
 									{:else}
-										<span class="font-medium text-[var(--netz-text-primary)]">
+										<span class="font-medium text-(--netz-text-primary)">
 											{formatPercent(row.weight, 1, "en-US")}
 										</span>
 									{/if}
@@ -375,8 +391,8 @@
 						{/each}
 					</div>
 				</div>
-				<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
-					<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Distribution</h3>
+				<div class="rounded-lg border border-(--netz-border) bg-(--netz-surface-elevated) p-5">
+					<h3 class="mb-4 text-sm font-semibold text-(--netz-text-primary)">Distribution</h3>
 					<div class="h-64">
 						<BarChart data={strategicChartData} orientation="horizontal" />
 					</div>
@@ -388,7 +404,7 @@
 
 		<!-- Simulation error -->
 		{#if simError}
-			<div class="rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+			<div class="rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
 				{simError}
 				<button class="ml-2 underline" onclick={() => simError = null}>dismiss</button>
 			</div>
@@ -396,15 +412,15 @@
 
 		<!-- Simulation result panel -->
 		{#if simulationResult}
-			<div class="rounded-lg border {simulationResult.within_limit ? 'border-[var(--netz-border)]' : 'border-[var(--netz-status-error)]'} bg-[var(--netz-surface-elevated)] p-5">
+			<div class="rounded-lg border {simulationResult.within_limit ? 'border-(--netz-border)' : 'border-(--netz-status-error)'} bg-(--netz-surface-elevated) p-5">
 				<div class="mb-3 flex items-center justify-between">
-					<h3 class="text-sm font-semibold text-[var(--netz-text-primary)]">CVaR Simulation Preview</h3>
+					<h3 class="text-sm font-semibold text-(--netz-text-primary)">CVaR Simulation Preview</h3>
 					{#if simulationResult.within_limit}
-						<span class="inline-flex items-center gap-1 rounded-full bg-[var(--netz-success,#22c55e)]/15 px-2 py-0.5 text-xs font-medium text-[var(--netz-success,#22c55e)]">
+						<span class="inline-flex items-center gap-1 rounded-full bg-(--netz-success,#22c55e)/15 px-2 py-0.5 text-xs font-medium text-(--netz-success,#22c55e)">
 							Within Limit
 						</span>
 					{:else}
-						<span class="inline-flex items-center gap-1 rounded-full bg-[var(--netz-status-error)]/15 px-2 py-0.5 text-xs font-medium text-[var(--netz-status-error)]">
+						<span class="inline-flex items-center gap-1 rounded-full bg-(--netz-status-error)/15 px-2 py-0.5 text-xs font-medium text-(--netz-status-error)">
 							Exceeds CVaR Limit — Submit Blocked
 						</span>
 					{/if}
@@ -444,11 +460,11 @@
 
 				<!-- Warnings from simulation -->
 				{#if simulationResult.warnings.length > 0}
-					<div class="mt-4 rounded-md border border-[var(--netz-status-warning,#f59e0b)] bg-[var(--netz-status-warning,#f59e0b)]/10 p-3">
-						<p class="mb-1 text-xs font-semibold uppercase tracking-wider text-[var(--netz-status-warning,#f59e0b)]">Warnings</p>
+					<div class="mt-4 rounded-md border border-(--netz-status-warning,#f59e0b) bg-(--netz-status-warning,#f59e0b)/10 p-3">
+						<p class="mb-1 text-xs font-semibold uppercase tracking-wider text-(--netz-status-warning,#f59e0b)">Warnings</p>
 						<ul class="space-y-1">
 							{#each simulationResult.warnings as warning, i (i)}
-								<li class="text-sm text-[var(--netz-text-primary)]">• {warning}</li>
+								<li class="text-sm text-(--netz-text-primary)">• {warning}</li>
 							{/each}
 						</ul>
 					</div>
@@ -456,7 +472,7 @@
 
 				<!-- Block message when limit exceeded -->
 				{#if !simulationResult.within_limit}
-					<p class="mt-3 text-sm font-medium text-[var(--netz-status-error)]">
+					<p class="mt-3 text-sm font-medium text-(--netz-status-error)">
 						This allocation exceeds the CVaR limit. Adjust weights before submitting.
 					</p>
 				{/if}
@@ -467,15 +483,15 @@
 	<!-- Tactical View -->
 	{#if activeTab === "tactical"}
 		{#if tactical.length > 0}
-			<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
+			<div class="rounded-lg border border-(--netz-border) bg-(--netz-surface-elevated) p-5">
 				<div class="mb-4 flex items-center justify-between">
-					<h3 class="text-sm font-semibold text-[var(--netz-text-primary)]">Tactical Positions</h3>
+					<h3 class="text-sm font-semibold text-(--netz-text-primary)">Tactical Positions</h3>
 					{#if !editingTactical}
 						<Button size="sm" variant="outline" onclick={startEditingTactical}>Edit</Button>
 					{:else}
 						<div class="flex gap-2">
 							<Button size="sm" variant="outline" onclick={() => editingTactical = false}>Cancel</Button>
-							<ActionButton size="sm" onclick={saveTactical} loading={savingTactical} loadingText="Saving...">
+							<ActionButton size="sm" onclick={handleSaveTacticalClick} loading={savingTactical} loadingText="Saving...">
 								Save
 							</ActionButton>
 						</div>
@@ -483,23 +499,36 @@
 				</div>
 				<div class="space-y-3">
 					{#each tactical as pos (pos.block)}
-						<div class="flex items-center justify-between">
-							<span class="text-sm text-[var(--netz-text-primary)]">{pos.block}</span>
-							<div class="flex items-center gap-3">
+						<div class="grid gap-3 rounded-(--netz-radius-md) border border-(--netz-border-subtle) bg-(--netz-surface-highlight) px-4 py-3 lg:grid-cols-[minmax(0,1.5fr)_140px_120px] lg:items-center">
+							<div class="space-y-2">
+								<span class="text-sm text-(--netz-text-primary)">{pos.block}</span>
+								<div class="space-y-1">
+									<div class="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">
+										<span>Conviction</span>
+										<span>{convictionLabel(pos.conviction)}</span>
+									</div>
+									<div class="h-2 overflow-hidden rounded-full bg-(--netz-surface-inset)">
+										<div class="h-full rounded-full bg-(--netz-border-accent)" style:width={convictionWidth(pos.conviction)}></div>
+									</div>
+								</div>
+							</div>
+							<div class="text-xs text-(--netz-text-muted)">
 								{#if pos.conviction !== null}
-									<span class="text-xs text-[var(--netz-text-muted)]">
-										Conviction: {formatNumber(pos.conviction, 0, "en-US")}
-									</span>
+									Signal strength {formatNumber(pos.conviction, 0, "en-US")} / 5
+								{:else}
+									No conviction score
 								{/if}
+							</div>
+							<div class="flex items-center justify-end gap-3">
 								{#if editingTactical}
-									<input
+									<Input
 										type="number"
-										class="w-20 rounded border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-2 py-1 text-right text-sm font-medium text-[var(--netz-text-primary)]"
+										class="w-20 text-right"
 										bind:value={editTactical[pos.block]}
 										step="0.1"
 									/>
 								{:else}
-									<span class="font-medium {pos.overweight >= 0 ? 'text-[var(--netz-success,#22c55e)]' : 'text-[var(--netz-danger,#ef4444)]'}">
+									<span class="font-medium {pos.overweight >= 0 ? 'text-(--netz-success,#22c55e)' : 'text-(--netz-danger,#ef4444)'}">
 										{formatPercent(pos.overweight, 1, "en-US", true)}
 									</span>
 								{/if}
@@ -517,27 +546,27 @@
 	{#if activeTab === "effective"}
 		{#if effective.length > 0}
 			<div class="grid gap-4 lg:grid-cols-2">
-				<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
+				<div class="rounded-lg border border-(--netz-border) bg-(--netz-surface-elevated) p-5">
 					<div class="mb-4 flex items-center justify-between">
-						<h3 class="text-sm font-semibold text-[var(--netz-text-primary)]">Effective Allocation</h3>
-						<span class="text-xs text-[var(--netz-text-muted)]">
+						<h3 class="text-sm font-semibold text-(--netz-text-primary)">Effective Allocation</h3>
+						<span class="text-xs text-(--netz-text-muted)">
 							Total: {formatPercent(totalWeight, 1, "en-US")}
 						</span>
 					</div>
 					<div class="space-y-3">
 						{#each effective as row (row.block)}
 							<div class="flex items-center justify-between">
-								<span class="text-sm text-[var(--netz-text-primary)]">{row.block}</span>
+								<span class="text-sm text-(--netz-text-primary)">{row.block}</span>
 								<div class="flex items-center gap-2 text-xs">
-									<span class="text-[var(--netz-text-muted)]">
+									<span class="text-(--netz-text-muted)">
 										{formatPercent(row.strategic_weight, 1, "en-US")}
 									</span>
 									{#if row.tactical_overweight !== 0}
-										<span class="{row.tactical_overweight >= 0 ? 'text-[var(--netz-success,#22c55e)]' : 'text-[var(--netz-danger,#ef4444)]'}">
+										<span class="{row.tactical_overweight >= 0 ? 'text-(--netz-success,#22c55e)' : 'text-(--netz-danger,#ef4444)'}">
 											{formatPercent(row.tactical_overweight, 1, "en-US", true)}
 										</span>
 									{/if}
-									<span class="font-medium text-[var(--netz-text-primary)]">
+									<span class="font-medium text-(--netz-text-primary)">
 										= {formatPercent(row.effective_weight, 1, "en-US")}
 									</span>
 								</div>
@@ -545,8 +574,8 @@
 						{/each}
 					</div>
 				</div>
-				<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
-					<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Distribution</h3>
+				<div class="rounded-lg border border-(--netz-border) bg-(--netz-surface-elevated) p-5">
+					<h3 class="mb-4 text-sm font-semibold text-(--netz-text-primary)">Distribution</h3>
 					<div class="h-64">
 						<BarChart data={effectiveChartData} orientation="horizontal" />
 					</div>
@@ -556,6 +585,9 @@
 			<EmptyState title="No Allocation Data" message="Effective allocation will appear once strategic weights are set." />
 		{/if}
 	{/if}
+
+		{/snippet}
+	</PageTabs>
 </div>
 
 <!-- Governed submit: ConsequenceDialog with mandatory rationale -->
@@ -583,15 +615,15 @@
 	{#snippet consequenceList()}
 		<ul class="space-y-1.5">
 			<li class="flex items-start gap-2">
-				<span class="mt-0.5 text-[var(--netz-warning)]">&#9679;</span>
-				<span>This will update the strategic allocation for <strong class="text-[var(--netz-text-primary)]">{activeProfile}</strong></span>
+				<span class="mt-0.5 text-(--netz-warning)">&#9679;</span>
+				<span>This will update the strategic allocation for <strong class="text-(--netz-text-primary)">{activeProfile}</strong></span>
 			</li>
 			<li class="flex items-start gap-2">
-				<span class="mt-0.5 text-[var(--netz-warning)]">&#9679;</span>
+				<span class="mt-0.5 text-(--netz-warning)">&#9679;</span>
 				<span>Affects all portfolios using this profile</span>
 			</li>
 			<li class="flex items-start gap-2">
-				<span class="mt-0.5 text-[var(--netz-warning)]">&#9679;</span>
+				<span class="mt-0.5 text-(--netz-warning)">&#9679;</span>
 				<span>CVaR recalculation will be triggered</span>
 			</li>
 		</ul>
@@ -615,15 +647,15 @@
 	{#snippet consequenceList()}
 		<ul class="space-y-1.5">
 			<li class="flex items-start gap-2">
-				<span class="mt-0.5 text-[var(--netz-warning)]">&#9679;</span>
-				<span>This will update tactical tilts for <strong class="text-[var(--netz-text-primary)]">{activeProfile}</strong></span>
+				<span class="mt-0.5 text-(--netz-warning)">&#9679;</span>
+				<span>This will update tactical tilts for <strong class="text-(--netz-text-primary)">{activeProfile}</strong></span>
 			</li>
 			<li class="flex items-start gap-2">
-				<span class="mt-0.5 text-[var(--netz-warning)]">&#9679;</span>
+				<span class="mt-0.5 text-(--netz-warning)">&#9679;</span>
 				<span>Affects all portfolios using this profile</span>
 			</li>
 			<li class="flex items-start gap-2">
-				<span class="mt-0.5 text-[var(--netz-warning)]">&#9679;</span>
+				<span class="mt-0.5 text-(--netz-warning)">&#9679;</span>
 				<span>Effective allocation will be recalculated immediately</span>
 			</li>
 		</ul>

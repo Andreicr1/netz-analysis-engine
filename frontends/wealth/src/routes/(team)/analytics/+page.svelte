@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
 	import {
+		Badge,
 		PageHeader,
 		PageTabs,
 		SectionCard,
@@ -12,6 +13,8 @@
 		HeatmapChart,
 		ChartContainer,
 		Button,
+		Input,
+		Select,
 		formatNumber,
 		formatPercent,
 	} from "@netz/ui";
@@ -49,8 +52,8 @@
 
 	// ── Server data ──────────────────────────────────────────────────────────
 
-	let correlation = $state.raw(data.correlation as CorrelationMatrix | null);
-	let correlationRegime = $state.raw(data.correlationRegime as CorrelationRegime | null);
+	let correlation = $derived(data.correlation as CorrelationMatrix | null);
+	let correlationRegime = $derived(data.correlationRegime as CorrelationRegime | null);
 
 	// ── Filters ──────────────────────────────────────────────────────────────
 
@@ -60,6 +63,7 @@
 		{ value: "growth", label: "Growth" },
 	];
 
+	// svelte-ignore state_referenced_locally
 	let selectedPortfolio = $state(data.profile as string ?? "moderate");
 	let dateFrom = $state("");
 	let dateTo = $state("");
@@ -90,6 +94,18 @@
 	function fmtPct(v: number | null | undefined): string {
 		return formatPercent(v, 1, "en-US");
 	}
+
+	const analysisLensSubtitle = $derived.by(() => {
+		if (dateFrom && dateTo) return `${dateFrom} - ${dateTo}`;
+		if (dateFrom) return `From ${dateFrom}`;
+		if (dateTo) return `Until ${dateTo}`;
+		return "Retornos mensais consolidados";
+	});
+
+	const highCorrelationNote = $derived.by(() => {
+		if (!stats?.max_pair_names || stats.max_pair_correlation == null || stats.max_pair_correlation < 0.7) return null;
+		return `${stats.max_pair_names.join(" ↔ ")} at ${fmtNum(stats.max_pair_correlation)} suggests elevated overlap.`;
+	});
 
 	// ── Heatmap data ─────────────────────────────────────────────────────────
 
@@ -330,37 +346,44 @@
 	}
 </script>
 
-<div class="space-y-6 p-6">
-	<!-- Page Header + Filters -->
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
+	<!-- Page Header -->
 	<PageHeader title="Analytics">
 		{#snippet actions()}
-			<!-- Portfolio dropdown -->
-			<select
-				class="rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] px-3 py-1.5 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-primary)]"
-				value={selectedPortfolio}
-				onchange={(e) => applyPortfolioFilter((e.target as HTMLSelectElement).value)}
-			>
-				{#each PROFILES as p (p.value)}
-					<option value={p.value}>{p.label}</option>
-				{/each}
-			</select>
-
-			<!-- Date range -->
-			<input
-				type="date"
-				class="rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] px-3 py-1.5 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-primary)]"
-				bind:value={dateFrom}
-				aria-label="Data início"
-			/>
-			<span class="text-xs text-[var(--netz-text-muted)]">–</span>
-			<input
-				type="date"
-				class="rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] px-3 py-1.5 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-primary)]"
-				bind:value={dateTo}
-				aria-label="Data fim"
-			/>
+			<Badge variant="secondary">{PROFILES.find((profile) => profile.value === selectedPortfolio)?.label ?? "Moderado"}</Badge>
 		{/snippet}
 	</PageHeader>
+	<p class="-mt-3 text-sm text-(--netz-text-muted)">
+		Cross-portfolio diagnostics for correlation, optimization, and attribution review.
+	</p>
+
+	<SectionCard title="Analysis Lens" subtitle={analysisLensSubtitle}>
+		<div class="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto_minmax(0,1fr)]">
+			<div class="space-y-1.5">
+				<p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">Portfolio</p>
+				<Select
+					bind:value={selectedPortfolio}
+					options={PROFILES}
+					placeholder="Portfolio"
+					onValueChange={applyPortfolioFilter}
+				/>
+			</div>
+			<div class="space-y-1.5">
+				<p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">From</p>
+				<Input type="date" bind:value={dateFrom} aria-label="Data inicio" />
+			</div>
+			<div class="hidden items-end justify-center text-sm text-(--netz-text-muted) lg:flex">to</div>
+			<div class="space-y-1.5">
+				<p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">To</p>
+				<Input type="date" bind:value={dateTo} aria-label="Data fim" />
+			</div>
+		</div>
+		<div class="mt-4 flex flex-wrap items-center gap-2 text-sm text-(--netz-text-muted)">
+			<span>Tabs persist in the URL for review continuity.</span>
+			<span class="hidden h-1 w-1 rounded-full bg-(--netz-text-muted) sm:inline-block"></span>
+			<span>Use the Pareto tab when committee discussion moves from diagnostics to positioning.</span>
+		</div>
+	</SectionCard>
 
 	<!-- 5-tab navigation -->
 	<PageTabs tabs={TABS} defaultTab="correlacoes">
@@ -423,6 +446,13 @@
 								message="A matriz de correlação será exibida após NAV histórico estar disponível para ao menos 2 fundos."
 							/>
 						{/if}
+
+						{#if highCorrelationNote}
+							<div class="mt-4 rounded-(--netz-radius-md) border border-(--netz-warning) bg-(--netz-surface-highlight) px-4 py-3 text-sm text-(--netz-text-secondary)">
+								<span class="font-semibold text-(--netz-text-primary)">Attention:</span>
+								{highCorrelationNote}
+							</div>
+						{/if}
 					</SectionCard>
 				</div>
 
@@ -442,13 +472,13 @@
 							</Button>
 						</div>
 						{#if backtestError}
-							<div class="mt-4 rounded-md border border-[var(--netz-status-error)] p-3 text-sm text-[var(--netz-status-error)]">
+							<div class="mt-4 rounded-(--netz-radius-md) border border-(--netz-status-error) bg-(--netz-surface-highlight) p-3 text-sm text-(--netz-status-error)">
 								{backtestError}
 							</div>
 						{/if}
 						{#if backtestResult}
-							<div class="mt-4 rounded-md bg-[var(--netz-surface-inset)] p-4">
-								<p class="text-sm text-[var(--netz-text-secondary)]">
+							<div class="mt-4 rounded-(--netz-radius-lg) border border-(--netz-border-subtle) bg-(--netz-surface-highlight) p-4 shadow-(--netz-shadow-1)">
+								<p class="text-sm text-(--netz-text-secondary)">
 									Status: <span class="font-mono font-medium">{backtestResult.status ?? "—"}</span>
 									{#if backtestResult.run_id}
 										| Run ID: <span class="font-mono">{backtestResult.run_id}</span>
@@ -457,9 +487,9 @@
 								{#if backtestResult.metrics}
 									<div class="mt-3 grid gap-2 sm:grid-cols-3">
 										{#each Object.entries(backtestResult.metrics as Record<string, number>) as [key, value]}
-											<div class="rounded bg-[var(--netz-surface)] p-2">
-												<p class="text-xs text-[var(--netz-text-muted)]">{key}</p>
-												<p class="text-sm font-medium text-[var(--netz-text-primary)]">{typeof value === "number" ? formatNumber(value, 4, "en-US") : value}</p>
+											<div class="rounded-(--netz-radius-md) border border-(--netz-border-subtle) bg-(--netz-surface-panel) p-2.5">
+												<p class="text-xs text-(--netz-text-muted)">{key}</p>
+												<p class="text-sm font-medium text-(--netz-text-primary)">{typeof value === "number" ? formatNumber(value, 4, "en-US") : value}</p>
 											</div>
 										{/each}
 									</div>
@@ -502,29 +532,29 @@
 							</div>
 						{/snippet}
 						{#if paretoError}
-							<div class="mb-3 rounded-md border border-[var(--netz-status-error)] p-3 text-sm text-[var(--netz-status-error)]">
+							<div class="mb-3 rounded-(--netz-radius-md) border border-(--netz-status-error) bg-(--netz-surface-highlight) p-3 text-sm text-(--netz-status-error)">
 								{paretoError}
 							</div>
 						{/if}
 						{#if optimizationError}
-							<div class="mb-3 rounded-md border border-[var(--netz-status-error)] p-3 text-sm text-[var(--netz-status-error)]">
+							<div class="mb-3 rounded-(--netz-radius-md) border border-(--netz-status-error) bg-(--netz-surface-highlight) p-3 text-sm text-(--netz-status-error)">
 								{optimizationError}
 							</div>
 						{/if}
 
 						<!-- Legend chips -->
 						<div class="mb-4 flex flex-wrap gap-3">
-							<div class="flex items-center gap-1.5">
-								<span class="h-2.5 w-2.5 rounded-full bg-[var(--netz-brand-primary)]"></span>
-								<span class="text-xs text-[var(--netz-text-muted)]">Fundos individuais</span>
+							<div class="flex items-center gap-1.5 rounded-(--netz-radius-pill) border border-(--netz-border-subtle) bg-(--netz-surface-highlight) px-3 py-1.5">
+								<span class="h-2.5 w-2.5 rounded-full bg-(--netz-brand-primary)"></span>
+								<span class="text-xs text-(--netz-text-muted)">Fundos individuais</span>
 							</div>
-							<div class="flex items-center gap-1.5">
-								<span class="h-2.5 w-2.5 rotate-45 bg-[var(--netz-warning)]" style="display:inline-block;"></span>
-								<span class="text-xs text-[var(--netz-text-muted)]">Portfólios</span>
+							<div class="flex items-center gap-1.5 rounded-(--netz-radius-pill) border border-(--netz-border-subtle) bg-(--netz-surface-highlight) px-3 py-1.5">
+								<span class="h-2.5 w-2.5 rotate-45 bg-(--netz-warning)" style="display:inline-block;"></span>
+								<span class="text-xs text-(--netz-text-muted)">Portfolios</span>
 							</div>
-							<div class="flex items-center gap-1.5">
-								<span class="h-0.5 w-5 border-t-2 border-dashed border-[var(--netz-brand-secondary)]"></span>
-								<span class="text-xs text-[var(--netz-text-muted)]">Fronteira eficiente</span>
+							<div class="flex items-center gap-1.5 rounded-(--netz-radius-pill) border border-(--netz-border-subtle) bg-(--netz-surface-highlight) px-3 py-1.5">
+								<span class="h-0.5 w-5 border-t-2 border-dashed border-(--netz-brand-secondary)"></span>
+								<span class="text-xs text-(--netz-text-muted)">Fronteira eficiente</span>
 							</div>
 						</div>
 
@@ -557,12 +587,12 @@
 			     ═══════════════════════════════════════════════════════════════ -->
 			{:else if activeTab === "atribuicao"}
 				<SectionCard title="Atribuição de Performance" subtitle="Decomposição de retorno por fator e classe de ativo">
-					<div class="mb-4 flex items-center gap-3">
-						<input
+					<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+						<Input
 							type="text"
-							class="rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] px-3 py-1.5 text-sm text-[var(--netz-text-primary)]"
 							bind:value={selectedFundId}
 							placeholder="Fund ID"
+							class="sm:max-w-56"
 						/>
 						<Button
 							onclick={loadAttribution}
@@ -576,9 +606,9 @@
 						<div class="space-y-2">
 							{#each Object.entries(attributionData) as [key, value]}
 								{#if key !== "fund_id" && key !== "period"}
-									<div class="flex items-center justify-between rounded-md bg-[var(--netz-surface-inset)] px-3 py-2 text-sm">
-										<span class="text-[var(--netz-text-primary)]">{key}</span>
-										<span class="font-mono text-[var(--netz-text-secondary)]">{typeof value === "number" ? formatNumber(value, 4, "en-US") : String(value ?? "—")}</span>
+										<div class="flex items-center justify-between rounded-(--netz-radius-md) border border-(--netz-border-subtle) bg-(--netz-surface-highlight) px-3 py-2 text-sm">
+											<span class="text-(--netz-text-primary)">{key}</span>
+											<span class="font-mono text-(--netz-text-secondary)">{typeof value === "number" ? formatNumber(value, 4, "en-US") : String(value ?? "—")}</span>
 									</div>
 								{/if}
 							{/each}

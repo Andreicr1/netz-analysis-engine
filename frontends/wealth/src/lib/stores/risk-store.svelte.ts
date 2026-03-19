@@ -404,6 +404,11 @@ export function createRiskStore(config: RiskStoreConfig) {
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Failed to load risk data";
 			status = "error";
+			// Auth errors are permanent — stop all retries
+			if (e instanceof Error && (e.name === "AuthError" || error.includes("401"))) {
+				deactivatePollFallback();
+				stopSSE();
+			}
 		} finally {
 			fetching = false;
 		}

@@ -27,9 +27,10 @@
 		freshness: FundFreshness[];
 	};
 
-	let geoMatrix = $state.raw(data.geoMatrix as ExposureMatrix | null);
-	let sectorMatrix = $state.raw(data.sectorMatrix as ExposureMatrix | null);
-	let metadata = $state.raw(data.metadata as ExposureMetadata | null);
+	let geoMatrix = $derived(data.geoMatrix as ExposureMatrix | null);
+	let sectorMatrix = $derived(data.sectorMatrix as ExposureMatrix | null);
+	let metadata = $derived(data.metadata as ExposureMetadata | null);
+	// svelte-ignore state_referenced_locally
 	let aggregation = $state(data.aggregation as string);
 
 	function freshnessColor(days: number): string {
@@ -54,30 +55,30 @@
 	}
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	<PageHeader title="Exposure Monitor">
 		{#snippet actions()}
 			<div
-				class="flex items-center rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-inset)] p-1"
+				class="flex items-center rounded-lg border border-(--netz-border) bg-(--netz-surface-inset) p-1"
 				role="group"
 				aria-label="Agregação"
 			>
 				<button
 					class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
-					class:bg-[var(--netz-surface-elevated)]={aggregation === "portfolio"}
-					class:text-[var(--netz-text-primary)]={aggregation === "portfolio"}
+					class:bg-(--netz-surface-elevated)={aggregation === "portfolio"}
+					class:text-(--netz-text-primary)={aggregation === "portfolio"}
 					class:shadow-sm={aggregation === "portfolio"}
-					class:text-[var(--netz-text-muted)]={aggregation !== "portfolio"}
+					class:text-(--netz-text-muted)={aggregation !== "portfolio"}
 					onclick={() => setAggregation("portfolio")}
 				>
 					Portfólios
 				</button>
 				<button
 					class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
-					class:bg-[var(--netz-surface-elevated)]={aggregation === "manager"}
-					class:text-[var(--netz-text-primary)]={aggregation === "manager"}
+					class:bg-(--netz-surface-elevated)={aggregation === "manager"}
+					class:text-(--netz-text-primary)={aggregation === "manager"}
 					class:shadow-sm={aggregation === "manager"}
-					class:text-[var(--netz-text-muted)]={aggregation !== "manager"}
+					class:text-(--netz-text-muted)={aggregation !== "manager"}
 					onclick={() => setAggregation("manager")}
 				>
 					Por gestor
@@ -141,7 +142,7 @@
 						class="flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium"
 						style:background-color={freshnessBg(fund.last_updated_days)}
 					>
-						<span class="text-[var(--netz-text-primary)]">{fund.fund_name}</span>
+						<span class="text-(--netz-text-primary)">{fund.fund_name}</span>
 						<span
 							class="rounded-full px-2 py-0.5 text-xs font-semibold"
 							style:color={freshnessColor(fund.last_updated_days)}
