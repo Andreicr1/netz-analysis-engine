@@ -37,12 +37,19 @@
 	}
 
 	interface Props {
+		/**
+		 * Audit trail entries. In parent components, declare this with $state.raw([...]) instead
+		 * of $state([...]) — entries are replaced wholesale, not mutated in-place, so deep
+		 * reactivity tracking is unnecessary overhead.
+		 */
 		entries?: AuditTrailEntry[];
 		title?: string;
 		description?: string;
 		emptyMessage?: string;
 		maxVisible?: number;
 		class?: string;
+		/** Domain-specific entry renderer. When provided, renders inside each entry li instead of the default layout. */
+		entryRenderer?: Snippet<[AuditTrailEntry]>;
 	}
 
 	let {
@@ -52,6 +59,7 @@
 		emptyMessage = "No audit events are available yet.",
 		maxVisible = 50,
 		class: className,
+		entryRenderer,
 	}: Props = $props();
 
 	let showAll = $state(false);
@@ -183,6 +191,9 @@
 					{/if}
 
 					<li class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] p-4">
+						{#if entryRenderer}
+							{@render entryRenderer(row.entry)}
+						{:else}
 						<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 							<div class="space-y-1">
 								<p class="text-sm font-semibold text-[var(--netz-text-primary)]">
@@ -294,6 +305,7 @@
 									{/each}
 								</ul>
 							</div>
+						{/if}
 						{/if}
 					</li>
 				{/each}

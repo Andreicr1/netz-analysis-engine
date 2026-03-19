@@ -156,7 +156,20 @@
 		editingTactical = true;
 	}
 
-	async function saveTactical() {
+	// ── Simulation + Governance ──────────────────────────────────
+	let simulationResult = $state<SimulationResult | null>(null);
+	let simulating = $state(false);
+	let simError = $state<string | null>(null);
+	let showConfirmDialog = $state(false);
+	let showTacticalDialog = $state(false);
+
+	/** Opens tactical ConsequenceDialog instead of saving directly. */
+	function handleSaveTacticalClick() {
+		showTacticalDialog = true;
+	}
+
+	/** Final tactical save — called from ConsequenceDialog onConfirm. */
+	async function confirmSaveTactical({ rationale }: { rationale?: string }) {
 		savingTactical = true;
 		editError = null;
 		try {
@@ -165,7 +178,10 @@
 			for (const [block, w] of Object.entries(editTactical)) {
 				tilts[block] = w / 100;
 			}
-			await api.put(`/allocation/${activeProfile}/tactical`, { tilts });
+			await api.put(`/allocation/${activeProfile}/tactical`, {
+				tilts,
+				...(rationale ? { rationale } : {}),
+			});
 			editingTactical = false;
 			await invalidateAll();
 		} catch (e) {
@@ -174,12 +190,6 @@
 			savingTactical = false;
 		}
 	}
-
-	// ── Simulation + Governance ──────────────────────────────────
-	let simulationResult = $state<SimulationResult | null>(null);
-	let simulating = $state(false);
-	let simError = $state<string | null>(null);
-	let showConfirmDialog = $state(false);
 
 	/**
 	 * Runs simulation against the proposed strategic weights.
@@ -339,14 +349,22 @@
 										</span>
 									{/if}
 									{#if editing}
+										{@const blockWeight = editWeights[row.block] ?? 0}
+										{@const belowMin = row.min_weight !== null && blockWeight < row.min_weight * 100}
+										{@const aboveMax = row.max_weight !== null && blockWeight > row.max_weight * 100}
+										{@const outOfBounds = belowMin || aboveMax}
 										<input
 											type="number"
-											class="w-20 rounded border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-2 py-1 text-right text-sm font-medium text-[var(--netz-text-primary)]"
+											class="w-20 rounded border px-2 py-1 text-right text-sm font-medium text-[var(--netz-text-primary)] bg-[var(--netz-bg-secondary)] {outOfBounds ? 'border-[var(--netz-danger)]' : 'border-[var(--netz-border)]'}"
 											bind:value={editWeights[row.block]}
 											min={row.min_weight !== null ? row.min_weight * 100 : 0}
 											max={row.max_weight !== null ? row.max_weight * 100 : 100}
 											step="0.1"
+											title={outOfBounds ? `Out of bounds: min ${row.min_weight !== null ? row.min_weight * 100 : 0}% — max ${row.max_weight !== null ? row.max_weight * 100 : 100}%` : undefined}
 										/>
+										{#if outOfBounds}
+											<span class="text-xs text-[var(--netz-danger)]">{belowMin ? "↓ min" : "↑ max"}</span>
+										{/if}
 									{:else}
 										<span class="font-medium text-[var(--netz-text-primary)]">
 											{formatPercent(row.weight, 1, "en-US")}
@@ -561,4 +579,53 @@
 		: []}
 	onConfirm={confirmSaveStrategic}
 	onCancel={() => showConfirmDialog = false}
-/>
+>
+	{#snippet consequenceList()}
+		<ul class="space-y-1.5">
+			<li class="flex items-start gap-2">
+				<span class="mt-0.5 text-[var(--netz-warning)]">&#9679;</span>
+				<span>This will update the strategic allocation for <strong class="text-[var(--netz-text-primary)]">{activeProfile}</strong></span>
+			</li>
+			<li class="flex items-start gap-2">
+				<span class="mt-0.5 text-[var(--netz-warning)]">&#9679;</span>
+				<span>Affects all portfolios using this profile</span>
+			</li>
+			<li class="flex items-start gap-2">
+				<span class="mt-0.5 text-[var(--netz-warning)]">&#9679;</span>
+				<span>CVaR recalculation will be triggered</span>
+			</li>
+		</ul>
+	{/snippet}
+</ConsequenceDialog>
+
+<!-- Governed tactical submit: ConsequenceDialog with mandatory rationale -->
+<ConsequenceDialog
+	bind:open={showTacticalDialog}
+	title="Confirm Tactical Allocation Change"
+	impactSummary="This will update tactical tilts for the {activeProfile} profile. Tilts adjust effective allocation away from strategic weights."
+	scopeText="Profile: {activeProfile} — affects effective allocation for all model portfolios using this profile."
+	requireRationale
+	rationaleLabel="Rationale for tactical change"
+	rationalePlaceholder="State the market signal, CIO directive, or tactical thesis driving this tilt."
+	rationaleMinLength={20}
+	confirmLabel="Submit Tactical Change"
+	onConfirm={confirmSaveTactical}
+	onCancel={() => showTacticalDialog = false}
+>
+	{#snippet consequenceList()}
+		<ul class="space-y-1.5">
+			<li class="flex items-start gap-2">
+				<span class="mt-0.5 text-[var(--netz-warning)]">&#9679;</span>
+				<span>This will update tactical tilts for <strong class="text-[var(--netz-text-primary)]">{activeProfile}</strong></span>
+			</li>
+			<li class="flex items-start gap-2">
+				<span class="mt-0.5 text-[var(--netz-warning)]">&#9679;</span>
+				<span>Affects all portfolios using this profile</span>
+			</li>
+			<li class="flex items-start gap-2">
+				<span class="mt-0.5 text-[var(--netz-warning)]">&#9679;</span>
+				<span>Effective allocation will be recalculated immediately</span>
+			</li>
+		</ul>
+	{/snippet}
+</ConsequenceDialog>

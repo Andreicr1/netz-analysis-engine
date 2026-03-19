@@ -117,7 +117,7 @@ type PageData = {
 				<div class="flex justify-end gap-3">
 					<Button variant="outline" onclick={cancelEdit} disabled={saving}>Cancel</Button>
 					<ActionButton onclick={saveEdit} loading={saving} loadingText="Saving..." disabled={!editForm.name}>
-						Save for this tenant
+						Save for {tenantName}
 					</ActionButton>
 				</div>
 			</div>

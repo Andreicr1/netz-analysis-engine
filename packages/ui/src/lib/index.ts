@@ -112,6 +112,7 @@ export {
 	formatDateTime,
 	formatDateRange,
 	formatRelativeDate,
+	formatShortDate,
 	formatISIN,
 	plColor,
 	plDirection,
@@ -124,3 +125,4 @@ export {
 } from "./utils/branding.js";
 export { createClerkHook, startSessionExpiryMonitor } from "./utils/auth.js";
 export type { ClerkHookOptions } from "./utils/auth.js";
+export { exportTableToCSV } from "./utils/table-export.js";

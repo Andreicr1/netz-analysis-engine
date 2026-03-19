@@ -12,6 +12,11 @@ export const wealthStatusMap: Record<string, StatusConfig> = {
 	published: { label: "Published", severity: "success", color: "var(--netz-success)" },
 	warning: { label: "Warning", severity: "warning", color: "var(--netz-warning)" },
 	breach: { label: "Breach", severity: "danger", color: "var(--netz-danger)" },
+	// Drift severity tokens
+	low: { label: "Low", severity: "success", color: "var(--netz-success)" },
+	medium: { label: "Medium", severity: "warning", color: "var(--netz-warning)" },
+	high: { label: "High", severity: "danger", color: "var(--netz-danger)" },
+	critical: { label: "Critical", severity: "danger", color: "var(--netz-danger)" },
 };
 
 export function resolveWealthStatus(token: string): StatusConfig | undefined {

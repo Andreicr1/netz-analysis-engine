@@ -35,6 +35,8 @@
 		metadata?: ConsequenceDialogMetadataItem[];
 		consequenceList?: Snippet;
 		children?: Snippet;
+		/** Inject custom footer content (e.g., scope warnings). Receives { canConfirm, submitting }. */
+		footer?: Snippet<[{ canConfirm: boolean; submitting: boolean }]>;
 		onConfirm: (payload: ConsequenceDialogPayload) => void | Promise<void>;
 		onCancel?: () => void;
 	}
@@ -57,6 +59,7 @@
 		metadata = [],
 		consequenceList,
 		children,
+		footer,
 		onConfirm,
 		onCancel,
 	}: Props = $props();
@@ -68,6 +71,7 @@
 
 	const instanceId = ++consequenceDialogId;
 	const rationaleId = `consequence-rationale-${instanceId}`;
+	const rationaleHintId = `consequence-rationale-hint-${instanceId}`;
 	const typedConfirmationId = `consequence-typed-${instanceId}`;
 
 	function resetForm() {
@@ -209,8 +213,9 @@
 							placeholder={rationalePlaceholder}
 							aria-invalid={rationale.length > 0 && !rationaleSatisfied}
 							aria-required={requireRationale}
+							aria-describedby={rationaleHintId}
 						></textarea>
-						<p class="text-xs text-[var(--netz-text-secondary)]">
+						<p id={rationaleHintId} class="text-xs text-[var(--netz-text-secondary)]">
 							Provide at least {rationaleMinLength} characters before continuing.
 						</p>
 					</div>
@@ -238,6 +243,12 @@
 				{#if children}
 					<div class="space-y-3 border-t border-[var(--netz-border)] pt-4">
 						{@render children()}
+					</div>
+				{/if}
+
+				{#if footer}
+					<div class="space-y-3 border-t border-[var(--netz-border)] pt-4">
+						{@render footer({ canConfirm, submitting })}
 					</div>
 				{/if}
 
