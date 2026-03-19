@@ -313,11 +313,16 @@ def search_deal_chunks(
     Supports optional domain filtering for cross-domain regulatory references.
     All queries include organization_id for tenant isolation (Security F2/F5).
     """
+    from typing import Any as _Any
     from typing import cast
 
-    from azure.search.documents.models import VectorizedQuery, VectorQuery
-
     from app.services.azure.search_client import get_search_client
+
+    try:
+        from azure.search.documents.models import VectorizedQuery, VectorQuery
+    except ImportError:
+        VectorizedQuery = None  # type: ignore[assignment,misc]
+        VectorQuery = _Any  # type: ignore[assignment,misc]
 
     client = get_search_client(index_name=_chunks_index_name())
 
@@ -328,7 +333,7 @@ def search_deal_chunks(
         safe_domain = validate_domain(domain_filter)
         filter_expr = f"({filter_expr}) and (domain eq '{safe_domain}')"
 
-    vector_queries: list[VectorQuery] | None = None
+    vector_queries: list | None = None
     if query_vector:
         vector_queries = cast(
             list[VectorQuery],
@@ -370,11 +375,16 @@ def search_fund_policy_chunks(
     All queries include organization_id for tenant isolation (Security F2/F5).
     Used by Deep Review v3 Stage 4 (policy compliance).
     """
+    from typing import Any as _Any
     from typing import cast
 
-    from azure.search.documents.models import VectorizedQuery, VectorQuery
-
     from app.services.azure.search_client import get_search_client
+
+    try:
+        from azure.search.documents.models import VectorizedQuery, VectorQuery
+    except ImportError:
+        VectorizedQuery = None  # type: ignore[assignment,misc]
+        VectorQuery = _Any  # type: ignore[assignment,misc]
 
     client = get_search_client(index_name=_chunks_index_name())
 
@@ -383,7 +393,7 @@ def search_fund_policy_chunks(
     safe_domain = validate_domain(domain_filter)
     filter_expr = f"fund_id eq '{safe_fund}' and organization_id eq '{safe_org}' and domain eq '{safe_domain}'"
 
-    vector_queries: list[VectorQuery] | None = None
+    vector_queries: list | None = None
     if query_vector:
         vector_queries = cast(
             list[VectorQuery],
