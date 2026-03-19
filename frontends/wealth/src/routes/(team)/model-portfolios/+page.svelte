@@ -166,11 +166,11 @@
 
 <div class="flex h-full bg-transparent">
 	<!-- Sidebar: portfolio list (240px) -->
-	<div class="flex w-72 shrink-0 flex-col border-r border-[var(--netz-border-subtle)] bg-[var(--netz-surface-panel)]">
-		<div class="flex items-center justify-between border-b border-[var(--netz-border-subtle)] bg-[var(--netz-surface-highlight)] px-5 py-4">
+	<div class="flex w-72 shrink-0 flex-col border-r border-(--netz-border-subtle) bg-(--netz-surface-panel)">
+		<div class="flex items-center justify-between border-b border-(--netz-border-subtle) bg-(--netz-surface-highlight) px-5 py-4">
 			<div>
 				<p class="netz-ui-kicker">Library</p>
-				<h2 class="mt-2 text-sm font-semibold text-[var(--netz-text-primary)]">Model Portfolios</h2>
+				<h2 class="mt-2 text-sm font-semibold text-(--netz-text-primary)">Model Portfolios</h2>
 			</div>
 			<Button
 				size="sm"
@@ -183,18 +183,18 @@
 		<div class="flex-1 overflow-y-auto p-3">
 			{#each portfolios as portfolio (portfolio.id)}
 				<button
-					class="mb-2 w-full rounded-[var(--netz-radius-lg)] border p-4 text-left transition-[background-color,border-color,box-shadow] duration-[var(--netz-duration-fast)] {portfolio.id === selectedPortfolio?.id
-						? 'border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] shadow-[var(--netz-shadow-2)]'
-						: 'border-transparent bg-transparent hover:border-[var(--netz-border-subtle)] hover:bg-[var(--netz-accent-soft)]'}"
+					class="mb-2 w-full rounded-(--netz-radius-lg) border p-4 text-left transition-[background-color,border-color,box-shadow] duration-(--netz-duration-fast) {portfolio.id === selectedPortfolio?.id
+						? 'border-(--netz-border) bg-(--netz-surface-elevated) shadow-(--netz-shadow-2)'
+						: 'border-transparent bg-transparent hover:border-(--netz-border-subtle) hover:bg-(--netz-accent-soft)'}"
 					onclick={() => selectPortfolio(portfolio.id)}
 				>
 					<div class="flex items-center justify-between">
-						<p class="text-sm font-semibold text-[var(--netz-text-primary)]">{portfolio.display_name}</p>
+						<p class="text-sm font-semibold text-(--netz-text-primary)">{portfolio.display_name}</p>
 						<Badge variant="secondary" class="capitalize">
 							{portfolio.profile}
 						</Badge>
 					</div>
-					<div class="mt-1 flex items-center gap-2 text-xs text-[var(--netz-text-muted)]">
+					<div class="mt-1 flex items-center gap-2 text-xs text-(--netz-text-muted)">
 						<span>NAV {formatNumber(portfolio.inception_nav, 0, "en-US")}</span>
 						<span>·</span>
 						<StatusBadge status={portfolio.status} resolve={resolveWealthStatus} />
@@ -205,7 +205,7 @@
 	</div>
 
 	<!-- Main: portfolio detail -->
-	<div class="flex-1 overflow-y-auto p-[var(--netz-space-page-gutter)]">
+	<div class="flex-1 overflow-y-auto p-(--netz-space-page-gutter)">
 		{#if selectedPortfolio}
 			<!-- Header -->
 			<PageHeader title={selectedPortfolio.display_name} class="pt-0">
@@ -238,7 +238,7 @@
 					</ActionButton>
 				{/snippet}
 			</PageHeader>
-			<p class="mb-6 -mt-2 text-sm text-[var(--netz-text-muted)]">
+			<p class="mb-6 -mt-2 text-sm text-(--netz-text-muted)">
 				Model Portfolio · {selectedPortfolio.benchmark_composite ?? "—"}
 				{#if selectedPortfolio.inception_date}
 					· Última revisão: {formatDate(selectedPortfolio.inception_date)}
@@ -286,7 +286,7 @@
 		{/if}
 
 		{#if actionError}
-			<div class="mt-4 rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+			<div class="mt-4 rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
 				{actionError}
 				<button class="ml-2 underline" onclick={() => actionError = null}>dismiss</button>
 			</div>
@@ -297,8 +297,8 @@
 				<div class="space-y-2">
 					{#each Object.entries(backtestResult) as [key, value]}
 						<div class="flex items-center justify-between text-sm">
-							<span class="text-[var(--netz-text-secondary)]">{key}</span>
-							<span class="font-mono text-[var(--netz-text-primary)]">{typeof value === "number" ? formatNumber(value, 4, "en-US") : String(value ?? "—")}</span>
+							<span class="text-(--netz-text-secondary)">{key}</span>
+							<span class="font-mono text-(--netz-text-primary)">{typeof value === "number" ? formatNumber(value, 4, "en-US") : String(value ?? "—")}</span>
 						</div>
 					{/each}
 				</div>
@@ -312,7 +312,7 @@
 	<form onsubmit={(e) => { e.preventDefault(); createPortfolio(); }} class="space-y-4">
 		<div class="space-y-2">
 			<p class="netz-ui-kicker">Create</p>
-			<h2 class="text-lg font-semibold tracking-[-0.02em] text-[var(--netz-text-primary)]">
+			<h2 class="text-lg font-semibold tracking-[-0.02em] text-(--netz-text-primary)">
 				Create Model Portfolio
 			</h2>
 		</div>
@@ -360,7 +360,7 @@
 			></Textarea>
 		</FormField>
 		{#if createError}
-			<p class="text-sm text-[var(--netz-status-error)]">{createError}</p>
+			<p class="text-sm text-(--netz-status-error)">{createError}</p>
 		{/if}
 		<div class="flex justify-end gap-2 pt-2">
 			<Button variant="outline" onclick={() => showCreate = false}>Cancel</Button>

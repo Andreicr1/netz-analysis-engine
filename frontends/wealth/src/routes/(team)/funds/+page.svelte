@@ -167,7 +167,7 @@
 	}
 </script>
 
-<div class="space-y-6 p-[var(--netz-space-page-gutter)]">
+<div class="space-y-6 p-(--netz-space-page-gutter)">
 	<!-- Page Header -->
 	<PageHeader title="Fund Universe">
 		{#snippet actions()}
@@ -181,22 +181,22 @@
 	</PageHeader>
 
 	<!-- Fund Table -->
-	<div class="overflow-hidden rounded-[var(--netz-radius-xl)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-panel)] shadow-[var(--netz-shadow-card)]">
+	<div class="overflow-hidden rounded-(--netz-radius-xl) border border-(--netz-border-subtle) bg-(--netz-surface-panel) shadow-(--netz-shadow-card)">
 		<!-- Status Tabs -->
-		<div class="border-b border-[var(--netz-border-subtle)] bg-[var(--netz-surface-highlight)] px-3 py-3">
+		<div class="border-b border-(--netz-border-subtle) bg-(--netz-surface-highlight) px-3 py-3">
 			<div class="flex flex-wrap items-center gap-2">
 				{#each statusTabs as tab (tab.value)}
 					<button
-						class="inline-flex min-h-[var(--netz-space-control-height-md)] items-center gap-2 rounded-[var(--netz-radius-md)] border px-3.5 py-2 text-sm font-medium tracking-[-0.01em] transition-[color,background-color,border-color,box-shadow] duration-[var(--netz-duration-fast)]"
-						class:border-[var(--netz-border)]={activeStatusTab === tab.value}
-						class:bg-[var(--netz-surface-elevated)]={activeStatusTab === tab.value}
-						class:text-[var(--netz-text-primary)]={activeStatusTab === tab.value}
-						class:shadow-[var(--netz-shadow-1)]={activeStatusTab === tab.value}
+						class="inline-flex min-h-(--netz-space-control-height-md) items-center gap-2 rounded-(--netz-radius-md) border px-3.5 py-2 text-sm font-medium tracking-[-0.01em] transition-[color,background-color,border-color,box-shadow] duration-(--netz-duration-fast)"
+						class:border-(--netz-border)={activeStatusTab === tab.value}
+						class:bg-(--netz-surface-elevated)={activeStatusTab === tab.value}
+						class:text-(--netz-text-primary)={activeStatusTab === tab.value}
+						class:shadow-(--netz-shadow-1)={activeStatusTab === tab.value}
 						class:border-transparent={activeStatusTab !== tab.value}
 						class:bg-transparent={activeStatusTab !== tab.value}
-						class:text-[var(--netz-text-muted)]={activeStatusTab !== tab.value}
-						class:hover:bg-[var(--netz-accent-soft)]={activeStatusTab !== tab.value}
-						class:hover:text-[var(--netz-text-secondary)]={activeStatusTab !== tab.value}
+						class:text-(--netz-text-muted)={activeStatusTab !== tab.value}
+						class:hover:bg-(--netz-accent-soft)={activeStatusTab !== tab.value}
+						class:hover:text-(--netz-text-secondary)={activeStatusTab !== tab.value}
 						onclick={() => (activeStatusTab = tab.value)}
 					>
 						{tab.label}
@@ -212,31 +212,31 @@
 
 		{#if filteredFunds.length > 0}
 			<div class="overflow-x-auto">
-				<table class="w-full min-w-[800px] text-sm">
+				<table class="w-full min-w-200 text-sm">
 					<thead>
-						<tr class="border-b border-[var(--netz-border-subtle)] bg-[var(--netz-surface-highlight)]">
-							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">
+						<tr class="border-b border-(--netz-border-subtle) bg-(--netz-surface-highlight)">
+							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">
 								Fundo
 							</th>
-							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">
+							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">
 								Gestor
 							</th>
-							<th class="px-4 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">
+							<th class="px-4 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">
 								AUM
 							</th>
-							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">
+							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">
 								Estratégia
 							</th>
-							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">
+							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">
 								Status
 							</th>
-							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">
+							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">
 								DD Report
 							</th>
-							<th class="px-4 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">
+							<th class="px-4 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">
 								Score
 							</th>
-							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">
+							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">
 								Atualizado
 							</th>
 						</tr>
@@ -244,27 +244,27 @@
 					<tbody>
 						{#each filteredFunds as fund (fund.id)}
 							<tr
-								class="cursor-pointer border-b border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] transition-colors last:border-b-0 hover:bg-[var(--netz-accent-soft)]"
-								class:bg-[var(--netz-accent-soft)]={selectedFund?.id === fund.id && panelOpen}
+								class="cursor-pointer border-b border-(--netz-border-subtle) bg-(--netz-surface-elevated) transition-colors last:border-b-0 hover:bg-(--netz-accent-soft)"
+								class:bg-(--netz-accent-soft)={selectedFund?.id === fund.id && panelOpen}
 								onclick={() => openPanel(fund)}
 							>
 								<!-- Fundo: name + subcategory -->
 								<td class="px-4 py-3">
 									<div>
-										<p class="font-medium text-[var(--netz-text-primary)]">{fund.name}</p>
+										<p class="font-medium text-(--netz-text-primary)">{fund.name}</p>
 										{#if fund.subcategory}
-											<p class="mt-0.5 text-xs text-[var(--netz-text-muted)]">{fund.subcategory}</p>
+											<p class="mt-0.5 text-xs text-(--netz-text-muted)">{fund.subcategory}</p>
 										{/if}
 									</div>
 								</td>
 
 								<!-- Gestor -->
-								<td class="px-4 py-3 text-[var(--netz-text-secondary)]">
+								<td class="px-4 py-3 text-(--netz-text-secondary)">
 									{fund.manager ?? "—"}
 								</td>
 
 								<!-- AUM -->
-								<td class="px-4 py-3 text-right font-mono text-[var(--netz-text-primary)]">
+								<td class="px-4 py-3 text-right font-mono text-(--netz-text-primary)">
 									{formatAum(fund.aum)}
 								</td>
 
@@ -272,20 +272,20 @@
 								<td class="px-4 py-3">
 									{#if fund.strategy}
 										<span
-											class="inline-flex items-center rounded-[var(--netz-radius-pill)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]"
+											class="inline-flex items-center rounded-(--netz-radius-pill) px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]"
 											style={getStrategyStyle(fund.strategy)}
 										>
 											{fund.strategy}
 										</span>
 									{:else}
-										<span class="text-[var(--netz-text-muted)]">—</span>
+										<span class="text-(--netz-text-muted)">—</span>
 									{/if}
 								</td>
 
 								<!-- Status badge -->
 								<td class="px-4 py-3">
 									<span
-										class="inline-flex items-center gap-1.5 rounded-[var(--netz-radius-pill)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]"
+										class="inline-flex items-center gap-1.5 rounded-(--netz-radius-pill) px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]"
 										style={getStatusStyle(fund.status)}
 									>
 										<span
@@ -299,7 +299,7 @@
 								<!-- DD Report status -->
 								<td class="px-4 py-3">
 									<span
-										class="inline-flex items-center gap-1.5 rounded-[var(--netz-radius-pill)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]"
+										class="inline-flex items-center gap-1.5 rounded-(--netz-radius-pill) px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]"
 										style={getDDReportStyle(fund.dd_report_status)}
 									>
 										{#if fund.dd_report_status === "generating"}

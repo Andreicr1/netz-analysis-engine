@@ -20,11 +20,16 @@
 	}
 
 	let {
-		name, profile,
-		nav = null, ytdReturn = null,
-		cvarCurrent = null, cvarLimit = null,
-		cvarUtilization = null, sharpe = null,
-		regime = null, triggerStatus = null,
+		name,
+		profile,
+		nav = null,
+		ytdReturn = null,
+		cvarCurrent = null,
+		cvarLimit = null,
+		cvarUtilization = null,
+		sharpe = null,
+		regime = null,
+		triggerStatus = null,
 	}: Props = $props();
 
 	let ytdColor = $derived(
@@ -32,7 +37,7 @@
 	);
 
 	// Bar color based on utilization
-	let barColor = $derived(() => {
+	let barColor = $derived.by(() => {
 		if (cvarUtilization === null) return "var(--netz-text-muted)";
 		if (cvarUtilization >= 100) return "var(--netz-danger)";
 		if (cvarUtilization >= 85) return "var(--netz-warning)";
@@ -44,7 +49,7 @@
 	);
 
 	// CVaR color
-	let cvarColor = $derived(() => {
+	let cvarColor = $derived.by(() => {
 		if (cvarUtilization === null) return "var(--netz-text-secondary)";
 		if (cvarUtilization >= 100) return "var(--netz-danger)";
 		if (cvarUtilization >= 85) return "var(--netz-warning)";
@@ -60,26 +65,26 @@
 	let profileLabel = $derived(profileLabels[profile] ?? profile);
 </script>
 
-<div class="flex h-full flex-col overflow-hidden rounded-[var(--netz-radius-xl)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-panel)] p-[var(--netz-space-card-padding-lg)] shadow-[var(--netz-shadow-card)]">
+<div class="flex h-full flex-col overflow-hidden rounded-(--netz-radius-xl) border border-(--netz-border-subtle) bg-(--netz-surface-panel) p-(--netz-space-card-padding-lg) shadow-(--netz-shadow-card)">
 
 	<!-- Header: name + profile badge -->
 	<div class="mb-4 flex items-start justify-between gap-3">
 		<div class="space-y-2">
 			<p class="netz-ui-kicker">Model Portfolio</p>
-			<h3 class="text-base font-semibold tracking-[-0.015em] text-[var(--netz-text-primary)]">{name}</h3>
+			<h3 class="text-base font-semibold tracking-[-0.015em] text-(--netz-text-primary)">{name}</h3>
 		</div>
 		<Badge variant="secondary" class="shrink-0">{profileLabel}</Badge>
 	</div>
 
 	<!-- NAV — dominant value -->
 	<div class="mb-2">
-		<p class="font-mono text-[2rem] font-semibold leading-none tracking-[-0.04em] text-[var(--netz-text-primary)]">
+		<p class="font-mono text-[2rem] font-semibold leading-none tracking-[-0.04em] text-(--netz-text-primary)">
 			{nav !== null ? formatCurrency(nav, "USD", "en-US") : "—"}
 		</p>
 	</div>
 
 	<!-- NAV · YTD line -->
-	<p class="mb-5 text-sm text-[var(--netz-text-secondary)]">
+	<p class="mb-5 text-sm text-(--netz-text-secondary)">
 		NAV
 		{#if ytdReturn !== null}
 			·
@@ -103,24 +108,24 @@
 
 	<!-- Three metrics row -->
 	<div class="mb-5 grid grid-cols-3 gap-3">
-		<div class="rounded-[var(--netz-radius-md)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] p-3 shadow-[var(--netz-shadow-1)]">
-			<p class="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">CVaR 95%</p>
-			<p class="text-sm font-semibold tracking-[-0.01em]" style:color={cvarColor()}>
+		<div class="rounded-(--netz-radius-md) border border-(--netz-border-subtle) bg-(--netz-surface-elevated) p-3 shadow-(--netz-shadow-1)">
+			<p class="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">CVaR 95%</p>
+			<p class="text-sm font-semibold tracking-[-0.01em]" style:color={cvarColor}>
 				{formatPercent(cvarCurrent, 1, "en-US")}
 			</p>
-			<p class="mt-1 text-xs text-[var(--netz-text-muted)]">
+			<p class="mt-1 text-xs text-(--netz-text-muted)">
 				lim {formatPercent(cvarLimit, 1, "en-US")}
 			</p>
 		</div>
-		<div class="rounded-[var(--netz-radius-md)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] p-3 shadow-[var(--netz-shadow-1)]">
-			<p class="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">Utilização</p>
-			<p class="text-sm font-semibold tracking-[-0.01em]" style:color={barColor()}>
+		<div class="rounded-(--netz-radius-md) border border-(--netz-border-subtle) bg-(--netz-surface-elevated) p-3 shadow-(--netz-shadow-1)">
+			<p class="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">Utilizacao</p>
+			<p class="text-sm font-semibold tracking-[-0.01em]" style:color={barColor}>
 				{cvarUtilization !== null ? formatNumber(cvarUtilization, 0, "en-US") + "%" : "—"}
 			</p>
 		</div>
-		<div class="rounded-[var(--netz-radius-md)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] p-3 shadow-[var(--netz-shadow-1)]">
-			<p class="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">Sharpe</p>
-			<p class="text-sm font-semibold tracking-[-0.01em] text-[var(--netz-success)]">
+		<div class="rounded-(--netz-radius-md) border border-(--netz-border-subtle) bg-(--netz-surface-elevated) p-3 shadow-(--netz-shadow-1)">
+			<p class="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">Sharpe</p>
+			<p class="text-sm font-semibold tracking-[-0.01em] text-(--netz-success)">
 				{sharpe !== null ? formatNumber(sharpe, 2, "en-US") : "—"}
 			</p>
 		</div>
@@ -128,16 +133,16 @@
 
 	<!-- Utilization bar -->
 	<div class="mt-auto space-y-2">
-		<div class="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">
+		<div class="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">
 			<span>Risk utilization</span>
 			<span>{cvarUtilization !== null ? formatNumber(cvarUtilization, 0, "en-US") + "%" : "—"}</span>
 		</div>
-		<div class="h-2 w-full overflow-hidden rounded-full bg-[var(--netz-surface-inset)]">
-		<div
-			class="h-full rounded-full transition-all duration-500"
-			style:width={barWidth}
-			style:background-color={barColor()}
-		></div>
+		<div class="h-2 w-full overflow-hidden rounded-full bg-(--netz-surface-inset)">
+			<div
+				class="h-full rounded-full transition-all duration-500"
+				style:width={barWidth}
+				style:background-color={barColor}
+			></div>
 		</div>
 	</div>
 </div>
