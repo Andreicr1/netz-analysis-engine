@@ -12,6 +12,8 @@
 	import { formatNumber, formatBps, formatRatio } from "@netz/ui";
 	import DealStageTimeline from "$lib/components/DealStageTimeline.svelte";
 	import ICMemoViewer from "$lib/components/ICMemoViewer.svelte";
+	import CashflowLedger from "$lib/components/CashflowLedger.svelte";
+	import DealPerformancePanel from "$lib/components/DealPerformancePanel.svelte";
 	import { goto, invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
 	import { createClientApiClient } from "$lib/api/client";
@@ -255,7 +257,7 @@
 		<!-- Action buttons based on allowed transitions -->
 		{#if allowedTransitions.length > 0}
 			<div class="flex gap-2">
-				{#each allowedTransitions as transition}
+				{#each allowedTransitions as transition (transition)}
 					{#if transition === "CONVERTED_TO_ASSET"}
 						<Button
 							variant="default"
@@ -295,6 +297,7 @@
 			{ id: "conditions", label: `Conditions${conditions.length > 0 ? ` (${conditions.length})` : ""}` },
 			{ id: "ic-memo", label: "IC Memo" },
 			{ id: "documents", label: "Documents" },
+			{ id: "cashflows", label: "Cashflows & Performance" },
 			{ id: "audit", label: "Audit Trail" },
 		]}
 		active={activeTab}
@@ -447,6 +450,20 @@
 				title="Deal Documents"
 				description="Evidence and supporting documents for this deal."
 			/>
+
+		{:else if activeTab === "cashflows"}
+			<div class="space-y-8">
+				<CashflowLedger
+					fundId={data.fundId}
+					dealId={data.dealId}
+				/>
+				<div class="border-t border-[var(--netz-border)] pt-6">
+					<DealPerformancePanel
+						fundId={data.fundId}
+						dealId={data.dealId}
+					/>
+				</div>
+			</div>
 
 		{:else if activeTab === "audit"}
 			<AuditTrailPanel
