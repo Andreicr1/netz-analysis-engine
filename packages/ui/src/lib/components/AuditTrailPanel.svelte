@@ -3,6 +3,7 @@
 	import Button from "./Button.svelte";
 	import { cn } from "../utils/cn.js";
 	import { formatDate, formatDateTime } from "../utils/format.js";
+	import type { Snippet } from "svelte";
 
 	export type AuditTrailStatus = "success" | "warning" | "error" | "info" | "pending";
 

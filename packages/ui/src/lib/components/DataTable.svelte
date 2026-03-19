@@ -57,8 +57,6 @@
 	});
 	let effectivePageSize = $derived(clampPageSize(pageSize));
 	let manualPagination = $derived(totalCount !== undefined);
-	let rowTotal = $derived(manualPagination ? (totalCount ?? 0) : table.getFilteredRowModel().rows.length);
-	let pageCount = $derived(manualPagination ? Math.ceil(rowTotal / effectivePageSize) : table.getPageCount());
 
 	let table = createTable({
 		get data() {
@@ -101,6 +99,8 @@
 		getExpandedRowModel: getExpandedRowModel(),
 		getPaginationRowModel: getPaginationRowModel(),
 	});
+	let rowTotal = $derived(manualPagination ? (totalCount ?? 0) : table.getFilteredRowModel().rows.length);
+	let pageCount = $derived(manualPagination ? Math.ceil(rowTotal / effectivePageSize) : table.getPageCount());
 
 	$effect(() => {
 		if (pagination.pageSize !== effectivePageSize) {
@@ -121,7 +121,7 @@
 					{@render filterBar(table)}
 				{:else if filterColumn}
 					<input
-						class="flex h-9 w-full max-w-sm rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-1 text-sm text-[var(--netz-text-primary)] placeholder:text-[var(--netz-text-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--netz-brand-secondary)]"
+						class="netz-ui-field flex h-[var(--netz-space-control-height-md)] w-full max-w-sm rounded-[var(--netz-radius-md)] px-3.5 py-2 text-sm tracking-[-0.005em] text-[var(--netz-text-primary)] placeholder:text-[var(--netz-text-muted)]"
 						placeholder={filterPlaceholder}
 						value={(table.getColumn(filterColumn)?.getFilterValue() as string) ?? ""}
 						oninput={(event) => {
@@ -141,17 +141,17 @@
 		</div>
 	{/if}
 
-	<div class="rounded-md border border-[var(--netz-border)]">
+	<div class="overflow-hidden rounded-[var(--netz-radius-lg)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-panel)] shadow-[var(--netz-shadow-1)]">
 		<table class="w-full caption-bottom text-sm">
-			<thead class="bg-[var(--netz-brand-primary)]">
+			<thead class="border-b border-[var(--netz-border-subtle)] bg-[var(--netz-surface-highlight)]">
 				{#each table.getHeaderGroups() as headerGroup}
 					<tr>
 						{#each headerGroup.headers as header}
-							<th class="h-10 px-4 text-left align-middle text-xs font-medium text-white">
+							<th class="h-11 px-4 text-left align-middle text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">
 								{#if !header.isPlaceholder}
 									{#if header.column.getCanSort()}
 										<button
-											class="flex items-center gap-1 hover:opacity-80"
+											class="flex items-center gap-1.5 text-[var(--netz-text-muted)] transition-colors duration-[var(--netz-duration-fast)] hover:text-[var(--netz-text-secondary)]"
 											onclick={(event) =>
 												header.column.toggleSorting(
 													header.column.getIsSorted() === "asc",
@@ -206,15 +206,15 @@
 			</thead>
 			<tbody>
 				{#each table.getRowModel().rows as row}
-					<tr class="border-b border-[var(--netz-border)] transition-colors hover:bg-[var(--netz-surface-alt)]">
+					<tr class="border-b border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] transition-colors last:border-b-0 hover:bg-[var(--netz-accent-soft)]">
 						{#each row.getVisibleCells() as cell}
-							<td class="px-4 py-3 align-middle text-[var(--netz-text-primary)]">
+							<td class="px-4 py-3.5 align-middle text-[var(--netz-text-primary)]">
 								<FlexRender content={cell.column.columnDef.cell} context={cell.getContext()} />
 							</td>
 						{/each}
 					</tr>
 					{#if expandedRow && row.getIsExpanded()}
-						<tr class="border-b border-[var(--netz-border)] bg-[var(--netz-surface-alt)]/60">
+						<tr class="border-b border-[var(--netz-border-subtle)] bg-[var(--netz-surface-inset)] last:border-b-0">
 							<td colspan={columns.length} class="px-4 py-3">
 								{@render expandedRow(row.original)}
 							</td>
@@ -222,7 +222,7 @@
 					{/if}
 				{:else}
 					<tr>
-						<td colspan={columns.length} class="h-24 text-center text-[var(--netz-text-muted)]">
+						<td colspan={columns.length} class="h-24 bg-[var(--netz-surface-elevated)] text-center text-[var(--netz-text-muted)]">
 							{#if emptyState}
 								{@render emptyState()}
 							{:else}
@@ -235,8 +235,8 @@
 		</table>
 	</div>
 
-	{#if table.getPageCount() > 1}
-		<div class="flex items-center justify-between px-2 py-4 text-sm text-[var(--netz-text-secondary)]">
+	{#if pageCount > 1}
+		<div class="mt-3 flex flex-col gap-3 rounded-[var(--netz-radius-lg)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-highlight)] px-4 py-3 text-sm text-[var(--netz-text-secondary)] sm:flex-row sm:items-center sm:justify-between">
 			<span>
 				Showing {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}-{Math.min(
 					(table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
@@ -245,7 +245,7 @@
 			</span>
 			<div class="flex items-center gap-2">
 				<select
-					class="h-8 rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-2 text-xs"
+					class="netz-ui-field h-[var(--netz-space-control-height-sm)] rounded-[var(--netz-radius-md)] bg-[var(--netz-surface-elevated)] px-2.5 text-xs text-[var(--netz-text-primary)]"
 					value={table.getState().pagination.pageSize}
 					onchange={(event) =>
 						table.setPageSize(clampPageSize(Number((event.target as HTMLSelectElement).value)))}
@@ -255,7 +255,7 @@
 					{/each}
 				</select>
 				<button
-					class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--netz-border)] disabled:opacity-50"
+					class="inline-flex h-[var(--netz-space-control-height-sm)] w-[var(--netz-space-control-height-sm)] items-center justify-center rounded-[var(--netz-radius-md)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] text-[var(--netz-text-secondary)] shadow-[var(--netz-shadow-1)] transition-[color,background-color,border-color] duration-[var(--netz-duration-fast)] hover:bg-[var(--netz-accent-soft)] hover:text-[var(--netz-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
 					onclick={() => table.previousPage()}
 					disabled={!table.getCanPreviousPage()}
 					aria-label="Previous page"
@@ -270,9 +270,11 @@
 						stroke-width="2"><path d="m15 18-6-6 6-6" /></svg
 					>
 				</button>
-				<span class="text-xs">{table.getState().pagination.pageIndex + 1} / {pageCount}</span>
+				<span class="min-w-14 text-center text-xs font-semibold tracking-[0.02em] text-[var(--netz-text-secondary)]">
+					{table.getState().pagination.pageIndex + 1} / {pageCount}
+				</span>
 				<button
-					class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--netz-border)] disabled:opacity-50"
+					class="inline-flex h-[var(--netz-space-control-height-sm)] w-[var(--netz-space-control-height-sm)] items-center justify-center rounded-[var(--netz-radius-md)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] text-[var(--netz-text-secondary)] shadow-[var(--netz-shadow-1)] transition-[color,background-color,border-color] duration-[var(--netz-duration-fast)] hover:bg-[var(--netz-accent-soft)] hover:text-[var(--netz-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
 					onclick={() => table.nextPage()}
 					disabled={!table.getCanNextPage()}
 					aria-label="Next page"

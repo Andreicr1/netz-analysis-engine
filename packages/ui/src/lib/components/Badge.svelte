@@ -26,7 +26,7 @@
 
 <span
 	class={cn(
-		"inline-flex items-center rounded-[var(--netz-radius-pill)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] transition-[color,background-color,border-color]",
+		"inline-flex items-center whitespace-nowrap rounded-[var(--netz-radius-pill)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] transition-[color,background-color,border-color]",
 		variantStyles[variant],
 		className,
 	)}
