@@ -58,6 +58,10 @@ export interface DDReportSummary {
 	status: string;
 	version: number;
 	created_at: string;
+	created_by: string | null;
+	approved_by: string | null;
+	approved_at: string | null;
+	rejection_reason: string | null;
 }
 
 export interface DDReportChapter {

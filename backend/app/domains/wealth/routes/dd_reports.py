@@ -9,10 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -25,7 +26,7 @@ from app.core.jobs.tracker import (
     register_job_owner,
     verify_job_owner,
 )
-from app.core.security.clerk_auth import CurrentUser, get_current_user
+from app.core.security.clerk_auth import Actor, CurrentUser, get_current_user, require_role
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.dd_report import DDReport
 from app.domains.wealth.routes.common import _get_content_semaphore, require_content_slot
@@ -33,8 +34,10 @@ from app.domains.wealth.schemas.dd_report import (
     DDReportCreate,
     DDReportRead,
     DDReportRegenerate,
+    DDReportRejectRequest,
     DDReportSummary,
 )
+from app.shared.enums import Role
 
 logger = structlog.get_logger()
 
@@ -151,15 +154,16 @@ async def trigger_dd_report(
 )
 async def list_dd_reports(
     fund_id: uuid.UUID,
+    report_status: str | None = Query(default=None, alias="status"),
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[DDReportSummary]:
     """List all DD Reports for a fund (version history)."""
-    result = await db.execute(
-        select(DDReport)
-        .where(DDReport.instrument_id == fund_id)
-        .order_by(DDReport.version.desc())
-    )
+    query = select(DDReport).where(DDReport.instrument_id == fund_id)
+    if report_status:
+        query = query.where(DDReport.status == report_status)
+    query = query.order_by(DDReport.version.desc())
+    result = await db.execute(query)
     reports = result.scalars().all()
     return [DDReportSummary.model_validate(r) for r in reports]
 
@@ -243,6 +247,87 @@ async def regenerate_dd_report(
     )
 
     await db.commit()
+    return DDReportSummary.model_validate(report)
+
+
+@router.post(
+    "/{report_id}/approve",
+    response_model=DDReportSummary,
+    summary="Approve a DD Report for investor distribution",
+)
+async def approve_dd_report(
+    report_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(require_role(Role.INVESTMENT_TEAM)),
+) -> DDReportSummary:
+    """Approve a DD report. Requires IC role. Self-approval blocked."""
+    result = await db.execute(
+        select(DDReport)
+        .options(selectinload(DDReport.chapters))
+        .where(DDReport.id == report_id)
+    )
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"DD Report {report_id} not found",
+        )
+
+    if report.status != "pending_approval":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Report status is '{report.status}', expected 'pending_approval'",
+        )
+
+    if actor.actor_id == report.created_by:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Self-approval is not allowed",
+        )
+
+    report.status = "approved"
+    report.approved_by = actor.actor_id
+    report.approved_at = datetime.now(UTC)
+    report.rejection_reason = None
+    await db.commit()
+
+    return DDReportSummary.model_validate(report)
+
+
+@router.post(
+    "/{report_id}/reject",
+    response_model=DDReportSummary,
+    summary="Reject a DD Report back to draft",
+)
+async def reject_dd_report(
+    report_id: uuid.UUID,
+    body: DDReportRejectRequest,
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(require_role(Role.INVESTMENT_TEAM)),
+) -> DDReportSummary:
+    """Reject a DD report back to draft with rationale."""
+    result = await db.execute(
+        select(DDReport).where(DDReport.id == report_id)
+    )
+    report = result.scalar_one_or_none()
+    if not report:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"DD Report {report_id} not found",
+        )
+
+    if report.status != "pending_approval":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Report status is '{report.status}', expected 'pending_approval'",
+        )
+
+    report.status = "draft"
+    report.rejection_reason = body.reason
+    report.approved_by = None
+    report.approved_at = None
+    await db.commit()
+
     return DDReportSummary.model_validate(report)
 
 

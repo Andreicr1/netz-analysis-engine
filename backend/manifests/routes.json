@@ -1241,8 +1241,18 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/dd-reports/{report_id}/approve",
+    "name": "approve_dd_report"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/dd-reports/{report_id}/regenerate",
     "name": "regenerate_dd_report"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/dd-reports/{report_id}/reject",
+    "name": "reject_dd_report"
   },
   {
     "method": "POST",

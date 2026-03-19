@@ -60,6 +60,11 @@ class DDReport(OrganizationScopedMixin, Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     created_by: Mapped[str | None] = mapped_column(String(128))
+    approved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Relationships
     chapters: Mapped[list[DDChapter]] = relationship(

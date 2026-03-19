@@ -1,14 +1,15 @@
 <!--
   DD Report detail — chapter navigation sidebar + content display.
-  Download PDF, regenerate with confirmation.
+  Download PDF, regenerate with confirmation. Approval bar for IC members.
 -->
 <script lang="ts">
-	import { Card, Button, EmptyState, cn } from "@netz/ui";
-	import { ActionButton, ConfirmDialog } from "@netz/ui";
+	import { Card, Button, EmptyState, cn, StatusBadge, Dialog } from "@netz/ui";
+	import { ActionButton, ConfirmDialog, FormField } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
 	import type { PageData } from "./$types";
+	import { resolveWealthStatus } from "$lib/utils/status-maps";
 	import DOMPurify from "dompurify";
 
 	/** Render Markdown as safe HTML — converts basic Markdown then sanitizes with DOMPurify. */
@@ -26,12 +27,14 @@
 			.replace(/\n\n/g, "</p><p>")
 			.replace(/\n/g, "<br/>");
 		html = `<p>${html}</p>`;
-		// Sanitize with DOMPurify — handles mXSS, namespace escapes, all known bypass vectors
+		// Sanitize with DOMPurify — strips scripts/handlers/javascript:
 		if (typeof window !== "undefined") {
 			html = DOMPurify.sanitize(html);
 		}
 		return html;
 	}
+
+	const IC_ROLES = new Set(["admin", "super_admin", "investment_team"]);
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -46,11 +49,29 @@
 
 	let report = $derived(data.report as Record<string, unknown>);
 	let chapters = $derived((report?.chapters ?? []) as Chapter[]);
+	let reportStatus = $derived((report?.status ?? "draft") as string);
+	let createdBy = $derived((report?.created_by ?? null) as string | null);
+	let rejectionReason = $derived((report?.rejection_reason ?? null) as string | null);
 	let activeChapter = $state(0);
 	let downloading = $state(false);
 	let showRegenConfirm = $state(false);
 	let regenerating = $state(false);
+	let approving = $state(false);
+	let showRejectDialog = $state(false);
+	let rejectReason = $state("");
+	let rejecting = $state(false);
 	let actionError = $state<string | null>(null);
+
+	let canApprove = $derived(
+		reportStatus === "pending_approval" &&
+		IC_ROLES.has(data.actorRole) &&
+		data.actorId !== createdBy
+	);
+
+	let canReject = $derived(
+		reportStatus === "pending_approval" &&
+		IC_ROLES.has(data.actorRole)
+	);
 
 	async function downloadPDF() {
 		downloading = true;
@@ -83,77 +104,157 @@
 			regenerating = false;
 		}
 	}
+
+	async function approveReport() {
+		approving = true;
+		actionError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post(`/dd-reports/${data.reportId}/approve`, {});
+			await invalidateAll();
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : "Approval failed";
+		} finally {
+			approving = false;
+		}
+	}
+
+	async function rejectReport() {
+		if (rejectReason.length < 10) return;
+		rejecting = true;
+		actionError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post(`/dd-reports/${data.reportId}/reject`, { reason: rejectReason });
+			showRejectDialog = false;
+			rejectReason = "";
+			await invalidateAll();
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : "Rejection failed";
+		} finally {
+			rejecting = false;
+		}
+	}
 </script>
 
-<div class="flex h-full">
-	<!-- Chapter sidebar -->
-	<aside class="w-64 shrink-0 border-r border-(--netz-border) bg-(--netz-surface-panel) p-4">
-		<h3 class="mb-3 text-sm font-semibold text-(--netz-text-secondary)">Chapters</h3>
-		{#if chapters.length === 0}
-			<p class="text-xs text-(--netz-text-muted)">No chapters yet.</p>
-		{:else}
-			<nav class="space-y-1">
-				{#each chapters as chapter, i (chapter.chapter_number)}
-					<button
-						class={cn(
-							"w-full rounded-md px-3 py-2 text-left text-xs transition-colors",
-							activeChapter === i
-								? "bg-(--netz-brand-primary)/10 text-(--netz-brand-primary) font-medium"
-								: "text-(--netz-text-secondary) hover:bg-(--netz-surface-highlight)"
-						)}
-						onclick={() => activeChapter = i}
-					>
-						{chapter.chapter_number}. {chapter.title}
-					</button>
-				{/each}
-			</nav>
-		{/if}
-
-		<div class="mt-6 space-y-2">
-			<ActionButton
-				onclick={downloadPDF}
-				loading={downloading}
-				loadingText="Downloading..."
-				class="w-full"
-				size="sm"
-			>
-				Download PDF
-			</ActionButton>
-			<ActionButton
-				variant="outline"
-				onclick={() => showRegenConfirm = true}
-				loading={regenerating}
-				loadingText="..."
-				class="w-full"
-				size="sm"
-			>
-				Regenerate
-			</ActionButton>
+<div class="flex h-full flex-col">
+	<!-- Approval bar -->
+	{#if reportStatus === "pending_approval" || reportStatus === "approved" || rejectionReason}
+		<div class={cn(
+			"flex items-center justify-between border-b px-6 py-3",
+			reportStatus === "pending_approval" && "border-(--netz-warning)/30 bg-(--netz-warning)/5",
+			reportStatus === "approved" && "border-(--netz-success)/30 bg-(--netz-success)/5",
+			reportStatus === "draft" && rejectionReason && "border-(--netz-status-error)/30 bg-(--netz-status-error)/5",
+		)}>
+			<div class="flex items-center gap-3">
+				<StatusBadge status={reportStatus} type="default" resolve={resolveWealthStatus} />
+				{#if reportStatus === "pending_approval"}
+					<span class="text-sm text-(--netz-text-secondary)">This report is awaiting IC approval before investor distribution.</span>
+				{:else if reportStatus === "approved"}
+					<span class="text-sm text-(--netz-text-secondary)">Approved for investor distribution.</span>
+				{/if}
+				{#if rejectionReason && reportStatus === "draft"}
+					<span class="text-sm text-(--netz-status-error)">Rejected: {rejectionReason}</span>
+				{/if}
+			</div>
+			{#if reportStatus === "pending_approval"}
+				<div class="flex gap-2">
+					{#if canApprove}
+						<ActionButton
+							size="sm"
+							onclick={approveReport}
+							loading={approving}
+							loadingText="Approving..."
+						>
+							Approve
+						</ActionButton>
+					{/if}
+					{#if canReject}
+						<Button size="sm" variant="outline" onclick={() => showRejectDialog = true}>
+							Reject
+						</Button>
+					{/if}
+					{#if !canApprove && !canReject}
+						<span class="text-xs text-(--netz-text-muted)">IC role required to review</span>
+					{/if}
+					{#if IC_ROLES.has(data.actorRole) && data.actorId === createdBy}
+						<span class="text-xs text-(--netz-text-muted)">You cannot approve your own report</span>
+					{/if}
+				</div>
+			{/if}
 		</div>
-	</aside>
+	{/if}
 
-	<!-- Chapter content -->
-	<main class="flex-1 overflow-y-auto p-6">
-		{#if actionError}
-			<div class="mb-4 rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
-				{actionError}
-			</div>
-		{/if}
+	<div class="flex flex-1">
+		<!-- Chapter sidebar -->
+		<aside class="w-64 shrink-0 border-r border-(--netz-border) bg-(--netz-surface-panel) p-4">
+			<h3 class="mb-3 text-sm font-semibold text-(--netz-text-secondary)">Chapters</h3>
+			{#if chapters.length === 0}
+				<p class="text-xs text-(--netz-text-muted)">No chapters yet.</p>
+			{:else}
+				<nav class="space-y-1">
+					{#each chapters as chapter, i (chapter.chapter_number)}
+						<button
+							class={cn(
+								"w-full rounded-md px-3 py-2 text-left text-xs transition-colors",
+								activeChapter === i
+									? "bg-(--netz-brand-primary)/10 text-(--netz-brand-primary) font-medium"
+									: "text-(--netz-text-secondary) hover:bg-(--netz-surface-highlight)"
+							)}
+							onclick={() => activeChapter = i}
+						>
+							{chapter.chapter_number}. {chapter.title}
+						</button>
+					{/each}
+				</nav>
+			{/if}
 
-		{#if chapters.length === 0}
-			<EmptyState title="No Chapters" description="Report chapters will appear here after generation." />
-		{:else if chapters[activeChapter]}
-			<div>
-				<h2 class="mb-4 text-xl font-semibold text-(--netz-text-primary)">
-					{chapters[activeChapter]!.chapter_number}. {chapters[activeChapter]!.title}
-				</h2>
-				<Card class="prose prose-sm max-w-none p-6 text-(--netz-text-primary)">
-					<!-- Sanitized Markdown rendering — strips scripts/handlers/javascript: -->
-					<div>{@html renderSafeMarkdown(chapters[activeChapter]!.content)}</div>
-				</Card>
+			<div class="mt-6 space-y-2">
+				<ActionButton
+					onclick={downloadPDF}
+					loading={downloading}
+					loadingText="Downloading..."
+					class="w-full"
+					size="sm"
+				>
+					Download PDF
+				</ActionButton>
+				<ActionButton
+					variant="outline"
+					onclick={() => showRegenConfirm = true}
+					loading={regenerating}
+					loadingText="..."
+					class="w-full"
+					size="sm"
+				>
+					Regenerate
+				</ActionButton>
 			</div>
-		{/if}
-	</main>
+		</aside>
+
+		<!-- Chapter content -->
+		<main class="flex-1 overflow-y-auto p-6">
+			{#if actionError}
+				<div class="mb-4 rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
+					{actionError}
+				</div>
+			{/if}
+
+			{#if chapters.length === 0}
+				<EmptyState title="No Chapters" description="Report chapters will appear here after generation." />
+			{:else if chapters[activeChapter]}
+				<div>
+					<h2 class="mb-4 text-xl font-semibold text-(--netz-text-primary)">
+						{chapters[activeChapter]!.chapter_number}. {chapters[activeChapter]!.title}
+					</h2>
+					<Card class="prose prose-sm max-w-none p-6 text-(--netz-text-primary)">
+						<!-- Sanitized Markdown rendering — strips scripts/handlers/javascript: -->
+						<div>{@html renderSafeMarkdown(chapters[activeChapter]!.content)}</div>
+					</Card>
+				</div>
+			{/if}
+		</main>
+	</div>
 </div>
 
 <ConfirmDialog
@@ -165,3 +266,34 @@
 	onConfirm={regenerate}
 	onCancel={() => showRegenConfirm = false}
 />
+
+<!-- Reject Dialog -->
+<Dialog bind:open={showRejectDialog} title="Reject DD Report">
+	<div class="space-y-4">
+		<p class="text-sm text-(--netz-text-secondary)">
+			Provide a rationale for rejecting this report. The author will see this feedback.
+		</p>
+		<FormField label="Rejection Reason" required>
+			<textarea
+				class="w-full rounded-md border border-(--netz-border) bg-(--netz-bg-secondary) px-3 py-2 text-sm text-(--netz-text-primary)"
+				rows={4}
+				placeholder="Minimum 10 characters..."
+				bind:value={rejectReason}
+			></textarea>
+		</FormField>
+		{#if rejectReason.length > 0 && rejectReason.length < 10}
+			<p class="text-xs text-(--netz-status-error)">Reason must be at least 10 characters.</p>
+		{/if}
+		<div class="flex justify-end gap-2 pt-2">
+			<Button variant="outline" onclick={() => { showRejectDialog = false; rejectReason = ""; }}>Cancel</Button>
+			<ActionButton
+				onclick={rejectReport}
+				loading={rejecting}
+				loadingText="Rejecting..."
+				disabled={rejectReason.length < 10}
+			>
+				Reject Report
+			</ActionButton>
+		</div>
+	</div>
+</Dialog>

@@ -241,10 +241,10 @@ async def download_dd_report_pdf(
             detail=f"DD Report {report_id} not found",
         )
 
-    if report.status != "completed":
+    if report.status not in ("completed", "pending_approval", "approved", "published"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"DD Report is not completed (status: {report.status})",
+            detail=f"DD Report is not ready for download (status: {report.status})",
         )
 
     # Get fund name

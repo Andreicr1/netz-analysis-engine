@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class DDChapterRead(BaseModel):
@@ -36,6 +36,9 @@ class DDReportSummary(BaseModel):
     is_current: bool
     created_at: datetime
     created_by: str | None = None
+    approved_by: str | None = None
+    approved_at: datetime | None = None
+    rejection_reason: str | None = None
 
 
 class DDReportRead(DDReportSummary):
@@ -48,6 +51,10 @@ class DDReportCreate(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     config_overrides: dict | None = None
+
+
+class DDReportRejectRequest(BaseModel):
+    reason: str = Field(..., min_length=10, max_length=2000)
 
 
 class DDReportRegenerate(BaseModel):
