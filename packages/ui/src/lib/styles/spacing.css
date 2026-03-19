@@ -1,9 +1,10 @@
 /* ============================================================
- * Netz Design Tokens — Spacing
- * 4px-based scale. Use --netz-space-{n} in components.
+ * Netz Design Tokens - Spacing
+ * Base scale plus semantic rhythm tokens for layout composition.
  * ============================================================ */
 
 :root {
+	/* Raw scale */
 	--netz-space-px: 1px;
 	--netz-space-0\.5: 2px;
 	--netz-space-1: 4px;
@@ -22,4 +23,31 @@
 	--netz-space-14: 56px;
 	--netz-space-15: 60px;
 	--netz-space-16: 64px;
+
+	/* Semantic rhythm */
+	--netz-space-inline-2xs: 6px;
+	--netz-space-inline-xs: 10px;
+	--netz-space-inline-sm: 12px;
+	--netz-space-inline-md: 16px;
+	--netz-space-inline-lg: 20px;
+	--netz-space-inline-xl: 24px;
+	--netz-space-inline-2xl: 32px;
+
+	--netz-space-stack-2xs: 6px;
+	--netz-space-stack-xs: 10px;
+	--netz-space-stack-sm: 14px;
+	--netz-space-stack-md: 20px;
+	--netz-space-stack-lg: 28px;
+	--netz-space-stack-xl: 40px;
+	--netz-space-stack-2xl: 56px;
+
+	--netz-space-card-padding: 20px;
+	--netz-space-card-padding-lg: 24px;
+	--netz-space-panel-padding: 28px;
+	--netz-space-control-height-sm: 32px;
+	--netz-space-control-height-md: 40px;
+	--netz-space-control-height-lg: 48px;
+	--netz-space-page-gutter: clamp(20px, 1rem + 1vw, 32px);
+	--netz-space-page-block: clamp(24px, 1rem + 2vw, 40px);
+	--netz-space-section-gap: clamp(28px, 1rem + 2vw, 48px);
 }

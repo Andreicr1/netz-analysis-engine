@@ -1,53 +1,70 @@
 /* ============================================================
- * Netz Design Tokens — Typography
- * Inter Variable for prose, JetBrains Mono for code.
+ * Netz Design Tokens - Typography
+ * Calm editorial hierarchy for dense executive interfaces.
  * ============================================================ */
 
 @import "@fontsource-variable/inter";
 
 :root {
-	/* ── Font families ─────────────────────────────────────── */
+	/* Font families */
 	--netz-font-sans: "Inter Variable", Inter, system-ui, sans-serif;
 	--netz-font-mono: "JetBrains Mono", monospace;
 
-	/* ── Heading sizes ─────────────────────────────────────── */
-	--netz-text-h1: 2.25rem; /* 36px */
-	--netz-text-h2: 1.875rem; /* 30px */
-	--netz-text-h3: 1.5rem; /* 24px */
-	--netz-text-h4: 1.25rem; /* 20px */
-	--netz-text-h5: 1.125rem; /* 18px */
-	--netz-text-h6: 1rem; /* 16px */
+	/* Display and heading sizes */
+	--netz-text-display: clamp(2.5rem, 2.1rem + 1.8vw, 3.25rem);
+	--netz-text-h1: clamp(2.125rem, 1.85rem + 1.2vw, 2.625rem);
+	--netz-text-h2: clamp(1.75rem, 1.55rem + 0.85vw, 2.125rem);
+	--netz-text-h3: 1.375rem;
+	--netz-text-h4: 1.125rem;
+	--netz-text-h5: 1rem;
+	--netz-text-h6: 0.9375rem;
 
-	/* ── Body sizes ────────────────────────────────────────── */
-	--netz-text-body: 0.9375rem; /* 15px */
-	--netz-text-small: 0.8125rem; /* 13px */
-	--netz-text-mono: 0.875rem; /* 14px */
+	/* Body sizes */
+	--netz-text-body-lg: 1rem;
+	--netz-text-body: 0.9375rem;
+	--netz-text-small: 0.8125rem;
+	--netz-text-label: 0.75rem;
+	--netz-text-caption: 0.75rem;
+	--netz-text-mono: 0.875rem;
 
-	/* ── Line heights ──────────────────────────────────────── */
-	--netz-leading-h1: 2.5rem; /* 40px */
-	--netz-leading-h2: 2.25rem; /* 36px */
-	--netz-leading-h3: 2rem; /* 32px */
-	--netz-leading-h4: 1.75rem; /* 28px */
-	--netz-leading-h5: 1.5rem; /* 24px */
-	--netz-leading-h6: 1.5rem; /* 24px */
-	--netz-leading-body: 1.625rem; /* 26px */
-	--netz-leading-small: 1.25rem; /* 20px */
-	--netz-leading-mono: 1.5rem; /* 24px */
+	/* Line heights */
+	--netz-leading-display: 1.08;
+	--netz-leading-h1: 1.12;
+	--netz-leading-h2: 1.18;
+	--netz-leading-h3: 1.24;
+	--netz-leading-h4: 1.3;
+	--netz-leading-h5: 1.35;
+	--netz-leading-h6: 1.4;
+	--netz-leading-body-lg: 1.6;
+	--netz-leading-body: 1.65;
+	--netz-leading-small: 1.55;
+	--netz-leading-label: 1.3;
+	--netz-leading-caption: 1.45;
+	--netz-leading-mono: 1.55;
 
-	/* ── Letter spacing ────────────────────────────────────── */
-	--netz-tracking-h1: -0.025em;
-	--netz-tracking-h2: -0.02em;
-	--netz-tracking-h3: -0.015em;
-	--netz-tracking-h4: -0.01em;
-	--netz-tracking-h5: -0.005em;
-	--netz-tracking-h6: 0em;
-	--netz-tracking-body: 0em;
-	--netz-tracking-small: 0.01em;
+	/* Letter spacing */
+	--netz-tracking-display: -0.035em;
+	--netz-tracking-h1: -0.03em;
+	--netz-tracking-h2: -0.026em;
+	--netz-tracking-h3: -0.02em;
+	--netz-tracking-h4: -0.014em;
+	--netz-tracking-h5: -0.01em;
+	--netz-tracking-h6: -0.006em;
+	--netz-tracking-body: -0.005em;
+	--netz-tracking-small: 0em;
+	--netz-tracking-label: 0.08em;
+	--netz-tracking-caption: 0.01em;
 	--netz-tracking-mono: -0.02em;
 
-	/* ── Font weights ──────────────────────────────────────── */
+	/* Font weights */
 	--netz-weight-normal: 400;
 	--netz-weight-medium: 500;
 	--netz-weight-semibold: 600;
+	--netz-weight-display: 650;
 	--netz-weight-bold: 700;
+
+	/* Measures */
+	--netz-measure-compact: 48ch;
+	--netz-measure-body: 70ch;
+	--netz-measure-wide: 82ch;
 }

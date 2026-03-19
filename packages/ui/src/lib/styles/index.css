@@ -1,19 +1,14 @@
 /* ============================================================
- * @netz/ui — Design System Entry Point
+ * @netz/ui - Design System Entry Point
  * Import this file to get all tokens, resets, and base styles.
  * ============================================================ */
 
-/* ── Font ──────────────────────────────────────────────────── */
-@import "@fontsource-variable/inter";
-
-/* ── Tokens ────────────────────────────────────────────────── */
 @import "./tokens.css";
 @import "./typography.css";
 @import "./spacing.css";
 @import "./shadows.css";
 @import "./animations.css";
 
-/* ── Base resets & defaults ────────────────────────────────── */
 *,
 *::before,
 *::after {
@@ -21,18 +16,50 @@
 }
 
 html {
+	background-color: var(--netz-surface);
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 	text-rendering: optimizeLegibility;
 }
 
 body {
+	min-height: 100vh;
 	margin: 0;
 	font-family: var(--netz-font-sans);
 	font-size: var(--netz-text-body);
 	line-height: var(--netz-leading-body);
+	letter-spacing: var(--netz-tracking-body);
 	color: var(--netz-text-primary);
 	background-color: var(--netz-surface);
+	background-image: var(--netz-page-background);
+	background-repeat: no-repeat;
+	background-attachment: fixed;
+	font-feature-settings: "cv02" 1, "cv03" 1, "cv04" 1, "cv11" 1;
+}
+
+::selection {
+	color: var(--netz-selection-color);
+	background: var(--netz-selection-bg);
+}
+
+img,
+picture,
+svg,
+canvas {
+	display: block;
+	max-width: 100%;
+}
+
+button,
+input,
+textarea,
+select {
+	font: inherit;
+	color: inherit;
+}
+
+button {
+	cursor: pointer;
 }
 
 code,
@@ -41,6 +68,26 @@ pre,
 samp {
 	font-family: var(--netz-font-mono);
 	font-size: var(--netz-text-mono);
+	line-height: var(--netz-leading-mono);
+	letter-spacing: var(--netz-tracking-mono);
+}
+
+code,
+kbd {
+	padding-inline: 0.35em;
+	padding-block: 0.15em;
+	border-radius: 8px;
+	background: var(--netz-surface-accent);
+	color: var(--netz-text-primary);
+}
+
+pre {
+	overflow-x: auto;
+	padding: var(--netz-space-4);
+	border: 1px solid var(--netz-border-subtle);
+	border-radius: var(--netz-radius-md);
+	background: var(--netz-surface-panel);
+	box-shadow: var(--netz-shadow-1);
 }
 
 h1,
@@ -50,6 +97,19 @@ h4,
 h5,
 h6 {
 	margin: 0;
+	color: var(--netz-text-primary);
+	text-wrap: balance;
+}
+
+h1,
+h2 {
+	font-weight: var(--netz-weight-display);
+}
+
+h3,
+h4,
+h5,
+h6 {
 	font-weight: var(--netz-weight-semibold);
 }
 
@@ -58,28 +118,136 @@ h1 {
 	line-height: var(--netz-leading-h1);
 	letter-spacing: var(--netz-tracking-h1);
 }
+
 h2 {
 	font-size: var(--netz-text-h2);
 	line-height: var(--netz-leading-h2);
 	letter-spacing: var(--netz-tracking-h2);
 }
+
 h3 {
 	font-size: var(--netz-text-h3);
 	line-height: var(--netz-leading-h3);
 	letter-spacing: var(--netz-tracking-h3);
 }
+
 h4 {
 	font-size: var(--netz-text-h4);
 	line-height: var(--netz-leading-h4);
 	letter-spacing: var(--netz-tracking-h4);
 }
+
 h5 {
 	font-size: var(--netz-text-h5);
 	line-height: var(--netz-leading-h5);
 	letter-spacing: var(--netz-tracking-h5);
 }
+
 h6 {
 	font-size: var(--netz-text-h6);
 	line-height: var(--netz-leading-h6);
 	letter-spacing: var(--netz-tracking-h6);
+}
+
+p,
+ul,
+ol,
+dl,
+blockquote,
+figure {
+	margin: 0;
+}
+
+small {
+	font-size: var(--netz-text-small);
+	line-height: var(--netz-leading-small);
+}
+
+strong,
+b {
+	color: var(--netz-text-primary);
+	font-weight: var(--netz-weight-semibold);
+}
+
+a {
+	color: var(--netz-brand-secondary);
+	text-decoration-color: color-mix(in srgb, currentColor 28%, transparent);
+	text-decoration-thickness: 0.08em;
+	text-underline-offset: 0.18em;
+	transition: var(--netz-transition-color);
+}
+
+a:hover {
+	color: var(--netz-brand-primary);
+	text-decoration-color: currentColor;
+}
+
+hr {
+	height: 1px;
+	margin: 0;
+	border: 0;
+	background: var(--netz-border-subtle);
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea) {
+	border: 1px solid var(--netz-border-subtle);
+	border-radius: var(--netz-radius-md);
+	background: var(--netz-surface-raised);
+	box-shadow: var(--netz-shadow-inset);
+	transition: var(--netz-transition-surface);
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea):hover {
+	border-color: var(--netz-border);
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), textarea)::placeholder {
+	color: var(--netz-text-muted);
+}
+
+textarea {
+	resize: vertical;
+}
+
+:where(button, input, select, textarea, summary, [role="button"]):focus-visible {
+	outline: none;
+	border-color: var(--netz-border-focus);
+	box-shadow: var(--netz-shadow-focus);
+}
+
+a:focus-visible {
+	outline: 2px solid var(--netz-border-focus);
+	outline-offset: 3px;
+	border-radius: 6px;
+}
+
+.netz-ui-surface {
+	background: var(--netz-surface-elevated);
+	border: 1px solid var(--netz-border-subtle);
+	border-radius: var(--netz-radius-lg);
+	box-shadow: var(--netz-shadow-card);
+}
+
+.netz-ui-panel {
+	background: var(--netz-surface-panel);
+	border: 1px solid var(--netz-border-subtle);
+	border-radius: var(--netz-radius-lg);
+	box-shadow: var(--netz-shadow-1);
+}
+
+.netz-ui-kicker {
+	font-size: var(--netz-text-label);
+	font-weight: var(--netz-weight-semibold);
+	line-height: var(--netz-leading-label);
+	letter-spacing: var(--netz-tracking-label);
+	text-transform: uppercase;
+	color: var(--netz-text-muted);
+}
+
+.netz-ui-field {
+	border: 1px solid var(--netz-border-subtle);
+	border-radius: var(--netz-radius-md);
+	background: var(--netz-surface-raised);
+	box-shadow: var(--netz-shadow-inset);
+	transition: var(--netz-transition-surface);
 }

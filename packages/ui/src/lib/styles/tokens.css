@@ -1,16 +1,17 @@
 /* ============================================================
- * Netz Design Tokens — Core Colors
- * All tokens use --netz- prefix and are overridable via CSS
- * custom properties cascade for tenant branding.
+ * Netz Design Tokens - Core Colors
+ * Premium, restrained defaults with stable legacy aliases.
  * ============================================================ */
 
 :root {
-	/* ── Brand ─────────────────────────────────────────────── */
-	--netz-brand-primary: #1b365d; /* navy */
-	--netz-brand-secondary: #3a7bd5; /* blue */
-	--netz-brand-accent: #8b9daf; /* slate */
-	--netz-brand-light: #d4e4f7; /* light blue */
-	--netz-brand-highlight: #ff975a; /* orange */
+	color-scheme: light;
+
+	/* Brand */
+	--netz-brand-primary: #18324d;
+	--netz-brand-secondary: #3e628d;
+	--netz-brand-accent: #8395a8;
+	--netz-brand-light: #e6edf6;
+	--netz-brand-highlight: #c58757;
 	--netz-navy: var(--netz-brand-primary);
 	--netz-blue: var(--netz-brand-secondary);
 	--netz-slate: var(--netz-brand-accent);
@@ -19,60 +20,90 @@
 	--netz-font-sans: "Inter Variable", system-ui, sans-serif;
 	--netz-font-mono: "JetBrains Mono", monospace;
 
-	/* ── Surface ───────────────────────────────────────────── */
-	--netz-surface: #ffffff;
-	--netz-surface-alt: #f8fafc;
+	/* Radius */
+	--netz-radius-sm: 10px;
+	--netz-radius-md: 14px;
+	--netz-radius-lg: 18px;
+	--netz-radius-xl: 24px;
+	--netz-radius-pill: 999px;
+
+	/* Surface */
+	--netz-surface: #f4f7fb;
+	--netz-surface-alt: #edf2f7;
 	--netz-surface-elevated: #ffffff;
-	--netz-surface-inset: #f1f5f9;
-	--netz-surface-overlay: rgba(0, 0, 0, 0.5);
+	--netz-surface-inset: #e7edf4;
+	--netz-surface-overlay: rgba(8, 14, 24, 0.56);
+	--netz-surface-raised: #fbfcfe;
+	--netz-surface-panel: color-mix(in srgb, var(--netz-surface-elevated) 88%, var(--netz-brand-light) 12%);
+	--netz-surface-highlight: color-mix(in srgb, var(--netz-brand-primary) 4%, var(--netz-surface-elevated));
+	--netz-surface-accent: color-mix(in srgb, var(--netz-brand-secondary) 7%, var(--netz-surface-elevated));
 
-	/* ── Border ────────────────────────────────────────────── */
-	--netz-border: #e2e8f0;
+	/* Border */
+	--netz-border-subtle: #d6deea;
+	--netz-border: #c5d0de;
+	--netz-border-strong: #aab8cb;
+	--netz-border-accent: color-mix(in srgb, var(--netz-brand-primary) 22%, var(--netz-border));
+	--netz-border-focus: color-mix(in srgb, var(--netz-brand-secondary) 58%, white 42%);
+	--netz-border-inverse: rgba(255, 255, 255, 0.2);
 
-	/* ── Text ──────────────────────────────────────────────── */
-	--netz-text-primary: #0f172a;
-	--netz-text-secondary: #475569;
-	--netz-text-muted: #94a3b8;
+	/* Text */
+	--netz-text-primary: #122033;
+	--netz-text-secondary: #48586b;
+	--netz-text-muted: #6f7f93;
+	--netz-text-tertiary: #5b6c81;
+	--netz-text-on-accent: #ffffff;
 
-	/* ── Semantic ──────────────────────────────────────────── */
-	--netz-success: #10b981;
-	--netz-warning: #f59e0b;
-	--netz-danger: #ef4444;
-	--netz-info: #3b82f6;
+	/* Semantic */
+	--netz-success: #0f8f70;
+	--netz-warning: #b7791f;
+	--netz-danger: #c15766;
+	--netz-info: #316cc4;
 
-	/* ── Chart palette ─────────────────────────────────────── */
-	--netz-chart-1: #1b365d; /* navy */
-	--netz-chart-2: #3a7bd5; /* blue */
-	--netz-chart-3: #ff975a; /* orange */
-	--netz-chart-4: #8b9daf; /* slate */
-	--netz-chart-5: #d4e4f7; /* light blue */
+	/* Chart palette */
+	--netz-chart-1: #18324d;
+	--netz-chart-2: #5479ac;
+	--netz-chart-3: #c58757;
+	--netz-chart-4: #6f869c;
+	--netz-chart-5: #91abc4;
 
-	/* ── Aliases (backward compat) ────────────────────────── */
+	/* Aliases (backward compat) */
 	--netz-primary: var(--netz-brand-primary);
-	--netz-primary-foreground: #ffffff;
-	--netz-primary-muted: color-mix(in srgb, var(--netz-brand-primary) 15%, transparent);
+	--netz-primary-foreground: var(--netz-text-on-accent);
+	--netz-primary-muted: color-mix(in srgb, var(--netz-brand-primary) 12%, transparent);
 
-	/* ── Extended semantic tokens ──────────────────────────── */
-	--netz-bg-hover: color-mix(in srgb, var(--netz-surface-alt) 80%, transparent);
+	/* Extended semantic tokens */
+	--netz-accent-soft: color-mix(in srgb, var(--netz-brand-secondary) 10%, var(--netz-surface-elevated));
+	--netz-accent-muted: color-mix(in srgb, var(--netz-brand-primary) 14%, var(--netz-surface));
+	--netz-focus-ring: color-mix(in srgb, var(--netz-border-focus) 32%, transparent);
+	--netz-bg-hover: color-mix(in srgb, var(--netz-brand-primary) 4%, var(--netz-surface-alt));
 	--netz-bg-secondary: var(--netz-surface-alt);
 	--netz-status-error: var(--netz-danger);
-	--netz-danger-subtle: color-mix(in srgb, var(--netz-danger) 12%, transparent);
-	--netz-success-subtle: color-mix(in srgb, var(--netz-success) 12%, transparent);
-	--netz-warning-subtle: color-mix(in srgb, var(--netz-warning) 12%, transparent);
+	--netz-danger-subtle: color-mix(in srgb, var(--netz-danger) 10%, var(--netz-surface-elevated));
+	--netz-success-subtle: color-mix(in srgb, var(--netz-success) 10%, var(--netz-surface-elevated));
+	--netz-warning-subtle: color-mix(in srgb, var(--netz-warning) 12%, var(--netz-surface-elevated));
+	--netz-info-subtle: color-mix(in srgb, var(--netz-info) 10%, var(--netz-surface-elevated));
 	--netz-error-surface: var(--netz-danger-subtle);
 	--netz-error-on-surface: var(--netz-danger);
 	--netz-warning-surface: var(--netz-warning-subtle);
 	--netz-warning-on-surface: var(--netz-warning);
+	--netz-page-background: linear-gradient(
+		180deg,
+		color-mix(in srgb, var(--netz-brand-light) 42%, var(--netz-surface) 58%) 0%,
+		var(--netz-surface) 220px
+	);
+	--netz-selection-bg: color-mix(in srgb, var(--netz-brand-secondary) 18%, white 82%);
+	--netz-selection-color: var(--netz-text-primary);
 }
 
-/* ── Dark Theme ────────────────────────────────────────────── */
 [data-theme="dark"] {
-	/* ── Brand (higher saturation for dark bg) ────────────── */
-	--netz-brand-primary: #4a90d9;
-	--netz-brand-secondary: #60a5fa;
-	--netz-brand-accent: #94a3b8;
-	--netz-brand-light: #1e3a5f;
-	--netz-brand-highlight: #ff975a;
+	color-scheme: dark;
+
+	/* Brand */
+	--netz-brand-primary: #84a8d0;
+	--netz-brand-secondary: #7ea4d8;
+	--netz-brand-accent: #96a7bc;
+	--netz-brand-light: #22324a;
+	--netz-brand-highlight: #d49a68;
 	--netz-navy: var(--netz-brand-primary);
 	--netz-blue: var(--netz-brand-secondary);
 	--netz-slate: var(--netz-brand-accent);
@@ -81,48 +112,77 @@
 	--netz-font-sans: "Inter Variable", system-ui, sans-serif;
 	--netz-font-mono: "JetBrains Mono", monospace;
 
-	/* ── Surface ───────────────────────────────────────────── */
-	--netz-surface: #0f1117;
-	--netz-surface-alt: #161922;
-	--netz-surface-elevated: #1c1f2b;
-	--netz-surface-inset: #090c10;
-	--netz-surface-overlay: rgba(0, 0, 0, 0.7);
+	/* Radius */
+	--netz-radius-sm: 10px;
+	--netz-radius-md: 14px;
+	--netz-radius-lg: 18px;
+	--netz-radius-xl: 24px;
+	--netz-radius-pill: 999px;
 
-	/* ── Border ────────────────────────────────────────────── */
-	--netz-border: #2a2f3d;
+	/* Surface */
+	--netz-surface: #0f1826;
+	--netz-surface-alt: #142030;
+	--netz-surface-elevated: #19273a;
+	--netz-surface-inset: #0b121c;
+	--netz-surface-overlay: rgba(0, 0, 0, 0.64);
+	--netz-surface-raised: #213147;
+	--netz-surface-panel: color-mix(in srgb, var(--netz-surface-elevated) 86%, var(--netz-brand-light) 14%);
+	--netz-surface-highlight: color-mix(in srgb, var(--netz-brand-primary) 10%, var(--netz-surface-elevated));
+	--netz-surface-accent: color-mix(in srgb, var(--netz-brand-secondary) 12%, var(--netz-surface-elevated));
 
-	/* ── Text (all pass WCAG AA 4.5:1 against #0f1117) ────── */
-	--netz-text-primary: #f1f5f9;
-	--netz-text-secondary: #94a3b8;
-	--netz-text-muted: #64748b;
+	/* Border */
+	--netz-border-subtle: #223146;
+	--netz-border: #31425a;
+	--netz-border-strong: #445774;
+	--netz-border-accent: color-mix(in srgb, var(--netz-brand-primary) 24%, var(--netz-border));
+	--netz-border-focus: color-mix(in srgb, var(--netz-brand-secondary) 72%, white 28%);
+	--netz-border-inverse: rgba(255, 255, 255, 0.18);
 
-	/* ── Semantic (all pass WCAG AA 4.5:1 against #0f1117) ── */
-	--netz-success: #34d399;
-	--netz-warning: #fbbf24;
-	--netz-danger: #f87171;
-	--netz-info: #60a5fa;
+	/* Text */
+	--netz-text-primary: #f4f7fb;
+	--netz-text-secondary: #c0cad7;
+	--netz-text-muted: #8d9caf;
+	--netz-text-tertiary: #a5b2c3;
+	--netz-text-on-accent: #08111d;
 
-	/* ── Chart palette (pass 3:1 graphical objects AA) ────── */
-	--netz-chart-1: #60a5fa;
-	--netz-chart-2: #34d399;
-	--netz-chart-3: #fbbf24;
-	--netz-chart-4: #f87171;
-	--netz-chart-5: #a78bfa;
+	/* Semantic */
+	--netz-success: #39b38d;
+	--netz-warning: #d6a24a;
+	--netz-danger: #e07c89;
+	--netz-info: #77abff;
 
-	/* ── Aliases (backward compat) ────────────────────────── */
+	/* Chart palette */
+	--netz-chart-1: #84a8d0;
+	--netz-chart-2: #57c2a0;
+	--netz-chart-3: #d49a68;
+	--netz-chart-4: #a6b7ca;
+	--netz-chart-5: #8da9ff;
+
+	/* Aliases (backward compat) */
 	--netz-primary: var(--netz-brand-primary);
-	--netz-primary-foreground: #ffffff;
-	--netz-primary-muted: color-mix(in srgb, var(--netz-brand-primary) 15%, transparent);
+	--netz-primary-foreground: var(--netz-text-on-accent);
+	--netz-primary-muted: color-mix(in srgb, var(--netz-brand-primary) 18%, transparent);
 
-	/* ── Extended semantic tokens ──────────────────────────── */
-	--netz-bg-hover: color-mix(in srgb, var(--netz-surface-alt) 80%, transparent);
+	/* Extended semantic tokens */
+	--netz-accent-soft: color-mix(in srgb, var(--netz-brand-secondary) 14%, var(--netz-surface-elevated));
+	--netz-accent-muted: color-mix(in srgb, var(--netz-brand-primary) 18%, var(--netz-surface));
+	--netz-focus-ring: color-mix(in srgb, var(--netz-border-focus) 26%, transparent);
+	--netz-bg-hover: color-mix(in srgb, var(--netz-brand-primary) 7%, var(--netz-surface-alt));
 	--netz-bg-secondary: var(--netz-surface-alt);
 	--netz-status-error: var(--netz-danger);
-	--netz-danger-subtle: color-mix(in srgb, var(--netz-danger) 12%, transparent);
-	--netz-success-subtle: color-mix(in srgb, var(--netz-success) 12%, transparent);
-	--netz-warning-subtle: color-mix(in srgb, var(--netz-warning) 12%, transparent);
+	--netz-danger-subtle: color-mix(in srgb, var(--netz-danger) 14%, var(--netz-surface-elevated));
+	--netz-success-subtle: color-mix(in srgb, var(--netz-success) 14%, var(--netz-surface-elevated));
+	--netz-warning-subtle: color-mix(in srgb, var(--netz-warning) 16%, var(--netz-surface-elevated));
+	--netz-info-subtle: color-mix(in srgb, var(--netz-info) 14%, var(--netz-surface-elevated));
 	--netz-error-surface: var(--netz-danger-subtle);
 	--netz-error-on-surface: var(--netz-danger);
 	--netz-warning-surface: var(--netz-warning-subtle);
 	--netz-warning-on-surface: var(--netz-warning);
+	--netz-page-background: linear-gradient(
+		180deg,
+		color-mix(in srgb, var(--netz-brand-primary) 20%, var(--netz-surface) 80%) 0%,
+		var(--netz-surface) 240px
+	);
+	--netz-selection-bg: color-mix(in srgb, var(--netz-brand-secondary) 28%, black 72%);
+	--netz-selection-color: var(--netz-text-primary);
 }
