@@ -1,16 +1,18 @@
-"""StorageClient — unified abstraction over ADLS Gen2 and local filesystem.
+"""StorageClient — unified abstraction over Cloudflare R2, ADLS Gen2, and local filesystem.
 
 All code that needs to read/write files in the data lake must use this
-client.  Never call ADLS SDK directly.
+client.  Never call storage SDKs directly.
 
-Backends:
-  - **Local filesystem** (default, ``FEATURE_ADLS_ENABLED=false``):
-    Writes to ``{local_storage_root}/`` with the same path hierarchy as ADLS.
+Backends (priority: R2 > ADLS > Local):
+  - **Cloudflare R2** (``FEATURE_R2_ENABLED=true``):
+    S3-compatible object storage via boto3. Production default (Milestone 2.5+).
+  - **Local filesystem** (default, both flags false):
+    Writes to ``{local_storage_root}/`` with the same path hierarchy.
     Default root: ``{project_root}/.data/lake/``.
-  - **ADLS Gen2** (``FEATURE_ADLS_ENABLED=true``):
-    Writes to Azure Data Lake Storage Gen2 container.
+  - **ADLS Gen2** (``FEATURE_ADLS_ENABLED=true``, deprecated):
+    Azure Data Lake Storage Gen2. Kept for rollback only.
 
-Path convention (both backends):
+Path convention (all backends):
   - ``{tier}/{organization_id}/{...}`` for tenant data (bronze, silver)
   - ``{tier}/_global/{...}`` for global data (gold/_global/fred_indicators/)
 """
@@ -188,8 +190,118 @@ class LocalStorageClient(StorageClient):
         return str(resolved).replace("\\", "/") + "/"
 
 
+class R2StorageClient(StorageClient):
+    """Cloudflare R2 backend (S3-compatible).
+
+    Uses ``boto3`` with custom endpoint URL pointing to R2.
+    Presigned URLs use the same S3 signing mechanism.
+    """
+
+    def __init__(self) -> None:
+        if not settings.r2_account_id:
+            raise RuntimeError("R2_ACCOUNT_ID must be set when FEATURE_R2_ENABLED=true")
+        if not settings.r2_access_key_id or not settings.r2_secret_access_key:
+            raise RuntimeError("R2 credentials must be set when FEATURE_R2_ENABLED=true")
+
+        import boto3
+
+        endpoint = settings.r2_endpoint_url or f"https://{settings.r2_account_id}.r2.cloudflarestorage.com"
+        self._bucket_name = settings.r2_bucket_name
+        self._s3 = boto3.client(
+            "s3",
+            endpoint_url=endpoint,
+            aws_access_key_id=settings.r2_access_key_id,
+            aws_secret_access_key=settings.r2_secret_access_key,
+            region_name="auto",
+        )
+        logger.info(
+            "R2StorageClient initialized",
+            extra={"bucket": self._bucket_name, "endpoint": endpoint},
+        )
+
+    async def write(self, path: str, data: bytes, *, content_type: str = "application/octet-stream") -> str:
+        self._validate_path(path)
+        await asyncio.to_thread(
+            self._s3.put_object,
+            Bucket=self._bucket_name,
+            Key=path,
+            Body=data,
+            ContentType=content_type,
+        )
+        return path
+
+    async def read(self, path: str) -> bytes:
+        self._validate_path(path)
+        try:
+            resp = await asyncio.to_thread(
+                self._s3.get_object, Bucket=self._bucket_name, Key=path,
+            )
+            return await asyncio.to_thread(resp["Body"].read)
+        except self._s3.exceptions.NoSuchKey:
+            raise FileNotFoundError(f"Storage path not found: {path}")
+
+    async def exists(self, path: str) -> bool:
+        self._validate_path(path)
+        try:
+            await asyncio.to_thread(
+                self._s3.head_object, Bucket=self._bucket_name, Key=path,
+            )
+            return True
+        except Exception:  # noqa: BLE001
+            return False
+
+    async def delete(self, path: str) -> None:
+        self._validate_path(path)
+        try:
+            await asyncio.to_thread(
+                self._s3.delete_object, Bucket=self._bucket_name, Key=path,
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+    async def list_files(self, prefix: str) -> list[str]:
+        self._validate_path(prefix)
+        paginator = self._s3.get_paginator("list_objects_v2")
+        files: list[str] = []
+        for page in paginator.paginate(Bucket=self._bucket_name, Prefix=prefix):
+            for obj in page.get("Contents", []):
+                files.append(obj["Key"])
+        return sorted(files)
+
+    async def generate_read_url(self, path: str, *, expires_in: int = 3600) -> str:
+        self._validate_path(path)
+        url: str = await asyncio.to_thread(
+            self._s3.generate_presigned_url,
+            "get_object",
+            Params={"Bucket": self._bucket_name, "Key": path},
+            ExpiresIn=expires_in,
+        )
+        return url
+
+    async def generate_upload_url(self, path: str, *, expires_in: int = 3600) -> str:
+        self._validate_path(path)
+        url: str = await asyncio.to_thread(
+            self._s3.generate_presigned_url,
+            "put_object",
+            Params={"Bucket": self._bucket_name, "Key": path},
+            ExpiresIn=expires_in,
+        )
+        return url
+
+    def get_duckdb_path(self, tier: Literal["bronze", "silver", "gold"], org_id: UUID, vertical: str) -> str:
+        from ai_engine.pipeline.storage_routing import _validate_segment, _validate_vertical
+
+        _validate_segment(str(org_id), "org_id")
+        _validate_vertical(vertical)
+        _validate_segment(tier, "tier")
+        return f"s3://{self._bucket_name}/{tier}/{org_id}/{vertical}/"
+
+
 class ADLSStorageClient(StorageClient):
     """Azure Data Lake Storage Gen2 backend.
+
+    DEPRECATED (2026-03-18): Replaced by R2StorageClient.
+    Kept for rollback compatibility.
 
     Uses ``azure-storage-file-datalake`` SDK.  Imported lazily to avoid
     pulling Azure SDK in development environments.
@@ -287,7 +399,12 @@ class ADLSStorageClient(StorageClient):
 
 
 def create_storage_client() -> StorageClient:
-    """Factory — returns the correct backend based on feature flag."""
+    """Factory — returns the correct backend based on feature flags.
+
+    Priority: R2 > ADLS > LocalStorage.
+    """
+    if settings.feature_r2_enabled:
+        return R2StorageClient()
     if settings.feature_adls_enabled:
         return ADLSStorageClient()
     return LocalStorageClient()

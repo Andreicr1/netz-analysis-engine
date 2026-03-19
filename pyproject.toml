@@ -29,6 +29,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "reportlab>=4.1",
     "matplotlib>=3.9",
+    "boto3>=1.35",
 ]
 
 [project.optional-dependencies]
@@ -59,6 +60,7 @@ quant = [
     "yfinance>=0.2",
     "statsmodels>=0.14",
     "scikit-learn>=1.6",
+    "datacommons-client[Pandas]>=1.0",
 ]
 edgar = [
     "edgartools>=5.23,<6.0",
@@ -294,6 +296,9 @@ source_modules = [
     "quant_engine.peer_comparison_service",
     "quant_engine.rebalance_service",
     "quant_engine.scoring_service",
+    "quant_engine.fiscal_data_service",
+    "quant_engine.ofr_hedge_fund_service",
+    "quant_engine.data_commons_service",
 ]
 forbidden_modules = ["app.domains.wealth", "app.domains.credit"]
 

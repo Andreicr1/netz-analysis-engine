@@ -891,6 +891,16 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/wealth/documents",
+    "name": "list_documents"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/wealth/documents/{document_id}",
+    "name": "get_document"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/wealth/exposure/matrix",
     "name": "get_exposure_matrix"
   },
@@ -1523,6 +1533,26 @@
     "method": "POST",
     "path": "/api/v1/universe/funds/{instrument_id}/reject",
     "name": "reject_fund"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/wealth/documents/ingestion/process-pending",
+    "name": "process_pending"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/wealth/documents/upload",
+    "name": "upload"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/wealth/documents/upload-complete",
+    "name": "upload_complete"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/wealth/documents/upload-url",
+    "name": "generate_upload_url"
   },
   {
     "method": "POST",

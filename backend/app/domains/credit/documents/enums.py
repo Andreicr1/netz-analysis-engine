@@ -20,9 +20,6 @@ class DocumentDomain(str, Enum):
     OTHER = "OTHER"
 
 
-class DocumentIngestionStatus(str, Enum):
-    PENDING = "PENDING"
-    PROCESSING = "PROCESSING"
-    INDEXED = "INDEXED"
-    FAILED = "FAILED"
+# Re-export from shared enums for backward compatibility
+from app.shared.enums import DocumentIngestionStatus  # noqa: F401
 

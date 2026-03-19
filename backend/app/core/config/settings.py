@@ -61,6 +61,16 @@ class Settings(BaseSettings):
     # ── External APIs ────────────────────────────────────────
     fred_api_key: str = ""
 
+    # ── Data Commons (free key from https://apikeys.datacommons.org/) ──
+    dc_api_key: str = ""
+
+    # ── FE fundinfo (production fund data provider) ────────────────
+    feature_fefundinfo_enabled: bool = False
+    fefundinfo_client_id: str = ""
+    fefundinfo_client_secret: str = ""
+    fefundinfo_subscription_key: str = ""
+    fefundinfo_token_url: str = "https://auth.fefundinfo.com/connect/token"
+
     # ── SEC EDGAR (public identifier — required by SEC policy) ──
     edgar_identity: str = "Netz Analysis Engine tech@netzco.com"
 
@@ -78,9 +88,18 @@ class Settings(BaseSettings):
     feature_wealth_monitoring: bool = False
 
     # ── Storage ──────────────────────────────────────────────
-    # false = LocalStorageClient (filesystem). Default for dev and Milestone 2 prod.
-    # true = ADLSStorageClient (Azure Blob). Enable at Milestone 3 when data lake > 100GB.
+    # LocalStorageClient (filesystem) is default for dev.
+    # R2StorageClient (Cloudflare R2) is default for prod (Milestone 2.5+).
+    # ADLSStorageClient (Azure) is deprecated.
     local_storage_root: str = ""
+
+    # ── Cloudflare R2 ─────────────────────────────────────────
+    feature_r2_enabled: bool = False
+    r2_account_id: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
+    r2_bucket_name: str = "netz-data-lake"
+    r2_endpoint_url: str = ""  # auto-derived from r2_account_id if empty
 
     # ── Local dev providers (NEVER use in production) ─────────
     # LLM: routes pipeline through LM Studio instead of OpenAI API
@@ -174,6 +193,11 @@ class Settings(BaseSettings):
             raise RuntimeError("CLERK_JWKS_URL must be set in production.")
         if self.dev_token == "dev-token-change-me":
             raise RuntimeError("DEV_TOKEN must be changed from default in production.")
+        if self.feature_r2_enabled:
+            if not self.r2_account_id:
+                raise RuntimeError("R2_ACCOUNT_ID must be set when FEATURE_R2_ENABLED=true.")
+            if not self.r2_access_key_id or not self.r2_secret_access_key:
+                raise RuntimeError("R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY must be set when FEATURE_R2_ENABLED=true.")
         if self.feature_adls_enabled:
             if not self.adls_account_name:
                 raise RuntimeError("ADLS_ACCOUNT_NAME must be set when FEATURE_ADLS_ENABLED=true.")

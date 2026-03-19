@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
-from enum import StrEnum
+from enum import Enum, StrEnum
+
+
+class DocumentIngestionStatus(str, Enum):
+    """Ingestion lifecycle status — shared across credit and wealth verticals."""
+
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    INDEXED = "INDEXED"
+    FAILED = "FAILED"
 
 
 class Role(StrEnum):
