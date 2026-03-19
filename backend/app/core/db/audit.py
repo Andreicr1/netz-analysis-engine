@@ -7,7 +7,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.models import AuditEvent
@@ -48,15 +48,25 @@ async def write_audit_event(
     before: dict[str, Any] | None = None,
     after: dict[str, Any] | None = None,
     access_level: str = "internal",
+    organization_id: uuid.UUID | None = None,
 ) -> None:
     """Write an audit event to the audit_events table.
 
     The caller must have an active RLS session (organization_id is set
-    via SET LOCAL by get_db_with_rls). The organization_id column is
-    populated automatically by OrganizationScopedMixin — it reads from
-    the current RLS context.
+    via SET LOCAL by get_db_with_rls). If organization_id is not passed
+    explicitly, it is read from the current RLS context.
     """
+    # Resolve organization_id from RLS context if not provided
+    if organization_id is None:
+        row = await db.execute(
+            text("SELECT current_setting('app.current_organization_id', true)")
+        )
+        org_str = row.scalar()
+        if org_str:
+            organization_id = uuid.UUID(org_str)
+
     event = AuditEvent(
+        organization_id=organization_id,
         fund_id=fund_id,
         access_level=access_level,
         actor_id=actor_id or "unknown",

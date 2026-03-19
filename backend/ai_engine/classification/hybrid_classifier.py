@@ -278,10 +278,15 @@ DOC_TYPE_DESCRIPTIONS: dict[str, str] = {
         "NOT a strategy profile or fund profile or fund overview."
     ),
     "investment_memo": (
-        "Investment memorandum, credit memo, deal memo, investment committee memo, "
-        "or due diligence report on a SPECIFIC named company or asset. Contains "
-        "investment thesis, financial analysis, risk factors, and recommendation "
-        "for a particular deal or potential investment."
+        "Investment memorandum, credit memo, deal memo, investment committee (IC) memo, "
+        "IC memorandum, or due diligence report on a SPECIFIC named company, property, "
+        "or asset. Contains investment thesis, loan opportunity, deal structure, "
+        "financial analysis, borrower profile, collateral description, risk factors, "
+        "underwriting analysis, sponsor overview, exit strategy, and recommendation "
+        "for a particular deal or potential investment. "
+        "Filename often contains: 'Investment Memo', 'Credit Memo', 'IC Memo', "
+        "'IC_Memorandum', 'Deal Memo', 'Due Diligence'. "
+        "NOT a fund-level presentation or quarterly update. NOT a general PPM or LPA."
     ),
     "risk_assessment": (
         "Risk assessment report, risk register, stress test analysis, scenario "
@@ -391,7 +396,7 @@ _FILENAME_RULES: list[tuple[re.Pattern[str], str]] = [
     # --- Legal documents (most specific) ---
     (re.compile(r"\bLPA\b|\bLimited\s+Partnership\s+Agreement\b", re.I), "legal_lpa"),
     (re.compile(r"\bSide\s+Letter\b", re.I), "legal_side_letter"),
-    (re.compile(r"\bSubscription\s+(?:Booklet|Agreement|Doc)\b", re.I), "legal_subscription"),
+    (re.compile(r"\bSubscription\s+(?:Booklet|Agreement|Doc(?:ument)?)\b", re.I), "legal_subscription"),
     (re.compile(r"\bCredit\s+Agreement\b|\bLoan\s+Agreement\b|\bFacility\s+Agreement\b", re.I), "legal_credit_agreement"),
     (re.compile(r"\bMaster\s+Participation\b|\bParticipation\s+Agreement\b", re.I), "legal_agreement"),
 
@@ -416,8 +421,18 @@ _FILENAME_RULES: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bRisk\s+Assessment\b", re.I), "risk_assessment"),
     (re.compile(r"\bQDD\b", re.I), "regulatory_qdd"),
 
-    # --- Deal / investment-level intro materials ---
-    (re.compile(r"\bIntro\s+Materials?(?:\b|_)", re.I), "investment_memo"),
+    # --- Legal: PPM / Offering Memorandum (before generic presentation rules) ---
+    (re.compile(r"\bPPM\b|\bPrivate\s+Placement\s+Memorandum\b|\bOffering\s+Memorandum\b|\bConfidential\s+(?:Information\s+)?Memorandum\b", re.I), "legal_lpa"),
+
+    # --- Deal / investment-level memos ---
+    (re.compile(r"\bIntro\s+Materials?\b", re.I), "investment_memo"),
+    (re.compile(r"\b(?:Investment|Credit|IC|Deal)[\s\-]?Memo(?:randum)?\b", re.I), "investment_memo"),
+    (re.compile(r"\bDue\s+Diligence\s+Report\b", re.I), "investment_memo"),
+
+    # --- Investor letters (before generic presentation/quarterly rules) ---
+    (re.compile(r"\b(?:Investor|Quarterly|Annual)\s+Letter\b", re.I), "fund_presentation"),
+    (re.compile(r"\bShareholder\s+(?:Update|Letter|Report)\b", re.I), "fund_presentation"),
+    (re.compile(r"\bQuarterly\s+(?:Investor\s+)?(?:Letter|Report|Update)\b", re.I), "fund_presentation"),
 
     # --- Fund pipeline / condensed presentations ---
     (re.compile(r"\bPipeline\b|\bSourcing\b", re.I), "fund_presentation"),
@@ -449,6 +464,10 @@ _CONTENT_RULES: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"PLEDGE\s+AGREEMENT", re.I), "legal_security"),
     (re.compile(r"CERTIFICATE\s+OF\s+INSURANCE", re.I), "operational_insurance"),
     (re.compile(r"NET\s+ASSET\s+VALUE\s+(?:REPORT|STATEMENT)", re.I), "financial_nav"),
+    (re.compile(r"PRIVATE\s+PLACEMENT\s+MEMORANDUM", re.I), "legal_lpa"),
+    (re.compile(r"CONFIDENTIAL\s+(?:INFORMATION\s+)?MEMORANDUM", re.I), "legal_lpa"),
+    (re.compile(r"OFFERING\s+MEMORANDUM", re.I), "legal_lpa"),
+    (re.compile(r"INVESTMENT\s+(?:COMMITTEE\s+)?MEMORANDUM", re.I), "investment_memo"),
 ]
 
 
@@ -701,8 +720,11 @@ async def classify(
     model_name: str = "rules"
 
     # ── Layer 1: Filename rules ──────────────────────────────────────
+    # Normalize underscores to spaces so \b word boundaries work with
+    # filenames like "BridgeInvest_Investment Memo_Balfour Hotel.pdf"
+    fn_normalized = filename.replace("_", " ")
     for pattern, dt in _FILENAME_RULES:
-        if pattern.search(filename):
+        if pattern.search(fn_normalized):
             doc_type = dt
             logger.info("Layer 1 filename match: %s → %s", filename, dt)
             break

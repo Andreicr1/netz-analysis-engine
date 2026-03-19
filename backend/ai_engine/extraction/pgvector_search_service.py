@@ -230,10 +230,10 @@ async def upsert_chunks(
                         section_type, breadcrumb, governance_critical,
                         embedding, embedding_model
                     ) VALUES (
-                        :id, :organization_id::uuid, :deal_id, :fund_id, :domain,
+                        :id, CAST(:organization_id AS uuid), :deal_id, :fund_id, :domain,
                         :doc_type, :doc_id, :title, :content, :page_start, :page_end,
                         :chunk_index, :section_type, :breadcrumb, :governance_critical,
-                        :embedding::vector, :embedding_model
+                        CAST(:embedding AS vector), :embedding_model
                     )
                     ON CONFLICT (id) DO UPDATE SET
                         content = EXCLUDED.content,
@@ -308,13 +308,13 @@ async def search_deal_chunks(
                 SELECT
                     id, deal_id, domain, doc_type, title, content,
                     page_start, page_end, chunk_index,
-                    1 - (embedding <=> :embedding::vector) AS score
+                    1 - (embedding <=> CAST(:embedding AS vector)) AS score
                 FROM vector_chunks
-                WHERE organization_id = :org_id::uuid
+                WHERE organization_id = CAST(:org_id AS uuid)
                   AND deal_id = :deal_id
                   AND domain = :domain
                   AND embedding IS NOT NULL
-                ORDER BY embedding <=> :embedding::vector
+                ORDER BY embedding <=> CAST(:embedding AS vector)
                 LIMIT :top
             """),
             {
@@ -331,12 +331,12 @@ async def search_deal_chunks(
                 SELECT
                     id, deal_id, domain, doc_type, title, content,
                     page_start, page_end, chunk_index,
-                    1 - (embedding <=> :embedding::vector) AS score
+                    1 - (embedding <=> CAST(:embedding AS vector)) AS score
                 FROM vector_chunks
-                WHERE organization_id = :org_id::uuid
+                WHERE organization_id = CAST(:org_id AS uuid)
                   AND deal_id = :deal_id
                   AND embedding IS NOT NULL
-                ORDER BY embedding <=> :embedding::vector
+                ORDER BY embedding <=> CAST(:embedding AS vector)
                 LIMIT :top
             """),
             {
@@ -377,13 +377,13 @@ async def search_fund_policy_chunks(
             SELECT
                 id, deal_id, fund_id, domain, doc_type, title, content,
                 page_start, page_end, chunk_index,
-                1 - (embedding <=> :embedding::vector) AS score
+                1 - (embedding <=> CAST(:embedding AS vector)) AS score
             FROM vector_chunks
-            WHERE organization_id = :org_id::uuid
+            WHERE organization_id = CAST(:org_id AS uuid)
               AND fund_id = :fund_id
               AND domain = :domain
               AND embedding IS NOT NULL
-            ORDER BY embedding <=> :embedding::vector
+            ORDER BY embedding <=> CAST(:embedding AS vector)
             LIMIT :top
         """),
         {
@@ -436,10 +436,10 @@ def upsert_chunks_sync(
                             section_type, breadcrumb, governance_critical,
                             embedding, embedding_model
                         ) VALUES (
-                            :id, :organization_id::uuid, :deal_id, :fund_id, :domain,
+                            :id, CAST(:organization_id AS uuid), :deal_id, :fund_id, :domain,
                             :doc_type, :doc_id, :title, :content, :page_start, :page_end,
                             :chunk_index, :section_type, :breadcrumb, :governance_critical,
-                            :embedding::vector, :embedding_model
+                            CAST(:embedding AS vector), :embedding_model
                         )
                         ON CONFLICT (id) DO UPDATE SET
                             content = EXCLUDED.content,
@@ -510,25 +510,25 @@ def search_deal_chunks_sync(
         query = text("""
             SELECT id, deal_id, domain, doc_type, title, content,
                    page_start, page_end, chunk_index,
-                   1 - (embedding <=> :embedding::vector) AS score
+                   1 - (embedding <=> CAST(:embedding AS vector)) AS score
             FROM vector_chunks
-            WHERE organization_id = :org_id::uuid
+            WHERE organization_id = CAST(:org_id AS uuid)
               AND deal_id = :deal_id
               AND domain = :domain
               AND embedding IS NOT NULL
-            ORDER BY embedding <=> :embedding::vector
+            ORDER BY embedding <=> CAST(:embedding AS vector)
             LIMIT :top
         """)
     else:
         query = text("""
             SELECT id, deal_id, domain, doc_type, title, content,
                    page_start, page_end, chunk_index,
-                   1 - (embedding <=> :embedding::vector) AS score
+                   1 - (embedding <=> CAST(:embedding AS vector)) AS score
             FROM vector_chunks
-            WHERE organization_id = :org_id::uuid
+            WHERE organization_id = CAST(:org_id AS uuid)
               AND deal_id = :deal_id
               AND embedding IS NOT NULL
-            ORDER BY embedding <=> :embedding::vector
+            ORDER BY embedding <=> CAST(:embedding AS vector)
             LIMIT :top
         """)
 
@@ -562,13 +562,13 @@ def search_fund_policy_chunks_sync(
             text("""
                 SELECT id, deal_id, fund_id, domain, doc_type, title, content,
                        page_start, page_end, chunk_index,
-                       1 - (embedding <=> :embedding::vector) AS score
+                       1 - (embedding <=> CAST(:embedding AS vector)) AS score
                 FROM vector_chunks
-                WHERE organization_id = :org_id::uuid
+                WHERE organization_id = CAST(:org_id AS uuid)
                   AND fund_id = :fund_id
                   AND domain = :domain
                   AND embedding IS NOT NULL
-                ORDER BY embedding <=> :embedding::vector
+                ORDER BY embedding <=> CAST(:embedding AS vector)
                 LIMIT :top
             """),
             {
@@ -581,3 +581,130 @@ def search_fund_policy_chunks_sync(
         )
         rows = result.mappings().all()
         return [dict(row) for row in rows]
+
+
+# ── Reranked search wrappers ─────────────────────────────────────────
+#
+# Compose pgvector cosine search (broad recall) with cross-encoder
+# reranking (precision).  Used by IC evidence, pipeline screening,
+# and copilot RAG.
+
+
+async def search_and_rerank_deal(
+    db: AsyncSession,
+    *,
+    deal_id: uuid.UUID,
+    organization_id: uuid.UUID | str,
+    query_text: str,
+    query_vector: list[float] | None = None,
+    top: int = 10,
+    candidates: int = 50,
+    domain_filter: str | None = None,
+) -> list[dict[str, Any]]:
+    """pgvector cosine recall → cross-encoder rerank → top results.
+
+    Parameters
+    ----------
+    candidates : int
+        Number of cosine-similarity candidates to retrieve before reranking.
+    top : int
+        Number of results to return after reranking.
+    """
+    raw = await search_deal_chunks(
+        db,
+        deal_id=deal_id,
+        organization_id=organization_id,
+        query_text=query_text,
+        query_vector=query_vector,
+        top=candidates,
+        domain_filter=domain_filter,
+    )
+    if not raw:
+        return raw
+
+    from ai_engine.extraction.local_reranker import rerank
+
+    return rerank(query_text, raw, top_k=top)
+
+
+async def search_and_rerank_fund_policy(
+    db: AsyncSession,
+    *,
+    fund_id: uuid.UUID,
+    organization_id: uuid.UUID | str,
+    query_text: str,
+    query_vector: list[float] | None = None,
+    top: int = 10,
+    candidates: int = 50,
+    domain_filter: str = "POLICY",
+) -> list[dict[str, Any]]:
+    """pgvector cosine recall → cross-encoder rerank for fund policy."""
+    raw = await search_fund_policy_chunks(
+        db,
+        fund_id=fund_id,
+        organization_id=organization_id,
+        query_text=query_text,
+        query_vector=query_vector,
+        top=candidates,
+        domain_filter=domain_filter,
+    )
+    if not raw:
+        return raw
+
+    from ai_engine.extraction.local_reranker import rerank
+
+    return rerank(query_text, raw, top_k=top)
+
+
+def search_and_rerank_deal_sync(
+    *,
+    deal_id: uuid.UUID,
+    organization_id: uuid.UUID | str,
+    query_text: str,
+    query_vector: list[float] | None = None,
+    top: int = 10,
+    candidates: int = 50,
+    domain_filter: str | None = None,
+) -> list[dict[str, Any]]:
+    """Sync variant: pgvector cosine → cross-encoder rerank for deals."""
+    raw = search_deal_chunks_sync(
+        deal_id=deal_id,
+        organization_id=organization_id,
+        query_text=query_text,
+        query_vector=query_vector,
+        top=candidates,
+        domain_filter=domain_filter,
+    )
+    if not raw:
+        return raw
+
+    from ai_engine.extraction.local_reranker import rerank_sync
+
+    return rerank_sync(query_text, raw, top_k=top)
+
+
+def search_and_rerank_fund_policy_sync(
+    *,
+    fund_id: uuid.UUID,
+    organization_id: uuid.UUID | str,
+    query_text: str,
+    query_vector: list[float] | None = None,
+    top: int = 10,
+    candidates: int = 50,
+    domain_filter: str = "POLICY",
+) -> list[dict[str, Any]]:
+    """Sync variant: pgvector cosine → cross-encoder rerank for fund policy."""
+    raw = search_fund_policy_chunks_sync(
+        fund_id=fund_id,
+        organization_id=organization_id,
+        query_text=query_text,
+        query_vector=query_vector,
+        top=candidates,
+        domain_filter=domain_filter,
+    )
+    if not raw:
+        return raw
+
+    from ai_engine.extraction.local_reranker import rerank_sync
+
+    return rerank_sync(query_text, raw, top_k=top)

@@ -1550,8 +1550,11 @@ Sharpe Ratio: 1.85
                     r5 = await session.execute(text(
                         "DELETE FROM vector_chunks WHERE organization_id = :org"
                     ), {"org": TEST_ORG})
+                    r6 = await session.execute(text(
+                        "DELETE FROM audit_events WHERE organization_id = :org"
+                    ), {"org": TEST_ORG})
 
-            print(f"  Cleaned up TEST_ORG rows: chapters={r1.rowcount}, reports={r2.rowcount}, nav={r3.rowcount}, instruments={r4.rowcount}, vectors={r5.rowcount}")
+            print(f"  Cleaned up TEST_ORG rows: chapters={r1.rowcount}, reports={r2.rowcount}, nav={r3.rowcount}, instruments={r4.rowcount}, vectors={r5.rowcount}, audit={r6.rowcount}")
         except Exception as e:
             print(f"  [WARN] Cleanup failed: {e}")
 

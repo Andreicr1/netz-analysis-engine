@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from ai_engine.extraction.embedding_service import generate_embeddings
 from ai_engine.extraction.pgvector_search_service import (
-    search_deal_chunks_sync as search_deal_chunks,
+    search_and_rerank_deal_sync as search_deal_chunks,
 )
 from ai_engine.prompts import prompt_registry
 
@@ -59,6 +59,7 @@ def _retrieve_context(
             organization_id=organization_id,
             query_text=query_text,
             query_vector=query_vector,
+            candidates=max_chunks * 3,
             top=max_chunks,
         )
     except Exception as exc:

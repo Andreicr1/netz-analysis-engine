@@ -12,7 +12,7 @@ import structlog
 
 from ai_engine.extraction.embedding_service import generate_embeddings
 from ai_engine.extraction.pgvector_search_service import (
-    search_deal_chunks_sync as search_deal_chunks,
+    search_and_rerank_deal_sync as search_deal_chunks,
 )
 from ai_engine.governance.authority_resolver import enrich_chunks_with_authority
 from vertical_engines.credit.pipeline.models import (
@@ -57,6 +57,7 @@ def _retrieve_deal_context(
             organization_id=organization_id,
             query_text=query_text,
             query_vector=query_vector,
+            candidates=max_chunks,
             top=max_chunks,
         )
     except Exception:
