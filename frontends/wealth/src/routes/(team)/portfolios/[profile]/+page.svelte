@@ -1,19 +1,35 @@
 <!--
-  Portfolio Profile Detail — CVaR timeline (ECharts), snapshot metrics,
-  rebalance workflow (trigger, approve, execute), drift history access.
-  Per UX spec: numbers always with context, ECharts with regime bands.
+  Portfolio Profile Workbench — Section 3.Wealth.6 of the UX Remediation Plan.
+
+  Multi-region allocation navigator, DataTable with multi-sort + row expansion,
+  before/after rebalance comparison, drift history export via GET /portfolios/{profile}/drift-history/export.
+  computed_at from server only — never Date.now().
 -->
 <script lang="ts">
 	import {
-		PageHeader, MetricCard, SectionCard, EmptyState, StatusBadge, Card, Button, ContextPanel,
-		formatCurrency, formatDate, formatPercent, formatNumber,
+		PageHeader,
+		MetricCard,
+		SectionCard,
+		EmptyState,
+		StatusBadge,
+		Card,
+		Button,
+		ContextPanel,
+		ActionButton,
+		ConfirmDialog,
+		DataTable,
+		formatDate,
+		formatDateTime,
+		formatPercent,
+		formatNumber,
 	} from "@netz/ui";
 	import { ChartContainer } from "@netz/ui/charts";
-	import { ActionButton, ConfirmDialog } from "@netz/ui";
-	import {
-		globalChartOptions, regimeColors, statusColors,
-	} from "@netz/ui/charts/echarts-setup";
 	import StaleBanner from "$lib/components/StaleBanner.svelte";
+	import {
+		globalChartOptions,
+		statusColors,
+	} from "@netz/ui/charts/echarts-setup";
+	import type { ColumnDef } from "@tanstack/svelte-table";
 	import DriftHistoryPanel from "$lib/components/DriftHistoryPanel.svelte";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll, goto } from "$app/navigation";
@@ -27,33 +43,193 @@
 
 	let { data }: { data: PageData } = $props();
 
-	// ── Snapshot metrics with context (UX principle #1) ──
-	type Snapshot = {
-		nav: number | null;
-		return_ytd: number | null;
-		return_1y: number | null;
-		volatility_1y: number | null;
-		sharpe_1y: number | null;
-		cvar_current: number | null;
-		cvar_limit: number | null;
-		cvar_utilized_pct: number | null;
-		regime: string | null;
-		updated_at: string | null;
+	// ── API types matching api.d.ts schemas — no invented shapes ─────────────
+	// Source of truth: packages/ui/src/types/api.d.ts (components["schemas"]["PortfolioSnapshotRead"])
+	type PortfolioSnapshotRead = {
+		snapshot_id: string;
+		profile: string;
+		snapshot_date: string;
+		weights: Record<string, unknown>;
+		fund_selection?: Record<string, unknown> | null;
+		cvar_current?: string | null;
+		cvar_limit?: string | null;
+		cvar_utilized_pct?: string | null;
+		trigger_status?: string | null;
+		consecutive_breach_days: number;
+		regime?: string | null;
+		core_weight?: string | null;
+		satellite_weight?: string | null;
+		regime_probs?: Record<string, unknown> | null;
+		cvar_lower_5?: string | null;
+		cvar_upper_95?: string | null;
+		computed_at?: string | null;
 	};
 
-	let snapshot = $derived(data.snapshot as Snapshot | null);
-	let profile = $derived(data.profile as string);
+	// Source of truth: packages/ui/src/types/api.d.ts (components["schemas"]["PortfolioSummary"])
+	type PortfolioSummary = {
+		profile: string;
+		snapshot_date?: string | null;
+		cvar_current?: string | null;
+		cvar_limit?: string | null;
+		cvar_utilized_pct?: string | null;
+		trigger_status?: string | null;
+		regime?: string | null;
+		core_weight?: string | null;
+		satellite_weight?: string | null;
+		computed_at?: string | null;
+	};
 
-	// CVaR from risk store (real-time via SSE/polling)
+	// ── Server data ───────────────────────────────────────────────────────────
+	let profile = $derived(data.profile as string);
+	let snapshot = $derived(data.snapshot as PortfolioSnapshotRead | null);
+	let summary = $derived(data.portfolio as PortfolioSummary | null);
+
+	// CVaR from risk store (SSE-primary, poll-fallback)
 	let cvarStatus = $derived(riskStore?.cvarByProfile?.[profile] ?? null);
 	let cvarHistory = $derived(riskStore?.cvarHistoryByProfile?.[profile] ?? []);
 
-	// ── CVaR Timeline ECharts option (per UX spec) ──
+	// Freshness from server computed_at ONLY — never Date.now()
+	let computedAt = $derived(
+		cvarStatus?.computed_at
+			?? snapshot?.computed_at
+			?? summary?.computed_at
+			?? null
+	);
+
+	// ── Region allocation navigator ──────────────────────────────────────────
+
+	const REGIONS = ["global", "latam", "us", "europe", "asia"] as const;
+	type Region = typeof REGIONS[number];
+
+	let selectedRegion = $state<Region | "all">("all");
+
+	// Weights from snapshot — typed as record
+	let weights = $derived<Record<string, number>>(() => {
+		const raw = snapshot?.weights ?? {};
+		const out: Record<string, number> = {};
+		for (const [k, v] of Object.entries(raw)) {
+			if (typeof v === "number") out[k] = v;
+		}
+		return out;
+	});
+
+	// Allocation rows — split by region tag if available (fund_name prefix heuristic)
+	function inferRegion(name: string): Region {
+		const lower = name.toLowerCase();
+		if (lower.includes("latam") || lower.includes("br") || lower.includes("brasil")) return "latam";
+		if (lower.includes("us") || lower.includes("eua") || lower.includes("american")) return "us";
+		if (lower.includes("europe") || lower.includes("eu") || lower.includes("eur")) return "europe";
+		if (lower.includes("asia") || lower.includes("japan") || lower.includes("china")) return "asia";
+		return "global";
+	}
+
+	type AllocationRow = {
+		fund_name: string;
+		region: Region;
+		current_weight: number;
+		target_weight: number | null;
+		delta_weight: number | null;
+	};
+
+	let allRows = $derived.by((): AllocationRow[] => {
+		const fundSelection = snapshot?.fund_selection ?? {};
+		return Object.entries(weights).map(([name, current]) => {
+			const sel = typeof fundSelection[name] === "object" && fundSelection[name] !== null
+				? fundSelection[name] as Record<string, unknown>
+				: null;
+			const target = typeof sel?.target_weight === "number" ? sel.target_weight : null;
+			return {
+				fund_name: name,
+				region: inferRegion(name),
+				current_weight: current,
+				target_weight: target,
+				delta_weight: target !== null ? current - target : null,
+			};
+		}).sort((a, b) => b.current_weight - a.current_weight);
+	});
+
+	let filteredRows = $derived(
+		selectedRegion === "all"
+			? allRows
+			: allRows.filter((r) => r.region === selectedRegion)
+	);
+
+	// Region totals for navigator
+	let regionTotals = $derived.by(() => {
+		const totals: Record<string, number> = {};
+		for (const r of allRows) {
+			totals[r.region] = (totals[r.region] ?? 0) + r.current_weight;
+		}
+		return totals;
+	});
+
+	// ── DataTable columns with multi-sort ────────────────────────────────────
+
+	type AllocationRecord = Record<string, unknown>;
+
+	const allocationColumns: ColumnDef<AllocationRecord>[] = [
+		{
+			accessorKey: "fund_name",
+			header: "Fundo",
+			enableSorting: true,
+			cell: (info) => String(info.getValue() ?? "—"),
+		},
+		{
+			accessorKey: "region",
+			header: "Região",
+			enableSorting: true,
+			cell: (info) => String(info.getValue() ?? "—"),
+		},
+		{
+			accessorKey: "current_weight",
+			header: "Peso Atual",
+			enableSorting: true,
+			cell: (info) => {
+				const v = info.getValue();
+				return typeof v === "number" ? formatPercent(v, 2, "en-US") : "—";
+			},
+		},
+		{
+			accessorKey: "target_weight",
+			header: "Peso Alvo",
+			enableSorting: true,
+			cell: (info) => {
+				const v = info.getValue();
+				return typeof v === "number" ? formatPercent(v, 2, "en-US") : "—";
+			},
+		},
+		{
+			accessorKey: "delta_weight",
+			header: "Δ Peso",
+			enableSorting: true,
+			cell: (info) => {
+				const v = info.getValue();
+				if (typeof v !== "number") return "—";
+				const pct = v * 100;
+				const sign = pct >= 0 ? "+" : "";
+				return `${sign}${formatNumber(pct, 2, "en-US")}pp`;
+			},
+		},
+	];
+
+	let tableRows = $derived<AllocationRecord[]>(
+		filteredRows.map((r): AllocationRecord => ({
+			fund_name: r.fund_name,
+			region: r.region,
+			current_weight: r.current_weight,
+			target_weight: r.target_weight,
+			delta_weight: r.delta_weight,
+		}))
+	);
+
+	// ── CVaR timeline chart ───────────────────────────────────────────────────
+
 	let cvarChartOption = $derived.by(() => {
 		if (!cvarHistory || cvarHistory.length === 0) return null;
 
-		const limit = cvarStatus?.cvar_limit ?? snapshot?.cvar_limit ?? -0.08;
-		const warningThreshold = limit * 0.8; // 80% utilization
+		const limitRaw = cvarStatus?.cvar_limit ?? snapshot?.cvar_limit;
+		const limit = typeof limitRaw === "string" ? parseFloat(limitRaw) : (limitRaw ?? -0.08);
+		const warningThreshold = limit * 0.8;
 
 		return {
 			...globalChartOptions,
@@ -61,7 +237,7 @@
 			xAxis: { type: "time" },
 			yAxis: {
 				type: "value",
-				inverse: true, // worse (more negative) visually higher
+				inverse: true,
 				axisLabel: { formatter: (v: number) => formatPercent(v, 1, "en-US") },
 			},
 			series: [
@@ -91,14 +267,12 @@
 					markArea: {
 						silent: true,
 						data: [
-							// Warning band between 80-100% of limit
 							[
-								{ yAxis: warningThreshold, itemStyle: { color: "rgba(245, 158, 11, 0.06)" } },
+								{ yAxis: warningThreshold, itemStyle: { color: "rgba(245,158,11,0.06)" } },
 								{ yAxis: limit },
 							],
-							// Breach zone beyond limit
 							[
-								{ yAxis: limit, itemStyle: { color: "rgba(239, 68, 68, 0.08)" } },
+								{ yAxis: limit, itemStyle: { color: "rgba(239,68,68,0.08)" } },
 								{ yAxis: limit * 1.5 },
 							],
 						],
@@ -108,7 +282,8 @@
 		};
 	});
 
-	// ── Rebalance workflow ──
+	// ── Rebalance workflow ────────────────────────────────────────────────────
+
 	let showRebalanceConfirm = $state(false);
 	let rebalancing = $state(false);
 	let rebalanceEvents = $state<Array<Record<string, unknown>>>([]);
@@ -116,6 +291,26 @@
 	let actionError = $state<string | null>(null);
 	let approvingEventId = $state<string | null>(null);
 	let executingEventId = $state<string | null>(null);
+
+	// Latest pending/approved event for before/after comparison
+	let latestEvent = $derived(rebalanceEvents[0] ?? null);
+	let pendingEvent = $derived(
+		rebalanceEvents.find((e) => e.status === "pending" || e.status === "approved") ?? null
+	);
+
+	// Before/after rebalance comparison
+	let beforeWeights = $derived<Record<string, number>>(weights);
+	let afterWeights = $derived.by((): Record<string, number> => {
+		const proposed = pendingEvent?.proposed_weights;
+		if (!proposed || typeof proposed !== "object") return {};
+		const out: Record<string, number> = {};
+		for (const [k, v] of Object.entries(proposed as Record<string, unknown>)) {
+			if (typeof v === "number") out[k] = v;
+		}
+		return out;
+	});
+
+	let hasProposedWeights = $derived(Object.keys(afterWeights).length > 0);
 
 	async function triggerRebalance() {
 		rebalancing = true;
@@ -155,7 +350,7 @@
 			await loadRebalanceEvents();
 		} catch (e) {
 			if (e instanceof Error && e.message.includes("409")) {
-				actionError = "Another IC member already approved this rebalance.";
+				actionError = "Outro membro do IC já aprovou este rebalanceamento.";
 			} else {
 				actionError = e instanceof Error ? e.message : "Approval failed";
 			}
@@ -174,7 +369,7 @@
 			await invalidateAll();
 		} catch (e) {
 			if (e instanceof Error && e.message.includes("409")) {
-				actionError = "Rebalance was already executed.";
+				actionError = "Rebalanceamento já foi executado.";
 			} else {
 				actionError = e instanceof Error ? e.message : "Execution failed";
 			}
@@ -183,129 +378,284 @@
 		}
 	}
 
-	// ── Drift history panel ──
-	let showDriftHistory = $state(false);
+	// ── Drift history panel ───────────────────────────────────────────────────
 
-	// instrument_id for drift history — from portfolio record if available
+	let showDriftHistory = $state(false);
+	let exportingDrift = $state(false);
+
 	type PortfolioRecord = { id: string; display_name?: string | null };
 	let portfolioRecord = $derived(data.portfolio as PortfolioRecord | null);
 	let driftInstrumentId = $derived(portfolioRecord?.id ?? profile);
 	let driftInstrumentName = $derived(portfolioRecord?.display_name ?? profile);
 
-	// Load rebalance events on mount
-	$effect(() => { loadRebalanceEvents(); });
-
-	function fmtPct(v: number | null | undefined): string {
-		return formatPercent(v, 1, "en-US");
+	async function exportDriftHistory() {
+		exportingDrift = true;
+		try {
+			const api = createClientApiClient(getToken);
+			// GET /portfolios/{profile}/drift-history/export
+			const res = await api.get<{ download_url?: string; url?: string }>(
+				`/portfolios/${profile}/drift-history/export`
+			);
+			const url = res.download_url ?? res.url;
+			if (url) {
+				window.open(url, "_blank");
+			}
+		} catch {
+			// fallback: strategy-drift export endpoint
+			const token = await getToken();
+			const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
+			const exportUrl = `${apiBase}/analytics/strategy-drift/${driftInstrumentId}/export?format=csv`;
+			const resp = await fetch(exportUrl, { headers: { Authorization: `Bearer ${token}` } });
+			if (resp.ok) {
+				const blob = await resp.blob();
+				const a = document.createElement("a");
+				a.href = URL.createObjectURL(blob);
+				a.download = `drift-history-${profile}.csv`;
+				a.click();
+			}
+		} finally {
+			exportingDrift = false;
+		}
 	}
 
-	function fmtDelta(v: number | null | undefined): string {
-		if (v === null || v === undefined) return "";
-		const pct = v * 100;
-		const formatted = formatNumber(pct, 1, "en-US");
-		return pct >= 0 ? `+${formatted}pp` : `${formatted}pp`;
+	// Load rebalance events on mount
+	$effect(() => { void loadRebalanceEvents(); });
+
+	// Profile display name
+	let profileLabel = $derived(
+		profile.charAt(0).toUpperCase() + profile.slice(1)
+	);
+
+	function fmtPct(v: string | number | null | undefined): string {
+		const n = typeof v === "string" ? parseFloat(v) : v;
+		return formatPercent(n, 1, "en-US");
 	}
 </script>
 
 <div class="space-y-6 p-6">
-	<!-- Stale banner -->
+
+	<!-- Stale banner — server computed_at only -->
 	{#if riskStore?.status === "stale"}
 		<StaleBanner lastUpdated={riskStore.lastUpdated} onRefresh={() => riskStore.refresh()} />
 	{/if}
 
-	<PageHeader title="{profile.charAt(0).toUpperCase() + profile.slice(1)} Portfolio">
+	<!-- Page header -->
+	<PageHeader title="{profileLabel} Portfolio Workbench">
 		{#snippet actions()}
-			<div class="flex gap-2">
-				<Button variant="outline" onclick={() => showDriftHistory = true}>
-					Drift History
+			<div class="flex flex-wrap gap-2">
+				<Button
+					variant="outline"
+					size="sm"
+					onclick={exportDriftHistory}
+					disabled={exportingDrift}
+				>
+					{exportingDrift ? "Exportando…" : "Exportar Drift History"}
+				</Button>
+				<Button variant="outline" size="sm" onclick={() => showDriftHistory = true}>
+					Ver Drift History
 				</Button>
 				<ActionButton
 					onclick={() => showRebalanceConfirm = true}
 					loading={rebalancing}
-					loadingText="Triggering..."
+					loadingText="Disparando…"
+					size="sm"
 				>
-					Rebalance
+					Rebalancear
 				</ActionButton>
 			</div>
 		{/snippet}
 	</PageHeader>
 
 	{#if actionError}
-		<div class="rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+		<div
+			class="rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]"
+			role="alert"
+		>
 			{actionError}
-			<button class="ml-2 underline" onclick={() => actionError = null}>dismiss</button>
+			<button class="ml-2 underline" onclick={() => actionError = null}>fechar</button>
 		</div>
 	{/if}
 
-	<!-- Metric cards with context (UX #1: CVaR + limit + utilization + delta) -->
-	<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+	<!-- ════════════════════════════════════════════════════════════════════════
+	     KPI row — freshness from server computed_at ONLY
+	     ════════════════════════════════════════════════════════════════════════ -->
+	<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 		<MetricCard
 			label="CVaR 95%"
 			value={fmtPct(cvarStatus?.cvar_current ?? snapshot?.cvar_current)}
 			sublabel="Limit: {fmtPct(cvarStatus?.cvar_limit ?? snapshot?.cvar_limit)} | Util: {fmtPct(cvarStatus?.cvar_utilized_pct ?? snapshot?.cvar_utilized_pct)}"
 			status={
-				(cvarStatus?.cvar_utilized_pct ?? 0) > 1 ? "breach" :
-				(cvarStatus?.cvar_utilized_pct ?? 0) > 0.8 ? "warn" : undefined
+				parseFloat(String(cvarStatus?.cvar_utilized_pct ?? 0)) > 1 ? "breach" :
+				parseFloat(String(cvarStatus?.cvar_utilized_pct ?? 0)) > 0.8 ? "warn" : undefined
 			}
 		/>
 		<MetricCard
-			label="NAV"
-			value={formatCurrency(snapshot?.nav, "USD", "en-US")}
-			sublabel={snapshot?.updated_at ? `Updated: ${formatDate(snapshot.updated_at)}` : ""}
+			label="Core / Satellite"
+			value="{fmtPct(snapshot?.core_weight)} / {fmtPct(snapshot?.satellite_weight)}"
+			sublabel="Regime: {cvarStatus?.regime ?? snapshot?.regime ?? '—'}"
 		/>
 		<MetricCard
-			label="Return YTD"
-			value={fmtPct(snapshot?.return_ytd)}
-			sublabel="1Y: {fmtPct(snapshot?.return_1y)}"
+			label="CVaR Breach Days"
+			value={String(cvarStatus?.consecutive_breach_days ?? 0)}
+			sublabel={cvarStatus?.trigger_status ?? snapshot?.trigger_status ?? "—"}
+			status={
+				(cvarStatus?.consecutive_breach_days ?? 0) > 3 ? "breach" :
+				(cvarStatus?.consecutive_breach_days ?? 0) > 0 ? "warn" : undefined
+			}
 		/>
 		<MetricCard
-			label="Regime"
-			value={cvarStatus?.regime ?? snapshot?.regime ?? "—"}
-			sublabel="Breach days: {cvarStatus?.consecutive_breach_days ?? 0}"
-			status={cvarStatus?.trigger_status === "warning" ? "warn" : cvarStatus?.trigger_status === "breach" ? "breach" : undefined}
+			label="Snapshot"
+			value={snapshot?.snapshot_date ? formatDate(snapshot.snapshot_date) : "—"}
+			sublabel={computedAt
+				? `Calculado: ${formatDateTime(computedAt)}`
+				: "Aguardando pipeline"}
 		/>
 	</div>
 
-	<!-- CVaR Timeline Chart -->
-	<SectionCard title="CVaR Timeline" subtitle="Rolling 12M with limit and regime bands">
+	<!-- ════════════════════════════════════════════════════════════════════════
+	     CVaR Timeline
+	     ════════════════════════════════════════════════════════════════════════ -->
+	<SectionCard title="CVaR Timeline" subtitle="Rolling 12M com limite e bandas de regime">
 		{#if cvarChartOption}
-			<ChartContainer option={cvarChartOption} height={400} ariaLabel={`${profile} CVaR timeline`} />
+			<ChartContainer option={cvarChartOption} height={360} ariaLabel="{profile} CVaR timeline" />
 		{:else}
 			<EmptyState
-				title="No CVaR history"
-				message="CVaR timeline will appear after the daily risk pipeline runs."
+				title="Sem histórico CVaR"
+				message="O gráfico será exibido após o pipeline de risco diário executar."
 			/>
 		{/if}
-		<!-- Stats row below chart -->
-		{#if cvarStatus}
-			<div class="mt-3 flex gap-6 text-xs text-[var(--netz-text-secondary)]">
-				<span>Current: {fmtPct(cvarStatus.cvar_current)}</span>
-				<span>Limit: {fmtPct(cvarStatus.cvar_limit)}</span>
-				<span>Utilization: {fmtPct(cvarStatus.cvar_utilized_pct)}</span>
-				<span>Breach days: {cvarStatus.consecutive_breach_days}</span>
-			</div>
+		{#if cvarStatus && computedAt}
+			<p class="mt-2 text-right text-xs text-[var(--netz-text-muted)]">
+				Calculado em: <time datetime={computedAt}>{formatDateTime(computedAt)}</time>
+			</p>
 		{/if}
 	</SectionCard>
 
-	<!-- Rebalance Events -->
-	<SectionCard title="Rebalance Events" subtitle="Pending and historical rebalance proposals">
+	<!-- ════════════════════════════════════════════════════════════════════════
+	     Multi-region allocation navigator
+	     ════════════════════════════════════════════════════════════════════════ -->
+	<SectionCard title="Alocação por Região" subtitle="Navegador de alocação multi-região">
+		<!-- Region filter chips -->
+		<div class="mb-4 flex flex-wrap gap-2">
+			<button
+				class="rounded-full px-3 py-1 text-sm font-medium transition-colors"
+				class:bg-[var(--netz-brand-primary)]={selectedRegion === "all"}
+				class:text-white={selectedRegion === "all"}
+				class:bg-[var(--netz-surface-inset)]={selectedRegion !== "all"}
+				class:text-[var(--netz-text-secondary)]={selectedRegion !== "all"}
+				onclick={() => selectedRegion = "all"}
+			>
+				Todas
+			</button>
+			{#each REGIONS as region}
+				<button
+					class="rounded-full px-3 py-1 text-sm font-medium transition-colors"
+					class:bg-[var(--netz-brand-primary)]={selectedRegion === region}
+					class:text-white={selectedRegion === region}
+					class:bg-[var(--netz-surface-inset)]={selectedRegion !== region}
+					class:text-[var(--netz-text-secondary)]={selectedRegion !== region}
+					onclick={() => selectedRegion = region}
+				>
+					{region.toUpperCase()}
+					{#if regionTotals[region]}
+						<span class="ml-1 text-xs opacity-70">({formatPercent(regionTotals[region], 1, "en-US")})</span>
+					{/if}
+				</button>
+			{/each}
+		</div>
+
+		<!-- Allocation DataTable — multi-sort + row expansion -->
+		{#if tableRows.length > 0}
+			<DataTable
+				data={tableRows}
+				columns={allocationColumns}
+				pageSize={20}
+				filterColumn="fund_name"
+				filterPlaceholder="Buscar fundo…"
+			>
+				{#snippet expandedRow(row)}
+					<div class="px-4 py-3 text-sm text-[var(--netz-text-secondary)] space-y-1">
+						<p><span class="font-medium">Fundo:</span> {String(row.fund_name ?? "—")}</p>
+						<p><span class="font-medium">Região:</span> {String(row.region ?? "—")}</p>
+						<p><span class="font-medium">Peso Atual:</span> {typeof row.current_weight === "number" ? formatPercent(row.current_weight, 4, "en-US") : "—"}</p>
+						{#if row.target_weight !== null}
+							<p><span class="font-medium">Peso Alvo:</span> {typeof row.target_weight === "number" ? formatPercent(row.target_weight, 4, "en-US") : "—"}</p>
+						{/if}
+						{#if row.delta_weight !== null}
+							<p>
+								<span class="font-medium">Desvio:</span>
+								{#if typeof row.delta_weight === "number"}
+									<span class={row.delta_weight > 0 ? "text-[var(--netz-success)]" : "text-[var(--netz-danger)]"}>
+										{row.delta_weight > 0 ? "+" : ""}{formatNumber(row.delta_weight * 100, 2, "en-US")}pp
+									</span>
+								{/if}
+							</p>
+						{/if}
+					</div>
+				{/snippet}
+			</DataTable>
+		{:else}
+			<EmptyState
+				title="Sem dados de alocação"
+				message="Dados de alocação serão exibidos após o snapshot mais recente estar disponível."
+			/>
+		{/if}
+	</SectionCard>
+
+	<!-- ════════════════════════════════════════════════════════════════════════
+	     Before / After rebalance comparison
+	     ════════════════════════════════════════════════════════════════════════ -->
+	{#if hasProposedWeights}
+		<SectionCard title="Comparação: Antes / Depois do Rebalanceamento" subtitle="Pesos atuais vs. proposta pendente">
+			<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+				{#each Object.keys(beforeWeights) as fundName}
+					{@const before = beforeWeights[fundName] ?? 0}
+					{@const after = afterWeights[fundName] ?? 0}
+					{@const delta = after - before}
+					<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-3">
+						<p class="truncate text-sm font-medium text-[var(--netz-text-primary)]">{fundName}</p>
+						<div class="mt-2 flex items-baseline gap-2">
+							<span class="text-xs text-[var(--netz-text-muted)]">Antes:</span>
+							<span class="text-sm font-mono">{formatPercent(before, 2, "en-US")}</span>
+							<span class="text-xs text-[var(--netz-text-muted)]">→</span>
+							<span class="text-sm font-mono font-semibold">{formatPercent(after, 2, "en-US")}</span>
+						</div>
+						{#if delta !== 0}
+							<p class="mt-1 text-xs font-medium" class:text-[var(--netz-success)]={delta > 0} class:text-[var(--netz-danger)]={delta < 0}>
+								{delta > 0 ? "+" : ""}{formatNumber(delta * 100, 2, "en-US")}pp
+							</p>
+						{/if}
+					</div>
+				{/each}
+			</div>
+		</SectionCard>
+	{/if}
+
+	<!-- ════════════════════════════════════════════════════════════════════════
+	     Rebalance events
+	     ════════════════════════════════════════════════════════════════════════ -->
+	<SectionCard title="Eventos de Rebalanceamento" subtitle="Propostas pendentes e histórico">
 		{#if loadingEvents}
-			<p class="text-sm text-[var(--netz-text-muted)]">Loading events...</p>
+			<p class="text-sm text-[var(--netz-text-muted)]">Carregando eventos…</p>
 		{:else if rebalanceEvents.length === 0}
-			<EmptyState title="No rebalance events" message="Trigger a rebalance to create proposals." />
+			<EmptyState title="Sem eventos" message="Dispare um rebalanceamento para criar propostas." />
 		{:else}
 			<div class="space-y-3">
 				{#each rebalanceEvents as event}
 					<Card class="flex items-center justify-between p-4">
 						<div>
 							<div class="flex items-center gap-2">
-								<StatusBadge status={String(event.status ?? "")} type="default" resolve={resolveWealthStatus} />
+								<StatusBadge
+									status={String(event.status ?? "")}
+									type="default"
+									resolve={resolveWealthStatus}
+								/>
 								<span class="text-sm font-medium text-[var(--netz-text-primary)]">
-									Event {String(event.id ?? "").slice(0, 8)}
+									Evento {String(event.id ?? "").slice(0, 8)}
 								</span>
 							</div>
 							<p class="mt-1 text-xs text-[var(--netz-text-muted)]">
-								{event.created_at ? formatDate(String(event.created_at)) : ""}
+								{event.created_at ? formatDateTime(String(event.created_at)) : ""}
 							</p>
 						</div>
 						<div class="flex gap-2">
@@ -314,9 +664,9 @@
 									size="sm"
 									onclick={() => approveRebalance(String(event.id))}
 									loading={approvingEventId === String(event.id)}
-									loadingText="..."
+									loadingText="…"
 								>
-									Approve
+									Aprovar
 								</ActionButton>
 							{/if}
 							{#if event.status === "approved"}
@@ -325,9 +675,9 @@
 									variant="destructive"
 									onclick={() => executeRebalance(String(event.id))}
 									loading={executingEventId === String(event.id)}
-									loadingText="..."
+									loadingText="…"
 								>
-									Execute
+									Executar
 								</ActionButton>
 							{/if}
 							<Button
@@ -335,7 +685,7 @@
 								variant="outline"
 								onclick={() => goto(`/portfolios/${profile}/rebalance/${event.id}`)}
 							>
-								Detail
+								Detalhe
 							</Button>
 						</div>
 					</Card>
@@ -345,22 +695,22 @@
 	</SectionCard>
 </div>
 
-<!-- Rebalance Confirm -->
+<!-- Confirm rebalance trigger -->
 <ConfirmDialog
 	bind:open={showRebalanceConfirm}
-	title="Trigger Rebalance"
-	message="This will generate rebalance proposals for the {profile} portfolio based on current allocation drift. Continue?"
-	confirmLabel="Trigger Rebalance"
+	title="Disparar Rebalanceamento"
+	message="Isso irá gerar propostas de rebalanceamento para o portfólio {profile} com base no drift de alocação atual. Continuar?"
+	confirmLabel="Disparar Rebalanceamento"
 	confirmVariant="default"
 	onConfirm={triggerRebalance}
 	onCancel={() => showRebalanceConfirm = false}
 />
 
-<!-- Drift History Panel -->
+<!-- Drift history side panel -->
 {#if showDriftHistory}
 	<ContextPanel
 		open={showDriftHistory}
-		title="Drift History — {profile}"
+		title="Drift History — {profileLabel}"
 		onClose={() => showDriftHistory = false}
 		width="720px"
 	>
