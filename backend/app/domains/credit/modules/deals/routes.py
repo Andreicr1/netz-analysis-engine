@@ -1,28 +1,35 @@
 from __future__ import annotations
 
+import datetime as dt
 import logging
 import re
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
 from app.core.db.session import get_sync_db_with_rls
 from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed
+from app.domains.credit.deals.models.deals import Deal
+from app.domains.credit.modules.deals import cashflow_service as cf_svc
 from app.domains.credit.modules.deals import service
-from app.domains.credit.modules.deals.models import DealDocument, PipelineDeal
+from app.domains.credit.modules.deals.models import DealCashflow, DealDocument, PipelineDeal
 from app.domains.credit.modules.deals.schemas import (
     DealApproveOut,
     DealApproveRequest,
+    DealCashflowCreate,
+    DealCashflowOut,
     DealContextPatch,
     DealCreate,
     DealDecisionCreate,
     DealDecisionOut,
     DealEventOut,
     DealOut,
+    DealPerformanceOut,
     DealStagePatch,
+    MonitoringMetricsOut,
     Page,
     QualificationRunRequest,
     QualificationRunResponse,
@@ -411,4 +418,154 @@ def list_pipeline_deal_events(
         db, fund_id=fund_id, pipeline_deal_id=deal_id, limit=limit, offset=offset,
     )
     return Page(items=[DealEventOut.model_validate(x) for x in items], limit=limit, offset=offset)
+
+
+# ── Deal Cashflows ───────────────────────────────────────────────────
+
+VALID_FLOW_TYPES = {
+    "disbursement", "capital_call", "repayment_principal",
+    "repayment_interest", "distribution", "fee",
+}
+
+
+def _get_deal_or_404(db: Session, *, fund_id: uuid.UUID, deal_id: uuid.UUID) -> Deal:
+    stmt = select(Deal).where(Deal.id == deal_id, Deal.fund_id == fund_id)
+    deal = db.execute(stmt).scalar_one_or_none()
+    if deal is None:
+        raise HTTPException(status_code=404, detail="Deal not found")
+    return deal
+
+
+@router.get("/{deal_id}/cashflows", response_model=Page[DealCashflowOut])
+def list_deal_cashflows(
+    deal_id: uuid.UUID,
+    fund_id: uuid.UUID,
+    db: Session = Depends(get_sync_db_with_rls),
+    limit: int = Depends(_limit),
+    offset: int = Depends(_offset),
+    _actor: Actor = Depends(get_actor),
+) -> Page[DealCashflowOut]:
+    stmt = (
+        select(DealCashflow)
+        .where(DealCashflow.deal_id == deal_id, DealCashflow.fund_id == fund_id)
+        .order_by(DealCashflow.flow_date.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    rows = db.execute(stmt).scalars().all()
+    total = db.execute(
+        select(func.count())
+        .select_from(DealCashflow)
+        .where(DealCashflow.deal_id == deal_id, DealCashflow.fund_id == fund_id),
+    ).scalar() or 0
+    return Page(
+        items=[DealCashflowOut.model_validate(r) for r in rows],
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.post("/{deal_id}/cashflows", response_model=DealCashflowOut, status_code=status.HTTP_201_CREATED)
+def create_cashflow(
+    deal_id: uuid.UUID,
+    fund_id: uuid.UUID,
+    body: DealCashflowCreate,
+    db: Session = Depends(get_sync_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> DealCashflowOut:
+    if body.flow_type not in VALID_FLOW_TYPES:
+        raise HTTPException(status_code=422, detail=f"Invalid flow_type '{body.flow_type}'. Must be one of: {', '.join(sorted(VALID_FLOW_TYPES))}")
+    _get_deal_or_404(db, fund_id=fund_id, deal_id=deal_id)
+    cashflow = DealCashflow(
+        deal_id=deal_id,
+        fund_id=fund_id,
+        flow_type=body.flow_type,
+        amount=body.amount,
+        currency=body.currency,
+        flow_date=body.flow_date,
+        description=body.description,
+        reference=body.reference,
+        created_by=actor.actor_id,
+        updated_by=actor.actor_id,
+    )
+    db.add(cashflow)
+    db.flush()
+    return DealCashflowOut.model_validate(cashflow)
+
+
+@router.patch("/{deal_id}/cashflows/{cashflow_id}", response_model=DealCashflowOut)
+def update_cashflow(
+    deal_id: uuid.UUID,
+    cashflow_id: uuid.UUID,
+    fund_id: uuid.UUID,
+    body: DealCashflowCreate,
+    db: Session = Depends(get_sync_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> DealCashflowOut:
+    stmt = select(DealCashflow).where(
+        DealCashflow.id == cashflow_id, DealCashflow.deal_id == deal_id,
+    )
+    cashflow = db.execute(stmt).scalar_one_or_none()
+    if cashflow is None:
+        raise HTTPException(status_code=404, detail="Cashflow not found")
+    if body.flow_type not in VALID_FLOW_TYPES:
+        raise HTTPException(status_code=422, detail=f"Invalid flow_type '{body.flow_type}'. Must be one of: {', '.join(sorted(VALID_FLOW_TYPES))}")
+    cashflow.flow_type = body.flow_type
+    cashflow.amount = body.amount
+    cashflow.currency = body.currency
+    cashflow.flow_date = body.flow_date
+    cashflow.description = body.description
+    cashflow.reference = body.reference
+    cashflow.updated_by = actor.actor_id
+    db.flush()
+    return DealCashflowOut.model_validate(cashflow)
+
+
+@router.delete("/{deal_id}/cashflows/{cashflow_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_cashflow(
+    deal_id: uuid.UUID,
+    cashflow_id: uuid.UUID,
+    fund_id: uuid.UUID,
+    db: Session = Depends(get_sync_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> None:
+    stmt = select(DealCashflow).where(
+        DealCashflow.id == cashflow_id, DealCashflow.deal_id == deal_id,
+    )
+    cashflow = db.execute(stmt).scalar_one_or_none()
+    if cashflow is None:
+        raise HTTPException(status_code=404, detail="Cashflow not found")
+    db.delete(cashflow)
+    db.flush()
+
+
+@router.get("/{deal_id}/performance", response_model=DealPerformanceOut)
+def get_deal_performance(
+    deal_id: uuid.UUID,
+    fund_id: uuid.UUID,
+    db: Session = Depends(get_sync_db_with_rls),
+    _actor: Actor = Depends(get_actor),
+) -> DealPerformanceOut:
+    metrics = cf_svc.calculate_performance(db, fund_id=fund_id, deal_id=deal_id)
+    count = db.execute(
+        select(func.count())
+        .select_from(DealCashflow)
+        .where(DealCashflow.deal_id == deal_id, DealCashflow.fund_id == fund_id),
+    ).scalar() or 0
+    return DealPerformanceOut(deal_id=deal_id, cashflow_count=count, **metrics)
+
+
+@router.get("/{deal_id}/monitoring", response_model=MonitoringMetricsOut)
+def get_deal_monitoring(
+    deal_id: uuid.UUID,
+    fund_id: uuid.UUID,
+    db: Session = Depends(get_sync_db_with_rls),
+    _actor: Actor = Depends(get_actor),
+) -> MonitoringMetricsOut:
+    metrics = cf_svc.calculate_portfolio_monitoring_metrics(db, fund_id=fund_id, deal_id=deal_id)
+    return MonitoringMetricsOut(
+        deal_id=deal_id,
+        computed_at=dt.datetime.now(dt.timezone.utc),
+        **metrics,
+    )
 

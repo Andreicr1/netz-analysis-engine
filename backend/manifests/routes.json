@@ -15,6 +15,11 @@
     "name": "delete_asset"
   },
   {
+    "method": "DELETE",
+    "path": "/api/v1/pipeline/deals/{deal_id}/cashflows/{cashflow_id}",
+    "name": "delete_cashflow"
+  },
+  {
     "method": "GET",
     "path": "/api/health",
     "name": "health"
@@ -771,8 +776,23 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/pipeline/deals/{deal_id}/cashflows",
+    "name": "list_deal_cashflows"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/pipeline/deals/{deal_id}/events",
     "name": "list_pipeline_deal_events"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/pipeline/deals/{deal_id}/monitoring",
+    "name": "get_deal_monitoring"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/pipeline/deals/{deal_id}/performance",
+    "name": "get_deal_performance"
   },
   {
     "method": "GET",
@@ -973,6 +993,11 @@
     "method": "PATCH",
     "path": "/api/v1/macro/reviews/{review_id}/reject",
     "name": "reject_review"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/pipeline/deals/{deal_id}/cashflows/{cashflow_id}",
+    "name": "update_cashflow"
   },
   {
     "method": "PATCH",
@@ -1448,6 +1473,11 @@
     "method": "POST",
     "path": "/api/v1/pipeline/deals/{deal_id}/approve",
     "name": "approve_deal"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/pipeline/deals/{deal_id}/cashflows",
+    "name": "create_cashflow"
   },
   {
     "method": "POST",
