@@ -2,6 +2,9 @@
 
 Uses raw httpx + DefaultAzureCredential — lightweight alternative to msgraph-sdk.
 Follows the same pattern as blob_client.py.
+
+DEPRECATED 2026-03-18: All azure imports are lazy to avoid breaking CI when azure SDK
+is not installed. Retained for rollback capability only.
 """
 from __future__ import annotations
 
@@ -9,7 +12,6 @@ import logging
 from dataclasses import dataclass
 
 import httpx
-from azure.identity import DefaultAzureCredential
 
 from app.core.config import settings
 
@@ -27,6 +29,8 @@ class GraphHealth:
 
 def _get_graph_token() -> str:
     """Acquire a Graph API access token via Managed Identity / DefaultAzureCredential."""
+    from azure.identity import DefaultAzureCredential
+
     credential = DefaultAzureCredential(exclude_interactive_browser_credential=True)
     token = credential.get_token(_GRAPH_SCOPE)
     return token.token

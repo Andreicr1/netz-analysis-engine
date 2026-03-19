@@ -23,7 +23,7 @@ def test_metadata_upsert_uses_supported_search_client(monkeypatch: pytest.Monkey
     ]
 
     with patch(
-        "app.services.search_index.get_metadata_index_client",
+        "app.services.azure.search_client.get_metadata_index_client",
         return_value=mock_client,
     ):
         uploaded = AzureSearchMetadataClient(
@@ -65,7 +65,7 @@ def test_metadata_search_filters_fund_and_org(monkeypatch: pytest.MonkeyPatch):
     ]
 
     with patch(
-        "app.services.search_index.get_metadata_index_client",
+        "app.services.azure.search_client.get_metadata_index_client",
         return_value=mock_client,
     ):
         hits = AzureSearchMetadataClient(
@@ -124,7 +124,7 @@ async def test_dataroom_search_route_uses_supported_metadata_client(
     ]
 
     with patch(
-        "app.services.search_index.get_metadata_index_client",
+        "app.services.azure.search_client.get_metadata_index_client",
         return_value=mock_client,
     ):
         response = await dataroom_routes.search(

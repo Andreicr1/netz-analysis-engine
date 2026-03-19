@@ -1,12 +1,10 @@
 # DEPRECATED 2026-03-18: Azure Blob Storage replaced by LocalStorageClient + StorageClient abstraction (Milestone 2).
 # Retained for rollback capability only. Use StorageClient for all new storage operations.
+# All azure imports are lazy to avoid breaking CI when azure SDK is not installed.
 from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
-
-from azure.identity import DefaultAzureCredential
-from azure.storage.blob import BlobServiceClient
 
 from app.core.config import settings
 
@@ -17,7 +15,10 @@ class StorageHealth:
     detail: str | None = None
 
 
-def get_blob_service_client() -> BlobServiceClient:
+def get_blob_service_client():
+    from azure.identity import DefaultAzureCredential
+    from azure.storage.blob import BlobServiceClient
+
     warnings.warn(
         "blob_client.get_blob_service_client is deprecated — use StorageClient abstraction",
         DeprecationWarning,

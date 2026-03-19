@@ -46,6 +46,11 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: pip install -e ".[dev,ai,quant]"
+      - name: Run migrations
+        run: python -m alembic upgrade head
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+psycopg://netz:password@localhost:5432/netz_engine_test
       - name: Lint
         run: python -m ruff check .
         working-directory: backend

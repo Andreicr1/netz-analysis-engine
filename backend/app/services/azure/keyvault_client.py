@@ -1,12 +1,10 @@
 # DEPRECATED 2026-03-18: Key Vault replaced by platform env vars (Railway secrets, Milestone 2).
 # Retained for rollback capability only.
+# All azure imports are lazy to avoid breaking CI when azure SDK is not installed.
 from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
-
-from azure.identity import DefaultAzureCredential
-from azure.keyvault.secrets import SecretClient
 
 from app.core.config import settings
 
@@ -17,7 +15,10 @@ class KeyVaultHealth:
     detail: str | None = None
 
 
-def get_secret_client() -> SecretClient:
+def get_secret_client():
+    from azure.identity import DefaultAzureCredential
+    from azure.keyvault.secrets import SecretClient
+
     warnings.warn(
         "keyvault_client.get_secret_client is deprecated — use environment variables (Railway secrets)",
         DeprecationWarning,
