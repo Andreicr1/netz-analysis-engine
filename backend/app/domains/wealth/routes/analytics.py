@@ -13,6 +13,7 @@ from app.core.security.clerk_auth import CurrentUser, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.allocation import StrategicAllocation
 from app.domains.wealth.models.backtest import BacktestRun
+from app.domains.wealth.routes.common import validate_profile as _validate_profile
 from app.domains.wealth.schemas.analytics import (
     BacktestRequest,
     BacktestRunRead,
@@ -22,7 +23,6 @@ from app.domains.wealth.schemas.analytics import (
     ParetoOptimizeResult,
 )
 from app.domains.wealth.services.quant_queries import compute_inputs_from_nav, fetch_returns_matrix
-from app.routers.common import validate_profile as _validate_profile
 from quant_engine.backtest_service import walk_forward_backtest
 from quant_engine.optimizer_service import (
     BlockConstraint,

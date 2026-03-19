@@ -46,11 +46,16 @@ def upgrade() -> None:
         )
     """)
 
-    # HNSW index for approximate nearest neighbor search
+    # HNSW index for approximate nearest neighbor search.
+    # pgvector HNSW limits vector type to 2000 dims, but halfvec supports
+    # up to 4000. Cast embedding to halfvec(3072) in the index expression
+    # so the column stays vector(3072) (no app code changes needed).
+    # Queries must cast to halfvec for index usage:
+    #   ORDER BY embedding::halfvec(3072) <=> :query::halfvec(3072)
     op.execute("""
         CREATE INDEX IF NOT EXISTS vector_chunks_embedding_hnsw
             ON vector_chunks
-            USING hnsw (embedding vector_cosine_ops)
+            USING hnsw ((embedding::halfvec(3072)) halfvec_cosine_ops)
             WITH (m = 16, ef_construction = 64)
     """)
 

@@ -1,15 +1,21 @@
 """TimescaleDB hypertables + compression for nav_timeseries and fund_risk_metrics
 
-Converts time-series tables to TimescaleDB hypertables with compression
-policies. compress_segmentby='organization_id' per CLAUDE.md requirements.
+TimescaleDB compression (columnstore) is incompatible with PostgreSQL RLS.
+Uses a separate DBAPI connection to bypass Alembic's transaction management.
 
--- NOTE: run during low-traffic window in production (migrate_data rewrites
--- the entire table and blocks writes during conversion).
+RLS is NOT re-enabled (incompatible with compression). Tenant isolation
+for these tables is enforced at the application level via
+WHERE organization_id = :org_id (mandated by CLAUDE.md).
+
+NOTE: run during low-traffic window in production (migrate_data rewrites
+the entire table and blocks writes during conversion).
 
 Revision ID: c3d4e5f6a7b8
 Revises: b2c3d4e5f6a7
 Create Date: 2026-03-18
 """
+
+import psycopg
 from alembic import op
 
 revision = "c3d4e5f6a7b8"
@@ -17,58 +23,73 @@ down_revision = "b2c3d4e5f6a7"
 branch_labels = None
 depends_on = None
 
+_HYPERTABLE_TABLES = [
+    {
+        "table": "nav_timeseries",
+        "time_col": "nav_date",
+        "compress_orderby": "nav_date DESC",
+    },
+    {
+        "table": "fund_risk_metrics",
+        "time_col": "calc_date",
+        "compress_orderby": "calc_date DESC",
+    },
+]
+
 
 def upgrade() -> None:
-    # ── nav_timeseries → hypertable ──────────────────────────────────────
-    op.execute(
-        "SELECT create_hypertable('nav_timeseries', 'nav_date', "
-        "migrate_data => true, if_not_exists => true)"
-    )
-    op.execute(
-        "ALTER TABLE nav_timeseries SET ("
-        "  timescaledb.compress,"
-        "  timescaledb.compress_segmentby = 'organization_id',"
-        "  timescaledb.compress_orderby = 'nav_date DESC'"
-        ")"
-    )
-    op.execute(
-        "SELECT add_compression_policy('nav_timeseries', "
-        "INTERVAL '30 days', if_not_exists => true)"
-    )
+    # We need a completely separate connection to escape Alembic's
+    # transactional DDL. The main connection's transaction has all prior
+    # migrations (including 0003 which created RLS). We commit that first,
+    # then use a fresh connection with autocommit for the hypertable work.
+    alembic_dbapi = op.get_bind().connection.dbapi_connection
+    conninfo = alembic_dbapi.info.dsn
+    alembic_dbapi.commit()
 
-    # ── fund_risk_metrics → hypertable ───────────────────────────────────
-    op.execute(
-        "SELECT create_hypertable('fund_risk_metrics', 'calc_date', "
-        "migrate_data => true, if_not_exists => true)"
-    )
-    op.execute(
-        "ALTER TABLE fund_risk_metrics SET ("
-        "  timescaledb.compress,"
-        "  timescaledb.compress_segmentby = 'organization_id',"
-        "  timescaledb.compress_orderby = 'calc_date DESC'"
-        ")"
-    )
-    op.execute(
-        "SELECT add_compression_policy('fund_risk_metrics', "
-        "INTERVAL '30 days', if_not_exists => true)"
-    )
+    with psycopg.connect(conninfo, autocommit=True) as conn:
+        cursor = conn.cursor()
+
+        # Phase 1: Drop RLS
+        for spec in _HYPERTABLE_TABLES:
+            table = spec["table"]
+            cursor.execute(f"DROP POLICY IF EXISTS org_isolation ON {table}")
+            cursor.execute(f"ALTER TABLE {table} DISABLE ROW LEVEL SECURITY")
+            cursor.execute(f"ALTER TABLE {table} NO FORCE ROW LEVEL SECURITY")
+
+        # Phase 2: Create hypertables + compression
+        for spec in _HYPERTABLE_TABLES:
+            table = spec["table"]
+            time_col = spec["time_col"]
+            orderby = spec["compress_orderby"]
+
+            cursor.execute(
+                f"SELECT create_hypertable('{table}', '{time_col}', "
+                f"migrate_data => true, if_not_exists => true)"
+            )
+            cursor.execute(
+                f"ALTER TABLE {table} SET ("
+                f"  timescaledb.compress,"
+                f"  timescaledb.compress_segmentby = 'organization_id',"
+                f"  timescaledb.compress_orderby = '{orderby}'"
+                f")"
+            )
+            cursor.execute(
+                f"SELECT add_compression_policy('{table}', "
+                f"INTERVAL '30 days', if_not_exists => true)"
+            )
+
+        cursor.close()
 
 
 def downgrade() -> None:
-    # Remove compression policies first, then decompress
-    op.execute(
-        "SELECT remove_compression_policy('fund_risk_metrics', if_exists => true)"
-    )
-    op.execute(
-        "ALTER TABLE fund_risk_metrics SET (timescaledb.compress = false)"
-    )
-
-    op.execute(
-        "SELECT remove_compression_policy('nav_timeseries', if_exists => true)"
-    )
-    op.execute(
-        "ALTER TABLE nav_timeseries SET (timescaledb.compress = false)"
-    )
+    for spec in reversed(_HYPERTABLE_TABLES):
+        table = spec["table"]
+        op.execute(
+            f"SELECT remove_compression_policy('{table}', if_exists => true)"
+        )
+        op.execute(
+            f"ALTER TABLE {table} SET (timescaledb.compress = false)"
+        )
     # NOTE: TimescaleDB does not support reverting a hypertable back to a
     # regular table. The tables remain hypertables after downgrade but
     # without compression.

@@ -140,6 +140,49 @@ class TestPathValidation:
             await storage.read("../../../etc/shadow")
 
 
+class TestGetDuckdbPath:
+    """Tests for LocalStorageClient.get_duckdb_path and ADLS fallback."""
+
+    def test_local_returns_correct_path(self, storage, tmp_path):
+        path = storage.get_duckdb_path("silver", "aaaa-bbbb-cccc", "credit")
+        assert "silver" in path
+        assert "aaaa-bbbb-cccc" in path
+        assert "credit" in path
+        assert path.endswith("/")
+
+    def test_path_traversal_rejected(self, storage):
+        with pytest.raises(ValueError):
+            storage.get_duckdb_path("silver", "../etc", "credit")
+
+    def test_base_class_raises_not_implemented(self):
+        """Base StorageClient.get_duckdb_path raises NotImplementedError."""
+        # Can't instantiate ABC directly, so call unbound method on a concrete subclass
+        # that doesn't override get_duckdb_path — simulate via direct call to base
+        with pytest.raises(NotImplementedError):
+            StorageClient.get_duckdb_path(StorageClient, "silver", "org-1", "credit")  # type: ignore[arg-type]
+
+
+class TestSilverChunksGlob:
+    """Tests for silver_chunks_glob from storage_routing."""
+
+    def test_correct_pattern(self):
+        import uuid as uuid_mod
+
+        from ai_engine.pipeline.storage_routing import silver_chunks_glob
+
+        org = uuid_mod.UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+        result = silver_chunks_glob(org, "credit")
+        assert result == "silver/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee/credit/chunks/*/chunks.parquet"
+
+    def test_invalid_vertical_rejected(self):
+        import uuid as uuid_mod
+
+        from ai_engine.pipeline.storage_routing import silver_chunks_glob
+
+        with pytest.raises(ValueError, match="Invalid vertical"):
+            silver_chunks_glob(uuid_mod.uuid4(), "insurance")
+
+
 class TestStorageClientFactory:
     def test_default_creates_local_client(self):
         client = create_storage_client()

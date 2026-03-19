@@ -14,10 +14,10 @@ from app.core.config.settings import settings
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
+from app.domains.wealth.routes.common import VALID_PROFILES, get_latest_snapshot
+from app.domains.wealth.routes.common import validate_profile as _validate_profile
 from app.domains.wealth.schemas.macro import MacroIndicators
 from app.domains.wealth.schemas.risk import CVaRPoint, CVaRStatus, RegimeHistoryPoint
-from app.routers.common import VALID_PROFILES, get_latest_snapshot
-from app.routers.common import validate_profile as _validate_profile
 from app.shared.schemas import RegimeRead
 from quant_engine.regime_service import get_current_regime, get_latest_macro_values
 

@@ -17,9 +17,19 @@ from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
 
-from ai_engine.validation.vector_integrity_guard import EMBEDDING_DIMENSIONS
+from ai_engine.validation.vector_integrity_guard import (
+    EMBEDDING_DIMENSIONS,
+    EMBEDDING_MODEL_NAME,
+)
 
 logger = logging.getLogger(__name__)
+
+try:
+    from app.services.duckdb_client import get_duckdb_client
+
+    _DUCKDB_AVAILABLE = True
+except ImportError:
+    _DUCKDB_AVAILABLE = False
 
 
 @dataclass
@@ -139,6 +149,26 @@ async def _do_rebuild(
     if not target_ids:
         logger.info("[rebuild] No documents found for %s/%s", org_id, vertical)
         return result
+
+    # ── DuckDB pre-rebuild audit (observability, never blocks) ────
+    if _DUCKDB_AVAILABLE:
+        try:
+            duckdb = get_duckdb_client()
+            stale = duckdb.stale_embeddings(
+                org_id, vertical, EMBEDDING_MODEL_NAME, EMBEDDING_DIMENSIONS
+            )
+            dim_mismatches = duckdb.embedding_dimension_audit(
+                org_id, vertical, EMBEDDING_DIMENSIONS
+            )
+            logger.info(
+                "[rebuild] Pre-rebuild audit: stale=%d docs, dim_mismatch=%d docs",
+                len(stale),
+                len(dim_mismatches),
+            )
+        except Exception:
+            logger.debug("[rebuild] DuckDB pre-rebuild audit failed", exc_info=True)
+    else:
+        logger.debug("[rebuild] DuckDB not available, skipping pre-rebuild audit")
 
     logger.info("[rebuild] Processing %d documents for %s/%s", len(target_ids), org_id, vertical)
 
