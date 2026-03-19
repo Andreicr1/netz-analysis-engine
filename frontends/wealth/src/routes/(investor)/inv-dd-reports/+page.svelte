@@ -17,10 +17,7 @@
 		id: string;
 		fund_name: string;
 		fund_id: string;
-		version: number;
 		status: string;
-		confidence_score: number | null;
-		decision_anchor: string | null;
 		created_at: string;
 	};
 
@@ -71,14 +68,7 @@
 							{report.fund_name}
 						</p>
 						<p class="text-sm text-(--netz-text-muted)">
-							Version {report.version}
-							{#if report.confidence_score}
-								&middot; Confidence: {report.confidence_score}%
-							{/if}
-							{#if report.decision_anchor}
-								&middot; {report.decision_anchor}
-							{/if}
-							&middot; {formatDate(report.created_at)}
+							{formatDate(report.created_at)}
 						</p>
 					</div>
 					<ActionButton

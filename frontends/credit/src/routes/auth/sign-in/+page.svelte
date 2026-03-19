@@ -69,7 +69,7 @@
 		align-items: center;
 		justify-content: center;
 		overflow: hidden;
-		background: var(--netz-brand-primary, #0f172a);
+		background: var(--netz-brand-primary);
 	}
 
 	/* ── Ambient background ────────────────────────── */
@@ -84,7 +84,7 @@
 		inset: 0;
 		background: radial-gradient(
 			ellipse 70% 50% at 50% 35%,
-			color-mix(in srgb, var(--netz-brand-secondary, #3b82f6) 12%, transparent) 0%,
+			color-mix(in srgb, var(--netz-brand-secondary) 12%, transparent) 0%,
 			transparent 70%
 		);
 	}
@@ -108,7 +108,7 @@
 		height: 60%;
 		background: radial-gradient(
 			circle at center,
-			color-mix(in srgb, var(--netz-brand-secondary, #3b82f6) 6%, transparent) 0%,
+			color-mix(in srgb, var(--netz-brand-secondary) 6%, transparent) 0%,
 			transparent 60%
 		);
 	}
@@ -151,11 +151,11 @@
 		justify-content: center;
 		width: 46px;
 		height: 46px;
-		border-radius: var(--netz-radius-md, 8px);
+		border-radius: var(--netz-radius-md);
 		background: rgba(255, 255, 255, 0.07);
 		border: 1px solid rgba(255, 255, 255, 0.1);
 		backdrop-filter: blur(8px);
-		font-family: var(--netz-font-sans, system-ui);
+		font-family: var(--netz-font-sans);
 		font-size: 21px;
 		font-weight: 700;
 		letter-spacing: -0.04em;
@@ -164,7 +164,7 @@
 	}
 
 	.sign-in-mark__badge {
-		font-family: var(--netz-font-mono, monospace);
+		font-family: var(--netz-font-mono);
 		font-size: 10px;
 		font-weight: 600;
 		letter-spacing: 0.14em;
@@ -172,16 +172,16 @@
 		color: rgba(255, 255, 255, 0.4);
 		padding: 4px 8px;
 		border: 1px solid rgba(255, 255, 255, 0.08);
-		border-radius: var(--netz-radius-sm, 4px);
+		border-radius: var(--netz-radius-sm);
 		background: rgba(255, 255, 255, 0.03);
 	}
 
 	/* ── Card ──────────────────────────────────────── */
 	.sign-in-card {
 		width: 100%;
-		background: var(--netz-surface-elevated, #fff);
-		border: 1px solid var(--netz-border-subtle, rgba(0, 0, 0, 0.08));
-		border-radius: var(--netz-radius-lg, 12px);
+		background: var(--netz-surface-elevated);
+		border: 1px solid var(--netz-border-subtle);
+		border-radius: var(--netz-radius-lg);
 		box-shadow:
 			0 1px 3px rgba(0, 0, 0, 0.08),
 			0 8px 24px rgba(0, 0, 0, 0.14),
@@ -196,11 +196,11 @@
 
 	.sign-in-card__title {
 		margin: 0;
-		font-family: var(--netz-font-sans, system-ui);
+		font-family: var(--netz-font-sans);
 		font-size: 22px;
 		font-weight: 700;
 		letter-spacing: -0.025em;
-		color: var(--netz-text-primary, #111);
+		color: var(--netz-text-primary);
 		line-height: 1.2;
 	}
 
@@ -209,13 +209,13 @@
 		font-size: 13px;
 		font-weight: 500;
 		letter-spacing: 0.01em;
-		color: var(--netz-text-muted, #888);
+		color: var(--netz-text-muted);
 	}
 
 	.sign-in-card__footer {
 		padding: 16px 32px;
-		border-top: 1px solid var(--netz-border-subtle, rgba(0, 0, 0, 0.06));
-		background: var(--netz-surface-highlight, rgba(0, 0, 0, 0.015));
+		border-top: 1px solid var(--netz-border-subtle);
+		background: var(--netz-surface-highlight);
 		text-align: center;
 	}
 
@@ -225,7 +225,7 @@
 		font-weight: 500;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
-		color: var(--netz-text-muted, #999);
+		color: var(--netz-text-muted);
 	}
 
 	/* ── Auth surface ──────────────────────────────── */
@@ -246,7 +246,7 @@
 		font-weight: 600;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		color: var(--netz-text-muted, #999);
+		color: var(--netz-text-muted);
 		text-align: center;
 	}
 
@@ -256,14 +256,14 @@
 		justify-content: center;
 		height: 42px;
 		padding: 0 24px;
-		font-family: var(--netz-font-sans, system-ui);
+		font-family: var(--netz-font-sans);
 		font-size: 14px;
 		font-weight: 600;
 		letter-spacing: -0.01em;
-		color: var(--netz-text-on-accent, #fff);
-		background: var(--netz-brand-primary, #0f172a);
+		color: var(--netz-text-on-accent);
+		background: var(--netz-brand-primary);
 		border: none;
-		border-radius: var(--netz-radius-md, 8px);
+		border-radius: var(--netz-radius-md);
 		text-decoration: none;
 		cursor: pointer;
 		transition: opacity 150ms ease, box-shadow 150ms ease;
@@ -271,7 +271,7 @@
 
 	.sign-in-dev__button:hover {
 		opacity: 0.92;
-		box-shadow: 0 2px 8px color-mix(in srgb, var(--netz-brand-primary, #0f172a) 30%, transparent);
+		box-shadow: 0 2px 8px color-mix(in srgb, var(--netz-brand-primary) 30%, transparent);
 	}
 
 	.sign-in-dev__button:active {
@@ -289,7 +289,7 @@
 	.sign-in-clerk__loading {
 		margin: 0;
 		font-size: 13px;
-		color: var(--netz-text-muted, #999);
+		color: var(--netz-text-muted);
 		animation: sign-in-pulse 2s ease-in-out infinite;
 	}
 
@@ -301,7 +301,7 @@
 	/* ── System label ──────────────────────────────── */
 	.sign-in-system {
 		margin: 0;
-		font-family: var(--netz-font-mono, monospace);
+		font-family: var(--netz-font-mono);
 		font-size: 11px;
 		letter-spacing: 0.04em;
 		color: rgba(255, 255, 255, 0.24);

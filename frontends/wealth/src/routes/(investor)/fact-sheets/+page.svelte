@@ -1,11 +1,10 @@
 <!--
-  Investor — Published fact-sheets with PDF download, generation trigger, and language toggle.
+  Investor — Published fact-sheets with PDF download.
 -->
 <script lang="ts">
-	import { PageHeader, EmptyState, Card, Button, formatDate } from "@netz/ui";
+	import { PageHeader, EmptyState, Card, formatDate } from "@netz/ui";
 	import { ActionButton } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
-	import { invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
 	import type { PageData } from "./$types";
 
@@ -23,27 +22,8 @@
 	};
 
 	let factSheets = $derived((data.factSheets ?? []) as FactSheet[]);
-	let generatingId = $state<string | null>(null);
 	let downloadingPath = $state<string | null>(null);
 	let actionError = $state<string | null>(null);
-
-	async function generateFactSheet(portfolioId: string) {
-		generatingId = portfolioId;
-		actionError = null;
-		try {
-			const api = createClientApiClient(getToken);
-			await api.post(`/fact-sheets/model-portfolios/${portfolioId}`, {}, { timeoutMs: 30_000 });
-			await invalidateAll();
-		} catch (e) {
-			if (e instanceof Error && e.message.includes("timeout")) {
-				actionError = "Server busy, please try again in a moment.";
-			} else {
-				actionError = e instanceof Error ? e.message : "Generation failed";
-			}
-		} finally {
-			generatingId = null;
-		}
-	}
 
 	async function downloadFactSheet(path: string, name: string) {
 		downloadingPath = path;
@@ -97,25 +77,15 @@
 							{/if}
 						</p>
 					</div>
-					<div class="flex gap-2">
-						<ActionButton
-							size="sm"
-							variant="outline"
-							onclick={() => downloadFactSheet(fs.path, fs.portfolio_name)}
-							loading={downloadingPath === fs.path}
-							loadingText="..."
-						>
-							Download PDF
-						</ActionButton>
-						<ActionButton
-							size="sm"
-							onclick={() => generateFactSheet(fs.portfolio_id)}
-							loading={generatingId === fs.portfolio_id}
-							loadingText="Generating..."
-						>
-							Regenerate
-						</ActionButton>
-					</div>
+					<ActionButton
+						size="sm"
+						variant="outline"
+						onclick={() => downloadFactSheet(fs.path, fs.portfolio_name)}
+						loading={downloadingPath === fs.path}
+						loadingText="..."
+					>
+						Download PDF
+					</ActionButton>
 				</Card>
 			{/each}
 		</div>

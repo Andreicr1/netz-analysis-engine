@@ -13,7 +13,6 @@
 	const columns = [
 		{ accessorKey: "period_month", header: "Period" },
 		{ accessorKey: "published_at", header: "Published" },
-		{ accessorKey: "status", header: "Status" },
 	];
 </script>
 

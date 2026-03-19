@@ -2,8 +2,7 @@
   Investor — Approved-for-distribution documents.
 -->
 <script lang="ts">
-	import { PageHeader, EmptyState, StatusBadge, formatDate } from "@netz/ui";
-	import { resolveCreditStatus } from "$lib/utils/status-maps";
+	import { PageHeader, EmptyState, formatDate } from "@netz/ui";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
@@ -36,12 +35,9 @@
 			{#each documents as doc (doc.id)}
 				<div class="flex items-center justify-between rounded-lg border border-(--netz-border) bg-(--netz-surface) p-4">
 					<div class="flex-1">
-						<div class="flex items-center gap-2">
-							<p class="font-medium text-(--netz-text-primary)">
-								{doc.title}
-							</p>
-							<StatusBadge status={doc.status as string} resolve={resolveCreditStatus} />
-						</div>
+						<p class="font-medium text-(--netz-text-primary)">
+							{doc.title}
+						</p>
 						<p class="mt-1 text-sm text-(--netz-text-muted)">
 							{doc.document_type}
 							{#if doc.created_at}

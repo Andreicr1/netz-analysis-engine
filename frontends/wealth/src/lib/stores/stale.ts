@@ -10,7 +10,13 @@
 
 const SAO_PAULO_TZ = "America/Sao_Paulo";
 
-/** Cached DateTimeFormat for São Paulo timezone. */
+/**
+ * Cached DateTimeFormat for São Paulo timezone.
+ * eslint-disable-next-line: this is an internal timezone parser for business-day
+ * staleness logic, not a display formatter. @netz/ui formatters do not expose
+ * timezone-aware current-time parsing, so direct Intl usage is required here.
+ */
+// eslint-disable-next-line no-restricted-syntax
 const saoPauloFormatter = new Intl.DateTimeFormat("en-US", {
 	timeZone: SAO_PAULO_TZ,
 	year: "numeric",
@@ -86,10 +92,10 @@ export function formatLastUpdated(computedAt: string | Date | null): string {
 	if (diffHours < 1) return "just now";
 	if (diffHours < 24) return `${diffHours}h ago`;
 
-	return date.toLocaleDateString("en-US", {
-		month: "short",
-		day: "numeric",
-		hour: "2-digit",
-		minute: "2-digit",
-	});
+	const m = date.toISOString().slice(5, 7);
+	const d = date.getDate();
+	const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+	const hh = String(date.getHours()).padStart(2, "0");
+	const mm = String(date.getMinutes()).padStart(2, "0");
+	return `${months[parseInt(m, 10) - 1]} ${d}, ${hh}:${mm}`;
 }

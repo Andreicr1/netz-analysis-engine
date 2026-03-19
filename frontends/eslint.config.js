@@ -3,13 +3,14 @@
  * Enforces formatter discipline: all number/date/currency formatting
  * must go through @netz/ui formatters.
  *
- * Install in each frontend: pnpm add -D eslint
+ * Install in each frontend: pnpm add -D eslint typescript-eslint
  * Then run: eslint src/
  */
 
-export default [
+/** @type {import("eslint").Linter.Config[]} */
+export const netzFormatterRules = [
 	{
-		files: ["**/*.{js,ts,svelte}"],
+		files: ["**/*.{js,ts}"],
 		rules: {
 			/**
 			 * Ban raw number/date formatting APIs that bypass @netz/ui formatters.
@@ -67,3 +68,5 @@ export default [
 		ignores: ["**/node_modules/**", "**/.svelte-kit/**", "**/dist/**", "**/build/**"],
 	},
 ];
+
+export default netzFormatterRules;

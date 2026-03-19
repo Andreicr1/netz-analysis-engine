@@ -74,6 +74,81 @@ export const defaultDarkBranding: BrandingConfig = {
 	org_slug: "netz",
 };
 
+// ── WCAG Contrast Validation ─────────────────────────────────
+
+/** Parse hex color to [r, g, b]. Returns null if invalid. */
+function hexToRgb(hex: string): [number, number, number] | null {
+	const m = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6,8})$/.exec(hex);
+	if (!m || !m[1]) return null;
+	const h = m[1];
+	if (h.length === 3) {
+		return [
+			parseInt(h.charAt(0) + h.charAt(0), 16),
+			parseInt(h.charAt(1) + h.charAt(1), 16),
+			parseInt(h.charAt(2) + h.charAt(2), 16),
+		];
+	}
+	return [
+		parseInt(h.slice(0, 2), 16),
+		parseInt(h.slice(2, 4), 16),
+		parseInt(h.slice(4, 6), 16),
+	];
+}
+
+/** Relative luminance per WCAG 2.1. */
+function relativeLuminance([r, g, b]: [number, number, number]): number {
+	function linearize(c: number): number {
+		const s = c / 255;
+		return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+	}
+	return 0.2126 * linearize(r) + 0.7152 * linearize(g) + 0.0722 * linearize(b);
+}
+
+/** WCAG contrast ratio between two hex colors. Returns 1 if either is invalid. */
+function contrastRatio(hex1: string, hex2: string): number {
+	const rgb1 = hexToRgb(hex1);
+	const rgb2 = hexToRgb(hex2);
+	if (!rgb1 || !rgb2) return 1;
+	const l1 = relativeLuminance(rgb1);
+	const l2 = relativeLuminance(rgb2);
+	const lighter = Math.max(l1, l2);
+	const darker = Math.min(l1, l2);
+	return (lighter + 0.05) / (darker + 0.05);
+}
+
+/** WCAG AA minimum contrast (4.5:1 for normal text). */
+const WCAG_AA_MIN = 4.5;
+
+/** Text/surface pairs that must meet WCAG AA contrast. */
+const CONTRAST_PAIRS: Array<[keyof BrandingConfig, keyof BrandingConfig, string]> = [
+	["text_primary", "surface_color", "text_primary vs surface_color"],
+	["text_primary", "surface_alt_color", "text_primary vs surface_alt_color"],
+	["text_primary", "surface_elevated_color", "text_primary vs surface_elevated_color"],
+	["text_secondary", "surface_color", "text_secondary vs surface_color"],
+	["text_muted", "surface_color", "text_muted vs surface_color"],
+];
+
+export type ContrastViolation = { pair: string; ratio: number; minimum: number };
+
+/**
+ * Validate WCAG AA contrast between text and surface colors.
+ * Returns an array of violations (empty = valid).
+ */
+export function validateBrandingContrast(config: BrandingConfig): ContrastViolation[] {
+	const violations: ContrastViolation[] = [];
+	for (const [textKey, surfaceKey, label] of CONTRAST_PAIRS) {
+		const textColor = config[textKey];
+		const surfaceColor = config[surfaceKey];
+		if (typeof textColor !== "string" || typeof surfaceColor !== "string") continue;
+		if (!HEX_RE.test(textColor) || !HEX_RE.test(surfaceColor)) continue;
+		const ratio = contrastRatio(textColor, surfaceColor);
+		if (ratio < WCAG_AA_MIN) {
+			violations.push({ pair: label, ratio: Math.round(ratio * 100) / 100, minimum: WCAG_AA_MIN });
+		}
+	}
+	return violations;
+}
+
 // ── CSS var mapping ──────────────────────────────────────────
 
 const CSS_VAR_MAP: Record<keyof BrandingConfig, string | null> = {

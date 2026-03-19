@@ -1,6 +1,6 @@
 .PHONY: check test lint typecheck architecture serve migrate migration help pipeline \
        dev-ui build-ui dev-credit build-credit dev-wealth build-wealth dev-admin build-admin \
-       dev-all build-all check-all types
+       dev-all build-all lint-frontend check-all types
 
 # ── Unified gate ──────────────────────────────────────────
 check: lint architecture typecheck test
@@ -68,8 +68,11 @@ dev-all:
 build-all:
 	pnpm exec turbo run build
 
+lint-frontend:
+	pnpm exec turbo run lint
+
 check-all:
-	pnpm exec turbo run check
+	pnpm exec turbo run lint check
 
 types:
 	npx openapi-typescript http://localhost:8000/openapi.json -o packages/ui/src/types/api.d.ts
@@ -95,5 +98,6 @@ help:
 	@echo "make dev-admin   - Admin frontend dev server"
 	@echo "make dev-all     - All packages in parallel (Turborepo)"
 	@echo "make build-all   - Build all packages (topological order)"
-	@echo "make check-all   - Check all frontend packages"
+	@echo "make lint-frontend - ESLint all frontend packages"
+	@echo "make check-all   - Lint + check all frontend packages"
 	@echo "make types       - Generate TS types from OpenAPI schema"

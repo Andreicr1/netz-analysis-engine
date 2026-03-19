@@ -34,7 +34,7 @@
 						</p>
 						{#if stmt.created_at}
 							<p class="text-sm text-(--netz-text-muted)">
-								Created: {formatDate(stmt.created_at as string)}
+								Issued: {formatDate(stmt.created_at as string)}
 							</p>
 						{/if}
 					</div>

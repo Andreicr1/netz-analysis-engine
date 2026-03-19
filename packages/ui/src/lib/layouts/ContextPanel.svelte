@@ -1,6 +1,14 @@
 <!--
   @component ContextPanel
   Slide-in panel from right side with overlay backdrop on mobile, focus trap, and Escape key handler.
+
+  Actively used in:
+  - wealth screener (instrument detail, run detail, history panels)
+  - wealth instruments page (instrument detail)
+  - wealth risk page (risk detail)
+  - wealth portfolios page (portfolio detail)
+  - wealth FundDetailPanel component (fund detail slide-in)
+  - credit pipeline page (deal detail panel)
 -->
 <script lang="ts">
 	import { cn } from "../utils/cn.js";

@@ -7,7 +7,8 @@
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "svelte-check --tsconfig ./tsconfig.json"
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "lint": "eslint src/"
   },
   "dependencies": {
     "@netz/ui": "workspace:*",
@@ -22,10 +23,12 @@
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "@tailwindcss/vite": "^4.2.1",
     "@types/dompurify": "^3.2.0",
+    "eslint": "^10.0.3",
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.5.0",
+    "typescript-eslint": "^8.57.1",
     "vite": "^6.0.0"
   }
 }

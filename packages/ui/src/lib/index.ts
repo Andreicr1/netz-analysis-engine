@@ -124,7 +124,9 @@ export {
 	defaultDarkBranding,
 	brandingToCSS,
 	injectBranding,
+	validateBrandingContrast,
 } from "./utils/branding.js";
+export type { ContrastViolation } from "./utils/branding.js";
 export { createClerkHook, startSessionExpiryMonitor } from "./utils/auth.js";
 export type { ClerkHookOptions } from "./utils/auth.js";
 export { exportTableToCSV } from "./utils/table-export.js";

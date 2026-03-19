@@ -77,7 +77,7 @@
 		align-items: center;
 		justify-content: center;
 		overflow: hidden;
-		background: var(--netz-brand-primary, #1b365d);
+		background: var(--netz-brand-primary);
 	}
 
 	/* ── Ambient background ────────────────────────── */
@@ -93,12 +93,12 @@
 		background:
 			radial-gradient(
 				ellipse 60% 50% at 30% 40%,
-				color-mix(in srgb, var(--netz-brand-secondary, #c9a84c) 8%, transparent) 0%,
+				color-mix(in srgb, var(--netz-brand-secondary) 8%, transparent) 0%,
 				transparent 60%
 			),
 			radial-gradient(
 				ellipse 50% 40% at 70% 60%,
-				color-mix(in srgb, var(--netz-brand-secondary, #c9a84c) 5%, transparent) 0%,
+				color-mix(in srgb, var(--netz-brand-secondary) 5%, transparent) 0%,
 				transparent 50%
 			);
 	}
@@ -160,14 +160,14 @@
 		justify-content: center;
 		width: 44px;
 		height: 44px;
-		border-radius: var(--netz-radius-md, 8px);
+		border-radius: var(--netz-radius-md);
 		background: rgba(255, 255, 255, 0.08);
 		border: 1px solid rgba(255, 255, 255, 0.12);
 		backdrop-filter: blur(8px);
 	}
 
 	.sign-in-mark__glyph {
-		font-family: var(--netz-font-sans, system-ui);
+		font-family: var(--netz-font-sans);
 		font-size: 20px;
 		font-weight: 700;
 		letter-spacing: -0.04em;
@@ -182,7 +182,7 @@
 	}
 
 	.sign-in-mark__name {
-		font-family: var(--netz-font-sans, system-ui);
+		font-family: var(--netz-font-sans);
 		font-size: 16px;
 		font-weight: 700;
 		letter-spacing: -0.02em;
@@ -191,7 +191,7 @@
 	}
 
 	.sign-in-mark__product {
-		font-family: var(--netz-font-sans, system-ui);
+		font-family: var(--netz-font-sans);
 		font-size: 11px;
 		font-weight: 500;
 		letter-spacing: 0.06em;
@@ -203,9 +203,9 @@
 	/* ── Card ──────────────────────────────────────── */
 	.sign-in-card {
 		width: 100%;
-		background: var(--netz-surface-elevated, #fff);
-		border: 1px solid var(--netz-border-subtle, rgba(0, 0, 0, 0.08));
-		border-radius: var(--netz-radius-lg, 12px);
+		background: var(--netz-surface-elevated);
+		border: 1px solid var(--netz-border-subtle);
+		border-radius: var(--netz-radius-lg);
 		box-shadow:
 			0 1px 2px rgba(0, 0, 0, 0.06),
 			0 6px 20px rgba(0, 0, 0, 0.1),
@@ -218,9 +218,9 @@
 		background: linear-gradient(
 			90deg,
 			transparent 0%,
-			color-mix(in srgb, var(--netz-brand-secondary, #c9a84c) 50%, transparent) 30%,
-			var(--netz-brand-secondary, #c9a84c) 50%,
-			color-mix(in srgb, var(--netz-brand-secondary, #c9a84c) 50%, transparent) 70%,
+			color-mix(in srgb, var(--netz-brand-secondary) 50%, transparent) 30%,
+			var(--netz-brand-secondary) 50%,
+			color-mix(in srgb, var(--netz-brand-secondary) 50%, transparent) 70%,
 			transparent 100%
 		);
 	}
@@ -232,11 +232,11 @@
 
 	.sign-in-card__title {
 		margin: 0;
-		font-family: var(--netz-font-sans, system-ui);
+		font-family: var(--netz-font-sans);
 		font-size: 22px;
 		font-weight: 700;
 		letter-spacing: -0.02em;
-		color: var(--netz-text-primary, #111);
+		color: var(--netz-text-primary);
 		line-height: 1.2;
 	}
 
@@ -245,13 +245,13 @@
 		font-size: 13px;
 		font-weight: 500;
 		letter-spacing: 0.01em;
-		color: var(--netz-text-muted, #888);
+		color: var(--netz-text-muted);
 	}
 
 	.sign-in-card__footer {
 		padding: 16px 32px;
-		border-top: 1px solid var(--netz-border-subtle, rgba(0, 0, 0, 0.06));
-		background: var(--netz-surface-highlight, rgba(0, 0, 0, 0.015));
+		border-top: 1px solid var(--netz-border-subtle);
+		background: var(--netz-surface-highlight);
 		text-align: center;
 	}
 
@@ -261,7 +261,7 @@
 		font-weight: 500;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
-		color: var(--netz-text-muted, #999);
+		color: var(--netz-text-muted);
 	}
 
 	/* ── Auth surface ──────────────────────────────── */
@@ -282,7 +282,7 @@
 		font-weight: 600;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		color: var(--netz-text-muted, #999);
+		color: var(--netz-text-muted);
 		text-align: center;
 	}
 
@@ -292,14 +292,14 @@
 		justify-content: center;
 		height: 42px;
 		padding: 0 24px;
-		font-family: var(--netz-font-sans, system-ui);
+		font-family: var(--netz-font-sans);
 		font-size: 14px;
 		font-weight: 600;
 		letter-spacing: -0.01em;
-		color: var(--netz-text-on-accent, #fff);
-		background: var(--netz-brand-primary, #1b365d);
+		color: var(--netz-text-on-accent);
+		background: var(--netz-brand-primary);
 		border: none;
-		border-radius: var(--netz-radius-md, 8px);
+		border-radius: var(--netz-radius-md);
 		text-decoration: none;
 		cursor: pointer;
 		transition: opacity 150ms ease, box-shadow 150ms ease;
@@ -307,7 +307,7 @@
 
 	.sign-in-dev__button:hover {
 		opacity: 0.92;
-		box-shadow: 0 2px 8px color-mix(in srgb, var(--netz-brand-primary, #1b365d) 30%, transparent);
+		box-shadow: 0 2px 8px color-mix(in srgb, var(--netz-brand-primary) 30%, transparent);
 	}
 
 	.sign-in-dev__button:active {
@@ -325,7 +325,7 @@
 	.sign-in-clerk__loading {
 		margin: 0;
 		font-size: 13px;
-		color: var(--netz-text-muted, #999);
+		color: var(--netz-text-muted);
 		animation: sign-in-pulse 2s ease-in-out infinite;
 	}
 
@@ -337,7 +337,7 @@
 	/* ── System label ──────────────────────────────── */
 	.sign-in-system {
 		margin: 0;
-		font-family: var(--netz-font-mono, monospace);
+		font-family: var(--netz-font-mono);
 		font-size: 11px;
 		letter-spacing: 0.04em;
 		color: rgba(255, 255, 255, 0.22);
