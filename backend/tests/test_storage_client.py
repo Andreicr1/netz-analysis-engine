@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 
 from app.services.storage_client import LocalStorageClient, StorageClient, create_storage_client
@@ -144,22 +146,40 @@ class TestGetDuckdbPath:
     """Tests for LocalStorageClient.get_duckdb_path and ADLS fallback."""
 
     def test_local_returns_correct_path(self, storage, tmp_path):
-        path = storage.get_duckdb_path("silver", "aaaa-bbbb-cccc", "credit")
+        org_id = uuid.UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+        path = storage.get_duckdb_path("silver", org_id, "credit")
         assert "silver" in path
-        assert "aaaa-bbbb-cccc" in path
+        assert str(org_id) in path
         assert "credit" in path
         assert path.endswith("/")
 
-    def test_path_traversal_rejected(self, storage):
-        with pytest.raises(ValueError):
-            storage.get_duckdb_path("silver", "../etc", "credit")
+    def test_rejects_invalid_vertical(self, storage):
+        org_id = uuid.UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+        with pytest.raises(ValueError, match="Invalid vertical"):
+            storage.get_duckdb_path("silver", org_id, "hacked")
+
+    def test_all_valid_tiers(self, storage):
+        org_id = uuid.UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+        for tier in ("bronze", "silver", "gold"):
+            path = storage.get_duckdb_path(tier, org_id, "credit")
+            assert tier in path
 
     def test_base_class_raises_not_implemented(self):
         """Base StorageClient.get_duckdb_path raises NotImplementedError."""
-        # Can't instantiate ABC directly, so call unbound method on a concrete subclass
-        # that doesn't override get_duckdb_path — simulate via direct call to base
+
+        class StubStorage(StorageClient):
+            async def write(self, *a, **kw): pass  # type: ignore[override]
+            async def read(self, *a, **kw): return b""  # type: ignore[override]
+            async def exists(self, *a, **kw): return False  # type: ignore[override]
+            async def delete(self, *a, **kw): pass  # type: ignore[override]
+            async def list_files(self, *a, **kw): return []  # type: ignore[override]
+            async def generate_read_url(self, *a, **kw): return ""  # type: ignore[override]
+            async def generate_upload_url(self, *a, **kw): return ""  # type: ignore[override]
+
+        stub = StubStorage()
+        org_id = uuid.UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
         with pytest.raises(NotImplementedError):
-            StorageClient.get_duckdb_path(StorageClient, "silver", "org-1", "credit")  # type: ignore[arg-type]
+            stub.get_duckdb_path("silver", org_id, "credit")
 
 
 class TestSilverChunksGlob:

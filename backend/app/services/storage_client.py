@@ -23,6 +23,8 @@ import os
 import re
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Literal
+from uuid import UUID
 
 from app.core.config.settings import settings
 
@@ -87,8 +89,8 @@ class StorageClient(ABC):
 
     def get_duckdb_path(
         self,
-        tier: str,
-        org_id: str,
+        tier: Literal["bronze", "silver", "gold"],
+        org_id: UUID,
         vertical: str,
     ) -> str:
         """Return a path readable by DuckDB for a tenant's data tier.
@@ -176,10 +178,10 @@ class LocalStorageClient(StorageClient):
         target.parent.mkdir(parents=True, exist_ok=True)
         return target.as_uri()
 
-    def get_duckdb_path(self, tier: str, org_id: str, vertical: str) -> str:
+    def get_duckdb_path(self, tier: Literal["bronze", "silver", "gold"], org_id: UUID, vertical: str) -> str:
         from ai_engine.pipeline.storage_routing import _validate_segment, _validate_vertical
 
-        _validate_segment(org_id, "org_id")
+        _validate_segment(str(org_id), "org_id")
         _validate_vertical(vertical)
         _validate_segment(tier, "tier")
         resolved = self._resolve(f"{tier}/{org_id}/{vertical}")

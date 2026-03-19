@@ -89,7 +89,7 @@ class DuckDBClient:
 
     def _parquet_glob(self, org_id: uuid.UUID, vertical: str) -> str:
         """Build absolute glob path for silver chunks Parquet files."""
-        base = self._storage.get_duckdb_path("silver", str(org_id), vertical)
+        base = self._storage.get_duckdb_path("silver", org_id, vertical)
         return base + "chunks/*/chunks.parquet"
 
     def _execute(

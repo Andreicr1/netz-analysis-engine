@@ -346,16 +346,11 @@ class TestBlockedColumns:
 
 
 class TestUUIDValidation:
-    def test_path_traversal_org_id_rejected(self, tmp_path):
-        """Path traversal via org_id is rejected by _validate_segment."""
-        storage = LocalStorageClient(root=tmp_path)
-        client = DuckDBClient(storage)
-        with pytest.raises(ValueError):
-            client._storage.get_duckdb_path("silver", "../evil", "credit")
-
     def test_path_traversal_vertical_rejected(self, tmp_path):
         """Invalid vertical is rejected."""
+        import uuid as uuid_mod
+
         storage = LocalStorageClient(root=tmp_path)
         client = DuckDBClient(storage)
         with pytest.raises(ValueError):
-            client._storage.get_duckdb_path("silver", "org-1", "insurance")
+            client._storage.get_duckdb_path("silver", uuid_mod.uuid4(), "insurance")
