@@ -128,6 +128,7 @@ The engine contains only analytical domains. Operational modules were intentiona
 - **Parquet schema must include embedding metadata:** All silver layer Parquet files must have `embedding_model` and `embedding_dim` columns. `search_rebuild.py` validates dimension match before upserting — prevents silent corruption on model upgrade.
 - **`organization_id` in vector search:** All pgvector queries MUST include `WHERE organization_id = :org_id` (SQL parameterized). All Parquet DuckDB queries MUST include `WHERE organization_id = ?`. Never query without tenant filter. (Azure Search files deprecated — `$filter=organization_id eq '{org_id}'` pattern no longer applies.)
 - **No Cohere dependency:** Hybrid classifier (rules → cosine_similarity → LLM) replaced Cohere Rerank. Cross-encoder reranker (`local_reranker.py`) replaced Cohere for IC memo evidence. Zero external ML API calls for classification.
+- **Frontend formatter discipline:** All number/date/currency formatting MUST use formatters from `@netz/ui` (`formatNumber`, `formatCurrency`, `formatPercent`, `formatDate`, `formatDateTime`, `formatShortDate`, etc.). Never use `.toFixed()`, `.toLocaleString()`, or inline `new Intl.NumberFormat`/`Intl.DateTimeFormat` in frontend code. Enforced by `frontends/eslint.config.js`.
 
 ## Vertical Engines
 

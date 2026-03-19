@@ -28,6 +28,7 @@
 		pageSize = 10,
 		filterColumn,
 		filterPlaceholder = "Filter...",
+		totalCount,
 		filterBar,
 		toolbar,
 		emptyState,
@@ -39,6 +40,8 @@
 		pageSize?: number;
 		filterColumn?: string;
 		filterPlaceholder?: string;
+		/** When provided, enables server-side pagination mode. Used instead of getFilteredRowModel().rows.length for totals and page count. */
+		totalCount?: number;
 		filterBar?: Snippet<[unknown]>;
 		toolbar?: Snippet<[unknown]>;
 		emptyState?: Snippet;
@@ -53,6 +56,9 @@
 		pageSize: 10,
 	});
 	let effectivePageSize = $derived(clampPageSize(pageSize));
+	let manualPagination = $derived(totalCount !== undefined);
+	let rowTotal = $derived(manualPagination ? (totalCount ?? 0) : table.getFilteredRowModel().rows.length);
+	let pageCount = $derived(manualPagination ? Math.ceil(rowTotal / effectivePageSize) : table.getPageCount());
 
 	let table = createTable({
 		get data() {
@@ -234,8 +240,8 @@
 			<span>
 				Showing {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}-{Math.min(
 					(table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
-					table.getFilteredRowModel().rows.length,
-				)} of {table.getFilteredRowModel().rows.length}
+					rowTotal,
+				)} of {rowTotal}
 			</span>
 			<div class="flex items-center gap-2">
 				<select
@@ -264,7 +270,7 @@
 						stroke-width="2"><path d="m15 18-6-6 6-6" /></svg
 					>
 				</button>
-				<span class="text-xs">{table.getState().pagination.pageIndex + 1} / {table.getPageCount()}</span>
+				<span class="text-xs">{table.getState().pagination.pageIndex + 1} / {pageCount}</span>
 				<button
 					class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--netz-border)] disabled:opacity-50"
 					onclick={() => table.nextPage()}
