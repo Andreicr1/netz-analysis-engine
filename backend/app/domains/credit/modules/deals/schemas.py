@@ -203,6 +203,31 @@ class DealPerformanceOut(BaseModel):
     cashflow_count: int
 
 
+# ── Portfolio Monitoring ─────────────────────────────────────────────
+
+
+class CashflowEventOut(BaseModel):
+    id: str
+    event_date: str
+    event_type: str
+    amount: float
+    currency: str
+    notes: str = ""
+
+
+class MonitoringMetricsOut(BaseModel):
+    deal_id: uuid.UUID
+    total_contributions: float
+    total_distributions: float
+    interest_received: float
+    principal_returned: float
+    net_cash_position: float
+    cash_to_cash_multiple: float | None = None
+    irr_estimate: float | None = None
+    cashflow_events: list[CashflowEventOut] = []
+    computed_at: dt.datetime
+
+
 # ── Deal Events ──────────────────────────────────────────────────────
 
 

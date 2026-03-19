@@ -104,6 +104,10 @@ The engine contains only analytical domains. Operational modules were intentiona
 
 **Do not re-add operational modules.** If you see references to `cash_management`, `compliance`, `signatures`, `counterparties`, or `adobe_sign` in existing code, they are stale and should be removed.
 
+**Critical distinction — cashflow vs cash_management:**
+- `cash_management/` (OUT OF SCOPE): gestora's bank accounts, transaction reconciliation, fund transfers — operational
+- `modules/deals/cashflow_service.py` (IN SCOPE): deal cashflow analytics — disbursements, repayments, MOIC, IRR, cash-to-cash — analytical credit module. These are NOT the same thing.
+
 ## Critical Rules
 
 - **Async-first:** All route handlers use `async def` + `AsyncSession` from `get_db_with_rls`. Never use sync `Session`.
