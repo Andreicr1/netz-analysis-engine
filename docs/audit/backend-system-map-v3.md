@@ -1,6 +1,6 @@
 # Backend System Map v3
 
-**Generated:** 2026-03-18
+**Generated:** 2026-03-18 (updated 2026-03-19)
 **Profile:** netz-backend
 **Scope:** `backend/` — API, AI engine, vertical engines, quant engine, workers
 **Evidence source:** Live repository code (primary), docs/plans (secondary context only)
@@ -29,7 +29,7 @@ No external task queue (Celery, RQ). All background work dispatched via FastAPI 
 | **AI Engine** | `ai_engine/` | Domain-agnostic document processing — OCR, classification, chunking, embedding, storage, indexing |
 | **Vertical Engines** | `vertical_engines/` | Domain-specific analytical logic — credit (13 packages), wealth (20+ packages) |
 | **Quant Engine** | `quant_engine/` | Shared quantitative services — CVaR, regime, optimizer, drift, scoring, FRED, backtest |
-| **Services** | `app/services/` | Cross-cutting abstractions — StorageClient (ADLS/local), blob storage, search index |
+| **Services** | `app/services/` | Cross-cutting abstractions — StorageClient (ADLS/local, type-safe: `Literal` tier + `UUID` org_id), DuckDB client (Parquet inspection), blob storage, search index |
 
 ### 1.3 Layered Architecture
 
@@ -120,7 +120,24 @@ Per-stage persistence via `PipelineIngestJob` row (counters, timing, errors).
 **Flow:** Advisory lock → list silver Parquet → validate embedding dimensions → build search docs → upsert to Azure Search → release lock.
 **Key invariant:** No OCR/LLM calls. Purely data movement from ADLS silver layer. Embedding dimension mismatch rejects entire document (prevents silent corruption on model upgrade).
 
-### 2.5 Wealth Worker Flows
+### 2.5 DuckDB Data Lake Inspection
+
+**Entry point:** `app/services/duckdb_client.py::DuckDBClient`
+**Admin API:** 5 endpoints under `GET /admin/inspect/{org_id}/{vertical}/*` (super-admin only, 30s timeout)
+
+| Endpoint | Query | Returns |
+|----------|-------|---------|
+| `/stale-embeddings` | Chunks with embedding_model ≠ current | `StaleEmbeddingResult[]` |
+| `/coverage` | Per-document chunk counts + embedding status | `DocumentCoverageResult[]` |
+| `/extraction-quality` | Empty chunks, governance-flagged, avg char count | `ExtractionQualityResult[]` |
+| `/chunk-stats` | Aggregate stats + doc_type distribution | `ChunkStatsResult` |
+| `/embedding-audit` | Chunks with embedding_dim ≠ expected | `DimensionMismatchResult[]` |
+
+**Security:** SELECT-only enforcement, blocked columns (content, embedding), `disabled_filesystems='httpfs,s3fs'`, `memory_limit=256MB`, `threads=2`. org_id required on every query (structural tenant isolation via `UUID` type — prevents path injection).
+
+**Data path:** DuckDB reads silver Parquet files directly from LocalStorage filesystem. No PostgreSQL dependency.
+
+### 2.6 Wealth Worker Flows
 
 **Entry point:** `POST /api/v1/workers/run-*` (8 worker endpoints)
 **Orchestrator:** `app/domains/wealth/routes/workers.py` → FastAPI BackgroundTasks
@@ -138,7 +155,7 @@ Per-stage persistence via `PipelineIngestJob` row (counters, timing, errors).
 
 All require `Role.INVESTMENT_TEAM` or `Role.ADMIN`. Workers use async sessions + thread pools for I/O isolation.
 
-### 2.6 IC Memo Generation (Deep Review)
+### 2.7 IC Memo Generation (Deep Review)
 
 **Entry point:** `vertical_engines/credit/deep_review/service.py`
 **Orchestrator:** 13-stage pipeline culminating in 14-chapter memo book
@@ -149,7 +166,7 @@ Key stages: Document collection → Evidence curation (retrieval governance) →
 **Resume safety:** Cached chapters skipped on re-run.
 **Batch mode:** Optional OpenAI Batch API (falls back to sequential).
 
-### 2.7 Fund Copilot RAG
+### 2.8 Fund Copilot RAG
 
 **Entry point:** `app/domains/credit/global_agent/agent.py`
 **Flow:** Intent classification → Knowledge base retrieval (Azure Search + BM25) → GPT response generation
@@ -181,6 +198,13 @@ Key stages: Document collection → Evidence curation (retrieval governance) →
 | `ai_engine/ingestion/` | Batch orchestration, document scanner, registry bridge | `run_full_pipeline_ingest()` | Pipeline + extraction modules | Canonical |
 | `ai_engine/validation/` | Vector integrity, deep review validation, eval runner | Validation functions | — | Canonical |
 | `ai_engine/prompts/` | Jinja2 templates (extraction/) | Template files (.j2) | Jinja2 | Canonical |
+
+**Credit AI Sub-modules** (under `app/domains/credit/modules/ai/`):
+
+| Module | Purpose | Status |
+|--------|---------|--------|
+| `evidence_selector.py` | Chunk curation for dual-surface architecture (audit + analysis surfaces), governance red flag dedup | Canonical |
+| `portfolio.py` | Portfolio monitoring dashboard (cashflows, covenants, drift flags) | Canonical (depends on `cashflow_service`) |
 
 ### 3.3 Vertical Engine Packages — Credit (13 packages)
 
@@ -251,11 +275,11 @@ Key stages: Document collection → Evidence curation (retrieval governance) →
 
 | Domain | Router Count | Prefix Pattern | Key Models |
 |--------|-------------|----------------|------------|
-| **Admin** | 7 | `/admin/*` | VerticalConfigDefault, VerticalConfigOverride, AuditEvent |
-| **Credit** | 26 | `/funds/{fund_id}/*`, `/pipeline/*`, `/ai/*`, `/dashboard/*`, `/documents/*` | Deal, IcMemo, Document, Asset, Obligation, Alert, NavSnapshot, ReportPack |
+| **Admin** | 8 | `/admin/*` | VerticalConfigDefault, VerticalConfigOverride, AuditEvent, DuckDB inspection |
+| **Credit** | 27 | `/funds/{fund_id}/*`, `/pipeline/*`, `/ai/*`, `/dashboard/*`, `/documents/*` | Deal, IcMemo, Document, Asset, Obligation, Alert, NavSnapshot, ReportPack, DealCashflow |
 | **Wealth** | 18 | `/instruments/*`, `/portfolios/*`, `/risk/*`, `/macro/*`, `/screener/*`, `/workers/*` | Instrument (polymorphic), NAV, Portfolio, Risk, Allocation, Macro |
 
-**Total registered routers:** 51 (7 admin + 26 credit + 18 wealth) plus 9 dynamically loaded AI sub-routers.
+**Total registered routers:** 53 (8 admin + 27 credit + 18 wealth) plus 9 dynamically loaded AI sub-routers.
 
 ---
 
@@ -268,6 +292,7 @@ Key stages: Document collection → Evidence curation (retrieval governance) →
 | `app/domains/wealth/routes/funds.py` | `instruments.py` | DEPRECATED — kept for backward compatibility | File header: "DEPRECATED: Fund CRUD routes" |
 | `app/domains/wealth/schemas/fund.py` | `instrument.py` schemas | DEPRECATED — kept for backward compatibility | File header: "DEPRECATED: Fund schemas" |
 | `app/domains/wealth/models/fund.py` | `instrument.py` (polymorphic) | DEPRECATED — will be removed | instrument.py header: "This replaces Fund (fund.py)" |
+| `app/domains/credit/dataroom/routes/routes.py` | Modularized document pipeline | DEPRECATED 2026-06-30 — 14 endpoints marked `deprecated=True` in OpenAPI | Both `/api/dataroom/` and `/api/data-room/` routers |
 | ~~`app/domains/wealth/workers/fred_ingestion.py`~~ | `macro_ingestion.py` (45-series superset) | DELETED (SR-5 fix) | File removed — `macro_ingestion.py` is sole FRED worker |
 
 ### 4.2 Legacy Sync Path
@@ -283,7 +308,7 @@ The following operational module names appear in 18 files (prompts, templates, m
 
 | Module Name | Context | Action |
 |-------------|---------|--------|
-| `cash_management` | Prompt templates, migration comments | Stale references — module removed per product scope |
+| `cash_management` | Prompt templates, migration comments | Stale references — operational module removed per product scope. Analytical cashflow functions implemented in `app/domains/credit/modules/deals/cashflow_service.py` (MOIC, IRR, cash-to-cash) |
 | `compliance` | Prompt templates | Stale reference — KYC screening retained in `vertical_engines/credit/kyc/` |
 | `signatures` / `adobe_sign` | Prompt templates, migration comments | Stale references — module removed |
 | `counterparties` | Prompt templates | Stale reference — module removed |
@@ -435,7 +460,7 @@ Import-linter enforces 30 contracts across credit and wealth verticals. All 16 q
 
 ## 8. Router Registration Map
 
-### 8.1 Admin Domain (7 routers)
+### 8.1 Admin Domain (8 routers)
 
 | Router | Prefix | Auth |
 |--------|--------|------|
@@ -446,17 +471,18 @@ Import-linter enforces 30 contracts across credit and wealth verticals. All 16 q
 | `admin_prompts_router` | `/admin/prompts` | Super-admin |
 | `admin_health_router` | `/admin/health` | Standard |
 | `admin_audit_router` | `/admin/audit` | Super-admin |
+| `admin_inspect_router` | `/admin/inspect/{org_id}/{vertical}` | Super-admin |
 
-### 8.2 Credit Domain (26 routers)
+### 8.2 Credit Domain (27 routers)
 
-**Deals:** 3 routers (`/funds/{fund_id}/deals`, `/funds/{fund_id}/deals/{deal_id}/ic-memo`, `/pipeline/deals/{deal_id}/convert`)
+**Deals:** 4 routers (`/funds/{fund_id}/deals`, `/funds/{fund_id}/deals/{deal_id}/ic-memo`, `/funds/{fund_id}/deals` provenance endpoints, `/pipeline/deals/{deal_id}/convert`)
 **Portfolio:** 5 routers (`/funds/{fund_id}/assets`, `/alerts`, `/obligations`, `/portfolio-actions`, `/fund-investments`)
 **Documents:** 6 routers (`/funds/{fund_id}/documents`, `/evidence/upload-request`, `/documents/{doc_id}/review`, `/evidence`, `/audit`, `/documents`)
 **Reporting:** 5 routers (`/reports/packs`, `/investor-portal`, `/evidence-packs`, `/reports`, `/schedules`)
 **Dashboard:** 2 routers (`/dashboard`, `/dashboard/task-inbox`)
-**Dataroom:** 2 routers (`/funds/{fund_id}/dataroom`, `/funds/{fund_id}/data-room`)
+**Dataroom:** 2 routers (`/api/dataroom`, `/api/data-room`) — **DEPRECATED 2026-06-30**, 14 endpoints marked `deprecated=True` in OpenAPI
 **Actions:** 1 router (`/funds/{fund_id}/actions`)
-**AI Modules:** 9 dynamically loaded sub-routers under `/ai/*` (copilot, documents, compliance, pipeline_deals, extraction, portfolio, deep_review, memo_chapters, artifacts)
+**AI Modules:** 9 dynamically loaded sub-routers under `/ai/*` — all 9 healthy (copilot, documents, compliance, pipeline_deals, extraction, portfolio, deep_review, memo_chapters, artifacts)
 **Pipeline Deals:** 1 router (`/pipeline/deals`)
 **Module Documents:** 1 router (`/documents`)
 
@@ -469,7 +495,7 @@ Import-linter enforces 30 contracts across credit and wealth verticals. All 16 q
 | `wealth_allocation_router` | `/allocation` | |
 | `wealth_analytics_router` | `/analytics` | |
 | `wealth_portfolios_router` | `/portfolios` | |
-| `wealth_risk_router` | `/risk` | |
+| `wealth_risk_router` | `/risk` | Includes `GET /risk/summary` batched endpoint (single DB query via `WHERE IN`) |
 | `wealth_macro_router` | `/macro` | |
 | `wealth_workers_router` | `/workers` | Background task triggers |
 | `wealth_dd_reports_router` | `/dd-reports` | |
@@ -478,7 +504,7 @@ Import-linter enforces 30 contracts across credit and wealth verticals. All 16 q
 | `wealth_fact_sheets_router` | `/fact-sheets` | |
 | `wealth_content_router` | `/content` | |
 | `wealth_screener_router` | `/screener` | |
-| `wealth_strategy_drift_router` | `/strategy-drift` | |
+| `wealth_strategy_drift_router` | `/analytics/strategy-drift` | Includes `GET /{id}/export` (CSV/JSON) |
 | `wealth_attribution_router` | `/attribution` | |
 | `wealth_correlation_regime_router` | `/correlation-regime` | |
 | `wealth_exposure_router` | `/exposure` | |
@@ -487,11 +513,14 @@ Import-linter enforces 30 contracts across credit and wealth verticals. All 16 q
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /health` | Health status + AI router diagnostics |
+| `GET /health` | Health status + AI router diagnostics (status: `ok`, 9/9 modules healthy) |
 | `GET /api/health` | Dual-mount for Azure SWA proxy |
 | `GET /api/v1/` | API root info |
 | `GET /api/v1/jobs/{job_id}/stream` | SSE streaming (auth required) |
+| `GET /api/v1/jobs/{job_id}/status` | Job status polling (SSE fallback) |
 | `POST /api/v1/test/sse/{job_id}/emit` | Dev-only test event |
+
+**Total route count:** 312 (from route manifest, includes all AI sub-router routes)
 
 ---
 
@@ -525,9 +554,9 @@ Mirror credit contracts for all 20+ wealth packages: models → service forbidde
 
 ### 10.1 Tenant-Scoped Tables (RLS Active)
 
-**Credit:** Deal, DealQualification, IcMemo, Document, DocumentReview, EvidenceDocument, Asset, Obligation, Alert, Action, FundInvestment, NavSnapshot, ReportPack, InvestorStatement, AssetValuationSnapshot, PipelineDeal, PipelineIngestJob, DocumentRegistry, DealDocument, AuditEvent
+**Credit:** Deal, DealQualification, IcMemo, Document, DocumentReview, EvidenceDocument, Asset, Obligation, Alert, Action, FundInvestment, NavSnapshot, ReportPack, InvestorStatement, AssetValuationSnapshot, PipelineDeal, PipelineIngestJob, DocumentRegistry, DealDocument, DealCashflow, AuditEvent
 
-**Wealth:** Instrument (polymorphic: fund, bond, equity), NAV timeseries, Portfolio holdings, Risk metrics, Allocation, Rebalance, DD Report, Content, Screening results, Watchlist, Macro Regional Snapshots
+**Wealth:** Instrument (polymorphic: fund, bond, equity), NAV timeseries, Portfolio holdings (with `computed_at` on PortfolioSummary/PortfolioSnapshotRead), Risk metrics (batched via `BatchRiskSummaryOut`), Allocation, Rebalance, DD Report, Content, Screening results, Watchlist, Macro Regional Snapshots, StrategyDriftAlert (with CSV/JSON export)
 
 ### 10.2 Global Tables (No RLS)
 
