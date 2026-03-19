@@ -10,7 +10,7 @@ export const load: PageServerLoad = async ({ parent, url }) => {
 
 	const [correlation, correlationRegime] = await Promise.allSettled([
 		api.get("/analytics/correlation"),
-		api.get(`/wealth/analytics/correlation-regime/${profile}`),
+		api.get(`/analytics/correlation-regime/${profile}`),
 	]);
 
 	return {

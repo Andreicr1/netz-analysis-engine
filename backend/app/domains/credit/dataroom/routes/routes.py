@@ -1,3 +1,10 @@
+"""Dataroom endpoints — DEPRECATED 2026-06-30.
+
+These endpoints predate the modularized document pipeline.
+Sunset alongside Fund model routes (SR-4).
+No frontend consumers exist. Do not build new integrations against these.
+"""
+
 from __future__ import annotations
 
 import dataclasses
@@ -14,8 +21,8 @@ from app.services.blob_storage import generate_read_link, list_blobs
 from app.services.dataroom_ingest import ingest_document_version, upload_dataroom_document
 from app.services.search_index import AzureSearchMetadataClient
 
-router = APIRouter(prefix="/api/dataroom", tags=["Dataroom"])
-data_room_router = APIRouter(prefix="/api/data-room", tags=["Data Room"])
+router = APIRouter(prefix="/api/dataroom", tags=["Dataroom"], deprecated=True)
+data_room_router = APIRouter(prefix="/api/data-room", tags=["Data Room"], deprecated=True)
 
 
 def _as_of() -> str:
@@ -90,7 +97,7 @@ def _build_folder_tree(container: str) -> list[dict]:
     return [nodes_by_path[r.name] for r in roots]
 
 
-@router.post("/documents")
+@router.post("/documents", deprecated=True, summary="[DEPRECATED 2026-06-30] Upload dataroom document")
 async def upload_document(
     fund_id: uuid.UUID = Form(...),
     title: str | None = Form(None),
@@ -122,7 +129,7 @@ async def upload_document(
     }
 
 
-@router.post("/documents/{document_id}/ingest")
+@router.post("/documents/{document_id}/ingest", deprecated=True, summary="[DEPRECATED 2026-06-30] Ingest dataroom document")
 async def ingest_document(
     document_id: uuid.UUID,
     fund_id: uuid.UUID = Query(...),
@@ -147,7 +154,7 @@ async def ingest_document(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/search")
+@router.get("/search", deprecated=True, summary="[DEPRECATED 2026-06-30] Search dataroom")
 async def search(
     fund_id: uuid.UUID = Query(...),
     q: str = Query(..., min_length=2, max_length=400),
@@ -173,15 +180,13 @@ async def search(
     return {"query": q, "count": len(hits), "hits": [h.__dict__ for h in hits]}
 
 
-@router.get("/browse")
+@router.get("/browse", deprecated=True, summary="[DEPRECATED 2026-06-30] Browse dataroom")
 async def browse(
     prefix: str = Query("", max_length=500),
     actor: Actor = Depends(get_actor),
     _role_guard: Actor = Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN", "AUDITOR"])),
 ):
-    """List folders and files in the dataroom blob container.
-    Uses virtual directory (delimiter-based) listing.
-    """
+    """List folders and files in the dataroom blob container."""
     container = settings.AZURE_STORAGE_DATAROOM_CONTAINER
     try:
         entries = list_blobs(container=container, prefix=prefix or None)
@@ -198,7 +203,7 @@ async def browse(
     }
 
 
-@data_room_router.get("/tree")
+@data_room_router.get("/tree", deprecated=True, summary="[DEPRECATED 2026-06-30] Get folder tree")
 async def get_tree(
     actor: Actor = Depends(get_actor),
     _role_guard: Actor = Depends(require_role(["INVESTMENT_TEAM", "COMPLIANCE", "GP", "ADMIN", "AUDITOR"])),
@@ -217,7 +222,7 @@ async def get_tree(
     }
 
 
-@data_room_router.get("/list")
+@data_room_router.get("/list", deprecated=True, summary="[DEPRECATED 2026-06-30] List items")
 async def list_items(
     path: str = Query("", max_length=500),
     actor: Actor = Depends(get_actor),
@@ -244,7 +249,7 @@ async def list_items(
     }
 
 
-@data_room_router.get("/file-link")
+@data_room_router.get("/file-link", deprecated=True, summary="[DEPRECATED 2026-06-30] Get file link")
 async def file_link(
     path: str = Query(..., max_length=1000),
     actor: Actor = Depends(get_actor),
@@ -287,7 +292,7 @@ def _is_user_visible_pipeline(entry) -> bool:
     return not any(name.endswith(ext) for ext in _PIPELINE_INTERNAL_SUFFIXES)
 
 
-@data_room_router.get("/pipeline/list")
+@data_room_router.get("/pipeline/list", deprecated=True, summary="[DEPRECATED 2026-06-30] List pipeline items")
 async def list_pipeline_items(
     path: str = Query("", max_length=500),
     actor: Actor = Depends(get_actor),
@@ -316,7 +321,7 @@ async def list_pipeline_items(
     }
 
 
-@data_room_router.get("/pipeline/file-link")
+@data_room_router.get("/pipeline/file-link", deprecated=True, summary="[DEPRECATED 2026-06-30] Get pipeline file link")
 async def pipeline_file_link(
     path: str = Query(..., max_length=1000),
     actor: Actor = Depends(get_actor),
@@ -344,7 +349,7 @@ async def pipeline_file_link(
     }
 
 
-@data_room_router.post("/upload")
+@data_room_router.post("/upload", deprecated=True, summary="[DEPRECATED 2026-06-30] Upload to data room")
 async def upload_to_path(
     path: str = Form(""),
     file: UploadFile = File(...),
