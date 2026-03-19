@@ -22,28 +22,28 @@
 
 	const variantStyles: Record<Variant, string> = {
 		default:
-			"bg-[var(--netz-brand-primary)] text-white hover:bg-[var(--netz-brand-primary)]/90",
+			"border border-[var(--netz-border-accent)] bg-[var(--netz-brand-primary)] text-[var(--netz-primary-foreground)] shadow-[var(--netz-shadow-1)] hover:-translate-y-px hover:shadow-[var(--netz-shadow-2)] active:translate-y-0 active:shadow-[var(--netz-shadow-1)]",
 		secondary:
-			"bg-[var(--netz-brand-secondary)] text-white hover:bg-[var(--netz-brand-secondary)]/90",
+			"border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-panel)] text-[var(--netz-text-primary)] shadow-[var(--netz-shadow-1)] hover:-translate-y-px hover:bg-[var(--netz-surface-highlight)] hover:shadow-[var(--netz-shadow-2)] active:translate-y-0 active:shadow-[var(--netz-shadow-1)]",
 		destructive:
-			"bg-[var(--netz-danger)] text-white hover:bg-[var(--netz-danger)]/90",
+			"border border-transparent bg-[var(--netz-danger)] text-white shadow-[var(--netz-shadow-1)] hover:-translate-y-px hover:shadow-[var(--netz-shadow-2)] active:translate-y-0 active:shadow-[var(--netz-shadow-1)]",
 		outline:
-			"border border-[var(--netz-border)] bg-transparent text-[var(--netz-text-primary)] hover:bg-[var(--netz-surface-alt)]",
+			"border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] text-[var(--netz-text-primary)] hover:border-[var(--netz-border)] hover:bg-[var(--netz-surface-highlight)]",
 		ghost:
-			"bg-transparent text-[var(--netz-text-primary)] hover:bg-[var(--netz-surface-alt)]",
-		link: "bg-transparent text-[var(--netz-brand-secondary)] underline-offset-4 hover:underline p-0 h-auto",
+			"border border-transparent bg-transparent text-[var(--netz-text-primary)] hover:bg-[var(--netz-accent-soft)]",
+		link: "h-auto border-none bg-transparent p-0 text-[var(--netz-brand-secondary)] underline-offset-4 hover:text-[var(--netz-brand-primary)] hover:underline",
 	};
 
 	const sizeStyles: Record<Size, string> = {
-		sm: "h-8 px-3 text-xs rounded-md",
-		default: "h-9 px-4 text-sm rounded-md",
-		lg: "h-11 px-6 text-base rounded-md",
+		sm: "h-[var(--netz-space-control-height-sm)] rounded-[var(--netz-radius-md)] px-3 text-xs",
+		default: "h-[var(--netz-space-control-height-md)] rounded-[var(--netz-radius-md)] px-4 text-sm",
+		lg: "h-[var(--netz-space-control-height-lg)] rounded-[var(--netz-radius-lg)] px-6 text-base",
 	};
 </script>
 
 <button
 	class={cn(
-		"inline-flex items-center justify-center font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--netz-brand-secondary)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+		"inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium tracking-[-0.01em] transition-[color,background-color,border-color,box-shadow,transform] duration-[var(--netz-duration-fast)] ease-[var(--netz-ease-out)] focus-visible:outline-none focus-visible:shadow-[var(--netz-shadow-focus)] disabled:pointer-events-none disabled:translate-y-0 disabled:shadow-none disabled:opacity-50",
 		variantStyles[variant],
 		sizeStyles[size],
 		className,

@@ -43,7 +43,8 @@
 
 <div
 	class={cn(
-		"relative rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface)] p-4 shadow-sm",
+		"relative overflow-hidden rounded-[var(--netz-radius-lg)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-highlight)] p-[var(--netz-space-card-padding)]",
+		"shadow-[var(--netz-shadow-card)]",
 		className,
 	)}
 	style={status
@@ -53,25 +54,25 @@
 	<div class="flex items-start justify-between gap-3">
 		<div class="min-w-0 flex-1">
 			<!-- Label -->
-			<p class="text-xs font-medium uppercase tracking-wide text-[var(--netz-text-muted)]">
+			<p class="netz-ui-kicker">
 				{label}
 			</p>
 
 			<!-- Value -->
 			<p
-				class="mt-1 font-mono text-2xl font-semibold leading-none tracking-tight text-[var(--netz-text-primary)]"
+				class="mt-2 font-mono text-[1.75rem] font-semibold leading-none tracking-[-0.03em] text-[var(--netz-text-primary)]"
 			>
 				{value}
 			</p>
 
 			<!-- Sublabel -->
 			{#if sublabel}
-				<p class="mt-0.5 text-xs text-[var(--netz-text-muted)]">{sublabel}</p>
+				<p class="mt-1 text-sm text-[var(--netz-text-secondary)]">{sublabel}</p>
 			{/if}
 
 			<!-- Delta -->
 			{#if delta}
-				<div class="mt-2 flex items-center gap-1 text-xs font-medium">
+				<div class="mt-3 flex items-center gap-1.5 text-xs font-semibold">
 					{#if delta.direction === "up"}
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -121,7 +122,7 @@
 
 			<!-- Utilization bar -->
 			{#if utilization}
-				<div class="mt-3">
+				<div class="mt-4">
 					<UtilizationBar current={utilization.current} limit={utilization.limit} />
 				</div>
 			{/if}
@@ -129,7 +130,7 @@
 
 		<!-- Sparkline slot -->
 		{#if sparkline}
-			<div class="shrink-0">
+			<div class="shrink-0 self-start rounded-[var(--netz-radius-md)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] p-2 shadow-[var(--netz-shadow-1)]">
 				{@render sparkline()}
 			</div>
 		{/if}

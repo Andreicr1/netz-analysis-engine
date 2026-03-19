@@ -34,6 +34,16 @@
 		left: "left-0 top-0 h-full",
 	};
 
+	const borderStyles: Record<Side, string> = {
+		right: "border-l",
+		left: "border-r",
+	};
+
+	const radiusStyles: Record<Side, string> = {
+		right: "rounded-l-[var(--netz-radius-xl)]",
+		left: "rounded-r-[var(--netz-radius-xl)]",
+	};
+
 	const slideIn: Record<Side, string> = {
 		right: "translate-x-0",
 		left: "translate-x-0",
@@ -50,7 +60,7 @@
 	<div class="fixed inset-0 z-50" onkeydown={handleKeydown}>
 		<!-- Backdrop -->
 		<button
-			class="fixed inset-0 bg-black/50 backdrop-blur-sm netz-animate-fade-in"
+			class="fixed inset-0 bg-[var(--netz-surface-overlay)] backdrop-blur-sm netz-animate-fade-in"
 			onclick={close}
 			aria-label="Close sheet"
 			tabindex="-1"
@@ -58,8 +68,10 @@
 		<!-- Panel -->
 		<div
 			class={cn(
-				"fixed z-50 w-[400px] border-l border-[var(--netz-border)] bg-[var(--netz-surface)] shadow-xl transition-transform duration-[var(--netz-duration-normal)] ease-[var(--netz-ease-out)]",
+				"fixed z-50 w-[min(100vw,420px)] border-[var(--netz-border-subtle)] bg-[var(--netz-surface-panel)] shadow-[var(--netz-shadow-floating)] transition-transform duration-[var(--netz-duration-normal)] ease-[var(--netz-ease-out)]",
 				sideStyles[side],
+				borderStyles[side],
+				radiusStyles[side],
 				open ? slideIn[side] : slideOut[side],
 				className,
 			)}
@@ -67,7 +79,7 @@
 			aria-modal="true"
 		>
 			<button
-				class="absolute right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+				class="absolute right-5 top-5 inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-raised)] text-[var(--netz-text-secondary)] shadow-[var(--netz-shadow-1)] transition-[color,background-color,border-color,box-shadow] duration-[var(--netz-duration-fast)] ease-[var(--netz-ease-out)] hover:bg-[var(--netz-accent-soft)] hover:text-[var(--netz-text-primary)] focus:outline-none focus:shadow-[var(--netz-shadow-focus)]"
 				onclick={close}
 				aria-label="Close"
 			>
@@ -86,7 +98,7 @@
 					<path d="m6 6 12 12" />
 				</svg>
 			</button>
-			<div class="h-full overflow-y-auto p-6">
+			<div class="h-full overflow-y-auto p-[var(--netz-space-panel-padding)]">
 				{@render children?.()}
 			</div>
 		</div>

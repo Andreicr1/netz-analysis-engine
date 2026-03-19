@@ -39,7 +39,7 @@
 <div class={cn("w-full", className)}>
 	<!-- Tab triggers -->
 	<div
-		class="flex border-b border-[var(--netz-border)]"
+		class="flex items-center gap-6 overflow-x-auto border-b border-[var(--netz-border-subtle)]"
 		role="tablist"
 	>
 		{#each tabs as tab}
@@ -47,9 +47,9 @@
 				role="tab"
 				aria-selected={activeTab === tab.value}
 				class={cn(
-					"relative px-4 py-2.5 text-sm font-medium transition-colors",
+					"relative flex shrink-0 items-center gap-2 px-1 pb-3 pt-1 text-sm font-medium tracking-[-0.01em] transition-[color,box-shadow] duration-[var(--netz-duration-fast)] focus-visible:outline-none focus-visible:shadow-[var(--netz-shadow-focus)]",
 					activeTab === tab.value
-						? "text-[var(--netz-brand-primary)]"
+						? "text-[var(--netz-text-primary)]"
 						: "text-[var(--netz-text-muted)] hover:text-[var(--netz-text-secondary)]",
 				)}
 				onclick={() => select(tab.value)}
@@ -57,7 +57,7 @@
 				{tab.label}
 				{#if activeTab === tab.value}
 					<span
-						class="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--netz-brand-primary)]"
+						class="absolute bottom-0 left-0 right-0 h-px bg-[var(--netz-border-accent)]"
 					></span>
 				{/if}
 			</button>

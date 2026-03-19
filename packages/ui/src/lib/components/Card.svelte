@@ -12,7 +12,7 @@
 
 <div
 	class={cn(
-		"rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface)] shadow-sm",
+		"netz-ui-surface overflow-hidden rounded-[var(--netz-radius-lg)]",
 		className,
 	)}
 >

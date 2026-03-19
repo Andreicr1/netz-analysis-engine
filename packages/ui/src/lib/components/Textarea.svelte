@@ -11,7 +11,7 @@
 
 <textarea
 	class={cn(
-		"flex min-h-[80px] w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] shadow-sm transition-colors placeholder:text-[var(--netz-text-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--netz-brand-secondary)] focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50",
+		"netz-ui-field flex min-h-28 w-full rounded-[var(--netz-radius-md)] px-3.5 py-2.5 text-sm leading-6 tracking-[-0.005em] text-[var(--netz-text-primary)] placeholder:text-[var(--netz-text-muted)] disabled:cursor-not-allowed disabled:bg-[var(--netz-surface-inset)] disabled:opacity-50",
 		className,
 	)}
 	{...rest}

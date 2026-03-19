@@ -26,17 +26,17 @@
 <Dialog.Root bind:open onOpenChange={handleOpenChange}>
 	<Dialog.Portal>
 		<Dialog.Overlay
-			class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm netz-animate-fade-in data-[state=closed]:netz-animate-fade-out"
+			class="fixed inset-0 z-50 bg-[var(--netz-surface-overlay)] backdrop-blur-sm netz-animate-fade-in data-[state=closed]:netz-animate-fade-out"
 		/>
 		<Dialog.Content
 			class={cn(
-				"fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface)] p-6 shadow-lg netz-animate-scale-in data-[state=closed]:netz-animate-scale-out",
+				"fixed left-1/2 top-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-[var(--netz-radius-xl)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-panel)] p-6 shadow-[var(--netz-shadow-floating)] netz-animate-scale-in data-[state=closed]:netz-animate-scale-out",
 				className,
 			)}
 		>
 			{@render children?.()}
 			<Dialog.Close
-				class="absolute right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+				class="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-raised)] text-[var(--netz-text-secondary)] shadow-[var(--netz-shadow-1)] transition-[color,background-color,border-color,box-shadow] duration-[var(--netz-duration-fast)] ease-[var(--netz-ease-out)] hover:bg-[var(--netz-accent-soft)] hover:text-[var(--netz-text-primary)] focus:outline-none focus:shadow-[var(--netz-shadow-focus)]"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"

@@ -21,16 +21,17 @@
 	}: Props = $props();
 </script>
 
-<div class={cn("space-y-1.5", className)}>
-	<label class="text-sm font-medium text-[var(--netz-text-primary)]">
+<div class={cn("space-y-2", className)}>
+	<!-- svelte-ignore a11y_label_has_associated_control -->
+	<label class="text-[13px] font-semibold tracking-[-0.01em] text-[var(--netz-text-secondary)]">
 		{label}
 		{#if required}
-			<span class="text-[var(--netz-danger)]">*</span>
+			<span class="ml-1 text-[var(--netz-danger)]">*</span>
 		{/if}
 	</label>
 	{@render children?.()}
 	{#if error}
-		<p class="text-xs text-[var(--netz-danger)]">{error}</p>
+		<p class="text-xs font-medium text-[var(--netz-danger)]">{error}</p>
 	{:else if hint}
 		<p class="text-xs text-[var(--netz-text-muted)]">{hint}</p>
 	{/if}

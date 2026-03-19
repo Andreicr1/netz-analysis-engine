@@ -14,19 +14,19 @@
 
 	const variantStyles: Record<Variant, string> = {
 		default:
-			"bg-[var(--netz-brand-primary)] text-white",
+			"border border-[var(--netz-border-accent)] bg-[var(--netz-accent-muted)] text-[var(--netz-brand-primary)]",
 		secondary:
-			"bg-[var(--netz-brand-accent)]/20 text-[var(--netz-text-secondary)]",
+			"border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-panel)] text-[var(--netz-text-secondary)]",
 		destructive:
-			"bg-[var(--netz-danger)] text-white",
+			"border border-transparent bg-[var(--netz-danger-subtle)] text-[var(--netz-danger)]",
 		outline:
-			"border border-[var(--netz-border)] bg-transparent text-[var(--netz-text-secondary)]",
+			"border border-[var(--netz-border-subtle)] bg-transparent text-[var(--netz-text-secondary)]",
 	};
 </script>
 
 <span
 	class={cn(
-		"inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors",
+		"inline-flex items-center rounded-[var(--netz-radius-pill)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] transition-[color,background-color,border-color]",
 		variantStyles[variant],
 		className,
 	)}
