@@ -2,7 +2,7 @@
   Investor — Approved-for-distribution documents.
 -->
 <script lang="ts">
-	import { PageHeader, EmptyState, StatusBadge } from "@netz/ui";
+	import { PageHeader, EmptyState, StatusBadge, formatDate } from "@netz/ui";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
@@ -44,7 +44,7 @@
 						<p class="mt-1 text-sm text-[var(--netz-text-muted)]">
 							{doc.document_type}
 							{#if doc.created_at}
-								&middot; {new Date(doc.created_at as string).toLocaleDateString()}
+								&middot; {formatDate(doc.created_at as string)}
 							{/if}
 						</p>
 					</div>

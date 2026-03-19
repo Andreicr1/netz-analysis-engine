@@ -2,7 +2,7 @@
   Investor — Published report packs with PDF download.
 -->
 <script lang="ts">
-	import { PageHeader, DataTable, EmptyState, PDFDownload } from "@netz/ui";
+	import { PageHeader, DataTable, EmptyState, PDFDownload, formatDate } from "@netz/ui";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
@@ -40,7 +40,7 @@
 						</p>
 						{#if pack.published_at}
 							<p class="text-sm text-[var(--netz-text-muted)]">
-								Published: {new Date(pack.published_at).toLocaleDateString()}
+								Published: {formatDate(pack.published_at)}
 							</p>
 						{/if}
 					</div>
