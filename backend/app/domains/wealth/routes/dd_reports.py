@@ -316,6 +316,8 @@ async def approve_dd_report(
         )
 
     old_status = report.status
+    # BL-17: Detect override — user action contradicts AI recommendation
+    is_override = report.decision_anchor in ("REJECT", "CONDITIONAL")
     report.status = DDReportStatus.approved.value
     report.approved_by = actor.actor_id
     report.approved_at = datetime.now(UTC)
@@ -325,14 +327,19 @@ async def approve_dd_report(
         report_id=str(report_id),
         approved_by=actor.actor_id,
         rationale=body.rationale,
+        is_override=is_override,
     )
     await write_audit_event(
         db,
         actor_id=actor.actor_id,
-        action="dd_report.approve",
+        action="dd_report.approve.override" if is_override else "dd_report.approve",
         entity_type="DDReport",
         entity_id=str(report.id),
-        before={"status": old_status},
+        before={
+            "status": old_status,
+            "decision_anchor": report.decision_anchor,
+            "confidence_score": str(report.confidence_score) if report.confidence_score else None,
+        },
         after={"status": "approved", "rationale": body.rationale},
     )
     await db.commit()
@@ -369,6 +376,8 @@ async def reject_dd_report(
         )
 
     old_status = report.status
+    # BL-17: Detect override — user rejects despite AI recommending APPROVE
+    is_override = report.decision_anchor == "APPROVE"
     report.status = DDReportStatus.draft.value
     report.rejection_reason = body.reason
     report.approved_by = None
@@ -376,10 +385,14 @@ async def reject_dd_report(
     await write_audit_event(
         db,
         actor_id=actor.actor_id,
-        action="dd_report.reject",
+        action="dd_report.reject.override" if is_override else "dd_report.reject",
         entity_type="DDReport",
         entity_id=str(report.id),
-        before={"status": old_status},
+        before={
+            "status": old_status,
+            "decision_anchor": report.decision_anchor,
+            "confidence_score": str(report.confidence_score) if report.confidence_score else None,
+        },
         after={"status": "draft", "rejection_reason": body.reason},
     )
     await db.commit()

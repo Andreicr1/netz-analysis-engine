@@ -195,6 +195,20 @@
 		return "pass";
 	}
 
+	// BL-16: Check if an instrument was eliminated at L1 or L2
+	function isEliminated(r: ScreeningResult): boolean {
+		return r.failed_at_layer === 1 || r.failed_at_layer === 2;
+	}
+
+	// BL-16: Get the elimination reason (first failing criterion at the failed layer)
+	function eliminationReason(r: ScreeningResult): string | null {
+		if (r.failed_at_layer === null) return null;
+		const failing = r.layer_results.find(
+			(c) => c.layer === r.failed_at_layer && !c.passed
+		);
+		return failing ? failing.criterion : null;
+	}
+
 	function scoreColor(score: number | null): string {
 		if (score === null) return "var(--netz-text-muted)";
 		if (score >= 0.7) return "var(--netz-success)";
@@ -393,6 +407,7 @@
 								{@const result = filteredResults[virtualRow.index]!}
 								<tr
 									class="result-row virtual-row"
+									class:result-row--eliminated={isEliminated(result)}
 									style="position: absolute; top: 0; left: 0; width: 100%; height: {virtualRow.size}px; transform: translateY({virtualRow.start}px);"
 									onclick={() => openPanel(result)}
 									role="button"
@@ -402,8 +417,14 @@
 									<!-- Instrumento -->
 									<td class="col-instrumento">
 										<div class="instrument-cell">
-											<span class="instrument-name">{instrumentLabel(result)}</span>
-											{#if instrumentSubtitle(result)}
+											<span class="instrument-name" class:instrument-name--eliminated={isEliminated(result)}>
+												{instrumentLabel(result)}
+											</span>
+											{#if isEliminated(result) && eliminationReason(result)}
+												<span class="elimination-reason">
+													L{result.failed_at_layer} fail: {eliminationReason(result)}
+												</span>
+											{:else if instrumentSubtitle(result)}
 												<span class="instrument-sub">{instrumentSubtitle(result)}</span>
 											{/if}
 										</div>
@@ -424,6 +445,9 @@
 									<!-- L1 dot -->
 									<td class="col-layers">
 										<span class="layer-dot layer-dot--{layerDotStatus(result, 1)}" title="L1: {layerDotStatus(result, 1)}"></span>
+										{#if layerDotStatus(result, 1) === "pass"}
+											<span class="layer-pass-label">OK</span>
+										{/if}
 									</td>
 
 									<!-- L2 dot -->
@@ -942,6 +966,41 @@
 
 	.result-row:hover td {
 		background: var(--netz-surface-inset);
+	}
+
+	/* BL-16: Eliminated row styling */
+	.result-row--eliminated td {
+		opacity: 0.6;
+		background: color-mix(in srgb, var(--netz-danger) 3%, transparent);
+	}
+
+	.result-row--eliminated:hover td {
+		opacity: 0.8;
+		background: color-mix(in srgb, var(--netz-danger) 6%, transparent);
+	}
+
+	.instrument-name--eliminated {
+		text-decoration: line-through;
+		text-decoration-color: var(--netz-danger);
+		text-decoration-thickness: 1px;
+	}
+
+	.elimination-reason {
+		font-size: 10px;
+		color: var(--netz-danger);
+		font-weight: 500;
+		line-height: 1.2;
+	}
+
+	.layer-pass-label {
+		display: block;
+		font-size: 8px;
+		font-weight: 600;
+		color: var(--netz-success);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		line-height: 1;
+		margin-top: 2px;
 	}
 
 	.virtual-row {

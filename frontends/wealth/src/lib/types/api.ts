@@ -57,6 +57,8 @@ export interface DDReportSummary {
 	report_id: string;
 	status: string;
 	version: number;
+	confidence_score: number | null;
+	decision_anchor: string | null;
 	created_at: string;
 	created_by: string | null;
 	approved_by: string | null;
@@ -65,10 +67,15 @@ export interface DDReportSummary {
 }
 
 export interface DDReportChapter {
-	chapter_number: number;
-	title: string;
-	content: string;
-	status: string;
+	id: string;
+	chapter_tag: string;
+	chapter_order: number;
+	content_md: string | null;
+	evidence_refs: Record<string, unknown> | null;
+	quant_data: Record<string, unknown> | null;
+	critic_iterations: number;
+	critic_status: string;
+	generated_at: string | null;
 }
 
 // ── Fund ───────────────────────────────────────────────────

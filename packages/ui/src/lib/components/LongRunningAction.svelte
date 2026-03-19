@@ -35,6 +35,10 @@
 		cancelLabel?: string;
 		idleMessage?: string;
 		successMessage?: string;
+		/** Seconds before showing "taking longer than expected" warning. */
+		slaSeconds?: number;
+		/** Custom SLA warning message. */
+		slaMessage?: string;
 		class?: string;
 		disabled?: boolean;
 		onStart?: () => void | Promise<void>;
@@ -51,6 +55,8 @@
 		cancelLabel = "Cancel",
 		idleMessage = "This action is ready to start.",
 		successMessage = "Completed successfully.",
+		slaSeconds,
+		slaMessage = "Taking longer than expected. The operation is still running.",
 		class: className,
 		disabled = false,
 		onStart,
@@ -61,6 +67,37 @@
 	let pendingState = $state<LongRunningActionState | null>(null);
 	let confirmCancellation = $state(false);
 	let localFailureDetail = $state<string | null>(null);
+
+	// SLA elapsed timer
+	let elapsedSeconds = $state(0);
+	let elapsedInterval: ReturnType<typeof setInterval> | null = null;
+	let startedAt: number | null = null;
+
+	function startElapsedTimer() {
+		stopElapsedTimer();
+		startedAt = Date.now();
+		elapsedSeconds = 0;
+		elapsedInterval = setInterval(() => {
+			elapsedSeconds = Math.floor((Date.now() - (startedAt ?? Date.now())) / 1000);
+		}, 1000);
+	}
+
+	function stopElapsedTimer() {
+		if (elapsedInterval) {
+			clearInterval(elapsedInterval);
+			elapsedInterval = null;
+		}
+	}
+
+	const slaExceeded = $derived(
+		typeof slaSeconds === "number" && slaSeconds > 0 && elapsedSeconds > slaSeconds,
+	);
+
+	function formatElapsed(seconds: number): string {
+		const m = Math.floor(seconds / 60);
+		const s = seconds % 60;
+		return m > 0 ? `${m}m ${s}s` : `${s}s`;
+	}
 
 	const latestEvent = $derived(stream?.events.at(-1) ?? null);
 	const progress = $derived.by(() => {
@@ -160,6 +197,17 @@
 		}
 	});
 
+	// Start/stop elapsed timer based on current state
+	$effect(() => {
+		if (currentState === "starting" || currentState === "in-flight") {
+			if (!elapsedInterval) startElapsedTimer();
+		} else {
+			stopElapsedTimer();
+		}
+
+		return () => stopElapsedTimer();
+	});
+
 	async function handleStart() {
 		if (!onStart || disabled) return;
 		localFailureDetail = null;
@@ -242,6 +290,9 @@
 				{#if etaLabel && currentState === "in-flight"}
 					<span>ETA: {etaLabel}</span>
 				{/if}
+				{#if (currentState === "starting" || currentState === "in-flight") && elapsedSeconds > 0}
+					<span>Elapsed: {formatElapsed(elapsedSeconds)}</span>
+				{/if}
 			</div>
 		</div>
 
@@ -251,6 +302,15 @@
 				style={`width: ${currentState === "starting" ? "12%" : `${progress}%`}; background-color: ${statusTone};`}
 			></div>
 		</div>
+
+		{#if slaExceeded && (currentState === "starting" || currentState === "in-flight")}
+			<div
+				class="rounded-lg border px-3 py-2 text-sm"
+				style="border-color: var(--netz-warning); background-color: color-mix(in srgb, var(--netz-warning) 10%, var(--netz-surface)); color: var(--netz-text-primary);"
+			>
+				<p class="font-medium" style="color: var(--netz-warning);">{slaMessage}</p>
+			</div>
+		{/if}
 
 		{#if currentState === "error" && failureDetail}
 			<div
