@@ -71,6 +71,31 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/admin/inspect/{org_id}/{vertical}/chunk-stats",
+    "name": "get_chunk_stats"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/inspect/{org_id}/{vertical}/coverage",
+    "name": "get_document_coverage"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/inspect/{org_id}/{vertical}/embedding-audit",
+    "name": "get_embedding_audit"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/inspect/{org_id}/{vertical}/extraction-quality",
+    "name": "get_extraction_quality"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/admin/inspect/{org_id}/{vertical}/stale-embeddings",
+    "name": "get_stale_embeddings"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/admin/prompts/{vertical}",
     "name": "list_prompts"
   },
