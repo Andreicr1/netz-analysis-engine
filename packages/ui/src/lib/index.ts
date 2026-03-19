@@ -112,6 +112,7 @@ export {
 	formatDateTime,
 	formatDateRange,
 	formatRelativeDate,
+	formatShortDate,
 	formatISIN,
 	plColor,
 	plDirection,

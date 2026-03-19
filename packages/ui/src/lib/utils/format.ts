@@ -355,6 +355,20 @@ export function plColor(value: NullableNumber): string {
 }
 
 /**
+ * Format a date as "DD/MM" for compact chart axes (e.g., "17/03").
+ * Useful for DriftHistoryPanel and any chart with dense date labels.
+ */
+export function formatShortDate(date: DateInput, locale = "pt-BR"): string {
+	const resolvedDate = toDate(date);
+
+	if (!resolvedDate) {
+		return EM_DASH;
+	}
+
+	return getDateFormatter(locale, { day: "2-digit", month: "2-digit" }).format(resolvedDate);
+}
+
+/**
  * Format ISIN with spaces: "BR XXXX XXXX XX".
  */
 export function formatISIN(isin: string): string {
