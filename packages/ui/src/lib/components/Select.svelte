@@ -33,7 +33,7 @@
 
 <select
 	class={cn(
-		"netz-ui-field flex h-[var(--netz-space-control-height-md)] w-full appearance-none rounded-[var(--netz-radius-md)] px-3.5 py-2 pr-10 text-sm tracking-[-0.005em] text-[var(--netz-text-primary)] disabled:cursor-not-allowed disabled:bg-[var(--netz-surface-inset)] disabled:opacity-50",
+		"netz-ui-field flex h-(--netz-space-control-height-md) w-full appearance-none rounded-(--netz-radius-md) px-3.5 py-2 pr-10 text-sm tracking-[-0.005em] text-(--netz-text-primary) disabled:cursor-not-allowed disabled:bg-(--netz-surface-inset) disabled:opacity-50",
 		className,
 	)}
 	{disabled}

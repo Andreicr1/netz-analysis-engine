@@ -14,7 +14,7 @@
 
 <div
 	class={cn(
-		"flex min-h-screen flex-col items-center justify-center bg-[var(--netz-brand-primary)] p-8 text-center",
+		"flex min-h-screen flex-col items-center justify-center bg-(--netz-brand-primary) p-8 text-center",
 		className,
 	)}
 >

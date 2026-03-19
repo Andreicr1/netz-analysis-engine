@@ -69,8 +69,8 @@
 	<!-- Header with refresh button -->
 	<div class="flex items-center justify-between">
 		<div>
-			<h3 class="text-lg font-semibold text-[var(--netz-text-primary)]">Performance</h3>
-			<p class="text-sm text-[var(--netz-text-muted)]">
+			<h3 class="text-lg font-semibold text-(--netz-text-primary)">Performance</h3>
+			<p class="text-sm text-(--netz-text-muted)">
 				Métricas calculadas a partir dos cashflows registrados.
 			</p>
 		</div>
@@ -81,7 +81,7 @@
 
 	{#if error}
 		<div
-			class="rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]"
+			class="rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)"
 		>
 			{error}
 		</div>
@@ -130,9 +130,9 @@
 		</div>
 	{:else if !loading}
 		<div
-			class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface)] p-8 text-center"
+			class="rounded-lg border border-(--netz-border) bg-(--netz-surface) p-8 text-center"
 		>
-			<p class="text-sm text-[var(--netz-text-muted)]">
+			<p class="text-sm text-(--netz-text-muted)">
 				Clique em <strong>Atualizar</strong> para carregar as métricas de performance.
 			</p>
 		</div>
@@ -140,7 +140,7 @@
 		<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 			{#each Array(5) as _, i (i)}
 				<div
-					class="h-24 animate-pulse rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-alt)]"
+					class="h-24 animate-pulse rounded-lg border border-(--netz-border) bg-(--netz-surface-alt)"
 				></div>
 			{/each}
 		</div>

@@ -144,7 +144,7 @@
 			class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm netz-animate-fade-in data-[state=closed]:netz-animate-fade-out"
 		/>
 		<AlertDialog.Content
-			class="fixed left-1/2 top-1/2 z-50 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface)] p-6 shadow-lg netz-animate-scale-in data-[state=closed]:netz-animate-scale-out"
+			class="fixed left-1/2 top-1/2 z-50 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 rounded-lg border border-(--netz-border) bg-(--netz-surface) p-6 shadow-lg netz-animate-scale-in data-[state=closed]:netz-animate-scale-out"
 			onOpenAutoFocus={handleOpenAutoFocus}
 			onEscapeKeydown={handleEscapeKeyDown}
 		>
@@ -152,46 +152,46 @@
 				<div class="space-y-2 pr-8">
 					<p
 						class={`text-xs font-semibold uppercase tracking-[0.18em] ${
-							destructive ? "text-[var(--netz-danger)]" : "text-[var(--netz-text-secondary)]"
+							destructive ? "text-(--netz-danger)" : "text-(--netz-text-secondary)"
 						}`}
 					>
 						{destructive ? "Destructive action" : "Consequence-aware confirmation"}
 					</p>
-					<AlertDialog.Title class="text-xl font-semibold text-[var(--netz-text-primary)]">
+					<AlertDialog.Title class="text-xl font-semibold text-(--netz-text-primary)">
 						{title}
 					</AlertDialog.Title>
-					<AlertDialog.Description class="text-sm leading-6 text-[var(--netz-text-secondary)]">
+					<AlertDialog.Description class="text-sm leading-6 text-(--netz-text-secondary)">
 						{impactSummary}
 					</AlertDialog.Description>
 				</div>
 
 				{#if scopeText}
-					<section class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] p-4">
-						<h3 class="text-sm font-semibold text-[var(--netz-text-primary)]">Scope</h3>
-						<p class="mt-2 text-sm leading-6 text-[var(--netz-text-secondary)]">{scopeText}</p>
+					<section class="rounded-lg border border-(--netz-border) bg-(--netz-surface-alt) p-4">
+						<h3 class="text-sm font-semibold text-(--netz-text-primary)">Scope</h3>
+						<p class="mt-2 text-sm leading-6 text-(--netz-text-secondary)">{scopeText}</p>
 					</section>
 				{/if}
 
 				{#if consequenceList}
-					<section class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] p-4">
-						<h3 class="text-sm font-semibold text-[var(--netz-text-primary)]">Consequences</h3>
-						<div class="mt-3 text-sm leading-6 text-[var(--netz-text-secondary)]">
+					<section class="rounded-lg border border-(--netz-border) bg-(--netz-surface-alt) p-4">
+						<h3 class="text-sm font-semibold text-(--netz-text-primary)">Consequences</h3>
+						<div class="mt-3 text-sm leading-6 text-(--netz-text-secondary)">
 							{@render consequenceList()}
 						</div>
 					</section>
 				{/if}
 
 				{#if metadata.length > 0}
-					<section class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface)] p-4">
+					<section class="rounded-lg border border-(--netz-border) bg-(--netz-surface) p-4">
 						<div class="grid gap-3 sm:grid-cols-2">
 							{#each metadata as item}
 								<div class="space-y-1">
-									<p class="text-xs font-medium uppercase tracking-[0.16em] text-[var(--netz-text-secondary)]">
+									<p class="text-xs font-medium uppercase tracking-[0.16em] text-(--netz-text-secondary)">
 										{item.label}
 									</p>
 									<p class={item.emphasis
-										? "text-sm font-semibold text-[var(--netz-text-primary)]"
-										: "text-sm text-[var(--netz-text-primary)]"}>
+										? "text-sm font-semibold text-(--netz-text-primary)"
+										: "text-sm text-(--netz-text-primary)"}>
 										{item.value}
 									</p>
 								</div>
@@ -202,20 +202,20 @@
 
 				{#if requireRationale}
 					<div class="space-y-2">
-						<label for={rationaleId} class="text-sm font-medium text-[var(--netz-text-primary)]">
+						<label for={rationaleId} class="text-sm font-medium text-(--netz-text-primary)">
 							{rationaleLabel}
 						</label>
 						<textarea
 							id={rationaleId}
 							bind:value={rationale}
 							rows="4"
-							class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] outline-none transition focus:border-[var(--netz-brand-secondary)] focus:ring-2 focus:ring-[var(--netz-brand-secondary)]/20"
+							class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) outline-none transition focus:border-(--netz-brand-secondary) focus:ring-2 focus:ring-(--netz-brand-secondary)/20"
 							placeholder={rationalePlaceholder}
 							aria-invalid={rationale.length > 0 && !rationaleSatisfied}
 							aria-required={requireRationale}
 							aria-describedby={rationaleHintId}
 						></textarea>
-						<p id={rationaleHintId} class="text-xs text-[var(--netz-text-secondary)]">
+						<p id={rationaleHintId} class="text-xs text-(--netz-text-secondary)">
 							Provide at least {rationaleMinLength} characters before continuing.
 						</p>
 					</div>
@@ -223,31 +223,31 @@
 
 				{#if confirmationPrompt}
 					<div class="space-y-2">
-						<label for={typedConfirmationId} class="text-sm font-medium text-[var(--netz-text-primary)]">
+						<label for={typedConfirmationId} class="text-sm font-medium text-(--netz-text-primary)">
 							{typedConfirmationLabel}
 						</label>
-						<p class="text-sm text-[var(--netz-text-secondary)]">
-							Type <span class="font-semibold text-[var(--netz-text-primary)]">{confirmationPrompt}</span>
+						<p class="text-sm text-(--netz-text-secondary)">
+							Type <span class="font-semibold text-(--netz-text-primary)">{confirmationPrompt}</span>
 							to continue.
 						</p>
 						<input
 							id={typedConfirmationId}
 							bind:value={typedConfirmation}
 							type="text"
-							class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] outline-none transition focus:border-[var(--netz-brand-secondary)] focus:ring-2 focus:ring-[var(--netz-brand-secondary)]/20"
+							class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) outline-none transition focus:border-(--netz-brand-secondary) focus:ring-2 focus:ring-(--netz-brand-secondary)/20"
 							aria-invalid={typedConfirmation.length > 0 && !typedConfirmationSatisfied}
 						/>
 					</div>
 				{/if}
 
 				{#if children}
-					<div class="space-y-3 border-t border-[var(--netz-border)] pt-4">
+					<div class="space-y-3 border-t border-(--netz-border) pt-4">
 						{@render children()}
 					</div>
 				{/if}
 
 				{#if footer}
-					<div class="space-y-3 border-t border-[var(--netz-border)] pt-4">
+					<div class="space-y-3 border-t border-(--netz-border) pt-4">
 						{@render footer({ canConfirm, submitting })}
 					</div>
 				{/if}
@@ -256,17 +256,17 @@
 					<AlertDialog.Cancel
 						bind:ref={cancelRef}
 						disabled={submitting}
-						class="inline-flex h-9 items-center justify-center rounded-md border border-[var(--netz-border)] bg-transparent px-4 text-sm font-medium text-[var(--netz-text-primary)] transition-colors hover:bg-[var(--netz-surface-alt)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--netz-brand-secondary)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+						class="inline-flex h-9 items-center justify-center rounded-md border border-(--netz-border) bg-transparent px-4 text-sm font-medium text-(--netz-text-primary) transition-colors hover:bg-(--netz-surface-alt) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--netz-brand-secondary) focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
 					>
 						{cancelLabel}
 					</AlertDialog.Cancel>
 					<AlertDialog.Action
 						disabled={!canConfirm || submitting}
 						onclick={handleConfirm}
-						class={`inline-flex h-9 items-center justify-center rounded-md px-4 text-sm font-medium text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--netz-brand-secondary)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${
+						class={`inline-flex h-9 items-center justify-center rounded-md px-4 text-sm font-medium text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--netz-brand-secondary) focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 ${
 							destructive
-								? "bg-[var(--netz-danger)] hover:bg-[var(--netz-danger)]/90"
-								: "bg-[var(--netz-brand-primary)] hover:bg-[var(--netz-brand-primary)]/90"
+								? "bg-(--netz-danger) hover:bg-(--netz-danger)/90"
+								: "bg-(--netz-brand-primary) hover:bg-(--netz-brand-primary)/90"
 						}`}
 					>
 						{#if submitting}

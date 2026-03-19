@@ -2,7 +2,7 @@
   Fund Detail — full metrics, NAV chart, risk metrics.
 -->
 <script lang="ts">
-	import { DataCard, StatusBadge, TimeSeriesChart, PageHeader, EmptyState, formatDate, formatNumber, formatPercent, formatRatio } from "@netz/ui";
+	import { DataCard, StatusBadge, TimeSeriesChart, PageHeader, SectionCard, EmptyState, formatDate, formatNumber, formatPercent, formatRatio } from "@netz/ui";
 	import { resolveWealthStatus } from "$lib/utils/status-maps";
 	import type { PageData } from "./$types";
 
@@ -61,13 +61,13 @@
 	}
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	{#if fund}
 		<PageHeader title={fund.name}>
 			{#snippet actions()}
 				<div class="flex items-center gap-2">
 					{#if fund.ticker}
-						<span class="rounded bg-[var(--netz-surface-alt)] px-2 py-1 text-xs font-mono text-[var(--netz-text-secondary)]">
+						<span class="rounded bg-(--netz-surface-alt) px-2 py-1 text-xs font-mono text-(--netz-text-secondary)">
 							{fund.ticker}
 						</span>
 					{/if}
@@ -87,8 +87,7 @@
 		</div>
 
 		<!-- NAV Chart -->
-		<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
-			<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">NAV History</h3>
+		<SectionCard title="NAV History">
 			{#if navSeries.length > 0 && navSeries[0]!.data.length > 0}
 				<div class="h-80">
 					<TimeSeriesChart
@@ -101,12 +100,21 @@
 			{:else}
 				<EmptyState title="No NAV Data" message="NAV history will appear once ingested." />
 			{/if}
-		</div>
+		</SectionCard>
 
 		<!-- Risk Metrics -->
-		{#if risk}
-			<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
-				<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Risk Metrics</h3>
+		{#if risk === null}
+			<SectionCard title="Risk Overview">
+				<div class="flex items-center gap-2 py-8 text-sm text-(--netz-text-muted)">
+					<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+						<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+					</svg>
+					<span>Awaiting risk data from analysis engine...</span>
+				</div>
+			</SectionCard>
+		{:else}
+			<SectionCard title="Risk Metrics">
 				<div class="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
 					<DataCard label="CVaR 95%" value={fmtPct(risk.cvar_95)} trend="flat" />
 					<DataCard label="VaR 95%" value={fmtPct(risk.var_95)} trend="flat" />
@@ -118,7 +126,7 @@
 					<DataCard label="Sortino" value={formatRatio(risk.sortino_ratio, 2, "", "en-US")} trend="flat" />
 					<DataCard label="Calmar" value={formatRatio(risk.calmar_ratio, 2, "", "en-US")} trend="flat" />
 				</div>
-			</div>
+			</SectionCard>
 		{/if}
 	{:else}
 		<EmptyState title="Fund Not Found" message="The requested fund could not be loaded." />

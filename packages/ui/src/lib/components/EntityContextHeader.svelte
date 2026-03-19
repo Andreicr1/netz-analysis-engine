@@ -26,20 +26,20 @@
 	const statusStyle = $derived.by(() => {
 		switch (status) {
 			case "active":
-				return { border: "border-l-[var(--netz-info)]", dot: "bg-[var(--netz-info)]", label: "Active" };
+				return { border: "border-l-(--netz-info)", dot: "bg-(--netz-info)", label: "Active" };
 			case "suspended":
-				return { border: "border-l-[var(--netz-warning)]", dot: "bg-[var(--netz-warning)]", label: "Suspended" };
+				return { border: "border-l-(--netz-warning)", dot: "bg-(--netz-warning)", label: "Suspended" };
 			case "archived":
-				return { border: "border-l-[var(--netz-text-muted)]", dot: "bg-[var(--netz-text-muted)]", label: "Archived" };
+				return { border: "border-l-(--netz-text-muted)", dot: "bg-(--netz-text-muted)", label: "Archived" };
 			default:
-				return { border: "border-l-[var(--netz-info)]", dot: "bg-[var(--netz-info)]", label: status ?? "" };
+				return { border: "border-l-(--netz-info)", dot: "bg-(--netz-info)", label: status ?? "" };
 		}
 	});
 </script>
 
 <section
 	class={cn(
-		"sticky top-0 z-20 border-b border-[var(--netz-border)] bg-[var(--netz-surface)]/95 px-6 py-4 backdrop-blur",
+		"sticky top-0 z-20 border-b border-(--netz-border) bg-(--netz-surface)/95 px-6 py-4 backdrop-blur",
 		"border-l-4",
 		statusStyle.border,
 		className,
@@ -47,16 +47,16 @@
 >
 	<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 		<div class="min-w-0 space-y-2">
-			<p class="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--netz-text-muted)]">
+			<p class="text-xs font-semibold uppercase tracking-[0.18em] text-(--netz-text-muted)">
 				{scopeLabel}
 			</p>
 			<div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-				<h1 class="text-xl font-semibold text-[var(--netz-text-primary)]">{title}</h1>
-				<span class="inline-flex items-center rounded-full border border-[var(--netz-border)] px-2.5 py-0.5 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--netz-text-secondary)]">
+				<h1 class="text-xl font-semibold text-(--netz-text-primary)">{title}</h1>
+				<span class="inline-flex items-center rounded-full border border-(--netz-border) px-2.5 py-0.5 font-mono text-[11px] uppercase tracking-[0.14em] text-(--netz-text-secondary)">
 					{orgId}
 				</span>
 			</div>
-			<div class="flex flex-wrap items-center gap-3 text-sm text-[var(--netz-text-secondary)]">
+			<div class="flex flex-wrap items-center gap-3 text-sm text-(--netz-text-secondary)">
 				{#if slug}
 					<span>Slug: {slug}</span>
 				{/if}

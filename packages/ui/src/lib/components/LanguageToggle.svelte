@@ -12,7 +12,7 @@
 
 <div
 	class={cn(
-		"inline-flex rounded-md border border-[var(--netz-border)]",
+		"inline-flex rounded-md border border-(--netz-border)",
 		className,
 	)}
 >
@@ -20,8 +20,8 @@
 		class={cn(
 			"rounded-l-md px-2.5 py-1 text-xs font-medium transition-colors",
 			value === "pt"
-				? "bg-[var(--netz-brand-primary)] text-white"
-				: "bg-[var(--netz-surface)] text-[var(--netz-text-secondary)] hover:bg-[var(--netz-surface-alt)]",
+				? "bg-(--netz-brand-primary) text-white"
+				: "bg-(--netz-surface) text-(--netz-text-secondary) hover:bg-(--netz-surface-alt)",
 		)}
 		onclick={() => onchange("pt")}
 	>
@@ -31,8 +31,8 @@
 		class={cn(
 			"rounded-r-md px-2.5 py-1 text-xs font-medium transition-colors",
 			value === "en"
-				? "bg-[var(--netz-brand-primary)] text-white"
-				: "bg-[var(--netz-surface)] text-[var(--netz-text-secondary)] hover:bg-[var(--netz-surface-alt)]",
+				? "bg-(--netz-brand-primary) text-white"
+				: "bg-(--netz-surface) text-(--netz-text-secondary) hover:bg-(--netz-surface-alt)",
 		)}
 		onclick={() => onchange("en")}
 	>

@@ -72,14 +72,14 @@
 	style="height: {height}px"
 >
 	{#if loading}
-		<div class="absolute inset-0 z-10 flex items-center justify-center bg-[var(--netz-surface)]/80">
-			<div class="h-8 w-8 animate-spin rounded-full border-4 border-[var(--netz-border)] border-t-[var(--netz-brand-secondary)]"></div>
+		<div class="absolute inset-0 z-10 flex items-center justify-center bg-(--netz-surface)/80">
+			<div class="h-8 w-8 animate-spin rounded-full border-4 border-(--netz-border) border-t-(--netz-brand-secondary)"></div>
 		</div>
 	{/if}
 
 	{#if empty && !loading}
 		<div class="absolute inset-0 z-10 flex items-center justify-center">
-			<p class="text-sm text-[var(--netz-text-muted)]">{emptyMessage}</p>
+			<p class="text-sm text-(--netz-text-muted)">{emptyMessage}</p>
 		</div>
 	{/if}
 

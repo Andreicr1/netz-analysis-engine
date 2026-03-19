@@ -34,15 +34,15 @@
 	{:else}
 		<div class="mt-6 space-y-3">
 			{#each documents as doc (doc.id)}
-				<div class="flex items-center justify-between rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface)] p-4">
+				<div class="flex items-center justify-between rounded-lg border border-(--netz-border) bg-(--netz-surface) p-4">
 					<div class="flex-1">
 						<div class="flex items-center gap-2">
-							<p class="font-medium text-[var(--netz-text-primary)]">
+							<p class="font-medium text-(--netz-text-primary)">
 								{doc.title}
 							</p>
 							<StatusBadge status={doc.status as string} resolve={resolveCreditStatus} />
 						</div>
-						<p class="mt-1 text-sm text-[var(--netz-text-muted)]">
+						<p class="mt-1 text-sm text-(--netz-text-muted)">
 							{doc.document_type}
 							{#if doc.created_at}
 								&middot; {formatDate(doc.created_at as string)}
@@ -51,7 +51,7 @@
 					</div>
 					{#if doc.blob_uri}
 						<button
-							class="inline-flex h-9 items-center gap-2 rounded-md bg-[var(--netz-brand-primary)] px-4 text-sm font-medium text-white transition-colors hover:opacity-90"
+							class="inline-flex h-9 items-center gap-2 rounded-md bg-(--netz-brand-primary) px-4 text-sm font-medium text-white transition-colors hover:opacity-90"
 							onclick={() => downloadDocument(doc)}
 						>
 							<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

@@ -89,7 +89,7 @@
 	}
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	<PageHeader title={fund ? `DD Reports — ${fund.name}` : "DD Reports"}>
 		{#snippet actions()}
 			<ActionButton onclick={triggerGeneration} loading={generating} loadingText="Generating...">
@@ -99,7 +99,7 @@
 	</PageHeader>
 
 	{#if actionError}
-		<div class="rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+		<div class="rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
 			{actionError}
 			<button class="ml-2 underline" onclick={() => actionError = null}>dismiss</button>
 		</div>
@@ -114,12 +114,12 @@
 						onclick={() => goto(`/dd-reports/${data.fundId}/${report.report_id}`)}
 					>
 						<div class="flex items-center gap-2">
-							<p class="text-sm font-medium text-[var(--netz-text-primary)]">
+							<p class="text-sm font-medium text-(--netz-text-primary)">
 								Version {report.version}
 							</p>
 							<StatusBadge status={report.status} type="default" resolve={resolveWealthStatus} />
 						</div>
-						<p class="mt-1 text-xs text-[var(--netz-text-muted)]">
+						<p class="mt-1 text-xs text-(--netz-text-muted)">
 							{formatDate(report.created_at)}
 						</p>
 					</button>

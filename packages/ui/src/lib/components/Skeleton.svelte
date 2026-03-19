@@ -11,7 +11,7 @@
 </script>
 
 <div
-	class={cn("animate-pulse rounded-md bg-[var(--netz-border)]", className)}
+	class={cn("animate-pulse rounded-md bg-(--netz-border)", className)}
 	style:width={width}
 	style:height={height}
 ></div>

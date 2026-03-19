@@ -2,9 +2,14 @@
   Branding Editor — color pickers, font selector, logo upload, live preview.
 -->
 <script lang="ts">
-	import { SectionCard } from "@netz/ui";
+	import { SectionCard, ActionButton } from "@netz/ui";
+	import { createClientApiClient } from "$lib/api/client";
 
-	let { branding, orgId }: { branding: Record<string, string>; orgId: string } = $props();
+	let {
+		branding,
+		orgId,
+		token,
+	}: { branding: Record<string, string>; orgId: string; token: string } = $props();
 
 	const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
@@ -19,8 +24,14 @@
 		{ key: "text_secondary", label: "Text Secondary" },
 	];
 
+	// svelte-ignore state_referenced_locally
 	let values = $state<Record<string, string>>({ ...branding });
 	let errors = $state<Record<string, string>>({});
+	let saving = $state(false);
+	let saveError = $state<string | null>(null);
+	let saveMessage = $state<string | null>(null);
+
+	const api = createClientApiClient(() => Promise.resolve(token));
 
 	function validateHex(key: string, value: string) {
 		if (!HEX_RE.test(value)) {
@@ -32,6 +43,21 @@
 	}
 
 	const hasErrors = $derived(Object.keys(errors).length > 0);
+
+	async function saveBranding() {
+		saving = true;
+		saveError = null;
+		saveMessage = null;
+		try {
+			await api.put(`/admin/tenants/${orgId}/branding`, values);
+			saveMessage = "Branding saved successfully";
+			setTimeout(() => (saveMessage = null), 3000);
+		} catch (e: unknown) {
+			saveError = e instanceof Error ? e.message : "Failed to save branding";
+		} finally {
+			saving = false;
+		}
+	}
 </script>
 
 <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -44,10 +70,10 @@
 						type="color"
 						value={values[field.key] ?? "#000000"}
 						oninput={(e) => validateHex(field.key, e.currentTarget.value)}
-						class="h-8 w-8 cursor-pointer rounded border border-[var(--netz-border)]"
+						class="h-8 w-8 cursor-pointer rounded border border-(--netz-border)"
 					/>
 					<div class="flex-1">
-						<label for="color-{field.key}" class="text-xs text-[var(--netz-text-muted)]">
+						<label for="color-{field.key}" class="text-xs text-(--netz-text-muted)">
 							{field.label}
 						</label>
 						<input
@@ -55,12 +81,12 @@
 							type="text"
 							value={values[field.key] ?? ""}
 							oninput={(e) => validateHex(field.key, e.currentTarget.value)}
-							class="w-full rounded border border-[var(--netz-border)] bg-[var(--netz-surface)] px-2 py-1 font-mono text-xs text-[var(--netz-text-primary)]"
+							class="w-full rounded border border-(--netz-border) bg-(--netz-surface) px-2 py-1 font-mono text-xs text-(--netz-text-primary)"
 							placeholder="#000000"
 						/>
 					</div>
 					{#if errors[field.key]}
-						<span class="text-xs text-red-500">{errors[field.key]}</span>
+						<span class="text-xs text-(--netz-danger)">{errors[field.key]}</span>
 					{/if}
 				</div>
 			{/each}
@@ -111,12 +137,22 @@
 	</SectionCard>
 </div>
 
+<!-- Save feedback -->
+{#if saveError}
+	<p role="alert" class="mt-4 text-xs text-(--netz-danger)">{saveError}</p>
+{/if}
+{#if saveMessage}
+	<p class="mt-4 text-xs text-(--netz-brand-primary)">{saveMessage}</p>
+{/if}
+
 <!-- Save Button -->
 <div class="mt-6 flex justify-end">
-	<button
+	<ActionButton
+		onclick={saveBranding}
+		loading={saving}
+		loadingText="Saving..."
 		disabled={hasErrors}
-		class="rounded-md bg-[var(--netz-brand-primary)] px-6 py-2 text-sm text-white hover:opacity-90 disabled:opacity-50"
 	>
 		Save Branding
-	</button>
+	</ActionButton>
 </div>

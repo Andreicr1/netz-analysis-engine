@@ -301,7 +301,7 @@
 			</div>
 		{/snippet}
 	</PageHeader>
-	<p class="-mt-3 text-sm text-(--netz-text-muted)">
+	<p class="mt-1 text-sm text-(--netz-text-muted)">
 		Strategic targets, tactical tilts, and effective exposure for the {activeProfileLabel} profile.
 	</p>
 

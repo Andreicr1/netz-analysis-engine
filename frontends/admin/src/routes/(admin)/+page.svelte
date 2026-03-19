@@ -8,5 +8,5 @@
 </script>
 
 <div class="flex h-full items-center justify-center">
-	<p class="text-[var(--netz-text-muted)]">Redirecting...</p>
+	<p class="text-(--netz-text-muted)">Redirecting...</p>
 </div>

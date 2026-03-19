@@ -4,7 +4,7 @@
   + ContextPanel side panel with FundDetailPanel.
 -->
 <script lang="ts">
-	import { Badge, Button, EmptyState, PageHeader, formatAUM as formatSharedAUM, formatDate as formatSharedDate, formatNumber } from "@netz/ui";
+	import { Badge, Button, EmptyState, PageHeader, Skeleton, formatAUM as formatSharedAUM, formatDate as formatSharedDate, formatNumber } from "@netz/ui";
 	import FundDetailPanel from "$lib/components/FundDetailPanel.svelte";
 	import type { PageData } from "./$types";
 
@@ -44,9 +44,9 @@
 	let activeStatusTab = $state<StatusTab>("todos");
 
 	const statusTabs: { value: StatusTab; label: string }[] = [
-		{ value: "todos", label: "Todos" },
-		{ value: "aprovados", label: "Aprovados" },
-		{ value: "dd_pendente", label: "DD Pendente" },
+		{ value: "todos", label: "All" },
+		{ value: "aprovados", label: "Approved" },
+		{ value: "dd_pendente", label: "DD Pending" },
 		{ value: "watchlist", label: "Watchlist" },
 	];
 
@@ -128,9 +128,9 @@
 
 	function getStatusLabel(status: string | null): string {
 		switch (status) {
-			case "aprovado": return "Aprovado";
+			case "aprovado": return "Approved";
 			case "watchlist": return "Watchlist";
-			case "dd_pendente": return "Pendente DD";
+			case "dd_pendente": return "DD Pending";
 			default: return status ?? "—";
 		}
 	}
@@ -149,9 +149,9 @@
 
 	function getDDReportLabel(ddStatus: string | null): string {
 		switch (ddStatus) {
-			case "complete": return "Completo";
-			case "generating": return "Gerando…";
-			case "pendente": return "Pendente";
+			case "complete": return "Complete";
+			case "generating": return "Generating...";
+			case "pendente": return "Pending";
 			default: return "Pendente";
 		}
 	}
@@ -167,7 +167,7 @@
 	}
 </script>
 
-<div class="space-y-6 p-(--netz-space-page-gutter)">
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	<!-- Page Header -->
 	<PageHeader title="Fund Universe">
 		{#snippet actions()}
@@ -175,13 +175,20 @@
 				<svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
 					<path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
 				</svg>
-				Adicionar fundo
+				Add Fund
 			</Button>
 		{/snippet}
 	</PageHeader>
 
 	<!-- Fund Table -->
-	<div class="overflow-hidden rounded-(--netz-radius-xl) border border-(--netz-border-subtle) bg-(--netz-surface-panel) shadow-(--netz-shadow-card)">
+	{#if !data.funds}
+		<div class="space-y-3">
+			{#each Array(5) as _}
+				<Skeleton class="h-14 rounded-lg" />
+			{/each}
+		</div>
+	{/if}
+	<div class="overflow-hidden rounded-(--netz-radius-xl) border border-(--netz-border-subtle) bg-(--netz-surface-panel) shadow-(--netz-shadow-card)" class:hidden={!data.funds}>
 		<!-- Status Tabs -->
 		<div class="border-b border-(--netz-border-subtle) bg-(--netz-surface-highlight) px-3 py-3">
 			<div class="flex flex-wrap items-center gap-2">
@@ -216,16 +223,16 @@
 					<thead>
 						<tr class="border-b border-(--netz-border-subtle) bg-(--netz-surface-highlight)">
 							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">
-								Fundo
+								Fund
 							</th>
 							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">
-								Gestor
+								Manager
 							</th>
 							<th class="px-4 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">
 								AUM
 							</th>
 							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">
-								Estratégia
+								Strategy
 							</th>
 							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">
 								Status
@@ -237,7 +244,7 @@
 								Score
 							</th>
 							<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">
-								Atualizado
+								Updated
 							</th>
 						</tr>
 					</thead>
@@ -248,7 +255,7 @@
 								class:bg-(--netz-accent-soft)={selectedFund?.id === fund.id && panelOpen}
 								onclick={() => openPanel(fund)}
 							>
-								<!-- Fundo: name + subcategory -->
+								<!-- Fund: name + subcategory -->
 								<td class="px-4 py-3">
 									<div>
 										<p class="font-medium text-(--netz-text-primary)">{fund.name}</p>
@@ -258,7 +265,7 @@
 									</div>
 								</td>
 
-								<!-- Gestor -->
+								<!-- Manager -->
 								<td class="px-4 py-3 text-(--netz-text-secondary)">
 									{fund.manager ?? "—"}
 								</td>
@@ -268,7 +275,7 @@
 									{formatAum(fund.aum)}
 								</td>
 
-								<!-- Estratégia badge -->
+								<!-- Strategy badge -->
 								<td class="px-4 py-3">
 									{#if fund.strategy}
 										<span
@@ -322,12 +329,12 @@
 											{formatNumber(fund.score, 1, "en-US")}
 										</span>
 									{:else}
-										<span class="text-[var(--netz-text-muted)]">—</span>
+										<span class="text-(--netz-text-muted)">—</span>
 									{/if}
 								</td>
 
-								<!-- Atualizado -->
-								<td class="px-4 py-3 text-[var(--netz-text-muted)]">
+								<!-- Updated -->
+								<td class="px-4 py-3 text-(--netz-text-muted)">
 									{formatDate(fund.updated_at)}
 								</td>
 							</tr>
@@ -337,11 +344,11 @@
 			</div>
 		{:else}
 			<EmptyState
-				title="Nenhum fundo encontrado"
+				title="No funds found"
 				message={activeStatusTab === "todos"
-					? "Adicione fundos ao universo para começar."
-					: "Nenhum fundo nesta categoria no momento."}
-				actionLabel={activeStatusTab === "todos" ? "Adicionar fundo" : undefined}
+					? "Add funds to the universe to get started."
+					: "No funds in this category at the moment."}
+				actionLabel={activeStatusTab === "todos" ? "Add Fund" : undefined}
 			/>
 		{/if}
 	</div>

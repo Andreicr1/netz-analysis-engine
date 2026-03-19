@@ -249,7 +249,7 @@
 
 <SectionCard title="{configType} — {isDefault ? 'Default' : `Override (v${version})`}">
 	{#if loading}
-		<p class="text-sm text-[var(--netz-text-muted)]">Loading...</p>
+		<p class="text-sm text-(--netz-text-muted)">Loading...</p>
 	{:else}
 		<div class="space-y-4">
 			<!-- CodeMirror JSON editor (replaces textarea) -->
@@ -260,10 +260,10 @@
 			/>
 
 			{#if saveError}
-				<p role="alert" class="text-xs text-[var(--netz-danger)]">{saveError}</p>
+				<p role="alert" class="text-xs text-(--netz-danger)">{saveError}</p>
 			{/if}
 			{#if saveMessage}
-				<p class="text-xs text-[var(--netz-brand-primary)]">{saveMessage}</p>
+				<p class="text-xs text-(--netz-brand-primary)">{saveMessage}</p>
 			{/if}
 
 			<div class="flex items-center justify-between">
@@ -309,11 +309,11 @@
 	<ConfigDiffView {diff} />
 {:else if orgId && diffLoading}
 	<SectionCard title="Diff — {configType}">
-		<p class="text-sm text-[var(--netz-text-muted)]">Loading diff...</p>
+		<p class="text-sm text-(--netz-text-muted)">Loading diff...</p>
 	</SectionCard>
 {:else if orgId && diffError}
 	<SectionCard title="Diff — {configType}">
-		<p class="text-sm text-[var(--netz-danger)]">{diffError}</p>
+		<p class="text-sm text-(--netz-danger)">{diffError}</p>
 	</SectionCard>
 {/if}
 
@@ -346,7 +346,7 @@
 				</li>
 			{/if}
 			{#if diff && diff.tenant_count_affected > 1}
-				<li class="font-medium text-[var(--netz-warning)]">
+				<li class="font-medium text-(--netz-warning)">
 					This will affect {diff.tenant_count_affected} tenants
 				</li>
 			{/if}
@@ -371,7 +371,7 @@
 >
 	{#snippet consequenceList()}
 		<ul class="list-disc space-y-1 pl-4 text-sm">
-			<li class="font-medium text-[var(--netz-danger)]">
+			<li class="font-medium text-(--netz-danger)">
 				ALL tenants without overrides will be affected immediately
 			</li>
 			<li>This change cannot be undone automatically — a new default must be set to revert</li>

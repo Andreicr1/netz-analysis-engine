@@ -121,7 +121,7 @@
 					{@render filterBar(table)}
 				{:else if filterColumn}
 					<input
-						class="netz-ui-field flex h-[var(--netz-space-control-height-md)] w-full max-w-sm rounded-[var(--netz-radius-md)] px-3.5 py-2 text-sm tracking-[-0.005em] text-[var(--netz-text-primary)] placeholder:text-[var(--netz-text-muted)]"
+						class="netz-ui-field flex h-(--netz-space-control-height-md) w-full max-w-sm rounded-(--netz-radius-md) px-3.5 py-2 text-sm tracking-[-0.005em] text-(--netz-text-primary) placeholder:text-(--netz-text-muted)"
 						placeholder={filterPlaceholder}
 						value={(table.getColumn(filterColumn)?.getFilterValue() as string) ?? ""}
 						oninput={(event) => {
@@ -141,17 +141,17 @@
 		</div>
 	{/if}
 
-	<div class="overflow-hidden rounded-[var(--netz-radius-lg)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-panel)] shadow-[var(--netz-shadow-1)]">
+	<div class="overflow-hidden rounded-(--netz-radius-lg) border border-(--netz-border-subtle) bg-(--netz-surface-panel) shadow-(--netz-shadow-1)">
 		<table class="w-full caption-bottom text-sm">
-			<thead class="border-b border-[var(--netz-border-subtle)] bg-[var(--netz-surface-highlight)]">
+			<thead class="border-b border-(--netz-border-subtle) bg-(--netz-surface-highlight)">
 				{#each table.getHeaderGroups() as headerGroup}
 					<tr>
 						{#each headerGroup.headers as header}
-							<th class="h-11 px-4 text-left align-middle text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--netz-text-muted)]">
+							<th class="h-11 px-4 text-left align-middle text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">
 								{#if !header.isPlaceholder}
 									{#if header.column.getCanSort()}
 										<button
-											class="flex items-center gap-1.5 text-[var(--netz-text-muted)] transition-colors duration-[var(--netz-duration-fast)] hover:text-[var(--netz-text-secondary)]"
+											class="flex items-center gap-1.5 text-(--netz-text-muted) transition-colors duration-(--netz-duration-fast) hover:text-(--netz-text-secondary)"
 											onclick={(event) =>
 												header.column.toggleSorting(
 													header.column.getIsSorted() === "asc",
@@ -206,15 +206,15 @@
 			</thead>
 			<tbody>
 				{#each table.getRowModel().rows as row}
-					<tr class="border-b border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] transition-colors last:border-b-0 hover:bg-[var(--netz-accent-soft)]">
+					<tr class="border-b border-(--netz-border-subtle) bg-(--netz-surface-elevated) transition-colors last:border-b-0 hover:bg-(--netz-accent-soft)">
 						{#each row.getVisibleCells() as cell}
-							<td class="px-4 py-3.5 align-middle text-[var(--netz-text-primary)]">
+							<td class="px-4 py-3.5 align-middle text-(--netz-text-primary)">
 								<FlexRender content={cell.column.columnDef.cell} context={cell.getContext()} />
 							</td>
 						{/each}
 					</tr>
 					{#if expandedRow && row.getIsExpanded()}
-						<tr class="border-b border-[var(--netz-border-subtle)] bg-[var(--netz-surface-inset)] last:border-b-0">
+						<tr class="border-b border-(--netz-border-subtle) bg-(--netz-surface-inset) last:border-b-0">
 							<td colspan={columns.length} class="px-4 py-3">
 								{@render expandedRow(row.original)}
 							</td>
@@ -222,7 +222,7 @@
 					{/if}
 				{:else}
 					<tr>
-						<td colspan={columns.length} class="h-24 bg-[var(--netz-surface-elevated)] text-center text-[var(--netz-text-muted)]">
+						<td colspan={columns.length} class="h-24 bg-(--netz-surface-elevated) text-center text-(--netz-text-muted)">
 							{#if emptyState}
 								{@render emptyState()}
 							{:else}
@@ -236,7 +236,7 @@
 	</div>
 
 	{#if pageCount > 1}
-		<div class="mt-3 flex flex-col gap-3 rounded-[var(--netz-radius-lg)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-highlight)] px-4 py-3 text-sm text-[var(--netz-text-secondary)] sm:flex-row sm:items-center sm:justify-between">
+		<div class="mt-3 flex flex-col gap-3 rounded-(--netz-radius-lg) border border-(--netz-border-subtle) bg-(--netz-surface-highlight) px-4 py-3 text-sm text-(--netz-text-secondary) sm:flex-row sm:items-center sm:justify-between">
 			<span>
 				Showing {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}-{Math.min(
 					(table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
@@ -245,7 +245,7 @@
 			</span>
 			<div class="flex items-center gap-2">
 				<select
-					class="netz-ui-field h-[var(--netz-space-control-height-sm)] rounded-[var(--netz-radius-md)] bg-[var(--netz-surface-elevated)] px-2.5 text-xs text-[var(--netz-text-primary)]"
+					class="netz-ui-field h-(--netz-space-control-height-sm) rounded-(--netz-radius-md) bg-(--netz-surface-elevated) px-2.5 text-xs text-(--netz-text-primary)"
 					value={table.getState().pagination.pageSize}
 					onchange={(event) =>
 						table.setPageSize(clampPageSize(Number((event.target as HTMLSelectElement).value)))}
@@ -255,7 +255,7 @@
 					{/each}
 				</select>
 				<button
-					class="inline-flex h-[var(--netz-space-control-height-sm)] w-[var(--netz-space-control-height-sm)] items-center justify-center rounded-[var(--netz-radius-md)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] text-[var(--netz-text-secondary)] shadow-[var(--netz-shadow-1)] transition-[color,background-color,border-color] duration-[var(--netz-duration-fast)] hover:bg-[var(--netz-accent-soft)] hover:text-[var(--netz-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+					class="inline-flex h-(--netz-space-control-height-sm) w-(--netz-space-control-height-sm) items-center justify-center rounded-(--netz-radius-md) border border-(--netz-border-subtle) bg-(--netz-surface-elevated) text-(--netz-text-secondary) shadow-(--netz-shadow-1) transition-[color,background-color,border-color] duration-(--netz-duration-fast) hover:bg-(--netz-accent-soft) hover:text-(--netz-text-primary) disabled:cursor-not-allowed disabled:opacity-50"
 					onclick={() => table.previousPage()}
 					disabled={!table.getCanPreviousPage()}
 					aria-label="Previous page"
@@ -270,11 +270,11 @@
 						stroke-width="2"><path d="m15 18-6-6 6-6" /></svg
 					>
 				</button>
-				<span class="min-w-14 text-center text-xs font-semibold tracking-[0.02em] text-[var(--netz-text-secondary)]">
+				<span class="min-w-14 text-center text-xs font-semibold tracking-[0.02em] text-(--netz-text-secondary)">
 					{table.getState().pagination.pageIndex + 1} / {pageCount}
 				</span>
 				<button
-					class="inline-flex h-[var(--netz-space-control-height-sm)] w-[var(--netz-space-control-height-sm)] items-center justify-center rounded-[var(--netz-radius-md)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] text-[var(--netz-text-secondary)] shadow-[var(--netz-shadow-1)] transition-[color,background-color,border-color] duration-[var(--netz-duration-fast)] hover:bg-[var(--netz-accent-soft)] hover:text-[var(--netz-text-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+					class="inline-flex h-(--netz-space-control-height-sm) w-(--netz-space-control-height-sm) items-center justify-center rounded-(--netz-radius-md) border border-(--netz-border-subtle) bg-(--netz-surface-elevated) text-(--netz-text-secondary) shadow-(--netz-shadow-1) transition-[color,background-color,border-color] duration-(--netz-duration-fast) hover:bg-(--netz-accent-soft) hover:text-(--netz-text-primary) disabled:cursor-not-allowed disabled:opacity-50"
 					onclick={() => table.nextPage()}
 					disabled={!table.getCanNextPage()}
 					aria-label="Next page"

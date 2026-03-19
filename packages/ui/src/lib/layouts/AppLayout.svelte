@@ -11,6 +11,7 @@
 	import { ErrorBoundary, Toast } from "../index.js";
 	import TopNav from "./TopNav.svelte";
 	import ContextSidebar from "./ContextSidebar.svelte";
+	import ThemeToggle from "../components/ThemeToggle.svelte";
 	import { injectBranding, startSessionExpiryMonitor, setConflictHandler, setAuthRedirectHandler } from "../utils/index.js";
 	import type { NavItem, BrandingConfig, ContextNav } from "../utils/types.js";
 	import { goto, invalidateAll } from "$app/navigation";
@@ -24,7 +25,7 @@
 		token,
 		contextNav,
 		logo,
-		trailing,
+		trailing: trailingSnippet,
 		children,
 	}: {
 		navItems: NavItem[];
@@ -78,8 +79,14 @@
 			{appName}
 			activeHref={$page.url.pathname}
 			{logo}
-			{trailing}
-		/>
+		>
+			{#snippet trailing()}
+				{#if trailingSnippet}
+					{@render trailingSnippet()}
+				{/if}
+				<ThemeToggle />
+			{/snippet}
+		</TopNav>
 
 		<div class="netz-app-layout__body">
 			{#if contextNav}
@@ -95,20 +102,20 @@
 
 {#if showExpiryWarning}
 	<div class="fixed inset-0 z-50 flex items-center justify-center" style="background: var(--netz-surface-overlay, rgba(0,0,0,0.5))">
-		<div class="mx-4 w-full max-w-md rounded-lg bg-[var(--netz-surface-elevated)] p-6 shadow-xl">
-			<h2 class="mb-2 text-lg font-semibold text-[var(--netz-text-primary)]">Session Expiring</h2>
-			<p class="mb-4 text-sm text-[var(--netz-text-secondary)]">
+		<div class="mx-4 w-full max-w-md rounded-lg bg-(--netz-surface-elevated) p-6 shadow-xl">
+			<h2 class="mb-2 text-lg font-semibold text-(--netz-text-primary)">Session Expiring</h2>
+			<p class="mb-4 text-sm text-(--netz-text-secondary)">
 				Your session expires in 5 minutes. Please save your work and renew your access.
 			</p>
 			<div class="flex justify-end gap-3">
 				<button
-					class="rounded-md px-4 py-2 text-sm font-medium text-[var(--netz-text-secondary)] hover:bg-[var(--netz-surface-alt)]"
+					class="rounded-md px-4 py-2 text-sm font-medium text-(--netz-text-secondary) hover:bg-(--netz-surface-alt)"
 					onclick={() => showExpiryWarning = false}
 				>
 					Dismiss
 				</button>
 				<button
-					class="rounded-md bg-[var(--netz-brand-primary)] px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+					class="rounded-md bg-(--netz-brand-primary) px-4 py-2 text-sm font-medium text-white hover:opacity-90"
 					onclick={() => { showExpiryWarning = false; window.location.reload(); }}
 				>
 					Renew Session
@@ -142,7 +149,7 @@
 		flex: 1;
 		overflow-y: auto;
 		overflow-x: hidden;
-		background: var(--netz-surface-alt, #f9fafb);
+		background: var(--netz-surface, #f9fafb);
 		min-width: 0;
 	}
 </style>

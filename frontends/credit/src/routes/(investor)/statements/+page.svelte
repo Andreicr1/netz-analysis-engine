@@ -27,13 +27,13 @@
 	{:else}
 		<div class="mt-6 space-y-4">
 			{#each statements as stmt (stmt.id)}
-				<div class="flex items-center justify-between rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface)] p-4">
+				<div class="flex items-center justify-between rounded-lg border border-(--netz-border) bg-(--netz-surface) p-4">
 					<div>
-						<p class="font-medium text-[var(--netz-text-primary)]">
+						<p class="font-medium text-(--netz-text-primary)">
 							{stmt.period_month ?? "Statement"}
 						</p>
 						{#if stmt.created_at}
-							<p class="text-sm text-[var(--netz-text-muted)]">
+							<p class="text-sm text-(--netz-text-muted)">
 								Created: {formatDate(stmt.created_at as string)}
 							</p>
 						{/if}

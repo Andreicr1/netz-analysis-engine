@@ -208,15 +208,15 @@
 
 <div
 	class={cn(
-		"rounded-xl border border-[var(--netz-border)] bg-[var(--netz-surface)] p-4 shadow-sm",
+		"rounded-xl border border-(--netz-border) bg-(--netz-surface) p-4 shadow-sm",
 		className,
 	)}
 >
 	<div class="flex flex-wrap items-start justify-between gap-3">
 		<div class="space-y-1">
-			<p class="text-sm font-semibold text-[var(--netz-text-primary)]">{title}</p>
+			<p class="text-sm font-semibold text-(--netz-text-primary)">{title}</p>
 			{#if description}
-				<p class="text-sm text-[var(--netz-text-secondary)]">{description}</p>
+				<p class="text-sm text-(--netz-text-secondary)">{description}</p>
 			{/if}
 		</div>
 
@@ -231,8 +231,8 @@
 
 	<div class="mt-4 space-y-3">
 		<div class="space-y-1">
-			<p class="text-sm text-[var(--netz-text-primary)]">{statusMessage}</p>
-			<div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--netz-text-muted)]">
+			<p class="text-sm text-(--netz-text-primary)">{statusMessage}</p>
+			<div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-(--netz-text-muted)">
 				{#if progressLabel}
 					<span>Progress: {progressLabel}</span>
 				{/if}
@@ -245,7 +245,7 @@
 			</div>
 		</div>
 
-		<div class="h-2 overflow-hidden rounded-full bg-[var(--netz-surface-inset)]">
+		<div class="h-2 overflow-hidden rounded-full bg-(--netz-surface-inset)">
 			<div
 				class="h-full rounded-full transition-[width] duration-300"
 				style={`width: ${currentState === "starting" ? "12%" : `${progress}%`}; background-color: ${statusTone};`}
@@ -257,8 +257,8 @@
 				class="rounded-lg border px-3 py-2 text-sm"
 				style="border-color: var(--netz-danger); background-color: color-mix(in srgb, var(--netz-danger) 10%, var(--netz-surface)); color: var(--netz-text-primary);"
 			>
-				<p class="font-medium text-[var(--netz-danger)]">Failure detail</p>
-				<p class="mt-1 text-[var(--netz-text-secondary)]">{failureDetail}</p>
+				<p class="font-medium text-(--netz-danger)">Failure detail</p>
+				<p class="mt-1 text-(--netz-text-secondary)">{failureDetail}</p>
 			</div>
 		{/if}
 	</div>

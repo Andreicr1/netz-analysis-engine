@@ -58,8 +58,8 @@
 	// ── Filters ──────────────────────────────────────────────────────────────
 
 	const PROFILES = [
-		{ value: "conservative", label: "Conservador" },
-		{ value: "moderate", label: "Moderado" },
+		{ value: "conservative", label: "Conservative" },
+		{ value: "moderate", label: "Moderate" },
 		{ value: "growth", label: "Growth" },
 	];
 
@@ -76,11 +76,11 @@
 	// ── Tabs ─────────────────────────────────────────────────────────────────
 
 	const TABS = [
-		{ value: "correlacoes", label: "Correlações" },
+		{ value: "correlacoes", label: "Correlations" },
 		{ value: "backtest", label: "Backtest & Walk-Forward" },
 		{ value: "pareto", label: "Pareto Frontier" },
 		{ value: "whatif", label: "What-If Scenarios" },
-		{ value: "atribuicao", label: "Atribuição de Performance" },
+		{ value: "atribuicao", label: "Performance Attribution" },
 	];
 
 	// ── Correlações KPIs ────────────────────────────────────────────────────
@@ -99,7 +99,7 @@
 		if (dateFrom && dateTo) return `${dateFrom} - ${dateTo}`;
 		if (dateFrom) return `From ${dateFrom}`;
 		if (dateTo) return `Until ${dateTo}`;
-		return "Retornos mensais consolidados";
+		return "Consolidated monthly returns";
 	});
 
 	const highCorrelationNote = $derived.by(() => {
@@ -140,39 +140,39 @@
 				trigger: "item",
 				formatter: (params: { seriesName?: string; name?: string; value: [number, number] }) => {
 					const label = params.name ? `<strong>${params.name}</strong><br/>` : "";
-					return `${label}CVaR: ${formatNumber(params.value[0], 2, "en-US")}%<br/>Retorno: ${formatNumber(params.value[1], 2, "en-US")}%`;
+					return `${label}CVaR: ${formatNumber(params.value[0], 2, "en-US")}%<br/>Return: ${formatNumber(params.value[1], 2, "en-US")}%`;
 				},
 			},
 			legend: {
 				bottom: 0,
 				textStyle: { fontSize: 11 },
-				data: ["Fundos", "Portfólios", ...(hasFrontier ? ["Fronteira Eficiente"] : [])],
+				data: ["Funds", "Portfolios", ...(hasFrontier ? ["Efficient Frontier"] : [])],
 			},
 			grid: { left: 60, right: 20, top: 20, bottom: 50 },
 			xAxis: {
 				type: "value",
-				name: "Risco (CVaR %)",
+				name: "Risk (CVaR %)",
 				nameLocation: "middle",
 				nameGap: 32,
 				axisLabel: { fontSize: 11, formatter: (v: number) => `${v}%` },
 			},
 			yAxis: {
 				type: "value",
-				name: "Retorno (%)",
+				name: "Return (%)",
 				nameLocation: "middle",
 				nameGap: 48,
 				axisLabel: { fontSize: 11, formatter: (v: number) => `${v}%` },
 			},
 			series: [
 				{
-					name: "Fundos",
+					name: "Funds",
 					type: "scatter",
 					data: fundPoints,
 					symbolSize: 10,
 					itemStyle: { color: "var(--netz-brand-primary)" },
 				},
 				{
-					name: "Portfólios",
+					name: "Portfolios",
 					type: "scatter",
 					data: portfolioPoints,
 					symbolSize: 14,
@@ -182,7 +182,7 @@
 				...(hasFrontier
 					? [
 							{
-								name: "Fronteira Eficiente",
+								name: "Efficient Frontier",
 								type: "line",
 								data: frontierLine,
 								lineStyle: { type: "dashed", color: "var(--netz-brand-secondary, #60A5FA)", width: 2 },
@@ -350,10 +350,10 @@
 	<!-- Page Header -->
 	<PageHeader title="Analytics">
 		{#snippet actions()}
-			<Badge variant="secondary">{PROFILES.find((profile) => profile.value === selectedPortfolio)?.label ?? "Moderado"}</Badge>
+			<Badge variant="secondary">{PROFILES.find((profile) => profile.value === selectedPortfolio)?.label ?? "Moderate"}</Badge>
 		{/snippet}
 	</PageHeader>
-	<p class="-mt-3 text-sm text-(--netz-text-muted)">
+	<p class="mt-1 text-sm text-(--netz-text-muted)">
 		Cross-portfolio diagnostics for correlation, optimization, and attribution review.
 	</p>
 
@@ -370,12 +370,12 @@
 			</div>
 			<div class="space-y-1.5">
 				<p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">From</p>
-				<Input type="date" bind:value={dateFrom} aria-label="Data inicio" />
+				<Input type="date" bind:value={dateFrom} aria-label="Start date" />
 			</div>
 			<div class="hidden items-end justify-center text-sm text-(--netz-text-muted) lg:flex">to</div>
 			<div class="space-y-1.5">
 				<p class="text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">To</p>
-				<Input type="date" bind:value={dateTo} aria-label="Data fim" />
+				<Input type="date" bind:value={dateTo} aria-label="End date" />
 			</div>
 		</div>
 		<div class="mt-4 flex flex-wrap items-center gap-2 text-sm text-(--netz-text-muted)">
@@ -399,38 +399,38 @@
 						<MetricCard
 							label="Sharpe Ratio"
 							value={fmtNum(stats?.sharpe_ratio)}
-							sublabel="Portfólio consolidado"
+							sublabel="Consolidated portfolio"
 						/>
 						<MetricCard
-							label="Correlação Média"
+							label="Average Correlation"
 							value={fmtNum(stats?.avg_correlation)}
-							sublabel="Entre todos os pares"
+							sublabel="Across all pairs"
 						/>
 						<MetricCard
-							label="Diversificação Efetiva"
+							label="Effective Diversification"
 							value={fmtNum(stats?.effective_n, 1)}
-							sublabel="N efetivo de ativos"
+							sublabel="Effective number of assets"
 						/>
 						<MetricCard
-							label="Maior Correlação Par"
+							label="Highest Pair Correlation"
 							value={fmtNum(stats?.max_pair_correlation)}
 							sublabel={stats?.max_pair_names ? stats.max_pair_names.join(" / ") : "—"}
 							status={stats?.max_pair_correlation !== null && stats?.max_pair_correlation !== undefined && stats.max_pair_correlation > 0.85 ? "warn" : undefined}
 						/>
 						<MetricCard
-							label="Menor Correlação Par"
+							label="Lowest Pair Correlation"
 							value={fmtNum(stats?.min_pair_correlation)}
 							sublabel={stats?.min_pair_names ? stats.min_pair_names.join(" / ") : "—"}
 						/>
 						<MetricCard
-							label="Corr. Benchmark"
+							label="Benchmark Corr."
 							value={fmtPct(stats?.benchmark_correlation)}
-							sublabel="vs. índice de referência"
+							sublabel="vs. reference index"
 						/>
 					</div>
 
 					<!-- Heatmap -->
-					<SectionCard title="Matriz de Correlação" subtitle="Correlação de Pearson entre retornos mensais dos fundos">
+					<SectionCard title="Correlation Matrix" subtitle="Pearson correlation across monthly fund returns">
 						{#if heatmapData && heatmapData.matrix.length > 0}
 							<div class="h-[480px]">
 								<HeatmapChart
@@ -442,8 +442,8 @@
 							</div>
 						{:else}
 							<EmptyState
-								title="Sem dados de correlação"
-								message="A matriz de correlação será exibida após NAV histórico estar disponível para ao menos 2 fundos."
+								title="No correlation data"
+								message="The correlation matrix will appear after historical NAV is available for at least 2 funds."
 							/>
 						{/if}
 
@@ -461,14 +461,14 @@
 			     ═══════════════════════════════════════════════════════════════ -->
 			{:else if activeTab === "backtest"}
 				<div class="space-y-6">
-					<SectionCard title="Backtest" subtitle="Executar backtest histórico para o perfil selecionado">
+					<SectionCard title="Backtest" subtitle="Run historical backtest for the selected profile">
 						<div class="flex items-center gap-3">
 							<Button
 								onclick={triggerBacktest}
 								disabled={backtestRunning}
 								size="sm"
 							>
-								{backtestRunning ? "Executando… (polling a cada 5s)" : "Executar Backtest"}
+								{backtestRunning ? "Running... (polling every 5s)" : "Run Backtest"}
 							</Button>
 						</div>
 						{#if backtestError}
@@ -498,10 +498,10 @@
 						{/if}
 					</SectionCard>
 
-					<SectionCard title="Walk-Forward Validation" subtitle="Análise out-of-sample por janelas rolantes">
+					<SectionCard title="Walk-Forward Validation" subtitle="Out-of-sample analysis with rolling windows">
 						<EmptyState
-							title="Walk-Forward disponível em breve"
-							message="A validação walk-forward será habilitada quando o backtest engine suportar janelas out-of-sample rolantes."
+							title="Walk-Forward coming soon"
+							message="Walk-forward validation will be enabled when the backtest engine supports rolling out-of-sample windows."
 						/>
 					</SectionCard>
 				</div>
@@ -511,7 +511,7 @@
 			     ═══════════════════════════════════════════════════════════════ -->
 			{:else if activeTab === "pareto"}
 				<div class="space-y-6">
-					<SectionCard title="Fronteira de Pareto — Risco × Retorno" subtitle="CVaR 95% no eixo X · Retorno anualizado no eixo Y">
+					<SectionCard title="Pareto Frontier — Risk x Return" subtitle="CVaR 95% on X axis · Annualized return on Y axis">
 						{#snippet actions()}
 							<div class="flex gap-2">
 								<Button
@@ -519,7 +519,7 @@
 									disabled={optimizationRunning}
 									size="sm"
 								>
-									{optimizationRunning ? "Otimizando…" : "Otimização rápida"}
+									{optimizationRunning ? "Optimizing..." : "Quick Optimization"}
 								</Button>
 								<Button
 									onclick={runPareto}
@@ -527,7 +527,7 @@
 									size="sm"
 									variant="outline"
 								>
-									{paretoRunning ? "Pareto… (até 2 min)" : "Multi-objetivo (Pareto)"}
+									{paretoRunning ? "Pareto... (up to 2 min)" : "Multi-objective (Pareto)"}
 								</Button>
 							</div>
 						{/snippet}
@@ -546,7 +546,7 @@
 						<div class="mb-4 flex flex-wrap gap-3">
 							<div class="flex items-center gap-1.5 rounded-(--netz-radius-pill) border border-(--netz-border-subtle) bg-(--netz-surface-highlight) px-3 py-1.5">
 								<span class="h-2.5 w-2.5 rounded-full bg-(--netz-brand-primary)"></span>
-								<span class="text-xs text-(--netz-text-muted)">Fundos individuais</span>
+								<span class="text-xs text-(--netz-text-muted)">Individual funds</span>
 							</div>
 							<div class="flex items-center gap-1.5 rounded-(--netz-radius-pill) border border-(--netz-border-subtle) bg-(--netz-surface-highlight) px-3 py-1.5">
 								<span class="h-2.5 w-2.5 rotate-45 bg-(--netz-warning)" style="display:inline-block;"></span>
@@ -554,7 +554,7 @@
 							</div>
 							<div class="flex items-center gap-1.5 rounded-(--netz-radius-pill) border border-(--netz-border-subtle) bg-(--netz-surface-highlight) px-3 py-1.5">
 								<span class="h-0.5 w-5 border-t-2 border-dashed border-(--netz-brand-secondary)"></span>
-								<span class="text-xs text-(--netz-text-muted)">Fronteira eficiente</span>
+								<span class="text-xs text-(--netz-text-muted)">Efficient frontier</span>
 							</div>
 						</div>
 
@@ -564,8 +564,8 @@
 							</div>
 						{:else}
 							<EmptyState
-								title="Sem dados de otimização"
-								message="Clique em 'Executar otimização' para calcular a fronteira eficiente. Requer CVaR histórico de ao menos 3 fundos."
+								title="No optimization data"
+								message="Click 'Quick Optimization' to compute the efficient frontier. Requires historical CVaR for at least 3 funds."
 							/>
 						{/if}
 					</SectionCard>
@@ -575,10 +575,10 @@
 			     Tab: What-If Scenarios
 			     ═══════════════════════════════════════════════════════════════ -->
 			{:else if activeTab === "whatif"}
-				<SectionCard title="What-If Scenarios" subtitle="Simulação de cenários e stress testing">
+				<SectionCard title="What-If Scenarios" subtitle="Scenario simulation and stress testing">
 					<EmptyState
-						title="Scenarios em desenvolvimento"
-						message="A análise de cenários What-If será habilitada quando o stress_scenario_engine estiver integrado ao portfólio selecionado."
+						title="Scenarios in development"
+						message="What-If scenario analysis will be enabled when the stress_scenario_engine is integrated with the selected portfolio."
 					/>
 				</SectionCard>
 
@@ -586,7 +586,7 @@
 			     Tab: Atribuição de Performance
 			     ═══════════════════════════════════════════════════════════════ -->
 			{:else if activeTab === "atribuicao"}
-				<SectionCard title="Atribuição de Performance" subtitle="Decomposição de retorno por fator e classe de ativo">
+				<SectionCard title="Performance Attribution" subtitle="Return decomposition by factor and asset class">
 					<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
 						<Input
 							type="text"
@@ -615,8 +615,8 @@
 						</div>
 					{:else if !attributionLoaded}
 						<EmptyState
-							title="Selecione um fundo"
-							message="Insira o Fund ID e clique Load Attribution para ver a decomposição de retorno."
+							title="Select a fund"
+							message="Enter the Fund ID and click Load Attribution to see the return decomposition."
 						/>
 					{/if}
 				</SectionCard>

@@ -7,7 +7,7 @@
   5. SSE stream showing pipeline stages
 -->
 <script lang="ts">
-	import { Card, Button, EmptyState, formatNumber } from "@netz/ui";
+	import { Card, Button, EmptyState, formatNumber, PageHeader } from "@netz/ui";
 	import { createSSEStream } from "@netz/ui/utils";
 	import IngestionProgress from "$lib/components/IngestionProgress.svelte";
 	import { createClientApiClient } from "$lib/api/client";
@@ -116,8 +116,11 @@
 	}
 </script>
 
-<div class="p-6">
-	<h2 class="mb-4 text-xl font-semibold text-[var(--netz-text-primary)]">Upload Document</h2>
+<div class="px-6">
+	<PageHeader
+		title="Upload Document"
+		breadcrumbs={[{ label: "Funds", href: "/funds" }, { label: "Documents" }, { label: "Upload" }]}
+	/>
 
 	{#if jobId}
 		<IngestionProgress {jobId} />
@@ -125,17 +128,17 @@
 		<Card class="p-8">
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
-				class="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-[var(--netz-border)] p-12 transition-colors hover:border-[var(--netz-brand-primary)]"
+				class="flex flex-col items-center justify-center rounded-lg border-2 border-dashed border-(--netz-border) p-12 transition-colors hover:border-(--netz-brand-primary)"
 				ondrop={handleDrop}
 				ondragover={(e) => e.preventDefault()}
 			>
 				{#if file}
-					<p class="text-sm font-medium text-[var(--netz-text-primary)]">{file.name}</p>
-					<p class="text-xs text-[var(--netz-text-muted)]">
+					<p class="text-sm font-medium text-(--netz-text-primary)">{file.name}</p>
+					<p class="text-xs text-(--netz-text-muted)">
 						{formatNumber(file.size / 1024 / 1024, 2)} MB
 					</p>
 				{:else}
-					<p class="mb-2 text-sm text-[var(--netz-text-secondary)]">
+					<p class="mb-2 text-sm text-(--netz-text-secondary)">
 						Drag & drop a file here, or click to browse
 					</p>
 				{/if}
@@ -149,7 +152,7 @@
 			</div>
 
 			{#if uploadError}
-				<p class="mt-3 text-sm text-[var(--netz-danger)]">{uploadError}</p>
+				<p class="mt-3 text-sm text-(--netz-status-error)">{uploadError}</p>
 			{/if}
 
 			<div class="mt-4 flex justify-end">

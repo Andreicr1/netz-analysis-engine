@@ -25,6 +25,7 @@ dist/
 .env
 .env.local
 .env.*.local
+.env.production
 
 # IDE
 .vscode/
@@ -46,3 +47,8 @@ pgdata/
 .playwright-mcp/
 **/.turbo/
 **/.codex-*.txt
+
+# Project-local data & docs (not versioned)
+Deals/
+scripts/
+docs/

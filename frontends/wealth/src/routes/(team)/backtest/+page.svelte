@@ -405,12 +405,12 @@
 
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	<!-- Header + Profile selector -->
 	<PageHeader title="Backtest & Fronteira de Pareto">
 		{#snippet actions()}
 			<select
-				class="rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] px-3 py-1.5 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-primary)]"
+				class="rounded-md border border-(--netz-border) bg-(--netz-surface-elevated) px-3 py-1.5 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-primary)"
 				bind:value={selectedProfile}
 			>
 				{#each PROFILES as p (p.value)}
@@ -439,19 +439,19 @@
 		/>
 
 		{#if backtestError}
-			<div class="mt-4 rounded-md border border-[var(--netz-status-error)] p-3 text-sm text-[var(--netz-status-error)]" role="alert">
+			<div class="mt-4 rounded-md border border-(--netz-status-error) p-3 text-sm text-(--netz-status-error)" role="alert">
 				{backtestError}
 			</div>
 		{/if}
 
 		{#if pollError}
-			<div class="mt-4 rounded-md border border-[var(--netz-status-error)] p-3 text-sm text-[var(--netz-status-error)]" role="alert">
+			<div class="mt-4 rounded-md border border-(--netz-status-error) p-3 text-sm text-(--netz-status-error)" role="alert">
 				Polling error: {pollError}
 			</div>
 		{/if}
 
 		{#if isPolling && backtestRunId}
-			<div class="mt-4 rounded-md bg-[var(--netz-surface-inset)] p-3 text-sm text-[var(--netz-text-secondary)]">
+			<div class="mt-4 rounded-md bg-(--netz-surface-inset) p-3 text-sm text-(--netz-text-secondary)">
 				Aguardando resultado — Run ID: <span class="font-mono">{backtestRunId}</span>
 				(polling a cada 5s via GET /jobs/{backtestRunId}/status)
 			</div>
@@ -461,10 +461,10 @@
 		{#if backtestResult && backtestResult.status !== "pending" && summary}
 			<div class="mt-6 space-y-6">
 				<!-- Run metadata -->
-				<div class="flex items-center gap-4 text-xs text-[var(--netz-text-muted)]">
+				<div class="flex items-center gap-4 text-xs text-(--netz-text-muted)">
 					<span>Run ID: <span class="font-mono">{backtestResult.run_id}</span></span>
-					<span>Perfil: <span class="font-medium text-[var(--netz-text-primary)]">{backtestResult.profile}</span></span>
-					<span>Status: <span class="font-medium text-[var(--netz-text-primary)]">{backtestResult.status}</span></span>
+					<span>Perfil: <span class="font-medium text-(--netz-text-primary)">{backtestResult.profile}</span></span>
+					<span>Status: <span class="font-medium text-(--netz-text-primary)">{backtestResult.status}</span></span>
 					{#if backtestResult.completed_at}
 						<span>Concluído: <time datetime={backtestResult.completed_at}>{formatDateTime(backtestResult.completed_at)}</time></span>
 					{/if}
@@ -504,7 +504,7 @@
 				<!-- Per-fold table — DataTable with multi-sort -->
 				{#if foldRows.length > 0}
 					<div>
-						<p class="mb-2 text-sm font-medium text-[var(--netz-text-primary)]">Métricas por Fold</p>
+						<p class="mb-2 text-sm font-medium text-(--netz-text-primary)">Métricas por Fold</p>
 						<DataTable
 							data={foldRows}
 							columns={foldColumns}
@@ -519,7 +519,7 @@
 				{/if}
 			</div>
 		{:else if backtestResult && backtestResult.status === "pending"}
-			<div class="mt-4 text-sm text-[var(--netz-text-muted)]">
+			<div class="mt-4 text-sm text-(--netz-text-muted)">
 				Aguardando conclusão do backtest…
 			</div>
 		{/if}
@@ -541,7 +541,7 @@
 		{/snippet}
 
 		{#if paretoError}
-			<div class="mb-4 rounded-md border border-[var(--netz-status-error)] p-3 text-sm text-[var(--netz-status-error)]" role="alert">
+			<div class="mb-4 rounded-md border border-(--netz-status-error) p-3 text-sm text-(--netz-status-error)" role="alert">
 				{paretoError}
 			</div>
 		{/if}
@@ -549,9 +549,9 @@
 		<!-- Risk/return slider -->
 		<div class="mb-6 space-y-2">
 			<div class="flex items-center justify-between text-sm">
-				<span class="text-[var(--netz-text-secondary)]">Aversão ao risco máxima</span>
-				<span class="font-medium text-[var(--netz-text-primary)]">Viés: {riskReturnBias}%</span>
-				<span class="text-[var(--netz-text-secondary)]">Retorno máximo</span>
+				<span class="text-(--netz-text-secondary)">Aversão ao risco máxima</span>
+				<span class="font-medium text-(--netz-text-primary)">Viés: {riskReturnBias}%</span>
+				<span class="text-(--netz-text-secondary)">Retorno máximo</span>
 			</div>
 			<input
 				type="range"
@@ -559,10 +559,10 @@
 				max="100"
 				step="1"
 				bind:value={riskReturnBias}
-				class="w-full accent-[var(--netz-brand-primary)]"
+				class="w-full accent-(--netz-brand-primary)"
 				aria-label="Ajuste de viés risco/retorno"
 			/>
-			<div class="flex justify-between text-xs text-[var(--netz-text-muted)]">
+			<div class="flex justify-between text-xs text-(--netz-text-muted)">
 				<span>Min CVaR</span>
 				<span>Balanceado</span>
 				<span>Max Retorno</span>
@@ -571,11 +571,11 @@
 
 		<!-- Recommended allocation highlight -->
 		{#if recommendedPoint}
-			<div class="mb-6 flex items-center gap-4 rounded-lg border border-[var(--netz-success)] bg-[var(--netz-success)]/10 p-3">
-				<div class="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--netz-success)] text-white text-sm font-bold">★</div>
+			<div class="mb-6 flex items-center gap-4 rounded-lg border border-(--netz-success) bg-(--netz-success)/10 p-3">
+				<div class="flex h-8 w-8 items-center justify-center rounded-full bg-(--netz-success) text-white text-sm font-bold">★</div>
 				<div>
-					<p class="text-sm font-semibold text-[var(--netz-text-primary)]">Alocação Recomendada</p>
-					<p class="text-xs text-[var(--netz-text-secondary)]">
+					<p class="text-sm font-semibold text-(--netz-text-primary)">Alocação Recomendada</p>
+					<p class="text-xs text-(--netz-text-secondary)">
 						CVaR 95%: <span class="font-medium">{formatNumber(recommendedPoint.cvar_pct, 2, "en-US")}%</span>
 						&nbsp;|&nbsp;
 						Retorno: <span class="font-medium">{formatNumber(recommendedPoint.return_pct, 2, "en-US")}%</span>
@@ -587,20 +587,20 @@
 		<!-- Legend chips -->
 		<div class="mb-4 flex flex-wrap gap-3">
 			<div class="flex items-center gap-1.5">
-				<span class="h-2.5 w-2.5 rounded-full bg-[var(--netz-brand-primary)]"></span>
-				<span class="text-xs text-[var(--netz-text-muted)]">Fundos individuais</span>
+				<span class="h-2.5 w-2.5 rounded-full bg-(--netz-brand-primary)"></span>
+				<span class="text-xs text-(--netz-text-muted)">Fundos individuais</span>
 			</div>
 			<div class="flex items-center gap-1.5">
-				<span class="h-2.5 w-2.5 rotate-45 bg-[var(--netz-warning)]" style="display:inline-block;"></span>
-				<span class="text-xs text-[var(--netz-text-muted)]">Portfólios</span>
+				<span class="h-2.5 w-2.5 rotate-45 bg-(--netz-warning)" style="display:inline-block;"></span>
+				<span class="text-xs text-(--netz-text-muted)">Portfólios</span>
 			</div>
 			<div class="flex items-center gap-1.5">
-				<span class="h-0.5 w-5 border-t-2 border-dashed border-[var(--netz-brand-secondary)]"></span>
-				<span class="text-xs text-[var(--netz-text-muted)]">Fronteira eficiente</span>
+				<span class="h-0.5 w-5 border-t-2 border-dashed border-(--netz-brand-secondary)"></span>
+				<span class="text-xs text-(--netz-text-muted)">Fronteira eficiente</span>
 			</div>
 			<div class="flex items-center gap-1.5">
-				<span class="h-3 w-3 rounded-full bg-[var(--netz-success)]"></span>
-				<span class="text-xs text-[var(--netz-text-muted)]">Recomendado (slider)</span>
+				<span class="h-3 w-3 rounded-full bg-(--netz-success)"></span>
+				<span class="text-xs text-(--netz-text-muted)">Recomendado (slider)</span>
 			</div>
 		</div>
 
@@ -610,7 +610,7 @@
 				<ChartContainer option={paretoChartOption} height={400} ariaLabel="Pareto frontier — risco vs. retorno" />
 			</div>
 			{#if paretoComputedAt}
-				<p class="mt-2 text-right text-xs text-[var(--netz-text-muted)]">
+				<p class="mt-2 text-right text-xs text-(--netz-text-muted)">
 					Calculado: <time datetime={paretoComputedAt}>{formatDateTime(paretoComputedAt)}</time>
 				</p>
 			{/if}

@@ -15,6 +15,7 @@ export { default as Textarea } from "./components/Textarea.svelte";
 export { default as Tooltip } from "./components/Tooltip.svelte";
 export { default as DropdownMenu } from "./components/DropdownMenu.svelte";
 export { default as Skeleton } from "./components/Skeleton.svelte";
+export { default as AlertBanner } from "./components/AlertBanner.svelte";
 
 // ── Data Components ─────────────────────────────────────────
 export { default as DataTable } from "./components/DataTable.svelte";
@@ -35,6 +36,7 @@ export { default as StatusBadge } from "./components/StatusBadge.svelte";
 export type { StatusConfig, StatusResolver, StatusSeverity } from "./components/StatusBadge.svelte";
 export { default as EmptyState } from "./components/EmptyState.svelte";
 export { default as PDFDownload } from "./components/PDFDownload.svelte";
+export { default as ThemeToggle } from "./components/ThemeToggle.svelte";
 export { default as LanguageToggle } from "./components/LanguageToggle.svelte";
 export { default as ErrorBoundary } from "./components/ErrorBoundary.svelte";
 export { default as ConnectionLost } from "./components/ConnectionLost.svelte";

@@ -157,7 +157,7 @@
 </script>
 
 <div class="flex h-full">
-	<div class="flex-1 space-y-4 p-6">
+	<div class="flex-1 space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 		<PageHeader title="Instruments ({instruments.length})">
 			{#snippet actions()}
 				<div class="flex gap-2">

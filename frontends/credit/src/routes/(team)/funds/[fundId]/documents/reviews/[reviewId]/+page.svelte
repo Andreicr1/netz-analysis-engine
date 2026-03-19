@@ -3,7 +3,7 @@
   assign reviewer, finalize, resubmit, AI analysis trigger.
 -->
 <script lang="ts">
-	import { Card, StatusBadge, Button, Dialog } from "@netz/ui";
+	import { Card, StatusBadge, Button, Dialog, PageHeader } from "@netz/ui";
 	import { resolveCreditStatus } from "$lib/utils/status-maps";
 	import { ActionButton, ConfirmDialog, FormField } from "@netz/ui";
 	import { ConsequenceDialog, AuditTrailPanel } from "@netz/ui";
@@ -314,15 +314,18 @@
 	);
 </script>
 
-<div class="p-6">
-	<div class="mb-4 flex items-center justify-between">
-		<div>
-			<h2 class="text-xl font-semibold text-[var(--netz-text-primary)]">
-				{review.title ?? review.document_title ?? "Review"}
-			</h2>
-			<StatusBadge status={status} type="review" resolve={resolveCreditStatus} />
-		</div>
-		<div class="flex gap-2">
+<div class="px-6">
+	<PageHeader
+		title={String(review.title ?? review.document_title ?? "Review")}
+		breadcrumbs={[
+			{ label: "Funds", href: "/funds" },
+			{ label: "Documents", href: `/funds/${data.fundId}/documents` },
+			{ label: "Reviews", href: `/funds/${data.fundId}/documents/reviews` },
+			{ label: String(review.title ?? review.document_title ?? "Review") },
+		]}
+	>
+		{#snippet actions()}
+			<div class="flex gap-2">
 			{#if canAssign}
 				<Button size="sm" variant="outline" onclick={() => showAssign = true}>
 					Assign Reviewer
@@ -353,10 +356,15 @@
 				</ActionButton>
 			{/if}
 		</div>
+		{/snippet}
+	</PageHeader>
+
+	<div class="mb-4">
+		<StatusBadge status={status} type="review" resolve={resolveCreditStatus} />
 	</div>
 
 	{#if actionError}
-		<div class="mb-4 rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+		<div class="mb-4 rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
 			{actionError}
 			<button class="ml-2 underline" onclick={() => actionError = null}>dismiss</button>
 		</div>
@@ -364,7 +372,7 @@
 
 	<!-- Assignments -->
 	<Card class="mb-4 p-4">
-		<h3 class="mb-2 text-sm font-medium text-[var(--netz-text-secondary)]">Assignments</h3>
+		<h3 class="mb-2 text-sm font-medium text-(--netz-text-secondary)">Assignments</h3>
 		{#if Array.isArray(review.assignments) && review.assignments.length > 0}
 			{#each review.assignments as assignment}
 				<div class="flex items-center justify-between py-2">
@@ -373,15 +381,15 @@
 				</div>
 			{/each}
 		{:else}
-			<p class="text-sm text-[var(--netz-text-muted)]">No assignments yet.</p>
+			<p class="text-sm text-(--netz-text-muted)">No assignments yet.</p>
 		{/if}
 	</Card>
 
 	<!-- Interactive Checklist -->
 	<Card class="p-4">
-		<h3 class="mb-2 text-sm font-medium text-[var(--netz-text-secondary)]">Checklist</h3>
+		<h3 class="mb-2 text-sm font-medium text-(--netz-text-secondary)">Checklist</h3>
 		{#if checklist.length === 0}
-			<p class="text-sm text-[var(--netz-text-muted)]">No checklist items.</p>
+			<p class="text-sm text-(--netz-text-muted)">No checklist items.</p>
 		{:else}
 			{#each checklist as item, idx}
 				<label class="flex items-center gap-2 py-1.5 {togglingItem === String(idx) ? 'opacity-50' : ''}">
@@ -391,7 +399,7 @@
 						onchange={() => toggleChecklistItem(String(idx), !item.checked)}
 						disabled={togglingItem !== null}
 					/>
-					<span class="text-sm {item.checked ? 'line-through text-[var(--netz-text-muted)]' : ''}">{item.description ?? ""}</span>
+					<span class="text-sm {item.checked ? 'line-through text-(--netz-text-muted)' : ''}">{item.description ?? ""}</span>
 				</label>
 			{/each}
 		{/if}
@@ -413,7 +421,7 @@
 		<FormField label="Reviewer Email" required>
 			<input
 				type="email"
-				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
+				class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary)"
 				bind:value={assignEmail}
 				placeholder="reviewer@company.com"
 			/>
@@ -480,14 +488,14 @@
 			<FormField label="Actor Capacity" required>
 				<input
 					type="text"
-					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+					class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-secondary)"
 					bind:value={decisionActorCapacity}
 					placeholder="e.g. Senior Analyst, Compliance Officer"
 					aria-required="true"
 				/>
 			</FormField>
 			{#if actionError}
-				<p class="text-sm text-[var(--netz-status-error)]">{actionError}</p>
+				<p class="text-sm text-(--netz-status-error)">{actionError}</p>
 			{/if}
 		</div>
 	{/snippet}

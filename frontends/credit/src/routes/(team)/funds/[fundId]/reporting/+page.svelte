@@ -3,7 +3,7 @@
   Actions: Create NAV, Generate/Publish report packs, Export evidence.
 -->
 <script lang="ts">
-	import { PageTabs, DataTable, EmptyState, Button, Card, StatusBadge } from "@netz/ui";
+	import { PageTabs, DataTable, EmptyState, Button, Card, StatusBadge, PageHeader } from "@netz/ui";
 	import { ActionButton, ConfirmDialog } from "@netz/ui";
 	import type { PageData } from "./$types";
 	import type { PaginatedResponse, NavSnapshot, ReportPack } from "$lib/types/api";
@@ -144,11 +144,14 @@
 	}
 </script>
 
-<div class="p-6">
-	<h2 class="mb-4 text-xl font-semibold text-[var(--netz-text-primary)]">Reporting</h2>
+<div class="px-6">
+	<PageHeader
+		title="Reporting"
+		breadcrumbs={[{ label: "Funds", href: "/funds" }, { label: "Reporting" }]}
+	/>
 
 	{#if actionError}
-		<div class="mb-4 rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+		<div class="mb-4 rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
 			{actionError}
 			<button class="ml-2 underline" onclick={() => actionError = null}>dismiss</button>
 		</div>
@@ -190,12 +193,12 @@
 					{#each reportPacks as pack (pack.id)}
 						<Card class="flex items-center justify-between p-4">
 							<div>
-								<p class="text-sm font-medium text-[var(--netz-text-primary)]">
+								<p class="text-sm font-medium text-(--netz-text-primary)">
 									{pack.period_start ?? pack.period} — {pack.period_end ?? ""}
 								</p>
 								<div class="mt-1 flex items-center gap-2">
 									<StatusBadge status={pack.status} type="default" />
-									<span class="text-xs text-[var(--netz-text-muted)]">{pack.created_at}</span>
+									<span class="text-xs text-(--netz-text-muted)">{pack.created_at}</span>
 								</div>
 							</div>
 							<div class="flex gap-2">
@@ -218,7 +221,7 @@
 										Publish
 									</ActionButton>
 								{:else if pack.status === "PUBLISHED"}
-									<span class="text-xs text-[var(--netz-text-muted)]">
+									<span class="text-xs text-(--netz-text-muted)">
 										Published {pack.published_at ?? ""}
 									</span>
 								{/if}

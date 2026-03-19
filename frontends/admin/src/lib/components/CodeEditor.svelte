@@ -173,12 +173,12 @@
 <div class={className}>
 	<div
 		bind:this={editorHost}
-		class="min-h-72 overflow-hidden rounded-xl border border-[var(--netz-border)] bg-[var(--netz-surface)]"
+		class="min-h-72 overflow-hidden rounded-xl border border-(--netz-border) bg-(--netz-surface)"
 		aria-busy={editorReady ? "false" : "true"}
 	></div>
 	<p
 		id={instructionsId}
-		class="mt-3 text-sm leading-6 text-[var(--netz-text-secondary)]"
+		class="mt-3 text-sm leading-6 text-(--netz-text-secondary)"
 	>
 		Press Escape to leave the editor, Tab to indent.
 	</p>

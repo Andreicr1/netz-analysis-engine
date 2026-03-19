@@ -66,6 +66,7 @@
 		}));
 	}
 
+	// svelte-ignore state_referenced_locally
 	let columns = $state<ColumnData[]>(buildColumns(deals));
 
 	// Sync when deals prop changes
@@ -149,23 +150,23 @@
 <div class="flex gap-3 overflow-x-auto pb-4" role="list" aria-label="Pipeline Kanban board">
 	{#each columns as column, idx}
 		<div
-			class="flex w-64 min-w-[16rem] shrink-0 flex-col rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-alt)]"
+			class="flex w-64 min-w-64 shrink-0 flex-col rounded-lg border border-(--netz-border) bg-(--netz-surface-alt)"
 			role="listitem"
 			aria-label="{column.label} column, {column.items.length} deals"
 		>
 			<!-- Column header -->
-			<div class="flex items-center justify-between border-b border-[var(--netz-border)] px-3 py-2">
-				<h3 class="text-xs font-semibold uppercase tracking-wider text-[var(--netz-text-secondary)]">
+			<div class="flex items-center justify-between border-b border-(--netz-border) px-3 py-2">
+				<h3 class="text-xs font-semibold uppercase tracking-wider text-(--netz-text-secondary)">
 					{column.label}
 				</h3>
-				<span class="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[var(--netz-surface)] px-1.5 text-xs font-medium text-[var(--netz-text-secondary)]">
+				<span class="flex h-5 min-w-5 items-center justify-center rounded-full bg-(--netz-surface) px-1.5 text-xs font-medium text-(--netz-text-secondary)">
 					{column.items.length}
 				</span>
 			</div>
 
 			<!-- Drop zone -->
 			<div
-				class="flex min-h-[8rem] flex-1 flex-col gap-2 p-2"
+				class="flex min-h-32 flex-1 flex-col gap-2 p-2"
 				use:dndzone={{ items: column.items, flipDurationMs: 200, dropTargetStyle: {} }}
 				onconsider={(e) => handleConsider(idx, e)}
 				onfinalize={(e) => handleFinalize(idx, e)}
@@ -175,19 +176,18 @@
 				{#each column.items as card (card.id)}
 					<a
 						href="/funds/{fundId}/pipeline/{card.id}"
-						class="block rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] p-3 shadow-sm transition-shadow hover:shadow-md"
+						class="block rounded-md border border-(--netz-border) bg-(--netz-surface) p-3 shadow-sm transition-shadow hover:shadow-md"
 						class:opacity-50={card[SHADOW_ITEM_MARKER_PROPERTY_NAME]}
-						role="listitem"
 						aria-label="Deal: {card.name}"
 					>
-						<p class="text-sm font-medium text-[var(--netz-text-primary)] line-clamp-2">
+						<p class="text-sm font-medium text-(--netz-text-primary) line-clamp-2">
 							{card.name}
 						</p>
 						<div class="mt-2 flex items-center gap-2">
 							<StatusBadge status={card.stage} type="deal" resolve={resolveCreditStatus} />
 						</div>
 						{#if card.deal_type || card.sponsor_name}
-							<p class="mt-1.5 text-xs text-[var(--netz-text-muted)] line-clamp-1">
+							<p class="mt-1.5 text-xs text-(--netz-text-muted) line-clamp-1">
 								{[card.deal_type, card.sponsor_name].filter(Boolean).join(" · ")}
 							</p>
 						{/if}
@@ -200,8 +200,8 @@
 
 <!-- Error toast -->
 {#if moveError}
-	<div class="fixed bottom-4 right-4 z-50 rounded-lg border border-[var(--netz-danger)] bg-[var(--netz-surface)] px-4 py-3 shadow-lg">
-		<p class="text-sm text-[var(--netz-danger)]">{moveError}</p>
+	<div class="fixed bottom-4 right-4 z-50 rounded-lg border border-(--netz-danger) bg-(--netz-surface) px-4 py-3 shadow-lg">
+		<p class="text-sm text-(--netz-danger)">{moveError}</p>
 	</div>
 {/if}
 

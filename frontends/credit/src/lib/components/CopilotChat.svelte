@@ -26,18 +26,18 @@
 			<div class="flex {message.role === 'user' ? 'justify-end' : 'justify-start'}">
 				<div
 					class="max-w-[80%] rounded-lg px-4 py-3 text-sm {message.role === 'user'
-						? 'bg-[var(--netz-brand-primary)] text-white'
-						: 'bg-[var(--netz-surface)] border border-[var(--netz-border)] text-[var(--netz-text-primary)]'}"
+						? 'bg-(--netz-brand-primary) text-white'
+						: 'bg-(--netz-surface) border border-(--netz-border) text-(--netz-text-primary)'}"
 				>
 					{#if message.content}
 						<p class="whitespace-pre-wrap">{message.content}</p>
 					{:else if streaming && i === messages.length - 1}
-						<span class="inline-block h-4 w-1 animate-pulse bg-[var(--netz-brand-primary)]"></span>
+						<span class="inline-block h-4 w-1 animate-pulse bg-(--netz-brand-primary)"></span>
 					{/if}
 
 					{#if message.citations && (message.citations as unknown[]).length > 0}
-						<div class="mt-2 border-t border-[var(--netz-border)] pt-2">
-							<p class="mb-1 text-xs font-medium text-[var(--netz-text-muted)]">Sources:</p>
+						<div class="mt-2 border-t border-(--netz-border) pt-2">
+							<p class="mb-1 text-xs font-medium text-(--netz-text-muted)">Sources:</p>
 							{#each message.citations as citation, ci (ci)}
 								<CopilotCitation {citation} />
 							{/each}

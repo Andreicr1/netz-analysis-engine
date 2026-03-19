@@ -9,6 +9,8 @@
 		EmptyState,
 		ActionButton,
 		AuditTrailPanel,
+		PageHeader,
+		SectionCard,
 		formatDate,
 		formatPercent,
 	} from "@netz/ui";
@@ -81,104 +83,108 @@
 	}
 </script>
 
-<div class="p-6">
-	<div class="mb-4 flex items-center justify-between">
-		<div>
-			<h2 class="text-xl font-semibold text-[var(--netz-text-primary)]">
-				{doc.title ?? "Document"}
-			</h2>
-			<div class="mt-1 flex items-center gap-2">
-				<StatusBadge status={String(doc.status ?? "")} type="default" resolve={resolveCreditStatus} />
-				<span class="text-sm text-[var(--netz-text-muted)]">{doc.classification ?? doc.domain ?? ""}</span>
-			</div>
-		</div>
-		<ActionButton onclick={submitForReview} loading={submitting} loadingText="Submitting...">
-			Submit for Review
-		</ActionButton>
+<div class="px-6">
+	<PageHeader
+		title={String(doc.title ?? "Document")}
+		breadcrumbs={[
+			{ label: "Funds", href: "/funds" },
+			{ label: "Documents", href: `/funds/${data.fundId}/documents` },
+			{ label: String(doc.title ?? "Document") },
+		]}
+	>
+		{#snippet actions()}
+			<ActionButton onclick={submitForReview} loading={submitting} loadingText="Submitting...">
+				Submit for Review
+			</ActionButton>
+		{/snippet}
+	</PageHeader>
+
+	<div class="mb-4 flex items-center gap-2">
+		<StatusBadge status={String(doc.status ?? "")} type="default" resolve={resolveCreditStatus} />
+		<span class="text-sm text-(--netz-text-muted)">{doc.classification ?? doc.domain ?? ""}</span>
 	</div>
 
 	{#if error}
 		<div
 			role="alert"
-			class="mb-4 rounded-md border border-[var(--netz-status-error)] p-3 text-sm text-[var(--netz-status-error)]"
+			class="mb-4 rounded-md border border-(--netz-status-error) p-3 text-sm text-(--netz-status-error)"
 		>
 			{error}
 		</div>
 	{/if}
 
-	<!-- AI Classification provenance -->
-	<Card class="mb-6 p-6">
-		<h3 class="mb-4 text-lg font-semibold text-[var(--netz-text-primary)]">AI Classification</h3>
-		<div class="grid gap-4 sm:grid-cols-3">
-			<div>
-				<p class="text-xs font-medium uppercase tracking-[0.14em] text-[var(--netz-text-secondary)]">
-					Layer
-				</p>
-				<p class="mt-1 text-sm font-medium text-[var(--netz-text-primary)]">
-					{classificationLayerLabel}
-				</p>
-			</div>
-			<div>
-				<p class="text-xs font-medium uppercase tracking-[0.14em] text-[var(--netz-text-secondary)]">
-					Model
-				</p>
-				<p class="mt-1 text-sm font-medium text-[var(--netz-text-primary)]">
-					{classificationModel}
-				</p>
-			</div>
-			<div>
-				<p class="text-xs font-medium uppercase tracking-[0.14em] text-[var(--netz-text-secondary)]">
-					Confidence
-				</p>
-				<p class="mt-1 text-sm font-medium text-[var(--netz-text-primary)]">
-					{classificationConfidence}
-				</p>
-			</div>
-		</div>
-	</Card>
-
-	<!-- Document Metadata -->
-	<Card class="mb-6 p-6">
-		<h3 class="mb-4 text-lg font-semibold text-[var(--netz-text-primary)]">Document Metadata</h3>
-		<div class="grid gap-4 md:grid-cols-2">
-			{#each Object.entries(doc).filter(([k]) => !["id", "organization_id", "content", "embedding", "classification_layer", "classification_model", "classification_confidence", "classification_layer_label"].includes(k)) as [key, value]}
+	<div class="space-y-6">
+		<!-- AI Classification provenance -->
+		<SectionCard title="AI Classification" subtitle="Hybrid classifier provenance">
+			<div class="grid gap-4 sm:grid-cols-3">
 				<div>
-					<p class="text-xs text-[var(--netz-text-muted)]">{key}</p>
-					<p class="text-sm font-medium text-[var(--netz-text-primary)]">{String(value ?? "—")}</p>
+					<p class="text-xs font-medium uppercase tracking-[0.14em] text-(--netz-text-secondary)">
+						Layer
+					</p>
+					<p class="mt-1 text-sm font-medium text-(--netz-text-primary)">
+						{classificationLayerLabel}
+					</p>
 				</div>
-			{/each}
-		</div>
-	</Card>
+				<div>
+					<p class="text-xs font-medium uppercase tracking-[0.14em] text-(--netz-text-secondary)">
+						Model
+					</p>
+					<p class="mt-1 text-sm font-medium text-(--netz-text-primary)">
+						{classificationModel}
+					</p>
+				</div>
+				<div>
+					<p class="text-xs font-medium uppercase tracking-[0.14em] text-(--netz-text-secondary)">
+						Confidence
+					</p>
+					<p class="mt-1 text-sm font-medium text-(--netz-text-primary)">
+						{classificationConfidence}
+					</p>
+				</div>
+			</div>
+		</SectionCard>
 
-	<!-- Version History -->
-	<Card class="mb-6 p-6">
-		<h3 class="mb-4 text-lg font-semibold text-[var(--netz-text-primary)]">Version History</h3>
-		{#if versions.length === 0}
-			<EmptyState title="No versions" description="Version history will appear here." />
-		{:else}
-			<div class="space-y-2">
-				{#each versions as version}
-					<div class="flex items-center justify-between rounded-md border border-[var(--netz-border)] p-3">
-						<div>
-							<p class="text-sm font-medium text-[var(--netz-text-primary)]">
-								Version {version.version ?? version.version_number ?? ""}
-							</p>
-							<p class="text-xs text-[var(--netz-text-muted)]">
-								{version.created_at ? formatDate(String(version.created_at)) : ""}
-							</p>
-						</div>
-						<StatusBadge status={String(version.status ?? "")} type="default" resolve={resolveCreditStatus} />
+		<!-- Document Metadata -->
+		<SectionCard title="Document Metadata">
+			<div class="grid gap-4 md:grid-cols-2">
+				{#each Object.entries(doc).filter(([k]) => !["id", "organization_id", "content", "embedding", "classification_layer", "classification_model", "classification_confidence", "classification_layer_label"].includes(k)) as [key, value]}
+					<div>
+						<p class="text-xs text-(--netz-text-muted)">{key}</p>
+						<p class="text-sm font-medium text-(--netz-text-primary)">{String(value ?? "—")}</p>
 					</div>
 				{/each}
 			</div>
-		{/if}
-	</Card>
+		</SectionCard>
 
-	<!-- Document Event Timeline -->
-	<AuditTrailPanel
-		entries={timelineEntries}
-		title="Document Timeline"
-		description="Immutable record of upload, classification, review, and decision events."
-		emptyMessage="No timeline events recorded yet."
-	/>
+		<!-- Version History -->
+		<SectionCard title="Version History">
+			{#if versions.length === 0}
+				<EmptyState title="No versions" description="Version history will appear here." />
+			{:else}
+				<div class="space-y-2">
+					{#each versions as version}
+						<div class="flex items-center justify-between rounded-md border border-(--netz-border) p-3">
+							<div>
+								<p class="text-sm font-medium text-(--netz-text-primary)">
+									Version {version.version ?? version.version_number ?? ""}
+								</p>
+								<p class="text-xs text-(--netz-text-muted)">
+									{version.created_at ? formatDate(String(version.created_at)) : ""}
+								</p>
+							</div>
+							<StatusBadge status={String(version.status ?? "")} type="default" resolve={resolveCreditStatus} />
+						</div>
+					{/each}
+				</div>
+			{/if}
+		</SectionCard>
+
+		<!-- Document Event Timeline -->
+		<AuditTrailPanel
+			entries={timelineEntries}
+			title="Document Timeline"
+			description="Immutable record of upload, classification, review, and decision events."
+			emptyMessage="No timeline events recorded yet."
+		/>
+	</div>
 </div>

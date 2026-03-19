@@ -44,8 +44,8 @@
 
 <Dialog bind:open>
 	<div class="space-y-4">
-		<h2 class="text-lg font-semibold text-[var(--netz-text-primary)]">{title}</h2>
-		<p class="text-sm text-[var(--netz-text-secondary)]">{message}</p>
+		<h2 class="text-lg font-semibold text-(--netz-text-primary)">{title}</h2>
+		<p class="text-sm text-(--netz-text-secondary)">{message}</p>
 		<div class="flex justify-end gap-3">
 			<Button variant="outline" onclick={handleCancel} disabled={loading}>
 				{cancelLabel}

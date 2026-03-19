@@ -146,10 +146,10 @@
 		{#if votingStatus}
 			<Card class="p-4">
 				<div class="mb-3 flex items-center justify-between">
-					<p class="text-sm font-semibold text-[var(--netz-text-primary)]">IC Committee Voting</p>
+					<p class="text-sm font-semibold text-(--netz-text-primary)">IC Committee Voting</p>
 					<StatusBadge status={String(votingStatus.status ?? "pending")} type="review" resolve={resolveCreditStatus} />
 				</div>
-				<p class="mb-4 text-xs text-[var(--netz-text-muted)]">
+				<p class="mb-4 text-xs text-(--netz-text-muted)">
 					{votingStatus.votes_cast ?? 0} / {votingStatus.quorum ?? 0} votes cast
 					{#if quorumReached}
 						— quorum reached
@@ -162,22 +162,22 @@
 				{#if committeeVotes.length > 0}
 					<div class="space-y-2">
 						{#each committeeVotes as member (member.email)}
-							<div class="flex items-start justify-between rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] px-3 py-2">
+							<div class="flex items-start justify-between rounded-md border border-(--netz-border) bg-(--netz-surface-alt) px-3 py-2">
 								<div class="space-y-0.5">
-									<p class="text-sm font-medium text-[var(--netz-text-primary)]">{member.email}</p>
+									<p class="text-sm font-medium text-(--netz-text-primary)">{member.email}</p>
 									{#if member.actor_capacity}
-										<p class="text-xs text-[var(--netz-text-muted)]">{member.actor_capacity}</p>
+										<p class="text-xs text-(--netz-text-muted)">{member.actor_capacity}</p>
 									{/if}
 									{#if member.signed_at}
-										<p class="text-xs text-[var(--netz-text-muted)]">
+										<p class="text-xs text-(--netz-text-muted)">
 											<time datetime={member.signed_at}>{formatDateTime(member.signed_at)}</time>
 										</p>
 									{/if}
 									{#if member.signer_status}
-										<p class="text-xs text-[var(--netz-text-muted)]">Signer: {member.signer_status}</p>
+										<p class="text-xs text-(--netz-text-muted)">Signer: {member.signer_status}</p>
 									{/if}
 									{#if member.rationale}
-										<p class="mt-1 text-xs leading-relaxed text-[var(--netz-text-secondary)]">
+										<p class="mt-1 text-xs leading-relaxed text-(--netz-text-secondary)">
 											"{member.rationale}"
 										</p>
 									{/if}
@@ -192,7 +192,7 @@
 						{/each}
 					</div>
 				{:else}
-					<p class="text-xs text-[var(--netz-text-muted)]">No votes recorded yet.</p>
+					<p class="text-xs text-(--netz-text-muted)">No votes recorded yet.</p>
 				{/if}
 			</Card>
 		{/if}
@@ -231,7 +231,7 @@
 						onclick={() => {/* toggle expand */}}
 					>
 						<div class="flex items-center gap-3">
-							<span class="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--netz-brand-primary)]/10 text-xs font-bold text-[var(--netz-brand-primary)]">
+							<span class="flex h-7 w-7 items-center justify-center rounded-full bg-(--netz-brand-primary)/10 text-xs font-bold text-(--netz-brand-primary)">
 								{chapter.chapter_number}
 							</span>
 							<span class="text-sm font-medium">{chapter.title}</span>
@@ -239,7 +239,7 @@
 						<StatusBadge status={chapter.status} type="review" resolve={resolveCreditStatus} />
 					</button>
 					{#if chapter.content}
-						<div class="mt-3 border-t border-[var(--netz-border)] pt-3 text-sm leading-relaxed whitespace-pre-wrap text-[var(--netz-text-secondary)]">
+						<div class="mt-3 border-t border-(--netz-border) pt-3 text-sm leading-relaxed whitespace-pre-wrap text-(--netz-text-secondary)">
 							{chapter.content}
 						</div>
 					{:else if streamingChapters[chapter.chapter_number]}

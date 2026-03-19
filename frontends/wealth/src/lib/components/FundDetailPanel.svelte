@@ -171,33 +171,33 @@
 		<!-- Fund identity row -->
 		<div class="mb-5 flex items-start gap-3">
 			<div class="min-w-0 flex-1">
-				<p class="text-xs text-[var(--netz-text-muted)]">{fund.manager ?? "—"}</p>
+				<p class="text-xs text-(--netz-text-muted)">{fund.manager ?? "—"}</p>
 				{#if fund.subcategory}
-					<p class="mt-0.5 text-xs text-[var(--netz-text-muted)]">{fund.subcategory}</p>
+					<p class="mt-0.5 text-xs text-(--netz-text-muted)">{fund.subcategory}</p>
 				{/if}
 			</div>
 			<div class="flex shrink-0 flex-col items-end gap-1">
 				{#if fund.score !== null}
-					<span class="text-lg font-bold text-[var(--netz-text-primary)]">
+					<span class="text-lg font-bold text-(--netz-text-primary)">
 						{formatNumber(fund.score, 1, "pt-BR")}
 					</span>
-					<span class="text-xs text-[var(--netz-text-muted)]">Score</span>
+					<span class="text-xs text-(--netz-text-muted)">Score</span>
 				{/if}
 			</div>
 		</div>
 
 		<!-- Tabs -->
-		<div class="mb-4 flex gap-1 border-b border-[var(--netz-border)]">
+		<div class="mb-4 flex gap-1 border-b border-(--netz-border)">
 			{#each tabs as tab (tab.value)}
 				<button
 					class="relative px-3 py-2 text-sm font-medium transition-colors"
-					class:text-[var(--netz-brand-primary)]={activeTab === tab.value}
-					class:text-[var(--netz-text-muted)]={activeTab !== tab.value}
+					class:text-(--netz-brand-primary)={activeTab === tab.value}
+					class:text-(--netz-text-muted)={activeTab !== tab.value}
 					onclick={() => (activeTab = tab.value)}
 				>
 					{tab.label}
 					{#if activeTab === tab.value}
-						<span class="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--netz-brand-primary)]"></span>
+						<span class="absolute bottom-0 left-0 right-0 h-0.5 bg-(--netz-brand-primary)"></span>
 					{/if}
 				</button>
 			{/each}
@@ -245,32 +245,32 @@
 						<dl class="space-y-2 text-sm">
 							{#if fund.isin}
 								<div class="flex justify-between">
-									<dt class="text-[var(--netz-text-muted)]">ISIN</dt>
-									<dd class="font-mono text-[var(--netz-text-primary)]">{fund.isin}</dd>
+									<dt class="text-(--netz-text-muted)">ISIN</dt>
+									<dd class="font-mono text-(--netz-text-primary)">{fund.isin}</dd>
 								</div>
 							{/if}
 							{#if fund.cnpj}
 								<div class="flex justify-between">
-									<dt class="text-[var(--netz-text-muted)]">CNPJ</dt>
-									<dd class="font-mono text-[var(--netz-text-primary)]">{fund.cnpj}</dd>
+									<dt class="text-(--netz-text-muted)">CNPJ</dt>
+									<dd class="font-mono text-(--netz-text-primary)">{fund.cnpj}</dd>
 								</div>
 							{/if}
 							<div class="flex justify-between">
-								<dt class="text-[var(--netz-text-muted)]">Estratégia</dt>
-								<dd class="text-[var(--netz-text-primary)]">{fund.strategy ?? "—"}</dd>
+								<dt class="text-(--netz-text-muted)">Estratégia</dt>
+								<dd class="text-(--netz-text-primary)">{fund.strategy ?? "—"}</dd>
 							</div>
 							<div class="flex justify-between">
-								<dt class="text-[var(--netz-text-muted)]">Gestor</dt>
-								<dd class="text-[var(--netz-text-primary)]">{fund.manager ?? "—"}</dd>
+								<dt class="text-(--netz-text-muted)">Gestor</dt>
+								<dd class="text-(--netz-text-primary)">{fund.manager ?? "—"}</dd>
 							</div>
 							<div class="flex justify-between">
-								<dt class="text-[var(--netz-text-muted)]">Atualizado</dt>
-								<dd class="text-[var(--netz-text-primary)]">{formatDate(fund.updated_at, "short", "pt-BR")}</dd>
+								<dt class="text-(--netz-text-muted)">Atualizado</dt>
+								<dd class="text-(--netz-text-primary)">{formatDate(fund.updated_at, "short", "pt-BR")}</dd>
 							</div>
 							{#if fund.inception_date}
 								<div class="flex justify-between">
-									<dt class="text-[var(--netz-text-muted)]">Início</dt>
-									<dd class="text-[var(--netz-text-primary)]">{formatDate(fund.inception_date, "short", "pt-BR")}</dd>
+									<dt class="text-(--netz-text-muted)">Início</dt>
+									<dd class="text-(--netz-text-primary)">{formatDate(fund.inception_date, "short", "pt-BR")}</dd>
 								</div>
 							{/if}
 						</dl>
@@ -282,9 +282,9 @@
 		{:else if activeTab === "dd-report"}
 			<div class="space-y-4">
 				{#if fund.dd_report_status === "complete"}
-					<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-4">
+					<div class="rounded-lg border border-(--netz-border) bg-(--netz-surface-elevated) p-4">
 						<div class="mb-3 flex items-center justify-between">
-							<span class="text-sm font-medium text-[var(--netz-text-primary)]">DD Report Completo</span>
+							<span class="text-sm font-medium text-(--netz-text-primary)">DD Report Completo</span>
 							<span
 								class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
 								style="background-color: color-mix(in srgb, var(--netz-success) 15%, transparent); color: var(--netz-success);"
@@ -294,7 +294,7 @@
 						</div>
 						<a
 							href="/dd-reports/{fund.id}"
-							class="inline-flex items-center gap-1.5 rounded-md bg-[var(--netz-brand-primary)] px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
+							class="inline-flex items-center gap-1.5 rounded-md bg-(--netz-brand-primary) px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
 						>
 							Ver Relatório
 							<svg width="14" height="14" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -304,22 +304,22 @@
 					</div>
 
 				{:else if fund.dd_report_status === "generating" || ddSseStatus === "streaming"}
-					<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-4">
+					<div class="rounded-lg border border-(--netz-border) bg-(--netz-surface-elevated) p-4">
 						<div class="mb-3 flex items-center justify-between">
-							<span class="text-sm font-medium text-[var(--netz-text-primary)]">Gerando relatório…</span>
+							<span class="text-sm font-medium text-(--netz-text-primary)">Gerando relatório…</span>
 							{#if ddProgress !== null}
-								<span class="text-xs text-[var(--netz-text-muted)]">{ddProgress}%</span>
+								<span class="text-xs text-(--netz-text-muted)">{ddProgress}%</span>
 							{/if}
 						</div>
 						<!-- Progress bar -->
-						<div class="h-1.5 w-full overflow-hidden rounded-full bg-[var(--netz-surface-inset)]">
+						<div class="h-1.5 w-full overflow-hidden rounded-full bg-(--netz-surface-inset)">
 							<div
-								class="h-full rounded-full bg-[var(--netz-brand-primary)] transition-all duration-300"
+								class="h-full rounded-full bg-(--netz-brand-primary) transition-all duration-300"
 								style="width: {ddProgress ?? 0}%;"
 							></div>
 						</div>
 						{#if ddProgressMessage}
-							<p class="mt-2 text-xs text-[var(--netz-text-muted)]">{ddProgressMessage}</p>
+							<p class="mt-2 text-xs text-(--netz-text-muted)">{ddProgressMessage}</p>
 						{/if}
 					</div>
 

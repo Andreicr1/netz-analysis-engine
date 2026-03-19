@@ -279,8 +279,8 @@
 	<!-- Header with register button -->
 	<div class="flex items-center justify-between">
 		<div>
-			<h3 class="text-lg font-semibold text-[var(--netz-text-primary)]">Cashflows</h3>
-			<p class="text-sm text-[var(--netz-text-muted)]">
+			<h3 class="text-lg font-semibold text-(--netz-text-primary)">Cashflows</h3>
+			<p class="text-sm text-(--netz-text-muted)">
 				Registro de desembolsos, amortizações e distribuições deste deal.
 			</p>
 		</div>
@@ -297,7 +297,7 @@
 
 	{#if error}
 		<div
-			class="rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]"
+			class="rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)"
 		>
 			{error}
 		</div>
@@ -311,9 +311,9 @@
 		/>
 	{:else}
 		<div class="overflow-x-auto">
-			<div class="rounded-md border border-[var(--netz-border)]">
+			<div class="rounded-md border border-(--netz-border)">
 				<table class="w-full caption-bottom text-sm">
-					<thead class="bg-[var(--netz-brand-primary)]">
+					<thead class="bg-(--netz-brand-primary)">
 						<tr>
 							<th class="h-10 px-4 text-left align-middle text-xs font-medium text-white">Data</th>
 							<th class="h-10 px-4 text-left align-middle text-xs font-medium text-white">Tipo</th>
@@ -326,21 +326,21 @@
 					<tbody>
 						{#each cashflows as cf (cf.id)}
 							<tr
-								class="border-b border-[var(--netz-border)] transition-colors hover:bg-[var(--netz-surface-alt)]"
+								class="border-b border-(--netz-border) transition-colors hover:bg-(--netz-surface-alt)"
 							>
-								<td class="px-4 py-3 align-middle text-[var(--netz-text-primary)]">
+								<td class="px-4 py-3 align-middle text-(--netz-text-primary)">
 									{formatDate(cf.flow_date)}
 								</td>
-								<td class="px-4 py-3 align-middle text-[var(--netz-text-primary)]">
+								<td class="px-4 py-3 align-middle text-(--netz-text-primary)">
 									{FLOW_TYPE_LABELS[cf.flow_type] ?? cf.flow_type}
 								</td>
-								<td class="px-4 py-3 align-middle font-mono text-[var(--netz-text-primary)]">
+								<td class="px-4 py-3 align-middle font-mono text-(--netz-text-primary)">
 									{formatCurrency(cf.amount)}
 								</td>
-								<td class="px-4 py-3 align-middle text-[var(--netz-text-primary)]">
+								<td class="px-4 py-3 align-middle text-(--netz-text-primary)">
 									{cf.currency}
 								</td>
-								<td class="px-4 py-3 align-middle text-[var(--netz-text-muted)]">
+								<td class="px-4 py-3 align-middle text-(--netz-text-muted)">
 									{cf.reference ?? "—"}
 								</td>
 								<td class="px-4 py-3 align-middle">
@@ -380,7 +380,7 @@
 		<div class="space-y-4">
 			<FormField label="Tipo" required>
 				<select
-					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+					class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-secondary)"
 					bind:value={registerFlowType}
 				>
 					{#each FLOW_TYPES as ft (ft)}
@@ -394,7 +394,7 @@
 					type="number"
 					min="0.01"
 					step="0.01"
-					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+					class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-secondary)"
 					bind:value={registerAmount}
 					placeholder="0.00"
 				/>
@@ -404,7 +404,7 @@
 				<input
 					type="text"
 					maxlength="3"
-					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+					class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-secondary)"
 					bind:value={registerCurrency}
 					placeholder="USD"
 				/>
@@ -413,7 +413,7 @@
 			<FormField label="Data" required>
 				<input
 					type="date"
-					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+					class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-secondary)"
 					bind:value={registerDate}
 				/>
 			</FormField>
@@ -421,7 +421,7 @@
 			<FormField label="Descrição">
 				<input
 					type="text"
-					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+					class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-secondary)"
 					bind:value={registerDescription}
 					placeholder="Descrição opcional"
 				/>
@@ -430,14 +430,14 @@
 			<FormField label="Referência">
 				<input
 					type="text"
-					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+					class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-secondary)"
 					bind:value={registerReference}
 					placeholder="Número de referência opcional"
 				/>
 			</FormField>
 
 			{#if error}
-				<p class="text-sm text-[var(--netz-status-error)]">{error}</p>
+				<p class="text-sm text-(--netz-status-error)">{error}</p>
 			{/if}
 		</div>
 	{/snippet}
@@ -462,7 +462,7 @@
 		<div class="space-y-4">
 			<FormField label="Tipo" required>
 				<select
-					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+					class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-secondary)"
 					bind:value={editFlowType}
 				>
 					{#each FLOW_TYPES as ft (ft)}
@@ -476,7 +476,7 @@
 					type="number"
 					min="0.01"
 					step="0.01"
-					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+					class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-secondary)"
 					bind:value={editAmount}
 					placeholder="0.00"
 				/>
@@ -486,7 +486,7 @@
 				<input
 					type="text"
 					maxlength="3"
-					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+					class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-secondary)"
 					bind:value={editCurrency}
 					placeholder="USD"
 				/>
@@ -495,7 +495,7 @@
 			<FormField label="Data" required>
 				<input
 					type="date"
-					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+					class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-secondary)"
 					bind:value={editDate}
 				/>
 			</FormField>
@@ -503,7 +503,7 @@
 			<FormField label="Descrição">
 				<input
 					type="text"
-					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+					class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-secondary)"
 					bind:value={editDescription}
 					placeholder="Descrição opcional"
 				/>
@@ -512,14 +512,14 @@
 			<FormField label="Referência">
 				<input
 					type="text"
-					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+					class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-secondary)"
 					bind:value={editReference}
 					placeholder="Número de referência opcional"
 				/>
 			</FormField>
 
 			{#if error}
-				<p class="text-sm text-[var(--netz-status-error)]">{error}</p>
+				<p class="text-sm text-(--netz-status-error)">{error}</p>
 			{/if}
 		</div>
 	{/snippet}

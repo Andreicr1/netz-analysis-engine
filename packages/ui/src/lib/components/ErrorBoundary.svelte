@@ -26,7 +26,7 @@
 	{#if error}
 		<div
 			class={cn(
-				"flex flex-col items-center justify-center rounded-lg border border-[var(--netz-danger)]/30 bg-[var(--netz-danger)]/5 p-6 text-center",
+				"flex flex-col items-center justify-center rounded-lg border border-(--netz-danger)/30 bg-(--netz-danger)/5 p-6 text-center",
 				className,
 			)}
 		>
@@ -43,12 +43,12 @@
 				<line x1="12" y1="8" x2="12" y2="12" />
 				<line x1="12" y1="16" x2="12.01" y2="16" />
 			</svg>
-			<p class="mt-3 text-sm font-medium text-[var(--netz-danger)]">
+			<p class="mt-3 text-sm font-medium text-(--netz-danger)">
 				Something went wrong
 			</p>
-			<p class="mt-1 text-xs text-[var(--netz-text-muted)]">{error.message}</p>
+			<p class="mt-1 text-xs text-(--netz-text-muted)">{error.message}</p>
 			<button
-				class="mt-4 inline-flex h-8 items-center rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 text-sm font-medium text-[var(--netz-text-primary)] transition-colors hover:bg-[var(--netz-surface-alt)]"
+				class="mt-4 inline-flex h-8 items-center rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 text-sm font-medium text-(--netz-text-primary) transition-colors hover:bg-(--netz-surface-alt)"
 				onclick={retry}
 			>
 				Retry

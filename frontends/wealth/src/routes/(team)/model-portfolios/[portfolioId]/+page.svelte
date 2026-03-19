@@ -2,7 +2,7 @@
   Model Portfolio Detail — composition, track record, backtest + stress results.
 -->
 <script lang="ts">
-	import { DataCard, StatusBadge, TimeSeriesChart, BarChart, PageHeader, EmptyState, formatDate, formatNumber, formatPercent, formatRatio } from "@netz/ui";
+	import { DataCard, StatusBadge, TimeSeriesChart, BarChart, PageHeader, SectionCard, EmptyState, formatDate, formatNumber, formatPercent, formatRatio } from "@netz/ui";
 	import { resolveWealthStatus } from "$lib/utils/status-maps";
 	import type { PageData } from "./$types";
 
@@ -56,13 +56,13 @@
 	}
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	{#if portfolio}
 		<PageHeader title={portfolio.display_name}>
 			{#snippet actions()}
 				<div class="flex items-center gap-2">
 					<StatusBadge status={portfolio.status} resolve={resolveWealthStatus} />
-					<span class="text-sm text-[var(--netz-text-muted)] capitalize">{portfolio.profile}</span>
+					<span class="text-sm text-(--netz-text-muted) capitalize">{portfolio.profile}</span>
 				</div>
 			{/snippet}
 		</PageHeader>
@@ -76,14 +76,13 @@
 		</div>
 
 		{#if portfolio.description}
-			<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-4">
-				<p class="text-sm text-[var(--netz-text-secondary)]">{portfolio.description}</p>
-			</div>
+			<SectionCard title="Description">
+				<p class="text-sm text-(--netz-text-secondary)">{portfolio.description}</p>
+			</SectionCard>
 		{/if}
 
 		<!-- Backtest Equity Curve -->
-		<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
-			<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Backtest Equity Curve</h3>
+		<SectionCard title="Backtest Equity Curve">
 			{#if equityCurveSeries.length > 0 && equityCurveSeries[0]!.data.length > 0}
 				<div class="h-80">
 					<TimeSeriesChart
@@ -96,7 +95,7 @@
 			{:else}
 				<EmptyState title="No Backtest Data" message="Run a backtest to see the equity curve." />
 			{/if}
-		</div>
+		</SectionCard>
 
 		<!-- Backtest Metrics -->
 		{#if trackRecord?.backtest}
@@ -110,15 +109,14 @@
 
 		<!-- Stress Scenarios -->
 		{#if stressData.length > 0}
-			<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
-				<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Stress Scenarios</h3>
+			<SectionCard title="Stress Scenarios">
 				<div class="h-64">
 					<BarChart
 						data={stressData}
 						orientation="horizontal"
 					/>
 				</div>
-			</div>
+			</SectionCard>
 		{/if}
 	{:else}
 		<EmptyState title="Portfolio Not Found" message="The requested model portfolio could not be loaded." />

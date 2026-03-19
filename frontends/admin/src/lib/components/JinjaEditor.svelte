@@ -175,12 +175,12 @@
 <div class={className}>
 	<div
 		bind:this={editorHost}
-		class="min-h-96 overflow-hidden rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] {readonly ? 'opacity-60' : ''}"
+		class="min-h-96 overflow-hidden rounded-md border border-(--netz-border) bg-(--netz-surface) {readonly ? 'opacity-60' : ''}"
 		aria-busy={editorReady ? "false" : "true"}
 	></div>
 	{#if !editorReady}
-		<p class="mt-1 text-xs text-[var(--netz-text-muted)]">Loading editor…</p>
+		<p class="mt-1 text-xs text-(--netz-text-muted)">Loading editor…</p>
 	{:else}
-		<p class="mt-1 text-xs text-[var(--netz-text-muted)]">Press Escape to leave the editor. Tab to indent.</p>
+		<p class="mt-1 text-xs text-(--netz-text-muted)">Press Escape to leave the editor. Tab to indent.</p>
 	{/if}
 </div>

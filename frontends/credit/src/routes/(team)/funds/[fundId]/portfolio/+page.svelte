@@ -3,7 +3,7 @@
   CRUD: Create asset, create obligation, update obligation status, update action status.
 -->
 <script lang="ts">
-	import { PageTabs, DataTable, StatusBadge, EmptyState, Button, Dialog, Card } from "@netz/ui";
+	import { PageTabs, DataTable, StatusBadge, EmptyState, Button, Dialog, Card, PageHeader } from "@netz/ui";
 	import { ActionButton, ConfirmDialog, FormField } from "@netz/ui";
 	import { invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
@@ -172,16 +172,20 @@
 	];
 </script>
 
-<div class="p-6">
-	<div class="mb-4 flex items-center justify-between">
-		<h2 class="text-xl font-semibold text-[var(--netz-text-primary)]">Portfolio</h2>
-		{#if activeTab === "assets"}
-			<Button onclick={() => { resetAssetForm(); showCreateAsset = true; }}>Add Asset</Button>
-		{/if}
-	</div>
+<div class="px-6">
+	<PageHeader
+		title="Portfolio"
+		breadcrumbs={[{ label: "Funds", href: "/funds" }, { label: "Portfolio" }]}
+	>
+		{#snippet actions()}
+			{#if activeTab === "assets"}
+				<Button onclick={() => { resetAssetForm(); showCreateAsset = true; }}>Add Asset</Button>
+			{/if}
+		{/snippet}
+	</PageHeader>
 
 	{#if actionError}
-		<div class="mb-4 rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+		<div class="mb-4 rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
 			{actionError}
 			<button class="ml-2 underline" onclick={() => actionError = null}>dismiss</button>
 		</div>
@@ -207,8 +211,8 @@
 					{#each assets as asset (asset.id)}
 						<Card class="flex items-center justify-between p-4">
 							<div>
-								<p class="text-sm font-medium text-[var(--netz-text-primary)]">{asset.name}</p>
-								<p class="text-xs text-[var(--netz-text-muted)]">
+								<p class="text-sm font-medium text-(--netz-text-primary)">{asset.name}</p>
+								<p class="text-xs text-(--netz-text-muted)">
 									{asset.asset_type} | {asset.strategy}
 								</p>
 							</div>
@@ -228,8 +232,8 @@
 					{#each obligations as ob (ob.id)}
 						<Card class="flex items-center justify-between p-4">
 							<div>
-								<p class="text-sm font-medium text-[var(--netz-text-primary)]">{ob.obligation_type}</p>
-								<p class="text-xs text-[var(--netz-text-muted)]">
+								<p class="text-sm font-medium text-(--netz-text-primary)">{ob.obligation_type}</p>
+								<p class="text-xs text-(--netz-text-muted)">
 									Due: {ob.due_date} | <StatusBadge status={ob.status} type="default" />
 								</p>
 							</div>
@@ -274,8 +278,8 @@
 					{#each actions as action (action.id)}
 						<Card class="flex items-center justify-between p-4">
 							<div>
-								<p class="text-sm font-medium text-[var(--netz-text-primary)]">{action.title}</p>
-								<p class="text-xs text-[var(--netz-text-muted)]">
+								<p class="text-sm font-medium text-(--netz-text-primary)">{action.title}</p>
+								<p class="text-xs text-(--netz-text-muted)">
 									<StatusBadge status={action.status} type="default" />
 									{#if action.evidence_notes}
 										| {action.evidence_notes}
@@ -319,7 +323,7 @@
 		<FormField label="Asset Name" required>
 			<input
 				type="text"
-				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
+				class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary)"
 				bind:value={assetForm.name}
 				placeholder="e.g. Acme Corp Senior Secured Loan"
 			/>
@@ -327,7 +331,7 @@
 
 		<FormField label="Asset Type" required>
 			<select
-				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
+				class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary)"
 				bind:value={assetForm.asset_type}
 			>
 				<option value="DIRECT_LOAN">Direct Loan</option>
@@ -339,7 +343,7 @@
 
 		<FormField label="Strategy" required>
 			<select
-				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
+				class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary)"
 				bind:value={assetForm.strategy}
 			>
 				<option value="CORE_DIRECT_LENDING">Core Direct Lending</option>
@@ -351,7 +355,7 @@
 		</FormField>
 
 		{#if actionError}
-			<p class="text-sm text-[var(--netz-status-error)]">{actionError}</p>
+			<p class="text-sm text-(--netz-status-error)">{actionError}</p>
 		{/if}
 
 		<div class="flex justify-end gap-2 pt-2">
@@ -368,7 +372,7 @@
 	<form onsubmit={(e) => { e.preventDefault(); createObligation(); }} class="space-y-4">
 		<FormField label="Obligation Type" required>
 			<select
-				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
+				class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary)"
 				bind:value={obligationForm.obligation_type}
 			>
 				<option value="NAV_REPORT">NAV Report</option>
@@ -382,13 +386,13 @@
 		<FormField label="Due Date" required>
 			<input
 				type="date"
-				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
+				class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary)"
 				bind:value={obligationForm.due_date}
 			/>
 		</FormField>
 
 		{#if actionError}
-			<p class="text-sm text-[var(--netz-status-error)]">{actionError}</p>
+			<p class="text-sm text-(--netz-status-error)">{actionError}</p>
 		{/if}
 
 		<div class="flex justify-end gap-2 pt-2">

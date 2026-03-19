@@ -155,10 +155,10 @@
 	<div class="space-y-5">
 		<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 			<div class="space-y-1">
-				<h2 id={getTitleId(title)} class="text-lg font-semibold text-[var(--netz-text-primary)]">
+				<h2 id={getTitleId(title)} class="text-lg font-semibold text-(--netz-text-primary)">
 					{title}
 				</h2>
-				<p class="text-sm text-[var(--netz-text-secondary)]">{description}</p>
+				<p class="text-sm text-(--netz-text-secondary)">{description}</p>
 			</div>
 
 			{#if getHiddenEntryCount(entries, showAll, maxVisible) > 0}
@@ -169,7 +169,7 @@
 		</div>
 
 		{#if entries.length === 0}
-			<div class="rounded-lg border border-dashed border-[var(--netz-border)] p-4 text-sm text-[var(--netz-text-secondary)]">
+			<div class="rounded-lg border border-dashed border-(--netz-border) p-4 text-sm text-(--netz-text-secondary)">
 				{emptyMessage}
 			</div>
 		{:else}
@@ -184,29 +184,29 @@
 					{#if row.groupLabel}
 						<li class="pt-2">
 							<h3
-								class="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--netz-text-secondary)]"
+								class="text-xs font-semibold uppercase tracking-[0.18em] text-(--netz-text-secondary)"
 							>
 								{row.groupLabel}
 							</h3>
 						</li>
 					{/if}
 
-					<li class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] p-4">
+					<li class="rounded-lg border border-(--netz-border) bg-(--netz-surface-alt) p-4">
 						{#if entryRenderer}
 							{@render entryRenderer(row.entry)}
 						{:else}
 						<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
 							<div class="space-y-1">
-								<p class="text-sm font-semibold text-[var(--netz-text-primary)]">
+								<p class="text-sm font-semibold text-(--netz-text-primary)">
 									{row.entry.action}
 								</p>
-								<p class="text-sm text-[var(--netz-text-secondary)]">{row.entry.scope}</p>
+								<p class="text-sm text-(--netz-text-secondary)">{row.entry.scope}</p>
 							</div>
 
 							<div class="flex flex-wrap items-center justify-start gap-2 sm:justify-end">
 								{#if row.entry.immutable}
 									<span
-										class="inline-flex w-fit items-center rounded-full border border-[var(--netz-border)] bg-[var(--netz-surface)] px-2.5 py-1 text-xs font-medium text-[var(--netz-text-secondary)]"
+										class="inline-flex w-fit items-center rounded-full border border-(--netz-border) bg-(--netz-surface) px-2.5 py-1 text-xs font-medium text-(--netz-text-secondary)"
 									>
 										Immutable
 									</span>
@@ -225,55 +225,55 @@
 
 						<dl class="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
 							<div>
-								<dt class="text-xs font-medium uppercase tracking-[0.14em] text-[var(--netz-text-secondary)]">
+								<dt class="text-xs font-medium uppercase tracking-[0.14em] text-(--netz-text-secondary)">
 									Actor
 								</dt>
-								<dd class="mt-1 text-[var(--netz-text-primary)]">{row.entry.actor}</dd>
+								<dd class="mt-1 text-(--netz-text-primary)">{row.entry.actor}</dd>
 							</div>
 
 							{#if row.entry.actorCapacity}
 								<div>
-									<dt class="text-xs font-medium uppercase tracking-[0.14em] text-[var(--netz-text-secondary)]">
+									<dt class="text-xs font-medium uppercase tracking-[0.14em] text-(--netz-text-secondary)">
 										Capacity
 									</dt>
-									<dd class="mt-1 text-[var(--netz-text-primary)]">{row.entry.actorCapacity}</dd>
+									<dd class="mt-1 text-(--netz-text-primary)">{row.entry.actorCapacity}</dd>
 								</div>
 							{/if}
 
 							{#if row.entry.actorEmail}
 								<div>
-									<dt class="text-xs font-medium uppercase tracking-[0.14em] text-[var(--netz-text-secondary)]">
+									<dt class="text-xs font-medium uppercase tracking-[0.14em] text-(--netz-text-secondary)">
 										Actor email
 									</dt>
-									<dd class="mt-1 text-[var(--netz-text-primary)]">{row.entry.actorEmail}</dd>
+									<dd class="mt-1 text-(--netz-text-primary)">{row.entry.actorEmail}</dd>
 								</div>
 							{/if}
 
 							<div>
-								<dt class="text-xs font-medium uppercase tracking-[0.14em] text-[var(--netz-text-secondary)]">
+								<dt class="text-xs font-medium uppercase tracking-[0.14em] text-(--netz-text-secondary)">
 									Timestamp
 								</dt>
-								<dd class="mt-1 text-[var(--netz-text-primary)]">
+								<dd class="mt-1 text-(--netz-text-primary)">
 									<time datetime={row.datetimeValue}>{row.timestampLabel}</time>
 								</dd>
 							</div>
 
 							{#if row.entry.sourceSystem}
 								<div>
-									<dt class="text-xs font-medium uppercase tracking-[0.14em] text-[var(--netz-text-secondary)]">
+									<dt class="text-xs font-medium uppercase tracking-[0.14em] text-(--netz-text-secondary)">
 										Source system
 									</dt>
-									<dd class="mt-1 text-[var(--netz-text-primary)]">{row.entry.sourceSystem}</dd>
+									<dd class="mt-1 text-(--netz-text-primary)">{row.entry.sourceSystem}</dd>
 								</div>
 							{/if}
 						</dl>
 
 						{#if row.entry.rationale}
-							<div class="mt-4 rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] p-3">
-								<p class="text-xs font-medium uppercase tracking-[0.14em] text-[var(--netz-text-secondary)]">
+							<div class="mt-4 rounded-md border border-(--netz-border) bg-(--netz-surface) p-3">
+								<p class="text-xs font-medium uppercase tracking-[0.14em] text-(--netz-text-secondary)">
 									Rationale
 								</p>
-								<p class="mt-2 text-sm leading-6 text-[var(--netz-text-primary)]">
+								<p class="mt-2 text-sm leading-6 text-(--netz-text-primary)">
 									{row.entry.rationale}
 								</p>
 							</div>
@@ -281,25 +281,25 @@
 
 						{#if row.entry.changedFields && row.entry.changedFields.length > 0}
 							<div class="mt-4 space-y-3">
-								<p class="text-xs font-medium uppercase tracking-[0.14em] text-[var(--netz-text-secondary)]">
+								<p class="text-xs font-medium uppercase tracking-[0.14em] text-(--netz-text-secondary)">
 									Changed fields
 								</p>
 								<ul class="space-y-2">
 									{#each row.entry.changedFields as change}
-										<li class="rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] p-3">
-											<p class="text-sm font-medium text-[var(--netz-text-primary)]">{change.field}</p>
+										<li class="rounded-md border border-(--netz-border) bg-(--netz-surface) p-3">
+											<p class="text-sm font-medium text-(--netz-text-primary)">{change.field}</p>
 											<div class="mt-2 grid gap-2 text-sm sm:grid-cols-2">
 												<div>
-													<p class="text-xs uppercase tracking-[0.12em] text-[var(--netz-text-secondary)]">
+													<p class="text-xs uppercase tracking-[0.12em] text-(--netz-text-secondary)">
 														From
 													</p>
-													<p class="mt-1 text-[var(--netz-text-primary)]">{change.from ?? "Not set"}</p>
+													<p class="mt-1 text-(--netz-text-primary)">{change.from ?? "Not set"}</p>
 												</div>
 												<div>
-													<p class="text-xs uppercase tracking-[0.12em] text-[var(--netz-text-secondary)]">
+													<p class="text-xs uppercase tracking-[0.12em] text-(--netz-text-secondary)">
 														To
 													</p>
-													<p class="mt-1 text-[var(--netz-text-primary)]">{change.to ?? "Not set"}</p>
+													<p class="mt-1 text-(--netz-text-primary)">{change.to ?? "Not set"}</p>
 												</div>
 											</div>
 										</li>

@@ -23,16 +23,16 @@
 
 <div class={cn("space-y-2", className)}>
 	<!-- svelte-ignore a11y_label_has_associated_control -->
-	<label class="text-[13px] font-semibold tracking-[-0.01em] text-[var(--netz-text-secondary)]">
+	<label class="text-[13px] font-semibold tracking-[-0.01em] text-(--netz-text-secondary)">
 		{label}
 		{#if required}
-			<span class="ml-1 text-[var(--netz-danger)]">*</span>
+			<span class="ml-1 text-(--netz-danger)">*</span>
 		{/if}
 	</label>
 	{@render children?.()}
 	{#if error}
-		<p class="text-xs font-medium text-[var(--netz-danger)]">{error}</p>
+		<p class="text-xs font-medium text-(--netz-danger)">{error}</p>
 	{:else if hint}
-		<p class="text-xs text-[var(--netz-text-muted)]">{hint}</p>
+		<p class="text-xs text-(--netz-text-muted)">{hint}</p>
 	{/if}
 </div>

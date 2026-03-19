@@ -2,7 +2,7 @@
   DD Reports — select fund, trigger report generation, view existing reports.
 -->
 <script lang="ts">
-	import { PageHeader, EmptyState, Button } from "@netz/ui";
+	import { PageHeader, SectionCard, EmptyState, Button } from "@netz/ui";
 	import type { PageData } from "./$types";
 	import { goto } from "$app/navigation";
 
@@ -24,15 +24,14 @@
 	}
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	<PageHeader title="Due Diligence Reports" />
 
-	<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
-		<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Select Fund</h3>
+	<SectionCard title="Select Fund">
 		{#if funds.length > 0}
 			<div class="flex items-center gap-3">
 				<select
-					class="flex-1 rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] px-3 py-2 text-sm"
+					class="flex-1 rounded-md border border-(--netz-border) bg-(--netz-surface-elevated) px-3 py-2 text-sm"
 					bind:value={selectedFundId}
 				>
 					<option value="">Choose a fund...</option>
@@ -49,5 +48,5 @@
 		{:else}
 			<EmptyState title="No Funds" message="Add funds to generate due diligence reports." />
 		{/if}
-	</div>
+	</SectionCard>
 </div>

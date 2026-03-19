@@ -33,13 +33,13 @@
 	{:else}
 		<div class="mt-6 space-y-4">
 			{#each packs as pack (pack.id)}
-				<div class="flex items-center justify-between rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface)] p-4">
+				<div class="flex items-center justify-between rounded-lg border border-(--netz-border) bg-(--netz-surface) p-4">
 					<div>
-						<p class="font-medium text-[var(--netz-text-primary)]">
+						<p class="font-medium text-(--netz-text-primary)">
 							{pack.period_month ?? "Report Pack"}
 						</p>
 						{#if pack.published_at}
-							<p class="text-sm text-[var(--netz-text-muted)]">
+							<p class="text-sm text-(--netz-text-muted)">
 								Published: {formatDate(pack.published_at)}
 							</p>
 						{/if}

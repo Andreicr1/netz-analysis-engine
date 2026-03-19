@@ -176,7 +176,7 @@
 				size="sm"
 				onclick={() => { resetCreateForm(); showCreate = true; }}
 			>
-				+ Novo
+				+ New
 			</Button>
 		</div>
 
@@ -226,7 +226,7 @@
 						loading={actionLoading === "rebalance"}
 						loadingText="..."
 					>
-						Rebalancear
+						Rebalance
 					</ActionButton>
 					<ActionButton
 						size="sm"
@@ -234,54 +234,54 @@
 						loading={actionLoading === "allocate"}
 						loadingText="..."
 					>
-						Construir portfólio
+						Build Portfolio
 					</ActionButton>
 				{/snippet}
 			</PageHeader>
-			<p class="mb-6 -mt-2 text-sm text-(--netz-text-muted)">
+			<p class="mb-6 mt-1 text-sm text-(--netz-text-muted)">
 				Model Portfolio · {selectedPortfolio.benchmark_composite ?? "—"}
 				{#if selectedPortfolio.inception_date}
-					· Última revisão: {formatDate(selectedPortfolio.inception_date)}
+					· Last review: {formatDate(selectedPortfolio.inception_date)}
 				{/if}
 			</p>
 
 			<!-- 6 KPI Cards -->
 			<div class="mb-6 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-				<MetricCard label="NAV Atual" value="Base {formatNumber(selectedPortfolio.inception_nav, 0, 'en-US')}" />
+				<MetricCard label="Current NAV" value="Base {formatNumber(selectedPortfolio.inception_nav, 0, 'en-US')}" />
 				<MetricCard label="YTD" value="—" status="ok" />
 				<MetricCard label="CVaR 95%" value="—" status="warn" sublabel="lim: —" />
 				<MetricCard label="Sharpe" value="—" />
-				<MetricCard label="Vol Anual" value="—" sublabel="rolling 12M" />
+				<MetricCard label="Annual Vol" value="—" sublabel="rolling 12M" />
 				<MetricCard label="Max Drawdown" value="—" status="breach" />
 			</div>
 
 			<!-- Track Record -->
-			<SectionCard title="Track-Record — Retornos Periódicos" class="mb-6">
+			<SectionCard title="Track Record — Periodic Returns" class="mb-6">
 				<EmptyState
-					title="Retornos periódicos indisponíveis"
-					message="Retornos periódicos serão calculados quando dados de NAV histórico estiverem disponíveis."
+					title="Periodic returns unavailable"
+					message="Periodic returns will be calculated when historical NAV data is available."
 				/>
 			</SectionCard>
 
 			<!-- Allocation by Block -->
-			<SectionCard title="Alocação por Bloco" class="mb-6">
+			<SectionCard title="Allocation by Block" class="mb-6">
 				<EmptyState
-					title="Dados de alocação"
-					message="Alocação por bloco será exibida quando a seleção de fundos estiver configurada."
+					title="Allocation data"
+					message="Block allocation will appear when fund selection is configured."
 				/>
 			</SectionCard>
 
 			<!-- Stress Scenarios -->
 			<SectionCard title="Stress Scenarios">
 				<EmptyState
-					title="Cenários de stress"
-					message="Cenários de stress serão exibidos quando dados de track-record estiverem disponíveis."
+					title="Stress scenarios"
+					message="Stress scenarios will appear when track-record data is available."
 				/>
 			</SectionCard>
 		{:else}
 			<EmptyState
-				title="Nenhum portfólio"
-				message="Crie um model portfolio para começar."
+				title="No portfolios"
+				message="Create a model portfolio to get started."
 			/>
 		{/if}
 

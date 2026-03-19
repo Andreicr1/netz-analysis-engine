@@ -2,11 +2,11 @@
   Tenant list — grid of TenantCards with Create button.
 -->
 <script lang="ts">
-	import { SectionCard, EmptyState, Dialog, Button, ActionButton, FormField } from "@netz/ui";
+	import { SectionCard, EmptyState, Dialog, Button, ActionButton, FormField, Input, Select, PageHeader } from "@netz/ui";
 	import type { PageData } from "./$types";
 	import TenantCard from "$lib/components/TenantCard.svelte";
 	import { createClientApiClient } from "$lib/api/client";
-	import { goto, invalidateAll } from "$app/navigation";
+	import { goto } from "$app/navigation";
 
 	let { data }: { data: PageData } = $props();
 	let showCreate = $state(false);
@@ -21,6 +21,12 @@
 		slug: !form.slug ? "Required" : !slugRegex.test(form.slug) ? "Lowercase alphanumeric + hyphens only" : null,
 	});
 	let canSubmit = $derived(!errors.name && !errors.slug && !creating);
+
+	const planOptions = [
+		{ value: "standard", label: "Standard" },
+		{ value: "professional", label: "Professional" },
+		{ value: "enterprise", label: "Enterprise" },
+	];
 
 	function resetForm() {
 		form = { name: "", slug: "", clerk_org_id: "", plan_tier: "standard" };
@@ -56,10 +62,11 @@
 </script>
 
 <div class="space-y-6 p-6">
-	<div class="flex items-center justify-between">
-		<h1 class="text-2xl font-bold text-[var(--netz-text-primary)]">Tenants</h1>
-		<Button onclick={onOpen}>Create Tenant</Button>
-	</div>
+	<PageHeader title="Tenants">
+		{#snippet actions()}
+			<Button onclick={onOpen}>Create Tenant</Button>
+		{/snippet}
+	</PageHeader>
 
 	{#if data.tenants.length > 0}
 		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -68,55 +75,51 @@
 			{/each}
 		</div>
 	{:else}
-		<SectionCard title="Tenants">
-			<EmptyState message="No tenants found. Create one to get started." />
-		</SectionCard>
+		<EmptyState title="No tenants" message="Create one to get started." actionLabel="Create Tenant" onAction={onOpen} />
 	{/if}
 
 	<Dialog bind:open={showCreate}>
-		<h2 class="mb-4 text-lg font-semibold text-[var(--netz-text-primary)]">
+		<h2 class="mb-4 text-lg font-semibold text-(--netz-text-primary)">
 			Create Tenant
 		</h2>
 		<div class="space-y-4">
 			<FormField label="Organization Name" required error={touched.name ? errors.name : null}>
-				<input
-					bind:value={form.name}
+				<Input
+					value={form.name}
+					oninput={(e) => (form.name = e.currentTarget.value)}
 					placeholder="Acme Capital"
 					onblur={() => (touched.name = true)}
-					class="flex h-9 w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-1 text-sm text-[var(--netz-text-primary)] placeholder:text-[var(--netz-text-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--netz-brand-secondary)]"
 				/>
 			</FormField>
 
 			<FormField label="Slug" required error={touched.slug ? errors.slug : null} hint="URL-safe identifier">
-				<input
-					bind:value={form.slug}
+				<Input
+					value={form.slug}
+					oninput={(e) => (form.slug = e.currentTarget.value)}
 					placeholder="acme-capital"
 					onblur={() => (touched.slug = true)}
-					class="flex h-9 w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-1 text-sm text-[var(--netz-text-primary)] placeholder:text-[var(--netz-text-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--netz-brand-secondary)]"
 				/>
 			</FormField>
 
 			<FormField label="Clerk Org ID" hint="Optional — link to Clerk organization">
-				<input
-					bind:value={form.clerk_org_id}
+				<Input
+					value={form.clerk_org_id}
+					oninput={(e) => (form.clerk_org_id = e.currentTarget.value)}
 					placeholder="org_..."
-					class="flex h-9 w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-1 text-sm text-[var(--netz-text-primary)] placeholder:text-[var(--netz-text-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--netz-brand-secondary)]"
 				/>
 			</FormField>
 
 			<FormField label="Plan Tier">
-				<select
-					bind:value={form.plan_tier}
-					class="flex h-9 w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-1 text-sm text-[var(--netz-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--netz-brand-secondary)]"
-				>
-					<option value="standard">Standard</option>
-					<option value="professional">Professional</option>
-					<option value="enterprise">Enterprise</option>
-				</select>
+				<Select
+					value={form.plan_tier}
+					onValueChange={(v) => (form.plan_tier = v)}
+					options={planOptions}
+					placeholder=""
+				/>
 			</FormField>
 
 			{#if error}
-				<p class="text-xs text-[var(--netz-danger)]">{error}</p>
+				<p class="text-xs text-(--netz-danger)">{error}</p>
 			{/if}
 
 			<div class="flex justify-end gap-3">

@@ -22,24 +22,24 @@
 
 {#if typedTasks.length === 0}
 	<Card class="p-4">
-		<p class="text-sm text-[var(--netz-text-muted)]">No pending tasks.</p>
+		<p class="text-sm text-(--netz-text-muted)">No pending tasks.</p>
 	</Card>
 {:else}
-	<Card class="divide-y divide-[var(--netz-border)]">
+	<Card class="divide-y divide-(--netz-border)">
 		{#each typedTasks as task (task.id)}
 			<a
 				href={task.link ?? "#"}
-				class="flex items-center justify-between px-4 py-3 transition-colors hover:bg-[var(--netz-surface-alt)]"
+				class="flex items-center justify-between px-4 py-3 transition-colors hover:bg-(--netz-surface-alt)"
 			>
 				<div class="flex items-center gap-3">
 					<StatusBadge status={task.priority} type="risk" resolve={resolveCreditStatus} />
 					<div>
-						<p class="text-sm font-medium text-[var(--netz-text-primary)]">{task.title}</p>
-						<p class="text-xs text-[var(--netz-text-muted)]">{task.type}</p>
+						<p class="text-sm font-medium text-(--netz-text-primary)">{task.title}</p>
+						<p class="text-xs text-(--netz-text-muted)">{task.type}</p>
 					</div>
 				</div>
 				{#if task.due_date}
-					<span class="text-xs text-[var(--netz-text-muted)]">{task.due_date}</span>
+					<span class="text-xs text-(--netz-text-muted)">{task.due_date}</span>
 				{/if}
 			</a>
 		{/each}

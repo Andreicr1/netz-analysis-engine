@@ -14,19 +14,19 @@
 
 	const variantStyles: Record<Variant, string> = {
 		default:
-			"border border-[var(--netz-border-accent)] bg-[var(--netz-accent-muted)] text-[var(--netz-brand-primary)]",
+			"border border-(--netz-border-accent) bg-(--netz-accent-muted) text-(--netz-brand-primary)",
 		secondary:
-			"border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-panel)] text-[var(--netz-text-secondary)]",
+			"border border-(--netz-border-subtle) bg-(--netz-surface-panel) text-(--netz-text-secondary)",
 		destructive:
-			"border border-transparent bg-[var(--netz-danger-subtle)] text-[var(--netz-danger)]",
+			"border border-transparent bg-(--netz-danger-subtle) text-(--netz-danger)",
 		outline:
-			"border border-[var(--netz-border-subtle)] bg-transparent text-[var(--netz-text-secondary)]",
+			"border border-(--netz-border-subtle) bg-transparent text-(--netz-text-secondary)",
 	};
 </script>
 
 <span
 	class={cn(
-		"inline-flex items-center whitespace-nowrap rounded-[var(--netz-radius-pill)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] transition-[color,background-color,border-color]",
+		"inline-flex items-center whitespace-nowrap rounded-(--netz-radius-pill) px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] transition-[color,background-color,border-color]",
 		variantStyles[variant],
 		className,
 	)}

@@ -23,8 +23,8 @@
 
 <div class={cn("flex flex-wrap gap-3", className)}>
 	<!-- VIX -->
-	<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-inset)] px-4 py-3">
-		<p class="text-xs text-[var(--netz-text-muted)]">VIX</p>
+	<div class="rounded-lg border border-(--netz-border) bg-(--netz-surface-inset) px-4 py-3">
+		<p class="text-xs text-(--netz-text-muted)">VIX</p>
 		<p
 			class="text-lg font-semibold"
 			style:color={macro.vix !== null && macro.vix > 25
@@ -34,8 +34,8 @@
 	</div>
 
 	<!-- Yield Curve -->
-	<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-inset)] px-4 py-3">
-		<p class="text-xs text-[var(--netz-text-muted)]">Yield Curve</p>
+	<div class="rounded-lg border border-(--netz-border) bg-(--netz-surface-inset) px-4 py-3">
+		<p class="text-xs text-(--netz-text-muted)">Yield Curve</p>
 		<p
 			class="text-lg font-semibold"
 			style:color={macro.yield_curve_10y2y !== null && macro.yield_curve_10y2y < 0
@@ -45,17 +45,17 @@
 	</div>
 
 	<!-- CPI YoY -->
-	<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-inset)] px-4 py-3">
-		<p class="text-xs text-[var(--netz-text-muted)]">CPI YoY</p>
-		<p class="text-lg font-semibold text-[var(--netz-text-primary)]">
+	<div class="rounded-lg border border-(--netz-border) bg-(--netz-surface-inset) px-4 py-3">
+		<p class="text-xs text-(--netz-text-muted)">CPI YoY</p>
+		<p class="text-lg font-semibold text-(--netz-text-primary)">
 			{macro.cpi_yoy !== null ? formatPercent(macro.cpi_yoy / 100, 1, "en-US") : "—"}
 		</p>
 	</div>
 
 	<!-- Fed Funds -->
-	<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-inset)] px-4 py-3">
-		<p class="text-xs text-[var(--netz-text-muted)]">Fed Funds</p>
-		<p class="text-lg font-semibold text-[var(--netz-text-primary)]">
+	<div class="rounded-lg border border-(--netz-border) bg-(--netz-surface-inset) px-4 py-3">
+		<p class="text-xs text-(--netz-text-muted)">Fed Funds</p>
+		<p class="text-lg font-semibold text-(--netz-text-primary)">
 			{macro.fed_funds_rate !== null ? formatPercent(macro.fed_funds_rate / 100, 2, "en-US") : "—"}
 		</p>
 	</div>

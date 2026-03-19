@@ -14,10 +14,7 @@
 
 	const navItems: NavItem[] = [
 		{ label: "Dashboard", href: "/dashboard" },
-		{ label: "Pipeline", href: "/pipeline" },
-		{ label: "Portfolio", href: "/portfolio" },
-		{ label: "Documents", href: "/documents" },
-		{ label: "Reporting", href: "/reporting" },
+		{ label: "Funds", href: "/funds" },
 		{ label: "Copilot", href: "/copilot" },
 	];
 </script>

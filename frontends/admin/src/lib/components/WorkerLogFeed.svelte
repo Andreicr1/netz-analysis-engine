@@ -220,7 +220,7 @@
 
 <div class="space-y-3">
 	<div class="flex flex-wrap items-center gap-2">
-		<div class="flex items-center gap-2 rounded-full border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-1 text-xs text-[var(--netz-text-secondary)]">
+		<div class="flex items-center gap-2 rounded-full border border-(--netz-border) bg-(--netz-surface) px-3 py-1 text-xs text-(--netz-text-secondary)">
 			<span class="h-2 w-2 rounded-full" style={`background-color: ${connectionTone};`}></span>
 			<span>{connection?.status ?? "disconnected"}</span>
 			<span>•</span>
@@ -231,13 +231,13 @@
 		<button
 			type="button"
 			onclick={isLive ? stopStream : startStream}
-			class="rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-1 text-xs text-[var(--netz-text-primary)] hover:bg-[var(--netz-surface-alt)]"
+			class="rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-1 text-xs text-(--netz-text-primary) hover:bg-(--netz-surface-alt)"
 		>
 			{isLive ? "Disconnect" : "Reconnect"}
 		</button>
 
 		{#if connection?.error}
-			<p class="text-xs text-[var(--netz-danger)]">{connection.error.message}</p>
+			<p class="text-xs text-(--netz-danger)">{connection.error.message}</p>
 		{/if}
 	</div>
 
@@ -249,8 +249,8 @@
 					onclick={() => (severityFilter = severity)}
 					class={`rounded-full border px-3 py-1 text-xs transition ${
 						severityFilter === severity
-							? "border-[var(--netz-brand-primary)] bg-[var(--netz-brand-primary)] text-white"
-							: "border-[var(--netz-border)] bg-[var(--netz-surface)] text-[var(--netz-text-secondary)] hover:bg-[var(--netz-surface-alt)]"
+							? "border-(--netz-brand-primary) bg-(--netz-brand-primary) text-white"
+							: "border-(--netz-border) bg-(--netz-surface) text-(--netz-text-secondary) hover:bg-(--netz-surface-alt)"
 					}`}
 				>
 					{severity === "all"
@@ -262,7 +262,7 @@
 
 		<input
 			type="search"
-			class="min-w-0 flex-1 rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] placeholder:text-[var(--netz-text-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--netz-brand-secondary)]"
+			class="min-w-0 flex-1 rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) placeholder:text-(--netz-text-muted) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--netz-brand-secondary)"
 			bind:value={searchQuery}
 			placeholder="Search worker logs"
 		/>
@@ -271,13 +271,13 @@
 	<div
 		bind:this={logContainer}
 		onscroll={handleScroll}
-		class="max-h-[28rem] overflow-auto rounded-xl border border-[var(--netz-border)] bg-[var(--netz-surface)]"
+		class="max-h-[28rem] overflow-auto rounded-xl border border-(--netz-border) bg-(--netz-surface)"
 		role="log"
 		aria-live="polite"
 		aria-relevant="additions text"
 	>
 		{#if visibleLogs.length > 0}
-			<div class="divide-y divide-[var(--netz-border)]">
+			<div class="divide-y divide-(--netz-border)">
 				{#each visibleLogs as entry (entry.id)}
 					<article class="border-l-4 px-4 py-3" style={`border-left-color: ${severityMeta[entry.severity].tone};`}>
 						<div class="flex flex-wrap items-start gap-3">
@@ -288,10 +288,10 @@
 								{severityMeta[entry.severity].label}
 							</span>
 							<div class="min-w-0 flex-1">
-								<p class="break-words font-mono text-xs text-[var(--netz-text-primary)]">
+								<p class="break-words font-mono text-xs text-(--netz-text-primary)">
 									{entry.message}
 								</p>
-								<div class="mt-1 flex flex-wrap gap-3 text-[11px] text-[var(--netz-text-muted)]">
+								<div class="mt-1 flex flex-wrap gap-3 text-[11px] text-(--netz-text-muted)">
 									{#if entry.source}
 										<span>{entry.source}</span>
 									{/if}
@@ -307,7 +307,7 @@
 				{/each}
 			</div>
 		{:else}
-			<div class="px-4 py-8 text-sm text-[var(--netz-text-muted)]">
+			<div class="px-4 py-8 text-sm text-(--netz-text-muted)">
 				No logs yet. The feed connects automatically when this panel loads.
 			</div>
 		{/if}

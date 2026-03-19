@@ -35,10 +35,10 @@
 	// Summary text: count changed keys
 	const summaryText = $derived(
 		diff.changed_keys.length === 0
-			? "Nenhuma propriedade alterada"
+			? "No properties changed"
 			: diff.changed_keys.length === 1
-				? "1 propriedade alterada"
-				: `${diff.changed_keys.length} propriedades alteradas`,
+				? "1 property changed"
+				: `${diff.changed_keys.length} properties changed`,
 	);
 
 	const beforeDoc = $derived(JSON.stringify(diff.default, null, 2));
@@ -159,8 +159,8 @@
 			<div class="space-y-1">
 				<p
 					class="text-sm font-medium {diff.changed_keys.length > 0
-						? 'text-[var(--netz-text-primary)]'
-						: 'text-[var(--netz-text-secondary)]'}"
+						? 'text-(--netz-text-primary)'
+						: 'text-(--netz-text-secondary)'}"
 				>
 					{summaryText}
 				</p>
@@ -168,7 +168,7 @@
 					<div class="flex flex-wrap gap-1">
 						{#each diff.changed_keys as key}
 							<span
-								class="rounded-full border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] px-2 py-0.5 font-mono text-xs text-[var(--netz-text-secondary)]"
+								class="rounded-full border border-(--netz-border) bg-(--netz-surface-alt) px-2 py-0.5 font-mono text-xs text-(--netz-text-secondary)"
 							>
 								{key}
 							</span>
@@ -177,20 +177,20 @@
 				{/if}
 			</div>
 
-			<div class="flex shrink-0 gap-1 rounded-md border border-[var(--netz-border)] p-0.5">
+			<div class="flex shrink-0 gap-1 rounded-md border border-(--netz-border) p-0.5">
 				<button
 					onclick={() => (viewMode = "split")}
 					class="rounded px-3 py-1 text-xs font-medium transition-colors {viewMode === 'split'
-						? 'bg-[var(--netz-brand-primary)] text-white'
-						: 'text-[var(--netz-text-secondary)] hover:bg-[var(--netz-surface-alt)]'}"
+						? 'bg-(--netz-brand-primary) text-white'
+						: 'text-(--netz-text-secondary) hover:bg-(--netz-surface-alt)'}"
 				>
 					Split
 				</button>
 				<button
 					onclick={() => (viewMode = "unified")}
 					class="rounded px-3 py-1 text-xs font-medium transition-colors {viewMode === 'unified'
-						? 'bg-[var(--netz-brand-primary)] text-white'
-						: 'text-[var(--netz-text-secondary)] hover:bg-[var(--netz-surface-alt)]'}"
+						? 'bg-(--netz-brand-primary) text-white'
+						: 'text-(--netz-text-secondary) hover:bg-(--netz-surface-alt)'}"
 				>
 					Unified
 				</button>
@@ -200,10 +200,10 @@
 		<!-- Column headers for split view -->
 		{#if viewMode === "split"}
 			<div class="grid grid-cols-2 gap-px">
-				<p class="text-xs font-medium uppercase tracking-[0.14em] text-[var(--netz-text-secondary)]">
+				<p class="text-xs font-medium uppercase tracking-[0.14em] text-(--netz-text-secondary)">
 					Default
 				</p>
-				<p class="text-xs font-medium uppercase tracking-[0.14em] text-[var(--netz-text-secondary)]">
+				<p class="text-xs font-medium uppercase tracking-[0.14em] text-(--netz-text-secondary)">
 					{hasOverride ? "Override" : "No override — showing default"}
 				</p>
 			</div>
@@ -212,7 +212,7 @@
 		<!-- Merge view host -->
 		<div
 			bind:this={mergeHost}
-			class="overflow-hidden rounded-xl border border-[var(--netz-border)] bg-[var(--netz-surface)]"
+			class="overflow-hidden rounded-xl border border-(--netz-border) bg-(--netz-surface)"
 			style="min-height: 200px;"
 			aria-label="Config diff viewer"
 		></div>

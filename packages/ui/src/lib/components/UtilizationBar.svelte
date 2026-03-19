@@ -38,7 +38,7 @@
 
 <div class={cn("w-full", className)}>
 	{#if showValues}
-		<div class="mb-1 flex justify-end gap-1 text-xs text-[var(--netz-text-muted)]">
+		<div class="mb-1 flex justify-end gap-1 text-xs text-(--netz-text-muted)">
 			<span style="color: {fillColor[status]};">{fmt(current)}</span>
 			<span>/</span>
 			<span>{fmt(limit)}</span>

@@ -15,7 +15,7 @@
 </script>
 
 <div
-	class="flex items-center gap-2 rounded-md border border-[var(--netz-warning)]/30 bg-[var(--netz-warning)]/5 px-4 py-2 text-sm text-[var(--netz-warning)]"
+	class="flex items-center gap-2 rounded-md border border-(--netz-warning)/30 bg-(--netz-warning)/5 px-4 py-2 text-sm text-(--netz-warning)"
 	role="alert"
 >
 	<span>

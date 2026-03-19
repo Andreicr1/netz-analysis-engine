@@ -39,10 +39,10 @@
 {#if bannerVisible}
 	<div
 		class="flex items-center gap-2 px-4 py-2 text-sm font-medium"
-		class:bg-[var(--netz-warning-surface)]={quality === "degraded"}
-		class:text-[var(--netz-warning-on-surface)]={quality === "degraded"}
-		class:bg-[var(--netz-error-surface)]={quality === "offline"}
-		class:text-[var(--netz-error-on-surface)]={quality === "offline"}
+		class:bg-(--netz-warning-surface)={quality === "degraded"}
+		class:text-(--netz-warning-on-surface)={quality === "degraded"}
+		class:bg-(--netz-error-surface)={quality === "offline"}
+		class:text-(--netz-error-on-surface)={quality === "offline"}
 		role="status"
 		aria-live="polite"
 	>

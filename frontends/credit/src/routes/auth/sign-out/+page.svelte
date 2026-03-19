@@ -12,6 +12,6 @@
 	});
 </script>
 
-<div class="flex min-h-screen items-center justify-center bg-[var(--netz-surface-alt)]">
-	<p class="text-sm text-[var(--netz-text-secondary)]">Signing out...</p>
+<div class="flex min-h-screen items-center justify-center bg-(--netz-surface-alt)">
+	<p class="text-sm text-(--netz-text-secondary)">Signing out...</p>
 </div>

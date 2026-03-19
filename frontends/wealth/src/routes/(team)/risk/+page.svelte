@@ -62,7 +62,7 @@
 	type BehaviorAlert = { instrument_name: string; severity: string; anomalous_count: number; total_metrics: number };
 
 	const profiles = ["conservative", "moderate", "growth"];
-	const profileLabels: Record<string, string> = { conservative: "Conservador", moderate: "Moderado", growth: "Growth" };
+	const profileLabels: Record<string, string> = { conservative: "Conservative", moderate: "Moderate", growth: "Growth" };
 
 	// CVaR history series
 	const cvarSeries = $derived(
@@ -178,7 +178,7 @@
 			</div>
 		{/snippet}
 	</PageHeader>
-	<p class="-mt-3 text-sm text-(--netz-text-muted)">
+	<p class="mt-1 text-sm text-(--netz-text-muted)">
 		Deep risk diagnostics across CVaR utilization, macro regime context, and drift surveillance.
 	</p>
 
@@ -195,8 +195,8 @@
 		</div>
 	{/if}
 
-	<!-- CVaR 95% — Utilização por Portfólio -->
-	<SectionCard title="CVaR 95% — Utilização por Portfólio" subtitle="Rolling 12M · Limite configurado por perfil de risco">
+	<!-- CVaR 95% — Utilization by Portfolio -->
+	<SectionCard title="CVaR 95% — Utilization by Portfolio" subtitle="Rolling 12M · Limit configured per risk profile">
 		{#snippet actions()}
 			<PeriodSelector periods={cvarPeriods} selected={selectedCvarPeriod} onSelect={(p) => selectedCvarPeriod = p} />
 		{/snippet}
@@ -239,10 +239,10 @@
 		</div>
 	</SectionCard>
 
-	<!-- Regime de Mercado + Drift Alerts side-by-side -->
+	<!-- Market Regime + Drift Alerts side-by-side -->
 	<div class="grid gap-4 lg:grid-cols-5">
 		<!-- Regime Chart (60%) -->
-		<SectionCard title="Regime de Mercado — FRED Indicators" class="lg:col-span-3">
+		<SectionCard title="Market Regime — FRED Indicators" class="lg:col-span-3">
 			{#snippet actions()}
 				{#if currentRegime}
 					<StatusBadge status={currentRegime} resolve={resolveWealthStatus} />
@@ -253,12 +253,12 @@
 					<RegimeChart series={cvarSeries.slice(0, 1)} regimes={regimeBands} ariaLabel="Market regime history chart" />
 				</div>
 			{:else}
-				<EmptyState title="Sem histórico de regime" message="Histórico de regimes aparecerá após a detecção de regime executar." />
+				<EmptyState title="No regime history" message="Regime history will appear after regime detection runs." />
 			{/if}
 		</SectionCard>
 
 		<!-- Drift Alerts (40%) -->
-		<SectionCard title="Drift Alerts" subtitle="Threshold: 0.60 = drift significativo vs benchmark" class="lg:col-span-2">
+		<SectionCard title="Drift Alerts" subtitle="Threshold: 0.60 = significant drift vs benchmark" class="lg:col-span-2">
 			<!-- DTW vs Benchmark -->
 			<h4 class="mb-2 text-xs font-semibold uppercase tracking-wider text-(--netz-text-muted)">DTW vs Benchmark</h4>
 			{#if driftAlerts?.dtw_alerts && driftAlerts.dtw_alerts.length > 0}
@@ -272,9 +272,9 @@
 						</div>
 					{/each}
 				</div>
-				<p class="text-xs text-(--netz-text-muted)">Threshold: 0.60 · Acima é drift significativo vs benchmark</p>
+				<p class="text-xs text-(--netz-text-muted)">Threshold: 0.60 · Above indicates significant drift vs benchmark</p>
 			{:else}
-				<p class="mb-4 text-sm text-(--netz-text-muted)">Sem alertas de DTW drift.</p>
+				<p class="mb-4 text-sm text-(--netz-text-muted)">No DTW drift alerts.</p>
 			{/if}
 
 			<!-- Behavior Change -->
@@ -289,7 +289,7 @@
 					{/each}
 				</div>
 			{:else}
-				<EmptyState title="" message="Behavior change detection disponível quando strategy_drift_scanner estiver ativo." />
+				<EmptyState title="" message="Behavior change detection available when strategy_drift_scanner is active." />
 			{/if}
 		</SectionCard>
 	</div>

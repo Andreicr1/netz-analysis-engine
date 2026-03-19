@@ -87,16 +87,16 @@
 
 <div class="flex h-full">
 	<!-- Chapter sidebar -->
-	<aside class="w-64 shrink-0 border-r border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] p-4">
-		<h3 class="mb-3 text-sm font-semibold text-[var(--netz-text-secondary)]">Chapters</h3>
+	<aside class="w-64 shrink-0 border-r border-(--netz-border) bg-(--netz-surface-panel) p-4">
+		<h3 class="mb-3 text-sm font-semibold text-(--netz-text-secondary)">Chapters</h3>
 		{#if chapters.length === 0}
-			<p class="text-xs text-[var(--netz-text-muted)]">No chapters yet.</p>
+			<p class="text-xs text-(--netz-text-muted)">No chapters yet.</p>
 		{:else}
 			<nav class="space-y-1">
 				{#each chapters as chapter, i (chapter.chapter_number)}
 					<button
 						class="w-full rounded-md px-3 py-2 text-left text-xs transition-colors
-							{activeChapter === i ? 'bg-[var(--netz-brand-primary)]/10 font-medium text-[var(--netz-brand-primary)]' : 'text-[var(--netz-text-secondary)] hover:bg-[var(--netz-bg-hover)]'}"
+							{activeChapter === i ? 'bg-(--netz-brand-primary)/10 font-medium text-(--netz-brand-primary)' : 'text-(--netz-text-secondary) hover:bg-(--netz-surface-highlight)'}"
 						onclick={() => activeChapter = i}
 					>
 						{chapter.chapter_number}. {chapter.title}
@@ -131,7 +131,7 @@
 	<!-- Chapter content -->
 	<main class="flex-1 overflow-y-auto p-6">
 		{#if actionError}
-			<div class="mb-4 rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+			<div class="mb-4 rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
 				{actionError}
 			</div>
 		{/if}
@@ -140,10 +140,10 @@
 			<EmptyState title="No Chapters" description="Report chapters will appear here after generation." />
 		{:else if chapters[activeChapter]}
 			<div>
-				<h2 class="mb-4 text-xl font-semibold text-[var(--netz-text-primary)]">
+				<h2 class="mb-4 text-xl font-semibold text-(--netz-text-primary)">
 					{chapters[activeChapter].chapter_number}. {chapters[activeChapter].title}
 				</h2>
-				<Card class="prose prose-sm max-w-none p-6 text-[var(--netz-text-primary)]">
+				<Card class="prose prose-sm max-w-none p-6 text-(--netz-text-primary)">
 					<!-- Sanitized Markdown rendering — strips scripts/handlers/javascript: -->
 					<div>{@html renderSafeMarkdown(chapters[activeChapter].content)}</div>
 				</Card>

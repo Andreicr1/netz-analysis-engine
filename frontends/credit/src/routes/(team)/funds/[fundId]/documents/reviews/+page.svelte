@@ -2,7 +2,7 @@
   Document review queue — DataTable of pending reviews.
 -->
 <script lang="ts">
-	import { DataTable, DataCard, EmptyState } from "@netz/ui";
+	import { DataTable, DataCard, EmptyState, PageHeader } from "@netz/ui";
 	import type { PageData } from "./$types";
 	import type { PaginatedResponse, ReviewItem, ReviewSummary } from "$lib/types/api";
 
@@ -20,8 +20,11 @@
 	];
 </script>
 
-<div class="p-6">
-	<h2 class="mb-4 text-xl font-semibold text-[var(--netz-text-primary)]">Document Reviews</h2>
+<div class="px-6">
+	<PageHeader
+		title="Document Reviews"
+		breadcrumbs={[{ label: "Funds", href: "/funds" }, { label: "Documents", href: `/funds/${data.fundId}/documents` }, { label: "Reviews" }]}
+	/>
 
 	{#if summary}
 		<div class="mb-6 grid gap-4 md:grid-cols-4">

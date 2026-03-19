@@ -24,7 +24,7 @@
 	<div class="flex flex-1 items-center gap-2">
 		{#if filterColumn}
 			<input
-				class="flex h-9 w-full max-w-sm rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-1 text-sm text-[var(--netz-text-primary)] placeholder:text-[var(--netz-text-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--netz-brand-secondary)]"
+				class="flex h-9 w-full max-w-sm rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-1 text-sm text-(--netz-text-primary) placeholder:text-(--netz-text-muted) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--netz-brand-secondary)"
 				placeholder={filterPlaceholder}
 				value={table.getColumn(filterColumn)?.getFilterValue() ?? ""}
 				oninput={(e) => {

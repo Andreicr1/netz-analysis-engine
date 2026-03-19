@@ -3,7 +3,6 @@
 -->
 <script lang="ts">
 	import { page } from "$app/state";
-	import { PageHeader } from "@netz/ui";
 	import { useContextNav } from "$lib/state/context-nav.svelte";
 	import type { Snippet } from "svelte";
 	import type { LayoutData } from "./$types";
@@ -33,8 +32,6 @@
 		};
 	});
 </script>
-
-<PageHeader title={data.fund.name} />
 
 <div class="flex-1 overflow-y-auto">
 	{@render children()}

@@ -20,7 +20,7 @@
 		{/snippet}
 	</Tooltip.Trigger>
 	<Tooltip.Content
-		class="z-50 overflow-hidden rounded-md border border-[var(--netz-border)] bg-[var(--netz-brand-primary)] px-3 py-1.5 text-xs text-white shadow-md netz-animate-fade-in"
+		class="z-50 overflow-hidden rounded-md border border-(--netz-border) bg-(--netz-brand-primary) px-3 py-1.5 text-xs text-white shadow-md netz-animate-fade-in"
 		sideOffset={4}
 	>
 		{content}

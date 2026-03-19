@@ -205,15 +205,15 @@
 
 <SectionCard title={templateName}>
 	{#if loading}
-		<p class="text-sm text-[var(--netz-text-muted)]">Loading template...</p>
+		<p class="text-sm text-(--netz-text-muted)">Loading template...</p>
 	{:else}
 		<!-- Header -->
 		<div class="mb-3 flex items-center justify-between">
 			<div class="flex items-center gap-2">
 				<span
-					class="h-2 w-2 rounded-full {syntaxValid ? 'bg-green-500' : 'bg-red-500'}"
+					class="h-2 w-2 rounded-full {syntaxValid ? 'bg-(--netz-success)' : 'bg-(--netz-danger)'}"
 				></span>
-				<span class="text-xs text-[var(--netz-text-muted)]">
+				<span class="text-xs text-(--netz-text-muted)">
 					{isReadonly
 						? "Viewing filesystem template (read-only)"
 						: `Editing ${sourceLevel} override`}
@@ -224,7 +224,7 @@
 			</div>
 			<div class="flex items-center gap-2">
 				{#if saveMessage}
-					<span class="text-xs text-[var(--netz-brand-primary)]">{saveMessage}</span>
+					<span class="text-xs text-(--netz-brand-primary)">{saveMessage}</span>
 				{/if}
 				<!-- Validate: triggers lint from CodeMirror content via backend validate endpoint -->
 				<Button
@@ -253,35 +253,35 @@
 
 		<!-- Version History (lazy-loaded) -->
 		{#if showHistory}
-			<div class="mb-4 rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] p-3">
-				<h3 class="mb-2 text-sm font-medium text-[var(--netz-text-primary)]">Version History</h3>
+			<div class="mb-4 rounded-md border border-(--netz-border) bg-(--netz-surface-alt) p-3">
+				<h3 class="mb-2 text-sm font-medium text-(--netz-text-primary)">Version History</h3>
 				{#if historyLoading}
-					<p class="text-xs text-[var(--netz-text-muted)]">Loading versions...</p>
+					<p class="text-xs text-(--netz-text-muted)">Loading versions...</p>
 				{:else if versions.length === 0}
-					<p class="text-xs text-[var(--netz-text-muted)]">No version history available.</p>
+					<p class="text-xs text-(--netz-text-muted)">No version history available.</p>
 				{:else}
 					<div class="max-h-48 space-y-2 overflow-y-auto">
 						{#each versions as ver}
-							<div class="flex items-center justify-between rounded border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2">
+							<div class="flex items-center justify-between rounded border border-(--netz-border) bg-(--netz-surface) px-3 py-2">
 								<div class="min-w-0 flex-1">
 									<div class="flex items-center gap-2">
-										<span class="text-sm font-medium text-[var(--netz-text-primary)]">v{ver.version}</span>
-										<span class="text-xs text-[var(--netz-text-muted)]">{ver.created_at}</span>
+										<span class="text-sm font-medium text-(--netz-text-primary)">v{ver.version}</span>
+										<span class="text-xs text-(--netz-text-muted)">{ver.created_at}</span>
 										{#if ver.actor_id}
-											<span class="text-xs text-[var(--netz-text-secondary)]">by {ver.actor_id}</span>
+											<span class="text-xs text-(--netz-text-secondary)">by {ver.actor_id}</span>
 										{/if}
 									</div>
 									{#if ver.change_summary}
-										<p class="mt-0.5 truncate text-xs text-[var(--netz-text-muted)]">{ver.change_summary}</p>
+										<p class="mt-0.5 truncate text-xs text-(--netz-text-muted)">{ver.change_summary}</p>
 									{/if}
 								</div>
-								<div class="ml-3 flex-shrink-0">
+								<div class="ml-3 shrink-0">
 									{#if ver.version !== version}
 										<Button variant="outline" size="sm" onclick={() => confirmRevert(ver.version)}>
 											Revert
 										</Button>
 									{:else}
-										<span class="text-xs text-[var(--netz-brand-primary)]">Current</span>
+										<span class="text-xs text-(--netz-brand-primary)">Current</span>
 									{/if}
 								</div>
 							</div>
@@ -295,7 +295,8 @@
 		<div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
 			<!-- Left: CodeMirror Jinja2 Editor -->
 			<div>
-				<label class="mb-1 block text-xs text-[var(--netz-text-muted)]">
+				<!-- svelte-ignore a11y_label_has_associated_control -->
+				<label class="mb-1 block text-xs text-(--netz-text-muted)">
 					Template (Jinja2)
 				</label>
 				<JinjaEditor
@@ -307,7 +308,7 @@
 				{#if validationErrors.length > 0}
 					<div class="mt-2 space-y-1">
 						{#each validationErrors as err}
-							<p class="text-xs text-[var(--netz-danger)]">{err}</p>
+							<p class="text-xs text-(--netz-danger)">{err}</p>
 						{/each}
 					</div>
 				{/if}
@@ -315,18 +316,19 @@
 
 			<!-- Right: Preview -->
 			<div>
-				<label class="mb-1 block text-xs text-[var(--netz-text-muted)]">Preview</label>
+				<!-- svelte-ignore a11y_label_has_associated_control -->
+				<label class="mb-1 block text-xs text-(--netz-text-muted)">Preview</label>
 				<div
-					class="h-full min-h-[20rem] overflow-auto rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] p-3"
+					class="h-full min-h-80 overflow-auto rounded-md border border-(--netz-border) bg-(--netz-surface-alt) p-3"
 				>
 					{#if previewErrors.length > 0}
 						<div class="space-y-1">
 							{#each previewErrors as err}
-								<p class="text-xs text-[var(--netz-danger)]">{err}</p>
+								<p class="text-xs text-(--netz-danger)">{err}</p>
 							{/each}
 						</div>
 					{:else}
-						<div class="prose prose-sm text-[var(--netz-text-primary)]">
+						<div class="prose prose-sm text-(--netz-text-primary)">
 							{@html sanitizePreview(preview)}
 						</div>
 					{/if}

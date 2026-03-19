@@ -2,15 +2,14 @@
   Dataroom — folder browser with breadcrumb navigation.
 -->
 <script lang="ts">
-	import { Card, EmptyState } from "@netz/ui";
-	import { page } from "$app/state";
-
-	// Dataroom will use the /api/data-room/tree and /api/data-room/list endpoints.
-	// For now, render a placeholder that will be wired to the API.
+	import { Card, EmptyState, PageHeader } from "@netz/ui";
 </script>
 
-<div class="p-6">
-	<h2 class="mb-4 text-xl font-semibold text-[var(--netz-text-primary)]">Dataroom</h2>
+<div class="px-6">
+	<PageHeader
+		title="Dataroom"
+		breadcrumbs={[{ label: "Funds", href: "/funds" }, { label: "Documents" }, { label: "Dataroom" }]}
+	/>
 	<Card class="p-6">
 		<EmptyState
 			title="Dataroom Browser"

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { MetricCard, SectionCard, StatusBadge } from "@netz/ui";
+	import { MetricCard, PageHeader, SectionCard, StatusBadge } from "@netz/ui";
 	import { resolveAdminStatus } from "$lib/utils/status-maps.js";
 	import type { TenantDetail } from "$lib/types";
 
@@ -38,13 +38,10 @@ type PageData = {
 </script>
 
 <div class="space-y-6 p-6">
-	<div class="space-y-2">
-		<p class="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--netz-text-muted)]">Tenant config</p>
-		<h2 class="text-2xl font-bold text-[var(--netz-text-primary)]">Configuration workspace for {tenant?.org_name ?? data.orgId}</h2>
-		<p class="max-w-3xl text-sm text-[var(--netz-text-secondary)]">
-			This page is the tenant-scoped index for config overrides. Open the vertical workspace to edit the active config, review diffs, and check what currently overrides the global default.
-		</p>
-	</div>
+	<PageHeader title="Configuration workspace for {tenant?.org_name ?? data.orgId}" />
+	<p class="mt-1 max-w-3xl text-sm text-(--netz-text-muted)">
+		This page is the tenant-scoped index for config overrides. Open the vertical workspace to edit the active config, review diffs, and check what currently overrides the global default.
+	</p>
 
 	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 		<MetricCard label="Override Count" value={String(tenant?.configs?.length ?? 0)} />
@@ -54,32 +51,32 @@ type PageData = {
 	<SectionCard title="Workspace map">
 		<div class="space-y-4">
 			{#each groupedConfigs as group}
-				<div class="rounded-xl border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] p-4">
+				<div class="rounded-xl border border-(--netz-border) bg-(--netz-surface-alt) p-4">
 					<div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
 						<div class="space-y-1">
-							<p class="text-sm font-semibold text-[var(--netz-text-primary)]">{humanize(group.vertical)}</p>
-							<p class="text-sm text-[var(--netz-text-secondary)]">
+							<p class="text-sm font-semibold text-(--netz-text-primary)">{humanize(group.vertical)}</p>
+							<p class="text-sm text-(--netz-text-secondary)">
 								{group.configs.length} override{group.configs.length === 1 ? "" : "s"} available for this tenant.
 							</p>
 						</div>
-						<a href="/config/{group.vertical}" class="inline-flex h-8 items-center justify-center rounded-md border border-[var(--netz-border)] bg-transparent px-3 text-xs font-medium text-[var(--netz-text-primary)] transition-colors hover:bg-[var(--netz-surface-alt)]">Open {humanize(group.vertical)} workspace</a>
+						<a href="/config/{group.vertical}" class="inline-flex h-8 items-center justify-center rounded-md border border-(--netz-border) bg-transparent px-3 text-xs font-medium text-(--netz-text-primary) transition-colors hover:bg-(--netz-surface-alt)">Open {humanize(group.vertical)} workspace</a>
 					</div>
 
 					<div class="mt-4 grid gap-3 sm:grid-cols-2">
 						{#if group.configs.length > 0}
 							{#each group.configs as config}
-								<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface)] p-3">
+								<div class="rounded-lg border border-(--netz-border) bg-(--netz-surface) p-3">
 									<div class="flex items-start justify-between gap-3">
 										<div>
-											<p class="text-sm font-medium text-[var(--netz-text-primary)]">{config.config_type}</p>
-											<p class="text-xs text-[var(--netz-text-secondary)]">Version {config.version ?? "\u2014"}</p>
+											<p class="text-sm font-medium text-(--netz-text-primary)">{config.config_type}</p>
+											<p class="text-xs text-(--netz-text-secondary)">Version {config.version ?? "\u2014"}</p>
 										</div>
 										<StatusBadge status={config.has_override ? "warning" : "success"} resolve={resolveAdminStatus} />
 									</div>
 								</div>
 							{/each}
 						{:else}
-							<p class="text-sm text-[var(--netz-text-muted)]">
+							<p class="text-sm text-(--netz-text-muted)">
 								No overrides are stored yet. Open the vertical workspace to create the first tenant-specific values.
 							</p>
 						{/if}
@@ -90,7 +87,7 @@ type PageData = {
 	</SectionCard>
 
 	<SectionCard title="Replacement warning">
-		<div class="space-y-3 text-sm text-[var(--netz-text-secondary)]">
+		<div class="space-y-3 text-sm text-(--netz-text-secondary)">
 			<p>
 				Config changes are centralized. This tenant page only points you at the authoritative vertical editor.
 			</p>

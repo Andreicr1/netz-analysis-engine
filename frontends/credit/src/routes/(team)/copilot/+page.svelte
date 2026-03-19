@@ -3,7 +3,7 @@
   Enhanced: History sidebar, Activity log, Document retrieval.
 -->
 <script lang="ts">
-	import { Card, Button, PageTabs, EmptyState, DataTable, formatPercent } from "@netz/ui";
+	import { Card, Button, PageTabs, EmptyState, DataTable, formatPercent, formatDateTime, PageHeader } from "@netz/ui";
 	import { ActionButton } from "@netz/ui";
 	import CopilotChat from "$lib/components/CopilotChat.svelte";
 	import { createClientApiClient } from "$lib/api/client";
@@ -133,13 +133,11 @@
 	}
 </script>
 
-<div class="flex h-full flex-col p-6">
-	<div class="mb-4 flex items-center justify-between">
-		<h2 class="text-xl font-semibold text-[var(--netz-text-primary)]">Fund Copilot</h2>
-	</div>
+<div class="flex h-full flex-col px-6">
+	<PageHeader title="Fund Copilot" />
 
 	{#if actionError}
-		<div class="mb-4 rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+		<div class="mb-4 rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
 			{actionError}
 			<button class="ml-2 underline" onclick={() => actionError = null}>dismiss</button>
 		</div>
@@ -169,7 +167,7 @@
 						type="text"
 						bind:value={query}
 						placeholder="Ask about the fund portfolio, deals, documents..."
-						class="flex-1 rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-4 py-2.5 text-sm outline-none focus:border-[var(--netz-brand-primary)] focus:ring-1 focus:ring-[var(--netz-brand-primary)]"
+						class="flex-1 rounded-md border border-(--netz-border) bg-(--netz-surface) px-4 py-2.5 text-sm outline-none focus:border-(--netz-brand-primary) focus:ring-1 focus:ring-(--netz-brand-primary)"
 						onkeydown={handleKeydown}
 						disabled={streaming}
 					/>
@@ -181,16 +179,16 @@
 
 		{:else if sidebarTab === "history"}
 			{#if loadingHistory}
-				<p class="text-sm text-[var(--netz-text-muted)]">Loading history...</p>
+				<p class="text-sm text-(--netz-text-muted)">Loading history...</p>
 			{:else if history.length === 0}
 				<EmptyState title="No History" description="Your past queries will appear here." />
 			{:else}
 				<div class="space-y-3 overflow-y-auto">
 					{#each history as item}
-						<Card class="cursor-pointer p-4 hover:bg-[var(--netz-bg-hover)]" onclick={() => replayFromHistory(item.question)}>
-							<p class="text-sm font-medium text-[var(--netz-text-primary)]">{item.question}</p>
-							<p class="mt-1 line-clamp-2 text-xs text-[var(--netz-text-muted)]">{item.answer}</p>
-							<p class="mt-1 text-xs text-[var(--netz-text-muted)]">{item.created_at}</p>
+						<Card class="cursor-pointer p-4 hover:bg-(--netz-surface-alt)" onclick={() => replayFromHistory(item.question)}>
+							<p class="text-sm font-medium text-(--netz-text-primary)">{item.question}</p>
+							<p class="mt-1 line-clamp-2 text-xs text-(--netz-text-muted)">{item.answer}</p>
+							<p class="mt-1 text-xs text-(--netz-text-muted)">{formatDateTime(item.created_at)}</p>
 						</Card>
 					{/each}
 				</div>
@@ -198,16 +196,16 @@
 
 		{:else if sidebarTab === "activity"}
 			{#if loadingActivity}
-				<p class="text-sm text-[var(--netz-text-muted)]">Loading activity...</p>
+				<p class="text-sm text-(--netz-text-muted)">Loading activity...</p>
 			{:else if activity.length === 0}
 				<EmptyState title="No Activity" description="AI operation logs will appear here." />
 			{:else}
 				<div class="space-y-2 overflow-y-auto">
 					{#each activity as item}
 						<Card class="p-3">
-							<p class="text-xs font-medium text-[var(--netz-text-primary)]">{item.action}</p>
-							<p class="text-xs text-[var(--netz-text-muted)]">{item.detail}</p>
-							<p class="mt-1 text-xs text-[var(--netz-text-muted)]">{item.created_at}</p>
+							<p class="text-xs font-medium text-(--netz-text-primary)">{item.action}</p>
+							<p class="text-xs text-(--netz-text-muted)">{item.detail}</p>
+							<p class="mt-1 text-xs text-(--netz-text-muted)">{formatDateTime(item.created_at)}</p>
 						</Card>
 					{/each}
 				</div>
@@ -220,7 +218,7 @@
 						type="text"
 						bind:value={retrieveQuery}
 						placeholder="Search documents by semantic query..."
-						class="flex-1 rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-4 py-2.5 text-sm outline-none focus:border-[var(--netz-brand-primary)]"
+						class="flex-1 rounded-md border border-(--netz-border) bg-(--netz-surface) px-4 py-2.5 text-sm outline-none focus:border-(--netz-brand-primary)"
 						onkeydown={(e) => { if (e.key === "Enter") searchDocuments(); }}
 					/>
 					<ActionButton onclick={searchDocuments} loading={retrieving} loadingText="Searching...">
@@ -233,12 +231,12 @@
 						{#each retrieveResults as doc}
 							<Card class="p-3">
 								<div class="flex items-start justify-between">
-									<p class="text-sm font-medium text-[var(--netz-text-primary)]">{doc.title}</p>
-									<span class="ml-2 shrink-0 rounded-full bg-[var(--netz-brand-primary)]/10 px-2 py-0.5 text-xs text-[var(--netz-brand-primary)]">
+									<p class="text-sm font-medium text-(--netz-text-primary)">{doc.title}</p>
+									<span class="ml-2 shrink-0 rounded-full bg-(--netz-brand-primary)/10 px-2 py-0.5 text-xs text-(--netz-brand-primary)">
 										{formatPercent(doc.score)}
 									</span>
 								</div>
-								<p class="mt-1 line-clamp-3 text-xs text-[var(--netz-text-muted)]">{doc.snippet}</p>
+								<p class="mt-1 line-clamp-3 text-xs text-(--netz-text-muted)">{doc.snippet}</p>
 							</Card>
 						{/each}
 					</div>

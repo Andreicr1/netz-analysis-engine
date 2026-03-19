@@ -76,9 +76,9 @@
 	}
 </script>
 
-<div class={cn("flex flex-col divide-y divide-[var(--netz-border)]", className)} role="feed">
+<div class={cn("flex flex-col divide-y divide-(--netz-border)", className)} role="feed">
 	{#if visible.length === 0}
-		<p class="py-8 text-center text-sm text-[var(--netz-text-muted)]">Nenhum alerta.</p>
+		<p class="py-8 text-center text-sm text-(--netz-text-muted)">Nenhum alerta.</p>
 	{:else}
 		{#each visible as alert, i (alertKey(alert, i))}
 			{@const sev = alertSeverity(alert)}
@@ -95,7 +95,7 @@
 						>
 							{typeLabel[alert.type]}
 						</span>
-						<p class="text-sm font-semibold text-[var(--netz-text-primary)]">
+						<p class="text-sm font-semibold text-(--netz-text-primary)">
 							{alertTitle(alert)}
 						</p>
 					</div>
@@ -106,26 +106,26 @@
 							<UtilizationBar current={alert.utilization} limit={100} showValues={false} />
 						</div>
 					{:else if alert.type === "behavior_change"}
-						<p class="mt-0.5 text-xs text-[var(--netz-text-secondary)]">
+						<p class="mt-0.5 text-xs text-(--netz-text-secondary)">
 							Severidade: {alert.severity} · Métricas: {alert.changed_metrics.join(", ")}
 						</p>
 					{:else if alert.type === "dtw_drift"}
-						<p class="mt-0.5 text-xs text-[var(--netz-text-secondary)]">
+						<p class="mt-0.5 text-xs text-(--netz-text-secondary)">
 							Drift score: {alert.drift_score.toFixed(3)}
 						</p>
 					{:else if alert.type === "regime_change"}
-						<p class="mt-0.5 text-xs text-[var(--netz-text-secondary)]">
+						<p class="mt-0.5 text-xs text-(--netz-text-secondary)">
 							Transição de regime detectada
 						</p>
 					{:else if alert.type === "universe_removal"}
-						<p class="mt-0.5 text-xs text-[var(--netz-text-secondary)]">
+						<p class="mt-0.5 text-xs text-(--netz-text-secondary)">
 							Portfólios afetados: {alert.affected_portfolios.join(", ")}
 						</p>
 					{/if}
 				</div>
 
 				<time
-					class="shrink-0 text-xs text-[var(--netz-text-muted)]"
+					class="shrink-0 text-xs text-(--netz-text-muted)"
 					datetime={alert.ts.toISOString()}
 				>
 					{relativeTime(alert.ts)}

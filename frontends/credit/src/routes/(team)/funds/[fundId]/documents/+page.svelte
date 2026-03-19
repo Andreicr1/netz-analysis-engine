@@ -2,7 +2,7 @@
   Document list — folders sidebar, document table, ingestion control, evidence lifecycle.
 -->
 <script lang="ts">
-	import { DataTable, Button, EmptyState, Card, Dialog } from "@netz/ui";
+	import { DataTable, Button, EmptyState, Card, Dialog, PageHeader } from "@netz/ui";
 	import { ActionButton, ConfirmDialog, FormField } from "@netz/ui";
 	import IngestionProgress from "$lib/components/IngestionProgress.svelte";
 	import { createClientApiClient } from "$lib/api/client";
@@ -99,25 +99,25 @@
 
 <div class="flex h-full">
 	<!-- Folder sidebar -->
-	<aside class="w-52 shrink-0 border-r border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] p-4">
+	<aside class="w-52 shrink-0 border-r border-(--netz-border) bg-(--netz-surface-alt) p-4">
 		<div class="mb-3 flex items-center justify-between">
-			<h3 class="text-xs font-semibold uppercase text-[var(--netz-text-muted)]">Folders</h3>
+			<h3 class="text-xs font-semibold uppercase tracking-wider text-(--netz-text-muted)">Folders</h3>
 			<button
-				class="text-xs text-[var(--netz-brand-primary)] hover:underline"
+				class="text-xs text-(--netz-brand-primary) hover:underline"
 				onclick={() => showCreateFolder = true}
 			>
 				+ New
 			</button>
 		</div>
 		<button
-			class="mb-1 w-full rounded px-2 py-1.5 text-left text-xs text-[var(--netz-text-primary)] hover:bg-[var(--netz-bg-hover)]"
+			class="mb-1 w-full rounded px-2 py-1.5 text-left text-xs text-(--netz-text-primary) hover:bg-(--netz-surface-alt)"
 			onclick={() => goto(`/funds/${data.fundId}/documents`)}
 		>
 			All Documents
 		</button>
 		{#each rootFolders as folder (folder.id)}
 			<button
-				class="mb-1 w-full rounded px-2 py-1.5 text-left text-xs text-[var(--netz-text-secondary)] hover:bg-[var(--netz-bg-hover)]"
+				class="mb-1 w-full rounded px-2 py-1.5 text-left text-xs text-(--netz-text-secondary) hover:bg-(--netz-surface-alt)"
 				onclick={() => goto(`/funds/${data.fundId}/documents?root_folder=${folder.name}`)}
 			>
 				{folder.name}
@@ -126,31 +126,35 @@
 	</aside>
 
 	<!-- Main content -->
-	<div class="flex-1 p-6">
-		<div class="mb-4 flex items-center justify-between">
-			<h2 class="text-xl font-semibold text-[var(--netz-text-primary)]">Documents</h2>
-			<div class="flex gap-2">
-				<ActionButton
-					size="sm"
-					variant="outline"
-					onclick={processPending}
-					loading={processing}
-					loadingText="Processing..."
-				>
-					Process Pending
-				</ActionButton>
-				<Button size="sm" variant="outline" onclick={() => showEvidenceUpload = true}>
-					Request Evidence
-				</Button>
-				<Button size="sm" href="/funds/{data.fundId}/documents/upload">Upload</Button>
-				<Button size="sm" variant="outline" href="/funds/{data.fundId}/documents/reviews">Reviews</Button>
-				<Button size="sm" variant="outline" href="/funds/{data.fundId}/documents/dataroom">Dataroom</Button>
-				<Button size="sm" variant="outline" href="/funds/{data.fundId}/documents/auditor">Auditor View</Button>
-			</div>
-		</div>
+	<div class="flex-1 px-6">
+		<PageHeader
+			title="Documents"
+			breadcrumbs={[{ label: "Funds", href: "/funds" }, { label: "Documents" }]}
+		>
+			{#snippet actions()}
+				<div class="flex gap-2">
+					<ActionButton
+						size="sm"
+						variant="outline"
+						onclick={processPending}
+						loading={processing}
+						loadingText="Processing..."
+					>
+						Process Pending
+					</ActionButton>
+					<Button size="sm" variant="outline" onclick={() => showEvidenceUpload = true}>
+						Request Evidence
+					</Button>
+					<Button size="sm" href="/funds/{data.fundId}/documents/upload">Upload</Button>
+					<Button size="sm" variant="outline" href="/funds/{data.fundId}/documents/reviews">Reviews</Button>
+					<Button size="sm" variant="outline" href="/funds/{data.fundId}/documents/dataroom">Dataroom</Button>
+					<Button size="sm" variant="outline" href="/funds/{data.fundId}/documents/auditor">Auditor View</Button>
+				</div>
+			{/snippet}
+		</PageHeader>
 
 		{#if actionError}
-			<div class="mb-4 rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+			<div class="mb-4 rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
 				{actionError}
 				<button class="ml-2 underline" onclick={() => actionError = null}>dismiss</button>
 			</div>
@@ -183,7 +187,7 @@
 		<FormField label="Folder Name" required>
 			<input
 				type="text"
-				class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
+				class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary)"
 				bind:value={folderName}
 				placeholder="e.g. Legal Documents"
 			/>

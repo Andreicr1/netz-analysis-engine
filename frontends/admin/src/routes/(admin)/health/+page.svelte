@@ -3,7 +3,7 @@
   Auto-refresh via client-side $effect (NOT invalidateAll).
 -->
 <script lang="ts">
-	import { DataTable, MetricCard, SectionCard, formatDateTime, formatNumber, formatPercent } from "@netz/ui";
+	import { DataTable, MetricCard, PageHeader, SectionCard, formatDateTime, formatNumber, formatPercent } from "@netz/ui";
 	import ServiceHealthCard from "$lib/components/ServiceHealthCard.svelte";
 	import WorkerLogFeed from "$lib/components/WorkerLogFeed.svelte";
 	import { createClientApiClient } from "$lib/api/client";
@@ -50,7 +50,9 @@
 	let { data }: { data: HealthPageData } = $props();
 
 	// Client-side auto-refresh (NOT invalidateAll — avoids full SSR round trip)
+	// svelte-ignore state_referenced_locally
 	let healthData = $state(data.services);
+	// svelte-ignore state_referenced_locally
 	let pipelineData = $state(data.pipelines);
 	let workerStatusFilter = $state("all");
 	let healthErrors = $derived(data.sectionErrors);
@@ -126,7 +128,7 @@
 </script>
 
 <div class="space-y-6 p-6">
-	<h1 class="text-2xl font-bold text-[var(--netz-text-primary)]">System Health</h1>
+	<PageHeader title="System Health" />
 
 	{#if degradedMessage}
 		<div
@@ -134,7 +136,7 @@
 			style="border-color: var(--netz-warning); background-color: color-mix(in srgb, var(--netz-warning) 12%, var(--netz-surface)); color: var(--netz-text-primary);"
 			role="alert"
 		>
-			<p class="font-medium text-[var(--netz-warning)]">Degraded state</p>
+			<p class="font-medium text-(--netz-warning)">Degraded state</p>
 			<p class="mt-1">{degradedMessage}</p>
 		</div>
 	{/if}
@@ -147,7 +149,7 @@
 				style="border-color: var(--netz-warning); background-color: color-mix(in srgb, var(--netz-warning) 12%, var(--netz-surface)); color: var(--netz-text-primary);"
 				role="alert"
 			>
-				<p class="font-medium text-[var(--netz-warning)]">Service health unavailable</p>
+				<p class="font-medium text-(--netz-warning)">Service health unavailable</p>
 				<p class="mt-1">{healthErrors.services}</p>
 			</div>
 		{:else if healthData.length > 0}
@@ -157,7 +159,7 @@
 				{/each}
 			</div>
 		{:else}
-			<div class="rounded-lg border border-dashed border-[var(--netz-border)] px-4 py-3 text-sm text-[var(--netz-text-muted)]">
+			<div class="rounded-lg border border-dashed border-(--netz-border) px-4 py-3 text-sm text-(--netz-text-muted)">
 				No service health data available.
 			</div>
 		{/if}
@@ -171,7 +173,7 @@
 				style="border-color: var(--netz-warning); background-color: color-mix(in srgb, var(--netz-warning) 12%, var(--netz-surface)); color: var(--netz-text-primary);"
 				role="alert"
 			>
-				<p class="font-medium text-[var(--netz-warning)]">Pipeline stats unavailable</p>
+				<p class="font-medium text-(--netz-warning)">Pipeline stats unavailable</p>
 				<p class="mt-1">{healthErrors.pipelines}</p>
 			</div>
 		{:else}
@@ -184,7 +186,7 @@
 				/>
 			</div>
 			{#if pipelineData.checked_at}
-				<p class="mt-3 text-xs text-[var(--netz-text-muted)]">
+				<p class="mt-3 text-xs text-(--netz-text-muted)">
 					Checked at
 					<time datetime={pipelineData.checked_at}>
 						{formatDateTime(pipelineData.checked_at, "en-US")}
@@ -202,16 +204,16 @@
 				style="border-color: var(--netz-warning); background-color: color-mix(in srgb, var(--netz-warning) 12%, var(--netz-surface)); color: var(--netz-text-primary);"
 				role="alert"
 			>
-				<p class="font-medium text-[var(--netz-warning)]">Worker status unavailable</p>
+				<p class="font-medium text-(--netz-warning)">Worker status unavailable</p>
 				<p class="mt-1">{healthErrors.workers}</p>
 			</div>
 		{:else if data.workers.length > 0}
 			<div class="mb-4 flex flex-wrap items-center gap-3">
-				<label class="text-sm text-[var(--netz-text-secondary)]">
-					<span class="mr-2 font-medium text-[var(--netz-text-primary)]">Status</span>
+				<label class="text-sm text-(--netz-text-secondary)">
+					<span class="mr-2 font-medium text-(--netz-text-primary)">Status</span>
 					<select
 						bind:value={workerStatusFilter}
-						class="rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
+						class="rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary)"
 					>
 						<option value="all">All statuses</option>
 						{#each workerStatusOptions as status}
@@ -219,7 +221,7 @@
 						{/each}
 					</select>
 				</label>
-				<p class="text-xs text-[var(--netz-text-muted)]">
+				<p class="text-xs text-(--netz-text-muted)">
 					{workerRows.length} of {data.workers.length} workers
 				</p>
 			</div>
@@ -234,40 +236,40 @@
 					{@const worker = row as HealthWorker}
 					<div class="grid grid-cols-2 gap-4 px-4 py-3 text-sm sm:grid-cols-3">
 						<div>
-							<p class="text-xs text-[var(--netz-text-muted)]">Worker</p>
-							<p class="font-mono font-medium text-[var(--netz-text-primary)]">{worker.name}</p>
+							<p class="text-xs text-(--netz-text-muted)">Worker</p>
+							<p class="font-mono font-medium text-(--netz-text-primary)">{worker.name}</p>
 						</div>
 						<div>
-							<p class="text-xs text-[var(--netz-text-muted)]">Status</p>
-							<p class="text-[var(--netz-text-primary)]">{worker.status}</p>
+							<p class="text-xs text-(--netz-text-muted)">Status</p>
+							<p class="text-(--netz-text-primary)">{worker.status}</p>
 						</div>
 						<div>
-							<p class="text-xs text-[var(--netz-text-muted)]">Error Count</p>
-							<p class="{worker.error_count > 0 ? "text-[var(--netz-danger)]" : "text-[var(--netz-text-primary)]"}">{worker.error_count}</p>
+							<p class="text-xs text-(--netz-text-muted)">Error Count</p>
+							<p class="{worker.error_count > 0 ? "text-(--netz-danger)" : "text-(--netz-text-primary)"}">{worker.error_count}</p>
 						</div>
 						<div>
-							<p class="text-xs text-[var(--netz-text-muted)]">Last Run</p>
-							<p class="text-[var(--netz-text-primary)]">{worker.last_run ? formatDateTime(worker.last_run, "en-US") : "Never"}</p>
+							<p class="text-xs text-(--netz-text-muted)">Last Run</p>
+							<p class="text-(--netz-text-primary)">{worker.last_run ? formatDateTime(worker.last_run, "en-US") : "Never"}</p>
 						</div>
 						<div>
-							<p class="text-xs text-[var(--netz-text-muted)]">Checked At</p>
-							<p class="text-[var(--netz-text-primary)]">{worker.checked_at ? formatDateTime(worker.checked_at, "en-US") : "—"}</p>
+							<p class="text-xs text-(--netz-text-muted)">Checked At</p>
+							<p class="text-(--netz-text-primary)">{worker.checked_at ? formatDateTime(worker.checked_at, "en-US") : "—"}</p>
 						</div>
 						<div>
-							<p class="text-xs text-[var(--netz-text-muted)]">Duration</p>
-							<p class="text-[var(--netz-text-primary)]">{worker.duration_ms !== null ? `${formatNumber(worker.duration_ms, 0, "en-US")}ms` : "—"}</p>
+							<p class="text-xs text-(--netz-text-muted)">Duration</p>
+							<p class="text-(--netz-text-primary)">{worker.duration_ms !== null ? `${formatNumber(worker.duration_ms, 0, "en-US")}ms` : "—"}</p>
 						</div>
 						{#if worker.error_count > 0}
 							<div class="col-span-2 sm:col-span-3">
-								<p class="text-xs text-[var(--netz-text-muted)]">Note</p>
-								<p class="text-xs text-[var(--netz-warning)]">This worker has recorded errors. Check the log feed below for details.</p>
+								<p class="text-xs text-(--netz-text-muted)">Note</p>
+								<p class="text-xs text-(--netz-warning)">This worker has recorded errors. Check the log feed below for details.</p>
 							</div>
 						{/if}
 					</div>
 				{/snippet}
 			</DataTable>
 		{:else}
-			<p class="text-[var(--netz-text-muted)]">No workers registered.</p>
+			<p class="text-(--netz-text-muted)">No workers registered.</p>
 		{/if}
 	</SectionCard>
 

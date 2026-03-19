@@ -29,17 +29,17 @@
 
 <div
 	class={cn(
-		"flex flex-col items-center justify-center rounded-[var(--netz-radius-lg)] border border-dashed border-[var(--netz-border-subtle)] bg-[var(--netz-surface-panel)] px-6 py-12 text-center",
+		"flex flex-col items-center justify-center rounded-(--netz-radius-lg) border border-dashed border-(--netz-border-subtle) bg-(--netz-surface-panel) px-6 py-12 text-center",
 		className,
 	)}
 >
 	{#if icon}
-		<div class="mb-5 flex h-16 w-16 items-center justify-center rounded-[var(--netz-radius-lg)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] text-[var(--netz-text-muted)] shadow-[var(--netz-shadow-1)]">
+		<div class="mb-5 flex h-16 w-16 items-center justify-center rounded-(--netz-radius-lg) border border-(--netz-border-subtle) bg-(--netz-surface-elevated) text-(--netz-text-muted) shadow-(--netz-shadow-1)">
 			{@render icon()}
 		</div>
 	{:else}
 		<!-- Default empty icon -->
-		<div class="mb-5 flex h-16 w-16 items-center justify-center rounded-[var(--netz-radius-lg)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] text-[var(--netz-text-muted)] shadow-[var(--netz-shadow-1)]">
+		<div class="mb-5 flex h-16 w-16 items-center justify-center rounded-(--netz-radius-lg) border border-(--netz-border-subtle) bg-(--netz-surface-elevated) text-(--netz-text-muted) shadow-(--netz-shadow-1)">
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
 				width="28"
@@ -56,11 +56,11 @@
 			</svg>
 		</div>
 	{/if}
-	<h3 class="text-base font-semibold tracking-[-0.015em] text-[var(--netz-text-primary)]">
+	<h3 class="text-base font-semibold tracking-[-0.015em] text-(--netz-text-primary)">
 		{title}
 	</h3>
 	{#if displayMessage}
-		<p class="mt-2 max-w-[36ch] text-sm leading-6 text-[var(--netz-text-secondary)]">
+		<p class="mt-2 max-w-[36ch] text-sm leading-6 text-(--netz-text-secondary)">
 			{displayMessage}
 		</p>
 	{/if}

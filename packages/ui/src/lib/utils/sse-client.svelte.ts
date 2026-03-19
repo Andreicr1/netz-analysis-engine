@@ -108,7 +108,16 @@ export function createSSEStream<T>(config: SSEConfig<T>): SSEConnection<T> {
 			});
 
 			if (!res.ok) {
-				throw new Error(`SSE connection failed: ${res.status}`);
+				const sseError = new Error(`SSE connection failed: ${res.status}`);
+				if (res.status === 401 || res.status === 403) {
+					// Auth errors are permanent — do not retry
+					status = "error";
+					error = sseError;
+					config.onError?.(sseError);
+					if (registered) { unregisterSSE(); registered = false; }
+					return;
+				}
+				throw sseError;
 			}
 
 			if (!res.body) {

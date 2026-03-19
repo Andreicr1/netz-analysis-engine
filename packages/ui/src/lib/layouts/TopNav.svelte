@@ -284,7 +284,10 @@
 			display: none;
 		}
 		.netz-topnav__trailing {
-			display: none;
+			gap: 0.25rem;
+		}
+		.netz-topnav__trailing :global(button) {
+			padding: 0.375rem;
 		}
 		.netz-topnav__hamburger {
 			display: flex;

@@ -17,10 +17,10 @@
 </script>
 
 <Card class="p-4">
-	<h3 class="mb-3 text-sm font-medium text-[var(--netz-text-secondary)]">Deal Pipeline</h3>
+	<h3 class="mb-3 text-sm font-medium text-(--netz-text-secondary)">Deal Pipeline</h3>
 	{#if funnelStages.length > 0}
 		<FunnelChart stages={funnelStages} height={280} />
 	{:else}
-		<p class="py-8 text-center text-sm text-[var(--netz-text-muted)]">No pipeline data</p>
+		<p class="py-8 text-center text-sm text-(--netz-text-muted)">No pipeline data</p>
 	{/if}
 </Card>

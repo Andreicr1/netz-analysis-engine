@@ -13,7 +13,7 @@
 
 <div
 	class={cn(
-		"inline-flex items-center gap-1 rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] p-1",
+		"inline-flex items-center gap-1 rounded-lg border border-(--netz-border) bg-(--netz-surface-alt) p-1",
 		className,
 	)}
 	role="group"
@@ -25,8 +25,8 @@
 			class={cn(
 				"rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
 				period === selected
-					? "bg-[var(--netz-brand-primary)] text-white shadow-sm"
-					: "text-[var(--netz-text-muted)] hover:bg-[var(--netz-surface)] hover:text-[var(--netz-text-secondary)]",
+					? "bg-(--netz-brand-primary) text-white shadow-sm"
+					: "text-(--netz-text-muted) hover:bg-(--netz-surface) hover:text-(--netz-text-secondary)",
 			)}
 			aria-pressed={period === selected}
 			onclick={() => onSelect(period)}

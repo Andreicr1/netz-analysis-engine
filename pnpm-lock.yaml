@@ -127,6 +127,9 @@ importers:
       '@netz/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@tanstack/svelte-table':
+        specifier: 9.0.0-alpha.10
+        version: 9.0.0-alpha.10(svelte@5.53.12)
       '@tanstack/svelte-virtual':
         specifier: ^3.0.0
         version: 3.13.23(svelte@5.53.12)

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { invalidateAll } from "$app/navigation";
 	import { createClientApiClient } from "$lib/api/client";
-	import { ActionButton, ConfirmDialog, MetricCard, SectionCard } from "@netz/ui";
+	import { ActionButton, ConfirmDialog, MetricCard, PageHeader, SectionCard } from "@netz/ui";
 	import type { TenantDetail } from "$lib/types";
 
 type PageData = {
@@ -37,13 +37,10 @@ type PageData = {
 </script>
 
 <div class="space-y-6 p-6">
-	<div class="space-y-2">
-		<p class="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--netz-text-muted)]">Tenant setup</p>
-		<h2 class="text-2xl font-bold text-[var(--netz-text-primary)]">Setup center for {tenantName}</h2>
-		<p class="max-w-3xl text-sm text-[var(--netz-text-secondary)]">
-			Use this page for one-time tenant bootstrap actions. Seed operations live here now so the overview page stays read-only and the replacement risk is explicit before you act.
-		</p>
-	</div>
+	<PageHeader title="Setup center for {tenantName}" />
+	<p class="mt-1 max-w-3xl text-sm text-(--netz-text-muted)">
+		Use this page for one-time tenant bootstrap actions. Seed operations live here now so the overview page stays read-only and the replacement risk is explicit before you act.
+	</p>
 
 	<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 		<MetricCard label="Config Overrides" value={String(tenant?.configs?.length ?? 0)} />
@@ -51,7 +48,7 @@ type PageData = {
 	</div>
 
 	<SectionCard title="Replacement warning">
-		<div class="space-y-3 text-sm text-[var(--netz-text-secondary)]">
+		<div class="space-y-3 text-sm text-(--netz-text-secondary)">
 			<p>
 				Seeding default configs creates missing overrides only. Existing tenant overrides are left in place.
 			</p>
@@ -62,7 +59,7 @@ type PageData = {
 	</SectionCard>
 
 	<SectionCard title="What seeding does">
-		<ul class="list-disc space-y-2 pl-5 text-sm text-[var(--netz-text-secondary)]">
+		<ul class="list-disc space-y-2 pl-5 text-sm text-(--netz-text-secondary)">
 			<li>Creates default config overrides that are missing for this tenant.</li>
 			<li>Does not overwrite existing overrides.</li>
 			<li>Returns the tenant to a known baseline before further config work.</li>
@@ -70,7 +67,7 @@ type PageData = {
 	</SectionCard>
 
 	{#if setupError}
-		<div class="rounded-xl border border-[var(--netz-danger)]/30 bg-[var(--netz-danger)]/5 px-4 py-3 text-sm text-[var(--netz-danger)]" role="alert">
+		<div class="rounded-xl border border-(--netz-danger)/30 bg-(--netz-danger)/5 px-4 py-3 text-sm text-(--netz-danger)" role="alert">
 			{setupError}
 		</div>
 	{/if}
@@ -78,13 +75,13 @@ type PageData = {
 	<SectionCard title="Seed defaults">
 		<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 			<div class="space-y-1">
-				<p class="text-sm font-semibold text-[var(--netz-text-primary)]">Initialize {tenantName}</p>
-				<p class="text-sm text-[var(--netz-text-secondary)]">
+				<p class="text-sm font-semibold text-(--netz-text-primary)">Initialize {tenantName}</p>
+				<p class="text-sm text-(--netz-text-secondary)">
 					You will be asked to confirm that you understand the seed action only fills in missing defaults for {tenantScope}.
 				</p>
 			</div>
 			<div class="flex items-center gap-3">
-				<a href="/tenants/{data.orgId}" class="inline-flex h-8 items-center justify-center rounded-md border border-[var(--netz-border)] bg-transparent px-3 text-xs font-medium text-[var(--netz-text-primary)] transition-colors hover:bg-[var(--netz-surface-alt)]">Back to overview</a>
+				<a href="/tenants/{data.orgId}" class="inline-flex h-8 items-center justify-center rounded-md border border-(--netz-border) bg-transparent px-3 text-xs font-medium text-(--netz-text-primary) transition-colors hover:bg-(--netz-surface-alt)">Back to overview</a>
 				<ActionButton onclick={() => (showSeedConfirm = true)} loading={seeding} loadingText="Seeding..." size="sm">
 					Seed defaults for this tenant
 				</ActionButton>

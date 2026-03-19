@@ -12,7 +12,7 @@
 
 <div
 	class={cn(
-		"netz-ui-surface overflow-hidden rounded-[var(--netz-radius-lg)]",
+		"netz-ui-surface overflow-hidden rounded-(--netz-radius-lg)",
 		className,
 	)}
 >

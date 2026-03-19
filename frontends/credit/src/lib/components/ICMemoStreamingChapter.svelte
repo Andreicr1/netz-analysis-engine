@@ -6,8 +6,8 @@
 	let { content = "" }: { content: string } = $props();
 </script>
 
-<div class="mt-3 border-t border-[var(--netz-border)] pt-3">
-	<div class="text-sm leading-relaxed text-[var(--netz-text-secondary)]">
-		{content}<span class="inline-block h-4 w-0.5 animate-pulse bg-[var(--netz-brand-primary)]"></span>
+<div class="mt-3 border-t border-(--netz-border) pt-3">
+	<div class="text-sm leading-relaxed text-(--netz-text-secondary)">
+		{content}<span class="inline-block h-4 w-0.5 animate-pulse bg-(--netz-brand-primary)"></span>
 	</div>
 </div>

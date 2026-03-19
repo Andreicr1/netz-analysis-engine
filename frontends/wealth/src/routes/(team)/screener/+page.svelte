@@ -147,13 +147,13 @@
 			});
 			if (!res.ok) {
 				const err = await res.json().catch(() => ({}));
-				runError = (err as { detail?: string }).detail ?? "Falha ao executar screening";
+				runError = (err as { detail?: string }).detail ?? "Failed to execute screening";
 			} else {
 				// Reload page to pick up new results
 				window.location.reload();
 			}
 		} catch {
-			runError = "Erro de rede ao executar screening";
+			runError = "Network error executing screening";
 		} finally {
 			isRunning = false;
 		}
@@ -188,9 +188,9 @@
 
 	function typeLabel(type: string | undefined): string {
 		switch (type) {
-			case "fund":   return "FII/FIC";
-			case "bond":   return "Renda Fixa";
-			case "equity": return "Ação";
+			case "fund":   return "Fund";
+			case "bond":   return "Fixed Income";
+			case "equity": return "Equity";
 			default:       return type ?? "—";
 		}
 	}
@@ -281,12 +281,12 @@
 <div class="screener-layout">
 	<!-- ── Funnel Sidebar ────────────────────────────────────────────────────── -->
 	<aside class="funnel-sidebar">
-		<h3 class="funnel-title">Pipeline de Triagem</h3>
+		<h3 class="funnel-title">Screening Pipeline</h3>
 
 		<div class="funnel-stages">
 			<!-- Universe -->
 			<div class="funnel-stage funnel-stage--universe">
-				<span class="funnel-stage__label">Universo</span>
+				<span class="funnel-stage__label">Universe</span>
 				<span class="funnel-stage__count">{universeCount}</span>
 			</div>
 
@@ -294,18 +294,18 @@
 
 			<!-- L1 -->
 			<div class="funnel-stage funnel-stage--l1">
-				<span class="funnel-stage__label">L1 Eliminatórios</span>
+				<span class="funnel-stage__label">L1 Knockout</span>
 				<span class="funnel-stage__count">{l1PassCount}</span>
-				<span class="funnel-stage__sublabel">passaram</span>
+				<span class="funnel-stage__sublabel">passed</span>
 			</div>
 
 			<div class="funnel-connector"></div>
 
 			<!-- L2 -->
 			<div class="funnel-stage funnel-stage--l2">
-				<span class="funnel-stage__label">L2 Elegíveis</span>
+				<span class="funnel-stage__label">L2 Eligible</span>
 				<span class="funnel-stage__count">{l2EligibleCount}</span>
-				<span class="funnel-stage__sublabel">elegíveis</span>
+				<span class="funnel-stage__sublabel">eligible</span>
 			</div>
 
 			<div class="funnel-connector"></div>
@@ -337,15 +337,15 @@
 	<!-- ── Main Content ──────────────────────────────────────────────────────── -->
 	<main class="screener-main">
 		<!-- Header -->
-		<PageHeader title="Screener de Instrumentos">
+		<PageHeader title="Instrument Screener">
 			{#snippet actions()}
 				<div class="header-meta">
 					{#if latestRun}
 						<span class="header-meta__run">
-							Último batch: {formatDate(latestRun.completed_at ?? latestRun.started_at)}
+							Last batch: {formatDate(latestRun.completed_at ?? latestRun.started_at)}
 						</span>
 						<span class="header-meta__count">
-							{latestRun.instrument_count} testados ✓
+							{latestRun.instrument_count} screened
 						</span>
 					{/if}
 					{#if runError}
@@ -356,7 +356,7 @@
 						onclick={executeBatch}
 						disabled={isRunning}
 					>
-						{isRunning ? "Executando..." : "Executar batch"}
+						{isRunning ? "Running..." : "Run Batch"}
 					</Button>
 				</div>
 			{/snippet}
@@ -372,7 +372,7 @@
 					aria-selected={activeTab === tab}
 					onclick={() => (activeTab = tab)}
 				>
-					{tab === "todos" ? "Todos" : tab}
+					{tab === "todos" ? "All" : tab}
 					<span class="status-tab__badge">{tabCounts[tab]}</span>
 				</button>
 			{/each}
@@ -385,9 +385,9 @@
 					<table class="results-table">
 						<thead>
 							<tr>
-								<th class="col-instrumento">Instrumento</th>
-								<th class="col-tipo">Tipo</th>
-								<th class="col-bloco">Bloco Elegível</th>
+								<th class="col-instrumento">Instrument</th>
+								<th class="col-tipo">Type</th>
+								<th class="col-bloco">Eligible Block</th>
 								<th class="col-layers">L1</th>
 								<th class="col-layers">L2</th>
 								<th class="col-layers">L3</th>
@@ -424,7 +424,7 @@
 										</span>
 									</td>
 
-									<!-- Bloco Elegível -->
+									<!-- Eligible Block -->
 									<td class="col-bloco">
 										<span class="bloco-label">{result.block_id ?? "—"}</span>
 									</td>
@@ -472,8 +472,8 @@
 			</Card>
 		{:else}
 			<EmptyState
-				title="Sem resultados"
-				message="Execute o batch de screening para classificar instrumentos do universo."
+				title="No results"
+				message="Run the screening batch to classify instruments in the universe."
 			/>
 		{/if}
 	</main>
@@ -483,7 +483,7 @@
 <ContextPanel
 	open={panelOpen}
 	onClose={closePanel}
-	title={selectedResult ? instrumentLabel(selectedResult) : "Instrumento"}
+	title={selectedResult ? instrumentLabel(selectedResult) : "Instrument"}
 	width="480px"
 >
 	{#if selectedResult}
@@ -510,7 +510,7 @@
 				{#if r.block_id}
 					<span class="panel-meta__block">{r.block_id}</span>
 				{/if}
-				<span class="panel-meta__date">Triagem: {formatDate(r.screened_at)}</span>
+				<span class="panel-meta__date">Screened: {formatDate(r.screened_at)}</span>
 			</div>
 		</div>
 
@@ -518,7 +518,7 @@
 		<div class="panel-layer-section">
 			<h4 class="panel-layer-title">
 				<span class="panel-layer-badge panel-layer-badge--l1">L1</span>
-				Critérios Eliminatórios
+				Knockout Criteria
 			</h4>
 			{#if layerCriteria(r, 1).length > 0}
 				<ul class="criteria-list">
@@ -528,23 +528,23 @@
 							<div class="criteria-content">
 								<span class="criteria-criterion">{c.criterion}</span>
 								<span class="criteria-detail">
-									Esperado: <strong>{c.expected}</strong>
-									· Atual: <strong>{c.actual}</strong>
+									Expected: <strong>{c.expected}</strong>
+									· Actual: <strong>{c.actual}</strong>
 								</span>
 							</div>
 						</li>
 					{/each}
 				</ul>
 			{:else}
-				<p class="panel-empty-note">Sem critérios L1 registrados.</p>
+				<p class="panel-empty-note">No L1 criteria recorded.</p>
 			{/if}
 		</div>
 
-		<!-- Layer 2 — Mandato + Bloco Elegível -->
+		<!-- Layer 2 — Mandato + Eligible Block -->
 		<div class="panel-layer-section">
 			<h4 class="panel-layer-title">
 				<span class="panel-layer-badge panel-layer-badge--l2">L2</span>
-				Fit de Mandato
+				Mandate Fit
 			</h4>
 			{#if r.block_id}
 				<div class="block-badge-row">
@@ -559,15 +559,15 @@
 							<div class="criteria-content">
 								<span class="criteria-criterion">{c.criterion}</span>
 								<span class="criteria-detail">
-									Esperado: <strong>{c.expected}</strong>
-									· Atual: <strong>{c.actual}</strong>
+									Expected: <strong>{c.expected}</strong>
+									· Actual: <strong>{c.actual}</strong>
 								</span>
 							</div>
 						</li>
 					{/each}
 				</ul>
 			{:else}
-				<p class="panel-empty-note">Sem critérios L2 registrados.</p>
+				<p class="panel-empty-note">No L2 criteria recorded.</p>
 			{/if}
 		</div>
 
@@ -575,15 +575,15 @@
 		<div class="panel-layer-section">
 			<h4 class="panel-layer-title">
 				<span class="panel-layer-badge panel-layer-badge--l3">L3</span>
-				Score Quantitativo
+				Quantitative Score
 			</h4>
 			{#if l3Metrics(r).length > 0}
 				<table class="l3-table">
 					<thead>
 						<tr>
-							<th>Métrica</th>
-							<th>Esperado</th>
-							<th>Atual</th>
+							<th>Metric</th>
+							<th>Expected</th>
+							<th>Actual</th>
 							<th>Status</th>
 						</tr>
 					</thead>
@@ -601,7 +601,7 @@
 					</tbody>
 				</table>
 			{:else}
-				<p class="panel-empty-note">Score L3 não calculado (instrumento eliminado em L1 ou L2).</p>
+				<p class="panel-empty-note">L3 Score not calculated (instrument eliminated at L1 or L2).</p>
 			{/if}
 		</div>
 
@@ -609,19 +609,19 @@
 		<div class="panel-ctas">
 			{#if r.required_analysis_type === "dd_report"}
 				<a href="/dd-reports/{r.instrument_id}" class="cta-primary">
-					Iniciar DD Report →
+					Start DD Report
 				</a>
 			{:else if r.required_analysis_type === "bond_brief"}
 				<a href="/dd-reports/{r.instrument_id}" class="cta-primary">
-					Iniciar Bond Brief →
+					Start Bond Brief
 				</a>
 			{/if}
 			<button class="cta-secondary" onclick={() => loadInstrumentHistory(r.instrument_id, instrumentLabel(r))}>
-				Histórico
+				History
 			</button>
 			{#if latestRun}
 				<button class="cta-secondary" onclick={() => loadRunDetail(latestRun!.run_id)}>
-					Detalhes do Run
+					Run Details
 				</button>
 			{/if}
 		</div>
@@ -657,7 +657,7 @@
 {#if showHistory}
 	<ContextPanel
 		open={showHistory}
-		title={`Histórico: ${historyInstrumentName}`}
+		title={`History: ${historyInstrumentName}`}
 		onClose={() => { showHistory = false; historyData = []; }}
 		width="480px"
 	>
@@ -686,6 +686,8 @@
 {/if}
 
 <style>
+	/* TODO: Migrate scoped CSS to Tailwind utilities — tracked as tech debt */
+
 	/* ── Layout ───────────────────────────────────────────────────────────── */
 
 	.screener-layout {

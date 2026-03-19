@@ -122,7 +122,7 @@
 	});
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	<PageHeader title="Content Production">
 		{#snippet actions()}
 			<div class="flex gap-2">
@@ -140,7 +140,7 @@
 	</PageHeader>
 
 	{#if actionError}
-		<div class="rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+		<div class="rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
 			{actionError}
 			<button class="ml-2 underline" onclick={() => actionError = null}>dismiss</button>
 		</div>
@@ -152,16 +152,16 @@
 				<Card class="flex items-center justify-between p-4">
 					<div class="flex-1">
 						<div class="flex items-center gap-2">
-							<p class="text-sm font-medium text-[var(--netz-text-primary)]">
+							<p class="text-sm font-medium text-(--netz-text-primary)">
 								{item.title ?? item.content_type}
 							</p>
 							<StatusBadge status={item.status} type="default" resolve={resolveWealthStatus} />
 						</div>
-						<p class="mt-1 text-xs text-[var(--netz-text-muted)]">
+						<p class="mt-1 text-xs text-(--netz-text-muted)">
 							{item.content_type} &middot; {formatDate(item.created_at)}
 						</p>
 						{#if item.status === "failed" && item.error_message}
-							<p class="mt-1 text-xs text-[var(--netz-status-error)]">{item.error_message}</p>
+							<p class="mt-1 text-xs text-(--netz-status-error)">{item.error_message}</p>
 						{/if}
 					</div>
 					<div class="ml-4 flex gap-2">
@@ -187,7 +187,7 @@
 							</ActionButton>
 						{/if}
 						{#if item.status === "generating"}
-							<span class="text-xs text-[var(--netz-text-muted)]">Generating...</span>
+							<span class="text-xs text-(--netz-text-muted)">Generating...</span>
 						{/if}
 					</div>
 				</Card>
@@ -205,13 +205,13 @@
 <Dialog bind:open={showSpotlightPicker} title="Select Fund for Spotlight">
 	<div class="space-y-4">
 		{#if loadingFunds}
-			<p class="text-sm text-[var(--netz-text-muted)]">Loading funds...</p>
+			<p class="text-sm text-(--netz-text-muted)">Loading funds...</p>
 		{:else if funds.length === 0}
-			<p class="text-sm text-[var(--netz-text-muted)]">No funds available.</p>
+			<p class="text-sm text-(--netz-text-muted)">No funds available.</p>
 		{:else}
 			<FormField label="Fund" required>
 				<select
-					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-bg-secondary)] px-3 py-2 text-sm text-[var(--netz-text-primary)]"
+					class="w-full rounded-md border border-(--netz-border) bg-(--netz-bg-secondary) px-3 py-2 text-sm text-(--netz-text-primary)"
 					bind:value={spotlightFundId}
 				>
 					<option value="">Select a fund...</option>

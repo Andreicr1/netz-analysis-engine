@@ -6,6 +6,7 @@
 		filename?: string;
 		languages?: string[];
 		class?: string;
+		getToken?: () => Promise<string | null>;
 	}
 
 	let {
@@ -13,9 +14,11 @@
 		filename = "document.pdf",
 		languages = ["en"],
 		class: className,
+		getToken,
 	}: Props = $props();
 
 	let loading = $state(false);
+	// svelte-ignore state_referenced_locally
 	let selectedLang = $state(languages[0] ?? "en");
 
 	async function download() {
@@ -25,7 +28,12 @@
 			const fetchUrl =
 				languages.length > 1 ? `${url}${separator}lang=${selectedLang}` : url;
 
-			const response = await fetch(fetchUrl);
+			const headers: Record<string, string> = {};
+			if (getToken) {
+				const token = await getToken();
+				if (token) headers['Authorization'] = `Bearer ${token}`;
+			}
+			const response = await fetch(fetchUrl, { headers });
 			if (!response.ok) throw new Error("Download failed");
 
 			const blob = await response.blob();
@@ -47,14 +55,14 @@
 
 <div class={cn("inline-flex items-center gap-2", className)}>
 	{#if languages.length > 1}
-		<div class="inline-flex rounded-md border border-[var(--netz-border)]">
+		<div class="inline-flex rounded-md border border-(--netz-border)">
 			{#each languages as lang}
 				<button
 					class={cn(
 						"px-2 py-1 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md",
 						selectedLang === lang
-							? "bg-[var(--netz-brand-primary)] text-white"
-							: "bg-[var(--netz-surface)] text-[var(--netz-text-secondary)] hover:bg-[var(--netz-surface-alt)]",
+							? "bg-(--netz-brand-primary) text-white"
+							: "bg-(--netz-surface) text-(--netz-text-secondary) hover:bg-(--netz-surface-alt)",
 					)}
 					onclick={() => (selectedLang = lang)}
 				>
@@ -64,7 +72,7 @@
 		</div>
 	{/if}
 	<button
-		class="inline-flex h-9 items-center gap-2 rounded-md bg-[var(--netz-brand-primary)] px-4 text-sm font-medium text-white transition-colors hover:bg-[var(--netz-brand-primary)]/90 disabled:opacity-50"
+		class="inline-flex h-9 items-center gap-2 rounded-md bg-(--netz-brand-primary) px-4 text-sm font-medium text-white transition-colors hover:bg-(--netz-brand-primary)/90 disabled:opacity-50"
 		onclick={download}
 		disabled={loading}
 	>

@@ -268,12 +268,12 @@
 		<div class="flex flex-wrap items-end gap-3">
 			<!-- Severity filter -->
 			<div class="flex flex-col gap-1">
-				<label class="text-xs font-medium text-[var(--netz-text-secondary)]" for="drift-severity-filter">
+				<label class="text-xs font-medium text-(--netz-text-secondary)" for="drift-severity-filter">
 					Severity
 				</label>
 				<select
 					id="drift-severity-filter"
-					class="h-8 rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-2 text-xs text-[var(--netz-text-primary)]"
+					class="h-8 rounded-md border border-(--netz-border) bg-(--netz-surface) px-2 text-xs text-(--netz-text-primary)"
 					bind:value={filterSeverity}
 				>
 					<option value="">All</option>
@@ -285,32 +285,32 @@
 
 			<!-- Date from -->
 			<div class="flex flex-col gap-1">
-				<label class="text-xs font-medium text-[var(--netz-text-secondary)]" for="drift-from-filter">
+				<label class="text-xs font-medium text-(--netz-text-secondary)" for="drift-from-filter">
 					From
 				</label>
 				<input
 					id="drift-from-filter"
 					type="date"
-					class="h-8 rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-2 text-xs text-[var(--netz-text-primary)]"
+					class="h-8 rounded-md border border-(--netz-border) bg-(--netz-surface) px-2 text-xs text-(--netz-text-primary)"
 					bind:value={filterFrom}
 				/>
 			</div>
 
 			<!-- Date to -->
 			<div class="flex flex-col gap-1">
-				<label class="text-xs font-medium text-[var(--netz-text-secondary)]" for="drift-to-filter">
+				<label class="text-xs font-medium text-(--netz-text-secondary)" for="drift-to-filter">
 					To
 				</label>
 				<input
 					id="drift-to-filter"
 					type="date"
-					class="h-8 rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-2 text-xs text-[var(--netz-text-primary)]"
+					class="h-8 rounded-md border border-(--netz-border) bg-(--netz-surface) px-2 text-xs text-(--netz-text-primary)"
 					bind:value={filterTo}
 				/>
 			</div>
 
 			<button
-				class="ml-auto inline-flex h-8 items-center gap-1.5 rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 text-xs font-medium text-[var(--netz-text-primary)] hover:bg-[var(--netz-surface-alt)] disabled:opacity-40"
+				class="ml-auto inline-flex h-8 items-center gap-1.5 rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 text-xs font-medium text-(--netz-text-primary) hover:bg-(--netz-surface-alt) disabled:opacity-40"
 				onclick={exportCSV}
 				disabled={filteredEvents.length === 0}
 			>
@@ -319,17 +319,17 @@
 		</div>
 
 		{#if computedAt}
-			<p class="text-xs text-[var(--netz-text-muted)]">
+			<p class="text-xs text-(--netz-text-muted)">
 				Computed: {formatDateTime(computedAt)}
 			</p>
 		{/if}
 
 		{#if loading}
 			<div class="flex h-24 items-center justify-center">
-				<span class="text-sm text-[var(--netz-text-muted)]">Loading drift history…</span>
+				<span class="text-sm text-(--netz-text-muted)">Loading drift history…</span>
 			</div>
 		{:else if error}
-			<div class="rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+			<div class="rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
 				{error}
 			</div>
 		{:else if filteredEvents.length === 0}
@@ -340,8 +340,8 @@
 		{:else}
 			<!-- Scatter chart -->
 			{#if scatterOption}
-				<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-4">
-					<h3 class="mb-3 text-sm font-semibold text-[var(--netz-text-primary)]">
+				<div class="rounded-lg border border-(--netz-border) bg-(--netz-surface-elevated) p-4">
+					<h3 class="mb-3 text-sm font-semibold text-(--netz-text-primary)">
 						Drift Magnitude Timeline — {instrumentName}
 					</h3>
 					<ChartContainer
@@ -362,16 +362,16 @@
 					{@const typedRow = row as unknown as DriftEvent}
 					<div class="space-y-2 p-2">
 						{#if typedRow.metric_details && typedRow.metric_details.length > 0}
-							<h4 class="text-xs font-semibold uppercase tracking-wider text-[var(--netz-text-secondary)]">
+							<h4 class="text-xs font-semibold uppercase tracking-wider text-(--netz-text-secondary)">
 								Metric Details
 							</h4>
 							<div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
 								{#each typedRow.metric_details as detail, i (i)}
-									<div class="rounded border border-[var(--netz-border)] bg-[var(--netz-surface)] p-2 text-xs">
+									<div class="rounded border border-(--netz-border) bg-(--netz-surface) p-2 text-xs">
 										{#each Object.entries(detail ?? {}) as [key, val] (key)}
 											<div class="flex justify-between gap-2">
-												<span class="text-[var(--netz-text-muted)]">{key}</span>
-												<span class="font-medium text-[var(--netz-text-primary)]">
+												<span class="text-(--netz-text-muted)">{key}</span>
+												<span class="font-medium text-(--netz-text-primary)">
 													{String(val ?? "—")}
 												</span>
 											</div>
@@ -380,10 +380,10 @@
 								{/each}
 							</div>
 						{:else}
-							<p class="text-xs text-[var(--netz-text-muted)]">No metric details available.</p>
+							<p class="text-xs text-(--netz-text-muted)">No metric details available.</p>
 						{/if}
 						{#if typedRow.breached}
-							<div class="inline-flex items-center gap-1 rounded-full bg-[var(--netz-status-error)]/15 px-2 py-0.5 text-xs font-medium text-[var(--netz-status-error)]">
+							<div class="inline-flex items-center gap-1 rounded-full bg-(--netz-status-error)/15 px-2 py-0.5 text-xs font-medium text-(--netz-status-error)">
 								Threshold Breached
 							</div>
 						{/if}

@@ -74,12 +74,12 @@
 			<tr>
 				<!-- Corner cell -->
 				<th
-					class="min-w-[120px] px-3 py-2 text-left text-[var(--netz-text-muted)]"
+					class="min-w-[120px] px-3 py-2 text-left text-(--netz-text-muted)"
 					scope="col"
 				></th>
 				{#each columns as col (col)}
 					<th
-						class="min-w-[72px] px-2 py-2 text-center font-medium text-[var(--netz-text-secondary)]"
+						class="min-w-[72px] px-2 py-2 text-center font-medium text-(--netz-text-secondary)"
 						scope="col"
 					>
 						{col}
@@ -89,9 +89,9 @@
 		</thead>
 		<tbody>
 			{#each rows as row, ri (row)}
-				<tr class="border-t border-[var(--netz-border)]">
+				<tr class="border-t border-(--netz-border)">
 					<th
-						class="px-3 py-2 text-left font-medium text-[var(--netz-text-secondary)]"
+						class="px-3 py-2 text-left font-medium text-(--netz-text-secondary)"
 						scope="row"
 					>
 						{row}

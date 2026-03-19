@@ -4,7 +4,7 @@
   Overview tab shows deal actions (decide, resolve conditions, convert).
 -->
 <script lang="ts">
-	import { PageTabs, Card, StatusBadge, Button, EmptyState, MetricCard } from "@netz/ui";
+	import { PageTabs, Card, StatusBadge, Button, EmptyState, MetricCard, PageHeader, SectionCard } from "@netz/ui";
 	import { ActionButton, FormField } from "@netz/ui";
 	import { ConsequenceDialog, AuditTrailPanel } from "@netz/ui";
 	import { createOptimisticMutation } from "@netz/ui";
@@ -274,50 +274,53 @@
 	);
 </script>
 
-<div class="p-6">
-	<div class="mb-4 flex items-center justify-between">
-		<div>
-			<h2 class="text-xl font-semibold text-[var(--netz-text-primary)]">
-				{data.deal.name ?? "Deal"}
-			</h2>
-			<div class="mt-1 flex items-center gap-2">
-				<StatusBadge status={String(data.deal.stage)} type="deal" resolve={resolveCreditStatus} />
-				{#if data.deal.deal_type}
-					<span class="text-sm text-[var(--netz-text-muted)]">{data.deal.deal_type}</span>
-				{/if}
-				{#if data.deal.sponsor_name}
-					<span class="text-sm text-[var(--netz-text-muted)]">| {data.deal.sponsor_name}</span>
-				{/if}
-			</div>
-		</div>
+<div class="px-6">
+	<PageHeader
+		title={String(data.deal.name ?? "Deal")}
+		breadcrumbs={[
+			{ label: "Funds", href: "/funds" },
+			{ label: "Pipeline", href: `/funds/${data.fundId}/pipeline` },
+			{ label: String(data.deal.name ?? "Deal") },
+		]}
+	>
+		{#snippet actions()}
+			{#if allowedTransitions.length > 0}
+				<div class="flex gap-2">
+					{#each allowedTransitions as transition (transition)}
+						{#if transition === "CONVERTED_TO_ASSET"}
+							<Button
+								variant="default"
+								onclick={() => { convertActorCapacity = ""; actionError = null; showConvert = true; }}
+							>
+								Convert to Asset
+							</Button>
+						{:else if transition === "REJECTED"}
+							<Button variant="destructive" onclick={() => openDecision(transition)}>
+								Reject
+							</Button>
+						{:else}
+							<Button onclick={() => openDecision(transition)}>
+								{stageLabels[transition] ?? transition}
+							</Button>
+						{/if}
+					{/each}
+				</div>
+			{/if}
+		{/snippet}
+	</PageHeader>
 
-		<!-- Action buttons based on allowed transitions -->
-		{#if allowedTransitions.length > 0}
-			<div class="flex gap-2">
-				{#each allowedTransitions as transition (transition)}
-					{#if transition === "CONVERTED_TO_ASSET"}
-						<Button
-							variant="default"
-							onclick={() => { convertActorCapacity = ""; actionError = null; showConvert = true; }}
-						>
-							Convert to Asset
-						</Button>
-					{:else if transition === "REJECTED"}
-						<Button variant="destructive" onclick={() => openDecision(transition)}>
-							Reject
-						</Button>
-					{:else}
-						<Button onclick={() => openDecision(transition)}>
-							{stageLabels[transition] ?? transition}
-						</Button>
-					{/if}
-				{/each}
-			</div>
+	<div class="mb-4 flex items-center gap-2">
+		<StatusBadge status={String(data.deal.stage)} type="deal" resolve={resolveCreditStatus} />
+		{#if data.deal.deal_type}
+			<span class="text-sm text-(--netz-text-muted)">{data.deal.deal_type}</span>
+		{/if}
+		{#if data.deal.sponsor_name}
+			<span class="text-sm text-(--netz-text-muted)">| {data.deal.sponsor_name}</span>
 		{/if}
 	</div>
 
 	{#if actionError}
-		<div class="mb-4 rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+		<div class="mb-4 rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
 			{actionError}
 		</div>
 	{/if}
@@ -347,34 +350,34 @@
 				<h3 class="mb-4 text-lg font-semibold">Deal Overview</h3>
 				<div class="grid gap-4 md:grid-cols-2">
 					<div>
-						<p class="text-xs text-[var(--netz-text-muted)]">Borrower / Sponsor</p>
+						<p class="text-xs text-(--netz-text-muted)">Borrower / Sponsor</p>
 						<p class="text-sm font-medium">{data.deal.sponsor_name ?? "—"}</p>
 					</div>
 					<div>
-						<p class="text-xs text-[var(--netz-text-muted)]">Deal Type</p>
+						<p class="text-xs text-(--netz-text-muted)">Deal Type</p>
 						<p class="text-sm font-medium">{data.deal.deal_type ?? "—"}</p>
 					</div>
 					<div>
-						<p class="text-xs text-[var(--netz-text-muted)]">Description</p>
+						<p class="text-xs text-(--netz-text-muted)">Description</p>
 						<p class="text-sm font-medium">{data.deal.description ?? "—"}</p>
 					</div>
 					<div>
-						<p class="text-xs text-[var(--netz-text-muted)]">Created</p>
+						<p class="text-xs text-(--netz-text-muted)">Created</p>
 						<p class="text-sm font-medium">{data.deal.created_at ?? "—"}</p>
 					</div>
 					{#if data.deal.rejection_code}
 						<div>
-							<p class="text-xs text-[var(--netz-text-muted)]">Rejection Code</p>
-							<p class="text-sm font-medium text-[var(--netz-status-error)]">{data.deal.rejection_code}</p>
+							<p class="text-xs text-(--netz-text-muted)">Rejection Code</p>
+							<p class="text-sm font-medium text-(--netz-status-error)">{data.deal.rejection_code}</p>
 						</div>
 						<div>
-							<p class="text-xs text-[var(--netz-text-muted)]">Rejection Notes</p>
-							<p class="text-sm font-medium text-[var(--netz-status-error)]">{data.deal.rejection_notes ?? "—"}</p>
+							<p class="text-xs text-(--netz-text-muted)">Rejection Notes</p>
+							<p class="text-sm font-medium text-(--netz-status-error)">{data.deal.rejection_notes ?? "—"}</p>
 						</div>
 					{/if}
 					{#if data.deal.asset_id}
 						<div>
-							<p class="text-xs text-[var(--netz-text-muted)]">Converted Asset</p>
+							<p class="text-xs text-(--netz-text-muted)">Converted Asset</p>
 							<Button variant="link" href="/funds/{data.fundId}/portfolio">
 								View in Portfolio
 							</Button>
@@ -405,19 +408,19 @@
 					<!-- Text fields -->
 					<div class="grid gap-4 md:grid-cols-2">
 						<div>
-							<p class="text-xs text-[var(--netz-text-muted)]">Covenant Type</p>
+							<p class="text-xs text-(--netz-text-muted)">Covenant Type</p>
 							<p class="text-sm font-medium">{data.deal.covenant_type ?? "—"}</p>
 						</div>
 						<div>
-							<p class="text-xs text-[var(--netz-text-muted)]">Covenant Frequency</p>
+							<p class="text-xs text-(--netz-text-muted)">Covenant Frequency</p>
 							<p class="text-sm font-medium">{data.deal.covenant_frequency ?? "—"}</p>
 						</div>
 						<div class="md:col-span-2">
-							<p class="text-xs text-[var(--netz-text-muted)]">Collateral Description</p>
+							<p class="text-xs text-(--netz-text-muted)">Collateral Description</p>
 							<p class="text-sm font-medium">{data.deal.collateral_description ?? "—"}</p>
 						</div>
 						<div>
-							<p class="text-xs text-[var(--netz-text-muted)]">Agreement Language</p>
+							<p class="text-xs text-(--netz-text-muted)">Agreement Language</p>
 							<p class="text-sm font-medium">{data.deal.agreement_language ?? "—"}</p>
 						</div>
 					</div>
@@ -435,16 +438,16 @@
 					<h3 class="mb-4 text-lg font-semibold">IC Conditions</h3>
 					<div class="space-y-3">
 						{#each conditions as condition (condition.id)}
-							<div class="flex items-start justify-between rounded-lg border border-[var(--netz-border)] p-4">
+							<div class="flex items-start justify-between rounded-lg border border-(--netz-border) p-4">
 								<div class="flex-1">
-									<p class="text-sm font-medium text-[var(--netz-text-primary)]">
+									<p class="text-sm font-medium text-(--netz-text-primary)">
 										{condition.title}
 									</p>
-									<p class="mt-1 text-xs text-[var(--netz-text-muted)]">
+									<p class="mt-1 text-xs text-(--netz-text-muted)">
 										Status: <StatusBadge status={condition.status} type="default" resolve={resolveCreditStatus} />
 									</p>
 									{#if condition.notes}
-										<p class="mt-1 text-xs text-[var(--netz-text-muted)]">{condition.notes}</p>
+										<p class="mt-1 text-xs text-(--netz-text-muted)">{condition.notes}</p>
 									{/if}
 								</div>
 								{#if condition.status === "open"}
@@ -494,7 +497,7 @@
 					fundId={data.fundId}
 					dealId={data.dealId}
 				/>
-				<div class="border-t border-[var(--netz-border)] pt-6">
+				<div class="border-t border-(--netz-border) pt-6">
 					<DealPerformancePanel
 						fundId={data.fundId}
 						dealId={data.dealId}
@@ -548,7 +551,7 @@
 			{#if decisionTarget === "REJECTED"}
 				<FormField label="Rejection Code" required>
 					<select
-						class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+						class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-secondary)"
 						bind:value={rejectionCode}
 					>
 						<option value="OUT_OF_MANDATE">Out of Mandate</option>
@@ -563,14 +566,14 @@
 			<FormField label="Actor Capacity" required>
 				<input
 					type="text"
-					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+					class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-secondary)"
 					bind:value={decisionActorCapacity}
 					placeholder="e.g. Investment Committee Member, Partner"
 					aria-required="true"
 				/>
 			</FormField>
 			{#if actionError}
-				<p class="text-sm text-[var(--netz-status-error)]">{actionError}</p>
+				<p class="text-sm text-(--netz-status-error)">{actionError}</p>
 			{/if}
 		</div>
 	{/snippet}
@@ -601,14 +604,14 @@
 			<FormField label="Actor Capacity" required>
 				<input
 					type="text"
-					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+					class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-secondary)"
 					bind:value={convertActorCapacity}
 					placeholder="e.g. Managing Partner, Investment Committee"
 					aria-required="true"
 				/>
 			</FormField>
 			{#if actionError}
-				<p class="text-sm text-[var(--netz-status-error)]">{actionError}</p>
+				<p class="text-sm text-(--netz-status-error)">{actionError}</p>
 			{/if}
 		</div>
 	{/snippet}
@@ -635,14 +638,14 @@
 			<FormField label="Actor Capacity" required>
 				<input
 					type="text"
-					class="w-full rounded-md border border-[var(--netz-border)] bg-[var(--netz-surface)] px-3 py-2 text-sm text-[var(--netz-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--netz-brand-secondary)]"
+					class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-secondary)"
 					bind:value={conditionActorCapacity}
 					placeholder="e.g. Investment Committee Member, Partner"
 					aria-required="true"
 				/>
 			</FormField>
 			{#if actionError}
-				<p class="text-sm text-[var(--netz-status-error)]">{actionError}</p>
+				<p class="text-sm text-(--netz-status-error)">{actionError}</p>
 			{/if}
 		</div>
 	{/snippet}

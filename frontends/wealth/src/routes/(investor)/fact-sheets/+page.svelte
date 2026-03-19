@@ -68,7 +68,7 @@
 	<PageHeader title="Fact Sheets" />
 
 	{#if actionError}
-		<div class="rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+		<div class="rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
 			{actionError}
 			<button class="ml-2 underline" onclick={() => actionError = null}>dismiss</button>
 		</div>
@@ -84,10 +84,10 @@
 			{#each factSheets as fs (fs.path)}
 				<Card class="flex items-center justify-between p-5">
 					<div>
-						<p class="font-medium text-[var(--netz-text-primary)]">
+						<p class="font-medium text-(--netz-text-primary)">
 							{fs.portfolio_name}
 						</p>
-						<p class="text-sm text-[var(--netz-text-muted)]">
+						<p class="text-sm text-(--netz-text-muted)">
 							{fs.format ?? "Fact Sheet"}
 							{#if fs.period}
 								&middot; {fs.period}

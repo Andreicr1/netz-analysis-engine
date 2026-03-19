@@ -9,10 +9,12 @@
 		vertical,
 		configType,
 		token,
+		orgId,
 	}: {
 		vertical: string;
 		configType: string;
 		token: string;
+		orgId: string;
 	} = $props();
 
 	let diff = $state<{
@@ -30,7 +32,7 @@
 		try {
 			const api = createClientApiClient(() => Promise.resolve(token));
 			diff = await api.get(`/admin/configs/${vertical}/${configType}/diff`, {
-				org_id: "00000000-0000-0000-0000-000000000000", // Placeholder
+				org_id: orgId,
 			});
 		} catch (e: any) {
 			error = e.message ?? "Failed to load diff";
@@ -46,39 +48,39 @@
 
 <SectionCard title="Diff: {configType}">
 	{#if loading}
-		<p class="text-sm text-[var(--netz-text-muted)]">Loading diff...</p>
+		<p class="text-sm text-(--netz-text-muted)">Loading diff...</p>
 	{:else if error}
-		<p class="text-sm text-red-500">{error}</p>
+		<p class="text-sm text-(--netz-danger)">{error}</p>
 	{:else if diff}
 		<div class="grid grid-cols-2 gap-4">
 			<!-- Default (left) -->
 			<div>
-				<p class="mb-2 text-xs font-medium text-[var(--netz-text-muted)]">Default</p>
+				<p class="mb-2 text-xs font-medium text-(--netz-text-muted)">Default</p>
 				<pre
-					class="max-h-96 overflow-auto rounded border border-[var(--netz-border)] bg-[var(--netz-surface)] p-3 font-mono text-xs text-[var(--netz-text-secondary)]"
+					class="max-h-96 overflow-auto rounded border border-(--netz-border) bg-(--netz-surface) p-3 font-mono text-xs text-(--netz-text-secondary)"
 				>{JSON.stringify(diff.default, null, 2)}</pre>
 			</div>
 			<!-- Override (right) -->
 			<div>
-				<p class="mb-2 text-xs font-medium text-[var(--netz-text-muted)]">
+				<p class="mb-2 text-xs font-medium text-(--netz-text-muted)">
 					{diff.override ? "Override" : "No Override"}
 				</p>
 				{#if diff.override}
 					<pre
-						class="max-h-96 overflow-auto rounded border border-[var(--netz-border)] bg-[var(--netz-surface)] p-3 font-mono text-xs text-[var(--netz-text-primary)]"
+						class="max-h-96 overflow-auto rounded border border-(--netz-border) bg-(--netz-surface) p-3 font-mono text-xs text-(--netz-text-primary)"
 					>{JSON.stringify(diff.override, null, 2)}</pre>
 				{:else}
-					<p class="text-sm text-[var(--netz-text-muted)]">Using default values.</p>
+					<p class="text-sm text-(--netz-text-muted)">Using default values.</p>
 				{/if}
 			</div>
 		</div>
 		{#if diff.changed_keys.length > 0}
 			<div class="mt-3">
-				<p class="text-xs text-[var(--netz-text-muted)]">Changed keys:</p>
+				<p class="text-xs text-(--netz-text-muted)">Changed keys:</p>
 				<div class="mt-1 flex flex-wrap gap-1">
 					{#each diff.changed_keys as key}
 						<span
-							class="rounded bg-[var(--netz-brand-highlight)]/20 px-2 py-0.5 text-xs text-[var(--netz-text-primary)]"
+							class="rounded bg-(--netz-brand-highlight)/20 px-2 py-0.5 text-xs text-(--netz-text-primary)"
 						>
 							{key}
 						</span>

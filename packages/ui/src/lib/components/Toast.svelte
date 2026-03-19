@@ -26,10 +26,10 @@
 		success:
 			"border-[#10B981] bg-[#10B981]/10 text-[#10B981]",
 		error:
-			"border-[var(--netz-danger)] bg-[var(--netz-danger)]/10 text-[var(--netz-danger)]",
+			"border-(--netz-danger) bg-(--netz-danger)/10 text-(--netz-danger)",
 		warning:
 			"border-[#F59E0B] bg-[#F59E0B]/10 text-[#92400E]",
-		info: "border-[var(--netz-info)] bg-[var(--netz-info)]/10 text-[var(--netz-info)]",
+		info: "border-(--netz-info) bg-(--netz-info)/10 text-(--netz-info)",
 	};
 
 	const icons: Record<ToastType, string> = {

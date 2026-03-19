@@ -43,8 +43,8 @@
 
 <div
 	class={cn(
-		"relative overflow-hidden rounded-[var(--netz-radius-lg)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-highlight)] p-[var(--netz-space-card-padding)]",
-		"shadow-[var(--netz-shadow-card)]",
+		"relative overflow-hidden rounded-(--netz-radius-lg) border border-(--netz-border-subtle) bg-(--netz-surface-highlight) p-(--netz-space-card-padding)",
+		"shadow-(--netz-shadow-card)",
 		className,
 	)}
 	style={status
@@ -60,14 +60,14 @@
 
 			<!-- Value -->
 			<p
-				class="mt-2 font-mono text-[1.75rem] font-semibold leading-none tracking-[-0.03em] text-[var(--netz-text-primary)]"
+				class="mt-2 font-mono text-[1.75rem] font-semibold leading-none tracking-[-0.03em] text-(--netz-text-primary)"
 			>
 				{value}
 			</p>
 
 			<!-- Sublabel -->
 			{#if sublabel}
-				<p class="mt-1 text-sm text-[var(--netz-text-secondary)]">{sublabel}</p>
+				<p class="mt-1 text-sm text-(--netz-text-secondary)">{sublabel}</p>
 			{/if}
 
 			<!-- Delta -->
@@ -115,7 +115,7 @@
 					{/if}
 					<span style="color: {deltaColor[delta.direction]};">{delta.value}</span>
 					{#if delta.period}
-						<span class="text-[var(--netz-text-muted)]">{delta.period}</span>
+						<span class="text-(--netz-text-muted)">{delta.period}</span>
 					{/if}
 				</div>
 			{/if}
@@ -130,7 +130,7 @@
 
 		<!-- Sparkline slot -->
 		{#if sparkline}
-			<div class="shrink-0 self-start rounded-[var(--netz-radius-md)] border border-[var(--netz-border-subtle)] bg-[var(--netz-surface-elevated)] p-2 shadow-[var(--netz-shadow-1)]">
+			<div class="shrink-0 self-start rounded-(--netz-radius-md) border border-(--netz-border-subtle) bg-(--netz-surface-elevated) p-2 shadow-(--netz-shadow-1)">
 				{@render sparkline()}
 			</div>
 		{/if}

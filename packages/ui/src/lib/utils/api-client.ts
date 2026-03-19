@@ -132,7 +132,11 @@ async function handleResponse<T>(res: Response): Promise<T> {
 }
 
 function buildUrl(base: string, path: string, params?: Record<string, string | number | boolean | undefined>): string {
-	const url = new URL(path, base);
+	// Concatenate base + path to preserve base path prefix (e.g. /api/v1).
+	// new URL("/risk", "http://host/api/v1") would discard /api/v1.
+	const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
+	const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+	const url = new URL(`${normalizedBase}${normalizedPath}`);
 	if (params) {
 		for (const [k, v] of Object.entries(params)) {
 			if (v !== undefined) url.searchParams.set(k, String(v));

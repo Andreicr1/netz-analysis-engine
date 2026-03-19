@@ -4,6 +4,7 @@
 <script lang="ts">
 	import { DataTable, PageHeader, EmptyState } from "@netz/ui";
 	import { ActionButton } from "@netz/ui";
+	import { invalidateAll } from "$app/navigation";
 	import { createClientApiClient } from "$lib/api/client";
 	import { getContext } from "svelte";
 	import type { PageData } from "./$types";
@@ -29,7 +30,7 @@
 		try {
 			const api = createClientApiClient(getToken);
 			await api.patch(`/funds/${data.fundId}/evidence/${evidenceId}/complete`, {});
-			window.location.reload();
+			await invalidateAll();
 		} catch {
 			// Error handled by api-client
 		} finally {
@@ -46,18 +47,21 @@
 	];
 </script>
 
-<div class="p-6">
-	<PageHeader title="Auditor Evidence View" />
+<div class="px-6">
+	<PageHeader
+		title="Auditor Evidence View"
+		breadcrumbs={[{ label: "Funds", href: "/funds" }, { label: "Documents", href: `/funds/${data.fundId}/documents` }, { label: "Auditor" }]}
+	/>
 
 	{#if evidence.length === 0}
 		<EmptyState title="No Evidence" description="Evidence documents across all deals will appear here." />
 	{:else}
 		<div class="space-y-3">
 			{#each evidence as item (item.id)}
-				<div class="flex items-center justify-between rounded-md border border-[var(--netz-border)] p-4">
+				<div class="flex items-center justify-between rounded-md border border-(--netz-border) p-4">
 					<div>
-						<p class="text-sm font-medium text-[var(--netz-text-primary)]">{item.filename}</p>
-						<p class="text-xs text-[var(--netz-text-muted)]">
+						<p class="text-sm font-medium text-(--netz-text-primary)">{item.filename}</p>
+						<p class="text-xs text-(--netz-text-muted)">
 							{item.document_title ?? ""} | {item.status} | {item.created_at}
 						</p>
 					</div>

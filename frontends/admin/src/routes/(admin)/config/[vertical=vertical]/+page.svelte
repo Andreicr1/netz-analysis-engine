@@ -3,7 +3,7 @@
   save, inline diff view, and audit trail. Section 3.Admin.1.
 -->
 <script lang="ts">
-	import { SectionCard, StatusBadge, EmptyState } from "@netz/ui";
+	import { SectionCard, StatusBadge, EmptyState, PageHeader } from "@netz/ui";
 	import { resolveAdminStatus } from "$lib/utils/status-maps.js";
 	import type { PageData } from "./$types";
 	import ConfigEditor from "$lib/components/ConfigEditor.svelte";
@@ -13,29 +13,28 @@
 </script>
 
 <div class="space-y-6 p-6">
-	<div class="flex items-center justify-between">
-		<h1 class="text-2xl font-bold text-[var(--netz-text-primary)]">
-			Config — {data.vertical.replace("_", " ")}
-		</h1>
-		<div class="flex gap-2">
-			<a
-				href="/config/liquid_funds"
-				class="rounded-md px-3 py-1 text-sm {data.vertical === 'liquid_funds'
-					? 'bg-[var(--netz-brand-primary)] text-white'
-					: 'text-[var(--netz-text-secondary)] hover:bg-[var(--netz-surface-alt)]'}"
-			>
-				Liquid Funds
-			</a>
-			<a
-				href="/config/private_credit"
-				class="rounded-md px-3 py-1 text-sm {data.vertical === 'private_credit'
-					? 'bg-[var(--netz-brand-primary)] text-white'
-					: 'text-[var(--netz-text-secondary)] hover:bg-[var(--netz-surface-alt)]'}"
-			>
-				Private Credit
-			</a>
-		</div>
-	</div>
+	<PageHeader title="Config — {data.vertical.replace('_', ' ')}">
+		{#snippet actions()}
+			<div class="flex gap-2">
+				<a
+					href="/config/liquid_funds"
+					class="rounded-md px-3 py-1 text-sm {data.vertical === 'liquid_funds'
+						? 'bg-(--netz-brand-primary) text-white'
+						: 'text-(--netz-text-secondary) hover:bg-(--netz-surface-alt)'}"
+				>
+					Liquid Funds
+				</a>
+				<a
+					href="/config/private_credit"
+					class="rounded-md px-3 py-1 text-sm {data.vertical === 'private_credit'
+						? 'bg-(--netz-brand-primary) text-white'
+						: 'text-(--netz-text-secondary) hover:bg-(--netz-surface-alt)'}"
+				>
+					Private Credit
+				</a>
+			</div>
+		{/snippet}
+	</PageHeader>
 
 	<!-- Invalid Overrides Warning -->
 	{#if data.invalidConfigs?.length > 0}
@@ -46,15 +45,15 @@
 						onclick={() => {
 							selectedConfig = invalid.config_type;
 						}}
-						class="flex w-full items-center gap-3 rounded-md border border-[var(--netz-danger)]/30 bg-[var(--netz-danger)]/5 px-4 py-2 text-left hover:bg-[var(--netz-danger)]/10"
+						class="flex w-full items-center gap-3 rounded-md border border-(--netz-danger)/30 bg-(--netz-danger)/5 px-4 py-2 text-left hover:bg-(--netz-danger)/10"
 					>
 						<StatusBadge status="error" label="Invalid" resolve={resolveAdminStatus} />
 						<div>
-							<span class="text-sm font-medium text-[var(--netz-text-primary)]">
+							<span class="text-sm font-medium text-(--netz-text-primary)">
 								{invalid.vertical}/{invalid.config_type}
 							</span>
 							{#if invalid.reason}
-								<p class="text-xs text-[var(--netz-text-muted)]">{invalid.reason}</p>
+								<p class="text-xs text-(--netz-text-muted)">{invalid.reason}</p>
 							{/if}
 						</div>
 					</button>
@@ -66,20 +65,20 @@
 	<!-- Config List -->
 	{#if data.configs.length > 0}
 		<SectionCard title="Config Types">
-			<div class="divide-y divide-[var(--netz-border)]">
+			<div class="divide-y divide-(--netz-border)">
 				{#each data.configs as config}
 					<button
 						onclick={() => {
 							selectedConfig = config.config_type;
 						}}
-						class="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[var(--netz-surface-alt)] {selectedConfig === config.config_type ? 'bg-[var(--netz-surface-alt)]' : ''}"
+						class="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-(--netz-surface-alt) {selectedConfig === config.config_type ? 'bg-(--netz-surface-alt)' : ''}"
 					>
 						<div>
-							<span class="text-sm font-medium text-[var(--netz-text-primary)]">
+							<span class="text-sm font-medium text-(--netz-text-primary)">
 								{config.config_type}
 							</span>
 							{#if config.description}
-								<p class="text-xs text-[var(--netz-text-muted)]">{config.description}</p>
+								<p class="text-xs text-(--netz-text-muted)">{config.description}</p>
 							{/if}
 						</div>
 						<div class="flex items-center gap-2">

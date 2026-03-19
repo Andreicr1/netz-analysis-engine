@@ -51,18 +51,18 @@
 </script>
 
 <Card class="p-6">
-	<h3 class="mb-4 text-lg font-semibold text-[var(--netz-text-primary)]">Ingestion Progress</h3>
+	<h3 class="mb-4 text-lg font-semibold text-(--netz-text-primary)">Ingestion Progress</h3>
 	<div class="space-y-3">
 		{#each STAGES as stage (stage)}
 			<div class="flex items-center justify-between">
-				<span class="text-sm capitalize text-[var(--netz-text-secondary)]">{stage}</span>
+				<span class="text-sm capitalize text-(--netz-text-secondary)">{stage}</span>
 				<StatusBadge status={stageStatus(stage)} type="review" resolve={resolveCreditStatus} />
 			</div>
 		{/each}
 	</div>
 	{#if status === "done"}
-		<p class="mt-4 text-sm font-medium text-[var(--netz-success)]">Document processed successfully.</p>
+		<p class="mt-4 text-sm font-medium text-(--netz-success)">Document processed successfully.</p>
 	{:else if status === "error"}
-		<p class="mt-4 text-sm font-medium text-[var(--netz-danger)]">Processing failed. Please retry.</p>
+		<p class="mt-4 text-sm font-medium text-(--netz-danger)">Processing failed. Please retry.</p>
 	{/if}
 </Card>

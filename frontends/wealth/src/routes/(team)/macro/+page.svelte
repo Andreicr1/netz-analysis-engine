@@ -2,7 +2,7 @@
   Macro Intelligence — regional scores, regime hierarchy, committee reviews.
 -->
 <script lang="ts">
-	import { DataCard, StatusBadge, PageHeader, EmptyState, Button, formatDate, formatNumber } from "@netz/ui";
+	import { DataCard, StatusBadge, PageHeader, SectionCard, EmptyState, Button, formatDate, formatNumber } from "@netz/ui";
 	import { ActionButton, ConfirmDialog } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll } from "$app/navigation";
@@ -78,7 +78,7 @@
 	}
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	<PageHeader title="Macro Intelligence">
 		{#snippet actions()}
 			<div class="flex items-center gap-2">
@@ -97,7 +97,7 @@
 	</PageHeader>
 
 	{#if actionError}
-		<div class="rounded-md border border-[var(--netz-status-error)] bg-[var(--netz-status-error)]/10 p-3 text-sm text-[var(--netz-status-error)]">
+		<div class="rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
 			{actionError}
 			<button class="ml-2 underline" onclick={() => actionError = null}>dismiss</button>
 		</div>
@@ -118,31 +118,29 @@
 
 	<!-- Regime Hierarchy -->
 	{#if regime?.regions}
-		<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
-			<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Regional Regime Classification</h3>
+		<SectionCard title="Regional Regime Classification">
 			<div class="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
 				{#each regime.regions as r (r.region)}
-					<div class="flex items-center justify-between rounded-md bg-[var(--netz-surface-alt)] p-3">
-						<span class="text-sm text-[var(--netz-text-primary)]">{r.region}</span>
+					<div class="flex items-center justify-between rounded-md bg-(--netz-surface-alt) p-3">
+						<span class="text-sm text-(--netz-text-primary)">{r.region}</span>
 						<StatusBadge status={r.regime} resolve={resolveWealthStatus} />
 					</div>
 				{/each}
 			</div>
-		</div>
+		</SectionCard>
 	{/if}
 
 	<!-- Committee Reviews -->
-	<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-elevated)] p-5">
-		<h3 class="mb-4 text-sm font-semibold text-[var(--netz-text-primary)]">Committee Reviews</h3>
+	<SectionCard title="Committee Reviews">
 		{#if reviews.length > 0}
 			<div class="space-y-3">
 				{#each reviews as review (review.id)}
-					<div class="flex items-start justify-between rounded-md border border-[var(--netz-border)] p-4">
+					<div class="flex items-start justify-between rounded-md border border-(--netz-border) p-4">
 						<div>
-							<p class="text-sm text-[var(--netz-text-primary)]">
+							<p class="text-sm text-(--netz-text-primary)">
 								{review.summary ?? "Macro Committee Review"}
 							</p>
-							<p class="text-xs text-[var(--netz-text-muted)]">
+							<p class="text-xs text-(--netz-text-muted)">
 								{formatDate(review.created_at)}
 							</p>
 						</div>
@@ -174,7 +172,7 @@
 		{:else}
 			<EmptyState title="No Reviews" message="Macro committee reviews will appear here." />
 		{/if}
-	</div>
+	</SectionCard>
 </div>
 
 <ConfirmDialog

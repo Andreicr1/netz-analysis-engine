@@ -23,22 +23,22 @@
 	}: Props = $props();
 
 	const trendColors: Record<Trend, string> = {
-		up: "text-[var(--netz-success)]",
-		down: "text-[var(--netz-danger)]",
-		flat: "text-[var(--netz-text-muted)]",
+		up: "text-(--netz-success)",
+		down: "text-(--netz-danger)",
+		flat: "text-(--netz-text-muted)",
 	};
 </script>
 
 <div
 	class={cn(
-		"rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface)] p-4 shadow-sm",
+		"rounded-lg border border-(--netz-border) bg-(--netz-surface) p-4 shadow-sm",
 		className,
 	)}
 >
 	<div class="flex items-start justify-between">
 		<div>
-			<p class="text-sm text-[var(--netz-text-muted)]">{label}</p>
-			<p class="mt-1 text-2xl font-semibold text-[var(--netz-text-primary)]">
+			<p class="text-sm text-(--netz-text-muted)">{label}</p>
+			<p class="mt-1 text-2xl font-semibold text-(--netz-text-primary)">
 				{value}
 			</p>
 			{#if trend}

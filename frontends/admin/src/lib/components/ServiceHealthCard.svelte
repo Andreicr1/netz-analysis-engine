@@ -26,21 +26,21 @@
 	);
 </script>
 
-<div class="rounded-lg border border-[var(--netz-border)] bg-[var(--netz-surface-alt)] p-4">
+<div class="rounded-lg border border-(--netz-border) bg-(--netz-surface-alt) p-4">
 	<div class="mb-2 flex items-center justify-between">
-		<span class="text-sm font-medium text-[var(--netz-text-primary)]">{service.name}</span>
+		<span class="text-sm font-medium text-(--netz-text-primary)">{service.name}</span>
 		<StatusBadge status={statusType} type="risk" resolve={resolveAdminStatus} />
 	</div>
 	{#if service.latency_ms != null}
-		<p class="text-xs text-[var(--netz-text-muted)]">
+		<p class="text-xs text-(--netz-text-muted)">
 			Latency: {formatNumber(service.latency_ms, 1, "en-US")}ms
 		</p>
 	{/if}
 	{#if service.error}
-		<p class="mt-1 text-xs text-[var(--netz-text-secondary)]">{service.error}</p>
+		<p class="mt-1 text-xs text-(--netz-text-secondary)">{service.error}</p>
 	{/if}
 	{#if service.checked_at}
-		<p class="mt-1 text-xs text-[var(--netz-text-muted)]">
+		<p class="mt-1 text-xs text-(--netz-text-muted)">
 			Checked at
 			<time datetime={service.checked_at}>{formatDateTime(service.checked_at, "en-US")}</time>
 		</p>
