@@ -476,7 +476,7 @@ No frontend consumers exist. Do not build new integrations against these.
 If there are two separate files (`/api/dataroom/` and `/api/data-room/`), deprecate both.
 
 ### Verification
-- Run `make check:all` (backend + all frontends)
+- Run `make check-all` (backend + all frontends)
 - Verify the wealth fund detail page still renders (it should — the removed data was always null)
 - Verify the analytics correlation-regime section now loads data (path was wrong before)
 - Verify deprecated endpoints still respond (deprecated ≠ removed)

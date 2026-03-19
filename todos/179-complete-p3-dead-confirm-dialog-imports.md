@@ -23,7 +23,7 @@ Multiple page components import `ConfirmDialog` but never render it in their tem
 
 1. Remove the unused `ConfirmDialog` import from each affected file
 2. Verify no associated state variables (e.g., `showConfirm`, `confirmOpen`) are also dead code and remove those too
-3. Run `make check:all` to confirm no build errors
+3. Run `make check-all` to confirm no build errors
 
 ## Acceptance Criteria
 

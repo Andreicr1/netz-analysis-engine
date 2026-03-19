@@ -1,6 +1,6 @@
 .PHONY: check test lint typecheck architecture serve migrate migration help pipeline \
-       dev:ui build:ui dev:credit build:credit dev:wealth build:wealth dev:admin build:admin \
-       dev:all build:all check:all types
+       dev-ui build-ui dev-credit build-credit dev-wealth build-wealth dev-admin build-admin \
+       dev-all build-all check-all types
 
 # ── Unified gate ──────────────────────────────────────────
 check: lint architecture typecheck test
@@ -38,37 +38,37 @@ down:
 	docker-compose down
 
 # ── Frontend (pnpm + Turborepo) ──────────────────────────
-dev\:ui:
+dev-ui:
 	pnpm --filter @netz/ui dev
 
-build\:ui:
+build-ui:
 	pnpm --filter @netz/ui build
 
-dev\:credit:
+dev-credit:
 	pnpm --filter netz-credit-intelligence dev
 
-build\:credit:
+build-credit:
 	pnpm --filter netz-credit-intelligence build
 
-dev\:wealth:
+dev-wealth:
 	pnpm --filter netz-wealth-os dev
 
-build\:wealth:
+build-wealth:
 	pnpm --filter netz-wealth-os build
 
-dev\:admin:
+dev-admin:
 	pnpm --filter netz-admin dev
 
-build\:admin:
+build-admin:
 	pnpm --filter netz-admin build
 
-dev\:all:
+dev-all:
 	pnpm exec turbo run dev
 
-build\:all:
+build-all:
 	pnpm exec turbo run build
 
-check\:all:
+check-all:
 	pnpm exec turbo run check
 
 types:
@@ -88,12 +88,12 @@ help:
 	@echo "make down        - docker-compose down"
 	@echo ""
 	@echo "── Frontend ────────────────────────────────────────"
-	@echo "make dev:ui      - @netz/ui watch mode"
-	@echo "make build:ui    - Build @netz/ui package"
-	@echo "make dev:credit  - Credit frontend dev server"
-	@echo "make dev:wealth  - Wealth frontend dev server"
-	@echo "make dev:admin   - Admin frontend dev server"
-	@echo "make dev:all     - All packages in parallel (Turborepo)"
-	@echo "make build:all   - Build all packages (topological order)"
-	@echo "make check:all   - Check all frontend packages"
+	@echo "make dev-ui      - @netz/ui watch mode"
+	@echo "make build-ui    - Build @netz/ui package"
+	@echo "make dev-credit  - Credit frontend dev server"
+	@echo "make dev-wealth  - Wealth frontend dev server"
+	@echo "make dev-admin   - Admin frontend dev server"
+	@echo "make dev-all     - All packages in parallel (Turborepo)"
+	@echo "make build-all   - Build all packages (topological order)"
+	@echo "make check-all   - Check all frontend packages"
 	@echo "make types       - Generate TS types from OpenAPI schema"

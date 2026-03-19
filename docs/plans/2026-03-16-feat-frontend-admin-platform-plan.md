@@ -1826,7 +1826,7 @@ All three frontends consume the same `@netz/ui` components and utilities. The in
 - [ ] Integration tests pass per frontend (vitest + MSW)
 - [ ] E2E tests pass per frontend (Playwright against docker-compose)
 - [ ] `make check` passes (backend lint + typecheck + test)
-- [ ] `make check:frontends` passes (svelte-check + vitest per frontend)
+- [ ] `make check-all` passes (svelte-check + vitest per frontend)
 - [ ] No TypeScript `any` types in production code
 
 ## Dependencies & Prerequisites
