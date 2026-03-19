@@ -300,59 +300,92 @@ export function createRiskStore(config: RiskStoreConfig) {
 		stopPolling();
 	}
 
+	// ── BatchRiskSummaryOut shape (matches api.d.ts components["schemas"]["BatchRiskSummaryOut"]) ──
+	interface BatchRiskSummaryOut {
+		profiles: Record<string, CVaRStatus | null>;
+		computed_at: string;
+		profile_count: number;
+	}
+
 	async function fetchAll() {
 		if (fetching) return;
 		fetching = true;
 		try {
 			const api = createClientApiClient(getToken);
 
-			const requests = [
-				...profileIds.map((p) => api.get(`/risk/${p}/cvar`).catch(() => null)),
+			// Batch CVaR summary — single request replaces N individual /risk/{p}/cvar calls.
+			// Falls back to per-profile calls only if the batch endpoint returns a non-2xx.
+			const profilesParam = profileIds.join(",");
+
+			const [batchResult, ...restResults] = await Promise.allSettled([
+				api.get<BatchRiskSummaryOut>(`/risk/summary?profiles=${profilesParam}`),
 				...profileIds.map((p) => api.get(`/risk/${p}/cvar/history`).catch(() => null)),
 				api.get("/risk/regime").catch(() => null),
 				api.get("/risk/regime/history").catch(() => null),
 				api.get("/analytics/strategy-drift/alerts").catch(() => null),
 				api.get("/risk/macro").catch(() => null),
-			];
+			]);
 
-			const results = await Promise.allSettled(requests);
 			const n = profileIds.length;
+			// restResults: [history*n, regime, regimeHist, drift, macro]
+			const historyResults = restResults.slice(0, n);
+			const regimeResult = restResults[n];
+			const regimeHistResult = restResults[n + 1];
+			const driftResult = restResults[n + 2];
+			const macroResult = restResults[n + 3];
 
+			// ── CVaR: prefer batch response; fall back to per-profile if batch failed ──
 			const newCvar: Record<string, CVaRStatus> = {};
-			const newHistory: Record<string, CVaRPoint[]> = {};
 
+			if (batchResult?.status === "fulfilled" && batchResult.value) {
+				// Batch succeeded — unpack profiles map
+				const batch = batchResult.value;
+				for (const [p, cvarEntry] of Object.entries(batch.profiles)) {
+					if (cvarEntry !== null) {
+						newCvar[p] = cvarEntry;
+					}
+				}
+			} else {
+				// Batch failed — fall back to individual fetches in parallel
+				const fallbackResults = await Promise.allSettled(
+					profileIds.map((p) => api.get<CVaRStatus>(`/risk/${p}/cvar`).catch(() => null))
+				);
+				for (let i = 0; i < n; i++) {
+					const p = profileIds[i]!;
+					const r = fallbackResults[i];
+					if (r?.status === "fulfilled" && r.value) {
+						newCvar[p] = r.value as CVaRStatus;
+					}
+				}
+			}
+
+			// ── History ────────────────────────────────────────────────────────
+			const newHistory: Record<string, CVaRPoint[]> = {};
 			for (let i = 0; i < n; i++) {
 				const p = profileIds[i]!;
-				const statusResult = results[i];
-				const historyResult = results[n + i];
-				if (statusResult?.status === "fulfilled" && statusResult.value) {
-					newCvar[p] = statusResult.value as CVaRStatus;
-				}
-				if (historyResult?.status === "fulfilled" && historyResult.value) {
-					const val = historyResult.value as CVaRPoint[] | { points: CVaRPoint[] };
+				const r = historyResults[i];
+				if (r?.status === "fulfilled" && r.value) {
+					const val = r.value as CVaRPoint[] | { points: CVaRPoint[] };
 					newHistory[p] = Array.isArray(val) ? val : val.points ?? [];
 				}
 			}
 
-			const regimeIdx = 2 * n;
-			const regimeResult = results[regimeIdx];
+			// ── Regime ────────────────────────────────────────────────────────
 			const newRegime = (regimeResult?.status === "fulfilled" && regimeResult.value)
 				? regimeResult.value as RegimeData
 				: undefined;
 
-			const regimeHistResult = results[regimeIdx + 1];
 			let newRegimeHistory: Array<{ date: string; regime: string }> | undefined;
 			if (regimeHistResult?.status === "fulfilled" && regimeHistResult.value) {
 				const val = regimeHistResult.value as Array<{ date: string; regime: string }> | { history: Array<{ date: string; regime: string }> };
 				newRegimeHistory = Array.isArray(val) ? val : val.history ?? [];
 			}
 
-			const driftResult = results[regimeIdx + 2];
+			// ── Drift + Macro ─────────────────────────────────────────────────
 			const newDrift = (driftResult?.status === "fulfilled" && driftResult.value)
 				? driftResult.value as { dtw_alerts: DriftAlert[]; behavior_change_alerts: BehaviorAlert[] }
 				: undefined;
 
-			const macroResult = results[regimeIdx + 3];
 			const newMacro = (macroResult?.status === "fulfilled" && macroResult.value)
 				? macroResult.value as Record<string, unknown>
 				: undefined;
