@@ -94,6 +94,14 @@ class RiskSummaryBatch(BaseModel):
     computed_at: datetime | None = None
 
 
+class BatchRiskSummaryOut(BaseModel):
+    """Aggregated risk summary for multiple profiles in a single request."""
+
+    profiles: dict[str, CVaRStatus | None]
+    computed_at: datetime
+    profile_count: int
+
+
 class RegimeHistoryPoint(BaseModel):
     snapshot_date: date
     profile: str

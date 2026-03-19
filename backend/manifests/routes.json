@@ -741,6 +741,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/risk/summary",
+    "name": "get_risk_summary_batch"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/risk/{profile}/cvar",
     "name": "get_cvar"
   },
