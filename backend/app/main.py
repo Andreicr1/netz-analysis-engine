@@ -46,6 +46,7 @@ from app.domains.credit.deals.routes.conversion import router as credit_conversi
 # Deals
 from app.domains.credit.deals.routes.deals import router as credit_deals_router
 from app.domains.credit.deals.routes.ic_memos import router as credit_ic_memos_router
+from app.domains.credit.deals.routes.provenance import router as credit_provenance_router
 from app.domains.credit.documents.routes.auditor import router as credit_auditor_router
 from app.domains.credit.documents.routes.evidence import router as credit_evidence_router
 from app.domains.credit.documents.routes.ingest import router as credit_ingest_router
@@ -357,6 +358,7 @@ api_v1.include_router(wealth_exposure_router)
 # Deals
 api_v1.include_router(credit_deals_router)
 api_v1.include_router(credit_ic_memos_router)
+api_v1.include_router(credit_provenance_router)
 api_v1.include_router(credit_conversion_router)
 
 # Portfolio
