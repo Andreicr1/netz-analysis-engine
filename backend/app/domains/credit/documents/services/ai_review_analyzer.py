@@ -40,6 +40,7 @@ async def analyze_review_checklist(
     *,
     review: DocumentReview,
     fund_id: uuid.UUID,
+    organization_id: uuid.UUID | str | None = None,
 ) -> dict[str, Any]:
     """Run AI analysis on all checklist items for a document review.
 
@@ -55,16 +56,14 @@ async def analyze_review_checklist(
     if not items:
         return {"analyzed": 0, "found": 0, "notFound": 0, "unclear": 0, "errors": 0}
 
-    search_engine = _get_search_engine()
     model = _get_model()
-    doc_id_str = str(review.document_id)
 
     stats = {"analyzed": 0, "found": 0, "notFound": 0, "unclear": 0, "errors": 0}
     now_iso = datetime.now(UTC).isoformat()
 
     for item in items:
         try:
-            chunks = _search_for_item(search_engine, fund_id, doc_id_str, item)
+            chunks = await _search_for_item(db, fund_id, organization_id, item)
             finding = _analyze_item_with_llm(model, item, chunks)
             finding["model"] = model
             finding["analyzed_at"] = now_iso
@@ -97,30 +96,20 @@ async def analyze_review_checklist(
     return stats
 
 
-def _get_search_engine():
-    """Get the Azure AI Search engine instance."""
-    try:
-        from app.services.search_index import InstitutionalSearchEngine
-        return InstitutionalSearchEngine()
-    except Exception:
-        logger.warning("Azure AI Search not available — AI analysis will use empty context")
-        return None
-
-
 def _get_model() -> str:
     """Resolve the model for document review analysis."""
     from ai_engine.model_config import get_model
     return get_model("doc_review")
 
 
-def _search_for_item(
-    search_engine: Any,
+async def _search_for_item(
+    db: AsyncSession,
     fund_id: uuid.UUID,
-    doc_id: str,
+    organization_id: uuid.UUID | str | None,
     item: ReviewChecklistItem,
 ) -> list[dict[str, Any]]:
     """Semantic search for chunks relevant to a checklist item."""
-    if search_engine is None:
+    if not organization_id:
         return []
 
     query = f"{item.category}: {item.label}"
@@ -128,19 +117,28 @@ def _search_for_item(
         query += f" — {item.description}"
 
     try:
-        hits = search_engine.search_institutional_hybrid(
-            query=query,
-            fund_id=str(fund_id),
+        from ai_engine.extraction.embedding_service import generate_embeddings
+        from ai_engine.extraction.pgvector_search_service import search_and_rerank_fund_policy
+
+        emb = generate_embeddings([query])
+        query_vector = emb.vectors[0] if emb.vectors else None
+
+        result = await search_and_rerank_fund_policy(
+            db,
+            fund_id=fund_id,
+            organization_id=str(organization_id),
+            query_text=query,
+            query_vector=query_vector,
             top=5,
-            scope_mode="FUND_ONLY",
+            candidates=20,
         )
         results = []
-        for hit in hits[:5]:
+        for chunk in result.chunks[:5]:
             results.append({
-                "chunk_id": getattr(hit, "chunk_id", "") or "",
-                "text": getattr(hit, "text", "") or getattr(hit, "content", "") or "",
-                "score": getattr(hit, "reranker_score", None) or getattr(hit, "score", 0),
-                "document_title": getattr(hit, "document_title", "") or "",
+                "chunk_id": chunk.get("id", ""),
+                "text": chunk.get("content", ""),
+                "score": chunk.get("reranker_score") or chunk.get("score", 0),
+                "document_title": chunk.get("title", ""),
             })
         return results
     except Exception:

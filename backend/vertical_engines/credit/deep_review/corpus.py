@@ -252,7 +252,6 @@ def _gather_deal_texts(
         }
 
     """
-    from app.services.search_index import AzureSearchChunksClient
     from vertical_engines.credit.memo import CHAPTER_REGISTRY
     from vertical_engines.credit.retrieval import (
         RETRIEVAL_POLICY_NAME,
@@ -263,28 +262,9 @@ def _gather_deal_texts(
     )
 
     deal_name = deal.deal_name or deal.title or ""
-    searcher = AzureSearchChunksClient()
     f_id = str(fund_id)
     d_id = str(deal.id)
-
-    # ── Resolve actual index identifiers (v5 uses folder-derived fund_id)
-    # Returns (fund_id, deal_id, scope_mode) — scope_mode indicates whether
-    # the fund_id is shared across multiple deals (STRICT) or exclusive.
-    f_id, d_id, scope_mode = searcher.resolve_index_scope(
-        fund_id=f_id,
-        deal_id=d_id,
-        deal_name=deal_name,
-        deal_folder_path=deal.deal_folder_path,
-    )
-    d_id = d_id or str(deal.id)
-
-    # CU pipeline sets deal_name as deal_id in the index (indexer maps
-    # /deal_name → deal_id).  Ensure d_id matches so the filter captures
-    # enriched CU chunks.
-    # SAFETY: With STRICT scope_mode, the AND clause prevents cross-deal
-    # contamination even if fund_id is a shared parent entity.
-    if deal_name:
-        d_id = deal_name
+    org_id = str(organization_id)
 
     logger.info(
         "ic_grade_retrieval.start",
@@ -293,7 +273,6 @@ def _gather_deal_texts(
         chapters=len(CHAPTER_REGISTRY),
         fund_id=f_id,
         deal_id=d_id,
-        scope_mode=scope_mode,
     )
 
     # ── Per-chapter specialized retrieval (parallel) ──────────────
@@ -308,8 +287,7 @@ def _gather_deal_texts(
             deal_name=deal_name,
             fund_id=f_id,
             deal_id=d_id,
-            searcher=searcher,
-            scope_mode=scope_mode,
+            organization_id=org_id,
         )
 
     with ThreadPoolExecutor(max_workers=6) as executor:

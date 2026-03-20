@@ -203,14 +203,6 @@ class AzureSearchMetadataClient:
         return hits
 
 
-class AzureSearchChunksClient:
-    def __init__(self, **kwargs: Any) -> None:
-        pass
-
-    def upsert(self, **kwargs: Any) -> None:
-        raise NotImplementedError("Search index not configured — Sprint 3")
-
-
 class RetrievalEmbeddingError(Exception):
     pass
 
@@ -221,11 +213,3 @@ class RetrievalExecutionError(Exception):
 
 class RetrievalScopeError(Exception):
     pass
-
-
-class InstitutionalSearchEngine:
-    def __init__(self, **kwargs: Any) -> None:
-        pass
-
-    def search(self, **kwargs: Any) -> list[dict[str, Any]]:
-        raise NotImplementedError("Search index not configured — Sprint 3")

@@ -33,7 +33,7 @@ def _get_sync_engine() -> Engine:
     global _sync_engine
     if _sync_engine is None:
         from app.core.config.settings import settings
-        sync_url = settings.database_url.replace("+asyncpg", "+psycopg")
+        sync_url = settings.database_url.replace("+asyncpg", "+psycopg").replace("?ssl=require", "?sslmode=require")
         _sync_engine = create_engine(
             sync_url,
             pool_size=5,

@@ -633,7 +633,7 @@ async def trigger_ai_analysis(
                     select(DocumentReview).where(DocumentReview.id == review_id),
                 )
                 r = result.scalar_one()
-                stats = await analyze_review_checklist(analysis_db, review=r, fund_id=fund_id)
+                stats = await analyze_review_checklist(analysis_db, review=r, fund_id=fund_id, organization_id=actor.organization_id)
 
                 await _log_event(analysis_db, r, "ai_analysis_completed", "ai-engine", {
                     "stats": stats,

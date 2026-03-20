@@ -36,11 +36,9 @@ class TestDealEmptyCorpusOnNoChunks:
     @patch("vertical_engines.credit.retrieval.enforce_evidence_saturation")
     @patch("vertical_engines.credit.retrieval.build_ic_corpus")
     @patch("vertical_engines.credit.retrieval.gather_chapter_evidence")
-    @patch("app.services.search_index.AzureSearchChunksClient")
     @patch("vertical_engines.credit.memo.CHAPTER_REGISTRY", [(0, "ch1", "Chapter 1")])
     def test_deal_empty_corpus_on_no_chunks(
         self,
-        mock_search_cls,
         mock_gather,
         mock_build_corpus,
         mock_saturation,
@@ -48,10 +46,6 @@ class TestDealEmptyCorpusOnNoChunks:
         _fake_deal,
     ):
         from vertical_engines.credit.deep_review.corpus import _gather_deal_texts
-
-        mock_searcher = MagicMock()
-        mock_searcher.resolve_index_scope.return_value = ("f1", "d1", "STRICT")
-        mock_search_cls.return_value = mock_searcher
 
         mock_gather.return_value = {
             "coverage_status": "EMPTY",
@@ -113,20 +107,18 @@ class TestInvestmentEmptyStringOnNoChunks:
         assert result == ""
 
 
-class TestNoBlobStorageCalls:
-    """download_bytes must never be called during corpus assembly."""
+class TestNoBlobStorageInGatherDealTexts:
+    """_gather_deal_texts must NOT call download_bytes (blob fallback removed)."""
 
     @patch("vertical_engines.credit.retrieval.build_retrieval_audit")
     @patch("vertical_engines.credit.retrieval.enforce_evidence_saturation")
     @patch("vertical_engines.credit.retrieval.build_ic_corpus")
     @patch("vertical_engines.credit.retrieval.gather_chapter_evidence")
-    @patch("app.services.search_index.AzureSearchChunksClient")
     @patch("vertical_engines.credit.memo.CHAPTER_REGISTRY", [(0, "ch1", "Chapter 1")])
     @patch("vertical_engines.credit.deep_review.corpus.download_bytes")
-    def test_no_blob_storage_calls(
+    def test_no_blob_storage_calls_in_gather(
         self,
         mock_download,
-        mock_search_cls,
         mock_gather,
         mock_build_corpus,
         mock_saturation,
@@ -134,10 +126,6 @@ class TestNoBlobStorageCalls:
         _fake_deal,
     ):
         from vertical_engines.credit.deep_review.corpus import _gather_deal_texts
-
-        mock_searcher = MagicMock()
-        mock_searcher.resolve_index_scope.return_value = ("f1", "d1", "STRICT")
-        mock_search_cls.return_value = mock_searcher
 
         mock_gather.return_value = {
             "coverage_status": "EMPTY",

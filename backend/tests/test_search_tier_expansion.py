@@ -1,62 +1,64 @@
 """Tests for Phase 5 — signal-based search tier expansion."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+from ai_engine.extraction.pgvector_search_service import RerankedResult
+from ai_engine.extraction.retrieval_signal import RetrievalSignal
+
 # ── Helpers ──────────────────────────────────────────────────────────
 
-_DEAL_ID = "deal-1"
-_FUND_ID = "fund-1"
+_DEAL_ID = "00000000-0000-0000-0000-000000000001"
+_FUND_ID = "00000000-0000-0000-0000-000000000002"
+_ORG_ID = "00000000-0000-0000-0000-000000000003"
 
 
-@dataclass
-class _FakeHit:
-    """Minimal hit object matching searcher.search_institutional_hybrid()."""
+def _make_chunk(
+    chunk_id: str = "c1",
+    chunk_index: int = 0,
+    score: float = 0.8,
+    reranker_score: float = 5.0,
+    deal_id: str = _DEAL_ID,
+) -> dict:
+    return {
+        "id": chunk_id,
+        "title": "doc.pdf",
+        "doc_type": "fund_doc",
+        "page_start": 1,
+        "page_end": 2,
+        "chunk_index": chunk_index,
+        "content": "content",
+        "score": score,
+        "reranker_score": reranker_score,
+        "fund_id": _FUND_ID,
+        "deal_id": deal_id,
+        "section_type": None,
+        "governance_critical": False,
+        "breadcrumb": None,
+    }
 
-    chunk_id: str = "c1"
-    title: str = "doc.pdf"
-    blob_name: str = "doc.pdf"
-    doc_type: str = "fund_doc"
-    authority: str = "manager"
-    page_start: int = 1
-    page_end: int = 2
-    chunk_index: int = 0
-    content_text: str = "content"
-    score: float = 0.8
-    reranker_score: float = 5.0
-    container_name: str = ""
-    retrieval_timestamp: str = ""
-    fund_id: str = _FUND_ID
-    deal_id: str = _DEAL_ID
-    section_type: str | None = None
-    vehicle_type: str | None = None
-    governance_critical: bool = False
-    governance_flags: list = field(default_factory=list)
-    breadcrumb: str | None = None
 
-
-def _make_high_confidence_hits(n: int = 6) -> list[_FakeHit]:
-    """Hits with large delta between top1 and top2 → HIGH confidence."""
-    hits = [_FakeHit(chunk_id="c0", chunk_index=0, reranker_score=10.0, score=0.95)]
+def _make_high_confidence_chunks(n: int = 6) -> list[dict]:
+    """Chunks with large delta between top1 and top2 → HIGH confidence."""
+    chunks = [_make_chunk(chunk_id="c0", chunk_index=0, reranker_score=10.0, score=0.95)]
     for i in range(1, n):
-        hits.append(
-            _FakeHit(
+        chunks.append(
+            _make_chunk(
                 chunk_id=f"c{i}",
                 chunk_index=i,
                 reranker_score=5.0 - i * 0.1,
                 score=0.8 - i * 0.01,
             )
         )
-    return hits
+    return chunks
 
 
-def _make_low_confidence_hits(n: int = 2) -> list[_FakeHit]:
+def _make_low_confidence_chunks(n: int = 2) -> list[dict]:
     """Too few results → LOW confidence."""
     return [
-        _FakeHit(
+        _make_chunk(
             chunk_id=f"c{i}",
             chunk_index=i,
             reranker_score=3.0 - i * 0.1,
@@ -66,24 +68,24 @@ def _make_low_confidence_hits(n: int = 2) -> list[_FakeHit]:
     ]
 
 
-def _make_moderate_confidence_hits(n: int = 5) -> list[_FakeHit]:
+def _make_moderate_confidence_chunks(n: int = 5) -> list[dict]:
     """Delta between MODERATE thresholds → MODERATE confidence."""
-    hits = [_FakeHit(chunk_id="c0", chunk_index=0, reranker_score=6.0)]
+    chunks = [_make_chunk(chunk_id="c0", chunk_index=0, reranker_score=6.0)]
     for i in range(1, n):
-        hits.append(
-            _FakeHit(
+        chunks.append(
+            _make_chunk(
                 chunk_id=f"c{i}",
                 chunk_index=i,
                 reranker_score=5.0 - i * 0.05,
             )
         )
-    return hits
+    return chunks
 
 
-def _make_ambiguous_hits(n: int = 6) -> list[_FakeHit]:
+def _make_ambiguous_chunks(n: int = 6) -> list[dict]:
     """Tight score band with many results → AMBIGUOUS confidence."""
     return [
-        _FakeHit(
+        _make_chunk(
             chunk_id=f"c{i}",
             chunk_index=i,
             reranker_score=5.0 + 0.01 * (n - i),
@@ -93,36 +95,41 @@ def _make_ambiguous_hits(n: int = 6) -> list[_FakeHit]:
     ]
 
 
-@pytest.fixture()
-def mock_searcher():
-    return MagicMock()
+def _make_reranked_result(chunks: list[dict]) -> RerankedResult:
+    return RerankedResult(chunks=chunks, signal=RetrievalSignal.from_results(chunks))
 
 
 @pytest.fixture(autouse=True)
 def _patch_dependencies():
-    """Patch query map and doc_type filters to isolate search tier logic."""
-    with (
-        patch(
-            "vertical_engines.credit.retrieval.evidence.build_chapter_query_map",
-            return_value={"ch01_exec": ["test query"]},
-        ),
-        patch(
-            "vertical_engines.credit.retrieval.evidence.CHAPTER_DOC_TYPE_FILTERS",
-            {"ch01_exec": None},
-        ),
+    """Patch query map to isolate search tier logic."""
+    with patch(
+        "vertical_engines.credit.retrieval.evidence.build_chapter_query_map",
+        return_value={"ch01_exec": ["test query"]},
     ):
         yield
 
 
-def _call_gather(mock_searcher):
+@pytest.fixture()
+def mock_embeddings():
+    """Patch embedding service to return a dummy vector."""
+    emb_result = MagicMock()
+    emb_result.vectors = [[0.1] * 10]
+    with patch(
+        "ai_engine.extraction.embedding_service.generate_embeddings",
+        return_value=emb_result,
+    ) as mock:
+        yield mock
+
+
+def _call_gather(mock_search):
     from vertical_engines.credit.retrieval.evidence import gather_chapter_evidence
 
     return gather_chapter_evidence(
         chapter_key="ch01_exec",
-        deal_name=_DEAL_ID,  # must match chunk deal_id for contamination filter
+        deal_name=_DEAL_ID,
         fund_id=_FUND_ID,
         deal_id=_DEAL_ID,
-        searcher=mock_searcher,
+        organization_id=_ORG_ID,
     )
 
 
@@ -132,70 +139,80 @@ def _call_gather(mock_searcher):
 class TestSignalBasedExpansion:
     """Search tier expansion triggered by LOW/AMBIGUOUS confidence."""
 
-    def test_low_confidence_triggers_expansion(self, mock_searcher):
+    def test_low_confidence_triggers_expansion(self, mock_embeddings):
         """LOW confidence should trigger expansion with EXPANDED_SEARCH_TIER."""
         from vertical_engines.credit.retrieval.models import EXPANDED_SEARCH_TIER
 
-        low_hits = _make_low_confidence_hits(2)
-        expanded_hits = _make_high_confidence_hits(8)
+        low_chunks = _make_low_confidence_chunks(2)
+        expanded_chunks = _make_high_confidence_chunks(8)
 
-        def _side_effect(**kwargs):
-            top = kwargs.get("top")
-            if top == EXPANDED_SEARCH_TIER[0]:
-                return expanded_hits
-            return low_hits
+        def _side_effect(*, deal_id, organization_id, query_text, query_vector, top, candidates, **kw):
+            if candidates == EXPANDED_SEARCH_TIER[1]:
+                return _make_reranked_result(expanded_chunks)
+            return _make_reranked_result(low_chunks)
 
-        mock_searcher.search_institutional_hybrid.side_effect = _side_effect
-
-        result = _call_gather(mock_searcher)
+        with patch(
+            "ai_engine.extraction.pgvector_search_service.search_and_rerank_deal_sync",
+            side_effect=_side_effect,
+        ) as mock_search:
+            result = _call_gather(mock_search)
 
         assert result["search_expanded"] is True
-        assert mock_searcher.search_institutional_hybrid.call_count >= 2
+        assert mock_search.call_count >= 2
 
-    def test_high_confidence_no_expansion(self, mock_searcher):
+    def test_high_confidence_no_expansion(self, mock_embeddings):
         """HIGH confidence should NOT trigger expansion."""
-        high_hits = _make_high_confidence_hits(8)
-        mock_searcher.search_institutional_hybrid.return_value = high_hits
+        high_chunks = _make_high_confidence_chunks(8)
 
-        result = _call_gather(mock_searcher)
+        with patch(
+            "ai_engine.extraction.pgvector_search_service.search_and_rerank_deal_sync",
+            return_value=_make_reranked_result(high_chunks),
+        ) as mock_search:
+            result = _call_gather(mock_search)
 
         assert result["search_expanded"] is False
-        assert mock_searcher.search_institutional_hybrid.call_count == 1
+        assert mock_search.call_count == 1
 
-    def test_moderate_confidence_no_expansion(self, mock_searcher):
+    def test_moderate_confidence_no_expansion(self, mock_embeddings):
         """MODERATE confidence should NOT trigger expansion."""
-        moderate_hits = _make_moderate_confidence_hits(5)
-        mock_searcher.search_institutional_hybrid.return_value = moderate_hits
+        moderate_chunks = _make_moderate_confidence_chunks(5)
 
-        result = _call_gather(mock_searcher)
+        with patch(
+            "ai_engine.extraction.pgvector_search_service.search_and_rerank_deal_sync",
+            return_value=_make_reranked_result(moderate_chunks),
+        ) as mock_search:
+            result = _call_gather(mock_search)
 
         assert result["search_expanded"] is False
 
-    def test_ambiguous_triggers_expansion(self, mock_searcher):
+    def test_ambiguous_triggers_expansion(self, mock_embeddings):
         """AMBIGUOUS confidence should trigger expansion."""
         from vertical_engines.credit.retrieval.models import EXPANDED_SEARCH_TIER
 
-        ambiguous_hits = _make_ambiguous_hits(6)
-        expanded_hits = _make_high_confidence_hits(10)
+        ambiguous_chunks = _make_ambiguous_chunks(6)
+        expanded_chunks = _make_high_confidence_chunks(10)
 
-        def _side_effect(**kwargs):
-            top = kwargs.get("top")
-            if top == EXPANDED_SEARCH_TIER[0]:
-                return expanded_hits
-            return ambiguous_hits
+        def _side_effect(*, deal_id, organization_id, query_text, query_vector, top, candidates, **kw):
+            if candidates == EXPANDED_SEARCH_TIER[1]:
+                return _make_reranked_result(expanded_chunks)
+            return _make_reranked_result(ambiguous_chunks)
 
-        mock_searcher.search_institutional_hybrid.side_effect = _side_effect
-
-        result = _call_gather(mock_searcher)
+        with patch(
+            "ai_engine.extraction.pgvector_search_service.search_and_rerank_deal_sync",
+            side_effect=_side_effect,
+        ) as mock_search:
+            result = _call_gather(mock_search)
 
         assert result["search_expanded"] is True
 
-    def test_missing_no_expansion(self, mock_searcher):
+    def test_missing_no_expansion(self, mock_embeddings):
         """COVERAGE_MISSING should NOT trigger expansion even with LOW confidence."""
-        mock_searcher.search_institutional_hybrid.return_value = []
-
-        result = _call_gather(mock_searcher)
+        with patch(
+            "ai_engine.extraction.pgvector_search_service.search_and_rerank_deal_sync",
+            return_value=_make_reranked_result([]),
+        ) as mock_search:
+            result = _call_gather(mock_search)
 
         assert result["search_expanded"] is False
         assert result["coverage_status"] == "MISSING_EVIDENCE"
-        assert mock_searcher.search_institutional_hybrid.call_count == 1
+        assert mock_search.call_count == 1
