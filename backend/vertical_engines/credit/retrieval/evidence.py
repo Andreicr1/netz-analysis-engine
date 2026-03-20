@@ -17,12 +17,13 @@ from vertical_engines.credit.retrieval.models import (
     CHAPTER_DOC_TYPE_FILTERS,
     CHAPTER_EVIDENCE_THRESHOLDS,
     CHAPTER_RETRIEVAL_MODE,
-    CHAPTER_SEARCH_TIERS,
+    COVERAGE_CONTESTED,
     COVERAGE_MISSING,
     COVERAGE_PARTIAL,
     COVERAGE_SATURATED,
     DEFAULT_SEARCH_TIER,
     DESIRED_PROVENANCE_FIELDS,
+    EXPANDED_SEARCH_TIER,
     FILTER_FALLBACK_THRESHOLD,
     REQUIRED_PROVENANCE_FIELDS,
     ChapterEvidenceThreshold,
@@ -155,11 +156,16 @@ def gather_chapter_evidence(
     # Chapter-local pool only — global dedup is done in build_ic_corpus.
     chapter_hits: dict[str, dict] = {}
 
-    _tier_top, _tier_k = CHAPTER_SEARCH_TIERS.get(chapter_key, DEFAULT_SEARCH_TIER)
+    _tier_top, _tier_k = DEFAULT_SEARCH_TIER
 
     per_query_counts: list[int] = [0] * len(queries)
 
-    def _execute_query(q_idx: int, query: str) -> tuple[int, list[dict]]:
+    def _execute_query(
+        q_idx: int,
+        query: str,
+        tier_top: int = _tier_top,
+        tier_k: int = _tier_k,
+    ) -> tuple[int, list[dict]]:
         """Execute a single search query — thread-safe (no shared mutable state)."""
         hits_data: list[dict] = []
         try:
@@ -167,8 +173,8 @@ def gather_chapter_evidence(
                 query=query,
                 fund_id=fund_id,
                 deal_id=deal_id,
-                top=_tier_top,
-                k=_tier_k,
+                top=tier_top,
+                k=tier_k,
                 doc_type_filter=active_filter,
                 scope_mode=scope_mode,
             )
@@ -386,6 +392,73 @@ def gather_chapter_evidence(
         score_key="reranker_score",
     )
 
+    # ── Signal-based search expansion ────────────────────────────────
+    search_expanded = False
+    if (
+        retrieval_signal.confidence in ("LOW", "AMBIGUOUS")
+        and coverage_status != COVERAGE_MISSING
+    ):
+        logger.info(
+            "search_tier_expanded",
+            chapter=chapter_key,
+            confidence=retrieval_signal.confidence,
+        )
+        _exp_top, _exp_k = EXPANDED_SEARCH_TIER
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            exp_futures = [
+                executor.submit(_execute_query, q_idx, query, _exp_top, _exp_k)
+                for q_idx, query in enumerate(queries)
+            ]
+            for future in exp_futures:
+                _, exp_hits = future.result()
+                for chunk_data in exp_hits:
+                    dedup_key = f"{chunk_data['title']}::{chunk_data['chunk_index']}"
+                    new_score = chunk_data["_best_score"]
+                    existing = chapter_hits.get(dedup_key)
+                    if (existing is None
+                            or new_score > existing.get("_best_score", 0.0)):
+                        chapter_hits[dedup_key] = chunk_data
+
+        # Re-validate provenance on expanded results
+        valid_chunks = [
+            c for c in chapter_hits.values()
+            if validate_provenance(c)
+        ]
+
+        # Re-apply cross-deal contamination filter
+        if deal_name:
+            clean_chunks = []
+            for c in valid_chunks:
+                chunk_deal = c.get("deal_id", "")
+                chunk_fund = str(c.get("fund_id", "") or "").lower()
+                if (
+                    not chunk_deal
+                    or chunk_deal.lower() == deal_name.lower()
+                    or chunk_fund in shared_aux_ids
+                ):
+                    clean_chunks.append(c)
+            valid_chunks = clean_chunks
+
+        # Recompute coverage stats
+        unique_docs = len({c["blob_name"] for c in valid_chunks})
+        doc_types = list({c.get("doc_type", "unknown") for c in valid_chunks})
+        chunk_count = len(valid_chunks)
+        fallback_count = sum(1 for c in valid_chunks if c.get("_fallback"))
+
+        if threshold.is_satisfied(chunk_count, unique_docs, set(doc_types)):
+            coverage_status = COVERAGE_SATURATED
+        elif chunk_count > 0:
+            coverage_status = COVERAGE_PARTIAL
+        else:
+            coverage_status = COVERAGE_MISSING
+
+        # Recompute signal on expanded results
+        retrieval_signal = RetrievalSignal.from_results(
+            valid_chunks,
+            score_key="reranker_score",
+        )
+        search_expanded = True
+
     # Override to EVIDENCE_CONTESTED when signal is AMBIGUOUS
     if retrieval_signal.confidence == "AMBIGUOUS" and coverage_status != COVERAGE_MISSING:
         coverage_status = COVERAGE_CONTESTED
@@ -402,6 +475,7 @@ def gather_chapter_evidence(
         "coverage_status": coverage_status,
         "retrieval_mode":  retrieval_mode,
         "doc_type_filter": active_filter,
+        "search_expanded": search_expanded,
         "retrieval_signal": {
             "confidence":      retrieval_signal.confidence,
             "top1_score":      retrieval_signal.top1_score,

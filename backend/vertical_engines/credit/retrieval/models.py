@@ -50,15 +50,10 @@ under-represented documents are boosted after DEPTH_FREE is exceeded."""
 RETRIEVAL_POLICY_NAME: str = "IC_GRADE_V2"
 """Official policy identifier for audit artifacts."""
 
-# ── Chapter Search Tiers (top, k) ─────────────────────────────────
+# ── Search Tiers (top, k) ─────────────────────────────────────────
 
-CHAPTER_SEARCH_TIERS: dict[str, tuple[int, int]] = {
-    "ch05_legal":             (200, 300),
-    "ch06_terms":             (200, 300),
-    "ch07_capital":           (200, 300),
-    "ch14_governance_stress": (200, 300),
-}
-DEFAULT_SEARCH_TIER: tuple[int, int] = (80, 150)
+DEFAULT_SEARCH_TIER: tuple[int, int] = (100, 150)
+EXPANDED_SEARCH_TIER: tuple[int, int] = (200, 300)
 
 # ── Total Corpus Budget ────────────────────────────────────────────
 
