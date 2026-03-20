@@ -173,7 +173,7 @@ def retrieve(
         query_vector = None
 
     try:
-        chunks = search_and_rerank_fund_sync(
+        reranked_result = search_and_rerank_fund_sync(
             fund_id=fund_id,
             organization_id=actor.organization_id,
             query_text=payload.query,
@@ -181,6 +181,8 @@ def retrieve(
             top=payload.top_k,
             candidates=payload.top_k * 3,
         )
+        chunks = reranked_result.chunks
+        retrieval_confidence = reranked_result.signal.confidence
     except Exception:
         raise HTTPException(status_code=502, detail="Search backend unavailable")
 
@@ -259,7 +261,7 @@ def retrieve(
     )
     db.commit()
 
-    return AIRetrieveResponse(results=results)
+    return AIRetrieveResponse(results=results, retrieval_confidence=retrieval_confidence)
 
 
 @router.post("/answer", response_model=AIAnswerResponse)
@@ -304,7 +306,7 @@ def answer(
         query_vector = None
 
     try:
-        chunks = search_and_rerank_fund_sync(
+        reranked_result = search_and_rerank_fund_sync(
             fund_id=fund_id,
             organization_id=actor.organization_id,
             query_text=payload.question,
@@ -312,6 +314,8 @@ def answer(
             top=payload.top_k,
             candidates=payload.top_k * 3,
         )
+        chunks = reranked_result.chunks
+        retrieval_confidence = reranked_result.signal.confidence
     except Exception:
         raise HTTPException(status_code=502, detail="Search backend unavailable")
 
@@ -603,4 +607,4 @@ def answer(
     )
     db.commit()
 
-    return AIAnswerResponse(answer=ans, citations=out_citations)
+    return AIAnswerResponse(answer=ans, citations=out_citations, retrieval_confidence=retrieval_confidence)

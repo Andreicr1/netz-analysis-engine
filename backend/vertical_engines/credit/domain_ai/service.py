@@ -15,7 +15,6 @@ import uuid
 from typing import Any
 
 import structlog
-from app.domains.credit.modules.deals.ai_mode import AIMode
 from sqlalchemy.orm import Session
 
 from ai_engine.extraction.embedding_service import generate_embeddings
@@ -23,6 +22,7 @@ from ai_engine.extraction.pgvector_search_service import (
     search_and_rerank_deal_sync as search_deal_chunks,
 )
 from ai_engine.prompts import prompt_registry
+from app.domains.credit.modules.deals.ai_mode import AIMode
 
 logger = structlog.get_logger()
 
@@ -54,7 +54,7 @@ def _retrieve_context(
         query_text = deal_name
 
     try:
-        chunks = search_deal_chunks(
+        result = search_deal_chunks(
             deal_id=deal_id,
             organization_id=organization_id,
             query_text=query_text,
@@ -62,6 +62,8 @@ def _retrieve_context(
             candidates=max_chunks * 3,
             top=max_chunks,
         )
+        chunks = result.chunks
+        retrieval_signal = result.signal
     except Exception as exc:
         logger.warning("domain_ai.retrieve_context.search_failed", deal_id=str(deal_id), error=str(exc), exc_info=True)
         return ""
@@ -69,7 +71,21 @@ def _retrieve_context(
     if not chunks:
         return ""
 
+    logger.info(
+        "domain_ai.retrieval_signal",
+        deal_id=str(deal_id),
+        confidence=retrieval_signal.confidence,
+        delta=retrieval_signal.delta_top1_top2,
+        result_count=retrieval_signal.result_count,
+    )
+
     context_parts: list[str] = []
+
+    if retrieval_signal.confidence == "LOW":
+        context_parts.append(
+            "Note: limited documentary evidence was found for this query."
+        )
+
     for chunk in chunks:
         header = f"[{chunk.get('doc_type', 'unknown')} | pages {chunk.get('page_start', '?')}-{chunk.get('page_end', '?')}]"
         context_parts.append(f"{header}\n{chunk.get('content', '')}")

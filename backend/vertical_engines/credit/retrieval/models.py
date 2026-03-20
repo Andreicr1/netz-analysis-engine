@@ -250,9 +250,10 @@ CHAPTER_EVIDENCE_THRESHOLDS: dict[str, ChapterEvidenceThreshold] = {
 
 # ── Coverage-status labels ─────────────────────────────────────────
 
-COVERAGE_SATURATED = "SATURATED"
-COVERAGE_PARTIAL   = "PARTIAL"
-COVERAGE_MISSING   = "MISSING_EVIDENCE"
+COVERAGE_SATURATED  = "SATURATED"
+COVERAGE_PARTIAL    = "PARTIAL"
+COVERAGE_MISSING    = "MISSING_EVIDENCE"
+COVERAGE_CONTESTED  = "EVIDENCE_CONTESTED"
 
 # ── Provenance validation fields ───────────────────────────────────
 

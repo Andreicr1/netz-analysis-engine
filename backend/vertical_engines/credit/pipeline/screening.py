@@ -52,7 +52,7 @@ def _retrieve_deal_context(
         query_text = deal_name
 
     try:
-        chunks = search_deal_chunks(
+        result = search_deal_chunks(
             deal_id=deal_id,
             organization_id=organization_id,
             query_text=query_text,
@@ -60,6 +60,8 @@ def _retrieve_deal_context(
             candidates=max_chunks,
             top=max_chunks,
         )
+        chunks = result.chunks
+        retrieval_signal = result.signal
     except Exception:
         logger.warning(
             "search_retrieval_failed",
@@ -67,6 +69,14 @@ def _retrieve_deal_context(
             exc_info=True,
         )
         return "", 0, [], {}
+
+    logger.info(
+        "pipeline_retrieval_signal",
+        deal_id=str(deal_id),
+        confidence=retrieval_signal.confidence,
+        delta=retrieval_signal.delta_top1_top2,
+        result_count=retrieval_signal.result_count,
+    )
 
     if not chunks:
         return "", 0, [], {}

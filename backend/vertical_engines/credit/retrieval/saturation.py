@@ -14,6 +14,7 @@ import structlog
 
 from vertical_engines.credit.retrieval.models import (
     CHAPTER_EVIDENCE_THRESHOLDS,
+    COVERAGE_CONTESTED,
     COVERAGE_MISSING,
     COVERAGE_PARTIAL,
     RETRIEVAL_POLICY_NAME,
@@ -53,6 +54,17 @@ def enforce_evidence_saturation(
                 missing_document_classes.append("MISSING_FINANCIAL_DISCLOSURE")
             elif ch_key in ("ch05_legal", "ch06_terms"):
                 missing_document_classes.append("NO_LPA_FOUND")
+
+        elif status == COVERAGE_CONTESTED:
+            signal_info = ch_data.get("retrieval_signal", {})
+            reason = (
+                f"Chapter {ch_key}: CONTESTED evidence (ambiguous retrieval). "
+                f"chunks={stats.get('chunk_count', 0)} "
+                f"delta={signal_info.get('delta_top1_top2', '?')} "
+                f"mode={ch_data.get('retrieval_mode', '?')}"
+            )
+            gaps.append({"chapter": ch_key, "status": status, "reason": reason})
+            logger.warning("evidence_contested", reason=reason)
 
         elif status == COVERAGE_PARTIAL:
             threshold = CHAPTER_EVIDENCE_THRESHOLDS.get(ch_key)

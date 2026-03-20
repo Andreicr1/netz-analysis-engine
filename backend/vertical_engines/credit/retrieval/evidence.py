@@ -11,6 +11,7 @@ from typing import Any
 
 import structlog
 
+from ai_engine.extraction.retrieval_signal import RetrievalSignal
 from app.core.config import settings
 from vertical_engines.credit.retrieval.models import (
     CHAPTER_DOC_TYPE_FILTERS,
@@ -379,12 +380,34 @@ def gather_chapter_evidence(
     else:
         coverage_status = COVERAGE_MISSING
 
+    # Compute retrieval confidence signal from chapter results
+    retrieval_signal = RetrievalSignal.from_results(
+        valid_chunks,
+        score_key="reranker_score",
+    )
+
+    # Override to EVIDENCE_CONTESTED when signal is AMBIGUOUS
+    if retrieval_signal.confidence == "AMBIGUOUS" and coverage_status != COVERAGE_MISSING:
+        coverage_status = COVERAGE_CONTESTED
+        logger.warning(
+            "evidence_contested",
+            chapter=chapter_key,
+            signal_confidence=retrieval_signal.confidence,
+            delta=retrieval_signal.delta_top1_top2,
+        )
+
     return {
         "chunks":          valid_chunks,
         "queries":         queries,
         "coverage_status": coverage_status,
         "retrieval_mode":  retrieval_mode,
         "doc_type_filter": active_filter,
+        "retrieval_signal": {
+            "confidence":      retrieval_signal.confidence,
+            "top1_score":      retrieval_signal.top1_score,
+            "delta_top1_top2": retrieval_signal.delta_top1_top2,
+            "result_count":    retrieval_signal.result_count,
+        },
         "stats": {
             "chunk_count":    chunk_count,
             "unique_docs":    unique_docs,
