@@ -273,6 +273,21 @@ def run_deal_deep_review_v4(
         type=instrument_type,
     )
 
+    # ── Phase 7 prep: concordance logging (pre-classifier vs Stage 3) ──
+    if pre_instrument_type != instrument_type:
+        logger.warning(
+            "pre_classify_concordance.mismatch",
+            deal_id=str(deal_id),
+            pre=pre_instrument_type,
+            stage3=instrument_type,
+        )
+    else:
+        logger.debug(
+            "pre_classify_concordance.match",
+            deal_id=str(deal_id),
+            type=instrument_type,
+        )
+
     # ── Stage 4.7: EDGAR public filing data (multi-entity) ──────
     logger.info("deep_review.v4.edgar.start", deal_id=str(deal_id))
     edgar_context: str = ""
@@ -1461,6 +1476,21 @@ async def async_run_deal_deep_review_v4(
 
     instrument_type = classify_instrument_type(analysis)
     logger.info("deep_review.v4.instrument_classified", deal_id=str(deal_id), type=instrument_type)
+
+    # ── Phase 7 prep: concordance logging (pre-classifier vs Stage 3) ──
+    if pre_instrument_type != instrument_type:
+        logger.warning(
+            "pre_classify_concordance.mismatch",
+            deal_id=str(deal_id),
+            pre=pre_instrument_type,
+            stage3=instrument_type,
+        )
+    else:
+        logger.debug(
+            "pre_classify_concordance.match",
+            deal_id=str(deal_id),
+            type=instrument_type,
+        )
 
     # ══════════════════════════════════════════════════════════════
     # Phase 3: Parallel stages (EDGAR, policy, sponsor, KYC, quant)
