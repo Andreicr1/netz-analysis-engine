@@ -7,6 +7,7 @@ Error contract: never-raises. Returns result dict with warnings on failure.
 """
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 import structlog
@@ -14,16 +15,15 @@ import structlog
 from ai_engine.extraction.retrieval_signal import RetrievalSignal
 from app.core.config import settings
 from vertical_engines.credit.retrieval.models import (
-    CHAPTER_DOC_TYPE_FILTERS,
     CHAPTER_EVIDENCE_THRESHOLDS,
     CHAPTER_RETRIEVAL_MODE,
-    CHAPTER_SEARCH_TIERS,
+    COVERAGE_CONTESTED,
     COVERAGE_MISSING,
     COVERAGE_PARTIAL,
     COVERAGE_SATURATED,
     DEFAULT_SEARCH_TIER,
     DESIRED_PROVENANCE_FIELDS,
-    FILTER_FALLBACK_THRESHOLD,
+    EXPANDED_SEARCH_TIER,
     REQUIRED_PROVENANCE_FIELDS,
     ChapterEvidenceThreshold,
 )
@@ -84,11 +84,7 @@ def gather_chapter_evidence(
     deal_name: str,
     fund_id: str,
     deal_id: str | None = None,
-    searcher: Any,  # AzureSearchChunksClient
-    global_dedup: dict[str, dict] | None = None,  # kept for API compat, no longer used
-    doc_type_filter: str | None = None,
-    override_filter: bool = False,
-    scope_mode: str = "STRICT",
+    organization_id: str | None = None,
 ) -> dict[str, Any]:
     """Retrieve evidence for a single chapter using specialized queries.
 
@@ -108,17 +104,9 @@ def gather_chapter_evidence(
     fund_id : str
         Mandatory fund scope.
     deal_id : str
-        Deal ID for scoping.
-    searcher : AzureSearchChunksClient
-        Configured retrieval client.
-    global_dedup : dict, optional
-        Shared dedup dict across chapters (kept for API compat).
-    doc_type_filter : str | None, optional
-        OData filter expression for doc_type scoping.
-    override_filter : bool
-        If True, use caller-provided doc_type_filter instead of map default.
-    scope_mode : str
-        Scope mode for search (STRICT or RELAXED).
+        Deal ID for scoping (UUID string).
+    organization_id : str
+        Organization ID for tenant isolation (mandatory for pgvector).
 
     Returns
     -------
@@ -127,10 +115,13 @@ def gather_chapter_evidence(
         "queries"         — list of queries fired
         "coverage_status" — SATURATED | PARTIAL | MISSING_EVIDENCE
         "retrieval_mode"  — PIPELINE_SCREENING | LEGAL_PACK | UNDERWRITING | IC_GRADE
-        "doc_type_filter" — the OData filter string used (or None)
+        "doc_type_filter" — None (pgvector doesn't use OData filters)
         "stats"           — {chunk_count, unique_docs, doc_types}
 
     """
+    from ai_engine.extraction.embedding_service import generate_embeddings
+    from ai_engine.extraction.pgvector_search_service import search_and_rerank_deal_sync
+
     query_map = build_chapter_query_map(deal_name)
     queries   = query_map.get(chapter_key, [])
 
@@ -144,63 +135,85 @@ def gather_chapter_evidence(
             "stats":           {"chunk_count": 0, "unique_docs": 0, "doc_types": []},
         }
 
-    # Resolve doc_type_filter — use map default unless override_filter=True
-    if not override_filter:
-        active_filter = CHAPTER_DOC_TYPE_FILTERS.get(chapter_key)
-    else:
-        active_filter = doc_type_filter
-
     retrieval_mode = CHAPTER_RETRIEVAL_MODE.get(chapter_key, "IC_GRADE")
+
+    # ── Batch-embed all chapter queries in one API call ───────────
+    try:
+        emb_result = generate_embeddings(queries)
+        query_vectors = emb_result.vectors
+    except Exception:
+        logger.warning(
+            "chapter_embedding_failed",
+            chapter=chapter_key,
+            exc_info=True,
+        )
+        query_vectors = [None] * len(queries)
 
     # Chapter-local pool only — global dedup is done in build_ic_corpus.
     chapter_hits: dict[str, dict] = {}
 
-    _tier_top, _tier_k = CHAPTER_SEARCH_TIERS.get(chapter_key, DEFAULT_SEARCH_TIER)
+    _tier_top, _tier_k = DEFAULT_SEARCH_TIER
 
     per_query_counts: list[int] = [0] * len(queries)
 
-    def _execute_query(q_idx: int, query: str) -> tuple[int, list[dict]]:
+    # Parse deal_id as UUID for pgvector
+    deal_uuid: uuid.UUID | None = None
+    if deal_id:
+        try:
+            deal_uuid = uuid.UUID(deal_id)
+        except (ValueError, AttributeError):
+            logger.warning("invalid_deal_id_uuid", deal_id=deal_id)
+
+    def _execute_query(
+        q_idx: int,
+        query: str,
+        tier_top: int = _tier_top,
+        tier_k: int = _tier_k,
+    ) -> tuple[int, list[dict]]:
         """Execute a single search query — thread-safe (no shared mutable state)."""
         hits_data: list[dict] = []
+        if deal_uuid is None or not organization_id:
+            return q_idx, hits_data
         try:
-            hits = searcher.search_institutional_hybrid(
-                query=query,
-                fund_id=fund_id,
-                deal_id=deal_id,
-                top=_tier_top,
-                k=_tier_k,
-                doc_type_filter=active_filter,
-                scope_mode=scope_mode,
+            q_vector = query_vectors[q_idx] if q_idx < len(query_vectors) else None
+            result = search_and_rerank_deal_sync(
+                deal_id=deal_uuid,
+                organization_id=organization_id,
+                query_text=query,
+                query_vector=q_vector,
+                top=tier_top,
+                candidates=tier_k,
             )
-            for hit in hits:
-                title      = hit.title or hit.blob_name or ""
-                chunk_idx  = hit.chunk_index or 0
-                new_score  = hit.reranker_score or hit.score or 0.0
+            for chunk in result.chunks:
+                title      = chunk.get("title", "")
+                chunk_idx  = chunk.get("chunk_index", 0) or 0
+                score      = chunk.get("score", 0.0)
+                reranker_score = chunk.get("reranker_score", score)
                 hits_data.append({
-                    "chunk_id":            hit.chunk_id,
+                    "chunk_id":            chunk.get("id", ""),
                     "title":               title,
-                    "blob_name":           hit.blob_name or title,
-                    "doc_type":            hit.doc_type or "unknown",
-                    "authority":           hit.authority or "",
-                    "page_start":          hit.page_start or 0,
-                    "page_end":            hit.page_end or 0,
+                    "blob_name":           title,
+                    "doc_type":            chunk.get("doc_type", "unknown"),
+                    "authority":           "",
+                    "page_start":          chunk.get("page_start", 0) or 0,
+                    "page_end":            chunk.get("page_end", 0) or 0,
                     "chunk_index":         chunk_idx,
-                    "content":             hit.content_text or "",
-                    "score":               hit.score or 0.0,
-                    "reranker_score":      hit.reranker_score or 0.0,
-                    "_best_score":         new_score,
+                    "content":             chunk.get("content", ""),
+                    "score":               score,
+                    "reranker_score":      reranker_score,
+                    "_best_score":         reranker_score or score,
                     "_query_origin":       query[:80],
                     "_chapter_key":        chapter_key,
                     "_retrieval_mode":     retrieval_mode,
-                    "container_name":      hit.container_name or "",
-                    "retrieval_timestamp": hit.retrieval_timestamp or "",
-                    "fund_id":             hit.fund_id or "",
-                    "deal_id":             hit.deal_id or "",
-                    "section_type":        getattr(hit, "section_type", None),
-                    "vehicle_type":        getattr(hit, "vehicle_type", None),
-                    "governance_critical": getattr(hit, "governance_critical", False),
-                    "governance_flags":    getattr(hit, "governance_flags", []) or [],
-                    "breadcrumb":          getattr(hit, "breadcrumb", None),
+                    "container_name":      "",
+                    "retrieval_timestamp": "",
+                    "fund_id":             chunk.get("fund_id", ""),
+                    "deal_id":             chunk.get("deal_id", ""),
+                    "section_type":        chunk.get("section_type"),
+                    "vehicle_type":        None,
+                    "governance_critical": chunk.get("governance_critical", False),
+                    "governance_flags":    [],
+                    "breadcrumb":          chunk.get("breadcrumb"),
                 })
             logger.info(
                 "chapter_retrieval",
@@ -209,8 +222,7 @@ def gather_chapter_evidence(
                 query_idx=q_idx + 1,
                 query_total=len(queries),
                 query=query[:60],
-                hits=len(hits),
-                filter=f"'{active_filter[:60]}'" if active_filter else "NONE",
+                hits=len(result.chunks),
             )
         except Exception:
             logger.warning(
@@ -248,96 +260,21 @@ def gather_chapter_evidence(
         if validate_provenance(c)
     ]
 
-    # ── Automatic filter broadening (v3.1 — smart per-query fallback) ──
-    _QUERY_FALLBACK_MIN = 3
-    if active_filter is not None and len(valid_chunks) < FILTER_FALLBACK_THRESHOLD:
-        queries_to_retry = [
-            i for i, cnt in enumerate(per_query_counts)
-            if cnt < _QUERY_FALLBACK_MIN
-        ]
-        logger.warning(
-            "filter_fallback_triggered",
-            chapter=chapter_key,
-            filtered_chunks=len(valid_chunks),
-            threshold=FILTER_FALLBACK_THRESHOLD,
-            retrying_queries=len(queries_to_retry),
-            total_queries=len(queries),
-        )
-        for q_idx in queries_to_retry:
-            query = queries[q_idx]
-            try:
-                fallback_hits = searcher.search_institutional_hybrid(
-                    query=query,
-                    fund_id=fund_id,
-                    deal_id=deal_id,
-                    top=_tier_top,
-                    k=_tier_k,
-                    doc_type_filter=None,  # IC_GRADE — no filter
-                    scope_mode=scope_mode,
-                )
-                for hit in fallback_hits:
-                    title     = hit.title or hit.blob_name or ""
-                    chunk_idx = hit.chunk_index or 0
-                    dedup_key = f"{title}::{chunk_idx}"
-                    new_score = hit.reranker_score or hit.score or 0.0
-                    if dedup_key not in chapter_hits:
-                        chapter_hits[dedup_key] = {
-                            "chunk_id":            hit.chunk_id,
-                            "title":               title,
-                            "blob_name":           hit.blob_name or title,
-                            "doc_type":            hit.doc_type or "unknown",
-                            "authority":           hit.authority or "",
-                            "page_start":          hit.page_start or 0,
-                            "page_end":            hit.page_end or 0,
-                            "chunk_index":         chunk_idx,
-                            "content":             hit.content_text or "",
-                            "score":               hit.score or 0.0,
-                            "reranker_score":      hit.reranker_score or 0.0,
-                            "_best_score":         new_score,
-                            "_query_origin":       query[:80],
-                            "_chapter_key":        chapter_key,
-                            "_retrieval_mode":     "IC_GRADE_FALLBACK",
-                            "_fallback":           True,
-                            "container_name":      hit.container_name or "",
-                            "retrieval_timestamp": hit.retrieval_timestamp or "",
-                            "fund_id":             hit.fund_id or "",
-                            "deal_id":             hit.deal_id or "",
-                            "section_type":        getattr(hit, "section_type", None),
-                            "vehicle_type":        getattr(hit, "vehicle_type", None),
-                            "governance_critical": getattr(hit, "governance_critical", False),
-                            "governance_flags":    getattr(hit, "governance_flags", []) or [],
-                            "breadcrumb":          getattr(hit, "breadcrumb", None),
-                        }
-            except Exception:
-                logger.warning(
-                    "filter_fallback_failed",
-                    chapter=chapter_key,
-                    query_idx=q_idx,
-                    exc_info=True,
-                )
-
-        # Re-validate with fallback chunks merged in
-        valid_chunks = [
-            c for c in chapter_hits.values()
-            if validate_provenance(c)
-        ]
-        logger.info(
-            "filter_fallback_result",
-            chapter=chapter_key,
-            chunks_after_fallback=len(valid_chunks),
-        )
-
     # ── Cross-deal contamination detection ──────────────────────────
     if deal_name:
         clean_chunks: list[dict] = []
         contaminated_count = 0
         shared_aux_ids = _shared_auxiliary_fund_ids()
+        # Accept chunks matching deal_id (UUID) OR deal_name (legacy string)
+        accepted_deal_ids = {deal_name.lower()}
+        if deal_id:
+            accepted_deal_ids.add(deal_id.lower())
         for c in valid_chunks:
             chunk_deal = c.get("deal_id", "")
             chunk_fund = str(c.get("fund_id", "") or "").lower()
             if (
                 not chunk_deal
-                or chunk_deal.lower() == deal_name.lower()
+                or chunk_deal.lower() in accepted_deal_ids
                 or chunk_fund in shared_aux_ids
             ):
                 clean_chunks.append(c)
@@ -386,6 +323,73 @@ def gather_chapter_evidence(
         score_key="reranker_score",
     )
 
+    # ── Signal-based search expansion ────────────────────────────────
+    search_expanded = False
+    if (
+        retrieval_signal.confidence in ("LOW", "AMBIGUOUS")
+        and coverage_status != COVERAGE_MISSING
+    ):
+        logger.info(
+            "search_tier_expanded",
+            chapter=chapter_key,
+            confidence=retrieval_signal.confidence,
+        )
+        _exp_top, _exp_k = EXPANDED_SEARCH_TIER
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            exp_futures = [
+                executor.submit(_execute_query, q_idx, query, _exp_top, _exp_k)
+                for q_idx, query in enumerate(queries)
+            ]
+            for future in exp_futures:
+                _, exp_hits = future.result()
+                for chunk_data in exp_hits:
+                    dedup_key = f"{chunk_data['title']}::{chunk_data['chunk_index']}"
+                    new_score = chunk_data["_best_score"]
+                    existing = chapter_hits.get(dedup_key)
+                    if (existing is None
+                            or new_score > existing.get("_best_score", 0.0)):
+                        chapter_hits[dedup_key] = chunk_data
+
+        # Re-validate provenance on expanded results
+        valid_chunks = [
+            c for c in chapter_hits.values()
+            if validate_provenance(c)
+        ]
+
+        # Re-apply cross-deal contamination filter
+        if deal_name:
+            clean_chunks = []
+            for c in valid_chunks:
+                chunk_deal = c.get("deal_id", "")
+                chunk_fund = str(c.get("fund_id", "") or "").lower()
+                if (
+                    not chunk_deal
+                    or chunk_deal.lower() in accepted_deal_ids
+                    or chunk_fund in shared_aux_ids
+                ):
+                    clean_chunks.append(c)
+            valid_chunks = clean_chunks
+
+        # Recompute coverage stats
+        unique_docs = len({c["blob_name"] for c in valid_chunks})
+        doc_types = list({c.get("doc_type", "unknown") for c in valid_chunks})
+        chunk_count = len(valid_chunks)
+        fallback_count = sum(1 for c in valid_chunks if c.get("_fallback"))
+
+        if threshold.is_satisfied(chunk_count, unique_docs, set(doc_types)):
+            coverage_status = COVERAGE_SATURATED
+        elif chunk_count > 0:
+            coverage_status = COVERAGE_PARTIAL
+        else:
+            coverage_status = COVERAGE_MISSING
+
+        # Recompute signal on expanded results
+        retrieval_signal = RetrievalSignal.from_results(
+            valid_chunks,
+            score_key="reranker_score",
+        )
+        search_expanded = True
+
     # Override to EVIDENCE_CONTESTED when signal is AMBIGUOUS
     if retrieval_signal.confidence == "AMBIGUOUS" and coverage_status != COVERAGE_MISSING:
         coverage_status = COVERAGE_CONTESTED
@@ -401,7 +405,8 @@ def gather_chapter_evidence(
         "queries":         queries,
         "coverage_status": coverage_status,
         "retrieval_mode":  retrieval_mode,
-        "doc_type_filter": active_filter,
+        "doc_type_filter": None,
+        "search_expanded": search_expanded,
         "retrieval_signal": {
             "confidence":      retrieval_signal.confidence,
             "top1_score":      retrieval_signal.top1_score,

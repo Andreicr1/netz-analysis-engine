@@ -4,54 +4,20 @@ from __future__ import annotations
 
 import json
 import uuid
-from pathlib import Path
 from typing import Any
 
 import structlog
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domains.credit.modules.ai.models import (
     ActiveInvestment,
-    DocumentRegistry,
 )
 from app.domains.credit.modules.deals.models import PipelineDeal as Deal  # pipeline domain
 from app.services.blob_storage import blob_uri, download_bytes
-from app.services.text_extract import extract_text_from_docx, extract_text_from_pdf
 
 logger = structlog.get_logger()
 
 _TOTAL_BUDGET_CHARS = 300_000
-
-
-# ---------------------------------------------------------------------------
-# Text extraction helpers
-# ---------------------------------------------------------------------------
-_EXTRACTABLE_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".md", ".csv"}
-
-
-def _extract_text_from_blob(container: str, blob_path: str) -> str:
-    """Download blob and extract text.  Return empty string on failure.
-
-    Skips unsupported file types (e.g. .mp4, .mp3, .xlsx) BEFORE
-    downloading to avoid pulling large binaries into memory.
-    """
-    suffix = Path(blob_path).suffix.lower()
-    if suffix not in _EXTRACTABLE_EXTENSIONS:
-        logger.debug("blob.skip_unsupported", suffix=suffix, blob_path=blob_path)
-        return ""
-    try:
-        data = download_bytes(blob_uri=blob_uri(container, blob_path))
-    except Exception:
-        return ""
-    try:
-        if suffix == ".pdf":
-            return extract_text_from_pdf(data).text
-        if suffix == ".docx":
-            return extract_text_from_docx(data).text
-        return data.decode("utf-8", errors="ignore")
-    except Exception:
-        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -286,7 +252,6 @@ def _gather_deal_texts(
         }
 
     """
-    from app.services.search_index import AzureSearchChunksClient
     from vertical_engines.credit.memo import CHAPTER_REGISTRY
     from vertical_engines.credit.retrieval import (
         RETRIEVAL_POLICY_NAME,
@@ -297,28 +262,9 @@ def _gather_deal_texts(
     )
 
     deal_name = deal.deal_name or deal.title or ""
-    searcher = AzureSearchChunksClient()
     f_id = str(fund_id)
     d_id = str(deal.id)
-
-    # ── Resolve actual index identifiers (v5 uses folder-derived fund_id)
-    # Returns (fund_id, deal_id, scope_mode) — scope_mode indicates whether
-    # the fund_id is shared across multiple deals (STRICT) or exclusive.
-    f_id, d_id, scope_mode = searcher.resolve_index_scope(
-        fund_id=f_id,
-        deal_id=d_id,
-        deal_name=deal_name,
-        deal_folder_path=deal.deal_folder_path,
-    )
-    d_id = d_id or str(deal.id)
-
-    # CU pipeline sets deal_name as deal_id in the index (indexer maps
-    # /deal_name → deal_id).  Ensure d_id matches so the filter captures
-    # enriched CU chunks.
-    # SAFETY: With STRICT scope_mode, the AND clause prevents cross-deal
-    # contamination even if fund_id is a shared parent entity.
-    if deal_name:
-        d_id = deal_name
+    org_id = str(organization_id)
 
     logger.info(
         "ic_grade_retrieval.start",
@@ -327,7 +273,6 @@ def _gather_deal_texts(
         chapters=len(CHAPTER_REGISTRY),
         fund_id=f_id,
         deal_id=d_id,
-        scope_mode=scope_mode,
     )
 
     # ── Per-chapter specialized retrieval (parallel) ──────────────
@@ -342,8 +287,7 @@ def _gather_deal_texts(
             deal_name=deal_name,
             fund_id=f_id,
             deal_id=d_id,
-            searcher=searcher,
-            scope_mode=scope_mode,
+            organization_id=org_id,
         )
 
     with ThreadPoolExecutor(max_workers=6) as executor:
@@ -391,16 +335,15 @@ def _gather_deal_texts(
             "saturation_report": saturation_report,
         }
 
-    # ── Fallback: legacy blob download (only if no indexed chunks) ──
+    # No indexed chunks — return empty corpus with warning
     logger.warning(
-        "rag_empty.fallback_blob_download",
+        "rag_empty.no_indexed_chunks",
         deal_id=d_id,
         fund_id=f_id,
         entity_type="deal",
     )
-    legacy_text = _gather_deal_texts_legacy(db, fund_id=fund_id, deal=deal)
     return {
-        "corpus_text": legacy_text,
+        "corpus_text": "",
         "evidence_map": [],
         "raw_chunks": [],
         "chapter_evidence": {},
@@ -409,50 +352,13 @@ def _gather_deal_texts(
     }
 
 
-
-def _gather_deal_texts_legacy(db: Session, *, fund_id: uuid.UUID, deal: Deal) -> str:
-    """Legacy blob-based text gathering — fallback when RAG index has no
-    chunks for this deal.  Will be removed once all deals are indexed."""
-    docs = list(
-        db.execute(
-            select(DocumentRegistry).where(
-                DocumentRegistry.fund_id == fund_id,
-                DocumentRegistry.container_name == "investment-pipeline-intelligence",
-            ),
-        )
-        .scalars()
-        .all(),
-    )
-    folder = (
-        (deal.deal_folder_path or "").split("/")[-1]
-        if deal.deal_folder_path
-        else deal.deal_name
-    )
-    parts: list[str] = []
-    total = 0
-    for doc in docs:
-        if folder and folder.lower() not in (doc.blob_path or "").lower():
-            continue
-        text = _extract_text_from_blob(doc.container_name, doc.blob_path)
-        if not text.strip():
-            continue
-        remaining = _TOTAL_BUDGET_CHARS - total
-        if remaining <= 0:
-            break
-        chunk = text[:remaining]
-        parts.append(f"--- Document: {doc.blob_path} ---\n{chunk}")
-        total += len(chunk)
-    return "\n\n".join(parts)
-
-
 def _gather_investment_texts(
     db: Session, *, fund_id: uuid.UUID, investment: ActiveInvestment,
     organization_id: uuid.UUID | str,
 ) -> str:
     """Retrieve investment document content via RAG retrieval.
 
-    REFACTOR (Phase 2, Step 6): Same RAG-first approach as _gather_deal_texts.
-    Falls back to blob download if no indexed chunks exist.
+    Returns empty string if no indexed chunks exist.
     """
     from ai_engine.extraction.embedding_service import generate_embeddings
     from ai_engine.extraction.pgvector_search_service import (
@@ -506,50 +412,14 @@ def _gather_investment_texts(
             total += len(snippet)
         return "\n\n".join(parts)
 
-    # ── Fallback: legacy blob download ────────────────────────────
+    # No indexed chunks — return empty string with warning
     logger.warning(
-        "rag_empty.fallback_blob_download",
+        "rag_empty.no_indexed_chunks",
         investment_id=str(investment.id),
         fund_id=str(fund_id),
         entity_type="investment",
     )
-    return _gather_investment_texts_legacy(db, fund_id=fund_id, investment=investment)
-
-
-def _gather_investment_texts_legacy(
-    db: Session, *, fund_id: uuid.UUID, investment: ActiveInvestment,
-) -> str:
-    """Legacy blob-based text gathering for investments."""
-    docs = list(
-        db.execute(
-            select(DocumentRegistry).where(
-                DocumentRegistry.fund_id == fund_id,
-                DocumentRegistry.container_name == investment.source_container,
-            ),
-        )
-        .scalars()
-        .all(),
-    )
-    folder = (
-        investment.source_folder.split("/")[-1]
-        if investment.source_folder
-        else investment.investment_name
-    )
-    parts: list[str] = []
-    total = 0
-    for doc in docs:
-        if folder and folder.lower() not in (doc.blob_path or "").lower():
-            continue
-        text = _extract_text_from_blob(doc.container_name, doc.blob_path)
-        if not text.strip():
-            continue
-        remaining = _TOTAL_BUDGET_CHARS - total
-        if remaining <= 0:
-            break
-        chunk = text[:remaining]
-        parts.append(f"--- Document: {doc.blob_path} ---\n{chunk}")
-        total += len(chunk)
-    return "\n\n".join(parts)
+    return ""
 
 
 __all__ = [

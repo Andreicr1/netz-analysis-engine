@@ -345,8 +345,8 @@ def _create_completion_local(
         "max_tokens": max_tokens,
         "stream": False,
     }
-    if response_format:
-        payload["response_format"] = response_format
+    # Skip response_format for local LM Studio — most local models
+    # don't support json_object mode. JSON output is enforced via prompt.
 
     url = f"{settings.local_llm_url}/chat/completions"
     response = httpx.post(url, json=payload, timeout=180.0)
@@ -354,13 +354,10 @@ def _create_completion_local(
     data = response.json()
 
     content = data["choices"][0]["message"]["content"]
-    usage = data.get("usage", {})
     return CompletionResult(
-        content=content,
+        text=content,
         model=data.get("model", model),
-        input_tokens=usage.get("prompt_tokens", 0),
-        output_tokens=usage.get("completion_tokens", 0),
-        provider="local_lmstudio",
+        raw=data,
     )
 
 

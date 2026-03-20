@@ -514,7 +514,6 @@ def regenerate_memo_chapter(
     evidence_pack_id = pack_row.id
 
     from app.domains.credit.modules.deals.models import Deal
-    from app.services.search_index import AzureSearchChunksClient
     from vertical_engines.credit.retrieval import (
         build_ic_corpus,
         gather_chapter_evidence,
@@ -525,24 +524,15 @@ def regenerate_memo_chapter(
     ).scalar_one_or_none()
     deal_name = (deal_row.deal_name or deal_row.title) if deal_row else "Unknown Deal"
 
-    searcher = AzureSearchChunksClient()
-    f_id = str(fund_id)
-    d_id = deal_name
-
-    f_id, d_id, scope_mode = searcher.resolve_index_scope(
-        fund_id=f_id, deal_id=str(deal_id), deal_name=deal_name,
-        deal_folder_path=None,
-    )
-    d_id = deal_name
+    org_id = str(_role_guard.organization_id) if _role_guard.organization_id else None
 
     chapter_evidence: dict = {}
     ch_result = gather_chapter_evidence(
         chapter_key=ch_tag,
         deal_name=deal_name,
-        fund_id=f_id,
-        deal_id=d_id,
-        searcher=searcher,
-        scope_mode=scope_mode,
+        fund_id=str(fund_id),
+        deal_id=str(deal_id),
+        organization_id=org_id,
     )
     chapter_evidence[ch_tag] = ch_result
 

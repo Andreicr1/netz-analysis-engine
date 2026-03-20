@@ -53,33 +53,16 @@ def _gather_policy_context(
     deal_folder_path: str | None = None,
     organization_id: uuid.UUID | str | None = None,
 ) -> str:
-    """Retrieve fund-level policy/governance chunks via v5 index RAG.
+    """Retrieve fund-level policy/governance chunks via pgvector RAG.
 
-    Uses AzureSearchChunksClient with doc_type filter scoped to compliance,
-    regulatory, and credit policy documents.
-    organization_id is threaded for tenant isolation when the search client
-    supports it (currently a stub — will enforce when Sprint 3 client ships).
+    Uses search_and_rerank_fund_policy_sync with POLICY domain filter.
+    organization_id is required for tenant isolation.
     Returns concatenated policy text or empty string if none found.
     """
-    from app.services.search_index import AzureSearchChunksClient
+    from ai_engine.extraction.embedding_service import generate_embeddings
+    from ai_engine.extraction.pgvector_search_service import search_and_rerank_fund_policy_sync
 
     f_id = str(fund_id)
-    searcher = AzureSearchChunksClient()
-
-    # Resolve actual fund_id in the index (v5 uses folder-derived names)
-    f_id, _, _scope_mode = searcher.resolve_index_scope(
-        fund_id=f_id,
-        deal_name=deal_name,
-        deal_folder_path=deal_folder_path,
-    )
-
-    policy_doc_type_filter = (
-        "doc_type eq 'regulatory_compliance'"
-        " or doc_type eq 'regulatory_qdd'"
-        " or doc_type eq 'regulatory_cima'"
-        " or doc_type eq 'credit_policy'"
-        " or doc_type eq 'fund_policy'"
-    )
 
     queries = [
         f"{deal_name} investment policy compliance governance limits",
@@ -87,25 +70,36 @@ def _gather_policy_context(
         f"{deal_name} credit policy underwriting standards concentration limits",
     ]
 
+    # Batch-embed all queries in one API call
+    try:
+        emb_result = generate_embeddings(queries)
+        query_vectors = emb_result.vectors
+    except Exception:
+        logger.warning("deep_review.policy_rag.embedding_failed", exc_info=True)
+        query_vectors = [None] * len(queries)
+
     policy_hits: dict[str, dict] = {}
-    for query in queries:
+    for q_idx, query in enumerate(queries):
         try:
-            hits = searcher.search_institutional_hybrid(
-                query=query,
-                fund_id=f_id,
+            q_vector = query_vectors[q_idx] if q_idx < len(query_vectors) else None
+            result = search_and_rerank_fund_policy_sync(
+                fund_id=fund_id,
+                organization_id=str(organization_id) if organization_id else "",
+                query_text=query,
+                query_vector=q_vector,
                 top=30,
-                k=60,
-                doc_type_filter=policy_doc_type_filter,
+                candidates=60,
+                domain_filter="POLICY",
             )
-            for hit in hits:
-                title = hit.title or hit.blob_name or ""
-                dedup_key = f"{title}::{hit.chunk_index or 0}"
-                score = hit.reranker_score or hit.score or 0.0
+            for chunk in result.chunks:
+                title = chunk.get("title", "")
+                dedup_key = f"{title}::{chunk.get('chunk_index', 0) or 0}"
+                score = chunk.get("reranker_score", 0.0) or chunk.get("score", 0.0)
                 existing = policy_hits.get(dedup_key)
                 if existing is None or score > existing.get("_score", 0.0):
                     policy_hits[dedup_key] = {
-                        "content": hit.content_text or "",
-                        "doc_type": hit.doc_type or "unknown",
+                        "content": chunk.get("content", ""),
+                        "doc_type": chunk.get("doc_type", "unknown"),
                         "title": title,
                         "_score": score,
                     }

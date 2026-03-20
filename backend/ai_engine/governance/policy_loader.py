@@ -32,6 +32,9 @@ logger = logging.getLogger(__name__)
 # SEARCH_ENDPOINT and SEARCH_API_KEY are resolved lazily at call-time
 # via the Settings singleton so that env-var changes between process
 # startup and first use (e.g. test fixtures overriding env) are honoured.
+# DEPRECATED: Azure Search removed — stubs kept for callers not yet migrated.
+SEARCH_ENDPOINT: str = ""
+SEARCH_API_KEY: str = ""
 SEARCH_API_VER    = "2024-07-01"
 
 

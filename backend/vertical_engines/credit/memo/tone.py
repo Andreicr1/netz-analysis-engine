@@ -45,6 +45,8 @@ logger = structlog.get_logger()
 _LLM_SEMAPHORE: asyncio.Semaphore | None = None
 _LLM_SEMAPHORE_INIT_LOCK: asyncio.Lock | None = None
 
+_GENERATION_FAILED_MARKERS = ("generation failed", "LLM returned empty")
+
 
 async def _get_llm_semaphore() -> asyncio.Semaphore:
     """Lazy semaphore creation — must not be created at module scope.
@@ -76,8 +78,24 @@ def _pass1_system(chapter_type: str, max_chars: int) -> str:
     )
 
 
-def _run_pass1_chapter(chapter_tag: str, text: str) -> tuple[str, int]:
-    """Synchronous Passe 1 for one chapter — called via asyncio.to_thread."""
+def _run_pass1_chapter(chapter_tag: str, text: str, *, deal_id: str = "") -> tuple[str, int, bool]:
+    """Synchronous Passe 1 for one chapter — called via asyncio.to_thread.
+
+    Returns (revised_text, chars_removed, skipped).
+    """
+    # Guard: skip rewrite for failed chapters — propagate error as-is
+    if text.startswith("*") and any(m in text for m in _GENERATION_FAILED_MARKERS):
+        logger.info(
+            "tone_normalizer.chapter_diff",
+            deal_id=deal_id,
+            chapter_id=chapter_tag,
+            pass_num=1,
+            input_len=len(text),
+            output_len=len(text),
+            skipped=True,
+        )
+        return text, 0, True
+
     chapter_type = get_chapter_type(chapter_tag)
     max_chars = DESCRIPTIVE_MAX_CHARS if chapter_type == "DESCRIPTIVE" else ANALYTICAL_MIN_CHARS
     model = get_model("tone_pass1")
@@ -93,25 +111,27 @@ def _run_pass1_chapter(chapter_tag: str, text: str) -> tuple[str, int]:
         )
         revised = result.text.strip()
         chars_removed = len(text) - len(revised)
-        logger.debug(
-            "TONE_PASS1",
-            chapter=chapter_tag,
-            original=len(text),
-            revised=len(revised),
-            delta=chars_removed,
+        logger.info(
+            "tone_normalizer.chapter_diff",
+            deal_id=deal_id,
+            chapter_id=chapter_tag,
+            pass_num=1,
+            input_len=len(text),
+            output_len=len(revised),
+            skipped=False,
         )
-        return revised, chars_removed
+        return revised, chars_removed, False
     except Exception as exc:
         logger.warning("TONE_PASS1_FAILED", chapter=chapter_tag, error=str(exc))
-        return text, 0
+        return text, 0, False
 
 
-async def _pass1_async(chapters: dict[str, str]) -> tuple[dict[str, str], dict[str, int]]:
+async def _pass1_async(chapters: dict[str, str], *, deal_id: str = "") -> tuple[dict[str, str], dict[str, int]]:
     """Passe 1: all chapters in parallel via asyncio.to_thread (max 4 concurrent)."""
 
-    async def _guarded(ch_tag: str, text: str) -> tuple[str, int]:
+    async def _guarded(ch_tag: str, text: str) -> tuple[str, int, bool]:
         async with await _get_llm_semaphore():
-            return await asyncio.to_thread(_run_pass1_chapter, ch_tag, text)
+            return await asyncio.to_thread(_run_pass1_chapter, ch_tag, text, deal_id=deal_id)
 
     tasks = {
         ch_tag: _guarded(ch_tag, text)
@@ -129,7 +149,7 @@ async def _pass1_async(chapters: dict[str, str]) -> tuple[dict[str, str], dict[s
             revised_chapters[ch_tag] = chapters[ch_tag]
             changes[ch_tag] = 0
         else:
-            revised_text, delta = result
+            revised_text, delta, _skipped = result
             revised_chapters[ch_tag] = revised_text
             changes[ch_tag] = delta
 
@@ -147,6 +167,8 @@ def _run_pass2(
     chapters: dict[str, str],
     critic_output: dict,
     current_signal: str,
+    *,
+    deal_id: str = "",
 ) -> dict[str, Any]:
     """Passe 2: lightweight signal-integrity check on chapter excerpts."""
     model = get_model("tone_pass2")
@@ -200,6 +222,18 @@ def _run_pass2(
             parsed["signal_escalated"] = False
             parsed["escalation_rationale"] = None
 
+        # Paired logging for pass 2 excerpts
+        for ch_tag, text in chapters.items():
+            logger.info(
+                "tone_normalizer.chapter_diff",
+                deal_id=deal_id,
+                chapter_id=ch_tag,
+                pass_num=2,
+                input_len=len(text),
+                output_len=len(text),
+                skipped=False,
+            )
+
         return parsed
 
     except Exception as exc:
@@ -223,6 +257,8 @@ async def run_tone_normalizer(
     chapter_texts: dict[str, str],
     critic_output: dict,
     current_signal: str,
+    *,
+    deal_id: str = "",
 ) -> dict[str, Any]:
     """Run Tone Normalizer (Passe 1 parallel + Passe 2 holistic).
 
@@ -234,6 +270,8 @@ async def run_tone_normalizer(
         Critic engine output dict (used for fatal_flaws count in Passe 2).
     current_signal : str
         Current IC recommendation signal: "INVEST" | "CONDITIONAL" | "PASS".
+    deal_id : str
+        Deal identifier for paired logging.
 
     Returns
     -------
@@ -256,17 +294,19 @@ async def run_tone_normalizer(
     total_chars_in = sum(len(t) for t in chapter_texts.values())
     logger.info(
         "TONE_NORMALIZER_START",
+        deal_id=deal_id,
         chapters=len(chapter_texts),
         total_chars=total_chars_in,
         signal=current_signal,
     )
 
     # Passe 1 — parallel per-chapter normalisation
-    revised_chapters, pass1_changes = await _pass1_async(chapter_texts)
+    revised_chapters, pass1_changes = await _pass1_async(chapter_texts, deal_id=deal_id)
 
     total_delta = sum(pass1_changes.values())
     logger.info(
         "TONE_PASS1_COMPLETE",
+        deal_id=deal_id,
         chapters=len(revised_chapters),
         chars_removed=total_delta,
     )
@@ -274,6 +314,7 @@ async def run_tone_normalizer(
     # Passe 2 — lightweight signal-integrity check
     pass2_result = await asyncio.to_thread(
         _run_pass2, revised_chapters, critic_output, current_signal,
+        deal_id=deal_id,
     )
 
     # Merge: final chapters = pass1 output
@@ -283,11 +324,12 @@ async def run_tone_normalizer(
     if pass2_result.get("signal_escalated"):
         logger.warning(
             "TONE_SIGNAL_ESCALATED",
+            deal_id=deal_id,
             original=pass2_result["signal_original"],
             final=pass2_result["signal_final"],
             rationale=pass2_result.get("escalation_rationale", ""),
         )
     else:
-        logger.info("TONE_PASS2_COMPLETE", signal=current_signal)
+        logger.info("TONE_PASS2_COMPLETE", deal_id=deal_id, signal=current_signal)
 
     return pass2_result

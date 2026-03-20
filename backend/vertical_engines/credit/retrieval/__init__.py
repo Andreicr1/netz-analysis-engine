@@ -24,7 +24,6 @@ from vertical_engines.credit.retrieval.evidence import (
     validate_provenance,
 )
 from vertical_engines.credit.retrieval.models import (
-    CHAPTER_DOC_TYPE_FILTERS,
     RETRIEVAL_POLICY_NAME,
     ChapterEvidenceThreshold,
     SaturationResult,
@@ -45,7 +44,6 @@ __all__ = [
     "ic_coverage_rerank",
     "validate_provenance",
     # Models
-    "CHAPTER_DOC_TYPE_FILTERS",
     "ChapterEvidenceThreshold",
     "RETRIEVAL_POLICY_NAME",
     "SaturationResult",

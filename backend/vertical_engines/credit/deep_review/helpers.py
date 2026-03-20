@@ -53,15 +53,11 @@ def _call_openai(
     from ai_engine.openai_client import create_completion
     from app.core.config import settings
 
-    has_openai = bool(settings.OPENAI_API_KEY)
-    has_azure_openai = bool(
-        settings.AZURE_OPENAI_ENDPOINT and settings.AZURE_OPENAI_KEY,
-    )
-    has_foundry = bool(settings.AZURE_AI_FOUNDRY_KEY)
-    if not has_openai and not has_azure_openai and not has_foundry:
+    has_openai = bool(settings.openai_api_key)
+    if not has_openai:
         raise ValueError(
             "No AI provider configured — cannot run AI deep review. "
-            "Set OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT+KEY, or AZURE_AI_FOUNDRY_KEY.",
+            "Set OPENAI_API_KEY.",
         )
 
     effective_model = model or _MODEL
@@ -149,15 +145,11 @@ async def _async_call_openai(
     from ai_engine.openai_client import async_create_completion
     from app.core.config import settings
 
-    has_openai = bool(settings.OPENAI_API_KEY)
-    has_azure_openai = bool(
-        settings.AZURE_OPENAI_ENDPOINT and settings.AZURE_OPENAI_KEY,
-    )
-    has_foundry = bool(settings.AZURE_AI_FOUNDRY_KEY)
-    if not has_openai and not has_azure_openai and not has_foundry:
+    has_openai = bool(settings.openai_api_key)
+    if not has_openai:
         raise ValueError(
             "No AI provider configured — cannot run AI deep review. "
-            "Set OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT+KEY, or AZURE_AI_FOUNDRY_KEY.",
+            "Set OPENAI_API_KEY.",
         )
 
     effective_model = model or _MODEL

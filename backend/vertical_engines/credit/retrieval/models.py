@@ -50,15 +50,10 @@ under-represented documents are boosted after DEPTH_FREE is exceeded."""
 RETRIEVAL_POLICY_NAME: str = "IC_GRADE_V2"
 """Official policy identifier for audit artifacts."""
 
-# ── Chapter Search Tiers (top, k) ─────────────────────────────────
+# ── Search Tiers (top, k) ─────────────────────────────────────────
 
-CHAPTER_SEARCH_TIERS: dict[str, tuple[int, int]] = {
-    "ch05_legal":             (200, 300),
-    "ch06_terms":             (200, 300),
-    "ch07_capital":           (200, 300),
-    "ch14_governance_stress": (200, 300),
-}
-DEFAULT_SEARCH_TIER: tuple[int, int] = (80, 150)
+DEFAULT_SEARCH_TIER: tuple[int, int] = (100, 150)
+EXPANDED_SEARCH_TIER: tuple[int, int] = (200, 300)
 
 # ── Total Corpus Budget ────────────────────────────────────────────
 
@@ -80,111 +75,6 @@ of reranker score."""
 # ── Filter fallback threshold ──────────────────────────────────────
 
 FILTER_FALLBACK_THRESHOLD: int = 6
-
-# ── Doc-type OData filter atoms ────────────────────────────────────
-
-_ATTACHMENT  = "doc_type eq 'attachment'"
-_REG_COMPL   = "doc_type eq 'regulatory_compliance'"
-_REG_CIMA    = "doc_type eq 'regulatory_cima'"
-_REG_QDD     = "doc_type eq 'regulatory_qdd'"
-_FUND_STRUCT = "doc_type eq 'fund_structure'"
-_FUND_PROF   = "doc_type eq 'fund_profile'"
-_FUND_PRES   = "doc_type eq 'fund_presentation'"
-_FUND_POLICY = "doc_type eq 'fund_policy'"
-_STRATEGY    = "doc_type eq 'strategy_profile'"
-_CAP_RAISING = "doc_type eq 'capital_raising'"
-_FIN_STMT    = "doc_type eq 'financial_statements'"
-_FIN_NAV     = "doc_type eq 'financial_nav'"
-_FIN_PROJ    = "doc_type eq 'financial_projections'"
-_CREDIT_POL  = "doc_type eq 'credit_policy'"
-_LPA         = "doc_type eq 'legal_lpa'"
-_SIDE_LTR    = "doc_type eq 'legal_side_letter'"
-_AGREEMENT   = "doc_type eq 'legal_agreement'"
-_AMENDMENT   = "doc_type eq 'legal_amendment'"
-_SUBSCRIPT   = "doc_type eq 'legal_subscription'"
-_TERM_SHEET  = "doc_type eq 'legal_term_sheet'"
-_CREDIT_AGR  = "doc_type eq 'legal_credit_agreement'"
-_SECURITY    = "doc_type eq 'legal_security'"
-_INTERCRED   = "doc_type eq 'legal_intercreditor'"
-_POA         = "doc_type eq 'legal_poa'"
-_ORG_CHART   = "doc_type eq 'org_chart'"
-_OP_SERVICE  = "doc_type eq 'operational_service'"
-_OP_INSUR    = "doc_type eq 'operational_insurance'"
-_OP_MONITOR  = "doc_type eq 'operational_monitoring'"
-_INV_MEMO    = "doc_type eq 'investment_memo'"
-_RISK_ASSESS = "doc_type eq 'risk_assessment'"
-
-
-def _f(*parts: str) -> str:
-    """Join doc_type filter parts with OR."""
-    return " or ".join(parts)
-
-
-CHAPTER_DOC_TYPE_FILTERS: dict[str, str | None] = {
-    # ── Pipeline Screening Mode ─────────────────────────────────────
-    "ch01_exec": _f(
-        _LPA, _SIDE_LTR, _TERM_SHEET,
-        _FUND_STRUCT, _FUND_PROF, _FUND_PRES, _FUND_POLICY,
-        _STRATEGY, _CAP_RAISING, _INV_MEMO, _ATTACHMENT,
-    ),
-    "ch02_macro": _f(
-        _FUND_PRES, _STRATEGY, _FUND_PROF, _FUND_STRUCT,
-        _CAP_RAISING, _REG_CIMA, _REG_COMPL, _ATTACHMENT,
-    ),
-    "ch04_sponsor": _f(
-        _FUND_PRES, _STRATEGY, _FUND_PROF, _FUND_STRUCT,
-        _ORG_CHART, _CAP_RAISING, _FUND_POLICY,
-        _LPA, _SIDE_LTR, _AGREEMENT, _SUBSCRIPT, _SECURITY,
-        _REG_COMPL, _OP_SERVICE, _OP_MONITOR,
-        _RISK_ASSESS, _ATTACHMENT,
-    ),
-    # ── Legal Pack Mode ─────────────────────────────────────────────
-    "ch05_legal": _f(
-        _LPA, _SIDE_LTR, _AGREEMENT, _AMENDMENT,
-        _SUBSCRIPT, _POA, _TERM_SHEET,
-        _CREDIT_AGR, _SECURITY, _INTERCRED,
-        _REG_CIMA, _ATTACHMENT,
-    ),
-    "ch06_terms": _f(
-        _LPA, _TERM_SHEET, _AMENDMENT, _AGREEMENT,
-        _CREDIT_AGR, _OP_SERVICE,
-        _FUND_PRES, _STRATEGY, _ATTACHMENT,
-    ),
-    # ── Underwriting Mode ───────────────────────────────────────────
-    "ch07_capital": _f(
-        _FIN_STMT, _FIN_NAV, _FIN_PROJ, _TERM_SHEET, _LPA,
-        _FUND_PRES, _STRATEGY, _FUND_PROF,
-        _CAP_RAISING, _ATTACHMENT,
-    ),
-    "ch08_returns": _f(
-        _FIN_STMT, _FIN_NAV, _FIN_PROJ, _TERM_SHEET, _LPA,
-        _STRATEGY, _FUND_PRES, _FUND_PROF,
-        _CAP_RAISING, _ATTACHMENT,
-    ),
-    "ch09_downside": _f(
-        _RISK_ASSESS, _CREDIT_POL, _FIN_STMT, _FIN_NAV,
-        _REG_CIMA, _REG_COMPL,
-        _OP_SERVICE, _OP_MONITOR, _LPA,
-        _FUND_PRES, _ATTACHMENT,
-    ),
-    "ch10_covenants": _f(
-        _CREDIT_POL, _CREDIT_AGR, _LPA, _AGREEMENT, _AMENDMENT,
-        _REG_CIMA, _REG_COMPL, _REG_QDD,
-        _OP_MONITOR, _ATTACHMENT,
-    ),
-    # ── Governance Stress Mode ──────────────────────────────────────
-    "ch14_governance_stress": _f(
-        _LPA, _SIDE_LTR, _AGREEMENT, _AMENDMENT, _CREDIT_AGR, _TERM_SHEET,
-        _CREDIT_POL, _FIN_STMT, _FIN_NAV,
-        _REG_CIMA, _REG_COMPL,
-        _RISK_ASSESS, _FUND_POLICY, _ORG_CHART, _ATTACHMENT,
-    ),
-    # ── IC Grade Mode (full corpus — no doc_type restriction) ───────
-    "ch03_exit":           None,
-    "ch11_risks":          None,
-    "ch12_peers":          None,
-    "ch13_recommendation": None,
-}
 
 # Human-readable mode labels for audit artifacts
 CHAPTER_RETRIEVAL_MODE: dict[str, str] = {

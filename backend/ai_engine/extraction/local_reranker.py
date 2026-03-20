@@ -19,6 +19,7 @@ preserved for downstream consumers that inspect both.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from typing import Any
 
@@ -34,6 +35,7 @@ _MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
 _cross_encoder = None
 _load_failed = False
+_load_lock = threading.Lock()
 
 
 def _get_cross_encoder():
@@ -41,6 +43,10 @@ def _get_cross_encoder():
 
     Returns None if sentence-transformers is not installed (graceful
     degradation — cosine score is used as-is).
+
+    Thread-safe: uses double-checked locking to ensure exactly one thread
+    loads the model. Without this, concurrent ThreadPoolExecutor threads
+    can trigger a PyTorch meta-tensor race condition during model init.
     """
     global _cross_encoder, _load_failed
 
@@ -49,29 +55,36 @@ def _get_cross_encoder():
     if _cross_encoder is not None:
         return _cross_encoder
 
-    try:
-        from sentence_transformers import CrossEncoder  # type: ignore[import-untyped]
+    with _load_lock:
+        # Double-check after acquiring lock
+        if _load_failed:
+            return None
+        if _cross_encoder is not None:
+            return _cross_encoder
 
-        t0 = time.time()
-        _cross_encoder = CrossEncoder(_MODEL_NAME)
-        logger.info(
-            "CrossEncoder loaded: model=%s, time=%.1fs",
-            _MODEL_NAME,
-            time.time() - t0,
-        )
-        return _cross_encoder
-    except ImportError:
-        logger.warning(
-            "sentence-transformers not installed — reranker disabled, "
-            "falling back to cosine similarity scores. "
-            "Install with: pip install -e '.[reranker]'"
-        )
-        _load_failed = True
-        return None
-    except Exception:
-        logger.exception("Failed to load CrossEncoder model %s", _MODEL_NAME)
-        _load_failed = True
-        return None
+        try:
+            from sentence_transformers import CrossEncoder  # type: ignore[import-untyped]
+
+            t0 = time.time()
+            _cross_encoder = CrossEncoder(_MODEL_NAME)
+            logger.info(
+                "CrossEncoder loaded: model=%s, time=%.1fs",
+                _MODEL_NAME,
+                time.time() - t0,
+            )
+            return _cross_encoder
+        except ImportError:
+            logger.warning(
+                "sentence-transformers not installed — reranker disabled, "
+                "falling back to cosine similarity scores. "
+                "Install with: pip install -e '.[reranker]'"
+            )
+            _load_failed = True
+            return None
+        except Exception:
+            logger.exception("Failed to load CrossEncoder model %s", _MODEL_NAME)
+            _load_failed = True
+            return None
 
 
 # ── Public API ───────────────────────────────────────────────────────
