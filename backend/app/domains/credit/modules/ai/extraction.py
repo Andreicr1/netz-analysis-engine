@@ -170,7 +170,6 @@ def get_latest_ingest_job(
 ):
     """Return the most recent PipelineIngestJob for the given fund."""
     from app.domains.credit.modules.ai.ingest_job_model import PipelineIngestJob
-
     from app.domains.credit.modules.ai.schemas import IngestJobOut
 
     row = db.execute(
@@ -195,7 +194,6 @@ def get_ingest_job(
 ):
     """Return a specific PipelineIngestJob by ID."""
     from app.domains.credit.modules.ai.ingest_job_model import PipelineIngestJob
-
     from app.domains.credit.modules.ai.schemas import IngestJobOut
 
     row = db.execute(
@@ -303,9 +301,8 @@ def trigger_deal_reanalyze(
         raise HTTPException(status_code=404, detail="Pipeline deal not found.")
 
     def _run_reanalyze():
-        from app.domains.credit.modules.deals.ai_mode import resolve_ai_mode
-
         from app.core.db.session import sync_session_factory
+        from app.domains.credit.modules.deals.ai_mode import resolve_ai_mode
         from vertical_engines.credit.domain_ai import run_deal_ai_analysis
 
         with sync_session_factory() as session:

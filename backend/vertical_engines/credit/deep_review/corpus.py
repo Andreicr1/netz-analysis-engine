@@ -472,7 +472,7 @@ def _gather_investment_texts(
 
     try:
         investment_deal_id = investment.deal_id or investment.id
-        chunks = search_deal_chunks(
+        result = search_deal_chunks(
             deal_id=investment_deal_id,
             organization_id=organization_id,
             query_text=query_text,
@@ -480,6 +480,7 @@ def _gather_investment_texts(
             candidates=120,
             top=80,
         )
+        chunks = result.chunks
     except Exception:
         logger.warning(
             "rag_retrieval.failed",

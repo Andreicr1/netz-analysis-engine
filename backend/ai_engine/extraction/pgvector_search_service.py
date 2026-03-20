@@ -19,6 +19,8 @@ from typing import Any
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ai_engine.extraction.retrieval_signal import RetrievalSignal
+
 logger = logging.getLogger(__name__)
 
 # ── Lazy sync engine for callers that don't have an AsyncSession ──────
@@ -80,6 +82,14 @@ class ChunkSearchResult:
     page_end: int | None
     chunk_index: int | None
     score: float
+
+
+@dataclass(frozen=True)
+class RerankedResult:
+    """Typed return from search_and_rerank_* functions."""
+
+    chunks: list[dict[str, Any]]
+    signal: RetrievalSignal
 
 
 # ── ID sanitization (same as Azure Search service) ────────────────────
@@ -601,7 +611,7 @@ async def search_and_rerank_deal(
     top: int = 10,
     candidates: int = 50,
     domain_filter: str | None = None,
-) -> list[dict[str, Any]]:
+) -> RerankedResult:
     """pgvector cosine recall → cross-encoder rerank → top results.
 
     Parameters
@@ -621,11 +631,12 @@ async def search_and_rerank_deal(
         domain_filter=domain_filter,
     )
     if not raw:
-        return raw
+        return RerankedResult(chunks=raw, signal=RetrievalSignal.from_results(raw))
 
     from ai_engine.extraction.local_reranker import rerank
 
-    return rerank(query_text, raw, top_k=top)
+    reranked = rerank(query_text, raw, top_k=top)
+    return RerankedResult(chunks=reranked, signal=RetrievalSignal.from_results(reranked))
 
 
 async def search_and_rerank_fund_policy(
@@ -638,7 +649,7 @@ async def search_and_rerank_fund_policy(
     top: int = 10,
     candidates: int = 50,
     domain_filter: str = "POLICY",
-) -> list[dict[str, Any]]:
+) -> RerankedResult:
     """pgvector cosine recall → cross-encoder rerank for fund policy."""
     raw = await search_fund_policy_chunks(
         db,
@@ -650,11 +661,12 @@ async def search_and_rerank_fund_policy(
         domain_filter=domain_filter,
     )
     if not raw:
-        return raw
+        return RerankedResult(chunks=raw, signal=RetrievalSignal.from_results(raw))
 
     from ai_engine.extraction.local_reranker import rerank
 
-    return rerank(query_text, raw, top_k=top)
+    reranked = rerank(query_text, raw, top_k=top)
+    return RerankedResult(chunks=reranked, signal=RetrievalSignal.from_results(reranked))
 
 
 def search_and_rerank_deal_sync(
@@ -666,7 +678,7 @@ def search_and_rerank_deal_sync(
     top: int = 10,
     candidates: int = 50,
     domain_filter: str | None = None,
-) -> list[dict[str, Any]]:
+) -> RerankedResult:
     """Sync variant: pgvector cosine → cross-encoder rerank for deals."""
     raw = search_deal_chunks_sync(
         deal_id=deal_id,
@@ -677,11 +689,12 @@ def search_and_rerank_deal_sync(
         domain_filter=domain_filter,
     )
     if not raw:
-        return raw
+        return RerankedResult(chunks=raw, signal=RetrievalSignal.from_results(raw))
 
     from ai_engine.extraction.local_reranker import rerank_sync
 
-    return rerank_sync(query_text, raw, top_k=top)
+    reranked = rerank_sync(query_text, raw, top_k=top)
+    return RerankedResult(chunks=reranked, signal=RetrievalSignal.from_results(reranked))
 
 
 def search_fund_chunks_sync(
@@ -751,7 +764,7 @@ def search_and_rerank_fund_sync(
     top: int = 10,
     candidates: int = 50,
     domain_filter: str | None = None,
-) -> list[dict[str, Any]]:
+) -> RerankedResult:
     """Sync variant: pgvector cosine → cross-encoder rerank for fund (all domains)."""
     raw = search_fund_chunks_sync(
         fund_id=fund_id,
@@ -762,11 +775,12 @@ def search_and_rerank_fund_sync(
         domain_filter=domain_filter,
     )
     if not raw:
-        return raw
+        return RerankedResult(chunks=raw, signal=RetrievalSignal.from_results(raw))
 
     from ai_engine.extraction.local_reranker import rerank_sync
 
-    return rerank_sync(query_text, raw, top_k=top)
+    reranked = rerank_sync(query_text, raw, top_k=top)
+    return RerankedResult(chunks=reranked, signal=RetrievalSignal.from_results(reranked))
 
 
 def search_and_rerank_fund_policy_sync(
@@ -778,7 +792,7 @@ def search_and_rerank_fund_policy_sync(
     top: int = 10,
     candidates: int = 50,
     domain_filter: str = "POLICY",
-) -> list[dict[str, Any]]:
+) -> RerankedResult:
     """Sync variant: pgvector cosine → cross-encoder rerank for fund policy."""
     raw = search_fund_policy_chunks_sync(
         fund_id=fund_id,
@@ -789,8 +803,9 @@ def search_and_rerank_fund_policy_sync(
         domain_filter=domain_filter,
     )
     if not raw:
-        return raw
+        return RerankedResult(chunks=raw, signal=RetrievalSignal.from_results(raw))
 
     from ai_engine.extraction.local_reranker import rerank_sync
 
-    return rerank_sync(query_text, raw, top_k=top)
+    reranked = rerank_sync(query_text, raw, top_k=top)
+    return RerankedResult(chunks=reranked, signal=RetrievalSignal.from_results(reranked))

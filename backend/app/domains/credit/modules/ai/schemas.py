@@ -66,6 +66,7 @@ class AIRetrieveResult(BaseModel):
 
 class AIRetrieveResponse(BaseModel):
     results: list[AIRetrieveResult]
+    retrieval_confidence: str | None = None
 
 
 class AIAnswerRequest(BaseModel):
@@ -92,6 +93,7 @@ class AIAnswerCitationOut(BaseModel):
 class AIAnswerResponse(BaseModel):
     answer: str
     citations: list[AIAnswerCitationOut]
+    retrieval_confidence: str | None = None
 
 
 class AIActivityItemOut(BaseModel):

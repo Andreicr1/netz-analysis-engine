@@ -1,6 +1,6 @@
 """Local VLM OCR — PDF to markdown via LM Studio SDK.
 
-Uses a local LM Studio server with a VLM (qwen2.5-vl-7b) to extract
+Uses a local LM Studio server with a VLM (e.g. Qwen2.5-VL-7B) to extract
 text from PDF pages rendered as JPEG images.
 
 Drop-in replacement for mistral_ocr.async_extract_pdf_with_mistral().
@@ -11,13 +11,25 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
 from ai_engine.extraction.mistral_ocr import PageBlock
 
+
 # ── Defaults ────────────────────────────────────────────────────────
-DEFAULT_HOST = "127.0.0.1:1234"
+def _default_host() -> str:
+    """Resolve LM Studio host from settings (strips http:// and /v1 suffix)."""
+    try:
+        from app.core.config.settings import settings as _settings
+        url = _settings.local_llm_url  # e.g. "http://127.0.0.1:1234/v1"
+        host = url.replace("http://", "").replace("https://", "").rstrip("/")
+        if host.endswith("/v1"):
+            host = host[:-3]
+        return host
+    except Exception:
+        return "127.0.0.1:1234"
 _DPI = 100
 _JPEG_QUALITY = 55
 _MAX_IMAGE_PIXELS = 1200 * 1600
@@ -82,7 +94,20 @@ def _ocr_page_sync(
             client.close()
             return PageBlock(page_start=page_num, page_end=page_num, text="")
 
-        model = models[0]
+        # Select VLM model — prefer LOCAL_VLM_MODEL env var, then vision keywords
+        _preferred = os.environ.get("LOCAL_VLM_MODEL", "").lower()
+        _VISION_KEYWORDS = ("olmocr", "qwen2.5-vl", "qwen2-vl", "gemma-3", "qwen3-vl", "llava", "pixtral")
+        if _preferred:
+            model = next(
+                (m for m in models if _preferred in m.identifier.lower()),
+                models[0],
+            )
+        else:
+            model = next(
+                (m for m in models if any(kw in m.identifier.lower() for kw in _VISION_KEYWORDS)),
+                models[0],
+            )
+        logger.info("VLM OCR using model: %s", model.identifier)
         img_handle = client.prepare_image(jpeg_bytes, name=f"page{page_num}.jpg")
 
         chat = lmstudio.Chat()
@@ -104,13 +129,15 @@ def _ocr_page_sync(
 async def async_extract_pdf_with_local_vlm(
     pdf_bytes: bytes,
     *,
-    host: str = DEFAULT_HOST,
+    host: str | None = None,
 ) -> list[PageBlock]:
     """Extract text from a PDF via local VLM (async).
 
     Drop-in replacement for async_extract_pdf_with_mistral().
     Processes pages sequentially (local GPU can only handle one at a time).
     """
+    if host is None:
+        host = _default_host()
     total = await asyncio.to_thread(_get_page_count, pdf_bytes)
     if total == 0:
         return []

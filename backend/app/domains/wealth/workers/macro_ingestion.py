@@ -20,7 +20,6 @@ import asyncio
 import logging
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
-from functools import lru_cache
 
 import structlog
 from sqlalchemy import text

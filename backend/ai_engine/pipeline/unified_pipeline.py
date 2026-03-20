@@ -22,7 +22,6 @@ import asyncio
 import datetime as dt
 import json
 import logging
-import os
 import time
 import uuid
 from pathlib import Path
@@ -573,7 +572,8 @@ async def process(
         page_count = cached_ocr.count("\n\n") + 1  # approximate from cached text
         del pdf_bytes
     else:
-        ocr_provider = os.environ.get("OCR_PROVIDER", "mistral")
+        from app.core.config.settings import settings as _s
+        ocr_provider = _s.local_ocr_provider if _s.use_local_ocr else "mistral"
         if ocr_provider == "local_vlm":
             from ai_engine.extraction.local_vlm_ocr import async_extract_pdf_with_local_vlm
             page_blocks = await async_extract_pdf_with_local_vlm(pdf_bytes)
