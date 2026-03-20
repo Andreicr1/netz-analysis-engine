@@ -970,6 +970,7 @@ def run_deal_deep_review_v4(
                 chapter_texts=chapter_texts,
                 critic_output=critic_dict,
                 current_signal=im_recommendation,
+                deal_id=str(deal_id),
             )
 
             try:
@@ -2114,6 +2115,7 @@ async def async_run_deal_deep_review_v4(
                 chapter_texts=chapter_texts,
                 critic_output=critic_dict,
                 current_signal=im_recommendation,
+                deal_id=str(deal_id),
             )
 
             if tone_result.get("chapters"):
