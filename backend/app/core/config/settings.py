@@ -56,6 +56,7 @@ class Settings(BaseSettings):
 
     # ── AI (REQUIRED) ────────────────────────────────────────
     openai_api_key: str = ""
+    OPENAI_MODEL_INTELLIGENCE: str = "gpt-4.1"
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-large"
 
     # ── External APIs ────────────────────────────────────────
@@ -112,7 +113,7 @@ class Settings(BaseSettings):
     local_embedding_dimensions: int = 768
     # OCR: routes document extraction through local provider
     use_local_ocr: bool = False
-    local_ocr_provider: str = "pymupdf"  # pymupdf | qwen2vl
+    local_ocr_provider: str = "pymupdf"  # pymupdf | local_vlm
 
     # ── Pipeline cache (reduces API costs during development) ──
     # Caches OCR text and embedding vectors in a local SQLite DB.

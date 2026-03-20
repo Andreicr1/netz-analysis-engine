@@ -8,9 +8,8 @@
   │  ROG Flow Z13 — Ryzen AI MAX+ 395, 64GB unified            │
   │                                                             │
   │  LM Studio Server (localhost:1234)                          │
-  │  ├── GPT OSS 20B (text LLM)                                │
-  │  │   └── Classification L3, metadata extraction, summary   │
-  │  └── Vision model (VLM OCR) — via Legion GPU link          │
+  │  ├── Qwen2.5-VL-7B (VLM OCR) — via Legion GPU link        │
+  │  └── GPT OSS 20B (Classification L3 only, dry mode)        │
   │                                                             │
   │  Pipeline (unified_pipeline.py)                             │
   │    │                                                        │
@@ -21,21 +20,22 @@
   │    │                                                        │
   │    ├── Classify ─┬── L1 Rules (deterministic, free)        │
   │    │             ├── L2 TF-IDF (deterministic, free)       │
-  │    │             ├── L3 Local LLM (localhost:1234)          │
-  │    │             └── L3 OpenAI (golden mode)               │
+  │    │             └── L3 LLM (local dry / OpenAI standard)  │
   │    │                                                        │
   │    ├── Chunk ────── Deterministic (free)                    │
   │    │                                                        │
-  │    ├── Extract ──┬── Local LLM (localhost:1234)             │
-  │    │             └── OpenAI (golden mode)                   │
+  │    ├── Extract ──── OpenAI API (gpt-4.1, always)           │
+  │    │                                                        │
+  │    ├── Summary ──── OpenAI API (gpt-4.1-mini, always)      │
   │    │                                                        │
   │    ├── Embed ────┬── Cache HIT → SQLite (.data/cache/)     │
   │    │             └── OpenAI API (only cache misses)         │
   │    │                                                        │
-  │    ├── Upsert ───── pgvector (local PostgreSQL, free)      │
-  │    └── Store ────── LocalStorage (.data/lake/, free)       │
+  │    ├── Store ────── R2 (prod) / LocalStorage (dev)         │
+  │    └── Upsert ───── pgvector (Timescale Cloud)             │
   │                                                             │
-  │  Docker: PostgreSQL 16 + TimescaleDB + Redis 7             │
+  │  Prod DB: Timescale Cloud (PostgreSQL 16 + pgvector)       │
+  │  Dev DB:  Docker (PostgreSQL 16 + TimescaleDB + Redis 7)   │
   └─────────────────────────────────────────────────────────────┘
                         │
           ┌─────────────┴──────────────┐
@@ -49,15 +49,17 @@
 
 **Key design:** Z13 runs both pipeline and LM Studio server. Vision models that need NVIDIA CUDA run on Legion's RTX 5070 Ti via dedicated hardware link — this is transparent to the application (appears as localhost to LM Studio). No network URLs or IP addresses in code.
 
+**Metadata extraction + summary always use OpenAI API** (gpt-4.1 / gpt-4.1-mini). These stages require structured JSON output with high accuracy for entity extraction (dates, counterparties, jurisdictions) — local LLMs do not meet the quality bar. The local LLM (GPT OSS 20B) is only used for classification L3 fallback in dry mode.
+
 ---
 
 ## Pipeline Modes
 
-| Mode | OCR | LLM | Embeddings | Cost | Use Case |
-|------|-----|-----|------------|------|----------|
-| **dry** | Cache → PyMuPDF → Local VLM | Local LLM (localhost) | Cache (OpenAI for misses) | ~$0/day | Large-scale dev testing |
-| **golden** | Mistral API | OpenAI API | OpenAI API | ~$5-10/run | Final quality validation |
-| **standard** | Whatever configured | Whatever configured | Whatever configured | Variable | Normal development |
+| Mode | OCR | Classification L3 | Extraction + Summary | Embeddings | Cost | Use Case |
+|------|-----|-------------------|---------------------|------------|------|----------|
+| **dry** | Cache → PyMuPDF → Local VLM | Local LLM (localhost) | OpenAI API (gpt-4.1) | Cache (OpenAI for misses) | ~$1-2/day | Large-scale dev testing |
+| **standard** | Cache → Local VLM | L1/L2 deterministic | OpenAI API (gpt-4.1) | OpenAI API | ~$3-5/day | Normal development + batch ingestion |
+| **golden** | Mistral API | OpenAI API | OpenAI API (gpt-4.1) | OpenAI API | ~$5-10/run | Final quality validation |
 
 ---
 
@@ -73,16 +75,21 @@ PIPELINE_MODE=dry
 ENABLE_PIPELINE_CACHE=true
 PIPELINE_CACHE_DIR=.data/cache
 
-# LLM → LM Studio local server
+# Classification L3 → LM Studio local server (dry mode only)
 USE_LOCAL_LLM=true
 LOCAL_LLM_URL=http://localhost:1234/v1
 
 # OCR → cache first, PyMuPDF fallback (zero cost)
-OCR_PROVIDER=pymupdf
-# OR for scanned PDFs: OCR_PROVIDER=local_vlm (requires Vision model)
+USE_LOCAL_OCR=true
+LOCAL_OCR_PROVIDER=pymupdf
+# OR for scanned PDFs: LOCAL_OCR_PROVIDER=local_vlm (requires Vision model on Legion GPU)
+
+# Metadata extraction + summary → always OpenAI (quality requirement)
+OPENAI_API_KEY=sk-...
+OPENAI_MODEL_INTELLIGENCE=gpt-4.1
 
 # Embeddings → OpenAI API (cached after first run)
-OPENAI_API_KEY=sk-...
+OPENAI_EMBEDDING_MODEL=text-embedding-3-large
 
 # Confidence fallback (optional)
 LOCAL_CONFIDENCE_THRESHOLD=0.0   # 0.0 = never escalate
@@ -282,16 +289,16 @@ Layer 3 (LLM Fallback):
 | Embeddings | OpenAI | $0.02 | $10.00 |
 | **Total** | | | **$55.50/day** |
 
-### After (dry mode with cache)
+### After (standard mode with cache + local OCR)
 
 | Step | Provider | Cost | Daily (50 docs x 10 runs) |
 |------|----------|------|--------------------------|
-| OCR | Cache / PyMuPDF | $0.00 | $0.00 |
-| Classification L3 | Local LLM | $0.00 | $0.00 |
-| Metadata | Local LLM | $0.00 | $0.00 |
-| Summary | Local LLM | $0.00 | $0.00 |
+| OCR | Cache / Local VLM | $0.00 | $0.00 |
+| Classification L3 | L1/L2 deterministic (~90%) | $0.00 | $0.00 |
+| Metadata | OpenAI gpt-4.1 | $0.05 | $2.50 (1st run, cached after) |
+| Summary | OpenAI gpt-4.1-mini | $0.01 | $0.50 (1st run, cached after) |
 | Embeddings | Cache (OpenAI 1st run only) | $0.00 | ~$1.00 first run |
-| **Total** | | | **~$0/day** |
+| **Total** | | | **~$4/day (first run), ~$0 re-runs** |
 
 Golden validation: ~$5.55 per run (once per release cycle).
 

@@ -20,7 +20,7 @@ _RLS_TABLES: list[str] = _mod._RLS_TABLES  # type: ignore[attr-defined]
 async def test_rls_table_list_includes_wealth_tables():
     """Wealth tables from migration 0002 must be in RLS list."""
     wealth_tables = {
-        "instruments_universe", "nav_timeseries", "fund_risk_metrics",
+        "funds_universe", "nav_timeseries", "fund_risk_metrics",
         "portfolio_snapshots", "strategic_allocation", "tactical_positions",
         "rebalance_events", "lipper_ratings", "backtest_runs",
     }

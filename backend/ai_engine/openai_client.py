@@ -56,7 +56,7 @@ def _get_client() -> OpenAI:
     if _client is not None:
         return _client
 
-    api_key = settings.OPENAI_API_KEY
+    api_key = settings.openai_api_key
     if api_key:
         _client = OpenAI(api_key=api_key, timeout=600.0)
         logger.info("AI_PROVIDER=openai (direct API key)")
@@ -112,7 +112,7 @@ def _get_async_client() -> AsyncOpenAI:
     if _async_client is not None:
         return _async_client
 
-    api_key = settings.OPENAI_API_KEY
+    api_key = settings.openai_api_key
     if api_key:
         _async_client = AsyncOpenAI(api_key=api_key, timeout=600.0, max_retries=0)
         logger.info("ASYNC_AI_PROVIDER=openai (direct API key)")

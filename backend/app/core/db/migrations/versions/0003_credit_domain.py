@@ -19,7 +19,7 @@ _RLS_TABLES = [
     # From 0001
     "audit_events",
     # From 0002 (wealth)
-    "instruments_universe", "nav_timeseries", "fund_risk_metrics",
+    "funds_universe", "nav_timeseries", "fund_risk_metrics",
     "portfolio_snapshots", "strategic_allocation", "tactical_positions",
     "rebalance_events", "lipper_ratings", "backtest_runs",
     # From 0003 — credit core

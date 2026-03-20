@@ -18,7 +18,6 @@ import time
 import traceback
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -296,6 +295,7 @@ async def main() -> None:
         # 2.5 US Treasury Fiscal Data
         try:
             import httpx
+
             from quant_engine.fiscal_data_service import FiscalDataService
 
             async with httpx.AsyncClient() as hc:
@@ -308,6 +308,7 @@ async def main() -> None:
         # 2.6 OFR Hedge Fund
         try:
             import httpx
+
             from quant_engine.ofr_hedge_fund_service import OFRHedgeFundService
 
             async with httpx.AsyncClient() as hc:
@@ -881,7 +882,7 @@ async def main() -> None:
                         if resp.status_code == 200:
                             items = resp.json()
                             if isinstance(items, list) and len(items) == 1:
-                                ok("7.8 Status filter", f"1 approved report returned")
+                                ok("7.8 Status filter", "1 approved report returned")
                             else:
                                 fail("7.8 Status filter", f"expected 1 item, got {len(items) if isinstance(items, list) else type(items)}")
                         else:
@@ -955,7 +956,7 @@ async def main() -> None:
 
         # 7.12 Engine pending_approval verification (unit-level, no DB)
         try:
-            from unittest.mock import AsyncMock, MagicMock, PropertyMock
+            from unittest.mock import MagicMock
 
             from vertical_engines.wealth.dd_report.dd_report_engine import DDReportEngine
             from vertical_engines.wealth.dd_report.models import ChapterResult
@@ -1064,16 +1065,19 @@ Sharpe Ratio: 1.85
         except Exception as e:
             fail("8.2 Semantic Chunker", str(e))
 
-        # 8.3 Mistral OCR
-        if has_key("MISTRAL_API_KEY"):
-            try:
-                from ai_engine.extraction.mistral_ocr import async_extract_pdf_with_mistral
+        # 8.3 OCR (routes via settings: Mistral, local_vlm, or pymupdf)
+        from app.core.config.settings import settings as _ocr_settings
+        _use_local = _ocr_settings.use_local_ocr
+        _ocr_provider = _ocr_settings.local_ocr_provider if _use_local else "mistral"
+        _ocr_can_run = _use_local or has_key("MISTRAL_API_KEY")
 
-                # Create minimal PDF with reportlab if available, else skip
+        if _ocr_can_run:
+            try:
                 try:
+                    import io
+
                     from reportlab.lib.pagesizes import letter
                     from reportlab.pdfgen import canvas
-                    import io
 
                     buf = io.BytesIO()
                     c = canvas.Canvas(buf, pagesize=letter)
@@ -1083,17 +1087,30 @@ Sharpe Ratio: 1.85
                     c.save()
                     pdf_bytes = buf.getvalue()
 
-                    pages = await with_timeout(async_extract_pdf_with_mistral(
-                        pdf_bytes, api_key=os.environ["MISTRAL_API_KEY"],
-                    ), 30)
+                    if _ocr_provider == "local_vlm":
+                        from ai_engine.extraction.local_vlm_ocr import (
+                            async_extract_pdf_with_local_vlm,
+                        )
+                        pages = await with_timeout(async_extract_pdf_with_local_vlm(pdf_bytes), 120)
+                    elif _ocr_provider == "pymupdf":
+                        import asyncio as _aio
+
+                        from ai_engine.pipeline.unified_pipeline import _extract_text_pymupdf
+                        pages = await _aio.to_thread(_extract_text_pymupdf, pdf_bytes)
+                    else:
+                        from ai_engine.extraction.mistral_ocr import async_extract_pdf_with_mistral
+                        pages = await with_timeout(async_extract_pdf_with_mistral(
+                            pdf_bytes, api_key=os.environ["MISTRAL_API_KEY"],
+                        ), 30)
+
                     has_text = any(p.text for p in pages) if pages else False
-                    ok("8.3 Mistral OCR", f"pages={len(pages)}, has_text={has_text}")
+                    ok(f"8.3 OCR ({_ocr_provider})", f"pages={len(pages)}, has_text={has_text}")
                 except ImportError:
-                    skip("8.3 Mistral OCR", "reportlab not installed for PDF generation")
+                    skip(f"8.3 OCR ({_ocr_provider})", "reportlab not installed for PDF generation")
             except Exception as e:
-                fail("8.3 Mistral OCR", str(e))
+                fail(f"8.3 OCR ({_ocr_provider})", str(e))
         else:
-            skip("8.3 Mistral OCR", "MISTRAL_API_KEY not set")
+            skip("8.3 OCR", "No OCR provider available (set USE_LOCAL_OCR=true or MISTRAL_API_KEY)")
 
         # 8.4 Embedding
         if has_key("OPENAI_API_KEY"):
@@ -1159,9 +1176,9 @@ Sharpe Ratio: 1.85
         # 8.6 IC Memo Chapter Generation
         if has_key("OPENAI_API_KEY"):
             try:
-                from vertical_engines.credit.memo.chapters import generate_chapter
-
                 from openai import OpenAI
+
+                from vertical_engines.credit.memo.chapters import generate_chapter
 
                 sync_client = OpenAI()
 
@@ -1215,18 +1232,17 @@ Sharpe Ratio: 1.85
             skip("8.6 Memo Chapter", "OPENAI_API_KEY not set")
 
         # 8.7 Full Pipeline Integration (mini)
-        if has_key("OPENAI_API_KEY") and has_key("MISTRAL_API_KEY"):
+        if has_key("OPENAI_API_KEY") and _ocr_can_run:
             try:
                 from ai_engine.classification.hybrid_classifier import classify
                 from ai_engine.extraction.embedding_service import async_generate_embeddings
                 from ai_engine.extraction.semantic_chunker import chunk_document
 
                 try:
-                    from reportlab.lib.pagesizes import letter
-                    from reportlab.pdfgen import canvas
                     import io
 
-                    from ai_engine.extraction.mistral_ocr import async_extract_pdf_with_mistral
+                    from reportlab.lib.pagesizes import letter
+                    from reportlab.pdfgen import canvas
 
                     # 1. Create PDF
                     buf = io.BytesIO()
@@ -1239,10 +1255,22 @@ Sharpe Ratio: 1.85
                     c.save()
                     pdf_bytes = buf.getvalue()
 
-                    # 2. OCR
-                    pages = await with_timeout(async_extract_pdf_with_mistral(
-                        pdf_bytes, api_key=os.environ["MISTRAL_API_KEY"],
-                    ), 30)
+                    # 2. OCR (routed via settings)
+                    if _ocr_provider == "local_vlm":
+                        from ai_engine.extraction.local_vlm_ocr import (
+                            async_extract_pdf_with_local_vlm,
+                        )
+                        pages = await with_timeout(async_extract_pdf_with_local_vlm(pdf_bytes), 120)
+                    elif _ocr_provider == "pymupdf":
+                        import asyncio as _aio
+
+                        from ai_engine.pipeline.unified_pipeline import _extract_text_pymupdf
+                        pages = await _aio.to_thread(_extract_text_pymupdf, pdf_bytes)
+                    else:
+                        from ai_engine.extraction.mistral_ocr import async_extract_pdf_with_mistral
+                        pages = await with_timeout(async_extract_pdf_with_mistral(
+                            pdf_bytes, api_key=os.environ["MISTRAL_API_KEY"],
+                        ), 30)
                     ocr_text = "\n".join(p.text for p in pages if p.text)
 
                     # 3. Classify
@@ -1256,16 +1284,16 @@ Sharpe Ratio: 1.85
                     if chunk_texts:
                         emb_batch = await with_timeout(async_generate_embeddings(chunk_texts), 30)
                         dims_consistent = all(len(v) == 3072 for v in emb_batch.vectors)
-                        ok("8.7 Full Pipeline", f"ocr={len(ocr_text)}ch, class={cls_result.doc_type}, chunks={len(chunks)}, embs={emb_batch.count}, dim_ok={dims_consistent}")
+                        ok(f"8.7 Full Pipeline ({_ocr_provider})", f"ocr={len(ocr_text)}ch, class={cls_result.doc_type}, chunks={len(chunks)}, embs={emb_batch.count}, dim_ok={dims_consistent}")
                     else:
-                        ok("8.7 Full Pipeline", f"ocr={len(ocr_text)}ch, class={cls_result.doc_type}, chunks=0 (OCR text too short for chunking)")
+                        ok(f"8.7 Full Pipeline ({_ocr_provider})", f"ocr={len(ocr_text)}ch, class={cls_result.doc_type}, chunks=0 (OCR text too short for chunking)")
 
                 except ImportError:
                     skip("8.7 Full Pipeline", "reportlab not installed")
             except Exception as e:
                 fail("8.7 Full Pipeline", f"{e}\n{traceback.format_exc()}")
         else:
-            skip("8.7 Full Pipeline", "OPENAI_API_KEY or MISTRAL_API_KEY not set")
+            skip("8.7 Full Pipeline", "OPENAI_API_KEY or OCR provider not available")
 
         print(f"  [TIME] Group 8: {time.time() - g8:.1f}s")
 
@@ -1355,7 +1383,7 @@ Sharpe Ratio: 1.85
                 )
 
                 search_docs = []
-                for i, (chunk, embedding) in enumerate(zip(corpus, emb_batch.vectors)):
+                for i, (chunk, embedding) in enumerate(zip(corpus, emb_batch.vectors, strict=False)):
                     doc = build_search_document(
                         deal_id=SMOKE_DEAL_ID,
                         fund_id=SMOKE_FUND_ID,

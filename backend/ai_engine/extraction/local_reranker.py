@@ -143,7 +143,7 @@ def rerank(
         _MODEL_NAME,
     )
 
-    for doc, score in zip(documents, scores):
+    for doc, score in zip(documents, scores, strict=False):
         doc[score_key] = float(score)
 
     documents.sort(key=lambda d: d.get(score_key, 0.0), reverse=True)

@@ -61,11 +61,29 @@ def _make_dd_report(
 
 
 def _mock_db_with_report(report):
-    """Create a mock AsyncSession that returns the given report from execute()."""
+    """Create a mock AsyncSession that returns the given report from execute().
+
+    Handles both report queries (scalar_one_or_none) and RLS context queries
+    (current_setting → returns ORG_ID via scalar()).
+    """
     mock_db = AsyncMock()
-    mock_result = MagicMock()
-    mock_result.scalar_one_or_none.return_value = report
-    mock_db.execute.return_value = mock_result
+
+    report_result = MagicMock()
+    report_result.scalar_one_or_none.return_value = report
+
+    rls_result = MagicMock()
+    rls_result.scalar.return_value = ORG_ID
+
+    call_count = {"n": 0}
+
+    async def _execute_side_effect(*args, **kwargs):
+        call_count["n"] += 1
+        query_str = str(args[0]) if args else ""
+        if "current_setting" in query_str:
+            return rls_result
+        return report_result
+
+    mock_db.execute = AsyncMock(side_effect=_execute_side_effect)
     mock_db.commit = AsyncMock()
     return mock_db
 
