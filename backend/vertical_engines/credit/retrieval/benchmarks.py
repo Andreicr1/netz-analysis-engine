@@ -53,6 +53,14 @@ def retrieve_market_benchmarks(
     """
     import httpx as _httpx
 
+    if not search_endpoint:
+        logger.debug(
+            "retrieve_market_benchmarks_skipped",
+            chapter=chapter_id,
+            reason="no search_endpoint configured",
+        )
+        return []
+
     queries = CHAPTER_MARKET_DATA_QUERIES.get(chapter_id, [])
     if not queries:
         logger.warning(

@@ -265,12 +265,16 @@ def gather_chapter_evidence(
         clean_chunks: list[dict] = []
         contaminated_count = 0
         shared_aux_ids = _shared_auxiliary_fund_ids()
+        # Accept chunks matching deal_id (UUID) OR deal_name (legacy string)
+        accepted_deal_ids = {deal_name.lower()}
+        if deal_id:
+            accepted_deal_ids.add(deal_id.lower())
         for c in valid_chunks:
             chunk_deal = c.get("deal_id", "")
             chunk_fund = str(c.get("fund_id", "") or "").lower()
             if (
                 not chunk_deal
-                or chunk_deal.lower() == deal_name.lower()
+                or chunk_deal.lower() in accepted_deal_ids
                 or chunk_fund in shared_aux_ids
             ):
                 clean_chunks.append(c)
@@ -360,7 +364,7 @@ def gather_chapter_evidence(
                 chunk_fund = str(c.get("fund_id", "") or "").lower()
                 if (
                     not chunk_deal
-                    or chunk_deal.lower() == deal_name.lower()
+                    or chunk_deal.lower() in accepted_deal_ids
                     or chunk_fund in shared_aux_ids
                 ):
                     clean_chunks.append(c)
