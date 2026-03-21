@@ -51,3 +51,4 @@ pgdata/
 # Project-local data
 Deals/
 scripts/
+dev.ps1
