@@ -28,7 +28,7 @@ def get_macro_snapshot(
     force_refresh: bool = False,
     deal_geography: str | None = None,
 ) -> dict[str, Any]:
-    """Return today's macro snapshot, fetching from FRED if not cached.
+    """Return today's macro snapshot, building from macro_data if not cached.
 
     NEW in v2: deal_geography triggers regional Case-Shiller fetch.
     Regional data is NOT cached (deal-specific) — always fetched live
@@ -76,7 +76,7 @@ def get_macro_snapshot(
             base_snapshot = data
             # Merge deal-specific regional data (never stored in cache)
             if deal_geography:
-                regional = fetch_regional_case_shiller(deal_geography, observations=24)
+                regional = fetch_regional_case_shiller(db, deal_geography, observations=24)
                 if regional:
                     base_snapshot = dict(base_snapshot)
                     base_snapshot["regional"] = {"case_shiller_metro": regional}
@@ -92,11 +92,11 @@ def get_macro_snapshot(
                         )
             return base_snapshot
 
-    # Fetch from FRED using the backward-compatible builder entrypoint.
-    # Build base snapshot WITHOUT regional (base is deal-agnostic/cacheable)
+    # Build from macro_data DB table (pre-ingested by macro_ingestion worker).
+    # Base snapshot WITHOUT regional (base is deal-agnostic/cacheable)
     snapshot: dict[str, Any] = {}
     try:
-        snapshot = _build_macro_snapshot(deal_geography=None)
+        snapshot = _build_macro_snapshot(db, deal_geography=None)
     except Exception as exc:
         fallback = db.execute(
             select(MacroSnapshot)
@@ -112,7 +112,7 @@ def get_macro_snapshot(
             )
             snapshot = dict(fallback.data_json)
         else:
-            raise ValueError("FRED failed and no cached macro snapshot available") from exc
+            raise ValueError("macro_data build failed and no cached macro snapshot available") from exc
 
     # Persist base snapshot
     new_snapshot = MacroSnapshot(as_of_date=today, data_json=snapshot)
@@ -138,7 +138,7 @@ def get_macro_snapshot(
 
     # Merge regional AFTER persisting (deal-specific, not stored)
     if deal_geography:
-        regional = fetch_regional_case_shiller(deal_geography, observations=24)
+        regional = fetch_regional_case_shiller(db, deal_geography, observations=24)
         if regional:
             snapshot = dict(snapshot)
             snapshot["regional"] = {"case_shiller_metro": regional}

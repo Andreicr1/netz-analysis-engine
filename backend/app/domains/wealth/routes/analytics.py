@@ -1,15 +1,24 @@
 """Analytics router — backtest, optimizer, correlation."""
 
+import hashlib
+import json
 import uuid
 from datetime import UTC, date, datetime
 
 import numpy as np
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security.clerk_auth import CurrentUser, get_current_user
+from app.core.jobs.sse import create_job_stream
+from app.core.jobs.tracker import (
+    get_redis_pool,
+    publish_event,
+    publish_terminal_event,
+    register_job_owner,
+)
+from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.allocation import StrategicAllocation
 from app.domains.wealth.models.backtest import BacktestRun
@@ -34,6 +43,65 @@ from quant_engine.optimizer_service import (
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/analytics")
+
+
+# ---------------------------------------------------------------------------
+# Redis result cache helpers
+# ---------------------------------------------------------------------------
+
+def _hash_analytics_input(
+    block_ids: list[str],
+    returns: list[float],
+    cov_matrix: list[list[float]] | None = None,
+    extra: dict | None = None,
+) -> str:
+    """Deterministic hash of analytics inputs for cache key."""
+    payload: dict = {
+        "blocks": sorted(block_ids),
+        "returns": [round(r, 8) for r in returns],
+        "date": date.today().isoformat(),
+    }
+    if cov_matrix:
+        payload["cov"] = [[round(c, 8) for c in row] for row in cov_matrix]
+    if extra:
+        payload.update(extra)
+    encoded = json.dumps(payload, sort_keys=True).encode()
+    return hashlib.sha256(encoded).hexdigest()[:24]
+
+
+async def _get_cached_result(cache_key: str) -> dict | None:
+    """Check Redis for cached analytics result."""
+    try:
+        import redis.asyncio as aioredis
+
+        r = aioredis.Redis(connection_pool=get_redis_pool())
+        try:
+            cached = await r.get(f"analytics:cache:{cache_key}")
+            if cached:
+                return json.loads(cached)
+        finally:
+            await r.aclose()
+    except Exception:
+        logger.debug("analytics_cache_miss", cache_key=cache_key)
+    return None
+
+
+async def _set_cached_result(cache_key: str, result: dict, ttl: int = 3600) -> None:
+    """Cache analytics result in Redis (1h TTL)."""
+    try:
+        import redis.asyncio as aioredis
+
+        r = aioredis.Redis(connection_pool=get_redis_pool())
+        try:
+            await r.set(
+                f"analytics:cache:{cache_key}",
+                json.dumps(result, default=str),
+                ex=ttl,
+            )
+        finally:
+            await r.aclose()
+    except Exception:
+        logger.debug("analytics_cache_set_failed", cache_key=cache_key)
 
 
 @router.post(
@@ -184,6 +252,14 @@ async def optimize(
     # Use provided expected returns or computed ones
     expected_returns = body.expected_returns if body.expected_returns else computed_returns
 
+    # Check Redis cache
+    returns_list = [expected_returns[bid] for bid in block_ids] if isinstance(expected_returns, dict) else list(expected_returns)
+    cache_key = _hash_analytics_input(block_ids, returns_list, cov_matrix.tolist())
+    cached = await _get_cached_result(cache_key)
+    if cached:
+        logger.info("optimize_cache_hit", profile=body.profile, cache_key=cache_key)
+        return OptimizeResult(**cached)
+
     # Build constraints from strategic allocation
     block_constraints = [
         BlockConstraint(
@@ -202,30 +278,38 @@ async def optimize(
         constraints=constraints,
     )
 
-    return OptimizeResult(
-        profile=body.profile,
-        weights=result.weights,
-        expected_return=result.expected_return,
-        expected_risk=result.portfolio_volatility,
-        sharpe_ratio=result.sharpe_ratio,
-    )
+    result_dict = {
+        "profile": body.profile,
+        "weights": result.weights,
+        "expected_return": result.expected_return,
+        "expected_risk": result.portfolio_volatility,
+        "sharpe_ratio": result.sharpe_ratio,
+    }
+    await _set_cached_result(cache_key, result_dict)
+
+    return OptimizeResult(**result_dict)
 
 
 @router.post(
     "/optimize/pareto",
     response_model=ParetoOptimizeResult,
-    summary="Multi-objective portfolio optimization (Pareto)",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Multi-objective portfolio optimization (Pareto) — async",
     description=(
         "Runs NSGA-II multi-objective optimization producing a Pareto front of "
-        "risk-return tradeoffs. WEEKLY / ON-DEMAND ONLY — takes 45–135s. "
+        "risk-return tradeoffs. Returns 202 with a job_id immediately. "
+        "Poll via GET /optimize/pareto/{job_id}/stream (SSE) for progress. "
+        "WEEKLY / ON-DEMAND ONLY — takes 45–135s. "
         "Daily pipeline uses /optimize (CLARABEL). "
         "Falls back to CLARABEL if pymoo is not installed."
     ),
 )
 async def optimize_pareto(
     body: OptimizeRequest,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
 ) -> ParetoOptimizeResult:
     _validate_profile(body.profile)
 
@@ -263,35 +347,82 @@ async def optimize_pareto(
 
     expected_returns = body.expected_returns if body.expected_returns else computed_returns
 
-    block_constraints = [
-        BlockConstraint(
-            block_id=a.block_id,
-            min_weight=float(a.min_weight),
-            max_weight=float(a.max_weight),
-        )
+    # Generate job ID for SSE tracking
+    job_id = str(uuid.uuid4())
+    await register_job_owner(job_id, str(actor.organization_id))
+
+    # Snapshot inputs for background task (avoid session leak across async boundary)
+    frozen_block_ids = list(block_ids)
+    frozen_returns = (
+        {k: float(v) for k, v in expected_returns.items()}
+        if isinstance(expected_returns, dict)
+        else list(expected_returns)
+    )
+    frozen_cov = cov_matrix.tolist()
+    frozen_constraints = [
+        {"block_id": a.block_id, "min_weight": float(a.min_weight), "max_weight": float(a.max_weight)}
         for a in allocations
     ]
-    constraints = ProfileConstraints(blocks=block_constraints)
+    profile = body.profile
 
-    result = await optimize_portfolio_pareto(
-        block_ids=block_ids,
-        expected_returns=expected_returns,
-        cov_matrix=cov_matrix,
-        constraints=constraints,
-        profile=body.profile,
-        calc_date=today,
-    )
+    async def _run_pareto() -> None:
+        try:
+            await publish_event(job_id, "progress", {"stage": "optimizing", "pct": 10})
+
+            constraints = ProfileConstraints(blocks=[
+                BlockConstraint(**c) for c in frozen_constraints
+            ])
+            cov = np.array(frozen_cov)
+
+            result = await optimize_portfolio_pareto(
+                block_ids=frozen_block_ids,
+                expected_returns=frozen_returns,
+                cov_matrix=cov,
+                constraints=constraints,
+                profile=profile,
+                calc_date=today,
+            )
+
+            await publish_terminal_event(job_id, "done", {
+                "profile": profile,
+                "recommended_weights": result.recommended_weights,
+                "pareto_sharpe": result.pareto_sharpe,
+                "pareto_cvar": result.pareto_cvar,
+                "n_solutions": result.n_solutions,
+                "seed": result.seed,
+                "input_hash": result.input_hash,
+                "status": result.status,
+            })
+        except Exception as e:
+            logger.exception("pareto_background_failed", job_id=job_id)
+            await publish_terminal_event(job_id, "error", {"message": str(e)})
+
+    background_tasks.add_task(_run_pareto)
 
     return ParetoOptimizeResult(
         profile=body.profile,
-        recommended_weights=result.recommended_weights,
-        pareto_sharpe=result.pareto_sharpe,
-        pareto_cvar=result.pareto_cvar,
-        n_solutions=result.n_solutions,
-        seed=result.seed,
-        input_hash=result.input_hash,
-        status=result.status,
+        recommended_weights={},
+        pareto_sharpe=[],
+        pareto_cvar=[],
+        n_solutions=0,
+        seed=0,
+        input_hash="",
+        status="generating",
+        job_id=job_id,
     )
+
+
+@router.get(
+    "/optimize/pareto/{job_id}/stream",
+    summary="SSE stream for Pareto optimization progress",
+)
+async def stream_pareto_progress(
+    job_id: str,
+    request: Request,
+    user: CurrentUser = Depends(get_current_user),
+) -> None:
+    """SSE stream for Pareto optimization progress."""
+    return await create_job_stream(request, job_id)
 
 
 @router.get(

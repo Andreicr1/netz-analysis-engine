@@ -95,3 +95,4 @@ class ParetoOptimizeResult(BaseModel):
     seed: int
     input_hash: str
     status: str
+    job_id: str | None = None

@@ -26,6 +26,11 @@ from app.domains.wealth.models.nav import NavTimeseries
 from app.domains.wealth.models.risk import FundRiskMetrics
 from quant_engine.cvar_service import compute_cvar_from_returns
 from quant_engine.drift_service import DtwDriftResult, DtwDriftStatus, compute_dtw_drift_batch
+from quant_engine.talib_momentum_service import (
+    compute_flow_momentum,
+    compute_momentum_signals_talib,
+    normalize_flow_momentum,
+)
 
 logger = structlog.get_logger()
 
@@ -220,6 +225,89 @@ async def _batch_fetch_nav_returns(
             raw_by_fund.setdefault(fid, []).append(float(return_1d))
 
     return raw_by_fund
+
+
+async def _batch_fetch_nav_prices(
+    db: AsyncSession,
+    fund_ids: list[uuid.UUID],
+    as_of_date: date,
+    lookback_days: int = 80,
+) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    """Batch-fetch latest NAV prices and AUM for momentum computation.
+
+    Returns dict mapping fund_id (str) -> (nav_prices, aum_values) as numpy arrays.
+    Each array is trimmed to the last 50 observations (enough for RSI(14) + BBANDS(20)).
+    """
+    start_date = as_of_date - timedelta(days=lookback_days)
+    stmt = (
+        select(
+            NavTimeseries.instrument_id,
+            NavTimeseries.nav,
+            NavTimeseries.aum_usd,
+        )
+        .where(
+            NavTimeseries.instrument_id.in_(fund_ids),
+            NavTimeseries.nav_date >= start_date,
+            NavTimeseries.nav_date <= as_of_date,
+            NavTimeseries.nav.is_not(None),
+        )
+        .order_by(NavTimeseries.instrument_id, NavTimeseries.nav_date)
+    )
+    result = await db.execute(stmt)
+
+    by_fund: dict[str, tuple[list[float], list[float]]] = {}
+    for row_id, nav, aum in result.all():
+        fid = str(row_id)
+        if fid not in by_fund:
+            by_fund[fid] = ([], [])
+        by_fund[fid][0].append(float(nav))
+        by_fund[fid][1].append(float(aum) if aum is not None else 0.0)
+
+    return {
+        fid: (np.array(navs[-50:]), np.array(aums[-50:]))
+        for fid, (navs, aums) in by_fund.items()
+    }
+
+
+def _compute_momentum_from_nav(
+    close: np.ndarray,
+    aum: np.ndarray,
+) -> dict[str, float | None]:
+    """Compute momentum signals from pre-fetched NAV prices and AUM.
+
+    Pure computation — no DB access.
+    """
+    if len(close) < 30:
+        return {
+            "rsi_14": None,
+            "bb_position": None,
+            "nav_momentum_score": None,
+            "flow_momentum_score": None,
+            "blended_momentum_score": None,
+        }
+
+    signals = compute_momentum_signals_talib(close)
+    nav_score = signals.get("momentum_score", 50.0)
+
+    rsi_val = signals.get("rsi_norm")
+    bb_val = signals.get("bb_pos")
+
+    result: dict[str, float | None] = {
+        "rsi_14": round(rsi_val * 100, 2) if rsi_val is not None else None,
+        "bb_position": round(bb_val * 100, 2) if bb_val is not None else None,
+        "nav_momentum_score": round(nav_score, 2),
+    }
+
+    if aum.any():
+        slope = compute_flow_momentum(close, aum)
+        flow_score = normalize_flow_momentum(slope)
+        result["flow_momentum_score"] = round(flow_score, 2)
+        result["blended_momentum_score"] = round(0.5 * nav_score + 0.5 * flow_score, 2)
+    else:
+        result["flow_momentum_score"] = None
+        result["blended_momentum_score"] = round(nav_score, 2)
+
+    return result
 
 
 def _compute_metrics_from_returns(
@@ -489,6 +577,26 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
                     results[fund.ticker or fid_str] = 0
                     continue
                 computed.append((fund, metrics))
+
+            # Pass 1.5: compute momentum signals from NAV prices (single batch query)
+            nav_price_map = await _batch_fetch_nav_prices(db, all_fund_ids, eval_date)
+            logger.info("NAV prices batch-fetched for momentum", n_funds=len(nav_price_map))
+
+            for fund, metrics in computed:
+                fid_str = str(fund.fund_id)
+                nav_data = nav_price_map.get(fid_str)
+                if nav_data is None:
+                    metrics.update({
+                        "rsi_14": None,
+                        "bb_position": None,
+                        "nav_momentum_score": None,
+                        "flow_momentum_score": None,
+                        "blended_momentum_score": None,
+                    })
+                    continue
+                close, aum = nav_data
+                momentum = _compute_momentum_from_nav(close, aum)
+                metrics.update(momentum)
 
             # Pass 2: compute DTW drift scores per block (reuses DB session, no extra query per fund)
             logger.info("Computing DTW drift scores", n_funds=len(computed))

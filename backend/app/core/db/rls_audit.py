@@ -67,16 +67,27 @@ TENANT_SCOPED_TABLES: frozenset[str] = frozenset({
 GLOBAL_TABLES: frozenset[str] = frozenset({
     # 0002 — Wealth allocation blocks
     "allocation_blocks",
-    # 0003 — Credit global
+    # 0003 — Credit global (macro_data: hypertable 0026, macro_snapshots: hypertable 0026)
     "macro_data",
+    "macro_snapshots",
     # 0004 — Vertical config defaults
     "vertical_config_defaults",
-    # 0005 — Macro regional snapshots
+    # 0005 — Macro regional snapshots (hypertable 0026)
     "macro_regional_snapshots",
-    # 0013 — Benchmark NAV
+    # 0013 — Benchmark NAV (hypertable 0026)
     "benchmark_nav",
     # 0015 — Admin audit log (cross-tenant, no RLS)
     "admin_audit_log",
+    # 0023 — SEC data providers (global, no RLS)
+    # sec_13f_holdings, sec_13f_diffs: hypertables since 0025
+    # sec_institutional_allocations: hypertable since 0028
+    "sec_managers",
+    "sec_manager_funds",
+    "sec_manager_team",
+    "sec_13f_holdings",
+    "sec_13f_diffs",
+    "sec_institutional_allocations",
+    "sec_cusip_ticker_map",
 })
 
 # Tables with special RLS patterns (not standard org_isolation)

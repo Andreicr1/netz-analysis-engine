@@ -181,12 +181,76 @@ GLOBAL_SERIES: list[GlobalSeriesSpec] = [
 ]
 
 
+# ---------------------------------------------------------------------------
+#  Credit-specific FRED series
+# ---------------------------------------------------------------------------
+# Series required by the credit vertical's market_data engine that are NOT
+# already covered by REGION_SERIES or GLOBAL_SERIES.  Ingested into macro_data
+# by the macro_ingestion worker so credit deep review reads from DB, not API.
+
+CREDIT_SERIES: list[SeriesSpec] = [
+    # Rates & Spreads
+    SeriesSpec("BAA10Y", "credit_spreads", "Baa Corporate Spread (Moody's)", "daily"),
+    SeriesSpec("BAMLH0A0HYM2", "credit_spreads", "ICE BofA HY Spread (OAS)", "daily"),
+    SeriesSpec("SOFR", "rates", "SOFR Overnight Rate", "daily"),
+    SeriesSpec("USREC", "recession", "NBER Recession Indicator", "monthly"),
+    # Real Estate
+    SeriesSpec("CSUSHPINSA", "real_estate", "Case-Shiller National HPI (NSA)", "monthly"),
+    SeriesSpec("MSPUS", "real_estate", "Median Sales Price of Houses Sold", "quarterly"),
+    SeriesSpec("HOUST", "real_estate", "Housing Starts (Total, SAAR)", "monthly"),
+    SeriesSpec("PERMIT", "real_estate", "Building Permits (Total, SAAR)", "monthly"),
+    SeriesSpec("EXHOSLUSM495S", "real_estate", "Existing Home Sales", "monthly"),
+    SeriesSpec("MSACSR", "real_estate", "Monthly Supply of Houses", "monthly"),
+    # Mortgage & Delinquency
+    SeriesSpec("MORTGAGE30US", "mortgage", "30-Year Fixed Mortgage Rate", "weekly"),
+    SeriesSpec("MORTGAGE15US", "mortgage", "15-Year Fixed Mortgage Rate", "weekly"),
+    SeriesSpec("OBMMIFHA30YF", "mortgage", "FHA 30-Year Fixed Mortgage Rate", "weekly"),
+    SeriesSpec("DRCCLACBS", "delinquency", "Credit Card Delinquency Rate", "quarterly"),
+    SeriesSpec("DRSFRMACBS", "delinquency", "Single-Family Mortgage Delinquency Rate", "quarterly"),
+    SeriesSpec("DRHMACBS", "delinquency", "Home Equity Loan Delinquency Rate", "quarterly"),
+    # Credit Quality
+    SeriesSpec("DRALACBN", "credit_quality", "Delinquency Rate — All Loans", "quarterly"),
+    SeriesSpec("NETCIBAL", "credit_quality", "Net Charge-Off Rate — All Loans", "quarterly"),
+    SeriesSpec("CCLACBW027SBOG", "credit_quality", "CRE Loans (commercial banks)", "weekly"),
+    SeriesSpec("DRCILNFNQ", "credit_quality", "Delinquency Rate — C&I Loans", "quarterly"),
+    # Banking Activity
+    SeriesSpec("TOTLL", "banking", "Total Loans & Leases", "weekly"),
+    SeriesSpec("DPSACBW027SBOG", "banking", "Total Deposits", "weekly"),
+    SeriesSpec("STLFSI4", "banking", "St. Louis Fed Financial Stress Index", "weekly"),
+    SeriesSpec("WRMFSL", "banking", "Money Market Fund Assets (retail)", "weekly"),
+    # Regional Case-Shiller metros (all monthly, used by credit deep review)
+    SeriesSpec("NYXRSA", "real_estate_regional", "Case-Shiller New York", "monthly"),
+    SeriesSpec("LXXRSA", "real_estate_regional", "Case-Shiller Los Angeles", "monthly"),
+    SeriesSpec("MFHXRSA", "real_estate_regional", "Case-Shiller Miami", "monthly"),
+    SeriesSpec("CHXRSA", "real_estate_regional", "Case-Shiller Chicago", "monthly"),
+    SeriesSpec("DAXRSA", "real_estate_regional", "Case-Shiller Dallas", "monthly"),
+    SeriesSpec("HIOXRSA", "real_estate_regional", "Case-Shiller Houston", "monthly"),
+    SeriesSpec("WDXRSA", "real_estate_regional", "Case-Shiller Washington DC", "monthly"),
+    SeriesSpec("BOXRSA", "real_estate_regional", "Case-Shiller Boston", "monthly"),
+    SeriesSpec("ATXRSA", "real_estate_regional", "Case-Shiller Atlanta", "monthly"),
+    SeriesSpec("SEXRSA", "real_estate_regional", "Case-Shiller Seattle", "monthly"),
+    SeriesSpec("PHXRSA", "real_estate_regional", "Case-Shiller Phoenix", "monthly"),
+    SeriesSpec("DNXRSA", "real_estate_regional", "Case-Shiller Denver", "monthly"),
+    SeriesSpec("SFXRSA", "real_estate_regional", "Case-Shiller San Francisco", "monthly"),
+    SeriesSpec("TPXRSA", "real_estate_regional", "Case-Shiller Tampa", "monthly"),
+    SeriesSpec("CRXRSA", "real_estate_regional", "Case-Shiller Charlotte", "monthly"),
+    SeriesSpec("MNXRSA", "real_estate_regional", "Case-Shiller Minneapolis", "monthly"),
+    SeriesSpec("POXRSA", "real_estate_regional", "Case-Shiller Portland", "monthly"),
+    SeriesSpec("SDXRSA", "real_estate_regional", "Case-Shiller San Diego", "monthly"),
+    SeriesSpec("DEXRSA", "real_estate_regional", "Case-Shiller Detroit", "monthly"),
+    SeriesSpec("CLXRSA", "real_estate_regional", "Case-Shiller Cleveland", "monthly"),
+]
+
+
 def get_all_series_ids() -> list[str]:
-    """Return flat list of all FRED series IDs across regions + global."""
+    """Return flat list of all FRED series IDs across regions + global + credit."""
     ids: list[str] = []
     for specs in REGION_SERIES.values():
         ids.extend(s.series_id for s in specs)
     ids.extend(s.series_id for s in GLOBAL_SERIES)
+    # Credit series — deduplicate against region/global (some overlap, e.g. USREC)
+    existing = set(ids)
+    ids.extend(s.series_id for s in CREDIT_SERIES if s.series_id not in existing)
     return ids
 
 
@@ -220,6 +284,25 @@ def build_fetch_configs(
             "sort_order": "asc",
         })
     batches["GLOBAL"] = global_configs
+
+    # Credit-specific series (deduplicate against already-fetched IDs)
+    already_fetched = {
+        cfg["series_id"]
+        for cfgs in batches.values()
+        for cfg in cfgs
+    }
+    credit_configs: list[dict[str, Any]] = []
+    for s in CREDIT_SERIES:
+        if s.series_id in already_fetched:
+            continue
+        credit_configs.append({
+            "series_id": s.series_id,
+            "limit": FREQUENCY_LIMITS.get(s.frequency, 120),
+            "observation_start": observation_start,
+            "sort_order": "asc",
+        })
+    if credit_configs:
+        batches["CREDIT"] = credit_configs
 
     return batches
 

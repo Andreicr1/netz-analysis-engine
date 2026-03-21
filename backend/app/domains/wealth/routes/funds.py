@@ -12,14 +12,12 @@ See SR-4 audit finding.
 import uuid
 from datetime import date
 
-import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config.config_service import ConfigService
 from app.core.config.dependencies import get_config_service
-from app.core.config.settings import settings
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.fund import Fund
@@ -28,11 +26,6 @@ from app.domains.wealth.models.risk import FundRiskMetrics
 from app.domains.wealth.schemas.fund import FundRead, NavPoint
 from app.domains.wealth.schemas.risk import FundRiskRead, FundScoreRead
 from quant_engine.scoring_service import compute_fund_score
-from quant_engine.talib_momentum_service import (
-    compute_flow_momentum,
-    compute_momentum_signals_talib,
-    normalize_flow_momentum,
-)
 
 router = APIRouter(prefix="/funds", tags=["funds (deprecated)"])
 
@@ -92,72 +85,18 @@ async def get_fund_scoring(
     risk_result = await db.execute(risk_stmt)
     risk_map = {r.instrument_id: r for r in risk_result.scalars().all()}
 
-    # Pre-fetch NAV data for momentum computation when flag is enabled.
-    # Uses a ROW_NUMBER() window function subquery to fetch at most 50 rows
-    # per fund at the DB level — avoids full history scan for each fund.
-    NAV_MOMENTUM_WINDOW = 50
-    momentum_map: dict[uuid.UUID, float] = {}
-    if settings.feature_momentum_signals:
-        # Subquery: rank rows within each fund by nav_date DESC
-        ranked_subq = (
-            select(
-                NavTimeseries,
-                func.row_number()
-                .over(
-                    partition_by=NavTimeseries.instrument_id,
-                    order_by=NavTimeseries.nav_date.desc(),
-                )
-                .label("rn"),
-            )
-            .where(
-                NavTimeseries.instrument_id.in_(fund_ids),
-                NavTimeseries.nav.isnot(None),
-            )
-            .subquery()
-        )
-        nav_stmt = (
-            select(NavTimeseries)
-            .join(
-                ranked_subq,
-                (NavTimeseries.instrument_id == ranked_subq.c.instrument_id)
-                & (NavTimeseries.nav_date == ranked_subq.c.nav_date),
-            )
-            .where(ranked_subq.c.rn <= NAV_MOMENTUM_WINDOW)
-            .order_by(NavTimeseries.instrument_id, NavTimeseries.nav_date.desc())
-        )
-        nav_result = await db.execute(nav_stmt)
-        nav_rows = nav_result.scalars().all()
-
-        # Group NAV rows by fund_id (already desc; reverse to get chronological order)
-        nav_by_fund: dict[uuid.UUID, list] = {}
-        for row in nav_rows:
-            nav_by_fund.setdefault(row.instrument_id, []).append(row)
-
-        for fid, rows in nav_by_fund.items():
-            rows_asc = list(reversed(rows))  # already limited to 50 at DB level; restore chronological order
-            close = np.array([float(r.nav) for r in rows_asc])
-            signals = compute_momentum_signals_talib(close)
-            nav_score = signals["momentum_score"]
-
-            # Blend with OBV flow momentum when net flow data is available
-            net_flows = np.array(
-                [float(r.aum_usd) if r.aum_usd is not None else 0.0 for r in rows_asc]
-            )
-            if net_flows.any():
-                slope = compute_flow_momentum(close, net_flows)
-                flow_score = normalize_flow_momentum(slope)
-                # Equal-weight blend: 50% price momentum + 50% flow momentum
-                momentum_map[fid] = round(0.5 * nav_score + 0.5 * flow_score, 2)
-            else:
-                momentum_map[fid] = nav_score
-
+    # Momentum is pre-computed by risk_calc worker — read from FundRiskMetrics
     scoring_result = await config_service.get("liquid_funds", "scoring", actor.organization_id)
     scoring_config = scoring_result.value
 
     scored: list[FundScoreRead] = []
     for fund in funds:
         risk = risk_map.get(fund.fund_id)
-        flows_momentum_score = momentum_map.get(fund.fund_id, 50.0)
+        flows_momentum_score = (
+            float(risk.blended_momentum_score)
+            if risk and risk.blended_momentum_score is not None
+            else 50.0
+        )
         if risk is not None:
             score_val, components = compute_fund_score(
                 risk, flows_momentum_score=flows_momentum_score, config=scoring_config

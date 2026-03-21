@@ -254,16 +254,31 @@ class TestScoreGlobalIndicators:
 class TestRegistryHelpers:
     def test_get_all_series_ids(self):
         ids = get_all_series_ids()
-        assert len(ids) == 45  # 14 + 6 + 7 + 7 + 11
+        # 14 (US) + 6 (EUROPE) + 7 (ASIA) + 7 (EM) + 11 (GLOBAL) + credit-only (deduplicated)
+        assert len(ids) >= 45
         assert "VIXCLS" in ids
         assert "DTWEXBGS" in ids
+        # Credit-specific series included
+        assert "BAA10Y" in ids
+        assert "MORTGAGE30US" in ids
         assert len(set(ids)) == len(ids)  # no duplicates
 
     def test_build_fetch_configs(self):
         batches = build_fetch_configs("2016-01-01")
-        assert set(batches.keys()) == {"US", "EUROPE", "ASIA", "EM", "GLOBAL"}
+        assert {"US", "EUROPE", "ASIA", "EM", "GLOBAL"}.issubset(batches.keys())
+        assert "CREDIT" in batches  # credit-only series batch
         assert len(batches["US"]) == 14
         assert len(batches["GLOBAL"]) == 11
+
+        # Credit batch contains only series not already in other batches
+        credit_ids = {cfg["series_id"] for cfg in batches["CREDIT"]}
+        other_ids = {
+            cfg["series_id"]
+            for domain, cfgs in batches.items()
+            if domain != "CREDIT"
+            for cfg in cfgs
+        }
+        assert credit_ids.isdisjoint(other_ids)
 
         # Verify limit is set per frequency
         for domain_configs in batches.values():

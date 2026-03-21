@@ -389,3 +389,62 @@ async def trigger_run_benchmark_ingest(
         run_benchmark_ingest,
         timeout_seconds=_HEAVY_WORKER_TIMEOUT,
     )
+
+
+@router.post(
+    "/run-treasury-ingestion",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger Treasury data ingestion",
+    description=(
+        "Schedules the Treasury data ingestion worker as a background task. "
+        "Fetches rates, debt snapshots, auction results, exchange rates, and "
+        "interest expense from the US Treasury Fiscal Data API and upserts into "
+        "treasury_data hypertable. Uses advisory lock 900_011. Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_treasury_ingestion(
+    background_tasks: BackgroundTasks,
+    lookback_days: int = Query(default=365, ge=30, le=3650),
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.treasury_ingestion import run_treasury_ingestion
+
+    return await _dispatch_worker(
+        background_tasks, "run-treasury-ingestion", "global",
+        run_treasury_ingestion, lookback_days,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )
+
+
+@router.post(
+    "/run-ofr-ingestion",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger OFR hedge fund data ingestion",
+    description=(
+        "Schedules the OFR hedge fund data ingestion worker as a background task. "
+        "Fetches leverage ratios, industry AUM, strategy breakdowns, repo volumes, "
+        "counterparty metrics, and stress scenarios from the OFR API and upserts "
+        "into ofr_hedge_fund_data hypertable. Uses advisory lock 900_012. Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_ofr_ingestion(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.ofr_ingestion import run_ofr_ingestion
+
+    return await _dispatch_worker(
+        background_tasks, "run-ofr-ingestion", "global",
+        run_ofr_ingestion,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )

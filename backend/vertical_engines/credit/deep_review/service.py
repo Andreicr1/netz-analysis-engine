@@ -965,6 +965,14 @@ def run_deal_deep_review_v4(
                 chapters=len(chapter_texts),
                 signal=im_recommendation,
             )
+            logger.info(
+                "deep_review.v4.memo_to_tone_handoff",
+                deal_id=str(deal_id),
+                chapters=len(chapter_texts),
+                total_chars=sum(len(v) for v in chapter_texts.values()),
+                chapter_chars={k: len(v) for k, v in chapter_texts.items()},
+                signal=im_recommendation,
+            )
 
             _tone_coro = _run_tone_normalizer(
                 chapter_texts=chapter_texts,
@@ -2108,6 +2116,14 @@ async def async_run_deal_deep_review_v4(
                 "deep_review.v4.tone_normalizer.start",
                 deal_id=str(deal_id),
                 chapters=len(chapter_texts),
+                signal=im_recommendation,
+            )
+            logger.info(
+                "deep_review.v4.memo_to_tone_handoff",
+                deal_id=str(deal_id),
+                chapters=len(chapter_texts),
+                total_chars=sum(len(v) for v in chapter_texts.values()),
+                chapter_chars={k: len(v) for k, v in chapter_texts.items()},
                 signal=im_recommendation,
             )
 

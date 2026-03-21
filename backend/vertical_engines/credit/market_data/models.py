@@ -8,8 +8,6 @@ from __future__ import annotations
 from typing import Any
 
 # ── Configuration ─────────────────────────────────────────────────────
-FRED_BASE_URL = "https://api.stlouisfed.org/fred"
-FRED_SLEEP_BETWEEN_CALLS = 0.5
 NFCI_STRESS_THRESHOLD = 0.0
 
 # ── Series Registry ───────────────────────────────────────────────────

@@ -62,11 +62,12 @@ quant = [
 ]
 edgar = [
     "edgartools>=5.23,<6.0",
+    "rapidfuzz>=3.0,<4.0",
 ]
 
 [tool.setuptools.packages.find]
 where = ["backend", "."]
-include = ["app*", "ai_engine*", "vertical_engines*", "quant_engine*", "worker_app*"]
+include = ["app*", "ai_engine*", "vertical_engines*", "quant_engine*", "worker_app*", "data_providers*"]
 
 [build-system]
 requires = ["setuptools>=75"]
@@ -131,7 +132,7 @@ ignore_missing_imports = true
 
 # ── Import architecture enforcement (import-linter) ──────────────────
 [tool.importlinter]
-root_packages = ["vertical_engines", "quant_engine", "app"]
+root_packages = ["vertical_engines", "quant_engine", "app", "data_providers"]
 
 [[tool.importlinter.contracts]]
 name = "Verticals must not import each other"
@@ -468,3 +469,9 @@ name = "Correlation regime service must not import wealth domain"
 type = "forbidden"
 source_modules = ["quant_engine.correlation_regime_service"]
 forbidden_modules = ["app.domains.wealth", "app.domains.credit"]
+
+[[tool.importlinter.contracts]]
+name = "Data providers must not import verticals or app domains or quant_engine"
+type = "forbidden"
+source_modules = ["data_providers"]
+forbidden_modules = ["vertical_engines", "app.domains", "quant_engine"]

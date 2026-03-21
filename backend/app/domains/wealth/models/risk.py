@@ -55,5 +55,12 @@ class FundRiskMetrics(OrganizationScopedMixin, Base):
     manager_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     score_components: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
+    # Momentum signals (pre-computed by risk_calc worker)
+    rsi_14: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    bb_position: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    nav_momentum_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    flow_momentum_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    blended_momentum_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+
     # DTW drift signal (derivative DTW vs block benchmark, length-normalized)
     dtw_drift_score: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))

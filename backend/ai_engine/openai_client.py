@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import json as _json
 import logging
+import os
 import random
 import re
 import threading
@@ -332,13 +333,21 @@ def _create_completion_local(
 
     DEV ONLY — never call in production (gated by settings.use_local_llm).
     LM Studio exposes OpenAI-compatible /v1/chat/completions at LOCAL_LLM_URL.
+
+    The model name from pipeline config (e.g. ``gpt-4.1``) is overridden by
+    ``LOCAL_LLM_MODEL`` env var so LM Studio receives a name it recognises.
     """
     import httpx
 
+    local_model = os.getenv("LOCAL_LLM_MODEL", model)
+    # Prepend /no_think to disable qwen3 reasoning mode (saves tokens + speed)
+    effective_system = system_prompt
+    if os.getenv("LOCAL_LLM_NO_THINK"):
+        effective_system = "/no_think\n" + system_prompt
     payload: dict = {
-        "model": model,
+        "model": local_model,
         "messages": [
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": effective_system},
             {"role": "user", "content": user_prompt},
         ],
         "temperature": temperature,
@@ -349,14 +358,22 @@ def _create_completion_local(
     # don't support json_object mode. JSON output is enforced via prompt.
 
     url = f"{settings.local_llm_url}/chat/completions"
-    response = httpx.post(url, json=payload, timeout=180.0)
+    local_timeout = float(os.getenv("LOCAL_LLM_TIMEOUT", "1800"))
+    response = httpx.post(url, json=payload, timeout=local_timeout)
+    if response.status_code >= 400:
+        logger.error(
+            "LOCAL_LLM_ERROR status=%d body=%s model=%s prompt_chars=%d",
+            response.status_code, response.text[:500], local_model,
+            len(system_prompt) + len(user_prompt),
+        )
     response.raise_for_status()
     data = response.json()
 
-    content = data["choices"][0]["message"]["content"]
+    msg = data["choices"][0]["message"]
+    content = msg.get("content") or msg.get("reasoning_content") or ""
     return CompletionResult(
         text=content,
-        model=data.get("model", model),
+        model=data.get("model", local_model),
         raw=data,
     )
 

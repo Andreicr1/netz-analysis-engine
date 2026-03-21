@@ -34,6 +34,12 @@ class FundRiskRead(BaseModel):
     beta_1y: Decimal | None = None
     information_ratio_1y: Decimal | None = None
     tracking_error_1y: Decimal | None = None
+    rsi_14: Decimal | None = None
+    bb_position: Decimal | None = None
+    nav_momentum_score: Decimal | None = None
+    flow_momentum_score: Decimal | None = None
+    blended_momentum_score: Decimal | None = None
+    dtw_drift_score: Decimal | None = None
     manager_score: Decimal | None = None
     score_components: dict[str, Any] | None = None
     computed_at: datetime | None = None
