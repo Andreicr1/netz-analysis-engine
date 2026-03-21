@@ -52,3 +52,4 @@ pgdata/
 Deals/
 scripts/
 dev.ps1
+backend/.sec_seed_checkpoint.json

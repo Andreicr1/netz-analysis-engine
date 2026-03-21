@@ -45,6 +45,21 @@ logger = structlog.get_logger()
 
 CHECKPOINT_FILE = Path(".sec_seed_checkpoint.json")
 
+# Semaphore: matches _sec_executor max_workers=4 in shared.py.
+# Prevents saturating EDGAR thread pool and keeps rate limiter effective.
+_MANAGER_CONCURRENCY = 4
+
+# Lock: serialises checkpoint writes from concurrent manager tasks.
+_checkpoint_lock: asyncio.Lock | None = None
+
+
+def _get_checkpoint_lock() -> asyncio.Lock:
+    """Return (or lazily create) the checkpoint lock on the running event loop."""
+    global _checkpoint_lock  # noqa: PLW0603
+    if _checkpoint_lock is None:
+        _checkpoint_lock = asyncio.Lock()
+    return _checkpoint_lock
+
 
 def _load_checkpoint() -> dict[str, Any]:
     """Load checkpoint from disk. Returns fresh state if missing."""
@@ -195,104 +210,118 @@ async def phase2_thirteenf_holdings(
     db_factory = _get_db_session_factory()
     thirteenf = ThirteenFService(db_session_factory=db_factory)
     checkpoint = _load_checkpoint()
+    sem = asyncio.Semaphore(_MANAGER_CONCURRENCY)
+    lock = _get_checkpoint_lock()
 
-    # Pass 1: Recent quarters for all managers
+    # ── Pass 1: Recent quarters — all managers concurrently ──────────
+
     logger.info(
         "phase2.pass1_start",
         managers=len(managers),
         quarters=priority_quarters,
+        concurrency=_MANAGER_CONCURRENCY,
     )
-    for name, ticker, crd, notes in managers:
-        cik = await _resolve_cik_for_seed(name, ticker)
-        if not cik:
-            logger.warning("phase2.cik_not_resolved", name=name, crd=crd)
-            stats["no_13f"] += 1
-            continue
 
-        checkpoint_key = f"{cik}:recent"
-        if checkpoint_key in checkpoint["completed"]:
-            logger.info("phase2.skip_already_done", cik=cik, name=name)
-            stats["skipped"] += 1
-            continue
+    async def _fetch_recent(name: str, ticker: str | None, crd: str | None) -> None:
+        async with sem:
+            cik = await _resolve_cik_for_seed(name, ticker)
+            if not cik:
+                logger.warning("phase2.cik_not_resolved", name=name, crd=crd)
+                async with lock:
+                    stats["no_13f"] += 1
+                return
 
-        try:
-            holdings = await thirteenf.fetch_holdings(
-                cik,
-                quarters=priority_quarters,
-                force_refresh=False,
-            )
-            count = len(holdings)
-            stats["managers_processed"] += 1
-            stats["holdings_ingested"] += count
+            async with lock:
+                if f"{cik}:recent" in checkpoint["completed"]:
+                    logger.info("phase2.skip_already_done", cik=cik, name=name)
+                    stats["skipped"] += 1
+                    return
 
-            if count == 0:
-                stats["no_13f"] += 1
-                logger.info("phase2.no_holdings", cik=cik, name=name)
-            else:
-                logger.info(
-                    "phase2.holdings_ingested",
+            try:
+                holdings = await thirteenf.fetch_holdings(
+                    cik,
+                    quarters=priority_quarters,
+                    force_refresh=False,
+                )
+                count = len(holdings)
+                async with lock:
+                    stats["managers_processed"] += 1
+                    stats["holdings_ingested"] += count
+                    if count == 0:
+                        stats["no_13f"] += 1
+                    checkpoint["completed"].add(f"{cik}:recent")
+                    _save_checkpoint(checkpoint)
+
+                log_fn = logger.info if count > 0 else logger.info
+                log_fn(
+                    "phase2.holdings_ingested" if count > 0 else "phase2.no_holdings",
                     cik=cik,
                     name=name,
-                    positions=count,
+                    **({} if count == 0 else {"positions": count}),
                 )
+            except Exception as exc:
+                logger.error("phase2.holdings_failed", cik=cik, name=name, error=str(exc))
+                async with lock:
+                    checkpoint["failed"][cik] = str(exc)
+                    _save_checkpoint(checkpoint)
+                    stats["failed"] += 1
 
-            checkpoint["completed"].add(checkpoint_key)
-            _save_checkpoint(checkpoint)
-
-        except Exception as exc:
-            logger.error("phase2.holdings_failed", cik=cik, name=name, error=str(exc))
-            checkpoint["failed"][cik] = str(exc)
-            _save_checkpoint(checkpoint)
-            stats["failed"] += 1
-            continue
-
-        await asyncio.sleep(2.0)
+    await asyncio.gather(*[
+        _fetch_recent(name, ticker, crd)
+        for name, ticker, crd, _notes in managers
+    ])
 
     _print_phase_summary("Phase 2 — 13F Holdings (Pass 1: Recent)", stats)
 
-    # Pass 2: Full history (remaining quarters)
+    # ── Pass 2: Full history ─────────────────────────────────────────
+
     if recent_only:
         logger.info("phase2.pass2_skipped_recent_only")
         return stats
 
-    logger.info("phase2.pass2_start", managers=len(managers), quarters=full_quarters)
-    pass2_stats = {"computed": 0, "failed": 0}
+    logger.info(
+        "phase2.pass2_start",
+        managers=len(managers),
+        quarters=full_quarters,
+        concurrency=_MANAGER_CONCURRENCY,
+    )
+    pass2_stats: dict[str, int] = {"computed": 0, "failed": 0}
 
-    for name, ticker, crd, notes in managers:
-        cik = await _resolve_cik_for_seed(name, ticker)
-        if not cik:
-            continue
+    async def _fetch_full(name: str, ticker: str | None) -> None:
+        async with sem:
+            cik = await _resolve_cik_for_seed(name, ticker)
+            if not cik:
+                return
 
-        checkpoint_key = f"{cik}:full"
-        if checkpoint_key in checkpoint["completed"]:
-            continue
+            async with lock:
+                if f"{cik}:full" in checkpoint["completed"]:
+                    return
 
-        try:
-            holdings = await thirteenf.fetch_holdings(
-                cik,
-                quarters=full_quarters,
-                force_refresh=False,
-            )
-            pass2_stats["computed"] += 1
-            logger.info(
-                "phase2.full_history_complete",
-                cik=cik,
-                name=name,
-                positions=len(holdings),
-            )
-            checkpoint["completed"].add(checkpoint_key)
-            _save_checkpoint(checkpoint)
-        except Exception as exc:
-            logger.error(
-                "phase2.full_history_failed",
-                cik=cik,
-                name=name,
-                error=str(exc),
-            )
-            pass2_stats["failed"] += 1
-            continue
+            try:
+                holdings = await thirteenf.fetch_holdings(
+                    cik,
+                    quarters=full_quarters,
+                    force_refresh=False,
+                )
+                async with lock:
+                    pass2_stats["computed"] += 1
+                    checkpoint["completed"].add(f"{cik}:full")
+                    _save_checkpoint(checkpoint)
+                logger.info(
+                    "phase2.full_history_complete",
+                    cik=cik,
+                    name=name,
+                    positions=len(holdings),
+                )
+            except Exception as exc:
+                logger.error("phase2.full_history_failed", cik=cik, name=name, error=str(exc))
+                async with lock:
+                    pass2_stats["failed"] += 1
 
-        await asyncio.sleep(2.0)
+    await asyncio.gather(*[
+        _fetch_full(name, ticker)
+        for name, ticker, _crd, _notes in managers
+    ])
 
     logger.info("phase2.pass2_complete", **pass2_stats)
     return stats
