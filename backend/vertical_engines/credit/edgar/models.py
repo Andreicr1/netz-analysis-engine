@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from data_providers.sec.models import CikResolution as CikResolution
+
 # ── Enums ─────────────────────────────────────────────────────────
 
 
@@ -34,18 +36,6 @@ class GoingConcernVerdict(str, Enum):
     CONFIRMED = "confirmed"
     MITIGATED = "mitigated"
     NONE = "none"
-
-
-# ── CIK Resolution ───────────────────────────────────────────────
-
-
-@dataclass
-class CikResolution:
-    """Result of CIK number resolution for a single entity."""
-    cik: str | None
-    company_name: str | None
-    method: str  # "ticker", "fuzzy", "blob_light", "blob_heavy", "not_found"
-    confidence: float  # 0.0-1.0
 
 
 # ── Financial Data ────────────────────────────────────────────────

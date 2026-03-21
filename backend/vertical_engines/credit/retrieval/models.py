@@ -57,7 +57,7 @@ EXPANDED_SEARCH_TIER: tuple[int, int] = (200, 300)
 
 # ── Total Corpus Budget ────────────────────────────────────────────
 
-TOTAL_BUDGET_CHARS: int = 300_000
+TOTAL_BUDGET_CHARS: int = 100_000  # TODO: revert to 300_000 after E2E validation
 """Hard character limit for the global corpus."""
 
 # ── Critical Document Types (guaranteed inclusion) ─────────────────

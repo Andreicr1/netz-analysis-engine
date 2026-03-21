@@ -42,6 +42,7 @@ import pytest
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 APP_ROOT = BACKEND_ROOT / "app"
 QUANT_ENGINE_ROOT = BACKEND_ROOT / "quant_engine"
+DATA_PROVIDERS_ROOT = BACKEND_ROOT / "data_providers"
 
 # ---------------------------------------------------------------------------
 # Canonical set of global-table ORM model symbols and their import paths.
@@ -51,7 +52,12 @@ QUANT_ENGINE_ROOT = BACKEND_ROOT / "quant_engine"
 # ---------------------------------------------------------------------------
 GLOBAL_TABLE_MODELS: dict[str, set[str]] = {
     # macro_data
-    "app.shared.models": {"MacroData", "MacroRegionalSnapshot", "MacroSnapshot"},
+    "app.shared.models": {
+        "MacroData", "MacroRegionalSnapshot", "MacroSnapshot",
+        "SecManager", "SecManagerFund", "SecManagerTeam",
+        "Sec13fHolding", "Sec13fDiff", "SecInstitutionalAllocation",
+        "SecCusipTickerMap",
+    },
     "app.domains.wealth.models.macro": {"MacroData"},
     # allocation_blocks
     "app.domains.wealth.models.block": {"AllocationBlock"},
@@ -87,7 +93,7 @@ ALL_GLOBAL_MODEL_NAMES: frozenset[str] = frozenset(
 # ---------------------------------------------------------------------------
 ALLOWLISTED_GLOBAL_TABLE_CONSUMERS: dict[str, str] = {
     # ── Model definitions (canonical source) ────────────────────────────────
-    "app/shared/models.py": "model — canonical definitions for MacroData, MacroRegionalSnapshot, MacroSnapshot",
+    "app/shared/models.py": "model — canonical definitions for MacroData, MacroRegionalSnapshot, MacroSnapshot, SecManager, SecManagerFund, SecManagerTeam, Sec13fHolding, Sec13fDiff, SecInstitutionalAllocation",
     "app/domains/wealth/models/macro.py": "model — backward-compat re-export shim for MacroData",
     "app/domains/wealth/models/block.py": "model — canonical definition for AllocationBlock",
     "app/domains/wealth/models/benchmark_nav.py": "model — canonical definition for BenchmarkNav",
@@ -133,6 +139,11 @@ ALLOWLISTED_GLOBAL_TABLE_CONSUMERS: dict[str, str] = {
     "app/core/db/migrations/versions/0015_admin_rls_bypass.py": "migration — admin RLS bypass DDL",
     # ── Prompts service (AdminAuditLog for audit trail) ──────────────────────
     "app/core/prompts/prompt_service.py": "admin — uses AdminAuditLog for audit trail; called from admin routes only",
+    # ── Data providers — background workers that upsert to global SEC tables ─
+    "data_providers/sec/adv_service.py": "write — upserts SecManager and SecManagerFund via async_session_factory (bulk CSV ingestion, no RLS)",
+    "data_providers/sec/thirteenf_service.py": "write — upserts Sec13fHolding and Sec13fDiff via async_session_factory (13F-HR ingestion, no RLS)",
+    "data_providers/sec/institutional_service.py": "write — reads Sec13fHolding CUSIPs and upserts SecInstitutionalAllocation via async_session_factory (13F reverse lookup, no RLS)",
+    "data_providers/sec/seed/populate_seed.py": "write — seed script upserts SecCusipTickerMap via async_session_factory (Phase 6 CUSIP→ticker mapping, no RLS)",
     # ── Tests ────────────────────────────────────────────────────────────────
     "tests/test_global_table_isolation.py": "test — this file",
     "tests/test_rls_audit.py": "test — imports GLOBAL_TABLES set (strings, not ORM models)",
@@ -297,7 +308,7 @@ class TestGlobalTableImportAllowlist:
         """
         violations: list[str] = []
 
-        search_roots = [APP_ROOT, QUANT_ENGINE_ROOT]
+        search_roots = [APP_ROOT, QUANT_ENGINE_ROOT, DATA_PROVIDERS_ROOT]
         for root in search_roots:
             if not root.exists():
                 continue

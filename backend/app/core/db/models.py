@@ -24,6 +24,10 @@ from app.core.db.base import (
 class AuditEvent(Base, IdMixin, OrganizationScopedMixin, AuditMetaMixin):
     """Immutable audit event for entity-level changes. RLS-scoped by organization_id.
 
+    TimescaleDB hypertable partitioned by created_at (1-week chunks).
+    Compression: 1 month. segmentby: organization_id.
+    Always include created_at filter in queries for chunk pruning.
+
     Tracks CREATE / UPDATE / DELETE actions across all domain entities
     (Deal, Document, Fund, etc.) with optional before/after JSONB snapshots.
     """

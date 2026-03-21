@@ -17,7 +17,7 @@ from typing import Any
 
 import structlog
 
-from vertical_engines.credit.edgar.cik_resolver import sanitize_entity_name
+from data_providers.sec.shared import sanitize_entity_name
 
 logger = structlog.get_logger()
 

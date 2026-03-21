@@ -11,13 +11,12 @@ Key invariants:
 from __future__ import annotations
 
 import dataclasses
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 import structlog
 
-from vertical_engines.credit.edgar.cik_resolver import resolve_cik
+from data_providers.sec.shared import SEC_USER_AGENT, check_edgar_rate, resolve_cik
 from vertical_engines.credit.edgar.financials import (
     calculate_ratios,
     extract_am_platform_metrics,
@@ -30,35 +29,9 @@ from vertical_engines.credit.edgar.models import EdgarEntityResult
 
 logger = structlog.get_logger()
 
-# SEC requires a descriptive User-Agent on all EDGAR requests
-_SEC_USER_AGENT = "Netz Analysis Engine tech@netzco.com"
-
 # SIC codes for metric type routing
 _AM_PLATFORM_SIC_CODES = {"6282", "6726", "6199"}
 _INVESTMENT_SIC_CODES = {"6726", "6798", "6199", "6770"}
-
-
-def _check_distributed_rate(max_per_second: int = 8) -> None:
-    """Redis-based distributed rate check for SEC EDGAR compliance.
-
-    Sliding window counter: key = edgar:rate:{current_second}, TTL = 2s.
-    If counter exceeds max_per_second, sleep until next second.
-    Falls back silently if Redis is unavailable.
-    """
-    try:
-        import redis
-
-        from app.core.config.settings import settings
-
-        r = redis.from_url(settings.redis_url, decode_responses=True)
-        key = f"edgar:rate:{int(time.time())}"
-        count = r.incr(key)
-        if count == 1:
-            r.expire(key, 2)
-        if count > max_per_second:
-            time.sleep(1.0)  # Wait for next second window
-    except Exception:
-        pass  # Fall back to edgartools-only rate limiting
 
 
 def fetch_edgar_data(
@@ -82,7 +55,7 @@ def fetch_edgar_data(
         metrics_type, going_concern, form_d, warnings, lookup_entity,
         resolution_method, resolution_confidence
     """
-    _check_distributed_rate()
+    check_edgar_rate()
 
     result = EdgarEntityResult(
         entity_name=entity_name,
@@ -365,7 +338,7 @@ def _search_form_d(entity_name: str) -> dict[str, Any] | None:
             "startdt": "2020-01-01",
         }
         headers = {
-            "User-Agent": _SEC_USER_AGENT,
+            "User-Agent": SEC_USER_AGENT,
             "Accept-Encoding": "gzip, deflate",
         }
         resp = httpx.get(url, params=params, headers=headers, timeout=20.0)

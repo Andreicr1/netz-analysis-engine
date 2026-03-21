@@ -11,7 +11,7 @@ Covers:
 """
 from __future__ import annotations
 
-from vertical_engines.credit.edgar.cik_resolver import sanitize_entity_name
+from data_providers.sec.shared import sanitize_entity_name
 from vertical_engines.credit.edgar.context_serializer import build_edgar_multi_entity_context
 from vertical_engines.credit.edgar.entity_extraction import extract_searchable_entities
 from vertical_engines.credit.edgar.financials import FinancialStatements, calculate_ratios
