@@ -448,3 +448,121 @@ async def trigger_run_ofr_ingestion(
         run_ofr_ingestion,
         timeout_seconds=_HEAVY_WORKER_TIMEOUT,
     )
+
+
+@router.post(
+    "/run-sec-refresh",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger SEC aggregate refresh + cache",
+    description=(
+        "Schedules the SEC refresh worker as a background task. "
+        "Refreshes TimescaleDB continuous aggregates (sec_13f_holdings_agg, "
+        "sec_13f_drift_agg) and writes per-manager summary stats to Redis "
+        "for the manager screener. Uses advisory lock 900_016. Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_sec_refresh(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.sec_refresh import run_sec_refresh
+
+    return await _dispatch_worker(
+        background_tasks, "run-sec-refresh", "global",
+        run_sec_refresh,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )
+
+
+@router.post(
+    "/run-nport-ingestion",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger N-PORT holdings ingestion",
+    description=(
+        "Schedules the N-PORT ingestion worker as a background task. "
+        "Fetches monthly portfolio holdings from SEC N-PORT filings for "
+        "all active managers with CIKs. Parses XML filings and upserts "
+        "into sec_nport_holdings hypertable. Uses advisory lock 900_018. "
+        "Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_nport_ingestion(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.nport_ingestion import run_nport_ingestion
+
+    return await _dispatch_worker(
+        background_tasks, "run-nport-ingestion", "global",
+        run_nport_ingestion,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )
+
+
+@router.post(
+    "/run-bis-ingestion",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger BIS statistics ingestion",
+    description=(
+        "Schedules the BIS ingestion worker as a background task. "
+        "Fetches credit-to-GDP gap, debt service ratio, and property "
+        "prices from the BIS SDMX API for 44 countries and upserts into "
+        "bis_statistics hypertable. Uses advisory lock 900_014. Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_bis_ingestion(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.bis_ingestion import run_bis_ingestion
+
+    return await _dispatch_worker(
+        background_tasks, "run-bis-ingestion", "global",
+        run_bis_ingestion,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )
+
+
+@router.post(
+    "/run-imf-ingestion",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger IMF WEO forecast ingestion",
+    description=(
+        "Schedules the IMF WEO ingestion worker as a background task. "
+        "Fetches 5-year forward GDP, inflation, fiscal balance, and govt "
+        "debt forecasts from the IMF DataMapper API for 44 countries and "
+        "upserts into imf_weo_forecasts hypertable. Uses advisory lock "
+        "900_015. Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_imf_ingestion(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.imf_ingestion import run_imf_ingestion
+
+    return await _dispatch_worker(
+        background_tasks, "run-imf-ingestion", "global",
+        run_imf_ingestion,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )

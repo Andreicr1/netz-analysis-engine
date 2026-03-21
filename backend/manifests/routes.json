@@ -361,6 +361,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/analytics/optimize/pareto/{job_id}/stream",
+    "name": "stream_pareto_progress"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/analytics/strategy-drift/alerts",
     "name": "list_drift_alerts"
   },
@@ -758,6 +763,36 @@
     "method": "GET",
     "path": "/api/v1/macro/snapshot",
     "name": "get_macro_snapshot"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/manager-screener/",
+    "name": "list_managers"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/manager-screener/managers/{crd}/drift",
+    "name": "get_drift"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/manager-screener/managers/{crd}/holdings",
+    "name": "get_holdings"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/manager-screener/managers/{crd}/institutional",
+    "name": "get_institutional"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/manager-screener/managers/{crd}/profile",
+    "name": "get_profile"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/manager-screener/managers/{crd}/universe-status",
+    "name": "get_universe_status"
   },
   {
     "method": "GET",
@@ -1471,6 +1506,16 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/manager-screener/managers/compare",
+    "name": "compare_managers"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/manager-screener/managers/{crd}/add-to-universe",
+    "name": "add_to_universe"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/model-portfolios",
     "name": "create_model_portfolio"
   },
@@ -1601,6 +1646,16 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/workers/run-nport-ingestion",
+    "name": "trigger_run_nport_ingestion"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-ofr-ingestion",
+    "name": "trigger_run_ofr_ingestion"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/workers/run-portfolio-eval",
     "name": "trigger_run_portfolio_eval"
   },
@@ -1613,6 +1668,16 @@
     "method": "POST",
     "path": "/api/v1/workers/run-screening-batch",
     "name": "trigger_run_screening_batch"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-sec-refresh",
+    "name": "trigger_run_sec_refresh"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-treasury-ingestion",
+    "name": "trigger_run_treasury_ingestion"
   },
   {
     "method": "POST",

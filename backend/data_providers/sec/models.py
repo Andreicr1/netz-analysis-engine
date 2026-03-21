@@ -74,6 +74,16 @@ class AdvTeamMember:
     bio_summary: str | None = None
 
 
+@dataclass(frozen=True)
+class AdvBrochureSection:
+    """Classified section from ADV Part 2A brochure PDF."""
+
+    crd_number: str
+    section: str  # e.g. "investment_philosophy", "risk_management"
+    content: str
+    filing_date: str  # ISO date
+
+
 # ── 13F Holdings ─────────────────────────────────────────────────
 
 
@@ -167,6 +177,28 @@ class CusipTickerResult:
     composite_figi: str | None
     resolved_via: str  # "openfigi" | "unresolved"
     is_tradeable: bool
+
+
+# ── N-PORT Holdings ─────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class NportHolding:
+    """Single position from an N-PORT monthly filing."""
+
+    cik: str
+    report_date: str
+    cusip: str
+    isin: str | None
+    issuer_name: str | None
+    asset_class: str | None
+    sector: str | None
+    market_value: int | None
+    quantity: float | None
+    currency: str | None
+    pct_of_nav: float | None
+    is_restricted: bool | None
+    fair_value_level: str | None
 
 
 # ── Generic Result Wrapper ───────────────────────────────────────

@@ -5,10 +5,12 @@ Covers:
   - ingest_bulk_adv() — CSV parsing, upsert semantics, ZIP handling
   - fetch_manager() — DB read, CRD validation, not found
   - fetch_manager_funds() — DB read
-  - fetch_manager_team() — stub returns empty list
+  - fetch_manager_team() — DB read + OCR extraction
   - _parse_iapd_hit() — field extraction, address parsing
   - _parse_int() / _parse_date() — CSV value parsers
   - _validate_crd() — format validation
+  - _classify_brochure_sections() — ADV Item heading classification
+  - _parse_team_from_brochure() — team member regex extraction
 """
 from __future__ import annotations
 
@@ -21,9 +23,11 @@ import pytest
 
 from data_providers.sec.adv_service import (
     AdvService,
+    _classify_brochure_sections,
     _parse_date,
     _parse_iapd_hit,
     _parse_int,
+    _parse_team_from_brochure,
     _validate_crd,
 )
 from data_providers.sec.models import AdvFund, AdvManager
@@ -527,3 +531,98 @@ class TestReadCsvFile:
 
         with pytest.raises(ValueError, match="No CSV file found"):
             AdvService._read_csv_file(str(zip_file))
+
+
+# ── _classify_brochure_sections() ─────────────────────────────────
+
+
+class TestClassifyBrochureSections:
+    def test_detects_adv_items(self):
+        text = (
+            "Some intro text here.\n\n"
+            "Item 4 – Advisory Business\n"
+            "We are a registered investment adviser.\n\n"
+            "Item 5 – Fees and Compensation\n"
+            "We charge a management fee of 1%.\n\n"
+            "Item 8 – Methods of Analysis\n"
+            "We use fundamental analysis.\n"
+        )
+        sections = _classify_brochure_sections("99999", text)
+        keys = [s.section for s in sections]
+        assert "advisory_business" in keys
+        assert "fees_compensation" in keys
+        assert "methods_of_analysis" in keys
+        for s in sections:
+            assert s.crd_number == "99999"
+            assert len(s.content) > 20
+
+    def test_no_headings_stores_full_brochure(self):
+        text = "This is a brochure with no standard headings but has plenty of content about the firm. We focus on long-term value creation across global markets with a diversified multi-asset portfolio."
+        sections = _classify_brochure_sections("12345", text)
+        assert len(sections) == 1
+        assert sections[0].section == "full_brochure"
+
+    def test_empty_text_returns_empty(self):
+        assert _classify_brochure_sections("12345", "") == []
+        assert _classify_brochure_sections("12345", "short") == []
+
+    def test_investment_philosophy_detected(self):
+        text = (
+            "Intro\n\nInvestment Philosophy\n"
+            "We believe in long-term value investing with a focus on quality."
+        )
+        sections = _classify_brochure_sections("11111", text)
+        keys = [s.section for s in sections]
+        assert "investment_philosophy" in keys
+
+    def test_esg_integration_detected(self):
+        text = "Header\n\nESG Integration Policy\nWe incorporate ESG factors into our investment decisions across all strategies."
+        sections = _classify_brochure_sections("22222", text)
+        keys = [s.section for s in sections]
+        assert "esg_integration" in keys
+
+
+# ── _parse_team_from_brochure() ───────────────────────────────────
+
+
+class TestParseTeamFromBrochure:
+    def test_extracts_team_members(self):
+        text = (
+            "Brochure Supplement\n\n"
+            "John Smith, CFA\nManaging Director\n"
+            "Mr. Smith has 15 years of experience in portfolio management. "
+            "He holds a CFA charter and a MBA from Wharton.\n\n"
+            "Jane Doe, Portfolio Manager\n"
+            "Ms. Doe joined the firm in 2010 after 8 years at Goldman Sachs.\n"
+        )
+        members = _parse_team_from_brochure("99999", text)
+        names = [m.person_name for m in members]
+        assert "John Smith" in names
+        assert "Jane Doe" in names
+
+        john = next(m for m in members if m.person_name == "John Smith")
+        assert "CFA" in john.certifications
+        assert john.years_experience == 15
+
+    def test_deduplicates_names(self):
+        text = (
+            "John Smith, CFA\nManaging Director\nBio text here.\n\n"
+            "Some other text.\n\n"
+            "John Smith, CFA\nManaging Director\nRepeated entry.\n"
+        )
+        members = _parse_team_from_brochure("12345", text)
+        names = [m.person_name for m in members]
+        assert names.count("John Smith") == 1
+
+    def test_empty_text_returns_empty(self):
+        assert _parse_team_from_brochure("12345", "") == []
+
+    def test_extracts_certifications(self):
+        text = (
+            "Robert Johnson, CFA, CAIA\nSenior Vice President\n"
+            "Robert holds the CFA and CAIA designations with 20 years of experience.\n"
+        )
+        members = _parse_team_from_brochure("33333", text)
+        assert len(members) == 1
+        assert "CFA" in members[0].certifications
+        assert "CAIA" in members[0].certifications

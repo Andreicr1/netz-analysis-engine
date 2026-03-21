@@ -8,17 +8,20 @@ for all active funds and stores results in fund_risk_metrics.
 """
 
 import asyncio
+import json
 import uuid
 from collections import defaultdict
 from datetime import date, timedelta
 
 import numpy as np
+import redis.asyncio as aioredis
 import structlog
 from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.engine import async_session_factory as async_session
+from app.core.jobs.tracker import get_redis_pool
 from app.core.tenancy.middleware import set_rls_context
 from app.domains.wealth.models.fund import Fund
 from app.domains.wealth.models.macro import MacroData
@@ -524,6 +527,56 @@ async def _compute_block_dtw_scores(
     return dtw_scores
 
 
+async def _write_risk_cache(
+    org_id: "uuid.UUID",
+    eval_date: date,
+    computed: list[tuple["Fund", dict]],
+) -> None:
+    """Write risk/scoring cache to Redis for fast dashboard reads."""
+    try:
+        r = aioredis.Redis(connection_pool=get_redis_pool())
+        try:
+            pipe = r.pipeline()
+
+            # Cache 1: correlation refresh marker
+            correlation_key = f"correlation:{str(org_id)}:{eval_date.isoformat()}"
+            correlation_value = json.dumps({
+                "status": "refreshed",
+                "funds_computed": len(computed),
+                "calc_date": eval_date.isoformat(),
+            })
+            pipe.set(correlation_key, correlation_value, ex=86400)
+
+            # Cache 2: scoring leaderboard (top 50 by sharpe_1y)
+            leaderboard = []
+            for fund, metrics in computed:
+                leaderboard.append({
+                    "fund_id": str(fund.fund_id),
+                    "ticker": fund.ticker,
+                    "sharpe_1y": metrics.get("sharpe_1y"),
+                    "return_1y": metrics.get("return_1y"),
+                    "volatility_1y": metrics.get("volatility_1y"),
+                    "blended_momentum_score": metrics.get("blended_momentum_score"),
+                })
+            leaderboard.sort(
+                key=lambda x: (x["sharpe_1y"] is not None, x["sharpe_1y"] or 0),
+                reverse=True,
+            )
+            leaderboard_key = f"scoring:leaderboard:{str(org_id)}"
+            pipe.set(leaderboard_key, json.dumps(leaderboard[:50]), ex=86400)
+
+            await pipe.execute()
+            logger.info(
+                "Risk cache written",
+                org_id=str(org_id),
+                leaderboard_size=min(len(leaderboard), 50),
+            )
+        finally:
+            await r.aclose()
+    except Exception:
+        logger.warning("Failed to write risk cache to Redis — continuing without cache")
+
+
 async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> dict[str, int]:
     """Compute risk metrics for all active funds with NAV data."""
     logger.info("Starting risk calculation", as_of_date=str(as_of_date))
@@ -635,6 +688,8 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
                 # Single commit for the entire batch — atomic and WAL-efficient
                 await db.commit()
                 logger.info("Risk metrics batch committed", funds_staged=len(computed))
+
+                await _write_risk_cache(org_id, eval_date, computed)
             except Exception:
                 await db.rollback()
                 logger.exception("Risk metrics batch failed — transaction rolled back")

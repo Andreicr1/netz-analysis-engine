@@ -98,6 +98,7 @@ from app.domains.wealth.routes.fact_sheets import router as wealth_fact_sheets_r
 from app.domains.wealth.routes.funds import router as wealth_funds_router
 from app.domains.wealth.routes.instruments import router as wealth_instruments_router
 from app.domains.wealth.routes.macro import router as wealth_macro_router
+from app.domains.wealth.routes.manager_screener import router as wealth_manager_screener_router
 from app.domains.wealth.routes.model_portfolios import router as wealth_model_portfolios_router
 from app.domains.wealth.routes.portfolios import router as wealth_portfolios_router
 from app.domains.wealth.routes.risk import router as wealth_risk_router
@@ -352,6 +353,7 @@ api_v1.include_router(wealth_model_portfolios_router)
 api_v1.include_router(wealth_fact_sheets_router)
 api_v1.include_router(wealth_content_router)
 api_v1.include_router(wealth_screener_router)
+api_v1.include_router(wealth_manager_screener_router)
 api_v1.include_router(wealth_strategy_drift_router)
 api_v1.include_router(wealth_attribution_router)
 api_v1.include_router(wealth_correlation_regime_router)

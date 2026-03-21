@@ -3,7 +3,8 @@
 The IAPD API only exposes a search endpoint (basic identification).
 Detailed data (AUM, fees, private funds, compliance) comes from monthly
 bulk CSV downloads published by SEC FOIA. Team bios come from Part 2A
-PDF brochures (OCR via Mistral — deferred to M2).
+PDF brochures (text extraction via PyMuPDF — SEC requires text-searchable
+PDFs for IARD submission since 2010, so OCR is unnecessary).
 
 Async service. Instantiate ONCE in FastAPI lifespan().
 """
@@ -14,15 +15,15 @@ import csv
 import io
 import re
 import zipfile
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Callable
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from app.shared.models import SecManager, SecManagerFund
-from data_providers.sec.models import AdvFund, AdvManager, AdvTeamMember
+from app.shared.models import SecManager, SecManagerBrochureText, SecManagerFund, SecManagerTeam
+from data_providers.sec.models import AdvBrochureSection, AdvFund, AdvManager, AdvTeamMember
 from data_providers.sec.shared import (
     SEC_USER_AGENT,
     check_iapd_rate,
@@ -35,6 +36,47 @@ _CRD_RE = re.compile(r"^\d{1,10}$")
 
 # IAPD search API — única rota pública documentada
 IAPD_SEARCH_URL = "https://api.adviserinfo.sec.gov/search/firm"
+
+# ── Part 2A brochure download ────────────────────────────────────
+# reports.adviserinfo.sec.gov serves PDF brochures by CRD number.
+_ADV_BROCHURE_URL = "https://reports.adviserinfo.sec.gov/reports/ADV/{crd}/R_0{crd}.pdf"
+
+# ── Brochure section classification ─────────────────────────────
+# Map section headings (from ADV Part 2A standard Items) to stable keys.
+_SECTION_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("advisory_business", re.compile(r"item\s*4.*advisory\s*business", re.I)),
+    ("fees_compensation", re.compile(r"item\s*5.*fees\s*and\s*compensation", re.I)),
+    ("performance_fees", re.compile(r"item\s*6.*performance.based\s*fees", re.I)),
+    ("client_types", re.compile(r"item\s*7.*types\s*of\s*clients", re.I)),
+    ("methods_of_analysis", re.compile(r"item\s*8.*methods\s*of\s*analysis", re.I)),
+    ("disciplinary_information", re.compile(r"item\s*9.*disciplinary\s*info", re.I)),
+    ("other_financial_activities", re.compile(r"item\s*10.*other\s*financial", re.I)),
+    ("code_of_ethics", re.compile(r"item\s*11.*code\s*of\s*ethics", re.I)),
+    ("brokerage_practices", re.compile(r"item\s*12.*brokerage\s*practices", re.I)),
+    ("review_of_accounts", re.compile(r"item\s*13.*review\s*of\s*accounts", re.I)),
+    ("client_referrals", re.compile(r"item\s*14.*client\s*referrals", re.I)),
+    ("custody", re.compile(r"item\s*15.*custody", re.I)),
+    ("investment_discretion", re.compile(r"item\s*16.*investment\s*discretion", re.I)),
+    ("voting_client_securities", re.compile(r"item\s*17.*voting\s*client\s*securities", re.I)),
+    ("financial_information", re.compile(r"item\s*18.*financial\s*info", re.I)),
+    # Common non-numbered sections
+    ("investment_philosophy", re.compile(r"investment\s*(philosophy|approach|strategy)", re.I)),
+    ("risk_management", re.compile(r"risk\s*management", re.I)),
+    ("esg_integration", re.compile(r"\besg\b.*integration|responsible\s*invest", re.I)),
+]
+
+# Team extraction patterns (Part 2B brochure supplement)
+_TEAM_PERSON_RE = re.compile(
+    r"^(?:##?\s*)?([A-Z][a-z]+(?:[ \t]+[A-Z][a-z]+){1,3})"
+    r"(?:[ \t]*,[ \t]*|[ \t]*\n[ \t]*)"
+    r"((?:CFA|CFP|CAIA|CPA|MBA|PhD|JD|CIO|CEO|Managing\s+Director|"
+    r"Portfolio\s+Manager|Partner|Principal|Analyst|Director|"
+    r"Senior\s+Vice\s+President|Vice\s+President|Chief)[^\n]*)",
+    re.MULTILINE,
+)
+
+_CERTIFICATION_RE = re.compile(r"\b(CFA|CFP|CAIA|CPA|FRM|CIPM)\b")
+_EXPERIENCE_RE = re.compile(r"(\d{1,2})\s*(?:\+\s*)?years?\s*(?:of\s*)?(?:experience|in\s*the\s*industry)", re.I)
 
 # Bulk ZIP — known URLs with fallback (SEC filename pattern is not deterministic).
 # DD in ia{MM}{DD}{YY}.zip varies by month — no reliable formula.
@@ -143,7 +185,7 @@ class AdvService:
     The IAPD API only exposes a search endpoint (basic identification).
     Detailed data (AUM, fees, private funds, compliance) comes from monthly
     bulk CSV downloads published by SEC FOIA. Team bios come from Part 2A
-    PDF brochures (OCR via Mistral).
+    PDF brochures (text extraction via PyMuPDF).
 
     Async service. Lifecycle: Instantiate ONCE in FastAPI lifespan().
     """
@@ -556,21 +598,405 @@ class AdvService:
         self,
         crd_number: str,
         *,
-        force_refresh: bool = False,  # noqa: ARG002 — reserved for M2
+        force_refresh: bool = False,
     ) -> list[AdvTeamMember]:
-        """Fetch team from DB. Stub in M1 — returns empty list.
+        """Fetch team from DB. If empty and force_refresh, extract from Part 2A PDF.
 
-        # TODO: Part 2A PDF OCR — download brochure from
-        # reports.adviserinfo.sec.gov and extract via Mistral OCR.
-        # Requires Mistral pipeline integration (M2 scope).
+        Stale-but-serve: returns DB data immediately if available.
+        OCR extraction only triggered by force_refresh=True when DB is empty.
         """
         if not _validate_crd(crd_number):
             return []
 
-        logger.info(
-            "adv_fetch_team_stub",
-            crd=crd_number,
-            note="Team extraction requires Part 2A PDF OCR (M2). "
-            "Callers expecting team bios will receive empty list.",
-        )
+        # Read from DB first (stale-but-serve)
+        try:
+            async with self._db_session_factory() as session:
+                result = await session.execute(
+                    select(SecManagerTeam).where(SecManagerTeam.crd_number == crd_number),
+                )
+                rows = result.scalars().all()
+                if rows and not force_refresh:
+                    return [
+                        AdvTeamMember(
+                            crd_number=r.crd_number,
+                            person_name=r.person_name,
+                            title=r.title,
+                            role=r.role,
+                            education=r.education,
+                            certifications=r.certifications or [],
+                            years_experience=r.years_experience,
+                            bio_summary=r.bio_summary,
+                        )
+                        for r in rows
+                    ]
+        except Exception as exc:
+            logger.error("adv_fetch_team_db_failed", crd=crd_number, error=str(exc))
+
+        if not force_refresh:
+            return []
+
+        # Extract from Part 2A PDF via PyMuPDF
+        try:
+            brochure_text = await self._download_and_extract_brochure(crd_number)
+            if not brochure_text:
+                logger.warning("adv_brochure_empty", crd=crd_number)
+                return []
+
+            # Parse team members and brochure sections
+            team_members = _parse_team_from_brochure(crd_number, brochure_text)
+            sections = _classify_brochure_sections(crd_number, brochure_text)
+
+            # Persist both
+            await self._upsert_team(crd_number, team_members)
+            if sections:
+                await self._upsert_brochure_sections(crd_number, sections)
+
+            return team_members
+
+        except Exception as exc:
+            logger.error("adv_fetch_team_ocr_failed", crd=crd_number, error=str(exc))
+            return []
+
+    async def extract_brochure(
+        self,
+        crd_number: str,
+        *,
+        force_refresh: bool = False,
+    ) -> list[AdvBrochureSection]:
+        """Extract and store brochure text sections for full-text search.
+
+        Returns classified sections. Triggers OCR if not in DB.
+        """
+        if not _validate_crd(crd_number):
+            return []
+
+        # Check DB first
+        if not force_refresh:
+            try:
+                async with self._db_session_factory() as session:
+                    result = await session.execute(
+                        select(SecManagerBrochureText).where(
+                            SecManagerBrochureText.crd_number == crd_number,
+                        ),
+                    )
+                    rows = result.scalars().all()
+                    if rows:
+                        return [
+                            AdvBrochureSection(
+                                crd_number=r.crd_number,
+                                section=r.section,
+                                content=r.content,
+                                filing_date=r.filing_date.isoformat(),
+                            )
+                            for r in rows
+                        ]
+            except Exception as exc:
+                logger.error("adv_brochure_db_read_failed", crd=crd_number, error=str(exc))
+
+        # OCR extraction
+        try:
+            brochure_text = await self._download_and_extract_brochure(crd_number)
+            if not brochure_text:
+                return []
+
+            sections = _classify_brochure_sections(crd_number, brochure_text)
+            if sections:
+                await self._upsert_brochure_sections(crd_number, sections)
+
+            # Also extract team if not done yet
+            team = _parse_team_from_brochure(crd_number, brochure_text)
+            if team:
+                await self._upsert_team(crd_number, team)
+
+            return sections
+
+        except Exception as exc:
+            logger.error("adv_brochure_extract_failed", crd=crd_number, error=str(exc))
+            return []
+
+    async def search_brochure_text(
+        self,
+        query: str,
+        *,
+        limit: int = 25,
+    ) -> list[AdvBrochureSection]:
+        """Full-text search across all manager brochure sections.
+
+        Uses PostgreSQL tsvector GIN index. Returns matching sections
+        ranked by ts_rank. Example: "ESG integration", "private credit".
+        """
+        if not query or not query.strip():
+            return []
+
+        try:
+            async with self._db_session_factory() as session:
+                # Use plainto_tsquery for safe user input (no special syntax needed)
+                stmt = text("""
+                    SELECT crd_number, section, content, filing_date
+                    FROM sec_manager_brochure_text
+                    WHERE to_tsvector('english', content) @@ plainto_tsquery('english', :query)
+                    ORDER BY ts_rank(to_tsvector('english', content), plainto_tsquery('english', :query)) DESC
+                    LIMIT :limit
+                """)
+                result = await session.execute(stmt, {"query": query.strip(), "limit": limit})
+                return [
+                    AdvBrochureSection(
+                        crd_number=row.crd_number,
+                        section=row.section,
+                        content=row.content,
+                        filing_date=row.filing_date.isoformat(),
+                    )
+                    for row in result.fetchall()
+                ]
+        except Exception as exc:
+            logger.error("adv_brochure_search_failed", query=query, error=str(exc))
+            return []
+
+    # ── Part 2A Brochure Text Extraction ────────────────────────
+
+    async def _download_and_extract_brochure(self, crd_number: str) -> str:
+        """Download Part 2A PDF and extract text via PyMuPDF.
+
+        SEC requires all Part 2A brochures to be text-searchable PDF before
+        IARD submission (mandatory since 2010). OCR is therefore not needed.
+        Uses fitz (pymupdf) — zero API cost, millisecond latency.
+
+        Runs in SEC thread pool (sync httpx download + sync fitz extraction).
+        Returns concatenated page text or empty string on failure.
+        """
+        return await run_in_sec_thread(self._download_and_extract_sync, crd_number)
+
+    @staticmethod
+    def _download_and_extract_sync(crd_number: str) -> str:
+        """Sync: download brochure PDF → PyMuPDF text extraction."""
+        import fitz  # pymupdf — already a project dependency
+        import httpx
+
+        pdf_url = _ADV_BROCHURE_URL.format(crd=crd_number)
+        check_iapd_rate()  # same domain family, conservative rate
+
+        try:
+            resp = httpx.get(
+                pdf_url,
+                headers={"User-Agent": SEC_USER_AGENT},
+                timeout=60.0,
+                follow_redirects=True,
+            )
+            if resp.status_code == 404:
+                logger.info("adv_brochure_not_found", crd=crd_number)
+                return ""
+            resp.raise_for_status()
+        except Exception as exc:
+            logger.warning("adv_brochure_download_failed", crd=crd_number, error=str(exc))
+            return ""
+
+        pdf_bytes = resp.content
+        if len(pdf_bytes) < 1024:
+            logger.warning("adv_brochure_too_small", crd=crd_number, size=len(pdf_bytes))
+            return ""
+
+        try:
+            with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                pages = [page.get_text("text") for page in doc]
+            text_out = "\n\n".join(p for p in pages if p.strip())
+            logger.info(
+                "adv_brochure_extracted",
+                crd=crd_number,
+                pages=len(pages),
+                chars=len(text_out),
+            )
+            return text_out
+        except Exception as exc:
+            logger.warning("adv_brochure_extract_failed", crd=crd_number, error=str(exc))
+            return ""
+
+    # ── Persist team + brochure sections ─────────────────────────
+
+    async def _upsert_team(
+        self,
+        crd_number: str,
+        members: list[AdvTeamMember],
+    ) -> None:
+        """Upsert team members to sec_manager_team."""
+        if not members:
+            return
+
+        values = [
+            {
+                "crd_number": m.crd_number,
+                "person_name": m.person_name,
+                "title": m.title,
+                "role": m.role,
+                "education": m.education,
+                "certifications": m.certifications or None,
+                "years_experience": m.years_experience,
+                "bio_summary": m.bio_summary,
+                "data_fetched_at": datetime.now(timezone.utc),
+            }
+            for m in members
+        ]
+
+        async with self._db_session_factory() as session, session.begin():
+            stmt = pg_insert(SecManagerTeam).values(values)
+            stmt = stmt.on_conflict_do_update(
+                constraint="uq_sec_manager_team_crd_person",
+                set_={
+                    "title": stmt.excluded.title,
+                    "role": stmt.excluded.role,
+                    "education": stmt.excluded.education,
+                    "certifications": stmt.excluded.certifications,
+                    "years_experience": stmt.excluded.years_experience,
+                    "bio_summary": stmt.excluded.bio_summary,
+                    "data_fetched_at": stmt.excluded.data_fetched_at,
+                },
+            )
+            await session.execute(stmt)
+
+    async def _upsert_brochure_sections(
+        self,
+        crd_number: str,
+        sections: list[AdvBrochureSection],
+    ) -> None:
+        """Upsert brochure text sections to sec_manager_brochure_text."""
+        if not sections:
+            return
+
+        values = [
+            {
+                "crd_number": s.crd_number,
+                "section": s.section,
+                "filing_date": s.filing_date,
+                "content": s.content,
+            }
+            for s in sections
+        ]
+
+        async with self._db_session_factory() as session, session.begin():
+            for val in values:
+                stmt = pg_insert(SecManagerBrochureText).values(val)
+                stmt = stmt.on_conflict_do_update(
+                    constraint="sec_manager_brochure_text_pkey",
+                    set_={"content": stmt.excluded.content},
+                )
+                await session.execute(stmt)
+
+
+# ── Brochure text parsing (module-level helpers) ─────────────────
+
+
+def _classify_brochure_sections(
+    crd_number: str,
+    full_text: str,
+) -> list[AdvBrochureSection]:
+    """Split brochure text into classified sections based on ADV Item headings.
+
+    Falls back to storing the full text as a single "full_brochure" section
+    if no Item headings are detected.
+    """
+    today = date.today().isoformat()
+
+    # Try to split by Item headings
+    # Find all section boundaries
+    boundaries: list[tuple[int, str]] = []
+    for section_key, pattern in _SECTION_PATTERNS:
+        for m in pattern.finditer(full_text):
+            boundaries.append((m.start(), section_key))
+
+    if not boundaries:
+        # No structured sections found — store as single block
+        if len(full_text.strip()) > 100:
+            return [
+                AdvBrochureSection(
+                    crd_number=crd_number,
+                    section="full_brochure",
+                    content=full_text.strip(),
+                    filing_date=today,
+                ),
+            ]
         return []
+
+    # Sort by position, extract text between boundaries
+    boundaries.sort(key=lambda x: x[0])
+    sections: list[AdvBrochureSection] = []
+    seen: set[str] = set()
+
+    for i, (start, key) in enumerate(boundaries):
+        if key in seen:
+            continue  # first match wins for duplicate section names
+        seen.add(key)
+
+        end = boundaries[i + 1][0] if i + 1 < len(boundaries) else len(full_text)
+        content = full_text[start:end].strip()
+
+        if len(content) > 50:  # skip near-empty sections
+            sections.append(
+                AdvBrochureSection(
+                    crd_number=crd_number,
+                    section=key,
+                    content=content,
+                    filing_date=today,
+                ),
+            )
+
+    return sections
+
+
+def _parse_team_from_brochure(
+    crd_number: str,
+    full_text: str,
+) -> list[AdvTeamMember]:
+    """Extract team member names, titles, and certifications from brochure text.
+
+    Uses regex patterns against Part 2B supplement content (typically appended
+    to the Part 2A brochure). Returns deduplicated list of team members.
+    """
+    members: list[AdvTeamMember] = []
+    seen_names: set[str] = set()
+
+    for match in _TEAM_PERSON_RE.finditer(full_text):
+        name = match.group(1).strip()
+        title_raw = match.group(2).strip().rstrip(",.")
+
+        # Deduplicate
+        name_key = name.lower()
+        if name_key in seen_names:
+            continue
+        seen_names.add(name_key)
+
+        # Extract certifications from surrounding context
+        context_start = max(0, match.start() - 50)
+        context_end = min(len(full_text), match.end() + 500)
+        context = full_text[context_start:context_end]
+
+        certs = sorted(set(_CERTIFICATION_RE.findall(context)))
+
+        # Extract years of experience
+        years: int | None = None
+        exp_match = _EXPERIENCE_RE.search(context)
+        if exp_match:
+            years = int(exp_match.group(1))
+
+        # Build bio summary from next ~300 chars after name+title
+        bio_start = match.end()
+        bio_end = min(len(full_text), bio_start + 300)
+        bio_raw = full_text[bio_start:bio_end].strip()
+        # Truncate at paragraph break
+        para_break = bio_raw.find("\n\n")
+        if para_break > 0:
+            bio_raw = bio_raw[:para_break]
+        bio = bio_raw.strip() if len(bio_raw) > 20 else None
+
+        members.append(
+            AdvTeamMember(
+                crd_number=crd_number,
+                person_name=name,
+                title=title_raw or None,
+                role=None,
+                education=None,
+                certifications=certs,
+                years_experience=years,
+                bio_summary=bio,
+            ),
+        )
+
+    return members

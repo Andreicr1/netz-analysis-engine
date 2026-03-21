@@ -17,16 +17,19 @@ DO NOT run both workers simultaneously.
 """
 
 import asyncio
+import json
 import logging
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
+import redis.asyncio as aioredis
 import structlog
 from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.config.settings import settings
 from app.core.db.engine import async_session_factory as async_session
+from app.core.jobs.tracker import get_redis_pool
 from app.shared.models import MacroData, MacroRegionalSnapshot
 from quant_engine.fred_service import FredObservation, FredService
 from quant_engine.macro_snapshot_builder import build_regional_snapshot
@@ -69,6 +72,33 @@ def _obs_to_macro_data_rows(
                 "is_derived": False,
             })
     return rows
+
+
+async def _write_macro_cache(snapshot_data: dict, today: date) -> None:
+    """Write macro snapshot data to Redis cache for fast dashboard reads."""
+    try:
+        r = aioredis.Redis(connection_pool=get_redis_pool())
+        try:
+            pipe = r.pipeline()
+            keys_written = 0
+
+            # Cache 1: per-geography regional snapshots
+            regions = snapshot_data.get("regions", {})
+            for geography, region_data in regions.items():
+                cache_key = f"credit:macro_snapshot:{geography}:{today.isoformat()}"
+                pipe.set(cache_key, json.dumps(region_data), ex=86400)
+                keys_written += 1
+
+            # Cache 2: full dashboard widget
+            pipe.set("macro:dashboard_widget", json.dumps(snapshot_data), ex=86400)
+            keys_written += 1
+
+            await pipe.execute()
+            logger.info("Macro cache written", keys_written=keys_written)
+        finally:
+            await r.aclose()
+    except Exception:
+        logger.warning("Failed to write macro cache to Redis — continuing without cache")
 
 
 async def run_macro_ingestion(
@@ -170,6 +200,8 @@ async def run_macro_ingestion(
                     await db.execute(stmt)
 
             await db.commit()
+
+            await _write_macro_cache(snapshot_data, today)
 
             logger.info(
                 "Macro ingestion complete",

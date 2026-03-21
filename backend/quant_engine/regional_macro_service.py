@@ -569,6 +569,280 @@ def score_region(
     )
 
 
+# ---------------------------------------------------------------------------
+#  BIS + IMF Integration — country-to-region mapping + enrichment
+# ---------------------------------------------------------------------------
+
+# Map ISO-2 country codes to regions for aggregation
+_COUNTRY_TO_REGION: dict[str, str] = {
+    "US": "US",
+    # Europe
+    "GB": "EUROPE", "DE": "EUROPE", "FR": "EUROPE", "IT": "EUROPE",
+    "ES": "EUROPE", "NL": "EUROPE", "CH": "EUROPE", "SE": "EUROPE",
+    "NO": "EUROPE", "DK": "EUROPE", "AT": "EUROPE", "BE": "EUROPE",
+    "FI": "EUROPE", "PT": "EUROPE", "IE": "EUROPE", "GR": "EUROPE",
+    "PL": "EUROPE", "CZ": "EUROPE", "HU": "EUROPE",
+    # Asia
+    "JP": "ASIA", "CN": "ASIA", "KR": "ASIA", "AU": "ASIA",
+    "SG": "ASIA", "HK": "ASIA", "TW": "ASIA",
+    # EM
+    "BR": "EM", "IN": "EM", "MX": "EM", "TR": "EM", "ZA": "EM",
+    "CL": "EM", "CO": "EM", "PE": "EM", "TH": "EM", "MY": "EM",
+    "ID": "EM", "PH": "EM", "AR": "EM", "RU": "EM", "SA": "EM",
+    "IL": "EM",
+}
+
+
+@dataclass(frozen=True)
+class BisDataPoint:
+    """Pre-fetched BIS observation for scoring (no DB dependency)."""
+
+    country_code: str
+    indicator: str  # credit_to_gdp_gap, debt_service_ratio, property_prices
+    value: float
+    period: date
+
+
+@dataclass(frozen=True)
+class ImfDataPoint:
+    """Pre-fetched IMF WEO forecast for scoring (no DB dependency)."""
+
+    country_code: str
+    indicator: str  # NGDP_RPCH, PCPIPCH, etc.
+    year: int
+    value: float
+
+
+@dataclass(frozen=True)
+class CreditCycleScore:
+    """Credit cycle dimension score from BIS data."""
+
+    score: float  # 0-100
+    credit_gap: float | None
+    debt_service: float | None
+    property_prices: float | None
+    n_countries: int
+
+
+def _aggregate_bis_for_region(
+    region: str,
+    bis_data: list[BisDataPoint],
+) -> dict[str, list[float]]:
+    """Group latest BIS values by indicator for countries in a region."""
+    region_countries = {
+        cc for cc, r in _COUNTRY_TO_REGION.items() if r == region
+    }
+
+    # Keep only latest value per (country, indicator)
+    latest: dict[tuple[str, str], float] = {}
+    latest_date: dict[tuple[str, str], date] = {}
+    for dp in bis_data:
+        if dp.country_code not in region_countries:
+            continue
+        key = (dp.country_code, dp.indicator)
+        if key not in latest_date or dp.period > latest_date[key]:
+            latest[key] = dp.value
+            latest_date[key] = dp.period
+
+    # Group by indicator
+    by_indicator: dict[str, list[float]] = {}
+    for (_, indicator), value in latest.items():
+        by_indicator.setdefault(indicator, []).append(value)
+
+    return by_indicator
+
+
+def score_credit_cycle(
+    region: str,
+    bis_data: list[BisDataPoint],
+) -> CreditCycleScore:
+    """Compute credit cycle dimension score from BIS data for a region.
+
+    Combines credit-to-GDP gap, debt service ratio, and property prices.
+    Higher credit gap and DSR = worse conditions (inverted).
+    Property prices are neutral (not inverted).
+    Returns 50.0 (neutral) if no data available.
+    """
+    by_indicator = _aggregate_bis_for_region(region, bis_data)
+
+    credit_gap_vals = by_indicator.get("credit_to_gdp_gap", [])
+    dsr_vals = by_indicator.get("debt_service_ratio", [])
+    prop_vals = by_indicator.get("property_prices", [])
+
+    n_countries = len(set(
+        dp.country_code for dp in bis_data
+        if _COUNTRY_TO_REGION.get(dp.country_code) == region
+    ))
+
+    if not any([credit_gap_vals, dsr_vals, prop_vals]):
+        return CreditCycleScore(
+            score=50.0,
+            credit_gap=None,
+            debt_service=None,
+            property_prices=None,
+            n_countries=0,
+        )
+
+    scores: list[float] = []
+    weights: list[float] = []
+
+    # Credit-to-GDP gap: higher = overheated credit cycle (inverted)
+    # BIS pre-computes this; positive values = above trend = risky
+    avg_gap = float(np.mean(credit_gap_vals)) if credit_gap_vals else None
+    if avg_gap is not None:
+        # Map: -10 (underleveraged) → 90, 0 (trend) → 50, +10 (overleveraged) → 10
+        gap_score = max(0.0, min(100.0, 50.0 - avg_gap * 4.0))
+        scores.append(gap_score)
+        weights.append(0.5)
+
+    # Debt service ratio: higher = more stress (inverted)
+    avg_dsr = float(np.mean(dsr_vals)) if dsr_vals else None
+    if avg_dsr is not None:
+        # DSR typically 10-25%; map 10→80, 25→20
+        dsr_score = max(0.0, min(100.0, 120.0 - avg_dsr * 4.0))
+        scores.append(dsr_score)
+        weights.append(0.3)
+
+    # Property prices: YoY growth, moderate growth is healthy
+    avg_prop = float(np.mean(prop_vals)) if prop_vals else None
+    if avg_prop is not None:
+        # Map: -10→30, 0→50, 5→65, 15→40 (overheating)
+        if avg_prop <= 5.0:
+            prop_score = 50.0 + avg_prop * 3.0
+        else:
+            prop_score = max(20.0, 65.0 - (avg_prop - 5.0) * 2.5)
+        scores.append(prop_score)
+        weights.append(0.2)
+
+    total_w = sum(weights)
+    composite = sum(s * w for s, w in zip(scores, weights, strict=True)) / total_w if total_w > 0 else 50.0
+
+    return CreditCycleScore(
+        score=round(composite, 2),
+        credit_gap=round(avg_gap, 4) if avg_gap is not None else None,
+        debt_service=round(avg_dsr, 4) if avg_dsr is not None else None,
+        property_prices=round(avg_prop, 4) if avg_prop is not None else None,
+        n_countries=n_countries,
+    )
+
+
+def blend_imf_growth(
+    region: str,
+    fred_growth_score: float,
+    imf_data: list[ImfDataPoint],
+    as_of: date,
+    fred_weight: float = 0.70,
+) -> float:
+    """Blend FRED backward-looking growth with IMF forward-looking forecast.
+
+    Uses next-year GDP forecast for the region's countries.
+    Returns blended score (0-100). Falls back to FRED-only if no IMF data.
+    """
+    region_countries = {
+        cc for cc, r in _COUNTRY_TO_REGION.items() if r == region
+    }
+    current_year = as_of.year
+
+    # Get next-year GDP growth forecasts for region countries
+    gdp_forecasts: list[float] = []
+    for dp in imf_data:
+        if dp.country_code not in region_countries:
+            continue
+        if dp.indicator != "NGDP_RPCH":
+            continue
+        if dp.year in (current_year, current_year + 1):
+            gdp_forecasts.append(dp.value)
+
+    if not gdp_forecasts:
+        return fred_growth_score
+
+    # Convert average GDP forecast to 0-100 score
+    # Historical range: -5% (crisis) to +8% (boom)
+    avg_forecast = float(np.mean(gdp_forecasts))
+    # Map: -5→10, 0→35, 2→50, 5→72, 8→95
+    imf_score = max(0.0, min(100.0, 35.0 + avg_forecast * 7.5))
+
+    imf_weight = 1.0 - fred_weight
+    blended = fred_growth_score * fred_weight + imf_score * imf_weight
+
+    return round(blended, 2)
+
+
+def enrich_region_score(
+    result: RegionalMacroResult,
+    bis_data: list[BisDataPoint] | None = None,
+    imf_data: list[ImfDataPoint] | None = None,
+) -> RegionalMacroResult:
+    """Enrich a RegionalMacroResult with BIS credit cycle and IMF growth blend.
+
+    Pure function — no I/O. Returns a new RegionalMacroResult with:
+    - 7th dimension: credit_cycle (from BIS data)
+    - Blended growth score (FRED 70% + IMF 30%)
+
+    Safe defaults: missing BIS/IMF data returns the original result unchanged.
+    """
+    dimensions = dict(result.dimensions)
+    composite_changed = False
+
+    # ── BIS credit cycle (7th dimension) ──────────────────────
+    if bis_data:
+        credit_cycle = score_credit_cycle(result.region, bis_data)
+        if credit_cycle.n_countries > 0:
+            dimensions["credit_cycle"] = DimensionScore(
+                dimension="credit_cycle",
+                score=credit_cycle.score,
+                n_indicators=credit_cycle.n_countries,
+                indicators={
+                    "credit_gap": credit_cycle.credit_gap or 0.0,
+                    "debt_service": credit_cycle.debt_service or 0.0,
+                    "property_prices": credit_cycle.property_prices or 0.0,
+                },
+            )
+            composite_changed = True
+
+    # ── IMF growth blend ──────────────────────────────────────
+    if imf_data and "growth" in dimensions:
+        original_growth = dimensions["growth"]
+        blended = blend_imf_growth(
+            result.region, original_growth.score, imf_data, result.as_of_date,
+        )
+        if blended != original_growth.score:
+            dimensions["growth"] = DimensionScore(
+                dimension="growth",
+                score=blended,
+                n_indicators=original_growth.n_indicators,
+                indicators=original_growth.indicators,
+            )
+            composite_changed = True
+
+    if not composite_changed:
+        return result
+
+    # Recompute composite with updated dimensions + credit_cycle weight
+    dim_weights = dict(_DEFAULT_CONFIG["dimension_weights"])
+    if "credit_cycle" in dimensions:
+        # Add credit_cycle weight; scale others proportionally
+        dim_weights["credit_cycle"] = 0.10
+
+    active_weight = sum(dim_weights.get(d, 0) for d in dimensions)
+    if active_weight > 0:
+        composite = sum(
+            dimensions[d].score * dim_weights.get(d, 0)
+            for d in dimensions
+        ) / active_weight
+    else:
+        composite = result.composite_score
+
+    return RegionalMacroResult(
+        region=result.region,
+        composite_score=round(composite, 2),
+        dimensions=dimensions,
+        data_freshness=result.data_freshness,
+        as_of_date=result.as_of_date,
+        coverage=result.coverage,
+    )
+
+
 def score_global_indicators(
     raw_observations: dict[str, list[FredObservation]],
     as_of: date,

@@ -142,6 +142,9 @@ class SecManager(Base):
     team: Mapped[list["SecManagerTeam"]] = relationship(
         back_populates="manager", lazy="raise", cascade="all, delete-orphan",
     )
+    brochure_sections: Mapped[list["SecManagerBrochureText"]] = relationship(
+        lazy="raise", cascade="all, delete-orphan",
+    )
 
 
 class SecManagerFund(Base, IdMixin):
@@ -199,6 +202,29 @@ class SecManagerTeam(Base, IdMixin):
     )
 
     manager: Mapped["SecManager"] = relationship(back_populates="team", lazy="raise")
+
+
+class SecManagerBrochureText(Base):
+    """ADV Part 2A brochure text sections for full-text search.
+
+    GLOBAL TABLE: No organization_id, no RLS.
+    Composite PK on (crd_number, section, filing_date).
+    GIN index on tsvector(content) for full-text search.
+    """
+
+    __tablename__ = "sec_manager_brochure_text"
+
+    crd_number: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("sec_managers.crd_number", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    section: Mapped[str] = mapped_column(Text, primary_key=True)
+    filing_date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
 
 
 class Sec13fHolding(Base):
@@ -337,6 +363,177 @@ class OfrHedgeFundData(Base):
     value: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
     source: Mapped[str] = mapped_column(String(40), server_default="ofr_api")
     metadata_json: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  ESMA Data Providers — Global Tables (no organization_id, no RLS)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class EsmaManager(Base):
+    """European fund manager from ESMA Register.
+
+    GLOBAL TABLE: No organization_id, no RLS.
+    Natural PK on esma_id (ESMA management company identifier).
+    """
+
+    __tablename__ = "esma_managers"
+
+    esma_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    lei: Mapped[str | None] = mapped_column(Text)
+    company_name: Mapped[str] = mapped_column(Text, nullable=False)
+    country: Mapped[str | None] = mapped_column(Text)
+    authorization_status: Mapped[str | None] = mapped_column(Text)
+    fund_count: Mapped[int | None] = mapped_column(Integer)
+    sec_crd_number: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+    data_fetched_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+
+    funds: Mapped[list["EsmaFund"]] = relationship(
+        back_populates="manager", lazy="raise", cascade="all, delete-orphan",
+    )
+
+
+class EsmaFund(Base):
+    """UCITS fund entry from ESMA Register.
+
+    GLOBAL TABLE: No organization_id, no RLS.
+    Natural PK on ISIN (unique identifier for securities).
+    FK to esma_managers on esma_manager_id.
+    """
+
+    __tablename__ = "esma_funds"
+
+    isin: Mapped[str] = mapped_column(Text, primary_key=True)
+    fund_name: Mapped[str] = mapped_column(Text, nullable=False)
+    esma_manager_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("esma_managers.esma_id", ondelete="CASCADE"), nullable=False,
+    )
+    domicile: Mapped[str | None] = mapped_column(Text)
+    fund_type: Mapped[str | None] = mapped_column(Text)
+    host_member_states: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
+    yahoo_ticker: Mapped[str | None] = mapped_column(Text)
+    ticker_resolved_at: Mapped[dt.datetime | None] = mapped_column(
+        DateTime(timezone=True),
+    )
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+    data_fetched_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+
+    manager: Mapped["EsmaManager"] = relationship(back_populates="funds", lazy="raise")
+
+
+class EsmaIsinTickerMap(Base):
+    """ISIN → Yahoo Finance ticker mapping via OpenFIGI batch API.
+
+    GLOBAL TABLE: No organization_id, no RLS.
+    Enables YFinance NAV lookups for ESMA-registered UCITS funds.
+    Populated by ESMA seed Phase 2. Refreshed periodically.
+    """
+
+    __tablename__ = "esma_isin_ticker_map"
+
+    isin: Mapped[str] = mapped_column(Text, primary_key=True)
+    yahoo_ticker: Mapped[str | None] = mapped_column(Text)
+    exchange: Mapped[str | None] = mapped_column(Text)
+    resolved_via: Mapped[str] = mapped_column(Text, nullable=False)
+    is_tradeable: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false",
+    )
+    last_verified_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+
+
+class SecNportHolding(Base):
+    """N-PORT monthly portfolio holdings for US mutual funds.
+
+    GLOBAL TABLE: No organization_id, no RLS.
+    TimescaleDB hypertable partitioned by report_date (3-month chunks).
+    Compression: 3 months. segmentby: cik.
+    Always include report_date filter in queries for chunk pruning.
+
+    PK is (report_date, cik, cusip) — no surrogate id column.
+    """
+
+    __tablename__ = "sec_nport_holdings"
+
+    report_date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
+    cik: Mapped[str] = mapped_column(Text, primary_key=True)
+    cusip: Mapped[str] = mapped_column(Text, primary_key=True)
+    isin: Mapped[str | None] = mapped_column(Text)
+    issuer_name: Mapped[str | None] = mapped_column(Text)
+    asset_class: Mapped[str | None] = mapped_column(Text)
+    sector: Mapped[str | None] = mapped_column(Text)
+    market_value: Mapped[int | None] = mapped_column(BigInteger)
+    quantity: Mapped[Decimal | None] = mapped_column(Numeric)
+    currency: Mapped[str | None] = mapped_column(Text)
+    pct_of_nav: Mapped[Decimal | None] = mapped_column(Numeric)
+    is_restricted: Mapped[bool | None] = mapped_column(Boolean)
+    fair_value_level: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  BIS + IMF Data Providers — Global Tables (no organization_id, no RLS)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class BisStatistics(Base):
+    """BIS credit-to-GDP gap, debt service ratio, and property prices.
+
+    GLOBAL TABLE: No organization_id, no RLS.
+    TimescaleDB hypertable partitioned by period (1-year chunks).
+    Compression: 1 year. segmentby: country_code.
+    Always include period filter in queries for chunk pruning.
+
+    Datasets: WS_CREDIT_GAP, WS_DSR, WS_SPP.
+    """
+
+    __tablename__ = "bis_statistics"
+
+    country_code: Mapped[str] = mapped_column(Text, primary_key=True)
+    indicator: Mapped[str] = mapped_column(Text, primary_key=True)
+    period: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    value: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    dataset: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+
+
+class ImfWeoForecast(Base):
+    """IMF World Economic Outlook 5-year forward forecasts.
+
+    GLOBAL TABLE: No organization_id, no RLS.
+    TimescaleDB hypertable partitioned by period (1-year chunks).
+    Compression: 1 year. segmentby: country_code.
+    Always include period filter in queries for chunk pruning.
+
+    Indicators: NGDP_RPCH (GDP growth), PCPIPCH (inflation),
+    GGXCNL_NGDP (fiscal balance), GGXWDG_NGDP (govt debt).
+    """
+
+    __tablename__ = "imf_weo_forecasts"
+
+    country_code: Mapped[str] = mapped_column(Text, primary_key=True)
+    indicator: Mapped[str] = mapped_column(Text, primary_key=True)
+    year: Mapped[int] = mapped_column(Integer, primary_key=True)
+    period: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    value: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    edition: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )
