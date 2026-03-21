@@ -19,7 +19,7 @@ import structlog
 
 logger = structlog.get_logger()
 
-BIS_API_BASE = "https://data.bis.org/api/v1/data"
+BIS_API_BASE = "https://stats.bis.org/api/v1/data"
 
 # BIS dataset → indicator mapping
 # Each entry: (dataset_key, frequency, ref_area_key, indicator_name)
@@ -78,8 +78,9 @@ async def fetch_bis_dataset(
     target_countries = countries or COUNTRIES
     ref_area = "+".join(target_countries)
 
-    # BIS SDMX REST: /data/{dataset}/{ref_area}..?format=csv
-    url = f"{BIS_API_BASE}/{dataset}/{ref_area}..?"
+    # BIS SDMX REST: /data/{dataset}/Q.{ref_area}?format=csv
+    # Key dimension: FREQ.REF_AREA (quarterly data, country codes)
+    url = f"{BIS_API_BASE}/{dataset}/Q.{ref_area}"
     headers = {"Accept": "text/csv"}
 
     try:
@@ -105,7 +106,8 @@ async def fetch_bis_dataset(
     reader = csv.DictReader(io.StringIO(resp.text))
 
     for row in reader:
-        country = row.get("REF_AREA", "")
+        # Country column varies by dataset: REF_AREA (SPP) or BORROWERS_CTY (CREDIT_GAP, DSR)
+        country = row.get("REF_AREA") or row.get("BORROWERS_CTY") or ""
         period_str = row.get("TIME_PERIOD", "")
         value_str = row.get("OBS_VALUE", "")
 

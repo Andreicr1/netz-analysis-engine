@@ -20,17 +20,28 @@ DEFAULT_PAGE_SIZE = 1000
 UCITS_FILTER = "funds_legal_framework_name:UCITS"
 
 # Solr fields we request (keeps response size manageable).
+# ESMA Register field names (current schema — verified 2026-03):
+#   funds_manager_nat_code = manager ID
+#   funds_manager_lei = manager LEI
+#   funds_manager_nat_name = manager company name
+#   funds_ca_cou_code = manager country
+#   funds_status_code_name = authorization status (e.g. "Active")
+#   funds_lei = fund LEI (used as ISIN-like identifier)
+#   funds_national_name = fund name
+#   funds_domicile_cou_code = fund domicile country
+#   funds_legal_framework_name = fund type (UCITS)
+#   funds_host_country_codes = host member states
 SOLR_FIELDS = (
-    "funds_management_company_id,"
-    "funds_management_company_lei,"
-    "funds_management_company_name,"
-    "funds_management_company_country,"
-    "funds_management_company_authorization_status,"
-    "funds_isin,"
-    "funds_fund_name,"
-    "funds_fund_domicile,"
-    "funds_fund_type,"
-    "funds_host_member_states"
+    "funds_manager_nat_code,"
+    "funds_manager_lei,"
+    "funds_manager_nat_name,"
+    "funds_ca_cou_code,"
+    "funds_status_code_name,"
+    "funds_lei,"
+    "funds_national_name,"
+    "funds_domicile_cou_code,"
+    "funds_legal_framework_name,"
+    "funds_host_country_codes"
 )
 
 
@@ -77,7 +88,6 @@ class RegisterService:
             "rows": str(self._page_size),
             "start": str(start),
             "wt": "json",
-            "sort": "funds_management_company_id asc",
         }
         response = await self._client.get(ESMA_SOLR_BASE, params=params)
         response.raise_for_status()
@@ -169,20 +179,29 @@ class RegisterService:
 
 
 def _parse_fund_doc(doc: dict[str, Any]) -> EsmaFund | None:
-    """Parse a single Solr document into an EsmaFund dataclass."""
-    isin = doc.get("funds_isin")
-    fund_name = doc.get("funds_fund_name")
-    manager_id = doc.get("funds_management_company_id")
+    """Parse a single Solr document into an EsmaFund dataclass.
 
-    if not isin or not fund_name or not manager_id:
+    ESMA Register Solr field mapping (verified 2026-03):
+      funds_lei → fund LEI (used as unique identifier, 20 chars)
+      funds_national_name → fund name
+      funds_manager_nat_code → manager ID
+      funds_domicile_cou_code → fund domicile
+      funds_legal_framework_name → fund type
+      funds_host_country_codes → host member states
+    """
+    fund_lei = doc.get("funds_lei")
+    fund_name = doc.get("funds_national_name")
+    manager_id = doc.get("funds_manager_nat_code")
+
+    if not fund_lei or not fund_name or not manager_id:
         return None
 
-    # Clean up ISIN (Solr sometimes returns with whitespace)
-    isin = str(isin).strip().upper()
-    if len(isin) != 12:
+    # Fund LEI is 20 chars (not ISIN 12 chars) — use as unique identifier
+    fund_lei = str(fund_lei).strip().upper()
+    if not fund_lei:
         return None
 
-    host_states_raw = doc.get("funds_host_member_states")
+    host_states_raw = doc.get("funds_host_country_codes")
     host_states: list[str] = []
     if isinstance(host_states_raw, list):
         host_states = [str(s).strip() for s in host_states_raw if s]
@@ -190,30 +209,38 @@ def _parse_fund_doc(doc: dict[str, Any]) -> EsmaFund | None:
         host_states = [s.strip() for s in host_states_raw.split(",") if s.strip()]
 
     return EsmaFund(
-        isin=isin,
+        isin=fund_lei,  # LEI as unique ID (ISIN not in Solr schema)
         fund_name=str(fund_name).strip(),
         esma_manager_id=str(manager_id).strip(),
-        domicile=_str_or_none(doc.get("funds_fund_domicile")),
-        fund_type=_str_or_none(doc.get("funds_fund_type")),
+        domicile=_str_or_none(doc.get("funds_domicile_cou_code")),
+        fund_type=_str_or_none(doc.get("funds_legal_framework_name")),
         host_member_states=host_states,
     )
 
 
 def parse_manager_from_doc(doc: dict[str, Any]) -> EsmaManager | None:
-    """Parse manager fields from a Solr fund document."""
-    manager_id = doc.get("funds_management_company_id")
-    company_name = doc.get("funds_management_company_name")
+    """Parse manager fields from a Solr fund document.
+
+    ESMA Register Solr field mapping (verified 2026-03):
+      funds_manager_nat_code → manager ID
+      funds_manager_nat_name → company name
+      funds_manager_lei → manager LEI
+      funds_ca_cou_code → country
+      funds_status_code_name → authorization status
+    """
+    manager_id = doc.get("funds_manager_nat_code")
+    company_name = doc.get("funds_manager_nat_name")
 
     if not manager_id or not company_name:
         return None
 
     return EsmaManager(
         esma_id=str(manager_id).strip(),
-        lei=_str_or_none(doc.get("funds_management_company_lei")),
+        lei=_str_or_none(doc.get("funds_manager_lei")),
         company_name=str(company_name).strip(),
-        country=_str_or_none(doc.get("funds_management_company_country")),
+        country=_str_or_none(doc.get("funds_ca_cou_code")),
         authorization_status=_str_or_none(
-            doc.get("funds_management_company_authorization_status")
+            doc.get("funds_status_code_name")
         ),
         fund_count=None,  # Computed during aggregation
     )
