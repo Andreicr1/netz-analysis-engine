@@ -11,6 +11,12 @@ from app.core.db.base import Base, OrganizationScopedMixin
 
 
 class PortfolioSnapshot(OrganizationScopedMixin, Base):
+    """TimescaleDB hypertable partitioned by snapshot_date (1-month chunks).
+
+    Compression: 3 months. segmentby: organization_id.
+    Always include snapshot_date filter in queries for chunk pruning.
+    """
+
     __tablename__ = "portfolio_snapshots"
     __table_args__ = (
         UniqueConstraint("organization_id", "profile", "snapshot_date"),

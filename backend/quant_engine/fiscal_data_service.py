@@ -9,6 +9,9 @@ Lifecycle: Instantiate ONCE in FastAPI lifespan() or at worker startup.
 Store as app.state.fiscal_data_service and inject via dependency.
 
 Config is injected as parameter — no module-level settings reads.
+
+DB reader functions (get_treasury_*_from_db) read from the treasury_data
+hypertable instead of calling the external API.
 """
 
 from __future__ import annotations
@@ -18,10 +21,13 @@ import logging
 import math
 import time
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 from typing import Any
 
 import httpx
 import structlog
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # Suppress httpx DEBUG logs
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -404,3 +410,92 @@ class FiscalDataService:
                     )
                 )
         return results
+
+
+# ---------------------------------------------------------------------------
+#  DB reader functions — read from treasury_data hypertable
+# ---------------------------------------------------------------------------
+
+
+async def get_treasury_rates_from_db(
+    db: AsyncSession,
+    series_id_prefix: str = "RATE_",
+    lookback_days: int = 252,
+) -> list[dict[str, Any]]:
+    """Read treasury rates from the treasury_data hypertable.
+
+    Returns list of dicts with keys: date, series_id, value.
+    """
+    from app.shared.models import TreasuryData
+
+    cutoff = date.today() - timedelta(days=lookback_days)
+    stmt = (
+        select(TreasuryData.obs_date, TreasuryData.series_id, TreasuryData.value)
+        .where(
+            TreasuryData.series_id.startswith(series_id_prefix),
+            TreasuryData.obs_date >= cutoff,
+        )
+        .order_by(TreasuryData.obs_date.desc())
+    )
+    result = await db.execute(stmt)
+    return [
+        {"date": str(r.obs_date), "series_id": r.series_id, "value": float(r.value)}
+        for r in result.all()
+        if r.value is not None
+    ]
+
+
+async def get_treasury_debt_from_db(
+    db: AsyncSession,
+    lookback_days: int = 252,
+) -> list[dict[str, Any]]:
+    """Read debt snapshots from the treasury_data hypertable."""
+    from app.shared.models import TreasuryData
+
+    cutoff = date.today() - timedelta(days=lookback_days)
+    stmt = (
+        select(TreasuryData.obs_date, TreasuryData.series_id, TreasuryData.value)
+        .where(
+            TreasuryData.series_id.startswith("DEBT_"),
+            TreasuryData.obs_date >= cutoff,
+        )
+        .order_by(TreasuryData.obs_date.desc())
+    )
+    result = await db.execute(stmt)
+    return [
+        {"date": str(r.obs_date), "series_id": r.series_id, "value": float(r.value)}
+        for r in result.all()
+        if r.value is not None
+    ]
+
+
+async def get_treasury_auctions_from_db(
+    db: AsyncSession,
+    lookback_days: int = 365,
+) -> list[dict[str, Any]]:
+    """Read auction results from the treasury_data hypertable."""
+    from app.shared.models import TreasuryData
+
+    cutoff = date.today() - timedelta(days=lookback_days)
+    stmt = (
+        select(
+            TreasuryData.obs_date, TreasuryData.series_id,
+            TreasuryData.value, TreasuryData.metadata_json,
+        )
+        .where(
+            TreasuryData.series_id.startswith("AUCTION_"),
+            TreasuryData.obs_date >= cutoff,
+        )
+        .order_by(TreasuryData.obs_date.desc())
+    )
+    result = await db.execute(stmt)
+    return [
+        {
+            "date": str(r.obs_date),
+            "series_id": r.series_id,
+            "value": float(r.value),
+            "metadata": r.metadata_json,
+        }
+        for r in result.all()
+        if r.value is not None
+    ]

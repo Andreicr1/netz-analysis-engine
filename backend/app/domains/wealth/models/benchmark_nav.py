@@ -1,5 +1,9 @@
 """Benchmark NAV model — global table (no organization_id, no RLS).
 
+TimescaleDB hypertable partitioned by nav_date (1-month chunks).
+Compression: 3 months. segmentby: block_id.
+Always include nav_date filter in queries for chunk pruning.
+
 Stores benchmark index NAV and return data per allocation block.
 Same global pattern as AllocationBlock and MacroData.
 """

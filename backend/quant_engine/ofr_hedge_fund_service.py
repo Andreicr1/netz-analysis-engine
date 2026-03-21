@@ -18,10 +18,13 @@ import asyncio
 import logging
 import math
 from dataclasses import dataclass
+from datetime import date, timedelta
 from typing import Any
 
 import httpx
 import structlog
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from quant_engine.fiscal_data_service import AsyncTokenBucketRateLimiter
 
@@ -379,10 +382,10 @@ class OFRHedgeFundService:
                 if not mne:
                     continue
                 entry = meta_map.setdefault(mne, {"mnemonic": mne, "dataset": item.get("dataset", "")})
-                field = item.get("field", "")
-                if field == "description/name":
+                field_name = item.get("field", "")
+                if field_name == "description/name":
                     entry["description"] = item.get("value", "")
-                elif field == "frequency":
+                elif field_name == "frequency":
                     entry["frequency"] = item.get("value", "")
 
             return [
@@ -397,3 +400,104 @@ class OFRHedgeFundService:
         except Exception as e:
             logger.warning("ofr search failed", query=query, error=str(e))
             return []
+
+
+# ---------------------------------------------------------------------------
+#  DB reader functions — read from ofr_hedge_fund_data hypertable
+# ---------------------------------------------------------------------------
+
+
+async def get_ofr_leverage_from_db(
+    db: AsyncSession,
+    lookback_days: int = 730,
+) -> list[dict[str, Any]]:
+    """Read OFR leverage data from the ofr_hedge_fund_data hypertable."""
+    from app.shared.models import OfrHedgeFundData
+
+    cutoff = date.today() - timedelta(days=lookback_days)
+    stmt = (
+        select(OfrHedgeFundData.obs_date, OfrHedgeFundData.series_id, OfrHedgeFundData.value)
+        .where(
+            OfrHedgeFundData.series_id.startswith("OFR_LEVERAGE_"),
+            OfrHedgeFundData.obs_date >= cutoff,
+        )
+        .order_by(OfrHedgeFundData.obs_date.desc())
+    )
+    result = await db.execute(stmt)
+    return [
+        {"date": str(r.obs_date), "series_id": r.series_id, "value": float(r.value)}
+        for r in result.all()
+        if r.value is not None
+    ]
+
+
+async def get_ofr_industry_size_from_db(
+    db: AsyncSession,
+    lookback_days: int = 730,
+) -> list[dict[str, Any]]:
+    """Read OFR industry size data from the ofr_hedge_fund_data hypertable."""
+    from app.shared.models import OfrHedgeFundData
+
+    cutoff = date.today() - timedelta(days=lookback_days)
+    stmt = (
+        select(OfrHedgeFundData.obs_date, OfrHedgeFundData.series_id, OfrHedgeFundData.value)
+        .where(
+            OfrHedgeFundData.series_id.startswith("OFR_INDUSTRY_"),
+            OfrHedgeFundData.obs_date >= cutoff,
+        )
+        .order_by(OfrHedgeFundData.obs_date.desc())
+    )
+    result = await db.execute(stmt)
+    return [
+        {"date": str(r.obs_date), "series_id": r.series_id, "value": float(r.value)}
+        for r in result.all()
+        if r.value is not None
+    ]
+
+
+async def get_ofr_repo_volumes_from_db(
+    db: AsyncSession,
+    lookback_days: int = 730,
+) -> list[dict[str, Any]]:
+    """Read OFR FICC repo volumes from the ofr_hedge_fund_data hypertable."""
+    from app.shared.models import OfrHedgeFundData
+
+    cutoff = date.today() - timedelta(days=lookback_days)
+    stmt = (
+        select(OfrHedgeFundData.obs_date, OfrHedgeFundData.value)
+        .where(
+            OfrHedgeFundData.series_id == "OFR_REPO_VOLUME",
+            OfrHedgeFundData.obs_date >= cutoff,
+        )
+        .order_by(OfrHedgeFundData.obs_date.desc())
+    )
+    result = await db.execute(stmt)
+    return [
+        {"date": str(r.obs_date), "value": float(r.value)}
+        for r in result.all()
+        if r.value is not None
+    ]
+
+
+async def get_ofr_risk_scenarios_from_db(
+    db: AsyncSession,
+    lookback_days: int = 730,
+) -> list[dict[str, Any]]:
+    """Read OFR stress scenario results from the ofr_hedge_fund_data hypertable."""
+    from app.shared.models import OfrHedgeFundData
+
+    cutoff = date.today() - timedelta(days=lookback_days)
+    stmt = (
+        select(OfrHedgeFundData.obs_date, OfrHedgeFundData.series_id, OfrHedgeFundData.value)
+        .where(
+            OfrHedgeFundData.series_id.startswith("OFR_CDS_"),
+            OfrHedgeFundData.obs_date >= cutoff,
+        )
+        .order_by(OfrHedgeFundData.obs_date.desc())
+    )
+    result = await db.execute(stmt)
+    return [
+        {"date": str(r.obs_date), "series_id": r.series_id, "value": float(r.value)}
+        for r in result.all()
+        if r.value is not None
+    ]

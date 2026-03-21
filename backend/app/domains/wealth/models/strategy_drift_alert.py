@@ -1,5 +1,9 @@
 """Strategy drift alert model — org-scoped with RLS.
 
+TimescaleDB hypertable partitioned by detected_at (1-month chunks).
+Compression: 3 months. segmentby: instrument_id.
+Always include detected_at filter in queries for chunk pruning.
+
 Persists drift detection results per instrument. Uses is_current flag
 pattern (same as ScreeningResult) with partial unique index guard.
 """
