@@ -18,7 +18,8 @@
 	function toggle() {
 		theme = theme === "dark" ? "light" : "dark";
 		document.documentElement.setAttribute("data-theme", theme);
-		// Persist across page loads (1-year expiry, SameSite=Lax)
+		// Persist for FOUC script (localStorage) + SSR hook (cookie)
+		localStorage.setItem("netz-theme", theme);
 		document.cookie = `netz-theme=${theme};max-age=31536000;path=/;SameSite=Lax`;
 	}
 </script>
