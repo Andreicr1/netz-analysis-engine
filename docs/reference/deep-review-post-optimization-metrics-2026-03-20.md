@@ -14,7 +14,7 @@
 | **Fund ID** | `a1b2c3d4-e5f6-7890-abcd-ef1234567890` | Same |
 | **Org ID** | `70f19993-b0d9-42ff-b3c7-cf2bb0728cec` | Same |
 | **Embeddings** | OpenAI text-embedding-3-large (3072 dim) | Same |
-| **Reranker** | **ACTIVE** — CrossEncoder ms-marco-MiniLM-L-6-v2 (CPU) | **CHANGED** from DISABLED (meta tensor error fixed) |
+| **Reranker** | **ACTIVE** — CrossEncoder ms-marco-MiniLM-L-6-v2 (CUDA, RTX 5070 Ti) | **CHANGED** from DISABLED (meta tensor error fixed) |
 | **DB** | Timescale Cloud prod (pgvector HNSW) | Same |
 | **Corpus budget** | 100,000 chars | Same |
 | **Search backend** | pgvector (sync) | **CHANGED** from Azure Search stub |
@@ -30,13 +30,13 @@
 
 ## Retrieval Timing
 
-| Stage | Post-Optimization | Baseline | Delta |
-|---|---|---|---|
-| Retrieval (14 chapters, pgvector + rerank) | **691s (~11.5 min)** | ~30s | +661s (reranker active — CPU inference on 14 chapters x multiple queries) |
-| Embedding calls | 100% cache hit | 100% cache hit | Same |
-| CrossEncoder load | 1.9s (one-time, thread-safe) | N/A (disabled) | NEW |
+| Stage | CPU (AMD, no CUDA) | GPU (RTX 5070 Ti, CUDA) | Baseline (reranker OFF) | Delta CPU→GPU |
+|---|---|---|---|---|
+| Retrieval (14 chapters, pgvector + rerank) | 691s (~11.5 min) | **69.3s (~1.2 min)** | ~30s | **10x speedup** |
+| Embedding calls | 100% cache hit | 100% cache hit | 100% cache hit | Same |
+| CrossEncoder load | 1.9s (one-time) | ~1s (one-time) | N/A (disabled) | NEW |
 
-**Note:** The 691s reflects CPU-based cross-encoder reranking over ~7000+ query-chunk pairs across 14 chapters. Production would use GPU or a dedicated reranker service to reduce this to ~30-60s.
+**GPU validation (2026-03-20):** Re-ran on NVIDIA RTX 5070 Ti Laptop GPU with CUDA. CrossEncoder device: `cuda`. Retrieval dropped from 691s → 69.3s (10x). Signal differentiation is identical (2H + 3M + 9A confidence, 5 SAT + 9 CONT coverage). Corpus increased to 300,430 chars (more documents ingested since CPU run; TOTAL_BUDGET_CHARS was raised to 300K for production with gpt-4.1 128K context).
 
 ---
 
@@ -151,7 +151,7 @@ The optimization plan predicted: "Deals with different evidence profiles produce
 
 ## Known Limitations
 
-1. **Reranker on CPU is slow** — 691s for 14 chapters. Production should use GPU or a dedicated reranker endpoint. The reranker itself is validated; this is a deployment concern.
+1. **Reranker on GPU validated** — 69.3s on RTX 5070 Ti (was 691s on CPU). Production deployment should ensure CUDA-enabled PyTorch. No dedicated reranker endpoint needed at current scale.
 
 2. **Per-chapter aggregate signal** — `RetrievalSignal` is computed over all deduped chunks from multiple queries per chapter. This dilutes discrimination when queries return overlapping results. Per-query signal computation would produce sharper differentiation. This is a design improvement, not a regression.
 
@@ -167,6 +167,7 @@ The optimization plan predicted: "Deals with different evidence profiles produce
 - `docs/plans/prompts/pgvector-caller-migration-prompt.md` — migration prompt used
 - `docs/plans/prompts/tone-normalizer-guard-prompt.md` — tone guard prompt used
 - `docs/plans/prompts/reranker-thread-safety-prompt.md` — reranker fix prompt used
+- `docs/plans/prompts/e2e-cuda-reranker-continuation-prompt.md` — CUDA GPU validation prompt (this run)
 
 
  Avaliação dos Resultados
@@ -186,10 +187,7 @@ The optimization plan predicted: "Deals with different evidence profiles produce
 
   Pontos de atenção
 
-  1. Reranker CPU: 691s vs 30s. Isso é 23x mais lento. Para baseline/dev está ok, mas prod precisa de GPU. O cross-encoder em CPU processa ~7000 query-chunk pairs sequencialmente.
-   Com GPU (RTX 5070 Ti disponível quando LM Studio não está usando), cairia para ~30-60s. Considerar:
-  - Liberar GPU do LM Studio durante rerank
-  - Ou usar um reranker endpoint separado
+  1. ~~Reranker CPU: 691s vs 30s~~ **RESOLVIDO.** GPU validado em 2026-03-20: 69.3s no RTX 5070 Ti (10x speedup). CrossEncoder roda em CUDA automaticamente quando disponível. Não precisa de endpoint separado. LM Studio e CrossEncoder coexistem na GPU sem conflito (modelo MiniLM usa ~100MB VRAM).
 
   2. Unique docs caiu de 4 → 2. O reranker concentra no melhor conteúdo, mas com 100K budget isso pode ser over-concentration. Com o budget de produção (300K), deve distribuir
   melhor entre mais documentos. Vale monitorar se a diversidade de fontes é suficiente para o IC committee.

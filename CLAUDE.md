@@ -36,7 +36,7 @@ backend/
     domains/
       credit/       ← analytical modules only (deals, portfolio, documents, reporting, dashboard, dataroom, actions, global_agent)
         modules/ai/ ← IC memos, deep review, extraction, pipeline deals, copilot, compliance
-      wealth/       ← models, routes, schemas, workers (24 tables, 13 workers, 18 route modules)
+      wealth/       ← models, routes, schemas, workers (26 tables, 15 workers, 18 route modules)
     services/
       storage_client.py ← StorageClient abstraction (LocalStorage dev, R2 prod, ADLS deprecated)
     shared/         ← enums, exceptions
@@ -47,7 +47,7 @@ backend/
     ingestion/      ← pipeline_ingest_runner, document_scanner, registry_bridge, monitoring
     validation/     ← vector_integrity_guard, deep_review validation, eval runner, evidence quality
     prompts/        ← Jinja2 templates (Netz IP — never expose to clients)
-  quant_engine/     ← CVaR, regime, optimizer, scoring, drift, rebalance, FRED, regional macro, stress severity, momentum
+  quant_engine/     ← CVaR, regime, optimizer, scoring, drift, rebalance, FRED, Treasury, OFR, regional macro, stress severity, momentum
   vertical_engines/
     base/           ← BaseAnalyzer ABC — shared interface all verticals implement
     credit/         ← 12 modular packages (Wave 1 complete):
@@ -56,7 +56,7 @@ backend/
       domain_ai/    ← domain AI engine
       edgar/        ← SEC EDGAR integration (edgartools)
       kyc/          ← KYC pipeline screening
-      market_data/  ← market data engine
+      market_data/  ← market data engine (reads from macro_data hypertable, zero FRED API calls)
       memo/         ← memo book generator, chapter engine, chapter prompts, evidence pack, tone normalizer, batch client
       pipeline/     ← pipeline engine + pipeline intelligence
       portfolio/    ← portfolio intelligence
@@ -93,7 +93,7 @@ frontends/
   wealth/           ← SvelteKit "netz-wealth-os"
 ```
 
-**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0004_vertical_configs`.
+**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0037_ofr_hedge_fund_hypertable`.
 
 **Auth:** Clerk JWT v2. `organization_id` from `o.id` claim. RLS via `SET LOCAL app.current_organization_id`. Dev bypass: `X-DEV-ACTOR` header.
 
@@ -105,7 +105,7 @@ frontends/
 
 **Classification:** Three-layer hybrid classifier (no external ML APIs). Layer 1: filename + keyword rules (~60% of docs). Layer 2: TF-IDF + cosine similarity (~30%). Layer 3: LLM fallback (~10%). Cross-encoder local reranker for IC memo evidence (replaced Cohere).
 
-**1405 tests.** All passing. Enforced by `make check` (lint + typecheck + test). CI: GitHub Actions (`pip install -e ".[dev,ai,quant]"`).
+**1439+ tests.** All passing. Enforced by `make check` (lint + typecheck + test). CI: GitHub Actions (`pip install -e ".[dev,ai,quant]"`).
 
 ## Product Scope — Analytical Core Only
 
@@ -135,7 +135,7 @@ The engine contains only analytical domains. Operational modules were intentiona
 - **expire_on_commit=False:** Always. Prevents implicit I/O in async context.
 - **lazy="raise":** Set on ALL relationships. Forces explicit `selectinload()`/`joinedload()`.
 - **RLS subselect:** All RLS policies must use `(SELECT current_setting(...))` not bare `current_setting()`. Without subselect, per-row evaluation causes 1000x slowdown.
-- **Global tables:** `macro_data`, `allocation_blocks`, `vertical_config_defaults`, `benchmark_nav`, `macro_regional_snapshots` have NO `organization_id`, NO RLS. They are shared across all tenants.
+- **Global tables:** `macro_data`, `allocation_blocks`, `vertical_config_defaults`, `benchmark_nav`, `macro_regional_snapshots`, `treasury_data`, `ofr_hedge_fund_data`, `sec_*` tables have NO `organization_id`, NO RLS. They are shared across all tenants.
 - **No module-level asyncio primitives:** Create `Semaphore`, `Lock`, `Event` lazily inside async functions. Module-level causes "attached to different event loop" errors.
 - **ORM thread safety:** Extract scalar attributes into frozen dataclasses before crossing any async/thread boundary.
 - **SET LOCAL not SET:** RLS context must use `SET LOCAL` (transaction-scoped). `SET` leaks across pooled connections.
@@ -148,6 +148,7 @@ The engine contains only analytical domains. Operational modules were intentiona
 - **Parquet schema must include embedding metadata:** All silver layer Parquet files must have `embedding_model` and `embedding_dim` columns. `search_rebuild.py` validates dimension match before upserting — prevents silent corruption on model upgrade.
 - **`organization_id` in vector search:** All pgvector queries MUST include `WHERE organization_id = :org_id` (SQL parameterized). All Parquet DuckDB queries MUST include `WHERE organization_id = ?`. Never query without tenant filter. (Azure Search files deprecated — `$filter=organization_id eq '{org_id}'` pattern no longer applies.)
 - **No Cohere dependency:** Hybrid classifier (rules → cosine_similarity → LLM) replaced Cohere Rerank. Cross-encoder reranker (`local_reranker.py`) replaced Cohere for IC memo evidence. Zero external ML API calls for classification.
+- **DB-first for external data:** All time-series external data (FRED, Treasury, OFR, Yahoo Finance) is ingested by background workers into TimescaleDB hypertables. Routes and vertical engines read from DB only — never call external APIs in user-facing requests. Workers use `pg_try_advisory_lock(ID)` with deterministic lock IDs (never `hash()`), unlock in `finally`.
 - **Frontend formatter discipline:** All number/date/currency formatting MUST use formatters from `@netz/ui` (`formatNumber`, `formatCurrency`, `formatPercent`, `formatDate`, `formatDateTime`, `formatShortDate`, etc.). Never use `.toFixed()`, `.toLocaleString()`, or inline `new Intl.NumberFormat`/`Intl.DateTimeFormat` in frontend code. Enforced by `frontends/eslint.config.js`.
 
 ## Vertical Engines
@@ -179,10 +180,31 @@ Enforced via `import-linter` in `make check`. Contracts in `pyproject.toml`:
 4. `gold/_global/fred_indicators/` = analytics use (backtesting, cross-fund correlation)
 5. All workers must write Parquet with `organization_id` as a column AND as a path segment
 6. DuckDB queries must always include `WHERE organization_id = ?` even when path already isolates
-7. TimescaleDB hypertables: `compress_segmentby = 'organization_id'` on all hypertables
+7. TimescaleDB hypertables: `compress_segmentby = 'organization_id'` on tenant-scoped hypertables; `compress_segmentby = 'series_id'` (or `cik`, `filer_cik`) on global hypertables
 8. Pipeline writes: OCR → `bronze/.../documents/{doc_id}.json`, chunks → `silver/.../chunks/{doc_id}/chunks.parquet`, metadata → `silver/.../documents/{doc_id}/metadata.json`
 9. Parquet files must use zstd compression and include `embedding_model` + `embedding_dim` columns for rebuild validation
 10. `search_rebuild.py` can reconstruct pgvector `vector_chunks` table from silver Parquet — no OCR/LLM calls needed. (Azure Search index rebuild is deprecated — Azure Search files kept for rollback only.)
+
+## Data Ingestion Workers (DB-First Pattern)
+
+Background workers ingest all external time-series data into hypertables. Routes and vertical engines read from DB only.
+
+| Worker | Lock ID | Scope | Hypertable | Source | Frequency |
+|--------|---------|-------|-----------|--------|-----------|
+| `macro_ingestion` | 43 | global | `macro_data` (1mo chunks) | FRED API (~65 series: 4 regions + global + credit + 20 Case-Shiller metros) | Daily |
+| `treasury_ingestion` | 900_011 | global | `treasury_data` (1mo chunks) | US Treasury API (rates, debt, auctions, FX, interest) | Daily |
+| `ofr_ingestion` | 900_012 | global | `ofr_hedge_fund_data` (3mo chunks) | OFR API (leverage, AUM, strategy, repo, stress) | Weekly |
+| `benchmark_ingest` | 900_004 | global | `benchmark_nav` (1mo chunks) | Yahoo Finance | Daily |
+| `instrument_ingestion` | 900_010 | org | `nav_timeseries` | Yahoo Finance (or pluggable provider) | Daily |
+| `risk_calc` | 900_007 | org | `fund_risk_metrics` | Computed (CVaR, Sharpe, volatility, momentum: RSI, Bollinger, OBV) | Daily |
+| `portfolio_eval` | 900_008 | org | `portfolio_snapshots` | Computed (breach status, regime, cascade) | Daily |
+| `drift_check` | 42 | org | `strategy_drift_alerts` | Computed (DTW drift) | Daily |
+
+**Credit market_data** reads all macro data from `macro_data` hypertable (zero FRED API calls at runtime, `fred_client.py` eliminated). Regional Case-Shiller (20 metros) also from `macro_data`.
+
+**Momentum signals** (RSI, Bollinger, OBV flow) are pre-computed by `risk_calc` worker into `fund_risk_metrics` columns (`rsi_14`, `bb_position`, `nav_momentum_score`, `flow_momentum_score`, `blended_momentum_score`). Scoring route reads pre-computed values — no in-request TA-Lib computation.
+
+**Analytics caching:** `POST /analytics/optimize` results cached in Redis (SHA-256 of inputs including date, 1h TTL). `POST /analytics/optimize/pareto` runs as background job with SSE progress (returns 202 immediately).
 
 ## Environment Variables
 

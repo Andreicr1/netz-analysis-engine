@@ -1,6 +1,6 @@
 # Netz Analysis Engine — Complete System Map
 
-**Date:** 2026-03-19
+**Date:** 2026-03-21
 **Scope:** All services, pipelines, calculations, reports, content, and frontend tools across Credit and Wealth verticals.
 
 ---
@@ -210,11 +210,11 @@ All services accept optional `config` parameter (never read YAML directly). Pure
 | Service | Key Functions | Outputs |
 |---------|--------------|---------|
 | **Optimizer** (`optimizer_service.py`) | `optimize_portfolio(blocks, returns, cov, constraints)` | weights, expected_return, Sharpe, volatility |
-| | `optimize_portfolio_pareto(...)` | NSGA-II Pareto front (2-3 objectives), 45-135s |
+| | `optimize_portfolio_pareto(...)` | NSGA-II Pareto front (2-3 objectives), 45-135s. Runs as background job with SSE progress. |
 | | `parametric_cvar_cf(weights, mu, cov, skew, kurt)` | Cornish-Fisher adjusted CVaR |
 | **Metrics** (`portfolio_metrics_service.py`) | `aggregate(portfolio_returns, bench_returns)` | Sharpe, Sortino, max_drawdown, information_ratio |
-| **Scoring** (`scoring_service.py`) | `compute_fund_score(metrics, lipper, flows)` | Composite 0-100 score (6 weighted dimensions) |
-| **Backtest** (`backtest_service.py`) | `walk_forward_backtest(returns, weights, n_splits)` | Per-fold Sharpe, CVaR, drawdown |
+| **Scoring** (`scoring_service.py`) | `compute_fund_score(metrics, lipper, flows)` | Composite 0-100 score (6 weighted dimensions). Momentum pre-computed by worker. |
+| **Backtest** (`backtest_service.py`) | `walk_forward_backtest(returns, weights, n_splits)` | Per-fold Sharpe, CVaR, drawdown. Results cached in Redis (1h TTL). |
 | **Rebalance** (`rebalance_service.py`) | `determine_cascade_action(trigger, prev, util, days)` | State machine: ok → warning → breach → hard_stop |
 
 ### 4.3 Technical & Momentum
@@ -226,14 +226,20 @@ All services accept optional `config` parameter (never read YAML directly). Pure
 | **Correlation** (`correlation_regime_service.py`) | `compute_correlation_regime(returns_matrix)` | Correlation matrix, contagion pairs, diversification ratio, absorption ratio |
 | **Attribution** (`attribution_service.py`) | `compute_attribution(portfolio, benchmark)` | Brinson-Fachler: allocation + selection + interaction effects |
 
-### 4.4 External Data Services
+### 4.4 External Data Services (DB-First Pattern)
 
-| Service | Source | Auth | Key Functions |
-|---------|--------|------|--------------|
-| **FRED** (`fred_service.py`) | Federal Reserve | `FRED_API_KEY` | `fetch_series()`, `fetch_batch_concurrent()` — rates, VIX, CPI, unemployment |
-| **Treasury** (`fiscal_data_service.py`) | US Treasury | None | `fetch_treasury_rates()`, `fetch_debt_snapshot()`, `fetch_auction_results()` |
-| **OFR** (`ofr_hedge_fund_service.py`) | SEC/CFTC/FRB | None | `fetch_leverage_snapshot()`, `fetch_industry_size()`, `fetch_strategy_aum()` |
-| **Data Commons** (`data_commons_service.py`) | Google | `DC_API_KEY` | `fetch_demographic_profile()`, `resolve_entity()` |
+All external time-series data is ingested by background workers into TimescaleDB hypertables. Routes and vertical engines read from DB only — never call external APIs in user-facing requests.
+
+| Service | Source | Auth | Hypertable | Ingestion Worker |
+|---------|--------|------|-----------|-----------------|
+| **FRED** (`fred_service.py`) | Federal Reserve | `FRED_API_KEY` | `macro_data` | `macro_ingestion` (~65 series: 4 regions + global + credit) |
+| **Treasury** (`fiscal_data_service.py`) | US Treasury | None | `treasury_data` | `treasury_ingestion` (rates, debt, auctions, FX, interest) |
+| **OFR** (`ofr_hedge_fund_service.py`) | SEC/CFTC/FRB | None | `ofr_hedge_fund_data` | `ofr_ingestion` (leverage, AUM, strategy, repo, stress) |
+| **Data Commons** (`data_commons_service.py`) | Google | `DC_API_KEY` | — (on-demand) | — |
+
+**DB reader functions:** Each service provides `get_*_from_db()` async functions that read from the hypertable instead of calling the API. Callers should prefer DB readers; API functions are used only by workers.
+
+**Credit market_data:** Reads all macro data from `macro_data` hypertable (zero FRED API calls at runtime). Regional Case-Shiller (20 metros) also from `macro_data`. The `fred_client.py` has been eliminated.
 
 ### 4.5 Macro Intelligence
 
@@ -241,6 +247,7 @@ All services accept optional `config` parameter (never read YAML directly). Pure
 |---------|--------------|---------|
 | **Regional Macro** (`regional_macro_service.py`) | `score_region(region, observations)` | Composite 0-100 per region (US, EU, ASIA, EM) via 6 dimensions |
 | | `score_global_indicators(observations)` | geopolitical_risk, energy_stress, commodity_stress, usd_strength |
+| | `CREDIT_SERIES` (24 + 20 Case-Shiller) | Credit-specific FRED series ingested alongside regional data |
 | **Snapshot Builder** (`macro_snapshot_builder.py`) | `build_regional_snapshot(observations)` | Assembled snapshot for macro_regional_snapshots |
 
 ---
@@ -393,23 +400,25 @@ All services accept optional `config` parameter (never read YAML directly). Pure
 | Manager Spotlight | ManagerSpotlight | Manual per fund | Status workflow | Yes |
 | Macro Review | MacroCommitteeEngine | Weekly trigger | Director/Admin approve | JSON (not PDF) |
 
-### 6.5 Background Workers (11 Workers)
+### 6.5 Background Workers (13 Workers)
 
-| Worker | Scope | Timeout | Purpose |
-|--------|-------|---------|---------|
-| `ingestion` | org | 10m | NAV fetch from Yahoo Finance → nav_timeseries |
-| `risk_calc` | org | 10m | Rolling CVaR, VaR, returns, volatility → fund_risk_metrics |
-| `portfolio_eval` | org | 5m | CVaR evaluation, regime detection → portfolio_snapshots |
-| `macro_ingestion` | global | 10m | ~45 FRED series + regional normalization → macro_regional_snapshots |
-| `fact_sheet_gen` | global | 10m | PDF generation for all active portfolios |
-| `screening_batch` | org | 5m | Re-screen all instruments → instruments_screening_results |
-| `watchlist_batch` | org | 5m | Watchlist transition detection, Redis pub/sub alerts |
-| `instrument_ingestion` | org | 10m | NAV fetch for instruments_universe by provider |
-| `benchmark_ingest` | global | 10m | Benchmark ticker NAV → benchmark_nav (global table) |
-| `drift_check` | org | 5m | DTW drift scan across fund universe |
-| `regime_fit` | org | 5m | Regime fitness evaluation |
+| Worker | Lock ID | Scope | Timeout | Purpose |
+|--------|---------|-------|---------|---------|
+| `ingestion` | — | org | 10m | NAV fetch from Yahoo Finance → nav_timeseries |
+| `risk_calc` | 900_007 | org | 10m | Rolling CVaR, VaR, returns, volatility, **momentum** (RSI, Bollinger, OBV) → fund_risk_metrics |
+| `portfolio_eval` | 900_008 | org | 5m | CVaR evaluation, regime detection → portfolio_snapshots |
+| `macro_ingestion` | 43 | global | 10m | ~65 FRED series (4 regions + global + credit + 20 Case-Shiller metros) → macro_data + macro_regional_snapshots |
+| `treasury_ingestion` | 900_011 | global | 10m | Treasury rates, debt, auctions, FX, interest expense → treasury_data |
+| `ofr_ingestion` | 900_012 | global | 10m | Hedge fund leverage, AUM, strategy, repo, stress → ofr_hedge_fund_data |
+| `fact_sheet_gen` | — | global | 10m | PDF generation for all active portfolios |
+| `screening_batch` | — | org | 5m | Re-screen all instruments → instruments_screening_results |
+| `watchlist_batch` | — | org | 5m | Watchlist transition detection, Redis pub/sub alerts |
+| `instrument_ingestion` | 900_010 | org | 10m | NAV fetch for instruments_universe by provider |
+| `benchmark_ingest` | 900_004 | global | 10m | Benchmark ticker NAV → benchmark_nav (global table) |
+| `drift_check` | 42 | org | 5m | DTW drift scan across fund universe |
+| `regime_fit` | — | org | 5m | Regime fitness evaluation |
 
-All workers wrapped with `asyncio.wait_for(timeout)` + Redis idempotency guard (409 on concurrent trigger).
+All workers wrapped with `asyncio.wait_for(timeout)` + Redis idempotency guard (409 on concurrent trigger). Advisory locks use deterministic IDs (never `hash()`).
 
 ### 6.6 Wealth Domain Tables
 
@@ -420,7 +429,7 @@ All workers wrapped with `asyncio.wait_for(timeout)` + Redis idempotency guard (
 | `dd_chapters` | org | Individual chapters with critic status |
 | `universe_approvals` | org | Investment universe approval workflow |
 | `nav_timeseries` | org | Daily NAV + returns |
-| `fund_risk_metrics` | org | Risk snapshots (CVaR, Sharpe, volatility) |
+| `fund_risk_metrics` | org | Risk snapshots (CVaR, Sharpe, volatility, momentum: RSI, Bollinger, OBV) |
 | `benchmark_nav` | global | Benchmark timeseries (no org_id) |
 | `model_portfolios` | org | Model construction with fund_selection_schema |
 | `portfolio_snapshots` | org | Daily portfolio state (weights, CVaR, regime) |
@@ -428,7 +437,9 @@ All workers wrapped with `asyncio.wait_for(timeout)` + Redis idempotency guard (
 | `macro_reviews` | org | Macro committee review records |
 | `instruments_screening_results` | org | 3-layer screening outcomes with config_hash |
 | `allocation_blocks` | global | Strategic allocation buckets with benchmark_ticker |
-| `macro_data` | global | Operational macro series (regime detection, daily pipeline) |
+| `macro_data` | global | Operational macro series (~65 FRED: regime detection, credit market_data, Case-Shiller metros) |
+| `treasury_data` | global | US Treasury rates, debt, auctions, FX, interest expense (hypertable, 1-month chunks) |
+| `ofr_hedge_fund_data` | global | OFR hedge fund leverage, AUM, strategy, repo volumes, stress (hypertable, 3-month chunks) |
 | `wealth_content` | org | Generated outlooks, flash reports, spotlights |
 | `strategy_drift_alerts` | org | DTW drift alerts with severity |
 | `wealth_documents` | org | Document management |
@@ -604,15 +615,17 @@ Monotonic version gate prevents stale poll data from overwriting fresh SSE data.
 
 ## Appendix: External Integrations
 
-| Service | Protocol | Auth | Usage |
-|---------|----------|------|-------|
-| OpenAI | REST | API key | GPT-4o/4.1 (analysis, memos, content), text-embedding-3-large (3072d) |
-| Mistral | REST | API key | mistral-ocr-latest (PDF OCR) |
-| Clerk | JWKS | JWT v2 | Authentication, organization context |
-| FRED | REST | API key | Risk-free rates, VIX, CPI, unemployment, financial conditions (~45 series) |
-| SEC EDGAR | REST | None (rate-limited 8 req/s) | CIK resolution, financials, 10-K filings, insider signals |
-| US Treasury Fiscal Data | REST | None | Treasury rates, debt snapshot, auction results |
-| OFR Hedge Fund Monitor | REST | None | Leverage, industry AUM, strategy breakdown, repo volume |
-| Data Commons | REST | API key | Demographics, economic observations, geographic hierarchy |
-| Yahoo Finance | yfinance lib | None | NAV, prices, instrument metadata (default provider) |
-| KYC Spider | REST | API key | PEP, sanctions, adverse media screening |
+**DB-First Rule:** All time-series external data is ingested by background workers into hypertables. Routes and vertical engines read from DB only. External APIs are never called in user-facing requests.
+
+| Service | Protocol | Auth | Hypertable | Worker | Usage |
+|---------|----------|------|-----------|--------|-------|
+| OpenAI | REST | API key | — | — | GPT-4o/4.1 (analysis, memos, content), text-embedding-3-large (3072d) |
+| Mistral | REST | API key | — | — | mistral-ocr-latest (PDF OCR) |
+| Clerk | JWKS | JWT v2 | — | — | Authentication, organization context |
+| FRED | REST | API key | `macro_data` | `macro_ingestion` | ~65 series: 4 regions + global + credit + 20 Case-Shiller metros |
+| US Treasury | REST | None | `treasury_data` | `treasury_ingestion` | Rates, debt, auctions, FX, interest expense |
+| OFR Hedge Fund | REST | None | `ofr_hedge_fund_data` | `ofr_ingestion` | Leverage, AUM, strategy, repo volumes, stress scenarios |
+| SEC EDGAR | REST | None (8 req/s) | `sec_13f_holdings` | SEC seed/worker | CIK resolution, financials, 13F holdings, insider signals |
+| Yahoo Finance | yfinance lib | None | `nav_timeseries`, `benchmark_nav` | `instrument_ingestion`, `benchmark_ingest` | NAV, prices, instrument metadata |
+| Data Commons | REST | API key | — (on-demand) | — | Demographics, economic observations, geographic hierarchy |
+| KYC Spider | REST | API key | — | — | PEP, sanctions, adverse media screening |
