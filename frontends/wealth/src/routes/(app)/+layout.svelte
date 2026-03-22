@@ -7,10 +7,20 @@
 	import { page } from "$app/stores";
 	import { setContext, getContext, onMount, type Snippet } from "svelte";
 	import { AppShell, Sidebar, ThemeToggle } from "@netz/ui";
-	import type { NavItem } from "@netz/ui/utils";
 	import { createRiskStore, type RiskStore } from "$lib/stores/risk-store.svelte";
 	import { formatLastUpdated } from "$lib/stores/stale";
 	import { formatDateTime } from "@netz/ui";
+	import {
+		Search, Building2, ClipboardList, Globe,
+		Briefcase, Zap, BarChart2, Map,
+		Landmark, FileText, Newspaper, Folders
+	} from "lucide-svelte";
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	interface SidebarNavItem {
+		label: string;
+		href: string;
+		icon: any;
+	}
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -41,26 +51,26 @@
 	);
 
 	// ── Navigation taxonomy ──
-	const navItems: NavItem[] = [
+	const navItems: SidebarNavItem[] = [
 		// SECTION 1: DISCOVERY & SCREENING
-		{ label: "Screener", href: "/screener", icon: "🔍" },
-		{ label: "Manager Screener", href: "/manager-screener", icon: "🏢" },
-		{ label: "DD Reports", href: "/dd-reports", icon: "📋" },
+		{ label: "Screener", href: "/screener", icon: Search },
+		{ label: "Manager Screener", href: "/manager-screener", icon: Building2 },
+		{ label: "DD Reports", href: "/dd-reports", icon: ClipboardList },
 
 		// SECTION 2: INVESTMENT ENGINE
-		{ label: "Universe", href: "/universe", icon: "🌐" },
-		{ label: "Model Portfolios", href: "/model-portfolios", icon: "📐" },
-		{ label: "Portfolios", href: "/portfolios", icon: "💼" },
+		{ label: "Universe", href: "/universe", icon: Globe },
+		{ label: "Model Portfolios", href: "/model-portfolios", icon: Folders },
+		{ label: "Portfolios", href: "/portfolios", icon: Briefcase },
 
 		// SECTION 3: RISK & INTELLIGENCE
-		{ label: "Risk", href: "/risk", icon: "⚡" },
-		{ label: "Analytics", href: "/analytics", icon: "📊" },
-		{ label: "Exposure", href: "/exposure", icon: "🗺️" },
-		{ label: "Macro", href: "/macro", icon: "🏛️" },
+		{ label: "Risk", href: "/risk", icon: Zap },
+		{ label: "Analytics", href: "/analytics", icon: BarChart2 },
+		{ label: "Exposure", href: "/exposure", icon: Map },
+		{ label: "Macro", href: "/macro", icon: Landmark },
 
 		// SECTION 4: CONTENT & DATA
-		{ label: "Documents", href: "/documents", icon: "📄" },
-		{ label: "Content", href: "/content", icon: "📰" },
+		{ label: "Documents", href: "/documents", icon: FileText },
+		{ label: "Content", href: "/content", icon: Newspaper },
 	];
 </script>
 
@@ -83,6 +93,7 @@
 			{/if}
 			<nav class="netz-ws-nav" aria-label="Discovery & Screening">
 				{#each navItems.slice(0, 3) as item (item.href)}
+					{@const Icon = item.icon}
 					<a
 						href={item.href}
 						class="netz-ws-nav-item"
@@ -90,7 +101,7 @@
 						title={sidebarCollapsed ? item.label : undefined}
 						aria-current={$page.url.pathname === item.href || $page.url.pathname.startsWith(item.href + "/") ? "page" : undefined}
 					>
-						<span class="netz-ws-nav-icon">{item.icon}</span>
+						<span class="netz-ws-nav-icon"><Icon size={18} strokeWidth={1.5} /></span>
 						{#if !sidebarCollapsed}
 							<span class="netz-ws-nav-label">{item.label}</span>
 						{/if}
@@ -105,6 +116,7 @@
 			{/if}
 			<nav class="netz-ws-nav" aria-label="Investment Engine">
 				{#each navItems.slice(3, 6) as item (item.href)}
+					{@const Icon = item.icon}
 					<a
 						href={item.href}
 						class="netz-ws-nav-item"
@@ -112,7 +124,7 @@
 						title={sidebarCollapsed ? item.label : undefined}
 						aria-current={$page.url.pathname === item.href || $page.url.pathname.startsWith(item.href + "/") ? "page" : undefined}
 					>
-						<span class="netz-ws-nav-icon">{item.icon}</span>
+						<span class="netz-ws-nav-icon"><Icon size={18} strokeWidth={1.5} /></span>
 						{#if !sidebarCollapsed}
 							<span class="netz-ws-nav-label">{item.label}</span>
 						{/if}
@@ -127,6 +139,7 @@
 			{/if}
 			<nav class="netz-ws-nav" aria-label="Risk & Intelligence">
 				{#each navItems.slice(6, 10) as item (item.href)}
+					{@const Icon = item.icon}
 					<a
 						href={item.href}
 						class="netz-ws-nav-item"
@@ -134,7 +147,7 @@
 						title={sidebarCollapsed ? item.label : undefined}
 						aria-current={$page.url.pathname === item.href || $page.url.pathname.startsWith(item.href + "/") ? "page" : undefined}
 					>
-						<span class="netz-ws-nav-icon">{item.icon}</span>
+						<span class="netz-ws-nav-icon"><Icon size={18} strokeWidth={1.5} /></span>
 						{#if !sidebarCollapsed}
 							<span class="netz-ws-nav-label">{item.label}</span>
 						{/if}
@@ -149,6 +162,7 @@
 			{/if}
 			<nav class="netz-ws-nav" aria-label="Content & Data">
 				{#each navItems.slice(10, 12) as item (item.href)}
+					{@const Icon = item.icon}
 					<a
 						href={item.href}
 						class="netz-ws-nav-item"
@@ -156,7 +170,7 @@
 						title={sidebarCollapsed ? item.label : undefined}
 						aria-current={$page.url.pathname === item.href || $page.url.pathname.startsWith(item.href + "/") ? "page" : undefined}
 					>
-						<span class="netz-ws-nav-icon">{item.icon}</span>
+						<span class="netz-ws-nav-icon"><Icon size={18} strokeWidth={1.5} /></span>
 						{#if !sidebarCollapsed}
 							<span class="netz-ws-nav-label">{item.label}</span>
 						{/if}
@@ -221,7 +235,9 @@
 			</div>
 		{/if}
 
-		{@render children()}
+		<div class="h-full w-full overflow-y-auto overflow-x-hidden p-6 md:p-10 box-border relative">
+			{@render children()}
+		</div>
 	{/snippet}
 </AppShell>
 
