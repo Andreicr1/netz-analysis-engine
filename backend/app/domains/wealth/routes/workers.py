@@ -566,3 +566,61 @@ async def trigger_run_imf_ingestion(
         run_imf_ingestion,
         timeout_seconds=_HEAVY_WORKER_TIMEOUT,
     )
+
+
+@router.post(
+    "/run-brochure-download",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger ADV brochure PDF download",
+    description=(
+        "Phase A: Download ADV Part 2A brochure PDFs from IAPD into "
+        "StorageClient (R2 prod / local dev). Rate-limited at 1 req/s. "
+        "Skips already-stored PDFs. Uses advisory lock 900_019. "
+        "Run phase B (extract) after download completes."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_brochure_download(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.brochure_ingestion import run_brochure_download
+
+    return await _dispatch_worker(
+        background_tasks, "run-brochure-download", "global",
+        run_brochure_download,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )
+
+
+@router.post(
+    "/run-brochure-extract",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger ADV brochure text extraction",
+    description=(
+        "Phase B: Read brochure PDFs from StorageClient and extract text "
+        "via PyMuPDF. Classifies into 18 ADV sections and extracts team "
+        "members. No IAPD network calls — runs at full CPU speed. "
+        "Uses advisory lock 900_020. Requires phase A (download) first."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_brochure_extract(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.brochure_ingestion import run_brochure_extract
+
+    return await _dispatch_worker(
+        background_tasks, "run-brochure-extract", "global",
+        run_brochure_extract,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )

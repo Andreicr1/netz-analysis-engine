@@ -118,3 +118,22 @@ class RegimeHistoryPoint(BaseModel):
     snapshot_date: date
     profile: str
     regime: str | None = None
+
+
+class ProfileMomentum(BaseModel):
+    """Weighted-average momentum signals for a single risk profile."""
+
+    profile: str
+    rsi_14: float | None = None
+    bb_position: float | None = None
+    nav_momentum_score: float | None = None
+    flow_momentum_score: float | None = None
+    blended_momentum_score: float | None = None
+    instrument_count: int = 0
+
+
+class MomentumSummaryOut(BaseModel):
+    """Aggregated momentum across all profiles."""
+
+    profiles: dict[str, ProfileMomentum]
+    computed_at: datetime
