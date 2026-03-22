@@ -31,10 +31,8 @@ from app.domains.credit.global_agent.intent_router import IntentRouter
 
 logger = logging.getLogger(__name__)
 
-# Compliance domains served by AzureComplianceKBAdapter
+# Compliance domains served by pgvector retrieval
 _COMPLIANCE_DOMAINS = {"REGULATORY", "CONSTITUTION", "SERVICE_PROVIDER"}
-
-PIPELINE_CONTAINER = "investment-pipeline-intelligence"
 
 
 class NetzGlobalAgent:
@@ -307,19 +305,68 @@ class NetzGlobalAgent:
         self, question: str, domain: str, top: int,
         organization_id: uuid.UUID | str | None = None,
     ) -> list[Any]:
-        """Retrieve from dedicated compliance indexes via AzureComplianceKBAdapter."""
-        from ai_engine.extraction.azure_kb_adapter import (
-            AzureComplianceKBAdapter,
+        """Retrieve compliance chunks from pgvector filtered by domain."""
+        from ai_engine.extraction.embedding_service import generate_embeddings
+        from ai_engine.extraction.kb_schema import ComplianceChunk, DocType
+        from ai_engine.extraction.pgvector_search_service import (
+            _get_sync_engine,
+            validate_domain,
+            validate_uuid,
         )
+        from sqlalchemy import text as sa_text
 
         if organization_id is None:
             logger.warning("GLOBAL_AGENT compliance retrieval without organization_id — tenant isolation disabled")
             return []
 
         try:
-            return AzureComplianceKBAdapter.search_live(
-                query=question, domain=domain, organization_id=organization_id, top=top,
-            )
+            safe_org = validate_uuid(organization_id, "organization_id")
+            safe_domain = validate_domain(domain)
+
+            batch = generate_embeddings([question])
+            if not batch.embeddings:
+                return []
+            query_vector = batch.embeddings[0]
+
+            valid_doc_types: set[str] = set(DocType.__args__)  # type: ignore[attr-defined]
+
+            engine = _get_sync_engine()
+            with engine.connect() as conn:
+                result = conn.execute(
+                    sa_text("""
+                        SELECT id, deal_id, domain, doc_type, doc_id, title, content,
+                               1 - (embedding <=> CAST(:embedding AS vector)) AS score
+                        FROM vector_chunks
+                        WHERE organization_id = CAST(:org_id AS uuid)
+                          AND domain = :domain
+                          AND embedding IS NOT NULL
+                        ORDER BY embedding <=> CAST(:embedding AS vector)
+                        LIMIT :top
+                    """),
+                    {
+                        "embedding": str(query_vector),
+                        "org_id": safe_org,
+                        "domain": safe_domain,
+                        "top": top,
+                    },
+                )
+                rows = result.mappings().all()
+
+            chunks = []
+            for r in rows:
+                raw_doc_type = r.get("doc_type") or "OTHER"
+                safe_doc_type = raw_doc_type if raw_doc_type in valid_doc_types else "OTHER"
+                chunks.append(ComplianceChunk(
+                    chunk_id=r["id"],
+                    doc_id=r.get("doc_id") or r["id"],
+                    domain=domain,
+                    doc_type=safe_doc_type,
+                    source_blob=r.get("title") or "unknown",
+                    chunk_text=r.get("content", ""),
+                    search_score=r.get("score"),
+                ))
+
+            return chunks
         except Exception as exc:
             logger.error(
                 "GLOBAL_AGENT COMPLIANCE_RETRIEVAL_ERROR domain=%s: %s",
@@ -368,17 +415,33 @@ class NetzGlobalAgent:
     # ------------------------------------------------------------------ #
     @staticmethod
     def _load_deal_context_chunk(deal_folder: str) -> Any | None:
-        """Load deal_context.json from blob and wrap as a synthetic
+        """Load deal_context.json from StorageClient and wrap as a synthetic
         ComplianceChunk. Returns None if unavailable.
         """
-        from ai_engine.extraction.kb_schema import (
-            ComplianceChunk,
-        )
-        from app.services.blob_storage import blob_uri, download_bytes
+        import asyncio
+
+        from ai_engine.extraction.kb_schema import ComplianceChunk
+        from app.services.storage_client import create_storage_client
 
         try:
-            uri = blob_uri(PIPELINE_CONTAINER, f"{deal_folder}/deal_context.json")
-            data = download_bytes(blob_uri=uri)
+            storage = create_storage_client()
+            path = f"silver/{deal_folder}/deal_context.json"
+
+            # StorageClient.read is async; run in a new loop if needed
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    data = pool.submit(
+                        lambda: asyncio.run(storage.read(path))
+                    ).result(timeout=10)
+            else:
+                data = asyncio.run(storage.read(path))
+
             json_content = data.decode("utf-8")
 
             return ComplianceChunk(
@@ -388,8 +451,6 @@ class NetzGlobalAgent:
                 doc_type="OTHER",
                 source_blob=f"{deal_folder}/deal_context.json",
                 chunk_text=json_content,
-                obligation_candidate=False,
-                extraction_confidence=1.0,
                 search_score=100.0,  # Highest priority
             )
         except Exception as exc:

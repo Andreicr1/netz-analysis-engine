@@ -1,12 +1,22 @@
-"""Azure AI Search adapter for the canonical env-scoped chunks index."""
+"""pgvector adapter for the pipeline chunks index.
+
+Replaces the former Azure AI Search adapter. Queries vector_chunks
+table filtered by domain='PIPELINE' and organization_id for tenant isolation.
+"""
 from __future__ import annotations
 
 import logging
 import re
 import uuid as _uuid
+from typing import Any
 
 from ai_engine.extraction.kb_schema import ComplianceChunk, DocType
-from ai_engine.extraction.pgvector_search_service import validate_uuid
+from ai_engine.extraction.pgvector_search_service import (
+    _get_sync_engine,
+    validate_domain,
+    validate_uuid,
+)
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +27,7 @@ _VALID_DOC_TYPES: set[str] = set(DocType.__args__)  # type: ignore[attr-defined]
 
 # Patterns that indicate the user wants a broad overview (all deals),
 # not a specific deal search. In these cases we do a wildcard search
-# grouped by deal_folder to get diverse coverage.
+# grouped by deal_id to get diverse coverage.
 _OVERVIEW_PATTERNS = re.compile(
     r"(pipeline|todos os deals|all deals|overview|visão geral|carteira"
     r"|portf[oó]lio.*completo|quantos deals|how many deals"
@@ -27,7 +37,7 @@ _OVERVIEW_PATTERNS = re.compile(
 
 
 class PipelineKBAdapter:
-    """Retrieves chunks from the canonical search chunks index.
+    """Retrieves chunks from pgvector vector_chunks table.
     Results are mapped to ComplianceChunk so the global agent can merge
     pipeline evidence with regulatory evidence seamlessly.
     """
@@ -39,65 +49,38 @@ class PipelineKBAdapter:
         deal_folder: str | None = None,
         top: int = 20,
     ) -> list[ComplianceChunk]:
-        """Full-text search against the canonical search chunks index.
+        """Semantic search against pgvector for pipeline chunks.
 
         For overview questions (pipeline summary, all deals, etc.), performs
-        a broad wildcard search and ensures diverse deal coverage by
-        selecting top chunks from each unique deal_folder.
+        a broad search and ensures diverse deal coverage by selecting top
+        chunks from each unique deal_id.
 
-        All queries include organization_id for tenant isolation (Security F2/F5).
-
-        Parameters
-        ----------
-        query : str
-            Natural-language search query.
-        organization_id : uuid.UUID | str
-            Tenant isolation — required for all search queries.
-        deal_folder : str | None
-            If provided, scopes retrieval to a specific deal via OData filter.
-        top : int
-            Maximum number of results.
-
-        Returns
-        -------
-        list[ComplianceChunk]
-            Sorted by search_score descending.
-
+        All queries include organization_id for tenant isolation.
         """
-        from ai_engine.pipeline.storage_routing import _SAFE_PATH_SEGMENT_RE
-        from app.services.azure.search_client import (
-            get_search_client,
-            resolve_chunks_index_name,
-        )
+        from ai_engine.extraction.embedding_service import generate_embeddings
 
         safe_org = validate_uuid(organization_id, "organization_id")
-        org_filter = f"organization_id eq '{safe_org}'"
 
         is_overview = not deal_folder and bool(_OVERVIEW_PATTERNS.search(query))
 
         try:
-            index_name = resolve_chunks_index_name()
-            client = get_search_client(index_name=index_name)
-
-            odata_filter = org_filter
-            if deal_folder:
-                if not _SAFE_PATH_SEGMENT_RE.match(deal_folder):
-                    raise ValueError(f"Invalid deal_folder: {deal_folder!r}")
-                odata_filter = f"{org_filter} and deal_folder eq '{deal_folder}'"
+            # Generate query embedding
+            batch = generate_embeddings([query])
+            if not batch.embeddings:
+                logger.warning("PIPELINE_KB empty embedding for query=%r", query[:80])
+                return []
+            query_vector = batch.embeddings[0]
 
             if is_overview:
-                # For overview queries: fetch more results with wildcard to
-                # ensure we cover all deals, then diversify per deal_folder
-                chunks = _overview_search(client, query, top, org_filter)
+                chunks = _overview_search(safe_org, query_vector, top)
             else:
-                chunks = _standard_search(client, query, top, odata_filter)
+                chunks = _standard_search(safe_org, query_vector, top, deal_folder)
 
             logger.info(
-                "PIPELINE_KB query=%r deal_folder=%s is_overview=%s index=%s hits=%d",
+                "PIPELINE_KB query=%r deal_folder=%s is_overview=%s hits=%d",
                 query[:80],
                 deal_folder,
                 is_overview,
-                index_name,
                 len(chunks),
             )
             return chunks
@@ -113,63 +96,100 @@ class PipelineKBAdapter:
 
 
 def _standard_search(
-    client, query: str, top: int, odata_filter: str | None,
+    org_id: str,
+    query_vector: list[float],
+    top: int,
+    deal_folder: str | None,
 ) -> list[ComplianceChunk]:
-    """Normal targeted search."""
-    results = client.search(
-        search_text=query,
-        top=top,
-        filter=odata_filter,
-    )
-    return [_to_chunk(r) for r in results]
+    """Targeted cosine similarity search, optionally scoped to a deal."""
+    from ai_engine.pipeline.storage_routing import _SAFE_PATH_SEGMENT_RE
+
+    params: dict[str, Any] = {
+        "embedding": str(query_vector),
+        "org_id": org_id,
+        "domain": PIPELINE_DOMAIN,
+        "top": top,
+    }
+
+    if deal_folder:
+        if not _SAFE_PATH_SEGMENT_RE.match(deal_folder):
+            raise ValueError(f"Invalid deal_folder: {deal_folder!r}")
+        # deal_folder is typically the deal_id in pgvector
+        params["deal_id"] = deal_folder
+        sql = text("""
+            SELECT id, deal_id, domain, doc_type, doc_id, title, content,
+                   page_start, page_end, chunk_index,
+                   1 - (embedding <=> CAST(:embedding AS vector)) AS score
+            FROM vector_chunks
+            WHERE organization_id = CAST(:org_id AS uuid)
+              AND deal_id = :deal_id
+              AND domain = :domain
+              AND embedding IS NOT NULL
+            ORDER BY embedding <=> CAST(:embedding AS vector)
+            LIMIT :top
+        """)
+    else:
+        sql = text("""
+            SELECT id, deal_id, domain, doc_type, doc_id, title, content,
+                   page_start, page_end, chunk_index,
+                   1 - (embedding <=> CAST(:embedding AS vector)) AS score
+            FROM vector_chunks
+            WHERE organization_id = CAST(:org_id AS uuid)
+              AND domain = :domain
+              AND embedding IS NOT NULL
+            ORDER BY embedding <=> CAST(:embedding AS vector)
+            LIMIT :top
+        """)
+
+    engine = _get_sync_engine()
+    with engine.connect() as conn:
+        result = conn.execute(sql, params)
+        rows = result.mappings().all()
+        return [_to_chunk(dict(r)) for r in rows]
 
 
 def _overview_search(
-    client, query: str, top: int, org_filter: str,
+    org_id: str,
+    query_vector: list[float],
+    top: int,
 ) -> list[ComplianceChunk]:
-    """Broad search that ensures coverage of all deals in the index.
+    """Broad search that ensures coverage of all deals.
 
-    Strategy: fetch a large result set with a generic query, then
-    pick the best chunks from each unique deal_folder to ensure
-    the LLM sees all deals — not just the top-scoring ones.
+    Fetches a large candidate set, groups by deal_id, and picks the
+    best chunks from each deal to ensure the LLM sees all deals.
     """
-    # Fetch more than needed so we can diversify
     fetch_size = max(top * 5, 100)
 
-    # Use both the user query AND a broad wildcard to maximize coverage
-    results_query = list(client.search(
-        search_text=query,
-        top=fetch_size,
-        filter=org_filter,
-        select=["id", "parent_id", "blob_name", "title", "content",
-                "doc_type", "deal_folder", "deal_id", "last_modified"],
-    ))
+    engine = _get_sync_engine()
+    with engine.connect() as conn:
+        result = conn.execute(
+            text("""
+                SELECT id, deal_id, domain, doc_type, doc_id, title, content,
+                       page_start, page_end, chunk_index,
+                       1 - (embedding <=> CAST(:embedding AS vector)) AS score
+                FROM vector_chunks
+                WHERE organization_id = CAST(:org_id AS uuid)
+                  AND domain = :domain
+                  AND embedding IS NOT NULL
+                ORDER BY embedding <=> CAST(:embedding AS vector)
+                LIMIT :top
+            """),
+            {
+                "embedding": str(query_vector),
+                "org_id": org_id,
+                "domain": PIPELINE_DOMAIN,
+                "top": fetch_size,
+            },
+        )
+        rows = result.mappings().all()
 
-    # Also fetch wildcard results to find deals that don't match the query text
-    results_wildcard = list(client.search(
-        search_text="*",
-        top=fetch_size,
-        filter=org_filter,
-        select=["id", "parent_id", "blob_name", "title", "content",
-                "doc_type", "deal_folder", "deal_id", "last_modified"],
-    ))
+    # Group by deal_id
+    by_deal: dict[str, list[dict]] = {}
+    for r in rows:
+        row = dict(r)
+        deal = row.get("deal_id") or "unknown"
+        by_deal.setdefault(deal, []).append(row)
 
-    # Merge and deduplicate by chunk id
-    seen_ids: set[str] = set()
-    all_results = []
-    for r in results_query + results_wildcard:
-        rid = r.get("id", "")
-        if rid not in seen_ids:
-            seen_ids.add(rid)
-            all_results.append(r)
-
-    # Group by deal_folder
-    by_deal: dict[str, list] = {}
-    for r in all_results:
-        folder = r.get("deal_folder") or r.get("deal_id") or "unknown"
-        by_deal.setdefault(folder, []).append(r)
-
-    # Pick top chunks per deal, distributing evenly
     num_deals = len(by_deal)
     if num_deals == 0:
         return []
@@ -177,9 +197,8 @@ def _overview_search(
     chunks_per_deal = max(2, top // num_deals)
     selected: list[ComplianceChunk] = []
 
-    for folder, results in sorted(by_deal.items()):
-        # Sort each deal's chunks by score descending
-        results.sort(key=lambda r: r.get("@search.score", 0), reverse=True)
+    for _folder, results in sorted(by_deal.items()):
+        # Already sorted by score from SQL
         for r in results[:chunks_per_deal]:
             selected.append(_to_chunk(r))
 
@@ -195,19 +214,16 @@ def _overview_search(
 
 
 def _to_chunk(r: dict) -> ComplianceChunk:
-    """Convert a search result dict to a ComplianceChunk."""
+    """Convert a pgvector result dict to a ComplianceChunk."""
     raw_doc_type = r.get("doc_type") or "OTHER"
     safe_doc_type = raw_doc_type if raw_doc_type in _VALID_DOC_TYPES else "OTHER"
 
     return ComplianceChunk(
         chunk_id=r.get("id", "UNKNOWN"),
-        doc_id=r.get("parent_id") or r.get("id") or "UNKNOWN",
+        doc_id=r.get("doc_id") or r.get("id") or "UNKNOWN",
         domain=PIPELINE_DOMAIN,
         doc_type=safe_doc_type,
-        source_blob=r.get("blob_name") or r.get("title", "unknown"),
+        source_blob=r.get("title") or "unknown",
         chunk_text=r.get("content", ""),
-        obligation_candidate=False,
-        extraction_confidence=r.get("@search.score", 0.5),
-        search_score=r.get("@search.score"),
-        last_modified=r.get("last_modified"),
+        search_score=r.get("score"),
     )

@@ -16,7 +16,6 @@ Module classification
     embedding_service      — standalone embedding helper (used by domain_ai, pipeline screening, deep_review)
     entity_bootstrap       — deal entity bootstrap from blob storage
     obligation_extractor   — obligation register extraction (used by monitoring)
-    azure_kb_adapter       — knowledge base adapter for Fund Copilot RAG
     kb_schema              — schema definitions for knowledge base chunks
     text_extraction        — text extraction from Azure Blob (used by entity_bootstrap)
 """

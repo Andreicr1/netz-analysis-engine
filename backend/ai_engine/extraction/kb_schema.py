@@ -1,4 +1,4 @@
-"""Knowledge-base chunk schema for AI Search retrieval.
+"""Knowledge-base chunk schema for pgvector retrieval.
 
 Cross-cutting retrieval data types used by the pipeline KB adapter
 and global agent.
@@ -40,7 +40,7 @@ DocType = Literal[
 
 @dataclass
 class ComplianceChunk:
-    """A single evidence chunk from Azure AI Search.
+    """A single evidence chunk from pgvector retrieval.
 
     Despite the name, this is used across all domains (pipeline,
     regulatory, constitution, service providers).
