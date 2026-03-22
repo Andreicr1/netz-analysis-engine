@@ -19,12 +19,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install wrangler
-        run: npm install -g wrangler
-
+      - name: Install dependencies
+        working-directory: infra/cloudflare/backend
+        run: npm install
       - name: Deploy backend container
-        run: npx wrangler deploy --config infra/cloudflare/wrangler.backend.jsonc
+        working-directory: infra/cloudflare/backend
+        run: npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
@@ -34,12 +34,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install wrangler
-        run: npm install -g wrangler
-
+      - name: Install dependencies
+        working-directory: infra/cloudflare/workers
+        run: npm install
       - name: Deploy workers container
-        run: npx wrangler deploy --config infra/cloudflare/wrangler.workers.jsonc
+        working-directory: infra/cloudflare/workers
+        run: npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}

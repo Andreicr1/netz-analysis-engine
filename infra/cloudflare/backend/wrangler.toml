@@ -1,0 +1,28 @@
+name = "netz-backend"
+main = "src/index.ts"
+compatibility_date = "2025-12-01"
+
+[[containers]]
+class_name = "NetzBackend"
+image = "../../../Dockerfile"
+max_instances = 3
+
+[durable_objects]
+bindings = [
+  { name = "BACKEND_CONTAINER", class_name = "NetzBackend" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["NetzBackend"]
+
+[vars]
+APP_ENV = "production"
+FEATURE_R2_ENABLED = "true"
+R2_ACCOUNT_ID = "a44ddf3ff0612bc0f62d1ee86f465ac9"
+
+# Secrets via `wrangler secret put`:
+# DATABASE_URL, REDIS_URL, OPENAI_API_KEY, MISTRAL_API_KEY,
+# CLERK_SECRET_KEY, CLERK_JWKS_URL,
+# R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME,
+# WORKER_DISPATCH_SECRET, FRED_API_KEY, EDGAR_IDENTITY
