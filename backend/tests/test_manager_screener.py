@@ -22,10 +22,10 @@ from tests.conftest import DEV_ACTOR_HEADER
 
 # ─── Dev actor headers ───────────────────────────────────────────────────
 
-_VIEWER_HEADER = {
+_READONLY_HEADER = {
     "X-DEV-ACTOR": json.dumps({
         "actor_id": "test-viewer",
-        "roles": ["VIEWER"],
+        "roles": ["INVESTOR"],
         "fund_ids": [],
         "org_id": "00000000-0000-0000-0000-000000000001",
     }),
@@ -221,7 +221,7 @@ class TestManagerScreenerEndpoints:
 
     @pytest.mark.asyncio
     async def test_list_managers_403_for_viewer(self, client: AsyncClient) -> None:
-        resp = await client.get("/api/v1/manager-screener/", headers=_VIEWER_HEADER)
+        resp = await client.get("/api/v1/manager-screener/", headers=_READONLY_HEADER)
         assert resp.status_code == 403
 
     @pytest.mark.asyncio
@@ -345,7 +345,7 @@ class TestManagerScreenerEndpoints:
             "/api/v1/manager-screener/managers/CRD1/universe-status",
         ]
         for url in endpoints:
-            resp = await client.get(url, headers=_VIEWER_HEADER)
+            resp = await client.get(url, headers=_READONLY_HEADER)
             assert resp.status_code == 403, f"Expected 403 for {url}"
 
     @pytest.mark.asyncio
@@ -353,14 +353,14 @@ class TestManagerScreenerEndpoints:
         """POST endpoints should return 403 for VIEWER role."""
         resp = await client.post(
             "/api/v1/manager-screener/managers/CRD1/add-to-universe",
-            headers=_VIEWER_HEADER,
+            headers=_READONLY_HEADER,
             json={"asset_class": "equity", "geography": "US"},
         )
         assert resp.status_code == 403
 
         resp = await client.post(
             "/api/v1/manager-screener/managers/compare",
-            headers=_VIEWER_HEADER,
+            headers=_READONLY_HEADER,
             json={"crd_numbers": ["CRD1", "CRD2"]},
         )
         assert resp.status_code == 403
@@ -379,7 +379,7 @@ class TestManagerScreenerEndpoints:
     async def test_nport_403_for_viewer(self, client: AsyncClient) -> None:
         resp = await client.get(
             "/api/v1/manager-screener/managers/CRD1/nport",
-            headers=_VIEWER_HEADER,
+            headers=_READONLY_HEADER,
         )
         assert resp.status_code == 403
 
@@ -413,7 +413,7 @@ class TestManagerScreenerEndpoints:
     async def test_brochure_sections_403_for_viewer(self, client: AsyncClient) -> None:
         resp = await client.get(
             "/api/v1/manager-screener/managers/CRD1/brochure/sections",
-            headers=_VIEWER_HEADER,
+            headers=_READONLY_HEADER,
         )
         assert resp.status_code == 403
 
@@ -421,7 +421,7 @@ class TestManagerScreenerEndpoints:
     async def test_brochure_search_403_for_viewer(self, client: AsyncClient) -> None:
         resp = await client.get(
             "/api/v1/manager-screener/managers/CRD1/brochure?q=ESG",
-            headers=_VIEWER_HEADER,
+            headers=_READONLY_HEADER,
         )
         assert resp.status_code == 403
 
@@ -481,7 +481,7 @@ class TestSecRefreshWorkerEndpoint:
     async def test_trigger_requires_admin(self, client: AsyncClient) -> None:
         resp = await client.post(
             "/api/v1/workers/run-sec-refresh",
-            headers=_VIEWER_HEADER,
+            headers=_READONLY_HEADER,
         )
         assert resp.status_code == 403
 

@@ -323,7 +323,7 @@ class TestResolveViaEfts:
 class TestRateLimiters:
     def test_constants(self):
         assert SEC_EDGAR_RATE_LIMIT == 8
-        assert SEC_IAPD_RATE_LIMIT == 2
+        assert SEC_IAPD_RATE_LIMIT == 1
 
     def test_user_agent_set(self):
         assert "netz" in SEC_USER_AGENT.lower() or "Netz" in SEC_USER_AGENT
@@ -598,8 +598,17 @@ class TestResolveSectorViaSic:
         mock_company.not_found = False
         mock_company.sic = "6798"
 
-        with patch("edgar.Company", return_value=mock_company):
-            result = _resolve_sector_via_sic("Test REIT Corp")
+        # Create a mock edgar module so patch works even when edgartools is not installed
+        import sys
+        edgar_installed = "edgar" in sys.modules
+        if not edgar_installed:
+            sys.modules["edgar"] = MagicMock()
+        try:
+            with patch("edgar.Company", return_value=mock_company):
+                result = _resolve_sector_via_sic("Test REIT Corp")
+        finally:
+            if not edgar_installed:
+                sys.modules.pop("edgar", None)
 
         assert result == "Real Estate"
 

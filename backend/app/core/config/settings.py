@@ -162,6 +162,17 @@ class Settings(BaseSettings):
     adls_container_name: str = ""
     adls_connection_string: str = ""
 
+    # ── DEPRECATED helpers (Azure Search, kept for rollback) ────────────────
+    def prefixed_index(self, base_name: str) -> str:
+        """Return env-prefixed index name. Deprecated: Azure Search replaced by pgvector."""
+        env = self.NETZ_ENV or "dev"
+        return f"{env}-{base_name}" if env != "production" else base_name
+
+    def canonical_search_chunks_index_name(self) -> str:
+        """Return canonical chunks index name. Deprecated: Azure Search replaced by pgvector."""
+        base = self.SEARCH_CHUNKS_INDEX_NAME or "global-vector-chunks-v2"
+        return self.prefixed_index(base)
+
     @property
     def is_development(self) -> bool:
         return self.app_env == "development"

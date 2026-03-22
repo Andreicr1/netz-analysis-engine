@@ -367,9 +367,10 @@ class TestQuantMetrics:
     def _make_price_series(self, n_days=500, annual_return=0.10, volatility=0.15):
         """Generate synthetic daily price data."""
         dates = pd.date_range(end=datetime.now(), periods=n_days, freq="B")
+        n = len(dates)  # may differ from n_days on weekends/holidays
         daily_return = annual_return / 252
         daily_vol = volatility / np.sqrt(252)
-        returns = np.random.normal(daily_return, daily_vol, n_days)
+        returns = np.random.normal(daily_return, daily_vol, n)
         prices = 100 * np.exp(np.cumsum(returns))
         return pd.DataFrame({"Close": prices}, index=dates)
 

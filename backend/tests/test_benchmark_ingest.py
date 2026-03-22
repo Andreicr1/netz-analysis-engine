@@ -63,19 +63,20 @@ def _make_price_df(
 ) -> pd.DataFrame:
     """Helper: generate synthetic price DataFrame matching yf.download output."""
     dates = pd.date_range(end=date.today(), periods=days, freq="B")
+    n = len(dates)  # may differ from `days` on weekends/holidays
     np.random.seed(42)
-    returns = np.random.normal(0.0005, 0.01, days)
+    returns = np.random.normal(0.0005, 0.01, n)
     prices = start_price * np.cumprod(1 + returns)
 
-    if zero_price_at is not None and 0 <= zero_price_at < days:
+    if zero_price_at is not None and 0 <= zero_price_at < n:
         prices[zero_price_at] = 0.0
 
     df = pd.DataFrame({"Close": prices}, index=dates)
 
     # Inject NaN
     if nan_pct > 0:
-        n_nan = int(days * nan_pct)
-        nan_indices = np.random.choice(days, n_nan, replace=False)
+        n_nan = int(n * nan_pct)
+        nan_indices = np.random.choice(n, n_nan, replace=False)
         df.iloc[nan_indices, 0] = np.nan
 
     return df
@@ -280,7 +281,7 @@ class TestInvalidTickerHandling:
 
         # All-NaN DataFrame
         dates = pd.date_range(end=date.today(), periods=10, freq="B")
-        nan_hist = pd.DataFrame({"Close": [np.nan] * 10}, index=dates)
+        nan_hist = pd.DataFrame({"Close": [np.nan] * len(dates)}, index=dates)
 
         with patch(
             "app.domains.wealth.workers.benchmark_ingest._batch_download",

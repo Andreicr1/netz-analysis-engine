@@ -139,6 +139,10 @@ ALLOWLISTED_GLOBAL_TABLE_CONSUMERS: dict[str, str] = {
     "app/core/db/migrations/versions/0015_admin_rls_bypass.py": "migration — admin RLS bypass DDL",
     # ── Prompts service (AdminAuditLog for audit trail) ──────────────────────
     "app/core/prompts/prompt_service.py": "admin — uses AdminAuditLog for audit trail; called from admin routes only",
+    # ── Credit dashboard — read-only access to global macro data ────────────
+    "app/domains/credit/dashboard/routes.py": "read — SELECT only on MacroData for dashboard aggregation; uses get_db_with_rls (read is safe, global tables have no RLS)",
+    # ── Wealth N-PORT ingestion worker — reads SecManager for CIK resolution ─
+    "app/domains/wealth/workers/nport_ingestion.py": "read — reads SecManager via async_session_factory for CIK resolution during N-PORT ingestion (no RLS)",
     # ── Data providers — background workers that upsert to global SEC tables ─
     "data_providers/sec/adv_service.py": "write — upserts SecManager and SecManagerFund via async_session_factory (bulk CSV ingestion, no RLS)",
     "data_providers/sec/thirteenf_service.py": "write — upserts Sec13fHolding and Sec13fDiff via async_session_factory (13F-HR ingestion, no RLS)",
@@ -169,6 +173,7 @@ ADMIN_ROUTES_REQUIRING_DB_ADMIN: set[str] = {
 #   b) The access is SELECT-only (never INSERT/UPDATE/DELETE).
 # ---------------------------------------------------------------------------
 TENANT_ROUTES_WITH_GLOBAL_TABLE_READS: set[str] = {
+    "app/domains/credit/dashboard/routes.py",
     "app/domains/wealth/routes/attribution.py",
     "app/domains/wealth/routes/macro.py",
 }

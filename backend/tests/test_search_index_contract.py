@@ -73,22 +73,15 @@ def test_upsert_chunks_uses_resolved_name(monkeypatch: pytest.MonkeyPatch):
     mock_get_client.assert_called_once_with(index_name=resolved_name)
 
 
-def test_pipeline_kb_adapter_uses_resolved_name(monkeypatch: pytest.MonkeyPatch):
+def test_pipeline_kb_adapter_returns_empty_on_failure(monkeypatch: pytest.MonkeyPatch):
+    """PipelineKBAdapter uses pgvector (not Azure Search). On failure it returns []."""
     from app.domains.credit.global_agent.pipeline_kb_adapter import PipelineKBAdapter
 
-    resolved_name = _set_chunks_contract(
-        monkeypatch,
-        env="staging",
-        base_name="canonical-chunks",
-    )
-
-    mock_client = MagicMock()
-    mock_client.search.return_value = []
-
+    # Mock embedding service to raise — adapter should catch and return []
     with patch(
-        "app.services.azure.search_client.get_search_client",
-        return_value=mock_client,
-    ) as mock_get_client:
+        "ai_engine.extraction.embedding_service.generate_embeddings",
+        side_effect=RuntimeError("embedding service unavailable"),
+    ):
         chunks = PipelineKBAdapter.search_live(
             query="pipeline overview",
             organization_id=uuid.uuid4(),
@@ -96,7 +89,6 @@ def test_pipeline_kb_adapter_uses_resolved_name(monkeypatch: pytest.MonkeyPatch)
         )
 
     assert chunks == []
-    mock_get_client.assert_called_once_with(index_name=resolved_name)
 
 
 @pytest.mark.asyncio
@@ -136,7 +128,11 @@ def test_active_backend_paths_do_not_hardcode_v4_chunks_index():
     for path in backend_root.rglob("*.py"):
         if path in excluded or "tests" in path.parts:
             continue
-        if "global-vector-chunks-v4" in path.read_text(encoding="utf-8"):
+        try:
+            content = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        if "global-vector-chunks-v4" in content:
             offenders.append(path.relative_to(backend_root).as_posix())
 
     assert offenders == []

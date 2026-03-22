@@ -446,6 +446,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/dashboard/credit-market-data",
+    "name": "credit_market_data"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/dashboard/fred-search",
     "name": "fred_search"
   },
@@ -771,6 +776,21 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/macro/bis",
+    "name": "get_bis_data"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/macro/imf",
+    "name": "get_imf_data"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/macro/ofr",
+    "name": "get_ofr_data"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/macro/regime",
     "name": "get_hierarchical_regime"
   },
@@ -791,8 +811,23 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/macro/treasury",
+    "name": "get_treasury_data"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/manager-screener/",
     "name": "list_managers"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/manager-screener/managers/{crd}/brochure",
+    "name": "search_brochure"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/manager-screener/managers/{crd}/brochure/sections",
+    "name": "get_brochure_sections"
   },
   {
     "method": "GET",
@@ -808,6 +843,11 @@
     "method": "GET",
     "path": "/api/v1/manager-screener/managers/{crd}/institutional",
     "name": "get_institutional"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/manager-screener/managers/{crd}/nport",
+    "name": "get_manager_nport_holdings"
   },
   {
     "method": "GET",
@@ -1656,6 +1696,16 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/workers/run-brochure-download",
+    "name": "trigger_run_brochure_download"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-brochure-extract",
+    "name": "trigger_run_brochure_extract"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/workers/run-esma-ingestion",
     "name": "trigger_run_esma_ingestion"
   },
@@ -1723,6 +1773,11 @@
     "method": "POST",
     "path": "/api/v1/workers/run-watchlist-check",
     "name": "trigger_run_watchlist_check"
+  },
+  {
+    "method": "POST",
+    "path": "/internal/workers/dispatch",
+    "name": "dispatch_workers"
   },
   {
     "method": "PUT",

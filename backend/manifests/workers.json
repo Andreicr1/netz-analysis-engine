@@ -11,6 +11,16 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/workers/run-brochure-download",
+    "name": "trigger_run_brochure_download"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-brochure-extract",
+    "name": "trigger_run_brochure_extract"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/workers/run-esma-ingestion",
     "name": "trigger_run_esma_ingestion"
   },
@@ -78,5 +88,10 @@
     "method": "POST",
     "path": "/api/v1/workers/run-watchlist-check",
     "name": "trigger_run_watchlist_check"
+  },
+  {
+    "method": "POST",
+    "path": "/internal/workers/dispatch",
+    "name": "dispatch_workers"
   }
 ]
