@@ -1,7 +1,7 @@
-/** Home page — redirect to dashboard. */
+/** Home page — redirect to screener (new default). */
 import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 
 export const load: PageServerLoad = async () => {
-	throw redirect(303, "/dashboard");
+	throw redirect(303, "/screener");
 };

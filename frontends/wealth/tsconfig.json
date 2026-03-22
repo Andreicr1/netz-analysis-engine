@@ -11,6 +11,7 @@
   },
   "exclude": [
     "node_modules",
+    "src/_legacy_routes",
     "../../backend",
     "../../docs",
     "../../profiles",
