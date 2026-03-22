@@ -8,12 +8,11 @@
 	import { setContext, getContext, onMount, type Snippet } from "svelte";
 	import { ThemeToggle } from "@netz/ui";
 	import { createRiskStore, type RiskStore } from "$lib/stores/risk-store.svelte";
-	import { formatLastUpdated } from "$lib/stores/stale";
-	import { formatDateTime } from "@netz/ui";
 	import {
 		Search, Building2, ClipboardList, Globe,
 		Briefcase, Zap, BarChart2, Map,
-		Landmark, FileText, Newspaper, Folders
+		Landmark, FileText, Newspaper, Folders,
+		Search as SearchIcon, Bot
 	} from "lucide-svelte";
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	interface SidebarNavItem {
@@ -42,13 +41,6 @@
 		riskStore.start();
 		return () => riskStore.destroy();
 	});
-
-	// Derived banner state
-	const quality = $derived(riskStore.connectionQuality);
-	const bannerVisible = $derived(quality === "degraded" || quality === "offline");
-	const lastComputedLabel = $derived(
-		riskStore.computedAt ? formatDateTime(riskStore.computedAt) : formatLastUpdated(null)
-	);
 
 	// ── Navigation taxonomy ──
 	const navItems: SidebarNavItem[] = [
@@ -180,9 +172,6 @@
 
 			<!-- Bottom controls -->
 			<div class="netz-ws-footer">
-				{#if !sidebarCollapsed}
-					<ThemeToggle />
-				{/if}
 				<button
 					class="netz-ws-toggle"
 					onclick={() => sidebarCollapsed = !sidebarCollapsed}
@@ -211,31 +200,28 @@
 	</aside>
 
 	<main class="netz-shell-main">
-		{#if bannerVisible}
-			<div
-				class="flex items-center gap-2 px-4 py-2 text-sm font-medium"
-				class:bg-(--netz-warning-surface)={quality === "degraded"}
-				class:text-(--netz-warning-on-surface)={quality === "degraded"}
-				class:bg-(--netz-error-surface)={quality === "offline"}
-				class:text-(--netz-error-on-surface)={quality === "offline"}
-				role="status"
-				aria-live="polite"
-			>
-				{#if quality === "degraded"}
-					<span>Live connection interrupted. Showing data from {lastComputedLabel}. Reconnecting...</span>
-				{:else}
-					<span>Unable to reach server. Last update: {lastComputedLabel}.</span>
-					<button
-						class="underline hover:no-underline"
-						onclick={() => riskStore.refresh()}
-					>
-						Retry
-					</button>
-				{/if}
+		<!-- Top Bar: Global Search + AI Agent + Theme Toggle -->
+		<header class="netz-topbar">
+			<div class="netz-topbar-search">
+				<SearchIcon size={15} strokeWidth={1.5} class="netz-topbar-search-icon" />
+				<input
+					type="text"
+					class="netz-topbar-search-input"
+					placeholder="Search…"
+					readonly
+				/>
+				<kbd class="netz-topbar-kbd">/</kbd>
 			</div>
-		{/if}
 
-		<div class="h-full w-full overflow-y-auto overflow-x-hidden p-6 md:p-10 box-border relative">
+			<div class="netz-topbar-actions">
+				<button class="netz-topbar-btn netz-topbar-btn--ai" type="button" title="AI Assistant">
+					<Bot size={18} strokeWidth={1.5} />
+				</button>
+				<ThemeToggle />
+			</div>
+		</header>
+
+		<div class="netz-shell-content">
 			{@render children()}
 		</div>
 	</main>
@@ -260,11 +246,116 @@
 	}
 
 	.netz-shell-main {
-		overflow-y: auto;
-		overflow-x: hidden;
+		overflow: hidden;
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
+	}
+
+	/* ── Top Bar ── */
+	.netz-topbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 0 var(--netz-space-inline-lg, 20px);
+		height: 48px;
+		border-bottom: 1px solid var(--netz-border-subtle);
+		background: var(--netz-surface-elevated);
+		flex-shrink: 0;
+	}
+
+	.netz-topbar-search {
+		display: flex;
+		align-items: center;
+		gap: var(--netz-space-inline-xs, 6px);
+		height: 32px;
+		padding: 0 var(--netz-space-inline-sm, 10px);
+		border: 1px solid var(--netz-border);
+		border-radius: var(--netz-radius-sm, 8px);
+		background: var(--netz-surface);
+		cursor: pointer;
+		transition: border-color 120ms ease;
+		min-width: 200px;
+		max-width: 320px;
+	}
+
+	.netz-topbar-search:hover {
+		border-color: var(--netz-border-focus);
+	}
+
+	.netz-topbar-search :global(.netz-topbar-search-icon) {
+		color: var(--netz-text-muted);
+		flex-shrink: 0;
+	}
+
+	.netz-topbar-search-input {
+		flex: 1;
+		border: none;
+		background: transparent;
+		color: var(--netz-text-muted);
+		font-size: var(--netz-text-small, 0.8125rem);
+		font-family: var(--netz-font-sans);
+		cursor: pointer;
+		outline: none;
+	}
+
+	.netz-topbar-kbd {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 20px;
+		height: 20px;
+		padding: 0 5px;
+		border: 1px solid var(--netz-border);
+		border-radius: 4px;
+		background: var(--netz-surface-alt);
+		color: var(--netz-text-muted);
+		font-size: 11px;
+		font-family: var(--netz-font-mono);
+		font-weight: 500;
+		line-height: 1;
+	}
+
+	.netz-topbar-actions {
+		display: flex;
+		align-items: center;
+		gap: var(--netz-space-inline-xs, 6px);
+	}
+
+	.netz-topbar-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		border: 1px solid var(--netz-border);
+		border-radius: var(--netz-radius-sm, 8px);
+		background: transparent;
+		color: var(--netz-text-secondary);
+		cursor: pointer;
+		transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
+	}
+
+	.netz-topbar-btn:hover {
+		color: var(--netz-text-primary);
+		background: var(--netz-surface-alt);
+	}
+
+	.netz-topbar-btn--ai {
+		border-color: var(--netz-brand-highlight);
+		color: var(--netz-brand-highlight);
+	}
+
+	.netz-topbar-btn--ai:hover {
+		background: color-mix(in srgb, var(--netz-brand-highlight) 10%, transparent);
+		color: var(--netz-brand-highlight);
+	}
+
+	/* ── Scrollable content area ── */
+	.netz-shell-content {
+		flex: 1;
+		overflow-y: auto;
+		overflow-x: hidden;
 	}
 
 	/* ── Workstation OS Sidebar ── */
