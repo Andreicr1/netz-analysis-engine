@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { cn } from "../utils/cn.js";
+	import Select from "./Select.svelte";
 	import type { Snippet } from "svelte";
 	import {
 		createTable,
@@ -255,16 +256,17 @@
 				)} of {rowTotal}
 			</span>
 			<div class="flex items-center gap-2">
-				<select
-					class="netz-ui-field h-(--netz-space-control-height-sm) rounded-(--netz-radius-md) bg-(--netz-surface-elevated) px-2.5 text-xs text-(--netz-text-primary)"
-					value={table.getState().pagination.pageSize}
-					onchange={(event) =>
-						table.setPageSize(clampPageSize(Number((event.target as HTMLSelectElement).value)))}
-				>
-					{#each [10, 20, 50, 100] as size}
-						<option value={size}>{size} / page</option>
-					{/each}
-				</select>
+				<Select
+					value={String(table.getState().pagination.pageSize)}
+					onValueChange={(v) => table.setPageSize(clampPageSize(Number(v)))}
+					options={[
+						{ value: "10", label: "10 / page" },
+						{ value: "20", label: "20 / page" },
+						{ value: "50", label: "50 / page" },
+						{ value: "100", label: "100 / page" },
+					]}
+					class="h-(--netz-space-control-height-sm) text-xs"
+				/>
 				<button
 					class="inline-flex h-(--netz-space-control-height-sm) w-(--netz-space-control-height-sm) items-center justify-center rounded-(--netz-radius-md) border border-(--netz-border-subtle) bg-(--netz-surface-elevated) text-(--netz-text-secondary) shadow-(--netz-shadow-1) transition-[color,background-color,border-color] duration-(--netz-duration-fast) hover:bg-(--netz-accent-soft) hover:text-(--netz-text-primary) disabled:cursor-not-allowed disabled:opacity-50"
 					onclick={() => table.previousPage()}

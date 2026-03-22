@@ -4,7 +4,7 @@
   Overview tab shows deal actions (decide, resolve conditions, convert).
 -->
 <script lang="ts">
-	import { PageTabs, Card, StatusBadge, Button, EmptyState, MetricCard, PageHeader, SectionCard } from "@netz/ui";
+	import { PageTabs, Card, StatusBadge, Button, EmptyState, MetricCard, PageHeader, SectionCard, Select } from "@netz/ui";
 	import { ActionButton, FormField } from "@netz/ui";
 	import { ConsequenceDialog, AuditTrailPanel } from "@netz/ui";
 	import { createOptimisticMutation } from "@netz/ui";
@@ -550,17 +550,17 @@
 		<div class="space-y-4">
 			{#if decisionTarget === "REJECTED"}
 				<FormField label="Rejection Code" required>
-					<select
-						class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-secondary)"
+					<Select
 						bind:value={rejectionCode}
-					>
-						<option value="OUT_OF_MANDATE">Out of Mandate</option>
-						<option value="TICKET_TOO_SMALL">Ticket Too Small</option>
-						<option value="JURISDICTION_EXCLUDED">Jurisdiction Excluded</option>
-						<option value="INSUFFICIENT_RETURN">Insufficient Return</option>
-						<option value="WEAK_CREDIT_PROFILE">Weak Credit Profile</option>
-						<option value="NO_COLLATERAL">No Collateral</option>
-					</select>
+						options={[
+							{ value: "OUT_OF_MANDATE", label: "Out of Mandate" },
+							{ value: "TICKET_TOO_SMALL", label: "Ticket Too Small" },
+							{ value: "JURISDICTION_EXCLUDED", label: "Jurisdiction Excluded" },
+							{ value: "INSUFFICIENT_RETURN", label: "Insufficient Return" },
+							{ value: "WEAK_CREDIT_PROFILE", label: "Weak Credit Profile" },
+							{ value: "NO_COLLATERAL", label: "No Collateral" },
+						]}
+					/>
 				</FormField>
 			{/if}
 			<FormField label="Actor Capacity" required>

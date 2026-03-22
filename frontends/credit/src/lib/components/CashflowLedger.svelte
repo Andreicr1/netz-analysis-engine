@@ -4,7 +4,7 @@
   Used in the "Cashflows & Performance" tab of the deal detail page.
 -->
 <script lang="ts">
-	import { DataTable, Button, ConsequenceDialog, FormField, EmptyState } from "@netz/ui";
+	import { DataTable, Button, ConsequenceDialog, FormField, EmptyState, Select } from "@netz/ui";
 	import { formatCurrency, formatDate, createOptimisticMutation } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import { getContext } from "svelte";
@@ -380,14 +380,10 @@
 	{#snippet children()}
 		<div class="space-y-4">
 			<FormField label="Tipo" required>
-				<select
-					class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-secondary)"
+				<Select
 					bind:value={registerFlowType}
-				>
-					{#each FLOW_TYPES as ft (ft)}
-						<option value={ft}>{FLOW_TYPE_LABELS[ft]}</option>
-					{/each}
-				</select>
+					options={FLOW_TYPES.map((ft) => ({ value: ft, label: FLOW_TYPE_LABELS[ft] }))}
+				/>
 			</FormField>
 
 			<FormField label="Valor" required>
@@ -462,14 +458,10 @@
 	{#snippet children()}
 		<div class="space-y-4">
 			<FormField label="Tipo" required>
-				<select
-					class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-secondary)"
+				<Select
 					bind:value={editFlowType}
-				>
-					{#each FLOW_TYPES as ft (ft)}
-						<option value={ft}>{FLOW_TYPE_LABELS[ft]}</option>
-					{/each}
-				</select>
+					options={FLOW_TYPES.map((ft) => ({ value: ft, label: FLOW_TYPE_LABELS[ft] }))}
+				/>
 			</FormField>
 
 			<FormField label="Valor" required>

@@ -36,7 +36,7 @@ type PageData = {
 	}
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	<PageHeader title="Setup center for {tenantName}" />
 	<p class="mt-1 max-w-3xl text-sm text-(--netz-text-muted)">
 		Use this page for one-time tenant bootstrap actions. Seed operations live here now so the overview page stays read-only and the replacement risk is explicit before you act.

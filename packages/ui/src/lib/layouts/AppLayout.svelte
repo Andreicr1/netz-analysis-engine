@@ -149,7 +149,7 @@
 		flex: 1;
 		overflow-y: auto;
 		overflow-x: hidden;
-		background: var(--netz-surface, #f9fafb);
+		background: var(--netz-page-background, var(--netz-surface, #f9fafb));
 		min-width: 0;
 	}
 </style>

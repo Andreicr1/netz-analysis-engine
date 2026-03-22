@@ -12,6 +12,7 @@
 		sublabel?: string;
 		delta?: { value: string; direction: Direction; period?: string };
 		status?: CardStatus;
+		accentColor?: string;
 		utilization?: { current: number; limit: number };
 		class?: string;
 		sparkline?: Snippet;
@@ -23,6 +24,7 @@
 		sublabel,
 		delta,
 		status,
+		accentColor,
 		utilization,
 		class: className,
 		sparkline,
@@ -47,9 +49,7 @@
 		"shadow-(--netz-shadow-card)",
 		className,
 	)}
-	style={status
-		? `border-left: 3px solid ${borderColor[status]};`
-		: "border-left: 3px solid transparent;"}
+	style="border-left: 3px solid {accentColor ?? (status ? borderColor[status] : 'transparent')};"
 >
 	<div class="flex items-start justify-between gap-3">
 		<div class="min-w-0 flex-1">

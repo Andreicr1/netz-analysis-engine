@@ -11,6 +11,7 @@
 		DataTable,
 		EmptyState,
 		StatusBadge,
+		Select,
 		formatDateTime,
 		formatNumber,
 	} from "@netz/ui";
@@ -268,19 +269,12 @@
 		<div class="flex flex-wrap items-end gap-3">
 			<!-- Severity filter -->
 			<div class="flex flex-col gap-1">
-				<label class="text-xs font-medium text-(--netz-text-secondary)" for="drift-severity-filter">
-					Severity
-				</label>
-				<select
-					id="drift-severity-filter"
-					class="h-8 rounded-md border border-(--netz-border) bg-(--netz-surface) px-2 text-xs text-(--netz-text-primary)"
+				<span class="text-xs font-medium text-(--netz-text-secondary)">Severity</span>
+				<Select
 					bind:value={filterSeverity}
-				>
-					<option value="">All</option>
-					{#each severities as sev (sev)}
-						<option value={sev}>{sev}</option>
-					{/each}
-				</select>
+					options={[{ value: "", label: "All" }, ...severities.map((s) => ({ value: s, label: s }))]}
+					class="h-8 text-xs"
+				/>
 			</div>
 
 			<!-- Date from -->

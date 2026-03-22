@@ -4,7 +4,7 @@
   Worker trigger buttons call wealth backend endpoints.
 -->
 <script lang="ts">
-	import { DataTable, MetricCard, PageHeader, SectionCard, Button, Input, ConfirmDialog, Toast, formatDateTime, formatNumber, formatPercent } from "@netz/ui";
+	import { DataTable, MetricCard, PageHeader, SectionCard, Button, Input, Select, ConfirmDialog, Toast, formatDateTime, formatNumber, formatPercent } from "@netz/ui";
 	import ServiceHealthCard from "$lib/components/ServiceHealthCard.svelte";
 	import WorkerLogFeed from "$lib/components/WorkerLogFeed.svelte";
 	import { createClientApiClient } from "$lib/api/client";
@@ -189,7 +189,7 @@
 	});
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	<PageHeader title="System Health" />
 
 	{#if degradedMessage}
@@ -271,18 +271,14 @@
 			</div>
 		{:else if workerData.length > 0}
 			<div class="mb-4 flex flex-wrap items-center gap-3">
-				<label class="text-sm text-(--netz-text-secondary)">
-					<span class="mr-2 font-medium text-(--netz-text-primary)">Status</span>
-					<select
+				<div class="flex items-center gap-2 text-sm text-(--netz-text-secondary)">
+					<span class="font-medium text-(--netz-text-primary)">Status</span>
+					<Select
 						bind:value={workerStatusFilter}
-						class="rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary)"
-					>
-						<option value="all">All statuses</option>
-						{#each workerStatusOptions as status}
-							<option value={status}>{status}</option>
-						{/each}
-					</select>
-				</label>
+						options={[{ value: "all", label: "All statuses" }, ...workerStatusOptions.map((s) => ({ value: s, label: s }))]}
+						class="w-44"
+					/>
+				</div>
 				<p class="text-xs text-(--netz-text-muted)">
 					{workerRows.length} of {workerData.length} workers
 				</p>

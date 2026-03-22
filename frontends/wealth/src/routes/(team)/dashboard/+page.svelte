@@ -1,6 +1,6 @@
 <!--
   Wealth Dashboard — Figma frame "Dashboard com portfólios + NAV chart + alertas"
-  Layout: RegimeBanner + Header + 3 PortfolioCards + NAV chart (left) + Alerts (right) + Macro chips
+  Layout hierarchy: RegimeBanner → Portfolio Hero → Drift+Actions → Macro chips
   Risk data consumed exclusively from the risk store — no page-local SSE.
 -->
 <script lang="ts">
@@ -14,6 +14,7 @@
 	import { resolveWealthStatus } from "$lib/utils/status-maps";
 	import type { PageData } from "./$types";
 	import { getContext } from "svelte";
+	import { goto } from "$app/navigation";
 	import type { RiskStore } from "$lib/stores/risk-store.svelte";
 
 	let { data }: { data: PageData } = $props();
@@ -116,12 +117,16 @@
 	const subtitle = $derived(
 		riskStore.computedAt
 			? `${formatDateTime(riskStore.computedAt)} · Updated`
-			: "Awaiting data..."
+			: null
 	);
+
+	// Featured portfolio (largest AUM or first)
+	const featuredCard = $derived(cards[0] ?? null);
+	const secondaryCards = $derived(cards.slice(1));
 </script>
 
 <div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
-	<!-- Regime Banner (renders nothing when RISK_ON) -->
+	<!-- 1. Regime Banner (contextual alert — renders nothing when RISK_ON) -->
 	<RegimeBanner regime={currentRegime} macroHref="/macro" />
 
 	<!-- Page Header -->
@@ -132,45 +137,78 @@
 			{/if}
 		{/snippet}
 	</PageHeader>
-	<p class="mt-1 text-sm text-(--netz-text-muted)">{subtitle}</p>
+	{#if subtitle}
+		<p class="-mt-4 text-sm text-(--netz-text-muted)">{subtitle}</p>
+	{/if}
 
-	<!-- Portfolio Cards -->
-	<section>
+	<!-- 2. Portfolio Health Hero — full-width, 2-column layout -->
+	<section class="p-(--netz-space-card-padding-lg)">
 		{#if !portfolios}
-			<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-				{#each Array(3) as _}
-					<Skeleton class="h-44 rounded-xl" />
-				{/each}
+			<div class="grid gap-4 md:grid-cols-[3fr_2fr]">
+				<Skeleton class="h-48 rounded-xl" />
+				<div class="space-y-4">
+					<Skeleton class="h-22 rounded-xl" />
+					<Skeleton class="h-22 rounded-xl" />
+				</div>
 			</div>
 		{:else if cards.length > 0}
-			<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-				{#each cards as card (card.profile)}
+			<div class="grid gap-4 md:grid-cols-[3fr_2fr]">
+				<!-- Featured portfolio (60%) -->
+				{#if featuredCard}
 					<a
-						href="/portfolios/{card.profile}"
+						href="/portfolios/{featuredCard.profile}"
 						class="block rounded-(--netz-radius-xl) transition-transform duration-(--netz-duration-fast) hover:-translate-y-0.5"
 					>
 						<PortfolioCard
-							name={card.name}
-							profile={card.profile}
-							nav={card.nav}
-							ytdReturn={card.ytdReturn}
-							cvarCurrent={card.cvarCurrent}
-							cvarLimit={card.cvarLimit}
-							cvarUtilization={card.cvarUtilization}
-							sharpe={card.sharpe}
-							regime={card.regime}
-							triggerStatus={card.triggerStatus}
+							name={featuredCard.name}
+							profile={featuredCard.profile}
+							nav={featuredCard.nav}
+							ytdReturn={featuredCard.ytdReturn}
+							cvarCurrent={featuredCard.cvarCurrent}
+							cvarLimit={featuredCard.cvarLimit}
+							cvarUtilization={featuredCard.cvarUtilization}
+							sharpe={featuredCard.sharpe}
+							regime={featuredCard.regime}
+							triggerStatus={featuredCard.triggerStatus}
 						/>
 					</a>
-				{/each}
+				{/if}
+
+				<!-- Secondary portfolios stacked (40%) -->
+				<div class="flex flex-col gap-4">
+					{#each secondaryCards as card (card.profile)}
+						<a
+							href="/portfolios/{card.profile}"
+							class="block rounded-(--netz-radius-xl) transition-transform duration-(--netz-duration-fast) hover:-translate-y-0.5"
+						>
+							<PortfolioCard
+								name={card.name}
+								profile={card.profile}
+								nav={card.nav}
+								ytdReturn={card.ytdReturn}
+								cvarCurrent={card.cvarCurrent}
+								cvarLimit={card.cvarLimit}
+								cvarUtilization={card.cvarUtilization}
+								sharpe={card.sharpe}
+								regime={card.regime}
+								triggerStatus={card.triggerStatus}
+							/>
+						</a>
+					{/each}
+				</div>
 			</div>
 		{:else}
-			<EmptyState title="No Model Portfolios" message="Model portfolios will appear here once created." />
+			<EmptyState
+				title="No portfolios configured"
+				message="Create your first model portfolio to see performance metrics."
+				actionLabel="Create Portfolio"
+				onAction={() => goto('/model-portfolios')}
+			/>
 		{/if}
 	</section>
 
-	<!-- Decision Surface — Drift Alerts + Recent Activity -->
-	<section class="grid gap-4 lg:grid-cols-5">
+	<!-- 3. Drift Alerts + Quick Actions — side-by-side secondary -->
+	<section class="grid gap-4 p-(--netz-space-card-padding-sm) lg:grid-cols-5">
 		<!-- Drift Alerts (60%) -->
 		<SectionCard title="Drift Alerts" class="lg:col-span-3">
 			{#snippet actions()}
@@ -226,15 +264,14 @@
 			{:else}
 				<EmptyState
 					title="No active drift alerts"
-					message="Risk alerts will appear here when detected by the analysis engine."
+					message="Monitoring {cards.length} portfolio{cards.length !== 1 ? 's' : ''} for style drift."
 				/>
 			{/if}
 		</SectionCard>
 
-		<!-- Recent Activity (40%) -->
+		<!-- Quick Actions (40%) -->
 		<SectionCard title="Quick Actions" class="lg:col-span-2">
 			<div class="space-y-3">
-				<!-- Portfolio links -->
 				{#each cards as card (card.profile)}
 					<a
 						href="/portfolios/{card.profile}"
@@ -262,9 +299,8 @@
 					</a>
 				{/each}
 
-				<!-- Allocation shortcut -->
 				<a
-					href="/allocation"
+					href="/analytics?tab=allocation"
 					class="flex items-center justify-between rounded-(--netz-radius-lg) border border-(--netz-border-subtle) bg-(--netz-surface-elevated) p-4 shadow-(--netz-shadow-1) transition-[background-color,border-color,transform] duration-(--netz-duration-fast) hover:border-(--netz-border) hover:bg-(--netz-surface-highlight)"
 				>
 					<div class="space-y-0.5">
@@ -277,7 +313,7 @@
 		</SectionCard>
 	</section>
 
-	<!-- Macro Indicator Chips -->
+	<!-- 4. Macro Indicator Chips — bottom reference section, minimal padding -->
 	<section>
 		<SectionCard title="Macro Summary">
 			{#snippet actions()}

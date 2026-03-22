@@ -4,7 +4,7 @@
   polling for generating status, failed status display.
 -->
 <script lang="ts">
-	import { DataTable, StatusBadge, PageHeader, EmptyState, Button, Card, Dialog, formatDate } from "@netz/ui";
+	import { DataTable, StatusBadge, PageHeader, EmptyState, Button, Card, Dialog, Select, formatDate } from "@netz/ui";
 	import { ActionButton, FormField } from "@netz/ui";
 	import type { PageData } from "./$types";
 	import { createClientApiClient } from "$lib/api/client";
@@ -210,15 +210,12 @@
 			<p class="text-sm text-(--netz-text-muted)">No funds available.</p>
 		{:else}
 			<FormField label="Fund" required>
-				<select
-					class="w-full rounded-md border border-(--netz-border) bg-(--netz-bg-secondary) px-3 py-2 text-sm text-(--netz-text-primary)"
+				<Select
 					bind:value={spotlightFundId}
-				>
-					<option value="">Select a fund...</option>
-					{#each funds as fund}
-						<option value={fund.id}>{fund.name}</option>
-					{/each}
-				</select>
+					placeholder="Select a fund..."
+					options={funds.map((f) => ({ value: f.id, label: f.name }))}
+					searchable
+				/>
 			</FormField>
 		{/if}
 

@@ -78,7 +78,7 @@ type PageData = {
 	}
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	<PageHeader title="Overview">
 		{#snippet actions()}
 			{#if !editing}

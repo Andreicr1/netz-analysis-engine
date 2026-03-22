@@ -41,7 +41,7 @@
 	}
 </script>
 
-<div class="mx-auto max-w-5xl space-y-6 p-6 md:p-10">
+<div class="mx-auto max-w-5xl space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	<PageHeader title="Documents" />
 
 	{#if documents.length === 0}

@@ -2,7 +2,7 @@
   DD Reports — select fund, trigger report generation, view existing reports.
 -->
 <script lang="ts">
-	import { PageHeader, SectionCard, EmptyState, Button } from "@netz/ui";
+	import { PageHeader, SectionCard, EmptyState, Button, Select } from "@netz/ui";
 	import type { PageData } from "./$types";
 	import { goto } from "$app/navigation";
 
@@ -22,25 +22,26 @@
 			goto(`/dd-reports/${selectedFundId}`);
 		}
 	}
+
+	const breadcrumbs = [
+		{ label: "Screener", href: "/screener?tab=funds" },
+		{ label: "DD Reports" },
+	];
 </script>
 
 <div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
-	<PageHeader title="Due Diligence Reports" />
+	<PageHeader title="Due Diligence Reports" {breadcrumbs} />
 
 	<SectionCard title="Select Fund">
 		{#if funds.length > 0}
 			<div class="flex items-center gap-3">
-				<select
-					class="flex-1 rounded-md border border-(--netz-border) bg-(--netz-surface-elevated) px-3 py-2 text-sm"
+				<Select
 					bind:value={selectedFundId}
-				>
-					<option value="">Choose a fund...</option>
-					{#each funds as fund (fund.id)}
-						<option value={fund.id}>
-							{fund.name} {fund.ticker ? `(${fund.ticker})` : ""}
-						</option>
-					{/each}
-				</select>
+					placeholder="Choose a fund..."
+					options={funds.map((f) => ({ value: f.id, label: `${f.name}${f.ticker ? ` (${f.ticker})` : ""}` }))}
+					searchable
+					class="flex-1"
+				/>
 				<Button onclick={viewReports} disabled={!selectedFundId}>
 					View Reports
 				</Button>

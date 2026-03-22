@@ -3,15 +3,18 @@
   Funnel sidebar + status tabs + results table + ContextPanel detail panel.
 -->
 <script lang="ts">
-	import { PageHeader, Card, EmptyState, StatusBadge, ContextPanel, Button, formatDateTime, formatNumber } from "@netz/ui";
+	import { PageHeader, PageTabs, Card, EmptyState, StatusBadge, ContextPanel, Button, formatDateTime, formatNumber } from "@netz/ui";
 	import { ActionButton } from "@netz/ui";
 	import { createVirtualizer } from "@tanstack/svelte-virtual";
 	import { createClientApiClient } from "$lib/api/client";
-	import { invalidateAll } from "$app/navigation";
+	import { invalidateAll, goto } from "$app/navigation";
 	import { getContext } from "svelte";
 	import { get as getStore } from "svelte/store";
 	import { resolveWealthStatus } from "$lib/utils/status-maps";
 	import type { PageData } from "./$types";
+	import FundsView from "$lib/components/FundsView.svelte";
+	import InstrumentsView from "$lib/components/InstrumentsView.svelte";
+	import UniverseView from "$lib/components/UniverseView.svelte";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -268,6 +271,35 @@
 	let showHistory = $state(false);
 	let historyInstrumentName = $state("");
 
+	// ── Top-level Screener tabs ────────────────────────────────────────────────
+	const SCREENER_TABS = [
+		{ value: "screening", label: "Screening" },
+		{ value: "funds", label: "Funds" },
+		{ value: "managers", label: "Managers" },
+		{ value: "instruments", label: "Instruments" },
+		{ value: "universe", label: "Universe" },
+	];
+
+	let screenerTab = $state(
+		typeof window !== "undefined"
+			? new URLSearchParams(window.location.search).get("tab") ?? "screening"
+			: "screening"
+	);
+
+	function handleScreenerTabChange(tab: string) {
+		if (tab === "managers") {
+			goto("/manager-screener");
+			return;
+		}
+		screenerTab = tab;
+		// Sync URL
+		if (typeof window !== "undefined") {
+			const url = new URL(window.location.href);
+			url.searchParams.set("tab", tab);
+			window.history.replaceState({}, "", url.toString());
+		}
+	}
+
 	async function loadInstrumentHistory(instrumentId: string, name: string) {
 		historyInstrumentName = name;
 		historyLoading = true;
@@ -284,6 +316,12 @@
 	}
 </script>
 
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
+	<PageHeader title="Screener" />
+
+	<PageTabs tabs={SCREENER_TABS} active={screenerTab} onChange={handleScreenerTabChange}>
+		{#snippet children(activeScreenerTab)}
+			{#if activeScreenerTab === "screening"}
 <div class="screener-layout">
 	<!-- ── Funnel Sidebar ────────────────────────────────────────────────────── -->
 	<aside class="funnel-sidebar">
@@ -700,6 +738,19 @@
 		</div>
 	</ContextPanel>
 {/if}
+
+			{:else if activeScreenerTab === "funds"}
+				<FundsView />
+
+			{:else if activeScreenerTab === "instruments"}
+				<InstrumentsView />
+
+			{:else if activeScreenerTab === "universe"}
+				<UniverseView />
+			{/if}
+		{/snippet}
+	</PageTabs>
+</div>
 
 <style>
 	/* TODO: Migrate scoped CSS to Tailwind utilities — tracked as tech debt */

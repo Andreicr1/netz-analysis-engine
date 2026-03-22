@@ -93,6 +93,20 @@
 	);
 	--netz-selection-bg: color-mix(in srgb, var(--netz-brand-secondary) 18%, white 82%);
 	--netz-selection-color: var(--netz-text-primary);
+
+	/* Density variation tokens */
+	--netz-space-card-padding-sm: clamp(12px, 0.5rem + 0.5vw, 16px);
+	--netz-space-card-padding-lg: clamp(24px, 1rem + 1vw, 40px);
+
+	/* Domain-semantic aliases */
+	--desk-surface: var(--netz-surface);
+	--desk-elevated: var(--netz-surface-elevated);
+	--ink-primary: var(--netz-text-primary);
+	--ink-secondary: var(--netz-text-secondary);
+	--ticker-mono: var(--netz-font-mono);
+	--regime-ok: var(--netz-success);
+	--regime-caution: var(--netz-warning);
+	--regime-stress: var(--netz-danger);
 }
 
 [data-theme="dark"] {
@@ -120,19 +134,19 @@
 	--netz-radius-pill: 999px;
 
 	/* Surface */
-	--netz-surface: #0f1826;
-	--netz-surface-alt: #142030;
-	--netz-surface-elevated: #19273a;
+	--netz-surface: #0c1220;
+	--netz-surface-alt: #152638;
+	--netz-surface-elevated: #1a2d44;
 	--netz-surface-inset: #0b121c;
 	--netz-surface-overlay: rgba(0, 0, 0, 0.64);
-	--netz-surface-raised: #213147;
+	--netz-surface-raised: #243a52;
 	--netz-surface-panel: color-mix(in srgb, var(--netz-surface-elevated) 86%, var(--netz-brand-light) 14%);
 	--netz-surface-highlight: color-mix(in srgb, var(--netz-brand-primary) 10%, var(--netz-surface-elevated));
 	--netz-surface-accent: color-mix(in srgb, var(--netz-brand-secondary) 12%, var(--netz-surface-elevated));
 
 	/* Border */
-	--netz-border-subtle: #223146;
-	--netz-border: #31425a;
+	--netz-border-subtle: #2a3d55;
+	--netz-border: #345270;
 	--netz-border-strong: #445774;
 	--netz-border-accent: color-mix(in srgb, var(--netz-brand-primary) 24%, var(--netz-border));
 	--netz-border-focus: color-mix(in srgb, var(--netz-brand-secondary) 72%, white 28%);
@@ -185,4 +199,14 @@
 	);
 	--netz-selection-bg: color-mix(in srgb, var(--netz-brand-secondary) 28%, black 72%);
 	--netz-selection-color: var(--netz-text-primary);
+
+	/* Domain-semantic aliases */
+	--desk-surface: var(--netz-surface);
+	--desk-elevated: var(--netz-surface-elevated);
+	--ink-primary: var(--netz-text-primary);
+	--ink-secondary: var(--netz-text-secondary);
+	--ticker-mono: var(--netz-font-mono);
+	--regime-ok: var(--netz-success);
+	--regime-caution: var(--netz-warning);
+	--regime-stress: var(--netz-danger);
 }

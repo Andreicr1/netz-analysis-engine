@@ -103,7 +103,7 @@
 	}
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	<PageHeader title="Branding" />
 	<BrandingEditor branding={data.branding} orgId={data.orgId} token={data.token} />
 

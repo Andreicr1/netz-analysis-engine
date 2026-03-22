@@ -3,7 +3,7 @@
   CRUD: Create asset, create obligation, update obligation status, update action status.
 -->
 <script lang="ts">
-	import { PageTabs, DataTable, StatusBadge, EmptyState, Button, Dialog, Card, PageHeader } from "@netz/ui";
+	import { PageTabs, DataTable, StatusBadge, EmptyState, Button, Dialog, Card, PageHeader, Select } from "@netz/ui";
 	import { ActionButton, ConfirmDialog, FormField } from "@netz/ui";
 	import { invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
@@ -330,28 +330,28 @@
 		</FormField>
 
 		<FormField label="Asset Type" required>
-			<select
-				class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary)"
+			<Select
 				bind:value={assetForm.asset_type}
-			>
-				<option value="DIRECT_LOAN">Direct Loan</option>
-				<option value="FUND_INVESTMENT">Fund Investment</option>
-				<option value="EQUITY_STAKE">Equity Stake</option>
-				<option value="SPV_NOTE">SPV Note</option>
-			</select>
+				options={[
+					{ value: "DIRECT_LOAN", label: "Direct Loan" },
+					{ value: "FUND_INVESTMENT", label: "Fund Investment" },
+					{ value: "EQUITY_STAKE", label: "Equity Stake" },
+					{ value: "SPV_NOTE", label: "SPV Note" },
+				]}
+			/>
 		</FormField>
 
 		<FormField label="Strategy" required>
-			<select
-				class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary)"
+			<Select
 				bind:value={assetForm.strategy}
-			>
-				<option value="CORE_DIRECT_LENDING">Core Direct Lending</option>
-				<option value="OPPORTUNISTIC">Opportunistic</option>
-				<option value="DISTRESSED">Distressed</option>
-				<option value="VENTURE_DEBT">Venture Debt</option>
-				<option value="FUND_OF_FUNDS">Fund of Funds</option>
-			</select>
+				options={[
+					{ value: "CORE_DIRECT_LENDING", label: "Core Direct Lending" },
+					{ value: "OPPORTUNISTIC", label: "Opportunistic" },
+					{ value: "DISTRESSED", label: "Distressed" },
+					{ value: "VENTURE_DEBT", label: "Venture Debt" },
+					{ value: "FUND_OF_FUNDS", label: "Fund of Funds" },
+				]}
+			/>
 		</FormField>
 
 		{#if actionError}
@@ -371,16 +371,16 @@
 <Dialog bind:open={showCreateObligation} title="Add Obligation">
 	<form onsubmit={(e) => { e.preventDefault(); createObligation(); }} class="space-y-4">
 		<FormField label="Obligation Type" required>
-			<select
-				class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary)"
+			<Select
 				bind:value={obligationForm.obligation_type}
-			>
-				<option value="NAV_REPORT">NAV Report</option>
-				<option value="COVENANT_TEST">Covenant Test</option>
-				<option value="FINANCIAL_STATEMENT">Financial Statement</option>
-				<option value="AUDIT_REPORT">Audit Report</option>
-				<option value="COMPLIANCE_CERT">Compliance Certificate</option>
-			</select>
+				options={[
+					{ value: "NAV_REPORT", label: "NAV Report" },
+					{ value: "COVENANT_TEST", label: "Covenant Test" },
+					{ value: "FINANCIAL_STATEMENT", label: "Financial Statement" },
+					{ value: "AUDIT_REPORT", label: "Audit Report" },
+					{ value: "COMPLIANCE_CERT", label: "Compliance Certificate" },
+				]}
+			/>
 		</FormField>
 
 		<FormField label="Due Date" required>

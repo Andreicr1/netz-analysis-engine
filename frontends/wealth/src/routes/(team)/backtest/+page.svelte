@@ -21,6 +21,7 @@
 		formatDate,
 		formatDateTime,
 		createPoller,
+		Select,
 	} from "@netz/ui";
 	import type { ColumnDef } from "@tanstack/svelte-table";
 	import { createClientApiClient } from "$lib/api/client";
@@ -408,14 +409,10 @@
 	<!-- Header + Profile selector -->
 	<PageHeader title="Backtest & Fronteira de Pareto">
 		{#snippet actions()}
-			<select
-				class="rounded-md border border-(--netz-border) bg-(--netz-surface-elevated) px-3 py-1.5 text-sm text-(--netz-text-primary) focus:outline-none focus:ring-2 focus:ring-(--netz-brand-primary)"
+			<Select
 				bind:value={selectedProfile}
-			>
-				{#each PROFILES as p (p.value)}
-					<option value={p.value}>{p.label}</option>
-				{/each}
-			</select>
+				options={PROFILES}
+			/>
 		{/snippet}
 	</PageHeader>
 

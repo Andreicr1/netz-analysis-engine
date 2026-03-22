@@ -1,16 +1,6 @@
-/** Instruments list — loads all instruments. */
-import type { PageServerLoad } from "./$types";
-import { createServerApiClient } from "$lib/api/client";
+import { redirect } from '@sveltejs/kit';
+import type { PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ parent }) => {
-	const { token } = await parent();
-	const api = createServerApiClient(token);
-
-	const [instruments] = await Promise.allSettled([
-		api.get("/instruments", { limit: 500 }),
-	]);
-
-	return {
-		instruments: instruments.status === "fulfilled" ? instruments.value : [],
-	};
+export const load: PageServerLoad = async () => {
+	redirect(301, '/screener?tab=instruments');
 };

@@ -3,7 +3,7 @@
   New Deal dialog for creating deals.
 -->
 <script lang="ts">
-	import { DataTable, StatusBadge, ContextPanel, EmptyState, Button, Dialog, PageHeader, Skeleton } from "@netz/ui";
+	import { DataTable, StatusBadge, ContextPanel, EmptyState, Button, Dialog, PageHeader, Skeleton, Select } from "@netz/ui";
 	import { ActionButton, FormField } from "@netz/ui";
 	import { goto, invalidateAll } from "$app/navigation";
 	import { page } from "$app/state";
@@ -237,15 +237,15 @@
 		</FormField>
 
 		<FormField label="Deal Type" required>
-			<select
-				class="w-full rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary) outline-none focus:border-(--netz-brand-primary)"
+			<Select
 				bind:value={form.deal_type}
-			>
-				<option value="DIRECT_LOAN">Direct Loan</option>
-				<option value="FUND_INVESTMENT">Fund Investment</option>
-				<option value="EQUITY_STAKE">Equity Stake</option>
-				<option value="SPV_NOTE">SPV Note</option>
-			</select>
+				options={[
+					{ value: "DIRECT_LOAN", label: "Direct Loan" },
+					{ value: "FUND_INVESTMENT", label: "Fund Investment" },
+					{ value: "EQUITY_STAKE", label: "Equity Stake" },
+					{ value: "SPV_NOTE", label: "SPV Note" },
+				]}
+			/>
 		</FormField>
 
 		<FormField label="Sponsor Name">

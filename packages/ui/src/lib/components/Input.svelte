@@ -5,16 +5,23 @@
 	interface Props extends HTMLInputAttributes {
 		value?: string | number;
 		class?: string;
+		error?: string;
 	}
 
-	let { value = $bindable(""), class: className, ...rest }: Props = $props();
+	let { value = $bindable(""), class: className, error, ...rest }: Props = $props();
 </script>
 
-<input
-	class={cn(
-		"netz-ui-field flex h-(--netz-space-control-height-md) w-full rounded-(--netz-radius-md) px-3.5 py-2 text-sm tracking-[-0.005em] text-(--netz-text-primary) placeholder:text-(--netz-text-muted) disabled:cursor-not-allowed disabled:bg-(--netz-surface-inset) disabled:opacity-50",
-		className,
-	)}
-	{value}
-	{...rest}
-/>
+<div class="w-full">
+	<input
+		class={cn(
+			"netz-ui-field flex h-(--netz-space-control-height-md) w-full rounded-(--netz-radius-md) px-3.5 py-2 text-sm tracking-[-0.005em] text-(--netz-text-primary) placeholder:text-(--netz-text-muted) disabled:cursor-not-allowed disabled:bg-(--netz-surface-inset) disabled:opacity-50",
+			error && "border-(--netz-danger)",
+			className,
+		)}
+		{value}
+		{...rest}
+	/>
+	{#if error}
+		<p class="mt-1 text-xs text-(--netz-danger)">{error}</p>
+	{/if}
+</div>

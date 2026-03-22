@@ -61,7 +61,7 @@
 	}
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	<PageHeader title="Tenants">
 		{#snippet actions()}
 			<Button onclick={onOpen}>Create Tenant</Button>

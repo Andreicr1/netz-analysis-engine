@@ -13,7 +13,7 @@
 	const tenantName = $derived(tenant?.org_name ?? orgId);
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	<PageHeader title="Health for {tenantName}" />
 	<p class="mt-1 max-w-3xl text-sm text-(--netz-text-muted)">
 		Tenant-scoped health monitoring. Use the global health dashboard for system-wide worker and service status.

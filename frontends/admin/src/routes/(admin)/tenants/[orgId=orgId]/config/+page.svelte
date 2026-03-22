@@ -37,7 +37,7 @@ type PageData = {
 	}
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	<PageHeader title="Configuration workspace for {tenant?.org_name ?? data.orgId}" />
 	<p class="mt-1 max-w-3xl text-sm text-(--netz-text-muted)">
 		This page is the tenant-scoped index for config overrides. Open the vertical workspace to edit the active config, review diffs, and check what currently overrides the global default.

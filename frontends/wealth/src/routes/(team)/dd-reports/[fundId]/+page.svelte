@@ -8,10 +8,13 @@
 	import type { PageData } from "./$types";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll, goto } from "$app/navigation";
+	import { page } from "$app/state";
 	import { getContext } from "svelte";
 	import { resolveWealthStatus } from "$lib/utils/status-maps";
+	import { useContextNav } from "$lib/state/context-nav.svelte";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
+	const nav = useContextNav();
 
 	let { data }: { data: PageData } = $props();
 
@@ -25,6 +28,33 @@
 
 	let fund = $derived(data.fund as FundDetail | null);
 	let reports = $derived((data.reports ?? []) as DDReportSummary[]);
+
+	// ContextSidebar for fund detail navigation
+	$effect(() => {
+		const fundId = data.fundId;
+		const fundName = fund?.name ?? "Fund";
+		const pathname = page.url.pathname;
+
+		nav.current = {
+			backHref: "/dd-reports",
+			backLabel: fundName,
+			items: [
+				{ label: "DD Reports", href: `/dd-reports/${fundId}` },
+				{ label: "Fund Detail", href: `/funds/${fundId}` },
+			],
+			activeHref: pathname,
+		};
+
+		return () => {
+			nav.current = null;
+		};
+	});
+
+	let breadcrumbs = $derived([
+		{ label: "Screener", href: "/screener?tab=funds" },
+		{ label: fund?.name ?? "Fund" },
+		{ label: "DD Reports" },
+	]);
 	let generating = $state(false);
 	let downloadingId = $state<string | null>(null);
 	let showRegenConfirm = $state(false);
@@ -90,7 +120,7 @@
 </script>
 
 <div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
-	<PageHeader title={fund ? `DD Reports — ${fund.name}` : "DD Reports"}>
+	<PageHeader title={fund ? `DD Reports — ${fund.name}` : "DD Reports"} {breadcrumbs}>
 		{#snippet actions()}
 			<ActionButton onclick={triggerGeneration} loading={generating} loadingText="Generating...">
 				Generate New Report

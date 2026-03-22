@@ -30,7 +30,7 @@ type PageData = {
 	}
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	<PageHeader title="Prompt workspace for {tenant?.org_name ?? data.orgId}" />
 	<p class="mt-1 max-w-3xl text-sm text-(--netz-text-muted)">
 		Prompt editing is centralized by vertical. This tenant page is the scoped index for the prompt workspaces that apply to it.

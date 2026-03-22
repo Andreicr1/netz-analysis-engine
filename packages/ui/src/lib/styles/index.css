@@ -251,3 +251,8 @@ a:focus-visible {
 	box-shadow: var(--netz-shadow-inset);
 	transition: var(--netz-transition-surface);
 }
+
+[data-theme="dark"] .netz-ui-field {
+	border-color: var(--netz-border);
+	background: var(--netz-surface-inset);
+}

@@ -16,6 +16,7 @@
 		class: className,
 		logo,
 		trailing,
+		navGroups,
 	}: {
 		items?: NavItem[];
 		appName?: string;
@@ -23,6 +24,7 @@
 		class?: string;
 		logo?: Snippet;
 		trailing?: Snippet;
+		navGroups?: Array<{ label: string; items: string[] }>;
 	} = $props();
 
 	let mobileOpen = $state(false);
@@ -91,19 +93,41 @@
 {#if mobileOpen}
 	<button class="netz-topnav__overlay" onclick={() => mobileOpen = false} aria-label="Close menu" tabindex="-1"></button>
 	<div class="netz-topnav__drawer" role="dialog" aria-modal="true">
-		<ul role="list">
-			{#each items as item (item.href)}
-				<li>
-					<a
-						href={item.href}
-						class={cn("netz-topnav__drawer-item", isActive(item.href) && "netz-topnav__drawer-item--active")}
-						onclick={() => mobileOpen = false}
-					>
-						{item.label}
-					</a>
-				</li>
-			{/each}
-		</ul>
+		{#if navGroups}
+			<ul role="list">
+				{#each navGroups as group, gi}
+					{#if gi > 0}
+						<li class="netz-topnav__drawer-divider" role="separator"></li>
+					{/if}
+					<li class="netz-topnav__drawer-group-label">{group.label}</li>
+					{#each items.filter((item) => group.items.includes(item.href)) as item (item.href)}
+						<li>
+							<a
+								href={item.href}
+								class={cn("netz-topnav__drawer-item", isActive(item.href) && "netz-topnav__drawer-item--active")}
+								onclick={() => mobileOpen = false}
+							>
+								{item.label}
+							</a>
+						</li>
+					{/each}
+				{/each}
+			</ul>
+		{:else}
+			<ul role="list">
+				{#each items as item (item.href)}
+					<li>
+						<a
+							href={item.href}
+							class={cn("netz-topnav__drawer-item", isActive(item.href) && "netz-topnav__drawer-item--active")}
+							onclick={() => mobileOpen = false}
+						>
+							{item.label}
+						</a>
+					</li>
+				{/each}
+			</ul>
+		{/if}
 	</div>
 {/if}
 
@@ -149,6 +173,7 @@
 		margin: 0;
 		padding: 0;
 		flex: 1;
+		min-width: 0;
 		overflow-x: auto;
 		scrollbar-width: none;
 	}
@@ -276,6 +301,23 @@
 		color: var(--netz-text-primary, #111827);
 		font-weight: 600;
 		background: var(--netz-surface-highlight, #ffffff);
+	}
+
+	.netz-topnav__drawer-divider {
+		height: 1px;
+		margin: 6px 14px;
+		background: var(--netz-border-subtle, #e5e7eb);
+		list-style: none;
+	}
+
+	.netz-topnav__drawer-group-label {
+		padding: 8px 14px 4px;
+		font-size: 10px;
+		font-weight: 600;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--netz-text-muted, #6b7280);
+		list-style: none;
 	}
 
 	/* Mobile: hide items, show hamburger */

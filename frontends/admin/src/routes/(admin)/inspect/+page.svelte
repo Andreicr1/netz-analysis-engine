@@ -177,25 +177,18 @@
 	] as any;
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	<PageHeader title="Data Lake Inspection" />
 
 	<!-- Controls -->
 	<div class="flex flex-wrap items-end gap-4">
 		<div class="space-y-1">
 			<span class="text-xs font-medium text-(--netz-text-secondary)">Tenant</span>
-			<select
+			<Select
 				bind:value={selectedOrgId}
-				aria-label="Tenant"
-				class="block rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 py-2 text-sm text-(--netz-text-primary)"
-			>
-				<option value="">Select tenant...</option>
-				{#each data.tenants as tenant}
-					<option value={tenant.organization_id}>
-						{tenant.org_name} ({tenant.organization_id.slice(0, 8)}...)
-					</option>
-				{/each}
-			</select>
+				placeholder="Select tenant..."
+				options={data.tenants.map((t) => ({ value: t.organization_id, label: `${t.org_name} (${t.organization_id.slice(0, 8)}...)` }))}
+			/>
 		</div>
 		<div class="space-y-1">
 			<span class="text-xs font-medium text-(--netz-text-secondary)">Vertical</span>

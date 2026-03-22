@@ -12,6 +12,7 @@
 		onAction?: () => void;
 		class?: string;
 		icon?: Snippet;
+		loading?: boolean;
 	}
 
 	let {
@@ -22,11 +23,24 @@
 		onAction,
 		class: className,
 		icon,
+		loading = false,
 	}: Props = $props();
 
 	let displayMessage = $derived(message ?? description);
 </script>
 
+{#if loading}
+<div
+	class={cn(
+		"flex flex-col items-center justify-center rounded-(--netz-radius-lg) border border-dashed border-(--netz-border-subtle) bg-(--netz-surface-panel) px-6 py-12 text-center",
+		className,
+	)}
+>
+	<div class="mb-4 h-16 w-16 animate-pulse rounded-(--netz-radius-lg) bg-(--netz-surface-alt)"></div>
+	<div class="mb-2 h-5 w-32 animate-pulse rounded bg-(--netz-surface-alt)"></div>
+	<div class="h-4 w-48 animate-pulse rounded bg-(--netz-surface-alt)"></div>
+</div>
+{:else}
 <div
 	class={cn(
 		"flex flex-col items-center justify-center rounded-(--netz-radius-lg) border border-dashed border-(--netz-border-subtle) bg-(--netz-surface-panel) px-6 py-12 text-center",
@@ -70,3 +84,4 @@
 		</Button>
 	{/if}
 </div>
+{/if}

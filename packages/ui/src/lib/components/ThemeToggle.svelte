@@ -10,7 +10,7 @@
 			const attr = document.documentElement.getAttribute("data-theme");
 			if (attr === "light" || attr === "dark") return attr;
 		}
-		return "dark";
+		return typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 	}
 
 	let theme = $state<"light" | "dark">(getInitialTheme());

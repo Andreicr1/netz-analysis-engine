@@ -22,6 +22,8 @@
   import { createClientApiClient } from "$lib/api/client";
   import { getContext } from "svelte";
   import { goto } from "$app/navigation";
+  import ExposureView from "$lib/components/ExposureView.svelte";
+  import AllocationView from "$lib/components/AllocationView.svelte";
 
   const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -88,6 +90,8 @@
     { value: "pareto", label: "Pareto Frontier" },
     { value: "whatif", label: "What-If Scenarios" },
     { value: "atribuicao", label: "Performance Attribution" },
+    { value: "exposure", label: "Exposure" },
+    { value: "allocation", label: "Allocation" },
   ];
 
   // ── Correlações KPIs ────────────────────────────────────────────────────
@@ -776,6 +780,12 @@
             />
           {/if}
         </SectionCard>
+
+      {:else if activeTab === "exposure"}
+        <ExposureView />
+
+      {:else if activeTab === "allocation"}
+        <AllocationView />
       {/if}
     {/snippet}
   </PageTabs>

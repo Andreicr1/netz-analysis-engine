@@ -12,7 +12,7 @@
 	let selectedConfig = $state<string | null>(null);
 </script>
 
-<div class="space-y-6 p-6">
+<div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
 	<PageHeader title="Config — {data.vertical.replace('_', ' ')}">
 		{#snippet actions()}
 			<div class="flex gap-2">

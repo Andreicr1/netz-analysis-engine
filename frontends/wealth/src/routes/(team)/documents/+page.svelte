@@ -127,8 +127,10 @@
 
 	{#if filtered.length === 0}
 		<EmptyState
-			title="No Documents"
-			description="Upload documents to start the ingestion pipeline."
+			title="No documents yet"
+			message="Upload a fund prospectus, DDQ, or financial statement to start analysis."
+			actionLabel="Upload Document"
+			onAction={() => goto('/documents/upload')}
 		/>
 	{:else}
 		<DataTable
