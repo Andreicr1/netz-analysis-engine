@@ -566,3 +566,33 @@ async def trigger_run_imf_ingestion(
         run_imf_ingestion,
         timeout_seconds=_HEAVY_WORKER_TIMEOUT,
     )
+
+
+@router.post(
+    "/run-esma-ingestion",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger ESMA UCITS universe ingestion",
+    description=(
+        "Schedules the ESMA ingestion worker as a background task. "
+        "Fetches ~134K UCITS funds from the ESMA Solr register, "
+        "deduplicates managers, resolves ISIN→ticker via OpenFIGI, "
+        "and upserts into esma_managers, esma_funds, esma_isin_ticker_map. "
+        "Uses advisory lock 900_019. Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_esma_ingestion(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.esma_ingestion import run_esma_ingestion
+
+    return await _dispatch_worker(
+        background_tasks, "run-esma-ingestion", "global",
+        run_esma_ingestion,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )
