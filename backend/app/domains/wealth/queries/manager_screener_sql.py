@@ -34,7 +34,7 @@ from sqlalchemy import (
     literal_column,
     select,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  Reflected tables (Core-style, not ORM)
@@ -242,21 +242,29 @@ def build_screener_queries(
             )
 
     # ── Holdings subquery (Block 2 uses this) ───────────────────
-    # Always filter by time column for chunk pruning
+    # Always filter by time column for chunk pruning.
+    # Two-step: first find latest quarter per CIK, then aggregate.
+    latest_quarter_sub = (
+        select(
+            holdings_agg.c.cik,
+            func.max(holdings_agg.c.quarter).label("max_quarter"),
+        )
+        .where(holdings_agg.c.quarter <= latest_quarter)
+        .group_by(holdings_agg.c.cik)
+        .subquery("latest_quarter")
+    )
     latest_q_sub = (
         select(
             holdings_agg.c.cik,
             func.sum(holdings_agg.c.sector_value).label("total_value"),
             func.sum(holdings_agg.c.position_count).label("total_positions"),
         )
-        .where(holdings_agg.c.quarter <= latest_quarter)
-        .where(
-            holdings_agg.c.quarter
-            == select(func.max(holdings_agg.c.quarter))
-            .where(holdings_agg.c.cik == holdings_agg.c.cik)
-            .where(holdings_agg.c.quarter <= latest_quarter)
-            .correlate(holdings_agg)
-            .scalar_subquery()
+        .join(
+            latest_quarter_sub,
+            and_(
+                holdings_agg.c.cik == latest_quarter_sub.c.cik,
+                holdings_agg.c.quarter == latest_quarter_sub.c.max_quarter,
+            ),
         )
         .group_by(holdings_agg.c.cik)
         .subquery("latest_holdings")
@@ -283,7 +291,7 @@ def build_screener_queries(
             instruments_universe.c.approval_status,
         )
         .where(
-            instruments_universe.c.organization_id == cast(literal_column("'" + str(org_id).replace("'", "''") + "'"), Text)
+            instruments_universe.c.organization_id == cast(literal_column("'" + str(org_id).replace("'", "''") + "'"), PG_UUID)
         )
         .where(instruments_universe.c.attributes["source"].astext == "sec_manager")
         .subquery("universe_status")

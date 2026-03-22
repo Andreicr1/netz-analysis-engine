@@ -134,23 +134,23 @@
 	--netz-radius-pill: 999px;
 
 	/* Surface */
-	--netz-surface: #0c1220;
-	--netz-surface-alt: #152638;
-	--netz-surface-elevated: #1a2d44;
-	--netz-surface-inset: #0b121c;
-	--netz-surface-overlay: rgba(0, 0, 0, 0.64);
-	--netz-surface-raised: #243a52;
-	--netz-surface-panel: color-mix(in srgb, var(--netz-surface-elevated) 86%, var(--netz-brand-light) 14%);
+	--netz-surface: #09090b;
+	--netz-surface-alt: #18181b;
+	--netz-surface-elevated: #27272a;
+	--netz-surface-inset: #000000;
+	--netz-surface-overlay: rgba(0, 0, 0, 0.72);
+	--netz-surface-raised: #3f3f46;
+	--netz-surface-panel: color-mix(in srgb, var(--netz-surface-elevated) 86%, var(--netz-brand-primary) 14%);
 	--netz-surface-highlight: color-mix(in srgb, var(--netz-brand-primary) 10%, var(--netz-surface-elevated));
 	--netz-surface-accent: color-mix(in srgb, var(--netz-brand-secondary) 12%, var(--netz-surface-elevated));
 
 	/* Border */
-	--netz-border-subtle: #2a3d55;
-	--netz-border: #345270;
-	--netz-border-strong: #445774;
+	--netz-border-subtle: #27272a;
+	--netz-border: #3f3f46;
+	--netz-border-strong: #52525b;
 	--netz-border-accent: color-mix(in srgb, var(--netz-brand-primary) 24%, var(--netz-border));
 	--netz-border-focus: color-mix(in srgb, var(--netz-brand-secondary) 72%, white 28%);
-	--netz-border-inverse: rgba(255, 255, 255, 0.18);
+	--netz-border-inverse: rgba(255, 255, 255, 0.12);
 
 	/* Text */
 	--netz-text-primary: #f4f7fb;

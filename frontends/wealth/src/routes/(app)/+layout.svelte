@@ -9,7 +9,7 @@
 	import { ThemeToggle } from "@netz/ui";
 	import { createRiskStore, type RiskStore } from "$lib/stores/risk-store.svelte";
 	import {
-		Search, Building2, ClipboardList, Globe,
+		Search, ClipboardList, Globe,
 		Briefcase, Zap, BarChart2, Map,
 		Landmark, FileText, Newspaper, Folders,
 		Search as SearchIcon, Bot
@@ -46,7 +46,6 @@
 	const navItems: SidebarNavItem[] = [
 		// SECTION 1: DISCOVERY & SCREENING
 		{ label: "Screener", href: "/screener", icon: Search },
-		{ label: "Manager Screener", href: "/manager-screener", icon: Building2 },
 		{ label: "DD Reports", href: "/dd-reports", icon: ClipboardList },
 
 		// SECTION 2: INVESTMENT ENGINE
@@ -84,7 +83,7 @@
 				<div class="netz-ws-section-label">Discovery & Screening</div>
 			{/if}
 			<nav class="netz-ws-nav" aria-label="Discovery & Screening">
-				{#each navItems.slice(0, 3) as item (item.href)}
+				{#each navItems.slice(0, 2) as item (item.href)}
 					{@const Icon = item.icon}
 					<a
 						href={item.href}
@@ -107,7 +106,7 @@
 				<div class="netz-ws-divider"></div>
 			{/if}
 			<nav class="netz-ws-nav" aria-label="Investment Engine">
-				{#each navItems.slice(3, 6) as item (item.href)}
+				{#each navItems.slice(2, 5) as item (item.href)}
 					{@const Icon = item.icon}
 					<a
 						href={item.href}
@@ -130,7 +129,7 @@
 				<div class="netz-ws-divider"></div>
 			{/if}
 			<nav class="netz-ws-nav" aria-label="Risk & Intelligence">
-				{#each navItems.slice(6, 10) as item (item.href)}
+				{#each navItems.slice(5, 9) as item (item.href)}
 					{@const Icon = item.icon}
 					<a
 						href={item.href}
@@ -153,7 +152,7 @@
 				<div class="netz-ws-divider"></div>
 			{/if}
 			<nav class="netz-ws-nav" aria-label="Content & Data">
-				{#each navItems.slice(10, 12) as item (item.href)}
+				{#each navItems.slice(9, 11) as item (item.href)}
 					{@const Icon = item.icon}
 					<a
 						href={item.href}

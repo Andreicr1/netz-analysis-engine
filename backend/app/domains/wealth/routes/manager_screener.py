@@ -183,10 +183,8 @@ async def list_managers(
 
     data_query, count_query = build_screener_queries(filters, str(org_id))
 
-    data_result, count_result = await asyncio.gather(
-        db.execute(data_query),
-        db.execute(count_query),
-    )
+    data_result = await db.execute(data_query)
+    count_result = await db.execute(count_query)
 
     rows = data_result.mappings().all()
     total_count = count_result.scalar_one()

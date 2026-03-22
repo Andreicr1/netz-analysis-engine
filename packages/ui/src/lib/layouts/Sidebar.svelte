@@ -45,7 +45,14 @@
 					aria-current={isActive(item.href) ? "page" : undefined}
 				>
 					{#if item.icon}
-						<span class="netz-sidebar__icon">{item.icon}</span>
+						<span class="netz-sidebar__icon">
+							{#if typeof item.icon === "string"}
+								{item.icon}
+							{:else}
+								{@const Icon = item.icon as any}
+								<Icon size={18} strokeWidth={2} />
+							{/if}
+						</span>
 					{/if}
 					{#if !collapsed}
 						<span class="netz-sidebar__label">{item.label}</span>
@@ -64,7 +71,14 @@
 									aria-current={isActive(child.href) ? "page" : undefined}
 								>
 									{#if child.icon}
-										<span class="netz-sidebar__icon">{child.icon}</span>
+										<span class="netz-sidebar__icon">
+											{#if typeof child.icon === "string"}
+												{child.icon}
+											{:else}
+												{@const Icon = child.icon as any}
+												<Icon size={16} strokeWidth={2} />
+											{/if}
+										</span>
 									{/if}
 									<span class="netz-sidebar__label">{child.label}</span>
 									{#if child.badge != null}

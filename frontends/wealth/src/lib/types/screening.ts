@@ -26,6 +26,7 @@ export interface ScreeningResult {
 	instrument_type?: string;
 	block_id?: string | null;
 	manager?: string;
+	manager_crd?: string | null;
 	geography?: string;
 	strategy?: string;
 	aum?: number | null;

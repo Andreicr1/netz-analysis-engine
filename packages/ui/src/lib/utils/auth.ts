@@ -68,6 +68,8 @@ export interface ClerkHookOptions {
 	jwksUrl?: string;
 	/** Allow dev bypass via X-DEV-ACTOR header when true. */
 	devBypass?: boolean;
+	/** Static dev token to use as Bearer when devBypass is active (matches backend DEV_TOKEN). */
+	devToken?: string;
 	/** Public routes that skip auth (e.g., ["/auth/", "/health"]). */
 	publicPrefixes?: string[];
 }
@@ -117,6 +119,7 @@ export function createClerkHook(options: ClerkHookOptions = {}): Handle {
 	const {
 		jwksUrl,
 		devBypass = false,
+		devToken = "dev-token",
 		publicPrefixes = ["/auth/", "/health"],
 	} = options;
 
@@ -133,7 +136,7 @@ export function createClerkHook(options: ClerkHookOptions = {}): Handle {
 		const devActorHeader = event.request.headers.get("x-dev-actor");
 		if (devBypass && devActorHeader) {
 			locals.actor = parseDevActor(devActorHeader);
-			locals.token = "dev-token";
+			locals.token = devToken;
 			return resolve(event);
 		}
 
@@ -145,7 +148,7 @@ export function createClerkHook(options: ClerkHookOptions = {}): Handle {
 		if (!token) {
 			if (devBypass) {
 				locals.actor = DEFAULT_DEV_ACTOR;
-				locals.token = "dev-token";
+				locals.token = devToken;
 				return resolve(event);
 			}
 			// Dynamic import to avoid importing @sveltejs/kit at module level

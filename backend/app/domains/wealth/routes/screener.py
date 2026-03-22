@@ -206,27 +206,56 @@ async def list_results(
     user: CurrentUser = Depends(get_current_user),
 ) -> list[ScreeningResultRead]:
     stmt = (
-        select(ScreeningResult)
+        select(
+            ScreeningResult,
+            Instrument.name.label("inst_name"),
+            Instrument.isin.label("inst_isin"),
+            Instrument.ticker.label("inst_ticker"),
+            Instrument.instrument_type.label("inst_type"),
+            Instrument.block_id.label("inst_block_id"),
+            Instrument.geography.label("inst_geography"),
+            Instrument.currency.label("inst_currency"),
+            Instrument.attributes["sec_crd_number"].astext.label("inst_manager_crd"),
+            Instrument.attributes["strategy"].astext.label("inst_strategy"),
+            Instrument.attributes["aum"].astext.label("inst_aum"),
+        )
+        .join(
+            Instrument,
+            ScreeningResult.instrument_id == Instrument.instrument_id,
+        )
         .where(ScreeningResult.is_current.is_(True))
     )
     if overall_status:
         stmt = stmt.where(ScreeningResult.overall_status == overall_status)
-
-    # Filter by instrument attributes if needed
-    if instrument_type or block_id:
-        stmt = stmt.join(
-            Instrument,
-            ScreeningResult.instrument_id == Instrument.instrument_id,
-        )
-        if instrument_type:
-            stmt = stmt.where(Instrument.instrument_type == instrument_type)
-        if block_id:
-            stmt = stmt.where(Instrument.block_id == block_id)
+    if instrument_type:
+        stmt = stmt.where(Instrument.instrument_type == instrument_type)
+    if block_id:
+        stmt = stmt.where(Instrument.block_id == block_id)
 
     stmt = stmt.order_by(ScreeningResult.score.desc().nulls_last()).limit(limit)
     result = await db.execute(stmt)
-    results = result.scalars().all()
-    return [ScreeningResultRead.model_validate(r) for r in results]
+    rows = result.all()
+
+    enriched: list[ScreeningResultRead] = []
+    for row in rows:
+        sr = row[0]
+        data = ScreeningResultRead.model_validate(sr)
+        data.name = row.inst_name
+        data.isin = row.inst_isin
+        data.ticker = row.inst_ticker
+        data.instrument_type = row.inst_type
+        data.block_id = row.inst_block_id
+        data.geography = row.inst_geography
+        data.currency = row.inst_currency
+        data.manager_crd = row.inst_manager_crd
+        data.strategy = row.inst_strategy
+        try:
+            data.aum = float(row.inst_aum) if row.inst_aum else None
+        except (ValueError, TypeError):
+            data.aum = None
+        enriched.append(data)
+
+    return enriched
 
 
 @router.get(

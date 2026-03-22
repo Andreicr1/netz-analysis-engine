@@ -36,6 +36,19 @@ class ScreeningResultRead(BaseModel):
     screened_at: datetime
     is_current: bool
 
+    # Joined from instruments_universe
+    name: str | None = None
+    isin: str | None = None
+    ticker: str | None = None
+    instrument_type: str | None = None
+    block_id: str | None = None
+    geography: str | None = None
+    strategy: str | None = None
+    currency: str | None = None
+    aum: float | None = None
+    manager: str | None = None
+    manager_crd: str | None = None
+
 
 class ScreeningRunRequest(BaseModel):
     """Request to trigger screening."""
