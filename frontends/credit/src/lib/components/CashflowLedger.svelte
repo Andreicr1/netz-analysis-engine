@@ -382,7 +382,7 @@
 			<FormField label="Tipo" required>
 				<Select
 					bind:value={registerFlowType}
-					options={FLOW_TYPES.map((ft) => ({ value: ft, label: FLOW_TYPE_LABELS[ft] }))}
+					options={FLOW_TYPES.map((ft) => ({ value: ft, label: FLOW_TYPE_LABELS[ft] ?? ft }))}
 				/>
 			</FormField>
 
@@ -460,7 +460,7 @@
 			<FormField label="Tipo" required>
 				<Select
 					bind:value={editFlowType}
-					options={FLOW_TYPES.map((ft) => ({ value: ft, label: FLOW_TYPE_LABELS[ft] }))}
+					options={FLOW_TYPES.map((ft) => ({ value: ft, label: FLOW_TYPE_LABELS[ft] ?? ft }))}
 				/>
 			</FormField>
 

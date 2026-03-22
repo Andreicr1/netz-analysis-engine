@@ -396,7 +396,7 @@
 </script>
 
 <PageHeader title="Manager Screener">
-  <svelte:fragment slot="actions">
+  {#snippet actions()}
     <Button
       variant={compareMode ? "default" : "outline"}
       size="sm"
@@ -415,7 +415,7 @@
         {comparing ? "Comparing..." : `Compare (${selectedForCompare.size})`}
       </Button>
     {/if}
-  </svelte:fragment>
+  {/snippet}
 </PageHeader>
 
 <div class="flex gap-6 mt-4">
@@ -521,11 +521,7 @@
                 {mgr.compliance_disclosures ?? 0}
               </td>
               <td class="px-3 py-2">
-                <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
-                  class:bg-green-500/10={mgr.registration_status === "APPROVED"}
-                  class:text-green-400={mgr.registration_status === "APPROVED"}
-                  class:bg-yellow-500/10={mgr.registration_status !== "APPROVED"}
-                  class:text-yellow-400={mgr.registration_status !== "APPROVED"}
+                <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {mgr.registration_status === 'APPROVED' ? 'bg-green-500/10 text-green-400' : 'bg-yellow-500/10 text-yellow-400'}"
                 >
                   {mgr.registration_status ?? "—"}
                 </span>
@@ -883,13 +879,7 @@
         <div class="space-y-4">
           <div class="flex items-center gap-2">
             <span class="text-sm text-muted-foreground">Coverage:</span>
-            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
-              class:bg-green-500/10={institutionalData.coverage_type === "full"}
-              class:text-green-400={institutionalData.coverage_type === "full"}
-              class:bg-yellow-500/10={institutionalData.coverage_type === "partial"}
-              class:text-yellow-400={institutionalData.coverage_type === "partial"}
-              class:bg-muted={institutionalData.coverage_type === "none"}
-              class:text-muted-foreground={institutionalData.coverage_type === "none"}
+            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {institutionalData.coverage_type === 'full' ? 'bg-green-500/10 text-green-400' : institutionalData.coverage_type === 'partial' ? 'bg-yellow-500/10 text-yellow-400' : 'bg-muted text-muted-foreground'}"
             >
               {institutionalData.coverage_type}
             </span>

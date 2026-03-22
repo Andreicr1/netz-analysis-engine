@@ -411,7 +411,7 @@
 		{#snippet actions()}
 			<Select
 				bind:value={selectedProfile}
-				options={PROFILES}
+				options={[...PROFILES]}
 			/>
 		{/snippet}
 	</PageHeader>
