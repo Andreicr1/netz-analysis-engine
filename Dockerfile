@@ -1,6 +1,6 @@
 # Netz Analysis Engine — Backend + Workers
 # Single image, entrypoint differentiates: uvicorn (backend) vs dispatch (workers)
-# Target: Cloudflare Containers (linux/amd64)
+# Target: Cloudflare Containers (linux/amd64, no GPU — CPU-only torch)
 #
 # Build from repo root: docker build -t netz-backend .
 
@@ -8,7 +8,7 @@ FROM python:3.12-slim AS base
 
 WORKDIR /app
 
-# System dependencies for asyncpg, scipy, scikit-learn, torch
+# System dependencies for asyncpg, scipy, scikit-learn
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential libpq-dev && \
     rm -rf /var/lib/apt/lists/*
@@ -19,8 +19,10 @@ COPY backend/ backend/
 COPY profiles/ profiles/
 COPY calibration/ calibration/
 
-# Non-editable install (source must be present for setuptools.packages.find)
-RUN pip install --no-cache-dir ".[ai,quant,edgar]"
+# Install CPU-only torch FIRST (avoids pulling ~3.5GB of CUDA/NVIDIA libs)
+# Then install everything else (torch already satisfied, pip skips CUDA deps)
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
+    pip install --no-cache-dir ".[ai,quant,edgar]"
 
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
