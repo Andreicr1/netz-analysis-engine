@@ -11,6 +11,7 @@ Async service. Instantiate ONCE in FastAPI lifespan().
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 import re
@@ -755,45 +756,76 @@ class AdvService:
     # ── Part 2A Brochure Text Extraction ────────────────────────
 
     async def _download_and_extract_brochure(self, crd_number: str) -> str:
-        """Download Part 2A PDF and extract text via PyMuPDF.
+        """Get brochure PDF (StorageClient first, then EDGAR) and extract text.
 
-        SEC requires all Part 2A brochures to be text-searchable PDF before
-        IARD submission (mandatory since 2010). OCR is therefore not needed.
-        Uses fitz (pymupdf) — zero API cost, millisecond latency.
+        Storage hierarchy:
+          1. StorageClient (R2 prod / local dev) — pre-populated by brochure_download worker
+          2. Legacy local path (.data/lake/brochures/{crd}.pdf) — seed script
+          3. Download from IAPD → save to StorageClient → extract
 
-        Runs in SEC thread pool (sync httpx download + sync fitz extraction).
-        Returns concatenated page text or empty string on failure.
+        SEC requires all Part 2A brochures to be text-searchable PDF
+        (mandatory since 2010). No OCR needed — PyMuPDF text extraction.
         """
-        return await run_in_sec_thread(self._download_and_extract_sync, crd_number)
+        from app.services.storage_client import get_storage_client
+
+        storage = get_storage_client()
+        storage_key = f"gold/_global/sec_brochures/{crd_number}.pdf"
+
+        # 1. Try StorageClient (worker-populated)
+        try:
+            if await storage.exists(storage_key):
+                pdf_bytes = await storage.read(storage_key)
+                if len(pdf_bytes) > 1024:
+                    logger.debug("adv_brochure_from_storage", crd=crd_number)
+                    return await asyncio.to_thread(
+                        self._extract_text_from_bytes, crd_number, pdf_bytes
+                    )
+        except Exception:
+            pass  # fall through to legacy/download
+
+        # 2. Try legacy local path (seed script)
+        pdf_bytes = await run_in_sec_thread(
+            self._resolve_pdf_sync, crd_number
+        )
+        if not pdf_bytes:
+            return ""
+
+        # Persist to StorageClient for future reads
+        try:
+            await storage.write(
+                storage_key, pdf_bytes, content_type="application/pdf"
+            )
+        except Exception:
+            pass  # non-fatal — extraction still works
+
+        return await asyncio.to_thread(
+            self._extract_text_from_bytes, crd_number, pdf_bytes
+        )
 
     @staticmethod
-    def _download_and_extract_sync(crd_number: str) -> str:
-        """Sync: download brochure PDF → PyMuPDF text extraction."""
-        import fitz  # pymupdf — already a project dependency
-        import httpx
+    def _resolve_pdf_sync(crd_number: str) -> bytes | None:
+        """Sync: try legacy local path, then download from IAPD."""
+        from pathlib import Path
 
-        pdf_url = _ADV_BROCHURE_URL.format(crd=crd_number)
-        check_iapd_rate()  # same domain family, conservative rate
+        brochure_dir = Path(".data/lake/brochures")
+        local_path = brochure_dir / f"{crd_number}.pdf"
 
-        try:
-            resp = httpx.get(
-                pdf_url,
-                headers={"User-Agent": SEC_USER_AGENT},
-                timeout=60.0,
-                follow_redirects=True,
-            )
-            if resp.status_code == 404:
-                logger.info("adv_brochure_not_found", crd=crd_number)
-                return ""
-            resp.raise_for_status()
-        except Exception as exc:
-            logger.warning("adv_brochure_download_failed", crd=crd_number, error=str(exc))
-            return ""
+        if local_path.exists() and local_path.stat().st_size > 1024:
+            logger.debug("adv_brochure_from_cache", crd=crd_number)
+            return local_path.read_bytes()
 
-        pdf_bytes = resp.content
-        if len(pdf_bytes) < 1024:
-            logger.warning("adv_brochure_too_small", crd=crd_number, size=len(pdf_bytes))
-            return ""
+        # Download from IAPD and persist to legacy path
+        pdf_bytes = AdvService._download_brochure_pdf(crd_number)
+        if not pdf_bytes:
+            return None
+        brochure_dir.mkdir(parents=True, exist_ok=True)
+        local_path.write_bytes(pdf_bytes)
+        return pdf_bytes
+
+    @staticmethod
+    def _extract_text_from_bytes(crd_number: str, pdf_bytes: bytes) -> str:
+        """Sync PyMuPDF text extraction from raw PDF bytes."""
+        import fitz  # pymupdf
 
         try:
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
@@ -809,6 +841,50 @@ class AdvService:
         except Exception as exc:
             logger.warning("adv_brochure_extract_failed", crd=crd_number, error=str(exc))
             return ""
+
+    @staticmethod
+    def _download_brochure_pdf(crd_number: str) -> bytes | None:
+        """Download brochure PDF from IAPD with retry on 403."""
+        import time as _time
+
+        import httpx
+
+        pdf_url = _ADV_BROCHURE_URL.format(crd=crd_number)
+
+        for attempt in range(4):
+            check_iapd_rate()
+            try:
+                resp = httpx.get(
+                    pdf_url,
+                    headers={"User-Agent": SEC_USER_AGENT},
+                    timeout=60.0,
+                    follow_redirects=True,
+                )
+                if resp.status_code == 404:
+                    logger.info("adv_brochure_not_found", crd=crd_number)
+                    return None
+                if resp.status_code == 403:
+                    wait = 2 ** attempt * 2
+                    logger.warning(
+                        "adv_brochure_rate_limited",
+                        crd=crd_number,
+                        attempt=attempt + 1,
+                        wait=wait,
+                    )
+                    _time.sleep(wait)
+                    continue
+                resp.raise_for_status()
+
+                if len(resp.content) < 1024:
+                    logger.warning("adv_brochure_too_small", crd=crd_number, size=len(resp.content))
+                    return None
+                return resp.content
+            except Exception as exc:
+                logger.warning("adv_brochure_download_failed", crd=crd_number, error=str(exc))
+                return None
+
+        logger.warning("adv_brochure_max_retries", crd=crd_number)
+        return None
 
     # ── Persist team + brochure sections ─────────────────────────
 

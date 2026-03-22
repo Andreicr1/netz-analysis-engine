@@ -12,6 +12,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, TypeVar
 
+import httpx
 import structlog
 
 from data_providers.esma.models import IsinResolution
@@ -28,7 +29,7 @@ ESMA_SOLR_BASE = (
 ESMA_RATE_LIMIT = 4  # req/s (conservative — no documented rate limit)
 
 OPENFIGI_BATCH_URL = "https://api.openfigi.com/v3/mapping"
-OPENFIGI_BATCH_SIZE = 100  # max per request (OpenFIGI limit)
+OPENFIGI_BATCH_SIZE = 50  # conservative — 100 can trigger 413 with extra fields
 
 # OpenFIGI exchange code → Yahoo Finance suffix mapping for European exchanges.
 EXCHANGE_SUFFIX_MAP: dict[str, str] = {
@@ -147,9 +148,17 @@ def check_esma_rate() -> None:
 
 
 def check_openfigi_rate(has_api_key: bool = False) -> None:
-    """Rate-limit OpenFIGI API requests (25 req/min free, 250 req/min with key)."""
-    limit = 4 if has_api_key else 1  # req/s (conservative)
-    _check_rate("openfigi_esma", limit)
+    """Rate-limit OpenFIGI API requests (25 req/min free, 250 req/min with key).
+
+    Without key: enforce ~20 req/min (0.33 req/s) to stay safely under 25/min.
+    With key: ~200 req/min (3 req/s) to stay safely under 250/min.
+    """
+    if has_api_key:
+        _check_rate("openfigi_esma", 3)
+    else:
+        # 25 req/min = 0.42/s — use blocking sleep to enforce ~3s gap
+        _check_rate_local("openfigi_esma_nokey", 1)
+        time.sleep(2.5)  # ensures ~3s between requests → ~20 req/min
 
 
 # ── ISIN → Ticker Resolution (OpenFIGI batch) ───────────────────
@@ -193,19 +202,48 @@ async def resolve_isin_to_ticker_batch(
     if api_key:
         headers["X-OPENFIGI-APIKEY"] = api_key
 
-    payload = [{"idType": "ID_ISIN", "idValue": isin} for isin in isins]
+    payload = [
+        {"idType": "ID_ISIN", "idValue": isin, "includeUnlistedEquities": True}
+        for isin in isins
+    ]
 
-    try:
-        response = await http_client.post(
-            OPENFIGI_BATCH_URL,
-            json=payload,
-            headers=headers,
-            timeout=30.0,
-        )
-        response.raise_for_status()
-        results = response.json()
-    except Exception as exc:
-        logger.warning("openfigi.isin_batch_failed", error=str(exc), count=len(isins))
+    max_retries = 5
+    results: list[Any] | None = None
+    for attempt in range(max_retries):
+        try:
+            response = await http_client.post(
+                OPENFIGI_BATCH_URL,
+                json=payload,
+                headers=headers,
+                timeout=30.0,
+            )
+            if response.status_code == 429:
+                wait = min(2 ** attempt * 3, 60)  # 3s, 6s, 12s, 24s, 48s
+                logger.warning(
+                    "openfigi.rate_limited",
+                    attempt=attempt + 1,
+                    wait_seconds=wait,
+                    count=len(isins),
+                )
+                await asyncio.sleep(wait)
+                continue
+            if response.status_code == 413:
+                logger.warning(
+                    "openfigi.payload_too_large",
+                    count=len(isins),
+                )
+                return [_make_unresolved(i) for i in isins]
+            response.raise_for_status()
+            results = response.json()
+            break
+        except httpx.HTTPStatusError:
+            raise
+        except Exception as exc:
+            logger.warning("openfigi.isin_batch_failed", error=str(exc), count=len(isins))
+            return [_make_unresolved(i) for i in isins]
+
+    if results is None:
+        logger.warning("openfigi.max_retries_exhausted", count=len(isins))
         return [_make_unresolved(i) for i in isins]
 
     if not isinstance(results, list) or len(results) != len(isins):

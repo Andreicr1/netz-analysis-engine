@@ -1,19 +1,21 @@
 """ESMA UCITS Seed Population Script.
 
-4-phase resumable pipeline to populate esma_* tables with European
+5-phase resumable pipeline to populate esma_* tables with European
 UCITS fund data. Run from backend/:
 
     python -m data_providers.esma.seed.populate_seed [--resume] [--dry-run]
     python -m data_providers.esma.seed.populate_seed --only-register
+    python -m data_providers.esma.seed.populate_seed --only-firds
     python -m data_providers.esma.seed.populate_seed --only-resolve
     python -m data_providers.esma.seed.populate_seed --only-nav
     python -m data_providers.esma.seed.populate_seed --only-crossref
 
 Phases (run in order):
-    Phase 1: ESMA Solr API → esma_managers + esma_funds
-    Phase 2: ISIN resolution via OpenFIGI → esma_isin_ticker_map
-    Phase 3: NAV backfill via yfinance → nav_timeseries
-    Phase 4: SEC cross-reference via fuzzy match → esma_managers.sec_crd_number
+    Phase 1:   ESMA Solr API → esma_managers + esma_funds (LEI as PK)
+    Phase 1.5: FIRDS FULINS_C → esma_isin_ticker_map (real ISINs linked to LEIs)
+    Phase 2:   ISIN resolution via OpenFIGI → esma_isin_ticker_map (yahoo tickers)
+    Phase 3:   NAV backfill via yfinance → nav_timeseries
+    Phase 4:   SEC cross-reference via fuzzy match → esma_managers.sec_crd_number
 """
 from __future__ import annotations
 
@@ -27,6 +29,9 @@ from pathlib import Path
 from typing import Any
 
 import structlog
+from dotenv import load_dotenv
+
+load_dotenv()  # Load .env before any os.environ.get() calls
 
 logger = structlog.get_logger()
 
@@ -41,6 +46,7 @@ def _load_checkpoint() -> dict[str, Any]:
         try:
             raw = json.loads(CHECKPOINT_FILE.read_text())
             raw.setdefault("phase1_complete", False)
+            raw.setdefault("phase1_5_complete", False)
             raw.setdefault("phase2_resolved", [])
             raw.setdefault("phase3_backfilled", [])
             raw.setdefault("phase4_complete", False)
@@ -51,6 +57,7 @@ def _load_checkpoint() -> dict[str, Any]:
             logger.warning("checkpoint_load_failed", error=str(exc))
     return {
         "phase1_complete": False,
+        "phase1_5_complete": False,
         "phase2_resolved": [],
         "phase3_backfilled": [],
         "phase4_complete": False,
@@ -115,6 +122,7 @@ async def phase1_register_ingest(
                     "esma_id": mid,
                     "company_name": f"Manager {mid}",  # placeholder
                     "fund_count": 0,
+                    "data_fetched_at": datetime.now(timezone.utc),
                 }
             managers[mid]["fund_count"] = managers[mid].get("fund_count", 0) + 1
 
@@ -131,12 +139,14 @@ async def phase1_register_ingest(
 
             # Flush in batches
             if len(funds_batch) >= batch_size:
-                await _flush_phase1_batch(db_factory, managers, funds_batch, stats)
+                deduped = _dedupe_by_isin(funds_batch)
+                await _flush_phase1_batch(db_factory, managers, deduped, stats)
                 funds_batch.clear()
 
     # Flush remaining
     if funds_batch:
-        await _flush_phase1_batch(db_factory, managers, funds_batch, stats)
+        deduped = _dedupe_by_isin(funds_batch)
+        await _flush_phase1_batch(db_factory, managers, deduped, stats)
 
     logger.info(
         "phase1.complete",
@@ -145,6 +155,18 @@ async def phase1_register_ingest(
         errors=stats["errors"],
     )
     return stats
+
+
+def _dedupe_by_isin(funds_batch: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Deduplicate funds by ISIN, keeping last occurrence.
+
+    Multiple ESMA Solr documents can share the same funds_lei (LEI ≠ ISIN).
+    PostgreSQL ON CONFLICT DO UPDATE cannot affect the same row twice in one statement.
+    """
+    seen: dict[str, dict[str, Any]] = {}
+    for f in funds_batch:
+        seen[f["isin"]] = f
+    return list(seen.values())
 
 
 async def _flush_phase1_batch(
@@ -166,16 +188,16 @@ async def _flush_phase1_batch(
                 managers[mid] for mid in manager_ids_in_batch if mid in managers
             ]
             if mgr_rows:
-                stmt = pg_insert(EsmaManager).values(mgr_rows)
-                stmt = stmt.on_conflict_do_update(
+                mgr_stmt = pg_insert(EsmaManager).values(mgr_rows)
+                mgr_stmt = mgr_stmt.on_conflict_do_update(
                     index_elements=["esma_id"],
                     set_={
-                        "company_name": stmt.excluded.company_name,
-                        "fund_count": stmt.excluded.fund_count,
-                        "data_fetched_at": stmt.excluded.data_fetched_at,
+                        "company_name": mgr_stmt.excluded.company_name,
+                        "fund_count": mgr_stmt.excluded.fund_count,
+                        "data_fetched_at": mgr_stmt.excluded.data_fetched_at,
                     },
                 )
-                await session.execute(stmt)
+                await session.execute(mgr_stmt)
                 stats["managers"] = len(managers)
 
             # Upsert funds
@@ -201,6 +223,119 @@ async def _flush_phase1_batch(
             logger.error("phase1.batch_upsert_failed", error=str(exc))
 
 
+# ── Phase 1.5: FIRDS FULINS_C → real ISINs ────────────────────────
+
+
+async def phase1_5_firds_isin_mapping(
+    *,
+    dry_run: bool = False,
+) -> dict[str, int]:
+    """Download FIRDS FULINS_C and map real ISINs to fund LEIs.
+
+    ESMA Register Solr returns LEIs (not ISINs). FIRDS contains the
+    ISIN ↔ LEI mapping for all EU collective investment instruments.
+    This phase populates esma_isin_ticker_map with real ISINs linked
+    to fund LEIs, enabling Phase 2 (OpenFIGI) to resolve actual ISINs.
+    """
+    from sqlalchemy import text as sa_text
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from app.shared.models import EsmaIsinTickerMap
+    from data_providers.esma.firds_service import FirdsService
+
+    stats = {"total_instruments": 0, "matched": 0, "unmatched": 0, "errors": 0}
+
+    db_factory = _get_db_session_factory()
+
+    # Fetch all fund LEIs from esma_funds
+    async with db_factory() as session:
+        result = await session.execute(
+            sa_text("SELECT isin FROM esma_funds ORDER BY isin")
+        )
+        fund_leis = {row[0] for row in result.fetchall()}
+
+    logger.info("phase1_5.fund_leis_loaded", count=len(fund_leis))
+
+    if dry_run:
+        logger.info("phase1_5.dry_run", fund_leis=len(fund_leis))
+        return stats
+
+    # Download and parse FIRDS FULINS_C
+    async with FirdsService() as svc:
+        url = await svc.find_latest_fulins_c_url()
+        zip_data = await svc.download_zip(url)
+
+        # Parse XML, filtering to only LEIs we know about
+        isin_rows: list[dict[str, Any]] = []
+        seen_isins: set[str] = set()
+
+        for instrument in svc.parse_xml(zip_data, lei_filter=fund_leis):
+            stats["total_instruments"] += 1
+
+            if instrument.isin in seen_isins:
+                continue
+            seen_isins.add(instrument.isin)
+
+            isin_rows.append({
+                "isin": instrument.isin,
+                "fund_lei": instrument.lei,
+                "resolved_via": "firds",
+                "is_tradeable": False,  # will be updated by Phase 2
+                "last_verified_at": datetime.now(timezone.utc),
+            })
+
+            # Flush in batches of 2000
+            if len(isin_rows) >= 2000:
+                matched = await _flush_firds_batch(db_factory, isin_rows, stats)
+                isin_rows.clear()
+
+        # Flush remaining
+        if isin_rows:
+            await _flush_firds_batch(db_factory, isin_rows, stats)
+
+    stats["matched"] = len(seen_isins)
+
+    logger.info(
+        "phase1_5.complete",
+        total_instruments=stats["total_instruments"],
+        unique_isins=len(seen_isins),
+        fund_leis=len(fund_leis),
+        errors=stats["errors"],
+    )
+    return stats
+
+
+async def _flush_firds_batch(
+    db_factory: Any,
+    rows: list[dict[str, Any]],
+    stats: dict[str, int],
+) -> int:
+    """Upsert a batch of FIRDS ISIN→LEI mappings to esma_isin_ticker_map."""
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from app.shared.models import EsmaIsinTickerMap
+
+    async with db_factory() as session:
+        try:
+            stmt = pg_insert(EsmaIsinTickerMap).values(rows)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["isin"],
+                set_={
+                    "fund_lei": stmt.excluded.fund_lei,
+                    "resolved_via": stmt.excluded.resolved_via,
+                    "last_verified_at": stmt.excluded.last_verified_at,
+                },
+            )
+            await session.execute(stmt)
+            await session.commit()
+            return len(rows)
+        except Exception as exc:
+            await session.rollback()
+            stats["errors"] += 1
+            logger.error("phase1_5.batch_upsert_failed", error=str(exc))
+            return 0
+
+
 # ── Phase 2: ISIN → Ticker Resolution ──────────────────────────────
 
 
@@ -209,11 +344,16 @@ async def phase2_isin_resolution(
     api_key: str | None = None,
     dry_run: bool = False,
 ) -> dict[str, int]:
-    """Resolve ISINs from esma_funds to Yahoo Finance tickers via OpenFIGI."""
+    """Resolve real ISINs from esma_isin_ticker_map to Yahoo Finance tickers via OpenFIGI.
+
+    Phase 1.5 (FIRDS) must run first to populate esma_isin_ticker_map with
+    real ISINs linked to fund LEIs. This phase resolves those ISINs to
+    Yahoo Finance tickers.
+    """
     from sqlalchemy import text as sa_text
     from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-    from app.shared.models import EsmaFund, EsmaIsinTickerMap
+    from app.shared.models import EsmaIsinTickerMap
     from data_providers.esma.ticker_resolver import TickerResolver
 
     stats = {"total": 0, "resolved": 0, "unresolved": 0, "errors": 0}
@@ -223,11 +363,11 @@ async def phase2_isin_resolution(
 
     db_factory = _get_db_session_factory()
 
-    # Fetch all ISINs from esma_funds that haven't been resolved yet
+    # Fetch real ISINs from esma_isin_ticker_map that haven't been resolved yet
     async with db_factory() as session:
         result = await session.execute(
             sa_text(
-                "SELECT isin FROM esma_funds "
+                "SELECT isin FROM esma_isin_ticker_map "
                 "WHERE yahoo_ticker IS NULL "
                 "ORDER BY isin"
             )
@@ -238,6 +378,13 @@ async def phase2_isin_resolution(
     pending_isins = [i for i in all_isins if i not in already_resolved]
     stats["total"] = len(pending_isins)
 
+    if not pending_isins:
+        logger.info(
+            "phase2.no_pending_isins",
+            message="No real ISINs to resolve. Run Phase 1.5 (FIRDS) first.",
+        )
+        return stats
+
     if dry_run:
         logger.info("phase2.dry_run", total_pending=len(pending_isins))
         return stats
@@ -245,7 +392,7 @@ async def phase2_isin_resolution(
     logger.info("phase2.starting", total_pending=len(pending_isins))
 
     async with TickerResolver(api_key=api_key) as resolver:
-        batch_size = 100
+        batch_size = 50
         for i in range(0, len(pending_isins), batch_size):
             batch = pending_isins[i : i + batch_size]
 
@@ -256,51 +403,47 @@ async def phase2_isin_resolution(
                 logger.error("phase2.batch_failed", error=str(exc))
                 continue
 
-            # Upsert to esma_isin_ticker_map
-            rows = [
-                {
-                    "isin": r.isin,
-                    "yahoo_ticker": r.yahoo_ticker,
-                    "exchange": r.exchange,
-                    "resolved_via": r.resolved_via,
-                    "is_tradeable": r.is_tradeable,
-                    "last_verified_at": datetime.now(timezone.utc),
-                }
-                for r in results
-            ]
-
             async with db_factory() as session:
                 try:
-                    stmt = pg_insert(EsmaIsinTickerMap).values(rows)
-                    stmt = stmt.on_conflict_do_update(
-                        index_elements=["isin"],
-                        set_={
-                            "yahoo_ticker": stmt.excluded.yahoo_ticker,
-                            "exchange": stmt.excluded.exchange,
-                            "resolved_via": stmt.excluded.resolved_via,
-                            "is_tradeable": stmt.excluded.is_tradeable,
-                            "last_verified_at": stmt.excluded.last_verified_at,
-                        },
-                    )
-                    await session.execute(stmt)
-
-                    # Update esma_funds with resolved tickers
+                    # Update esma_isin_ticker_map with resolved tickers
                     for r in results:
+                        await session.execute(
+                            sa_text(
+                                "UPDATE esma_isin_ticker_map "
+                                "SET yahoo_ticker = :ticker, "
+                                "    exchange = :exchange, "
+                                "    resolved_via = :resolved_via, "
+                                "    is_tradeable = :is_tradeable, "
+                                "    last_verified_at = :last_verified_at "
+                                "WHERE isin = :isin"
+                            ),
+                            {
+                                "ticker": r.yahoo_ticker,
+                                "exchange": r.exchange,
+                                "resolved_via": r.resolved_via,
+                                "is_tradeable": r.is_tradeable,
+                                "last_verified_at": datetime.now(timezone.utc),
+                                "isin": r.isin,
+                            },
+                        )
                         if r.yahoo_ticker:
-                            await session.execute(
-                                sa_text(
-                                    "UPDATE esma_funds SET yahoo_ticker = :ticker, "
-                                    "ticker_resolved_at = :ts WHERE isin = :isin"
-                                ),
-                                {
-                                    "ticker": r.yahoo_ticker,
-                                    "ts": datetime.now(timezone.utc),
-                                    "isin": r.isin,
-                                },
-                            )
                             stats["resolved"] += 1
                         else:
                             stats["unresolved"] += 1
+
+                    # Propagate resolved tickers back to esma_funds via LEI join
+                    await session.execute(
+                        sa_text(
+                            "UPDATE esma_funds f "
+                            "SET yahoo_ticker = m.yahoo_ticker, "
+                            "    ticker_resolved_at = m.last_verified_at "
+                            "FROM esma_isin_ticker_map m "
+                            "WHERE f.isin = m.fund_lei "
+                            "  AND m.yahoo_ticker IS NOT NULL "
+                            "  AND m.isin = ANY(:isins)"
+                        ),
+                        {"isins": [r.isin for r in results]},
+                    )
 
                     await session.commit()
                 except Exception as exc:
@@ -401,23 +544,36 @@ async def _backfill_single_ticker(
     from sqlalchemy import text as sa_text
 
     def _download() -> list[tuple[str, float]]:
+        import logging
         import yfinance as yf
+
+        # Suppress yfinance stderr noise for delisted tickers
+        logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 
         end = date.today()
         start = end - timedelta(days=years * 365)
-        df = yf.download(
-            ticker,
-            start=start.isoformat(),
-            end=end.isoformat(),
-            progress=False,
-        )
-        if df.empty:
+        try:
+            df = yf.download(
+                ticker,
+                start=start.isoformat(),
+                end=end.isoformat(),
+                progress=False,
+            )
+        except Exception:
             return []
-        # Use Adj Close if available, else Close
-        col = "Adj Close" if "Adj Close" in df.columns else "Close"
+        if df is None or df.empty:
+            return []
+        # Flatten MultiIndex columns (yfinance >= 0.2.31)
+        if hasattr(df.columns, "levels"):
+            df.columns = df.columns.get_level_values(0)
+        # Use Close (Adj Close removed in recent yfinance)
+        col = "Close"
+        if col not in df.columns:
+            return []
+        series = df[col]
         return [
-            (idx.strftime("%Y-%m-%d"), float(val))
-            for idx, val in df[col].items()
+            (idx.date(), float(val))
+            for idx, val in series.items()
             if val == val  # skip NaN
         ]
 
@@ -426,16 +582,16 @@ async def _backfill_single_ticker(
         return 0
 
     async with db_factory() as session:
-        # Batch upsert — use raw SQL for nav_timeseries
+        # Batch upsert to esma_nav_history (global, no org_id)
         for nav_date, nav_value in rows:
             await session.execute(
                 sa_text(
-                    "INSERT INTO nav_timeseries (ticker, nav_date, nav_value, source) "
-                    "VALUES (:ticker, :nav_date, :nav_value, 'esma_seed') "
-                    "ON CONFLICT (ticker, nav_date) DO UPDATE "
+                    "INSERT INTO esma_nav_history (isin, yahoo_ticker, nav_date, nav_value) "
+                    "VALUES (:isin, :ticker, :nav_date, :nav_value) "
+                    "ON CONFLICT (isin, nav_date) DO UPDATE "
                     "SET nav_value = EXCLUDED.nav_value"
                 ),
-                {"ticker": ticker, "nav_date": nav_date, "nav_value": nav_value},
+                {"isin": isin, "ticker": ticker, "nav_date": nav_date, "nav_value": nav_value},
             )
         await session.commit()
 
@@ -573,8 +729,12 @@ def _parse_args() -> argparse.Namespace:
         help="Only run Phase 1 (ESMA Register ingest)",
     )
     parser.add_argument(
+        "--only-firds", action="store_true",
+        help="Only run Phase 1.5 (FIRDS ISIN mapping)",
+    )
+    parser.add_argument(
         "--only-resolve", action="store_true",
-        help="Only run Phase 2 (ISIN ticker resolution)",
+        help="Only run Phase 2 (ISIN ticker resolution via OpenFIGI)",
     )
     parser.add_argument(
         "--only-nav", action="store_true",
@@ -634,6 +794,8 @@ async def _main() -> None:
 
     if args.only_register:
         await phase1_register_ingest(max_pages=args.max_pages, dry_run=args.dry_run)
+    elif args.only_firds:
+        await phase1_5_firds_isin_mapping(dry_run=args.dry_run)
     elif args.only_resolve:
         await phase2_isin_resolution(api_key=args.openfigi_key, dry_run=args.dry_run)
     elif args.only_nav:
@@ -643,13 +805,19 @@ async def _main() -> None:
             min_score=args.min_match_score, dry_run=args.dry_run,
         )
     else:
-        # Full pipeline: all 4 phases in order
+        # Full pipeline: all 5 phases in order
         if not checkpoint.get("phase1_complete"):
-            result = await phase1_register_ingest(
+            await phase1_register_ingest(
                 max_pages=args.max_pages, dry_run=args.dry_run,
             )
             if not args.dry_run:
                 checkpoint["phase1_complete"] = True
+                _save_checkpoint(checkpoint)
+
+        if not checkpoint.get("phase1_5_complete"):
+            await phase1_5_firds_isin_mapping(dry_run=args.dry_run)
+            if not args.dry_run:
+                checkpoint["phase1_5_complete"] = True
                 _save_checkpoint(checkpoint)
 
         await phase2_isin_resolution(
@@ -660,7 +828,7 @@ async def _main() -> None:
         )
 
         if not checkpoint.get("phase4_complete"):
-            result = await phase4_sec_crossref(
+            await phase4_sec_crossref(
                 min_score=args.min_match_score, dry_run=args.dry_run,
             )
             if not args.dry_run:

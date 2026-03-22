@@ -18,6 +18,7 @@ Phases (run in order):
     Phase 4: Sector enrichment (after holdings, uses Redis cache)
     Phase 5: Institutional discovery (endowments/pensions already in list)
     Phase 6: CUSIP → Ticker mapping via OpenFIGI batch API
+    Phase 7: ADV Part 2A brochure text extraction (PDF → sections → FTS)
 """
 from __future__ import annotations
 
@@ -694,6 +695,316 @@ async def phase6_cusip_ticker_mapping(
     return stats
 
 
+# ── Phase 7: Brochure PDF Download + Text Extraction ──────────────
+#
+# Split into two sub-phases:
+#   7a: Download PDFs from IAPD → local storage (.data/lake/brochures/)
+#   7b: Extract text from local PDFs → sec_manager_brochure_text
+#
+# This avoids re-downloading on extract failures and allows running
+# extraction at full CPU speed without IAPD rate limits.
+
+_BROCHURE_DIR = Path(".data/lake/brochures")
+_ADV_PDF_URL = "https://reports.adviserinfo.sec.gov/reports/ADV/{crd}/R_0{crd}.pdf"
+
+
+async def phase7_brochure_download(
+    *,
+    dry_run: bool = False,
+) -> dict[str, int]:
+    """Phase 7a: Download ADV Part 2A brochure PDFs to local storage.
+
+    Downloads from IAPD at 1 req/s (rate-limited). Saves to
+    .data/lake/brochures/{crd}.pdf. Skips already-downloaded files.
+    """
+    from data_providers.sec.shared import SEC_USER_AGENT, check_iapd_rate
+
+    stats = {"total": 0, "downloaded": 0, "skipped": 0, "not_found": 0, "errors": 0}
+
+    db_factory = _get_db_session_factory()
+
+    async with db_factory() as session:
+        from sqlalchemy import text as sa_text
+
+        result = await session.execute(
+            sa_text("SELECT crd_number FROM sec_managers ORDER BY crd_number")
+        )
+        all_crds = [row[0] for row in result.fetchall()]
+
+    stats["total"] = len(all_crds)
+
+    # Filter out already-downloaded
+    _BROCHURE_DIR.mkdir(parents=True, exist_ok=True)
+    pending = [c for c in all_crds if not (_BROCHURE_DIR / f"{c}.pdf").exists()]
+    stats["skipped"] = len(all_crds) - len(pending)
+
+    if dry_run:
+        logger.info("phase7a.dry_run", total=len(all_crds), pending=len(pending))
+        _print_phase_summary("Phase 7a — Brochure Download (dry run)", stats)
+        return stats
+
+    if not pending:
+        logger.info("phase7a.all_downloaded")
+        _print_phase_summary("Phase 7a — Brochure Download", stats)
+        return stats
+
+    logger.info("phase7a.starting", pending=len(pending), skipped=stats["skipped"])
+
+    import httpx as _httpx
+
+    def _download_one(crd: str) -> str:
+        """Sync download — runs in thread pool."""
+        import time as _time
+
+        pdf_url = _ADV_PDF_URL.format(crd=crd)
+        for attempt in range(4):
+            check_iapd_rate()
+            try:
+                resp = _httpx.get(
+                    pdf_url,
+                    headers={"User-Agent": SEC_USER_AGENT},
+                    timeout=60.0,
+                    follow_redirects=True,
+                )
+                if resp.status_code == 404:
+                    return "not_found"
+                if resp.status_code == 403:
+                    wait = 2 ** attempt * 2
+                    _time.sleep(wait)
+                    continue
+                resp.raise_for_status()
+                pdf_path = _BROCHURE_DIR / f"{crd}.pdf"
+                pdf_path.write_bytes(resp.content)
+                return "ok"
+            except Exception:
+                return "error"
+        return "max_retries"
+
+    from data_providers.sec.shared import run_in_sec_thread
+
+    for i, crd in enumerate(pending):
+        result = await run_in_sec_thread(_download_one, crd)
+        if result == "ok":
+            stats["downloaded"] += 1
+        elif result == "not_found":
+            stats["not_found"] += 1
+            # Write empty marker to skip next time
+            (_BROCHURE_DIR / f"{crd}.pdf").write_bytes(b"")
+        else:
+            stats["errors"] += 1
+
+        if (i + 1) % 100 == 0:
+            logger.info(
+                "phase7a.progress",
+                progress=i + 1,
+                total=len(pending),
+                downloaded=stats["downloaded"],
+                not_found=stats["not_found"],
+                errors=stats["errors"],
+            )
+
+    _print_phase_summary("Phase 7a — Brochure PDF Download", stats)
+    return stats
+
+
+async def phase7_brochure_extract(
+    *,
+    dry_run: bool = False,
+) -> dict[str, int]:
+    """Phase 7b: Extract text from local PDFs and upsert to DB.
+
+    Reads from .data/lake/brochures/{crd}.pdf (downloaded by Phase 7a).
+    No network calls — runs at full CPU speed.
+    """
+    import fitz  # pymupdf
+    from sqlalchemy import text as sa_text
+
+    stats = {"total": 0, "extracted": 0, "skipped": 0, "empty": 0, "errors": 0}
+
+    db_factory = _get_db_session_factory()
+
+    # Find CRDs with downloaded PDFs but no brochure text in DB
+    async with db_factory() as session:
+        result = await session.execute(
+            sa_text(
+                "SELECT m.crd_number FROM sec_managers m "
+                "LEFT JOIN sec_manager_brochure_text b "
+                "  ON m.crd_number = b.crd_number "
+                "WHERE b.crd_number IS NULL "
+                "ORDER BY m.crd_number"
+            )
+        )
+        pending_crds = {row[0] for row in result.fetchall()}
+
+    # Filter to only those with downloaded PDFs (non-empty files)
+    if not _BROCHURE_DIR.exists():
+        logger.warning("phase7b.no_brochure_dir", path=str(_BROCHURE_DIR))
+        return stats
+
+    crds_with_pdf = []
+    for pdf_file in _BROCHURE_DIR.glob("*.pdf"):
+        crd = pdf_file.stem
+        if crd in pending_crds and pdf_file.stat().st_size > 1024:
+            crds_with_pdf.append(crd)
+
+    stats["total"] = len(crds_with_pdf)
+
+    if dry_run:
+        logger.info("phase7b.dry_run", total=len(crds_with_pdf))
+        _print_phase_summary("Phase 7b — Brochure Extract (dry run)", stats)
+        return stats
+
+    if not crds_with_pdf:
+        logger.info("phase7b.nothing_to_extract")
+        _print_phase_summary("Phase 7b — Brochure Extract", stats)
+        return stats
+
+    logger.info("phase7b.starting", total=len(crds_with_pdf))
+
+    from data_providers.sec.adv_service import (
+        _classify_brochure_sections,
+        _parse_team_from_brochure,
+    )
+
+    svc_module = None
+    try:
+        from data_providers.sec.adv_service import AdvService
+        svc_module = AdvService(db_session_factory=db_factory)
+    except Exception:
+        pass
+
+    for i, crd in enumerate(crds_with_pdf):
+        pdf_path = _BROCHURE_DIR / f"{crd}.pdf"
+        try:
+            # Extract text from local PDF
+            with fitz.open(str(pdf_path)) as doc:
+                pages = [page.get_text("text") for page in doc]
+            full_text = "\n\n".join(p for p in pages if p.strip())
+
+            if not full_text or len(full_text) < 100:
+                stats["empty"] += 1
+                continue
+
+            # Classify sections + extract team
+            sections = _classify_brochure_sections(crd, full_text)
+            team = _parse_team_from_brochure(crd, full_text)
+
+            if svc_module:
+                if sections:
+                    await svc_module._upsert_brochure_sections(crd, sections)
+                if team:
+                    await svc_module._upsert_team(crd, team)
+
+            stats["extracted"] += 1
+
+        except Exception as exc:
+            stats["errors"] += 1
+            logger.warning("phase7b.extract_failed", crd=crd, error=str(exc)[:200])
+
+        if (i + 1) % 200 == 0:
+            logger.info(
+                "phase7b.progress",
+                progress=i + 1,
+                total=len(crds_with_pdf),
+                extracted=stats["extracted"],
+                errors=stats["errors"],
+            )
+
+    _print_phase_summary("Phase 7b — Brochure Text Extraction", stats)
+    return stats
+
+
+async def phase7_brochure_text(
+    *,
+    dry_run: bool = False,
+) -> dict[str, int]:
+    """Phase 7: Download + Extract brochure text (convenience wrapper).
+
+    Runs Phase 7a (download) then Phase 7b (extract) in sequence.
+    """
+    await phase7_brochure_download(dry_run=dry_run)
+    return await phase7_brochure_extract(dry_run=dry_run)
+
+
+async def phase7c_upload_brochures_to_storage(
+    *,
+    dry_run: bool = False,
+) -> dict[str, int]:
+    """Phase 7c: Upload local brochure PDFs to StorageClient (R2 / local).
+
+    Reads from .data/lake/brochures/{crd}.pdf (populated by Phase 7a or
+    manual browser download). Uploads to StorageClient at
+    gold/_global/sec_brochures/{crd}.pdf. Skips files already in storage.
+
+    Use case: seed R2 after downloading 16K+ PDFs overnight, so the
+    brochure_extract worker can read from R2 without IAPD rate limits.
+    """
+    from app.services.storage_client import get_storage_client
+
+    stats = {"total": 0, "uploaded": 0, "skipped": 0, "empty": 0, "errors": 0}
+
+    if not _BROCHURE_DIR.exists():
+        logger.warning("phase7c.no_brochure_dir", path=str(_BROCHURE_DIR))
+        _print_phase_summary("Phase 7c — Upload Brochures to Storage (no dir)", stats)
+        return stats
+
+    pdf_files = sorted(_BROCHURE_DIR.glob("*.pdf"))
+    stats["total"] = len(pdf_files)
+
+    if not pdf_files:
+        logger.info("phase7c.no_pdfs")
+        _print_phase_summary("Phase 7c — Upload Brochures to Storage", stats)
+        return stats
+
+    if dry_run:
+        logger.info("phase7c.dry_run", total=len(pdf_files))
+        _print_phase_summary("Phase 7c — Upload Brochures to Storage (dry run)", stats)
+        return stats
+
+    storage = get_storage_client()
+    storage_prefix = "gold/_global/sec_brochures"
+
+    logger.info("phase7c.starting", total=len(pdf_files))
+
+    for i, pdf_path in enumerate(pdf_files):
+        crd = pdf_path.stem
+        storage_key = f"{storage_prefix}/{crd}.pdf"
+
+        try:
+            # Skip if already in storage
+            if await storage.exists(storage_key):
+                stats["skipped"] += 1
+                continue
+
+            pdf_bytes = pdf_path.read_bytes()
+
+            # Skip empty markers (0-byte files from 404s)
+            if len(pdf_bytes) < 1024:
+                stats["empty"] += 1
+                # Upload empty marker so worker skips too
+                await storage.write(storage_key, b"", content_type="application/pdf")
+                continue
+
+            await storage.write(storage_key, pdf_bytes, content_type="application/pdf")
+            stats["uploaded"] += 1
+
+        except Exception as exc:
+            stats["errors"] += 1
+            logger.warning("phase7c.upload_failed", crd=crd, error=str(exc)[:200])
+
+        if (i + 1) % 500 == 0:
+            logger.info(
+                "phase7c.progress",
+                progress=i + 1,
+                total=len(pdf_files),
+                uploaded=stats["uploaded"],
+                skipped=stats["skipped"],
+            )
+
+    _print_phase_summary("Phase 7c — Upload Brochures to Storage", stats)
+    return stats
+
+
 # ── Summary Printer ─────────────────────────────────────────────────
 
 
@@ -755,8 +1066,28 @@ def _parse_args() -> argparse.Namespace:
         help="Run Phase 6 only (CUSIP ticker mapping)",
     )
     parser.add_argument(
+        "--only-brochures", action="store_true",
+        help="Run Phase 7 only (download + extract brochure text)",
+    )
+    parser.add_argument(
+        "--only-brochure-download", action="store_true",
+        help="Run Phase 7a only (download brochure PDFs to local storage)",
+    )
+    parser.add_argument(
+        "--only-brochure-extract", action="store_true",
+        help="Run Phase 7b only (extract text from local PDFs to DB)",
+    )
+    parser.add_argument(
         "--retry-unresolved", action="store_true",
         help="Re-attempt previously unresolved CUSIPs in Phase 6",
+    )
+    parser.add_argument(
+        "--upload-brochures-to-storage", action="store_true",
+        help=(
+            "Upload local brochure PDFs (.data/lake/brochures/) to "
+            "StorageClient (R2 prod / local dev). Use after downloading "
+            "PDFs via --only-brochure-download to seed remote storage."
+        ),
     )
     return parser.parse_args()
 
@@ -809,8 +1140,16 @@ async def _main() -> None:
             force_retry_unresolved=args.retry_unresolved,
             dry_run=args.dry_run,
         )
+    elif args.only_brochures:
+        await phase7_brochure_text(dry_run=args.dry_run)
+    elif args.only_brochure_download:
+        await phase7_brochure_download(dry_run=args.dry_run)
+    elif args.only_brochure_extract:
+        await phase7_brochure_extract(dry_run=args.dry_run)
+    elif args.upload_brochures_to_storage:
+        await phase7c_upload_brochures_to_storage(dry_run=args.dry_run)
     else:
-        # Full pipeline: all 6 phases in order
+        # Full pipeline: all 7 phases in order
         await phase1_adv_ingest(dry_run=args.dry_run)
         await phase2_thirteenf_holdings(
             recent_only=args.recent_only,
@@ -826,6 +1165,7 @@ async def _main() -> None:
             force_retry_unresolved=args.retry_unresolved,
             dry_run=args.dry_run,
         )
+        await phase7_brochure_text(dry_run=args.dry_run)
 
     elapsed = time.monotonic() - start
     print(f"\nTotal elapsed: {elapsed:.1f}s")

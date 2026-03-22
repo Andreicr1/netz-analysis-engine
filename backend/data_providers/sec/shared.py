@@ -24,7 +24,7 @@ T = TypeVar("T")
 
 SEC_USER_AGENT = "Netz Analysis Engine tech@netzco.com"
 SEC_EDGAR_RATE_LIMIT = 8   # req/s (conservative under SEC 10/s)
-SEC_IAPD_RATE_LIMIT = 2    # req/s (conservative for undocumented API)
+SEC_IAPD_RATE_LIMIT = 1    # req/s (IAPD aggressively blocks — 403 at >2 req/s)
 
 _MAX_ENTITY_NAME_LENGTH = 200
 _SAFE_NAME_RE = re.compile(r"^[a-zA-Z0-9\s.,'\-&()]+$")
