@@ -5,6 +5,7 @@ import redis.asyncio as aioredis
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
+from sqlalchemy import func as sa_func
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,7 +14,10 @@ from app.core.config.dependencies import get_config_service
 from app.core.config.settings import settings
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls
+from app.domains.wealth.models.allocation import StrategicAllocation
+from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
+from app.domains.wealth.models.risk import FundRiskMetrics
 from app.domains.wealth.routes.common import VALID_PROFILES, get_latest_snapshot
 from app.domains.wealth.routes.common import validate_profile as _validate_profile
 from app.domains.wealth.schemas.macro import MacroIndicators
@@ -94,8 +98,6 @@ async def get_risk_summary_batch(
         )
 
     # Single query: latest snapshot per requested profile
-    from sqlalchemy import func as sa_func
-
     latest_subq = (
         select(
             PortfolioSnapshot.profile,
@@ -116,13 +118,56 @@ async def get_risk_summary_batch(
     result = await db.execute(stmt)
     snaps_by_profile = {s.profile: s for s in result.scalars().all()}
 
+    # Momentum averages per profile: profile → block_ids → instruments → fund_risk_metrics
+    momentum_by_profile: dict[str, dict[str, float | None]] = {}
+    valid_names = [n for n in names if n in VALID_PROFILES]
+    if valid_names:
+        momentum_stmt = (
+            select(
+                StrategicAllocation.profile,
+                sa_func.avg(FundRiskMetrics.rsi_14).label("rsi_14"),
+                sa_func.avg(FundRiskMetrics.bb_position).label("bb_position"),
+                sa_func.avg(FundRiskMetrics.nav_momentum_score).label("nav_momentum_score"),
+                sa_func.avg(FundRiskMetrics.flow_momentum_score).label("flow_momentum_score"),
+                sa_func.avg(FundRiskMetrics.blended_momentum_score).label("blended_momentum_score"),
+            )
+            .join(Instrument, Instrument.block_id == StrategicAllocation.block_id)
+            .join(FundRiskMetrics, FundRiskMetrics.instrument_id == Instrument.instrument_id)
+            .where(
+                StrategicAllocation.profile.in_(valid_names),
+                FundRiskMetrics.calc_date == (
+                    select(sa_func.max(FundRiskMetrics.calc_date))
+                    .where(FundRiskMetrics.instrument_id == Instrument.instrument_id)
+                    .correlate(Instrument)
+                    .scalar_subquery()
+                ),
+            )
+            .group_by(StrategicAllocation.profile)
+        )
+        mom_result = await db.execute(momentum_stmt)
+        for row in mom_result.all():
+            momentum_by_profile[row.profile] = {
+                "rsi_14": float(row.rsi_14) if row.rsi_14 is not None else None,
+                "bb_position": float(row.bb_position) if row.bb_position is not None else None,
+                "nav_momentum_score": float(row.nav_momentum_score) if row.nav_momentum_score is not None else None,
+                "flow_momentum_score": float(row.flow_momentum_score) if row.flow_momentum_score is not None else None,
+                "blended_momentum_score": float(row.blended_momentum_score) if row.blended_momentum_score is not None else None,
+            }
+
     results: dict[str, CVaRStatus | None] = {}
     for name in names:
         if name not in VALID_PROFILES:
             results[name] = None
         else:
             snap = snaps_by_profile.get(name)
-            results[name] = _snap_to_cvar(name, snap)
+            cvar = _snap_to_cvar(name, snap)
+            mom = momentum_by_profile.get(name, {})
+            cvar.rsi_14 = mom.get("rsi_14")
+            cvar.bb_position = mom.get("bb_position")
+            cvar.nav_momentum_score = mom.get("nav_momentum_score")
+            cvar.flow_momentum_score = mom.get("flow_momentum_score")
+            cvar.blended_momentum_score = mom.get("blended_momentum_score")
+            results[name] = cvar
 
     return BatchRiskSummaryOut(
         profiles=results,
@@ -147,7 +192,39 @@ async def get_cvar(
 ) -> CVaRStatus:
     _validate_profile(profile)
     snap = await get_latest_snapshot(db, profile)
-    return _snap_to_cvar(profile, snap)
+    cvar = _snap_to_cvar(profile, snap)
+
+    # Enrich with momentum averages for this profile
+    momentum_stmt = (
+        select(
+            sa_func.avg(FundRiskMetrics.rsi_14).label("rsi_14"),
+            sa_func.avg(FundRiskMetrics.bb_position).label("bb_position"),
+            sa_func.avg(FundRiskMetrics.nav_momentum_score).label("nav_momentum_score"),
+            sa_func.avg(FundRiskMetrics.flow_momentum_score).label("flow_momentum_score"),
+            sa_func.avg(FundRiskMetrics.blended_momentum_score).label("blended_momentum_score"),
+        )
+        .select_from(StrategicAllocation)
+        .join(Instrument, Instrument.block_id == StrategicAllocation.block_id)
+        .join(FundRiskMetrics, FundRiskMetrics.instrument_id == Instrument.instrument_id)
+        .where(
+            StrategicAllocation.profile == profile,
+            FundRiskMetrics.calc_date == (
+                select(sa_func.max(FundRiskMetrics.calc_date))
+                .where(FundRiskMetrics.instrument_id == Instrument.instrument_id)
+                .correlate(Instrument)
+                .scalar_subquery()
+            ),
+        )
+    )
+    row = (await db.execute(momentum_stmt)).one_or_none()
+    if row:
+        cvar.rsi_14 = float(row.rsi_14) if row.rsi_14 is not None else None
+        cvar.bb_position = float(row.bb_position) if row.bb_position is not None else None
+        cvar.nav_momentum_score = float(row.nav_momentum_score) if row.nav_momentum_score is not None else None
+        cvar.flow_momentum_score = float(row.flow_momentum_score) if row.flow_momentum_score is not None else None
+        cvar.blended_momentum_score = float(row.blended_momentum_score) if row.blended_momentum_score is not None else None
+
+    return cvar
 
 
 @router.get(
