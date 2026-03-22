@@ -21,6 +21,7 @@
 			items: [
 				{ label: "Pipeline", href: `/funds/${fundId}/pipeline` },
 				{ label: "Portfolio", href: `/funds/${fundId}/portfolio` },
+				{ label: "Market Data", href: `/funds/${fundId}/market-data` },
 				{ label: "Documents", href: `/funds/${fundId}/documents` },
 				{ label: "Reporting", href: `/funds/${fundId}/reporting` },
 			],

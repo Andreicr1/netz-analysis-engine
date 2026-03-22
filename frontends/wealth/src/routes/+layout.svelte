@@ -18,11 +18,13 @@
 		{ label: "Screener", href: "/screener" },
 		{ label: "Universe", href: "/universe" },
 		{ label: "Instruments", href: "/instruments" },
+		{ label: "ESMA Universe", href: "/esma" },
 		{ label: "Documents", href: "/documents" },
 		{ label: "Analytics", href: "/analytics" },
 		{ label: "Exposure", href: "/exposure" },
 		{ label: "Allocation", href: "/allocation" },
 		{ label: "Macro", href: "/macro" },
+		{ label: "Content", href: "/content" },
 	];
 </script>
 

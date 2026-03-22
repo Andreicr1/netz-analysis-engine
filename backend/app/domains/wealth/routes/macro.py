@@ -3,37 +3,55 @@
 Phase 1: GET /scores, GET /snapshot
 Phase 2: GET /regime, GET /reviews, POST /reviews/generate,
          PATCH /reviews/{id}/approve, PATCH /reviews/{id}/reject
+Phase 3A: GET /bis, GET /imf, GET /treasury, GET /ofr — raw hypertable data
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import json
+from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 from uuid import UUID
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config.config_service import ConfigService
+from app.core.db.engine import async_session_factory
 from app.core.security.clerk_auth import CurrentUser, get_current_user, require_role
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.macro_committee import MacroReview
 from app.domains.wealth.routes.common import _get_content_semaphore, require_content_slot
 from app.domains.wealth.schemas.macro import (
+    BisDataResponse,
+    BisTimePoint,
     DataFreshnessRead,
     DimensionScoreRead,
     GlobalIndicatorsRead,
+    ImfDataResponse,
+    ImfYearPoint,
     MacroReviewApprove,
     MacroReviewRead,
     MacroReviewReject,
     MacroScoresResponse,
     MacroSnapshotResponse,
+    OfrDataResponse,
+    OfrTimePoint,
     RegimeHierarchyRead,
     RegionalScoreRead,
+    TreasuryDataResponse,
+    TreasuryTimePoint,
 )
 from app.shared.enums import Role
-from app.shared.models import MacroRegionalSnapshot
+from app.shared.models import (
+    BisStatistics,
+    ImfWeoForecast,
+    MacroRegionalSnapshot,
+    OfrHedgeFundData,
+    TreasuryData,
+)
 from quant_engine.regime_service import (
     REGIONAL_REGIME_SIGNALS,
     classify_regional_regime,
@@ -45,6 +63,8 @@ from vertical_engines.wealth.macro_committee_engine import (
     build_report_json,
     generate_weekly_report,
 )
+
+logger = structlog.get_logger()
 
 router = APIRouter(prefix="/macro")
 
@@ -373,3 +393,230 @@ async def reject_review(
 
     await db.flush()
     return MacroReviewRead.model_validate(review)
+
+
+# ---------------------------------------------------------------------------
+#  Phase 3A: Raw Hypertable Data Panels
+#  Global tables (no RLS), Redis-cached, INVESTMENT_TEAM auth.
+# ---------------------------------------------------------------------------
+
+_DEFAULT_LOOKBACK_DAYS = 730  # 2 years
+
+
+async def _get_cached(cache_key: str) -> list | None:
+    """Check Redis for cached raw data result."""
+    try:
+        import redis.asyncio as aioredis
+
+        from app.core.jobs.tracker import get_redis_pool
+
+        r = aioredis.Redis(connection_pool=get_redis_pool())
+        try:
+            cached = await r.get(f"macro_raw:{cache_key}")
+            if cached:
+                return json.loads(cached)
+        finally:
+            await r.aclose()
+    except Exception:
+        logger.debug("macro_raw_cache_miss", cache_key=cache_key)
+    return None
+
+
+async def _set_cached(cache_key: str, data: list, ttl: int) -> None:
+    """Cache raw data result in Redis."""
+    try:
+        import redis.asyncio as aioredis
+
+        from app.core.jobs.tracker import get_redis_pool
+
+        r = aioredis.Redis(connection_pool=get_redis_pool())
+        try:
+            await r.set(
+                f"macro_raw:{cache_key}",
+                json.dumps(data, default=str),
+                ex=ttl,
+            )
+        finally:
+            await r.aclose()
+    except Exception:
+        logger.debug("macro_raw_cache_set_failed", cache_key=cache_key)
+
+
+@router.get(
+    "/bis",
+    response_model=BisDataResponse,
+    summary="Raw BIS time series",
+    tags=["macro"],
+    dependencies=[Depends(require_role(Role.INVESTMENT_TEAM))],
+)
+async def get_bis_data(
+    country: str = Query(..., description="ISO country code, e.g. US, DE, GB"),
+    indicator: str = Query(..., description="BIS indicator, e.g. CREDIT_GAP"),
+    user: CurrentUser = Depends(get_current_user),
+) -> BisDataResponse:
+    """Return raw BIS time series for a country/indicator pair.
+
+    Cached in Redis for 6 hours. 2-year lookback by default.
+    """
+    cache_key = f"bis:{country}:{indicator}"
+    cached = await _get_cached(cache_key)
+    if cached is not None:
+        return BisDataResponse(country=country, indicator=indicator, data=cached)
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+    stmt = (
+        select(BisStatistics.period, BisStatistics.value)
+        .where(
+            BisStatistics.country_code == country,
+            BisStatistics.indicator == indicator,
+            BisStatistics.period >= cutoff,
+        )
+        .order_by(BisStatistics.period)
+    )
+
+    async with async_session_factory() as db:
+        result = await db.execute(stmt)
+
+    rows = result.all()
+    points = [
+        BisTimePoint(period=r.period.date() if hasattr(r.period, "date") else r.period, value=float(r.value))
+        for r in rows
+    ]
+
+    await _set_cached(cache_key, [p.model_dump(mode="json") for p in points], ttl=21600)
+    return BisDataResponse(country=country, indicator=indicator, data=points)
+
+
+@router.get(
+    "/imf",
+    response_model=ImfDataResponse,
+    summary="Raw IMF WEO forecasts",
+    tags=["macro"],
+    dependencies=[Depends(require_role(Role.INVESTMENT_TEAM))],
+)
+async def get_imf_data(
+    country: str = Query(..., description="ISO country code, e.g. US, DE, BR"),
+    indicator: str = Query(..., description="IMF indicator, e.g. NGDP_RPCH"),
+    user: CurrentUser = Depends(get_current_user),
+) -> ImfDataResponse:
+    """Return raw IMF WEO annual forecasts for a country/indicator pair.
+
+    Provenance: model_inference (NOT deterministic).
+    Cached in Redis for 6 hours. 2-year lookback by default.
+    """
+    cache_key = f"imf:{country}:{indicator}"
+    cached = await _get_cached(cache_key)
+    if cached is not None:
+        return ImfDataResponse(country=country, indicator=indicator, data=cached)
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+    stmt = (
+        select(ImfWeoForecast.year, ImfWeoForecast.value)
+        .where(
+            ImfWeoForecast.country_code == country,
+            ImfWeoForecast.indicator == indicator,
+            ImfWeoForecast.period >= cutoff,
+        )
+        .order_by(ImfWeoForecast.year)
+    )
+
+    async with async_session_factory() as db:
+        result = await db.execute(stmt)
+
+    rows = result.all()
+    points = [
+        ImfYearPoint(year=r.year, value=float(r.value))
+        for r in rows
+        if r.value is not None
+    ]
+
+    await _set_cached(cache_key, [p.model_dump(mode="json") for p in points], ttl=21600)
+    return ImfDataResponse(country=country, indicator=indicator, data=points)
+
+
+@router.get(
+    "/treasury",
+    response_model=TreasuryDataResponse,
+    summary="Raw US Treasury data",
+    tags=["macro"],
+    dependencies=[Depends(require_role(Role.INVESTMENT_TEAM))],
+)
+async def get_treasury_data(
+    series: str = Query(..., description="Treasury series ID, e.g. 10Y_RATE"),
+    user: CurrentUser = Depends(get_current_user),
+) -> TreasuryDataResponse:
+    """Return raw Treasury time series for a given series ID.
+
+    Cached in Redis for 1 hour. 2-year lookback by default.
+    """
+    cache_key = f"treasury:{series}"
+    cached = await _get_cached(cache_key)
+    if cached is not None:
+        return TreasuryDataResponse(series=series, data=cached)
+
+    cutoff = date.today() - timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+    stmt = (
+        select(TreasuryData.obs_date, TreasuryData.value)
+        .where(
+            TreasuryData.series_id == series,
+            TreasuryData.obs_date >= cutoff,
+        )
+        .order_by(TreasuryData.obs_date)
+    )
+
+    async with async_session_factory() as db:
+        result = await db.execute(stmt)
+
+    rows = result.all()
+    points = [
+        TreasuryTimePoint(obs_date=r.obs_date, value=float(r.value))
+        for r in rows
+        if r.value is not None
+    ]
+
+    await _set_cached(cache_key, [p.model_dump(mode="json") for p in points], ttl=3600)
+    return TreasuryDataResponse(series=series, data=points)
+
+
+@router.get(
+    "/ofr",
+    response_model=OfrDataResponse,
+    summary="Raw OFR hedge fund data",
+    tags=["macro"],
+    dependencies=[Depends(require_role(Role.INVESTMENT_TEAM))],
+)
+async def get_ofr_data(
+    metric: str = Query(..., description="OFR metric/series ID, e.g. HF_LEVERAGE"),
+    user: CurrentUser = Depends(get_current_user),
+) -> OfrDataResponse:
+    """Return raw OFR hedge fund time series for a given metric.
+
+    Cached in Redis for 1 hour. 2-year lookback by default.
+    """
+    cache_key = f"ofr:{metric}"
+    cached = await _get_cached(cache_key)
+    if cached is not None:
+        return OfrDataResponse(metric=metric, data=cached)
+
+    cutoff = date.today() - timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+    stmt = (
+        select(OfrHedgeFundData.obs_date, OfrHedgeFundData.value)
+        .where(
+            OfrHedgeFundData.series_id == metric,
+            OfrHedgeFundData.obs_date >= cutoff,
+        )
+        .order_by(OfrHedgeFundData.obs_date)
+    )
+
+    async with async_session_factory() as db:
+        result = await db.execute(stmt)
+
+    rows = result.all()
+    points = [
+        OfrTimePoint(obs_date=r.obs_date, value=float(r.value))
+        for r in rows
+        if r.value is not None
+    ]
+
+    await _set_cached(cache_key, [p.model_dump(mode="json") for p in points], ttl=3600)
+    return OfrDataResponse(metric=metric, data=points)
