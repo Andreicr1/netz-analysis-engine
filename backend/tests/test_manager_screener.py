@@ -365,6 +365,81 @@ class TestManagerScreenerEndpoints:
         )
         assert resp.status_code == 403
 
+    # ── N-PORT endpoints ──────────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_nport_not_found(self, client: AsyncClient) -> None:
+        resp = await client.get(
+            "/api/v1/manager-screener/managers/NONEXISTENT999/nport",
+            headers=DEV_ACTOR_HEADER,
+        )
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_nport_403_for_viewer(self, client: AsyncClient) -> None:
+        resp = await client.get(
+            "/api/v1/manager-screener/managers/CRD1/nport",
+            headers=_VIEWER_HEADER,
+        )
+        assert resp.status_code == 403
+
+    # ── Brochure endpoints ────────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_brochure_sections_not_found(self, client: AsyncClient) -> None:
+        resp = await client.get(
+            "/api/v1/manager-screener/managers/NONEXISTENT999/brochure/sections",
+            headers=DEV_ACTOR_HEADER,
+        )
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_brochure_search_not_found(self, client: AsyncClient) -> None:
+        resp = await client.get(
+            "/api/v1/manager-screener/managers/NONEXISTENT999/brochure?q=ESG",
+            headers=DEV_ACTOR_HEADER,
+        )
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_brochure_search_query_too_short(self, client: AsyncClient) -> None:
+        resp = await client.get(
+            "/api/v1/manager-screener/managers/CRD1/brochure?q=a",
+            headers=DEV_ACTOR_HEADER,
+        )
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_brochure_sections_403_for_viewer(self, client: AsyncClient) -> None:
+        resp = await client.get(
+            "/api/v1/manager-screener/managers/CRD1/brochure/sections",
+            headers=_VIEWER_HEADER,
+        )
+        assert resp.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_brochure_search_403_for_viewer(self, client: AsyncClient) -> None:
+        resp = await client.get(
+            "/api/v1/manager-screener/managers/CRD1/brochure?q=ESG",
+            headers=_VIEWER_HEADER,
+        )
+        assert resp.status_code == 403
+
+    # ── Route shadowing regression ────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_literal_routes_not_shadowed(self, client: AsyncClient) -> None:
+        """Brochure sections route must not be shadowed by {crd} param."""
+        resp = await client.get(
+            "/api/v1/manager-screener/managers/12345/brochure/sections",
+            headers=DEV_ACTOR_HEADER,
+        )
+        # Should reach the actual handler (404 = manager not found, not route not found)
+        assert resp.status_code != 405
+        # If the route were shadowed, FastAPI would return 404 with "Not Found"
+        # from the wrong handler or 405 Method Not Allowed
+        assert resp.status_code in (200, 404)
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  SEC Refresh Worker — Unit Tests

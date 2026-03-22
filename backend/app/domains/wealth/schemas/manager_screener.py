@@ -198,3 +198,62 @@ class ManagerCompareResult(BaseModel):
     sector_allocations: dict[str, dict[str, float]] = Field(default_factory=dict)
     jaccard_overlap: float | None = None
     drift_comparison: list[dict] = Field(default_factory=list)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  N-PORT holdings
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class NportHoldingItem(BaseModel):
+    cusip: str | None = None
+    isin: str | None = None
+    issuer_name: str
+    asset_class: str | None = None
+    sector: str | None = None
+    market_value: float | None = None
+    quantity: float | None = None
+    currency: str | None = None
+    pct_of_nav: float | None = None
+    report_date: date
+
+
+class NportHoldingsResponse(BaseModel):
+    crd_number: str
+    report_date: date | None = None
+    total_holdings: int
+    holdings: list[NportHoldingItem]
+    page: int
+    page_size: int
+    total_pages: int
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Brochure full-text search
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class BrochureSectionItem(BaseModel):
+    section: str
+    content_excerpt: str
+    filing_date: date
+
+
+class BrochureSectionsResponse(BaseModel):
+    crd_number: str
+    sections: list[BrochureSectionItem]
+    total_sections: int
+
+
+class BrochureSearchHit(BaseModel):
+    section: str
+    headline: str
+    filing_date: date
+    rank: float
+
+
+class BrochureSearchResponse(BaseModel):
+    crd_number: str
+    query: str
+    results: list[BrochureSearchHit]
+    total_results: int

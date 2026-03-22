@@ -113,6 +113,55 @@
     added_at: string | null;
   };
 
+  type NportHolding = {
+    cusip: string | null;
+    isin: string | null;
+    issuer_name: string;
+    asset_class: string | null;
+    sector: string | null;
+    market_value: number | null;
+    quantity: number | null;
+    currency: string | null;
+    pct_of_nav: number | null;
+    report_date: string;
+  };
+
+  type NportData = {
+    crd_number: string;
+    report_date: string | null;
+    total_holdings: number;
+    holdings: NportHolding[];
+    page: number;
+    page_size: number;
+    total_pages: number;
+  };
+
+  type BrochureSection = {
+    section: string;
+    content_excerpt: string;
+    filing_date: string;
+  };
+
+  type BrochureSectionsData = {
+    crd_number: string;
+    sections: BrochureSection[];
+    total_sections: number;
+  };
+
+  type BrochureSearchHit = {
+    section: string;
+    headline: string;
+    filing_date: string;
+    rank: number;
+  };
+
+  type BrochureSearchData = {
+    crd_number: string;
+    query: string;
+    results: BrochureSearchHit[];
+    total_results: number;
+  };
+
   // ── Props & State ────────────────────────────────────────────
 
   const getToken = getContext<() => Promise<string>>("netz:getToken");
@@ -128,13 +177,22 @@
 
   // Detail drawer
   let selectedCrd = $state<string | null>(null);
-  let detailTab = $state<"profile" | "holdings" | "drift" | "institutional" | "universe">("profile");
+  let detailTab = $state<"profile" | "holdings" | "drift" | "institutional" | "universe" | "fund-holdings">("profile");
   let profileData = $state<ManagerProfile | null>(null);
   let holdingsData = $state<HoldingsData | null>(null);
   let driftData = $state<DriftData | null>(null);
   let institutionalData = $state<InstitutionalData | null>(null);
   let universeData = $state<UniverseData | null>(null);
+  let nportData = $state<NportData | null>(null);
   let detailLoading = $state(false);
+
+  // Brochure state (within Profile tab)
+  let brochureExpanded = $state(false);
+  let brochureSections = $state<BrochureSectionsData | null>(null);
+  let brochureSearchQuery = $state("");
+  let brochureSearchResults = $state<BrochureSearchData | null>(null);
+  let brochureSearchSeq = $state(0);
+  let brochureLoading = $state(false);
 
   // Compare mode
   let compareMode = $state(false);
@@ -184,6 +242,11 @@
     driftData = null;
     institutionalData = null;
     universeData = null;
+    nportData = null;
+    brochureExpanded = false;
+    brochureSections = null;
+    brochureSearchQuery = "";
+    brochureSearchResults = null;
     await loadDetailTab("profile");
   }
 
@@ -213,6 +276,9 @@
           break;
         case "universe":
           universeData = await api.get(`/manager-screener/managers/${selectedCrd}/universe-status`);
+          break;
+        case "fund-holdings":
+          nportData = await api.get(`/manager-screener/managers/${selectedCrd}/nport`);
           break;
       }
     } catch (err) {
@@ -267,10 +333,62 @@
     }
   }
 
+  async function loadNportPage(p: number) {
+    if (!selectedCrd) return;
+    detailLoading = true;
+    try {
+      const api = createClientApiClient(getToken);
+      nportData = await api.get(`/manager-screener/managers/${selectedCrd}/nport?page=${p}&page_size=50`);
+    } catch (err) {
+      console.error("Failed to load N-PORT page", err);
+    } finally {
+      detailLoading = false;
+    }
+  }
+
+  async function loadBrochureSections() {
+    if (!selectedCrd) return;
+    brochureLoading = true;
+    try {
+      const api = createClientApiClient(getToken);
+      brochureSections = await api.get(`/manager-screener/managers/${selectedCrd}/brochure/sections`);
+    } catch (err) {
+      console.error("Failed to load brochure sections", err);
+    } finally {
+      brochureLoading = false;
+    }
+  }
+
+  async function searchBrochure(q: string) {
+    if (!selectedCrd || q.length < 2) {
+      brochureSearchResults = null;
+      return;
+    }
+    const seq = ++brochureSearchSeq;
+    try {
+      const api = createClientApiClient(getToken);
+      const res: BrochureSearchData = await api.get(
+        `/manager-screener/managers/${selectedCrd}/brochure?q=${encodeURIComponent(q)}`
+      );
+      if (seq !== brochureSearchSeq) return; // stale
+      brochureSearchResults = res;
+    } catch (err) {
+      if (seq === brochureSearchSeq) brochureSearchResults = null;
+    }
+  }
+
+  let brochureDebounce: ReturnType<typeof setTimeout> | null = null;
+  function onBrochureSearchInput(q: string) {
+    brochureSearchQuery = q;
+    if (brochureDebounce) clearTimeout(brochureDebounce);
+    brochureDebounce = setTimeout(() => searchBrochure(q), 300);
+  }
+
   // Detail tabs config
   const detailTabs = [
     { value: "profile" as const, label: "Profile" },
     { value: "holdings" as const, label: "Holdings" },
+    { value: "fund-holdings" as const, label: "Fund Holdings" },
     { value: "drift" as const, label: "Drift" },
     { value: "institutional" as const, label: "Institutional" },
     { value: "universe" as const, label: "Universe" },
@@ -599,6 +717,69 @@
               </div>
             </div>
           {/if}
+
+          <!-- ADV Brochure (accordion) -->
+          <div class="border border-border rounded-lg">
+            <button
+              class="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/30 transition-colors"
+              onclick={() => {
+                brochureExpanded = !brochureExpanded;
+                if (brochureExpanded && !brochureSections) loadBrochureSections();
+              }}
+            >
+              <span>ADV Brochure</span>
+              <span class="text-muted-foreground text-xs">{brochureExpanded ? "▲" : "▼"}</span>
+            </button>
+
+            {#if brochureExpanded}
+              <div class="px-4 pb-4 space-y-3 border-t border-border">
+                <!-- Search -->
+                <div class="pt-3">
+                  <Input
+                    placeholder="Search brochure..."
+                    value={brochureSearchQuery}
+                    oninput={(e: Event) => onBrochureSearchInput((e.target as HTMLInputElement).value)}
+                  />
+                </div>
+
+                <!-- Search results -->
+                {#if brochureSearchResults && brochureSearchQuery.length >= 2}
+                  <div class="space-y-2">
+                    <p class="text-xs text-muted-foreground">{brochureSearchResults.total_results} results</p>
+                    {#each brochureSearchResults.results as hit}
+                      <div class="rounded border border-border/50 p-2 text-sm">
+                        <div class="flex justify-between text-xs text-muted-foreground mb-1">
+                          <span class="font-medium">{hit.section}</span>
+                          <span>{formatDate(hit.filing_date)}</span>
+                        </div>
+                        <p class="text-sm">{@html hit.headline}</p>
+                      </div>
+                    {:else}
+                      <p class="text-sm text-muted-foreground">No matches found.</p>
+                    {/each}
+                  </div>
+
+                <!-- Sections listing (default) -->
+                {:else if brochureLoading}
+                  <p class="text-sm text-muted-foreground">Loading sections...</p>
+                {:else if brochureSections}
+                  <div class="space-y-1">
+                    {#each brochureSections.sections as sec}
+                      <div class="text-sm border-b border-border/50 py-1">
+                        <div class="flex justify-between">
+                          <span class="font-medium">{sec.section}</span>
+                          <span class="text-xs text-muted-foreground">{formatDate(sec.filing_date)}</span>
+                        </div>
+                        <p class="text-xs text-muted-foreground line-clamp-2 mt-0.5">{sec.content_excerpt}</p>
+                      </div>
+                    {:else}
+                      <p class="text-sm text-muted-foreground">No brochure sections found.</p>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          </div>
         </div>
 
       {:else if detailTab === "holdings" && holdingsData}
@@ -737,6 +918,70 @@
             </table>
           {:else}
             <EmptyState title="No institutional holders" description="No 13F institutional holders found." />
+          {/if}
+        </div>
+
+      {:else if detailTab === "fund-holdings" && nportData}
+        <!-- Fund Holdings tab (N-PORT) -->
+        <div class="space-y-4">
+          {#if nportData.report_date}
+            <p class="text-xs text-muted-foreground">
+              Report date: {formatDate(nportData.report_date)} · {formatNumber(nportData.total_holdings, 0)} holdings
+            </p>
+          {/if}
+
+          {#if nportData.holdings.length > 0}
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-xs text-muted-foreground">
+                  <th class="text-left pb-1">Issuer</th>
+                  <th class="text-left pb-1">Class</th>
+                  <th class="text-right pb-1">Value</th>
+                  <th class="text-right pb-1">% NAV</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each nportData.holdings as h}
+                  <tr class="border-t border-border/50">
+                    <td class="py-1 truncate max-w-[180px]">{h.issuer_name}</td>
+                    <td class="py-1 text-muted-foreground">{h.asset_class ?? "—"}</td>
+                    <td class="py-1 text-right tabular-nums">
+                      {h.market_value != null ? formatCurrency(h.market_value, h.currency ?? "USD", "en-US") : "—"}
+                    </td>
+                    <td class="py-1 text-right tabular-nums">
+                      {h.pct_of_nav != null ? formatPercent(h.pct_of_nav / 100) : "—"}
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+
+            <!-- Pagination -->
+            {#if nportData.total_pages > 1}
+              <div class="flex items-center justify-center gap-2 mt-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={nportData.page <= 1}
+                  onclick={() => loadNportPage(nportData!.page - 1)}
+                >
+                  Previous
+                </Button>
+                <span class="text-sm text-muted-foreground tabular-nums">
+                  {nportData.page} / {nportData.total_pages}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={nportData.page >= nportData.total_pages}
+                  onclick={() => loadNportPage(nportData!.page + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            {/if}
+          {:else}
+            <EmptyState title="No N-PORT filings" description="No N-PORT filings found for this manager." />
           {/if}
         </div>
 

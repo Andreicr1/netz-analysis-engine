@@ -13,13 +13,14 @@ POST /manager-screener/managers/compare        — compare 2-5 managers
 from __future__ import annotations
 
 import asyncio
+import math
 import re
 import uuid
 from datetime import date
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -31,6 +32,10 @@ from app.domains.wealth.queries.manager_screener_sql import (
     build_screener_queries,
 )
 from app.domains.wealth.schemas.manager_screener import (
+    BrochureSearchHit,
+    BrochureSearchResponse,
+    BrochureSectionItem,
+    BrochureSectionsResponse,
     DriftQuarter,
     HoldingRow,
     InstitutionalHolder,
@@ -46,6 +51,8 @@ from app.domains.wealth.schemas.manager_screener import (
     ManagerTeamMemberRead,
     ManagerToUniverseRequest,
     ManagerUniverseRead,
+    NportHoldingItem,
+    NportHoldingsResponse,
 )
 from app.shared.enums import Role
 from app.shared.models import (
@@ -53,6 +60,7 @@ from app.shared.models import (
     Sec13fHolding,
     SecInstitutionalAllocation,
     SecManager,
+    SecNportHolding,
 )
 
 logger = structlog.get_logger()
@@ -569,6 +577,208 @@ async def get_universe_status(
         currency=instrument.currency,
         block_id=instrument.block_id,
         added_at=instrument.created_at,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  GET /managers/{crd}/nport — N-PORT mutual fund holdings
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@router.get(
+    "/managers/{crd}/nport",
+    response_model=NportHoldingsResponse,
+    summary="N-PORT mutual fund holdings for a manager",
+)
+async def get_manager_nport_holdings(
+    crd: str = Path(...),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    report_date: date | None = Query(None),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> NportHoldingsResponse:
+    """Return paginated N-PORT holdings for a manager (resolved CRD→CIK)."""
+    _require_investment_role(actor)
+    crd = _validate_crd(crd)
+
+    manager = await _get_manager(db, crd)
+    if not manager.cik:
+        return NportHoldingsResponse(
+            crd_number=crd, total_holdings=0, holdings=[],
+            page=page, page_size=page_size, total_pages=0,
+        )
+
+    today = date.today()
+
+    # Resolve report_date: use latest if not specified
+    if report_date is None:
+        latest_stmt = (
+            select(func.max(SecNportHolding.report_date))
+            .where(SecNportHolding.cik == manager.cik)
+            .where(SecNportHolding.report_date <= today)
+        )
+        result = await db.execute(latest_stmt)
+        report_date = result.scalar_one_or_none()
+
+    if report_date is None:
+        return NportHoldingsResponse(
+            crd_number=crd, total_holdings=0, holdings=[],
+            page=page, page_size=page_size, total_pages=0,
+        )
+
+    # Count total
+    count_stmt = (
+        select(func.count())
+        .select_from(SecNportHolding)
+        .where(SecNportHolding.cik == manager.cik)
+        .where(SecNportHolding.report_date == report_date)
+    )
+
+    # Paginated data
+    offset = (page - 1) * page_size
+    data_stmt = (
+        select(SecNportHolding)
+        .where(SecNportHolding.cik == manager.cik)
+        .where(SecNportHolding.report_date == report_date)
+        .order_by(SecNportHolding.market_value.desc().nulls_last())
+        .limit(page_size)
+        .offset(offset)
+    )
+
+    count_result, data_result = await asyncio.gather(
+        db.execute(count_stmt),
+        db.execute(data_stmt),
+    )
+
+    total = count_result.scalar_one()
+    rows = data_result.scalars().all()
+
+    holdings = [
+        NportHoldingItem(
+            cusip=h.cusip,
+            isin=h.isin,
+            issuer_name=h.issuer_name or "Unknown",
+            asset_class=h.asset_class,
+            sector=h.sector,
+            market_value=float(h.market_value) if h.market_value else None,
+            quantity=float(h.quantity) if h.quantity else None,
+            currency=h.currency,
+            pct_of_nav=float(h.pct_of_nav) if h.pct_of_nav else None,
+            report_date=h.report_date,
+        )
+        for h in rows
+    ]
+
+    return NportHoldingsResponse(
+        crd_number=crd,
+        report_date=report_date,
+        total_holdings=total,
+        holdings=holdings,
+        page=page,
+        page_size=page_size,
+        total_pages=math.ceil(total / page_size) if total > 0 else 0,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  GET /managers/{crd}/brochure/sections — ADV brochure sections listing
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@router.get(
+    "/managers/{crd}/brochure/sections",
+    response_model=BrochureSectionsResponse,
+    summary="List ADV brochure sections for a manager",
+)
+async def get_brochure_sections(
+    crd: str = Path(...),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> BrochureSectionsResponse:
+    _require_investment_role(actor)
+    crd = _validate_crd(crd)
+    await _get_manager(db, crd)  # 404 if not found
+
+    result = await db.execute(
+        text(
+            "SELECT crd_number, section, LEFT(content, 200) AS content_excerpt, filing_date "
+            "FROM sec_manager_brochure_text "
+            "WHERE crd_number = :crd "
+            "ORDER BY filing_date DESC, section"
+        ),
+        {"crd": crd},
+    )
+    rows = result.mappings().all()
+
+    return BrochureSectionsResponse(
+        crd_number=crd,
+        sections=[
+            BrochureSectionItem(
+                section=r["section"],
+                content_excerpt=r["content_excerpt"],
+                filing_date=r["filing_date"],
+            )
+            for r in rows
+        ],
+        total_sections=len(rows),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  GET /managers/{crd}/brochure — full-text search in ADV brochure
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@router.get(
+    "/managers/{crd}/brochure",
+    response_model=BrochureSearchResponse,
+    summary="Full-text search within manager's ADV brochure",
+)
+async def search_brochure(
+    crd: str = Path(...),
+    q: str = Query(..., min_length=2, max_length=200),
+    section: str | None = Query(None),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> BrochureSearchResponse:
+    _require_investment_role(actor)
+    crd = _validate_crd(crd)
+    await _get_manager(db, crd)  # 404 if not found
+
+    sql = (
+        "SELECT section, filing_date, "
+        "  ts_headline('english', content, plainto_tsquery('english', :query), "
+        "    'MaxFragments=2,MaxWords=30') AS headline, "
+        "  ts_rank(to_tsvector('english', content), plainto_tsquery('english', :query)) AS rank "
+        "FROM sec_manager_brochure_text "
+        "WHERE crd_number = :crd "
+        "  AND to_tsvector('english', content) @@ plainto_tsquery('english', :query)"
+    )
+    params: dict = {"crd": crd, "query": q}
+
+    if section:
+        sql += " AND section = :section"
+        params["section"] = section
+
+    sql += " ORDER BY rank DESC"
+
+    result = await db.execute(text(sql), params)
+    rows = result.mappings().all()
+
+    return BrochureSearchResponse(
+        crd_number=crd,
+        query=q,
+        results=[
+            BrochureSearchHit(
+                section=r["section"],
+                headline=r["headline"],
+                filing_date=r["filing_date"],
+                rank=float(r["rank"]),
+            )
+            for r in rows
+        ],
+        total_results=len(rows),
     )
 
 
