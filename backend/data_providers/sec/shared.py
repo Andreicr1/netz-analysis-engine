@@ -385,8 +385,8 @@ SIC_TO_GICS_SECTOR: dict[str, str] = {
     "5940": "Consumer Discretionary", "5944": "Consumer Discretionary",
     "5945": "Consumer Discretionary", "5960": "Consumer Discretionary",
     "5990": "Consumer Discretionary", "7011": "Consumer Discretionary",
-    "7200": "Consumer Discretionary", "7812": "Consumer Discretionary",
-    "7819": "Consumer Discretionary", "7822": "Consumer Discretionary",
+    "7200": "Consumer Discretionary",
+    "7822": "Consumer Discretionary",
     "7841": "Consumer Discretionary", "7900": "Consumer Discretionary",
     "7941": "Consumer Discretionary", "7990": "Consumer Discretionary",
     # Consumer Staples (SIC 20xx-21xx, 54xx)
@@ -458,7 +458,7 @@ SIC_TO_GICS_SECTOR: dict[str, str] = {
     # Utilities (SIC 49xx)
     "4900": "Utilities", "4911": "Utilities", "4931": "Utilities",
     "4932": "Utilities", "4939": "Utilities", "4941": "Utilities",
-    "4950": "Utilities", "4952": "Utilities", "4953": "Utilities",
+    "4950": "Utilities", "4952": "Utilities",
     "4955": "Utilities", "4961": "Utilities", "4991": "Utilities",
 }
 
@@ -814,7 +814,7 @@ async def resolve_cusip_to_ticker_batch(
         return [_make_unresolved(c) for c in cusips]
 
     output: list[CusipTickerResult] = []
-    for cusip, result in zip(cusips, results):
+    for cusip, result in zip(cusips, results, strict=True):
         if "data" not in result or not result["data"]:
             output.append(_make_unresolved(cusip))
             continue

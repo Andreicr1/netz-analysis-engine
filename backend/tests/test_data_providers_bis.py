@@ -17,7 +17,6 @@ import httpx
 import pytest
 
 from data_providers.bis.service import (
-    BIS_API_BASE,
     COUNTRIES,
     DATASETS,
     BisIndicator,
@@ -25,7 +24,6 @@ from data_providers.bis.service import (
     fetch_all_bis_data,
     fetch_bis_dataset,
 )
-
 
 # ── BisIndicator Dataclass ────────────────────────────────────────────
 

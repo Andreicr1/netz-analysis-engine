@@ -17,8 +17,8 @@ depends_on: 0036 (treasury_data_hypertable).
 import os
 
 import psycopg
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0037_ofr_hedge_fund_hypertable"
 down_revision = "0036_treasury_data_hypertable"

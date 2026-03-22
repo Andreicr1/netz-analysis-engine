@@ -15,7 +15,7 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 from contextlib import asynccontextmanager
 from datetime import date, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -27,7 +27,6 @@ from data_providers.sec.nport_service import (
     _safe_int,
     _validate_cik,
 )
-
 
 # ── NportHolding Dataclass ────────────────────────────────────────────
 

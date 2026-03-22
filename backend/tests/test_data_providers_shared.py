@@ -17,11 +17,11 @@ import pytest
 
 from data_providers.sec.models import CikResolution
 from data_providers.sec.shared import (
-    SIC_TO_GICS_SECTOR,
     SEC_EDGAR_RATE_LIMIT,
-    _canonicalize_sector,
     SEC_IAPD_RATE_LIMIT,
     SEC_USER_AGENT,
+    SIC_TO_GICS_SECTOR,
+    _canonicalize_sector,
     _check_rate_local,
     _normalize_heavy,
     _normalize_light,

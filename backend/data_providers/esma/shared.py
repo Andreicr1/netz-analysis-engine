@@ -255,7 +255,7 @@ async def resolve_isin_to_ticker_batch(
         return [_make_unresolved(i) for i in isins]
 
     output: list[IsinResolution] = []
-    for isin, result in zip(isins, results):
+    for isin, result in zip(isins, results, strict=True):
         if "data" not in result or not result["data"]:
             output.append(_make_unresolved(isin))
             continue

@@ -88,10 +88,8 @@ async def phase1_register_ingest(
     dry_run: bool = False,
 ) -> dict[str, int]:
     """Fetch UCITS fund data from ESMA Solr API. Upserts managers and funds."""
-    from sqlalchemy import text as sa_text
-    from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-    from data_providers.esma.register_service import RegisterService, parse_manager_from_doc
+    from data_providers.esma.register_service import RegisterService
 
     stats = {"managers": 0, "funds": 0, "skipped": 0, "errors": 0}
 
@@ -238,9 +236,7 @@ async def phase1_5_firds_isin_mapping(
     to fund LEIs, enabling Phase 2 (OpenFIGI) to resolve actual ISINs.
     """
     from sqlalchemy import text as sa_text
-    from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-    from app.shared.models import EsmaIsinTickerMap
     from data_providers.esma.firds_service import FirdsService
 
     stats = {"total_instruments": 0, "matched": 0, "unmatched": 0, "errors": 0}
@@ -351,9 +347,7 @@ async def phase2_isin_resolution(
     Yahoo Finance tickers.
     """
     from sqlalchemy import text as sa_text
-    from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-    from app.shared.models import EsmaIsinTickerMap
     from data_providers.esma.ticker_resolver import TickerResolver
 
     stats = {"total": 0, "resolved": 0, "unresolved": 0, "errors": 0}
@@ -545,6 +539,7 @@ async def _backfill_single_ticker(
 
     def _download() -> list[tuple[str, float]]:
         import logging
+
         import yfinance as yf
 
         # Suppress yfinance stderr noise for delisted tickers

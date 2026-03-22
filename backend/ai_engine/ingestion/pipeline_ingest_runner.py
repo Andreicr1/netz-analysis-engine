@@ -576,9 +576,8 @@ async def async_run_full_pipeline_ingest(
         if job is not None:
             finalize_db = _get_db_session()
             try:
-                from sqlalchemy import select as sa_select
-
                 from app.domains.credit.modules.ai.ingest_job_model import PipelineIngestJob
+                from sqlalchemy import select as sa_select
 
                 refreshed_job = finalize_db.execute(
                     sa_select(PipelineIngestJob).where(PipelineIngestJob.id == job.id)

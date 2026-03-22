@@ -10,13 +10,13 @@ import re
 import uuid as _uuid
 from typing import Any
 
+from sqlalchemy import text
+
 from ai_engine.extraction.kb_schema import ComplianceChunk, DocType
 from ai_engine.extraction.pgvector_search_service import (
     _get_sync_engine,
-    validate_domain,
     validate_uuid,
 )
-from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 

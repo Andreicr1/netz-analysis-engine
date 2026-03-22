@@ -306,6 +306,8 @@ class NetzGlobalAgent:
         organization_id: uuid.UUID | str | None = None,
     ) -> list[Any]:
         """Retrieve compliance chunks from pgvector filtered by domain."""
+        from sqlalchemy import text as sa_text
+
         from ai_engine.extraction.embedding_service import generate_embeddings
         from ai_engine.extraction.kb_schema import ComplianceChunk, DocType
         from ai_engine.extraction.pgvector_search_service import (
@@ -313,7 +315,6 @@ class NetzGlobalAgent:
             validate_domain,
             validate_uuid,
         )
-        from sqlalchemy import text as sa_text
 
         if organization_id is None:
             logger.warning("GLOBAL_AGENT compliance retrieval without organization_id — tenant isolation disabled")

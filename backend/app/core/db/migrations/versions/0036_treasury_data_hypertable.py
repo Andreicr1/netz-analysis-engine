@@ -16,8 +16,8 @@ depends_on: 0035 (fund_risk_metrics_momentum).
 import os
 
 import psycopg
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0036_treasury_data_hypertable"
 down_revision = "0035_fund_risk_metrics_momentum"

@@ -7,8 +7,8 @@ Populated by sec seed Phase 6 via OpenFIGI batch API.
 depends_on: 0032 (hypertable_skip_documentation).
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0033_sec_cusip_ticker_map"
 down_revision = "0032_hypertable_skip_docs"

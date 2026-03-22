@@ -34,7 +34,8 @@ from sqlalchemy import (
     literal_column,
     select,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  Reflected tables (Core-style, not ORM)

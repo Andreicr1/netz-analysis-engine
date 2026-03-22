@@ -35,7 +35,6 @@ from data_providers.esma.shared import (
 )
 from data_providers.esma.ticker_resolver import TickerResolver
 
-
 # ── EsmaManager Dataclass ────────────────────────────────────────────
 
 
@@ -327,7 +326,7 @@ class TestOpenfigi2Yahoo:
 
 class TestExchangeConstants:
     def test_tradeable_exchanges_match_map(self):
-        assert TRADEABLE_EXCHANGES == frozenset(EXCHANGE_SUFFIX_MAP.keys())
+        assert frozenset(EXCHANGE_SUFFIX_MAP.keys()) == TRADEABLE_EXCHANGES
 
     def test_key_exchanges_present(self):
         assert "LN" in EXCHANGE_SUFFIX_MAP

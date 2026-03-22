@@ -24,7 +24,6 @@ from data_providers.imf.service import (
     fetch_imf_indicator,
 )
 
-
 # ── ImfForecast Dataclass ─────────────────────────────────────────────
 
 

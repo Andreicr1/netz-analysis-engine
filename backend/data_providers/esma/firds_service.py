@@ -28,7 +28,7 @@ import re
 import zipfile
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import AsyncIterator, Iterator
+from typing import Iterator
 from xml.etree.ElementTree import iterparse
 
 import httpx
