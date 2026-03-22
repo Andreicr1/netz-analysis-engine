@@ -1,4 +1,4 @@
-import adapter from "@sveltejs/adapter-node";
+import adapter from "@sveltejs/adapter-cloudflare";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 
 const dev = process.env.NODE_ENV !== "production";
@@ -7,7 +7,9 @@ const dev = process.env.NODE_ENV !== "production";
 const config = {
 	preprocess: vitePreprocess(),
 	kit: {
-		adapter: adapter({ out: "build" }),
+		adapter: adapter({
+			routes: { include: ["/*"], exclude: ["<all>"] },
+		}),
 		alias: {
 			$lib: "src/lib",
 		},

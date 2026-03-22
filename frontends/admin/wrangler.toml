@@ -1,0 +1,6 @@
+name = "netz-admin"
+compatibility_date = "2025-12-01"
+pages_build_output_dir = ".svelte-kit/cloudflare"
+
+[vars]
+PUBLIC_BACKEND_URL = "https://api.netz.app"

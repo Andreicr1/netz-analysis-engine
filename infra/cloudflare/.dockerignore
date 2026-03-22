@@ -1,0 +1,13 @@
+frontends/
+packages/
+.git/
+.data/
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+docs/
+backend/tests/
+node_modules/
+.claude/

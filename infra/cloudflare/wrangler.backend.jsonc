@@ -1,0 +1,24 @@
+{
+  // Netz Backend — always-on API server
+  // Deploy: npx wrangler containers deploy --config wrangler.backend.jsonc
+  "name": "netz-backend",
+  "containers": {
+    "image": "./Dockerfile",
+    "port": 8000,
+    "instances": { "min": 1, "max": 3 },
+    "memory": "2GB",
+    "cpu": 2
+  },
+  "r2_buckets": [
+    { "binding": "NETZ_DATA_LAKE", "bucket_name": "netz-data-lake" }
+  ],
+  "vars": {
+    "APP_ENV": "production",
+    "FEATURE_R2_ENABLED": "true"
+  }
+  // Secrets configured via `wrangler secret put` or Cloudflare Dashboard:
+  // DATABASE_URL, REDIS_URL, OPENAI_API_KEY, MISTRAL_API_KEY,
+  // CLERK_SECRET_KEY, CLERK_JWKS_URL,
+  // R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME,
+  // WORKER_DISPATCH_SECRET
+}
