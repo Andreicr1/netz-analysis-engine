@@ -2,7 +2,7 @@
   Fund Detail — full metrics, NAV chart, risk metrics.
 -->
 <script lang="ts">
-	import { DataCard, StatusBadge, TimeSeriesChart, PageHeader, SectionCard, EmptyState, formatDate, formatNumber, formatPercent, formatRatio } from "@netz/ui";
+	import { DataCard, MetricCard, StatusBadge, TimeSeriesChart, PageHeader, SectionCard, EmptyState, formatDate, formatNumber, formatPercent, formatRatio } from "@netz/ui";
 	import { resolveWealthStatus } from "$lib/utils/status-maps";
 	import type { PageData } from "./$types";
 
@@ -21,16 +21,19 @@
 		inception_date: string | null;
 	};
 
-	type FundRisk = {
-		cvar_95: number | null;
-		var_95: number | null;
-		annual_return: number | null;
-		annual_volatility: number | null;
-		sharpe_ratio: number | null;
-		max_drawdown: number | null;
-		recovery_days: number | null;
-		sortino_ratio: number | null;
-		calmar_ratio: number | null;
+	type FundRiskMetrics = {
+		cvar_95_3m: number | null;
+		var_95_3m: number | null;
+		return_1y: number | null;
+		volatility_1y: number | null;
+		sharpe_1y: number | null;
+		max_drawdown_1y: number | null;
+		sortino_1y: number | null;
+		rsi_14: number | null;
+		bb_position: number | null;
+		nav_momentum_score: number | null;
+		flow_momentum_score: number | null;
+		blended_momentum_score: number | null;
 	};
 
 	type NavPoint = {
@@ -39,11 +42,17 @@
 	};
 
 	let fund = $derived(data.fund as FundDetail | null);
+	let riskMetrics = $derived(data.riskMetrics as FundRiskMetrics | null);
 
-	// Risk and NAV data will be provided by SSE-primary risk store (Sprint 1, Wealth.1).
-	// Previous phantom API calls (/stats, /performance, /holdings) never returned data.
-	let risk = $state<FundRisk | null>(null);
+	// NAV data will be provided by SSE-primary risk store (Sprint 1, Wealth.1).
 	let navHistory = $state<NavPoint[] | null>(null);
+
+	function rsiStatus(rsi: number | null): "ok" | "warn" | "breach" | undefined {
+		if (rsi == null) return undefined;
+		if (rsi < 30) return "ok";
+		if (rsi > 70) return "breach";
+		return "warn";
+	}
 
 	// NAV chart series
 	let navSeries = $derived(
@@ -103,29 +112,34 @@
 		</SectionCard>
 
 		<!-- Risk Metrics -->
-		{#if risk === null}
-			<SectionCard title="Risk Overview">
-				<div class="flex items-center gap-2 py-8 text-sm text-(--netz-text-muted)">
-					<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-						<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-					</svg>
-					<span>Awaiting risk data from analysis engine...</span>
-				</div>
-			</SectionCard>
-		{:else}
+		{#if riskMetrics}
 			<SectionCard title="Risk Metrics">
 				<div class="grid gap-4 md:grid-cols-3 lg:grid-cols-5">
-					<DataCard label="CVaR 95%" value={fmtPct(risk.cvar_95)} trend="flat" />
-					<DataCard label="VaR 95%" value={fmtPct(risk.var_95)} trend="flat" />
-					<DataCard label="Annual Return" value={fmtPct(risk.annual_return)} trend={risk.annual_return !== null && risk.annual_return >= 0 ? "up" : "down"} />
-					<DataCard label="Volatility" value={fmtPct(risk.annual_volatility)} trend="flat" />
-					<DataCard label="Sharpe" value={formatRatio(risk.sharpe_ratio, 2, "", "en-US")} trend="flat" />
-					<DataCard label="Max Drawdown" value={fmtPct(risk.max_drawdown)} trend="flat" />
-					<DataCard label="Recovery Days" value={risk.recovery_days !== null ? String(risk.recovery_days) : "—"} trend="flat" />
-					<DataCard label="Sortino" value={formatRatio(risk.sortino_ratio, 2, "", "en-US")} trend="flat" />
-					<DataCard label="Calmar" value={formatRatio(risk.calmar_ratio, 2, "", "en-US")} trend="flat" />
+					<DataCard label="CVaR 95% (3M)" value={fmtPct(riskMetrics.cvar_95_3m)} trend="flat" />
+					<DataCard label="VaR 95% (3M)" value={fmtPct(riskMetrics.var_95_3m)} trend="flat" />
+					<DataCard label="Return 1Y" value={fmtPct(riskMetrics.return_1y)} trend={riskMetrics.return_1y !== null && riskMetrics.return_1y >= 0 ? "up" : "down"} />
+					<DataCard label="Volatility 1Y" value={fmtPct(riskMetrics.volatility_1y)} trend="flat" />
+					<DataCard label="Sharpe 1Y" value={formatRatio(riskMetrics.sharpe_1y, 2, "", "en-US")} trend="flat" />
+					<DataCard label="Max Drawdown 1Y" value={fmtPct(riskMetrics.max_drawdown_1y)} trend="flat" />
+					<DataCard label="Sortino 1Y" value={formatRatio(riskMetrics.sortino_1y, 2, "", "en-US")} trend="flat" />
 				</div>
+			</SectionCard>
+
+			<!-- Momentum Signals -->
+			{#if riskMetrics.rsi_14 != null || riskMetrics.blended_momentum_score != null}
+				<SectionCard title="Momentum Signals" subtitle="Deterministic Metric · Pre-computed by risk_calc worker">
+					<div class="grid grid-cols-2 gap-3 md:grid-cols-5">
+						<MetricCard label="RSI-14" value={riskMetrics.rsi_14 != null ? formatNumber(riskMetrics.rsi_14, 1, "en-US") : "—"} status={rsiStatus(riskMetrics.rsi_14)} sublabel={riskMetrics.rsi_14 != null ? (riskMetrics.rsi_14 < 30 ? "Oversold" : riskMetrics.rsi_14 > 70 ? "Overbought" : "Neutral") : "Pending"} />
+						<MetricCard label="Bollinger" value={riskMetrics.bb_position != null ? formatNumber(riskMetrics.bb_position, 2, "en-US") : "—"} sublabel="Band position (0–1)" />
+						<MetricCard label="NAV Momentum" value={riskMetrics.nav_momentum_score != null ? formatNumber(riskMetrics.nav_momentum_score, 2, "en-US") : "—"} />
+						<MetricCard label="Flow Momentum" value={riskMetrics.flow_momentum_score != null ? formatNumber(riskMetrics.flow_momentum_score, 2, "en-US") : "—"} />
+						<MetricCard label="Blended" value={riskMetrics.blended_momentum_score != null ? formatNumber(riskMetrics.blended_momentum_score, 2, "en-US") : "—"} sublabel="Composite score" />
+					</div>
+				</SectionCard>
+			{/if}
+		{:else}
+			<SectionCard title="Risk Overview">
+				<EmptyState title="No Risk Data" message="Risk metrics will appear after the risk_calc worker has run." />
 			</SectionCard>
 		{/if}
 	{:else}
