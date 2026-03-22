@@ -28,6 +28,7 @@ from app.domains.admin.routes.branding import router as admin_branding_router
 from app.domains.admin.routes.configs import router as admin_configs_router
 from app.domains.admin.routes.health import router as admin_health_router
 from app.domains.admin.routes.inspect import router as admin_inspect_router
+from app.domains.admin.routes.internal import router as internal_router
 from app.domains.admin.routes.prompts import router as admin_prompts_router
 from app.domains.admin.routes.tenants import router as admin_tenants_router
 
@@ -399,3 +400,7 @@ api_v1.include_router(credit_module_documents_router)
 # ── Mount API v1 ─────────────────────────────────────────────
 
 app.include_router(api_v1)
+
+# ── Internal routes (Cloudflare Cron Workers only) ───────────
+# Mounted on root, not under /api/v1 — gateway blocks /internal/* without secret.
+app.include_router(internal_router)
