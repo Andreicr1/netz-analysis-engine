@@ -67,7 +67,7 @@ edgar = [
 
 [tool.setuptools.packages.find]
 where = ["backend", "."]
-include = ["app*", "ai_engine*", "vertical_engines*", "quant_engine*", "worker_app*", "data_providers*"]
+include = ["app*", "ai_engine*", "vertical_engines*", "quant_engine*", "data_providers*"]
 
 [build-system]
 requires = ["setuptools>=75"]
