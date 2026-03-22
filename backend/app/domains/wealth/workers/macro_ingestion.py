@@ -24,16 +24,18 @@ from decimal import Decimal, InvalidOperation
 
 import redis.asyncio as aioredis
 import structlog
-from sqlalchemy import text
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.config.settings import settings
 from app.core.db.engine import async_session_factory as async_session
 from app.core.jobs.tracker import get_redis_pool
-from app.shared.models import MacroData, MacroRegionalSnapshot
+from app.shared.models import BisStatistics, ImfWeoForecast, MacroData, MacroRegionalSnapshot
 from quant_engine.fred_service import FredObservation, FredService
 from quant_engine.macro_snapshot_builder import build_regional_snapshot
 from quant_engine.regional_macro_service import (
+    BisDataPoint,
+    ImfDataPoint,
     build_fetch_configs,
     get_all_series_ids,
 )
@@ -101,6 +103,47 @@ async def _write_macro_cache(snapshot_data: dict, today: date) -> None:
         logger.warning("Failed to write macro cache to Redis — continuing without cache")
 
 
+async def _fetch_bis_data(db) -> list[BisDataPoint] | None:
+    """Query BIS hypertable for recent credit cycle data. Returns None on failure."""
+    try:
+        bis_rows = await db.execute(
+            select(
+                BisStatistics.country_code,
+                BisStatistics.indicator,
+                BisStatistics.value,
+                BisStatistics.period,
+            ).where(BisStatistics.period >= func.now() - text("interval '180 days'"))
+        )
+        return [
+            BisDataPoint(r.country_code, r.indicator, float(r.value), r.period.date())
+            for r in bis_rows.all()
+        ]
+    except Exception:
+        logger.warning("Failed to query BIS data — enrichment will be skipped")
+        return None
+
+
+async def _fetch_imf_data(db) -> list[ImfDataPoint] | None:
+    """Query IMF hypertable for recent WEO forecasts. Returns None on failure."""
+    try:
+        imf_rows = await db.execute(
+            select(
+                ImfWeoForecast.country_code,
+                ImfWeoForecast.indicator,
+                ImfWeoForecast.value,
+                ImfWeoForecast.year,
+            ).where(ImfWeoForecast.year >= func.extract("year", func.now()) - 1)
+        )
+        return [
+            ImfDataPoint(r.country_code, r.indicator, r.year, float(r.value))
+            for r in imf_rows.all()
+            if r.value is not None
+        ]
+    except Exception:
+        logger.warning("Failed to query IMF data — growth blending will be skipped")
+        return None
+
+
 async def run_macro_ingestion(
     lookback_years: int = 10,
 ) -> dict:
@@ -159,11 +202,21 @@ async def run_macro_ingestion(
                 logger.error("No FRED data returned — aborting snapshot")
                 return {"status": "failed", "reason": "no_data"}
 
+            # ── Fetch BIS + IMF enrichment data ─────────────
+            bis_data = await _fetch_bis_data(db)
+            imf_data = await _fetch_imf_data(db)
+            if bis_data:
+                logger.info("BIS data fetched for enrichment", count=len(bis_data))
+            if imf_data:
+                logger.info("IMF data fetched for enrichment", count=len(imf_data))
+
             # ── Build snapshot (pure computation) ──────────────
             snapshot_data = await asyncio.to_thread(
                 build_regional_snapshot,
                 raw_observations,
                 as_of=today,
+                bis_data=bis_data,
+                imf_data=imf_data,
             )
 
             # ── Persist snapshot ───────────────────────────────
@@ -184,6 +237,12 @@ async def run_macro_ingestion(
             # ── Upsert to macro_data (backward compat) ────────
             macro_rows = _obs_to_macro_data_rows(raw_observations)
             if macro_rows:
+                # Deduplicate by PK
+                seen: dict[tuple, dict] = {}
+                for r in macro_rows:
+                    seen[(r["series_id"], r["obs_date"])] = r
+                macro_rows = list(seen.values())
+
                 # Batch in chunks to avoid oversized statements
                 chunk_size = 2000
                 for i in range(0, len(macro_rows), chunk_size):
@@ -219,10 +278,16 @@ async def run_macro_ingestion(
                 "macro_data_rows": len(macro_rows),
             }
 
+        except Exception:
+            await db.rollback()
+            raise
         finally:
-            await db.execute(
-                text(f"SELECT pg_advisory_unlock({MACRO_INGESTION_LOCK_ID})")
-            )
+            try:
+                await db.execute(
+                    text(f"SELECT pg_advisory_unlock({MACRO_INGESTION_LOCK_ID})")
+                )
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

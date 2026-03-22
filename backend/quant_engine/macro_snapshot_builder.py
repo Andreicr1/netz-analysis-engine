@@ -14,9 +14,12 @@ from typing import Any
 
 from quant_engine.fred_service import FredObservation
 from quant_engine.regional_macro_service import (
+    BisDataPoint,
     GlobalIndicatorsResult,
+    ImfDataPoint,
     RegionalMacroResult,
     RegionalScoringConfig,
+    enrich_region_score,
     resolve_scoring_config,
     score_global_indicators,
     score_region,
@@ -28,6 +31,8 @@ def build_regional_snapshot(
     *,
     as_of: date | None = None,
     config: dict[str, Any] | None = None,
+    bis_data: list[BisDataPoint] | None = None,
+    imf_data: list[ImfDataPoint] | None = None,
 ) -> dict[str, Any]:
     """Build v1 regional macro snapshot from raw FRED data.
 
@@ -36,6 +41,8 @@ def build_regional_snapshot(
             Produced by FredService.fetch_batch_concurrent().
         as_of: Reference date (defaults to today).
         config: Raw config dict from ConfigService (contains regional_scoring key).
+        bis_data: Optional BIS credit cycle data for 7th dimension enrichment.
+        imf_data: Optional IMF WEO forecasts for growth score blending.
 
     Returns:
         Snapshot dict suitable for storing in macro_regional_snapshots.data_json.
@@ -66,6 +73,8 @@ def build_regional_snapshot(
         result: RegionalMacroResult = score_region(
             region, raw_observations, as_of, scoring_config,
         )
+        # Enrich with BIS credit cycle + IMF growth blend (no-op if data is None)
+        result = enrich_region_score(result, bis_data=bis_data, imf_data=imf_data)
         regions[region] = _serialize_regional_result(result)
 
     # Score global indicators
