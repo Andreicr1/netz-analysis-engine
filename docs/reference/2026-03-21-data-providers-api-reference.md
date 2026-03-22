@@ -290,8 +290,13 @@ EDGAR 13F (quarterly XML, via edgartools)
        └─→ sec_13f_holdings, sec_13f_diffs
 
 ADV Part 2A (PDF brochures, PyMuPDF)
-  └─→ AdvService.extract_brochure_sections()
-       └─→ sec_manager_brochure_text (GIN full-text search)
+  ├─→ brochure_download worker (Lock 900_019, weekly)
+  │    └─→ StorageClient: gold/_global/sec_brochures/{crd}.pdf
+  │         └─→ brochure_extract worker (Lock 900_020, on-demand)
+  │              ├─→ sec_manager_brochure_text (GIN full-text search)
+  │              └─→ sec_manager_team
+  └─→ AdvService._download_and_extract_brochure() (lazy, on-demand)
+       └─→ StorageClient → legacy local → IAPD fallback
 
 EDGAR N-PORT (monthly XML, via edgartools)
   └─→ NportService.fetch_holdings()
@@ -426,6 +431,8 @@ class IsinResolution:
 | Worker | Lock ID | Arquivo | Provider | Hypertable | Frequencia |
 |--------|---------|---------|----------|------------|------------|
 | `sec_refresh` | 900_016 | `workers/sec_refresh.py` | SEC (continuous aggs) | Redis cache | Daily |
+| `brochure_download` | 900_019 | `workers/brochure_ingestion.py` | SEC IAPD (ADV Part 2A PDFs) | StorageClient (`gold/_global/sec_brochures/`) | Weekly |
+| `brochure_extract` | 900_020 | `workers/brochure_ingestion.py` | StorageClient (PDFs) → PyMuPDF | `sec_manager_brochure_text`, `sec_manager_team` | On-demand |
 | `nport_ingestion` | 900_018 | `workers/nport_ingestion.py` | SEC N-PORT (edgartools) | `sec_nport_holdings` | Weekly |
 | `bis_ingestion` | 900_014 | `workers/bis_ingestion.py` | BIS SDMX CSV | `bis_statistics` | Quarterly |
 | `imf_ingestion` | 900_015 | `workers/imf_ingestion.py` | IMF DataMapper JSON | `imf_weo_forecasts` | Quarterly |
@@ -437,6 +444,8 @@ class IsinResolution:
 | Endpoint | Worker | Lock ID | Status Frontend |
 |----------|--------|---------|----------------|
 | `POST /run-sec-refresh` | SEC continuous agg refresh | 900_016 | **NAO** |
+| `POST /run-brochure-download` | ADV brochure PDF download → StorageClient | 900_019 | **NAO** |
+| `POST /run-brochure-extract` | Brochure text extraction (PyMuPDF) → DB | 900_020 | **NAO** |
 | `POST /run-nport-ingestion` | N-PORT holdings | 900_018 | **NAO** |
 | `POST /run-bis-ingestion` | BIS statistics | 900_014 | **NAO** |
 | `POST /run-imf-ingestion` | IMF WEO forecasts | 900_015 | **NAO** |
@@ -554,7 +563,7 @@ Sort allowlist: `aum_total`, `firm_name`, `compliance_disclosures`, `last_adv_fi
 
 ## 10. Endpoints sem Consumidor Frontend
 
-### 10.1 Worker Triggers (15 endpoints — nenhum no frontend)
+### 10.1 Worker Triggers (17 endpoints — nenhum no frontend)
 
 Todos os `POST /workers/run-*` sao admin-only, sem UI:
 
@@ -571,6 +580,8 @@ POST /workers/run-fact-sheet-gen
 POST /workers/run-treasury-ingestion
 POST /workers/run-ofr-ingestion
 POST /workers/run-sec-refresh
+POST /workers/run-brochure-download
+POST /workers/run-brochure-extract
 POST /workers/run-nport-ingestion
 POST /workers/run-bis-ingestion
 POST /workers/run-imf-ingestion
@@ -589,7 +600,8 @@ N-PORT data esta no hypertable `sec_nport_holdings`, mas:
 
 ### 10.4 SEC Brochure Text (parcial)
 
-`sec_manager_brochure_text` tem GIN full-text search index, mas:
+`sec_manager_brochure_text` tem GIN full-text search index. Workers de download (900_019)
+e extract (900_020) implementados com pipeline em duas fases via StorageClient. Gaps restantes:
 - Sem endpoint REST para busca full-text em brochures
 - Manager Screener Profile tab nao exibe brochure sections
 
@@ -604,8 +616,8 @@ N-PORT data esta no hypertable `sec_nport_holdings`, mas:
 | **enrich_region_score nao conectado** | Funcao pura pronta, mas macro_ingestion worker nao chama. BIS/IMF data existe no DB mas nao enriquece os scores regionais. | Scores macro sem 7a dimensao (credit_cycle) e sem blend IMF growth |
 | **ESMA sem integracao** | Data providers funcionam (e2e validado), mas sem worker/endpoint/frontend | European fund universe nao populada |
 | **N-PORT sem exposure** | Holdings no DB, sem endpoint dedicado | Mutual fund holdings invisiveis no frontend |
-| **Brochure text sem busca** | GIN index existe, sem endpoint | Full-text search em ADV brochures nao acessivel |
-| **Worker triggers sem UI** | 15 endpoints admin-only sem pagina | Requer chamadas manuais via curl/Postman |
+| **Brochure text sem busca** | GIN index existe, workers de download/extract implementados (900_019/900_020), sem endpoint REST de busca | Full-text search em ADV brochures nao acessivel via API |
+| **Worker triggers sem UI** | 17 endpoints admin-only sem pagina | Requer chamadas manuais via curl/Postman |
 
 ### 11.2 Tabelas Global (sem organization_id, sem RLS)
 
