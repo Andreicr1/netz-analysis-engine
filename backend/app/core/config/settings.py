@@ -83,7 +83,7 @@ class Settings(BaseSettings):
     # ── Feature Flags ────────────────────────────────────────
     feature_lipper_enabled: bool = False
     feature_auto_rebalance: bool = False
-    feature_adls_enabled: bool = False
+    feature_adls_enabled: bool = False  # DEPRECATED: ADLS removed, kept for env var compat
     feature_wealth_fact_sheets: bool = True
     feature_wealth_content: bool = False
     feature_wealth_monitoring: bool = False
@@ -139,46 +139,29 @@ class Settings(BaseSettings):
     # Resolved lazily at call-time; never captured at module level.
     netz_llm_concurrency: int = 5
 
-    # ── DEPRECATED (Azure services — kept for rollback, 2026-03-18) ──────────
-    storage_account_url: str = ""  # DEPRECATED: use LocalStorageClient
-    keyvault_url: str = ""  # DEPRECATED: use platform env vars (Railway secrets)
-    service_bus_namespace: str = ""  # DEPRECATED: use Redis pub/sub + BackgroundTasks
-    applicationinsights_connection_string: str = ""  # DEPRECATED: use structlog → stdout
-    azure_openai_endpoint: str = ""  # DEPRECATED: use OpenAI direct + retry
-    azure_openai_key: str = ""  # DEPRECATED
-    azure_openai_api_version: str = "2025-03-01-preview"  # DEPRECATED
-    azure_search_endpoint: str = ""  # DEPRECATED: use pgvector
-    azure_search_key: str = ""  # DEPRECATED
-    SEARCH_INDEX_NAME: str = ""  # DEPRECATED
-    SEARCH_CHUNKS_INDEX_NAME: str = "global-vector-chunks-v2"  # DEPRECATED
-    NETZ_ENV: str = "dev"  # DEPRECATED: search index prefixing no longer needed
-    adls_account_name: str = ""  # DEPRECATED: use LocalStorageClient
-    adls_account_key: str = ""  # DEPRECATED
-    adls_container_name: str = "netz-analysis"  # DEPRECATED
-    adls_connection_string: str = ""  # DEPRECATED
+    # ── REMOVED (Azure services eliminated, Cloudflare migration 2026-03-21) ──
+    # Fields kept temporarily so existing env files don't cause validation errors.
+    # Remove after all environments are confirmed clean.
+    storage_account_url: str = ""
+    keyvault_url: str = ""
+    service_bus_namespace: str = ""
+    applicationinsights_connection_string: str = ""
+    azure_openai_endpoint: str = ""
+    azure_openai_key: str = ""
+    azure_openai_api_version: str = "2025-03-01-preview"
+    azure_search_endpoint: str = ""
+    azure_search_key: str = ""
+    SEARCH_INDEX_NAME: str = ""
+    SEARCH_CHUNKS_INDEX_NAME: str = ""
+    NETZ_ENV: str = "dev"
+    adls_account_name: str = ""
+    adls_account_key: str = ""
+    adls_container_name: str = ""
+    adls_connection_string: str = ""
 
     @property
     def is_development(self) -> bool:
         return self.app_env == "development"
-
-    def prefixed_index(self, base_name: str) -> str:
-        """Apply NETZ_ENV prefix to Azure Search index names.
-
-        DEPRECATED: Azure Search replaced by pgvector (2026-03-18).
-        Kept for rollback compatibility.
-        """
-        if self.NETZ_ENV in ("prod", "production"):
-            return base_name
-        return f"{self.NETZ_ENV}-{base_name}"
-
-    def canonical_search_chunks_index_name(self) -> str:
-        """Resolve the canonical env-scoped chunks index name.
-
-        DEPRECATED: Azure Search replaced by pgvector (2026-03-18).
-        """
-        return self.prefixed_index(
-            self.SEARCH_CHUNKS_INDEX_NAME or "global-vector-chunks-v2",
-        )
 
     def validate_production_secrets(self) -> None:
         """Reject weak or missing secrets in production."""

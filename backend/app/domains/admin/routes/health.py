@@ -54,13 +54,12 @@ async def _check_redis() -> ServiceHealthOut:
         return ServiceHealthOut(name="Redis", status="down", latency_ms=None, error=str(e), checked_at=checked_at)
 
 
-async def _check_adls() -> ServiceHealthOut:
-    """Check ADLS availability (feature-flagged)."""
+async def _check_storage() -> ServiceHealthOut:
+    """Check storage backend availability (R2 or local)."""
     checked_at = datetime.now(UTC)
     from app.core.config.settings import settings
-    if not getattr(settings, "feature_adls_enabled", False):
-        return ServiceHealthOut(name="ADLS", status="disabled", latency_ms=None, error="Using local storage", checked_at=checked_at)
-    return ServiceHealthOut(name="ADLS", status="ok", latency_ms=None, error=None, checked_at=checked_at)
+    backend = "R2" if settings.feature_r2_enabled else "LocalStorage"
+    return ServiceHealthOut(name=backend, status="ok", latency_ms=None, error=None, checked_at=checked_at)
 
 
 async def _check_search() -> ServiceHealthOut:
@@ -118,11 +117,11 @@ async def get_service_health(
     db: AsyncSession = Depends(get_db_admin),
     actor: Actor = Depends(require_super_admin),
 ) -> list[ServiceHealthOut]:
-    """Service status -- PostgreSQL, Redis, ADLS, pgvector, PgNotifier."""
+    """Service status -- PostgreSQL, Redis, Storage, pgvector, PgNotifier."""
     results = await asyncio.gather(
         _check_postgres(db),
         _check_redis(),
-        _check_adls(),
+        _check_storage(),
         _check_search(),
         return_exceptions=True,
     )

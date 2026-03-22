@@ -103,7 +103,7 @@ class TenantAssetResponse(BaseModel):
 
 
 class ServiceHealthOut(BaseModel):
-    """Health status for an infrastructure service (DB, Redis, ADLS, etc.)."""
+    """Health status for an infrastructure service (DB, Redis, Storage, etc.)."""
 
     name: str
     status: str  # "ok" | "down" | "degraded" | "disabled" | "disconnected"

@@ -1,8 +1,7 @@
-"""Blob storage service — stub for Sprint 2b.
+"""Blob storage service — legacy stub.
 
-Real implementation uses Azure Blob Storage SDK. Populated in Sprint 3
-when upload architecture is built. All functions raise NotImplementedError
-until then.
+Upload functions raise NotImplementedError — use StorageClient directly.
+download_bytes bridges the legacy API to the unified StorageClient.
 """
 
 from __future__ import annotations
@@ -30,7 +29,7 @@ def upload_bytes_idempotent(**kwargs: Any) -> dict[str, Any]:
 
 
 def download_bytes(**kwargs: Any) -> bytes:
-    """Download blob bytes via StorageClient (R2/Local/ADLS).
+    """Download blob bytes via StorageClient (R2/Local).
 
     Accepts ``blob_uri`` kwarg — the storage path to read.
     Bridges the legacy blob_storage API to the unified StorageClient.

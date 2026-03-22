@@ -1,16 +1,14 @@
-"""StorageClient — unified abstraction over Cloudflare R2, ADLS Gen2, and local filesystem.
+"""StorageClient — unified abstraction over Cloudflare R2 and local filesystem.
 
 All code that needs to read/write files in the data lake must use this
 client.  Never call storage SDKs directly.
 
-Backends (priority: R2 > ADLS > Local):
+Backends (priority: R2 > Local):
   - **Cloudflare R2** (``FEATURE_R2_ENABLED=true``):
-    S3-compatible object storage via boto3. Production default (Milestone 2.5+).
-  - **Local filesystem** (default, both flags false):
+    S3-compatible object storage via boto3. Production default.
+  - **Local filesystem** (default, flag false):
     Writes to ``{local_storage_root}/`` with the same path hierarchy.
     Default root: ``{project_root}/.data/lake/``.
-  - **ADLS Gen2** (``FEATURE_ADLS_ENABLED=true``, deprecated):
-    Azure Data Lake Storage Gen2. Kept for rollback only.
 
 Path convention (all backends):
   - ``{tier}/{organization_id}/{...}`` for tenant data (bronze, silver)
@@ -83,11 +81,11 @@ class StorageClient(ABC):
 
     @abstractmethod
     async def generate_read_url(self, path: str, *, expires_in: int = 3600) -> str:
-        """Generate a time-limited read URL (SAS for ADLS, file:// for local)."""
+        """Generate a time-limited read URL (presigned for R2, file:// for local)."""
 
     @abstractmethod
     async def generate_upload_url(self, path: str, *, expires_in: int = 3600) -> str:
-        """Generate a time-limited upload URL (SAS for ADLS, file:// for local)."""
+        """Generate a time-limited upload URL (presigned for R2, file:// for local)."""
 
     def get_duckdb_path(
         self,
@@ -101,7 +99,7 @@ class StorageClient(ABC):
         existing mocks and test doubles. Subclasses override.
 
         LocalStorageClient  → filesystem path (.data/lake/{tier}/{org_id}/{vertical}/)
-        ADLSStorageClient   → raises NotImplementedError (Phase 3: abfss://)
+        R2StorageClient     → s3://{bucket}/{tier}/{org_id}/{vertical}/
         """
         raise NotImplementedError(
             f"{self.__class__.__name__} does not support DuckDB path resolution"
@@ -111,14 +109,14 @@ class StorageClient(ABC):
 class LocalStorageClient(StorageClient):
     """Local filesystem backend for development.
 
-    Mirrors ADLS path hierarchy on disk so code under test uses
+    Mirrors R2 path hierarchy on disk so code under test uses
     the same path conventions as production.
 
     .. note::
         Methods use sync ``pathlib.Path`` operations inside ``async def``.
         This is tolerable for local dev where I/O is fast and there is no
         concurrent load.  If this backend is ever used in production,
-        wrap calls with ``asyncio.to_thread`` as done in ``ADLSStorageClient``.
+        wrap calls with ``asyncio.to_thread`` as done in ``R2StorageClient``.
     """
 
     def __init__(self, root: str | Path | None = None) -> None:
@@ -297,116 +295,13 @@ class R2StorageClient(StorageClient):
         return f"s3://{self._bucket_name}/{tier}/{org_id}/{vertical}/"
 
 
-class ADLSStorageClient(StorageClient):
-    """Azure Data Lake Storage Gen2 backend.
-
-    DEPRECATED (2026-03-18): Replaced by R2StorageClient.
-    Kept for rollback compatibility.
-
-    Uses ``azure-storage-file-datalake`` SDK.  Imported lazily to avoid
-    pulling Azure SDK in development environments.
-    """
-
-    def __init__(self) -> None:
-        if not settings.adls_account_name:
-            raise RuntimeError("ADLS_ACCOUNT_NAME must be set when FEATURE_ADLS_ENABLED=true")
-
-        # Lazy import — Azure SDK not required in dev
-        from azure.storage.filedatalake import DataLakeServiceClient
-
-        if settings.adls_connection_string:
-            self._service = DataLakeServiceClient.from_connection_string(settings.adls_connection_string)
-        else:
-            self._service = DataLakeServiceClient(
-                account_url=f"https://{settings.adls_account_name}.dfs.core.windows.net",
-                credential=settings.adls_account_key or None,
-            )
-        self._fs = self._service.get_file_system_client(settings.adls_container_name)
-        logger.info(
-            "ADLSStorageClient initialized",
-            extra={"account": settings.adls_account_name, "container": settings.adls_container_name},
-        )
-
-    async def write(self, path: str, data: bytes, *, content_type: str = "application/octet-stream") -> str:
-        self._validate_path(path)
-        file_client = self._fs.get_file_client(path)
-        await asyncio.to_thread(
-            file_client.upload_data, data, overwrite=True, content_settings={"content_type": content_type},
-        )
-        return path
-
-    async def read(self, path: str) -> bytes:
-        self._validate_path(path)
-        file_client = self._fs.get_file_client(path)
-        download = await asyncio.to_thread(file_client.download_file)
-        return await asyncio.to_thread(download.readall)
-
-    async def exists(self, path: str) -> bool:
-        self._validate_path(path)
-        file_client = self._fs.get_file_client(path)
-        try:
-            await asyncio.to_thread(file_client.get_file_properties)
-            return True
-        except Exception:  # noqa: BLE001
-            return False
-
-    async def delete(self, path: str) -> None:
-        self._validate_path(path)
-        file_client = self._fs.get_file_client(path)
-        try:
-            await asyncio.to_thread(file_client.delete_file)
-        except Exception:  # noqa: BLE001
-            pass
-
-    async def list_files(self, prefix: str) -> list[str]:
-        self._validate_path(prefix)
-        paths = await asyncio.to_thread(self._fs.get_paths, path=prefix)
-        return [p.name for p in paths if not p.is_directory]
-
-    async def generate_read_url(self, path: str, *, expires_in: int = 3600) -> str:
-        self._validate_path(path)
-        from datetime import datetime, timedelta, timezone
-
-        from azure.storage.filedatalake import generate_file_sas
-        from azure.storage.filedatalake._models import FileSasPermissions
-
-        sas = generate_file_sas(
-            account_name=settings.adls_account_name,
-            file_system_name=settings.adls_container_name,
-            file_path=path,
-            credential=settings.adls_account_key,
-            permission=FileSasPermissions(read=True),
-            expiry=datetime.now(tz=timezone.utc) + timedelta(seconds=expires_in),
-        )
-        return f"https://{settings.adls_account_name}.dfs.core.windows.net/{settings.adls_container_name}/{path}?{sas}"
-
-    async def generate_upload_url(self, path: str, *, expires_in: int = 3600) -> str:
-        self._validate_path(path)
-        from datetime import datetime, timedelta, timezone
-
-        from azure.storage.filedatalake import generate_file_sas
-        from azure.storage.filedatalake._models import FileSasPermissions
-
-        sas = generate_file_sas(
-            account_name=settings.adls_account_name,
-            file_system_name=settings.adls_container_name,
-            file_path=path,
-            credential=settings.adls_account_key,
-            permission=FileSasPermissions(write=True, create=True),
-            expiry=datetime.now(tz=timezone.utc) + timedelta(seconds=expires_in),
-        )
-        return f"https://{settings.adls_account_name}.dfs.core.windows.net/{settings.adls_container_name}/{path}?{sas}"
-
-
 def create_storage_client() -> StorageClient:
     """Factory — returns the correct backend based on feature flags.
 
-    Priority: R2 > ADLS > LocalStorage.
+    Priority: R2 > LocalStorage.
     """
     if settings.feature_r2_enabled:
         return R2StorageClient()
-    if settings.feature_adls_enabled:
-        return ADLSStorageClient()
     return LocalStorageClient()
 
 
