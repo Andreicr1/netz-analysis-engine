@@ -6,7 +6,7 @@
 <script lang="ts">
 	import { page } from "$app/stores";
 	import { setContext, getContext, onMount, type Snippet } from "svelte";
-	import { AppShell, Sidebar, ThemeToggle } from "@netz/ui";
+	import { ThemeToggle } from "@netz/ui";
 	import { createRiskStore, type RiskStore } from "$lib/stores/risk-store.svelte";
 	import { formatLastUpdated } from "$lib/stores/stale";
 	import { formatDateTime } from "@netz/ui";
@@ -74,8 +74,8 @@
 	];
 </script>
 
-<AppShell sidebarCollapsed={sidebarCollapsed}>
-	{#snippet sidebar()}
+<div class="netz-shell" style:--sidebar-w={sidebarCollapsed ? "56px" : "240px"}>
+	<aside class="netz-shell-sidebar">
 		<div class="netz-workstation-sidebar">
 			{#if !sidebarCollapsed}
 				<div class="netz-ws-header">
@@ -208,9 +208,9 @@
 				</button>
 			</div>
 		</div>
-	{/snippet}
+	</aside>
 
-	{#snippet main()}
+	<main class="netz-shell-main">
 		{#if bannerVisible}
 			<div
 				class="flex items-center gap-2 px-4 py-2 text-sm font-medium"
@@ -238,10 +238,35 @@
 		<div class="h-full w-full overflow-y-auto overflow-x-hidden p-6 md:p-10 box-border relative">
 			{@render children()}
 		</div>
-	{/snippet}
-</AppShell>
+	</main>
+</div>
 
 <style>
+	/* ── Shell grid (replaces AppShell for direct $state reactivity) ── */
+	.netz-shell {
+		display: grid;
+		grid-template-columns: var(--sidebar-w) 1fr;
+		height: 100vh;
+		width: 100vw;
+		overflow: hidden;
+		transition: grid-template-columns 200ms ease;
+	}
+
+	.netz-shell-sidebar {
+		overflow-y: auto;
+		overflow-x: hidden;
+		border-right: 1px solid var(--netz-border-subtle);
+		transition: width 200ms ease;
+	}
+
+	.netz-shell-main {
+		overflow-y: auto;
+		overflow-x: hidden;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+	}
+
 	/* ── Workstation OS Sidebar ── */
 	.netz-workstation-sidebar {
 		display: flex;
