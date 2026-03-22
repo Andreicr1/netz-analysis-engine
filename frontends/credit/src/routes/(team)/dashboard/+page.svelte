@@ -248,7 +248,7 @@
           <p class="text-xs text-(--netz-text-muted)">Searching...</p>
         {/if}
         {#if fredResults.length > 0}
-          <div class="max-h-48 space-y-1 overflow-y-auto" role="listbox" aria-label="FRED search results" onkeydown={handleResultsKeydown}>
+          <div class="max-h-48 space-y-1 overflow-y-auto" role="listbox" aria-label="FRED search results" onkeydown={handleResultsKeydown} tabindex="0">
             {#each fredResults as series}
               <button
                 role="option"

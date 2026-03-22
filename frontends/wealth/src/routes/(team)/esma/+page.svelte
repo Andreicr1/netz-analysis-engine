@@ -206,8 +206,9 @@
 			<!-- Filter Sidebar -->
 			<aside class="w-64 shrink-0 space-y-4">
 				<div>
-					<label class="block text-xs font-medium text-(--netz-text-secondary) mb-1">Search</label>
+					<label class="block text-xs font-medium text-(--netz-text-secondary) mb-1" for="esma-search">Search</label>
 					<Input
+						id="esma-search"
 						type="text"
 						placeholder={tab === "managers" ? "Company name..." : "Fund name or ISIN..."}
 						bind:value={searchValue}
@@ -217,8 +218,9 @@
 
 				{#if tab === "managers"}
 					<div>
-						<label class="block text-xs font-medium text-(--netz-text-secondary) mb-1">Country</label>
+						<label class="block text-xs font-medium text-(--netz-text-secondary) mb-1" for="esma-country">Country</label>
 						<Input
+							id="esma-country"
 							type="text"
 							placeholder="e.g. DE, FR, IE..."
 							bind:value={countryFilter}
@@ -227,8 +229,9 @@
 					</div>
 				{:else}
 					<div>
-						<label class="block text-xs font-medium text-(--netz-text-secondary) mb-1">Domicile</label>
+						<label class="block text-xs font-medium text-(--netz-text-secondary) mb-1" for="esma-domicile">Domicile</label>
 						<Input
+							id="esma-domicile"
 							type="text"
 							placeholder="e.g. Luxembourg, Ireland..."
 							bind:value={domicileFilter}
@@ -236,8 +239,9 @@
 						/>
 					</div>
 					<div>
-						<label class="block text-xs font-medium text-(--netz-text-secondary) mb-1">Fund Type</label>
+						<label class="block text-xs font-medium text-(--netz-text-secondary) mb-1" for="esma-fund-type">Fund Type</label>
 						<Input
+							id="esma-fund-type"
 							type="text"
 							placeholder="e.g. UCITS, AIF..."
 							bind:value={fundTypeFilter}

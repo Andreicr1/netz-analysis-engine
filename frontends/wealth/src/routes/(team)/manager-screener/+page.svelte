@@ -170,10 +170,18 @@
   let screener = $derived((data.screener ?? { managers: [], total_count: 0, page: 1, page_size: 25, has_next: false }) as ScreenerPage);
 
   // Filter state
-  let textSearch = $state(data.currentParams?.text_search ?? "");
-  let aumMin = $state(data.currentParams?.aum_min ?? "");
-  let aumMax = $state(data.currentParams?.aum_max ?? "");
-  let complianceClean = $state(data.currentParams?.compliance_clean === "true");
+  let textSearch = $state("");
+  let aumMin = $state("");
+  let aumMax = $state("");
+  let complianceClean = $state(false);
+
+  $effect(() => {
+    const p = data.currentParams ?? {};
+    textSearch = p.text_search ?? "";
+    aumMin = p.aum_min ?? "";
+    aumMax = p.aum_max ?? "";
+    complianceClean = p.compliance_clean === "true";
+  });
 
   // Detail drawer
   let selectedCrd = $state<string | null>(null);

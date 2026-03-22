@@ -28,20 +28,20 @@ function sanitizeCSSValue(key: string, value: string): string | null {
 
 /** Netz light default branding — matches :root tokens in tokens.css. */
 export const defaultBranding: BrandingConfig = {
-	primary_color: "#1B365D",
-	secondary_color: "#3A7BD5",
-	accent_color: "#8B9DAF",
-	light_color: "#D4E4F7",
-	highlight_color: "#FF975A",
-	surface_color: "#FFFFFF",
-	surface_alt_color: "#F8FAFC",
-	surface_elevated_color: "#FFFFFF",
-	surface_inset_color: "#F1F5F9",
-	border_color: "#E2E8F0",
-	text_primary: "#0F172A",
-	text_secondary: "#475569",
-	text_muted: "#94A3B8",
-	font_sans: "'Inter Variable', Inter, system-ui, sans-serif",
+	primary_color: "#18324d",
+	secondary_color: "#3e628d",
+	accent_color: "#8395a8",
+	light_color: "#e6edf6",
+	highlight_color: "#c58757",
+	surface_color: "#f4f7fb",
+	surface_alt_color: "#edf2f7",
+	surface_elevated_color: "#ffffff",
+	surface_inset_color: "#e7edf4",
+	border_color: "#c5d0de",
+	text_primary: "#122033",
+	text_secondary: "#48586b",
+	text_muted: "#6f7f93",
+	font_sans: "'Inter Variable', system-ui, sans-serif",
 	font_mono: "'JetBrains Mono', monospace",
 	logo_light_url: null,
 	logo_dark_url: null,
@@ -52,20 +52,20 @@ export const defaultBranding: BrandingConfig = {
 
 /** Netz dark default branding — matches [data-theme="dark"] tokens in tokens.css. */
 export const defaultDarkBranding: BrandingConfig = {
-	primary_color: "#4A90D9",
-	secondary_color: "#60A5FA",
-	accent_color: "#94A3B8",
-	light_color: "#1E3A5F",
-	highlight_color: "#FF975A",
-	surface_color: "#0F1117",
-	surface_alt_color: "#161922",
-	surface_elevated_color: "#1C1F2B",
-	surface_inset_color: "#090C10",
-	border_color: "#2A2F3D",
-	text_primary: "#F1F5F9",
-	text_secondary: "#94A3B8",
-	text_muted: "#64748B",
-	font_sans: "'Inter Variable', Inter, system-ui, sans-serif",
+	primary_color: "#84a8d0",
+	secondary_color: "#7ea4d8",
+	accent_color: "#96a7bc",
+	light_color: "#22324a",
+	highlight_color: "#d49a68",
+	surface_color: "#0c1220",
+	surface_alt_color: "#152638",
+	surface_elevated_color: "#1a2d44",
+	surface_inset_color: "#0b121c",
+	border_color: "#345270",
+	text_primary: "#f4f7fb",
+	text_secondary: "#c0cad7",
+	text_muted: "#8d9caf",
+	font_sans: "'Inter Variable', system-ui, sans-serif",
 	font_mono: "'JetBrains Mono', monospace",
 	logo_light_url: null,
 	logo_dark_url: null,
@@ -209,8 +209,18 @@ export function injectBranding(element: HTMLElement, config: BrandingConfig): vo
 		const value = config[key as keyof BrandingConfig];
 		if (value != null) {
 			const safe = sanitizeCSSValue(key, String(value));
-			if (safe) {
+			
+			// To support the native CSS dark/light mode toggle via tokens.css cascade,
+			// we MUST NOT inject values that exactly match the default system tokens.
+			// If we inject them as inline styles, the CSS cascade (and toggle) breaks.
+			const matchesLight = safe === String(defaultBranding[key as keyof BrandingConfig]);
+			const matchesDark = safe === String(defaultDarkBranding[key as keyof BrandingConfig]);
+			
+			if (safe && !matchesLight && !matchesDark) {
 				element.style.setProperty(varName, safe);
+			} else {
+				// Clear any previously injected default so tokens.css takes over natively
+				element.style.removeProperty(varName);
 			}
 		}
 	}

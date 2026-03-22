@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { cn } from "../utils/cn.js";
+	import { DEV } from "esm-env";
 
 	export type StatusSeverity = "neutral" | "info" | "success" | "warning" | "danger";
 
@@ -90,7 +91,7 @@
 			return "info";
 		}
 
-		if (import.meta.env.DEV && !NEUTRAL_STATUSES.has(normalizedToken)) {
+		if (DEV && !NEUTRAL_STATUSES.has(normalizedToken)) {
 			console.warn(`StatusBadge: unrecognized status "${token}"`);
 		}
 
@@ -113,7 +114,7 @@
 
 	/** In dev mode, flag unrecognized tokens (those that triggered the neutral fallback via inferSeverity) with a dashed border. */
 	let isDevUnknown = $derived.by(() => {
-		if (!import.meta.env.DEV) return false;
+		if (!DEV) return false;
 		// Only flag when using the fallback (no custom resolver) and severity resolved to neutral
 		if (resolve) return false;
 		const normalizedToken = status.trim().toLowerCase();
