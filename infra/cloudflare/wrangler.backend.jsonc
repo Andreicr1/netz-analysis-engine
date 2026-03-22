@@ -2,13 +2,15 @@
   // Netz Backend — always-on API server
   // Deploy: npx wrangler containers deploy --config wrangler.backend.jsonc
   "name": "netz-backend",
-  "containers": {
-    "image": "./Dockerfile",
-    "port": 8000,
-    "instances": { "min": 1, "max": 3 },
-    "memory": "2GB",
-    "cpu": 2
-  },
+  "containers": [
+    {
+      "image": "../../Dockerfile",
+      "port": 8000,
+      "instances": { "min": 1, "max": 3 },
+      "memory": "2GB",
+      "cpu": 2
+    }
+  ],
   "r2_buckets": [
     { "binding": "NETZ_DATA_LAKE", "bucket_name": "netz-data-lake" }
   ],

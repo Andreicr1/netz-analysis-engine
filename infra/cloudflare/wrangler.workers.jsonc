@@ -3,14 +3,16 @@
   // Wakes on Cron Worker POST, sleeps after 30min idle
   // Deploy: npx wrangler containers deploy --config wrangler.workers.jsonc
   "name": "netz-workers",
-  "containers": {
-    "image": "./Dockerfile",
-    "port": 8000,
-    "instances": { "min": 0, "max": 1 },
-    "sleep_after": "30m",
-    "memory": "2GB",
-    "cpu": 2
-  },
+  "containers": [
+    {
+      "image": "../../Dockerfile",
+      "port": 8000,
+      "instances": { "min": 0, "max": 1 },
+      "sleep_after": "30m",
+      "memory": "2GB",
+      "cpu": 2
+    }
+  ],
   "r2_buckets": [
     { "binding": "NETZ_DATA_LAKE", "bucket_name": "netz-data-lake" }
   ],
