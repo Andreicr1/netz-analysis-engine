@@ -290,7 +290,6 @@ source_modules = [
     "quant_engine.talib_momentum_service",
     "quant_engine.backtest_service",
     "quant_engine.drift_service",
-    "quant_engine.lipper_service",
     "quant_engine.optimizer_service",
     "quant_engine.peer_comparison_service",
     "quant_engine.rebalance_service",
