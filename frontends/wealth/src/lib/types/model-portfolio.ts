@@ -10,24 +10,30 @@ export interface ModelPortfolio {
 	backtest_start_date: string | null;
 	inception_nav: number;
 	status: string;
-	fund_selection_schema: FundSelectionSchema | null;
+	fund_selection_schema: SelectionSchema | null;
 	created_at: string;
 	created_by: string | null;
 }
 
-export interface FundSelectionSchema {
+export interface SelectionSchema {
 	profile: string;
 	total_weight: number;
-	funds: FundWeight[];
+	funds: InstrumentWeight[];
 }
 
-export interface FundWeight {
+export interface InstrumentWeight {
 	instrument_id: string;
 	fund_name: string;
+	instrument_type: "fund" | "bond" | "equity" | null;
 	block_id: string;
 	weight: number;
 	score: number;
 }
+
+/** @deprecated Use SelectionSchema */
+export type FundSelectionSchema = SelectionSchema;
+/** @deprecated Use InstrumentWeight */
+export type FundWeight = InstrumentWeight;
 
 export interface BacktestFold {
 	fold: number;
@@ -63,7 +69,7 @@ export interface TrackRecord {
 	portfolio_id: string;
 	profile: string;
 	status: string;
-	fund_selection: FundSelectionSchema | null;
+	fund_selection: SelectionSchema | null;
 	backtest: BacktestResult | null;
 	live_nav: unknown;
 	stress: StressResult | null;

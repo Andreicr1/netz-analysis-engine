@@ -12,7 +12,8 @@
 	} from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
-	import type { ModelPortfolio, TrackRecord, FundWeight, BacktestFold, StressScenario } from "$lib/types/model-portfolio";
+	import type { ModelPortfolio, TrackRecord, InstrumentWeight, BacktestFold, StressScenario } from "$lib/types/model-portfolio";
+	import { instrumentTypeLabel, instrumentTypeColor } from "$lib/types/universe";
 	import { scenarioLabel, profileColor } from "$lib/types/model-portfolio";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
@@ -25,7 +26,7 @@
 
 	let backtest = $derived(trackRecord?.backtest ?? null);
 	let stress = $derived(trackRecord?.stress ?? null);
-	let funds = $derived(portfolio.fund_selection_schema?.funds ?? [] as FundWeight[]);
+	let funds = $derived(portfolio.fund_selection_schema?.funds ?? [] as InstrumentWeight[]);
 
 	// ── Actions ───────────────────────────────────────────────────────────
 
@@ -228,7 +229,8 @@
 				<table class="fund-table">
 					<thead>
 						<tr>
-							<th class="th-fund">Fund</th>
+							<th class="th-fund">Instrument</th>
+							<th class="th-itype">Type</th>
 							<th class="th-block">Block</th>
 							<th class="th-weight">Weight</th>
 							<th class="th-score">Score</th>
@@ -239,6 +241,11 @@
 						{#each funds as fund (fund.instrument_id)}
 							<tr class="fund-row">
 								<td class="td-fund">{fund.fund_name}</td>
+								<td class="td-itype">
+									<span class="itype-badge" style:color={instrumentTypeColor(fund.instrument_type)} style:background="color-mix(in srgb, {instrumentTypeColor(fund.instrument_type)} 12%, transparent)">
+										{instrumentTypeLabel(fund.instrument_type)}
+									</span>
+								</td>
 								<td class="td-block">{fund.block_id}</td>
 								<td class="td-weight">{formatPercent(fund.weight)}</td>
 								<td class="td-score">{fund.score.toFixed(1)}</td>
@@ -487,12 +494,23 @@
 	}
 
 	.th-fund { min-width: 200px; }
+	.th-itype { min-width: 90px; }
 	.th-block { min-width: 120px; }
 	.th-weight { width: 80px; text-align: right; }
 	.th-score { width: 60px; text-align: right; }
 	.th-bar { width: 120px; }
 
 	.td-fund { font-weight: 500; color: var(--netz-text-primary); }
+
+	.itype-badge {
+		display: inline-block;
+		padding: 1px 8px;
+		border-radius: var(--netz-radius-pill, 999px);
+		font-size: var(--netz-text-label, 0.75rem);
+		font-weight: 500;
+		white-space: nowrap;
+	}
+
 	.td-block { color: var(--netz-text-secondary); }
 	.td-weight { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--netz-text-primary); }
 	.td-score { text-align: right; font-variant-numeric: tabular-nums; color: var(--netz-text-secondary); }

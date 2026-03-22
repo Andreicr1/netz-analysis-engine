@@ -1,14 +1,35 @@
 /** Universe domain types — maps 1:1 to backend schemas. */
 
+export type InstrumentType = "fund" | "bond" | "equity";
+
 export interface UniverseAsset {
 	fund_id: string;
 	fund_name: string;
+	instrument_type: InstrumentType | null;
 	block_id: string | null;
 	geography: string | null;
 	asset_class: string | null;
 	approval_status: string | null;
 	approval_decision: "approved" | "watchlist";
 	approved_at: string | null;
+}
+
+export function instrumentTypeLabel(type: InstrumentType | string | null | undefined): string {
+	switch (type) {
+		case "fund":   return "Fund";
+		case "bond":   return "Fixed Income";
+		case "equity": return "Equity";
+		default:       return type ?? "—";
+	}
+}
+
+export function instrumentTypeColor(type: InstrumentType | string | null | undefined): string {
+	switch (type) {
+		case "fund":   return "var(--netz-brand-primary)";
+		case "bond":   return "var(--netz-brand-highlight)";
+		case "equity": return "var(--netz-success)";
+		default:       return "var(--netz-text-muted)";
+	}
 }
 
 export interface UniverseApproval {
@@ -24,7 +45,8 @@ export interface UniverseApproval {
 	created_at: string;
 }
 
-export interface FundRiskMetrics {
+/** Risk metrics — shared across all instrument types (fund, bond, equity). */
+export interface InstrumentRiskMetrics {
 	instrument_id: string;
 	calc_date: string;
 	cvar_95_1m: number | null;

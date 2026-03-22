@@ -11,7 +11,8 @@
 	} from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
-	import type { UniverseAsset, FundRiskMetrics } from "$lib/types/universe";
+	import type { UniverseAsset, InstrumentRiskMetrics } from "$lib/types/universe";
+	import { instrumentTypeLabel, instrumentTypeColor } from "$lib/types/universe";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -23,15 +24,22 @@
 
 	let search = $state("");
 	let blockFilter = $state<string | null>(null);
+	let typeFilter = $state<string | null>(null);
 
 	let distinctBlocks = $derived(
 		[...new Set(assets.map((a) => a.block_id).filter(Boolean))] as string[]
+	);
+	let distinctTypes = $derived(
+		[...new Set(assets.map((a) => a.instrument_type).filter(Boolean))] as string[]
 	);
 
 	let filtered = $derived.by(() => {
 		let rows = assets;
 		if (blockFilter) {
 			rows = rows.filter((a) => a.block_id === blockFilter);
+		}
+		if (typeFilter) {
+			rows = rows.filter((a) => a.instrument_type === typeFilter);
 		}
 		if (search) {
 			const q = search.toLowerCase();
@@ -49,7 +57,7 @@
 
 	let panelOpen = $state(false);
 	let selectedAsset = $state<UniverseAsset | null>(null);
-	let riskMetrics = $state<FundRiskMetrics | null>(null);
+	let riskMetrics = $state<InstrumentRiskMetrics | null>(null);
 	let loadingRisk = $state(false);
 
 	async function openDetail(asset: UniverseAsset) {
@@ -59,7 +67,7 @@
 		loadingRisk = true;
 		try {
 			const api = createClientApiClient(getToken);
-			riskMetrics = await api.get<FundRiskMetrics>(`/funds/${asset.fund_id}/risk`);
+			riskMetrics = await api.get<InstrumentRiskMetrics>(`/funds/${asset.fund_id}/risk`);
 		} catch {
 			riskMetrics = null;
 		} finally {
@@ -123,6 +131,12 @@
 			placeholder="Search by name, block, geography…"
 			bind:value={search}
 		/>
+		<select class="universe-select" bind:value={typeFilter}>
+			<option value={null}>All types</option>
+			{#each distinctTypes as t (t)}
+				<option value={t}>{instrumentTypeLabel(t)}</option>
+			{/each}
+		</select>
 		<select class="universe-select" bind:value={blockFilter}>
 			<option value={null}>All blocks</option>
 			{#each distinctBlocks as b (b)}
@@ -148,7 +162,8 @@
 			<table class="universe-table">
 				<thead>
 					<tr>
-						<th class="th-name">Fund</th>
+						<th class="th-name">Instrument</th>
+						<th class="th-type">Type</th>
 						<th class="th-block">Block</th>
 						<th class="th-geo">Geography</th>
 						<th class="th-class">Asset Class</th>
@@ -164,6 +179,11 @@
 							onclick={() => openDetail(asset)}
 						>
 							<td class="td-name">{asset.fund_name}</td>
+							<td class="td-type">
+								<span class="type-badge" style:color={instrumentTypeColor(asset.instrument_type)} style:background="color-mix(in srgb, {instrumentTypeColor(asset.instrument_type)} 12%, transparent)">
+									{instrumentTypeLabel(asset.instrument_type)}
+								</span>
+							</td>
 							<td class="td-block">{asset.block_id ?? "—"}</td>
 							<td class="td-geo">{asset.geography ?? "—"}</td>
 							<td class="td-class">{asset.asset_class ?? "—"}</td>
@@ -477,6 +497,7 @@
 	}
 
 	.th-name { min-width: 200px; }
+	.th-type { min-width: 90px; }
 	.th-block { min-width: 100px; }
 	.th-geo { min-width: 100px; }
 	.th-class { min-width: 100px; }
@@ -486,6 +507,15 @@
 	.td-name {
 		font-weight: 500;
 		color: var(--netz-text-primary);
+	}
+
+	.type-badge {
+		display: inline-block;
+		padding: 1px 8px;
+		border-radius: var(--netz-radius-pill, 999px);
+		font-size: var(--netz-text-label, 0.75rem);
+		font-weight: 500;
+		white-space: nowrap;
 	}
 
 	.td-block, .td-geo, .td-class {
