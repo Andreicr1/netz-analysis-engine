@@ -11,6 +11,11 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/workers/run-esma-ingestion",
+    "name": "trigger_run_esma_ingestion"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/workers/run-fact-sheet-gen",
     "name": "trigger_run_fact_sheet_gen"
   },
