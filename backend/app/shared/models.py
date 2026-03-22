@@ -50,7 +50,7 @@ class MacroData(Base, AuditMetaMixin):
 
     series_id: Mapped[str] = mapped_column(String(30), primary_key=True)
     obs_date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
-    value: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    value: Mapped[Decimal] = mapped_column(Numeric(24, 6), nullable=False)
     source: Mapped[str | None] = mapped_column(String(30), server_default="fred")
     is_derived: Mapped[bool] = mapped_column(Boolean, server_default="false")
 
@@ -336,7 +336,7 @@ class TreasuryData(Base):
 
     obs_date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
     series_id: Mapped[str] = mapped_column(String(80), primary_key=True)
-    value: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    value: Mapped[Decimal | None] = mapped_column(Numeric(24, 6))
     source: Mapped[str] = mapped_column(String(40), server_default="treasury_api")
     metadata_json: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[dt.datetime] = mapped_column(
@@ -360,7 +360,7 @@ class OfrHedgeFundData(Base):
 
     obs_date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
     series_id: Mapped[str] = mapped_column(String(80), primary_key=True)
-    value: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    value: Mapped[Decimal | None] = mapped_column(Numeric(24, 6))
     source: Mapped[str] = mapped_column(String(40), server_default="ofr_api")
     metadata_json: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[dt.datetime] = mapped_column(
@@ -444,6 +444,7 @@ class EsmaIsinTickerMap(Base):
     __tablename__ = "esma_isin_ticker_map"
 
     isin: Mapped[str] = mapped_column(Text, primary_key=True)
+    fund_lei: Mapped[str | None] = mapped_column(Text, index=True)
     yahoo_ticker: Mapped[str | None] = mapped_column(Text)
     exchange: Mapped[str | None] = mapped_column(Text)
     resolved_via: Mapped[str] = mapped_column(Text, nullable=False)
@@ -507,7 +508,7 @@ class BisStatistics(Base):
     country_code: Mapped[str] = mapped_column(Text, primary_key=True)
     indicator: Mapped[str] = mapped_column(Text, primary_key=True)
     period: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
-    value: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    value: Mapped[Decimal] = mapped_column(Numeric(24, 6), nullable=False)
     dataset: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
@@ -532,7 +533,7 @@ class ImfWeoForecast(Base):
     indicator: Mapped[str] = mapped_column(Text, primary_key=True)
     year: Mapped[int] = mapped_column(Integer, primary_key=True)
     period: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
-    value: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    value: Mapped[Decimal | None] = mapped_column(Numeric(24, 6))
     edition: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
