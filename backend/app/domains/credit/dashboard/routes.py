@@ -9,6 +9,7 @@ Endpoints:
   GET /dashboard/compliance-alerts    -> upcoming regulatory deadlines
   GET /dashboard/fred-search          -> FRED series search proxy (Phase 3)
   GET /dashboard/macro-fred-multi     -> multi-series FRED observations (Phase 3)
+  GET /dashboard/credit-market-data   -> credit market time-series from macro_data hypertable
 """
 from __future__ import annotations
 
@@ -33,6 +34,7 @@ from app.domains.credit.modules.ai.models import (
 )
 from app.domains.credit.modules.deals.models import PipelineDeal
 from app.domains.credit.modules.portfolio.models import Loan
+from app.shared.models import MacroData
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -629,3 +631,157 @@ async def macro_fred_multi(
         end_date=end_date.isoformat(),
     )
     return {"series": results}
+
+
+# ---------------------------------------------------------------------------
+#  Credit Market Data — time-series from macro_data hypertable
+# ---------------------------------------------------------------------------
+
+# Series IDs grouped by section for the credit market data page.
+# All sourced from the macro_data global hypertable (ingested by macro_ingestion worker).
+
+_CREDIT_MARKET_SERIES: dict[str, list[str]] = {
+    "credit_spreads": ["BAA10Y", "BAMLH0A0HYM2"],
+    "yield_curve": ["DFF", "SOFR", "DGS2", "DGS10"],
+    "case_shiller_national": ["CSUSHPINSA"],
+    "case_shiller_metro": [
+        "NYXRSA", "LXXRSA", "MFHXRSA", "CHXRSA", "DAXRSA",
+        "HIOXRSA", "WDXRSA", "BOXRSA", "ATXRSA", "SEXRSA",
+        "PHXRSA", "DNXRSA", "SFXRSA", "TPXRSA", "CRXRSA",
+        "MNXRSA", "POXRSA", "SDXRSA", "DEXRSA", "CLXRSA",
+    ],
+    "housing": ["MSPUS", "HOUST", "PERMIT", "EXHOSLUSM495S", "MSACSR"],
+    "mortgage": ["MORTGAGE30US", "MORTGAGE15US"],
+    "delinquency": ["DRCCLACBS", "DRSFRMACBS", "DRHMACBS"],
+    "credit_quality": ["DRALACBN", "NETCIBAL", "DRCILNFNQ"],
+    "banking": ["TOTLL", "STLFSI4"],
+}
+
+# Human-readable labels for each series.
+_SERIES_LABELS: dict[str, str] = {
+    "BAA10Y": "Baa Corporate Spread",
+    "BAMLH0A0HYM2": "ICE BofA HY OAS",
+    "DFF": "Fed Funds Rate",
+    "SOFR": "SOFR",
+    "DGS2": "2Y Treasury",
+    "DGS10": "10Y Treasury",
+    "CSUSHPINSA": "Case-Shiller National HPI",
+    "NYXRSA": "New York",
+    "LXXRSA": "Los Angeles",
+    "MFHXRSA": "Miami",
+    "CHXRSA": "Chicago",
+    "DAXRSA": "Dallas",
+    "HIOXRSA": "Houston",
+    "WDXRSA": "Washington DC",
+    "BOXRSA": "Boston",
+    "ATXRSA": "Atlanta",
+    "SEXRSA": "Seattle",
+    "PHXRSA": "Phoenix",
+    "DNXRSA": "Denver",
+    "SFXRSA": "San Francisco",
+    "TPXRSA": "Tampa",
+    "CRXRSA": "Charlotte",
+    "MNXRSA": "Minneapolis",
+    "POXRSA": "Portland",
+    "SDXRSA": "San Diego",
+    "DEXRSA": "Detroit",
+    "CLXRSA": "Cleveland",
+    "MSPUS": "Median Sale Price",
+    "HOUST": "Housing Starts",
+    "PERMIT": "Building Permits",
+    "EXHOSLUSM495S": "Existing Home Sales",
+    "MSACSR": "Months Supply",
+    "MORTGAGE30US": "30Y Fixed Mortgage",
+    "MORTGAGE15US": "15Y Fixed Mortgage",
+    "DRCCLACBS": "Credit Card Delinquency",
+    "DRSFRMACBS": "Mortgage Delinquency",
+    "DRHMACBS": "Home Equity Delinquency",
+    "DRALACBN": "All Loans Delinquency",
+    "NETCIBAL": "Net Charge-Off Rate",
+    "DRCILNFNQ": "C&I Loan Delinquency",
+    "TOTLL": "Total Loans & Leases",
+    "STLFSI4": "Financial Stress Index",
+}
+
+# Flat set of all series IDs for the query.
+_ALL_CREDIT_MARKET_IDS: list[str] = [
+    sid for group in _CREDIT_MARKET_SERIES.values() for sid in group
+]
+
+
+@router.get("/credit-market-data")
+async def credit_market_data(
+    fund_id: uuid.UUID,  # noqa: ARG001 -- required for fund_router path prefix
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),  # noqa: ARG001
+    months: int = Query(default=24, ge=3, le=60),
+) -> dict[str, Any]:
+    """Credit market time-series from macro_data hypertable.
+
+    Returns series grouped by section for the market data page.
+    macro_data is a GLOBAL table (no RLS, no organization_id).
+    """
+    cutoff = dt.date.today() - dt.timedelta(days=months * 31)
+
+    result = await db.execute(
+        select(
+            MacroData.series_id,
+            MacroData.obs_date,
+            MacroData.value,
+        )
+        .where(
+            MacroData.series_id.in_(_ALL_CREDIT_MARKET_IDS),
+            MacroData.obs_date >= cutoff,
+        )
+        .order_by(MacroData.series_id, MacroData.obs_date)
+    )
+    rows = result.all()
+
+    # Group by series_id
+    by_series: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for series_id, obs_date, value in rows:
+        by_series[series_id].append({
+            "date": obs_date.isoformat(),
+            "value": float(value),
+        })
+
+    # Build grouped response
+    sections: dict[str, Any] = {}
+    for section_key, series_ids in _CREDIT_MARKET_SERIES.items():
+        section_data: dict[str, Any] = {}
+        for sid in series_ids:
+            points = by_series.get(sid, [])
+            section_data[sid] = {
+                "label": _SERIES_LABELS.get(sid, sid),
+                "points": points,
+                "latest": points[-1]["value"] if points else None,
+            }
+        sections[section_key] = section_data
+
+    # Compute yield curve snapshot (latest values for DFF, SOFR, DGS2, DGS10)
+    yield_curve_snapshot: list[dict[str, Any]] = []
+    for sid in ["DFF", "SOFR", "DGS2", "DGS10"]:
+        points = by_series.get(sid, [])
+        if points:
+            yield_curve_snapshot.append({
+                "seriesId": sid,
+                "label": _SERIES_LABELS.get(sid, sid),
+                "value": points[-1]["value"],
+                "date": points[-1]["date"],
+            })
+
+    # 2s10s inversion indicator
+    dgs2_latest = by_series.get("DGS2", [])
+    dgs10_latest = by_series.get("DGS10", [])
+    spread_2s10s: float | None = None
+    if dgs2_latest and dgs10_latest:
+        spread_2s10s = round(dgs10_latest[-1]["value"] - dgs2_latest[-1]["value"], 4)
+
+    return {
+        "sections": sections,
+        "yieldCurveSnapshot": yield_curve_snapshot,
+        "spread2s10s": spread_2s10s,
+        "inverted": spread_2s10s is not None and spread_2s10s < 0,
+        "asOfDate": dt.date.today().isoformat(),
+        "source": "FRED (via macro_data hypertable)",
+    }

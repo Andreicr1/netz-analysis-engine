@@ -133,3 +133,71 @@ class MacroReviewReject(BaseModel):
     """PATCH body for rejecting a macro review."""
 
     decision_rationale: str = Field(max_length=2000)
+
+
+# ---------------------------------------------------------------------------
+#  Phase 3A: Raw Hypertable Data Panels
+# ---------------------------------------------------------------------------
+
+
+class BisTimePoint(BaseModel):
+    """Single BIS data observation."""
+
+    period: date
+    value: float
+    source: str = "BIS SDMX"
+
+
+class BisDataResponse(BaseModel):
+    """GET /macro/bis response — raw BIS time series."""
+
+    country: str
+    indicator: str
+    data: list[BisTimePoint]
+
+
+class ImfYearPoint(BaseModel):
+    """Single IMF WEO annual observation."""
+
+    year: int
+    value: float
+    source: str = "IMF WEO"
+    provenance: str = "model_inference"
+
+
+class ImfDataResponse(BaseModel):
+    """GET /macro/imf response — raw IMF WEO forecasts."""
+
+    country: str
+    indicator: str
+    data: list[ImfYearPoint]
+
+
+class TreasuryTimePoint(BaseModel):
+    """Single Treasury data observation."""
+
+    obs_date: date
+    value: float
+    source: str = "US Treasury"
+
+
+class TreasuryDataResponse(BaseModel):
+    """GET /macro/treasury response — raw Treasury time series."""
+
+    series: str
+    data: list[TreasuryTimePoint]
+
+
+class OfrTimePoint(BaseModel):
+    """Single OFR data observation."""
+
+    obs_date: date
+    value: float
+    source: str = "OFR"
+
+
+class OfrDataResponse(BaseModel):
+    """GET /macro/ofr response — raw OFR hedge fund data."""
+
+    metric: str
+    data: list[OfrTimePoint]

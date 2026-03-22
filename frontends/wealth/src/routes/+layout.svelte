@@ -21,6 +21,8 @@
 		{ label: "Analytics", href: "/analytics" },
 		{ label: "Documents", href: "/documents" },
 		{ label: "Macro", href: "/macro" },
+		{ label: "Content", href: "/content" },
+		{ label: "ESMA", href: "/esma" },
 	];
 </script>
 

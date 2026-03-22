@@ -2,7 +2,7 @@
   Portfolio Profile Workbench — Section 3.Wealth.6 of the UX Remediation Plan.
 
   Multi-region allocation navigator, DataTable with multi-sort + row expansion,
-  before/after rebalance comparison, drift history export via GET /portfolios/{profile}/drift-history/export.
+  drift history export, rebalancing tab with IC governance workflow.
   computed_at from server only — never Date.now().
 -->
 <script lang="ts">
@@ -16,8 +16,8 @@
 		Button,
 		ContextPanel,
 		ActionButton,
-		ConfirmDialog,
 		DataTable,
+		PageTabs,
 		formatDate,
 		formatDateTime,
 		formatPercent,
@@ -31,8 +31,9 @@
 	} from "@netz/ui/charts/echarts-setup";
 	import type { ColumnDef } from "@tanstack/svelte-table";
 	import DriftHistoryPanel from "$lib/components/DriftHistoryPanel.svelte";
+	import RebalancingTab from "./RebalancingTab.svelte";
 	import { createClientApiClient } from "$lib/api/client";
-	import { invalidateAll, goto } from "$app/navigation";
+	import { invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
 	import type { PageData } from "./$types";
 	import type { RiskStore } from "$lib/stores/risk-store.svelte";
@@ -44,7 +45,6 @@
 	let { data }: { data: PageData } = $props();
 
 	// ── API types matching api.d.ts schemas — no invented shapes ─────────────
-	// Source of truth: packages/ui/src/types/api.d.ts (components["schemas"]["PortfolioSnapshotRead"])
 	type PortfolioSnapshotRead = {
 		snapshot_id: string;
 		profile: string;
@@ -65,7 +65,6 @@
 		computed_at?: string | null;
 	};
 
-	// Source of truth: packages/ui/src/types/api.d.ts (components["schemas"]["PortfolioSummary"])
 	type PortfolioSummary = {
 		profile: string;
 		snapshot_date?: string | null;
@@ -172,13 +171,13 @@
 			accessorKey: "fund_name",
 			header: "Fund",
 			enableSorting: true,
-			cell: (info) => String(info.getValue() ?? "—"),
+			cell: (info) => String(info.getValue() ?? "--"),
 		},
 		{
 			accessorKey: "region",
 			header: "Region",
 			enableSorting: true,
-			cell: (info) => String(info.getValue() ?? "—"),
+			cell: (info) => String(info.getValue() ?? "--"),
 		},
 		{
 			accessorKey: "current_weight",
@@ -186,7 +185,7 @@
 			enableSorting: true,
 			cell: (info) => {
 				const v = info.getValue();
-				return typeof v === "number" ? formatPercent(v, 2, "en-US") : "—";
+				return typeof v === "number" ? formatPercent(v, 2, "en-US") : "--";
 			},
 		},
 		{
@@ -195,7 +194,7 @@
 			enableSorting: true,
 			cell: (info) => {
 				const v = info.getValue();
-				return typeof v === "number" ? formatPercent(v, 2, "en-US") : "—";
+				return typeof v === "number" ? formatPercent(v, 2, "en-US") : "--";
 			},
 		},
 		{
@@ -204,7 +203,7 @@
 			enableSorting: true,
 			cell: (info) => {
 				const v = info.getValue();
-				if (typeof v !== "number") return "—";
+				if (typeof v !== "number") return "--";
 				const pct = v * 100;
 				const sign = pct >= 0 ? "+" : "";
 				return `${sign}${formatNumber(pct, 2, "en-US")}pp`;
@@ -282,102 +281,6 @@
 		};
 	});
 
-	// ── Rebalance workflow ────────────────────────────────────────────────────
-
-	let showRebalanceConfirm = $state(false);
-	let rebalancing = $state(false);
-	let rebalanceEvents = $state<Array<Record<string, unknown>>>([]);
-	let loadingEvents = $state(false);
-	let actionError = $state<string | null>(null);
-	let approvingEventId = $state<string | null>(null);
-	let executingEventId = $state<string | null>(null);
-
-	// Latest pending/approved event for before/after comparison
-	let latestEvent = $derived(rebalanceEvents[0] ?? null);
-	let pendingEvent = $derived(
-		rebalanceEvents.find((e) => e.status === "pending" || e.status === "approved") ?? null
-	);
-
-	// Before/after rebalance comparison
-	let beforeWeights = $derived<Record<string, number>>(weights);
-	let afterWeights = $derived.by((): Record<string, number> => {
-		const proposed = pendingEvent?.proposed_weights;
-		if (!proposed || typeof proposed !== "object") return {};
-		const out: Record<string, number> = {};
-		for (const [k, v] of Object.entries(proposed as Record<string, unknown>)) {
-			if (typeof v === "number") out[k] = v;
-		}
-		return out;
-	});
-
-	let hasProposedWeights = $derived(Object.keys(afterWeights).length > 0);
-
-	async function triggerRebalance() {
-		rebalancing = true;
-		showRebalanceConfirm = false;
-		actionError = null;
-		try {
-			const api = createClientApiClient(getToken);
-			await api.post(`/portfolios/${profile}/rebalance`, {});
-			await invalidateAll();
-			await loadRebalanceEvents();
-		} catch (e) {
-			actionError = e instanceof Error ? e.message : "Rebalance trigger failed";
-		} finally {
-			rebalancing = false;
-		}
-	}
-
-	async function loadRebalanceEvents() {
-		loadingEvents = true;
-		try {
-			const api = createClientApiClient(getToken);
-			const res = await api.get<Array<Record<string, unknown>>>(`/portfolios/${profile}/rebalance`);
-			rebalanceEvents = Array.isArray(res) ? res : [];
-		} catch {
-			rebalanceEvents = [];
-		} finally {
-			loadingEvents = false;
-		}
-	}
-
-	async function approveRebalance(eventId: string) {
-		approvingEventId = eventId;
-		actionError = null;
-		try {
-			const api = createClientApiClient(getToken);
-			await api.post(`/portfolios/${profile}/rebalance/${eventId}/approve`, {});
-			await loadRebalanceEvents();
-		} catch (e) {
-			if (e instanceof Error && e.message.includes("409")) {
-				actionError = "Another IC member has already approved this rebalance.";
-			} else {
-				actionError = e instanceof Error ? e.message : "Approval failed";
-			}
-		} finally {
-			approvingEventId = null;
-		}
-	}
-
-	async function executeRebalance(eventId: string) {
-		executingEventId = eventId;
-		actionError = null;
-		try {
-			const api = createClientApiClient(getToken);
-			await api.post(`/portfolios/${profile}/rebalance/${eventId}/execute`, {});
-			await loadRebalanceEvents();
-			await invalidateAll();
-		} catch (e) {
-			if (e instanceof Error && e.message.includes("409")) {
-				actionError = "Rebalance has already been executed.";
-			} else {
-				actionError = e instanceof Error ? e.message : "Execution failed";
-			}
-		} finally {
-			executingEventId = null;
-		}
-	}
-
 	// ── Drift history panel ───────────────────────────────────────────────────
 
 	let showDriftHistory = $state(false);
@@ -399,14 +302,11 @@
 			a.click();
 			URL.revokeObjectURL(a.href);
 		} catch (e) {
-			actionError = e instanceof Error ? e.message : "Export failed";
+			// silent error for export
 		} finally {
 			exportingDrift = false;
 		}
 	}
-
-	// Load rebalance events on mount
-	$effect(() => { void loadRebalanceEvents(); });
 
 	// Profile display name
 	let profileLabel = $derived(
@@ -417,6 +317,26 @@
 		const n = typeof v === "string" ? parseFloat(v) : v;
 		return formatPercent(n, 1, "en-US");
 	}
+
+	// CVaR numeric values for rebalancing tab
+	let cvarCurrentNum = $derived.by((): number | null => {
+		const raw = cvarStatus?.cvar_current ?? snapshot?.cvar_current;
+		if (typeof raw === "number") return raw;
+		if (typeof raw === "string") return parseFloat(raw);
+		return null;
+	});
+	let cvarLimitNum = $derived.by((): number | null => {
+		const raw = cvarStatus?.cvar_limit ?? snapshot?.cvar_limit;
+		if (typeof raw === "number") return raw;
+		if (typeof raw === "string") return parseFloat(raw);
+		return null;
+	});
+
+	// ── Tab config ──
+	const portfolioTabs = [
+		{ value: "overview", label: "Overview" },
+		{ value: "rebalancing", label: "Rebalancing" },
+	];
 </script>
 
 <div class="space-y-(--netz-space-section-gap) p-(--netz-space-page-gutter)">
@@ -441,27 +361,9 @@
 				<Button variant="outline" size="sm" onclick={() => showDriftHistory = true}>
 					View Drift History
 				</Button>
-				<ActionButton
-					onclick={() => showRebalanceConfirm = true}
-					loading={rebalancing}
-					loadingText="Triggering..."
-					size="sm"
-				>
-					Rebalance
-				</ActionButton>
 			</div>
 		{/snippet}
 	</PageHeader>
-
-	{#if actionError}
-		<div
-			class="rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)"
-			role="alert"
-		>
-			{actionError}
-			<button class="ml-2 underline" onclick={() => actionError = null}>dismiss</button>
-		</div>
-	{/if}
 
 	<!-- ════════════════════════════════════════════════════════════════════════
 	     KPI row — freshness from server computed_at ONLY
@@ -479,12 +381,12 @@
 		<MetricCard
 			label="Core / Satellite"
 			value="{fmtPct(snapshot?.core_weight)} / {fmtPct(snapshot?.satellite_weight)}"
-			sublabel="Regime: {cvarStatus?.regime ?? snapshot?.regime ?? '—'}"
+			sublabel="Regime: {cvarStatus?.regime ?? snapshot?.regime ?? '--'}"
 		/>
 		<MetricCard
 			label="CVaR Breach Days"
 			value={String(cvarStatus?.consecutive_breach_days ?? 0)}
-			sublabel={cvarStatus?.trigger_status ?? snapshot?.trigger_status ?? "—"}
+			sublabel={cvarStatus?.trigger_status ?? snapshot?.trigger_status ?? "--"}
 			status={
 				(cvarStatus?.consecutive_breach_days ?? 0) > 3 ? "breach" :
 				(cvarStatus?.consecutive_breach_days ?? 0) > 0 ? "warn" : undefined
@@ -492,7 +394,7 @@
 		/>
 		<MetricCard
 			label="Snapshot"
-			value={snapshot?.snapshot_date ? formatDate(snapshot.snapshot_date) : "—"}
+			value={snapshot?.snapshot_date ? formatDate(snapshot.snapshot_date) : "--"}
 			sublabel={computedAt
 				? `Calculado: ${formatDateTime(computedAt)}`
 				: "Awaiting pipeline"}
@@ -500,204 +402,112 @@
 	</div>
 
 	<!-- ════════════════════════════════════════════════════════════════════════
-	     CVaR Timeline
+	     Tabbed content: Overview | Rebalancing
 	     ════════════════════════════════════════════════════════════════════════ -->
-	<SectionCard title="CVaR Timeline" subtitle="Rolling 12M with limit and regime bands">
-		{#if cvarChartOption}
-			<ChartContainer option={cvarChartOption} height={360} ariaLabel="{profile} CVaR timeline" />
-		{:else}
-			<EmptyState
-				title="No CVaR history"
-				message="The chart will appear after the daily risk pipeline runs."
-			/>
-		{/if}
-		{#if cvarStatus && computedAt}
-			<p class="mt-2 text-right text-xs text-(--netz-text-muted)">
-				Computed at: <time datetime={computedAt}>{formatDateTime(computedAt)}</time>
-			</p>
-		{/if}
-	</SectionCard>
-
-	<!-- ════════════════════════════════════════════════════════════════════════
-	     Multi-region allocation navigator
-	     ════════════════════════════════════════════════════════════════════════ -->
-	<SectionCard title="Allocation by Region" subtitle="Multi-region allocation navigator">
-		<!-- Region filter chips -->
-		<div class="mb-4 flex flex-wrap gap-2">
-			<button
-				class="rounded-full px-3 py-1 text-sm font-medium transition-colors"
-				class:bg-(--netz-brand-primary)={selectedRegion === "all"}
-				class:text-white={selectedRegion === "all"}
-				class:bg-(--netz-surface-inset)={selectedRegion !== "all"}
-				class:text-(--netz-text-secondary)={selectedRegion !== "all"}
-				onclick={() => selectedRegion = "all"}
-			>
-				All
-			</button>
-			{#each REGIONS as region}
-				<button
-					class="rounded-full px-3 py-1 text-sm font-medium transition-colors"
-					class:bg-(--netz-brand-primary)={selectedRegion === region}
-					class:text-white={selectedRegion === region}
-					class:bg-(--netz-surface-inset)={selectedRegion !== region}
-					class:text-(--netz-text-secondary)={selectedRegion !== region}
-					onclick={() => selectedRegion = region}
-				>
-					{region.toUpperCase()}
-					{#if regionTotals[region]}
-						<span class="ml-1 text-xs opacity-70">({formatPercent(regionTotals[region], 1, "en-US")})</span>
+	<PageTabs tabs={portfolioTabs} defaultTab="overview">
+		{#snippet children(activeTab)}
+			{#if activeTab === "overview"}
+				<!-- CVaR Timeline -->
+				<SectionCard title="CVaR Timeline" subtitle="Rolling 12M with limit and regime bands">
+					{#if cvarChartOption}
+						<ChartContainer option={cvarChartOption} height={360} ariaLabel="{profile} CVaR timeline" />
+					{:else}
+						<EmptyState
+							title="No CVaR history"
+							message="The chart will appear after the daily risk pipeline runs."
+						/>
 					{/if}
-				</button>
-			{/each}
-		</div>
+					{#if cvarStatus && computedAt}
+						<p class="mt-2 text-right text-xs text-(--netz-text-muted)">
+							Computed at: <time datetime={computedAt}>{formatDateTime(computedAt)}</time>
+						</p>
+					{/if}
+				</SectionCard>
 
-		<!-- Allocation DataTable — multi-sort + row expansion -->
-		{#if tableRows.length > 0}
-			<DataTable
-				data={tableRows}
-				columns={allocationColumns}
-				pageSize={20}
-				filterColumn="fund_name"
-				filterPlaceholder="Search fund..."
-			>
-				{#snippet expandedRow(row)}
-					<div class="px-4 py-3 text-sm text-(--netz-text-secondary) space-y-1">
-						<p><span class="font-medium">Fund:</span> {String(row.fund_name ?? "—")}</p>
-						<p><span class="font-medium">Region:</span> {String(row.region ?? "—")}</p>
-						<p><span class="font-medium">Current Weight:</span> {typeof row.current_weight === "number" ? formatPercent(row.current_weight, 4, "en-US") : "—"}</p>
-						{#if row.target_weight !== null}
-							<p><span class="font-medium">Target Weight:</span> {typeof row.target_weight === "number" ? formatPercent(row.target_weight, 4, "en-US") : "—"}</p>
-						{/if}
-						{#if row.delta_weight !== null}
-							<p>
-								<span class="font-medium">Deviation:</span>
-								{#if typeof row.delta_weight === "number"}
-									<span class={row.delta_weight > 0 ? "text-(--netz-success)" : "text-(--netz-danger)"}>
-										{row.delta_weight > 0 ? "+" : ""}{formatNumber(row.delta_weight * 100, 2, "en-US")}pp
-									</span>
-								{/if}
-							</p>
-						{/if}
-					</div>
-				{/snippet}
-			</DataTable>
-		{:else}
-			<EmptyState
-				title="No allocation data"
-				message="Allocation data will appear after the latest snapshot is available."
-			/>
-		{/if}
-	</SectionCard>
-
-	<!-- ════════════════════════════════════════════════════════════════════════
-	     Before / After rebalance comparison
-	     ════════════════════════════════════════════════════════════════════════ -->
-	{#if hasProposedWeights}
-		<SectionCard title="Comparison: Before / After Rebalance" subtitle="Current weights vs. pending proposal">
-			<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-				{#each Object.keys(beforeWeights) as fundName}
-					{@const before = beforeWeights[fundName] ?? 0}
-					{@const after = afterWeights[fundName] ?? 0}
-					{@const delta = after - before}
-					<div class="rounded-lg border border-(--netz-border) bg-(--netz-surface-elevated) p-3">
-						<p class="truncate text-sm font-medium text-(--netz-text-primary)">{fundName}</p>
-						<div class="mt-2 flex items-baseline gap-2">
-							<span class="text-xs text-(--netz-text-muted)">Before:</span>
-							<span class="text-sm font-mono">{formatPercent(before, 2, "en-US")}</span>
-							<span class="text-xs text-(--netz-text-muted)">→</span>
-							<span class="text-sm font-mono font-semibold">{formatPercent(after, 2, "en-US")}</span>
-						</div>
-						{#if delta !== 0}
-							<p class="mt-1 text-xs font-medium" class:text-(--netz-success)={delta > 0} class:text-(--netz-danger)={delta < 0}>
-								{delta > 0 ? "+" : ""}{formatNumber(delta * 100, 2, "en-US")}pp
-							</p>
-						{/if}
-					</div>
-				{/each}
-			</div>
-		</SectionCard>
-	{/if}
-
-	<!-- ════════════════════════════════════════════════════════════════════════
-	     Rebalance events
-	     ════════════════════════════════════════════════════════════════════════ -->
-	<SectionCard title="Rebalance Events" subtitle="Pending proposals and history">
-		{#if loadingEvents}
-			<p class="text-sm text-(--netz-text-muted)">Loading events...</p>
-		{:else if rebalanceEvents.length === 0}
-			<EmptyState title="No events" message="Trigger a rebalance to create proposals." />
-		{:else}
-			<div class="space-y-3">
-				{#each rebalanceEvents as event}
-					<Card class="flex items-center justify-between p-4">
-						<div>
-							<div class="flex items-center gap-2">
-								<StatusBadge
-									status={String(event.status ?? "")}
-									type="default"
-									resolve={resolveWealthStatus}
-								/>
-								<span class="text-sm font-medium text-(--netz-text-primary)">
-									Event {String(event.id ?? "").slice(0, 8)}
-								</span>
-							</div>
-							<p class="mt-1 text-xs text-(--netz-text-muted)">
-								{event.created_at ? formatDateTime(String(event.created_at)) : ""}
-							</p>
-						</div>
-						<div class="flex gap-2">
-							{#if event.status === "pending"}
-								<ActionButton
-									size="sm"
-									onclick={() => approveRebalance(String(event.id))}
-									loading={approvingEventId === String(event.id)}
-									loadingText="…"
-								>
-									Approve
-								</ActionButton>
-							{/if}
-							{#if event.status === "approved"}
-								<ActionButton
-									size="sm"
-									variant="destructive"
-									onclick={() => executeRebalance(String(event.id))}
-									loading={executingEventId === String(event.id)}
-									loadingText="…"
-								>
-									Execute
-								</ActionButton>
-							{/if}
-							<Button
-								size="sm"
-								variant="outline"
-								onclick={() => goto(`/portfolios/${profile}/rebalance/${event.id}`)}
+				<!-- Multi-region allocation navigator -->
+				<SectionCard title="Allocation by Region" subtitle="Multi-region allocation navigator">
+					<div class="mb-4 flex flex-wrap gap-2">
+						<button
+							class="rounded-full px-3 py-1 text-sm font-medium transition-colors"
+							class:bg-(--netz-brand-primary)={selectedRegion === "all"}
+							class:text-white={selectedRegion === "all"}
+							class:bg-(--netz-surface-inset)={selectedRegion !== "all"}
+							class:text-(--netz-text-secondary)={selectedRegion !== "all"}
+							onclick={() => selectedRegion = "all"}
+						>
+							All
+						</button>
+						{#each REGIONS as region}
+							<button
+								class="rounded-full px-3 py-1 text-sm font-medium transition-colors"
+								class:bg-(--netz-brand-primary)={selectedRegion === region}
+								class:text-white={selectedRegion === region}
+								class:bg-(--netz-surface-inset)={selectedRegion !== region}
+								class:text-(--netz-text-secondary)={selectedRegion !== region}
+								onclick={() => selectedRegion = region}
 							>
-								Detail
-							</Button>
-						</div>
-					</Card>
-				{/each}
-			</div>
-		{/if}
-	</SectionCard>
-</div>
+								{region.toUpperCase()}
+								{#if regionTotals[region]}
+									<span class="ml-1 text-xs opacity-70">({formatPercent(regionTotals[region], 1, "en-US")})</span>
+								{/if}
+							</button>
+						{/each}
+					</div>
 
-<!-- Confirm rebalance trigger -->
-<ConfirmDialog
-	bind:open={showRebalanceConfirm}
-	title="Trigger Rebalance"
-	message="This will generate rebalance proposals for the {profile} portfolio based on current allocation drift. Continue?"
-	confirmLabel="Trigger Rebalance"
-	confirmVariant="default"
-	onConfirm={triggerRebalance}
-	onCancel={() => showRebalanceConfirm = false}
-/>
+					{#if tableRows.length > 0}
+						<DataTable
+							data={tableRows}
+							columns={allocationColumns}
+							pageSize={20}
+							filterColumn="fund_name"
+							filterPlaceholder="Search fund..."
+						>
+							{#snippet expandedRow(row)}
+								<div class="px-4 py-3 text-sm text-(--netz-text-secondary) space-y-1">
+									<p><span class="font-medium">Fund:</span> {String(row.fund_name ?? "--")}</p>
+									<p><span class="font-medium">Region:</span> {String(row.region ?? "--")}</p>
+									<p><span class="font-medium">Current Weight:</span> {typeof row.current_weight === "number" ? formatPercent(row.current_weight, 4, "en-US") : "--"}</p>
+									{#if row.target_weight !== null}
+										<p><span class="font-medium">Target Weight:</span> {typeof row.target_weight === "number" ? formatPercent(row.target_weight, 4, "en-US") : "--"}</p>
+									{/if}
+									{#if row.delta_weight !== null}
+										<p>
+											<span class="font-medium">Deviation:</span>
+											{#if typeof row.delta_weight === "number"}
+												<span class={row.delta_weight > 0 ? "text-(--netz-success)" : "text-(--netz-danger)"}>
+													{row.delta_weight > 0 ? "+" : ""}{formatNumber(row.delta_weight * 100, 2, "en-US")}pp
+												</span>
+											{/if}
+										</p>
+									{/if}
+								</div>
+							{/snippet}
+						</DataTable>
+					{:else}
+						<EmptyState
+							title="No allocation data"
+							message="Allocation data will appear after the latest snapshot is available."
+						/>
+					{/if}
+				</SectionCard>
+
+			{:else if activeTab === "rebalancing"}
+				<RebalancingTab
+					{profile}
+					currentWeights={weights}
+					cvarCurrent={cvarCurrentNum}
+					cvarLimit={cvarLimitNum}
+				/>
+			{/if}
+		{/snippet}
+	</PageTabs>
+</div>
 
 <!-- Drift history side panel -->
 {#if showDriftHistory}
 	<ContextPanel
 		open={showDriftHistory}
-		title="Drift History — {profileLabel}"
+		title="Drift History -- {profileLabel}"
 		onClose={() => showDriftHistory = false}
 		width="720px"
 	>
