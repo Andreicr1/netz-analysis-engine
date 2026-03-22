@@ -6,6 +6,7 @@ compatibility_date = "2025-12-01"
 class_name = "NetzWorkers"
 image = "../../../Dockerfile"
 max_instances = 1
+instance_type = "standard-1"
 
 [durable_objects]
 bindings = [
