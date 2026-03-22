@@ -1,4 +1,4 @@
-/** Fund detail — fetch fund info + risk metrics (including momentum). */
+/** Fund detail — fetch fund info. */
 import type { PageServerLoad } from "./$types";
 import { createServerApiClient } from "$lib/api/client";
 
@@ -7,14 +7,10 @@ export const load: PageServerLoad = async ({ parent, params }) => {
 	const api = createServerApiClient(token);
 	const { fundId } = params;
 
-	const [fund, riskMetrics] = await Promise.allSettled([
-		api.get(`/funds/${fundId}`),
-		api.get(`/funds/${fundId}/risk`),
-	]);
+	const [fund] = await Promise.allSettled([api.get(`/funds/${fundId}`)]);
 
 	return {
 		fund: fund.status === "fulfilled" ? fund.value : null,
-		riskMetrics: riskMetrics.status === "fulfilled" ? riskMetrics.value : null,
 		fundId,
 	};
 };

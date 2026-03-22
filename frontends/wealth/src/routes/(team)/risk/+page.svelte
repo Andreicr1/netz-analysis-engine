@@ -15,7 +15,6 @@
 		PeriodSelector,
 		ContextPanel,
 		MetricCard,
-		GaugeChart,
 		formatNumber,
 		formatPercent,
 	} from "@netz/ui";
@@ -40,11 +39,6 @@
 		trigger_status: string | null;
 		regime: string | null;
 		consecutive_breach_days: number;
-		rsi_14: number | null;
-		bb_position: number | null;
-		nav_momentum_score: number | null;
-		flow_momentum_score: number | null;
-		blended_momentum_score: number | null;
 	};
 
 	type CVaRPoint = { date: string; cvar: number };
@@ -122,33 +116,6 @@
 	function fmtPct(v: number | null): string {
 		return formatPercent(v, 1, "en-US");
 	}
-
-	function rsiStatus(rsi: number | null): "ok" | "warn" | "breach" | undefined {
-		if (rsi == null) return undefined;
-		if (rsi < 30) return "ok";
-		if (rsi > 70) return "breach";
-		return "warn";
-	}
-
-	const rsiThresholds = [
-		{ value: 30, color: "var(--netz-success)" },
-		{ value: 70, color: "var(--netz-warning)" },
-		{ value: 100, color: "var(--netz-danger)" },
-	];
-
-	function blendedStatus(score: number | null): "ok" | "warn" | "breach" | undefined {
-		if (score == null) return undefined;
-		if (score >= 0.6) return "ok";
-		if (score >= 0.3) return "warn";
-		return "breach";
-	}
-
-	const hasMomentumData = $derived(
-		profiles.some((p) => {
-			const c = cvarByProfile[p] as CVaRStatus | undefined;
-			return c?.rsi_14 != null || c?.blended_momentum_score != null;
-		}),
-	);
 
 	// ── Drift Scan Trigger ──────────────────────────────────────────────────
 	let showDriftScan = $state(false);
@@ -271,51 +238,6 @@
 			{/each}
 		</div>
 	</SectionCard>
-
-	<!-- Momentum Signals -->
-	{#if hasMomentumData}
-		<SectionCard title="Momentum Signals" subtitle="Deterministic Metric · Profile-level averages from pre-computed signals">
-			{#snippet actions()}
-				<Badge variant="secondary">Deterministic Metric</Badge>
-			{/snippet}
-			<div class="grid gap-6 lg:grid-cols-3">
-				{#each profiles as profile (profile)}
-					{@const cvar = cvarByProfile[profile] as CVaRStatus | undefined}
-					<div class="space-y-4 rounded-(--netz-radius-md) border border-(--netz-border-subtle) bg-(--netz-surface-highlight) p-4">
-						<h4 class="text-sm font-semibold text-(--netz-text-primary)">{profileLabels[profile] ?? profile}</h4>
-						{#if cvar?.rsi_14 != null}
-							<div>
-								<p class="netz-ui-kicker mb-1">RSI-14</p>
-								<GaugeChart
-									value={cvar.rsi_14}
-									min={0}
-									max={100}
-									thresholds={rsiThresholds}
-									label={cvar.rsi_14 < 30 ? "Oversold" : cvar.rsi_14 > 70 ? "Overbought" : "Neutral"}
-									height={180}
-								/>
-							</div>
-						{:else}
-							<div class="flex h-[180px] items-center justify-center text-sm text-(--netz-text-muted)">RSI — Pending</div>
-						{/if}
-						<div class="grid grid-cols-2 gap-3">
-							<MetricCard
-								label="Bollinger"
-								value={cvar?.bb_position != null ? formatNumber(cvar.bb_position, 2, "en-US") : "—"}
-								sublabel="Band position (0–1)"
-							/>
-							<MetricCard
-								label="Blended"
-								value={cvar?.blended_momentum_score != null ? formatNumber(cvar.blended_momentum_score, 2, "en-US") : "—"}
-								sublabel="Composite score"
-								status={blendedStatus(cvar?.blended_momentum_score ?? null)}
-							/>
-						</div>
-					</div>
-				{/each}
-			</div>
-		</SectionCard>
-	{/if}
 
 	<!-- Market Regime + Drift Alerts side-by-side -->
 	<div class="grid gap-4 lg:grid-cols-5">

@@ -75,12 +75,6 @@ class CVaRStatus(BaseModel):
     cvar_upper_95: Decimal | None = None
     computed_at: datetime | None = None  # server-side computation timestamp
     next_expected_update: datetime | None = None  # next expected update
-    # Momentum signals — profile-level averages from fund_risk_metrics
-    rsi_14: float | None = None
-    bb_position: float | None = None
-    nav_momentum_score: float | None = None
-    flow_momentum_score: float | None = None
-    blended_momentum_score: float | None = None
 
 
 class CVaRPoint(BaseModel):
