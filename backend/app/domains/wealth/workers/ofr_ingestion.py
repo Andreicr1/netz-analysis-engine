@@ -192,8 +192,13 @@ async def run_ofr_ingestion(lookback_years: int = 5) -> dict:
                 except Exception as e:
                     logger.warning("ofr_risk_scenarios_fetch_failed", error=str(e))
 
-            # Upsert all rows in chunks
+            # Deduplicate by (obs_date, series_id) — keep last value
             if rows:
+                seen: dict[tuple, dict] = {}
+                for r in rows:
+                    seen[(r["obs_date"], r["series_id"])] = r
+                rows = list(seen.values())
+
                 chunk_size = 2000
                 for i in range(0, len(rows), chunk_size):
                     chunk = rows[i:i + chunk_size]
@@ -212,10 +217,16 @@ async def run_ofr_ingestion(lookback_years: int = 5) -> dict:
             logger.info("OFR ingestion complete", rows_upserted=len(rows))
             return {"status": "completed", "rows": len(rows)}
 
+        except Exception:
+            await db.rollback()
+            raise
         finally:
-            await db.execute(
-                text(f"SELECT pg_advisory_unlock({OFR_LOCK_ID})")
-            )
+            try:
+                await db.execute(
+                    text(f"SELECT pg_advisory_unlock({OFR_LOCK_ID})")
+                )
+            except Exception:
+                pass  # lock auto-released on session close
 
 
 if __name__ == "__main__":

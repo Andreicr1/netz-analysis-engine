@@ -695,9 +695,12 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
                 logger.exception("Risk metrics batch failed — transaction rolled back")
                 raise
         finally:
-            await db.execute(
-                text(f"SELECT pg_advisory_unlock({RISK_CALC_LOCK_ID})")
-            )
+            try:
+                await db.execute(
+                    text(f"SELECT pg_advisory_unlock({RISK_CALC_LOCK_ID})")
+                )
+            except Exception:
+                pass
 
     total = sum(results.values())
     logger.info("Risk calculation complete", funds_computed=total)

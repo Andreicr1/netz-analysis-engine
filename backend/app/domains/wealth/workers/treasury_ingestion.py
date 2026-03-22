@@ -221,8 +221,13 @@ async def run_treasury_ingestion(lookback_days: int = 365) -> dict:
                 else:
                     logger.warning("treasury_expense_fetch_failed", error=str(expense_t))
 
-            # Upsert all rows in chunks
+            # Deduplicate by (obs_date, series_id) — keep last value
             if rows:
+                seen: dict[tuple, dict] = {}
+                for r in rows:
+                    seen[(r["obs_date"], r["series_id"])] = r
+                rows = list(seen.values())
+
                 chunk_size = 2000
                 for i in range(0, len(rows), chunk_size):
                     chunk = rows[i:i + chunk_size]
@@ -241,10 +246,16 @@ async def run_treasury_ingestion(lookback_days: int = 365) -> dict:
             logger.info("Treasury ingestion complete", rows_upserted=len(rows))
             return {"status": "completed", "rows": len(rows)}
 
+        except Exception:
+            await db.rollback()
+            raise
         finally:
-            await db.execute(
-                text(f"SELECT pg_advisory_unlock({TREASURY_LOCK_ID})")
-            )
+            try:
+                await db.execute(
+                    text(f"SELECT pg_advisory_unlock({TREASURY_LOCK_ID})")
+                )
+            except Exception:
+                pass  # lock auto-released on session close
 
 
 if __name__ == "__main__":

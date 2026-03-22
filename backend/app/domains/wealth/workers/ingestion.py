@@ -223,10 +223,16 @@ async def run_ingestion(org_id: uuid.UUID, lookback_days: int = 30) -> dict[str,
                     await db.execute(stmt)
                     await db.commit()
                     await set_rls_context(db, org_id)
+        except Exception:
+            await db.rollback()
+            raise
         finally:
-            await db.execute(
-                text(f"SELECT pg_advisory_unlock({NAV_INGESTION_LOCK_ID})")
-            )
+            try:
+                await db.execute(
+                    text(f"SELECT pg_advisory_unlock({NAV_INGESTION_LOCK_ID})")
+                )
+            except Exception:
+                pass
 
     total = sum(results.values())
     logger.info("Ingestion complete", total_rows=total, funds_processed=len(results))

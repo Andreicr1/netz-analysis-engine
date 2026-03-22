@@ -67,6 +67,12 @@ async def run_bis_ingestion() -> dict:
                 logger.warning("No valid BIS rows after conversion")
                 return {"status": "completed", "rows": 0}
 
+            # Deduplicate by PK
+            seen: dict[tuple, dict] = {}
+            for r in rows:
+                seen[(r["country_code"], r["indicator"], r["period"])] = r
+            rows = list(seen.values())
+
             # Batch upsert in chunks of 2000
             chunk_size = 2000
             for i in range(0, len(rows), chunk_size):
@@ -97,10 +103,16 @@ async def run_bis_ingestion() -> dict:
                 "countries": len({r["country_code"] for r in rows}),
             }
 
+        except Exception:
+            await db.rollback()
+            raise
         finally:
-            await db.execute(
-                text(f"SELECT pg_advisory_unlock({BIS_INGESTION_LOCK_ID})")
-            )
+            try:
+                await db.execute(
+                    text(f"SELECT pg_advisory_unlock({BIS_INGESTION_LOCK_ID})")
+                )
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

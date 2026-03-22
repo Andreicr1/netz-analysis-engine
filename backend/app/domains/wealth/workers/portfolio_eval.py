@@ -317,10 +317,16 @@ async def run_portfolio_eval(org_id: uuid.UUID) -> dict[str, str]:
                         regime=snapshot_data["regime"],
                         cvar_pct=snapshot_data["cvar_utilized_pct"],
                     )
+            except Exception:
+                await db.rollback()
+                raise
             finally:
-                await db.execute(
-                    text(f"SELECT pg_advisory_unlock({PORTFOLIO_EVAL_LOCK_ID})")
-                )
+                try:
+                    await db.execute(
+                        text(f"SELECT pg_advisory_unlock({PORTFOLIO_EVAL_LOCK_ID})")
+                    )
+                except Exception:
+                    pass
     finally:
         if redis_conn is not None:
             await redis_conn.aclose()
