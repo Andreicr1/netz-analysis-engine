@@ -216,7 +216,7 @@
 			</div>
 		{:else if healthData.length > 0}
 			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-				{#each healthData as service}
+				{#each healthData as service (service.name)}
 					<ServiceHealthCard {service} />
 				{/each}
 			</div>

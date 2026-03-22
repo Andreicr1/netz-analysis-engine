@@ -40,7 +40,7 @@
 	{#if data.invalidConfigs?.length > 0}
 		<SectionCard title="Invalid Overrides">
 			<div class="space-y-2">
-				{#each data.invalidConfigs as invalid}
+				{#each data.invalidConfigs as invalid (invalid.config_type)}
 					<button
 						onclick={() => {
 							selectedConfig = invalid.config_type;
@@ -66,7 +66,7 @@
 	{#if data.configs.length > 0}
 		<SectionCard title="Config Types">
 			<div class="divide-y divide-(--netz-border)">
-				{#each data.configs as config}
+				{#each data.configs as config (config.config_type)}
 					<button
 						onclick={() => {
 							selectedConfig = config.config_type;

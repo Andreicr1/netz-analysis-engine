@@ -437,7 +437,7 @@
 						>
 							All
 						</button>
-						{#each REGIONS as region}
+						{#each REGIONS as region (region)}
 							<button
 								class="rounded-full px-3 py-1 text-sm font-medium transition-colors"
 								class:bg-(--netz-brand-primary)={selectedRegion === region}

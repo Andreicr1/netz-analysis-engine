@@ -92,6 +92,16 @@ The product should be treated as composed of five visual layers.
 
 The first layer is Structural Frame. This includes application shell, side navigation, top-level headers, page chrome, and sectional framing. It establishes where the user is in the operating system.
 
+**App Shell & Navigation Blueprint (The Structural Frame):**
+The TopNav pattern is formally deprecated for global navigation due to horizontal overflow and scaling limitations across dense verticals (e.g., Credit's 8+ sections, Wealth's 10+ sections). The system must utilize a persistent Sidebar for global routing and a slim Top Bar strictly for local context.
+
+*   **Sidebar (Global Navigation):** Fixed on the left. Must maintain an independent dark surface (e.g., `--netz-surface-alt`) regardless of the content area's theme, acting as the durable "OS frame" (similar to VS Code or Linear).
+    *   *Responsiveness:* Widescreen (~240px expanded); Standard Desktop (~48px collapsed/icon-only, hover to expand); Mobile/Tablet (hidden/overlay).
+    *   *Content:* Vertical selector (Credit / Wealth / Admin), full tree navigation for sub-pages.
+*   **Top Bar (Local Context):** Slim horizontal bar (~40px max). Never used for global navigation links.
+    *   *Content:* Contextual breadcrumbs (`Fund ABC > Pipeline > Deal XYZ`), page-specific actions/filters, regime badges, and org switchers.
+*   **Vertical Space:** Eliminating the generic top menu reclaims ~12-32px of guaranteed vertical real estate, which is critical for dense DataTables, pagination, and multi-panel workbenches.
+
 The second layer is Operational Workspace. This includes pages where users actively work: pipeline boards, allocation editors, review screens, report builders, macro workbenches, portfolio tools, and detail pages.
 
 The third layer is Analytical Surface. This includes cards, tables, metrics, charts, detail panes, chapter views, evidence panels, and context drawers. This is where most reading and comparison happens.

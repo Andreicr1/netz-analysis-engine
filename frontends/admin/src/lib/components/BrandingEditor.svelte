@@ -64,7 +64,7 @@
 	<!-- Color Pickers -->
 	<SectionCard title="Brand Colors">
 		<div class="space-y-3">
-			{#each colorFields as field}
+			{#each colorFields as field (field.key)}
 				<div class="flex items-center gap-3">
 					<input
 						type="color"

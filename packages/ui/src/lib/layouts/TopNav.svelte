@@ -95,7 +95,7 @@
 	<div class="netz-topnav__drawer" role="dialog" aria-modal="true">
 		{#if navGroups}
 			<ul role="list">
-				{#each navGroups as group, gi}
+				{#each navGroups as group, gi (group.label)}
 					{#if gi > 0}
 						<li class="netz-topnav__drawer-divider" role="separator"></li>
 					{/if}

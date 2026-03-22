@@ -243,7 +243,7 @@
 
 	<div class="flex flex-wrap items-center gap-2">
 		<div class="flex flex-wrap gap-2">
-			{#each severityFilters as severity}
+			{#each severityFilters as severity (severity)}
 				<button
 					type="button"
 					onclick={() => (severityFilter = severity)}

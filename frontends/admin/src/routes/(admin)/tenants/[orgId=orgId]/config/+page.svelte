@@ -50,7 +50,7 @@ type PageData = {
 
 	<SectionCard title="Workspace map">
 		<div class="space-y-4">
-			{#each groupedConfigs as group}
+			{#each groupedConfigs as group (group.vertical)}
 				<div class="rounded-xl border border-(--netz-border) bg-(--netz-surface-alt) p-4">
 					<div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
 						<div class="space-y-1">
@@ -64,7 +64,7 @@ type PageData = {
 
 					<div class="mt-4 grid gap-3 sm:grid-cols-2">
 						{#if group.configs.length > 0}
-							{#each group.configs as config}
+							{#each group.configs as config (config.config_type)}
 								<div class="rounded-lg border border-(--netz-border) bg-(--netz-surface) p-3">
 									<div class="flex items-start justify-between gap-3">
 										<div>

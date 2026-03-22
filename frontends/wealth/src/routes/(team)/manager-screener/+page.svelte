@@ -596,7 +596,7 @@
 
       <!-- Side-by-side comparison -->
       <div class="grid gap-4" style="grid-template-columns: repeat({compareResult.managers.length}, 1fr);">
-        {#each compareResult.managers as mgr}
+        {#each compareResult.managers as mgr (mgr.crd_number)}
           <div class="rounded-lg border border-border p-4 space-y-2">
             <h3 class="font-medium text-sm">{mgr.firm_name}</h3>
             <p class="text-xs text-muted-foreground">CRD: {mgr.crd_number}</p>
@@ -609,7 +609,7 @@
             {#if compareResult.sector_allocations[mgr.crd_number]}
               <div class="mt-2">
                 <p class="text-xs font-medium text-muted-foreground mb-1">Top Sectors</p>
-                {#each Object.entries(compareResult.sector_allocations[mgr.crd_number]).slice(0, 5) as [sector, weight]}
+                {#each Object.entries(compareResult.sector_allocations[mgr.crd_number]).slice(0, 5) as [sector, weight] (sector)}
                   <div class="flex justify-between text-xs">
                     <span class="truncate">{sector}</span>
                     <span class="tabular-nums">{formatPercent(weight as number)}</span>
@@ -643,7 +643,7 @@
 
     <!-- Tab navigation -->
     <div class="flex border-b border-border">
-      {#each detailTabs as tab}
+      {#each detailTabs as tab (tab.value)}
         <button
           class="px-4 py-2 text-sm border-b-2 transition-colors"
           class:border-primary={detailTab === tab.value}
@@ -693,7 +693,7 @@
             <div>
               <h4 class="text-sm font-medium mb-2">Funds ({profileData.funds.length})</h4>
               <div class="space-y-1">
-                {#each profileData.funds as fund}
+                {#each profileData.funds as fund (fund.fund_name)}
                   <div class="flex justify-between text-sm border-b border-border/50 py-1">
                     <span class="truncate">{fund.fund_name}</span>
                     <span class="tabular-nums text-muted-foreground">
@@ -710,7 +710,7 @@
             <div>
               <h4 class="text-sm font-medium mb-2">Team ({profileData.team.length})</h4>
               <div class="space-y-1">
-                {#each profileData.team as member}
+                {#each profileData.team as member (member.person_name)}
                   <div class="text-sm border-b border-border/50 py-1">
                     <span class="font-medium">{member.person_name}</span>
                     {#if member.title}
@@ -750,7 +750,7 @@
                 {#if brochureSearchResults && brochureSearchQuery.length >= 2}
                   <div class="space-y-2">
                     <p class="text-xs text-muted-foreground">{brochureSearchResults.total_results} results</p>
-                    {#each brochureSearchResults.results as hit}
+                    {#each brochureSearchResults.results as hit (hit.section)}
                       <div class="rounded border border-border/50 p-2 text-sm">
                         <div class="flex justify-between text-xs text-muted-foreground mb-1">
                           <span class="font-medium">{hit.section}</span>
@@ -768,7 +768,7 @@
                   <p class="text-sm text-muted-foreground">Loading sections...</p>
                 {:else if brochureSections}
                   <div class="space-y-1">
-                    {#each brochureSections.sections as sec}
+                    {#each brochureSections.sections as sec (sec.section)}
                       <div class="text-sm border-b border-border/50 py-1">
                         <div class="flex justify-between">
                           <span class="font-medium">{sec.section}</span>
@@ -797,7 +797,7 @@
           {#if Object.keys(holdingsData.sector_allocation).length > 0}
             <div>
               <h4 class="text-sm font-medium mb-2">Sector Allocation</h4>
-              {#each Object.entries(holdingsData.sector_allocation) as [sector, weight]}
+              {#each Object.entries(holdingsData.sector_allocation) as [sector, weight] (sector)}
                 <div class="flex items-center justify-between text-sm py-1">
                   <span class="truncate">{sector}</span>
                   <div class="flex items-center gap-2">
@@ -824,7 +824,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {#each holdingsData.top_holdings as h}
+                  {#each holdingsData.top_holdings as h (h.issuer_name)}
                     <tr class="border-t border-border/50">
                       <td class="py-1 truncate max-w-[200px]">{h.issuer_name}</td>
                       <td class="py-1 text-right tabular-nums">
@@ -862,7 +862,7 @@
                 </tr>
               </thead>
               <tbody>
-                {#each driftData.quarters as q}
+                {#each driftData.quarters as q (q.quarter)}
                   <tr class="border-t border-border/50">
                     <td class="py-1">{q.quarter}</td>
                     <td class="py-1 text-right tabular-nums"
@@ -903,7 +903,7 @@
                 </tr>
               </thead>
               <tbody>
-                {#each institutionalData.holders as holder}
+                {#each institutionalData.holders as holder (holder.filer_name)}
                   <tr class="border-t border-border/50">
                     <td class="py-1 truncate max-w-[200px]">{holder.filer_name}</td>
                     <td class="py-1">{holder.filer_type ?? "—"}</td>
@@ -939,7 +939,7 @@
                 </tr>
               </thead>
               <tbody>
-                {#each nportData.holdings as h}
+                {#each nportData.holdings as h (h.issuer_name)}
                   <tr class="border-t border-border/50">
                     <td class="py-1 truncate max-w-[180px]">{h.issuer_name}</td>
                     <td class="py-1 text-muted-foreground">{h.asset_class ?? "—"}</td>

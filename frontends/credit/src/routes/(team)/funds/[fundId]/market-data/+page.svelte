@@ -192,7 +192,7 @@
 		<SectionCard title="Yield Curve" subtitle="Key rates & inversion indicator">
 			{#if md.yieldCurveSnapshot.length}
 				<div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
-					{#each md.yieldCurveSnapshot as point}
+					{#each md.yieldCurveSnapshot as point (point.label)}
 						<MetricCard
 							label={point.label}
 							value={fmtRate(point.value)}
@@ -236,7 +236,7 @@
 					Metro Areas (select up to 5)
 				</p>
 				<div class="flex flex-wrap gap-2">
-					{#each METRO_OPTIONS as metro}
+					{#each METRO_OPTIONS as metro (metro.id)}
 						<button
 							type="button"
 							class="rounded-full border px-3 py-1 text-xs font-medium transition-colors

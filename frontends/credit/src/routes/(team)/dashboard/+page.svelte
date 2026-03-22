@@ -249,7 +249,7 @@
         {/if}
         {#if fredResults.length > 0}
           <div class="max-h-48 space-y-1 overflow-y-auto" role="listbox" aria-label="FRED search results" onkeydown={handleResultsKeydown} tabindex="0">
-            {#each fredResults as series}
+            {#each fredResults as series (series.id)}
               <button
                 role="option"
                 aria-selected={selectedFredSeries.includes(series.id)}
@@ -263,7 +263,7 @@
         {/if}
         {#if selectedFredSeries.length > 0}
           <div class="flex flex-wrap gap-1">
-            {#each selectedFredSeries as id}
+            {#each selectedFredSeries as id (id)}
               <span class="inline-flex items-center gap-1 rounded-full bg-(--netz-brand-primary)/10 px-2 py-0.5 text-xs text-(--netz-brand-primary)">
                 {id}
                 <button onclick={() => selectedFredSeries = selectedFredSeries.filter(s => s !== id)} aria-label="Remove {id}" class="ml-1 opacity-60 hover:opacity-100">
@@ -280,7 +280,7 @@
                 {selectedFredSeries.join(", ")} — Last 30 observations
               </p>
               <div class="space-y-1">
-                {#each Object.entries(fredChartData) as [seriesId, observations]}
+                {#each Object.entries(fredChartData) as [seriesId, observations] (seriesId)}
                   <div class="flex items-center gap-2 text-xs">
                     <span class="w-24 font-mono">{seriesId}</span>
                     <span class="text-(--netz-text-muted)">

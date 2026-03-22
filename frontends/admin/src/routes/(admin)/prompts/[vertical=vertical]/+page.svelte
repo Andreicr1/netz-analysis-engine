@@ -39,7 +39,7 @@
 	{#if data.prompts.length > 0}
 		<SectionCard title="Templates">
 			<div class="divide-y divide-(--netz-border)">
-				{#each data.prompts as prompt}
+				{#each data.prompts as prompt (prompt.template_name)}
 					<button
 						onclick={() => (selectedPrompt = prompt.template_name)}
 						class="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-(--netz-surface-alt) {selectedPrompt ===

@@ -43,7 +43,7 @@ type PageData = {
 
 	<SectionCard title="Workspace map">
 		<div class="space-y-4">
-			{#each verticals as vertical}
+			{#each verticals as vertical (vertical)}
 				<div class="rounded-xl border border-(--netz-border) bg-(--netz-surface-alt) p-4">
 					<div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
 						<div class="space-y-1">

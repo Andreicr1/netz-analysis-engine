@@ -78,7 +78,7 @@
 			<div class="mt-3">
 				<p class="text-xs text-(--netz-text-muted)">Changed keys:</p>
 				<div class="mt-1 flex flex-wrap gap-1">
-					{#each diff.changed_keys as key}
+					{#each diff.changed_keys as key (key)}
 						<span
 							class="rounded bg-(--netz-brand-highlight)/20 px-2 py-0.5 text-xs text-(--netz-text-primary)"
 						>

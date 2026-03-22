@@ -594,7 +594,7 @@
                 </p>
                 {#if backtestResult.metrics}
                   <div class="mt-3 grid gap-2 sm:grid-cols-3">
-                    {#each Object.entries(backtestResult.metrics as Record<string, number>) as [key, value]}
+                    {#each Object.entries(backtestResult.metrics as Record<string, number>) as [key, value] (key)}
                       <div
                         class="rounded-(--netz-radius-md) border border-(--netz-border-subtle) bg-(--netz-surface-panel) p-2.5"
                       >
@@ -758,7 +758,7 @@
           </div>
           {#if attributionData}
             <div class="space-y-2">
-              {#each Object.entries(attributionData) as [key, value]}
+              {#each Object.entries(attributionData) as [key, value] (key)}
                 {#if key !== "fund_id" && key !== "period"}
                   <div
                     class="flex items-center justify-between rounded-(--netz-radius-md) border border-(--netz-border-subtle) bg-(--netz-surface-highlight) px-3 py-2 text-sm"

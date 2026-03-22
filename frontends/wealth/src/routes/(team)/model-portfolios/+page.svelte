@@ -281,7 +281,7 @@
 		{#if backtestResult}
 			<SectionCard title="Backtest Results" class="mt-4">
 				<div class="space-y-2">
-					{#each Object.entries(backtestResult) as [key, value]}
+					{#each Object.entries(backtestResult) as [key, value] (key)}
 						<div class="flex items-center justify-between text-sm">
 							<span class="text-(--netz-text-secondary)">{key}</span>
 							<span class="font-mono text-(--netz-text-primary)">{typeof value === "number" ? formatNumber(value, 4, "en-US") : String(value ?? "—")}</span>

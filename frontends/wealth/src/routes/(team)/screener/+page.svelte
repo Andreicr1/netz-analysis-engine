@@ -694,7 +694,7 @@
 			{#if runDetailLoading}
 				<p class="text-sm text-(--netz-text-muted)">Loading...</p>
 			{:else if runDetailData}
-				{#each Object.entries(runDetailData) as [key, value]}
+				{#each Object.entries(runDetailData) as [key, value] (key)}
 					<div class="mb-2">
 						<p class="text-xs text-(--netz-text-muted)">{key}</p>
 						<p class="text-sm text-(--netz-text-primary)">{String(value ?? "—")}</p>
@@ -720,7 +720,7 @@
 				<p class="text-sm text-(--netz-text-muted)">Loading...</p>
 			{:else if historyData.length > 0}
 				<div class="space-y-3">
-					{#each historyData as entry}
+					{#each historyData as entry (entry.screened_at)}
 						<div class="rounded-md border border-(--netz-border) p-3">
 							<div class="flex items-center justify-between">
 								<StatusBadge status={String(entry.overall_status ?? "")} resolve={resolveWealthStatus} />

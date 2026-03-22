@@ -56,7 +56,7 @@
 <div class={cn("inline-flex items-center gap-2", className)}>
 	{#if languages.length > 1}
 		<div class="inline-flex rounded-md border border-(--netz-border)">
-			{#each languages as lang}
+			{#each languages as lang (lang)}
 				<button
 					class={cn(
 						"px-2 py-1 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md",

@@ -154,7 +154,7 @@
 <div class="space-y-4">
 	{#if loading}
 		<div class="space-y-3">
-			{#each Array(5) as _}
+			{#each Array.from({length: 5}, (_, i) => i) as i (i)}
 				<Skeleton class="h-14 rounded-lg" />
 			{/each}
 		</div>

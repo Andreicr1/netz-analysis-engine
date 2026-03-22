@@ -241,7 +241,7 @@
 					<div class="mt-4">
 						<p class="mb-2 text-xs font-medium text-(--netz-text-secondary)">Document Type Distribution</p>
 						<div class="flex flex-wrap gap-2">
-							{#each Object.entries(chunkStats.doc_type_distribution) as [docType, count]}
+							{#each Object.entries(chunkStats.doc_type_distribution) as [docType, count] (docType)}
 								<span class="rounded-full bg-(--netz-surface-highlight) px-3 py-1 text-xs font-medium text-(--netz-text-primary)">
 									{docType}: {count}
 								</span>

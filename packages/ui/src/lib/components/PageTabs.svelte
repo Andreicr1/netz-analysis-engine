@@ -62,7 +62,7 @@
 		class="flex items-center gap-6 overflow-x-auto border-b border-(--netz-border-subtle)"
 		role="tablist"
 	>
-		{#each tabs as tab}
+		{#each tabs as tab (resolveTabValue(tab))}
 			{@const tabValue = resolveTabValue(tab)}
 			<button
 				role="tab"

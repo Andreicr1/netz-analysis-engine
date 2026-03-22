@@ -334,7 +334,7 @@
 						</tr>
 					</thead>
 					<tbody>
-						{#each Object.keys(beforeWeights).sort((a, b) => (beforeWeights[b] ?? 0) - (beforeWeights[a] ?? 0)) as fund}
+						{#each Object.keys(beforeWeights).sort((a, b) => (beforeWeights[b] ?? 0) - (beforeWeights[a] ?? 0)) as fund (fund)}
 							{@const before = beforeWeights[fund] ?? 0}
 							{@const after = afterWeights[fund] ?? 0}
 							{@const delta = after - before}
@@ -365,7 +365,7 @@
 			<EmptyState title="No Rebalance Events" message="Click 'Propose Rebalance' to generate a proposal based on current allocation drift." />
 		{:else}
 			<div class="space-y-3">
-				{#each rebalanceEvents as event}
+				{#each rebalanceEvents as event (event.event_id ?? event.id)}
 					{@const eventId = String(event.event_id ?? event.id ?? "")}
 					{@const eventStatus = String(event.status ?? "")}
 					<Card class="p-4">

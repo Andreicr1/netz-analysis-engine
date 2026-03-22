@@ -143,7 +143,7 @@
 			{#if (data as any).tenant?.assets?.length}
 				<div class="mt-4 space-y-2">
 					<h3 class="text-sm font-medium text-(--netz-text-secondary)">Uploaded Assets</h3>
-					{#each (data as any).tenant.assets as asset}
+					{#each (data as any).tenant.assets as asset (asset.asset_type ?? asset.type)}
 						<div class="flex items-center justify-between rounded border border-(--netz-border) p-3">
 							<span class="text-sm text-(--netz-text-primary)">{asset.asset_type ?? asset.type ?? "unknown"}</span>
 							<Button variant="destructive" size="sm" onclick={() => confirmDelete(asset.asset_type ?? asset.type)}>

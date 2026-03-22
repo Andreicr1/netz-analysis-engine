@@ -184,7 +184,7 @@
 				{#if metadata.length > 0}
 					<section class="rounded-lg border border-(--netz-border) bg-(--netz-surface) p-4">
 						<div class="grid gap-3 sm:grid-cols-2">
-							{#each metadata as item}
+							{#each metadata as item (item.label)}
 								<div class="space-y-1">
 									<p class="text-xs font-medium uppercase tracking-[0.16em] text-(--netz-text-secondary)">
 										{item.label}

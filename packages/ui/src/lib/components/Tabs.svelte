@@ -37,7 +37,7 @@
 		class="inline-flex min-h-(--netz-space-control-height-lg) items-center justify-start rounded-(--netz-radius-lg) border border-(--netz-border-subtle) bg-(--netz-surface-inset) p-1"
 		role="tablist"
 	>
-		{#each items as item}
+		{#each items as item (item.value)}
 			<button
 				role="tab"
 				aria-selected={activeValue === item.value}

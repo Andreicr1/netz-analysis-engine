@@ -320,8 +320,8 @@
 		{#if csvPreview && csvPreview.length > 0}
 			<div class="overflow-x-auto rounded-md border border-(--netz-border)">
 				<table class="w-full text-xs">
-					<thead><tr class="bg-(--netz-surface-highlight)">{#each csvPreview[0] as header}<th class="px-3 py-1.5 text-left font-medium text-(--netz-text-secondary)">{header}</th>{/each}</tr></thead>
-					<tbody>{#each csvPreview.slice(1, 6) as row, i}<tr class="{i % 2 === 0 ? '' : 'bg-(--netz-surface-highlight/50)'}">{#each row as cell}<td class="px-3 py-1 text-(--netz-text-primary)">{cell}</td>{/each}</tr>{/each}</tbody>
+					<thead><tr class="bg-(--netz-surface-highlight)">{#each csvPreview[0] as header (header)}<th class="px-3 py-1.5 text-left font-medium text-(--netz-text-secondary)">{header}</th>{/each}</tr></thead>
+					<tbody>{#each csvPreview.slice(1, 6) as row, i (i)}<tr class="{i % 2 === 0 ? '' : 'bg-(--netz-surface-highlight/50)'}">{#each row as cell (cell)}<td class="px-3 py-1 text-(--netz-text-primary)">{cell}</td>{/each}</tr>{/each}</tbody>
 				</table>
 			</div>
 		{/if}

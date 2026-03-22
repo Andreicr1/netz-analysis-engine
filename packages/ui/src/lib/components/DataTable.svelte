@@ -151,9 +151,9 @@
 	<div class="overflow-hidden rounded-(--netz-radius-lg) border border-(--netz-border-subtle) bg-(--netz-surface-panel) shadow-(--netz-shadow-1)">
 		<table class="w-full caption-bottom text-sm">
 			<thead class="border-b border-(--netz-border-subtle) bg-(--netz-surface-highlight)">
-				{#each table.getHeaderGroups() as headerGroup}
+				{#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
 					<tr>
-						{#each headerGroup.headers as header}
+						{#each headerGroup.headers as header (header.id)}
 							<th class="h-11 px-4 text-left align-middle text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">
 								{#if !header.isPlaceholder}
 									{#if header.column.getCanSort()}
@@ -212,14 +212,14 @@
 				{/each}
 			</thead>
 			<tbody>
-				{#each table.getRowModel().rows as row}
+				{#each table.getRowModel().rows as row (row.id)}
 					<!-- svelte-ignore a11y_click_events_have_key_events -->
 					<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 					<tr
 						class="border-b border-(--netz-border-subtle) bg-(--netz-surface-elevated) transition-colors last:border-b-0 hover:bg-(--netz-accent-soft) {onRowClick ? 'cursor-pointer' : ''}"
 						onclick={() => onRowClick?.(row.original)}
 					>
-						{#each row.getVisibleCells() as cell}
+						{#each row.getVisibleCells() as cell (cell.id)}
 							<td class="px-4 py-3.5 align-middle text-(--netz-text-primary)">
 								<FlexRender content={cell.column.columnDef.cell} context={cell.getContext()} />
 							</td>

@@ -402,7 +402,7 @@
 			{#if driftDetailLoading}
 				<p class="text-sm text-(--netz-text-muted)">Loading...</p>
 			{:else if driftDetailData}
-				{#each Object.entries(driftDetailData) as [key, value]}
+				{#each Object.entries(driftDetailData) as [key, value] (key)}
 					<div>
 						<p class="text-xs text-(--netz-text-muted)">{key}</p>
 						<p class="text-sm text-(--netz-text-primary)">{typeof value === "number" ? formatNumber(value, 4, "en-US") : String(value ?? "—")}</p>

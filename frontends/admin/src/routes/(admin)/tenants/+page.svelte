@@ -70,7 +70,7 @@
 
 	{#if data.tenants.length > 0}
 		<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-			{#each data.tenants as tenant}
+			{#each data.tenants as tenant (tenant.organization_id)}
 				<TenantCard {tenant} />
 			{/each}
 		</div>

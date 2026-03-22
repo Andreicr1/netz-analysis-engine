@@ -285,7 +285,7 @@
 									Changed fields
 								</p>
 								<ul class="space-y-2">
-									{#each row.entry.changedFields as change}
+									{#each row.entry.changedFields as change (change.field)}
 										<li class="rounded-md border border-(--netz-border) bg-(--netz-surface) p-3">
 											<p class="text-sm font-medium text-(--netz-text-primary)">{change.field}</p>
 											<div class="mt-2 grid gap-2 text-sm sm:grid-cols-2">

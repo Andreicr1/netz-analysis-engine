@@ -148,7 +148,7 @@
 </script>
 
 <div class="flex gap-3 overflow-x-auto pb-4" role="list" aria-label="Pipeline Kanban board">
-	{#each columns as column, idx}
+	{#each columns as column, idx (column.stage)}
 		<div
 			class="flex w-64 min-w-64 shrink-0 flex-col rounded-lg border border-(--netz-border) bg-(--netz-surface-alt)"
 			role="listitem"

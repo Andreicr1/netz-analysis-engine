@@ -185,7 +185,7 @@
 				<EmptyState title="No History" description="Your past queries will appear here." />
 			{:else}
 				<div class="space-y-3 overflow-y-auto">
-					{#each history as item}
+					{#each history as item (item.created_at)}
 						<Card class="cursor-pointer p-4 hover:bg-(--netz-surface-alt)" onclick={() => replayFromHistory(item.question)}>
 							<p class="text-sm font-medium text-(--netz-text-primary)">{item.question}</p>
 							<p class="mt-1 line-clamp-2 text-xs text-(--netz-text-muted)">{item.answer}</p>
@@ -202,7 +202,7 @@
 				<EmptyState title="No Activity" description="AI operation logs will appear here." />
 			{:else}
 				<div class="space-y-2 overflow-y-auto">
-					{#each activity as item}
+					{#each activity as item (item.created_at)}
 						<Card class="p-3">
 							<p class="text-xs font-medium text-(--netz-text-primary)">{item.action}</p>
 							<p class="text-xs text-(--netz-text-muted)">{item.detail}</p>
@@ -229,7 +229,7 @@
 
 				{#if retrieveResults.length > 0}
 					<div class="space-y-2 overflow-y-auto">
-						{#each retrieveResults as doc}
+						{#each retrieveResults as doc (doc.title)}
 							<Card class="p-3">
 								<div class="flex items-start justify-between">
 									<p class="text-sm font-medium text-(--netz-text-primary)">{doc.title}</p>

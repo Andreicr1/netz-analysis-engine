@@ -159,7 +159,7 @@
 				</p>
 				{#if diff.changed_keys.length > 0}
 					<div class="flex flex-wrap gap-1">
-						{#each diff.changed_keys as key}
+						{#each diff.changed_keys as key (key)}
 							<span
 								class="rounded-full border border-(--netz-border) bg-(--netz-surface-alt) px-2 py-0.5 font-mono text-xs text-(--netz-text-secondary)"
 							>

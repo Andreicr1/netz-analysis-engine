@@ -261,7 +261,7 @@
 					<p class="text-xs text-(--netz-text-muted)">No version history available.</p>
 				{:else}
 					<div class="max-h-48 space-y-2 overflow-y-auto">
-						{#each versions as ver}
+						{#each versions as ver (ver.version)}
 							<div class="flex items-center justify-between rounded border border-(--netz-border) bg-(--netz-surface) px-3 py-2">
 								<div class="min-w-0 flex-1">
 									<div class="flex items-center gap-2">
@@ -307,7 +307,7 @@
 				/>
 				{#if validationErrors.length > 0}
 					<div class="mt-2 space-y-1">
-						{#each validationErrors as err}
+						{#each validationErrors as err (err)}
 							<p class="text-xs text-(--netz-danger)">{err}</p>
 						{/each}
 					</div>
@@ -323,7 +323,7 @@
 				>
 					{#if previewErrors.length > 0}
 						<div class="space-y-1">
-							{#each previewErrors as err}
+							{#each previewErrors as err (err)}
 								<p class="text-xs text-(--netz-danger)">{err}</p>
 							{/each}
 						</div>

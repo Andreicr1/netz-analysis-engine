@@ -33,7 +33,7 @@
 		)}
 		sideOffset={4}
 	>
-		{#each items as item}
+		{#each items as item (item.label)}
 			<BitsDropdownMenu.Item
 				class={cn(
 					"relative flex min-h-9 cursor-pointer select-none items-center rounded-(--netz-radius-md) px-3 py-2 text-[13px] font-medium outline-none transition-[color,background-color] duration-(--netz-duration-fast) hover:bg-(--netz-accent-soft) focus:bg-(--netz-accent-soft)",

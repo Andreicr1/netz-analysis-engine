@@ -159,7 +159,7 @@
 
 		{#if viewMode === "list"}
 			<div class="mb-4 flex flex-wrap gap-2">
-				{#each stageFilters as stage}
+				{#each stageFilters as stage (stage.value)}
 					<Button
 						onclick={() => selectStageFilter(stage.value)}
 						size="sm"
@@ -173,7 +173,7 @@
 
 		{#if !data.deals}
 			<div class="space-y-3">
-				{#each Array(6) as _}
+				{#each Array.from({length: 6}, (_, i) => i) as i (i)}
 					<Skeleton class="h-12 rounded-lg" />
 				{/each}
 			</div>

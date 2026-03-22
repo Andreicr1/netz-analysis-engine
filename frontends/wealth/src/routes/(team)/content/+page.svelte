@@ -321,7 +321,7 @@
 							<!-- Status pipeline visualization -->
 							{#if currentStage >= 0 && item.status !== "failed"}
 								<div class="mt-3 flex items-center gap-1">
-									{#each PIPELINE_STAGES as stage, i}
+									{#each PIPELINE_STAGES as stage, i (stage)}
 										{@const isActive = i <= currentStage}
 										{@const isCurrent = stage === item.status}
 										<div class="flex items-center gap-1">

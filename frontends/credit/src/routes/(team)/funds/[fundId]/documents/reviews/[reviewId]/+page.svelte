@@ -374,7 +374,7 @@
 	<Card class="mb-4 p-4">
 		<h3 class="mb-2 text-sm font-medium text-(--netz-text-secondary)">Assignments</h3>
 		{#if Array.isArray(review.assignments) && review.assignments.length > 0}
-			{#each review.assignments as assignment}
+			{#each review.assignments as assignment (assignment.reviewer_name)}
 				<div class="flex items-center justify-between py-2">
 					<span class="text-sm">{assignment.reviewer_name ?? "Unknown"}</span>
 					<StatusBadge status={String(assignment.decision ?? "pending")} type="review" resolve={resolveCreditStatus} />
@@ -391,7 +391,7 @@
 		{#if checklist.length === 0}
 			<p class="text-sm text-(--netz-text-muted)">No checklist items.</p>
 		{:else}
-			{#each checklist as item, idx}
+			{#each checklist as item, idx (idx)}
 				<label class="flex items-center gap-2 py-1.5 {togglingItem === String(idx) ? 'opacity-50' : ''}">
 					<input
 						type="checkbox"

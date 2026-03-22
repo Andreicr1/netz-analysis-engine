@@ -170,7 +170,7 @@
 		<!-- Document Metadata -->
 		<SectionCard title="Document Metadata">
 			<div class="grid gap-4 md:grid-cols-2">
-				{#each Object.entries(doc).filter(([k]) => !["id", "organization_id", "content", "embedding", "classification_layer", "classification_model", "classification_confidence", "classification_layer_label"].includes(k)) as [key, value]}
+				{#each Object.entries(doc).filter(([k]) => !["id", "organization_id", "content", "embedding", "classification_layer", "classification_model", "classification_confidence", "classification_layer_label"].includes(k)) as [key, value] (key)}
 					<div>
 						<p class="text-xs text-(--netz-text-muted)">{humanizeKey(key)}</p>
 						<p class="text-sm font-medium text-(--netz-text-primary)">{String(value ?? "—")}</p>
@@ -185,7 +185,7 @@
 				<EmptyState title="No versions" description="Version history will appear here." />
 			{:else}
 				<div class="space-y-2">
-					{#each versions as version}
+					{#each versions as version (version.version ?? version.version_number ?? '')}
 						<div class="flex items-center justify-between rounded-md border border-(--netz-border) p-3">
 							<div>
 								<p class="text-sm font-medium text-(--netz-text-primary)">
