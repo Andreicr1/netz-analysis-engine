@@ -204,7 +204,9 @@ class TestSilverChunksGlob:
 
 
 class TestStorageClientFactory:
-    def test_default_creates_local_client(self):
+    def test_default_creates_local_client(self, monkeypatch):
+        from app.core.config.settings import settings
+        monkeypatch.setattr(settings, "feature_r2_enabled", False)
         client = create_storage_client()
         assert isinstance(client, LocalStorageClient)
 
