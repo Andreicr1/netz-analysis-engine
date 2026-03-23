@@ -5,7 +5,6 @@ import math
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from vertical_engines.wealth.screener.quant_metrics import (
     BondQuantMetrics,
@@ -14,7 +13,6 @@ from vertical_engines.wealth.screener.quant_metrics import (
     compute_bond_metrics,
     compute_quant_metrics,
 )
-
 
 # ── Helpers ──────────────────────────────────────────────────────
 

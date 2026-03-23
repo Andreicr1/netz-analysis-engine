@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,7 +16,6 @@ from vertical_engines.credit.pipeline.models import (
     STATUS_PROCESSING,
     STATUS_READY,
 )
-
 
 # ── Pipeline status constants ────────────────────────────────────
 

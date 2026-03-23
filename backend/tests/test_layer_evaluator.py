@@ -4,11 +4,11 @@ from __future__ import annotations
 import pytest
 
 from vertical_engines.wealth.screener.layer_evaluator import (
+    _RATING_ORDER,
     DEFAULT_HYSTERESIS_BUFFER,
     DEFAULT_PASS_THRESHOLD,
     DEFAULT_WATCHLIST_THRESHOLD,
     LayerEvaluator,
-    _RATING_ORDER,
     determine_status,
 )
 

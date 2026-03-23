@@ -1,16 +1,11 @@
 """Tests for ai_engine.pipeline.validation — pipeline validation gates."""
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 
-import pytest
-
-from ai_engine.pipeline.models import HybridClassificationResult, PipelineStageResult
+from ai_engine.pipeline.models import HybridClassificationResult
 from ai_engine.pipeline.validation import (
-    EXPECTED_EMBEDDING_DIM,
     MAX_CONTENT_LOSS_RATIO,
-    MAX_NON_PRINTABLE_RATIO,
     MIN_CLASSIFICATION_CONFIDENCE,
     MIN_OCR_CHARS,
     validate_chunks,
@@ -18,7 +13,6 @@ from ai_engine.pipeline.validation import (
     validate_embeddings,
     validate_ocr_output,
 )
-
 
 # ── validate_ocr_output ──────────────────────────────────────────
 

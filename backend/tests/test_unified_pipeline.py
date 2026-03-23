@@ -8,9 +8,9 @@ import pytest
 
 from ai_engine.pipeline.models import IngestRequest, PipelineStageResult
 from ai_engine.pipeline.unified_pipeline import (
-    EXTRACTION_SOURCE_CONFIG,
     _EXTRACTION_JOBS,
     _MAX_EXTRACTION_JOBS,
+    EXTRACTION_SOURCE_CONFIG,
     _blob_entry_value,
     _trim_extraction_jobs,
     _update_extraction_job,
@@ -19,7 +19,6 @@ from ai_engine.pipeline.unified_pipeline import (
     new_extraction_job,
     run_extraction_pipeline,
 )
-
 
 # ── IngestRequest validation ─────────────────────────────────────
 

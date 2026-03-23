@@ -1,8 +1,6 @@
 """Tests for ai_engine.governance.authority_resolver — authority resolution and issuer detection."""
 from __future__ import annotations
 
-import pytest
-
 from ai_engine.governance.authority_resolver import (
     AUTHORITY_RANK,
     DOC_TYPE_AUTHORITY_OVERRIDE,
@@ -11,7 +9,6 @@ from ai_engine.governance.authority_resolver import (
     detect_chunk_issuer,
     enrich_chunks_with_authority,
 )
-
 
 # ── _resolve_authority ────────────────────────────────────────────
 

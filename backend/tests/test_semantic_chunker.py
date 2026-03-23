@@ -1,11 +1,7 @@
 """Tests for ai_engine.extraction.semantic_chunker — document chunking."""
 from __future__ import annotations
 
-import pytest
-
 from ai_engine.extraction.semantic_chunker import (
-    Block,
-    Chunk,
     _build_breadcrumb,
     _classify_section_type,
     _estimate_tokens,
@@ -17,7 +13,6 @@ from ai_engine.extraction.semantic_chunker import (
     _split_html_table,
     chunk_document,
 )
-
 
 # ── _slugify_key ─────────────────────────────────────────────────
 

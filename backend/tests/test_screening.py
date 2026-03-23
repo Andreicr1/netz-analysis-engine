@@ -1,17 +1,13 @@
 """Tests for vertical_engines.credit.pipeline.screening — context retrieval and completeness scoring."""
 from __future__ import annotations
 
-import pytest
-
 from vertical_engines.credit.pipeline.models import (
     REQUIRED_DD_DOCUMENTS,
-    TOTAL_DD_WEIGHT,
 )
 from vertical_engines.credit.pipeline.screening import (
     _compute_missing_documents,
     compute_completeness_score,
 )
-
 
 # ── _compute_missing_documents ────────────────────────────────────
 

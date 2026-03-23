@@ -18,9 +18,7 @@ from ai_engine.classification.hybrid_classifier import (
 from ai_engine.pipeline.models import (
     CANONICAL_DOC_TYPES,
     CANONICAL_VEHICLE_TYPES,
-    NO_VEHICLE_DOC_TYPES,
 )
-
 
 # ── Description completeness ────────────────────────────────────
 

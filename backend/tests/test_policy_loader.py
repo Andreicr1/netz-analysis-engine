@@ -1,19 +1,16 @@
 """Tests for ai_engine.governance.policy_loader — policy threshold resolution."""
 from __future__ import annotations
 
-import pytest
-
 from ai_engine.governance.policy_loader import (
+    _DEFAULTS,
     PolicyThresholds,
     ThresholdEntry,
-    _DEFAULTS,
     _build_context,
     _dedup_chunks,
     _first_source,
     invalidate_cache,
     resolve_governance_policy,
 )
-
 
 # ── PolicyThresholds defaults ────────────────────────────────────
 
