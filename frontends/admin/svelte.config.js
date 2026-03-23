@@ -16,7 +16,7 @@ const config = {
 		// CSP disabled in dev — Vite injects inline scripts without nonces
 		...(!dev && {
 			csp: {
-				mode: "auto",
+				mode: "hash",
 				directives: {
 					"default-src": ["self"],
 					"script-src": ["self", "unsafe-inline", "https://*.clerk.com"],
