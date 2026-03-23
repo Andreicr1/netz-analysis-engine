@@ -1,0 +1,3186 @@
+openapi: 3.0.0
+info:
+  title: Public Fund Data APIs - Dynamic Data
+  description: >-
+    Stay updated with real-time fund data using our Dynamic Data API, offering
+    the latest fund prices and dividends.
+  version: 1.0.0
+servers:
+  - url: https://api.fefundinfo.com/funds/Dynamic/1.0.0
+    description: Production
+security:
+  - Production: []
+paths:
+  /Dividends:
+    get:
+      tags:
+        - Dynamic Data
+      summary: >-
+        Latest yield data, dividend frequency, and a history of fund dividend
+        records.
+      description: >
+        Use this end point to fetch Divident Data based on the identifierType
+        like citicodes, isin and apirs.
+      operationId: FundDividendDataSimple
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: fieldSelections
+          in: query
+          description: Provide field names to filter in response.
+          required: false
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: identifierType
+          in: query
+          description: Currently supported identifierTypes are citicodes, isins and apirs.
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: string
+            default: ''
+        - name: identifierValue
+          in: query
+          description: Value for the identifier type. Provide maximum 10 values.
+          required: true
+          style: form
+          explode: false
+          schema:
+            maxItems: 10
+            minItems: 1
+            uniqueItems: true
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: DateFrom
+          in: query
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: string
+            format: date-time
+        - name: DateTo
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+            format: date-time
+        - name: Currencies
+          in: query
+          description: Value for currency. It will be default to GBP if nothing specified.
+          required: false
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+            default:
+              - GBP
+      responses:
+        '200':
+          description: Get Dividend Data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+        '206':
+          description: Get Dividend Data. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-read
+        - Sandbox:
+            - dynamic-data-read
+        - Development:
+            - dynamic-data-read
+    post:
+      tags:
+        - Dynamic Data
+      summary: >-
+        Latest yield data, dividend frequency, and a history of fund dividend
+        records.
+      description: >
+        Use this end point to fetch Divident Data based on the identifierType
+        like citicodes, isin and apirs.
+      operationId: Post_FundDividendDataSimple
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+      requestBody:
+        description: Provide inputs as JSON
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostDividendRequestBody'
+        required: true
+      responses:
+        '200':
+          description: Get Dividend Data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+        '206':
+          description: Get Dividend Data. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-read
+        - Sandbox:
+            - dynamic-data-read
+        - Development:
+            - dynamic-data-read
+  /Pricing:
+    get:
+      tags:
+        - Dynamic Data
+      summary: >-
+        Static price data including valuation currency and frequency, and latest
+        dynamic price data, including relevant prices, primary price change, and
+        price date
+      description: >
+        Use this end point to fetch Pricing Data based on the identifierType
+        like citicodes, isins and apirs.
+      operationId: FundPricingDataSimple
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: fieldSelections
+          in: query
+          description: Provide field names to filter in response.
+          required: false
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: identifierType
+          in: query
+          description: Currently supported identifierTypes are citicodes, isins and apirs.
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: string
+            default: ''
+        - name: identifierValue
+          in: query
+          description: Value for the identifier type. Provide maximum 10 values.
+          required: true
+          style: form
+          explode: false
+          schema:
+            maxItems: 10
+            minItems: 1
+            uniqueItems: true
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: Currency
+          in: query
+          description: Value for currency. It will be default to GBP if nothing specified.
+          required: false
+          style: form
+          explode: false
+          schema:
+            type: string
+            default: GBP
+        - name: DateTime
+          in: query
+          description: >-
+            Price to be returned for the requested Date. Default value is
+            today's date.
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Get Pricing Data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_1'
+        '206':
+          description: Get Pricing Data. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_1'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-read
+        - Sandbox:
+            - dynamic-data-read
+        - Development:
+            - dynamic-data-read
+    post:
+      tags:
+        - Dynamic Data
+      summary: >-
+        Static price data including valuation currency and frequency, and latest
+        dynamic price data, including relevant prices, primary price change, and
+        price date
+      description: >
+        Use this end point to fetch Pricing Data based on the identifierType
+        like citicodes, isins and apirs.
+      operationId: Post_FundPricingDataSimple
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+      requestBody:
+        description: Provide inputs as JSON
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostPricingRequestBody'
+        required: true
+      responses:
+        '200':
+          description: Get Pricing Data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_1'
+        '206':
+          description: Get Pricing Data. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_1'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-read
+        - Sandbox:
+            - dynamic-data-read
+        - Development:
+            - dynamic-data-read
+  /Aum:
+    get:
+      tags:
+        - Dynamic Data
+      summary: >-
+        Static and dynamic fund data including fund attributes, sector and
+        benchmark names, dates and codes, manager contact information, total net
+        assets, and some limited portfolio statistics
+      description: >
+        Use this end point to fetch asset under management based on the
+        identifierType like citicodes, isins and apirs.
+      operationId: AumData
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: fieldSelections
+          in: query
+          description: Provide field names to filter in response.
+          required: false
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: identifierType
+          in: query
+          description: Currently supported identifierTypes are citicodes, isins and apirs.
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: string
+            default: ''
+        - name: identifierValue
+          in: query
+          description: Value for the identifier type. Provide maximum 10 values.
+          required: true
+          style: form
+          explode: false
+          schema:
+            maxItems: 10
+            minItems: 1
+            uniqueItems: true
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: Currency
+          in: query
+          description: Value for currency. It will be default to GBP if nothing specified.
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+            default: GBP
+        - name: AumOn
+          in: query
+          description: >-
+            AumOn date when entered will retrieve the latest data prior to the
+            entered date. Default is today's date.
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Get asset under management Data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_2'
+        '206':
+          description: Get asset under management data. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_2'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-read
+        - Sandbox:
+            - dynamic-data-read
+        - Development:
+            - dynamic-data-read
+    post:
+      tags:
+        - Dynamic Data
+      summary: >-
+        Static and dynamic fund data including fund attributes, sector and
+        benchmark names, dates and codes, manager contact information, total net
+        assets, and some limited portfolio statistics
+      description: >
+        Use this end point to fetch asset under management based on the
+        identifierType like citicodes, isins and apirs.
+      operationId: Post_AumData
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+      requestBody:
+        description: Provide inputs as JSON
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostAumOnRequestBody'
+        required: true
+      responses:
+        '200':
+          description: Get asset under management Data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_2'
+        '206':
+          description: Get asset under management Data. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_2'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-read
+        - Sandbox:
+            - dynamic-data-read
+        - Development:
+            - dynamic-data-read
+  /Analytics:
+    get:
+      tags:
+        - Dynamic Data
+      summary: >-
+        Dynamic fund data including ratios and other analytics, such as Alpha,
+        Beta, maximum drawdown, excess return and relative return over periods
+        of 1, 3, and 5 years to date
+      description: >
+        Use this end point to fetch dynamic fund data including ratios and other
+        analytics based on the identifierType like citicodes, isins and apirs.
+      operationId: AnalyticsData
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: fieldSelections
+          in: query
+          description: Provide field names to filter in response.
+          required: false
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: identifierType
+          in: query
+          description: Currently supported identifierTypes are citicodes, isins and apirs.
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: string
+            default: ''
+        - name: identifierValue
+          in: query
+          description: Value for the identifier type. Provide maximum 10 values.
+          required: true
+          style: form
+          explode: false
+          schema:
+            maxItems: 10
+            minItems: 1
+            uniqueItems: true
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: currency
+          in: query
+          description: >-
+            The ISO currency code to be used in the output, if the raw data
+            needs to be exchanged or rebased from a base currency into this
+            currency. Eg. "EUR". Default value is "Local" corresponds to the
+            instrument currency.
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+            default: Local
+        - name: methodType
+          in: query
+          description: |
+            Performace End Types:
+             * `1` - BidToBid
+             * `3` - OfferToBid
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: integer
+            format: int32
+            enum:
+              - 1
+              - 3
+        - name: priceType
+          in: query
+          description: |
+            Performace End Types:
+             * `0` - Price
+             * `1` - NetTotalReturn
+             * `2` - GrossTotalReturn
+             * `5` - Nav
+             * `7` - NavPublished
+             * `51` - UniverseDefault
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: integer
+            format: int32
+            enum:
+              - 0
+              - 1
+              - 2
+              - 5
+              - 7
+              - 51
+        - name: riskFreeRate
+          in: query
+          description: >-
+            A constant used in some correlation statistics to represent an
+            interest rate that is considered be a gauge for risk free
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+        - name: isAnnualised
+          in: query
+          description: >-
+            Whether or not performance/ratios should be calculated on an
+            annualised basis for the instrument
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: boolean
+        - name: benchmark
+          in: query
+          description: >-
+            Defines whether the fund's index or sector should be used as the
+            fund's benchmark in ratio calculation. True means the sector should
+            be used, false means index should be used
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Get dynamic fund data including ratios and other analytics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_3'
+        '206':
+          description: >-
+            Get dynamic fund data including ratios and other analytics. Partial
+            Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_3'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-read
+        - Sandbox:
+            - dynamic-data-read
+        - Development:
+            - dynamic-data-read
+    post:
+      tags:
+        - Dynamic Data
+      summary: >-
+        Dynamic fund data including ratios and other analytics, such as Alpha,
+        Beta, maximum drawdown, excess return and relative return over periods
+        of 1, 3, and 5 years to date
+      description: >
+        Use this end point to fetch dynamic fund data including ratios and other
+        analytics based on the identifierType like citicodes, isins and apirs.
+      operationId: Post_AnalyticsData
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+      requestBody:
+        description: Provide inputs as JSON
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostAnalyticsDataRequestBody'
+        required: true
+      responses:
+        '200':
+          description: Get dynamic fund data including ratios and other analytics.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_3'
+        '206':
+          description: >-
+            Get dynamic fund data including ratios and other analytics. Partial
+            Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_3'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-read
+        - Sandbox:
+            - dynamic-data-read
+        - Development:
+            - dynamic-data-read
+  /Ratings:
+    get:
+      tags:
+        - Dynamic Data
+      summary: >-
+        Fund and fund manager ratings, including Crown rating, Alpha Manager
+        rating, risk score, SRRI and FE Adviser Fund Index flags
+      description: >
+        Use this end point to fetch dynamic fund and fund manager ratings based
+        on the identifierType like citicodes, isins and apirs.
+      operationId: RatingsData
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: fieldSelections
+          in: query
+          description: Provide field names to filter in response.
+          required: false
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: identifierType
+          in: query
+          description: Currently supported identifierTypes are citicodes, isins and apirs.
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: string
+            default: ''
+        - name: identifierValue
+          in: query
+          description: Value for the identifier type. Provide maximum 10 values.
+          required: true
+          style: form
+          explode: false
+          schema:
+            maxItems: 10
+            minItems: 1
+            uniqueItems: true
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: countryCode
+          in: query
+          description: >-
+            The ISO 3166-1 alpha-3 code for the country for which risk score
+            should be calculated
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+        - name: asAtDate
+          in: query
+          description: This date is applied to ESG related rating only
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: string
+            format: date-time
+        - name: usingUniverseUAsDefault
+          in: query
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Get dynamic fund and fund manager ratings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_4'
+        '206':
+          description: Get dynamic fund and fund manager ratings. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_4'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-read
+        - Sandbox:
+            - dynamic-data-read
+        - Development:
+            - dynamic-data-read
+    post:
+      tags:
+        - Dynamic Data
+      summary: >-
+        Fund and fund manager ratings, including Crown rating, Alpha Manager
+        rating, risk score, SRRI and FE Adviser Fund Index flags
+      description: >
+        Use this end point to fetch dynamic fund and fund manager ratings based
+        on the identifierType like citicodes, isins and apirs.
+      operationId: Post_RatingsData
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+      requestBody:
+        description: Provide inputs as JSON
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostRatingsDataRequestBody'
+        required: true
+      responses:
+        '200':
+          description: Get dynamic fund and fund manager ratings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_4'
+        '206':
+          description: Get dynamic fund and fund manager ratings.. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_4'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-read
+        - Sandbox:
+            - dynamic-data-read
+        - Development:
+            - dynamic-data-read
+  /IntraDayPrice:
+    get:
+      tags:
+        - Dynamic Data
+      summary: >-
+        Intra-day dynamic price data including relevant prices for the current
+        day, open and close price for the prior day, and mid price change
+      description: >
+        Use this end point to fetch intraday prices based on the identifierType
+        like citicodes, isins and apirs.
+      operationId: IntraDayPriceData
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: fieldSelections
+          in: query
+          description: Provide field names to filter in response.
+          required: false
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: identifierType
+          in: query
+          description: Currently supported identifierTypes are citicodes, isins and apirs.
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: string
+            default: ''
+        - name: identifierValue
+          in: query
+          description: Value for the identifier type. Provide maximum 10 values.
+          required: true
+          style: form
+          explode: false
+          schema:
+            maxItems: 10
+            minItems: 1
+            uniqueItems: true
+            type: array
+            items:
+              type: string
+              default: ''
+        - name: Currencies
+          in: query
+          description: Value for currency. It will be default to GBP if nothing specified.
+          required: false
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+            default:
+              - GBP
+      responses:
+        '200':
+          description: Get intraday prices.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_5'
+        '206':
+          description: Get intraday prices. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_5'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-read
+        - Sandbox:
+            - dynamic-data-read
+        - Development:
+            - dynamic-data-read
+    post:
+      tags:
+        - Dynamic Data
+      summary: >-
+        Intra-day dynamic price data including relevant prices for the current
+        day, open and close price for the prior day, and mid price change
+      description: >
+        Use this end point to fetch intraday prices based on the identifierType
+        like citicodes, isins and apirs.
+      operationId: Post_IntraDayPriceData
+      parameters:
+        - name: Fefi-Apim-Subscription-Key
+          in: header
+          description: Fefi APIM Subscription key
+          required: true
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+        - name: x-correlation-id
+          in: header
+          description: >-
+            x-correlation-id is used to trace the log. It is unique guid id. API
+            will generate new id if it is not passed explicitly.
+          required: false
+          style: simple
+          explode: false
+          schema:
+            type: string
+            default: ''
+      requestBody:
+        description: Provide inputs as JSON
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostIntraDayPriceDataRequestBody'
+        required: true
+      responses:
+        '200':
+          description: Get intraday prices.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_5'
+        '206':
+          description: Get intraday prices. Partial Content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_5'
+        '400':
+          description: Bad request, Please check your inputs.
+          content: {}
+        '401':
+          description: Unauthorized.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_401'
+        '404':
+          description: No data for this identifierValue.
+          content: {}
+        '408':
+          description: Your request has timed out. Please try again.
+          content: {}
+        '500':
+          description: >-
+            Internal Server error, please raise a ticket with the FEFundinfo
+            support team if you experience this.
+          content: {}
+      security:
+        - Production:
+            - dynamic-data-read
+        - Sandbox:
+            - dynamic-data-read
+        - Development:
+            - dynamic-data-read
+components:
+  schemas:
+    DividendData:
+      type: object
+      properties:
+        Message:
+          type: string
+          description: response message
+        IsSuccess:
+          type: boolean
+          description: based on the response value will be set.
+        Request:
+          $ref: '#/components/schemas/DividendData_Request'
+        Result:
+          type: array
+          description: response result will be assign to result.
+          items:
+            $ref: '#/components/schemas/DividendDataResult'
+    DividendDataResult:
+      type: object
+      properties:
+        CitiCode:
+          type: string
+        Isin:
+          type: string
+        Apir:
+          type: string
+        OFDY005005:
+          type: string
+          description: The date a dividend is or was announced.
+          format: date-time
+        OFDY005010:
+          type: string
+          description: >-
+            Date when dividend is deducted from share classes' net asset value,
+            i.e. ceteris paribus the net asset value on Dividend Ex Date plus
+            "OFDY005020 Dividend Gross" would equal the net asset value of the 
+            day before.
+          format: date-time
+        OFDY005020:
+          type: number
+          description: >-
+            Amount of dividend paid out, if no taxes would be deducted.
+            Equivalent to  CEPT-PRICES: 11050_Distribution_value
+          format: double
+        OFDY005022:
+          type: number
+          description: >-
+            Dividend paid out after withholding taxes are deducted. The net
+            dividend must not be higher than the OFDY005020 Dividend Gross.
+          format: double
+        OFDY005015:
+          type: number
+          description: >-
+            Date of the dividend payment, i.e. when you can expect the dividend
+            amount transferred to your bank account.
+          format: double
+        OFDY900149:
+          type: number
+          description: >-
+            Omitted dividend. Enter "yes" if this dividend is 0 - e.g. it has
+            not been distributed.
+          format: double
+        OFDY005100:
+          type: number
+          description: Taxable Income per Dividend, shown as an amount per dividend.
+          format: double
+        OFDY005155:
+          type: array
+          description: >-
+            Taxable income per share (TIS) for Belgium. The amount of income per
+            share that is considered taxable for funds marketed in Belgium.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY005160:
+          type: array
+          description: >-
+            Taxable income per share (TIS) for Switzerland. The amount of income
+            per share that is considered taxable for funds marketed in
+            Switzerland.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY005150:
+          type: array
+          description: >-
+            Taxable income per share (TIS) for the European Union (EU). The
+            amount of income per share that is considered taxable for funds
+            marketed in the EU.
+          items:
+            $ref: '#/components/schemas/Pricing'
+    Pricing:
+      type: object
+      properties:
+        Value:
+          type: number
+          description: currency value
+          format: double
+        Currency:
+          type: string
+          description: currency format
+    PricingData:
+      type: object
+      properties:
+        Message:
+          type: string
+          description: response message
+        IsSuccess:
+          type: boolean
+          description: based on the response value will be set.
+        Request:
+          $ref: '#/components/schemas/PricingData_Request'
+        Result:
+          type: array
+          description: response result will be assign to result.
+          items:
+            $ref: '#/components/schemas/PricingDataResult'
+    PricingDataResult:
+      type: object
+      properties:
+        CitiCode:
+          type: string
+        Isin:
+          type: string
+        Apir:
+          type: string
+        OFDY000020:
+          type: array
+          description: >-
+            For funds with "OFST401002 Pricing Methodology" = "dual pricing"
+            only. Net asset value (NAV) of share class by using underlying
+            assets' bid prices for NAV calculation. Default currency is
+            "OFST020540 Share Class Currency". For different currencies use
+            OFDY000020_XXX, where XXX stands for ISO code 4217 as it can be
+            found on: https://en.wikipedia.org/wiki/ISO_4217 or on
+            http://www.currency-iso.org/en/home/tables/table-a1.html
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY000025:
+          type: array
+          description: >-
+            For funds with "OFST401002 Pricing Methodology" = "dual pricing"
+            only. Net asset value (NAV) of share class by using underlying
+            assets' ask prices for NAV calculation. Default currency is
+            "OFST020540 Share Class Currency". For different currencies use
+            OFDY000025_XXX, where XXX stands for ISO code 4217 as it can be
+            found on https://en.wikipedia.org/wiki/ISO_4217 or on
+            http://www.currency-iso.org/en/home/tables/table-a1.html.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY908005:
+          type: array
+          description: >-
+            FE fundinfo Mid. Decimal figure, rounded to maximal 7 digits after
+            the decimal point.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY908102:
+          type: array
+          description: >-
+            FE fundinfo Total Return NAV. Decimal figure, rounded to maximal 7
+            digits after the decimal point.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY907001:
+          type: array
+          description: >-
+            This field is to indicate the Ausgabepreis (subscription price) used
+            in Germany. The subscription price of a fund refers to the price at
+            which investors can buy shares or units in the fund. It is the
+            initial price per share or unit that investors pay to enter the fund
+            and may also include additional fees or charges, such as sales
+            charges or front-end loads, which are deducted from the investor's
+            initial investment.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY907003:
+          type: array
+          description: >-
+            This field is to indicate the Rücknahmepreis (redemption price) used
+            in Germany. The redemption price refers to the price at which
+            investors can sell their shares or units in the fund. It represents
+            the value of the investor's holdings at the time of redemption and
+            may include additional fees or charges, such as redemption fees or
+            back-end loads, which are deducted from the investor's proceeds upon
+            sale.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY028010:
+          type: array
+          description: >-
+            The equity participation ratio as per item 28 of the letter of the
+            Ministry of Finance in connection with the letter of the Ministry of
+            Finance of 14 June 2017 (Reference: IV C 1 – p. 1980-1/16/10010
+            :001). By taking this value into account, a fund of funds can
+            acquire the status of an equity fund entitled to partial tax
+            exemption on shares in favor of its investors. German: Höhe der
+            Kapitalbeteiligungsquote. This field is relevant for Retail
+            Investment Funds and Special Investment Funds distributed in
+            Germany.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY028012:
+          type: array
+          description: >-
+            This indicates the proportion of the total fund assets in the share
+            class. This is required to calculate tax deductions from the taxable
+            investment income. The relevant date for this value should be the
+            valuation date given alongside this, e.g. OFDY000021 Bid NAV Date.
+            German: Anteil am Gesamtfondsvermögen. This field is relevant for
+            Retail Investment Funds and Special Investment Funds distributed in
+            Germany.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY028018:
+          type: array
+          description: >-
+            The real estate ratio (non-German real estates) as per item 2.14 of
+            the (draft) letter of the Federal Ministry of Finance of August 2017
+            "Letter of Application of the Investment Tax Law in the Version of
+            the Law Governing the Reform of the Investment Taxation" in
+            connection with the letter of the Ministry of Finance of 14 June
+            2017. German: Ausländische Immobilienquote. This field is relevant
+            for Retail Investment Funds and Special Investment Funds distributed
+            in Germany.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY900150:
+          type: array
+          description: >-
+            The amount of shares subscribed refers to the total value of shares
+            or units that investors have agreed to purchase in a financial
+            product, such as a fund or security, during the NAV calculation
+            period. This metric represents the level of demand for the product
+            and is shown in the currency of the share class. Calculated using
+            Price x Number of subscribed shares.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY900151:
+          type: array
+          description: >-
+            The amount of redeemed shares refers to the total value of shares or
+            units that investors have sold back to a financial product, such as
+            a fund or security, during the NAV calculation period. This metric
+            represents the level of investor disinterest or need for liquidity
+            in the product and is shown in the currency of the share class.
+            Calculated using Price x Number of redeemed shares.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY900152:
+          type: array
+          description: >-
+            The number of subscribed shares refers to the total count of shares
+            or units that have been purchased by investors in a financial
+            product, such as a fund or security, during the NAV calculation
+            period. This metric represents the level of investor interest in the
+            product.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY900153:
+          type: array
+          description: >-
+            The number of redeemed shares refers to the total count of shares or
+            units that have been sold back by investors to a financial product,
+            such as a fund or security, during the NAV calculation period. This
+            metric represents the level of investor disinterest or need for
+            liquidity in the product.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY900154:
+          type: array
+          description: >-
+            The amount of subscriptions inside sub-fund refers to the total
+            value of shares or units that investors have purchased within a
+            specific sub-fund of a larger financial product, such as a mutual
+            fund or exchange-traded fund (ETF), during the NAV calculation
+            period. This metric represents the level of investor interest and
+            participation in the sub-fund and is shown in the currency of the
+            sub-fund.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY900155:
+          type: array
+          description: >-
+            The amount in redemptions inside sub-fund refers to the total value
+            of shares or units that investors have sold back within a specific
+            sub-fund of a larger financial product, such as a mutual fund or
+            exchange-traded fund (ETF), during NAV calculation period. This
+            metric represents the level of investor disinterest or need for
+            liquidity in the sub-fund and is shown in the currency of the
+            sub-fund.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY900156:
+          type: array
+          description: >-
+            The number of subscribed shares in sub-fund refers to the total
+            count of shares or units that have been purchased by investors
+            within a specific sub-fund of a larger financial product, such as a
+            mutual fund or exchange-traded fund (ETF), during the NAV
+            calculation period. This metric represents the level of investor
+            interest and participation in the sub-fund.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY900157:
+          type: array
+          description: >-
+            The number of redeemed shares in sub-fund refers to the total count
+            of shares or units that have been sold back by investors within a
+            specific sub-fund of a larger financial product, such as a mutual
+            fund or exchange-traded fund (ETF), during the NAV calculation
+            period. This metric represents the level of investor disinterest or
+            need for liquidity in the sub-fund.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY005155:
+          type: array
+          description: >-
+            Taxable income per share (TIS) for Belgium. The amount of income per
+            share that is considered taxable for funds marketed in Belgium.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY005160:
+          type: array
+          description: >-
+            Taxable income per share (TIS) for Switzerland. The amount of income
+            per share that is considered taxable for funds marketed in
+            Switzerland.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY005150:
+          type: array
+          description: >-
+            Taxable income per share (TIS) for the European Union (EU). The
+            amount of income per share that is considered taxable for funds
+            marketed in the EU.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY005100:
+          type: array
+          description: Taxable Income per Dividend, shown as an amount per dividend.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY900149:
+          type: array
+          description: >-
+            Omitted dividend. Enter "yes" if this dividend is 0 - e.g. it has
+            not been distributed.
+          items:
+            $ref: '#/components/schemas/Pricing'
+        OFDY900141:
+          type: number
+          description: The Gross Total Return value of Bid.
+          format: double
+        OFDY900142:
+          type: number
+          description: The Gross Total Return value of Offer.
+          format: double
+        OFDY900143:
+          type: number
+          description: The Total Return value of Bid.
+          format: double
+        OFDY900144:
+          type: number
+          description: The Total Return value of Offer.
+          format: double
+        OFDY000021:
+          type: string
+          description: Valuation date.
+          format: date-time
+        OFDY000026:
+          type: string
+          description: Valuation date.
+          format: date-time
+        OFDY000036:
+          type: string
+          description: Valuation date.
+          format: date-time
+        OFDY000041:
+          type: string
+          description: Valuation date.
+          format: date-time
+        OFDY000066:
+          type: string
+          description: Number Of Shares Amount Fund
+          format: date-time
+        OFDY000075:
+          type: string
+          description: Number Of Shares Amount Unit
+          format: date-time
+        OFDY000076:
+          type: string
+          description: Number Of Shares Date Unit
+          format: date-time
+        OFDY000065:
+          type: string
+          description: Number Of Shares Date Fund
+          format: date-time
+        PriceChangePercentage:
+          type: number
+          description: Price change in percentage compared to the previous price.
+          format: double
+    AumOnData:
+      type: object
+      properties:
+        Message:
+          type: string
+          description: response message
+        IsSuccess:
+          type: boolean
+          description: based on the response value will be set.
+        Request:
+          $ref: '#/components/schemas/AumOnData_Request'
+        Result:
+          type: array
+          description: response result will be assign to result.
+          items:
+            $ref: '#/components/schemas/AumOnDataResult'
+    AumOnDataResult:
+      type: object
+      properties:
+        CitiCode:
+          type: string
+        Isin:
+          type: string
+        Apir:
+          type: string
+        OFDY000060:
+          type: number
+          description: >
+            Also known as "Total Net Assets" (TNA) The overall value of the
+            fund's assets Table or function is : whUnits..FundFact; dbField Name
+            is :FundSize (with exchange rate); logic is :ff.FundSize *
+            IsNUll(ex.ExchangeRate, 1)
+          format: double
+        OFDY000061:
+          type: string
+          description: >
+            The date at which the fund size was calculated. See "FundSize" for
+            more details on fund size Table or function is : whUnits..FundFact;
+            dbField Name is :FundSizeDate
+          format: date-time
+        OFDY000070:
+          type: number
+          description: >
+            Also known as "Unit Total Net Assets" (Unit TNA). The value of the
+            proportion of the fund's assets allocated to a given unit Table or
+            function is : whUnits..FxUnit; dbField Name is :UnitSize (with
+            exchange rate); logic is :u.UnitSize * IsNull(ex.ExchangeRate, 1)
+          format: double
+        OFDY000071:
+          type: string
+          description: >
+            The date at which the unit size was calculated. See "Unit Size" for
+            more details on unit size Table or function is : whUnits..FxUnit;
+            dbField Name is :UnitSizeDate
+          format: date-time
+    AnalyticsData:
+      type: object
+      properties:
+        Message:
+          type: string
+          description: response message
+        IsSuccess:
+          type: boolean
+          description: based on the response value will be set.
+        Request:
+          $ref: '#/components/schemas/AnalyticsData_Request'
+        Result:
+          type: array
+          description: response result will be assign to result.
+          items:
+            $ref: '#/components/schemas/AnalyticsDataResult'
+    AnalyticsDataResult:
+      type: object
+      properties:
+        Isin:
+          type: string
+        Apir:
+          type: string
+        citiCode:
+          type: string
+          description: >-
+            The FE internal identifier code for the instrument Table or function
+            is : whUnits..FxUnit; dbField Name is :Citicode
+        bearBeta1Yr:
+          type: number
+          description: >-
+            The Bear Beta coefficient of the fund share unit over a 1
+            yearperiod, to last month end. Bear Beta is a measure of the
+            sensitivity of a fund’s return to negative changes in its
+            benchmark’s return Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcBearBeta(unitreturns, benchreturns); logic is :1 year period
+          format: double
+        bearBeta3Yr:
+          type: number
+          description: >-
+            The Bear Beta coefficient of the fund share unit over a 3
+            yearperiod, to last month end. Bear Beta is a measure of the
+            sensitivity of a fund’s return to negative changes in its
+            benchmark’s return Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcBearBeta(unitreturns, benchreturns); logic is :3 year period
+          format: double
+        bearBeta5Yr:
+          type: number
+          description: >-
+            The Bear Beta coefficient of the fund share unit over a 5
+            yearperiod, to last month end. Bear Beta is a measure of the
+            sensitivity of a fund’s return to negative changes in its
+            benchmark’s return Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcBearBeta(unitreturns, benchreturns); logic is :5 year period
+          format: double
+        maxDrawdown1Yr:
+          type: number
+          description: >-
+            The maximum drawdown (MDD) of the fund share unit over a 1
+            yearperiod, to last month end. A maximum drawdown (MDD) is the
+            maximum loss from a peak to a trough of a portfolio, before a new
+            peak is attained. Maximum Drawdown (MDD) is an indicator of downside
+            risk over a specified timeperiod, to last month end. MDD = (Trough
+            Value – Peak Value) ÷ Peak Value Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcMaxDrawDown(HistData xp); logic is :1 year period
+          format: double
+        maxDrawdown3Yr:
+          type: number
+          description: >-
+            The maximum drawdown (MDD) of the fund share unit over a 3
+            yearperiod, to last month end. A maximum drawdown (MDD) is the
+            maximum loss from a peak to a trough of a portfolio, before a new
+            peak is attained. Maximum Drawdown (MDD) is an indicator of downside
+            risk over a specified timeperiod, to last month end. MDD = (Trough
+            Value – Peak Value) ÷ Peak Value Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcMaxDrawDown(HistData xp); logic is :3 year period
+          format: double
+        maxDrawdown5Yr:
+          type: number
+          description: >-
+            The maximum drawdown (MDD) of the fund share unit over a 5
+            yearperiod, to last month end. A maximum drawdown (MDD) is the
+            maximum loss from a peak to a trough of a portfolio, before a new
+            peak is attained. Maximum Drawdown (MDD) is an indicator of downside
+            risk over a specified timeperiod, to last month end. MDD = (Trough
+            Value – Peak Value) ÷ Peak Value Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcMaxDrawDown(HistData xp); logic is :5 year period
+          format: double
+        sortino1Yr:
+          type: number
+          description: >-
+            The Sortino ratio of the fund share unit over a 1 yearperiod, to
+            last month end. The Sortino ratio is a variation of the Sharpe ratio
+            that differentiates harmful volatility from total overall volatility
+            by using the asset's standard deviation of negative portfolio
+            returns, called downside deviation, instead of the total standard
+            deviation of portfolio returns. The Sortino ratio takes an asset or
+            portfolio's return and subtracts the risk-free rate, and then
+            divides that amount by the asset's downside deviation Table or
+            function is : FE.Core - Business.Stats.AnalyticalTool; dbField Name
+            is :calcSortino(annunitreturn, annUnitDownsideRisk); logic is :1
+            year period
+          format: double
+        sortino3Yr:
+          type: number
+          description: >-
+            The Sortino ratio of the fund share unit over a 3 yearperiod, to
+            last month end. The Sortino ratio is a variation of the Sharpe ratio
+            that differentiates harmful volatility from total overall volatility
+            by using the asset's standard deviation of negative portfolio
+            returns, called downside deviation, instead of the total standard
+            deviation of portfolio returns. The Sortino ratio takes an asset or
+            portfolio's return and subtracts the risk-free rate, and then
+            divides that amount by the asset's downside deviation Table or
+            function is : FE.Core - Business.Stats.AnalyticalTool; dbField Name
+            is :calcSortino(annunitreturn, annUnitDownsideRisk); logic is :3
+            year period
+          format: double
+        sortino5Yr:
+          type: number
+          description: >-
+            The Sortino ratio of the fund share unit over a 5 yearperiod, to
+            last month end. The Sortino ratio is a variation of the Sharpe ratio
+            that differentiates harmful volatility from total overall volatility
+            by using the asset's standard deviation of negative portfolio
+            returns, called downside deviation, instead of the total standard
+            deviation of portfolio returns. The Sortino ratio takes an asset or
+            portfolio's return and subtracts the risk-free rate, and then
+            divides that amount by the asset's downside deviation Table or
+            function is : FE.Core - Business.Stats.AnalyticalTool; dbField Name
+            is :calcSortino(annunitreturn, annUnitDownsideRisk); logic is :5
+            year period
+          format: double
+        maxGain1Yr:
+          type: number
+          description: >-
+            The maximum gain of the fund share unit over a 1 yearperiod, to last
+            month end Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcMaxGain(unitdata); logic is :1 year period
+          format: double
+        maxGain3Yr:
+          type: number
+          description: >-
+            The maximum gain of the fund share unit over a 3 year period Table
+            or function is : FE.Core - Business.Stats.AnalyticalTool; dbField
+            Name is :calcMaxGain(unitdata); logic is :3 year period
+          format: double
+        maxGain5Yr:
+          type: number
+          description: >-
+            The maximum gain of the fund share unit over a 5 year period Table
+            or function is : FE.Core - Business.Stats.AnalyticalTool; dbField
+            Name is :calcMaxGain(unitdata); logic is :5 year period
+          format: double
+        maxLoss1Yr:
+          type: number
+          description: >-
+            The maximum loss of the fund share unit over a 1 year period Table
+            or function is : FE.Core - Business.Stats.AnalyticalTool; dbField
+            Name is :calcMaxLoss(unitdata); logic is :1 year period
+          format: double
+        maxLoss3Yr:
+          type: number
+          description: >-
+            The maximum loss of the fund share unit over a 3 year period Table
+            or function is : FE.Core - Business.Stats.AnalyticalTool; dbField
+            Name is :calcMaxLoss(unitdata); logic is :3 year period
+          format: double
+        maxLoss5Yr:
+          type: number
+          description: >-
+            The maximum loss of the fund share unit over a 5 year period Table
+            or function is : FE.Core - Business.Stats.AnalyticalTool; dbField
+            Name is :calcMaxLoss(unitdata); logic is :5 year period
+          format: double
+        negPeriods1Yr:
+          type: number
+          description: >-
+            The number of periods of negative return for the fund share unit
+            over the past 1 year period Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcTotalPeriod(unitreturns, -1); logic is :1 year period
+          format: double
+        negPeriods3Yr:
+          type: number
+          description: >-
+            The number of periods of negative return for the fund share unit
+            over the past 3 year period Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcTotalPeriod(unitreturns, -1); logic is :3 year period
+          format: double
+        negPeriods5Yr:
+          type: number
+          description: >-
+            The number of periods of negative return for the fund share unit
+            over the past 5 year period Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcTotalPeriod(unitreturns, -1); logic is :For period specified in
+            API input
+          format: double
+        posPeriods1Yr:
+          type: number
+          description: >-
+            The number of periods of positive return for the fund share unit
+            over the past 1 year period Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcTotalPeriod(unitreturns, 1); logic is :1 year period
+          format: double
+        posPeriods3Yr:
+          type: number
+          description: >-
+            The number of periods of positive return for the fund share unit
+            over the past 3 year period Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcTotalPeriod(unitreturns, 1)
+          format: double
+        posPeriods5Yr:
+          type: number
+          description: >-
+            The number of periods of positive return for the fund share unit
+            over the past 5 year period Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcTotalPeriod(unitreturns, 1); logic is :For period specified in
+            API input
+          format: double
+        jensensAlpha1Yr:
+          type: number
+          description: >-
+            The Jensen's Alpha of the portfolio over a 1 yearperiod, to last
+            month end. The Jensen's Alpha is a risk-adjusted performance measure
+            that represents the average return on a portfolio or investment,
+            above or below that predicted by the capital asset pricing model
+            (CAPM), given the portfolio's or investment's beta and the average
+            market return. This metric is also commonly referred to as Jensen's
+            measure, or simply alpha Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcJensensAlpha(HistData x, HistData y, double beta); logic is :1
+            year period
+          format: double
+        jensensAlpha3Yr:
+          type: number
+          description: >-
+            The Jensen's Alpha of the fund share unit over a 3 yearperiod, to
+            last month end. The Jensen's Alpha is a risk-adjusted performance
+            measure that represents the average return on a portfolio or
+            investment, above or below that predicted by the capital asset
+            pricing model (CAPM), given the portfolio's or investment's beta and
+            the average market return. This metric is also commonly referred to
+            as Jensen's measure, or simply alpha Table or function is : FE.Core
+            - Business.Stats.AnalyticalTool; dbField Name is
+            :calcJensensAlpha(HistData x, HistData y, double beta); logic is :3
+            year period
+          format: double
+        jensensAlpha5Yr:
+          type: number
+          description: >-
+            The Jensen's Alpha of the fund share unit over a 5 yearperiod, to
+            last month end. The Jensen's Alpha is a risk-adjusted performance
+            measure that represents the average return on a portfolio or
+            investment, above or below that predicted by the capital asset
+            pricing model (CAPM), given the portfolio's or investment's beta and
+            the average market return. This metric is also commonly referred to
+            as Jensen's measure, or simply alpha Table or function is : FE.Core
+            - Business.Stats.AnalyticalTool; dbField Name is
+            :calcJensensAlpha(HistData x, HistData y, double beta); logic is :5
+            year period
+          format: double
+        treynor1Yr:
+          type: number
+          description: >-
+            The Treynor ratio of the fund share unit over a 1 yearperiod, to
+            last month end. The Treynor ratio, also known as the
+            reward-to-volatility ratio, is a performance metric for determining
+            how much excess return was generated for each unit of risk taken on
+            by a portfolio. Treynor ratio = (portfolio return - risk-free
+            return) / Beta Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is :(annunitreturn -
+            this.m_Rf) / beta; logic is :1 year period
+          format: double
+        treynor3Yr:
+          type: number
+          description: >-
+            The Treynor ratio of the fund share unit over a 3 yearperiod, to
+            last month end. The Treynor ratio, also known as the
+            reward-to-volatility ratio, is a performance metric for determining
+            how much excess return was generated for each unit of risk taken on
+            by a portfolio. Treynor ratio = (portfolio return - risk-free
+            return) / Beta Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is :(annunitreturn -
+            this.m_Rf) / beta; logic is :3 year period
+          format: double
+        treynor5Yr:
+          type: number
+          description: >-
+            The Treynor ratio of the fund share unit over a 5 yearperiod, to
+            last month end. The Treynor ratio, also known as the
+            reward-to-volatility ratio, is a performance metric for determining
+            how much excess return was generated for each unit of risk taken on
+            by a portfolio. Treynor ratio = (portfolio return - risk-free
+            return) / Beta Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is :(annunitreturn -
+            this.m_Rf) / beta; logic is :5 year period
+          format: double
+        vol1Yr:
+          type: number
+          description: >-
+            The annualised volatility of a fund share unit over a 1 yearperiod,
+            to last month end. Volatility is a statistical measure of the
+            dispersion of returns for a given security or market index. In most
+            cases, the higher the volatility, the riskier the security.
+            Volatility can either be measured by using the standard deviation or
+            variance between returns from that same security or market index
+            Table or function is : FE.Core - Business.Stats.AnalyticalTool;
+            dbField Name is :calcAnnVolatility(unitreturns); logic is :1 year
+            period
+          format: double
+        vol3Yr:
+          type: number
+          description: >-
+            The annualised volatility of a fund share unit over a 3 yearperiod,
+            to last month end. Volatility is a statistical measure of the
+            dispersion of returns for a given security or market index. In most
+            cases, the higher the volatility, the riskier the security.
+            Volatility can either be measured by using the standard deviation or
+            variance between returns from that same security or market index
+            Table or function is : FE.Core - Business.Stats.AnalyticalTool;
+            dbField Name is :calcAnnVolatility(unitreturns); logic is :3 year
+            period
+          format: double
+        vol5Yr:
+          type: number
+          description: >-
+            The annualised volatility of a fund share unit over a 5 yearperiod,
+            to last month end. Volatility is a statistical measure of the
+            dispersion of returns for a given security or market index. In most
+            cases, the higher the volatility, the riskier the security.
+            Volatility can either be measured by using the standard deviation or
+            variance between returns from that same security or market index
+            Table or function is : FE.Core - Business.Stats.AnalyticalTool;
+            dbField Name is :calcAnnVolatility(unitreturns); logic is :5 year
+            period
+          format: double
+        alpha1Yr:
+          type: number
+          description: >-
+            The Alpha of the fund share unit over a 1 yearperiod, to last month
+            end. Alpha is a measure of an investment's performance on a
+            risk-adjusted basis. It takes the volatility (price risk) of a
+            security or fund portfolio and compares its risk-adjusted
+            performance to a benchmark index. The excess return of the
+            investment relative to the return of the benchmark index is its
+            alpha. Alpha is often considered to represent the value that a
+            portfolio manager adds or subtracts from a fund portfolio's return.
+            An alpha of 1.0 means the fund has outperformed its benchmark index
+            by 1%. Correspondingly, an alpha of -1.0 would indicate an
+            under-performance of 1% Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcAnnAlpha(unitreturns, benchreturns, beta); logic is :1 year
+            period
+          format: double
+        alpha3Yr:
+          type: number
+          description: >-
+            The Alpha of the fund share unit over a 3 yearperiod, to last month
+            end. Alpha is a measure of an investment's performance on a
+            risk-adjusted basis. It takes the volatility (price risk) of a
+            security or fund portfolio and compares its risk-adjusted
+            performance to a benchmark index. The excess return of the
+            investment relative to the return of the benchmark index is its
+            alpha. Alpha is often considered to represent the value that a
+            portfolio manager adds or subtracts from a fund portfolio's return.
+            An alpha of 1.0 means the fund has outperformed its benchmark index
+            by 1%. Correspondingly, an alpha of -1.0 would indicate an
+            under-performance of 1% Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcAnnAlpha(unitreturns, benchreturns, beta); logic is :3 year
+            period
+          format: double
+        alpha5Yr:
+          type: number
+          description: >-
+            The Alpha of the fund share unit over a 5 yearperiod, to last month
+            end. Alpha is a measure of an investment's performance on a
+            risk-adjusted basis. It takes the volatility (price risk) of a
+            security or fund portfolio and compares its risk-adjusted
+            performance to a benchmark index. The excess return of the
+            investment relative to the return of the benchmark index is its
+            alpha. Alpha is often considered to represent the value that a
+            portfolio manager adds or subtracts from a fund portfolio's return.
+            An alpha of 1.0 means the fund has outperformed its benchmark index
+            by 1%. Correspondingly, an alpha of -1.0 would indicate an
+            under-performance of 1% Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcAnnAlpha(unitreturns, benchreturns, beta); logic is :5 year
+            period
+          format: double
+        beta1Yr:
+          type: number
+          description: >-
+            The Beta coefficient of the fund share unit over a 1 yearperiod, to
+            last month end. Beta, also known as the beta coefficient, is a
+            measure of the volatility, or systematic risk, of a security or a
+            portfolio compared to the market as a whole. Beta is calculated
+            using regression analysis and it represents the tendency of an
+            investment's return to respond to movements in the market. By
+            definition, the market has a beta of 1.0. Individual security and
+            portfolio values are measured according to how they deviate from the
+            market Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcBeta(unitreturns, benchreturns); logic is :1 year period
+          format: double
+        beta3Yr:
+          type: number
+          description: >-
+            The Beta coefficient of the fund share unit over a 3 yearperiod, to
+            last month end. Beta, also known as the beta coefficient, is a
+            measure of the volatility, or systematic risk, of a security or a
+            portfolio compared to the market as a whole. Beta is calculated
+            using regression analysis and it represents the tendency of an
+            investment's return to respond to movements in the market. By
+            definition, the market has a beta of 1.0. Individual security and
+            portfolio values are measured according to how they deviate from the
+            market Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcBeta(unitreturns, benchreturns); logic is :3 year period
+          format: double
+        beta5Yr:
+          type: number
+          description: >-
+            The Beta coefficient of the fund share unit over a 5 yearperiod, to
+            last month end. Beta, also known as the beta coefficient, is a
+            measure of the volatility, or systematic risk, of a security or a
+            portfolio compared to the market as a whole. Beta is calculated
+            using regression analysis and it represents the tendency of an
+            investment's return to respond to movements in the market. By
+            definition, the market has a beta of 1.0. Individual security and
+            portfolio values are measured according to how they deviate from the
+            market Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcBeta(unitreturns, benchreturns); logic is :5 year period
+          format: double
+        sharpe1Yr:
+          type: number
+          description: >-
+            The Sharpe ratio of the fund share unit over a 1 yearperiod, to last
+            month end. The Sharpe ratio measures risk-adjusted performance. It
+            is calculated by subtracting the risk-free rate of return from the
+            rate of return for an investment and dividing the result by the
+            investment's standard deviation of its return. The Sharpe ratio
+            tells investors whether an investment's returns are due to wise
+            investment decisions or the result of excess risk Table or function
+            is : FE.Core - Business.Stats.AnalyticalTool; dbField Name is
+            :calcMSharpe(annunitreturn - m_Rf, unitvol); logic is :1 year period
+          format: double
+        sharpe3Yr:
+          type: number
+          description: >-
+            The Sharpe ratio of the fund share unit over a 3 yearperiod, to last
+            month end. The Sharpe ratio measures risk-adjusted performance. It
+            is calculated by subtracting the risk-free rate of return from the
+            rate of return for an investment and dividing the result by the
+            investment's standard deviation of its return. The Sharpe ratio
+            tells investors whether an investment's returns are due to wise
+            investment decisions or the result of excess risk Table or function
+            is : FE.Core - Business.Stats.AnalyticalTool; dbField Name is
+            :calcMSharpe(annunitreturn - m_Rf, unitvol); logic is :3 year period
+          format: double
+        sharpe5Yr:
+          type: number
+          description: >-
+            The Sharpe ratio of the fund share unit over a 5 yearperiod, to last
+            month end. The Sharpe ratio measures risk-adjusted performance. It
+            is calculated by subtracting the risk-free rate of return from the
+            rate of return for an investment and dividing the result by the
+            investment's standard deviation of its return. The Sharpe ratio
+            tells investors whether an investment's returns are due to wise
+            investment decisions or the result of excess risk Table or function
+            is : FE.Core - Business.Stats.AnalyticalTool; dbField Name is
+            :calcMSharpe(annunitreturn - m_Rf, unitvol); logic is :5 year period
+          format: double
+        infoRatio1Yr:
+          type: number
+          description: >-
+            The Information ratio of the fund share unit over a 1 yearperiod, to
+            last month end. The information ratio measures the excess return and
+            risk relative to a specific benchmark. It is essentially used to
+            measure the performance of the mutual fund's active manager. Through
+            the use of the information ratio, an investor can tell by how much
+            the active manager could outperform the benchmark, and it also
+            indicates the length of time that the active manager could
+            outperform the benchmark. A low information ratio is a signal that a
+            mutual fund is underperforming and should not be seen as a viable
+            investment. A higher information ratio means that the active manager
+            had a better ability to outperform the benchmark – and for a longer
+            period of time Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcAnnRelReturns(unitdata, benchdata) /
+            calcAnnRelTrackingError(unitreturns, benchreturns); logic is :1 year
+            period
+          format: double
+        infoRatio3Yr:
+          type: number
+          description: >-
+            The Information ratio of the fund share unit over a 3 yearperiod, to
+            last month end. The information ratio measures the excess return and
+            risk relative to a specific benchmark. It is essentially used to
+            measure the performance of the mutual fund's active manager. Through
+            the use of the information ratio, an investor can tell by how much
+            the active manager could outperform the benchmark, and it also
+            indicates the length of time that the active manager could
+            outperform the benchmark. A low information ratio is a signal that a
+            mutual fund is underperforming and should not be seen as a viable
+            investment. A higher information ratio means that the active manager
+            had a better ability to outperform the benchmark – and for a longer
+            period of time Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcAnnRelReturns(unitdata, benchdata) /
+            calcAnnRelTrackingError(unitreturns, benchreturns); logic is :3 year
+            period
+          format: double
+        infoRatio5Yr:
+          type: number
+          description: >-
+            The Information ratio of the fund share unit over a 5 yearperiod, to
+            last month end. The information ratio measures the excess return and
+            risk relative to a specific benchmark. It is essentially used to
+            measure the performance of the mutual fund's active manager. Through
+            the use of the information ratio, an investor can tell by how much
+            the active manager could outperform the benchmark, and it also
+            indicates the length of time that the active manager could
+            outperform the benchmark. A low information ratio is a signal that a
+            mutual fund is underperforming and should not be seen as a viable
+            investment. A higher information ratio means that the active manager
+            had a better ability to outperform the benchmark – and for a longer
+            period of time Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :calcAnnRelReturns(unitdata, benchdata) /
+            calcAnnRelTrackingError(unitreturns, benchreturns); logic is :5 year
+            period
+          format: double
+        rsquared1Yr:
+          type: number
+          description: >-
+            The R-squared of the fund share unit over a 1 yearperiod, to last
+            month end. R-squared is a statistical measure that represents the
+            percentage of a fund portfolio or a security's movements that can be
+            explained by movements in a benchmark index. For fixed-income
+            securities and bond funds, the benchmark is the U.S. Treasury Bill.
+            The S&P 500 Index is the benchmark for equities and equity funds
+            Table or function is : FE.Core - Business.Stats.AnalyticalTool;
+            dbField Name is :calcRSquared(unitreturns, benchreturns); logic is
+            :1 year period
+          format: double
+        rsquared3Yr:
+          type: number
+          description: >-
+            The R-squared of the fund share unit over a 3 yearperiod, to last
+            month end. R-squared is a statistical measure that represents the
+            percentage of a fund portfolio or a security's movements that can be
+            explained by movements in a benchmark index. For fixed-income
+            securities and bond funds, the benchmark is the U.S. Treasury Bill.
+            The S&P 500 Index is the benchmark for equities and equity funds
+            Table or function is : FE.Core - Business.Stats.AnalyticalTool;
+            dbField Name is :calcRSquared(unitreturns, benchreturns); logic is
+            :3 year period
+          format: double
+        rsquared5Yr:
+          type: number
+          description: >-
+            The R-squared of the fund share unit over a 5 yearperiod, to last
+            month end. R-squared is a statistical measure that represents the
+            percentage of a fund portfolio or a security's movements that can be
+            explained by movements in a benchmark index. For fixed-income
+            securities and bond funds, the benchmark is the U.S. Treasury Bill.
+            The S&P 500 Index is the benchmark for equities and equity funds
+            Table or function is : FE.Core - Business.Stats.AnalyticalTool;
+            dbField Name is :calcRSquared(unitreturns, benchreturns); logic is
+            :5 year period
+          format: double
+        trackingError1Yr:
+          type: number
+          description: >-
+            The Tracking Error of the fund share unit over a 1 yearperiod, to
+            last month end. Tracking error is the divergence between the price
+            behavior of a position or a portfolio and the price behavior of a
+            benchmark. Tracking error is reported as a standard deviation
+            percentage difference, which reports the difference between the
+            return an investor receives and that of the benchmark they were
+            attempting to imitate Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :deAnnualiseVol(anntrackingerror, unitdata.m_annualise); logic is :1
+            year period
+          format: double
+        trackingError3Yr:
+          type: number
+          description: >-
+            The Tracking Error of the fund share unit over a 3 yearperiod, to
+            last month end. Tracking error is the divergence between the price
+            behavior of a position or a portfolio and the price behavior of a
+            benchmark. Tracking error is reported as a standard deviation
+            percentage difference, which reports the difference between the
+            return an investor receives and that of the benchmark they were
+            attempting to imitate Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :deAnnualiseVol(anntrackingerror, unitdata.m_annualise); logic is :3
+            year period
+          format: double
+        trackingError5Yr:
+          type: number
+          description: >-
+            The Tracking Error of the fund share unit over a 5 yearperiod, to
+            last month end. Tracking error is the divergence between the price
+            behavior of a position or a portfolio and the price behavior of a
+            benchmark. Tracking error is reported as a standard deviation
+            percentage difference, which reports the difference between the
+            return an investor receives and that of the benchmark they were
+            attempting to imitate Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is
+            :deAnnualiseVol(anntrackingerror, unitdata.m_annualise); logic is :5
+            year period
+          format: double
+        excessReturn1Yr:
+          type: number
+          description: >-
+            The extent to which the fund has out- or under-performed its
+            benchmark index (calculated as the difference between the fund’s
+            total return and the benchmark’s total return) over a 1 year period,
+            to last month end Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is :; logic is :1 year
+            period
+          format: double
+        excessReturn3Yr:
+          type: number
+          description: >-
+            The extent to which the fund has out- or under-performed its
+            benchmark index (calculated as the difference between the fund’s
+            total return and the benchmark’s total return) over a 3 year period,
+            to last month end Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is :; logic is :3 year
+            period
+          format: double
+        excessReturn5Yr:
+          type: number
+          description: >-
+            The extent to which the fund has out- or under-performed its
+            benchmark index (calculated as the difference between the fund’s
+            total return and the benchmark’s total return) over a 5 year period,
+            to last month end Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is :; logic is :5 year
+            period
+          format: double
+        relativeReturn1Yr:
+          type: number
+          description: >-
+            The factor to which the fund has out- or under-performed its
+            benchmark index (calculated as the fund’s net asset value (NAV)
+            total return divided by the benchmark’s total return) over a 1 year
+            period, to last month end Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is :; logic is :1 year
+            period
+          format: double
+        relativeReturn3Yr:
+          type: number
+          description: >-
+            The factor to which the fund has out- or under-performed its
+            benchmark index (calculated as the fund’s net asset value (NAV)
+            total return divided by the benchmark’s total return) over a 3 year
+            period, to last month end Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is :; logic is :3 year
+            period
+          format: double
+        relativeReturn5Yr:
+          type: number
+          description: >-
+            The factor to which the fund has out- or under-performed its
+            benchmark index (calculated as the fund’s net asset value (NAV)
+            total return divided by the benchmark’s total return) over a 5 year
+            period, to last month end Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is :; logic is :5 year
+            period
+          format: double
+        correlation1Yr:
+          type: number
+          description: >-
+            Measures over 1 year  the degree to which two securities move in
+            relation to each other. Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is :; logic is :For
+            period specified in API input
+          format: double
+        correlation3Yr:
+          type: number
+          description: >-
+            Measures over 3 years the degree   to which two securities move in
+            relation to each other. Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is :; logic is :For
+            period specified in API input
+          format: double
+        correlation5Yr:
+          type: number
+          description: >-
+            Measures over 5 years the degree  to which two securities move in
+            relation to each other. Table or function is : FE.Core -
+            Business.Stats.AnalyticalTool; dbField Name is :; logic is :For
+            period specified in API input
+          format: double
+    RatingsData:
+      type: object
+      properties:
+        Message:
+          type: string
+          description: response message
+        IsSuccess:
+          type: boolean
+          description: based on the response value will be set.
+        Request:
+          $ref: '#/components/schemas/RatingsData_Request'
+        Result:
+          type: array
+          description: response result will be assign to result.
+          items:
+            $ref: '#/components/schemas/RatingsDataResult'
+    RatingsDataResult:
+      type: object
+      properties:
+        CitiCode:
+          type: string
+        Isin:
+          type: string
+        Apir:
+          type: string
+        fundCode:
+          type: string
+          description: >-
+            The FE internal identifier code for the instrument Table or function
+            is : whUnits..FxUnit; dbField Name is :Citicode
+        universeCode:
+          type: string
+          description: >-
+            The code(s) assigned to identify the FE universe(s) of the fund.
+            Table or function is : ; dbField Name is :; logic is :
+        msciEsgFundRating:
+          type: string
+        issEsgFundRating:
+          type: integer
+          format: int32
+        climetricsEsgFundRating:
+          type: integer
+          format: int32
+        obsrRating:
+          type: string
+          description: >-
+            Morningstar OBSR Analyst Ratings are assigned to funds on a
+            five-tier scale running from Gold to Negative Table or function is :
+            whUnits..OBSR_fundrating; dbField Name is :Rating
+        ferApproved:
+          type: string
+          description: >-
+            FE Approved fund that forms part of FE's own model portfolio Table
+            or function is : whUnits..FER_Fund; dbField Name is :BuyRating;
+            logic is :SELECT ferf.FundCode, BuyRating, ReportDate FROM
+            [dbo].[FER_Fund] ferf WITH (NOLOCK) INNER JOIN (SELECT FundCode,
+            Max(ReportDate) As MaxReportDate FROM [dbo].[FER_Fund] WITH (NOLOCK)
+            GROUP BY FundCode) max ON ferf.FundCode = max.FundCode AND
+            ferf.ReportDate = max.MaxReportDate
+        crownRating:
+          type: integer
+          description: >-
+            FE rating (1-5) for funds that are outperforming their benchmark
+            Table or function is : whUnits..FxFundRating; dbField Name is
+            :CrownRating
+          format: int32
+        alphaManagerRated:
+          type: integer
+          description: >-
+            FE Alpha fund manager rating Table or function is :
+            whUnits..FxUnitInSector; dbField Name is :IsCurrentMember; logic is
+            :CASE WHEN s.IsCurrentMember = 1
+          format: int32
+        feRiskScore:
+          type: number
+          description: >-
+            FE Risk Scores define risk as a measure of volatility relative to a
+            specified index, which has a risk rating of 100. The Risk Score is
+            relative to the locality where you are based so the FTSE 100 is used
+            as the UK index. Instruments more volatile than the FTSE 100 have a
+            score above 100 and instruments less volatile than the FTSE 100 have
+            a score below 100. Table or function is : whUnits..FxRiskScore;
+            dbField Name is :RiskScore
+          format: double
+        fePassiveRating:
+          type: integer
+          description: >-
+            FE rating which awards passive funds between one and five P-Crowns,
+            based on their ability to track their index Table or function is :
+            whUnits..FxFundPassiveRating or whUnits..FxFundRating; dbField Name
+            is :PassiveCrownRating; logic is :CASE WHEN
+            ','+f.InvestmentStyle+',' LIKE '%,PSTK,%' THEN
+            ISNULL(pr.PassiveCrownRating,r.PassiveCrownRating) END
+          format: int32
+        fEfundinfoRating:
+          type: integer
+          format: int32
+        citicode:
+          type: string
+          description: >-
+            The FE internal identifier code for the instrument Table or function
+            is : whUnits..FxUnit; dbField Name is :Citicode
+        squareMileRating:
+          type: string
+          description: >-
+            Square Mile rating of funds which ranges from AAA(highest) to
+            A(suspended) Table or function is : whUnits..SquareMileFundRating;
+            dbField Name is :Rating
+        sandPRating:
+          type: string
+          description: >-
+            Standard & Poor rating Table or function is :
+            whUnits..SandPFundRatings; dbField Name is :spManagementRating
+        cityWireManagerRating:
+          type: string
+          description: ORDER BY Updated DESC
+        srri:
+          type: integer
+          description: >-
+            Synthetic risk and reward indicator. This indicator forms an
+            integral part of the Key Investor Information Document (KIID) and
+            gives the historical volatility of the fund unit price on a scale
+            from 1 to 7 Table or function is : whUnits..FsUnit; dbField Name is
+            :KiiRiskNumber
+          format: int32
+        esma:
+          type: integer
+          description: >-
+            European Securities and Markets Authority rating Table or function
+            is : NULL; dbField Name is :NULL
+          format: int32
+        fundSourceRating:
+          type: integer
+          description: >-
+            A fund rating given by the company FundSource, based upon the
+            modified Sharpe ratio Table or function is :
+            whUnits..FundSourceStarRatings; dbField Name is :StarRating
+          format: int32
+        isAfiAggressive:
+          type: integer
+          description: >-
+            The Adviser Fund Index (AFI) is made up of the recommended
+            portfolios of a panel of leading UK financial advisers. The
+            portfolios are spread across the AFI Aggressive, AFI Balanced and
+            AFI Cautious and are available on FE Analytics as indices. Based
+            entirely on the funds actually recommended to clients, the FE AFI
+            index carries real-life credibility, providing insight into the
+            benefits of holding top quality fundsFE Adviser Fund Index
+            Aggressive Table or function is : whUnits..AFI_Member; dbField Name
+            is :Portfolio; logic is :SELECT IsAfiAggressive = 1 FROM
+            dbo.AFI_Member WHERE portfolio='A' and CitiCode=l.Code
+          format: int32
+        isAfiBalanced:
+          type: integer
+          description: >-
+            The Adviser Fund Index (AFI) is made up of the recommended
+            portfolios of a panel of leading UK financial advisers. The
+            portfolios are spread across the AFI Aggressive, AFI Balanced and
+            AFI Cautious and are available on FE Analytics as indices. Based
+            entirely on the funds actually recommended to clients, the FE AFI
+            index carries real-life credibility, providing insight into the
+            benefits of holding top quality funds Table or function is :
+            whUnits..AFI_Member; dbField Name is :Portfolio; logic is :SELECT
+            IsAfiBalanced = 1 FROM dbo.AFI_Member WHERE portfolio='B' and
+            CitiCode=l.Code
+          format: int32
+        isAfiCautious:
+          type: integer
+          description: >-
+            The Adviser Fund Index (AFI) is made up of the recommended
+            portfolios of a panel of leading UK financial advisers. The
+            portfolios are spread across the AFI Aggressive, AFI Balanced and
+            AFI Cautious and are available on FE Analytics as indices. Based
+            entirely on the funds actually recommended to clients, the FE AFI
+            index carries real-life credibility, providing insight into the
+            benefits of holding top quality funds Table or function is :
+            whUnits..AFI_Member; dbField Name is :Portfolio; logic is :SELECT
+            IsAfiCautious = 1 FROM dbo.AFI_Member WHERE portfolio='C' and 
+            CitiCode=l.Code
+          format: int32
+        rsmRating:
+          type: string
+          description: >-
+            RSMR Group 'R' rated funds Table or function is :
+            whUnits..RsmRating; dbField Name is :DisplayName
+        morningstarMedalistRating:
+          type: string
+        rsmRatings:
+          $ref: '#/components/schemas/RatingsDataResult_rsmRatings'
+    IntraDayPriceData:
+      type: object
+      properties:
+        Message:
+          type: string
+          description: response message
+        IsSuccess:
+          type: boolean
+          description: based on the response value will be set.
+        Request:
+          $ref: '#/components/schemas/IntraDayPriceData_Request'
+        Result:
+          type: array
+          description: response result will be assign to result.
+          items:
+            $ref: '#/components/schemas/IntradatPriceDataResult'
+    IntradatPriceDataResult:
+      type: object
+      properties:
+        CitiCode:
+          type: string
+        Isin:
+          type: string
+        Apir:
+          type: string
+        TimeStamp:
+          type: string
+          description: >-
+            The time of the intra-day price record Table or function is :
+            Wincast.dbWincast.dbo.CCAST_SECURITY_DELAYED; dbField Name is
+            :TimeStamp
+        IntraDayPrices:
+          type: array
+          items:
+            $ref: '#/components/schemas/IntraDayPrices'
+    IntraDayPrices:
+      type: object
+      properties:
+        OFDY900135:
+          type: number
+          description: Close Price
+          format: double
+        OFDY900136:
+          type: number
+          description: Open Price
+          format: double
+        OFDY900137:
+          type: number
+          description: High
+          format: double
+        OFDY900138:
+          type: number
+          description: Low
+          format: double
+        RequestedCurrency:
+          type: string
+          description: The currency requested by the user
+    PostDividendRequestBody:
+      allOf:
+        - $ref: '#/components/schemas/PostRequestBody'
+        - type: object
+          properties:
+            IdentifierType:
+              type: string
+              description: >-
+                Currently supported identifierTypes are citicodes, isins and
+                apirs.
+              default: ''
+            Filters:
+              $ref: '#/components/schemas/PostDividendRequestBody_Filters'
+    PostPricingRequestBody:
+      allOf:
+        - $ref: '#/components/schemas/PostRequestBody'
+        - type: object
+          properties:
+            IdentifierType:
+              type: string
+              description: >-
+                Currently supported identifierTypes are citicodes, isins and
+                apirs.
+              default: ''
+            Filters:
+              $ref: '#/components/schemas/PostPricingRequestBody_Filters'
+    PostAumOnRequestBody:
+      allOf:
+        - $ref: '#/components/schemas/PostRequestBody'
+        - type: object
+          properties:
+            IdentifierType:
+              type: string
+              description: >-
+                Currently supported identifierTypes are citicodes, isins and
+                apirs.
+              default: ''
+            Filters:
+              $ref: '#/components/schemas/PostAumOnRequestBody_Filters'
+    PostAnalyticsDataRequestBody:
+      allOf:
+        - $ref: '#/components/schemas/PostRequestBody'
+        - type: object
+          properties:
+            IdentifierType:
+              type: string
+              description: >-
+                Currently supported identifierTypes are citicodes, isins and
+                apirs.
+              default: ''
+            Filters:
+              $ref: '#/components/schemas/PostAnalyticsDataRequestBody_Filters'
+    PostRatingsDataRequestBody:
+      allOf:
+        - $ref: '#/components/schemas/PostRequestBody'
+        - type: object
+          properties:
+            IdentifierType:
+              type: string
+              description: >-
+                Currently supported identifierTypes are citicodes, isins and
+                apirs.
+              default: ''
+            Filters:
+              $ref: '#/components/schemas/PostRatingsDataRequestBody_Filters'
+    PostIntraDayPriceDataRequestBody:
+      allOf:
+        - $ref: '#/components/schemas/PostRequestBody'
+        - type: object
+          properties:
+            IdentifierType:
+              type: string
+              description: >-
+                Currently supported identifierTypes are citicodes, isins and
+                apirs.
+              default: ''
+            Filters:
+              $ref: '#/components/schemas/PostIntraDayPriceDataRequestBody_Filters'
+    PostRequestBody:
+      type: object
+      properties:
+        IdentifierValues:
+          maxItems: 10
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: Provide identifier values. Provide maximum 10 values.
+          items:
+            type: string
+          default: []
+        FieldSelections:
+          uniqueItems: true
+          type: array
+          description: Provide the fields name to return in response
+          items:
+            type: string
+            description: Field name
+          default: []
+    ErrorResponse:
+      type: object
+      properties:
+        Message:
+          type: string
+          description: response message
+        IsSuccess:
+          type: boolean
+          description: based on the response value will be set.
+        Result:
+          type: array
+          description: response result will be assign to result.
+          items:
+            $ref: '#/components/schemas/ErrorItem'
+    ErrorItem:
+      type: object
+    inline_response_200:
+      anyOf:
+        - $ref: '#/components/schemas/DividendData'
+    inline_response_401:
+      anyOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+    inline_response_200_1:
+      anyOf:
+        - $ref: '#/components/schemas/PricingData'
+    inline_response_200_2:
+      anyOf:
+        - $ref: '#/components/schemas/AumOnData'
+    inline_response_200_3:
+      anyOf:
+        - $ref: '#/components/schemas/AnalyticsData'
+    inline_response_200_4:
+      anyOf:
+        - $ref: '#/components/schemas/RatingsData'
+    inline_response_200_5:
+      anyOf:
+        - $ref: '#/components/schemas/IntraDayPriceData'
+    DividendData_Request:
+      type: object
+      properties:
+        identifierType:
+          type: string
+        identifierValue:
+          type: string
+        Datefrom:
+          type: string
+          format: date-time
+        DateTo:
+          type: string
+          format: date-time
+        Currencies:
+          type: string
+        fieldSelections:
+          type: string
+      description: It contains the request input data
+    PricingData_Request:
+      type: object
+      properties:
+        identifierType:
+          type: string
+        identifierValue:
+          type: string
+        Currency:
+          type: string
+        DateTime:
+          type: string
+          format: date-time
+        fieldSelections:
+          type: string
+      description: It contains the request input data
+    AumOnData_Request:
+      type: object
+      properties:
+        identifierType:
+          type: string
+        identifierValue:
+          type: string
+        Currency:
+          type: string
+        AumOn:
+          type: string
+          format: date-time
+        fieldSelections:
+          type: string
+      description: It contains the request input data
+    AnalyticsData_Request:
+      type: object
+      properties:
+        identifierType:
+          type: string
+        identifierValue:
+          type: string
+        Currency:
+          type: string
+        methodType:
+          type: integer
+        priceType:
+          type: integer
+        riskFreeRate:
+          type: string
+        isAnnualised:
+          type: boolean
+        benchmark:
+          type: boolean
+        fieldSelections:
+          type: string
+      description: It contains the request input data
+    RatingsData_Request:
+      type: object
+      properties:
+        identifierType:
+          type: string
+        identifierValue:
+          type: string
+        countryCode:
+          type: string
+        asAtDate:
+          type: string
+          format: date-time
+        usingUniverseUAsDefault:
+          type: boolean
+        fieldSelections:
+          type: string
+      description: It contains the request input data
+    RatingsDataResult_rsmRatings:
+      type: object
+      properties:
+        rsmRatingCode:
+          type: string
+        rsmRatingTypes:
+          type: array
+          items:
+            type: string
+    IntraDayPriceData_Request:
+      type: object
+      properties:
+        identifierType:
+          type: string
+        identifierValue:
+          type: string
+        Currencies:
+          type: array
+          description: Value for currency. It will be default to GBP if nothing specified.
+          items:
+            type: string
+            description: currency value.
+          default:
+            - GBP
+        fieldSelections:
+          type: string
+      description: It contains the request input data
+    PostDividendRequestBody_Filters:
+      type: object
+      properties:
+        DateFrom:
+          type: string
+          format: date-time
+        DateTo:
+          type: string
+          format: date-time
+        Currencies:
+          type: array
+          description: Value for currency. It will be default to GBP if nothing specified.
+          items:
+            type: string
+            description: currency value.
+          default:
+            - GBP
+    PostPricingRequestBody_Filters:
+      type: object
+      properties:
+        Currency:
+          type: string
+          description: Value for currency. It will be default to GBP if nothing specified.
+          default: GBP
+        DateTime:
+          type: string
+          description: >-
+            Price to be returned for the requested Date. Default value is
+            today's date.
+          format: date-time
+    PostAumOnRequestBody_Filters:
+      type: object
+      properties:
+        Currency:
+          type: string
+          description: Value for currency. It will be default to GBP if nothing specified.
+          default: GBP
+        AumOn:
+          type: string
+          description: >-
+            AumOn date when entered will retrieve the latest data prior to the
+            entered date. Default is today's date.
+          format: date-time
+    PostAnalyticsDataRequestBody_Filters:
+      type: object
+      properties:
+        currency:
+          type: string
+          description: >-
+            The ISO currency code to be used in the output, if the raw data
+            needs to be exchanged or rebased from a base currency into this
+            currency. Eg. "EUR". Default value is "Local" corresponds to the
+            instrument currency.
+          default: Local
+        methodType:
+          type: integer
+          description: |
+            Performace End Types:
+             * `1` - BidToBid
+             * `3` - OfferToBid
+          format: int32
+          enum:
+            - 1
+            - 3
+        priceType:
+          type: integer
+          description: |
+            Performace End Types:
+             * `0` - Price
+             * `1` - NetTotalReturn
+             * `2` - GrossTotalReturn
+             * `5` - Nav
+             * `7` - NavPublished
+             * `51` - UniverseDefault
+          format: int32
+          enum:
+            - 0
+            - 1
+            - 2
+            - 5
+            - 7
+            - 51
+        riskFreeRate:
+          type: string
+          description: >-
+            A constant used in some correlation statistics to represent an
+            interest rate that is considered be a gauge for risk free
+        isAnnualised:
+          type: boolean
+          description: >-
+            Whether or not performance/ratios should be calculated on an
+            annualised basis for the instrument
+        benchmark:
+          type: boolean
+          description: >-
+            Defines whether the fund's index or sector should be used as the
+            fund's benchmark in ratio calculation. True means the sector should
+            be used, false means index should be used
+    PostRatingsDataRequestBody_Filters:
+      type: object
+      properties:
+        countryCode:
+          type: string
+          description: >-
+            The ISO 3166-1 alpha-3 code for the country for which risk score
+            should be calculated.
+        asAtDate:
+          type: string
+          description: This date is applied to ESG related rating only
+          format: date-time
+        usingUniverseUAsDefault:
+          type: boolean
+    PostIntraDayPriceDataRequestBody_Filters:
+      type: object
+      properties:
+        Currencies:
+          type: array
+          description: Value for currency. It will be default to GBP if nothing specified.
+          items:
+            type: string
+            description: currency value.
+          default:
+            - GBP
+  responses:
+    '400':
+      description: Bad request, Please check your inputs.
+      content: {}
+    '401':
+      description: Unauthorized.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/inline_response_401'
+    '404':
+      description: No data for this identifierValue.
+      content: {}
+    '408':
+      description: Your request has timed out. Please try again.
+      content: {}
+    '500':
+      description: >-
+        Internal Server error, please raise a ticket with the FEFundinfo support
+        team if you experience this.
+      content: {}
+  parameters:
+    subscriptionHeaderParam:
+      name: Fefi-Apim-Subscription-Key
+      in: header
+      description: Fefi APIM Subscription key
+      required: true
+      style: simple
+      explode: false
+      schema:
+        type: string
+        default: ''
+    correlationIdParam:
+      name: x-correlation-id
+      in: header
+      description: >-
+        x-correlation-id is used to trace the log. It is unique guid id. API
+        will generate new id if it is not passed explicitly.
+      required: false
+      style: simple
+      explode: false
+      schema:
+        type: string
+        default: ''
+    identifierValueParam:
+      name: identifierValue
+      in: query
+      description: Value for the identifier type. Provide maximum 10 values.
+      required: true
+      style: form
+      explode: false
+      schema:
+        maxItems: 10
+        minItems: 1
+        uniqueItems: true
+        type: array
+        items:
+          type: string
+          default: ''
+    fieldSelectionsParam:
+      name: fieldSelections
+      in: query
+      description: Provide field names to filter in response.
+      required: false
+      style: form
+      explode: false
+      schema:
+        type: array
+        items:
+          type: string
+          default: ''
+  securitySchemes:
+    Production:
+      type: oauth2
+      description: Using AAD to get an OAuth2 token for a registered app as a client.
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.fefundinfo.com/connect/token
+          scopes:
+            dynamic-data-read: Access to read dynamic data
+        authorizationCode:
+          authorizationUrl: https://auth.fefundinfo.com/connect/authorize
+          tokenUrl: https://auth.fefundinfo.com/connect/token
+          scopes:
+            dynamic-data-read: Access to read dynamic data
