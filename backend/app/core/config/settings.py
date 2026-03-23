@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     log_level: str = "INFO"
     cors_origins: list[str] = [
+        # Local dev
         "http://localhost:5173",
         "http://localhost:5174",
         "http://localhost:5175",
@@ -52,6 +53,10 @@ class Settings(BaseSettings):
         "http://localhost:5179",
         "http://localhost:5180",
         "http://localhost:4173",
+        # Cloudflare Pages (production)
+        "https://netz-wealth.pages.dev",
+        "https://netz-credit.pages.dev",
+        "https://netz-admin.pages.dev",
     ]
 
     # ── AI (REQUIRED) ────────────────────────────────────────
