@@ -23,28 +23,39 @@ jobs:
         with:
           fetch-depth: 2
       - id: filter
-        shell: bash
+        shell: pwsh
         run: |
-          diff=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only HEAD)
-          ui=false; backend=false; credit=false; wealth=false; admin=false; infra=false
-          echo "$diff" | grep -q '^packages/ui/' && ui=true
-          echo "$diff" | grep -q -E '^backend/|^pyproject.toml' && backend=true
-          echo "$diff" | grep -q '^frontends/credit/' && credit=true
-          echo "$diff" | grep -q '^frontends/wealth/' && wealth=true
-          echo "$diff" | grep -q '^frontends/admin/' && admin=true
-          echo "$diff" | grep -q '^infra/' && infra=true
-          # UI changes trigger all frontends
-          if [ "$ui" = "true" ]; then credit=true; wealth=true; admin=true; fi
-          # CI/lockfile changes trigger everything
-          if echo "$diff" | grep -q -E '^\.github/|^pnpm-lock.yaml'; then
-            backend=true; credit=true; wealth=true; admin=true; infra=true
-          fi
-          echo "backend=$backend" >> "$GITHUB_OUTPUT"
-          echo "credit=$credit" >> "$GITHUB_OUTPUT"
-          echo "wealth=$wealth" >> "$GITHUB_OUTPUT"
-          echo "admin=$admin" >> "$GITHUB_OUTPUT"
-          echo "infra=$infra" >> "$GITHUB_OUTPUT"
-          echo "backend=$backend credit=$credit wealth=$wealth admin=$admin infra=$infra"
+          Set-Location $env:GITHUB_WORKSPACE
+          Write-Host "Working directory: $(Get-Location)"
+          Write-Host "Git status check: $(git rev-parse --git-dir 2>&1)"
+          $diff = git diff --name-only HEAD~1 HEAD 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "HEAD~1 failed, falling back to HEAD-only diff"
+            $diff = git diff --name-only HEAD 2>&1
+          }
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "WARNING: git diff failed — deploying everything"
+            $diff = @()
+            $backend = $true; $credit = $true; $wealth = $true; $admin = $true; $infra = $true
+          } else {
+            $diff = $diff -split "`n" | Where-Object { $_ -ne '' }
+            Write-Host "Changed files: $($diff -join ', ')"
+            $ui = [bool]($diff | Where-Object { $_ -match '^packages/ui/' })
+            $backend = [bool]($diff | Where-Object { $_ -match '^backend/' -or $_ -match '^pyproject\.toml' })
+            $credit = [bool]($diff | Where-Object { $_ -match '^frontends/credit/' }) -or $ui
+            $wealth = [bool]($diff | Where-Object { $_ -match '^frontends/wealth/' }) -or $ui
+            $admin = [bool]($diff | Where-Object { $_ -match '^frontends/admin/' }) -or $ui
+            $infra = [bool]($diff | Where-Object { $_ -match '^infra/' })
+            $lockfile = [bool]($diff | Where-Object { $_ -match '^pnpm-lock\.yaml' })
+            $ci = [bool]($diff | Where-Object { $_ -match '^\.github/' })
+            if ($ci -or $lockfile) { $backend = $true; $credit = $true; $wealth = $true; $admin = $true; $infra = $true }
+          }
+          echo "backend=$("$backend".ToLower())" >> $env:GITHUB_OUTPUT
+          echo "credit=$("$credit".ToLower())" >> $env:GITHUB_OUTPUT
+          echo "wealth=$("$wealth".ToLower())" >> $env:GITHUB_OUTPUT
+          echo "admin=$("$admin".ToLower())" >> $env:GITHUB_OUTPUT
+          echo "infra=$("$infra".ToLower())" >> $env:GITHUB_OUTPUT
+          Write-Host "backend=$backend credit=$credit wealth=$wealth admin=$admin infra=$infra"
 
   # ── CI (only if backend changed) ────────────────────────────────────
   ci:
