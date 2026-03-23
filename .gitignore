@@ -55,3 +55,6 @@ scripts/
 dev.ps1
 backend/.sec_seed_checkpoint.json
 backend/.esma_seed_checkpoint.json
+
+playwright-report/
+test-results/
