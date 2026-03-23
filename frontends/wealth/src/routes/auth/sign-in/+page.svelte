@@ -23,6 +23,9 @@
 
 		// Load Clerk from their hosted CDN (includes full UI bundle).
 		// npm dynamic import gets tree-shaken on Cloudflare Pages, stripping mountSignIn.
+		// IMPORTANT: do NOT set data-clerk-publishable-key on the script tag —
+		// that triggers Clerk's auto-initialization with navigation handlers
+		// which causes infinite redirect loops on non-localhost domains with dev keys.
 		await new Promise<void>((resolve, reject) => {
 			if (document.querySelector('script[data-clerk-script]')) {
 				resolve();
@@ -30,7 +33,6 @@
 			}
 			const script = document.createElement("script");
 			script.setAttribute("data-clerk-script", "");
-			script.setAttribute("data-clerk-publishable-key", CLERK_PK);
 			script.async = true;
 			script.src = `https://${domain}/npm/@clerk/clerk-js@latest/dist/clerk.browser.js`;
 			script.onload = () => resolve();
@@ -38,10 +40,20 @@
 			document.head.appendChild(script);
 		});
 
-		// Clerk hosted script auto-initializes window.Clerk as an instance
-		const clerk = (window as any).Clerk;
-		if (!clerk) return;
-		await clerk.load();
+		// Without data-clerk-publishable-key, window.Clerk is the class (not an auto-initialized instance).
+		// We must construct and load manually to avoid Clerk's built-in routing/navigation.
+		const ClerkClass = (window as any).Clerk;
+		if (!ClerkClass) return;
+
+		let clerk: any;
+		if (typeof ClerkClass.load === "function") {
+			// Already an auto-initialized instance (script was cached with old attribute)
+			clerk = ClerkClass;
+		} else {
+			// Class constructor — manual initialization (no routing side-effects)
+			clerk = new ClerkClass(CLERK_PK);
+		}
+		await clerk.load({ routerPush: () => {}, routerReplace: () => {} });
 
 		// If already signed in, sync session cookie and redirect to app
 		if (clerk.session) {
