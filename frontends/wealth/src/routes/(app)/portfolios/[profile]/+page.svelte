@@ -1,6 +1,6 @@
 <!--
   Portfolio Workbench — tactical allocation management.
-  Tabs: Strategic / Tactical / Effective.
+  Tabs: Strategic / Tactical / Effective / Rebalancing / Benchmark.
   Allocation Editor: $state weights + $derived totalWeight (must == 100% to save).
   ConsequenceDialog on every rebalance submission.
 -->
@@ -19,6 +19,8 @@
 		PortfolioSummary, PortfolioSnapshot,
 		StrategicAllocation, EffectiveAllocation, EditableWeight,
 	} from "$lib/types/portfolio";
+	import RebalancingTab from "$lib/components/RebalancingTab.svelte";
+	import BlendedBenchmarkEditor from "$lib/components/BlendedBenchmarkEditor.svelte";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const riskStore = getContext<RiskStore>("netz:riskStore");
@@ -36,13 +38,15 @@
 
 	// ── Tab state ─────────────────────────────────────────────────────────
 
-	type TabKey = "strategic" | "tactical" | "effective";
+	type TabKey = "strategic" | "tactical" | "effective" | "rebalancing" | "benchmark";
 	let activeTab = $state<TabKey>("strategic");
 
 	const tabs = [
 		{ key: "strategic" as const, label: "Strategic" },
 		{ key: "tactical" as const, label: "Tactical" },
 		{ key: "effective" as const, label: "Effective" },
+		{ key: "rebalancing" as const, label: "Rebalancing" },
+		{ key: "benchmark" as const, label: "Benchmark" },
 	];
 
 	// ── Allocation Editor (editable weights) ──────────────────────────────
@@ -324,7 +328,7 @@
 		{:else}
 			<div class="pw-empty">No snapshot available.</div>
 		{/if}
-	{:else}
+	{:else if activeTab === "effective"}
 		<!-- ── EFFECTIVE VIEW ─────────────────────────────────────────── -->
 		{#if effective.length === 0}
 			<div class="pw-empty">No effective allocation computed.</div>
@@ -356,6 +360,17 @@
 				</tbody>
 			</table>
 		{/if}
+	{:else if activeTab === "rebalancing"}
+		<!-- ── REBALANCING VIEW ───────────────────────────────────────── -->
+		<RebalancingTab
+			{profile}
+			currentWeights={snapshot?.weights ?? {}}
+			cvarCurrent={live?.cvar_current ?? portfolio?.cvar_current ?? null}
+			cvarLimit={live?.cvar_limit ?? portfolio?.cvar_limit ?? null}
+		/>
+	{:else if activeTab === "benchmark"}
+		<!-- ── BENCHMARK VIEW ─────────────────────────────────────────── -->
+		<BlendedBenchmarkEditor {profile} />
 	{/if}
 </div>
 

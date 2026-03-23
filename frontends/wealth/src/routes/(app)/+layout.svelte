@@ -12,7 +12,7 @@
 		Search, ClipboardList, Globe,
 		Briefcase, Zap, BarChart2, Map,
 		Landmark, FileText, Newspaper, Folders,
-		Search as SearchIcon, Bot
+		Search as SearchIcon, Bot, PieChart
 	} from "lucide-svelte";
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	interface SidebarNavItem {
@@ -52,6 +52,7 @@
 		{ label: "Universe", href: "/universe", icon: Globe },
 		{ label: "Model Portfolios", href: "/model-portfolios", icon: Folders },
 		{ label: "Portfolios", href: "/portfolios", icon: Briefcase },
+		{ label: "Allocation", href: "/allocation", icon: PieChart },
 
 		// SECTION 3: RISK & INTELLIGENCE
 		{ label: "Risk", href: "/risk", icon: Zap },
@@ -106,7 +107,7 @@
 				<div class="netz-ws-divider"></div>
 			{/if}
 			<nav class="netz-ws-nav" aria-label="Investment Engine">
-				{#each navItems.slice(2, 5) as item (item.href)}
+				{#each navItems.slice(2, 6) as item (item.href)}
 					{@const Icon = item.icon}
 					<a
 						href={item.href}
@@ -129,7 +130,7 @@
 				<div class="netz-ws-divider"></div>
 			{/if}
 			<nav class="netz-ws-nav" aria-label="Risk & Intelligence">
-				{#each navItems.slice(5, 9) as item (item.href)}
+				{#each navItems.slice(6, 10) as item (item.href)}
 					{@const Icon = item.icon}
 					<a
 						href={item.href}
@@ -152,7 +153,7 @@
 				<div class="netz-ws-divider"></div>
 			{/if}
 			<nav class="netz-ws-nav" aria-label="Content & Data">
-				{#each navItems.slice(9, 11) as item (item.href)}
+				{#each navItems.slice(10, 12) as item (item.href)}
 					{@const Icon = item.icon}
 					<a
 						href={item.href}

@@ -84,6 +84,7 @@ from app.domains.credit.reporting.routes.schedules import router as credit_sched
 from app.domains.wealth.routes.allocation import router as wealth_allocation_router
 from app.domains.wealth.routes.analytics import router as wealth_analytics_router
 from app.domains.wealth.routes.attribution import router as wealth_attribution_router
+from app.domains.wealth.routes.blended_benchmark import router as wealth_blended_benchmark_router
 from app.domains.wealth.routes.content import router as wealth_content_router
 from app.domains.wealth.routes.correlation_regime import router as wealth_correlation_regime_router
 from app.domains.wealth.routes.dd_reports import router as wealth_dd_reports_router
@@ -348,6 +349,7 @@ api_v1.include_router(wealth_attribution_router)
 api_v1.include_router(wealth_correlation_regime_router)
 api_v1.include_router(wealth_esma_router)
 api_v1.include_router(wealth_exposure_router)
+api_v1.include_router(wealth_blended_benchmark_router)
 
 # ── Mount credit domain routes ───────────────────────────────
 
