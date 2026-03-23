@@ -9,8 +9,8 @@ jobs:
     runs-on: self-hosted
 
     env:
-      DATABASE_URL: postgresql+asyncpg://netz:password@localhost:5432/netz_engine_test
-      DATABASE_URL_SYNC: postgresql+psycopg://netz:password@localhost:5432/netz_engine_test
+      DATABASE_URL: postgresql+asyncpg://netz:password@localhost:5434/netz_engine_test
+      DATABASE_URL_SYNC: postgresql+psycopg://netz:password@localhost:5434/netz_engine_test
       REDIS_URL: redis://localhost:6379/0
       APP_ENV: development
 
@@ -35,7 +35,7 @@ jobs:
         run: python -m alembic upgrade head
         working-directory: backend
         env:
-          DATABASE_URL: postgresql+psycopg://netz:password@localhost:5432/netz_engine_test
+          DATABASE_URL: postgresql+psycopg://netz:password@localhost:5434/netz_engine_test
 
       - name: Lint
         run: python -m ruff check .
