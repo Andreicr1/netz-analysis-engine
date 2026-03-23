@@ -4,18 +4,56 @@ on:
   push:
     branches: [main]
 
-# Only one deploy at a time
 concurrency:
   group: deploy-production
   cancel-in-progress: false
 
 jobs:
-  # CI must pass before deploy (reuses existing ci.yml)
+  # ── Detect what changed ─────────────────────────────────────────────
+  changes:
+    runs-on: self-hosted
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      credit: ${{ steps.filter.outputs.credit }}
+      wealth: ${{ steps.filter.outputs.wealth }}
+      admin: ${{ steps.filter.outputs.admin }}
+      infra: ${{ steps.filter.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: filter
+        shell: pwsh
+        run: |
+          $diff = git diff --name-only HEAD~1 HEAD 2>$null
+          if (-not $diff) { $diff = git diff --name-only HEAD }
+          $ui = ($diff | Where-Object { $_ -match '^packages/ui/' }) -ne $null
+          $backend = ($diff | Where-Object { $_ -match '^backend/' -or $_ -match '^pyproject.toml' }) -ne $null
+          $credit = ($diff | Where-Object { $_ -match '^frontends/credit/' }) -ne $null -or $ui
+          $wealth = ($diff | Where-Object { $_ -match '^frontends/wealth/' }) -ne $null -or $ui
+          $admin = ($diff | Where-Object { $_ -match '^frontends/admin/' }) -ne $null -or $ui
+          $infra = ($diff | Where-Object { $_ -match '^infra/' }) -ne $null
+          $lockfile = ($diff | Where-Object { $_ -match '^pnpm-lock.yaml' }) -ne $null
+          $ci = ($diff | Where-Object { $_ -match '^\.github/' }) -ne $null
+          # CI/lockfile changes trigger everything
+          if ($ci -or $lockfile) { $backend = $true; $credit = $true; $wealth = $true; $admin = $true; $infra = $true }
+          echo "backend=$($backend.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          echo "credit=$($credit.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          echo "wealth=$($wealth.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          echo "admin=$($admin.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          echo "infra=$($infra.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          Write-Host "backend=$backend credit=$credit wealth=$wealth admin=$admin infra=$infra"
+
+  # ── CI (only if backend changed) ────────────────────────────────────
   ci:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     uses: ./.github/workflows/ci.yml
 
+  # ── Backend infra deploys ───────────────────────────────────────────
   deploy-backend:
-    needs: ci
+    needs: [changes, ci]
+    if: always() && needs.changes.outputs.infra == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
@@ -30,7 +68,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
 
   deploy-workers:
-    needs: ci
+    needs: [changes, ci]
+    if: always() && needs.changes.outputs.infra == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
@@ -45,7 +84,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
 
   deploy-gateway:
-    needs: ci
+    needs: [changes, ci]
+    if: always() && needs.changes.outputs.infra == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +100,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
 
   deploy-cron:
-    needs: ci
+    needs: [changes, ci]
+    if: always() && needs.changes.outputs.infra == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
@@ -74,8 +115,10 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
 
+  # ── Frontend deploys (independent, only if their files changed) ─────
   deploy-credit:
-    needs: ci
+    needs: [changes, ci]
+    if: always() && needs.changes.outputs.credit == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
@@ -97,7 +140,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
 
   deploy-wealth:
-    needs: ci
+    needs: [changes, ci]
+    if: always() && needs.changes.outputs.wealth == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
@@ -119,7 +163,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
 
   deploy-admin:
-    needs: ci
+    needs: [changes, ci]
+    if: always() && needs.changes.outputs.admin == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4

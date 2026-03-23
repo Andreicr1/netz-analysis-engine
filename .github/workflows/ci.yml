@@ -5,18 +5,41 @@ on:
   workflow_call:
 
 jobs:
-  test-backend:
+  # Detect which areas changed
+  changes:
     runs-on: self-hosted
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontends: ${{ steps.filter.outputs.frontends }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: filter
+        shell: pwsh
+        run: |
+          $diff = git diff --name-only HEAD~1 HEAD 2>$null
+          if (-not $diff) { $diff = git diff --name-only HEAD }
+          $backend = ($diff | Where-Object { $_ -match '^backend/' -or $_ -match '^pyproject.toml' }) -ne $null
+          $frontends = ($diff | Where-Object { $_ -match '^frontends/' -or $_ -match '^packages/' -or $_ -match '^pnpm-lock.yaml' }) -ne $null
+          # If workflow files changed, run everything
+          $ci = ($diff | Where-Object { $_ -match '^\.github/' }) -ne $null
+          if ($ci) { $backend = $true; $frontends = $true }
+          echo "backend=$($backend.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          echo "frontends=$($frontends.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          Write-Host "backend=$backend frontends=$frontends"
 
+  test-backend:
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: self-hosted
     env:
       DATABASE_URL: postgresql+asyncpg://netz:password@localhost:5434/netz_engine_test
       DATABASE_URL_SYNC: postgresql+psycopg://netz:password@localhost:5434/netz_engine_test
       REDIS_URL: redis://localhost:6379/0
       APP_ENV: development
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Ensure test database exists
         run: |
           $result = docker exec netz-analysis-engine-db-1 psql -U netz -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='netz_engine_test'"
@@ -27,20 +50,16 @@ jobs:
             Write-Host "netz_engine_test already exists"
           }
         shell: pwsh
-
       - name: Install dependencies
         run: pip install -e ".[dev,ai,quant]"
-
       - name: Run migrations
         run: python -m alembic upgrade head
         working-directory: backend
         env:
           DATABASE_URL: postgresql+psycopg://netz:password@localhost:5434/netz_engine_test
-
       - name: Lint
         run: python -m ruff check .
         working-directory: backend
-
       - name: Test
         run: python -m pytest tests/ -v --tb=short
         working-directory: backend
