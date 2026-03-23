@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
+from ai_engine.pipeline.storage_routing import gold_credit_report_path
 from app.core.db.audit import write_audit_event
 from app.core.security.clerk_auth import Actor, get_actor, require_fund_access, require_role
 from app.core.tenancy.middleware import get_db_with_rls
@@ -26,7 +26,7 @@ from app.domains.credit.reporting.models.asset_valuation_snapshots import AssetV
 from app.domains.credit.reporting.models.investor_statements import InvestorStatement
 from app.domains.credit.reporting.models.nav_snapshots import NAVSnapshot
 from app.domains.credit.reporting.models.report_packs import MonthlyReportPack
-from app.services.blob_storage import download_bytes, upload_bytes_append_only
+from app.services.storage_client import get_storage_client
 
 router = APIRouter(tags=["Reporting"], dependencies=[Depends(require_fund_access())])
 
@@ -506,20 +506,16 @@ async def generate_monthly_pack(
 
     payload_bytes = json.dumps(manifest, ensure_ascii=False, default=str, indent=2).encode("utf-8")
 
-    # Persist append-only output
-    blob_name = f"{fund_id}/reports/{snap.period_month}/{pack_type.value}/{uuid.uuid4()}.json"
-    write_res = upload_bytes_append_only(
-        container=settings.AZURE_STORAGE_MONTHLY_REPORTS_CONTAINER,
-        blob_name=blob_name,
-        data=payload_bytes,
-        content_type="application/json",
-        metadata={
-            "fund_id": str(fund_id),
-            "period_month": snap.period_month,
-            "pack_type": pack_type.value,
-            "nav_snapshot_id": str(snap.id),
-        },
+    # Persist via StorageClient (R2 in prod, LocalStorage in dev)
+    storage = get_storage_client()
+    filename = f"{uuid.uuid4()}.json"
+    storage_path = gold_credit_report_path(
+        org_id=actor.organization_id,
+        fund_id=str(fund_id),
+        report_type="monthly",
+        filename=filename,
     )
+    await storage.write(storage_path, payload_bytes, content_type="application/json")
 
     period_start, period_end = _month_start_end(snap.period_month)
     pack = MonthlyReportPack(
@@ -532,7 +528,7 @@ async def generate_monthly_pack(
     )
 
     pack.nav_snapshot_id = snap.id
-    pack.blob_path = write_res.blob_uri
+    pack.blob_path = storage_path
     pack.generated_at = _utcnow()
     pack.generated_by = actor.actor_id
     pack.pack_type = pack_type
@@ -598,7 +594,8 @@ async def download_monthly_pack(
     if not pack.blob_path:
         raise HTTPException(status_code=400, detail="Pack has no blob output")
 
-    data = download_bytes(blob_uri=pack.blob_path)
+    storage = get_storage_client()
+    data = await storage.read(pack.blob_path)
     filename = f"monthly-pack-{pack_id}.json"
     return Response(
         content=data,
@@ -651,14 +648,17 @@ async def generate_investor_statement(
     }
 
     payload_bytes = json.dumps(statement_manifest, ensure_ascii=False, default=str, indent=2).encode("utf-8")
-    blob_name = f"{fund_id}/reports/{period_month}/INVESTOR_STATEMENT/{uuid.uuid4()}.json"
-    write_res = upload_bytes_append_only(
-        container=settings.AZURE_STORAGE_MONTHLY_REPORTS_CONTAINER,
-        blob_name=blob_name,
-        data=payload_bytes,
-        content_type="application/json",
-        metadata={"fund_id": str(fund_id), "period_month": period_month, "kind": "INVESTOR_STATEMENT"},
+
+    # Persist via StorageClient (R2 in prod, LocalStorage in dev)
+    storage = get_storage_client()
+    filename = f"{uuid.uuid4()}.json"
+    storage_path = gold_credit_report_path(
+        org_id=actor.organization_id,
+        fund_id=str(fund_id),
+        report_type="investor_statements",
+        filename=filename,
     )
+    await storage.write(storage_path, payload_bytes, content_type="application/json")
 
     row = InvestorStatement(
         fund_id=fund_id,
@@ -669,7 +669,7 @@ async def generate_investor_statement(
         capital_called=_num("capital_called"),
         distributions=_num("distributions"),
         ending_balance=_num("ending_balance"),
-        blob_path=write_res.blob_uri,
+        blob_path=storage_path,
         created_by=actor.actor_id,
         updated_by=actor.actor_id,
     )
@@ -736,7 +736,8 @@ async def download_investor_statement(
     if not row:
         raise HTTPException(status_code=404, detail="Not found")
 
-    data = download_bytes(blob_uri=row.blob_path)
+    storage = get_storage_client()
+    data = await storage.read(row.blob_path)
     filename = f"investor-statement-{statement_id}.json"
     return Response(
         content=data,

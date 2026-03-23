@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 
 from app.domains.credit.modules.ai.models import DocumentRegistry, ObligationRegister
 from app.domains.credit.modules.documents.models import DocumentChunk, DocumentVersion
-from app.services.search_index import AzureSearchMetadataClient
 
 OBLIGATION_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
 DUE_RULE_RE = re.compile(r"(within\s+\d+\s+(?:days?|months?)\s+after\s+[^.;]+|\d+\s+months\s+after\s+fy\s+end)", re.IGNORECASE)
@@ -178,29 +177,6 @@ def extract_obligation_register(
                 db.flush()
 
             saved.append(row)
-
-    if saved:
-        try:
-            search_docs = [
-                {
-                    "id": f"ai-obligation-{item.id}",
-                    "fund_id": str(item.fund_id),
-                    "organization_id": str(item.organization_id),
-                    "title": item.obligation_id,
-                    "content": item.obligation_text[:900],
-                    "doc_type": "AI_OBLIGATION_REGISTER",
-                    "version": str(item.id),
-                    "uploaded_at": item.as_of.isoformat(),
-                }
-                for item in saved
-            ]
-            AzureSearchMetadataClient(
-                caller="obligation_extractor",
-            ).upsert_documents(items=search_docs)
-        except Exception:
-            for item in saved:
-                item.data_quality = "DEGRADED"
-                item.updated_by = actor_id
 
     db.commit()
     return saved

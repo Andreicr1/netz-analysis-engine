@@ -12,7 +12,6 @@ All functions return a list of page dicts:
 """
 from __future__ import annotations
 
-import asyncio
 import io
 import logging
 import os
@@ -259,10 +258,9 @@ async def async_extract_text_from_blob(blob_container: str, blob_path: str) -> T
             reason=f"Unsupported file extension: {ext}",
         )
 
-    from app.services.azure.blob_client import get_blob_service_client
+    from app.services.storage_client import get_storage_client
 
-    svc = get_blob_service_client()
-    container = svc.get_container_client(blob_container)
-    blob = container.get_blob_client(blob_path)
-    data = await asyncio.to_thread(lambda: blob.download_blob().readall())
+    storage = get_storage_client()
+    storage_path = f"{blob_container}/{blob_path}" if blob_container else blob_path
+    data = await storage.read(storage_path)
     return await async_extract_text_from_bytes(data, filename=filename)

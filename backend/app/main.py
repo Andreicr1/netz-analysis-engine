@@ -38,10 +38,6 @@ from app.domains.credit.actions.routes.actions import router as credit_actions_r
 # Dashboard
 from app.domains.credit.dashboard.routes import router as credit_dashboard_router
 from app.domains.credit.dashboard.task_inbox import router as credit_task_inbox_router
-from app.domains.credit.dataroom.routes.routes import data_room_router as credit_data_room_router
-
-# Dataroom
-from app.domains.credit.dataroom.routes.routes import router as credit_dataroom_router
 from app.domains.credit.deals.routes.conversion import router as credit_conversion_router
 
 # ── Credit domain routers ────────────────────────────────────
@@ -386,10 +382,6 @@ api_v1.include_router(credit_schedules_router)
 # Dashboard
 api_v1.include_router(credit_dashboard_router)
 api_v1.include_router(credit_task_inbox_router)
-
-# Dataroom
-api_v1.include_router(credit_dataroom_router)
-api_v1.include_router(credit_data_room_router)
 
 # Actions
 api_v1.include_router(credit_actions_router)

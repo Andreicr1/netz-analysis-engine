@@ -115,7 +115,7 @@ class TestNoBlobStorageInGatherDealTexts:
     @patch("vertical_engines.credit.retrieval.build_ic_corpus")
     @patch("vertical_engines.credit.retrieval.gather_chapter_evidence")
     @patch("vertical_engines.credit.memo.CHAPTER_REGISTRY", [(0, "ch1", "Chapter 1")])
-    @patch("vertical_engines.credit.deep_review.corpus.download_bytes")
+    @patch("vertical_engines.credit.deep_review.corpus._read_storage_sync")
     def test_no_blob_storage_calls_in_gather(
         self,
         mock_download,

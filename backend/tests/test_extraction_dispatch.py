@@ -30,8 +30,6 @@ def test_dispatch_extraction_background_tasks_uses_unified_pipeline(monkeypatch)
     background_tasks = DummyBackgroundTasks()
     invoked: list[dict[str, object]] = []
 
-    monkeypatch.setattr(pipeline_dispatch, "_use_service_bus", lambda: False)
-
     def fake_run_extraction_pipeline(**kwargs):
         invoked.append(kwargs)
         return kwargs["job_id"]
@@ -72,41 +70,6 @@ def test_dispatch_extraction_background_tasks_uses_unified_pipeline(monkeypatch)
         "no_index": False,
         "job_id": "job-123",
     }]
-
-
-def test_dispatch_extraction_service_bus_marks_unified_pipeline(monkeypatch):
-    captured: dict[str, object] = {}
-
-    monkeypatch.setattr(pipeline_dispatch, "_use_service_bus", lambda: True)
-
-    def fake_send_to_topic(topic: str, payload: dict[str, object], *, stage: str):
-        captured["topic"] = topic
-        captured["payload"] = payload
-        captured["stage"] = stage
-        return "sb-job-1"
-
-    monkeypatch.setattr("app.services.azure.servicebus_client.send_to_topic", fake_send_to_topic)
-
-    response = pipeline_dispatch.dispatch_extraction(
-        background_tasks=DummyBackgroundTasks(),
-        source="market-data",
-        deals_filter="",
-        dry_run=True,
-        skip_bootstrap=False,
-        skip_prepare=False,
-        skip_embed=True,
-        skip_enrich=True,
-        no_index=True,
-        job_id="job-456",
-        actor_id="actor-2",
-    )
-
-    assert response["dispatch"] == "service_bus"
-    assert response["pipeline_name"] == "unified_pipeline"
-    assert captured["topic"] == "document-pipeline"
-    assert captured["stage"] == "extraction"
-    assert captured["payload"]["pipeline_name"] == "unified_pipeline"
-    assert captured["payload"]["legacy_path_invoked"] is False
 
 
 def test_trigger_extraction_pipeline_allocates_canonical_job(monkeypatch):
@@ -169,17 +132,21 @@ def test_extraction_status_and_jobs_routes_use_canonical_tracker(monkeypatch):
 
 def test_extraction_sources_route_uses_canonical_source_registry(monkeypatch):
     extraction_routes = _import_extraction_routes()
-    monkeypatch.setattr(unified_pipeline, "list_extraction_source_items", lambda source: ["Alpha", "Beta"])
+
+    async def fake_list(source):
+        return ["Alpha", "Beta"]
+
+    monkeypatch.setattr(unified_pipeline, "list_extraction_source_items", fake_list)
 
     actor = SimpleNamespace(actor_id="actor-5")
-    result = extraction_routes.list_extraction_sources(
+    result = asyncio.run(extraction_routes.list_extraction_sources(
         source="deals",
         _role_guard=actor,
-    )
+    ))
 
     assert result == {
         "source": "deals",
-        "container": "investment-pipeline-intelligence",
+        "storage_prefix": "bronze/batch/deals",
         "items": ["Alpha", "Beta"],
         "count": 2,
     }
@@ -188,10 +155,13 @@ def test_extraction_sources_route_uses_canonical_source_registry(monkeypatch):
 def test_run_extraction_pipeline_invokes_unified_pipeline_process(monkeypatch):
     processed_requests: list[object] = []
 
-    class FakeBlobEntry:
-        def __init__(self, name: str, is_folder: bool = False) -> None:
-            self.name = name
-            self.is_folder = is_folder
+    class FakeStorage:
+        async def list_files(self, prefix):
+            return [
+                f"{prefix}/Blue Owl/deck.pdf",
+                f"{prefix}/Blue Owl/notes.txt",
+                f"{prefix}/Ares/summary.pdf",
+            ]
 
     async def fake_process(request, *, db=None, actor_id="unified-pipeline", skip_index=False):
         processed_requests.append((request, actor_id, skip_index))
@@ -203,14 +173,9 @@ def test_run_extraction_pipeline_invokes_unified_pipeline_process(monkeypatch):
         )
 
     monkeypatch.setattr(
-        "app.services.blob_storage.list_blobs",
-        lambda **kwargs: [
-            FakeBlobEntry("Blue Owl/deck.pdf"),
-            FakeBlobEntry("Blue Owl/notes.txt"),
-            FakeBlobEntry("Ares/summary.pdf"),
-        ],
+        "app.services.storage_client.get_storage_client",
+        lambda: FakeStorage(),
     )
-    monkeypatch.setattr("app.services.blob_storage.blob_uri", lambda container, blob_path: f"{container}/{blob_path}")
     monkeypatch.setattr(unified_pipeline, "process", fake_process)
 
     job_id = unified_pipeline.run_extraction_pipeline(
@@ -225,7 +190,7 @@ def test_run_extraction_pipeline_invokes_unified_pipeline_process(monkeypatch):
     assert len(processed_requests) == 1
     request, actor_id, skip_index = processed_requests[0]
     assert request.filename == "deck.pdf"
-    assert request.blob_uri == "investment-pipeline-intelligence/Blue Owl/deck.pdf"
+    assert request.blob_uri == "bronze/batch/deals/Blue Owl/deck.pdf"
     assert actor_id == "unified_pipeline"
     assert skip_index is True
 

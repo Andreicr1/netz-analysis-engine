@@ -11,7 +11,7 @@ from app.domains.credit.modules.ai.models import (
     DocumentRegistry,
     KnowledgeAnchor,
 )
-from app.services.blob_storage import blob_uri, download_bytes
+from app.services.storage_client import get_storage_client
 
 DATE_RE = re.compile(r"\b(20\d{2}[-/]\d{2}[-/]\d{2})\b")
 LAW_RE = re.compile(r"governed by the laws? of ([A-Za-z\s]+)", re.IGNORECASE)
@@ -21,7 +21,23 @@ OBLIGATION_KEYWORDS = ("must", "shall", "required", "requirement")
 
 def _extract_text(registry: DocumentRegistry) -> str:
     try:
-        data = download_bytes(blob_uri=blob_uri(registry.container_name, registry.blob_path))
+        import asyncio
+
+        storage = get_storage_client()
+        path = f"{registry.container_name}/{registry.blob_path}" if registry.container_name else registry.blob_path
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                data = pool.submit(asyncio.run, storage.read(path)).result()
+        else:
+            data = asyncio.run(storage.read(path))
         return data.decode("utf-8", errors="ignore")
     except Exception:
         return f"{registry.title} {registry.blob_path}"

@@ -2,75 +2,9 @@ from __future__ import annotations
 
 import uuid
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-
-from app.core.config import settings
-from app.services.azure.search_client import (
-    describe_chunks_index_contract,
-    get_chunks_index_client,
-    resolve_chunks_index_name,
-)
-
-
-def _set_chunks_contract(monkeypatch: pytest.MonkeyPatch, *, env: str, base_name: str) -> str:
-    monkeypatch.setattr(settings, "NETZ_ENV", env)
-    monkeypatch.setattr(settings, "SEARCH_CHUNKS_INDEX_NAME", base_name)
-    return settings.prefixed_index(base_name)
-
-
-def test_chunks_index_contract_is_env_prefixed(monkeypatch: pytest.MonkeyPatch):
-    resolved_name = _set_chunks_contract(
-        monkeypatch,
-        env="staging",
-        base_name="canonical-chunks",
-    )
-
-    contract = describe_chunks_index_contract()
-
-    assert resolve_chunks_index_name() == resolved_name
-    assert contract.configured_base_name == "canonical-chunks"
-    assert contract.resolved_name == resolved_name
-    assert contract.env_name == "staging"
-
-
-def test_get_chunks_index_client_uses_resolved_name(monkeypatch: pytest.MonkeyPatch):
-    resolved_name = _set_chunks_contract(
-        monkeypatch,
-        env="qa",
-        base_name="shared-index",
-    )
-
-    with patch("app.services.azure.search_client.get_search_client") as mock_get_client:
-        get_chunks_index_client()
-
-    mock_get_client.assert_called_once_with(index_name=resolved_name)
-
-
-def test_upsert_chunks_uses_resolved_name(monkeypatch: pytest.MonkeyPatch):
-    from ai_engine.extraction.search_upsert_service import upsert_chunks
-
-    resolved_name = _set_chunks_contract(
-        monkeypatch,
-        env="staging",
-        base_name="canonical-chunks",
-    )
-
-    mock_client = MagicMock()
-    mock_client.upload_documents.return_value = [SimpleNamespace(succeeded=True)]
-
-    with patch(
-        "app.services.azure.search_client.get_search_client",
-        return_value=mock_client,
-    ) as mock_get_client:
-        result = upsert_chunks([{"id": "chunk-1"}])
-
-    assert result.successful_chunk_count == 1
-    assert result.failed_chunk_count == 0
-    assert result.is_full_success
-    mock_get_client.assert_called_once_with(index_name=resolved_name)
 
 
 def test_pipeline_kb_adapter_returns_empty_on_failure(monkeypatch: pytest.MonkeyPatch):
@@ -94,12 +28,6 @@ def test_pipeline_kb_adapter_returns_empty_on_failure(monkeypatch: pytest.Monkey
 @pytest.mark.asyncio
 async def test_rebuild_search_index_exposes_resolved_name(monkeypatch: pytest.MonkeyPatch):
     from ai_engine.pipeline.search_rebuild import rebuild_search_index
-
-    resolved_name = _set_chunks_contract(
-        monkeypatch,
-        env="staging",
-        base_name="canonical-chunks",
-    )
 
     class _FakeStorage:
         async def list_files(self, prefix: str) -> list[str]:

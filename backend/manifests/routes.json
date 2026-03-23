@@ -386,41 +386,6 @@
   },
   {
     "method": "GET",
-    "path": "/api/v1/api/data-room/file-link",
-    "name": "file_link"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/api/data-room/list",
-    "name": "list_items"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/api/data-room/pipeline/file-link",
-    "name": "pipeline_file_link"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/api/data-room/pipeline/list",
-    "name": "list_pipeline_items"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/api/data-room/tree",
-    "name": "get_tree"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/api/dataroom/browse",
-    "name": "browse"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/api/dataroom/search",
-    "name": "search"
-  },
-  {
-    "method": "GET",
     "path": "/api/v1/assets/tenant/{org_slug}/{asset_type}",
     "name": "get_tenant_asset"
   },
@@ -1311,21 +1276,6 @@
   },
   {
     "method": "POST",
-    "path": "/api/v1/api/data-room/upload",
-    "name": "upload_to_path"
-  },
-  {
-    "method": "POST",
-    "path": "/api/v1/api/dataroom/documents",
-    "name": "upload_document"
-  },
-  {
-    "method": "POST",
-    "path": "/api/v1/api/dataroom/documents/{document_id}/ingest",
-    "name": "ingest_document"
-  },
-  {
-    "method": "POST",
     "path": "/api/v1/content/flash-reports",
     "name": "trigger_flash_report"
   },
@@ -1378,11 +1328,6 @@
     "method": "POST",
     "path": "/api/v1/documents/root-folders",
     "name": "create_root_folder"
-  },
-  {
-    "method": "POST",
-    "path": "/api/v1/documents/upload",
-    "name": "upload"
   },
   {
     "method": "POST",
@@ -1758,6 +1703,16 @@
     "method": "POST",
     "path": "/api/v1/workers/run-screening-batch",
     "name": "trigger_run_screening_batch"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-sec-13f-ingestion",
+    "name": "trigger_run_sec_13f_ingestion"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-sec-adv-ingestion",
+    "name": "trigger_run_sec_adv_ingestion"
   },
   {
     "method": "POST",

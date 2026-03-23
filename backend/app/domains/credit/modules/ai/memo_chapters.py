@@ -7,12 +7,13 @@ from datetime import UTC
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
 from app.core.db.session import get_sync_db_with_rls
 from app.core.security.clerk_auth import Actor, require_roles
+from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.credit.modules.ai._helpers import (
-    _IC_MEMORANDA_CONTAINER,
     _normalize_chapter_content,
     _utcnow,
 )
@@ -160,11 +161,10 @@ def get_deal_im_draft(
 
 
 @router.get("/pipeline/deals/{deal_id}/im-pdf", response_model=ICMemorandumPdfResponse)
-def get_deal_im_pdf(
+async def get_deal_im_pdf(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
-    request: Request,
-    db: Session = Depends(get_sync_db_with_rls),
+    db: AsyncSession = Depends(get_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> ICMemorandumPdfResponse:
     """Generate IC Memorandum PDF from V4 memo_chapters (Deep Review)."""
@@ -173,13 +173,16 @@ def get_deal_im_pdf(
     import re as _re
     from datetime import datetime as _dt
 
+    from ai_engine.pipeline.storage_routing import gold_ic_memo_path
+    from app.services.storage_client import get_storage_client
+
     log = logging.getLogger("ai.im_pdf")
 
     from sqlalchemy import text as sa_text
 
     from app.domains.credit.modules.ai.models import DealUnderwritingArtifact as UWArtifact
 
-    chapters_rows = db.execute(
+    result = await db.execute(
         sa_text("""
             SELECT chapter_number, chapter_tag, chapter_title, content_md,
                    version_tag, model_version, generated_at
@@ -189,10 +192,11 @@ def get_deal_im_pdf(
             ORDER BY chapter_number
         """),
         {"did": str(deal_id), "fid": str(fund_id)},
-    ).fetchall()
+    )
+    chapters_rows = result.fetchall()
 
     if not chapters_rows:
-        im_row = db.execute(
+        im_result = await db.execute(
             select(InvestmentMemorandumDraft)
             .where(
                 InvestmentMemorandumDraft.fund_id == fund_id,
@@ -200,7 +204,8 @@ def get_deal_im_pdf(
             )
             .order_by(InvestmentMemorandumDraft.generated_at.desc())
             .limit(1),
-        ).scalar_one_or_none()
+        )
+        im_row = im_result.scalar_one_or_none()
         if not im_row:
             return ICMemorandumPdfResponse(
                 available=False,
@@ -223,12 +228,13 @@ def get_deal_im_pdf(
         for r in chapters_rows
     ]
 
-    artifact_row = db.execute(
+    artifact_result = await db.execute(
         select(UWArtifact)
         .where(UWArtifact.deal_id == deal_id, UWArtifact.is_active == True)  # noqa: E712
         .order_by(UWArtifact.created_at.desc())
         .limit(1),
-    ).scalar_one_or_none()
+    )
+    artifact_row = artifact_result.scalar_one_or_none()
 
     artifact = {}
     if artifact_row:
@@ -242,9 +248,10 @@ def get_deal_im_pdf(
             "created_at": artifact_row.generated_at,
         }
 
-    deal_row = db.execute(
+    deal_result = await db.execute(
         select(Deal).where(Deal.id == deal_id),
-    ).scalar_one_or_none()
+    )
+    deal_row = deal_result.scalar_one_or_none()
     deal_name = (deal_row.deal_name or deal_row.title) if deal_row else "Unknown Deal"
 
     version_tag = chapters[0]["version_tag"] if chapters else "v4"
@@ -317,64 +324,21 @@ def get_deal_im_pdf(
 
     generated_at_dt = created_at or _dt.now(UTC)
 
-    try:
-        from app.services.blob_storage import (
-            ensure_container,
-            generate_read_link,
-            upload_bytes_idempotent,
-        )
-        from app.services.blob_storage import (
-            exists as blob_exists,
-        )
+    org_id = _role_guard.organization_id
+    filename = f"IC_Memorandum_{safe_version}.pdf"
+    storage_path = gold_ic_memo_path(org_id, str(deal_id), filename)
+    storage = get_storage_client()
 
-        with open(local_cache_path, "rb") as f:
-            pdf_bytes = f.read()
+    with open(local_cache_path, "rb") as f:
+        pdf_bytes = f.read()
 
-        container = _IC_MEMORANDA_CONTAINER
-        ensure_container(container)
+    if not await storage.exists(storage_path):
+        await storage.write(storage_path, pdf_bytes, content_type="application/pdf")
+        log.info("IC Memo uploaded: %s", storage_path)
 
-        _deal_folder = ""
-        if deal_row and deal_row.deal_folder_path:
-            _parts = deal_row.deal_folder_path.rstrip("/").split("/")
-            _deal_folder = _parts[-1] if len(_parts) > 1 else _parts[0]
-        if not _deal_folder:
-            _deal_folder = deal_name or str(deal_id)
-
-        blob_name = f"{_deal_folder}/memos/IC_Memorandum_{safe_version}.pdf"
-
-        if not blob_exists(container=container, blob_name=blob_name):
-            upload_bytes_idempotent(
-                container=container,
-                blob_name=blob_name,
-                data=pdf_bytes,
-                content_type="application/pdf",
-                metadata={
-                    "deal_id": str(deal_id),
-                    "fund_id": str(fund_id),
-                    "version_tag": version_tag,
-                    "model_version": model_ver,
-                    "document_type": "IC_MEMORANDUM",
-                },
-            )
-            log.info(
-                "IC Memo uploaded to deal folder: %s/%s",
-                container, blob_name,
-            )
-
-        signed_url = generate_read_link(container=container, blob_name=blob_name, ttl_minutes=30)
-        return ICMemorandumPdfResponse(
-            signedPdfUrl=signed_url,
-            versionTag=version_tag,
-            generatedAt=generated_at_dt,
-            modelVersion=model_ver,
-        )
-    except Exception as blob_err:
-        log.warning("Blob storage unavailable (%s), falling back to local serve.", blob_err)
-
-    base_url = str(request.base_url).rstrip("/")
-    local_url = f"{base_url}/api/ai/pipeline/deals/{deal_id}/im-pdf/download"
+    signed_url = await storage.generate_read_url(storage_path, expires_in=1800)
     return ICMemorandumPdfResponse(
-        signedPdfUrl=local_url,
+        signedPdfUrl=signed_url,
         versionTag=version_tag,
         generatedAt=generated_at_dt,
         modelVersion=model_ver,
@@ -639,11 +603,10 @@ def regenerate_memo_chapter(
     "/pipeline/deals/{deal_id}/im-pdf/rebuild",
     response_model=ICMemorandumPdfResponse,
 )
-def rebuild_deal_im_pdf(
+async def rebuild_deal_im_pdf(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
-    request: Request,
-    db: Session = Depends(get_sync_db_with_rls),
+    db: AsyncSession = Depends(get_db_with_rls),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.INVESTMENT_TEAM])),
 ) -> ICMemorandumPdfResponse:
     """Force-rebuild IC Memorandum PDF from the latest chapters."""
@@ -652,13 +615,16 @@ def rebuild_deal_im_pdf(
     import re as _re
     from datetime import datetime as _dt
 
+    from ai_engine.pipeline.storage_routing import gold_ic_memo_path
+    from app.services.storage_client import get_storage_client
+
     log = logging.getLogger("ai.im_pdf_rebuild")
 
     from sqlalchemy import text as sa_text
 
     from app.domains.credit.modules.ai.models import DealUnderwritingArtifact as UWArtifact
 
-    chapters_rows = db.execute(
+    result = await db.execute(
         sa_text("""
             SELECT chapter_number, chapter_tag, chapter_title, content_md,
                    version_tag, model_version, generated_at
@@ -668,7 +634,8 @@ def rebuild_deal_im_pdf(
             ORDER BY chapter_number
         """),
         {"did": str(deal_id), "fid": str(fund_id)},
-    ).fetchall()
+    )
+    chapters_rows = result.fetchall()
 
     if not chapters_rows:
         raise HTTPException(
@@ -688,12 +655,13 @@ def rebuild_deal_im_pdf(
         for r in chapters_rows
     ]
 
-    artifact_row = db.execute(
+    artifact_result = await db.execute(
         select(UWArtifact)
         .where(UWArtifact.deal_id == deal_id, UWArtifact.is_active == True)  # noqa: E712
         .order_by(UWArtifact.created_at.desc())
         .limit(1),
-    ).scalar_one_or_none()
+    )
+    artifact_row = artifact_result.scalar_one_or_none()
 
     artifact = {}
     if artifact_row:
@@ -707,9 +675,10 @@ def rebuild_deal_im_pdf(
             "created_at": artifact_row.generated_at,
         }
 
-    deal_row = db.execute(
+    deal_result = await db.execute(
         select(Deal).where(Deal.id == deal_id),
-    ).scalar_one_or_none()
+    )
+    deal_row = deal_result.scalar_one_or_none()
     deal_name = (deal_row.deal_name or deal_row.title) if deal_row else "Unknown Deal"
 
     now = _dt.now(UTC)
@@ -781,54 +750,20 @@ def rebuild_deal_im_pdf(
         log.error("PDF rebuild failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=f"PDF generation failed: {exc}")
 
-    try:
-        from app.services.blob_storage import (
-            ensure_container,
-            generate_read_link,
-            upload_bytes_idempotent,
-        )
+    org_id = _role_guard.organization_id
+    filename = f"IC_Memorandum_rebuilt-{timestamp}.pdf"
+    storage_path = gold_ic_memo_path(org_id, str(deal_id), filename)
+    storage = get_storage_client()
 
-        container = _IC_MEMORANDA_CONTAINER
-        ensure_container(container)
+    with open(local_cache_path, "rb") as f:
+        pdf_bytes = f.read()
 
-        _deal_folder = ""
-        if deal_row and deal_row.deal_folder_path:
-            _parts = deal_row.deal_folder_path.rstrip("/").split("/")
-            _deal_folder = _parts[-1] if len(_parts) > 1 else _parts[0]
-        if not _deal_folder:
-            _deal_folder = deal_name or str(deal_id)
+    await storage.write(storage_path, pdf_bytes, content_type="application/pdf")
+    log.info("IC Memo rebuilt and uploaded: %s", storage_path)
 
-        blob_name = f"{_deal_folder}/memos/IC_Memorandum_rebuilt-{timestamp}.pdf"
-
-        with open(local_cache_path, "rb") as f:
-            pdf_bytes = f.read()
-        upload_bytes_idempotent(
-            container=container,
-            blob_name=blob_name,
-            data=pdf_bytes,
-            content_type="application/pdf",
-            metadata={
-                "deal_id": str(deal_id),
-                "fund_id": str(fund_id),
-                "version_tag": version_tag,
-                "model_version": model_ver,
-            },
-        )
-
-        signed_url = generate_read_link(container=container, blob_name=blob_name, ttl_minutes=30)
-        return ICMemorandumPdfResponse(
-            signedPdfUrl=signed_url,
-            versionTag=version_tag,
-            generatedAt=now,
-            modelVersion=model_ver,
-        )
-    except Exception as blob_err:
-        log.warning("Blob storage unavailable (%s), falling back to local serve.", blob_err)
-
-    base_url = str(request.base_url).rstrip("/")
-    local_url = f"{base_url}/api/ai/pipeline/deals/{deal_id}/im-pdf/download"
+    signed_url = await storage.generate_read_url(storage_path, expires_in=1800)
     return ICMemorandumPdfResponse(
-        signedPdfUrl=local_url,
+        signedPdfUrl=signed_url,
         versionTag=version_tag,
         generatedAt=now,
         modelVersion=model_ver,

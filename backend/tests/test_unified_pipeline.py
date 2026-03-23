@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -11,7 +11,6 @@ from ai_engine.pipeline.unified_pipeline import (
     _EXTRACTION_JOBS,
     _MAX_EXTRACTION_JOBS,
     EXTRACTION_SOURCE_CONFIG,
-    _blob_entry_value,
     _trim_extraction_jobs,
     _update_extraction_job,
     get_extraction_job_status,
@@ -118,31 +117,6 @@ class TestJobManagement:
         # After trim, should have removed at least 1
 
 
-# ── _blob_entry_value ─────────────────────────────────────────────
-
-
-class TestBlobEntryValue:
-    def test_dict_entry(self):
-        entry = {"name": "file.pdf", "is_folder": False}
-        assert _blob_entry_value(entry, "name") == "file.pdf"
-        assert _blob_entry_value(entry, "is_folder") is False
-
-    def test_dict_missing_key_default(self):
-        entry = {"name": "file.pdf"}
-        assert _blob_entry_value(entry, "size", default=0) == 0
-
-    def test_object_entry(self):
-        entry = MagicMock()
-        entry.name = "file.pdf"
-        entry.is_folder = True
-        assert _blob_entry_value(entry, "name") == "file.pdf"
-        assert _blob_entry_value(entry, "is_folder") is True
-
-    def test_object_missing_attr_default(self):
-        entry = MagicMock(spec=[])
-        assert _blob_entry_value(entry, "size", default=42) == 42
-
-
 # ── EXTRACTION_SOURCE_CONFIG ──────────────────────────────────────
 
 
@@ -154,7 +128,7 @@ class TestExtractionSourceConfig:
 
     def test_each_source_has_required_keys(self):
         for source, config in EXTRACTION_SOURCE_CONFIG.items():
-            assert "input_container" in config
+            assert "storage_prefix" in config
             assert "description" in config
 
 

@@ -1,7 +1,6 @@
 """Microsoft Graph API client for SharePoint content retrieval.
 
 Uses raw httpx + DefaultAzureCredential — lightweight alternative to msgraph-sdk.
-Follows the same pattern as blob_client.py.
 
 DEPRECATED 2026-03-18: All azure imports are lazy to avoid breaking CI when azure SDK
 is not installed. Retained for rollback capability only.

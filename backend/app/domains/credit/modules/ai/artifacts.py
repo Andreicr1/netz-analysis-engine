@@ -4,10 +4,11 @@ from __future__ import annotations
 import uuid
 from datetime import UTC
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ai_engine.pipeline.storage_routing import gold_artifact_path
 from app.core.db.session import get_sync_db_with_rls
 from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed, require_roles
 from app.domains.credit.modules.ai._helpers import _utcnow
@@ -19,12 +20,10 @@ from app.domains.credit.modules.ai.schemas import (
     MarketingPresentationPdfResponse,
 )
 from app.domains.credit.modules.deals.models import Deal
+from app.services.storage_client import StorageClient, get_storage_client
 from app.shared.enums import Role
 
 router = APIRouter()
-
-_FACT_SHEET_CONTAINER = "netz-fund-artifacts"
-_MARKETING_PRES_CONTAINER = "netz-fund-artifacts"
 
 
 @router.get("/pipeline/deals/{deal_id}/evidence-governance")
@@ -258,12 +257,11 @@ def get_deal_critical_gaps(
     "/pipeline/fact-sheet/generate",
     response_model=FactSheetPdfResponse,
 )
-def generate_fact_sheet(
+async def generate_fact_sheet(
     fund_id: uuid.UUID,
-    request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
+    storage: StorageClient = Depends(get_storage_client),
     _write_guard: Actor = Depends(require_readonly_allowed()),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP])),
 ) -> FactSheetPdfResponse:
@@ -300,52 +298,26 @@ def generate_fact_sheet(
         log.error("Fact Sheet PPTX generation failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Fact Sheet generation failed: {exc}")
 
-    try:
-        from app.services.blob_storage import (
-            ensure_container,
-            generate_read_link,
-            upload_bytes_idempotent,
+    filename = f"{version_tag}.pptx"
+    org_id = actor.organization_id
+    if org_id is None:
+        raise HTTPException(status_code=400, detail="Organization context required")
+    path = gold_artifact_path(org_id, str(fund_id), filename)
+
+    with open(pptx_path, "rb") as f:
+        pptx_bytes = f.read()
+
+    if not await storage.exists(path):
+        await storage.write(
+            path,
+            pptx_bytes,
+            content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
         )
-        from app.services.blob_storage import (
-            exists as blob_exists,
-        )
+        log.info("Fact Sheet uploaded: %s", path)
 
-        with open(pptx_path, "rb") as f:
-            pptx_bytes = f.read()
-
-        container = _FACT_SHEET_CONTAINER
-        ensure_container(container)
-        blob_name = f"fact-sheets/{fund_id}/{version_tag}.pptx"
-
-        if not blob_exists(container=container, blob_name=blob_name):
-            upload_bytes_idempotent(
-                container=container,
-                blob_name=blob_name,
-                data=pptx_bytes,
-                content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                metadata={
-                    "fund_id": str(fund_id),
-                    "document_type": "FACT_SHEET",
-                    "version_tag": version_tag,
-                    "generated_by": actor.actor_id,
-                },
-            )
-            log.info("Fact Sheet uploaded: %s/%s", container, blob_name)
-
-        signed_url = generate_read_link(container=container, blob_name=blob_name, ttl_minutes=30)
-        return FactSheetPdfResponse(
-            signedPdfUrl=signed_url,
-            versionTag=version_tag,
-            generatedAt=generated_at,
-            modelVersion=model_version,
-        )
-    except Exception as blob_err:
-        log.warning("Blob storage unavailable (%s), falling back to local.", blob_err)
-
-    base_url = str(request.base_url).rstrip("/")
-    local_url = f"{base_url}/public/fact-sheets/{fund_id}/{version_tag}.pptx"
+    signed_url = await storage.generate_read_url(path)
     return FactSheetPdfResponse(
-        signedPdfUrl=local_url,
+        signedPdfUrl=signed_url,
         versionTag=version_tag,
         generatedAt=generated_at,
         modelVersion=model_version,
@@ -356,9 +328,10 @@ def generate_fact_sheet(
     "/pipeline/fact-sheet/pdf",
     response_model=FactSheetPdfResponse,
 )
-def get_fact_sheet_pdf(
+async def get_fact_sheet_pdf(
     fund_id: uuid.UUID,
-    request: Request,
+    actor: Actor = Depends(get_actor),
+    storage: StorageClient = Depends(get_storage_client),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> FactSheetPdfResponse:
     """Return a signed URL for the latest Fact Sheet PPTX (if it exists)."""
@@ -366,20 +339,21 @@ def get_fact_sheet_pdf(
 
     log = logging.getLogger("ai.fact_sheet")
 
-    try:
-        from app.services.blob_storage import generate_read_link, list_blobs
+    org_id = actor.organization_id
+    if org_id is None:
+        raise HTTPException(status_code=400, detail="Organization context required")
 
-        container = _FACT_SHEET_CONTAINER
-        prefix = f"fact-sheets/{fund_id}/"
-        blobs = list_blobs(container=container, name_starts_with=prefix)
-        if not blobs:
+    prefix = gold_artifact_path(org_id, str(fund_id), "fact-sheet-")
+    try:
+        files = await storage.list_files(prefix)
+        if not files:
             raise HTTPException(status_code=404, detail="No Fact Sheet found. Generate one first.")
 
-        blobs.sort(key=lambda b: b.name, reverse=True)
-        blob_name = blobs[0].name
+        files.sort(reverse=True)
+        latest_path = files[0]
 
-        signed_url = generate_read_link(container=container, blob_name=blob_name, ttl_minutes=30)
-        filename = blob_name.rsplit("/", 1)[-1] if "/" in blob_name else blob_name
+        signed_url = await storage.generate_read_url(latest_path)
+        filename = latest_path.rsplit("/", 1)[-1] if "/" in latest_path else latest_path
         vtag = filename.replace(".pptx", "").replace(".pdf", "") if filename else "unknown"
         return FactSheetPdfResponse(
             signedPdfUrl=signed_url,
@@ -398,12 +372,11 @@ def get_fact_sheet_pdf(
     "/pipeline/marketing-presentation/generate",
     response_model=MarketingPresentationPdfResponse,
 )
-def generate_marketing_presentation(
+async def generate_marketing_presentation(
     fund_id: uuid.UUID,
-    request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
+    storage: StorageClient = Depends(get_storage_client),
     _write_guard: Actor = Depends(require_readonly_allowed()),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP])),
 ) -> MarketingPresentationPdfResponse:
@@ -440,52 +413,26 @@ def generate_marketing_presentation(
         log.error("Marketing Presentation PPTX generation failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Marketing Presentation generation failed: {exc}")
 
-    try:
-        from app.services.blob_storage import (
-            ensure_container,
-            generate_read_link,
-            upload_bytes_idempotent,
+    filename = f"{version_tag}.pptx"
+    org_id = actor.organization_id
+    if org_id is None:
+        raise HTTPException(status_code=400, detail="Organization context required")
+    path = gold_artifact_path(org_id, str(fund_id), filename)
+
+    with open(pptx_path, "rb") as f:
+        pptx_bytes = f.read()
+
+    if not await storage.exists(path):
+        await storage.write(
+            path,
+            pptx_bytes,
+            content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
         )
-        from app.services.blob_storage import (
-            exists as blob_exists,
-        )
+        log.info("Marketing Presentation uploaded: %s", path)
 
-        with open(pptx_path, "rb") as f:
-            pptx_bytes = f.read()
-
-        container = _MARKETING_PRES_CONTAINER
-        ensure_container(container)
-        blob_name = f"marketing-presentations/{fund_id}/{version_tag}.pptx"
-
-        if not blob_exists(container=container, blob_name=blob_name):
-            upload_bytes_idempotent(
-                container=container,
-                blob_name=blob_name,
-                data=pptx_bytes,
-                content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                metadata={
-                    "fund_id": str(fund_id),
-                    "document_type": "MARKETING_PRESENTATION",
-                    "version_tag": version_tag,
-                    "generated_by": actor.actor_id,
-                },
-            )
-            log.info("Marketing Presentation uploaded: %s/%s", container, blob_name)
-
-        signed_url = generate_read_link(container=container, blob_name=blob_name, ttl_minutes=30)
-        return MarketingPresentationPdfResponse(
-            signedPdfUrl=signed_url,
-            versionTag=version_tag,
-            generatedAt=generated_at,
-            modelVersion=model_version,
-        )
-    except Exception as blob_err:
-        log.warning("Blob storage unavailable (%s), falling back to local.", blob_err)
-
-    base_url = str(request.base_url).rstrip("/")
-    local_url = f"{base_url}/public/marketing-presentations/{fund_id}/{version_tag}.pptx"
+    signed_url = await storage.generate_read_url(path)
     return MarketingPresentationPdfResponse(
-        signedPdfUrl=local_url,
+        signedPdfUrl=signed_url,
         versionTag=version_tag,
         generatedAt=generated_at,
         modelVersion=model_version,
@@ -496,9 +443,10 @@ def generate_marketing_presentation(
     "/pipeline/marketing-presentation/pdf",
     response_model=MarketingPresentationPdfResponse,
 )
-def get_marketing_presentation_pdf(
+async def get_marketing_presentation_pdf(
     fund_id: uuid.UUID,
-    request: Request,
+    actor: Actor = Depends(get_actor),
+    storage: StorageClient = Depends(get_storage_client),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> MarketingPresentationPdfResponse:
     """Return a signed URL for the latest Marketing Presentation PPTX (if it exists)."""
@@ -506,20 +454,21 @@ def get_marketing_presentation_pdf(
 
     log = logging.getLogger("ai.marketing_pres")
 
-    try:
-        from app.services.blob_storage import generate_read_link, list_blobs
+    org_id = actor.organization_id
+    if org_id is None:
+        raise HTTPException(status_code=400, detail="Organization context required")
 
-        container = _MARKETING_PRES_CONTAINER
-        prefix = f"marketing-presentations/{fund_id}/"
-        blobs = list_blobs(container=container, name_starts_with=prefix)
-        if not blobs:
+    prefix = gold_artifact_path(org_id, str(fund_id), "marketing-pres-")
+    try:
+        files = await storage.list_files(prefix)
+        if not files:
             raise HTTPException(status_code=404, detail="No Marketing Presentation found. Generate one first.")
 
-        blobs.sort(key=lambda b: b.name, reverse=True)
-        blob_name = blobs[0].name
+        files.sort(reverse=True)
+        latest_path = files[0]
 
-        signed_url = generate_read_link(container=container, blob_name=blob_name, ttl_minutes=30)
-        filename = blob_name.rsplit("/", 1)[-1] if "/" in blob_name else blob_name
+        signed_url = await storage.generate_read_url(latest_path)
+        filename = latest_path.rsplit("/", 1)[-1] if "/" in latest_path else latest_path
         vtag = filename.replace(".pptx", "").replace(".pdf", "") if filename else "unknown"
         return MarketingPresentationPdfResponse(
             signedPdfUrl=signed_url,

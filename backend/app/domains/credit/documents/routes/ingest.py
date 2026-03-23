@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,50 +33,6 @@ class ProcessPendingResponse(BaseModel):
     indexed: int
     failed: int
     skipped: int
-
-
-@router.post("/upload")
-async def upload(
-    fund_id: uuid.UUID,
-    root_folder: str = Form(...),
-    subfolder_path: str | None = Form(None),
-    domain: str | None = Form(None),
-    title: str | None = Form(None),
-    file: UploadFile = File(...),
-    db: AsyncSession = Depends(get_db_with_rls),
-    actor: Actor = Depends(get_actor),
-    _role_guard: Actor = Depends(require_role(Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM)),
-):
-    MAX_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
-    data = await file.read()
-    if not data:
-        raise HTTPException(status_code=400, detail="file is empty")
-    if len(data) > MAX_UPLOAD_SIZE:
-        raise HTTPException(status_code=413, detail="File too large (max 100 MB)")
-    try:
-        res = await service.upload_document(
-            db,
-            fund_id=fund_id,
-            actor=actor,
-            root_folder=root_folder,
-            subfolder_path=subfolder_path,
-            domain=domain,
-            title=title or (file.filename or "Document"),
-            filename=file.filename or "document.pdf",
-            content_type=file.content_type,
-            data=data,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error("Document upload failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Upload failed — see server logs")
-
-    return {
-        "document_id": str(res.document.id),
-        "version_id": str(res.version.id),
-        "blob_path": res.blob_path,
-    }
 
 
 @router.get("", response_model=Page[DocumentOut])

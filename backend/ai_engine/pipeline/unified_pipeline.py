@@ -6,15 +6,15 @@ feedback (SSE events), not analytical quality.
 
 Stages: pre-filter → OCR → [gate] → classify → [gate] → governance
         → chunk → [gate] → extract metadata → [gate] → embed → [gate]
-        → storage (ADLS) → index (pgvector) → done
+        → storage (StorageClient) → index (pgvector) → done
 
 Each gate returns ``PipelineStageResult``. On failure the pipeline halts
 for this document (other documents in a batch continue).
 
 Storage follows dual-write pattern (Phase 3):
-  1. Write to ADLS (StorageClient) — source of truth
+  1. Write to StorageClient (R2 prod / LocalStorage dev) — source of truth
   2. Upsert to pgvector (PostgreSQL) — derived index
-  3. If ADLS succeeds but pgvector fails → document is safe, warning logged
+  3. If storage succeeds but pgvector fails → document is safe, warning logged
 """
 from __future__ import annotations
 
@@ -48,14 +48,17 @@ logger = logging.getLogger(__name__)
 EXTRACTION_SOURCE_CONFIG: dict[str, dict[str, str]] = {
     "deals": {
         "input_container": "investment-pipeline-intelligence",
+        "storage_prefix": "bronze/batch/deals",
         "description": "Pipeline deal PDFs through unified_pipeline",
     },
     "fund-data": {
         "input_container": "fund-data",
+        "storage_prefix": "bronze/batch/fund-data",
         "description": "Fund data documents through unified_pipeline",
     },
     "market-data": {
         "input_container": "market-data",
+        "storage_prefix": "bronze/batch/market-data",
         "description": "Market data documents through unified_pipeline",
     },
 }
@@ -141,41 +144,21 @@ def list_extraction_jobs() -> list[dict[str, Any]]:
     )
 
 
-def _blob_entry_value(entry: Any, field_name: str, *, default: Any = None) -> Any:
-    if isinstance(entry, dict):
-        return entry.get(field_name, default)
-    return getattr(entry, field_name, default)
-
-
-def _resolve_blob_uri(container_name: str, blob_path: str) -> str:
-    from app.services.blob_storage import blob_uri as build_blob_uri
-
-    for args, kwargs in (
-        ((container_name, blob_path), {}),
-        ((), {"container": container_name, "blob_path": blob_path}),
-        ((), {"container_name": container_name, "blob_path": blob_path}),
-    ):
-        try:
-            return build_blob_uri(*args, **kwargs)
-        except TypeError:
-            continue
-    return f"{container_name}/{blob_path}"
-
-
-def list_extraction_source_items(source: str) -> list[str]:
+async def list_extraction_source_items(source: str) -> list[str]:
     """List top-level folders for a canonical extraction source."""
-    source_cfg = EXTRACTION_SOURCE_CONFIG[source]
+    from app.services.storage_client import get_storage_client
 
-    from app.services.blob_storage import list_blobs
+    source_cfg = EXTRACTION_SOURCE_CONFIG[source]
+    storage = get_storage_client()
+    files = await storage.list_files(source_cfg["storage_prefix"])
 
     seen: set[str] = set()
-    for entry in list_blobs(container=source_cfg["input_container"], prefix=None, delimiter=""):
-        if _blob_entry_value(entry, "is_folder", default=False):
+    for file_path in files:
+        if not file_path.lower().endswith(".pdf"):
             continue
-        blob_name = str(_blob_entry_value(entry, "name", default=""))
-        if not blob_name.lower().endswith(".pdf"):
-            continue
-        parts = blob_name.split("/", 1)
+        # Strip the prefix to get the relative path, then extract the top-level folder
+        relative = file_path[len(source_cfg["storage_prefix"]):].lstrip("/")
+        parts = relative.split("/", 1)
         if len(parts) == 2:
             seen.add(parts[0])
     return sorted(seen)
@@ -188,31 +171,28 @@ async def _run_extraction_pipeline_async(
     dry_run: bool,
     no_index: bool,
 ) -> list[dict[str, Any]]:
-    from app.services.blob_storage import list_blobs
+    from app.services.storage_client import get_storage_client
 
+    storage = get_storage_client()
     filters = [item.strip().lower() for item in deals_filter.split(",") if item.strip()]
     sources_to_run = list(EXTRACTION_SOURCE_CONFIG) if source == "all" else [source]
     results: list[dict[str, Any]] = []
 
     for source_key in sources_to_run:
         source_cfg = EXTRACTION_SOURCE_CONFIG[source_key]
-        entries = list_blobs(container=source_cfg["input_container"], prefix=None, delimiter="")
-        pdf_entries = [
-            entry
-            for entry in entries
-            if not _blob_entry_value(entry, "is_folder", default=False)
-            and str(_blob_entry_value(entry, "name", default="")).lower().endswith(".pdf")
-        ]
+        all_files = await storage.list_files(source_cfg["storage_prefix"])
+        pdf_paths = [p for p in all_files if p.lower().endswith(".pdf")]
 
-        for entry in pdf_entries:
-            blob_path = str(_blob_entry_value(entry, "name", default=""))
-            if filters and not any(filter_value in blob_path.lower() for filter_value in filters):
+        for storage_path in pdf_paths:
+            # Use relative path from prefix for display and filtering
+            relative = storage_path[len(source_cfg["storage_prefix"]):].lstrip("/")
+            if filters and not any(f in relative.lower() for f in filters):
                 continue
 
-            filename = Path(blob_path).name
+            filename = Path(relative).name
             item_result: dict[str, Any] = {
                 "source": source_key,
-                "blob_path": blob_path,
+                "blob_path": storage_path,
                 "filename": filename,
                 "pipeline_name": "unified_pipeline",
                 "legacy_path_invoked": False,
@@ -227,8 +207,8 @@ async def _run_extraction_pipeline_async(
                 source="batch",
                 org_id=uuid.UUID(int=0),
                 vertical="credit",
-                document_id=uuid.uuid5(uuid.NAMESPACE_URL, f"{source_cfg['input_container']}/{blob_path}"),
-                blob_uri=_resolve_blob_uri(source_cfg["input_container"], blob_path),
+                document_id=uuid.uuid5(uuid.NAMESPACE_URL, storage_path),
+                blob_uri=storage_path,
                 filename=filename,
             )
 
@@ -425,10 +405,8 @@ async def _check_gate(
 
 
 async def _write_to_lake(path: str, data: bytes, *, content_type: str = "application/json") -> bool:
-    """Write data to ADLS via StorageClient. Returns True on success.
+    """Write data via StorageClient (R2 prod / LocalStorage dev). Returns True on success.
 
-    Feature-flagged: only writes when ``FEATURE_ADLS_ENABLED`` is true
-    OR when using ``LocalStorageClient`` (always available in dev).
     Swallowed on failure — logs warning but does not halt the pipeline.
     """
     try:
@@ -559,9 +537,10 @@ async def process(
         )
 
     # ── 2. OCR ──────────────────────────────────────────────────
-    from app.services.blob_storage import download_bytes
+    from app.services.storage_client import get_storage_client
 
-    pdf_bytes = await asyncio.to_thread(download_bytes, blob_uri=request.blob_uri)
+    storage = get_storage_client()
+    pdf_bytes = await storage.read(request.blob_uri)
 
     # Check OCR cache first (avoids paid API call on cache hit)
     from ai_engine.cache.provider_cache import ocr_cache
@@ -795,7 +774,7 @@ async def process(
     if failure:
         return failure
 
-    # ── 8. Write to ADLS (source of truth) ────────────────────────
+    # ── 8. Write to storage (source of truth) ──────────────────────
     from ai_engine.pipeline.storage_routing import (
         bronze_document_path,
         silver_chunks_path,
@@ -847,22 +826,22 @@ async def process(
     metrics["storage_silver_metadata"] = meta_ok
 
     if not bronze_ok:
-        warnings.append("ADLS bronze write failed — raw OCR not persisted to lake")
+        warnings.append("Storage bronze write failed — raw OCR not persisted to lake")
     if not silver_ok:
-        warnings.append("ADLS silver chunks write failed — rebuild capability degraded")
+        warnings.append("Storage silver chunks write failed — rebuild capability degraded")
     if not meta_ok:
-        warnings.append("ADLS silver metadata write failed")
+        warnings.append("Storage silver metadata write failed")
 
-    adls_all_failed = not bronze_ok and not silver_ok and not meta_ok
-    adls_partial_failed = (not bronze_ok or not silver_ok or not meta_ok) and not adls_all_failed
+    storage_all_failed = not bronze_ok and not silver_ok and not meta_ok
+    storage_partial_failed = (not bronze_ok or not silver_ok or not meta_ok) and not storage_all_failed
 
-    if adls_partial_failed:
+    if storage_partial_failed:
         failed_writes = [
             name for name, ok in [("bronze", bronze_ok), ("silver_chunks", silver_ok), ("silver_metadata", meta_ok)]
             if not ok
         ]
         logger.warning(
-            "[pipeline] ADLS partial failure for %s — failed writes: %s; continuing to Search upsert",
+            "[pipeline] Storage partial failure for %s — failed writes: %s; continuing to Search upsert",
             request.filename,
             failed_writes,
         )
@@ -871,17 +850,17 @@ async def process(
         "bronze": bronze_ok,
         "silver_chunks": silver_ok,
         "silver_metadata": meta_ok,
-        "adls_all_failed": adls_all_failed,
+        "all_failed": storage_all_failed,
     })
 
-    # SR-6: If ALL ADLS writes failed, skip Search upsert — source of truth has no data.
-    if adls_all_failed:
+    # SR-6: If ALL storage writes failed, skip Search upsert — source of truth has no data.
+    if storage_all_failed:
         logger.error(
-            "[pipeline] ALL ADLS writes failed for %s — skipping Search upsert (source of truth missing)",
+            "[pipeline] ALL storage writes failed for %s — skipping Search upsert (source of truth missing)",
             request.filename,
         )
         skip_index = True
-        warnings.append("Search upsert skipped — all ADLS writes failed (no source of truth)")
+        warnings.append("Search upsert skipped — all storage writes failed (no source of truth)")
 
     # ── 9. Index to pgvector (derived index) ─────────────────────
     from ai_engine.extraction.pgvector_search_service import (
@@ -967,7 +946,7 @@ async def process(
     metrics["duration_ms"] = elapsed_ms
 
     # Compute terminal state: degraded when partial, failed when total failure
-    if adls_all_failed:
+    if storage_all_failed:
         terminal_state = "failed"
         pipeline_success = False
     elif upsert_result.is_total_failure and not skip_index:
@@ -976,7 +955,7 @@ async def process(
         warnings.append(
             f"Search indexing failed completely: 0/{upsert_result.attempted_chunk_count} chunks indexed"
         )
-    elif adls_partial_failed:
+    elif storage_partial_failed:
         terminal_state = "degraded"
         pipeline_success = True
     elif upsert_result.is_degraded:

@@ -1,6 +1,6 @@
-"""pgvector search service — drop-in replacement for Azure AI Search.
+"""pgvector search service — vector search via pgvector.
 
-Exposes the same function signatures as search_upsert_service.py:
+Provides:
 - upsert_chunks()
 - search_deal_chunks()
 - search_fund_policy_chunks()

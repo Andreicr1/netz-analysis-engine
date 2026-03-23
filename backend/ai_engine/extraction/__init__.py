@@ -10,8 +10,6 @@ Module classification
     semantic_chunker       — document → semantic chunks
     document_intelligence  — metadata extraction from chunks
     embed_chunks           — embedding stage (build text + embed batch)
-    search_upsert_service  — Azure Search upsert (push model)
-
 **Autonomous utilities** (called by vertical engines, ingestion, or domain modules):
     embedding_service      — standalone embedding helper (used by domain_ai, pipeline screening, deep_review)
     entity_bootstrap       — deal entity bootstrap from blob storage

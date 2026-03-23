@@ -13,15 +13,32 @@ from app.domains.credit.modules.ai.models import (
     ActiveInvestment,
 )
 from app.domains.credit.modules.deals.models import PipelineDeal as Deal  # pipeline domain
-from app.services.blob_storage import blob_uri, download_bytes
+from app.services.storage_client import get_storage_client
 
 logger = structlog.get_logger()
 
 _TOTAL_BUDGET_CHARS = 300_000
 
 
+def _read_storage_sync(path: str) -> bytes:
+    """Read bytes from StorageClient in a sync context."""
+    import asyncio
+    import concurrent.futures
+
+    storage = get_storage_client()
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, storage.read(path)).result()
+    return asyncio.run(storage.read(path))
+
+
 # ---------------------------------------------------------------------------
-# Deal context loader — enriches deal_fields from blob-stored JSON
+# Deal context loader — enriches deal_fields from storage-stored JSON
 # ---------------------------------------------------------------------------
 _RAW_DOCS_CONTAINER = "investment-pipeline-intelligence"
 
@@ -30,7 +47,7 @@ def _load_deal_context_from_blob(
     deal: Deal,
     deal_fields: dict[str, Any],
 ) -> dict[str, Any]:
-    """Download deal_context.json + fund_context.json from blob storage
+    """Download deal_context.json + fund_context.json from storage
     and merge rich structured metadata into deal_fields.
 
     This provides the LLM with vehicles, investment terms, key contacts,
@@ -52,22 +69,22 @@ def _load_deal_context_from_blob(
 
     # ── Load deal_context.json ──────────────────────
     try:
-        blob_path = f"{folder}/deal_context.json"
-        data = download_bytes(blob_uri=blob_uri(_RAW_DOCS_CONTAINER, blob_path))
+        storage_path = f"{_RAW_DOCS_CONTAINER}/{folder}/deal_context.json"
+        data = _read_storage_sync(storage_path)
         deal_ctx = json.loads(data.decode("utf-8"))
         logger.info(
-            "deal_context.loaded", blob=blob_path, keys=list(deal_ctx.keys()),
+            "deal_context.loaded", path=storage_path, keys=list(deal_ctx.keys()),
         )
     except Exception as exc:
         logger.debug("deal_context.unavailable", folder=folder, error=str(exc))
 
     # ── Load fund_context.json ──────────────────────
     try:
-        blob_path = f"{folder}/fund_context.json"
-        data = download_bytes(blob_uri=blob_uri(_RAW_DOCS_CONTAINER, blob_path))
+        storage_path = f"{_RAW_DOCS_CONTAINER}/{folder}/fund_context.json"
+        data = _read_storage_sync(storage_path)
         fund_ctx = json.loads(data.decode("utf-8"))
         logger.info(
-            "fund_context.loaded", blob=blob_path, keys=list(fund_ctx.keys()),
+            "fund_context.loaded", path=storage_path, keys=list(fund_ctx.keys()),
         )
     except Exception as exc:
         logger.debug("fund_context.unavailable", folder=folder, error=str(exc))

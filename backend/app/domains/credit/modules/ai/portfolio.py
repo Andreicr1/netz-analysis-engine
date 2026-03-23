@@ -631,11 +631,12 @@ def get_portfolio_deal_monitoring(
     "/portfolio/investments/{investment_id}/review-pdf",
     response_model=PeriodicReviewPdfResponse,
 )
-def get_periodic_review_pdf(
+async def get_periodic_review_pdf(
     fund_id: uuid.UUID,
     investment_id: uuid.UUID,
     review_id: uuid.UUID | None = Query(default=None, description="Optional specific review ID; defaults to latest"),
     db: Session = Depends(get_sync_db_with_rls),
+    actor: Actor = Depends(get_actor),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> PeriodicReviewPdfResponse:
     """Generate and return a signed URL for the Periodic Review PDF."""
@@ -643,8 +644,10 @@ def get_periodic_review_pdf(
     import tempfile
 
     from ai_engine.pdf.generate_periodic_review_pdf import _load_review_data, generate_pdf
-    from app.services.blob_storage import exists as blob_exists
-    from app.services.blob_storage import generate_read_link, upload_bytes_idempotent
+    from ai_engine.pipeline.storage_routing import gold_portfolio_review_path
+    from app.services.storage_client import get_storage_client
+
+    storage = get_storage_client()
 
     investment = db.execute(
         select(ActiveInvestment).where(
@@ -681,10 +684,14 @@ def get_periodic_review_pdf(
     model_version = review_row.model_version or "unknown"
 
     version_tag = f"review-{reviewed_at.isoformat()}"
-    blob_name = f"periodic-reviews/{investment_id}/{version_tag}.pdf"
-    container = "portfolio-monitoring-evidence"
+    filename = f"{version_tag}.pdf"
+    path = gold_portfolio_review_path(
+        org_id=actor.organization_id,
+        investment_id=str(investment_id),
+        filename=filename,
+    )
 
-    if not blob_exists(container=container, blob_name=blob_name):
+    if not await storage.exists(path):
         data = _load_review_data(
             investment_id=str(investment_id),
             review_id=str(review_row.id),
@@ -703,21 +710,9 @@ def get_periodic_review_pdf(
             except OSError:
                 pass
 
-        upload_bytes_idempotent(
-            container=container,
-            blob_name=blob_name,
-            data=pdf_bytes,
-            content_type="application/pdf",
-            metadata={
-                "investment_id": str(investment_id),
-                "fund_id": str(fund_id),
-                "review_id": str(review_row.id),
-                "version_tag": version_tag,
-                "model_version": model_version,
-            },
-        )
+        await storage.write(path, pdf_bytes, content_type="application/pdf")
 
-    signed_url = generate_read_link(container=container, blob_name=blob_name, ttl_minutes=30)
+    signed_url = await storage.generate_read_url(path)
 
     return PeriodicReviewPdfResponse(
         signedPdfUrl=signed_url,

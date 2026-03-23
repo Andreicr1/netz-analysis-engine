@@ -66,49 +66,6 @@ class TestStorageRouting:
             global_reference_path("../secret", "data.csv")
 
 
-# ── build_search_document organization_id tests ───────────────────
-
-
-class TestSearchDocumentOrgId:
-    """Test that build_search_document includes organization_id (F4 fix)."""
-
-    def test_organization_id_included(self):
-        from ai_engine.extraction.search_upsert_service import build_search_document
-        org_id = uuid.uuid4()
-        doc = build_search_document(
-            deal_id=uuid.uuid4(),
-            fund_id=uuid.uuid4(),
-            domain="credit",
-            doc_type="legal_lpa",
-            authority="test",
-            title="test.pdf",
-            chunk_index=0,
-            content="test content",
-            embedding=[0.1] * 10,
-            page_start=1,
-            page_end=1,
-            organization_id=org_id,
-        )
-        assert doc["organization_id"] == str(org_id)
-
-    def test_organization_id_omitted_when_none(self):
-        from ai_engine.extraction.search_upsert_service import build_search_document
-        doc = build_search_document(
-            deal_id=uuid.uuid4(),
-            fund_id=uuid.uuid4(),
-            domain="credit",
-            doc_type="legal_lpa",
-            authority="test",
-            title="test.pdf",
-            chunk_index=0,
-            content="test content",
-            embedding=[0.1] * 10,
-            page_start=1,
-            page_end=1,
-        )
-        assert "organization_id" not in doc
-
-
 # ── Parquet serialization tests ────────────────────────────────────
 
 

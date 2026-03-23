@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import hashlib
 import logging
@@ -16,11 +17,25 @@ from app.domains.credit.modules.ai.models import (
     DocumentRegistry,
 )
 from app.domains.credit.modules.documents.models import Document, DocumentChunk, DocumentVersion
-from app.services.blob_storage import BlobEntry, blob_uri, download_bytes, list_blobs
-from app.services.search_index import AzureSearchMetadataClient
+from app.services.storage_client import get_storage_client
 from app.services.text_extract import extract_text_from_docx, extract_text_from_pdf
 
 logger = logging.getLogger(__name__)
+
+
+def _run_async(coro):  # noqa: ANN001, ANN202
+    """Run an async coroutine from synchronous context (StorageClient bridge)."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, coro).result()
+    return asyncio.run(coro)
 
 
 CONTAINER_METADATA: dict[str, dict[str, str]] = {
@@ -202,29 +217,6 @@ def classify_documents(
 
         saved.append(row)
 
-    if saved:
-        try:
-            search_docs = [
-                {
-                    "id": f"ai-doc-registry-{item.id}",
-                    "fund_id": str(item.fund_id),
-                    "organization_id": str(item.organization_id),
-                    "title": item.title or "Untitled",
-                    "content": f"{item.institutional_type} | {(item.root_folder or '')}/{(item.folder_path or '')}",
-                    "doc_type": "AI_DOCUMENT_REGISTRY",
-                    "version": str(item.version_id),
-                    "uploaded_at": item.as_of.isoformat(),
-                }
-                for item in saved
-            ]
-            AzureSearchMetadataClient(
-                caller="document_scanner",
-            ).upsert_documents(items=search_docs)
-        except Exception:
-            for item in saved:
-                item.data_quality = "DEGRADED"
-                item.updated_by = actor_id
-
     db.commit()
     return saved
 
@@ -247,9 +239,12 @@ def _read_text_content(db: Session, doc: DocumentRegistry) -> str:
             return text
 
     try:
-        uri = blob_uri(doc.container_name, doc.blob_path)
-        data = download_bytes(blob_uri=uri)
-        suffix = Path(doc.blob_path).suffix.lower()
+        storage = get_storage_client()
+        storage_path = doc.blob_path or ""
+        if not storage_path:
+            return ""
+        data = _run_async(storage.read(storage_path))
+        suffix = Path(storage_path).suffix.lower()
         if suffix == ".pdf":
             return extract_text_from_pdf(data).text
         if suffix == ".docx":
@@ -345,18 +340,6 @@ def classify_registered_documents(
     return saved
 
 
-def _parse_iso(value: str | None) -> dt.datetime | None:
-    if not value:
-        return None
-    try:
-        parsed = dt.datetime.fromisoformat(value)
-        if parsed.tzinfo is None:
-            return parsed.replace(tzinfo=dt.UTC)
-        return parsed.astimezone(dt.UTC)
-    except Exception:
-        return None
-
-
 def _title_from_blob_path(blob_path: str) -> str:
     cleaned = (blob_path or "").rstrip("/")
     if not cleaned:
@@ -364,8 +347,8 @@ def _title_from_blob_path(blob_path: str) -> str:
     return cleaned.split("/")[-1]
 
 
-def _checksum(entry: BlobEntry, container_name: str) -> str:
-    base = f"{container_name}:{entry.name}:{entry.size_bytes}:{entry.last_modified}:{entry.etag}"
+def _checksum(file_path: str, container_name: str) -> str:
+    base = f"{container_name}:{file_path}"
     return hashlib.sha256(base.encode("utf-8")).hexdigest()
 
 
@@ -378,17 +361,12 @@ def scan_document_registry(
     now = _now_utc()
     touched: list[DocumentRegistry] = []
 
+    storage = get_storage_client()
+
     for container_name, metadata in CONTAINER_METADATA.items():
         try:
-            # delimiter="" → recursive listing of ALL blobs including nested
-            # subdirectories (e.g. investment-pipeline-intelligence/Blue Owl/*.pdf).
-            # A prefix-only listing (delimiter="/") would miss files in
-            # sub-folders, which is required for the full document registry.
-            entries = [
-                item
-                for item in list_blobs(container=container_name, prefix=None, delimiter="")
-                if not item.is_folder
-            ]
+            # list_files returns all paths under the prefix (recursive).
+            file_paths = _run_async(storage.list_files(container_name))
         except Exception:
             continue
 
@@ -402,35 +380,31 @@ def scan_document_registry(
             ).scalars().all()
         }
 
-        for entry in entries:
-            checksum = _checksum(entry, container_name)
-            modified = _parse_iso(entry.last_modified)
-            existing = existing_map.get(entry.name)
+        for file_path in file_paths:
+            checksum = _checksum(file_path, container_name)
+            existing = existing_map.get(file_path)
 
             payload = {
                 "fund_id": fund_id,
                 "access_level": "internal",
                 "container_name": container_name,
-                "blob_path": entry.name,
-                "title": _title_from_blob_path(entry.name),
+                "blob_path": file_path,
+                "title": _title_from_blob_path(file_path),
                 "domain_tag": metadata["domain_tag"],
                 "authority": metadata["authority"],
                 "shareability": metadata["shareability"],
                 "lifecycle_stage": metadata["lifecycle_stage"],
                 "last_ingested_at": now,
                 "checksum": checksum,
-                "etag": entry.etag,
-                "last_modified_utc": modified,
                 "as_of": now,
                 "data_latency": None,
                 "data_quality": "OK",
                 "root_folder": container_name,
-                "folder_path": entry.name,
+                "folder_path": file_path,
                 "institutional_type": "OPERATIONAL_EVIDENCE",
                 "classifier_version": "wave-ai2-scan-v1",
                 "source_signals": {
-                    "scanner": "container+etag+last_modified",
-                    "size_bytes": entry.size_bytes,
+                    "scanner": "storage_client+checksum",
                 },
                 "created_by": actor_id,
                 "updated_by": actor_id,
@@ -443,7 +417,7 @@ def scan_document_registry(
                 touched.append(row)
                 continue
 
-            changed = bool(existing.etag != payload["etag"] or existing.last_modified_utc != payload["last_modified_utc"])
+            changed = bool(existing.checksum != payload["checksum"])
             for key, value in payload.items():
                 if key == "created_by":
                     continue

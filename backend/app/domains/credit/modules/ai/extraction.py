@@ -139,14 +139,14 @@ def list_extraction_jobs(
 
 
 @router.get("/pipeline/extract/sources")
-def list_extraction_sources(
+async def list_extraction_sources(
     source: str = Query(
         default="deals",
         description="'deals' | 'fund-data' | 'market-data'",
     ),
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP])),
 ):
-    """List item folders currently in the specified Azure Blob input container."""
+    """List item folders currently in the specified storage prefix."""
     from ai_engine.pipeline.unified_pipeline import (
         EXTRACTION_SOURCE_CONFIG,
         list_extraction_source_items,
@@ -155,9 +155,8 @@ def list_extraction_sources(
     if source not in EXTRACTION_SOURCE_CONFIG:
         raise HTTPException(status_code=422, detail=f"Invalid source '{source}'")
     try:
-        container = EXTRACTION_SOURCE_CONFIG[source]["input_container"]
-        items = list_extraction_source_items(source)
-        return {"source": source, "container": container, "items": items, "count": len(items)}
+        items = await list_extraction_source_items(source)
+        return {"source": source, "storage_prefix": EXTRACTION_SOURCE_CONFIG[source]["storage_prefix"], "items": items, "count": len(items)}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 

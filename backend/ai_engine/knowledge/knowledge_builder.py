@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from app.domains.credit.modules.ai.models import DocumentRegistry, ManagerProfile
 from app.domains.credit.modules.documents.models import DocumentChunk, DocumentVersion
-from app.services.search_index import AzureSearchMetadataClient
 
 _logger = structlog.get_logger()
 
@@ -225,34 +224,6 @@ def build_manager_profiles(
             db.flush()
 
         saved.append(row)
-
-    if saved:
-        try:
-            search_docs = [
-                {
-                    "id": f"ai-manager-profile-{item.id}",
-                    "fund_id": str(item.fund_id),
-                    "organization_id": str(item.organization_id),
-                    "title": f"Manager Profile - {item.name}",
-                    "content": f"{item.strategy} | {item.region} | {item.reporting_cadence}",
-                    "doc_type": "AI_MANAGER_PROFILE",
-                    "version": str(item.id),
-                    "uploaded_at": item.as_of.isoformat(),
-                }
-                for item in saved
-            ]
-            AzureSearchMetadataClient(
-                caller="knowledge_builder",
-            ).upsert_documents(items=search_docs)
-        except Exception as exc:
-            _logger.warning(
-                "knowledge_builder.search_upsert_failed",
-                exc_info=True,
-                error=str(exc),
-            )
-            for item in saved:
-                item.data_quality = "DEGRADED"
-                item.updated_by = actor_id
 
     db.commit()
     return saved

@@ -212,7 +212,7 @@ class TestExceptionRemoval:
         assert not hasattr(ret, "EvidenceGapError")
 
     def test_no_retrieval_scope_error_in_retrieval(self):
-        """RetrievalScopeError removed from retrieval — canonical is in search_index.py."""
+        """RetrievalScopeError removed from retrieval — search_index.py deleted."""
         import vertical_engines.credit.retrieval as ret
 
         assert not hasattr(ret, "RetrievalScopeError")
@@ -221,12 +221,6 @@ class TestExceptionRemoval:
         import vertical_engines.credit.retrieval as ret
 
         assert hasattr(ret, "SaturationResult")
-
-    def test_copilot_retrieval_scope_error_from_search_index(self):
-        """Copilot's RetrievalScopeError import is from search_index.py (kept)."""
-        from app.services.search_index import RetrievalScopeError
-
-        assert issubclass(RetrievalScopeError, Exception)
 
 
 class TestEnforceEvidenceSaturation:

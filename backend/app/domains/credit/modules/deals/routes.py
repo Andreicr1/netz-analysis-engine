@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
-import re
 import uuid
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -10,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
+from ai_engine.pipeline.storage_routing import bronze_deal_path
 from app.core.db.session import get_sync_db_with_rls
 from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed
 from app.domains.credit.deals.models.deals import Deal
@@ -34,11 +34,10 @@ from app.domains.credit.modules.deals.schemas import (
     QualificationRunRequest,
     QualificationRunResponse,
 )
-from app.services.blob_storage import upload_bytes
+from app.services.storage_client import StorageClient, get_storage_client
 
 logger = logging.getLogger(__name__)
 
-PIPELINE_CONTAINER = "investment-pipeline-intelligence"
 PIPELINE_DEAL_SUBFOLDERS = ["legal", "regulatory", "operational", "presentations", "financial", "memos"]
 
 router = APIRouter(prefix="/pipeline/deals", tags=["deals"])
@@ -74,83 +73,55 @@ def list_deals(
     return Page(items=[DealOut.model_validate(x) for x in items], limit=limit, offset=offset)
 
 
-def _slugify(name: str) -> str:
-    """Convert deal name to a URL/blob-friendly slug."""
-    slug = name.strip().lower()
-    slug = re.sub(r"[^\w\s-]", "", slug)
-    slug = re.sub(r"[\s_]+", "-", slug)
-    slug = re.sub(r"-+", "-", slug).strip("-")
-    return slug or "deal"
 
-
-def _deal_folder_name(deal: PipelineDeal) -> str:
-    """Return the deal's blob-storage folder name.
-
-    If the deal already has a ``deal_folder_path``, extract the last
-    segment (this preserves the Title-Case name used by the ingestion
-    pipeline, e.g. ``"Arzan - Workforce Housing"``).  Otherwise fall
-    back to the raw deal name — **no lowercasing or slug-mangling** so
-    that manually-created deals match the same convention.
-    """
-    if deal.deal_folder_path:
-        parts = deal.deal_folder_path.rstrip("/").split("/")
-        return parts[-1] if len(parts) > 1 else parts[0]
-    return deal.deal_name or deal.title or str(deal.id)
-
-
-def _build_and_save_deal_context(deal: PipelineDeal, payload: DealCreate) -> None:
-    """Build deal_context.json from deal record + payload extras, save to blob (best-effort)."""
-    folder_name = _deal_folder_name(deal)
+async def _build_and_save_deal_context(
+    deal: PipelineDeal, payload: DealCreate, *, org_id: uuid.UUID, storage: StorageClient,
+) -> None:
+    """Build deal_context.json from deal record + payload extras, save to storage (best-effort)."""
     ctx = service.build_deal_context_dict(deal, payload)
     if not ctx:
         return
     import json
-    blob_name = f"{folder_name}/deal_context.json"
+    path = bronze_deal_path(org_id, str(deal.id), "deal_context.json")
     try:
-        upload_bytes(
-            container=PIPELINE_CONTAINER,
-            blob_name=blob_name,
-            data=json.dumps(ctx, indent=2, default=str).encode("utf-8"),
+        await storage.write(
+            path,
+            json.dumps(ctx, indent=2, default=str).encode("utf-8"),
             content_type="application/json",
-            overwrite=True,
         )
-        logger.info("Saved deal_context.json for deal %s at %s", deal.id, blob_name)
+        logger.info("Saved deal_context.json for deal %s at %s", deal.id, path)
     except Exception:
         logger.warning("Failed to save deal_context.json for deal %s — continuing anyway", deal.id, exc_info=True)
 
 
 @router.post("", response_model=DealOut, status_code=status.HTTP_201_CREATED)
-def create_deal(
+async def create_deal(
     fund_id: uuid.UUID,
     payload: DealCreate,
     db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
+    storage: StorageClient = Depends(get_storage_client),
 ) -> DealOut:
     deal = service.create_deal(db, fund_id=fund_id, actor=actor, data=payload)
+    org_id = actor.organization_id
+    deal_id_str = str(deal.id)
 
-    # Best-effort: create blob folder structure for the deal
-    # Use the deal name as-is (Title Case) to match existing convention
-    folder_name = deal.deal_name or deal.title or str(deal.id)
-    deal_folder_path = f"{PIPELINE_CONTAINER}/{folder_name}"
+    # Best-effort: create storage folder structure for the deal
+    # Build base path directly — bronze_deal_path requires a non-empty filename
+    deal_folder_path = f"bronze/{org_id}/credit/pipeline/deals/{deal_id_str}"
     try:
         for subfolder in PIPELINE_DEAL_SUBFOLDERS:
-            blob_name = f"{folder_name}/{subfolder}/.keep"
-            upload_bytes(
-                container=PIPELINE_CONTAINER,
-                blob_name=blob_name,
-                data=b"",
-                content_type="text/plain",
-                overwrite=True,
-            )
+            keep_path = f"{deal_folder_path}/{subfolder}/.keep"
+            await storage.write(keep_path, b"")
         # Update deal with folder path
         deal.deal_folder_path = deal_folder_path
         db.commit()
         db.refresh(deal)
-        logger.info("Created blob folders for deal %s at %s", deal.id, deal_folder_path)
+        logger.info("Created storage folders for deal %s at %s", deal.id, deal_folder_path)
     except Exception:
-        logger.warning("Failed to create blob folders for deal %s — continuing anyway", deal.id, exc_info=True)
-        # Still try to set the folder path even if blob creation failed
+        logger.warning("Failed to create storage folders for deal %s — continuing anyway", deal.id, exc_info=True)
+        # Still try to set the folder path even if storage creation failed
         try:
             deal.deal_folder_path = deal_folder_path
             db.commit()
@@ -158,8 +129,8 @@ def create_deal(
         except Exception:
             logger.warning("Failed to update deal_folder_path for deal %s", deal.id, exc_info=True)
 
-    # Best-effort: build and save deal_context.json to blob
-    _build_and_save_deal_context(deal, payload)
+    # Best-effort: build and save deal_context.json to storage
+    await _build_and_save_deal_context(deal, payload, org_id=org_id, storage=storage)
 
     return deal
 
@@ -173,8 +144,9 @@ async def upload_deal_document(
     db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
+    storage: StorageClient = Depends(get_storage_client),
 ):
-    """Upload a document to a deal's blob folder with category-based organization."""
+    """Upload a document to a deal's storage folder with category-based organization."""
     # Validate category
     valid_categories = PIPELINE_DEAL_SUBFOLDERS + ["other"]
     if category not in valid_categories:
@@ -189,32 +161,31 @@ async def upload_deal_document(
     if deal is None:
         raise HTTPException(status_code=404, detail="Deal not found")
 
-    # Derive folder name — preserves Title Case from blob storage
-    folder_name = _deal_folder_name(deal)
-
-    blob_name = f"{folder_name}/{category}/{file.filename}"
+    org_id = actor.organization_id
+    # Use bronze_deal_path for category subfolder, then append filename
+    # (filename is user input — StorageClient._validate_path rejects traversal)
+    category_path = bronze_deal_path(org_id, str(deal_id), category)
+    storage_path = f"{category_path}/{file.filename}"
 
     # Read file data
     data = await file.read()
 
-    # Upload to blob storage
+    # Upload to storage
     try:
-        upload_bytes(
-            container=PIPELINE_CONTAINER,
-            blob_name=blob_name,
-            data=data,
+        await storage.write(
+            storage_path,
+            data,
             content_type=file.content_type or "application/octet-stream",
-            overwrite=True,
         )
     except Exception as exc:
-        logger.error("Failed to upload blob %s: %s", blob_name, exc, exc_info=True)
-        raise HTTPException(status_code=502, detail="Failed to upload file to blob storage")
+        logger.error("Failed to upload %s: %s", storage_path, exc, exc_info=True)
+        raise HTTPException(status_code=502, detail="Failed to upload file to storage")
 
     # Create or update document record in DB
     existing_doc = db.execute(
         select(DealDocument).where(
             DealDocument.deal_id == deal_id,
-            DealDocument.blob_path == blob_name,
+            DealDocument.blob_path == storage_path,
         ),
     ).scalar_one_or_none()
 
@@ -229,8 +200,8 @@ async def upload_deal_document(
             deal_id=deal_id,
             document_type=category.upper(),
             filename=file.filename,
-            blob_container=PIPELINE_CONTAINER,
-            blob_path=blob_name,
+            blob_container="storage",
+            blob_path=storage_path,
             status="registered",
             created_by=actor.actor_id,
             updated_by=actor.actor_id,
@@ -242,24 +213,25 @@ async def upload_deal_document(
 
     return {
         "document_id": str(doc.id),
-        "blob_path": blob_name,
+        "blob_path": storage_path,
         "category": category,
         "filename": file.filename,
     }
 
 
 @router.patch("/{deal_id}/context")
-def patch_deal_context(
+async def patch_deal_context(
     fund_id: uuid.UUID,
     deal_id: uuid.UUID,
     payload: DealContextPatch,
     db: Session = Depends(get_sync_db_with_rls),
     actor: Actor = Depends(get_actor),
     _write_guard: Actor = Depends(require_readonly_allowed()),
+    storage: StorageClient = Depends(get_storage_client),
 ):
-    """Merge investment parameters into the deal's deal_context.json on blob (best-effort).
+    """Merge investment parameters into the deal's deal_context.json in storage (best-effort).
 
-    This endpoint does NOT create new DB columns — all data lives in blob only.
+    This endpoint does NOT create new DB columns — all data lives in storage only.
     """
     import json
 
@@ -271,20 +243,13 @@ def patch_deal_context(
     if deal is None:
         raise HTTPException(status_code=404, detail="Deal not found")
 
-    # Derive slug
-    if deal.deal_folder_path:
-        parts = deal.deal_folder_path.rstrip("/").split("/")
-        slug = parts[-1] if len(parts) > 1 else parts[0]
-    else:
-        slug = _slugify(deal.deal_name or deal.title or str(deal.id))
-
-    blob_name = f"{slug}/deal_context.json"
+    org_id = actor.organization_id
+    path = bronze_deal_path(org_id, str(deal_id), "deal_context.json")
 
     # Load existing deal_context.json (if any)
     existing_ctx: dict = {}
     try:
-        from app.services.blob_storage import blob_uri, download_bytes
-        data = download_bytes(blob_uri=blob_uri(PIPELINE_CONTAINER, blob_name))
+        data = await storage.read(path)
         existing_ctx = json.loads(data.decode("utf-8"))
     except Exception:
         logger.debug("No existing deal_context.json for deal %s — will create new", deal_id)
@@ -315,18 +280,16 @@ def patch_deal_context(
 
     # Save merged context
     try:
-        upload_bytes(
-            container=PIPELINE_CONTAINER,
-            blob_name=blob_name,
-            data=json.dumps(existing_ctx, indent=2, default=str).encode("utf-8"),
+        await storage.write(
+            path,
+            json.dumps(existing_ctx, indent=2, default=str).encode("utf-8"),
             content_type="application/json",
-            overwrite=True,
         )
     except Exception:
         logger.warning("Failed to save deal_context.json for deal %s — continuing anyway", deal.id, exc_info=True)
-        raise HTTPException(status_code=502, detail="Failed to save deal context to blob storage")
+        raise HTTPException(status_code=502, detail="Failed to save deal context to storage")
 
-    return {"status": "ok", "blob_path": blob_name}
+    return {"status": "ok", "blob_path": path}
 
 
 @router.patch("/{deal_id}/stage", response_model=DealOut)

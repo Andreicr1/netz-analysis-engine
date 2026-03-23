@@ -1,13 +1,4 @@
-# DEPRECATED 2026-03-18: Service Bus dispatch path replaced by Redis pub/sub + BackgroundTasks (Milestone 2).
-# The BackgroundTasks path (USE_SERVICE_BUS=False) remains the active code path.
-# Service Bus branching kept for rollback capability only.
-"""Pipeline dispatch — route async work to Service Bus or BackgroundTasks.
-
-Centralises the ``USE_SERVICE_BUS`` feature-flag check so every pipeline
-endpoint uses the same branching logic:
-
-* **USE_SERVICE_BUS = True** → enqueue via Service Bus (workers pick up) [DEPRECATED]
-* **USE_SERVICE_BUS = False** → run in-process via FastAPI BackgroundTasks [ACTIVE]
+"""Pipeline dispatch — route async work to FastAPI BackgroundTasks.
 
 Each ``dispatch_*`` function returns a dict suitable for the HTTP response.
 """
@@ -20,8 +11,6 @@ from typing import Any
 
 from fastapi import BackgroundTasks
 from sqlalchemy import text as _sa_text
-
-from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +27,6 @@ def update_deal_intelligence_status(
 ) -> None:
     """Update ``pipeline_deals.intelligence_status`` (and optionally
     ``intelligence_generated_at``) for a single deal.
-
-    Used by both the Service Bus worker and the BackgroundTasks fallback
-    to avoid duplicating raw SQL across modules.
 
     Parameters
     ----------
@@ -81,10 +67,6 @@ def update_deal_intelligence_status(
         )
 
 
-def _use_service_bus() -> bool:
-    return bool(getattr(settings, "USE_SERVICE_BUS", False))
-
-
 # ── Extraction Pipeline ─────────────────────────────────────────────
 
 def dispatch_extraction(
@@ -101,38 +83,6 @@ def dispatch_extraction(
     job_id: str,
     actor_id: str,
 ) -> dict[str, Any]:
-    payload = {
-        "source": source,
-        "deals_filter": deals_filter,
-        "dry_run": dry_run,
-        "skip_bootstrap": skip_bootstrap,
-        "skip_prepare": skip_prepare,
-        "skip_embed": skip_embed,
-        "skip_enrich": skip_enrich,
-        "no_index": no_index,
-        "job_id": job_id,
-        "triggered_by": actor_id,
-        "pipeline_name": "unified_pipeline",
-        "legacy_path_invoked": False,
-    }
-
-    if _use_service_bus():
-        from app.services.azure.servicebus_client import send_to_topic
-
-        sb_job_id = send_to_topic("document-pipeline", payload, stage="extraction")
-        logger.info("Extraction dispatched via Service Bus job=%s", sb_job_id)
-        return {
-            "status": "queued",
-            "dispatch": "service_bus",
-            "job_id": job_id,
-            "sb_job_id": sb_job_id,
-            "source": source,
-            "deals_filter": deals_filter or "(all)",
-            "dry_run": dry_run,
-            "triggered_by": actor_id,
-            "pipeline_name": "unified_pipeline",
-        }
-
     from ai_engine.pipeline.unified_pipeline import run_extraction_pipeline
 
     async def _run() -> None:
@@ -180,33 +130,10 @@ def dispatch_ingest(
     batch_size: int,
     actor_id: str,
 ) -> dict[str, Any]:
-    payload = {
-        "fund_id": str(fund_id),
-        "deal_ids": [str(d) for d in deal_ids] if deal_ids else None,
-        "batch_size": batch_size,
-        "run_ai_analysis": True,
-        "actor_id": actor_id,
-        "triggered_by": actor_id,
-    }
-
-    if _use_service_bus():
-        from app.services.azure.servicebus_client import send_to_topic
-
-        sb_job_id = send_to_topic("document-pipeline", payload, stage="ingest")
-        logger.info("Ingest dispatched via Service Bus job=%s fund=%s", sb_job_id, fund_id)
-        return {
-            "status": "queued",
-            "dispatch": "service_bus",
-            "sb_job_id": sb_job_id,
-            "fund_id": str(fund_id),
-            "batch_size": batch_size,
-            "deal_ids": payload["deal_ids"],
-            "triggered_by": actor_id,
-        }
-
     from ai_engine.ingestion.pipeline_ingest_runner import async_run_full_pipeline_ingest
 
     _deal_ids = deal_ids
+    serialized_deal_ids = [str(d) for d in deal_ids] if deal_ids else None
 
     async def _run() -> None:
         try:
@@ -227,7 +154,7 @@ def dispatch_ingest(
         "dispatch": "background_tasks",
         "fund_id": str(fund_id),
         "batch_size": batch_size,
-        "deal_ids": payload["deal_ids"],
+        "deal_ids": serialized_deal_ids,
         "triggered_by": actor_id,
     }
 
@@ -263,26 +190,6 @@ async def dispatch_deep_review(
             "status": "already_in_progress",
             "dealId": str(deal_id),
             "message": "A deep review is already running for this deal.",
-        }
-
-    payload = {
-        "fund_id": str(fund_id),
-        "deal_id": str(deal_id),
-        "actor": actor,
-        "force": force,
-        "triggered_by": actor,
-    }
-
-    if _use_service_bus():
-        from app.services.azure.servicebus_client import send_to_queue
-
-        sb_job_id = send_to_queue("memo-generation", payload, stage="memo")
-        logger.info("Deep review dispatched via Service Bus job=%s deal=%s", sb_job_id, deal_id)
-        return {
-            "status": "queued",
-            "dispatch": "service_bus",
-            "sb_job_id": sb_job_id,
-            "dealId": str(deal_id),
         }
 
     from app.core.db.session import sync_session_factory
