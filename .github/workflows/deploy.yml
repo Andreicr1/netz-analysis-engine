@@ -19,7 +19,7 @@ jobs:
       admin: ${{ steps.filter.outputs.admin }}
       infra: ${{ steps.filter.outputs.infra }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 2
       - id: filter
@@ -56,7 +56,7 @@ jobs:
     if: always() && needs.changes.outputs.infra == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install dependencies
         working-directory: infra/cloudflare/backend
         run: npm install
@@ -72,7 +72,7 @@ jobs:
     if: always() && needs.changes.outputs.infra == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install dependencies
         working-directory: infra/cloudflare/workers
         run: npm install
@@ -88,7 +88,7 @@ jobs:
     if: always() && needs.changes.outputs.infra == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install dependencies
         working-directory: infra/cloudflare/gateway
         run: npm install
@@ -104,7 +104,7 @@ jobs:
     if: always() && needs.changes.outputs.infra == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install dependencies
         working-directory: infra/cloudflare/cron
         run: npm install
@@ -121,7 +121,7 @@ jobs:
     if: always() && needs.changes.outputs.credit == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build @netz/ui
@@ -144,7 +144,7 @@ jobs:
     if: always() && needs.changes.outputs.wealth == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build @netz/ui
@@ -167,7 +167,7 @@ jobs:
     if: always() && needs.changes.outputs.admin == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build @netz/ui

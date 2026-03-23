@@ -12,7 +12,7 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       frontends: ${{ steps.filter.outputs.frontends }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 2
       - id: filter
@@ -39,7 +39,7 @@ jobs:
       REDIS_URL: redis://localhost:6379/0
       APP_ENV: development
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Ensure test database exists
         run: |
           $result = docker exec netz-analysis-engine-db-1 psql -U netz -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='netz_engine_test'"
