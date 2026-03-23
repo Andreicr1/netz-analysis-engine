@@ -19,7 +19,7 @@ const config = {
 				mode: "auto",
 				directives: {
 					"default-src": ["self"],
-					"script-src": ["self"],
+					"script-src": ["self", "unsafe-inline", "https://*.clerk.com"],
 					"style-src": ["self", "unsafe-inline"],
 					"img-src": ["self", "data:", "blob:", "https:"],
 					"connect-src": ["self", "https://*.clerk.com", "https://api.netz.app", "wss:"],
