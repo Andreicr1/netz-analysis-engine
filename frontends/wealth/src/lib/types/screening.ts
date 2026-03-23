@@ -56,3 +56,80 @@ export const EMPTY_FILTERS: ScreenerFilterConfig = {
 	block_id: null,
 	search: "",
 };
+
+// ── Global Instrument Search types ──────────────────────────────────────
+
+export interface InstrumentSearchItem {
+	instrument_id: string | null;
+	source: "internal" | "esma" | "sec";
+	instrument_type: "fund" | "bond" | "equity" | "etf" | "hedge_fund";
+	name: string;
+	isin: string | null;
+	ticker: string | null;
+	asset_class: string;
+	geography: string;
+	domicile: string | null;
+	currency: string;
+	strategy: string | null;
+	aum: number | null;
+	manager_name: string | null;
+	manager_crd: string | null;
+	esma_manager_id: string | null;
+	approval_status: string | null;
+	screening_status: "PASS" | "FAIL" | "WATCHLIST" | null;
+	screening_score: number | null;
+	nav_1y_return: number | null;
+	nav_3m_return: number | null;
+	block_id: string | null;
+	structure: string | null;
+}
+
+export interface InstrumentSearchPage {
+	items: InstrumentSearchItem[];
+	total: number;
+	page: number;
+	page_size: number;
+	has_next: boolean;
+}
+
+export interface FacetItem {
+	value: string;
+	label: string;
+	count: number;
+}
+
+export interface ScreenerFacets {
+	instrument_types: FacetItem[];
+	geographies: FacetItem[];
+	asset_classes: FacetItem[];
+	domiciles: FacetItem[];
+	currencies: FacetItem[];
+	strategies: FacetItem[];
+	sources: FacetItem[];
+	screening_statuses: FacetItem[];
+	total_universe: number;
+	total_screened: number;
+	total_approved: number;
+}
+
+export const EMPTY_SEARCH_PAGE: InstrumentSearchPage = {
+	items: [],
+	total: 0,
+	page: 1,
+	page_size: 50,
+	has_next: false,
+};
+
+export const EMPTY_FACETS: ScreenerFacets = {
+	instrument_types: [],
+	geographies: [],
+	asset_classes: [],
+	domiciles: [],
+	currencies: [],
+	strategies: [],
+	sources: [],
+	screening_statuses: [],
+	total_universe: 0,
+	total_screened: 0,
+	total_approved: 0,
+};

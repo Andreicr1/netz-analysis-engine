@@ -1,7 +1,7 @@
 <!--
-  Unified Screener — Hierarchical Manager → Fund table.
-  Left sidebar: manager filters + fund screening funnel.
-  Right surface: L1 manager rows → L2 fund sub-rows (expandable).
+  Unified Screener — Dual mode: Instrument Search (flat) + Manager Screener (hierarchical).
+  Left sidebar: context-aware filters (instrument search OR manager filters).
+  Right surface: paginated instrument table OR manager→fund hierarchy.
   Peer comparison mode + 4-tab manager detail + fund detail panel.
 -->
 <script lang="ts">
@@ -18,8 +18,9 @@
 	import type {
 		ScreeningResult, ScreeningRun, CriterionResult,
 		ScreenerFilterConfig, OverallStatus,
+		InstrumentSearchItem, InstrumentSearchPage, ScreenerFacets,
 	} from "$lib/types/screening";
-	import { EMPTY_FILTERS } from "$lib/types/screening";
+	import { EMPTY_FILTERS, EMPTY_SEARCH_PAGE, EMPTY_FACETS } from "$lib/types/screening";
 	import type {
 		ManagerRow, ScreenerPage, ManagerProfile, HoldingsData,
 		InstitutionalData, UniverseStatus, CompareResult, DetailTab,
@@ -30,13 +31,152 @@
 
 	let { data }: { data: PageData } = $props();
 
+	// ── Mode toggle ──────────────────────────────────────────────────────
+	type ScreenerMode = "instruments" | "managers";
+	const initParams = (untrack(() => data.currentParams) as Record<string, string>) ?? {};
+	let activeMode = $state<ScreenerMode>((initParams.mode as ScreenerMode) ?? "instruments");
+
+	function switchMode(mode: ScreenerMode) {
+		activeMode = mode;
+		goto(`/screener?mode=${mode}`, { invalidateAll: true });
+	}
+
 	// ── SSR data ──────────────────────────────────────────────────────────
 	let screener = $derived((data.screener ?? EMPTY_SCREENER) as ScreenerPage);
 	let results = $derived((data.results ?? []) as ScreeningResult[]);
 	let lastRun = $derived(data.lastRun as ScreeningRun | null);
+	let searchResults = $derived((data.searchResults ?? EMPTY_SEARCH_PAGE) as InstrumentSearchPage);
+	let facets = $derived((data.facets ?? EMPTY_FACETS) as ScreenerFacets);
+
+	// ── Instrument Search state ──────────────────────────────────────────
+	let searchQ = $state(initParams.q ?? "");
+	let searchSource = $state<string | null>(initParams.source ?? null);
+	let searchInstrumentType = $state<string | null>(initParams.instrument_type ?? null);
+	let searchGeography = $state<string | null>(initParams.geography ?? null);
+	let searchDomicile = $state<string | null>(initParams.domicile ?? null);
+	let searchCurrency = $state<string | null>(initParams.currency ?? null);
+
+	// Chip type filters
+	type ChipKey = "all" | "us_funds" | "ucits" | "etfs" | "bonds" | "equities" | "hedge_funds";
+	let activeChip = $state<ChipKey>("all");
+
+	const CHIP_FILTERS: Record<ChipKey, { source?: string; instrument_type?: string }> = {
+		all: {},
+		us_funds: { source: "internal", instrument_type: "fund" },
+		ucits: { source: "esma", instrument_type: "fund" },
+		etfs: { instrument_type: "etf" },
+		bonds: { instrument_type: "bond" },
+		equities: { instrument_type: "equity" },
+		hedge_funds: { instrument_type: "hedge_fund" },
+	};
+
+	const CHIP_LABELS: Record<ChipKey, string> = {
+		all: "All",
+		us_funds: "Funds US",
+		ucits: "UCITS/EU",
+		etfs: "ETFs",
+		bonds: "Bonds",
+		equities: "Equities",
+		hedge_funds: "Hedge Funds",
+	};
+
+	function selectChip(chip: ChipKey) {
+		activeChip = chip;
+		const filters = CHIP_FILTERS[chip];
+		searchSource = filters.source ?? null;
+		searchInstrumentType = filters.instrument_type ?? null;
+		applySearchFilters();
+	}
+
+	function applySearchFilters() {
+		const params = new URLSearchParams();
+		params.set("mode", "instruments");
+		if (searchQ) params.set("q", searchQ);
+		if (searchSource) params.set("source", searchSource);
+		if (searchInstrumentType) params.set("instrument_type", searchInstrumentType);
+		if (searchGeography) params.set("geography", searchGeography);
+		if (searchDomicile) params.set("domicile", searchDomicile);
+		if (searchCurrency) params.set("currency", searchCurrency);
+		params.set("page", "1");
+		params.set("page_size", "50");
+		goto(`/screener?${params.toString()}`, { invalidateAll: true });
+	}
+
+	function clearSearchFilters() {
+		searchQ = "";
+		searchSource = null;
+		searchInstrumentType = null;
+		searchGeography = null;
+		searchDomicile = null;
+		searchCurrency = null;
+		activeChip = "all";
+		goto("/screener?mode=instruments", { invalidateAll: true });
+	}
+
+	function goToSearchPage(p: number) {
+		const params = new URLSearchParams($page.url.searchParams);
+		params.set("page", String(p));
+		goto(`/screener?${params.toString()}`, { invalidateAll: true });
+	}
+
+	function handleSearchKeydown(e: KeyboardEvent) {
+		if (e.key === "Enter") applySearchFilters();
+	}
+
+	// ── Instrument detail panel ──────────────────────────────────────────
+	let selectedInstrument = $state<InstrumentSearchItem | null>(null);
+	let instrumentPanelOpen = $state(false);
+	let esmaImportDialogOpen = $state(false);
+	let importing = $state(false);
+	let importError = $state<string | null>(null);
+
+	function openInstrumentDetail(item: InstrumentSearchItem) {
+		selectedInstrument = item;
+		instrumentPanelOpen = true;
+	}
+
+	function closeInstrumentPanel() {
+		instrumentPanelOpen = false;
+		selectedInstrument = null;
+	}
+
+	async function handleEsmaImport(payload: ConsequenceDialogPayload) {
+		if (!selectedInstrument?.isin) return;
+		importing = true;
+		importError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post(`/screener/import-esma/${selectedInstrument.isin}`, {});
+			esmaImportDialogOpen = false;
+			await invalidateAll();
+		} catch (e) {
+			importError = e instanceof Error ? e.message : "Import failed";
+		} finally {
+			importing = false;
+		}
+	}
+
+	function sourceBadgeClass(source: string): string {
+		switch (source) {
+			case "internal": return "source-badge--internal";
+			case "esma": return "source-badge--esma";
+			case "sec": return "source-badge--sec";
+			default: return "";
+		}
+	}
+
+	function typeBadgeClass(type: string): string {
+		switch (type) {
+			case "fund": return "type-badge--fund";
+			case "etf": return "type-badge--etf";
+			case "bond": return "type-badge--bond";
+			case "equity": return "type-badge--equity";
+			case "hedge_fund": return "type-badge--hedge";
+			default: return "";
+		}
+	}
 
 	// ── Manager filter state ──────────────────────────────────────────────
-	const initParams = (untrack(() => data.currentParams) as Record<string, string>) ?? {};
 	let textSearch = $state(initParams.text_search ?? "");
 	let aumMin = $state(initParams.aum_min ?? "");
 	let aumMax = $state(initParams.aum_max ?? "");
@@ -366,13 +506,28 @@
 <PageHeader title="Screener">
 	{#snippet actions()}
 		<div class="scr-actions">
-			{#if canCompare}
-				<Button size="sm" onclick={runCompare} disabled={comparing}>
-					{comparing ? "Comparing…" : `Compare ${selectionCount}`}
-				</Button>
-			{/if}
-			{#if selectionCount > 0}
-				<Button size="sm" variant="ghost" onclick={clearCompare}>Clear</Button>
+			<!-- Mode toggle -->
+			<div class="mode-toggle">
+				<button
+					class="mode-btn"
+					class:mode-btn--active={activeMode === "instruments"}
+					onclick={() => switchMode("instruments")}
+				>Instruments</button>
+				<button
+					class="mode-btn"
+					class:mode-btn--active={activeMode === "managers"}
+					onclick={() => switchMode("managers")}
+				>Managers</button>
+			</div>
+			{#if activeMode === "managers"}
+				{#if canCompare}
+					<Button size="sm" onclick={runCompare} disabled={comparing}>
+						{comparing ? "Comparing…" : `Compare ${selectionCount}`}
+					</Button>
+				{/if}
+				{#if selectionCount > 0}
+					<Button size="sm" variant="ghost" onclick={clearCompare}>Clear</Button>
+				{/if}
 			{/if}
 			<Button size="sm" onclick={executeBatch} disabled={isRunning}>
 				{isRunning ? "Running…" : "Run Screening"}
@@ -386,6 +541,100 @@
 	<!-- LEFT: FILTER PANEL                                                 -->
 	<!-- ═══════════════════════════════════════════════════════════════════ -->
 	<aside class="scr-filters">
+		{#if activeMode === "instruments"}
+			<!-- ── INSTRUMENT SEARCH FILTERS ─────────────────────── -->
+			<div class="scr-filter-section">
+				<h3 class="scr-filter-title">Search</h3>
+				<div class="scr-field">
+					<input
+						class="scr-input"
+						type="text"
+						placeholder="Name, ISIN, ticker, manager…"
+						bind:value={searchQ}
+						onkeydown={handleSearchKeydown}
+					/>
+				</div>
+			</div>
+
+			<!-- Chips -->
+			<div class="scr-filter-section">
+				<h3 class="scr-filter-title">Type</h3>
+				<div class="chip-grid">
+					{#each Object.entries(CHIP_LABELS) as [key, label] (key)}
+						<button
+							class="chip"
+							class:chip--active={activeChip === key}
+							onclick={() => selectChip(key as ChipKey)}
+						>
+							{label}
+							{#if key === "all"}
+								<span class="chip-count">{facets.total_universe}</span>
+							{/if}
+						</button>
+					{/each}
+				</div>
+			</div>
+
+			<!-- Dimension filters -->
+			<div class="scr-filter-section">
+				<h3 class="scr-filter-title">Filters</h3>
+				{#if facets.geographies.length > 0}
+					<div class="scr-field">
+						<label class="scr-label" for="search-geo">Geography</label>
+						<select id="search-geo" class="scr-select" bind:value={searchGeography} onchange={applySearchFilters}>
+							<option value={null}>All</option>
+							{#each facets.geographies as g (g.value)}
+								<option value={g.value}>{g.label} ({g.count})</option>
+							{/each}
+						</select>
+					</div>
+				{/if}
+				{#if facets.domiciles.length > 0}
+					<div class="scr-field">
+						<label class="scr-label" for="search-dom">Domicile</label>
+						<select id="search-dom" class="scr-select" bind:value={searchDomicile} onchange={applySearchFilters}>
+							<option value={null}>All</option>
+							{#each facets.domiciles as d (d.value)}
+								<option value={d.value}>{d.label} ({d.count})</option>
+							{/each}
+						</select>
+					</div>
+				{/if}
+				{#if facets.currencies.length > 0}
+					<div class="scr-field">
+						<label class="scr-label" for="search-cur">Currency</label>
+						<select id="search-cur" class="scr-select" bind:value={searchCurrency} onchange={applySearchFilters}>
+							<option value={null}>All</option>
+							{#each facets.currencies as c (c.value)}
+								<option value={c.value}>{c.label} ({c.count})</option>
+							{/each}
+						</select>
+					</div>
+				{/if}
+				<div class="scr-filter-btns">
+					<Button size="sm" onclick={applySearchFilters}>Apply</Button>
+					<Button size="sm" variant="ghost" onclick={clearSearchFilters}>Clear</Button>
+				</div>
+			</div>
+
+			<!-- Facet summary -->
+			<div class="scr-filter-section scr-filter-section--meta">
+				<h3 class="scr-filter-title">Universe</h3>
+				<div class="scr-meta-row">
+					<span class="scr-meta-k">Total</span>
+					<span class="scr-meta-v">{formatNumber(facets.total_universe)}</span>
+				</div>
+				<div class="scr-meta-row">
+					<span class="scr-meta-k">Screened</span>
+					<span class="scr-meta-v">{formatNumber(facets.total_screened)}</span>
+				</div>
+				<div class="scr-meta-row">
+					<span class="scr-meta-k">Approved</span>
+					<span class="scr-meta-v">{formatNumber(facets.total_approved)}</span>
+				</div>
+			</div>
+		{:else}
+		<!-- ── MANAGER FILTERS (Mode B) ────────────────────────── -->
 		<!-- Manager filters -->
 		<div class="scr-filter-section">
 			<h3 class="scr-filter-title">Manager</h3>
@@ -528,13 +777,111 @@
 		{#if runError}
 			<div class="scr-filter-error">{runError}</div>
 		{/if}
+		{/if}
 	</aside>
 
 	<!-- ═══════════════════════════════════════════════════════════════════ -->
 	<!-- RIGHT: DATA SURFACE                                                -->
 	<!-- ═══════════════════════════════════════════════════════════════════ -->
 	<section class="scr-main">
-		{#if compareResult}
+		{#if activeMode === "instruments"}
+			<!-- ═══ INSTRUMENT SEARCH MODE (A) ═══════════════════════════ -->
+			<div class="scr-data-header">
+				<span class="scr-data-count">
+					{searchResults.total} instrument{searchResults.total !== 1 ? "s" : ""}
+					{#if searchQ}
+						<span class="scr-data-count-muted">matching "{searchQ}"</span>
+					{/if}
+				</span>
+			</div>
+
+			{#if searchResults.items.length === 0}
+				<div class="scr-empty">No instruments found. Adjust filters or search.</div>
+			{:else}
+				<div class="scr-table-wrap">
+					<table class="scr-table">
+						<thead>
+							<tr>
+								<th class="sth-name">Name</th>
+								<th>Type</th>
+								<th>Source</th>
+								<th>Manager</th>
+								<th class="sth-aum">AUM</th>
+								<th>Geography</th>
+								<th>Currency</th>
+								<th class="sth-score">Score</th>
+								<th class="sth-status">Status</th>
+								<th>Action</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each searchResults.items as item (item.isin ?? item.instrument_id ?? item.name)}
+								<tr class="scr-inst-row" onclick={() => openInstrumentDetail(item)}>
+									<td class="std-name">
+										<span class="inst-name">{item.name}</span>
+										{#if item.isin || item.ticker}
+											<span class="inst-ids">
+												{#if item.isin}{item.isin}{/if}
+												{#if item.isin && item.ticker} · {/if}
+												{#if item.ticker}{item.ticker}{/if}
+											</span>
+										{/if}
+									</td>
+									<td>
+										<span class="type-badge {typeBadgeClass(item.instrument_type)}">
+											{item.instrument_type}
+										</span>
+									</td>
+									<td>
+										<span class="source-badge {sourceBadgeClass(item.source)}">
+											{item.source}
+										</span>
+									</td>
+									<td class="std-manager">{item.manager_name ?? "—"}</td>
+									<td class="std-aum">{item.aum ? formatAUM(item.aum) : "—"}</td>
+									<td>{item.geography}{item.domicile ? ` / ${item.domicile}` : ""}</td>
+									<td>{item.currency}</td>
+									<td class="std-score">
+										{#if item.screening_score !== null}
+											<span>{formatPercent(item.screening_score)}</span>
+										{:else}
+											<span class="score-na">—</span>
+										{/if}
+									</td>
+									<td class="std-status">
+										{#if item.screening_status}
+											<StatusBadge status={item.screening_status} />
+										{:else if item.approval_status}
+											<StatusBadge status={item.approval_status} />
+										{:else}
+											<span class="score-na">—</span>
+										{/if}
+									</td>
+									<td onclick={(e) => e.stopPropagation()}>
+										{#if item.source === "esma" && !item.instrument_id}
+											<Button size="sm" variant="outline" onclick={() => { selectedInstrument = item; esmaImportDialogOpen = true; }}>
+												Add
+											</Button>
+										{:else if item.instrument_id}
+											<Button size="sm" variant="ghost" onclick={() => openInstrumentDetail(item)}>
+												View
+											</Button>
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+
+				<!-- Pagination -->
+				<div class="scr-pagination">
+					<button class="scr-page-btn" disabled={searchResults.page <= 1} onclick={() => goToSearchPage(searchResults.page - 1)}>Previous</button>
+					<span class="scr-page-info">Page {searchResults.page} · {searchResults.total} total</span>
+					<button class="scr-page-btn" disabled={!searchResults.has_next} onclick={() => goToSearchPage(searchResults.page + 1)}>Next</button>
+				</div>
+			{/if}
+		{:else if compareResult}
 			<!-- ── PEER COMPARISON VIEW ──────────────────────────── -->
 			<div class="cmp-view">
 				<div class="cmp-header">
@@ -990,6 +1337,67 @@
 		{ label: "Geography", value: addGeography },
 	]}
 	onConfirm={handleAddToUniverse}
+/>
+
+<!-- Instrument detail panel -->
+<ContextPanel open={instrumentPanelOpen} onClose={closeInstrumentPanel} title={selectedInstrument?.name ?? ""} width="420px">
+	{#if selectedInstrument}
+		<div class="dt-section">
+			<div class="dt-header-row">
+				{#if selectedInstrument.screening_status}
+					<StatusBadge status={selectedInstrument.screening_status} />
+				{/if}
+				<span class="source-badge {sourceBadgeClass(selectedInstrument.source)}">{selectedInstrument.source}</span>
+				<span class="type-badge {typeBadgeClass(selectedInstrument.instrument_type)}">{selectedInstrument.instrument_type}</span>
+			</div>
+			<div class="dt-fund-meta">
+				{#if selectedInstrument.isin}<span>ISIN: {selectedInstrument.isin}</span>{/if}
+				{#if selectedInstrument.ticker}<span>Ticker: {selectedInstrument.ticker}</span>{/if}
+				{#if selectedInstrument.manager_name}<span>Manager: {selectedInstrument.manager_name}</span>{/if}
+				{#if selectedInstrument.aum}<span>AUM: {formatAUM(selectedInstrument.aum)}</span>{/if}
+				<span>Geography: {selectedInstrument.geography}</span>
+				{#if selectedInstrument.domicile}<span>Domicile: {selectedInstrument.domicile}</span>{/if}
+				<span>Currency: {selectedInstrument.currency}</span>
+				{#if selectedInstrument.structure}<span>Structure: {selectedInstrument.structure}</span>{/if}
+				{#if selectedInstrument.strategy}<span>Strategy: {selectedInstrument.strategy}</span>{/if}
+				{#if selectedInstrument.asset_class}<span>Asset Class: {selectedInstrument.asset_class}</span>{/if}
+			</div>
+		</div>
+		{#if selectedInstrument.screening_score !== null}
+			<div class="dt-section">
+				<h4 class="dt-section-title">Screening</h4>
+				<div class="dt-kv"><span class="dt-k">Score</span><span class="dt-v">{formatPercent(selectedInstrument.screening_score)}</span></div>
+				<div class="dt-kv"><span class="dt-k">Status</span><StatusBadge status={selectedInstrument.screening_status ?? "—"} /></div>
+			</div>
+		{/if}
+		{#if selectedInstrument.source === "esma" && !selectedInstrument.instrument_id}
+			<div class="dt-section">
+				<p class="dt-empty-text">This ESMA fund is not yet in your universe.</p>
+				<Button size="sm" onclick={() => esmaImportDialogOpen = true}>Add to Universe</Button>
+				{#if importError}
+					<span class="dt-add-error">{importError}</span>
+				{/if}
+			</div>
+		{/if}
+	{/if}
+</ContextPanel>
+
+<!-- ESMA Import dialog -->
+<ConsequenceDialog
+	bind:open={esmaImportDialogOpen}
+	title="Import ESMA Fund to Universe"
+	impactSummary="This will add the fund to your instrument universe as a pending instrument for screening."
+	requireRationale={true}
+	rationaleLabel="Import justification"
+	rationalePlaceholder="Why add this UCITS fund? (min 10 chars)"
+	rationaleMinLength={10}
+	confirmLabel="Import to Universe"
+	metadata={[
+		{ label: "Fund", value: selectedInstrument?.name ?? "" },
+		{ label: "ISIN", value: selectedInstrument?.isin ?? "" },
+		{ label: "Source", value: "ESMA" },
+	]}
+	onConfirm={handleEsmaImport}
 />
 
 <style>
@@ -1889,4 +2297,128 @@
 			min-height: 400px;
 		}
 	}
+
+	/* ── Mode toggle ────────────────────────────────────────────────────── */
+	.mode-toggle {
+		display: flex;
+		border: 1px solid var(--netz-border);
+		border-radius: var(--netz-radius-sm, 8px);
+		overflow: hidden;
+	}
+
+	.mode-btn {
+		padding: var(--netz-space-stack-2xs, 4px) var(--netz-space-inline-sm, 12px);
+		border: none;
+		background: transparent;
+		color: var(--netz-text-secondary);
+		font-size: var(--netz-text-small, 0.8125rem);
+		font-family: var(--netz-font-sans);
+		font-weight: 500;
+		cursor: pointer;
+		transition: background 120ms ease, color 120ms ease;
+	}
+
+	.mode-btn:hover { background: var(--netz-surface-alt); }
+
+	.mode-btn--active {
+		background: color-mix(in srgb, var(--netz-brand-primary) 12%, transparent);
+		color: var(--netz-brand-primary);
+		font-weight: 600;
+	}
+
+	/* ── Chips ───────────────────────────────────────────────────────────── */
+	.chip-grid {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--netz-space-inline-2xs, 4px);
+	}
+
+	.chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 3px 10px;
+		border: 1px solid var(--netz-border-subtle);
+		border-radius: var(--netz-radius-full, 100px);
+		background: transparent;
+		color: var(--netz-text-secondary);
+		font-size: var(--netz-text-label, 0.75rem);
+		font-family: var(--netz-font-sans);
+		cursor: pointer;
+		transition: all 120ms ease;
+	}
+
+	.chip:hover {
+		border-color: var(--netz-border);
+		background: var(--netz-surface-alt);
+	}
+
+	.chip--active {
+		border-color: var(--netz-brand-primary);
+		background: color-mix(in srgb, var(--netz-brand-primary) 10%, transparent);
+		color: var(--netz-brand-primary);
+		font-weight: 600;
+	}
+
+	.chip-count {
+		font-variant-numeric: tabular-nums;
+		font-size: 0.65rem;
+		opacity: 0.7;
+	}
+
+	/* ── Instrument search table ─────────────────────────────────────────── */
+	.scr-inst-row {
+		cursor: pointer;
+		transition: background-color 80ms ease;
+	}
+
+	.scr-inst-row:hover {
+		background: var(--netz-surface-highlight, var(--netz-surface-alt));
+	}
+
+	.inst-name {
+		display: block;
+		font-weight: 500;
+		color: var(--netz-text-primary);
+		max-width: 250px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.inst-ids {
+		display: block;
+		font-size: var(--netz-text-label, 0.75rem);
+		color: var(--netz-text-muted);
+		font-family: var(--netz-font-mono);
+	}
+
+	.std-manager {
+		max-width: 150px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--netz-text-secondary);
+	}
+
+	/* ── Source & type badges ─────────────────────────────────────────────── */
+	.source-badge, .type-badge {
+		display: inline-block;
+		padding: 1px 8px;
+		border-radius: var(--netz-radius-full, 100px);
+		font-size: var(--netz-text-label, 0.75rem);
+		font-weight: 500;
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
+	}
+
+	.source-badge--internal { background: color-mix(in srgb, var(--netz-brand-primary) 12%, transparent); color: var(--netz-brand-primary); }
+	.source-badge--esma { background: color-mix(in srgb, var(--netz-success) 12%, transparent); color: var(--netz-success); }
+	.source-badge--sec { background: color-mix(in srgb, var(--netz-warning) 12%, transparent); color: var(--netz-warning); }
+
+	.type-badge--fund { background: color-mix(in srgb, var(--netz-brand-secondary) 12%, transparent); color: var(--netz-brand-secondary); }
+	.type-badge--etf { background: color-mix(in srgb, var(--netz-info, #3b82f6) 12%, transparent); color: var(--netz-info, #3b82f6); }
+	.type-badge--bond { background: color-mix(in srgb, var(--netz-success) 12%, transparent); color: var(--netz-success); }
+	.type-badge--equity { background: color-mix(in srgb, var(--netz-warning) 12%, transparent); color: var(--netz-warning); }
+	.type-badge--hedge { background: color-mix(in srgb, var(--netz-danger) 12%, transparent); color: var(--netz-danger); }
 </style>
