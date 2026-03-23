@@ -53,6 +53,10 @@ from vertical_engines.wealth.dd_report.quant_injection import (
     gather_quant_metrics,
     gather_risk_metrics,
 )
+from vertical_engines.wealth.dd_report.sec_injection import (
+    gather_sec_13f_data,
+    gather_sec_adv_data,
+)
 from vertical_engines.wealth.shared_protocols import CallOpenAiFn
 
 logger = structlog.get_logger()
@@ -304,10 +308,17 @@ class DDReportEngine:
         quant_profile = gather_quant_metrics(db, instrument_id=fund_id)
         risk_metrics = gather_risk_metrics(db, instrument_id=fund_id)
 
+        # SEC data (global tables, no RLS — DB-only reads)
+        manager_name = fund.manager_name
+        sec_13f = gather_sec_13f_data(db, manager_name=manager_name)
+        sec_adv = gather_sec_adv_data(db, manager_name=manager_name)
+
         return build_evidence_pack(
             fund_data=fund_data,
             quant_profile=quant_profile,
             risk_metrics=risk_metrics,
+            sec_13f_data=sec_13f,
+            sec_adv_data=sec_adv,
         )
 
     def _generate_all_chapters(
@@ -356,6 +367,7 @@ class DDReportEngine:
                 self._call_openai_fn,
                 chapter_tag=ch_def["tag"],
                 evidence_context=evidence_context,
+                evidence_pack=evidence,
             )
             chapters.append(result)
 
@@ -388,6 +400,7 @@ class DDReportEngine:
                     chapter_tag=SEQUENTIAL_CHAPTER_TAG,
                     evidence_context=evidence_context,
                     chapter_summaries=chapter_summaries,
+                    evidence_pack=evidence,
                 )
                 chapters.append(rec_result)
         else:

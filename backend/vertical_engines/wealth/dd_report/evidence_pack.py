@@ -17,6 +17,94 @@ import structlog
 
 logger = structlog.get_logger()
 
+# Per-chapter field expectations: which fields each chapter needs,
+# which data providers supply them, and the primary provider.
+_CHAPTER_FIELD_EXPECTATIONS: dict[str, dict[str, Any]] = {
+    "fee_analysis": {
+        "fields": ["fund_name", "fund_type", "currency"],
+        "providers": ["YFinance"],
+        "primary_provider": "YFinance",
+    },
+    "investment_strategy": {
+        "fields": [
+            "fund_name", "fund_type", "geography", "asset_class",
+            "thirteenf_available", "sector_weights",
+        ],
+        "providers": ["YFinance", "SEC EDGAR 13F"],
+        "primary_provider": "YFinance",
+    },
+    "operational_dd": {
+        "fields": ["fund_name", "manager_name", "domicile", "compliance_disclosures"],
+        "providers": ["YFinance", "SEC EDGAR ADV"],
+        "primary_provider": "YFinance",
+    },
+    "manager_assessment": {
+        # ADV fields required for complete — YFinance identity alone is partial at best
+        "fields": [
+            "fund_name", "manager_name",
+            "adv_aum_history", "adv_compliance_disclosures", "adv_team",
+        ],
+        "providers": ["YFinance", "SEC EDGAR ADV"],
+        "primary_provider": "SEC EDGAR ADV",
+    },
+    "performance_analysis": {
+        "fields": [
+            "quant_profile.sharpe_1y", "quant_profile.return_1y",
+            "quant_profile.return_3m", "quant_profile.return_1m",
+            "quant_profile.cvar_95_3m", "quant_profile.max_drawdown_1y",
+        ],
+        "providers": ["YFinance"],
+        "primary_provider": "YFinance",
+    },
+    "risk_framework": {
+        "fields": [
+            "quant_profile.cvar_95_1m", "quant_profile.cvar_95_3m",
+            "quant_profile.cvar_95_12m", "quant_profile.volatility_1y",
+            "quant_profile.beta_1y",
+            "risk_metrics",
+        ],
+        "providers": ["YFinance"],
+        "primary_provider": "YFinance",
+    },
+    "executive_summary": {
+        "fields": [
+            "fund_name", "fund_type", "geography", "asset_class",
+            "quant_profile.sharpe_1y", "quant_profile.return_1y",
+            "quant_profile.cvar_95_3m",
+        ],
+        "providers": ["YFinance"],
+        "primary_provider": "YFinance",
+    },
+    "recommendation": {
+        # Synthesis chapter — needs identity + quant + risk
+        "fields": [
+            "fund_name", "fund_type",
+            "quant_profile.sharpe_1y", "quant_profile.return_1y",
+            "quant_profile.cvar_95_3m",
+            "risk_metrics",
+        ],
+        "providers": ["YFinance"],
+        "primary_provider": "YFinance",
+    },
+}
+
+
+def _resolve_field(pack: "EvidencePack", field_path: str) -> Any:
+    """Resolve a dotted field path against the evidence pack.
+
+    Supports top-level attributes and one-level dict nesting:
+      "fund_name"              → pack.fund_name
+      "quant_profile.sharpe_1y" → pack.quant_profile.get("sharpe_1y")
+      "risk_metrics"           → pack.risk_metrics (checks non-empty dict)
+    """
+    if "." in field_path:
+        parent, child = field_path.split(".", 1)
+        parent_val = getattr(pack, parent, None)
+        if isinstance(parent_val, dict):
+            return parent_val.get(child)
+        return None
+    return getattr(pack, field_path, None)
+
 
 @dataclass(frozen=True, slots=True)
 class EvidencePack:
@@ -55,6 +143,19 @@ class EvidencePack:
     # Macro context
     macro_snapshot: dict[str, Any] = field(default_factory=dict)
 
+    # SEC 13F data (investment_strategy chapter)
+    thirteenf_available: bool = False
+    sector_weights: dict[str, float] = field(default_factory=dict)
+    drift_detected: bool = False
+    drift_quarters: int = 0
+
+    # SEC ADV data (manager_assessment + operational_dd chapters)
+    compliance_disclosures: int | None = None
+    adv_aum_history: dict[str, Any] = field(default_factory=dict)
+    adv_fee_structure: list[str] = field(default_factory=list)
+    adv_funds: list[dict[str, Any]] = field(default_factory=list)
+    adv_team: list[dict[str, Any]] = field(default_factory=list)
+
     def to_context(self) -> dict[str, Any]:
         """Convert to template context dict for Jinja2 rendering."""
         return {
@@ -75,6 +176,15 @@ class EvidencePack:
             "risk_metrics": self.risk_metrics,
             "scoring_data": self.scoring_data,
             "macro_snapshot": self.macro_snapshot,
+            "thirteenf_available": self.thirteenf_available,
+            "sector_weights": self.sector_weights,
+            "drift_detected": self.drift_detected,
+            "drift_quarters": self.drift_quarters,
+            "compliance_disclosures": self.compliance_disclosures,
+            "adv_aum_history": self.adv_aum_history,
+            "adv_fee_structure": self.adv_fee_structure,
+            "adv_funds": self.adv_funds,
+            "adv_team": self.adv_team,
         }
 
     def filter_for_chapter(self, chapter_tag: str) -> dict[str, Any]:
@@ -100,6 +210,51 @@ class EvidencePack:
 
         return ctx
 
+    def compute_source_metadata(self, chapter_tag: str) -> dict[str, Any]:
+        """Compute data availability metadata for a chapter.
+
+        Returns structured info about which fields are present/missing
+        so templates can render source-aware preambles instead of hedging.
+        """
+        expectations = _CHAPTER_FIELD_EXPECTATIONS.get(chapter_tag, {})
+        expected_fields: list[str] = expectations.get("fields", [])
+        primary_provider: str = expectations.get("primary_provider", "YFinance")
+        providers: list[str] = list(expectations.get("providers", ["YFinance"]))
+
+        if not expected_fields:
+            return {
+                "structured_data_complete": False,
+                "structured_data_partial": False,
+                "structured_data_absent": True,
+                "data_providers": providers,
+                "available_fields": [],
+                "missing_fields": [],
+                "primary_provider": primary_provider,
+            }
+
+        available: list[str] = []
+        missing: list[str] = []
+
+        for f in expected_fields:
+            val = _resolve_field(self, f)
+            if val is not None and val != "" and val != {} and val != []:
+                available.append(f)
+            else:
+                missing.append(f)
+
+        all_present = len(missing) == 0
+        none_present = len(available) == 0
+
+        return {
+            "structured_data_complete": all_present,
+            "structured_data_partial": not all_present and not none_present,
+            "structured_data_absent": none_present,
+            "data_providers": providers,
+            "available_fields": available,
+            "missing_fields": missing,
+            "primary_provider": primary_provider,
+        }
+
 
 def build_evidence_pack(
     *,
@@ -109,6 +264,8 @@ def build_evidence_pack(
     risk_metrics: dict[str, Any] | None = None,
     scoring_data: dict[str, Any] | None = None,
     macro_snapshot: dict[str, Any] | None = None,
+    sec_13f_data: dict[str, Any] | None = None,
+    sec_adv_data: dict[str, Any] | None = None,
 ) -> EvidencePack:
     """Build a frozen evidence pack from gathered data.
 
@@ -126,6 +283,10 @@ def build_evidence_pack(
         Manager scoring data.
     macro_snapshot : dict
         Macro context (FRED indicators, regime).
+    sec_13f_data : dict
+        SEC 13F holdings data (sector weights, drift).
+    sec_adv_data : dict
+        SEC ADV manager profile data (AUM, compliance, team).
 
     Returns
     -------
@@ -133,6 +294,9 @@ def build_evidence_pack(
         Frozen, thread-safe evidence surface.
     """
     logger.info("building_evidence_pack", instrument_id=fund_data.get("instrument_id"))
+
+    _13f = sec_13f_data or {}
+    _adv = sec_adv_data or {}
 
     return EvidencePack(
         instrument_id=str(fund_data.get("instrument_id", "")),
@@ -152,4 +316,15 @@ def build_evidence_pack(
         risk_metrics=risk_metrics or {},
         scoring_data=scoring_data or {},
         macro_snapshot=macro_snapshot or {},
+        # SEC 13F
+        thirteenf_available=_13f.get("thirteenf_available", False),
+        sector_weights=_13f.get("sector_weights", {}),
+        drift_detected=_13f.get("drift_detected", False),
+        drift_quarters=_13f.get("drift_quarters", 0),
+        # SEC ADV
+        compliance_disclosures=_adv.get("compliance_disclosures"),
+        adv_aum_history=_adv.get("adv_aum_history", {}),
+        adv_fee_structure=_adv.get("adv_fee_structure", []),
+        adv_funds=_adv.get("adv_funds", []),
+        adv_team=_adv.get("adv_team", []),
     )

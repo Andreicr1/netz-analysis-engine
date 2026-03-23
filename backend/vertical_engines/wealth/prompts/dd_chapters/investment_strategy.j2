@@ -13,6 +13,37 @@ You are a senior investment analyst writing the Investment Strategy & Process ch
 {% if geography %}- **Geography:** {{ geography }}{% endif %}
 {% if asset_class %}- **Asset Class:** {{ asset_class }}{% endif %}
 
+{% if structured_data_complete is defined %}
+{% if structured_data_complete %}
+## Data Availability
+All structured data fields for this chapter are available from {{ primary_provider }}. Base your analysis on these fields directly.
+{% elif structured_data_partial %}
+## Data Availability
+Partial structured data available from {{ data_providers | join(', ') }}.
+Available: {{ available_fields | join(', ') }}.
+Not available: {{ missing_fields | join(', ') }}.
+For missing fields, write '[Not available from {{ primary_provider }}]'.
+{% elif structured_data_absent %}
+## Data Availability
+No structured data available for this chapter. State this clearly and do not speculate.
+{% endif %}
+{% endif %}
+
+{% if thirteenf_available is defined and thirteenf_available %}
+## SEC 13F Holdings Verification ({{ drift_quarters }} quarters of data)
+The manager's most recent 13F-HR filing reports the following sector allocation:
+{% for sector, weight in sector_weights.items() %}
+- {{ sector }}: {{ "%.1f"|format(weight * 100) }}%
+{% endfor %}
+{% if drift_detected %}
+**⚠ Sector drift detected:** Material shift (>5pp) in sector weights between the two most recent quarters. Flag for investment team review.
+{% else %}
+Sector allocation is stable quarter-over-quarter (no material drift detected).
+{% endif %}
+
+Cross-reference the stated investment strategy against this 13F sector allocation. If the fund's classification or stated strategy diverges from actual holdings composition, note the divergence as a finding.
+{% endif %}
+
 ## Instructions
 Analyze and describe the fund's investment strategy and process. Cover:
 
@@ -21,7 +52,10 @@ Analyze and describe the fund's investment strategy and process. Cover:
 3. **Competitive Advantage** — What differentiates this manager's approach
 4. **Capacity Constraints** — AUM limits, liquidity management, market impact
 5. **Strategy Evolution** — How the strategy has adapted over time
+{% if thirteenf_available is defined and thirteenf_available %}
+6. **13F Holdings Alignment** — Whether the actual 13F sector allocation above is consistent with the fund's stated strategy and classification
+{% endif %}
 
-If document evidence is available, cite specific sources. If not, note where additional documentation would strengthen the analysis.
+Base your analysis on the fund identity and classification data provided. For strategy details not available from structured data, state plainly that the information is not available rather than speculating.
 
 Format as institutional-quality markdown. Be analytical, not promotional. Maximum 600 words.

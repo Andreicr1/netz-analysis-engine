@@ -23,6 +23,22 @@ You are a senior investment analyst at an institutional asset manager writing th
 {% if quant_profile.manager_score is not none %}- Manager Score: {{ quant_profile.manager_score }}{% endif %}
 {% endif %}
 
+{% if structured_data_complete is defined %}
+{% if structured_data_complete %}
+## Data Availability
+All structured data fields for this chapter are available from {{ primary_provider }}. Base your analysis on these fields directly.
+{% elif structured_data_partial %}
+## Data Availability
+Partial structured data available from {{ data_providers | join(', ') }}.
+Available: {{ available_fields | join(', ') }}.
+Not available: {{ missing_fields | join(', ') }}.
+For missing fields, write '[Not available from {{ primary_provider }}]'.
+{% elif structured_data_absent %}
+## Data Availability
+No structured data available for this chapter. State this clearly and do not speculate.
+{% endif %}
+{% endif %}
+
 ## Instructions
 Write a concise executive summary that:
 1. Summarizes the fund's investment proposition in 2-3 sentences
@@ -30,4 +46,4 @@ Write a concise executive summary that:
 3. Provides a preliminary assessment (positive/neutral/negative) with brief justification
 4. Notes any critical risk factors or red flags
 
-Format as institutional-quality markdown. Be direct, evidence-based, and avoid promotional language. Maximum 800 words.
+Format as institutional-quality markdown. Be direct, data-driven, and avoid promotional language. Maximum 800 words.

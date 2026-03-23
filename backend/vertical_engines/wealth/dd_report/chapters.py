@@ -13,6 +13,7 @@ import structlog
 
 from ai_engine.governance.output_safety import sanitize_llm_text
 from ai_engine.prompts.registry import get_prompt_registry
+from vertical_engines.wealth.dd_report.evidence_pack import EvidencePack
 from vertical_engines.wealth.dd_report.models import CHAPTER_REGISTRY, ChapterResult
 from vertical_engines.wealth.shared_protocols import CallOpenAiFn
 
@@ -33,6 +34,7 @@ def generate_chapter(
     chapter_tag: str,
     evidence_context: dict[str, Any],
     chapter_summaries: dict[str, str] | None = None,
+    evidence_pack: EvidencePack | None = None,
 ) -> ChapterResult:
     """Generate a single DD Report chapter via LLM.
 
@@ -70,6 +72,10 @@ def generate_chapter(
         ctx = {**evidence_context}
         if chapter_summaries:
             ctx["chapter_summaries"] = chapter_summaries
+
+        # Inject source-aware metadata for template preambles
+        if evidence_pack is not None:
+            ctx.update(evidence_pack.compute_source_metadata(chapter_tag))
 
         # Render prompt
         if registry.has_template(template_name):
@@ -155,6 +161,40 @@ def _build_user_content(
         for key, val in risk.items():
             if val is not None:
                 parts.append(f"- {key}: {val}")
+
+    # SEC 13F data for investment_strategy
+    if chapter_tag == "investment_strategy" and evidence_context.get("thirteenf_available"):
+        parts.append("\n## SEC 13F Holdings Data")
+        sector_weights = evidence_context.get("sector_weights", {})
+        if sector_weights:
+            parts.append("Sector allocation (most recent quarter):")
+            for sector, weight in sector_weights.items():
+                parts.append(f"- {sector}: {weight * 100:.1f}%")
+        if evidence_context.get("drift_detected"):
+            parts.append("⚠ Sector drift detected between recent quarters")
+        parts.append(f"Quarters of 13F data available: {evidence_context.get('drift_quarters', 0)}")
+
+    # SEC ADV data for manager_assessment
+    if chapter_tag == "manager_assessment":
+        adv_aum = evidence_context.get("adv_aum_history", {})
+        if adv_aum:
+            parts.append("\n## SEC ADV — Regulatory AUM")
+            for key, val in adv_aum.items():
+                parts.append(f"- {key}: {val}")
+        adv_team = evidence_context.get("adv_team", [])
+        if adv_team:
+            parts.append(f"\n## SEC ADV — Team ({len(adv_team)} members)")
+            for member in adv_team:
+                line = f"- {member.get('person_name', 'Unknown')}"
+                if member.get("title"):
+                    line += f" ({member['title']})"
+                parts.append(line)
+
+    # Compliance disclosures for operational_dd
+    if chapter_tag == "operational_dd":
+        disclosures = evidence_context.get("compliance_disclosures")
+        if disclosures is not None:
+            parts.append(f"\n## SEC Compliance Disclosures: {disclosures}")
 
     # Document excerpts
     docs = evidence_context.get("documents", [])

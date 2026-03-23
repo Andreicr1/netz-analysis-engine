@@ -20,6 +20,22 @@ You are a senior investment analyst writing the final Recommendation chapter of 
 {% endfor %}
 {% endif %}
 
+{% if structured_data_complete is defined %}
+{% if structured_data_complete %}
+## Data Availability
+All structured data fields for this chapter are available from {{ primary_provider }}. Base your analysis on these fields directly.
+{% elif structured_data_partial %}
+## Data Availability
+Partial structured data available from {{ data_providers | join(', ') }}.
+Available: {{ available_fields | join(', ') }}.
+Not available: {{ missing_fields | join(', ') }}.
+For missing fields, write '[Not available from {{ primary_provider }}]'.
+{% elif structured_data_absent %}
+## Data Availability
+No structured data available for this chapter. State this clearly and do not speculate.
+{% endif %}
+{% endif %}
+
 ## Instructions
 Provide a definitive investment recommendation based on ALL preceding chapters:
 
