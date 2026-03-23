@@ -143,6 +143,7 @@ ALLOWLISTED_GLOBAL_TABLE_CONSUMERS: dict[str, str] = {
     "app/domains/credit/dashboard/routes.py": "read — SELECT only on MacroData for dashboard aggregation; uses get_db_with_rls (read is safe, global tables have no RLS)",
     # ── Wealth N-PORT ingestion worker — reads SecManager for CIK resolution ─
     "app/domains/wealth/workers/nport_ingestion.py": "read — reads SecManager via async_session_factory for CIK resolution during N-PORT ingestion (no RLS)",
+    "app/domains/wealth/workers/sec_13f_ingestion.py": "write — reads SecManager CIKs, delegates to ThirteenFService for 13F EDGAR ingestion via async_session_factory (no RLS)",
     # ── Data providers — background workers that upsert to global SEC tables ─
     "data_providers/sec/adv_service.py": "write — upserts SecManager and SecManagerFund via async_session_factory (bulk CSV ingestion, no RLS)",
     "data_providers/sec/thirteenf_service.py": "write — upserts Sec13fHolding and Sec13fDiff via async_session_factory (13F-HR ingestion, no RLS)",

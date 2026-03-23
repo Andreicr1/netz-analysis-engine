@@ -76,6 +76,16 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/workers/run-sec-13f-ingestion",
+    "name": "trigger_run_sec_13f_ingestion"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-sec-adv-ingestion",
+    "name": "trigger_run_sec_adv_ingestion"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/workers/run-sec-refresh",
     "name": "trigger_run_sec_refresh"
   },

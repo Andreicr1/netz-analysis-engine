@@ -42,6 +42,8 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
     from app.domains.wealth.workers.regime_fit import run_regime_fit
     from app.domains.wealth.workers.risk_calc import run_risk_calc
     from app.domains.wealth.workers.screening_batch import run_screening_batch
+    from app.domains.wealth.workers.sec_13f_ingestion import run_sec_13f_ingestion
+    from app.domains.wealth.workers.sec_adv_ingestion import run_sec_adv_ingestion
     from app.domains.wealth.workers.sec_refresh import run_sec_refresh
     from app.domains.wealth.workers.treasury_ingestion import run_treasury_ingestion
     from app.domains.wealth.workers.watchlist_batch import run_watchlist_check
@@ -56,6 +58,8 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
         "imf_ingestion": (run_imf_ingestion, "global", _HEAVY),
         "nport_ingestion": (run_nport_ingestion, "global", _HEAVY),
         "sec_refresh": (run_sec_refresh, "global", _HEAVY),
+        "sec_13f_ingestion": (run_sec_13f_ingestion, "global", _HEAVY),
+        "sec_adv_ingestion": (run_sec_adv_ingestion, "global", _HEAVY),
         "brochure_download": (run_brochure_download, "global", _HEAVY),
         "brochure_extract": (run_brochure_extract, "global", _HEAVY),
         "drift_check": (run_drift_check, "global", _LIGHT),

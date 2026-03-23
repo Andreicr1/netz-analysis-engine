@@ -67,7 +67,34 @@ class ThirteenFService:
         self._db_session_factory = db_session_factory
         self._rate_check = rate_check or check_edgar_rate
 
-    # ── Public API ──────────────────────────────────────────────────
+    # ── Public API (DB-only reads) ───────────────────────────────────
+
+    async def read_holdings(
+        self,
+        cik: str,
+        *,
+        quarters: int = 8,
+    ) -> list[ThirteenFHolding]:
+        """Read holdings from DB only. Never calls EDGAR. Never raises.
+
+        Use this in hot paths (DD report, routes) where latency matters.
+        Data is populated by the ``sec_13f_ingestion`` background worker.
+        """
+        if not _validate_cik(cik):
+            return []
+        return await self._read_holdings_from_db(cik, quarters)
+
+    async def read_holdings_for_date(
+        self,
+        cik: str,
+        report_date: date,
+    ) -> list[ThirteenFHolding]:
+        """Read holdings for a specific quarter from DB only. Never raises."""
+        if not _validate_cik(cik):
+            return []
+        return await self._read_holdings_for_date(cik, report_date)
+
+    # ── Public API (may call EDGAR — workers only) ────────────────
 
     async def fetch_holdings(
         self,

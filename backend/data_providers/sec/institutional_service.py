@@ -122,7 +122,64 @@ class InstitutionalService:
         self._thirteenf = thirteenf_service
         self._db_session_factory = db_session_factory
 
-    # ── Public API ──────────────────────────────────────────────────
+    # ── Public API (DB-only reads) ───────────────────────────────────
+
+    async def read_investors_in_manager(
+        self,
+        manager_cik: str,
+    ) -> InstitutionalOwnershipResult:
+        """DB-only version of find_investors_in_manager. Never calls EDGAR.
+
+        Skips the feeder→master look-through heuristic (which calls edgartools).
+        Use this in hot paths (DD report, routes). Data is populated by the
+        ``sec_13f_ingestion`` background worker.
+        """
+        if not _validate_cik(manager_cik):
+            return InstitutionalOwnershipResult(
+                manager_cik=manager_cik,
+                coverage=CoverageType.NO_PUBLIC_SECURITIES,
+                investors=[],
+                note="Invalid CIK format.",
+            )
+
+        try:
+            manager_cusips = await self._get_manager_cusips(manager_cik)
+            if not manager_cusips:
+                return InstitutionalOwnershipResult(
+                    manager_cik=manager_cik,
+                    coverage=CoverageType.NO_PUBLIC_SECURITIES,
+                    investors=[],
+                    note="No 13F holdings found in database.",
+                )
+
+            allocations = await self._query_institutional_holders(manager_cusips)
+            if not allocations:
+                return InstitutionalOwnershipResult(
+                    manager_cik=manager_cik,
+                    coverage=CoverageType.PUBLIC_SECURITIES_NO_HOLDERS,
+                    investors=[],
+                    note="Manager has public securities but no institutional holders in database.",
+                )
+
+            return InstitutionalOwnershipResult(
+                manager_cik=manager_cik,
+                coverage=CoverageType.FOUND,
+                investors=allocations,
+            )
+        except Exception as exc:
+            logger.error(
+                "institutional_read_investors_failed",
+                manager_cik=manager_cik,
+                error=str(exc),
+            )
+            return InstitutionalOwnershipResult(
+                manager_cik=manager_cik,
+                coverage=CoverageType.NO_PUBLIC_SECURITIES,
+                investors=[],
+                note=f"DB lookup failed: {exc}",
+            )
+
+    # ── Public API (may call EDGAR — workers only) ────────────────
 
     async def discover_institutional_filers(
         self,
