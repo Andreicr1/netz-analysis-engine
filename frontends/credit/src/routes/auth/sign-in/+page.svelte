@@ -43,16 +43,36 @@
 		if (!clerk) return;
 		await clerk.load();
 
+		// If already signed in, sync session cookie and redirect to app
+		if (clerk.session) {
+			const token = await clerk.session.getToken();
+			if (token) {
+				document.cookie = `__session=${token}; path=/; secure; samesite=lax`;
+				window.location.href = "/";
+				return;
+			}
+		}
+
 		const el = document.getElementById("clerk-sign-in") as HTMLDivElement | null;
 		if (el) {
 			el.innerHTML = "";
 			clerk.mountSignIn(el, {
 				fallbackRedirectUrl: "/",
+				afterSignInUrl: "/",
 				appearance: {
 					variables: { colorPrimary: "#2563eb" },
 				},
 			});
 		}
+
+		// After sign-in completes, sync session cookie before navigation
+		clerk.addListener(({ session }: any) => {
+			if (session) {
+				session.getToken().then((t: string) => {
+					if (t) document.cookie = `__session=${t}; path=/; secure; samesite=lax`;
+				});
+			}
+		});
 	});
 </script>
 
