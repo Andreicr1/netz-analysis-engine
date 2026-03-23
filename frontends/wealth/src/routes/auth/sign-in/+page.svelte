@@ -5,9 +5,10 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import { browser } from "$app/environment";
+	import { env } from "$env/dynamic/public";
 
 	const DEV_MODE = import.meta.env.DEV;
-	const CLERK_PK = import.meta.env.PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
+	const CLERK_PK = env.PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
 
 	onMount(async () => {
 		if (DEV_MODE || !browser || !CLERK_PK) return;
