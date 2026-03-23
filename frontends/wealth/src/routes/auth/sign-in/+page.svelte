@@ -10,11 +10,19 @@
 	const DEV_MODE = import.meta.env.DEV;
 	const CLERK_PK = env.PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
 
+	/** Decode Clerk publishable key to get the frontend API domain. */
+	function clerkDomain(pk: string): string {
+		const encoded = pk.replace(/^pk_(test|live)_/, "");
+		return atob(encoded).replace(/\$$/, "");
+	}
+
 	onMount(async () => {
 		if (DEV_MODE || !browser || !CLERK_PK) return;
 
-		// Load Clerk via CDN to ensure UI components are included
-		// (npm dynamic import tree-shakes the UI bundle on Cloudflare Pages)
+		const domain = clerkDomain(CLERK_PK);
+
+		// Load Clerk from their hosted CDN (includes full UI bundle).
+		// npm dynamic import gets tree-shaken on Cloudflare Pages, stripping mountSignIn.
 		await new Promise<void>((resolve, reject) => {
 			if (document.querySelector('script[data-clerk-script]')) {
 				resolve();
@@ -22,15 +30,17 @@
 			}
 			const script = document.createElement("script");
 			script.setAttribute("data-clerk-script", "");
+			script.setAttribute("data-clerk-publishable-key", CLERK_PK);
 			script.async = true;
-			script.src = `https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js`;
+			script.src = `https://${domain}/npm/@clerk/clerk-js@latest/dist/clerk.browser.js`;
 			script.onload = () => resolve();
 			script.onerror = () => reject(new Error("Failed to load Clerk"));
 			document.head.appendChild(script);
 		});
 
-		const Clerk = (window as any).Clerk;
-		const clerk = new Clerk(CLERK_PK);
+		// Clerk hosted script auto-initializes window.Clerk as an instance
+		const clerk = (window as any).Clerk;
+		if (!clerk) return;
 		await clerk.load();
 
 		const el = document.getElementById("clerk-sign-in") as HTMLDivElement | null;
