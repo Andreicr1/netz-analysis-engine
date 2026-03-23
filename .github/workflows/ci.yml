@@ -19,9 +19,12 @@ jobs:
 
       - name: Ensure test database exists
         run: |
-          docker exec netz-analysis-engine-db-1 psql -U netz -tc "SELECT 1 FROM pg_database WHERE datname='netz_engine_test'" | Out-Null
-          if ($LASTEXITCODE -ne 0 -or -not (docker exec netz-analysis-engine-db-1 psql -U netz -tc "SELECT 1 FROM pg_database WHERE datname='netz_engine_test'" | Select-String "1")) {
-            docker exec netz-analysis-engine-db-1 psql -U netz -c "CREATE DATABASE netz_engine_test"
+          $result = docker exec netz-analysis-engine-db-1 psql -U netz -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='netz_engine_test'"
+          if (-not ($result | Select-String "1")) {
+            docker exec netz-analysis-engine-db-1 psql -U netz -d postgres -c "CREATE DATABASE netz_engine_test"
+            Write-Host "Created netz_engine_test"
+          } else {
+            Write-Host "netz_engine_test already exists"
           }
         shell: pwsh
 
