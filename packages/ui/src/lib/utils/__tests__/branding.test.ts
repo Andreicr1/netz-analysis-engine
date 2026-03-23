@@ -3,7 +3,7 @@ import { defaultBranding, brandingToCSS } from "../branding.js";
 
 describe("defaultBranding", () => {
 	it("has Netz default primary color", () => {
-		expect(defaultBranding.primary_color).toBe("#1B365D");
+		expect(defaultBranding.primary_color).toBe("#18324d");
 	});
 
 	it("has all required fields", () => {
@@ -17,7 +17,7 @@ describe("brandingToCSS", () => {
 	it("converts branding to CSS custom properties", () => {
 		const css = brandingToCSS(defaultBranding);
 		expect(css).toContain("--netz-brand-primary:");
-		expect(css).toContain("#1B365D");
+		expect(css).toContain("#18324d");
 		expect(css).toContain("--netz-font-sans:");
 	});
 
