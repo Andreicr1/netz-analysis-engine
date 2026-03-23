@@ -122,6 +122,11 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v5
+        with:
+          clean: true
+      - name: Clean stale node_modules
+        run: Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
+        shell: pwsh
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build @netz/ui
@@ -145,6 +150,11 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v5
+        with:
+          clean: true
+      - name: Clean stale node_modules
+        run: Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
+        shell: pwsh
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build @netz/ui
@@ -168,6 +178,11 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v5
+        with:
+          clean: true
+      - name: Clean stale node_modules
+        run: Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
+        shell: pwsh
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build @netz/ui
