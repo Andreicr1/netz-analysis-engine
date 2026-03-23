@@ -1,0 +1,74 @@
+// ============================================================
+// DAX — Medidas SEC Diffs (Style Drift & Activity)
+// ============================================================
+
+// ── Atividade de portfólio ────────────────────────────────────
+
+New Positions =
+CALCULATE(
+    COUNTROWS(SEC_Diffs),
+    SEC_Diffs[action] = "NEW_POSITION"
+)
+
+Exited Positions =
+CALCULATE(
+    COUNTROWS(SEC_Diffs),
+    SEC_Diffs[action] = "EXITED"
+)
+
+Increased Positions =
+CALCULATE(
+    COUNTROWS(SEC_Diffs),
+    SEC_Diffs[action] = "INCREASED"
+)
+
+Decreased Positions =
+CALCULATE(
+    COUNTROWS(SEC_Diffs),
+    SEC_Diffs[action] = "DECREASED"
+)
+
+Total Changes =
+[New Positions] + [Exited Positions] + [Increased Positions] + [Decreased Positions]
+
+// Turnover: % de posições que mudaram
+Portfolio Turnover % =
+DIVIDE(
+    [New Positions] + [Exited Positions],
+    [New Positions] + [Exited Positions] + [Increased Positions] + [Decreased Positions] +
+    CALCULATE(COUNTROWS(SEC_Diffs), SEC_Diffs[action] = "UNCHANGED"),
+    0
+) * 100
+
+// ── Movimentação de capital ───────────────────────────────────
+
+Net Capital Deployed ($M) =
+DIVIDE(
+    SUMX(
+        SEC_Diffs,
+        SEC_Diffs[value_after] - SEC_Diffs[value_before]
+    ),
+    1000000
+)
+
+Largest Single Buy ($M) =
+DIVIDE(
+    MAXX(
+        FILTER(SEC_Diffs, SEC_Diffs[value_after] > SEC_Diffs[value_before]),
+        SEC_Diffs[value_after] - SEC_Diffs[value_before]
+    ),
+    1000000
+)
+
+Largest Single Sale ($M) =
+DIVIDE(
+    MAXX(
+        FILTER(SEC_Diffs, SEC_Diffs[value_before] > SEC_Diffs[value_after]),
+        SEC_Diffs[value_before] - SEC_Diffs[value_after]
+    ),
+    1000000
+)
+
+// Flag de drift: turnover > 30% em um quarter
+Style Drift Flag =
+IF([Portfolio Turnover %] > 30, "DRIFT DETECTED", "STABLE")

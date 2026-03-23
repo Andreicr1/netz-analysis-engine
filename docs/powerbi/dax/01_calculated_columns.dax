@@ -1,0 +1,60 @@
+// ============================================================
+// DAX — Colunas Calculadas (adicionar em cada tabela)
+// Copie cada bloco em: Table Tools → New Column
+// ============================================================
+
+// ── Tabela: SEC_Holdings ─────────────────────────────────────
+
+// Chave composta para relacionamento com SEC_Diffs
+Holdings_Key = SEC_Holdings[cik] & "|" & SEC_Holdings[cusip]
+
+// Peso percentual da posição no portfólio do manager naquele quarter
+Position_Weight_Pct =
+VAR TotalValue =
+    CALCULATE(
+        SUM(SEC_Holdings[market_value]),
+        ALLEXCEPT(SEC_Holdings, SEC_Holdings[cik], SEC_Holdings[report_date])
+    )
+RETURN
+    DIVIDE(SEC_Holdings[market_value], TotalValue, 0) * 100
+
+// Classificação da posição por valor dentro do manager+quarter
+Position_Rank =
+RANKX(
+    FILTER(
+        SEC_Holdings,
+        SEC_Holdings[cik] = EARLIER(SEC_Holdings[cik]) &&
+        SEC_Holdings[report_date] = EARLIER(SEC_Holdings[report_date])
+    ),
+    SEC_Holdings[market_value],
+    ,
+    DESC,
+    DENSE
+)
+
+// ── Tabela: SEC_Diffs ─────────────────────────────────────────
+
+// Chave composta para relacionamento com SEC_Holdings
+Holdings_Key = SEC_Diffs[cik] & "|" & SEC_Diffs[cusip]
+
+// Variação percentual de valor
+Value_Change_Pct =
+DIVIDE(
+    SEC_Diffs[value_after] - SEC_Diffs[value_before],
+    SEC_Diffs[value_before],
+    BLANK()
+) * 100
+
+// ── Tabela: SEC_Managers ─────────────────────────────────────
+
+// Faixa de AUM para segmentação
+AUM_Tier =
+SWITCH(
+    TRUE(),
+    SEC_Managers[aum_total] >= 100000000000, "Mega (>$100B)",
+    SEC_Managers[aum_total] >= 10000000000,  "Large ($10B-$100B)",
+    SEC_Managers[aum_total] >= 1000000000,   "Mid ($1B-$10B)",
+    SEC_Managers[aum_total] >= 100000000,    "Small ($100M-$1B)",
+    NOT ISBLANK(SEC_Managers[aum_total]),     "Micro (<$100M)",
+    "Unknown"
+)

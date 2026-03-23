@@ -1,0 +1,71 @@
+// ============================================================
+// DAX — Tabelas Calculadas
+// Copie em: Modeling → New Table
+// Estas tabelas são criadas dentro do Power BI a partir dos
+// dados já carregados — não precisam de conexão ODBC adicional
+// ============================================================
+
+// ── Top 20 Managers por AUM ───────────────────────────────────
+
+Top20_Managers_by_AUM =
+TOPN(
+    20,
+    SUMMARIZE(
+        SEC_Managers,
+        SEC_Managers[crd_number],
+        SEC_Managers[firm_name],
+        SEC_Managers[aum_total],
+        SEC_Managers[aum_discretionary],
+        SEC_Managers[state],
+        SEC_Managers[country],
+        SEC_Managers[compliance_disclosures]
+    ),
+    [aum_total],
+    DESC
+)
+
+// ── Maiores posições do universo 13F (cross-manager) ──────────
+
+Top_Holdings_Universe =
+TOPN(
+    50,
+    SUMMARIZE(
+        SEC_Holdings,
+        SEC_Holdings[cusip],
+        SEC_Holdings[issuer_name],
+        SEC_Holdings[asset_class],
+        "Total_Market_Value", SUM(SEC_Holdings[market_value]),
+        "Manager_Count",      DISTINCTCOUNT(SEC_Holdings[cik]),
+        "Latest_Quarter",     MAX(SEC_Holdings[report_date])
+    ),
+    [Total_Market_Value],
+    DESC
+)
+
+// ── Resumo de drift por manager (último quarter) ──────────────
+
+Manager_Drift_Summary =
+SUMMARIZE(
+    SEC_Diffs,
+    SEC_Diffs[cik],
+    "Quarter",          MAX(SEC_Diffs[quarter_to]),
+    "New_Positions",    CALCULATE(COUNTROWS(SEC_Diffs), SEC_Diffs[action] = "NEW_POSITION"),
+    "Exited_Positions", CALCULATE(COUNTROWS(SEC_Diffs), SEC_Diffs[action] = "EXITED"),
+    "Total_Changes",    COUNTROWS(SEC_Diffs),
+    "Net_Value_Delta",  SUM(SEC_Diffs[value_after]) - SUM(SEC_Diffs[value_before])
+)
+
+// ── Distribuição de fundos UCITS por domicílio ────────────────
+
+ESMA_Domicile_Summary =
+SUMMARIZE(
+    ESMA_Funds,
+    ESMA_Funds[domicile],
+    "Fund_Count",        COUNTROWS(ESMA_Funds),
+    "Tradeable_Count",
+        CALCULATE(
+            COUNTROWS(ESMA_Funds),
+            RELATED(ESMA_Tickers[is_tradeable]) = TRUE()
+        ),
+    "Manager_Count",     DISTINCTCOUNT(ESMA_Funds[esma_manager_id])
+)
