@@ -76,6 +76,8 @@ jobs:
         run: pnpm --filter @netz/ui build
       - name: Lint all frontends
         run: pnpm --filter "./frontends/*" lint
+      - name: Sync SvelteKit generated types
+        run: pnpm --filter "./frontends/*" exec svelte-kit sync
       - name: Type-check all frontends
         run: pnpm --filter "./frontends/*" check
       - name: Build all frontends
