@@ -7,10 +7,7 @@
 	import AllocationView from "$lib/components/AllocationView.svelte";
 </script>
 
-<PageHeader
-	title="Allocation"
-	breadcrumbs={[{ label: "Allocation" }]}
-/>
+<PageHeader title="Allocation" />
 
 <div class="alloc-page">
 	<AllocationView />
@@ -18,6 +15,6 @@
 
 <style>
 	.alloc-page {
-		padding: var(--netz-space-stack-md, 16px) var(--netz-space-inline-lg, 24px);
+		padding-bottom: var(--netz-space-stack-xl, 48px);
 	}
 </style>

@@ -1,6 +1,6 @@
 <!--
   App layout — Workstation OS: fixed Sidebar + AppShell grid.
-  Dark surface sidebar (netz-surface-alt) with section headers.
+  Thunder Client–style sidebar with collapsible two-level sections.
   Risk store initialized once, shared across all (app) routes via context.
 -->
 <script lang="ts">
@@ -12,13 +12,20 @@
 		Search, ClipboardList, Globe,
 		Briefcase, Zap, BarChart2, Map,
 		Landmark, FileText, Newspaper, Folders,
-		Search as SearchIcon, Bot, PieChart
+		Search as SearchIcon, Bot, PieChart, ChevronRight
 	} from "lucide-svelte";
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	interface SidebarNavItem {
+
+	interface SidebarItem {
 		label: string;
 		href: string;
-		icon: any;
+		icon: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+	}
+
+	interface SidebarSection {
+		id: string;
+		label: string;
+		defaultOpen: boolean;
+		items: SidebarItem[];
 	}
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
@@ -42,144 +49,130 @@
 		return () => riskStore.destroy();
 	});
 
-	// ── Navigation taxonomy ──
-	const navItems: SidebarNavItem[] = [
-		// SECTION 1: DISCOVERY & SCREENING
-		{ label: "Screener", href: "/screener", icon: Search },
-		{ label: "DD Reports", href: "/dd-reports", icon: ClipboardList },
-
-		// SECTION 2: INVESTMENT ENGINE
-		{ label: "Universe", href: "/universe", icon: Globe },
-		{ label: "Model Portfolios", href: "/model-portfolios", icon: Folders },
-		{ label: "Portfolios", href: "/portfolios", icon: Briefcase },
-		{ label: "Allocation", href: "/allocation", icon: PieChart },
-
-		// SECTION 3: RISK & INTELLIGENCE
-		{ label: "Risk", href: "/risk", icon: Zap },
-		{ label: "Analytics", href: "/analytics", icon: BarChart2 },
-		{ label: "Exposure", href: "/exposure", icon: Map },
-		{ label: "Macro", href: "/macro", icon: Landmark },
-
-		// SECTION 4: CONTENT & DATA
-		{ label: "Documents", href: "/documents", icon: FileText },
-		{ label: "Content", href: "/content", icon: Newspaper },
+	// ── Navigation taxonomy — sectioned ──
+	const sections: SidebarSection[] = [
+		{
+			id: "discovery", label: "Discovery & Screening", defaultOpen: true,
+			items: [
+				{ label: "Screener",   href: "/screener",   icon: Search },
+				{ label: "DD Reports", href: "/dd-reports", icon: ClipboardList },
+			],
+		},
+		{
+			id: "investment", label: "Investment Engine", defaultOpen: true,
+			items: [
+				{ label: "Universe",         href: "/universe",         icon: Globe },
+				{ label: "Model Portfolios", href: "/model-portfolios", icon: Folders },
+				{ label: "Portfolios",       href: "/portfolios",       icon: Briefcase },
+				{ label: "Allocation",       href: "/allocation",       icon: PieChart },
+			],
+		},
+		{
+			id: "risk", label: "Risk & Intelligence", defaultOpen: true,
+			items: [
+				{ label: "Risk",      href: "/risk",      icon: Zap },
+				{ label: "Analytics", href: "/analytics", icon: BarChart2 },
+				{ label: "Exposure",  href: "/exposure",  icon: Map },
+				{ label: "Macro",     href: "/macro",     icon: Landmark },
+			],
+		},
+		{
+			id: "content", label: "Content & Data", defaultOpen: true,
+			items: [
+				{ label: "Documents", href: "/documents", icon: FileText },
+				{ label: "Content",   href: "/content",   icon: Newspaper },
+			],
+		},
 	];
+
+	// ── Collapsible section state ──
+	let openSections = $state<Set<string>>(
+		new Set(sections.filter(s => s.defaultOpen).map(s => s.id))
+	);
+
+	function toggleSection(id: string) {
+		const next = new Set(openSections);
+		next.has(id) ? next.delete(id) : next.add(id);
+		openSections = next;
+	}
+
+	function isActive(href: string): boolean {
+		return $page.url.pathname === href || $page.url.pathname.startsWith(href + "/");
+	}
 </script>
 
-<div class="netz-shell" style:--sidebar-w={sidebarCollapsed ? "56px" : "240px"}>
+<div class="netz-shell" style:--sidebar-w={sidebarCollapsed ? "56px" : "256px"}>
 	<aside class="netz-shell-sidebar">
 		<div class="netz-workstation-sidebar">
-			{#if !sidebarCollapsed}
-				<div class="netz-ws-header">
-					<span class="netz-ws-logo">W</span>
-					<span class="netz-ws-title">Wealth OS</span>
-				</div>
-			{:else}
-				<div class="netz-ws-header netz-ws-header--collapsed">
-					<span class="netz-ws-logo">W</span>
-				</div>
-			{/if}
+			<!-- Scrollable nav area — no header, logo lives in topbar -->
+			<div class="sidebar-nav">
+				{#each sections as section (section.id)}
+					{#if !sidebarCollapsed}
+						<!-- Section header — clickable accordion toggle -->
+						<button
+							class="section-header"
+							onclick={() => toggleSection(section.id)}
+							aria-expanded={openSections.has(section.id)}
+							type="button"
+						>
+							<span class="section-label">{section.label}</span>
+							<ChevronRight
+								size={12}
+								strokeWidth={2}
+								class="section-chevron {openSections.has(section.id) ? 'open' : ''}"
+							/>
+						</button>
 
-			{#if !sidebarCollapsed}
-				<div class="netz-ws-section-label">Discovery & Screening</div>
-			{/if}
-			<nav class="netz-ws-nav" aria-label="Discovery & Screening">
-				{#each navItems.slice(0, 2) as item (item.href)}
-					{@const Icon = item.icon}
-					<a
-						href={item.href}
-						class="netz-ws-nav-item"
-						class:active={$page.url.pathname === item.href || $page.url.pathname.startsWith(item.href + "/")}
-						title={sidebarCollapsed ? item.label : undefined}
-						aria-current={$page.url.pathname === item.href || $page.url.pathname.startsWith(item.href + "/") ? "page" : undefined}
-					>
-						<span class="netz-ws-nav-icon"><Icon size={18} strokeWidth={1.5} /></span>
-						{#if !sidebarCollapsed}
-							<span class="netz-ws-nav-label">{item.label}</span>
+						<!-- Accordion body -->
+						<div class="section-items" class:open={openSections.has(section.id)}>
+							<nav class="section-items-inner" aria-label={section.label}>
+								{#each section.items as item (item.href)}
+									{@const Icon = item.icon}
+									<a
+										href={item.href}
+										class="nav-item"
+										class:active={isActive(item.href)}
+										aria-current={isActive(item.href) ? "page" : undefined}
+									>
+										<span class="nav-icon"><Icon size={18} strokeWidth={1.5} /></span>
+										<span class="nav-label">{item.label}</span>
+									</a>
+								{/each}
+							</nav>
+						</div>
+					{:else}
+						<!-- Collapsed: divider between sections, icon-only items -->
+						{#if section.id !== "discovery"}
+							<div class="sidebar-divider"></div>
 						{/if}
-					</a>
+						<nav class="section-items-collapsed" aria-label={section.label}>
+							{#each section.items as item (item.href)}
+								{@const Icon = item.icon}
+								<a
+									href={item.href}
+									class="nav-item nav-item--icon-only"
+									class:active={isActive(item.href)}
+									title={item.label}
+									aria-current={isActive(item.href) ? "page" : undefined}
+								>
+									<span class="nav-icon"><Icon size={18} strokeWidth={1.5} /></span>
+								</a>
+							{/each}
+						</nav>
+					{/if}
 				{/each}
-			</nav>
-
-			{#if !sidebarCollapsed}
-				<div class="netz-ws-section-label">Investment Engine</div>
-			{:else}
-				<div class="netz-ws-divider"></div>
-			{/if}
-			<nav class="netz-ws-nav" aria-label="Investment Engine">
-				{#each navItems.slice(2, 6) as item (item.href)}
-					{@const Icon = item.icon}
-					<a
-						href={item.href}
-						class="netz-ws-nav-item"
-						class:active={$page.url.pathname === item.href || $page.url.pathname.startsWith(item.href + "/")}
-						title={sidebarCollapsed ? item.label : undefined}
-						aria-current={$page.url.pathname === item.href || $page.url.pathname.startsWith(item.href + "/") ? "page" : undefined}
-					>
-						<span class="netz-ws-nav-icon"><Icon size={18} strokeWidth={1.5} /></span>
-						{#if !sidebarCollapsed}
-							<span class="netz-ws-nav-label">{item.label}</span>
-						{/if}
-					</a>
-				{/each}
-			</nav>
-
-			{#if !sidebarCollapsed}
-				<div class="netz-ws-section-label">Risk & Intelligence</div>
-			{:else}
-				<div class="netz-ws-divider"></div>
-			{/if}
-			<nav class="netz-ws-nav" aria-label="Risk & Intelligence">
-				{#each navItems.slice(6, 10) as item (item.href)}
-					{@const Icon = item.icon}
-					<a
-						href={item.href}
-						class="netz-ws-nav-item"
-						class:active={$page.url.pathname === item.href || $page.url.pathname.startsWith(item.href + "/")}
-						title={sidebarCollapsed ? item.label : undefined}
-						aria-current={$page.url.pathname === item.href || $page.url.pathname.startsWith(item.href + "/") ? "page" : undefined}
-					>
-						<span class="netz-ws-nav-icon"><Icon size={18} strokeWidth={1.5} /></span>
-						{#if !sidebarCollapsed}
-							<span class="netz-ws-nav-label">{item.label}</span>
-						{/if}
-					</a>
-				{/each}
-			</nav>
-
-			{#if !sidebarCollapsed}
-				<div class="netz-ws-section-label">Content & Data</div>
-			{:else}
-				<div class="netz-ws-divider"></div>
-			{/if}
-			<nav class="netz-ws-nav" aria-label="Content & Data">
-				{#each navItems.slice(10, 12) as item (item.href)}
-					{@const Icon = item.icon}
-					<a
-						href={item.href}
-						class="netz-ws-nav-item"
-						class:active={$page.url.pathname === item.href || $page.url.pathname.startsWith(item.href + "/")}
-						title={sidebarCollapsed ? item.label : undefined}
-						aria-current={$page.url.pathname === item.href || $page.url.pathname.startsWith(item.href + "/") ? "page" : undefined}
-					>
-						<span class="netz-ws-nav-icon"><Icon size={18} strokeWidth={1.5} /></span>
-						{#if !sidebarCollapsed}
-							<span class="netz-ws-nav-label">{item.label}</span>
-						{/if}
-					</a>
-				{/each}
-			</nav>
+			</div>
 
 			<!-- Bottom controls -->
-			<div class="netz-ws-footer">
+			<div class="sidebar-footer">
 				<button
-					class="netz-ws-toggle"
+					class="sidebar-toggle"
 					onclick={() => sidebarCollapsed = !sidebarCollapsed}
 					aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
 					type="button"
 				>
 					<svg
-						class="netz-ws-toggle-icon"
+						class="sidebar-toggle-icon"
 						class:rotated={!sidebarCollapsed}
 						width="16"
 						height="16"
@@ -199,9 +192,16 @@
 		</div>
 	</aside>
 
-	<main class="netz-shell-main">
-		<!-- Top Bar: Global Search + AI Agent + Theme Toggle -->
-		<header class="netz-topbar">
+	<!-- Top Bar — direct child of grid, spans BOTH columns -->
+	<header class="netz-topbar">
+		<div class="netz-topbar-brand">
+			<span class="netz-topbar-logo">W</span>
+			{#if !sidebarCollapsed}
+				<span class="netz-topbar-appname">Wealth OS</span>
+			{/if}
+		</div>
+		<div class="netz-topbar-divider"></div>
+
 			<div class="netz-topbar-search">
 				<SearchIcon size={15} strokeWidth={1.5} class="netz-topbar-search-icon" />
 				<input
@@ -221,6 +221,7 @@
 			</div>
 		</header>
 
+	<main class="netz-shell-main">
 		<div class="netz-shell-content">
 			{@render children()}
 		</div>
@@ -228,284 +229,353 @@
 </div>
 
 <style>
-	/* ── Shell grid (replaces AppShell for direct $state reactivity) ── */
+	/* ── Shell grid — topbar spans full width, sidebar+content below ── */
 	.netz-shell {
 		display: grid;
 		grid-template-columns: var(--sidebar-w) 1fr;
+		grid-template-rows: 58px 1fr;
 		height: 100vh;
 		width: 100vw;
 		overflow: hidden;
-		transition: grid-template-columns 200ms ease;
+		transition: grid-template-columns 200ms var(--netz-ease-out, cubic-bezier(0,0,.2,1));
 	}
 
 	.netz-shell-sidebar {
+		grid-column: 1;
+		grid-row: 2;
 		overflow-y: auto;
 		overflow-x: hidden;
 		border-right: 1px solid var(--netz-border-subtle);
-		transition: width 200ms ease;
+		transition: width 200ms var(--netz-ease-out, cubic-bezier(0,0,.2,1));
 	}
 
 	.netz-shell-main {
+		grid-column: 2;
+		grid-row: 2;
 		overflow: hidden;
 		min-width: 0;
-		display: flex;
-		flex-direction: column;
 	}
 
-	/* ── Top Bar ── */
+	/* ── Top Bar — spans BOTH columns (full width) ── */
 	.netz-topbar {
+		grid-column: 1 / -1;
+		grid-row: 1;
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		padding: 0 var(--netz-space-inline-lg, 20px);
-		height: 48px;
+		gap: 0;
+		height: 58px;
 		border-bottom: 1px solid var(--netz-border-subtle);
 		background: var(--netz-surface-elevated);
 		flex-shrink: 0;
+		overflow: hidden;
+	}
+
+	/* ── Topbar brand section — aligns with sidebar width ── */
+	.netz-topbar-brand {
+		display: flex;
+		align-items: center;
+		gap: 9px;
+		width: var(--sidebar-w);
+		min-width: var(--sidebar-w);
+		max-width: var(--sidebar-w);
+		padding: 0 14px;
+		flex-shrink: 0;
+		overflow: hidden;
+		transition: width 200ms var(--netz-ease-out, cubic-bezier(0,0,.2,1)),
+		            min-width 200ms var(--netz-ease-out, cubic-bezier(0,0,.2,1));
+	}
+
+	.netz-topbar-logo {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		border-radius: var(--netz-radius-md, 6px);
+		background: var(--netz-brand-primary);
+		color: #fff;
+		font-size: 13px;
+		font-weight: 700;
+		flex-shrink: 0;
+		font-family: var(--netz-font-sans);
+	}
+
+	.netz-topbar-appname {
+		font-size: 15px;
+		font-weight: 600;
+		color: var(--netz-text-secondary);
+		white-space: nowrap;
+		overflow: hidden;
+		font-family: var(--netz-font-sans);
+	}
+
+	/* Vertical divider between brand and search */
+	.netz-topbar-divider {
+		width: 1px;
+		height: 20px;
+		background: var(--netz-border-subtle);
+		flex-shrink: 0;
+		margin: 0 16px 0 0;
 	}
 
 	.netz-topbar-search {
 		display: flex;
 		align-items: center;
-		gap: var(--netz-space-inline-xs, 6px);
+		gap: 6px;
 		height: 32px;
-		padding: 0 var(--netz-space-inline-sm, 10px);
+		padding: 0 10px;
 		border: 1px solid var(--netz-border);
-		border-radius: var(--netz-radius-sm, 8px);
-		background: var(--netz-surface);
+		border-radius: var(--netz-radius-md, 6px);
+		background: var(--netz-bg, var(--netz-surface));
 		cursor: pointer;
 		transition: border-color 120ms ease;
 		min-width: 200px;
 		max-width: 320px;
 	}
 
-	.netz-topbar-search:hover {
-		border-color: var(--netz-border-focus);
-	}
+	.netz-topbar-search:hover { border-color: var(--netz-border-focus); }
 
 	.netz-topbar-search :global(.netz-topbar-search-icon) {
-		color: var(--netz-text-muted);
-		flex-shrink: 0;
+		color: var(--netz-text-muted); flex-shrink: 0;
 	}
 
 	.netz-topbar-search-input {
-		flex: 1;
-		border: none;
-		background: transparent;
-		color: var(--netz-text-muted);
-		font-size: var(--netz-text-small, 0.8125rem);
-		font-family: var(--netz-font-sans);
-		cursor: pointer;
-		outline: none;
+		flex: 1; border: none; background: transparent;
+		color: var(--netz-text-muted); font-size: 0.8125rem;
+		font-family: var(--netz-font-sans); cursor: pointer; outline: none;
 	}
 
 	.netz-topbar-kbd {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		min-width: 20px;
-		height: 20px;
-		padding: 0 5px;
+		display: inline-flex; align-items: center; justify-content: center;
+		min-width: 20px; height: 20px; padding: 0 5px;
 		border: 1px solid var(--netz-border);
-		border-radius: 4px;
+		border-radius: var(--netz-radius-xs, 4px);
 		background: var(--netz-surface-alt);
-		color: var(--netz-text-muted);
-		font-size: 11px;
-		font-family: var(--netz-font-mono);
-		font-weight: 500;
-		line-height: 1;
+		color: var(--netz-text-muted); font-size: 11px;
+		font-family: var(--netz-font-mono); font-weight: 500; line-height: 1;
 	}
 
 	.netz-topbar-actions {
-		display: flex;
-		align-items: center;
-		gap: var(--netz-space-inline-xs, 6px);
+		display: flex; align-items: center; gap: 6px;
+		margin-left: auto;
+		padding-right: 16px;
 	}
 
 	.netz-topbar-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 32px;
-		height: 32px;
+		display: flex; align-items: center; justify-content: center;
+		width: 32px; height: 32px;
 		border: 1px solid var(--netz-border);
-		border-radius: var(--netz-radius-sm, 8px);
-		background: transparent;
-		color: var(--netz-text-secondary);
+		border-radius: var(--netz-radius-md, 6px);
+		background: transparent; color: var(--netz-text-secondary);
 		cursor: pointer;
 		transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
 	}
 
-	.netz-topbar-btn:hover {
-		color: var(--netz-text-primary);
-		background: var(--netz-surface-alt);
-	}
+	.netz-topbar-btn:hover { color: var(--netz-text-primary); background: var(--netz-surface-alt); }
 
-	.netz-topbar-btn--ai {
-		border-color: var(--netz-brand-highlight);
-		color: var(--netz-brand-highlight);
-	}
-
+	.netz-topbar-btn--ai { border-color: var(--netz-brand-highlight); color: var(--netz-brand-highlight); }
 	.netz-topbar-btn--ai:hover {
 		background: color-mix(in srgb, var(--netz-brand-highlight) 10%, transparent);
 		color: var(--netz-brand-highlight);
 	}
 
-	/* ── Scrollable content area ── */
+	/* ── Scrollable content area — TC: same bg as sidebar, 48px horiz padding ── */
 	.netz-shell-content {
 		flex: 1;
 		overflow-y: auto;
 		overflow-x: hidden;
+		padding: 0 48px;
+		background: var(--netz-bg, #f5f8fd);
 	}
 
-	/* ── Workstation OS Sidebar ── */
+	@media (max-width: 767px) {
+		.netz-shell-content {
+			padding: 0 16px;
+		}
+	}
+
+	/* ── Sidebar container — TC: no border, separation by bg only ── */
 	.netz-workstation-sidebar {
 		display: flex;
 		flex-direction: column;
 		height: 100%;
 		background: var(--netz-surface-alt);
-		border-right: 1px solid var(--netz-border-subtle);
 		overflow: hidden;
+		font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+		-webkit-font-smoothing: antialiased;
 	}
 
-	/* Header */
-	.netz-ws-header {
+	/* ── Scrollable nav ── */
+	.sidebar-nav {
+		flex: 1;
+		overflow-y: auto;
+		overflow-x: hidden;
+		scrollbar-width: thin;
+		scrollbar-color: var(--netz-border) transparent;
+	}
+
+	/* ── Section header — clickable ── */
+	.section-header {
 		display: flex;
 		align-items: center;
-		gap: 10px;
-		padding: 16px 14px;
-		border-bottom: 1px solid var(--netz-border-subtle);
-		flex-shrink: 0;
+		justify-content: space-between;
+		width: 100%;
+		padding: 6px 8px;
+		margin-top: 20px;
+		margin-bottom: 8px;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		user-select: none;
 	}
 
-	.netz-ws-header--collapsed {
-		justify-content: center;
-		padding: 16px 0;
+	.section-header:first-child {
+		margin-top: 8px;
 	}
 
-	.netz-ws-logo {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 28px;
-		height: 28px;
-		border-radius: 8px;
-		background: var(--netz-brand-primary);
-		color: #fff;
+	.section-label {
 		font-size: 14px;
-		font-weight: 700;
-		flex-shrink: 0;
-	}
-
-	.netz-ws-title {
-		font-size: 15px;
 		font-weight: 600;
 		color: var(--netz-text-primary);
-		white-space: nowrap;
 	}
 
-	/* Section labels */
-	.netz-ws-section-label {
-		padding: 16px 14px 4px;
-		font-size: 10px;
-		font-weight: 600;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
+	.section-header :global(.section-chevron) {
 		color: var(--netz-text-muted);
-		white-space: nowrap;
+		transition: transform 200ms var(--netz-ease-out, cubic-bezier(0,0,.2,1));
+		flex-shrink: 0;
 	}
 
-	.netz-ws-divider {
-		margin: 8px 12px;
-		border-top: 1px solid var(--netz-border-subtle);
+	.section-header :global(.section-chevron.open) {
+		transform: rotate(90deg);
 	}
 
-	/* Nav items */
-	.netz-ws-nav {
+	/* ── Accordion — grid trick (no height hacks) ── */
+	.section-items {
+		display: grid;
+		grid-template-rows: 0fr;
+		overflow: hidden;
+		transition: grid-template-rows 220ms var(--netz-ease-out, cubic-bezier(0,0,.2,1));
+	}
+
+	.section-items.open {
+		grid-template-rows: 1fr;
+	}
+
+	.section-items-inner {
+		min-height: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		padding: 2px 8px 4px;
+		margin-left: 12px;
+		position: relative;
+	}
+
+	.section-items-inner::before {
+		content: "";
+		position: absolute;
+		left: 0;
+		top: 4px;
+		bottom: 4px;
+		width: 1px;
+		background: var(--netz-border-subtle, #e5e7eb);
+	}
+
+	/* ── Collapsed sections ── */
+	.section-items-collapsed {
 		display: flex;
 		flex-direction: column;
 		gap: 1px;
 		padding: 4px 8px;
 	}
 
-	.netz-ws-nav-item {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		padding: 7px 10px;
-		border-radius: var(--netz-radius-sm, 8px);
-		color: var(--netz-text-secondary);
-		text-decoration: none;
-		font-size: 13px;
-		font-weight: 500;
-		line-height: 1.4;
-		white-space: nowrap;
-		transition: background-color 120ms ease, color 120ms ease;
+	.sidebar-divider {
+		margin: 6px 12px;
+		border-top: 1px solid var(--netz-border-subtle);
 	}
 
-	.netz-ws-nav-item:hover {
-		background: color-mix(in srgb, var(--netz-brand-primary) 6%, transparent);
+	/* ── Nav item — TC: 15.2px, 4px radius, #e0efff active, #f3f4f6 hover ── */
+	.nav-item {
+		display: flex;
+		align-items: center;
+		gap: 9px;
+		padding: 6px 8px;
+		border-radius: var(--netz-radius-sm, 4px);
+		color: var(--netz-text-muted);
+		font-size: 0.95rem;
+		font-weight: 500;
+		line-height: 21.7px;
+		transition: background 120ms ease, color 120ms ease;
+		text-decoration: none;
+		white-space: nowrap;
+	}
+
+	.nav-item:hover {
+		background: var(--netz-bg-hover, #f3f4f6);
 		color: var(--netz-text-primary);
 	}
 
-	.netz-ws-nav-item.active {
-		background: color-mix(in srgb, var(--netz-brand-primary) 12%, transparent);
-		color: var(--netz-brand-primary);
+	.nav-item.active {
+		background: var(--netz-surface-highlight, #e0efff);
+		color: var(--netz-text-secondary);
 		font-weight: 600;
 	}
 
-	.netz-ws-nav-icon {
+	.nav-item--icon-only {
+		justify-content: center;
+		padding: 7px 0;
+	}
+
+	.nav-icon {
 		flex-shrink: 0;
 		width: 20px;
 		height: 20px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-size: 15px;
 	}
 
-	.netz-ws-nav-label {
+	.nav-label {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		flex: 1;
 	}
 
-	/* Footer */
-	.netz-ws-footer {
+	/* ── Footer ── */
+	.sidebar-footer {
 		margin-top: auto;
 		padding: 8px;
 		border-top: 1px solid var(--netz-border-subtle);
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
+		justify-content: flex-end;
 		flex-shrink: 0;
 	}
 
-	.netz-ws-toggle {
+	.sidebar-toggle {
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		width: 32px;
 		height: 32px;
 		border: none;
-		border-radius: var(--netz-radius-sm, 6px);
+		border-radius: var(--netz-radius-md, 6px);
 		background: transparent;
 		color: var(--netz-text-muted);
 		cursor: pointer;
 		transition: color 120ms ease, background-color 120ms ease;
-		margin-left: auto;
 	}
 
-	.netz-ws-toggle:hover {
+	.sidebar-toggle:hover {
 		color: var(--netz-text-primary);
 		background: color-mix(in srgb, var(--netz-brand-primary) 8%, transparent);
 	}
 
-	.netz-ws-toggle-icon {
-		transition: transform 200ms ease;
+	.sidebar-toggle-icon {
+		transition: transform 200ms var(--netz-ease-out, cubic-bezier(0,0,.2,1));
 	}
 
-	.netz-ws-toggle-icon.rotated {
+	.sidebar-toggle-icon.rotated {
 		transform: rotate(180deg);
 	}
 </style>
