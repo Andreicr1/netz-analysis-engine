@@ -127,6 +127,11 @@ export function createClerkHook(options: ClerkHookOptions = {}): Handle {
 		const { pathname } = event.url;
 		const locals = event.locals as Record<string, unknown>;
 
+		// Static assets — skip auth (prevents redirect loops on favicon, images, etc.)
+		if (pathname.includes(".") && !pathname.endsWith(".html")) {
+			return resolve(event);
+		}
+
 		// Public routes — skip auth
 		if (publicPrefixes.some((p) => pathname.startsWith(p))) {
 			return resolve(event);
