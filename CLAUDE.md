@@ -148,7 +148,8 @@ The engine contains only analytical domains. Operational modules were intentiona
 - **Parquet schema must include embedding metadata:** All silver layer Parquet files must have `embedding_model` and `embedding_dim` columns. `search_rebuild.py` validates dimension match before upserting — prevents silent corruption on model upgrade.
 - **`organization_id` in vector search:** All pgvector queries MUST include `WHERE organization_id = :org_id` (SQL parameterized). All Parquet DuckDB queries MUST include `WHERE organization_id = ?`. Never query without tenant filter. (Azure Search files deprecated — `$filter=organization_id eq '{org_id}'` pattern no longer applies.)
 - **No Cohere dependency:** Hybrid classifier (rules → cosine_similarity → LLM) replaced Cohere Rerank. Cross-encoder reranker (`local_reranker.py`) replaced Cohere for IC memo evidence. Zero external ML API calls for classification.
-- **DB-first for external data:** All time-series external data (FRED, Treasury, OFR, Yahoo Finance) is ingested by background workers into TimescaleDB hypertables. Routes and vertical engines read from DB only — never call external APIs in user-facing requests. Workers use `pg_try_advisory_lock(ID)` with deterministic lock IDs (never `hash()`), unlock in `finally`.
+- **DB-first for external data:** All time-series external data (FRED, Treasury, OFR, Yahoo Finance, SEC EDGAR) is ingested by background workers into TimescaleDB hypertables. Routes and vertical engines read from DB only — never call external APIs in user-facing requests. Workers use `pg_try_advisory_lock(ID)` with deterministic lock IDs (never `hash()`), unlock in `finally`.
+- **SEC data providers — DB-only in hot path:** `data_providers/sec/` services expose both DB-only reads and EDGAR API calls. Routes and DD reports must use ONLY DB-only methods: `ThirteenFService.read_holdings()`, `read_holdings_for_date()`, `get_sector_aggregation()`, `get_concentration_metrics()`, `compute_diffs()`; `AdvService.fetch_manager()`, `fetch_manager_funds()`, `fetch_manager_team()`; `InstitutionalService.read_investors_in_manager()`. NEVER call `fetch_holdings()` (triggers EDGAR) or `discover_institutional_filers()` (triggers EFTS) from user-facing code — those are for `sec_13f_ingestion` and `sec_adv_ingestion` workers only.
 - **Frontend formatter discipline:** All number/date/currency formatting MUST use formatters from `@netz/ui` (`formatNumber`, `formatCurrency`, `formatPercent`, `formatDate`, `formatDateTime`, `formatShortDate`, etc.). Never use `.toFixed()`, `.toLocaleString()`, or inline `new Intl.NumberFormat`/`Intl.DateTimeFormat` in frontend code. Enforced by `frontends/eslint.config.js`.
 
 ## Vertical Engines
@@ -199,6 +200,8 @@ Background workers ingest all external time-series data into hypertables. Routes
 | `risk_calc` | 900_007 | org | `fund_risk_metrics` | Computed (CVaR, Sharpe, volatility, momentum: RSI, Bollinger, OBV) | Daily |
 | `portfolio_eval` | 900_008 | org | `portfolio_snapshots` | Computed (breach status, regime, cascade) | Daily |
 | `nport_ingestion` | 900_018 | global | `sec_nport_holdings` (3mo chunks) | SEC EDGAR N-PORT XML | Weekly |
+| `sec_13f_ingestion` | 900_021 | global | `sec_13f_holdings`, `sec_13f_diffs` | SEC EDGAR 13F-HR (edgartools) | Weekly |
+| `sec_adv_ingestion` | 900_022 | global | `sec_managers`, `sec_manager_funds` | SEC FOIA bulk CSV | Monthly |
 | `bis_ingestion` | 900_014 | global | `bis_statistics` (1yr chunks) | BIS SDMX API (credit gap, DSR, property) | Quarterly |
 | `imf_ingestion` | 900_015 | global | `imf_weo_forecasts` (1yr chunks) | IMF DataMapper API (GDP, inflation, fiscal) | Quarterly |
 | `drift_check` | 42 | org | `strategy_drift_alerts` | Computed (DTW drift) | Daily |
