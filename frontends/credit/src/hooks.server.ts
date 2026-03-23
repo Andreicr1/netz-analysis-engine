@@ -1,5 +1,5 @@
 /**
- * SvelteKit server hook — Clerk JWT + theme injection.
+ * SvelteKit server hook — Clerk JWT + theme injection + CSP header.
  */
 import { createClerkHook, createThemeHook } from "@netz/ui/utils";
 import type { Handle } from "@sveltejs/kit";
@@ -13,4 +13,27 @@ const authHook = createClerkHook({
 	publicPrefixes: ["/auth/", "/health"],
 });
 
-export const handle: Handle = sequence(authHook, createThemeHook({ defaultTheme: "light" }));
+/** CSP header — must use unsafe-inline for Clerk + FOUC prevention script. */
+const cspHook: Handle = async ({ event, resolve }) => {
+	const response = await resolve(event);
+	response.headers.set(
+		"Content-Security-Policy",
+		[
+			"default-src 'self'",
+			"script-src 'self' 'unsafe-inline' https://*.clerk.com",
+			"style-src 'self' 'unsafe-inline'",
+			"img-src 'self' data: blob: https:",
+			"connect-src 'self' https://*.clerk.com https://api.netz.app wss:",
+			"font-src 'self' data:",
+			"frame-ancestors 'none'",
+			"base-uri 'self'",
+			"form-action 'self'",
+		].join("; "),
+	);
+	response.headers.set("X-Frame-Options", "DENY");
+	response.headers.set("X-Content-Type-Options", "nosniff");
+	response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+	return response;
+};
+
+export const handle: Handle = sequence(authHook, createThemeHook({ defaultTheme: "light" }), cspHook);
