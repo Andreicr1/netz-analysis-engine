@@ -16,7 +16,7 @@ jobs:
 
   deploy-backend:
     needs: ci
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
@@ -31,7 +31,7 @@ jobs:
 
   deploy-workers:
     needs: ci
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
@@ -46,7 +46,7 @@ jobs:
 
   deploy-gateway:
     needs: ci
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
@@ -61,7 +61,7 @@ jobs:
 
   deploy-cron:
     needs: ci
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
@@ -76,14 +76,9 @@ jobs:
 
   deploy-credit:
     needs: ci
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build credit frontend
@@ -101,14 +96,9 @@ jobs:
 
   deploy-wealth:
     needs: ci
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build wealth frontend
@@ -126,14 +116,9 @@ jobs:
 
   deploy-admin:
     needs: ci
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build admin frontend

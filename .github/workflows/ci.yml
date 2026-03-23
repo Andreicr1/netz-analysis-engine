@@ -6,31 +6,7 @@ on:
 
 jobs:
   test-backend:
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: timescale/timescaledb:latest-pg16
-        env:
-          POSTGRES_USER: netz
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: netz_engine_test
-          POSTGRES_HOST_AUTH_METHOD: trust
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U netz"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=5
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd="redis-cli ping"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=5
+    runs-on: self-hosted
 
     env:
       DATABASE_URL: postgresql+asyncpg://netz:password@localhost:5432/netz_engine_test
@@ -39,28 +15,26 @@ jobs:
       APP_ENV: development
 
     steps:
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-          sudo docker image prune --all --force
-          df -h
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+
+      - name: Ensure test database exists
+        run: |
+          docker exec $(docker ps -q --filter ancestor=timescale/timescaledb:latest-pg16) psql -U netz -tc "SELECT 1 FROM pg_database WHERE datname='netz_engine_test'" | findstr "1" || docker exec $(docker ps -q --filter ancestor=timescale/timescaledb:latest-pg16) psql -U netz -c "CREATE DATABASE netz_engine_test"
+        shell: cmd
+
       - name: Install dependencies
         run: pip install -e ".[dev,ai,quant]"
+
       - name: Run migrations
         run: python -m alembic upgrade head
         working-directory: backend
         env:
           DATABASE_URL: postgresql+psycopg://netz:password@localhost:5432/netz_engine_test
+
       - name: Lint
         run: python -m ruff check .
         working-directory: backend
+
       - name: Test
         run: python -m pytest tests/ -v --tb=short
         working-directory: backend
