@@ -5,5 +5,3 @@ pages_build_output_dir = ".svelte-kit/cloudflare"
 
 [vars]
 PUBLIC_BACKEND_URL = "https://api.netz.app"
-PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_test_Y2FwaXRhbC10YXJwb24tNDIuY2xlcmsuYWNjb3VudHMuZGV2JA"
-CLERK_JWKS_URL = "https://capital-tarpon-42.clerk.accounts.dev/.well-known/jwks.json"
