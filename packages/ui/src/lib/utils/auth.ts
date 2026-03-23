@@ -156,7 +156,14 @@ export function createClerkHook(options: ClerkHookOptions = {}): Handle {
 				locals.token = devToken;
 				return resolve(event);
 			}
-			// Dynamic import to avoid importing @sveltejs/kit at module level
+			// Clerk dev keys use __client_uat cookie (not __session) to track sessions.
+			// If __client_uat > 0, user is signed in on client side — let the request
+			// through without actor. Client-side Clerk handles auth state, backend API
+			// verifies JWT on every call. Redirecting here causes infinite loops.
+			const clerkUat = event.cookies.get("__client_uat");
+			if (clerkUat && clerkUat !== "0") {
+				return resolve(event);
+			}
 			const { redirect } = await import("@sveltejs/kit");
 			throw redirect(303, "/auth/sign-in");
 		}
