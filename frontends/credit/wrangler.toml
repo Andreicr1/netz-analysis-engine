@@ -4,6 +4,6 @@ compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = ".svelte-kit/cloudflare"
 
 [vars]
-VITE_API_BASE_URL = "https://rio-associations-craps-furniture.trycloudflare.com/api/v1"
+VITE_API_BASE_URL = "https://api.wmf-corp.com/api/v1"
 PUBLIC_CLERK_PUBLISHABLE_KEY = "pk_test_Y2FwaXRhbC10YXJwb24tNDIuY2xlcmsuYWNjb3VudHMuZGV2JA"
 CLERK_JWKS_URL = "https://capital-tarpon-42.clerk.accounts.dev/.well-known/jwks.json"
