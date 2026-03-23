@@ -365,8 +365,8 @@
 		<RebalancingTab
 			{profile}
 			currentWeights={snapshot?.weights ?? {}}
-			cvarCurrent={live?.cvar_current ?? portfolio?.cvar_current ?? null}
-			cvarLimit={live?.cvar_limit ?? portfolio?.cvar_limit ?? null}
+			cvarCurrent={Number(live?.cvar_current ?? portfolio?.cvar_current) || null}
+			cvarLimit={Number(live?.cvar_limit ?? portfolio?.cvar_limit) || null}
 		/>
 	{:else if activeTab === "benchmark"}
 		<!-- ── BENCHMARK VIEW ─────────────────────────────────────────── -->
