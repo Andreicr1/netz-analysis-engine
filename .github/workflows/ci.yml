@@ -63,3 +63,22 @@ jobs:
       - name: Test
         run: python -m pytest tests/ -v --tb=short
         working-directory: backend
+
+  check-frontends:
+    needs: changes
+    if: needs.changes.outputs.frontends == 'true'
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build shared UI package
+        run: pnpm --filter @netz/ui build
+      - name: Lint all frontends
+        run: pnpm --filter "./frontends/*" lint
+      - name: Type-check all frontends
+        run: pnpm --filter "./frontends/*" check
+      - name: Build all frontends
+        run: pnpm --filter "./frontends/*" build
+      - name: Run UI unit tests
+        run: pnpm --filter @netz/ui test
