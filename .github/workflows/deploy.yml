@@ -26,6 +26,7 @@ jobs:
         shell: pwsh
         run: |
           Set-Location $env:GITHUB_WORKSPACE
+          git config --global --add safe.directory $env:GITHUB_WORKSPACE
           Write-Host "Working directory: $(Get-Location)"
           Write-Host "Git status check: $(git rev-parse --git-dir 2>&1)"
           $diff = git diff --name-only HEAD~1 HEAD 2>&1
