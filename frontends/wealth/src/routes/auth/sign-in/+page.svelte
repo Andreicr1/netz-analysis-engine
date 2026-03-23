@@ -13,7 +13,23 @@
 	onMount(async () => {
 		if (DEV_MODE || !browser || !CLERK_PK) return;
 
-		const { Clerk } = await import("@clerk/clerk-js");
+		// Load Clerk via CDN to ensure UI components are included
+		// (npm dynamic import tree-shakes the UI bundle on Cloudflare Pages)
+		await new Promise<void>((resolve, reject) => {
+			if (document.querySelector('script[data-clerk-script]')) {
+				resolve();
+				return;
+			}
+			const script = document.createElement("script");
+			script.setAttribute("data-clerk-script", "");
+			script.async = true;
+			script.src = `https://cdn.jsdelivr.net/npm/@clerk/clerk-js@latest/dist/clerk.browser.js`;
+			script.onload = () => resolve();
+			script.onerror = () => reject(new Error("Failed to load Clerk"));
+			document.head.appendChild(script);
+		});
+
+		const Clerk = (window as any).Clerk;
 		const clerk = new Clerk(CLERK_PK);
 		await clerk.load();
 
