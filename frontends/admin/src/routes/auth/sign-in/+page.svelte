@@ -18,11 +18,11 @@
 		const clerk = new Clerk(CLERK_PK);
 		await clerk.load();
 
-		const el = document.getElementById("clerk-sign-in");
+		const el = document.getElementById("clerk-sign-in") as HTMLDivElement | null;
 		if (el) {
 			el.innerHTML = "";
 			clerk.mountSignIn(el, {
-				afterSignInUrl: "/",
+				fallbackRedirectUrl: "/",
 				appearance: {
 					variables: { colorPrimary: "#374151" },
 				},

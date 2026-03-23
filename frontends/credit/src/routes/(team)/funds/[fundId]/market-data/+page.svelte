@@ -55,8 +55,8 @@
 		return seriesIds
 			.filter((sid) => section[sid]?.points?.length)
 			.map((sid) => ({
-				name: section[sid].label,
-				data: section[sid].points.map((p: SeriesPoint) => [p.date, p.value] as [string, number]),
+				name: section[sid]!.label,
+				data: section[sid]!.points.map((p: SeriesPoint) => [p.date, p.value] as [string, number]),
 			}));
 	}
 
@@ -141,13 +141,10 @@
 	let stressSeries = $derived(toChartSeries("banking", ["STLFSI4"]));
 </script>
 
-<PageHeader
-	title="Market Data"
-	subtitle="Credit market indicators from FRED — deterministic, DB-sourced"
-/>
+<PageHeader title="Market Data" />
 
 {#if !md}
-	<EmptyState message="Market data unavailable. Macro ingestion worker may not have run yet." />
+	<EmptyState title="No Market Data" message="Market data unavailable. Macro ingestion worker may not have run yet." />
 {:else}
 	<!-- Provenance banner -->
 	<div class="mb-6 flex items-center gap-2 rounded-(--netz-radius-md) border border-(--netz-border-subtle) bg-(--netz-surface-highlight) px-4 py-2 text-xs text-(--netz-text-muted)">
