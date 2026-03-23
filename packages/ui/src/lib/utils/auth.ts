@@ -180,9 +180,19 @@ export function createClerkHook(options: ClerkHookOptions = {}): Handle {
 				// No JWKS configured — decode without verification (dev fallback).
 				// Backend still verifies on every API call (defense in depth).
 				const parts = token.split(".");
-				if (parts.length !== 3) throw new Error("Invalid JWT");
-				const payload = JSON.parse(atob(parts[1]!));
-				locals.actor = actorFromClaims(payload);
+				if (parts.length === 3) {
+					try {
+						// Standard JWT — decode payload
+						const payload = JSON.parse(atob(parts[1]!.replace(/-/g, "+").replace(/_/g, "/")));
+						locals.actor = actorFromClaims(payload);
+					} catch {
+						// Non-standard token (Clerk dev session token) — use default dev actor
+						locals.actor = DEFAULT_DEV_ACTOR;
+					}
+				} else {
+					// Not a JWT at all — use default dev actor
+					locals.actor = DEFAULT_DEV_ACTOR;
+				}
 			}
 			locals.token = token;
 		} catch (err) {

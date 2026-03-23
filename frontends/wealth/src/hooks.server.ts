@@ -4,9 +4,25 @@
 import { createClerkHook, createThemeHook } from "@netz/ui/utils";
 import type { Handle } from "@sveltejs/kit";
 import { sequence } from "@sveltejs/kit/hooks";
+import { env } from "$env/dynamic/private";
+import { env as pubEnv } from "$env/dynamic/public";
 
-const CLERK_JWKS_URL = process.env.CLERK_JWKS_URL ?? import.meta.env.VITE_CLERK_JWKS_URL;
-const DEV_TOKEN = import.meta.env.VITE_DEV_TOKEN ?? process.env.DEV_TOKEN ?? "dev-token";
+/** Derive Clerk JWKS URL from publishable key if not explicitly set.
+ *  pk_test_Y2Fw... → base64 decode → capital-tarpon-42.clerk.accounts.dev
+ */
+function deriveJwksUrl(pk: string): string {
+	try {
+		const encoded = pk.replace(/^pk_(test|live)_/, "");
+		const domain = atob(encoded).replace(/\$$/, "");
+		return `https://${domain}/.well-known/jwks.json`;
+	} catch {
+		return "";
+	}
+}
+
+const PK = pubEnv.PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
+const CLERK_JWKS_URL = env.CLERK_JWKS_URL || deriveJwksUrl(PK);
+const DEV_TOKEN = env.DEV_TOKEN ?? "dev-token";
 
 const authHook = createClerkHook({
 	jwksUrl: CLERK_JWKS_URL,
