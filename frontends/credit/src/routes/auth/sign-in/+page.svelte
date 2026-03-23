@@ -3,7 +3,30 @@
   First impression of the credit intelligence platform: precise, authoritative, data-driven.
 -->
 <script lang="ts">
+	import { onMount } from "svelte";
+	import { browser } from "$app/environment";
+
 	const DEV_MODE = import.meta.env.DEV;
+	const CLERK_PK = import.meta.env.PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
+
+	onMount(async () => {
+		if (DEV_MODE || !browser || !CLERK_PK) return;
+
+		const { Clerk } = await import("@clerk/clerk-js");
+		const clerk = new Clerk(CLERK_PK);
+		await clerk.load();
+
+		const el = document.getElementById("clerk-sign-in");
+		if (el) {
+			el.innerHTML = "";
+			clerk.mountSignIn(el, {
+				afterSignInUrl: "/",
+				appearance: {
+					variables: { colorPrimary: "#2563eb" },
+				},
+			});
+		}
+	});
 </script>
 
 <div class="sign-in-shell">

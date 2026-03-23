@@ -20,10 +20,10 @@ const cspHook: Handle = async ({ event, resolve }) => {
 		"Content-Security-Policy",
 		[
 			"default-src 'self'",
-			"script-src 'self' 'unsafe-inline' https://*.clerk.com",
+			"script-src 'self' 'unsafe-inline' https://*.clerk.com https://*.clerk.accounts.dev",
 			"style-src 'self' 'unsafe-inline'",
 			"img-src 'self' data: blob: https:",
-			"connect-src 'self' https://*.clerk.com https://api.netz.app wss:",
+			"connect-src 'self' https://*.clerk.com https://*.clerk.accounts.dev https://api.netz.app wss:",
 			"font-src 'self' data:",
 			"frame-ancestors 'none'",
 			"base-uri 'self'",

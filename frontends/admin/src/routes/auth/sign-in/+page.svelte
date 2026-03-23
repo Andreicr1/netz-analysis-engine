@@ -3,9 +3,32 @@
   First impression of the governance console: authoritative, restrained, secure.
 -->
 <script lang="ts">
+	import { onMount } from "svelte";
+	import { browser } from "$app/environment";
 	import { page } from "$app/state";
+
 	const DEV_MODE = import.meta.env.DEV;
+	const CLERK_PK = import.meta.env.PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
 	const error = $derived(page.url.searchParams.get("error"));
+
+	onMount(async () => {
+		if (DEV_MODE || !browser || !CLERK_PK) return;
+
+		const { Clerk } = await import("@clerk/clerk-js");
+		const clerk = new Clerk(CLERK_PK);
+		await clerk.load();
+
+		const el = document.getElementById("clerk-sign-in");
+		if (el) {
+			el.innerHTML = "";
+			clerk.mountSignIn(el, {
+				afterSignInUrl: "/",
+				appearance: {
+					variables: { colorPrimary: "#374151" },
+				},
+			});
+		}
+	});
 </script>
 
 <div class="sign-in-shell">

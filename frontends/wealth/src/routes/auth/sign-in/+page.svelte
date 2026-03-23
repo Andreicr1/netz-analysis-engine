@@ -3,7 +3,32 @@
   First impression of the wealth platform: refined, composed, institutional trust.
 -->
 <script lang="ts">
+	import { onMount } from "svelte";
+	import { browser } from "$app/environment";
+
 	const DEV_MODE = import.meta.env.DEV;
+	const CLERK_PK = import.meta.env.PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
+
+	onMount(async () => {
+		if (DEV_MODE || !browser || !CLERK_PK) return;
+
+		const { Clerk } = await import("@clerk/clerk-js");
+		const clerk = new Clerk(CLERK_PK);
+		await clerk.load();
+
+		const el = document.getElementById("clerk-sign-in");
+		if (el) {
+			el.innerHTML = "";
+			clerk.mountSignIn(el, {
+				afterSignInUrl: "/",
+				appearance: {
+					variables: {
+						colorPrimary: "#6366f1",
+					},
+				},
+			});
+		}
+	});
 </script>
 
 <div class="sign-in-shell">
@@ -50,7 +75,6 @@
 						</a>
 					</div>
 				{:else}
-					<!-- svelte-clerk SignIn component will be mounted here -->
 					<div id="clerk-sign-in" class="sign-in-clerk">
 						<p class="sign-in-clerk__loading">Loading authentication...</p>
 					</div>
