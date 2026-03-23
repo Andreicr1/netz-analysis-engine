@@ -19,8 +19,11 @@ jobs:
 
       - name: Ensure test database exists
         run: |
-          docker exec $(docker ps -q --filter ancestor=timescale/timescaledb:latest-pg16) psql -U netz -tc "SELECT 1 FROM pg_database WHERE datname='netz_engine_test'" | findstr "1" || docker exec $(docker ps -q --filter ancestor=timescale/timescaledb:latest-pg16) psql -U netz -c "CREATE DATABASE netz_engine_test"
-        shell: cmd
+          docker exec netz-analysis-engine-db-1 psql -U netz -tc "SELECT 1 FROM pg_database WHERE datname='netz_engine_test'" | Out-Null
+          if ($LASTEXITCODE -ne 0 -or -not (docker exec netz-analysis-engine-db-1 psql -U netz -tc "SELECT 1 FROM pg_database WHERE datname='netz_engine_test'" | Select-String "1")) {
+            docker exec netz-analysis-engine-db-1 psql -U netz -c "CREATE DATABASE netz_engine_test"
+          }
+        shell: pwsh
 
       - name: Install dependencies
         run: pip install -e ".[dev,ai,quant]"
