@@ -47,7 +47,7 @@
 <a
 	{href}
 	class={cn(
-		"inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium tracking-[-0.01em] transition-[color,background-color,border-color,box-shadow,transform] duration-(--netz-duration-fast) ease-(--netz-ease-out) focus-visible:outline-none focus-visible:shadow-(--netz-shadow-focus)",
+		"inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium tracking-[-0.01em] [font-feature-settings:var(--netz-font-features)] transition-[color,background-color,border-color,box-shadow,transform] duration-(--netz-duration-fast) ease-(--netz-ease-out) focus-visible:outline-none focus-visible:shadow-(--netz-shadow-focus)",
 		variantStyles[variant],
 		sizeStyles[size],
 		className,
@@ -58,7 +58,7 @@
 {:else}
 <button
 	class={cn(
-		"inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium tracking-[-0.01em] transition-[color,background-color,border-color,box-shadow,transform] duration-(--netz-duration-fast) ease-(--netz-ease-out) focus-visible:outline-none focus-visible:shadow-(--netz-shadow-focus) disabled:pointer-events-none disabled:translate-y-0 disabled:shadow-none disabled:opacity-50",
+		"inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium tracking-[-0.01em] [font-feature-settings:var(--netz-font-features)] transition-[color,background-color,border-color,box-shadow,transform] duration-(--netz-duration-fast) ease-(--netz-ease-out) focus-visible:outline-none focus-visible:shadow-(--netz-shadow-focus) disabled:pointer-events-none disabled:translate-y-0 disabled:shadow-none disabled:opacity-50",
 		variantStyles[variant],
 		sizeStyles[size],
 		className,

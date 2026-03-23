@@ -1,23 +1,40 @@
 /* ============================================================
  * Netz Design Tokens - Typography
- * Calm editorial hierarchy for dense executive interfaces.
+ * Thunder Client exact measurements (getComputedStyle).
  * ============================================================ */
 
-@import "@fontsource-variable/inter";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-sans/700.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
 
 :root {
 	/* Font families */
-	--netz-font-sans: "Inter Variable", Inter, system-ui, sans-serif;
-	--netz-font-mono: "JetBrains Mono", monospace;
+	--netz-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+	--netz-font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Monaco, monospace;
 
-	/* Display and heading sizes */
-	--netz-text-display: clamp(2.5rem, 2.1rem + 1.8vw, 3.25rem);
-	--netz-text-h1: clamp(2.125rem, 1.85rem + 1.2vw, 2.625rem);
-	--netz-text-h2: clamp(1.75rem, 1.55rem + 0.85vw, 2.125rem);
-	--netz-text-h3: 1.375rem;
+	/* Font feature settings — TC style */
+	--netz-font-features: "rlig" 1, "calt" 1, "ss01" 1;
+
+	/* ── Scale — TC exact ── */
+	--netz-text-xs: 11px;       /* KBD, meta labels */
+	--netz-text-sm: 14px;       /* breadcrumb, TOC, secondary */
+	--netz-text-base: 16px;     /* body, paragraphs */
+	--netz-text-md: 15px;       /* nav items sidebar */
+	--netz-text-lg: 20px;       /* subtítulos menores */
+
+	/* Heading sizes — TC exact (px from getComputedStyle) */
+	--netz-text-h1: 30.4px;
+	--netz-text-h2: 27.2px;
+	--netz-text-h3: 24px;
 	--netz-text-h4: 1.125rem;
 	--netz-text-h5: 1rem;
 	--netz-text-h6: 0.9375rem;
+
+	/* Display (hero / marketing — larger than H1) */
+	--netz-text-display: clamp(2.5rem, 2.1rem + 1.8vw, 3.25rem);
 
 	/* Body sizes */
 	--netz-text-body-lg: 1rem;
@@ -27,11 +44,17 @@
 	--netz-text-caption: 0.75rem;
 	--netz-text-mono: 0.875rem;
 
-	/* Line heights */
+	/* ── Line heights — TC exact ── */
+	--netz-leading-tight: 1.11;     /* H1: 33.8/30.4 */
+	--netz-leading-snug: 1.33;      /* H3: 32/24 */
+	--netz-leading-normal: 1.5;     /* base */
+	--netz-leading-relaxed: 1.75;   /* body paragraphs: 28/16 */
+
+	/* Per-level line heights */
 	--netz-leading-display: 1.08;
-	--netz-leading-h1: 1.12;
-	--netz-leading-h2: 1.18;
-	--netz-leading-h3: 1.24;
+	--netz-leading-h1: 1.11;
+	--netz-leading-h2: 1.20;       /* TC: 32.6/27.2 */
+	--netz-leading-h3: 1.33;       /* TC: 32/24 */
 	--netz-leading-h4: 1.3;
 	--netz-leading-h5: 1.35;
 	--netz-leading-h6: 1.4;
@@ -42,11 +65,15 @@
 	--netz-leading-caption: 1.45;
 	--netz-leading-mono: 1.55;
 
-	/* Letter spacing */
+	/* ── Letter spacing — TC: -0.025em for ALL headings ── */
+	--netz-tracking-tight: -0.025em;
+	--netz-tracking-normal: normal;
+	--netz-tracking-wide: 0.07em;
+
 	--netz-tracking-display: -0.035em;
-	--netz-tracking-h1: -0.03em;
-	--netz-tracking-h2: -0.026em;
-	--netz-tracking-h3: -0.02em;
+	--netz-tracking-h1: -0.025em;
+	--netz-tracking-h2: -0.025em;
+	--netz-tracking-h3: -0.025em;
 	--netz-tracking-h4: -0.014em;
 	--netz-tracking-h5: -0.01em;
 	--netz-tracking-h6: -0.006em;
@@ -56,15 +83,41 @@
 	--netz-tracking-caption: 0.01em;
 	--netz-tracking-mono: -0.02em;
 
-	/* Font weights */
+	/* ── Font weights ── */
 	--netz-weight-normal: 400;
 	--netz-weight-medium: 500;
 	--netz-weight-semibold: 600;
 	--netz-weight-display: 650;
 	--netz-weight-bold: 700;
 
-	/* Measures */
+	/* ── Heading margins (margin-top) — TC exact ── */
+	--netz-heading-h1-mt: 16px;
+	--netz-heading-h2-mt: 40px;
+	--netz-heading-h3-mt: 32px;
+	--netz-paragraph-mt: 20px;
+
+	/* ── Measures ── */
 	--netz-measure-compact: 48ch;
 	--netz-measure-body: 70ch;
 	--netz-measure-wide: 82ch;
+}
+
+/* ── Component tokens — theme-specific ── */
+
+[data-theme="light"], :root {
+	--netz-link-color: #006be6;
+	--netz-link-hover-color: #0055c8;
+	--netz-code-bg: rgba(147, 141, 189, 0.23);
+	--netz-code-border: rgba(0, 0, 0, 0.04);
+	--netz-kbd-bg: #fafafa;
+	--netz-kbd-border: #e5e7eb;
+}
+
+[data-theme="dark"] {
+	--netz-link-color: #60b0ff;
+	--netz-link-hover-color: #90c8ff;
+	--netz-code-bg: rgba(147, 141, 189, 0.15);
+	--netz-code-border: rgba(255, 255, 255, 0.06);
+	--netz-kbd-bg: #1e1e1e;
+	--netz-kbd-border: #333333;
 }

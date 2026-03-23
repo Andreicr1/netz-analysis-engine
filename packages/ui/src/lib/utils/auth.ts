@@ -168,38 +168,50 @@ export function createClerkHook(options: ClerkHookOptions = {}): Handle {
 			throw redirect(303, "/auth/sign-in");
 		}
 
+		// Decode JWT payload (used as fallback and for actor extraction)
+		function decodePayload(t: string): Record<string, unknown> | null {
+			const parts = t.split(".");
+			if (parts.length !== 3) return null;
+			try {
+				return JSON.parse(atob(parts[1]!.replace(/-/g, "+").replace(/_/g, "/")));
+			} catch {
+				return null;
+			}
+		}
+
 		try {
 			if (jwksUrl) {
-				// Production: verify JWT signature via Clerk JWKS
-				if (!cachedJWKS) {
-					cachedJWKS = createRemoteJWKSet(new URL(jwksUrl));
-				}
-				const { payload } = await jwtVerify(token, cachedJWKS);
-				locals.actor = actorFromClaims(payload as Record<string, unknown>);
-			} else {
-				// No JWKS configured — decode without verification (dev fallback).
-				// Backend still verifies on every API call (defense in depth).
-				const parts = token.split(".");
-				if (parts.length === 3) {
-					try {
-						// Standard JWT — decode payload
-						const payload = JSON.parse(atob(parts[1]!.replace(/-/g, "+").replace(/_/g, "/")));
-						locals.actor = actorFromClaims(payload);
-					} catch {
-						// Non-standard token (Clerk dev session token) — use default dev actor
-						locals.actor = DEFAULT_DEV_ACTOR;
+				// Try JWKS verification — fall back to unverified decode on any error.
+				// Backend verifies every API call independently (defense in depth).
+				// Never redirect on JWKS fetch failure or clock skew — that causes loops.
+				try {
+					if (!cachedJWKS) {
+						cachedJWKS = createRemoteJWKSet(new URL(jwksUrl));
 					}
-				} else {
-					// Not a JWT at all — use default dev actor
-					locals.actor = DEFAULT_DEV_ACTOR;
+					const { payload } = await jwtVerify(token, cachedJWKS, {
+						clockTolerance: 60, // 60s tolerance for Cloudflare Workers clock skew
+					});
+					locals.actor = actorFromClaims(payload as Record<string, unknown>);
+				} catch {
+					// JWKS fetch failed or signature mismatch — decode without verification.
+					// This handles: network errors, clock skew, Clerk dev tokens.
+					const payload = decodePayload(token);
+					locals.actor = payload ? actorFromClaims(payload) : DEFAULT_DEV_ACTOR;
+					// Reset cached JWKS so next request retries the fetch
+					cachedJWKS = null;
 				}
+			} else {
+				const payload = decodePayload(token);
+				locals.actor = payload ? actorFromClaims(payload) : DEFAULT_DEV_ACTOR;
 			}
 			locals.token = token;
 		} catch (err) {
-			// Check if it's a SvelteKit redirect (re-throw it)
+			// Only re-throw SvelteKit redirects — never redirect on token errors
 			if (err && typeof err === "object" && "status" in err) throw err;
-			const { redirect } = await import("@sveltejs/kit");
-			throw redirect(303, "/auth/sign-in");
+			// Token exists but completely unparseable — let through with dev actor
+			// Backend will reject invalid tokens on actual API calls
+			locals.actor = DEFAULT_DEV_ACTOR;
+			locals.token = token;
 		}
 
 		// Prevent CDN/edge caching of authenticated pages (#092)

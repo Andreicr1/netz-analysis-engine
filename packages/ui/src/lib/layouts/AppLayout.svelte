@@ -51,13 +51,28 @@
 		}
 	});
 
-	// Session expiry monitor
+	// Session expiry monitor — only warn if token has > 10 min remaining.
+	// Clerk tokens are short-lived (~1 min) and auto-renewed by Clerk JS.
+	// Showing a warning for auto-renewed tokens is a false positive.
 	$effect(() => {
 		if (token && token !== "dev-token") {
-			const cleanup = startSessionExpiryMonitor(token, () => {
-				showExpiryWarning = true;
-			});
-			return cleanup;
+			try {
+				const parts = token.split(".");
+				if (parts.length === 3) {
+					const payload = JSON.parse(atob(parts[1]!.replace(/-/g, "+").replace(/_/g, "/")));
+					const exp = payload.exp;
+					// Only start monitor if token lives longer than 10 minutes from now
+					// (i.e., not a short-lived Clerk session token)
+					if (typeof exp === "number" && (exp * 1000) - Date.now() > 10 * 60 * 1000) {
+						const cleanup = startSessionExpiryMonitor(token, () => {
+							showExpiryWarning = true;
+						});
+						return cleanup;
+					}
+				}
+			} catch {
+				// Non-standard token — skip monitor
+			}
 		}
 	});
 

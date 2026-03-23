@@ -1,6 +1,7 @@
 /* ============================================================
  * @netz/ui - Design System Entry Point
  * Import this file to get all tokens, resets, and base styles.
+ * Thunder Client typography & component alignment.
  * ============================================================ */
 
 @import "./tokens.css";
@@ -9,17 +10,20 @@
 @import "./shadows.css";
 @import "./animations.css";
 
+/* ── Global reset ── */
+
 *,
 *::before,
 *::after {
 	box-sizing: border-box;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
 
 html {
 	background-color: var(--netz-surface);
-	-webkit-font-smoothing: antialiased;
-	-moz-osx-font-smoothing: grayscale;
 	text-rendering: optimizeLegibility;
+	font-feature-settings: var(--netz-font-features, "rlig" 1, "calt" 1, "ss01" 1);
 }
 
 body {
@@ -34,7 +38,7 @@ body {
 	background-image: var(--netz-page-background);
 	background-repeat: no-repeat;
 	background-attachment: fixed;
-	font-feature-settings: "cv02" 1, "cv03" 1, "cv04" 1, "cv11" 1;
+	font-feature-settings: var(--netz-font-features);
 }
 
 ::selection {
@@ -62,6 +66,8 @@ button {
 	cursor: pointer;
 }
 
+/* ── Inline code — TC: purple-tinted bg, NOT grey ── */
+
 code,
 kbd,
 pre,
@@ -72,12 +78,24 @@ samp {
 	letter-spacing: var(--netz-tracking-mono);
 }
 
-code,
+code:not(pre code) {
+	font-size: 0.9em;
+	background: var(--netz-code-bg, rgba(147, 141, 189, 0.23));
+	border: 0.67px solid var(--netz-code-border, rgba(0, 0, 0, 0.04));
+	border-radius: 5.4px;
+	padding: 0.1em 0.3em;
+	color: var(--netz-text-primary);
+}
+
 kbd {
-	padding-inline: 0.35em;
-	padding-block: 0.15em;
-	border-radius: 8px;
-	background: var(--netz-surface-accent);
+	font-family: var(--netz-font-mono);
+	font-size: var(--netz-text-xs, 11px);
+	font-weight: var(--netz-weight-medium, 500);
+	line-height: 20px;
+	padding: 0 6px;
+	background: var(--netz-kbd-bg, #fafafa);
+	border: 0.67px solid var(--netz-kbd-border, #e5e7eb);
+	border-radius: var(--netz-radius-sm, 4px);
 	color: var(--netz-text-primary);
 }
 
@@ -90,6 +108,8 @@ pre {
 	box-shadow: var(--netz-shadow-1);
 }
 
+/* ── Headings — TC: blue institutional color, tight tracking ── */
+
 h1,
 h2,
 h3,
@@ -97,13 +117,14 @@ h4,
 h5,
 h6 {
 	margin: 0;
-	color: var(--netz-text-primary);
+	color: var(--netz-text-secondary);
 	text-wrap: balance;
+	font-feature-settings: var(--netz-font-features);
 }
 
 h1,
 h2 {
-	font-weight: var(--netz-weight-display);
+	font-weight: var(--netz-weight-semibold);
 }
 
 h3,
@@ -117,18 +138,23 @@ h1 {
 	font-size: var(--netz-text-h1);
 	line-height: var(--netz-leading-h1);
 	letter-spacing: var(--netz-tracking-h1);
+	margin-top: var(--netz-heading-h1-mt);
 }
 
 h2 {
 	font-size: var(--netz-text-h2);
 	line-height: var(--netz-leading-h2);
 	letter-spacing: var(--netz-tracking-h2);
+	margin-top: var(--netz-heading-h2-mt);
+	padding-bottom: 4px;
+	border-bottom: 1px solid var(--netz-border-subtle);
 }
 
 h3 {
 	font-size: var(--netz-text-h3);
 	line-height: var(--netz-leading-h3);
 	letter-spacing: var(--netz-tracking-h3);
+	margin-top: var(--netz-heading-h3-mt);
 }
 
 h4 {
@@ -149,7 +175,18 @@ h6 {
 	letter-spacing: var(--netz-tracking-h6);
 }
 
-p,
+/* ── Body text — TC: line-height 1.75 for paragraphs ── */
+
+p {
+	margin: 0;
+	line-height: var(--netz-leading-relaxed);
+	margin-top: var(--netz-paragraph-mt);
+}
+
+p:first-child {
+	margin-top: 0;
+}
+
 ul,
 ol,
 dl,
@@ -166,20 +203,23 @@ small {
 strong,
 b {
 	color: var(--netz-text-primary);
-	font-weight: var(--netz-weight-semibold);
+	font-weight: var(--netz-weight-bold);
 }
 
+/* ── Links — TC: primary-600 (#006be6) ── */
+
 a {
-	color: var(--netz-brand-secondary);
+	color: var(--netz-link-color, var(--netz-brand-secondary));
+	text-decoration: underline;
 	text-decoration-color: color-mix(in srgb, currentColor 28%, transparent);
 	text-decoration-thickness: 0.08em;
 	text-underline-offset: 0.18em;
-	transition: var(--netz-transition-color);
+	transition: color 120ms ease;
 }
 
 a:hover {
-	color: var(--netz-brand-primary);
-	text-decoration-color: currentColor;
+	color: var(--netz-link-hover-color, var(--netz-brand-primary));
+	text-decoration: none;
 }
 
 hr {
@@ -188,6 +228,8 @@ hr {
 	border: 0;
 	background: var(--netz-border-subtle);
 }
+
+/* ── Form inputs ── */
 
 :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea) {
 	border: 1px solid var(--netz-border-subtle);
@@ -220,6 +262,8 @@ a:focus-visible {
 	outline-offset: 3px;
 	border-radius: 6px;
 }
+
+/* ── Utility classes ── */
 
 .netz-ui-surface {
 	background: var(--netz-surface-elevated);

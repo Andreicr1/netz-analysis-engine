@@ -51,7 +51,7 @@
 
 <style>
 	.netz-page-header {
-		padding: 24px 0 16px;
+		padding: 0;
 	}
 
 	.netz-page-header__breadcrumbs ol {
@@ -59,9 +59,12 @@
 		align-items: center;
 		gap: 0;
 		list-style: none;
-		margin: 0 0 8px;
+		margin: 0 0 6px;
 		padding: 0;
-		font-size: 13px;
+		font-size: var(--netz-text-sm, 14px);
+		font-weight: var(--netz-weight-normal, 400);
+		line-height: 20px;
+		color: var(--netz-text-muted);
 	}
 
 	.netz-page-header__breadcrumbs li {
@@ -70,23 +73,23 @@
 	}
 
 	.netz-page-header__crumb-link {
-		color: var(--netz-text-muted, #9ca3af);
+		color: var(--netz-text-muted);
 		text-decoration: none;
 		transition: color 120ms ease;
 	}
 
 	.netz-page-header__crumb-link:hover {
-		color: var(--netz-text-primary, #111827);
+		color: var(--netz-text-primary);
 		text-decoration: underline;
 	}
 
 	.netz-page-header__crumb-text {
-		color: var(--netz-text-secondary, #6b7280);
+		color: var(--netz-text-secondary);
 	}
 
 	.netz-page-header__crumb-sep {
 		margin: 0 6px;
-		color: var(--netz-text-muted, #9ca3af);
+		color: var(--netz-text-muted);
 		font-size: 11px;
 	}
 
@@ -99,11 +102,14 @@
 	}
 
 	.netz-page-header__title {
-		margin: 0;
-		font-size: var(--netz-text-h2, 1.5rem);
-		font-weight: 700;
-		color: var(--netz-text-primary, #111827);
-		line-height: 1.3;
+		margin: 16px 0 0;
+		font-size: var(--netz-text-h1, 30.4px);
+		font-weight: var(--netz-weight-semibold, 600);
+		line-height: var(--netz-leading-tight, 1.11);
+		letter-spacing: var(--netz-tracking-tight, -0.025em);
+		color: var(--netz-text-secondary);
+		font-feature-settings: var(--netz-font-features, "rlig" 1, "calt" 1, "ss01" 1);
+		-webkit-font-smoothing: antialiased;
 	}
 
 	.netz-page-header__actions {
