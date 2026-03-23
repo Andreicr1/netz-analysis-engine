@@ -27,6 +27,7 @@ dist/
 .env.*.local
 .env.production
 .env.cloudflare
+frontends/**/.env
 
 # IDE
 .vscode/
