@@ -36,6 +36,7 @@ from app.domains.wealth.schemas.dd_report import (
     AuditEventRead,
     DDReportApproveRequest,
     DDReportCreate,
+    DDReportListItem,
     DDReportRead,
     DDReportRegenerate,
     DDReportRejectRequest,
@@ -46,6 +47,41 @@ from app.shared.enums import Role
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/dd-reports", tags=["dd-reports"])
+
+
+@router.get(
+    "/",
+    response_model=list[DDReportListItem],
+    summary="List all DD Reports for the tenant",
+)
+async def list_all_dd_reports(
+    report_status: str | None = Query(default=None, alias="status"),
+    limit: int = Query(default=100, ge=1, le=500),
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> list[DDReportListItem]:
+    """List all DD Reports across all instruments for the current tenant."""
+    from app.domains.wealth.models.instrument import Instrument
+
+    query = (
+        select(DDReport, Instrument.name, Instrument.ticker)
+        .outerjoin(Instrument, DDReport.instrument_id == Instrument.instrument_id)
+        .where(DDReport.is_current.is_(True))
+    )
+    if report_status:
+        query = query.where(DDReport.status == report_status)
+    query = query.order_by(DDReport.created_at.desc()).limit(limit)
+
+    result = await db.execute(query)
+    rows = result.all()
+    return [
+        DDReportListItem(
+            **DDReportSummary.model_validate(report).model_dump(),
+            instrument_name=inst_name or "",
+            instrument_ticker=inst_ticker,
+        )
+        for report, inst_name, inst_ticker in rows
+    ]
 
 
 @router.post(
@@ -342,6 +378,31 @@ async def approve_dd_report(
         },
         after={"status": "approved", "rationale": body.rationale},
     )
+
+    # Update instrument approval_status in instruments_universe
+    from app.domains.wealth.models.instrument import Instrument
+    from app.domains.wealth.models.universe_approval import UniverseApproval
+
+    inst_result = await db.execute(
+        select(Instrument).where(Instrument.instrument_id == report.instrument_id)
+    )
+    instrument = inst_result.scalar_one_or_none()
+    if instrument:
+        instrument.approval_status = "approved"
+
+    # Create UniverseApproval record for audit trail
+    approval = UniverseApproval(
+        instrument_id=report.instrument_id,
+        organization_id=report.organization_id,
+        analysis_report_id=report.id,
+        decision="approved",
+        rationale=body.rationale,
+        created_by=report.created_by,
+        decided_by=actor.actor_id,
+        decided_at=datetime.now(UTC),
+    )
+    db.add(approval)
+
     await db.commit()
 
     return DDReportSummary.model_validate(report)
@@ -395,6 +456,17 @@ async def reject_dd_report(
         },
         after={"status": "draft", "rejection_reason": body.reason},
     )
+
+    # Revert instrument approval_status to pending
+    from app.domains.wealth.models.instrument import Instrument
+
+    inst_result = await db.execute(
+        select(Instrument).where(Instrument.instrument_id == report.instrument_id)
+    )
+    instrument = inst_result.scalar_one_or_none()
+    if instrument and instrument.approval_status == "approved":
+        instrument.approval_status = "pending"
+
     await db.commit()
 
     return DDReportSummary.model_validate(report)

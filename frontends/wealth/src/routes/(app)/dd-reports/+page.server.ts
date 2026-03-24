@@ -1,22 +1,17 @@
-/** DD Reports — list funds with available reports. */
+/** DD Reports — list all DD reports for the tenant with statuses. */
 import type { PageServerLoad } from "./$types";
 import { createServerApiClient } from "$lib/api/client";
-import type { DDReportSummary } from "$lib/types/dd-report";
+import type { DDReportListItem } from "$lib/types/dd-report";
 
-interface FundBrief {
-	id: string;
-	name: string;
-	ticker: string | null;
-	isin: string | null;
-	asset_class: string | null;
-	geography: string | null;
-}
-
-export const load: PageServerLoad = async ({ parent }) => {
+export const load: PageServerLoad = async ({ parent, url }) => {
 	const { token } = await parent();
 	const api = createServerApiClient(token);
 
-	const funds = await api.get<FundBrief[]>("/funds").catch(() => [] as FundBrief[]);
+	const statusFilter = url.searchParams.get("status") ?? undefined;
+	const params: Record<string, string> = {};
+	if (statusFilter) params.status = statusFilter;
 
-	return { funds };
+	const reports = await api.get<DDReportListItem[]>("/dd-reports/", params).catch(() => [] as DDReportListItem[]);
+
+	return { reports, statusFilter: statusFilter ?? null };
 };

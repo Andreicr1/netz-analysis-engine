@@ -486,6 +486,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/dd-reports/",
+    "name": "list_all_dd_reports"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/dd-reports/funds/{fund_id}",
     "name": "list_dd_reports"
   },

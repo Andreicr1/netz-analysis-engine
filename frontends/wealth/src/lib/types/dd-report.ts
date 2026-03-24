@@ -38,6 +38,11 @@ export interface DDReportSummary {
 	rejection_reason: string | null;
 }
 
+export interface DDReportListItem extends DDReportSummary {
+	instrument_name: string;
+	instrument_ticker: string | null;
+}
+
 export interface DDReportFull extends DDReportSummary {
 	config_snapshot: Record<string, unknown> | null;
 	schema_version: number;

@@ -47,6 +47,13 @@ class DDReportRead(DDReportSummary):
     chapters: list[DDChapterRead] = []
 
 
+class DDReportListItem(DDReportSummary):
+    """Extended summary with instrument name for the all-reports listing."""
+
+    instrument_name: str = ""
+    instrument_ticker: str | None = None
+
+
 class DDReportCreate(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
