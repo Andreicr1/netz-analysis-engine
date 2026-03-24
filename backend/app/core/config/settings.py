@@ -18,7 +18,7 @@ _log = logging.getLogger(__name__)
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(Path(__file__).resolve().parents[4] / ".env", ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     # ── Dev bypass ───────────────────────────────────────────
     dev_actor_header: str = "X-DEV-ACTOR"
     dev_token: str = "dev-token-change-me"
+    # UUID used when dev_token is presented without X-DEV-ACTOR (no Clerk session in dev).
+    # Set this to the real org UUID in your local .env to get data from org-scoped tables.
+    dev_org_id: str = ""
 
     # ── App ──────────────────────────────────────────────────
     app_env: str = "development"

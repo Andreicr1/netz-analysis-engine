@@ -121,6 +121,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
+        # Always pass through CORS preflight — CORSMiddleware handles these.
+        if request.method == "OPTIONS":
+            return await call_next(request)
+
         if not settings.rate_limit_enabled:
             return await call_next(request)
 

@@ -55,4 +55,12 @@ async def get_db_with_rls(
     async with async_session_factory() as session, session.begin():
         if actor.organization_id is not None:
             await set_rls_context(session, actor.organization_id)
+        else:
+            # Dev token without org_id — set a nil UUID so RLS policies using
+            # current_setting('app.current_organization_id') don't throw
+            # "unrecognized configuration parameter". Queries return no rows
+            # (nil UUID matches nothing) which is the correct fail-closed behavior.
+            await session.execute(
+                text("SET LOCAL app.current_organization_id = '00000000-0000-0000-0000-000000000000'")
+            )
         yield session

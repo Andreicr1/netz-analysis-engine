@@ -261,8 +261,9 @@ class R2StorageClient(StorageClient):
         except Exception as exc:  # noqa: BLE001
             from botocore.exceptions import ClientError
             if isinstance(exc, ClientError) and exc.response["Error"]["Code"] in ("404", "NoSuchKey"):
-                return
+                return  # already gone — idempotent
             logger.warning("storage_delete_error", extra={"path": path, "error": str(exc)})
+            raise  # real errors (auth, network) must propagate
 
     async def list_files(self, prefix: str) -> list[str]:
         self._validate_path(prefix)

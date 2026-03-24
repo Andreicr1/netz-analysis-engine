@@ -22,9 +22,12 @@ class PgNotifier:
     """Listen for PostgreSQL NOTIFY events and dispatch to handlers."""
 
     def __init__(self, dsn: str) -> None:
-        # asyncpg rejects ?ssl=true — needs ?sslmode=require
-        self._dsn = dsn.replace("?ssl=true", "?sslmode=require").replace(
-            "&ssl=true", "&sslmode=require"
+        # asyncpg rejects ?ssl=<value> — needs ?sslmode=require
+        import re
+        self._dsn = re.sub(
+            r"([?&])ssl=[^&]*",
+            r"\1sslmode=require",
+            dsn,
         )
         self._handlers: dict[str, list[Callable[[dict], Any]]] = {}
         self._connection: Any = None  # asyncpg.Connection

@@ -134,12 +134,13 @@ async def get_actor(
 
         # Accept static dev token
         if credentials and credentials.credentials == settings.dev_token:
+            org_id = uuid.UUID(settings.dev_org_id) if settings.dev_org_id else None
             return Actor(
                 actor_id="dev-user",
                 name="Dev User",
                 email="dev@netz.capital",
                 roles=[Role.ADMIN, Role.SUPER_ADMIN],
-                organization_id=None,
+                organization_id=org_id,
                 fund_ids=[],
             )
 

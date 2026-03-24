@@ -224,7 +224,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — exact origins + regex for Cloudflare Pages preview subdomains
+# Rate limiting registered first (innermost) — runs after CORS
+from app.core.middleware.rate_limit import RateLimitMiddleware  # noqa: E402
+
+app.add_middleware(RateLimitMiddleware)
+
+# CORS registered last (outermost) — handles preflight OPTIONS before rate limiter sees it
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -233,11 +238,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Rate limiting (after CORS so preflight OPTIONS requests are not rate-limited)
-from app.core.middleware.rate_limit import RateLimitMiddleware  # noqa: E402
-
-app.add_middleware(RateLimitMiddleware)
 
 
 # ── Health endpoints ─────────────────────────────────────────
