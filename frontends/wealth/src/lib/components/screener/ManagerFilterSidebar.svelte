@@ -14,9 +14,13 @@
 		runError: string | null;
 		initParams: Record<string, string>;
 		fundFilters: ScreenerFilterConfig;
+		onRunClick?: () => void;
+		runDetailOpen?: boolean;
+		runDetailLoading?: boolean;
+		runDetailData?: Record<string, unknown> | null;
 	}
 
-	let { results, lastRun, runError, initParams = {}, fundFilters = $bindable() }: Props = $props();
+	let { results, lastRun, runError, initParams = {}, fundFilters = $bindable(), onRunClick, runDetailOpen = false, runDetailLoading = false, runDetailData = null }: Props = $props();
 
 	// ── Manager filters ──
 	let textSearch = $state(initParams.text_search ?? "");
@@ -227,6 +231,27 @@
 			<div class="scr-meta-row">
 				<span class="scr-meta-k">Completed</span>
 				<span class="scr-meta-v">{formatDateTime(lastRun.completed_at)}</span>
+			</div>
+		{/if}
+		{#if onRunClick}
+			<button class="scr-detail-toggle" onclick={onRunClick}>
+				{runDetailOpen ? "Hide Details" : "View Details"}
+			</button>
+		{/if}
+		{#if runDetailOpen}
+			<div class="scr-run-detail">
+				{#if runDetailLoading}
+					<p class="scr-run-detail-msg">Loading…</p>
+				{:else if runDetailData}
+					{#each Object.entries(runDetailData) as [key, val] (key)}
+						<div class="scr-meta-row">
+							<span class="scr-meta-k">{key}</span>
+							<span class="scr-meta-v">{typeof val === "object" ? JSON.stringify(val) : String(val ?? "—")}</span>
+						</div>
+					{/each}
+				{:else}
+					<p class="scr-run-detail-msg">No details available.</p>
+				{/if}
 			</div>
 		{/if}
 	</div>

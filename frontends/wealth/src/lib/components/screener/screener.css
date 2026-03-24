@@ -194,6 +194,34 @@
 .scr-meta-k { color: var(--netz-text-muted); }
 .scr-meta-v { color: var(--netz-text-primary); font-variant-numeric: tabular-nums; }
 
+.scr-detail-toggle {
+	display: block;
+	width: 100%;
+	margin-top: var(--netz-space-stack-2xs, 4px);
+	padding: 3px 0;
+	border: none;
+	background: none;
+	color: var(--netz-brand-primary);
+	font-size: var(--netz-text-label, 0.75rem);
+	font-family: var(--netz-font-sans);
+	cursor: pointer;
+	text-align: left;
+}
+
+.scr-detail-toggle:hover { text-decoration: underline; }
+
+.scr-run-detail {
+	margin-top: var(--netz-space-stack-2xs, 4px);
+	padding-top: var(--netz-space-stack-2xs, 4px);
+	border-top: 1px solid var(--netz-border-subtle);
+}
+
+.scr-run-detail-msg {
+	font-size: var(--netz-text-small, 0.8125rem);
+	color: var(--netz-text-muted);
+	padding: 4px 0;
+}
+
 .scr-filter-error {
 	color: var(--netz-danger);
 	font-size: var(--netz-text-small, 0.8125rem);

@@ -111,6 +111,45 @@
 		{ accessorKey: "approved_by", header: "By" },
 	];
 
+	// ── Audit trail (lazy load per fund) ──
+	type AuditEntry = { event_type: string; actor: string | null; before: unknown; after: unknown; created_at: string };
+	let auditFundId = $state<string | null>(null);
+	let auditEntries = $state<AuditEntry[]>([]);
+	let auditLoading = $state(false);
+	let auditError = $state<string | null>(null);
+	let auditAbort: (() => void) | null = null;
+
+	function toggleAudit(fundId: string) {
+		if (auditFundId === fundId) {
+			auditFundId = null;
+			auditEntries = [];
+			return;
+		}
+		auditFundId = fundId;
+		auditEntries = [];
+		auditLoading = true;
+		auditError = null;
+
+		auditAbort?.();
+		const controller = new AbortController();
+		auditAbort = () => controller.abort();
+
+		(async () => {
+			try {
+				const api = createClientApiClient(getToken);
+				auditEntries = await api.get<AuditEntry[]>(`/universe/funds/${fundId}/audit-trail`);
+			} catch (e) {
+				if (!controller.signal.aborted) {
+					auditError = e instanceof Error ? e.message : "Failed to load audit trail";
+				}
+			} finally {
+				if (!controller.signal.aborted) {
+					auditLoading = false;
+				}
+			}
+		})();
+	}
+
 	// Load on mount
 	fetchData();
 </script>
@@ -163,6 +202,45 @@
 				<EmptyState title="No approved instruments" description="Approve instruments from the Pending tab to build your investment universe." />
 			{:else}
 				<DataTable data={universe} columns={approvedColumns} filterColumn="instrument_name" filterPlaceholder="Search instrument..." />
+
+				<!-- Audit trail toggle per fund -->
+				<div class="mt-4 space-y-2">
+					<p class="text-xs font-medium uppercase tracking-wider text-(--netz-text-muted)">Audit Trail</p>
+					<div class="flex flex-wrap gap-2">
+						{#each universe as asset (asset.id)}
+							<button
+								class="rounded border px-2 py-1 text-xs transition-colors {auditFundId === asset.instrument_id ? 'border-(--netz-brand-primary) bg-(--netz-brand-primary)/10 text-(--netz-brand-primary)' : 'border-(--netz-border) text-(--netz-text-muted) hover:bg-(--netz-surface-alt)'}"
+								onclick={() => toggleAudit(asset.instrument_id)}
+							>
+								{asset.instrument_name}
+							</button>
+						{/each}
+					</div>
+
+					{#if auditFundId}
+						<div class="rounded-lg border border-(--netz-border) bg-(--netz-surface-elevated) p-3">
+							{#if auditLoading}
+								<p class="text-sm text-(--netz-text-muted)">Loading audit trail…</p>
+							{:else if auditError}
+								<p class="text-sm text-(--netz-danger)">{auditError}</p>
+							{:else if auditEntries.length === 0}
+								<p class="text-sm text-(--netz-text-muted)">No audit events recorded.</p>
+							{:else}
+								<div class="space-y-2">
+									{#each auditEntries as entry, idx (idx)}
+										<div class="flex items-start gap-3 border-b border-(--netz-border)/50 pb-2 text-sm last:border-0">
+											<Badge variant="secondary">{entry.event_type}</Badge>
+											<div class="flex-1">
+												<span class="text-(--netz-text-primary)">{entry.actor ?? "system"}</span>
+												<span class="ml-2 text-xs text-(--netz-text-muted)">{formatDate(entry.created_at)}</span>
+											</div>
+										</div>
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{/if}
+				</div>
 			{/if}
 		{/if}
 

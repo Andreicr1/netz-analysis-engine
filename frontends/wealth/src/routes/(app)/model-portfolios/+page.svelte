@@ -1,20 +1,92 @@
 <!--
   Model Portfolios — Strategy Laboratory.
   Grid view with KPI cards per strategy (Conservative, Moderate, Growth).
+  "New Portfolio" dialog for INVESTMENT_TEAM role.
 -->
 <script lang="ts">
 	import { goto } from "$app/navigation";
-	import { PageHeader, StatusBadge, EmptyState, formatDateTime, formatNumber } from "@netz/ui";
+	import { getContext } from "svelte";
+	import { PageHeader, Button, StatusBadge, EmptyState, formatDateTime, formatNumber } from "@netz/ui";
+	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
 	import type { ModelPortfolio } from "$lib/types/model-portfolio";
 	import { profileColor } from "$lib/types/model-portfolio";
 
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
+
 	let { data }: { data: PageData } = $props();
 
 	let portfolios = $derived((data.portfolios ?? []) as ModelPortfolio[]);
+	let actorRole = $derived((data.actorRole ?? null) as string | null);
+
+	const IC_ROLES = ["investment_team", "director", "admin"];
+	let canCreate = $derived(actorRole !== null && IC_ROLES.includes(actorRole));
+
+	// ── Creation dialog ──────────────────────────────────────────────────
+
+	let dialogOpen = $state(false);
+	let submitting = $state(false);
+	let formError = $state<string | null>(null);
+
+	let formProfile = $state("");
+	let formDisplayName = $state("");
+	let formDescription = $state("");
+	let formBenchmark = $state("");
+	let formInceptionDate = $state("");
+	let formBacktestStart = $state("");
+
+	let isFormValid = $derived(formProfile.trim() !== "" && formDisplayName.trim() !== "");
+
+	function openDialog() {
+		formProfile = "";
+		formDisplayName = "";
+		formDescription = "";
+		formBenchmark = "";
+		formInceptionDate = "";
+		formBacktestStart = "";
+		formError = null;
+		dialogOpen = true;
+	}
+
+	function closeDialog() {
+		dialogOpen = false;
+	}
+
+	async function handleCreate() {
+		if (!isFormValid) return;
+		submitting = true;
+		formError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			const result = await api.post<ModelPortfolio>("/model-portfolios", {
+				profile: formProfile.trim(),
+				display_name: formDisplayName.trim(),
+				description: formDescription.trim() || null,
+				benchmark_composite: formBenchmark.trim() || null,
+				inception_date: formInceptionDate || null,
+				backtest_start_date: formBacktestStart || null,
+			});
+			dialogOpen = false;
+			goto(`/model-portfolios/${result.id}`);
+		} catch (e) {
+			if (e instanceof Error && e.message.includes("409")) {
+				formError = "A portfolio with this profile already exists.";
+			} else {
+				formError = e instanceof Error ? e.message : "Failed to create portfolio.";
+			}
+		} finally {
+			submitting = false;
+		}
+	}
 </script>
 
-<PageHeader title="Model Portfolios" />
+<PageHeader title="Model Portfolios">
+	{#snippet actions()}
+		{#if canCreate}
+			<Button size="sm" onclick={openDialog}>New Portfolio</Button>
+		{/if}
+	{/snippet}
+</PageHeader>
 
 <div class="mp-page">
 	{#if portfolios.length === 0}
@@ -69,6 +141,86 @@
 		</div>
 	{/if}
 </div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- CREATE PORTFOLIO DIALOG                                                -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+{#if dialogOpen}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="dialog-backdrop" onclick={closeDialog} onkeydown={(e) => e.key === "Escape" && closeDialog()}>
+		<!-- svelte-ignore a11y_no_static_element_interactions -->
+		<div class="dialog-panel" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+			<h2 class="dialog-title">New Model Portfolio</h2>
+
+			{#if formError}
+				<div class="dialog-error">
+					{formError}
+					<button class="dialog-error-dismiss" onclick={() => formError = null}>dismiss</button>
+				</div>
+			{/if}
+
+			<div class="dialog-form">
+				<label class="dialog-field">
+					<span class="dialog-label">Profile <span class="dialog-required">*</span></span>
+					<input
+						type="text"
+						class="dialog-input"
+						placeholder="e.g. conservative, moderate, growth"
+						bind:value={formProfile}
+					/>
+				</label>
+
+				<label class="dialog-field">
+					<span class="dialog-label">Display Name <span class="dialog-required">*</span></span>
+					<input
+						type="text"
+						class="dialog-input"
+						placeholder="Conservative Strategy"
+						bind:value={formDisplayName}
+					/>
+				</label>
+
+				<label class="dialog-field">
+					<span class="dialog-label">Description</span>
+					<textarea
+						class="dialog-input dialog-textarea"
+						placeholder="Optional description..."
+						rows="2"
+						bind:value={formDescription}
+					></textarea>
+				</label>
+
+				<label class="dialog-field">
+					<span class="dialog-label">Benchmark Composite</span>
+					<input
+						type="text"
+						class="dialog-input"
+						placeholder="e.g. 60% IMA-B + 40% CDI"
+						bind:value={formBenchmark}
+					/>
+				</label>
+
+				<div class="dialog-row">
+					<label class="dialog-field">
+						<span class="dialog-label">Inception Date</span>
+						<input type="date" class="dialog-input" bind:value={formInceptionDate} />
+					</label>
+					<label class="dialog-field">
+						<span class="dialog-label">Backtest Start</span>
+						<input type="date" class="dialog-input" bind:value={formBacktestStart} />
+					</label>
+				</div>
+			</div>
+
+			<div class="dialog-actions">
+				<Button size="sm" variant="ghost" onclick={closeDialog} disabled={submitting}>Cancel</Button>
+				<Button size="sm" onclick={handleCreate} disabled={!isFormValid || submitting}>
+					{submitting ? "Creating…" : "Create Portfolio"}
+				</Button>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <style>
 	.mp-page {
@@ -168,5 +320,115 @@
 	.mp-created {
 		font-size: var(--netz-text-label, 0.75rem);
 		color: var(--netz-text-muted);
+	}
+
+	/* ── Dialog ───────────────────────────────────────────────────────────── */
+	.dialog-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 50;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: rgba(0, 0, 0, 0.5);
+	}
+
+	.dialog-panel {
+		width: 100%;
+		max-width: 520px;
+		margin: var(--netz-space-inline-md, 16px);
+		background: var(--netz-surface-elevated);
+		border: 1px solid var(--netz-border-subtle);
+		border-radius: var(--netz-radius-lg, 16px);
+		box-shadow: var(--netz-shadow-3);
+		overflow: hidden;
+	}
+
+	.dialog-title {
+		padding: var(--netz-space-stack-md, 16px) var(--netz-space-inline-lg, 24px);
+		font-size: var(--netz-text-h4, 1.125rem);
+		font-weight: 700;
+		color: var(--netz-text-primary);
+		border-bottom: 1px solid var(--netz-border-subtle);
+	}
+
+	.dialog-error {
+		margin: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-lg, 24px) 0;
+		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-md, 12px);
+		border-radius: var(--netz-radius-sm, 8px);
+		background: color-mix(in srgb, var(--netz-danger) 8%, transparent);
+		color: var(--netz-danger);
+		font-size: var(--netz-text-small, 0.8125rem);
+	}
+
+	.dialog-error-dismiss {
+		margin-left: var(--netz-space-inline-sm, 8px);
+		text-decoration: underline;
+		cursor: pointer;
+		background: none;
+		border: none;
+		color: inherit;
+		font-size: inherit;
+	}
+
+	.dialog-form {
+		padding: var(--netz-space-stack-md, 16px) var(--netz-space-inline-lg, 24px);
+		display: flex;
+		flex-direction: column;
+		gap: var(--netz-space-stack-sm, 12px);
+	}
+
+	.dialog-field {
+		display: flex;
+		flex-direction: column;
+		gap: var(--netz-space-stack-2xs, 4px);
+		flex: 1;
+	}
+
+	.dialog-label {
+		font-size: var(--netz-text-label, 0.75rem);
+		font-weight: 600;
+		color: var(--netz-text-secondary);
+	}
+
+	.dialog-required {
+		color: var(--netz-danger);
+	}
+
+	.dialog-input {
+		height: var(--netz-space-control-height-sm, 36px);
+		padding: 0 var(--netz-space-inline-sm, 10px);
+		border: 1px solid var(--netz-border);
+		border-radius: var(--netz-radius-sm, 8px);
+		background: var(--netz-surface);
+		color: var(--netz-text-primary);
+		font-size: var(--netz-text-small, 0.8125rem);
+		font-family: var(--netz-font-sans);
+	}
+
+	.dialog-input:focus {
+		outline: none;
+		border-color: var(--netz-border-focus);
+		box-shadow: 0 0 0 2px color-mix(in srgb, var(--netz-brand-secondary) 20%, transparent);
+	}
+
+	.dialog-textarea {
+		height: auto;
+		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-sm, 10px);
+		resize: vertical;
+	}
+
+	.dialog-row {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: var(--netz-space-inline-md, 16px);
+	}
+
+	.dialog-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: var(--netz-space-inline-sm, 8px);
+		padding: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-lg, 24px);
+		border-top: 1px solid var(--netz-border-subtle);
 	}
 </style>

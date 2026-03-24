@@ -8,8 +8,8 @@ export const load: PageServerLoad = async ({ parent }) => {
 	const api = createServerApiClient(token);
 
 	const [geographic, sector] = await Promise.all([
-		api.get<ExposureMatrix>("/exposure/matrix", { dimension: "geographic" }).catch(() => null),
-		api.get<ExposureMatrix>("/exposure/matrix", { dimension: "sector" }).catch(() => null),
+		api.get<ExposureMatrix>("/wealth/exposure/matrix", { dimension: "geographic" }).catch(() => null),
+		api.get<ExposureMatrix>("/wealth/exposure/matrix", { dimension: "sector" }).catch(() => null),
 	]);
 
 	return { geographic, sector };

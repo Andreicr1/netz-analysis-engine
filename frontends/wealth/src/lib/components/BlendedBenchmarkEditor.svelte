@@ -169,6 +169,30 @@
 		}
 	}
 
+	// ── Delete benchmark ──
+	let showDeleteDialog = $state(false);
+	let deleting = $state(false);
+
+	async function handleDelete(payload: ConsequenceDialogPayload) {
+		if (!currentBenchmark) return;
+		deleting = true;
+		error = null;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.delete(`/blended-benchmarks/${currentBenchmark.id}`);
+			showDeleteDialog = false;
+			currentBenchmark = null;
+			components = [];
+			benchmarkName = "";
+			navSeries = [];
+			onSaved?.();
+		} catch (e) {
+			error = e instanceof Error ? e.message : "Failed to delete benchmark";
+		} finally {
+			deleting = false;
+		}
+	}
+
 	$effect(() => { void loadData(); });
 
 	// ── Actions ──
@@ -329,6 +353,11 @@
 							Normalize
 						</Button>
 					</div>
+					{#if currentBenchmark}
+						<Button size="sm" variant="destructive" onclick={() => showDeleteDialog = true} disabled={deleting}>
+							{deleting ? "Deleting…" : "Delete"}
+						</Button>
+					{/if}
 					<ActionButton
 						size="sm"
 						onclick={requestSave}
@@ -430,4 +459,22 @@
 	]}
 	onConfirm={handleSave}
 	onCancel={() => { showConfirmDialog = false; }}
+/>
+
+<ConsequenceDialog
+	bind:open={showDeleteDialog}
+	title="Delete Blended Benchmark"
+	impactSummary="This will permanently delete the blended benchmark for the {profile} profile. NAV history will be lost."
+	destructive={true}
+	requireRationale={true}
+	rationaleLabel="Deletion rationale"
+	rationalePlaceholder="Explain why this benchmark should be removed (min 10 chars)."
+	rationaleMinLength={10}
+	confirmLabel="Delete Benchmark"
+	metadata={[
+		{ label: "Profile", value: profile },
+		{ label: "Name", value: currentBenchmark?.name ?? "—" },
+	]}
+	onConfirm={handleDelete}
+	onCancel={() => { showDeleteDialog = false; }}
 />

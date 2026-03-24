@@ -8,12 +8,16 @@
 	import { page } from "$app/stores";
 	import { getContext } from "svelte";
 	import {
-		PageHeader, StatusBadge,
-		formatPercent, formatDateTime,
+		PageHeader, StatusBadge, MetricCard,
+		formatPercent, formatDateTime, formatNumber,
 	} from "@netz/ui";
+	import { CorrelationHeatmap, ChartContainer, RegimeChart } from "@netz/ui/charts";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
-	import type { AttributionResult, ParetoResult, SectorAttribution, StrategyDriftAlert, Timeframe } from "$lib/types/analytics";
+	import type {
+		AttributionResult, ParetoResult, SectorAttribution, StrategyDriftAlert, Timeframe,
+		CorrelationResult, RollingCorrelation, BacktestResult, BacktestFoldResult,
+	} from "$lib/types/analytics";
 	import { effectColor, severityColor } from "$lib/types/analytics";
 	import { Button } from "@netz/ui";
 
@@ -71,6 +75,132 @@
 	function fmtEffect(v: number): string {
 		const sign = v >= 0 ? "+" : "";
 		return `${sign}${(v * 10000).toFixed(1)} bps`;
+	}
+
+	// ── Correlation ──────────────────────────────────────────────────────
+
+	let correlation = $derived(data.correlation as CorrelationResult | null);
+	let concentration = $derived(correlation?.concentration ?? null);
+
+	function absorptionStatus(ratio: number): "ok" | "warn" | "breach" {
+		if (ratio > 0.90) return "breach";
+		if (ratio > 0.80) return "warn";
+		return "ok";
+	}
+
+	// Eigenvalue bar chart option
+	let eigenOption = $derived.by(() => {
+		if (!concentration) return null;
+		const evs = concentration.eigenvalues;
+		const mpT = concentration.mp_threshold;
+		return {
+			tooltip: { trigger: "axis" },
+			grid: { left: 60, right: 20, top: 20, bottom: 30 },
+			xAxis: {
+				type: "category",
+				data: evs.map((_: number, i: number) => `\u03BB${i + 1}`),
+				axisLabel: { fontSize: 10 },
+			},
+			yAxis: { type: "value", axisLabel: { fontSize: 10 } },
+			series: [{
+				type: "bar",
+				data: evs.map((v: number) => ({
+					value: v,
+					itemStyle: { color: v > mpT ? "#2166ac" : "#94a3b8" },
+				})),
+				markLine: {
+					silent: true,
+					data: [{ yAxis: mpT, lineStyle: { color: "#ef4444", type: "dashed", width: 2 }, label: { formatter: "MP threshold", position: "end", fontSize: 10 } }],
+				},
+			}],
+		} as Record<string, unknown>;
+	});
+
+	// ── Rolling Correlation (drill-down from heatmap click) ──────────────
+
+	let rollingPair = $state<{ a: string; b: string } | null>(null);
+	let rollingData = $state<RollingCorrelation | null>(null);
+	let rollingLoading = $state(false);
+	let rollingError = $state<string | null>(null);
+
+	function handlePairSelect(a: string, b: string) {
+		rollingPair = { a, b };
+		rollingData = null;
+		rollingLoading = true;
+		rollingError = null;
+
+		const controller = new AbortController();
+
+		(async () => {
+			try {
+				const api = createClientApiClient(getToken);
+				const result = await api.get<RollingCorrelation>("/analytics/rolling-correlation", {
+					inst_a: a,
+					inst_b: b,
+					profile: selectedProfile,
+				});
+				if (!controller.signal.aborted) {
+					rollingData = result;
+				}
+			} catch (e) {
+				if (!controller.signal.aborted) {
+					rollingError = e instanceof Error ? e.message : "Failed to load rolling correlation";
+				}
+			} finally {
+				if (!controller.signal.aborted) {
+					rollingLoading = false;
+				}
+			}
+		})();
+
+		// Store cleanup for next click
+		rollingAbort?.();
+		rollingAbort = () => controller.abort();
+	}
+
+	let rollingAbort: (() => void) | null = $state(null);
+
+	let rollingChartSeries = $derived.by(() => {
+		if (!rollingData) return [];
+		return [{
+			name: `${rollingData.instrument_a} vs ${rollingData.instrument_b}`,
+			data: rollingData.dates.map((d, i) => [d, rollingData!.values[i]] as [string, number]),
+		}];
+	});
+
+	// ── Backtest ────────────────────────────────────────────────────────
+
+	let backtestRunning = $state(false);
+	let backtestResult = $state<BacktestResult | null>(null);
+	let backtestError = $state<string | null>(null);
+	let backtestElapsed = $state(0);
+	let backtestTimer: ReturnType<typeof setInterval> | null = null;
+
+	async function runBacktest() {
+		backtestRunning = true;
+		backtestResult = null;
+		backtestError = null;
+		backtestElapsed = 0;
+
+		backtestTimer = setInterval(() => {
+			backtestElapsed += 1;
+		}, 1000);
+
+		try {
+			const api = createClientApiClient(getToken);
+			const result = await api.post<BacktestResult>("/analytics/backtest", {
+				profile: selectedProfile,
+			}, { timeoutMs: 180000 });
+			backtestResult = result;
+		} catch (e) {
+			backtestError = e instanceof Error ? e.message : "Backtest failed";
+		} finally {
+			backtestRunning = false;
+			if (backtestTimer) {
+				clearInterval(backtestTimer);
+				backtestTimer = null;
+			}
+		}
 	}
 
 	// ── Pareto optimization ──────────────────────────────────────────────
@@ -416,6 +546,169 @@
 						{/each}
 					</div>
 				</div>
+			{/if}
+		</div>
+	{/if}
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- Correlation Heatmap + Eigenvalue Chart                             -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+{#if correlation}
+	<div class="an-corr-section">
+		<div class="an-corr-header">
+			<h3 class="an-section-title">Correlation Matrix</h3>
+		</div>
+
+		<div class="an-corr-metrics">
+			{#if concentration}
+				<MetricCard
+					label="Absorption Ratio"
+					value={formatPercent(concentration.absorption_ratio)}
+					sublabel="Top {concentration.n_signal_eigenvalues} eigenvalues of {concentration.eigenvalues.length} total"
+					status={absorptionStatus(concentration.absorption_ratio)}
+				/>
+			{/if}
+		</div>
+
+		<div class="an-corr-body">
+			<div class="an-corr-heatmap">
+				<CorrelationHeatmap
+					matrix={correlation.matrix}
+					labels={correlation.labels}
+					onPairSelect={handlePairSelect}
+					height={Math.min(500, Math.max(300, correlation.labels.length * 18))}
+					ariaLabel="Correlation heatmap"
+				/>
+			</div>
+
+			{#if eigenOption}
+				<div class="an-corr-eigen">
+					<h4 class="an-subsection-title">Eigenvalue Decomposition (Marchenko-Pastur)</h4>
+					<ChartContainer option={eigenOption} height={220} ariaLabel="Eigenvalue bar chart" />
+				</div>
+			{/if}
+		</div>
+
+		<!-- Rolling Correlation Drill-Down -->
+		{#if rollingPair}
+			<div class="an-rolling-section">
+				<h4 class="an-subsection-title">
+					Rolling Correlation: {rollingPair.a} vs {rollingPair.b}
+				</h4>
+				{#if rollingLoading}
+					<div class="an-empty">Loading rolling correlation…</div>
+				{:else if rollingError}
+					<div class="an-rolling-error">{rollingError}</div>
+				{:else if rollingData && rollingChartSeries.length > 0}
+					<RegimeChart
+						series={rollingChartSeries}
+						regimes={[]}
+						height={260}
+						ariaLabel="Rolling correlation chart"
+						optionsOverride={{
+							yAxis: { min: -1, max: 1, axisLabel: { fontSize: 10 } },
+							series: [{
+								type: "line",
+								data: rollingChartSeries[0]?.data ?? [],
+								name: rollingChartSeries[0]?.name ?? "",
+								smooth: true,
+								showSymbol: false,
+								markLine: {
+									silent: true,
+									data: [{ yAxis: 0, lineStyle: { color: "#94a3b8", type: "dashed" } }],
+								},
+							}],
+						}}
+					/>
+				{:else}
+					<div class="an-empty">No data available for this pair.</div>
+				{/if}
+			</div>
+		{/if}
+	</div>
+{/if}
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- Backtest                                                           -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="an-backtest-section">
+	<div class="an-pareto-header">
+		<h3 class="an-pareto-title">Walk-Forward Backtest</h3>
+		<Button size="sm" variant="outline" onclick={runBacktest} disabled={backtestRunning}>
+			{backtestRunning ? "Running…" : "Run Backtest"}
+		</Button>
+	</div>
+
+	{#if backtestRunning}
+		<div class="an-backtest-progress">
+			<div class="an-backtest-pulse"></div>
+			<span>
+				{#if backtestElapsed < 15}
+					Running backtest…
+				{:else if backtestElapsed < 90}
+					Running backtest… ({backtestElapsed}s elapsed)
+				{:else}
+					This is taking longer than expected. ({backtestElapsed}s elapsed)
+				{/if}
+			</span>
+		</div>
+	{/if}
+
+	{#if backtestError}
+		<div class="an-pareto-error">{backtestError}</div>
+	{/if}
+
+	{#if backtestResult}
+		<div class="an-backtest-result">
+			<div class="an-kpi-row an-kpi-row--3">
+				<div class="an-kpi">
+					<span class="an-kpi-label">Mean Sharpe</span>
+					<span class="an-kpi-value">
+						{backtestResult.mean_sharpe !== null ? backtestResult.mean_sharpe.toFixed(3) : "—"}
+					</span>
+				</div>
+				<div class="an-kpi">
+					<span class="an-kpi-label">Std Sharpe</span>
+					<span class="an-kpi-value">
+						{backtestResult.std_sharpe !== null ? backtestResult.std_sharpe.toFixed(3) : "—"}
+					</span>
+				</div>
+				<div class="an-kpi">
+					<span class="an-kpi-label">Positive Folds</span>
+					<span class="an-kpi-value">{backtestResult.positive_folds}/{backtestResult.total_folds}</span>
+				</div>
+			</div>
+
+			{#if backtestResult.folds.length > 0}
+				<table class="an-folds-table">
+					<thead>
+						<tr>
+							<th>Fold</th>
+							<th>Period</th>
+							<th>Sharpe</th>
+							<th>CVaR 95%</th>
+							<th>Max DD</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each backtestResult.folds as fold (fold.fold)}
+							<tr>
+								<td class="fold-num">{fold.fold}</td>
+								<td class="fold-period">
+									{#if fold.period_start && fold.period_end}
+										{fold.period_start} — {fold.period_end}
+									{:else}
+										—
+									{/if}
+								</td>
+								<td>{fold.sharpe !== null ? fold.sharpe.toFixed(3) : "—"}</td>
+								<td>{fold.cvar_95 !== null ? formatPercent(fold.cvar_95) : "—"}</td>
+								<td>{fold.max_drawdown !== null ? formatPercent(fold.max_drawdown) : "—"}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
 			{/if}
 		</div>
 	{/if}
@@ -924,5 +1217,134 @@
 			border-bottom: 1px solid var(--netz-border-subtle);
 			max-height: 250px;
 		}
+	}
+
+	/* ── Correlation section ─────────────────────────────────────────────── */
+	.an-corr-section {
+		margin: var(--netz-space-stack-md, 16px) var(--netz-space-inline-lg, 24px) 0;
+		border: 1px solid var(--netz-border-subtle);
+		border-radius: var(--netz-radius-md, 12px);
+		background: var(--netz-surface-elevated);
+		overflow: hidden;
+	}
+
+	.an-corr-header {
+		padding: var(--netz-space-stack-xs, 10px) var(--netz-space-inline-md, 16px);
+		border-bottom: 1px solid var(--netz-border-subtle);
+		background: var(--netz-surface-alt);
+	}
+
+	.an-section-title {
+		font-size: var(--netz-text-small, 0.8125rem);
+		font-weight: 600;
+		color: var(--netz-text-primary);
+	}
+
+	.an-subsection-title {
+		font-size: var(--netz-text-label, 0.75rem);
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--netz-text-muted);
+		margin-bottom: var(--netz-space-stack-xs, 8px);
+	}
+
+	.an-corr-metrics {
+		padding: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-md, 16px);
+	}
+
+	.an-corr-body {
+		padding: 0 var(--netz-space-inline-md, 16px) var(--netz-space-stack-md, 16px);
+	}
+
+	.an-corr-eigen {
+		margin-top: var(--netz-space-stack-md, 16px);
+	}
+
+	/* ── Rolling correlation ─────────────────────────────────────────────── */
+	.an-rolling-section {
+		padding: var(--netz-space-stack-md, 16px) var(--netz-space-inline-md, 16px);
+		border-top: 1px solid var(--netz-border-subtle);
+	}
+
+	.an-rolling-error {
+		padding: var(--netz-space-stack-xs, 8px);
+		color: var(--netz-danger);
+		font-size: var(--netz-text-small, 0.8125rem);
+	}
+
+	/* ── Backtest section ────────────────────────────────────────────────── */
+	.an-backtest-section {
+		margin: var(--netz-space-stack-md, 16px) var(--netz-space-inline-lg, 24px) 0;
+		border: 1px solid var(--netz-border-subtle);
+		border-radius: var(--netz-radius-md, 12px);
+		background: var(--netz-surface-elevated);
+		overflow: hidden;
+	}
+
+	.an-backtest-progress {
+		display: flex;
+		align-items: center;
+		gap: var(--netz-space-inline-sm, 8px);
+		padding: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-md, 16px);
+		font-size: var(--netz-text-small, 0.8125rem);
+		color: var(--netz-info);
+		font-weight: 500;
+	}
+
+	.an-backtest-pulse {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--netz-info);
+		animation: pulse 1.5s ease-in-out infinite;
+	}
+
+	@keyframes pulse {
+		0%, 100% { opacity: 0.3; }
+		50% { opacity: 1; }
+	}
+
+	.an-backtest-result {
+		padding: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-md, 16px);
+	}
+
+	.an-kpi-row--3 {
+		grid-template-columns: repeat(3, 1fr);
+	}
+
+	.an-folds-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: var(--netz-text-small, 0.8125rem);
+		margin-top: var(--netz-space-stack-sm, 12px);
+	}
+
+	.an-folds-table th {
+		padding: var(--netz-space-stack-2xs, 5px) var(--netz-space-inline-sm, 10px);
+		text-align: left;
+		font-size: var(--netz-text-label, 0.75rem);
+		font-weight: 600;
+		color: var(--netz-text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
+		border-bottom: 1px solid var(--netz-border-subtle);
+	}
+
+	.an-folds-table td {
+		padding: var(--netz-space-stack-2xs, 5px) var(--netz-space-inline-sm, 10px);
+		border-bottom: 1px solid var(--netz-border-subtle);
+		font-variant-numeric: tabular-nums;
+		color: var(--netz-text-secondary);
+	}
+
+	.fold-num {
+		font-weight: 600;
+		color: var(--netz-text-primary);
+	}
+
+	.fold-period {
+		font-size: var(--netz-text-label, 0.75rem);
+		color: var(--netz-text-muted);
 	}
 </style>

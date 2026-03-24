@@ -9,7 +9,7 @@
 	import { invalidateAll } from "$app/navigation";
 	import {
 		PageHeader, PageTabs, StatusBadge, Button, ConsequenceDialog,
-		formatPercent, formatDateTime,
+		formatPercent, formatDateTime, formatNumber,
 	} from "@netz/ui";
 	import type { ConsequenceDialogPayload } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
@@ -38,7 +38,7 @@
 
 	// ── Tab state ─────────────────────────────────────────────────────────
 
-	type TabKey = "strategic" | "tactical" | "effective" | "rebalancing" | "benchmark";
+	type TabKey = "strategic" | "tactical" | "effective" | "rebalancing" | "benchmark" | "history";
 	let activeTab = $state<TabKey>("strategic");
 
 	const tabs = [
@@ -47,6 +47,7 @@
 		{ key: "effective" as const, label: "Effective" },
 		{ key: "rebalancing" as const, label: "Rebalancing" },
 		{ key: "benchmark" as const, label: "Benchmark" },
+		{ key: "history" as const, label: "History" },
 	];
 
 	// ── Allocation Editor (editable weights) ──────────────────────────────
@@ -117,6 +118,48 @@
 			submitting = false;
 		}
 	}
+
+	// ── History (lazy load) ──────────────────────────────────────────────
+
+	interface HistorySnapshot {
+		snapshot_date: string;
+		nav: number | null;
+		breach_status: string | null;
+		regime: string | null;
+	}
+
+	let historySnapshots = $state<HistorySnapshot[]>([]);
+	let historyLoading = $state(false);
+	let historyLoaded = $state(false);
+	let historyError = $state<string | null>(null);
+
+	$effect(() => {
+		if (activeTab !== "history" || historyLoaded) return;
+		const controller = new AbortController();
+		historyLoading = true;
+		historyError = null;
+
+		(async () => {
+			try {
+				const api = createClientApiClient(getToken);
+				const result = await api.get<HistorySnapshot[]>(`/portfolios/${profile}/history`);
+				if (!controller.signal.aborted) {
+					historySnapshots = result;
+					historyLoaded = true;
+				}
+			} catch (e) {
+				if (!controller.signal.aborted) {
+					historyError = e instanceof Error ? e.message : "Failed to load history";
+				}
+			} finally {
+				if (!controller.signal.aborted) {
+					historyLoading = false;
+				}
+			}
+		})();
+
+		return () => controller.abort();
+	});
 
 	// ── Helpers ───────────────────────────────────────────────────────────
 
@@ -371,6 +414,48 @@
 	{:else if activeTab === "benchmark"}
 		<!-- ── BENCHMARK VIEW ─────────────────────────────────────────── -->
 		<BlendedBenchmarkEditor {profile} />
+	{:else if activeTab === "history"}
+		<!-- ── HISTORY VIEW ───────────────────────────────────────────── -->
+		{#if historyLoading}
+			<div class="pw-empty">Loading history…</div>
+		{:else if historyError}
+			<div class="pw-error">{historyError}</div>
+		{:else if historySnapshots.length === 0}
+			<div class="pw-empty">No snapshots available.</div>
+		{:else}
+			<table class="alloc-table alloc-table--readonly">
+				<thead>
+					<tr>
+						<th>Date</th>
+						<th>NAV</th>
+						<th>Breach Status</th>
+						<th>Regime</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each historySnapshots as snap (snap.snapshot_date)}
+						<tr>
+							<td class="atd-date">{snap.snapshot_date}</td>
+							<td class="atd-weight">{snap.nav !== null ? formatNumber(snap.nav) : "—"}</td>
+							<td>
+								{#if snap.breach_status}
+									<StatusBadge status={snap.breach_status} />
+								{:else}
+									<span class="atd-date">—</span>
+								{/if}
+							</td>
+							<td>
+								{#if snap.regime}
+									<StatusBadge status={snap.regime} />
+								{:else}
+									<span class="atd-date">—</span>
+								{/if}
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		{/if}
 	{/if}
 </div>
 

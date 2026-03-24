@@ -1,14 +1,14 @@
 <!--
-  Model Portfolio Workbench — Committee view with backtest, stress scenarios, fund selection.
+  Model Portfolio Workbench — Committee view with backtest, stress scenarios, fund selection, fact sheets.
   Top: Equity curve placeholder + stress bar chart.
-  Bottom: Fund Selection Schema (approved universe assets assigned to this strategy).
+  Bottom: Fund Selection Schema + Fact Sheets.
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
 	import { invalidateAll } from "$app/navigation";
 	import {
 		PageHeader, Button, StatusBadge, EmptyState, ActionButton,
-		formatNumber, formatPercent, formatDateTime,
+		formatNumber, formatPercent, formatDateTime, formatDate,
 	} from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
@@ -27,6 +27,25 @@
 	let backtest = $derived(trackRecord?.backtest ?? null);
 	let stress = $derived(trackRecord?.stress ?? null);
 	let funds = $derived(portfolio.fund_selection_schema?.funds ?? [] as InstrumentWeight[]);
+
+	// ── Fact Sheets ──────────────────────────────────────────────────────
+
+	interface FactSheet {
+		path: string;
+		portfolio_name: string;
+		portfolio_id: string;
+		period: string | null;
+		language: string | null;
+		created_at: string | null;
+		format: string | null;
+	}
+
+	let factSheets = $derived((data.factSheets ?? []) as FactSheet[]);
+
+	let generating = $state(false);
+	let generateLang = $state<"pt" | "en">("pt");
+	let downloadingPath = $state<string | null>(null);
+	let factSheetError = $state<string | null>(null);
 
 	// ── Actions ───────────────────────────────────────────────────────────
 
@@ -74,6 +93,39 @@
 			error = e instanceof Error ? e.message : "Stress test failed";
 		} finally {
 			stressing = false;
+		}
+	}
+
+	async function generateFactSheet() {
+		generating = true;
+		factSheetError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post(`/fact-sheets/model-portfolios/${portfolioId}`, { language: generateLang });
+			await invalidateAll();
+		} catch (e) {
+			factSheetError = e instanceof Error ? e.message : "Failed to generate fact sheet";
+		} finally {
+			generating = false;
+		}
+	}
+
+	async function downloadFactSheet(path: string) {
+		downloadingPath = path;
+		factSheetError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			const blob = await api.getBlob(`/fact-sheets/${encodeURIComponent(path)}/download`);
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = `fact-sheet-${portfolio.display_name.toLowerCase().replace(/\s+/g, "-")}.pdf`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (e) {
+			factSheetError = e instanceof Error ? e.message : "Download failed";
+		} finally {
+			downloadingPath = null;
 		}
 	}
 
@@ -260,6 +312,70 @@
 				</table>
 			</div>
 		{/if}
+	</section>
+
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<!-- FACT SHEETS                                                        -->
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<section class="mp-section mp-section--full">
+		<h3 class="mp-section-title">
+			Fact Sheets
+			{#if factSheets.length > 0}
+				<span class="mp-section-count">{factSheets.length} generated</span>
+			{/if}
+		</h3>
+
+		{#if factSheetError}
+			<div class="fs-error">
+				{factSheetError}
+				<button class="fs-error-dismiss" onclick={() => factSheetError = null}>dismiss</button>
+			</div>
+		{/if}
+
+		<div class="fs-content">
+			<div class="fs-generate">
+				<select class="fs-lang-select" bind:value={generateLang}>
+					<option value="pt">Portugues</option>
+					<option value="en">English</option>
+				</select>
+				<Button size="sm" onclick={generateFactSheet} disabled={generating}>
+					{generating ? "Generating…" : "Generate Fact Sheet"}
+				</Button>
+			</div>
+
+			{#if factSheets.length === 0}
+				<div class="mp-empty">
+					<p>No fact sheets generated yet.</p>
+				</div>
+			{:else}
+				<div class="fs-list">
+					{#each factSheets as fs (fs.path)}
+						<div class="fs-row">
+							<div class="fs-info">
+								<span class="fs-format">{fs.format ?? "Fact Sheet"}</span>
+								{#if fs.language}
+									<span class="fs-lang-badge">{fs.language.toUpperCase()}</span>
+								{/if}
+								{#if fs.period}
+									<span class="fs-period">{fs.period}</span>
+								{/if}
+								{#if fs.created_at}
+									<span class="fs-date">{formatDate(fs.created_at)}</span>
+								{/if}
+							</div>
+							<Button
+								size="sm"
+								variant="outline"
+								onclick={() => downloadFactSheet(fs.path)}
+								disabled={downloadingPath === fs.path}
+							>
+								{downloadingPath === fs.path ? "…" : "Download"}
+							</Button>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		</div>
 	</section>
 </div>
 
@@ -527,5 +643,92 @@
 		background: var(--netz-brand-primary);
 		border-radius: 3px;
 		transition: width 200ms ease;
+	}
+
+	/* ── Fact Sheets ─────────────────────────────────────────────────────── */
+	.fs-error {
+		margin: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-md, 16px) 0;
+		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-md, 12px);
+		border-radius: var(--netz-radius-sm, 8px);
+		background: color-mix(in srgb, var(--netz-danger) 8%, transparent);
+		color: var(--netz-danger);
+		font-size: var(--netz-text-small, 0.8125rem);
+	}
+
+	.fs-error-dismiss {
+		margin-left: var(--netz-space-inline-sm, 8px);
+		text-decoration: underline;
+		cursor: pointer;
+		background: none;
+		border: none;
+		color: inherit;
+		font-size: inherit;
+	}
+
+	.fs-content {
+		padding: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-md, 16px);
+	}
+
+	.fs-generate {
+		display: flex;
+		align-items: center;
+		gap: var(--netz-space-inline-sm, 8px);
+		margin-bottom: var(--netz-space-stack-sm, 12px);
+	}
+
+	.fs-lang-select {
+		height: var(--netz-space-control-height-sm, 32px);
+		padding: 0 var(--netz-space-inline-sm, 10px);
+		border: 1px solid var(--netz-border);
+		border-radius: var(--netz-radius-sm, 6px);
+		background: var(--netz-surface);
+		color: var(--netz-text-primary);
+		font-size: var(--netz-text-small, 0.8125rem);
+		font-family: var(--netz-font-sans);
+	}
+
+	.fs-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--netz-space-stack-2xs, 4px);
+	}
+
+	.fs-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-sm, 10px);
+		border: 1px solid var(--netz-border-subtle);
+		border-radius: var(--netz-radius-sm, 8px);
+	}
+
+	.fs-info {
+		display: flex;
+		align-items: center;
+		gap: var(--netz-space-inline-sm, 8px);
+		font-size: var(--netz-text-small, 0.8125rem);
+	}
+
+	.fs-format {
+		font-weight: 500;
+		color: var(--netz-text-primary);
+	}
+
+	.fs-lang-badge {
+		display: inline-block;
+		padding: 1px 6px;
+		border-radius: var(--netz-radius-pill, 999px);
+		background: color-mix(in srgb, var(--netz-brand-primary) 10%, transparent);
+		color: var(--netz-brand-primary);
+		font-size: var(--netz-text-label, 0.75rem);
+		font-weight: 600;
+	}
+
+	.fs-period {
+		color: var(--netz-text-secondary);
+	}
+
+	.fs-date {
+		color: var(--netz-text-muted);
 	}
 </style>

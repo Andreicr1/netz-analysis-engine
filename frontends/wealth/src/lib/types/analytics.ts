@@ -60,6 +60,45 @@ export interface ParetoResult {
 	job_id?: string;
 }
 
+export interface ConcentrationAnalysis {
+	absorption_ratio: number;
+	eigenvalues: number[];
+	mp_threshold: number;
+	n_signal_eigenvalues: number;
+}
+
+export interface CorrelationResult {
+	profile: string;
+	matrix: number[][];
+	labels: string[];
+	concentration: ConcentrationAnalysis;
+}
+
+export interface RollingCorrelation {
+	dates: string[];
+	values: number[];
+	instrument_a: string;
+	instrument_b: string;
+}
+
+export interface BacktestFoldResult {
+	fold: number;
+	sharpe: number | null;
+	cvar_95: number | null;
+	max_drawdown: number | null;
+	n_obs: number;
+	period_start?: string;
+	period_end?: string;
+}
+
+export interface BacktestResult {
+	mean_sharpe: number | null;
+	std_sharpe: number | null;
+	positive_folds: number;
+	total_folds: number;
+	folds: BacktestFoldResult[];
+}
+
 export type Timeframe = "ytd" | "1y" | "3y" | "custom";
 
 export function effectColor(value: number): string {

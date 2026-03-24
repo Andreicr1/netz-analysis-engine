@@ -158,6 +158,29 @@
 
 	let panelWidth = $derived(panelMode === "manager" ? "480px" : "420px");
 
+	// ── Run detail expand ──
+	let runDetailData = $state<Record<string, unknown> | null>(null);
+	let runDetailLoading = $state(false);
+	let runDetailOpen = $state(false);
+
+	async function toggleRunDetail() {
+		if (runDetailOpen) {
+			runDetailOpen = false;
+			return;
+		}
+		if (!lastRun) return;
+		runDetailOpen = true;
+		runDetailLoading = true;
+		try {
+			const api = createClientApiClient(getToken);
+			runDetailData = await api.get<Record<string, unknown>>(`/screener/runs/${lastRun.run_id}`);
+		} catch {
+			runDetailData = null;
+		} finally {
+			runDetailLoading = false;
+		}
+	}
+
 	// ── Batch screening ──
 	let isRunning = $state(false);
 	let runError = $state<string | null>(null);
@@ -207,7 +230,9 @@
 		{#if activeMode === "instruments"}
 			<InstrumentFilterSidebar {facets} {initParams} />
 		{:else}
-			<ManagerFilterSidebar {results} {lastRun} {runError} {initParams} bind:fundFilters />
+			<ManagerFilterSidebar {results} {lastRun} {runError} {initParams} bind:fundFilters
+				onRunClick={toggleRunDetail} {runDetailOpen} {runDetailLoading} {runDetailData}
+			/>
 		{/if}
 	</aside>
 
