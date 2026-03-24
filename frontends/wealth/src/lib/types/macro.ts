@@ -90,3 +90,24 @@ export function freshnessColor(status: string): string {
 		default:         return "var(--netz-text-muted)";
 	}
 }
+
+export interface MacroSnapshot {
+	id: string;
+	as_of_date: string;
+	data_json: Record<string, unknown>;
+}
+
+export interface MacroReview {
+	id: string;
+	organization_id: string;
+	status: string;
+	is_emergency: boolean;
+	as_of_date: string;
+	snapshot_id: string | null;
+	report_json: Record<string, unknown>;
+	approved_by: string | null;
+	approved_at: string | null;
+	decision_rationale: string | null;
+	created_at: string;
+	created_by: string | null;
+}

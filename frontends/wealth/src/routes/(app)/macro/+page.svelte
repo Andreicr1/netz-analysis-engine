@@ -1,7 +1,7 @@
 <!--
-  Macro Intelligence — Dense read-only dashboard consuming hypertables.
-  FRED, Treasury, OFR, BIS, IMF data visualized in CSS Grid panels.
-  Design: data-first density, --netz-* tokens only, no competing UI.
+  Macro Intelligence — Dense dashboard with interactive ECharts charting,
+  series picker, snapshot regime badge, committee reviews.
+  Specs: WM-S1-01 through WM-S1-05
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
@@ -14,17 +14,26 @@
 	import type {
 		MacroScores, RegimeHierarchy, MacroIndicators,
 		RegionalScore, GlobalIndicators, TreasuryPoint, OfrPoint,
-		BisPoint, ImfPoint,
+		BisPoint, ImfPoint, MacroSnapshot, MacroReview,
 	} from "$lib/types/macro";
-	import { regimeColor, freshnessColor } from "$lib/types/macro";
+	import { regimeColor } from "$lib/types/macro";
+	import MacroChart from "$lib/components/macro/MacroChart.svelte";
+	import SeriesPicker, { type IndicatorEntry } from "$lib/components/macro/SeriesPicker.svelte";
+	import CommitteeReviews from "$lib/components/macro/CommitteeReviews.svelte";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let { data }: { data: PageData } = $props();
 
-	let scores = $derived(data.scores as MacroScores | null);
-	let regime = $derived(data.regime as RegimeHierarchy | null);
-	let indicators = $derived(data.indicators as MacroIndicators | null);
+	// Extended fields added in +page.server.ts — cast via any until types regenerated
+	let pageData = $derived(data as PageData & Record<string, unknown>);
+
+	let scores = $derived(pageData.scores as MacroScores | null);
+	let regime = $derived(pageData.regime as RegimeHierarchy | null);
+	let indicators = $derived(pageData.indicators as MacroIndicators | null);
+	let snapshot = $derived(pageData.snapshot as MacroSnapshot | null);
+	let initialReviews = $derived((pageData.reviews ?? []) as MacroReview[]);
+	let actorRole = $derived((pageData.actorRole ?? null) as string | null);
 
 	// ── Derived regions ───────────────────────────────────────────────────
 
@@ -33,115 +42,133 @@
 	);
 	let globalInd = $derived(scores?.global_indicators ?? null);
 
-	// ── Treasury panel state ──────────────────────────────────────────────
+	// ── Chart state ──────────────────────────────────────────────────────
 
-	let treasurySeries = $state("YIELD_CURVE");
-	let treasuryData = $state<TreasuryPoint[]>([]);
-	let treasuryLoading = $state(false);
+	let selectedSeries = $state<Set<string>>(new Set());
+	let favorites = $state<Set<string>>(new Set());
+	let timeRange = $state<"1M" | "3M" | "6M" | "1Y" | "2Y">("2Y");
+	import type { MacroSeries } from "$lib/components/macro/MacroChart.svelte";
+	let chartSeries = $state.raw<MacroSeries[]>([]);
+	let fetchControllers = $state<Map<string, AbortController>>(new Map());
 
-	const TREASURY_SERIES = ["YIELD_CURVE", "10Y_RATE", "2Y_RATE", "30Y_RATE", "FED_FUNDS"];
+	let pickerRef: ReturnType<typeof SeriesPicker> | undefined = $state();
 
-	async function fetchTreasury(series: string) {
-		treasuryLoading = true;
-		try {
-			const api = createClientApiClient(getToken);
-			const res = await api.get<{ series: string; data: TreasuryPoint[] }>(`/macro/treasury`, { series });
-			treasuryData = res.data ?? [];
-		} catch {
-			treasuryData = [];
-		} finally {
-			treasuryLoading = false;
+	function toggleSeries(id: string) {
+		const next = new Set(selectedSeries);
+		if (next.has(id)) {
+			next.delete(id);
+			// Abort pending fetch
+			const ctrl = fetchControllers.get(id);
+			if (ctrl) { ctrl.abort(); fetchControllers.delete(id); }
+			// Remove from chart
+			chartSeries = chartSeries.filter((s) => s.id !== id);
+		} else {
+			if (next.size >= 8) return;
+			next.add(id);
+			fetchSeriesData(id);
 		}
+		selectedSeries = next;
 	}
 
-	$effect(() => {
-		fetchTreasury(treasurySeries);
-	});
-
-	// ── OFR panel state ───────────────────────────────────────────────────
-
-	let ofrMetric = $state("HF_LEVERAGE");
-	let ofrData = $state<OfrPoint[]>([]);
-	let ofrLoading = $state(false);
-
-	const OFR_METRICS = ["HF_AUM", "HF_LEVERAGE", "HF_REPO_STRESS"];
-
-	async function fetchOfr(metric: string) {
-		ofrLoading = true;
-		try {
-			const api = createClientApiClient(getToken);
-			const res = await api.get<{ metric: string; data: OfrPoint[] }>(`/macro/ofr`, { metric });
-			ofrData = res.data ?? [];
-		} catch {
-			ofrData = [];
-		} finally {
-			ofrLoading = false;
-		}
+	function toggleFavorite(id: string) {
+		const next = new Set(favorites);
+		if (next.has(id)) next.delete(id);
+		else next.add(id);
+		favorites = next;
 	}
 
-	$effect(() => {
-		fetchOfr(ofrMetric);
-	});
+	async function fetchSeriesData(id: string) {
+		// Abort previous fetch for same id
+		const prev = fetchControllers.get(id);
+		if (prev) prev.abort();
+		const controller = new AbortController();
+		fetchControllers.set(id, controller);
 
-	// ── BIS panel state ──────────────────────────────────────────────────
+		const entry = pickerRef?.getEntryById(id);
+		if (!entry) return;
 
-	let bisCountry = $state("US");
-	let bisIndicator = $state("CREDIT_GAP");
-	let bisData = $state<BisPoint[]>([]);
-	let bisLoading = $state(false);
-
-	const BIS_COUNTRIES = ["US", "GB", "DE", "JP", "CN", "BR"];
-	const BIS_INDICATORS = ["CREDIT_GAP", "DSR", "PROPERTY_PRICES"];
-
-	async function fetchBis(country: string, indicator: string) {
-		bisLoading = true;
 		try {
 			const api = createClientApiClient(getToken);
-			const res = await api.get<{ country: string; indicator: string; data: BisPoint[] }>(`/macro/bis`, { country, indicator });
-			bisData = res.data ?? [];
-		} catch {
-			bisData = [];
+			let data: [string, number][] = [];
+			let frequency = entry.frequency;
+
+			if (entry.source === "treasury") {
+				const res = await api.get<{ series: string; data: TreasuryPoint[] }>("/macro/treasury", entry.params);
+				if (controller.signal.aborted) return;
+				data = (res.data ?? []).map((p) => [p.obs_date, p.value]);
+			} else if (entry.source === "ofr") {
+				const res = await api.get<{ metric: string; data: OfrPoint[] }>("/macro/ofr", entry.params);
+				if (controller.signal.aborted) return;
+				data = (res.data ?? []).map((p) => [p.obs_date, p.value]);
+			} else if (entry.source === "bis") {
+				const res = await api.get<{ country: string; indicator: string; data: BisPoint[] }>("/macro/bis", entry.params);
+				if (controller.signal.aborted) return;
+				data = (res.data ?? []).map((p) => [p.period, p.value]);
+			} else if (entry.source === "imf") {
+				const res = await api.get<{ country: string; indicator: string; data: ImfPoint[] }>("/macro/imf", entry.params);
+				if (controller.signal.aborted) return;
+				// IMF: split into actual + forecast
+				const currentYear = new Date().getFullYear();
+				const actual = (res.data ?? []).filter((p) => p.year <= currentYear);
+				const forecast = (res.data ?? []).filter((p) => p.year >= currentYear);
+
+				const actualSeries: MacroSeries = {
+					id: entry.id,
+					name: entry.name,
+					data: actual.map((p) => [`${p.year}-01-01`, p.value]),
+					frequency: "A",
+					yAxisIndex: 1,
+				};
+
+				if (forecast.length > 0) {
+					const forecastSeries: MacroSeries = {
+						id: `${entry.id}:forecast`,
+						name: `${entry.name} (proj.)`,
+						data: forecast.map((p) => [`${p.year}-01-01`, p.value]),
+						frequency: "A",
+						yAxisIndex: 1,
+						lineStyle: "dashed",
+					};
+					chartSeries = [
+						...chartSeries.filter((s) => s.id !== entry.id && s.id !== `${entry.id}:forecast`),
+						actualSeries,
+						forecastSeries,
+					];
+				} else {
+					chartSeries = [
+						...chartSeries.filter((s) => s.id !== entry.id && s.id !== `${entry.id}:forecast`),
+						actualSeries,
+					];
+				}
+				fetchControllers.delete(id);
+				return;
+			}
+
+			if (controller.signal.aborted) return;
+
+			// Determine yAxisIndex based on unit
+			const yAxisIndex = entry.unit === "%" || entry.unit === "bps" || entry.unit === "pp" || entry.unit === "%GDP" ? 0 : 1;
+
+			const newSeries: MacroSeries = {
+				id: entry.id,
+				name: entry.name,
+				data,
+				frequency,
+				yAxisIndex,
+			};
+
+			chartSeries = [
+				...chartSeries.filter((s) => s.id !== entry.id),
+				newSeries,
+			];
+		} catch (e) {
+			if (e instanceof DOMException && e.name === "AbortError") return;
+			// Remove failed series silently
+			chartSeries = chartSeries.filter((s) => s.id !== id);
 		} finally {
-			bisLoading = false;
+			fetchControllers.delete(id);
 		}
 	}
-
-	$effect(() => {
-		fetchBis(bisCountry, bisIndicator);
-	});
-
-	// ── IMF panel state ──────────────────────────────────────────────────
-
-	let imfCountry = $state("US");
-	let imfIndicator = $state("NGDP_RPCH");
-	let imfData = $state<ImfPoint[]>([]);
-	let imfLoading = $state(false);
-
-	const IMF_COUNTRIES = ["US", "GB", "DE", "JP", "CN", "BR"];
-	const IMF_INDICATORS = ["NGDP_RPCH", "PCPIPCH", "GGXWDG_NGDP"];
-
-	const IMF_LABELS: Record<string, string> = {
-		NGDP_RPCH: "GDP Growth",
-		PCPIPCH: "Inflation",
-		GGXWDG_NGDP: "Fiscal Balance",
-	};
-
-	async function fetchImf(country: string, indicator: string) {
-		imfLoading = true;
-		try {
-			const api = createClientApiClient(getToken);
-			const res = await api.get<{ country: string; indicator: string; data: ImfPoint[] }>(`/macro/imf`, { country, indicator });
-			imfData = res.data ?? [];
-		} catch {
-			imfData = [];
-		} finally {
-			imfLoading = false;
-		}
-	}
-
-	$effect(() => {
-		fetchImf(imfCountry, imfIndicator);
-	});
 
 	// ── Helpers ───────────────────────────────────────────────────────────
 
@@ -151,20 +178,33 @@
 		return "var(--netz-danger)";
 	}
 
-	function sparkMini(data: { value: number }[], maxCount = 30): { h: number }[] {
-		const tail = data.slice(-maxCount);
-		if (tail.length === 0) return [];
-		const max = Math.max(...tail.map((d) => Math.abs(d.value)), 0.001);
-		return tail.map((d) => ({ h: (Math.abs(d.value) / max) * 100 }));
+	// ── Snapshot regime badge ────────────────────────────────────────────
+
+	function snapshotRegimeLabel(r: RegimeHierarchy): string {
+		const regime = r.global_regime;
+		if (!regime) return "";
+		return regime.replace(/_/g, " ").toUpperCase();
+	}
+
+	function snapshotRegimeBadgeColor(r: RegimeHierarchy | null): string {
+		if (!r) return "var(--netz-text-muted)";
+		return regimeColor(r.global_regime);
 	}
 </script>
 
 <PageHeader title="Macro Intelligence">
 	{#snippet actions()}
 		{#if regime}
-			<span class="macro-regime-badge" style:color={regimeColor(regime.global_regime)}>
-				{regime.global_regime.toUpperCase()}
+			<span class="macro-regime-badge" style:color={snapshotRegimeBadgeColor(regime)}>
+				Regime: {snapshotRegimeLabel(regime)} ●
 			</span>
+		{/if}
+		{#if regime?.regional_regimes}
+			{#each Object.entries(regime.regional_regimes) as [region, reg] (region)}
+				<span class="macro-region-badge" style:color={regimeColor(reg)}>
+					{region}
+				</span>
+			{/each}
 		{/if}
 		{#if scores}
 			<span class="macro-asof">as of {scores.as_of_date}</span>
@@ -275,7 +315,6 @@
 				Coverage: {(regionData.coverage * 100).toFixed(0)}%
 			</div>
 
-			<!-- Dimension scores -->
 			{#if Object.keys(regionData.dimensions).length > 0}
 				<div class="region-dims">
 					{#each Object.entries(regionData.dimensions) as [dimName, dim] (dimName)}
@@ -293,133 +332,34 @@
 	{/each}
 
 	<!-- ═══════════════════════════════════════════════════════════════════ -->
-	<!-- ROW 4: Treasury time-series                                        -->
+	<!-- ROW 4: Interactive Chart + Series Picker (full width)              -->
 	<!-- ═══════════════════════════════════════════════════════════════════ -->
-	<section class="macro-panel macro-panel--wide">
-		<div class="ts-header">
-			<h3 class="macro-panel-title">US Treasury</h3>
-			<select class="ts-select" bind:value={treasurySeries}>
-				{#each TREASURY_SERIES as s (s)}
-					<option value={s}>{s.replace(/_/g, " ")}</option>
-				{/each}
-			</select>
+	<section class="macro-panel macro-panel--chart">
+		<h3 class="macro-panel-title">Macro Charting</h3>
+		<div class="chart-layout">
+			<div class="chart-main">
+				<MacroChart
+					series={chartSeries}
+					{timeRange}
+					onTimeRangeChange={(r) => (timeRange = r)}
+					height={440}
+				/>
+			</div>
+			<SeriesPicker
+				bind:this={pickerRef}
+				selected={selectedSeries}
+				{favorites}
+				onToggle={toggleSeries}
+				onToggleFavorite={toggleFavorite}
+			/>
 		</div>
-		{#if treasuryLoading}
-			<div class="ts-loading">Loading…</div>
-		{:else if treasuryData.length > 0}
-			<div class="ts-spark">
-				{#each sparkMini(treasuryData, 60) as bar, i (i)}
-					<div class="ts-bar" style:height="{bar.h}%"></div>
-				{/each}
-			</div>
-			<div class="ts-range">
-				<span>{treasuryData[0]?.obs_date}</span>
-				<span>{treasuryData[treasuryData.length - 1]?.obs_date}</span>
-			</div>
-		{:else}
-			<div class="ts-empty">No data for {treasurySeries}</div>
-		{/if}
 	</section>
 
 	<!-- ═══════════════════════════════════════════════════════════════════ -->
-	<!-- ROW 5: OFR Hedge Fund Monitor                                      -->
+	<!-- ROW 5: Committee Reviews (full width)                              -->
 	<!-- ═══════════════════════════════════════════════════════════════════ -->
-	<section class="macro-panel macro-panel--wide">
-		<div class="ts-header">
-			<h3 class="macro-panel-title">OFR Hedge Fund</h3>
-			<select class="ts-select" bind:value={ofrMetric}>
-				{#each OFR_METRICS as m (m)}
-					<option value={m}>{m.replace(/^HF_/, "").replace(/_/g, " ")}</option>
-				{/each}
-			</select>
-		</div>
-		{#if ofrLoading}
-			<div class="ts-loading">Loading…</div>
-		{:else if ofrData.length > 0}
-			<div class="ts-spark">
-				{#each sparkMini(ofrData, 60) as bar, i (i)}
-					<div class="ts-bar ts-bar--ofr" style:height="{bar.h}%"></div>
-				{/each}
-			</div>
-			<div class="ts-range">
-				<span>{ofrData[0]?.obs_date}</span>
-				<span>{ofrData[ofrData.length - 1]?.obs_date}</span>
-			</div>
-		{:else}
-			<div class="ts-empty">No data for {ofrMetric}</div>
-		{/if}
-	</section>
-
-	<!-- ═══════════════════════════════════════════════════════════════════ -->
-	<!-- ROW 6: BIS Global Credit                                           -->
-	<!-- ═══════════════════════════════════════════════════════════════════ -->
-	<section class="macro-panel macro-panel--wide">
-		<div class="ts-header">
-			<h3 class="macro-panel-title">BIS Global Credit</h3>
-			<div class="ts-selects">
-				<select class="ts-select" bind:value={bisCountry}>
-					{#each BIS_COUNTRIES as c (c)}
-						<option value={c}>{c}</option>
-					{/each}
-				</select>
-				<select class="ts-select" bind:value={bisIndicator}>
-					{#each BIS_INDICATORS as ind (ind)}
-						<option value={ind}>{ind.replace(/_/g, " ")}</option>
-					{/each}
-				</select>
-			</div>
-		</div>
-		{#if bisLoading}
-			<div class="ts-loading">Loading…</div>
-		{:else if bisData.length > 0}
-			<div class="ts-spark">
-				{#each sparkMini(bisData, 60) as bar, i (i)}
-					<div class="ts-bar ts-bar--bis" style:height="{bar.h}%"></div>
-				{/each}
-			</div>
-			<div class="ts-range">
-				<span>{bisData[0]?.period}</span>
-				<span>{bisData[bisData.length - 1]?.period}</span>
-			</div>
-		{:else}
-			<div class="ts-empty">No BIS data for {bisCountry} / {bisIndicator}</div>
-		{/if}
-	</section>
-
-	<!-- ═══════════════════════════════════════════════════════════════════ -->
-	<!-- ROW 7: IMF Economic Outlook                                        -->
-	<!-- ═══════════════════════════════════════════════════════════════════ -->
-	<section class="macro-panel macro-panel--wide">
-		<div class="ts-header">
-			<h3 class="macro-panel-title">IMF Economic Outlook</h3>
-			<div class="ts-selects">
-				<select class="ts-select" bind:value={imfCountry}>
-					{#each IMF_COUNTRIES as c (c)}
-						<option value={c}>{c}</option>
-					{/each}
-				</select>
-				<select class="ts-select" bind:value={imfIndicator}>
-					{#each IMF_INDICATORS as ind (ind)}
-						<option value={ind}>{IMF_LABELS[ind] ?? ind}</option>
-					{/each}
-				</select>
-			</div>
-		</div>
-		{#if imfLoading}
-			<div class="ts-loading">Loading…</div>
-		{:else if imfData.length > 0}
-			<div class="ts-imf-bars">
-				{#each imfData as point (point.year)}
-					<div class="imf-bar-col">
-						<div class="imf-bar-value">{formatNumber(point.value, 1)}</div>
-						<div class="imf-bar-fill" style:height="{Math.min(Math.abs(point.value) * 10, 100)}%" class:imf-bar-fill--negative={point.value < 0}></div>
-						<div class="imf-bar-year">{point.year}</div>
-					</div>
-				{/each}
-			</div>
-		{:else}
-			<div class="ts-empty">No IMF data for {imfCountry} / {IMF_LABELS[imfIndicator] ?? imfIndicator}</div>
-		{/if}
+	<section class="macro-panel macro-panel--full">
+		<CommitteeReviews {initialReviews} {actorRole} />
 	</section>
 </div>
 
@@ -439,6 +379,12 @@
 		letter-spacing: 0.04em;
 	}
 
+	.macro-region-badge {
+		font-size: var(--netz-text-label, 0.75rem);
+		font-weight: 600;
+		letter-spacing: 0.02em;
+	}
+
 	.macro-asof {
 		font-size: var(--netz-text-label, 0.75rem);
 		color: var(--netz-text-muted);
@@ -456,8 +402,12 @@
 		grid-column: 1 / -1;
 	}
 
-	.macro-panel--wide {
-		grid-column: span 2;
+	.macro-panel--chart {
+		grid-column: 1 / -1;
+	}
+
+	.macro-panel--full {
+		grid-column: 1 / -1;
 	}
 
 	.macro-panel--region {
@@ -603,126 +553,15 @@
 		border-radius: 2px;
 	}
 
-	/* ── Time-series panels (Treasury, OFR) ──────────────────────────────── */
-	.ts-header {
+	/* ── Chart layout ───────────────────────────────────────────────────── */
+	.chart-layout {
 		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-md, 16px);
-		border-bottom: 1px solid var(--netz-border-subtle);
-		background: var(--netz-surface-alt);
+		gap: 0;
 	}
 
-	.ts-header .macro-panel-title {
-		border-bottom: none;
-		padding: 0;
-		background: transparent;
-	}
-
-	.ts-select {
-		height: var(--netz-space-control-height-sm, 28px);
-		padding: 0 var(--netz-space-inline-xs, 8px);
-		border: 1px solid var(--netz-border);
-		border-radius: var(--netz-radius-sm, 6px);
-		background: var(--netz-surface-elevated);
-		color: var(--netz-text-primary);
-		font-size: var(--netz-text-label, 0.75rem);
-		font-family: var(--netz-font-sans);
-	}
-
-	.ts-spark {
-		display: flex;
-		align-items: flex-end;
-		gap: 1px;
-		height: 64px;
-		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-md, 16px);
-	}
-
-	.ts-bar {
+	.chart-main {
 		flex: 1;
-		min-width: 2px;
-		background: var(--netz-brand-primary);
-		border-radius: 1px 1px 0 0;
-		opacity: 0.5;
-		transition: height 200ms ease;
-	}
-
-	.ts-bar:last-child {
-		opacity: 1;
-	}
-
-	.ts-bar--ofr {
-		background: var(--netz-brand-highlight);
-	}
-
-	.ts-range {
-		display: flex;
-		justify-content: space-between;
-		padding: 0 var(--netz-space-inline-md, 16px) var(--netz-space-stack-xs, 8px);
-		font-size: 10px;
-		color: var(--netz-text-muted);
-	}
-
-	.ts-loading,
-	.ts-empty {
-		padding: var(--netz-space-stack-lg, 32px);
-		text-align: center;
-		color: var(--netz-text-muted);
-		font-size: var(--netz-text-small, 0.8125rem);
-	}
-
-	/* ── Multi-select row ────────────────────────────────────────────────── */
-	.ts-selects {
-		display: flex;
-		gap: var(--netz-space-inline-xs, 6px);
-	}
-
-	/* ── BIS bar accent ──────────────────────────────────────────────────── */
-	.ts-bar--bis {
-		background: var(--netz-info);
-	}
-
-	/* ── IMF bar chart ───────────────────────────────────────────────────── */
-	.ts-imf-bars {
-		display: flex;
-		align-items: flex-end;
-		gap: var(--netz-space-inline-xs, 6px);
-		height: 80px;
-		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-md, 16px);
-	}
-
-	.imf-bar-col {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 2px;
 		min-width: 0;
-	}
-
-	.imf-bar-value {
-		font-size: 10px;
-		font-weight: 600;
-		color: var(--netz-text-secondary);
-		font-variant-numeric: tabular-nums;
-	}
-
-	.imf-bar-fill {
-		width: 100%;
-		max-width: 32px;
-		background: var(--netz-success);
-		border-radius: 2px 2px 0 0;
-		transition: height 200ms ease;
-	}
-
-	.imf-bar-fill--negative {
-		background: var(--netz-danger);
-	}
-
-	.imf-bar-year {
-		font-size: 10px;
-		color: var(--netz-text-muted);
-		font-variant-numeric: tabular-nums;
 	}
 
 	/* ── Responsive ──────────────────────────────────────────────────────── */
@@ -731,8 +570,8 @@
 			grid-template-columns: repeat(2, 1fr);
 		}
 
-		.macro-panel--wide {
-			grid-column: span 2;
+		.chart-layout {
+			flex-direction: column;
 		}
 	}
 
@@ -741,8 +580,7 @@
 			grid-template-columns: 1fr;
 		}
 
-		.macro-panel--indicators,
-		.macro-panel--wide {
+		.macro-panel--indicators {
 			grid-column: 1;
 		}
 

@@ -1,0 +1,434 @@
+<!--
+  SeriesPicker — indicator catalog with search, region/frequency chips, favorites, hard cap 8.
+  Spec: WM-S1-02
+-->
+<script lang="ts">
+	import { slide } from "svelte/transition";
+
+	export interface IndicatorEntry {
+		id: string;
+		name: string;
+		group: string;
+		frequency: "D" | "M" | "Q" | "A";
+		source: "treasury" | "ofr" | "bis" | "imf" | "fred";
+		region?: string;
+		unit?: string;
+		params?: Record<string, string>;
+	}
+
+	interface Props {
+		selected: Set<string>;
+		favorites?: Set<string>;
+		onToggle: (id: string) => void;
+		onToggleFavorite?: (id: string) => void;
+	}
+
+	let {
+		selected,
+		favorites = new Set<string>(),
+		onToggle,
+		onToggleFavorite,
+	}: Props = $props();
+
+	let searchQuery = $state("");
+	let regionFilter = $state("All");
+	let frequencyFilter = $state("All");
+	let expandedGroups = $state<Set<string>>(new Set());
+
+	const REGIONS = ["All", "US", "Europe", "Asia", "EM", "Global"] as const;
+	const FREQUENCIES = ["All", "D", "M", "Q", "A"] as const;
+	const MAX_SERIES = 8;
+	const WARN_THRESHOLD = 6;
+
+	const FREQ_LABELS: Record<string, string> = { D: "Daily", M: "Monthly", Q: "Quarterly", A: "Annual" };
+
+	const CATALOG: IndicatorEntry[] = [
+		// ── US Treasury ──
+		{ id: "treasury:YIELD_CURVE", name: "Yield Curve (10Y-2Y)", group: "US Treasury", frequency: "D", source: "treasury", region: "US", unit: "bps", params: { series: "YIELD_CURVE" } },
+		{ id: "treasury:10Y_RATE", name: "10-Year Rate", group: "US Treasury", frequency: "D", source: "treasury", region: "US", unit: "%", params: { series: "10Y_RATE" } },
+		{ id: "treasury:2Y_RATE", name: "2-Year Rate", group: "US Treasury", frequency: "D", source: "treasury", region: "US", unit: "%", params: { series: "2Y_RATE" } },
+		{ id: "treasury:30Y_RATE", name: "30-Year Rate", group: "US Treasury", frequency: "D", source: "treasury", region: "US", unit: "%", params: { series: "30Y_RATE" } },
+		{ id: "treasury:FED_FUNDS", name: "Fed Funds Rate", group: "US Treasury", frequency: "D", source: "treasury", region: "US", unit: "%", params: { series: "FED_FUNDS" } },
+
+		// ── OFR Hedge Fund ──
+		{ id: "ofr:HF_AUM", name: "Hedge Fund AUM", group: "OFR Hedge Fund", frequency: "Q", source: "ofr", region: "Global", unit: "$B", params: { metric: "HF_AUM" } },
+		{ id: "ofr:HF_LEVERAGE", name: "Hedge Fund Leverage", group: "OFR Hedge Fund", frequency: "Q", source: "ofr", region: "Global", unit: "x", params: { metric: "HF_LEVERAGE" } },
+		{ id: "ofr:HF_REPO_STRESS", name: "Repo Stress Index", group: "OFR Hedge Fund", frequency: "Q", source: "ofr", region: "Global", unit: "idx", params: { metric: "HF_REPO_STRESS" } },
+
+		// ── BIS US ──
+		{ id: "bis:US:CREDIT_GAP", name: "Credit-to-GDP Gap (US)", group: "BIS Credit", frequency: "Q", source: "bis", region: "US", unit: "pp", params: { country: "US", indicator: "CREDIT_GAP" } },
+		{ id: "bis:US:DSR", name: "Debt Service Ratio (US)", group: "BIS Credit", frequency: "Q", source: "bis", region: "US", unit: "%", params: { country: "US", indicator: "DSR" } },
+		{ id: "bis:US:PROPERTY_PRICES", name: "Property Prices (US)", group: "BIS Credit", frequency: "Q", source: "bis", region: "US", unit: "idx", params: { country: "US", indicator: "PROPERTY_PRICES" } },
+
+		// ── BIS Europe ──
+		{ id: "bis:GB:CREDIT_GAP", name: "Credit-to-GDP Gap (UK)", group: "BIS Credit", frequency: "Q", source: "bis", region: "Europe", unit: "pp", params: { country: "GB", indicator: "CREDIT_GAP" } },
+		{ id: "bis:DE:CREDIT_GAP", name: "Credit-to-GDP Gap (Germany)", group: "BIS Credit", frequency: "Q", source: "bis", region: "Europe", unit: "pp", params: { country: "DE", indicator: "CREDIT_GAP" } },
+		{ id: "bis:GB:DSR", name: "Debt Service Ratio (UK)", group: "BIS Credit", frequency: "Q", source: "bis", region: "Europe", unit: "%", params: { country: "GB", indicator: "DSR" } },
+		{ id: "bis:DE:DSR", name: "Debt Service Ratio (Germany)", group: "BIS Credit", frequency: "Q", source: "bis", region: "Europe", unit: "%", params: { country: "DE", indicator: "DSR" } },
+		{ id: "bis:GB:PROPERTY_PRICES", name: "Property Prices (UK)", group: "BIS Credit", frequency: "Q", source: "bis", region: "Europe", unit: "idx", params: { country: "GB", indicator: "PROPERTY_PRICES" } },
+		{ id: "bis:DE:PROPERTY_PRICES", name: "Property Prices (Germany)", group: "BIS Credit", frequency: "Q", source: "bis", region: "Europe", unit: "idx", params: { country: "DE", indicator: "PROPERTY_PRICES" } },
+
+		// ── BIS Asia ──
+		{ id: "bis:JP:CREDIT_GAP", name: "Credit-to-GDP Gap (Japan)", group: "BIS Credit", frequency: "Q", source: "bis", region: "Asia", unit: "pp", params: { country: "JP", indicator: "CREDIT_GAP" } },
+		{ id: "bis:JP:DSR", name: "Debt Service Ratio (Japan)", group: "BIS Credit", frequency: "Q", source: "bis", region: "Asia", unit: "%", params: { country: "JP", indicator: "DSR" } },
+		{ id: "bis:JP:PROPERTY_PRICES", name: "Property Prices (Japan)", group: "BIS Credit", frequency: "Q", source: "bis", region: "Asia", unit: "idx", params: { country: "JP", indicator: "PROPERTY_PRICES" } },
+
+		// ── BIS EM ──
+		{ id: "bis:CN:CREDIT_GAP", name: "Credit-to-GDP Gap (China)", group: "BIS Credit", frequency: "Q", source: "bis", region: "EM", unit: "pp", params: { country: "CN", indicator: "CREDIT_GAP" } },
+		{ id: "bis:BR:CREDIT_GAP", name: "Credit-to-GDP Gap (Brazil)", group: "BIS Credit", frequency: "Q", source: "bis", region: "EM", unit: "pp", params: { country: "BR", indicator: "CREDIT_GAP" } },
+		{ id: "bis:CN:DSR", name: "Debt Service Ratio (China)", group: "BIS Credit", frequency: "Q", source: "bis", region: "EM", unit: "%", params: { country: "CN", indicator: "DSR" } },
+		{ id: "bis:BR:DSR", name: "Debt Service Ratio (Brazil)", group: "BIS Credit", frequency: "Q", source: "bis", region: "EM", unit: "%", params: { country: "BR", indicator: "DSR" } },
+		{ id: "bis:CN:PROPERTY_PRICES", name: "Property Prices (China)", group: "BIS Credit", frequency: "Q", source: "bis", region: "EM", unit: "idx", params: { country: "CN", indicator: "PROPERTY_PRICES" } },
+		{ id: "bis:BR:PROPERTY_PRICES", name: "Property Prices (Brazil)", group: "BIS Credit", frequency: "Q", source: "bis", region: "EM", unit: "idx", params: { country: "BR", indicator: "PROPERTY_PRICES" } },
+
+		// ── IMF US ──
+		{ id: "imf:US:NGDP_RPCH", name: "GDP Growth (US)", group: "IMF Outlook", frequency: "A", source: "imf", region: "US", unit: "%", params: { country: "US", indicator: "NGDP_RPCH" } },
+		{ id: "imf:US:PCPIPCH", name: "Inflation (US)", group: "IMF Outlook", frequency: "A", source: "imf", region: "US", unit: "%", params: { country: "US", indicator: "PCPIPCH" } },
+		{ id: "imf:US:GGXWDG_NGDP", name: "Fiscal Balance (US)", group: "IMF Outlook", frequency: "A", source: "imf", region: "US", unit: "%GDP", params: { country: "US", indicator: "GGXWDG_NGDP" } },
+
+		// ── IMF Europe ──
+		{ id: "imf:GB:NGDP_RPCH", name: "GDP Growth (UK)", group: "IMF Outlook", frequency: "A", source: "imf", region: "Europe", unit: "%", params: { country: "GB", indicator: "NGDP_RPCH" } },
+		{ id: "imf:DE:NGDP_RPCH", name: "GDP Growth (Germany)", group: "IMF Outlook", frequency: "A", source: "imf", region: "Europe", unit: "%", params: { country: "DE", indicator: "NGDP_RPCH" } },
+		{ id: "imf:GB:PCPIPCH", name: "Inflation (UK)", group: "IMF Outlook", frequency: "A", source: "imf", region: "Europe", unit: "%", params: { country: "GB", indicator: "PCPIPCH" } },
+		{ id: "imf:DE:PCPIPCH", name: "Inflation (Germany)", group: "IMF Outlook", frequency: "A", source: "imf", region: "Europe", unit: "%", params: { country: "DE", indicator: "PCPIPCH" } },
+
+		// ── IMF Asia ──
+		{ id: "imf:JP:NGDP_RPCH", name: "GDP Growth (Japan)", group: "IMF Outlook", frequency: "A", source: "imf", region: "Asia", unit: "%", params: { country: "JP", indicator: "NGDP_RPCH" } },
+		{ id: "imf:JP:PCPIPCH", name: "Inflation (Japan)", group: "IMF Outlook", frequency: "A", source: "imf", region: "Asia", unit: "%", params: { country: "JP", indicator: "PCPIPCH" } },
+
+		// ── IMF EM ──
+		{ id: "imf:CN:NGDP_RPCH", name: "GDP Growth (China)", group: "IMF Outlook", frequency: "A", source: "imf", region: "EM", unit: "%", params: { country: "CN", indicator: "NGDP_RPCH" } },
+		{ id: "imf:BR:NGDP_RPCH", name: "GDP Growth (Brazil)", group: "IMF Outlook", frequency: "A", source: "imf", region: "EM", unit: "%", params: { country: "BR", indicator: "NGDP_RPCH" } },
+		{ id: "imf:CN:PCPIPCH", name: "Inflation (China)", group: "IMF Outlook", frequency: "A", source: "imf", region: "EM", unit: "%", params: { country: "CN", indicator: "PCPIPCH" } },
+		{ id: "imf:BR:PCPIPCH", name: "Inflation (Brazil)", group: "IMF Outlook", frequency: "A", source: "imf", region: "EM", unit: "%", params: { country: "BR", indicator: "PCPIPCH" } },
+	];
+
+	export function getCatalog(): IndicatorEntry[] {
+		return CATALOG;
+	}
+
+	export function getEntryById(id: string): IndicatorEntry | undefined {
+		return CATALOG.find((e) => e.id === id);
+	}
+
+	let filtered = $derived.by(() => {
+		let items = CATALOG;
+		if (regionFilter !== "All") {
+			items = items.filter((e) => e.region === regionFilter);
+		}
+		if (frequencyFilter !== "All") {
+			items = items.filter((e) => e.frequency === frequencyFilter);
+		}
+		if (searchQuery.trim()) {
+			const q = searchQuery.trim().toLowerCase();
+			items = items.filter(
+				(e) =>
+					e.name.toLowerCase().includes(q) ||
+					e.group.toLowerCase().includes(q) ||
+					e.id.toLowerCase().includes(q),
+			);
+		}
+		return items;
+	});
+
+	let groupedFiltered = $derived.by(() => {
+		const groups = new Map<string, IndicatorEntry[]>();
+		for (const item of filtered) {
+			const list = groups.get(item.group) ?? [];
+			list.push(item);
+			groups.set(item.group, list);
+		}
+		return groups;
+	});
+
+	let atLimit = $derived(selected.size >= MAX_SERIES);
+	let nearLimit = $derived(selected.size >= WARN_THRESHOLD);
+
+	function toggleGroup(group: string) {
+		const next = new Set(expandedGroups);
+		if (next.has(group)) next.delete(group);
+		else next.add(group);
+		expandedGroups = next;
+	}
+
+	const FREQ_COLORS: Record<string, string> = {
+		D: "var(--netz-chart-1)",
+		M: "var(--netz-chart-2)",
+		Q: "var(--netz-chart-3)",
+		A: "var(--netz-chart-4)",
+	};
+</script>
+
+<aside class="picker">
+	<input
+		class="picker-search"
+		type="search"
+		placeholder="Search indicators…"
+		bind:value={searchQuery}
+	/>
+
+	<div class="chip-row">
+		{#each REGIONS as r (r)}
+			<button
+				class="chip"
+				class:chip--active={regionFilter === r}
+				onclick={() => (regionFilter = r)}
+			>
+				{r}
+			</button>
+		{/each}
+	</div>
+
+	<div class="chip-row">
+		{#each FREQUENCIES as f (f)}
+			<button
+				class="chip"
+				class:chip--active={frequencyFilter === f}
+				onclick={() => (frequencyFilter = f)}
+			>
+				{f === "All" ? "All" : FREQ_LABELS[f]}
+			</button>
+		{/each}
+	</div>
+
+	{#if nearLimit && !atLimit}
+		<div class="picker-warning">Approaching series limit ({selected.size}/{MAX_SERIES})</div>
+	{/if}
+
+	<div class="picker-list">
+		{#each [...groupedFiltered] as [group, items] (group)}
+			<button class="group-header" onclick={() => toggleGroup(group)}>
+				<span class="group-chevron" class:group-chevron--open={expandedGroups.has(group) || searchQuery.trim() !== ""}>&#9656;</span>
+				<span class="group-name">{group}</span>
+				<span class="group-count">{items.length}</span>
+			</button>
+
+			{#if expandedGroups.has(group) || searchQuery.trim() !== ""}
+				<div transition:slide={{ duration: 150 }}>
+					{#each items as entry (entry.id)}
+						{@const isSelected = selected.has(entry.id)}
+						{@const isFav = favorites.has(entry.id)}
+						<div class="indicator-row" class:indicator-row--selected={isSelected}>
+							<button
+								class="indicator-btn"
+								disabled={atLimit && !isSelected}
+								title={atLimit && !isSelected ? "Maximum 8 series reached" : entry.name}
+								onclick={() => onToggle(entry.id)}
+							>
+								<span class="indicator-check">{isSelected ? "✓" : ""}</span>
+								<span class="indicator-name">{entry.name}</span>
+								<span class="freq-badge" style:background={FREQ_COLORS[entry.frequency]}>{entry.frequency}</span>
+							</button>
+							{#if onToggleFavorite}
+								<button
+									class="fav-btn"
+									class:fav-btn--active={isFav}
+									title={isFav ? "Remove from favorites" : "Add to favorites"}
+									onclick={() => onToggleFavorite(entry.id)}
+								>
+									{isFav ? "★" : "☆"}
+								</button>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			{/if}
+		{/each}
+
+		{#if filtered.length === 0}
+			<div class="picker-empty">No indicators match your filters</div>
+		{/if}
+	</div>
+</aside>
+
+<style>
+	.picker {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		min-width: 280px;
+		max-width: 320px;
+		border: 1px solid var(--netz-border-subtle);
+		border-radius: var(--netz-radius-md, 12px);
+		background: var(--netz-surface-elevated);
+		padding: 12px;
+		overflow-y: auto;
+		max-height: 600px;
+	}
+
+	.picker-search {
+		width: 100%;
+		height: var(--netz-space-control-height-sm, 28px);
+		padding: 0 8px;
+		border: 1px solid var(--netz-border);
+		border-radius: var(--netz-radius-sm, 6px);
+		background: var(--netz-surface);
+		color: var(--netz-text-primary);
+		font-size: var(--netz-text-label, 0.75rem);
+		font-family: var(--netz-font-sans);
+	}
+
+	.picker-search::placeholder {
+		color: var(--netz-text-muted);
+	}
+
+	.chip-row {
+		display: flex;
+		gap: 4px;
+		flex-wrap: wrap;
+	}
+
+	.chip {
+		padding: 2px 8px;
+		font-size: 11px;
+		font-weight: 500;
+		border: 1px solid var(--netz-border);
+		border-radius: 12px;
+		background: var(--netz-surface);
+		color: var(--netz-text-secondary);
+		cursor: pointer;
+		transition: all 100ms ease;
+	}
+
+	.chip:hover {
+		background: var(--netz-surface-alt);
+	}
+
+	.chip--active {
+		background: var(--netz-brand-primary);
+		color: white;
+		border-color: var(--netz-brand-primary);
+	}
+
+	.picker-warning {
+		padding: 4px 8px;
+		font-size: 11px;
+		font-weight: 500;
+		color: var(--netz-warning);
+		background: color-mix(in srgb, var(--netz-warning) 10%, transparent);
+		border-radius: var(--netz-radius-sm, 6px);
+		text-align: center;
+	}
+
+	.picker-list {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.group-header {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		width: 100%;
+		padding: 6px 4px;
+		border: none;
+		background: none;
+		cursor: pointer;
+		color: var(--netz-text-secondary);
+		font-size: var(--netz-text-label, 0.75rem);
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+
+	.group-header:hover {
+		color: var(--netz-text-primary);
+	}
+
+	.group-chevron {
+		font-size: 10px;
+		transition: transform 150ms ease;
+	}
+
+	.group-chevron--open {
+		transform: rotate(90deg);
+	}
+
+	.group-name {
+		flex: 1;
+		text-align: left;
+	}
+
+	.group-count {
+		font-size: 10px;
+		color: var(--netz-text-muted);
+		font-weight: 400;
+	}
+
+	.indicator-row {
+		display: flex;
+		align-items: center;
+		padding-left: 8px;
+	}
+
+	.indicator-row--selected {
+		background: color-mix(in srgb, var(--netz-brand-primary) 8%, transparent);
+	}
+
+	.indicator-btn {
+		flex: 1;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 4px;
+		border: none;
+		background: none;
+		cursor: pointer;
+		color: var(--netz-text-primary);
+		font-size: var(--netz-text-small, 0.8125rem);
+		text-align: left;
+	}
+
+	.indicator-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.indicator-btn:hover:not(:disabled) {
+		background: var(--netz-surface-alt);
+		border-radius: 4px;
+	}
+
+	.indicator-check {
+		width: 14px;
+		font-size: 11px;
+		color: var(--netz-brand-primary);
+		font-weight: 700;
+	}
+
+	.indicator-name {
+		flex: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.freq-badge {
+		padding: 1px 5px;
+		font-size: 9px;
+		font-weight: 700;
+		color: white;
+		border-radius: 6px;
+		letter-spacing: 0.04em;
+	}
+
+	.fav-btn {
+		border: none;
+		background: none;
+		cursor: pointer;
+		color: var(--netz-text-muted);
+		font-size: 14px;
+		padding: 4px;
+	}
+
+	.fav-btn--active {
+		color: var(--netz-warning);
+	}
+
+	.picker-empty {
+		padding: 16px;
+		text-align: center;
+		color: var(--netz-text-muted);
+		font-size: var(--netz-text-small, 0.8125rem);
+	}
+</style>
