@@ -61,6 +61,16 @@ export interface OfrPoint {
 	value: number;
 }
 
+export interface BisPoint {
+	period: string;
+	value: number;
+}
+
+export interface ImfPoint {
+	year: number;
+	value: number;
+}
+
 export function regimeColor(regime: string | null | undefined): string {
 	switch (regime) {
 		case "crisis":      return "var(--netz-danger)";

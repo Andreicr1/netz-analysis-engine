@@ -48,6 +48,18 @@ export interface StrategyDriftAlert {
 	detected_at: string;
 }
 
+export interface ParetoResult {
+	profile: string;
+	recommended_weights: Record<string, number>;
+	pareto_sharpe: number[];
+	pareto_cvar: number[];
+	n_solutions: number;
+	seed: number;
+	input_hash: string;
+	status: string;
+	job_id?: string;
+}
+
 export type Timeframe = "ytd" | "1y" | "3y" | "custom";
 
 export function effectColor(value: number): string {

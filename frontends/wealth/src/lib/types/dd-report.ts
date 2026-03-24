@@ -44,6 +44,15 @@ export interface DDReportFull extends DDReportSummary {
 	chapters: DDChapter[];
 }
 
+export interface AuditEvent {
+	id: string;
+	action: string;
+	actor_id: string | null;
+	before: Record<string, unknown> | null;
+	after: Record<string, unknown> | null;
+	created_at: string | null;
+}
+
 /** Chapter registry — mirrors backend CHAPTER_REGISTRY order */
 export const CHAPTER_TITLES: Record<string, string> = {
 	executive_summary: "Executive Summary",
