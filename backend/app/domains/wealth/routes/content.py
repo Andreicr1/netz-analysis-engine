@@ -450,6 +450,8 @@ def _sync_generate_content(
 
     with sync_session_factory() as db:
         db.expire_on_commit = False
+        from sqlalchemy import text
+        db.execute(text("SET LOCAL app.current_organization_id = :oid"), {"oid": org_id})
 
         if content_type == "investment_outlook":
             from vertical_engines.wealth.investment_outlook import InvestmentOutlook

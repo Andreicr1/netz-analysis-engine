@@ -18,6 +18,7 @@ def gather_quant_metrics(
     db: Session,
     *,
     instrument_id: str,
+    organization_id: str,
     config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Gather quantitative metrics for a fund from the database.
@@ -46,7 +47,10 @@ def gather_quant_metrics(
 
         row = (
             db.query(FundRiskMetrics)
-            .filter(FundRiskMetrics.instrument_id == instrument_id)
+            .filter(
+                FundRiskMetrics.instrument_id == instrument_id,
+                FundRiskMetrics.organization_id == organization_id,
+            )
             .order_by(FundRiskMetrics.calc_date.desc())
             .first()
         )
@@ -91,9 +95,10 @@ def gather_risk_metrics(
     db: Session,
     *,
     instrument_id: str,
+    organization_id: str,
 ) -> dict[str, Any]:
     """Gather risk-specific metrics formatted for the risk chapter."""
-    profile = gather_quant_metrics(db, instrument_id=instrument_id)
+    profile = gather_quant_metrics(db, instrument_id=instrument_id, organization_id=organization_id)
     if not profile:
         return {}
 

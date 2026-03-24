@@ -245,7 +245,11 @@ class R2StorageClient(StorageClient):
                 self._s3.head_object, Bucket=self._bucket_name, Key=path,
             )
             return True
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            from botocore.exceptions import ClientError
+            if isinstance(exc, ClientError) and exc.response["Error"]["Code"] in ("404", "NoSuchKey"):
+                return False
+            logger.warning("storage_exists_error", extra={"path": path, "error": str(exc)})
             return False
 
     async def delete(self, path: str) -> None:
@@ -254,8 +258,11 @@ class R2StorageClient(StorageClient):
             await asyncio.to_thread(
                 self._s3.delete_object, Bucket=self._bucket_name, Key=path,
             )
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as exc:  # noqa: BLE001
+            from botocore.exceptions import ClientError
+            if isinstance(exc, ClientError) and exc.response["Error"]["Code"] in ("404", "NoSuchKey"):
+                return
+            logger.warning("storage_delete_error", extra={"path": path, "error": str(exc)})
 
     async def list_files(self, prefix: str) -> list[str]:
         self._validate_path(prefix)

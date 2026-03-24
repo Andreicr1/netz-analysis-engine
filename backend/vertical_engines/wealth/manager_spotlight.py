@@ -80,9 +80,9 @@ class ManagerSpotlight:
             )
 
         try:
-            fund_data = self._gather_fund_data(db, instrument_id)
-            quant_profile = gather_quant_metrics(db, instrument_id=instrument_id)
-            risk_metrics = gather_risk_metrics(db, instrument_id=instrument_id)
+            fund_data = self._gather_fund_data(db, instrument_id, organization_id)
+            quant_profile = gather_quant_metrics(db, instrument_id=instrument_id, organization_id=organization_id)
+            risk_metrics = gather_risk_metrics(db, instrument_id=instrument_id, organization_id=organization_id)
 
             content_md = self._generate_narrative(
                 fund_data=fund_data,
@@ -123,11 +123,15 @@ class ManagerSpotlight:
             language=language,
         )
 
-    def _gather_fund_data(self, db: Session, instrument_id: str) -> dict[str, Any]:
+    def _gather_fund_data(self, db: Session, instrument_id: str, organization_id: str) -> dict[str, Any]:
         """Gather fund identity and DD report data."""
         from app.domains.wealth.models.fund import Fund
 
-        fund = db.query(Fund).filter(Fund.fund_id == instrument_id).first()
+        fund = (
+            db.query(Fund)
+            .filter(Fund.fund_id == instrument_id, Fund.organization_id == organization_id)
+            .first()
+        )
         if not fund:
             return {"instrument_id": instrument_id, "name": "Unknown Fund"}
 

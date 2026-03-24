@@ -139,7 +139,7 @@ class DDReportEngine:
             )
 
             # 2. Gather evidence
-            evidence = self._build_evidence(db, fund_id=instrument_id)
+            evidence = self._build_evidence(db, fund_id=instrument_id, organization_id=organization_id)
 
             # 3. Generate chapters (parallel 1-7, sequential 8)
             chapters = self._generate_all_chapters(
@@ -281,11 +281,16 @@ class DDReportEngine:
         db: Session,
         *,
         fund_id: str,
+        organization_id: str,
     ) -> EvidencePack:
         """Gather all evidence for the fund."""
         from app.domains.wealth.models.fund import Fund
 
-        fund = db.query(Fund).filter(Fund.fund_id == fund_id).first()
+        fund = (
+            db.query(Fund)
+            .filter(Fund.fund_id == fund_id, Fund.organization_id == organization_id)
+            .first()
+        )
         if not fund:
             logger.warning("fund_not_found", fund_id=fund_id)
             return EvidencePack()
@@ -305,8 +310,8 @@ class DDReportEngine:
             "aum_usd": fund.aum_usd,
         }
 
-        quant_profile = gather_quant_metrics(db, instrument_id=fund_id)
-        risk_metrics = gather_risk_metrics(db, instrument_id=fund_id)
+        quant_profile = gather_quant_metrics(db, instrument_id=fund_id, organization_id=organization_id)
+        risk_metrics = gather_risk_metrics(db, instrument_id=fund_id, organization_id=organization_id)
 
         # SEC data (global tables, no RLS — DB-only reads)
         manager_name = fund.manager_name
