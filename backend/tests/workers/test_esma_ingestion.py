@@ -80,7 +80,7 @@ class TestEsmaWorkerConstants:
     def test_lock_id(self) -> None:
         from app.domains.wealth.workers.esma_ingestion import ESMA_LOCK_ID
 
-        assert ESMA_LOCK_ID == 900_019
+        assert ESMA_LOCK_ID == 900_023
 
     def test_batch_size(self) -> None:
         from app.domains.wealth.workers.esma_ingestion import _BATCH_SIZE

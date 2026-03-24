@@ -8,11 +8,13 @@
 
 	let {
 		title,
+		subtitle,
 		breadcrumbs = [],
 		class: className,
 		actions,
 	}: {
 		title: string;
+		subtitle?: string;
 		breadcrumbs?: { label: string; href?: string }[];
 		class?: string;
 		actions?: Snippet;
@@ -40,7 +42,12 @@
 	{/if}
 
 	<div class="netz-page-header__row">
-		<h1 class="netz-page-header__title">{title}</h1>
+		<div class="netz-page-header__titles">
+			<h1 class="netz-page-header__title">{title}</h1>
+			{#if subtitle}
+				<p class="netz-page-header__subtitle">{subtitle}</p>
+			{/if}
+		</div>
 		{#if actions}
 			<div class="netz-page-header__actions">
 				{@render actions()}
@@ -110,6 +117,21 @@
 		color: var(--netz-text-secondary);
 		font-feature-settings: var(--netz-font-features, "rlig" 1, "calt" 1, "ss01" 1);
 		-webkit-font-smoothing: antialiased;
+	}
+
+	.netz-page-header__titles {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+	}
+
+	.netz-page-header__subtitle {
+		margin: 0;
+		font-size: var(--netz-text-sm, 14px);
+		font-weight: var(--netz-weight-normal, 400);
+		line-height: 20px;
+		color: var(--netz-text-muted);
 	}
 
 	.netz-page-header__actions {

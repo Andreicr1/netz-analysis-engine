@@ -1,15 +1,17 @@
 """
 CSP configuration tests — prevent nonce/inline regressions.
 
-CSP is set via hooks.server.ts (cspHook) in each frontend, NOT via
+CSP is set via static/_headers (Cloudflare Pages) in each frontend, NOT via
 SvelteKit csp config (which injects nonces that disable unsafe-inline).
+SSR-level cspHook was removed because dual CSP headers cause nonce conflicts.
 
-The _headers files provide fallback for static assets on Cloudflare Pages.
+hooks.server.ts provides non-CSP security headers (X-Frame-Options, etc.)
+via securityHeadersHook.
 
 These tests enforce:
 1. No CSP in svelte.config.js (prevents nonce injection)
-2. hooks.server.ts has cspHook with unsafe-inline + *.clerk.com
-3. _headers file exists as fallback
+2. _headers file has CSP with unsafe-inline + *.clerk.com
+3. hooks.server.ts has securityHeadersHook in sequence
 4. All frontends have consistent CSP
 """
 from __future__ import annotations
@@ -37,47 +39,42 @@ class TestSvelteConfigHasNoCsp:
         )
 
 
-class TestHooksHasCspHook:
-    """hooks.server.ts must set CSP header with unsafe-inline for Clerk."""
+class TestCspInHeaders:
+    """CSP is set via static/_headers (Cloudflare Pages), not hooks.server.ts.
+
+    SSR-level cspHook was removed from all frontends because dual CSP headers
+    cause nonce/unsafe-inline conflicts: Cloudflare may inject nonces which
+    per CSP3 spec disable unsafe-inline, blocking the FOUC prevention script.
+    """
 
     @pytest.mark.parametrize("frontend", FRONTENDS)
-    def test_hooks_has_csp_hook(self, frontend: str):
-        hooks_path = REPO_ROOT / "frontends" / frontend / "src" / "hooks.server.ts"
-        assert hooks_path.exists(), f"Missing {hooks_path}"
-        content = hooks_path.read_text(encoding="utf-8")
-        assert "cspHook" in content, (
-            f"frontends/{frontend}/src/hooks.server.ts missing cspHook. "
-            "CSP must be set via server hook, not svelte.config.js."
-        )
-
-    @pytest.mark.parametrize("frontend", FRONTENDS)
-    def test_hooks_csp_has_unsafe_inline(self, frontend: str):
-        hooks_path = REPO_ROOT / "frontends" / frontend / "src" / "hooks.server.ts"
-        content = hooks_path.read_text(encoding="utf-8")
+    def test_headers_csp_has_unsafe_inline(self, frontend: str):
+        headers_path = REPO_ROOT / "frontends" / frontend / "static" / "_headers"
+        content = headers_path.read_text(encoding="utf-8")
         assert "'unsafe-inline'" in content, (
-            f"frontends/{frontend} hooks.server.ts CSP missing 'unsafe-inline'. "
+            f"frontends/{frontend} _headers CSP missing 'unsafe-inline'. "
             "Clerk and FOUC prevention script require inline execution."
         )
 
     @pytest.mark.parametrize("frontend", FRONTENDS)
-    def test_hooks_csp_has_clerk_domain(self, frontend: str):
-        hooks_path = REPO_ROOT / "frontends" / frontend / "src" / "hooks.server.ts"
-        content = hooks_path.read_text(encoding="utf-8")
+    def test_headers_csp_has_clerk_domain(self, frontend: str):
+        headers_path = REPO_ROOT / "frontends" / frontend / "static" / "_headers"
+        content = headers_path.read_text(encoding="utf-8")
         assert "*.clerk.com" in content, (
-            f"frontends/{frontend} hooks.server.ts CSP missing *.clerk.com."
+            f"frontends/{frontend} _headers CSP missing *.clerk.com."
         )
 
     @pytest.mark.parametrize("frontend", FRONTENDS)
-    def test_hooks_csp_in_sequence(self, frontend: str):
-        """cspHook must be in the exported handle sequence() call."""
+    def test_hooks_has_security_headers_hook(self, frontend: str):
+        """hooks.server.ts must have securityHeadersHook in exported sequence()."""
         hooks_path = REPO_ROOT / "frontends" / frontend / "src" / "hooks.server.ts"
+        assert hooks_path.exists(), f"Missing {hooks_path}"
         content = hooks_path.read_text(encoding="utf-8")
-        # The export line should include cspHook in its sequence
         import re
         export_match = re.search(r"export const handle.*=.*sequence\((.+)\);", content)
         assert export_match, f"frontends/{frontend} missing 'export const handle = sequence(...)'"
-        assert "cspHook" in export_match.group(1), (
-            f"frontends/{frontend} cspHook not in exported sequence() — CSP won't be applied."
+        assert "securityHeadersHook" in export_match.group(1), (
+            f"frontends/{frontend} securityHeadersHook not in exported sequence()."
         )
 
 

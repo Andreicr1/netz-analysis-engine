@@ -112,6 +112,7 @@ ALLOWLISTED_GLOBAL_TABLE_CONSUMERS: dict[str, str] = {
     # ── Wealth routes — read-only access to global reference data ───────────
     "app/domains/wealth/routes/attribution.py": "read — SELECT only on AllocationBlock and BenchmarkNav; no writes",
     "app/domains/wealth/routes/macro.py": "read — SELECT only on MacroRegionalSnapshot; no writes",
+    "app/domains/wealth/services/blended_benchmark_service.py": "read — SELECT only on AllocationBlock and BenchmarkNav; no writes",
     # ── Background workers — use async_session_factory directly (no RLS) ────
     "app/domains/wealth/workers/macro_ingestion.py": "write — writes MacroData and MacroRegionalSnapshot via async_session_factory",
     "app/domains/wealth/workers/regime_fit.py": "read — reads MacroData via async_session_factory for regime fitting",
