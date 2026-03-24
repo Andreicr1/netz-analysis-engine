@@ -228,6 +228,10 @@ async def run_treasury_ingestion(lookback_days: int = 365) -> dict:
                     seen[(r["obs_date"], r["series_id"])] = r
                 rows = list(seen.values())
 
+                # Normalize: all rows must have same keys for pg_insert multi-row
+                for r in rows:
+                    r.setdefault("metadata_json", None)
+
                 chunk_size = 2000
                 for i in range(0, len(rows), chunk_size):
                     chunk = rows[i:i + chunk_size]
@@ -259,4 +263,8 @@ async def run_treasury_ingestion(lookback_days: int = 365) -> dict:
 
 
 if __name__ == "__main__":
-    asyncio.run(run_treasury_ingestion())
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--lookback", type=int, default=365, help="Lookback in days (default 365)")
+    args = parser.parse_args()
+    asyncio.run(run_treasury_ingestion(lookback_days=args.lookback))
