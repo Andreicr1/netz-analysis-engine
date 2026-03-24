@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import route_cache
 from app.core.config.config_service import ConfigService
 from app.core.db.engine import async_session_factory
 from app.core.security.clerk_auth import CurrentUser, get_current_user, require_role
@@ -140,6 +141,7 @@ async def get_macro_scores(
     summary="Latest full macro snapshot (raw JSONB)",
     tags=["macro"],
 )
+@route_cache(ttl=300, key_prefix="macro:snapshot")
 async def get_macro_snapshot(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),

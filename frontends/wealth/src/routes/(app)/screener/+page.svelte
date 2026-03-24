@@ -156,7 +156,7 @@
 		return "";
 	});
 
-	let panelWidth = $derived(panelMode === "manager" ? "480px" : "420px");
+	let panelWidth = $derived(panelMode === "manager" ? "min(50vw, 720px)" : "min(40vw, 600px)");
 
 	// ── Run detail expand ──
 	let runDetailData = $state<Record<string, unknown> | null>(null);

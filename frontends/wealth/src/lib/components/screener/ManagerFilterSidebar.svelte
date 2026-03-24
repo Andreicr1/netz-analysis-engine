@@ -31,6 +31,7 @@
 
 	function applyManagerFilters() {
 		const params = new URLSearchParams();
+		params.set("mode", "managers");
 		if (textSearch) params.set("text_search", textSearch);
 		if (aumMin) params.set("aum_min", aumMin);
 		if (aumMax) params.set("aum_max", aumMax);
@@ -47,7 +48,7 @@
 		aumMax = "";
 		complianceClean = false;
 		hasInstitutional = false;
-		goto("/screener", { invalidateAll: true });
+		goto("/screener?mode=managers", { invalidateAll: true });
 	}
 
 	function handleFilterKeydown(e: KeyboardEvent) {

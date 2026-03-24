@@ -12,7 +12,7 @@ export const load: PageServerLoad = async ({ parent, url }) => {
 
 	// Search params for instrument mode
 	const searchParams: Record<string, string> = {};
-	for (const key of ["q", "instrument_type", "asset_class", "geography", "domicile", "currency", "strategy", "source", "approval_status", "block_id"]) {
+	for (const key of ["q", "instrument_type", "asset_class", "geography", "domicile", "currency", "strategy", "source", "approval_status", "block_id", "aum_min", "aum_max"]) {
 		const val = url.searchParams.get(key);
 		if (val) searchParams[key] = val;
 	}

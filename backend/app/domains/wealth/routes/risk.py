@@ -9,6 +9,7 @@ from sqlalchemy import func as sa_func
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import route_cache
 from app.core.config.config_service import ConfigService
 from app.core.config.dependencies import get_config_service
 from app.core.config.settings import settings
@@ -83,6 +84,7 @@ def _snap_to_cvar(profile: str, snap: PortfolioSnapshot | None) -> CVaRStatus:
     response_model=BatchRiskSummaryOut,
     summary="Batched risk summary for multiple profiles",
 )
+@route_cache(ttl=300, key_prefix="risk:summary")
 async def get_risk_summary_batch(
     profiles: str = Query(..., description="Comma-separated profile names"),
     db: AsyncSession = Depends(get_db_with_rls),
@@ -185,6 +187,7 @@ async def get_risk_summary_batch(
     summary="Current CVaR status",
     description="Returns the current CVaR level, limit, utilization, and trigger status for a profile.",
 )
+@route_cache(ttl=60, key_prefix="risk:cvar")
 async def get_cvar(
     profile: str,
     db: AsyncSession = Depends(get_db_with_rls),
@@ -268,6 +271,7 @@ async def get_cvar_history(
     summary="Current regime classification",
     description="Returns the current market regime based on latest portfolio snapshots.",
 )
+@route_cache(ttl=300, key_prefix="risk:regime")
 async def get_regime(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),

@@ -3,7 +3,7 @@
 -->
 <script lang="ts">
 	import "./screener.css";
-	import { invalidateAll } from "$app/navigation";
+	import { goto, invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
 	import {
 		Button, StatusBadge, ConsequenceDialog,
@@ -34,13 +34,13 @@
 	let institutionalData = $state<InstitutionalData | null>(null);
 	let universeData = $state<UniverseStatus | null>(null);
 
-	// Add to Universe
-	let addDialogOpen = $state(false);
+	// Send to Review (add to universe + create DD report)
+	let reviewDialogOpen = $state(false);
 	let addAssetClass = $state("hedge_fund");
 	let addGeography = $state("Global");
 	let addCurrency = $state("USD");
-	let adding = $state(false);
-	let addError = $state<string | null>(null);
+	let sendingToReview = $state(false);
+	let reviewError = $state<string | null>(null);
 
 	// Load first tab on mount
 	$effect(() => {
@@ -81,24 +81,48 @@
 		}
 	}
 
-	async function handleAddToUniverse(payload: ConsequenceDialogPayload) {
+	async function handleSendToReview(payload: ConsequenceDialogPayload) {
 		if (!panelCrd) return;
-		adding = true;
-		addError = null;
+		sendingToReview = true;
+		reviewError = null;
 		try {
 			const api = createClientApiClient(getToken);
+			// Step 1: Add to universe (creates instrument entry)
 			await api.post(`/manager-screener/managers/${panelCrd}/add-to-universe`, {
 				asset_class: addAssetClass,
 				geography: addGeography,
 				currency: addCurrency,
 			});
-			addDialogOpen = false;
+			// Step 2: Refresh universe status to get instrument_id
 			universeData = await api.get<UniverseStatus>(`/manager-screener/managers/${panelCrd}/universe-status`);
-			await invalidateAll();
+			if (!universeData?.instrument_id) {
+				reviewError = "Instrument created but ID not available. Navigate to DD Reports manually.";
+				return;
+			}
+			// Step 3: Create DD Report for the instrument
+			const ddReport = await api.post<{ id: string }>(`/dd-reports/funds/${universeData.instrument_id}`, {});
+			reviewDialogOpen = false;
+			// Step 4: Navigate to DD Report detail page
+			goto(`/dd-reports/${universeData.instrument_id}/${ddReport.id}`);
 		} catch (e) {
-			addError = e instanceof Error ? e.message : "Failed to add";
+			reviewError = e instanceof Error ? e.message : "Failed to send to review";
 		} finally {
-			adding = false;
+			sendingToReview = false;
+		}
+	}
+
+	async function handleSendExistingToReview() {
+		if (!universeData?.instrument_id) return;
+		sendingToReview = true;
+		reviewError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			const ddReport = await api.post<{ id: string }>(`/dd-reports/funds/${universeData.instrument_id}`, {});
+			goto(`/dd-reports/${universeData.instrument_id}/${ddReport.id}`);
+		} catch (e) {
+			reviewError = e instanceof Error ? e.message : "Failed to create DD report";
+		} finally {
+			sendingToReview = false;
 		}
 	}
 </script>
@@ -221,6 +245,16 @@
 				<div class="dt-kv"><span class="dt-k">Currency</span><span class="dt-v">{universeData.currency ?? "—"}</span></div>
 				{#if universeData.added_at}<div class="dt-kv"><span class="dt-k">Added</span><span class="dt-v">{formatDate(universeData.added_at)}</span></div>{/if}
 			</div>
+			{#if universeData.approval_status !== "approved"}
+				<div class="dt-section">
+					<Button size="sm" onclick={handleSendExistingToReview} disabled={sendingToReview}>
+						{sendingToReview ? "Creating DD Report…" : "Send to Review"}
+					</Button>
+					{#if reviewError}
+						<span class="dt-add-error">{reviewError}</span>
+					{/if}
+				</div>
+			{/if}
 		{:else}
 			<div class="dt-section">
 				<p class="dt-empty-text">Not yet added to universe.</p>
@@ -252,9 +286,9 @@
 							<option value="BRL">BRL</option>
 						</select>
 					</div>
-					<Button size="sm" onclick={() => addDialogOpen = true}>Add to Universe</Button>
-					{#if addError}
-						<span class="dt-add-error">{addError}</span>
+					<Button size="sm" onclick={() => reviewDialogOpen = true}>Send to Review</Button>
+					{#if reviewError}
+						<span class="dt-add-error">{reviewError}</span>
 					{/if}
 				</div>
 			</div>
@@ -268,20 +302,20 @@
 	{/if}
 </div>
 
-<!-- Add to Universe dialog -->
+<!-- Send to Review dialog -->
 <ConsequenceDialog
-	bind:open={addDialogOpen}
-	title="Add Manager to Universe"
-	impactSummary="This manager will enter the approval pipeline as a pending instrument."
+	bind:open={reviewDialogOpen}
+	title="Send Manager to DD Review"
+	impactSummary="This manager will be added to the instrument universe and a DD Report will be created for committee review."
 	requireRationale={true}
 	rationaleLabel="Justification"
-	rationalePlaceholder="Why should this manager enter the universe? (min 10 chars)"
+	rationalePlaceholder="Why should this manager undergo due diligence review? (min 10 chars)"
 	rationaleMinLength={10}
-	confirmLabel="Add to Universe"
+	confirmLabel="Send to Review"
 	metadata={[
 		{ label: "Firm", value: panelFirm },
 		{ label: "Asset Class", value: addAssetClass },
 		{ label: "Geography", value: addGeography },
 	]}
-	onConfirm={handleAddToUniverse}
+	onConfirm={handleSendToReview}
 />

@@ -1,11 +1,12 @@
 <!--
-  Instrument search results table with pagination.
+  Instrument search results table with infinite scroll pagination.
 -->
 <script lang="ts">
 	import "./screener.css";
-	import { goto } from "$app/navigation";
+	import { getContext } from "svelte";
 	import { page } from "$app/stores";
 	import { Button, StatusBadge, formatAUM, formatPercent } from "@netz/ui";
+	import { createClientApiClient } from "$lib/api/client";
 	import type { InstrumentSearchPage, InstrumentSearchItem } from "$lib/types/screening";
 	import { EMPTY_SEARCH_PAGE } from "$lib/types/screening";
 
@@ -16,6 +17,86 @@
 	}
 
 	let { searchResults = EMPTY_SEARCH_PAGE, searchQ = "", onOpenInstrumentDetail }: Props = $props();
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
+
+	// ── Accumulated items for infinite scroll ──
+	let allItems = $state<InstrumentSearchItem[]>([]);
+	let currentPage = $state(1);
+	let hasMore = $state(false);
+	let totalCount = $state(0);
+	let loading = $state(false);
+	let sentinelEl: HTMLDivElement | undefined = $state(undefined);
+	let prevSearchKey = $state("");
+
+	// Reset when SSR data changes (new filters / search)
+	$effect(() => {
+		const key = JSON.stringify({
+			total: searchResults.total,
+			page: searchResults.page,
+			firstItem: searchResults.items[0]?.isin ?? searchResults.items[0]?.name ?? "",
+		});
+		if (key !== prevSearchKey) {
+			prevSearchKey = key;
+			allItems = [...searchResults.items];
+			currentPage = searchResults.page;
+			hasMore = searchResults.has_next;
+			totalCount = searchResults.total;
+		}
+	});
+
+	// ── IntersectionObserver for sentinel ──
+	$effect(() => {
+		if (!sentinelEl) return;
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries[0]?.isIntersecting && hasMore && !loading) {
+					loadNextPage();
+				}
+			},
+			{ rootMargin: "200px" },
+		);
+		observer.observe(sentinelEl);
+		return () => observer.disconnect();
+	});
+
+	let abortController: AbortController | null = null;
+
+	async function loadNextPage() {
+		if (loading || !hasMore) return;
+		loading = true;
+
+		abortController?.abort();
+		abortController = new AbortController();
+
+		try {
+			const api = createClientApiClient(getToken);
+			const nextPage = currentPage + 1;
+
+			// Build params from current URL search params
+			const params: Record<string, string> = {};
+			const urlParams = $page.url.searchParams;
+			for (const key of ["q", "instrument_type", "asset_class", "geography", "domicile", "currency", "strategy", "source", "approval_status", "block_id", "aum_min"]) {
+				const val = urlParams.get(key);
+				if (val) params[key] = val;
+			}
+			params.page = String(nextPage);
+			params.page_size = urlParams.get("page_size") ?? "50";
+
+			const result = await api.get<InstrumentSearchPage>("/screener/search", params);
+
+			if (!abortController.signal.aborted) {
+				allItems = [...allItems, ...result.items];
+				currentPage = result.page;
+				hasMore = result.has_next;
+				totalCount = result.total;
+			}
+		} catch (e) {
+			if (e instanceof DOMException && e.name === "AbortError") return;
+		} finally {
+			loading = false;
+		}
+	}
 
 	function sourceBadgeClass(source: string): string {
 		switch (source) {
@@ -36,24 +117,18 @@
 			default: return "";
 		}
 	}
-
-	function goToSearchPage(p: number) {
-		const params = new URLSearchParams($page.url.searchParams);
-		params.set("page", String(p));
-		goto(`/screener?${params.toString()}`, { invalidateAll: true });
-	}
 </script>
 
 <div class="scr-data-header">
 	<span class="scr-data-count">
-		{searchResults.total} instrument{searchResults.total !== 1 ? "s" : ""}
+		{totalCount} instrument{totalCount !== 1 ? "s" : ""}
 		{#if searchQ}
 			<span class="scr-data-count-muted">matching "{searchQ}"</span>
 		{/if}
 	</span>
 </div>
 
-{#if searchResults.items.length === 0}
+{#if allItems.length === 0 && !loading}
 	<div class="scr-empty">No instruments found. Adjust filters or search.</div>
 {:else}
 	<div class="scr-table-wrap">
@@ -73,7 +148,7 @@
 				</tr>
 			</thead>
 			<tbody>
-				{#each searchResults.items as item (item.isin ?? item.instrument_id ?? item.name)}
+				{#each allItems as item (item.isin ?? item.instrument_id ?? item.name)}
 					<tr class="scr-inst-row" onclick={() => onOpenInstrumentDetail?.(item)}>
 						<td class="std-name">
 							<span class="inst-name">{item.name}</span>
@@ -130,12 +205,57 @@
 				{/each}
 			</tbody>
 		</table>
-	</div>
 
-	<!-- Pagination -->
-	<div class="scr-pagination">
-		<button class="scr-page-btn" disabled={searchResults.page <= 1} onclick={() => goToSearchPage(searchResults.page - 1)}>Previous</button>
-		<span class="scr-page-info">Page {searchResults.page} · {searchResults.total} total</span>
-		<button class="scr-page-btn" disabled={!searchResults.has_next} onclick={() => goToSearchPage(searchResults.page + 1)}>Next</button>
+		<!-- Infinite scroll sentinel -->
+		<div bind:this={sentinelEl} class="scr-scroll-sentinel">
+			{#if loading}
+				<div class="scr-scroll-loader">
+					<span class="scr-spinner"></span>
+					<span>Loading more…</span>
+				</div>
+			{:else if !hasMore && allItems.length > 0}
+				<div class="scr-scroll-end">
+					{totalCount} instrument{totalCount !== 1 ? "s" : ""} loaded
+				</div>
+			{/if}
+		</div>
 	</div>
 {/if}
+
+<style>
+	.scr-scroll-sentinel {
+		padding: var(--netz-space-stack-sm, 12px) 0;
+		min-height: 1px;
+	}
+
+	.scr-scroll-loader {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--netz-space-inline-xs, 8px);
+		color: var(--netz-text-muted);
+		font-size: var(--netz-text-small, 0.8125rem);
+		padding: var(--netz-space-stack-xs, 8px);
+	}
+
+	.scr-spinner {
+		display: inline-block;
+		width: 16px;
+		height: 16px;
+		border: 2px solid var(--netz-border);
+		border-top-color: var(--netz-brand-primary);
+		border-radius: 50%;
+		animation: scr-spin 600ms linear infinite;
+	}
+
+	@keyframes scr-spin {
+		to { transform: rotate(360deg); }
+	}
+
+	.scr-scroll-end {
+		text-align: center;
+		color: var(--netz-text-muted);
+		font-size: var(--netz-text-small, 0.8125rem);
+		padding: var(--netz-space-stack-xs, 8px);
+	}
+</style>

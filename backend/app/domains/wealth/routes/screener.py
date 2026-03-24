@@ -24,6 +24,7 @@ from sqlalchemy import Float, String, literal, select, union_all
 from sqlalchemy import func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cache import route_cache
 from app.core.config.config_service import ConfigService
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
@@ -209,6 +210,7 @@ async def get_run(
     response_model=list[ScreeningResultRead],
     summary="Latest screening results with filters",
 )
+@route_cache(ttl=60, key_prefix="screener:results")
 async def list_results(
     overall_status: str | None = Query(None, description="PASS|FAIL|WATCHLIST"),
     instrument_type: str | None = Query(None),
@@ -417,6 +419,7 @@ def _build_esma_query(
     response_model=InstrumentSearchPage,
     summary="Global instrument search across internal universe and ESMA",
 )
+@route_cache(ttl=60, key_prefix="screener:search")
 async def search_instruments(
     q: str | None = Query(None),
     instrument_type: str | None = Query(None),
@@ -537,6 +540,7 @@ async def search_instruments(
     response_model=ScreenerFacets,
     summary="Facet counts for screener sidebar filters",
 )
+@route_cache(ttl=300, key_prefix="screener:facets")
 async def get_screener_facets(
     q: str | None = Query(None),
     instrument_type: str | None = Query(None),
@@ -558,6 +562,12 @@ async def get_screener_facets(
         base = base.where(
             Instrument.name.ilike(pattern) | Instrument.isin.ilike(pattern) | Instrument.ticker.ilike(pattern)
         )
+    if instrument_type:
+        base = base.where(Instrument.instrument_type == instrument_type)
+    if asset_class:
+        base = base.where(Instrument.asset_class == asset_class)
+    if geography:
+        base = base.where(Instrument.geography == geography)
 
     result = await db.execute(base)
     instruments = result.scalars().all()

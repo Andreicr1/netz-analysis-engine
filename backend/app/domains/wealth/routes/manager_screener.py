@@ -24,6 +24,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.cache import route_cache
 from app.core.security.clerk_auth import Actor, get_actor
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.instrument import Instrument
@@ -105,11 +106,17 @@ async def _get_manager(db: AsyncSession, crd: str) -> SecManager:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+def _require_investment_role_dep(actor: Actor = Depends(get_actor)) -> None:
+    _require_investment_role(actor)
+
+
 @router.get(
     "/",
     response_model=ManagerScreenerPage,
     summary="Paginated manager screener",
+    dependencies=[Depends(_require_investment_role_dep)],
 )
+@route_cache(ttl=300, global_key=True, key_prefix="mgr:list")
 async def list_managers(
     # Block 1 — Firma
     aum_min: int | None = Query(None),
@@ -149,8 +156,6 @@ async def list_managers(
     org_id: uuid.UUID = Depends(get_org_id),
     actor: Actor = Depends(get_actor),
 ) -> ManagerScreenerPage:
-    _require_investment_role(actor)
-
     filters = ScreenerFilters(
         aum_min=aum_min,
         aum_max=aum_max,

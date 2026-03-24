@@ -1,9 +1,9 @@
 <!--
-  Instrument detail context panel — screening info + ESMA import.
+  Instrument detail context panel — screening info + send to review.
 -->
 <script lang="ts">
 	import "./screener.css";
-	import { invalidateAll } from "$app/navigation";
+	import { goto, invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
 	import { Button, StatusBadge, ConsequenceDialog, formatAUM, formatPercent } from "@netz/ui";
 	import type { ConsequenceDialogPayload } from "@netz/ui";
@@ -18,23 +18,37 @@
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
-	let esmaImportDialogOpen = $state(false);
-	let importing = $state(false);
-	let importError = $state<string | null>(null);
+	let reviewDialogOpen = $state(false);
+	let sendingToReview = $state(false);
+	let reviewError = $state<string | null>(null);
 
-	async function handleEsmaImport(payload: ConsequenceDialogPayload) {
-		if (!selectedInstrument?.isin) return;
-		importing = true;
-		importError = null;
+	async function handleSendToReview(payload: ConsequenceDialogPayload) {
+		if (!selectedInstrument) return;
+		sendingToReview = true;
+		reviewError = null;
 		try {
 			const api = createClientApiClient(getToken);
-			await api.post(`/screener/import-esma/${selectedInstrument.isin}`, {});
-			esmaImportDialogOpen = false;
-			await invalidateAll();
+			let instrumentId = selectedInstrument.instrument_id;
+
+			// For ESMA instruments not yet imported, import first
+			if (!instrumentId && selectedInstrument.source === "esma" && selectedInstrument.isin) {
+				const imported = await api.post<{ instrument_id: string }>(`/screener/import-esma/${selectedInstrument.isin}`, {});
+				instrumentId = imported.instrument_id;
+			}
+
+			if (!instrumentId) {
+				reviewError = "Cannot create DD report: instrument ID not available.";
+				return;
+			}
+
+			// Create DD Report
+			const ddReport = await api.post<{ id: string }>(`/dd-reports/funds/${instrumentId}`, {});
+			reviewDialogOpen = false;
+			goto(`/dd-reports/${instrumentId}/${ddReport.id}`);
 		} catch (e) {
-			importError = e instanceof Error ? e.message : "Import failed";
+			reviewError = e instanceof Error ? e.message : "Failed to send to review";
 		} finally {
-			importing = false;
+			sendingToReview = false;
 		}
 	}
 
@@ -87,30 +101,34 @@
 		<div class="dt-kv"><span class="dt-k">Status</span><StatusBadge status={selectedInstrument.screening_status ?? "—"} /></div>
 	</div>
 {/if}
-{#if selectedInstrument.source === "esma" && !selectedInstrument.instrument_id}
-	<div class="dt-section">
+<div class="dt-section">
+	{#if selectedInstrument.source === "esma" && !selectedInstrument.instrument_id}
 		<p class="dt-empty-text">This ESMA fund is not yet in your universe.</p>
-		<Button size="sm" onclick={() => esmaImportDialogOpen = true}>Add to Universe</Button>
-		{#if importError}
-			<span class="dt-add-error">{importError}</span>
-		{/if}
-	</div>
-{/if}
+	{/if}
+	<Button size="sm" onclick={() => reviewDialogOpen = true} disabled={sendingToReview}>
+		{sendingToReview ? "Sending…" : "Send to Review"}
+	</Button>
+	{#if reviewError}
+		<span class="dt-add-error">{reviewError}</span>
+	{/if}
+</div>
 
-<!-- ESMA Import dialog -->
+<!-- Send to Review dialog -->
 <ConsequenceDialog
-	bind:open={esmaImportDialogOpen}
-	title="Import ESMA Fund to Universe"
-	impactSummary="This will add the fund to your instrument universe as a pending instrument for screening."
+	bind:open={reviewDialogOpen}
+	title="Send to DD Review"
+	impactSummary={selectedInstrument.source === "esma" && !selectedInstrument.instrument_id
+		? "This fund will be imported to your universe and a DD Report will be created for committee review."
+		: "A DD Report will be created for this instrument for committee review."}
 	requireRationale={true}
-	rationaleLabel="Import justification"
-	rationalePlaceholder="Why add this UCITS fund? (min 10 chars)"
+	rationaleLabel="Review justification"
+	rationalePlaceholder="Why should this instrument undergo due diligence review? (min 10 chars)"
 	rationaleMinLength={10}
-	confirmLabel="Import to Universe"
+	confirmLabel="Send to Review"
 	metadata={[
 		{ label: "Fund", value: selectedInstrument?.name ?? "" },
-		{ label: "ISIN", value: selectedInstrument?.isin ?? "" },
-		{ label: "Source", value: "ESMA" },
+		{ label: "ISIN", value: selectedInstrument?.isin ?? "—" },
+		{ label: "Source", value: selectedInstrument?.source ?? "" },
 	]}
-	onConfirm={handleEsmaImport}
+	onConfirm={handleSendToReview}
 />
