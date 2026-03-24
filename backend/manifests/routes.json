@@ -16,6 +16,11 @@
   },
   {
     "method": "DELETE",
+    "path": "/api/v1/blended-benchmarks/{benchmark_id}",
+    "name": "delete_benchmark"
+  },
+  {
+    "method": "DELETE",
     "path": "/api/v1/pipeline/deals/{deal_id}/cashflows/{cashflow_id}",
     "name": "delete_cashflow"
   },
@@ -366,6 +371,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/analytics/rolling-correlation",
+    "name": "get_rolling_correlation"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/analytics/strategy-drift/alerts",
     "name": "list_drift_alerts"
   },
@@ -388,6 +398,21 @@
     "method": "GET",
     "path": "/api/v1/assets/tenant/{org_slug}/{asset_type}",
     "name": "get_tenant_asset"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/blended-benchmarks/blocks",
+    "name": "list_blocks"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/blended-benchmarks/{benchmark_id}/nav",
+    "name": "get_benchmark_nav"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/blended-benchmarks/{profile}",
+    "name": "get_benchmark"
   },
   {
     "method": "GET",
@@ -931,6 +956,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/screener/facets",
+    "name": "get_screener_facets"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/screener/results",
     "name": "list_results"
   },
@@ -948,6 +978,11 @@
     "method": "GET",
     "path": "/api/v1/screener/runs/{run_id}",
     "name": "get_run"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/screener/search",
+    "name": "search_instruments"
   },
   {
     "method": "GET",
@@ -1276,6 +1311,11 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/blended-benchmarks/{profile}",
+    "name": "create_benchmark"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/content/flash-reports",
     "name": "trigger_flash_report"
   },
@@ -1588,6 +1628,11 @@
     "method": "POST",
     "path": "/api/v1/portfolios/{profile}/rebalance/{event_id}/execute",
     "name": "execute_rebalance"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/screener/import-esma/{isin}",
+    "name": "import_esma_fund"
   },
   {
     "method": "POST",

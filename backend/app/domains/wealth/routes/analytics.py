@@ -22,6 +22,8 @@ from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_curr
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.allocation import StrategicAllocation
 from app.domains.wealth.models.backtest import BacktestRun
+from app.domains.wealth.models.instrument import Instrument
+from app.domains.wealth.models.nav import NavTimeseries
 from app.domains.wealth.routes.common import validate_profile as _validate_profile
 from app.domains.wealth.schemas.analytics import (
     BacktestRequest,
@@ -30,6 +32,7 @@ from app.domains.wealth.schemas.analytics import (
     OptimizeRequest,
     OptimizeResult,
     ParetoOptimizeResult,
+    RollingCorrelationResult,
 )
 from app.domains.wealth.services.quant_queries import compute_inputs_from_nav, fetch_returns_matrix
 from quant_engine.backtest_service import walk_forward_backtest
@@ -482,4 +485,88 @@ async def get_correlation(
         matrix=[[round(float(corr[i, j]), 6) for j in range(len(block_list))]
                 for i in range(len(block_list))],
         as_of_date=date.today(),
+    )
+
+
+@router.get(
+    "/rolling-correlation",
+    response_model=RollingCorrelationResult,
+    summary="Rolling correlation between two instruments",
+    description=(
+        "Returns a time series of rolling Pearson correlation between two instruments, "
+        "computed from daily returns in nav_timeseries."
+    ),
+)
+async def get_rolling_correlation(
+    inst_a: uuid.UUID = Query(..., description="First instrument UUID"),
+    inst_b: uuid.UUID = Query(..., description="Second instrument UUID"),
+    window_days: int = Query(90, ge=10, le=252, description="Rolling window in trading days"),
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> RollingCorrelationResult:
+    if inst_a == inst_b:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="inst_a and inst_b must be different instruments",
+        )
+
+    # Load instrument names
+    inst_stmt = select(Instrument.instrument_id, Instrument.name).where(
+        Instrument.instrument_id.in_([inst_a, inst_b])
+    )
+    inst_result = await db.execute(inst_stmt)
+    name_map = {row.instrument_id: row.name for row in inst_result.all()}
+
+    if len(name_map) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="One or both instruments not found",
+        )
+
+    # Load returns for both instruments
+    nav_stmt = (
+        select(NavTimeseries.instrument_id, NavTimeseries.nav_date, NavTimeseries.return_1d)
+        .where(
+            NavTimeseries.instrument_id.in_([inst_a, inst_b]),
+            NavTimeseries.return_1d.isnot(None),
+        )
+        .order_by(NavTimeseries.nav_date)
+    )
+    nav_result = await db.execute(nav_stmt)
+
+    returns_a: dict[date, float] = {}
+    returns_b: dict[date, float] = {}
+    for row in nav_result.all():
+        if row.instrument_id == inst_a:
+            returns_a[row.nav_date] = float(row.return_1d)
+        else:
+            returns_b[row.nav_date] = float(row.return_1d)
+
+    # Date intersection
+    common_dates = sorted(set(returns_a.keys()) & set(returns_b.keys()))
+    if len(common_dates) < window_days:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Insufficient overlapping data: {len(common_dates)} days (need {window_days})",
+        )
+
+    # Compute rolling correlation
+    arr_a = np.array([returns_a[d] for d in common_dates])
+    arr_b = np.array([returns_b[d] for d in common_dates])
+
+    dates_out: list[str] = []
+    values_out: list[float] = []
+
+    for i in range(window_days, len(common_dates) + 1):
+        window_a = arr_a[i - window_days:i]
+        window_b = arr_b[i - window_days:i]
+        corr = float(np.corrcoef(window_a, window_b)[0, 1])
+        dates_out.append(common_dates[i - 1].isoformat())
+        values_out.append(round(corr, 6))
+
+    return RollingCorrelationResult(
+        dates=dates_out,
+        values=values_out,
+        instrument_a=name_map[inst_a],
+        instrument_b=name_map[inst_b],
     )

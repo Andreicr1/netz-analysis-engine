@@ -187,6 +187,8 @@ async def get_correlation_regime(
         dr_alert=result.concentration.dr_alert,
         absorption_ratio=result.concentration.absorption_ratio,
         absorption_status=result.concentration.absorption_status,
+        mp_threshold=result.concentration.mp_threshold,
+        n_signal_eigenvalues=result.concentration.n_signal_eigenvalues,
     )
 
     return CorrelationRegimeRead(

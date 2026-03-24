@@ -68,6 +68,7 @@ class CorrelationService:
                     first_eigenvalue_ratio=0.0, concentration_status="diversified",
                     diversification_ratio=1.0, dr_alert=False,
                     absorption_ratio=0.0, absorption_status="normal",
+                    mp_threshold=0.0, n_signal_eigenvalues=0,
                 ),
                 average_correlation=0.0,
                 baseline_average_correlation=0.0,
@@ -99,6 +100,8 @@ class CorrelationService:
             dr_alert=result.dr_alert,
             absorption_ratio=result.concentration.absorption_ratio,
             absorption_status=result.concentration.absorption_status,
+            mp_threshold=result.concentration.mp_threshold,
+            n_signal_eigenvalues=result.concentration.n_signal_eigenvalues,
         )
 
         return PortfolioCorrelationResult(

@@ -86,6 +86,13 @@ class CorrelationMatrix(BaseModel):
     as_of_date: date | None = None
 
 
+class RollingCorrelationResult(BaseModel):
+    dates: list[str]
+    values: list[float]
+    instrument_a: str
+    instrument_b: str
+
+
 class ParetoOptimizeResult(BaseModel):
     profile: str
     recommended_weights: dict[str, float]

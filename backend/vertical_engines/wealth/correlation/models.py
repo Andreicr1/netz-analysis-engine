@@ -31,6 +31,8 @@ class ConcentrationAnalysis:
     dr_alert: bool
     absorption_ratio: float
     absorption_status: str
+    mp_threshold: float  # Marchenko-Pastur upper bound lambda_plus
+    n_signal_eigenvalues: int  # eigenvalues above mp_threshold
 
 
 @dataclass(frozen=True, slots=True)

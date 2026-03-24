@@ -31,6 +31,8 @@ class ConcentrationRead(BaseModel):
     dr_alert: bool
     absorption_ratio: float
     absorption_status: str
+    mp_threshold: float = 0.0
+    n_signal_eigenvalues: int = 0
 
 
 class CorrelationRegimeRead(BaseModel):

@@ -286,6 +286,8 @@ class TestCorrelationSchemas:
             "dr_alert": False,
             "absorption_ratio": 0.625,
             "absorption_status": "normal",
+            "mp_threshold": 1.5,
+            "n_signal_eigenvalues": 1,
         }
         schema = ConcentrationRead(**data)
         assert schema.concentration_status == "moderate_concentration"
@@ -308,6 +310,8 @@ class TestCorrelationSchemas:
                 "dr_alert": False,
                 "absorption_ratio": 0.75,
                 "absorption_status": "normal",
+                "mp_threshold": 1.2,
+                "n_signal_eigenvalues": 1,
             },
             "average_correlation": 0.5,
             "baseline_average_correlation": 0.3,
@@ -335,5 +339,6 @@ class TestCorrelationModels:
             first_eigenvalue_ratio=0.67, concentration_status="moderate_concentration",
             diversification_ratio=1.3, dr_alert=False,
             absorption_ratio=0.67, absorption_status="normal",
+            mp_threshold=1.2, n_signal_eigenvalues=1,
         )
         assert ca.concentration_status == "moderate_concentration"

@@ -46,6 +46,8 @@ class ConcentrationResult:
     concentration_status: str  # "diversified" | "moderate_concentration" | "high_concentration"
     absorption_ratio: float
     absorption_status: str  # "normal" | "warning" | "critical"
+    mp_threshold: float  # Marchenko-Pastur upper bound lambda_plus
+    n_signal_eigenvalues: int  # eigenvalues above mp_threshold
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,12 +120,16 @@ def _marchenko_pastur_denoise(corr_matrix: np.ndarray, q: float) -> np.ndarray:
 
 
 def _compute_concentration(
-    corr_matrix: np.ndarray, config: dict[str, Any],
+    corr_matrix: np.ndarray, config: dict[str, Any], q: float = 0.0,
 ) -> ConcentrationResult:
     """Eigenvalue concentration analysis."""
     eigenvalues = np.linalg.eigvalsh(corr_matrix)
     eigenvalues = np.sort(eigenvalues)[::-1]  # descending
     eigenvalues = np.maximum(eigenvalues, 0)  # numerical stability
+
+    # Marchenko-Pastur upper bound: lambda_plus = (1 + sqrt(q))^2
+    mp_threshold = (1 + np.sqrt(q)) ** 2 if q > 0 else 0.0
+    n_signal = int(np.sum(eigenvalues > mp_threshold)) if mp_threshold > 0 else len(eigenvalues)
 
     total = float(np.sum(eigenvalues))
     if total < 1e-10:
@@ -134,6 +140,8 @@ def _compute_concentration(
             concentration_status="high_concentration",
             absorption_ratio=1.0,
             absorption_status="critical",
+            mp_threshold=round(mp_threshold, 6),
+            n_signal_eigenvalues=n_signal,
         )
 
     ratios = eigenvalues / total
@@ -167,6 +175,8 @@ def _compute_concentration(
         concentration_status=concentration_status,
         absorption_ratio=round(absorption_ratio, 6),
         absorption_status=absorption_status,
+        mp_threshold=round(float(mp_threshold), 6),
+        n_signal_eigenvalues=n_signal,
     )
 
 
@@ -214,6 +224,7 @@ def compute_correlation_regime(
                 eigenvalues=(), explained_variance_ratios=(),
                 first_eigenvalue_ratio=0.0, concentration_status="diversified",
                 absorption_ratio=0.0, absorption_status="normal",
+                mp_threshold=0.0, n_signal_eigenvalues=0,
             ),
             diversification_ratio=1.0,
             dr_alert=False,
@@ -297,8 +308,9 @@ def compute_correlation_regime(
                 is_contagion=is_contagion,
             ))
 
-    # Concentration
-    concentration = _compute_concentration(corr_recent, cfg)
+    # Concentration — pass q for Marchenko-Pastur threshold
+    q = N / len(recent_returns) if len(recent_returns) > 0 else 0.0
+    concentration = _compute_concentration(corr_recent, cfg, q=q)
 
     # Diversification ratio
     dr = _compute_diversification_ratio(cov_recent, weights)
