@@ -3,7 +3,8 @@
   Pure CSS grid heatmap, no chart library.
 -->
 <script lang="ts">
-	import { PageHeader, formatPercent } from "@netz/ui";
+	import { PageHeader, EmptyState, formatPercent } from "@netz/ui";
+	import { goto } from "$app/navigation";
 	import type { PageData } from "./$types";
 	import type { ExposureMatrix } from "$lib/types/exposure";
 
@@ -11,6 +12,12 @@
 
 	let geographic = $derived(data.geographic as ExposureMatrix | null);
 	let sector = $derived(data.sector as ExposureMatrix | null);
+	let portfolioCount = $derived((data.portfolioCount ?? 0) as number);
+
+	let bothEmpty = $derived(
+		(!geographic || geographic.rows.length === 0) &&
+		(!sector || sector.rows.length === 0)
+	);
 
 	let activeDimension = $state<"geographic" | "sector">("geographic");
 	let activeMatrix = $derived(activeDimension === "geographic" ? geographic : sector);
@@ -55,7 +62,21 @@
 </PageHeader>
 
 <div class="exp-page">
-	{#if activeMatrix && activeMatrix.rows.length > 0 && activeMatrix.columns.length > 0}
+	{#if bothEmpty}
+		{#if portfolioCount === 0}
+			<EmptyState
+				title="No portfolios configured"
+				description="Configure a Model Portfolio before viewing exposure."
+				actionLabel="Go to Model Portfolios"
+				onAction={() => goto("/model-portfolios")}
+			/>
+		{:else}
+			<EmptyState
+				title="No positions allocated"
+				description="Portfolios exist but have no calculated positions yet. Exposure will appear after the next engine cycle."
+			/>
+		{/if}
+	{:else if activeMatrix && activeMatrix.rows.length > 0 && activeMatrix.columns.length > 0}
 		<div class="heatmap" style:--cols={activeMatrix.columns.length + 1}>
 			<!-- Header row: empty corner + column labels -->
 			<div class="hm-corner"></div>

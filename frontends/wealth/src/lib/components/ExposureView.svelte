@@ -3,7 +3,7 @@
   Self-loading component for embedding in Analytics tabs.
 -->
 <script lang="ts">
-	import { SectionCard, HeatmapTable, EmptyState, Skeleton, formatPercent } from "@netz/ui";
+	import { SectionCard, HeatmapTable, EmptyState, Skeleton, formatPercent, formatShortDate } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import { getContext } from "svelte";
 
@@ -15,15 +15,14 @@
 		rows: string[];
 		columns: string[];
 		data: number[][];
-	};
-
-	type FundFreshness = {
-		fund_name: string;
-		last_updated_days: number;
+		is_empty: boolean;
+		as_of: string | null;
 	};
 
 	type ExposureMetadata = {
-		freshness: FundFreshness[];
+		as_of: string | null;
+		snapshot_count: number;
+		profile_count: number;
 	};
 
 	let geoMatrix = $state<ExposureMatrix | null>(null);
@@ -32,17 +31,11 @@
 	let aggregation = $state("portfolio");
 	let loading = $state(true);
 
-	function freshnessColor(days: number): string {
-		if (days < 30) return "var(--netz-success)";
-		if (days <= 60) return "var(--netz-warning)";
-		return "var(--netz-danger)";
-	}
-
-	function freshnessBg(days: number): string {
-		if (days < 30) return "var(--netz-success-subtle)";
-		if (days <= 60) return "var(--netz-warning-subtle)";
-		return "var(--netz-danger-subtle)";
-	}
+	let bothEmpty = $derived(
+		!loading &&
+			(geoMatrix?.is_empty !== false) &&
+			(sectorMatrix?.is_empty !== false)
+	);
 
 	async function fetchData(agg: string) {
 		loading = true;
@@ -78,31 +71,38 @@
 	<!-- Aggregation toggle -->
 	<div class="flex items-center justify-between">
 		<h3 class="text-sm font-semibold text-(--netz-text-primary)">Exposure Monitor</h3>
-		<div
-			class="flex items-center rounded-lg border border-(--netz-border) bg-(--netz-surface-inset) p-1"
-			role="group"
-			aria-label="Aggregation"
-		>
-			<button
-				class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
-				class:bg-(--netz-surface-elevated)={aggregation === "portfolio"}
-				class:text-(--netz-text-primary)={aggregation === "portfolio"}
-				class:shadow-(--netz-shadow-1)={aggregation === "portfolio"}
-				class:text-(--netz-text-muted)={aggregation !== "portfolio"}
-				onclick={() => setAggregation("portfolio")}
+		<div class="flex items-center gap-3">
+			{#if metadata?.as_of}
+				<span class="text-xs text-(--netz-text-muted)">
+					as of {formatShortDate(metadata.as_of)}
+				</span>
+			{/if}
+			<div
+				class="flex items-center rounded-lg border border-(--netz-border) bg-(--netz-surface-inset) p-1"
+				role="group"
+				aria-label="Aggregation"
 			>
-				Portfolios
-			</button>
-			<button
-				class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
-				class:bg-(--netz-surface-elevated)={aggregation === "manager"}
-				class:text-(--netz-text-primary)={aggregation === "manager"}
-				class:shadow-(--netz-shadow-1)={aggregation === "manager"}
-				class:text-(--netz-text-muted)={aggregation !== "manager"}
-				onclick={() => setAggregation("manager")}
-			>
-				By Manager
-			</button>
+				<button
+					class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+					class:bg-(--netz-surface-elevated)={aggregation === "portfolio"}
+					class:text-(--netz-text-primary)={aggregation === "portfolio"}
+					class:shadow-(--netz-shadow-1)={aggregation === "portfolio"}
+					class:text-(--netz-text-muted)={aggregation !== "portfolio"}
+					onclick={() => setAggregation("portfolio")}
+				>
+					Portfolios
+				</button>
+				<button
+					class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+					class:bg-(--netz-surface-elevated)={aggregation === "manager"}
+					class:text-(--netz-text-primary)={aggregation === "manager"}
+					class:shadow-(--netz-shadow-1)={aggregation === "manager"}
+					class:text-(--netz-text-muted)={aggregation !== "manager"}
+					onclick={() => setAggregation("manager")}
+				>
+					By Manager
+				</button>
+			</div>
 		</div>
 	</div>
 
@@ -111,6 +111,28 @@
 			<Skeleton class="h-64 rounded-xl" />
 			<Skeleton class="h-64 rounded-xl" />
 		</div>
+	{:else if bothEmpty}
+		<SectionCard title="Exposure Monitor">
+			<div class="flex flex-col items-center justify-center py-20 text-center">
+				<p class="text-lg font-medium text-(--netz-text-primary)">Sem posições para exibir</p>
+				{#if metadata && metadata.profile_count === 0}
+					<p class="mt-2 text-sm text-(--netz-text-muted)">
+						Configure um Model Portfolio antes de visualizar a exposição.
+					</p>
+					<a
+						href="/model-portfolios"
+						class="mt-4 inline-flex items-center rounded-lg bg-(--netz-accent) px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+					>
+						Ir para Model Portfolios
+					</a>
+				{:else}
+					<p class="mt-2 text-sm text-(--netz-text-muted)">
+						Os portfolios existem mas ainda não têm posições calculadas.
+						Aguarde o próximo ciclo do engine ou acione a construção manual.
+					</p>
+				{/if}
+			</div>
+		</SectionCard>
 	{:else}
 		<!-- Heatmap grids -->
 		<div class="grid gap-4 xl:grid-cols-2">
@@ -118,7 +140,7 @@
 				title="Geographic Exposure"
 				subtitle="Weight by region · from latest processed portfolio"
 			>
-				{#if geoMatrix && geoMatrix.rows.length > 0}
+				{#if geoMatrix && !geoMatrix.is_empty && geoMatrix.rows.length > 0}
 					<HeatmapTable
 						rows={geoMatrix.rows}
 						columns={geoMatrix.columns}
@@ -137,7 +159,7 @@
 				title="Sector Exposure"
 				subtitle="Weight by asset class · from latest processed portfolio"
 			>
-				{#if sectorMatrix && sectorMatrix.rows.length > 0}
+				{#if sectorMatrix && !sectorMatrix.is_empty && sectorMatrix.rows.length > 0}
 					<HeatmapTable
 						rows={sectorMatrix.rows}
 						columns={sectorMatrix.columns}
@@ -152,30 +174,5 @@
 				{/if}
 			</SectionCard>
 		</div>
-
-		<!-- Data freshness badges -->
-		{#if metadata && metadata.freshness.length > 0}
-			<SectionCard
-				title="Data Freshness"
-				subtitle="Last update per fund · green < 30d · yellow 30–60d · red > 60d"
-			>
-				<div class="flex flex-wrap gap-2">
-					{#each metadata.freshness as fund (fund.fund_name)}
-						<div
-							class="flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium"
-							style:background-color={freshnessBg(fund.last_updated_days)}
-						>
-							<span class="text-(--netz-text-primary)">{fund.fund_name}</span>
-							<span
-								class="rounded-full px-2 py-0.5 text-xs font-semibold"
-								style:color={freshnessColor(fund.last_updated_days)}
-							>
-								{fund.last_updated_days}d
-							</span>
-						</div>
-					{/each}
-				</div>
-			</SectionCard>
-		{/if}
 	{/if}
 </div>
