@@ -190,6 +190,10 @@
 		if (!r) return "var(--netz-text-muted)";
 		return regimeColor(r.global_regime);
 	}
+
+	function formatLabel(key: string): string {
+		return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+	}
 </script>
 
 <PageHeader title="Macro Intelligence">
@@ -302,12 +306,16 @@
 				<h3 class="region-name">{regionName}</h3>
 				{#if regime?.regional_regimes[regionName]}
 					<span class="region-regime" style:color={regimeColor(regime.regional_regimes[regionName])}>
-						{regime.regional_regimes[regionName]}
+						{formatLabel(regime.regional_regimes[regionName])}
 					</span>
 				{/if}
 			</div>
 
-			<div class="region-score-hero" style:color={scoreColor(regionData.composite_score)}>
+			<div
+				class="region-score-hero"
+				style:color={scoreColor(regionData.composite_score)}
+				title="Composite score 0–100 based on multiple economic indicators. Higher = stronger economic conditions."
+			>
 				{regionData.composite_score.toFixed(0)}
 			</div>
 
@@ -319,7 +327,7 @@
 				<div class="region-dims">
 					{#each Object.entries(regionData.dimensions) as [dimName, dim] (dimName)}
 						<div class="region-dim">
-							<span class="dim-name">{dimName}</span>
+							<span class="dim-name">{formatLabel(dimName)}</span>
 							<span class="dim-score" style:color={scoreColor(dim.score)}>{dim.score.toFixed(0)}</span>
 							<div class="dim-bar-track">
 								<div class="dim-bar-fill" style:width="{dim.score}%"></div>

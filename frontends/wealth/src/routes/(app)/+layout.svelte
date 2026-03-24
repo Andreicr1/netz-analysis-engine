@@ -254,6 +254,8 @@
 		grid-row: 2;
 		overflow: hidden;
 		min-width: 0;
+		display: flex;
+		flex-direction: column;
 	}
 
 	/* ── Top Bar — spans BOTH columns (full width) ── */
