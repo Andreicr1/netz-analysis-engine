@@ -40,6 +40,10 @@ jobs:
       APP_ENV: development
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
       - name: Ensure test database exists
         run: |
           $result = docker exec netz-analysis-engine-db-1 psql -U netz -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='netz_engine_test'"
