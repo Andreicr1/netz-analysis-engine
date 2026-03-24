@@ -1,0 +1,11 @@
+export { default as InstrumentFilterSidebar } from "./InstrumentFilterSidebar.svelte";
+export { default as ManagerFilterSidebar } from "./ManagerFilterSidebar.svelte";
+export { default as InstrumentTable } from "./InstrumentTable.svelte";
+export { default as PeerComparisonView } from "./PeerComparisonView.svelte";
+export { default as ManagerHierarchyTable } from "./ManagerHierarchyTable.svelte";
+export { default as ManagerDetailPanel } from "./ManagerDetailPanel.svelte";
+export { default as InstrumentDetailPanel } from "./InstrumentDetailPanel.svelte";
+export { default as FundDetailPanel } from "./FundDetailPanel.svelte";
+export { default as DriftTab } from "./DriftTab.svelte";
+export { default as HoldingsTab } from "./HoldingsTab.svelte";
+export { default as DocsTab } from "./DocsTab.svelte";

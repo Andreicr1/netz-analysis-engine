@@ -83,7 +83,75 @@ export interface CompareResult {
 	jaccard_overlap: number;
 }
 
-export type DetailTab = "profile" | "holdings" | "institutional" | "universe";
+export type DetailTab = "profile" | "holdings" | "institutional" | "universe" | "drift" | "nport" | "docs";
+
+// ── Drift tab ──
+export interface DriftQuarter {
+	quarter: string;
+	turnover: number;
+	new_positions: number;
+	exited_positions: number;
+	increased: number;
+	decreased: number;
+	unchanged: number;
+	total_changes: number;
+}
+
+export interface ManagerDriftData {
+	quarters: DriftQuarter[];
+	style_drift_detected: boolean;
+}
+
+// ── N-PORT tab ──
+export interface NportHoldingItem {
+	cusip: string | null;
+	isin: string | null;
+	issuer_name: string;
+	asset_class: string | null;
+	sector: string | null;
+	market_value: number | null;
+	quantity: number | null;
+	currency: string | null;
+	pct_of_nav: number | null;
+	report_date: string;
+}
+
+export interface NportHoldingsResponse {
+	crd_number: string;
+	report_date: string | null;
+	total_holdings: number;
+	holdings: NportHoldingItem[];
+	page: number;
+	page_size: number;
+	total_pages: number;
+}
+
+// ── Brochure/Docs tab ──
+export interface BrochureSectionItem {
+	section: string;
+	content_excerpt: string;
+	filing_date: string;
+}
+
+export interface BrochureSectionsResponse {
+	crd_number: string;
+	sections: BrochureSectionItem[];
+	total_sections: number;
+}
+
+export interface BrochureSearchHit {
+	section: string;
+	headline: string;
+	filing_date: string;
+	rank: number;
+}
+
+export interface BrochureSearchResponse {
+	crd_number: string;
+	query: string;
+	results: BrochureSearchHit[];
+	total_results: number;
+}
 
 export const EMPTY_SCREENER: ScreenerPage = {
 	managers: [],
