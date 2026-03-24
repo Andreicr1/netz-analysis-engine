@@ -234,6 +234,32 @@
 		}
 	}
 
+	// ── Expand/collapse event detail ──
+	let expandedEventId = $state<string | null>(null);
+	let expandedEventDetail = $state<Record<string, unknown> | null>(null);
+	let loadingDetail = $state(false);
+
+	async function toggleEventDetail(event: Record<string, unknown>) {
+		const eventId = String(event.event_id ?? event.id ?? "");
+		if (expandedEventId === eventId) {
+			expandedEventId = null;
+			expandedEventDetail = null;
+			return;
+		}
+		expandedEventId = eventId;
+		loadingDetail = true;
+		try {
+			const api = createClientApiClient(getToken);
+			expandedEventDetail = await api.get<Record<string, unknown>>(
+				`/portfolios/${profile}/rebalance/${eventId}`
+			);
+		} catch {
+			expandedEventDetail = null;
+		} finally {
+			loadingDetail = false;
+		}
+	}
+
 	// Load on mount
 	$effect(() => { void loadRebalanceEvents(); });
 
@@ -354,10 +380,12 @@
 				{#each rebalanceEvents as event (event.event_id ?? event.id)}
 					{@const eventId = String(event.event_id ?? event.id ?? "")}
 					{@const eventStatus = String(event.status ?? "")}
+					{@const isExpanded = expandedEventId === eventId}
 					<Card class="p-4">
 						<div class="flex items-start justify-between gap-4">
-							<div class="flex-1">
+							<button class="flex-1 text-left" onclick={() => toggleEventDetail(event)}>
 								<div class="flex items-center gap-2">
+									<span class="text-xs text-(--netz-text-muted)">{isExpanded ? "▾" : "▸"}</span>
 									<StatusBadge status={eventStatus} resolve={resolveWealthStatus} />
 									<span class="text-sm font-medium text-(--netz-text-primary)">
 										{eventId.slice(0, 8)}
@@ -382,7 +410,7 @@
 										{event.notes}
 									</p>
 								{/if}
-							</div>
+							</button>
 							<div class="flex gap-2">
 								{#if eventStatus === "pending" || eventStatus === "proposed" || eventStatus === "pending_review"}
 									<ActionButton
@@ -403,6 +431,69 @@
 								{/if}
 							</div>
 						</div>
+
+						<!-- Expanded event detail -->
+						{#if isExpanded}
+							<div class="mt-4 border-t border-(--netz-border)/50 pt-4">
+								{#if loadingDetail}
+									<p class="text-xs text-(--netz-text-muted)">Loading detail…</p>
+								{:else if expandedEventDetail}
+									{#if expandedEventDetail.cvar_before !== null || expandedEventDetail.cvar_after !== null}
+										<div class="mb-3 grid gap-3 sm:grid-cols-2">
+											<div class="rounded-md bg-(--netz-surface-alt) p-2">
+												<span class="text-xs text-(--netz-text-muted)">CVaR Before</span>
+												<p class="font-mono text-sm font-semibold text-(--netz-text-primary)">{fmtPct(expandedEventDetail.cvar_before as number | null)}</p>
+											</div>
+											<div class="rounded-md bg-(--netz-surface-alt) p-2">
+												<span class="text-xs text-(--netz-text-muted)">CVaR After</span>
+												<p class="font-mono text-sm font-semibold text-(--netz-text-primary)">{fmtPct(expandedEventDetail.cvar_after as number | null)}</p>
+											</div>
+										</div>
+									{/if}
+
+									{@const wBefore = (expandedEventDetail.weights_before ?? {}) as Record<string, number>}
+									{@const wAfter = (expandedEventDetail.weights_after ?? {}) as Record<string, number>}
+									{@const allFunds = [...new Set([...Object.keys(wBefore), ...Object.keys(wAfter)])].sort()}
+									{#if allFunds.length > 0}
+										<div class="overflow-x-auto">
+											<table class="w-full text-xs">
+												<thead>
+													<tr class="border-b border-(--netz-border) text-left font-medium uppercase tracking-wider text-(--netz-text-secondary)">
+														<th class="pb-1 pr-3">Fund</th>
+														<th class="pb-1 pr-3 text-right">Before</th>
+														<th class="pb-1 pr-3 text-right">After</th>
+														<th class="pb-1 text-right">Delta</th>
+													</tr>
+												</thead>
+												<tbody>
+													{#each allFunds as fund (fund)}
+														{@const before = wBefore[fund] ?? 0}
+														{@const after = wAfter[fund] ?? 0}
+														{@const delta = after - before}
+														<tr class="border-b border-(--netz-border)/30">
+															<td class="py-1 pr-3 text-(--netz-text-primary)">{fund}</td>
+															<td class="py-1 pr-3 text-right font-mono text-(--netz-text-secondary)">{formatPercent(before, 2, "en-US")}</td>
+															<td class="py-1 pr-3 text-right font-mono font-semibold text-(--netz-text-primary)">{formatPercent(after, 2, "en-US")}</td>
+															<td class="py-1 text-right font-mono" class:text-(--netz-success)={delta > 0.0001} class:text-(--netz-danger)={delta < -0.0001}>
+																{#if Math.abs(delta) > 0.00005}
+																	{delta > 0 ? "+" : ""}{formatNumber(delta * 100, 2, "en-US")}pp
+																{:else}
+																	--
+																{/if}
+															</td>
+														</tr>
+													{/each}
+												</tbody>
+											</table>
+										</div>
+									{:else}
+										<p class="text-xs text-(--netz-text-muted)">No weight data available.</p>
+									{/if}
+								{:else}
+									<p class="text-xs text-(--netz-text-muted)">Failed to load detail.</p>
+								{/if}
+							</div>
+						{/if}
 					</Card>
 				{/each}
 			</div>

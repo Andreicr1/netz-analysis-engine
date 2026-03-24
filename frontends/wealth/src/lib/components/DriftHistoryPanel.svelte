@@ -229,30 +229,37 @@
 		}
 	}
 
-	// ── CSV export ──────────────────────────────────────────────
-	function exportCSV() {
-		const header = ["detected_at", "severity", "status", "anomalous_count", "drift_magnitude", "drift_threshold", "rebalance_triggered"].join(",");
-		const rows = filteredEvents.map((e) =>
-			[
-				e.detected_at,
-				e.severity,
-				e.status,
-				e.anomalous_count,
-				e.drift_magnitude ?? "",
-				e.drift_threshold ?? "",
-				e.rebalance_triggered ?? "",
-			]
-				.map((v) => `"${String(v).replace(/"/g, '""')}"`)
-				.join(","),
-		);
-		const csv = [header, ...rows].join("\n");
-		const blob = new Blob([csv], { type: "text/csv" });
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement("a");
-		a.href = url;
-		a.download = `drift-history-${instrumentId}.csv`;
-		a.click();
-		URL.revokeObjectURL(url);
+	// ── CSV export via backend endpoint ─────────────────────────
+	let exporting = $state(false);
+
+	async function exportCSV() {
+		exporting = true;
+		try {
+			const token = await getToken();
+			const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
+			const params = new URLSearchParams({ format: "csv", limit: "5000" });
+			if (filterFrom) params.set("from_date", filterFrom);
+			if (filterTo) params.set("to_date", filterTo);
+			if (filterSeverity) params.set("severity", filterSeverity);
+
+			const res = await fetch(
+				`${apiBase}/analytics/strategy-drift/${instrumentId}/export?${params.toString()}`,
+				{ headers: { Authorization: `Bearer ${token}` } },
+			);
+			if (!res.ok) throw new Error("Export failed");
+
+			const blob = await res.blob();
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = `drift-history-${instrumentId}.csv`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (e) {
+			error = e instanceof Error ? e.message : "Export failed";
+		} finally {
+			exporting = false;
+		}
 	}
 
 	// Load on mount
@@ -306,9 +313,9 @@
 			<button
 				class="ml-auto inline-flex h-8 items-center gap-1.5 rounded-md border border-(--netz-border) bg-(--netz-surface) px-3 text-xs font-medium text-(--netz-text-primary) hover:bg-(--netz-surface-alt) disabled:opacity-40"
 				onclick={exportCSV}
-				disabled={filteredEvents.length === 0}
+				disabled={filteredEvents.length === 0 || exporting}
 			>
-				Export CSV
+				{exporting ? "Exporting…" : "Export CSV"}
 			</button>
 		</div>
 
