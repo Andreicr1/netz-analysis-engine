@@ -15,7 +15,7 @@
 	import type { ConsequenceDialogPayload } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
-	import type { DDReportFull, DDChapter, DDReportStatus, DecisionAnchor } from "$lib/types/dd-report";
+	import type { DDReportFull, DDChapter, DDReportStatus, DecisionAnchor, AuditEvent } from "$lib/types/dd-report";
 	import { chapterTitle, anchorLabel, anchorColor, confidenceColor } from "$lib/types/dd-report";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
@@ -120,6 +120,36 @@
 
 	// ── Regenerate ────────────────────────────────────────────────────────
 
+	// ── Fact sheet download ──────────────────────────────────────────────
+
+	let downloading = $state(false);
+
+	let canDownload = $derived(
+		["completed", "pending_approval", "approved", "published"].includes(report.status)
+	);
+
+	async function downloadFactSheet() {
+		downloading = true;
+		try {
+			const token = await getToken();
+			const res = await fetch(`/api/v1/fact-sheets/dd-reports/${reportId}/download?language=pt`, {
+				headers: { Authorization: `Bearer ${token}` },
+			});
+			if (!res.ok) throw new Error(`Download failed: ${res.status}`);
+			const blob = await res.blob();
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = `dd_report_${fundId}_pt.pdf`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (e) {
+			console.error("Fact sheet download failed:", e);
+		} finally {
+			downloading = false;
+		}
+	}
+
 	let regenerating = $state(false);
 
 	async function regenerate() {
@@ -132,6 +162,41 @@
 			startSSE();
 		} finally {
 			regenerating = false;
+		}
+	}
+
+	// ── Audit trail ──────────────────────────────────────────────────────
+
+	let auditTrailOpen = $state(false);
+	let auditEvents = $state<AuditEvent[]>([]);
+	let auditLoading = $state(false);
+
+	async function loadAuditTrail() {
+		if (auditEvents.length > 0) return;
+		auditLoading = true;
+		try {
+			const api = createClientApiClient(getToken);
+			auditEvents = await api.get<AuditEvent[]>(`/dd-reports/${reportId}/audit-trail`);
+		} catch {
+			auditEvents = [];
+		} finally {
+			auditLoading = false;
+		}
+	}
+
+	function handleAuditToggle() {
+		auditTrailOpen = !auditTrailOpen;
+		if (auditTrailOpen) loadAuditTrail();
+	}
+
+	function auditActionLabel(action: string): string {
+		switch (action) {
+			case "CREATE": return "Created";
+			case "UPDATE": return "Updated";
+			case "APPROVE": return "Approved";
+			case "REJECT": return "Rejected";
+			case "REGENERATE": return "Regenerated";
+			default: return action;
 		}
 	}
 
@@ -203,6 +268,12 @@
 			{#if report.status === "draft" || report.status === "rejected" || report.status === "failed"}
 				<Button size="sm" variant="outline" onclick={regenerate} disabled={regenerating}>
 					{regenerating ? "Regenerating…" : "Regenerate"}
+				</Button>
+			{/if}
+
+			{#if canDownload}
+				<Button size="sm" variant="outline" onclick={downloadFactSheet} disabled={downloading}>
+					{downloading ? "Downloading…" : "Download PDF"}
 				</Button>
 			{/if}
 		</div>
@@ -318,6 +389,54 @@
 			</div>
 		{/if}
 	</article>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<!-- AUDIT TRAIL                                                             -->
+<!-- ═══════════════════════════════════════════════════════════════════════ -->
+<div class="audit-section">
+	<button class="audit-toggle" onclick={handleAuditToggle}>
+		<span class="audit-toggle-icon">{auditTrailOpen ? "▾" : "▸"}</span>
+		Audit Trail
+	</button>
+
+	{#if auditTrailOpen}
+		<div class="audit-content">
+			{#if auditLoading}
+				<p class="audit-loading">Loading audit trail…</p>
+			{:else if auditEvents.length === 0}
+				<p class="audit-empty">No audit events recorded yet.</p>
+			{:else}
+				<div class="audit-timeline">
+					{#each auditEvents as event (event.id)}
+						<div class="audit-event">
+							<div class="audit-event-header">
+								<span class="audit-action">{auditActionLabel(event.action)}</span>
+								{#if event.created_at}
+									<span class="audit-date">{formatDateTime(event.created_at)}</span>
+								{/if}
+							</div>
+							{#if event.actor_id}
+								<span class="audit-actor">by {event.actor_id}</span>
+							{/if}
+							{#if event.after}
+								<div class="audit-detail">
+									{#each Object.entries(event.after) as [key, value] (key)}
+										{#if value !== null && value !== undefined}
+											<span class="audit-field">
+												<span class="audit-field-key">{key}:</span>
+												<span class="audit-field-val">{typeof value === "object" ? JSON.stringify(value) : String(value)}</span>
+											</span>
+										{/if}
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	{/if}
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
@@ -682,6 +801,108 @@
 		color: var(--netz-warning);
 		font-size: var(--netz-text-small, 0.8125rem);
 		font-weight: 500;
+	}
+
+	/* ── Audit trail ────────────────────────────────────────────────────── */
+	.audit-section {
+		border-top: 1px solid var(--netz-border-subtle);
+	}
+
+	.audit-toggle {
+		display: flex;
+		align-items: center;
+		gap: var(--netz-space-inline-xs, 6px);
+		width: 100%;
+		padding: var(--netz-space-stack-xs, 10px) var(--netz-space-inline-md, 16px);
+		border: none;
+		background: var(--netz-surface-elevated);
+		color: var(--netz-text-secondary);
+		font-size: var(--netz-text-small, 0.8125rem);
+		font-weight: 600;
+		font-family: var(--netz-font-sans);
+		cursor: pointer;
+		text-align: left;
+	}
+
+	.audit-toggle:hover {
+		color: var(--netz-text-primary);
+		background: var(--netz-surface-alt);
+	}
+
+	.audit-toggle-icon {
+		font-size: 10px;
+		width: 14px;
+		text-align: center;
+	}
+
+	.audit-content {
+		padding: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-md, 16px);
+	}
+
+	.audit-loading, .audit-empty {
+		font-size: var(--netz-text-small, 0.8125rem);
+		color: var(--netz-text-muted);
+	}
+
+	.audit-timeline {
+		display: flex;
+		flex-direction: column;
+		gap: var(--netz-space-stack-xs, 8px);
+	}
+
+	.audit-event {
+		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-sm, 12px);
+		border-left: 3px solid var(--netz-border-accent);
+		background: var(--netz-surface-alt);
+		border-radius: 0 var(--netz-radius-sm, 6px) var(--netz-radius-sm, 6px) 0;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.audit-event-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+
+	.audit-action {
+		font-size: var(--netz-text-small, 0.8125rem);
+		font-weight: 600;
+		color: var(--netz-text-primary);
+	}
+
+	.audit-date {
+		font-size: var(--netz-text-label, 0.75rem);
+		color: var(--netz-text-muted);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.audit-actor {
+		font-size: var(--netz-text-label, 0.75rem);
+		color: var(--netz-text-secondary);
+	}
+
+	.audit-detail {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--netz-space-inline-xs, 6px);
+		margin-top: 4px;
+	}
+
+	.audit-field {
+		font-size: var(--netz-text-label, 0.75rem);
+		display: inline-flex;
+		gap: 3px;
+	}
+
+	.audit-field-key {
+		color: var(--netz-text-muted);
+	}
+
+	.audit-field-val {
+		color: var(--netz-text-secondary);
+		font-variant-numeric: tabular-nums;
 	}
 
 	/* ── Responsive ──────────────────────────────────────────────────────── */

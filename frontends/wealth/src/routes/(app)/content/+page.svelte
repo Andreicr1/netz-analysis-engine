@@ -21,6 +21,9 @@
 
 	let content = $derived((data.content ?? []) as ContentSummary[]);
 
+	type FundSummary = { fund_id: string; name: string; manager_name?: string | null };
+	let funds = $derived((data.funds ?? []) as FundSummary[]);
+
 	// ── Tab filter ────────────────────────────────────────────────────────
 
 	type TabKey = "all" | "investment_outlook" | "flash_report" | "manager_spotlight";
@@ -43,18 +46,35 @@
 	let generating = $state(false);
 	let error = $state<string | null>(null);
 
-	async function generateContent(endpoint: string) {
+	async function generateContent(endpoint: string, params?: Record<string, string>) {
 		generating = true;
 		error = null;
 		try {
 			const api = createClientApiClient(getToken);
-			await api.post(`/content/${endpoint}`, {});
+			const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+			await api.post(`/content/${endpoint}${qs}`, {});
 			await invalidateAll();
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Generation failed";
 		} finally {
 			generating = false;
 		}
+	}
+
+	// ── Spotlight fund picker ────────────────────────────────────────────
+
+	let spotlightDialogOpen = $state(false);
+	let spotlightFundId = $state("");
+
+	function requestSpotlight() {
+		spotlightFundId = funds[0]?.fund_id ?? "";
+		spotlightDialogOpen = true;
+	}
+
+	async function handleSpotlightConfirm(_payload: ConsequenceDialogPayload) {
+		if (!spotlightFundId) return;
+		spotlightDialogOpen = false;
+		await generateContent("spotlights", { instrument_id: spotlightFundId });
 	}
 
 	// ── Approve ───────────────────────────────────────────────────────────
@@ -127,6 +147,9 @@
 			</Button>
 			<Button size="sm" variant="outline" onclick={() => generateContent("flash-reports")} disabled={generating}>
 				Flash Report
+			</Button>
+			<Button size="sm" variant="outline" onclick={requestSpotlight} disabled={generating || funds.length === 0}>
+				Spotlight
 			</Button>
 		</div>
 	{/snippet}
@@ -206,6 +229,28 @@
 	metadata={[{ label: "Content", value: approveTargetTitle }]}
 	onConfirm={handleApprove}
 />
+
+<!-- Spotlight fund picker dialog -->
+<ConsequenceDialog
+	bind:open={spotlightDialogOpen}
+	title="Generate Manager Spotlight"
+	impactSummary="A Manager Spotlight report will be generated for the selected fund."
+	requireRationale={false}
+	confirmLabel="Generate"
+	metadata={[{ label: "Fund", value: funds.find((f) => f.fund_id === spotlightFundId)?.name ?? "—" }]}
+	onConfirm={handleSpotlightConfirm}
+>
+	<div class="ct-spotlight-picker">
+		<label class="ct-spotlight-label" for="spotlight-fund-select">Select Fund</label>
+		<select id="spotlight-fund-select" class="ct-spotlight-select" bind:value={spotlightFundId}>
+			{#each funds as fund (fund.fund_id)}
+				<option value={fund.fund_id}>
+					{fund.name}{fund.manager_name ? ` — ${fund.manager_name}` : ""}
+				</option>
+			{/each}
+		</select>
+	</div>
+</ConsequenceDialog>
 
 <style>
 	.ct-actions {
@@ -327,5 +372,30 @@
 		padding: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-md, 16px);
 		margin-top: auto;
 		border-top: 1px solid var(--netz-border-subtle);
+	}
+
+	/* Spotlight picker */
+	.ct-spotlight-picker {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		padding: var(--netz-space-stack-xs, 8px) 0;
+	}
+
+	.ct-spotlight-label {
+		font-size: var(--netz-text-small, 0.8125rem);
+		font-weight: 500;
+		color: var(--netz-text-secondary);
+	}
+
+	.ct-spotlight-select {
+		height: var(--netz-space-control-height-sm, 36px);
+		padding: 0 var(--netz-space-inline-sm, 10px);
+		border: 1px solid var(--netz-border);
+		border-radius: var(--netz-radius-sm, 8px);
+		background: var(--netz-surface-elevated);
+		color: var(--netz-text-primary);
+		font-size: var(--netz-text-small, 0.8125rem);
+		font-family: var(--netz-font-sans);
 	}
 </style>
