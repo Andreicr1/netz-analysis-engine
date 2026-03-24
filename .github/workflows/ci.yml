@@ -40,32 +40,20 @@ jobs:
       APP_ENV: development
     steps:
       - uses: actions/checkout@v5
-      - name: Find Python
-        id: find-python
+      - name: Locate Python and add to PATH
         shell: pwsh
         run: |
-          # Try common locations on self-hosted Windows runner
           $candidates = @(
-            "py -3",
-            "python",
-            "python3",
-            "C:\Python312\python.exe",
-            "C:\Python311\python.exe",
-            "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
-            "$env:LOCALAPPDATA\Programs\Python\Python311\python.exe"
+            "C:\Users\Andrei\AppData\Local\Programs\Python\Python311",
+            "C:\Users\Andrei\AppData\Local\Programs\Python\Python313",
+            "C:\Program Files\Python311",
+            "C:\Python311"
           )
-          foreach ($cmd in $candidates) {
-            try {
-              $version = & $cmd.Split()[0] $cmd.Split()[1..99] --version 2>&1
-              if ($LASTEXITCODE -eq 0) {
-                Write-Host "Found: $cmd -> $version"
-                echo "python=$cmd" >> $env:GITHUB_OUTPUT
-                exit 0
-              }
-            } catch {}
-          }
-          Write-Error "No Python found on this runner"
-          exit 1
+          $found = $candidates | Where-Object { Test-Path "$_\python.exe" } | Select-Object -First 1
+          if (-not $found) { Write-Error "Python not found on runner"; exit 1 }
+          Write-Host "Using Python at: $found"
+          echo "$found" >> $env:GITHUB_PATH
+          echo "$found\Scripts" >> $env:GITHUB_PATH
       - name: Ensure test database exists
         run: |
           $result = docker exec netz-analysis-engine-db-1 psql -U netz -d postgres -tc "SELECT 1 FROM pg_database WHERE datname='netz_engine_test'"
@@ -77,17 +65,17 @@ jobs:
           }
         shell: pwsh
       - name: Install dependencies
-        run: py -3 -m pip install -e ".[dev,ai,quant]"
+        run: python -m pip install -e ".[dev,ai,quant]"
       - name: Run migrations
-        run: py -3 -m alembic upgrade head
+        run: python -m alembic upgrade head
         working-directory: backend
         env:
           DATABASE_URL: postgresql+psycopg://netz:password@localhost:5434/netz_engine_test
       - name: Lint
-        run: py -3 -m ruff check .
+        run: python -m ruff check .
         working-directory: backend
       - name: Test
-        run: py -3 -m pytest tests/ -v --tb=short
+        run: python -m pytest tests/ -v --tb=short
         working-directory: backend
 
   check-frontends:
