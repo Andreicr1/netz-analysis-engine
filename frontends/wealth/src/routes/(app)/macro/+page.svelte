@@ -14,6 +14,7 @@
 	import type {
 		MacroScores, RegimeHierarchy, MacroIndicators,
 		RegionalScore, GlobalIndicators, TreasuryPoint, OfrPoint,
+		BisPoint, ImfPoint,
 	} from "$lib/types/macro";
 	import { regimeColor, freshnessColor } from "$lib/types/macro";
 
@@ -80,6 +81,66 @@
 
 	$effect(() => {
 		fetchOfr(ofrMetric);
+	});
+
+	// ── BIS panel state ──────────────────────────────────────────────────
+
+	let bisCountry = $state("US");
+	let bisIndicator = $state("CREDIT_GAP");
+	let bisData = $state<BisPoint[]>([]);
+	let bisLoading = $state(false);
+
+	const BIS_COUNTRIES = ["US", "GB", "DE", "JP", "CN", "BR"];
+	const BIS_INDICATORS = ["CREDIT_GAP", "DSR", "PROPERTY_PRICES"];
+
+	async function fetchBis(country: string, indicator: string) {
+		bisLoading = true;
+		try {
+			const api = createClientApiClient(getToken);
+			const res = await api.get<{ country: string; indicator: string; data: BisPoint[] }>(`/macro/bis`, { country, indicator });
+			bisData = res.data ?? [];
+		} catch {
+			bisData = [];
+		} finally {
+			bisLoading = false;
+		}
+	}
+
+	$effect(() => {
+		fetchBis(bisCountry, bisIndicator);
+	});
+
+	// ── IMF panel state ──────────────────────────────────────────────────
+
+	let imfCountry = $state("US");
+	let imfIndicator = $state("NGDP_RPCH");
+	let imfData = $state<ImfPoint[]>([]);
+	let imfLoading = $state(false);
+
+	const IMF_COUNTRIES = ["US", "GB", "DE", "JP", "CN", "BR"];
+	const IMF_INDICATORS = ["NGDP_RPCH", "PCPIPCH", "GGXWDG_NGDP"];
+
+	const IMF_LABELS: Record<string, string> = {
+		NGDP_RPCH: "GDP Growth",
+		PCPIPCH: "Inflation",
+		GGXWDG_NGDP: "Fiscal Balance",
+	};
+
+	async function fetchImf(country: string, indicator: string) {
+		imfLoading = true;
+		try {
+			const api = createClientApiClient(getToken);
+			const res = await api.get<{ country: string; indicator: string; data: ImfPoint[] }>(`/macro/imf`, { country, indicator });
+			imfData = res.data ?? [];
+		} catch {
+			imfData = [];
+		} finally {
+			imfLoading = false;
+		}
+	}
+
+	$effect(() => {
+		fetchImf(imfCountry, imfIndicator);
 	});
 
 	// ── Helpers ───────────────────────────────────────────────────────────
@@ -286,6 +347,78 @@
 			</div>
 		{:else}
 			<div class="ts-empty">No data for {ofrMetric}</div>
+		{/if}
+	</section>
+
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<!-- ROW 6: BIS Global Credit                                           -->
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<section class="macro-panel macro-panel--wide">
+		<div class="ts-header">
+			<h3 class="macro-panel-title">BIS Global Credit</h3>
+			<div class="ts-selects">
+				<select class="ts-select" bind:value={bisCountry}>
+					{#each BIS_COUNTRIES as c (c)}
+						<option value={c}>{c}</option>
+					{/each}
+				</select>
+				<select class="ts-select" bind:value={bisIndicator}>
+					{#each BIS_INDICATORS as ind (ind)}
+						<option value={ind}>{ind.replace(/_/g, " ")}</option>
+					{/each}
+				</select>
+			</div>
+		</div>
+		{#if bisLoading}
+			<div class="ts-loading">Loading…</div>
+		{:else if bisData.length > 0}
+			<div class="ts-spark">
+				{#each sparkMini(bisData, 60) as bar, i (i)}
+					<div class="ts-bar ts-bar--bis" style:height="{bar.h}%"></div>
+				{/each}
+			</div>
+			<div class="ts-range">
+				<span>{bisData[0]?.period}</span>
+				<span>{bisData[bisData.length - 1]?.period}</span>
+			</div>
+		{:else}
+			<div class="ts-empty">No BIS data for {bisCountry} / {bisIndicator}</div>
+		{/if}
+	</section>
+
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<!-- ROW 7: IMF Economic Outlook                                        -->
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<section class="macro-panel macro-panel--wide">
+		<div class="ts-header">
+			<h3 class="macro-panel-title">IMF Economic Outlook</h3>
+			<div class="ts-selects">
+				<select class="ts-select" bind:value={imfCountry}>
+					{#each IMF_COUNTRIES as c (c)}
+						<option value={c}>{c}</option>
+					{/each}
+				</select>
+				<select class="ts-select" bind:value={imfIndicator}>
+					{#each IMF_INDICATORS as ind (ind)}
+						<option value={ind}>{IMF_LABELS[ind] ?? ind}</option>
+					{/each}
+				</select>
+			</div>
+		</div>
+		{#if imfLoading}
+			<div class="ts-loading">Loading…</div>
+		{:else if imfData.length > 0}
+			<div class="ts-imf-bars">
+				{#each imfData as point (point.year)}
+					<div class="imf-bar-col">
+						<div class="imf-bar-value">{formatNumber(point.value, 1)}</div>
+						<div class="imf-bar-fill" style:height="{Math.min(Math.abs(point.value) * 10, 100)}%" class:imf-bar-fill--negative={point.value < 0}></div>
+						<div class="imf-bar-year">{point.year}</div>
+					</div>
+				{/each}
+			</div>
+		{:else}
+			<div class="ts-empty">No IMF data for {imfCountry} / {IMF_LABELS[imfIndicator] ?? imfIndicator}</div>
 		{/if}
 	</section>
 </div>
@@ -536,6 +669,60 @@
 		text-align: center;
 		color: var(--netz-text-muted);
 		font-size: var(--netz-text-small, 0.8125rem);
+	}
+
+	/* ── Multi-select row ────────────────────────────────────────────────── */
+	.ts-selects {
+		display: flex;
+		gap: var(--netz-space-inline-xs, 6px);
+	}
+
+	/* ── BIS bar accent ──────────────────────────────────────────────────── */
+	.ts-bar--bis {
+		background: var(--netz-info);
+	}
+
+	/* ── IMF bar chart ───────────────────────────────────────────────────── */
+	.ts-imf-bars {
+		display: flex;
+		align-items: flex-end;
+		gap: var(--netz-space-inline-xs, 6px);
+		height: 80px;
+		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-md, 16px);
+	}
+
+	.imf-bar-col {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 2px;
+		min-width: 0;
+	}
+
+	.imf-bar-value {
+		font-size: 10px;
+		font-weight: 600;
+		color: var(--netz-text-secondary);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.imf-bar-fill {
+		width: 100%;
+		max-width: 32px;
+		background: var(--netz-success);
+		border-radius: 2px 2px 0 0;
+		transition: height 200ms ease;
+	}
+
+	.imf-bar-fill--negative {
+		background: var(--netz-danger);
+	}
+
+	.imf-bar-year {
+		font-size: 10px;
+		color: var(--netz-text-muted);
+		font-variant-numeric: tabular-nums;
 	}
 
 	/* ── Responsive ──────────────────────────────────────────────────────── */

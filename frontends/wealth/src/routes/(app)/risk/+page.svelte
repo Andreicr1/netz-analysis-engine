@@ -56,6 +56,20 @@
 		return formatPercent(n);
 	}
 
+	// ── Aggregate risk summary ──────────────────────────────────────────
+	let worstUtil = $derived(
+		profiles.reduce((max, [, c]) => {
+			const u = pctNum(c.cvar_utilized_pct);
+			return u !== null && u > max ? u : max;
+		}, 0)
+	);
+	let breachedCount = $derived(
+		profiles.filter(([, c]) => c.trigger_status === "breach" || c.trigger_status === "hard_stop").length
+	);
+	let warningCount = $derived(
+		profiles.filter(([, c]) => c.trigger_status === "warning").length
+	);
+
 	// ── CVaR history sparkline (CSS-only mini bar chart) ──────────────────
 
 	function sparkBars(history: CVaRPoint[]): { value: number; date: string }[] {
@@ -104,6 +118,38 @@
 </PageHeader>
 
 <div class="rw-grid">
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<!-- ROW 0: Aggregate Risk Summary                                      -->
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	{#if profiles.length > 0}
+		<section class="rw-panel rw-panel--summary">
+			<div class="summary-grid">
+				<div class="summary-card">
+					<span class="summary-label">Profiles</span>
+					<span class="summary-value">{profiles.length}</span>
+				</div>
+				<div class="summary-card">
+					<span class="summary-label">Worst Utilization</span>
+					<span class="summary-value" style:color={worstUtil > 90 ? "var(--netz-danger)" : worstUtil > 70 ? "var(--netz-warning)" : "var(--netz-text-primary)"}>
+						{formatPercent(worstUtil / 100)}
+					</span>
+				</div>
+				<div class="summary-card">
+					<span class="summary-label">Breached</span>
+					<span class="summary-value" style:color={breachedCount > 0 ? "var(--netz-danger)" : "var(--netz-success)"}>{breachedCount}</span>
+				</div>
+				<div class="summary-card">
+					<span class="summary-label">Warnings</span>
+					<span class="summary-value" style:color={warningCount > 0 ? "var(--netz-warning)" : "var(--netz-success)"}>{warningCount}</span>
+				</div>
+				<div class="summary-card">
+					<span class="summary-label">Drift Alerts</span>
+					<span class="summary-value" style:color={totalAlerts > 0 ? "var(--netz-warning)" : "var(--netz-text-muted)"}>{totalAlerts}</span>
+				</div>
+			</div>
+		</section>
+	{/if}
+
 	<!-- ═══════════════════════════════════════════════════════════════════ -->
 	<!-- ROW 1: Regime + Connection                                         -->
 	<!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -328,6 +374,41 @@
 		text-align: center;
 		color: var(--netz-text-muted);
 		font-size: var(--netz-text-small, 0.8125rem);
+	}
+
+	/* ── Summary banner ─────────────────────────────────────────────────── */
+	.rw-panel--summary {
+		grid-column: 1 / -1;
+	}
+
+	.summary-grid {
+		display: grid;
+		grid-template-columns: repeat(5, 1fr);
+		gap: 1px;
+		background: var(--netz-border-subtle);
+	}
+
+	.summary-card {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 2px;
+		padding: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-sm, 12px);
+		background: var(--netz-surface-elevated);
+	}
+
+	.summary-label {
+		font-size: var(--netz-text-label, 0.75rem);
+		color: var(--netz-text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		font-weight: 600;
+	}
+
+	.summary-value {
+		font-size: var(--netz-text-h3, 1.375rem);
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
 	}
 
 	/* ── Flash animation on trigger state change ─────────────────────────── */
