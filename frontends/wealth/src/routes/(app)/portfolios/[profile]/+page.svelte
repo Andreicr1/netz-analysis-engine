@@ -181,7 +181,8 @@
 </script>
 
 <PageHeader
-	title={profile}
+	title="{profile} — Portfolio Workbench"
+	subtitle="Strategic allocation, tactical tilts, rebalancing events, and benchmark configuration"
 	breadcrumbs={[{ label: "Portfolios", href: "/portfolios" }, { label: profile }]}
 >
 	{#snippet actions()}

@@ -16,7 +16,16 @@
 
 	let { data }: { data: PageData } = $props();
 
+	interface BlockBrief {
+		block_id: string;
+		display_name: string;
+		benchmark_ticker: string | null;
+		geography: string;
+		asset_class: string;
+	}
+
 	let portfolios = $derived((data.portfolios ?? []) as ModelPortfolio[]);
+	let blocks = $derived((data.blocks ?? []) as BlockBrief[]);
 	let actorRole = $derived((data.actorRole ?? null) as string | null);
 
 	const IC_ROLES = ["investment_team", "director", "admin"];
@@ -32,6 +41,40 @@
 	let formDisplayName = $state("");
 	let formDescription = $state("");
 	let formBenchmark = $state("");
+	let benchmarkQuery = $state("");
+	let benchmarkDropdownOpen = $state(false);
+	let benchmarkSuggestions = $derived.by(() => {
+		if (!benchmarkQuery) return blocks.slice(0, 10);
+		const q = benchmarkQuery.toLowerCase();
+		return blocks.filter(
+			(b) =>
+				b.display_name.toLowerCase().includes(q) ||
+				b.benchmark_ticker?.toLowerCase().includes(q) ||
+				b.block_id.toLowerCase().includes(q)
+		).slice(0, 10);
+	});
+
+	function selectBenchmark(block: BlockBrief) {
+		formBenchmark = block.display_name;
+		benchmarkQuery = block.display_name;
+		benchmarkDropdownOpen = false;
+	}
+
+	function handleBenchmarkInput(e: Event) {
+		benchmarkQuery = (e.target as HTMLInputElement).value;
+		formBenchmark = benchmarkQuery;
+		benchmarkDropdownOpen = true;
+	}
+
+	function handleBenchmarkFocus() {
+		benchmarkDropdownOpen = true;
+	}
+
+	function handleBenchmarkBlur() {
+		// Delay to allow click on dropdown item
+		setTimeout(() => { benchmarkDropdownOpen = false; }, 200);
+	}
+
 	let formInceptionDate = $state("");
 	let formBacktestStart = $state("");
 
@@ -42,6 +85,8 @@
 		formDisplayName = "";
 		formDescription = "";
 		formBenchmark = "";
+		benchmarkQuery = "";
+		benchmarkDropdownOpen = false;
 		formInceptionDate = "";
 		formBacktestStart = "";
 		formError = null;
@@ -190,15 +235,37 @@
 					></textarea>
 				</label>
 
-				<label class="dialog-field">
-					<span class="dialog-label">Benchmark Composite</span>
-					<input
-						type="text"
-						class="dialog-input"
-						placeholder="e.g. 60% IMA-B + 40% CDI"
-						bind:value={formBenchmark}
-					/>
-				</label>
+				<div class="dialog-field benchmark-field">
+					<span class="dialog-label">Benchmark</span>
+					<div class="benchmark-autocomplete">
+						<input
+							type="text"
+							class="dialog-input"
+							placeholder="Search benchmarks…"
+							value={benchmarkQuery}
+							oninput={handleBenchmarkInput}
+							onfocus={handleBenchmarkFocus}
+							onblur={handleBenchmarkBlur}
+							autocomplete="off"
+						/>
+						{#if benchmarkDropdownOpen && benchmarkSuggestions.length > 0}
+							<div class="benchmark-dropdown">
+								{#each benchmarkSuggestions as block (block.block_id)}
+									<button
+										class="benchmark-option"
+										type="button"
+										onmousedown={(e) => { e.preventDefault(); selectBenchmark(block); }}
+									>
+										<span class="benchmark-option-name">{block.display_name}</span>
+										<span class="benchmark-option-meta">
+											{block.benchmark_ticker ?? ""} · {block.geography} · {block.asset_class}
+										</span>
+									</button>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				</div>
 
 				<div class="dialog-row">
 					<label class="dialog-field">
@@ -416,6 +483,59 @@
 		height: auto;
 		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-sm, 10px);
 		resize: vertical;
+	}
+
+	/* ── Benchmark autocomplete ─────────────────────────────────────────── */
+	.benchmark-field {
+		position: relative;
+	}
+
+	.benchmark-autocomplete {
+		position: relative;
+	}
+
+	.benchmark-dropdown {
+		position: absolute;
+		top: 100%;
+		left: 0;
+		right: 0;
+		z-index: 10;
+		max-height: 220px;
+		overflow-y: auto;
+		border: 1px solid var(--netz-border);
+		border-top: none;
+		border-radius: 0 0 var(--netz-radius-sm, 8px) var(--netz-radius-sm, 8px);
+		background: var(--netz-surface-elevated);
+		box-shadow: var(--netz-shadow-2);
+	}
+
+	.benchmark-option {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		width: 100%;
+		padding: var(--netz-space-stack-2xs, 6px) var(--netz-space-inline-sm, 10px);
+		border: none;
+		background: transparent;
+		text-align: left;
+		cursor: pointer;
+		font-family: var(--netz-font-sans);
+		transition: background 80ms ease;
+	}
+
+	.benchmark-option:hover {
+		background: var(--netz-surface-alt);
+	}
+
+	.benchmark-option-name {
+		font-size: var(--netz-text-small, 0.8125rem);
+		font-weight: 500;
+		color: var(--netz-text-primary);
+	}
+
+	.benchmark-option-meta {
+		font-size: var(--netz-text-label, 0.75rem);
+		color: var(--netz-text-muted);
 	}
 
 	.dialog-row {

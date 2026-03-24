@@ -22,7 +22,7 @@
 	}
 </script>
 
-<PageHeader title="Portfolios" />
+<PageHeader title="Portfolios" subtitle="Current positions and realized weights for each risk profile" />
 
 <div class="port-page">
 	{#if profiles.length === 0}

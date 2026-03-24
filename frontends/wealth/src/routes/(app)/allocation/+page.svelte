@@ -7,7 +7,7 @@
 	import AllocationView from "$lib/components/AllocationView.svelte";
 </script>
 
-<PageHeader title="Allocation" />
+<PageHeader title="Allocation" subtitle="Strategic targets, tactical tilts, and effective allocation across risk profiles" />
 
 <div class="alloc-page">
 	<AllocationView />
