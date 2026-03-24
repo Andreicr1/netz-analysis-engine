@@ -13,8 +13,9 @@
 	} from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
-	import type { AttributionResult, SectorAttribution, StrategyDriftAlert, Timeframe } from "$lib/types/analytics";
+	import type { AttributionResult, ParetoResult, SectorAttribution, StrategyDriftAlert, Timeframe } from "$lib/types/analytics";
 	import { effectColor, severityColor } from "$lib/types/analytics";
+	import { Button } from "@netz/ui";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -70,6 +71,92 @@
 	function fmtEffect(v: number): string {
 		const sign = v >= 0 ? "+" : "";
 		return `${sign}${(v * 10000).toFixed(1)} bps`;
+	}
+
+	// ── Pareto optimization ──────────────────────────────────────────────
+
+	let paretoRunning = $state(false);
+	let paretoProgress = $state<string | null>(null);
+	let paretoResult = $state<ParetoResult | null>(null);
+	let paretoError = $state<string | null>(null);
+
+	async function runPareto() {
+		paretoRunning = true;
+		paretoProgress = "Submitting…";
+		paretoResult = null;
+		paretoError = null;
+
+		try {
+			const api = createClientApiClient(getToken);
+			const initial = await api.post<ParetoResult>("/analytics/optimize/pareto", {
+				profile: selectedProfile,
+			});
+
+			const jobId = initial.job_id;
+			if (!jobId) {
+				paretoResult = initial;
+				paretoRunning = false;
+				paretoProgress = null;
+				return;
+			}
+
+			// Connect to SSE stream via fetch + ReadableStream
+			const token = await getToken();
+			const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
+			const res = await fetch(`${apiBase}/analytics/optimize/pareto/${jobId}/stream`, {
+				headers: { Authorization: `Bearer ${token}` },
+			});
+
+			if (!res.ok || !res.body) {
+				paretoError = "Failed to connect to progress stream";
+				paretoRunning = false;
+				paretoProgress = null;
+				return;
+			}
+
+			const reader = res.body.getReader();
+			const decoder = new TextDecoder();
+			let buffer = "";
+			let currentEvent = "message";
+
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+
+				buffer += decoder.decode(value, { stream: true });
+				const lines = buffer.split("\n");
+				buffer = lines.pop() ?? "";
+
+				for (const line of lines) {
+					if (line.startsWith("event: ")) {
+						currentEvent = line.slice(7).trim();
+					} else if (line.startsWith("data: ")) {
+						try {
+							const data = JSON.parse(line.slice(6));
+							if (currentEvent === "progress") {
+								paretoProgress = `${data.stage ?? "optimizing"}… ${data.pct ?? ""}%`;
+							} else if (currentEvent === "done") {
+								paretoResult = data as ParetoResult;
+								paretoProgress = null;
+							} else if (currentEvent === "error") {
+								paretoError = data.message ?? "Optimization failed";
+								paretoProgress = null;
+							}
+						} catch {
+							// skip malformed SSE lines
+						}
+						currentEvent = "message";
+					} else if (line === "") {
+						currentEvent = "message";
+					}
+				}
+			}
+		} catch (e) {
+			paretoError = e instanceof Error ? e.message : "Pareto optimization failed";
+		} finally {
+			paretoRunning = false;
+			if (paretoProgress) paretoProgress = null;
+		}
 	}
 </script>
 
@@ -279,6 +366,59 @@
 			</div>
 		{/if}
 	</section>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- Pareto Optimization                                                -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="an-pareto-section">
+	<div class="an-pareto-header">
+		<h3 class="an-pareto-title">Multi-Objective Optimization (Pareto)</h3>
+		<Button size="sm" variant="outline" onclick={runPareto} disabled={paretoRunning}>
+			{paretoRunning ? "Running…" : "Run Pareto"}
+		</Button>
+	</div>
+
+	{#if paretoProgress}
+		<div class="an-pareto-progress">{paretoProgress}</div>
+	{/if}
+
+	{#if paretoError}
+		<div class="an-pareto-error">{paretoError}</div>
+	{/if}
+
+	{#if paretoResult}
+		<div class="an-pareto-result">
+			<div class="an-kpi-row">
+				<div class="an-kpi">
+					<span class="an-kpi-label">Solutions</span>
+					<span class="an-kpi-value">{paretoResult.n_solutions}</span>
+				</div>
+				<div class="an-kpi">
+					<span class="an-kpi-label">Status</span>
+					<span class="an-kpi-value">{paretoResult.status}</span>
+				</div>
+				<div class="an-kpi">
+					<span class="an-kpi-label">Seed</span>
+					<span class="an-kpi-value">{paretoResult.seed}</span>
+				</div>
+			</div>
+
+			{#if Object.keys(paretoResult.recommended_weights).length > 0}
+				<div class="an-pareto-weights">
+					<h4 class="an-pareto-subtitle">Recommended Weights</h4>
+					<div class="an-weight-grid">
+						{#each Object.entries(paretoResult.recommended_weights) as [block, weight] (block)}
+							<div class="an-weight-item">
+								<span class="an-weight-label">{block}</span>
+								<span class="an-weight-value">{formatPercent(weight)}</span>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -686,6 +826,86 @@
 
 	.an-legend-dot--alloc { background: var(--netz-success); }
 	.an-legend-dot--sel { background: var(--netz-info); }
+
+	/* ── Pareto section ──────────────────────────────────────────────────── */
+	.an-pareto-section {
+		margin: var(--netz-space-stack-md, 16px) var(--netz-space-inline-lg, 24px) 0;
+		border: 1px solid var(--netz-border-subtle);
+		border-radius: var(--netz-radius-md, 12px);
+		background: var(--netz-surface-elevated);
+		overflow: hidden;
+	}
+
+	.an-pareto-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: var(--netz-space-stack-xs, 10px) var(--netz-space-inline-md, 16px);
+		border-bottom: 1px solid var(--netz-border-subtle);
+		background: var(--netz-surface-alt);
+	}
+
+	.an-pareto-title {
+		font-size: var(--netz-text-small, 0.8125rem);
+		font-weight: 600;
+		color: var(--netz-text-primary);
+	}
+
+	.an-pareto-progress {
+		padding: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-md, 16px);
+		font-size: var(--netz-text-small, 0.8125rem);
+		color: var(--netz-info);
+		font-weight: 500;
+	}
+
+	.an-pareto-error {
+		padding: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-md, 16px);
+		font-size: var(--netz-text-small, 0.8125rem);
+		color: var(--netz-danger);
+	}
+
+	.an-pareto-result {
+		padding: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-md, 16px);
+	}
+
+	.an-pareto-subtitle {
+		font-size: var(--netz-text-label, 0.75rem);
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--netz-text-muted);
+		margin: var(--netz-space-stack-sm, 12px) 0 var(--netz-space-stack-xs, 8px);
+	}
+
+	.an-weight-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+		gap: var(--netz-space-stack-2xs, 6px);
+	}
+
+	.an-weight-item {
+		display: flex;
+		justify-content: space-between;
+		padding: var(--netz-space-stack-2xs, 4px) var(--netz-space-inline-sm, 8px);
+		border-radius: var(--netz-radius-sm, 8px);
+		background: var(--netz-surface-alt);
+	}
+
+	.an-weight-label {
+		font-size: var(--netz-text-small, 0.8125rem);
+		color: var(--netz-text-primary);
+		font-weight: 500;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.an-weight-value {
+		font-size: var(--netz-text-small, 0.8125rem);
+		font-weight: 600;
+		color: var(--netz-text-primary);
+		font-variant-numeric: tabular-nums;
+	}
 
 	/* ── Responsive ──────────────────────────────────────────────────────── */
 	@media (max-width: 768px) {

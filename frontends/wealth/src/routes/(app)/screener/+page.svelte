@@ -360,10 +360,28 @@
 		await fetchTab("profile");
 	}
 
+	// ── Fund screening history ───────────────────────────────────────────
+	let fundHistory = $state<ScreeningResult[]>([]);
+	let fundHistoryLoading = $state(false);
+
+	async function loadFundHistory(instrumentId: string) {
+		fundHistoryLoading = true;
+		try {
+			const api = createClientApiClient(getToken);
+			fundHistory = await api.get<ScreeningResult[]>(`/screener/results/${instrumentId}`);
+		} catch {
+			fundHistory = [];
+		} finally {
+			fundHistoryLoading = false;
+		}
+	}
+
 	function openFundDetail(fund: ScreeningResult) {
 		panelMode = "fund";
 		selectedFund = fund;
+		fundHistory = [];
 		panelOpen = true;
+		void loadFundHistory(fund.instrument_id);
 	}
 
 	function closePanel() {
@@ -1318,6 +1336,37 @@
 				</div>
 			{/if}
 		{/each}
+
+		<!-- Screening History -->
+		<div class="dt-section">
+			<h4 class="dt-section-title">Screening History</h4>
+			{#if fundHistoryLoading}
+				<p class="dt-empty">Loading history…</p>
+			{:else if fundHistory.length <= 1}
+				<p class="dt-empty">No previous screenings.</p>
+			{:else}
+				<table class="criteria-table">
+					<thead>
+						<tr>
+							<th>Date</th>
+							<th>Status</th>
+							<th>Score</th>
+							<th>Failed</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each fundHistory as h (h.id)}
+							<tr class:criteria-fail={h.overall_status === "FAIL"}>
+								<td class="criteria-val">{formatDateTime(h.screened_at)}</td>
+								<td><StatusBadge status={h.overall_status} /></td>
+								<td class="criteria-val" style:color={scoreColor(h.score)}>{h.score !== null ? formatPercent(h.score) : "—"}</td>
+								<td class="criteria-val">{h.failed_at_layer !== null ? `L${h.failed_at_layer}` : "—"}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			{/if}
+		</div>
 	{/if}
 {/snippet}
 
