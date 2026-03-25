@@ -1,15 +1,13 @@
 """DD Report Engine — orchestrator for 8-chapter fund DD reports.
 
-Generates all 8 chapters sequentially (chapters 1-7 first, then chapter 8
-Recommendation). This engine runs inside asyncio.to_thread() on a sync
-Session, so concurrency is provided at the caller level (the async route
-may dispatch multiple reports in parallel via TaskGroup), not inside the
-engine itself.
+Chapters 1-7 run in parallel via ThreadPoolExecutor(max_workers=5),
+then chapter 8 (Recommendation) runs sequentially consuming summaries
+from the preceding chapters. This engine runs inside asyncio.to_thread()
+on a sync Session.
 
-Chapter generation mode: SEQUENTIAL
-- Chapters 1-7 generated one at a time in registry order.
-- Chapter 8 (Recommendation) generated after chapters 1-7 complete,
-  consuming summaries from the preceding chapters.
+Chapter generation mode: PARALLEL (1-7) + SEQUENTIAL (8)
+- Chapters 1-7 dispatched to ThreadPoolExecutor(5) — share only frozen EvidencePack.
+- Chapter 8 (Recommendation) generated after 1-7 complete.
 - Resume safety: cached chapters are skipped when force=False.
 - Never raises — returns DDReportResult with status='failed' on error.
 
@@ -27,6 +25,7 @@ Usage (from async route via asyncio.to_thread)::
 from __future__ import annotations
 
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any
 
@@ -333,98 +332,141 @@ class DDReportEngine:
         existing_chapters: dict[str, str],
         force: bool,
     ) -> list[ChapterResult]:
-        """Generate all 8 chapters: 1-7 sequentially, then 8.
+        """Generate all 8 chapters: 1-7 in parallel, then 8 sequentially.
 
-        Note: Parallel generation via TaskGroup happens at the async
-        layer (route handler). This sync method generates sequentially
-        since it runs inside asyncio.to_thread(). The async route
-        can dispatch multiple chapter calls in parallel via TaskGroup
-        if needed.
+        Chapters 1-7 are independent (share only the frozen EvidencePack)
+        and run in a ThreadPoolExecutor(max_workers=5). Chapter 8
+        (Recommendation) depends on summaries from 1-7.
+
+        Each future is wrapped in try/except to honour the never-raises
+        contract — a failed chapter returns status='failed' with a safe
+        default, never killing the entire generation.
         """
         assert self._call_openai_fn is not None
 
-        chapters: list[ChapterResult] = []
+        chapter_results: dict[str, ChapterResult] = {}
         chapter_summaries: dict[str, str] = {}
 
-        # Phase A: Chapters 1-7
-        for ch_def in CHAPTER_REGISTRY:
-            if ch_def["tag"] == SEQUENTIAL_CHAPTER_TAG:
-                continue  # Skip recommendation for now
+        # Separate parallel (1-7) and sequential (8) chapters
+        parallel_defs = [
+            ch for ch in CHAPTER_REGISTRY if ch["tag"] != SEQUENTIAL_CHAPTER_TAG
+        ]
 
-            # Resume safety: skip cached chapters
+        # Identify which parallel chapters actually need generation
+        to_generate: list[dict[str, Any]] = []
+        for ch_def in parallel_defs:
             if not force and ch_def["tag"] in existing_chapters:
                 cached_content = existing_chapters[ch_def["tag"]]
-                chapters.append(ChapterResult(
+                chapter_results[ch_def["tag"]] = ChapterResult(
                     tag=ch_def["tag"],
                     order=ch_def["order"],
                     title=ch_def["title"],
                     content_md=cached_content,
                     status="completed",
                     critic_status="accepted",
-                ))
-                # Add to summaries for recommendation
+                )
                 chapter_summaries[ch_def["tag"]] = cached_content[:500]
                 logger.info("chapter_cached", chapter_tag=ch_def["tag"])
-                continue
+            else:
+                to_generate.append(ch_def)
 
-            evidence_context = evidence.filter_for_chapter(ch_def["tag"])
-            result = generate_chapter(
-                self._call_openai_fn,
-                chapter_tag=ch_def["tag"],
-                evidence_context=evidence_context,
-                evidence_pack=evidence,
-            )
-            chapters.append(result)
-
-            # Track summary for recommendation chapter
-            if result.content_md:
-                chapter_summaries[result.tag] = result.content_md[:500]
+        # Phase A: Chapters 1-7 in parallel via ThreadPoolExecutor
+        if to_generate:
+            with ThreadPoolExecutor(
+                max_workers=_DEFAULT_LLM_CONCURRENCY,
+            ) as pool:
+                futures = {
+                    pool.submit(
+                        generate_chapter,
+                        self._call_openai_fn,
+                        chapter_tag=ch_def["tag"],
+                        evidence_context=evidence.filter_for_chapter(ch_def["tag"]),
+                        evidence_pack=evidence,
+                    ): ch_def
+                    for ch_def in to_generate
+                }
+                for future in as_completed(futures):
+                    ch_def = futures[future]
+                    try:
+                        result = future.result()
+                    except Exception as exc:
+                        logger.warning(
+                            "chapter_generation_failed",
+                            chapter_tag=ch_def["tag"],
+                            error=str(exc),
+                        )
+                        result = ChapterResult(
+                            tag=ch_def["tag"],
+                            order=ch_def["order"],
+                            title=ch_def["title"],
+                            content_md=None,
+                            status="failed",
+                            error=str(exc),
+                        )
+                    chapter_results[ch_def["tag"]] = result
+                    if result.content_md:
+                        chapter_summaries[result.tag] = result.content_md[:500]
 
         # Phase B: Chapter 8 (Recommendation) — sequential
         completed_count = sum(
-            1 for ch in chapters if ch.content_md and ch.status == "completed"
+            1 for r in chapter_results.values()
+            if r.content_md and r.status == "completed"
         )
 
         if completed_count >= MIN_CHAPTERS_FOR_RECOMMENDATION:
             # Check cache
             if not force and SEQUENTIAL_CHAPTER_TAG in existing_chapters:
                 cached_content = existing_chapters[SEQUENTIAL_CHAPTER_TAG]
-                chapters.append(ChapterResult(
+                chapter_results[SEQUENTIAL_CHAPTER_TAG] = ChapterResult(
                     tag=SEQUENTIAL_CHAPTER_TAG,
                     order=8,
                     title="Recommendation",
                     content_md=cached_content,
                     status="completed",
                     critic_status="accepted",
-                ))
+                )
             else:
                 evidence_context = evidence.filter_for_chapter(SEQUENTIAL_CHAPTER_TAG)
                 evidence_context["chapter_summaries"] = chapter_summaries
-                rec_result = generate_chapter(
-                    self._call_openai_fn,
-                    chapter_tag=SEQUENTIAL_CHAPTER_TAG,
-                    evidence_context=evidence_context,
-                    chapter_summaries=chapter_summaries,
-                    evidence_pack=evidence,
-                )
-                chapters.append(rec_result)
+                try:
+                    rec_result = generate_chapter(
+                        self._call_openai_fn,
+                        chapter_tag=SEQUENTIAL_CHAPTER_TAG,
+                        evidence_context=evidence_context,
+                        chapter_summaries=chapter_summaries,
+                        evidence_pack=evidence,
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "recommendation_chapter_failed",
+                        error=str(exc),
+                    )
+                    rec_result = ChapterResult(
+                        tag=SEQUENTIAL_CHAPTER_TAG,
+                        order=8,
+                        title="Recommendation",
+                        content_md=None,
+                        status="failed",
+                        error=str(exc),
+                    )
+                chapter_results[SEQUENTIAL_CHAPTER_TAG] = rec_result
         else:
             logger.warning(
                 "insufficient_chapters_for_recommendation",
                 completed=completed_count,
                 required=MIN_CHAPTERS_FOR_RECOMMENDATION,
             )
-            chapters.append(ChapterResult(
+            chapter_results[SEQUENTIAL_CHAPTER_TAG] = ChapterResult(
                 tag=SEQUENTIAL_CHAPTER_TAG,
                 order=8,
                 title="Recommendation",
                 content_md=None,
                 status="skipped",
                 error=f"Only {completed_count}/{MIN_CHAPTERS_FOR_RECOMMENDATION} prerequisite chapters completed",
-            ))
+            )
 
         # Sort by order
-        chapters.sort(key=lambda ch: ch.order)
+        chapters = sorted(chapter_results.values(), key=lambda ch: ch.order)
         return chapters
 
     def _persist_results(

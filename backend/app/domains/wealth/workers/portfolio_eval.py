@@ -280,6 +280,7 @@ async def run_portfolio_eval(org_id: uuid.UUID) -> dict[str, str]:
                         continue
 
                     stmt = pg_insert(PortfolioSnapshot).values(
+                        organization_id=org_id,
                         profile=snapshot_data["profile"],
                         snapshot_date=snapshot_data["snapshot_date"],
                         weights=snapshot_data["weights"],
@@ -293,7 +294,7 @@ async def run_portfolio_eval(org_id: uuid.UUID) -> dict[str, str]:
                         satellite_weight=snapshot_data["satellite_weight"],
                     )
                     stmt = stmt.on_conflict_do_update(
-                        index_elements=["profile", "snapshot_date"],
+                        index_elements=["organization_id", "profile", "snapshot_date"],
                         set_={
                             "weights": stmt.excluded.weights,
                             "cvar_current": stmt.excluded.cvar_current,

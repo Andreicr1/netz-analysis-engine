@@ -74,13 +74,15 @@ def gather_sec_13f_data(
         report_dates = [r[0] for r in dates_result]
         latest_date = report_dates[0]
 
-        # Sector aggregation for most recent quarter
-        sector_weights = _compute_sector_weights(db, resolved_cik, latest_date)
+        # Sector aggregation for latest + previous quarter in single query
+        compare_dates = report_dates[:2]
+        weights_by_date = _compute_sector_weights_batch(db, resolved_cik, compare_dates)
+        sector_weights = weights_by_date.get(latest_date, {})
 
         # Drift detection: compare two most recent quarters
         drift_detected = False
-        if len(report_dates) >= 2:
-            prev_weights = _compute_sector_weights(db, resolved_cik, report_dates[1])
+        if len(compare_dates) >= 2:
+            prev_weights = weights_by_date.get(compare_dates[1], {})
             if sector_weights and prev_weights:
                 drift_detected = _detect_sector_drift(sector_weights, prev_weights)
 
@@ -283,6 +285,56 @@ def _compute_sector_weights(
         sector: round(val / total_value, 4)
         for sector, val in sorted(sector_totals.items(), key=lambda x: -x[1])
     }
+
+
+def _compute_sector_weights_batch(
+    db: Session,
+    cik: str,
+    report_dates: list[date],
+) -> dict[date, dict[str, float]]:
+    """Compute sector weight allocation for multiple quarters in one query."""
+    if not report_dates:
+        return {}
+
+    from app.shared.models import Sec13fHolding
+
+    holdings = (
+        db.query(Sec13fHolding)
+        .filter(
+            Sec13fHolding.cik == cik,
+            Sec13fHolding.report_date.in_(report_dates),
+        )
+        .all()
+    )
+    if not holdings:
+        return {}
+
+    # Group by report_date, then compute weights per date
+    by_date: dict[date, list] = {}
+    for h in holdings:
+        by_date.setdefault(h.report_date, []).append(h)
+
+    result: dict[date, dict[str, float]] = {}
+    for rd, date_holdings in by_date.items():
+        equity = [
+            h for h in date_holdings
+            if (h.asset_class or "").upper() not in ("CALL", "PUT")
+        ]
+        if not equity:
+            continue
+        total_value = sum(h.market_value or 0 for h in equity)
+        if total_value <= 0:
+            continue
+        sector_totals: dict[str, int] = {}
+        for h in equity:
+            sector = h.sector or "Unknown"
+            sector_totals[sector] = sector_totals.get(sector, 0) + (h.market_value or 0)
+        result[rd] = {
+            sector: round(val / total_value, 4)
+            for sector, val in sorted(sector_totals.items(), key=lambda x: -x[1])
+        }
+
+    return result
 
 
 def _detect_sector_drift(

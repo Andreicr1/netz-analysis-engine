@@ -676,10 +676,11 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
                             reason=dtw_result.reason,
                         )
 
+                    metrics["organization_id"] = org_id
                     upsert = pg_insert(FundRiskMetrics).values(**metrics)
                     upsert = upsert.on_conflict_do_update(
                         index_elements=["instrument_id", "calc_date"],
-                        set_={k: upsert.excluded[k] for k in metrics if k not in ("instrument_id", "calc_date")},
+                        set_={k: upsert.excluded[k] for k in metrics if k not in ("instrument_id", "calc_date", "organization_id")},
                     )
                     await db.execute(upsert)
                     results[fund.ticker or str(fund.fund_id)] = 1

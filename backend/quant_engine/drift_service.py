@@ -169,11 +169,18 @@ def compute_dtw_drift(
     fund_returns: list[float],
     benchmark_returns: list[float],
     window: int = 63,
+    max_lookback_days: int = 504,
 ) -> DtwDriftResult:
     """Compute derivative DTW distance between fund and benchmark return series.
 
     Uses ddtw_distance (derivative DTW) — naturally scale-invariant.
     Result is length-normalized (raw / window) for cross-fund comparability.
+
+    Args:
+        max_lookback_days: Sliding window cap (~2 years trading days).
+            Truncates both series to the most recent N points before
+            applying the DTW window, bounding computation cost on
+            long histories.
 
     Returns a typed DtwDriftResult instead of a bare float, so that
     computation failures are never silently encoded as 0.0.
@@ -188,6 +195,9 @@ def compute_dtw_drift(
             status=DtwDriftStatus.degraded,
             reason="aeon library not installed",
         )
+
+    fund_returns = fund_returns[-max_lookback_days:]
+    benchmark_returns = benchmark_returns[-max_lookback_days:]
 
     f = np.array(fund_returns[-window:], dtype=float)
     b = np.array(benchmark_returns[-window:], dtype=float)
@@ -218,12 +228,20 @@ def compute_dtw_drift_batch(
     fund_returns_matrix: "np.ndarray",
     benchmark_returns: "np.ndarray",
     window: int = 63,
+    max_lookback_days: int = 504,
 ) -> list[DtwDriftResult]:
     """Vectorized DTW distance for all funds vs benchmark.
+
+    Args:
+        max_lookback_days: Sliding window cap (~2 years trading days).
+            Truncates series to the most recent N columns before
+            applying the DTW window.
 
     Returns a list of typed DtwDriftResult instead of bare floats,
     so that computation failures are never silently encoded as 0.0.
     """
+    fund_returns_matrix = fund_returns_matrix[:, -max_lookback_days:]
+    benchmark_returns = benchmark_returns[-max_lookback_days:]
     n_funds = fund_returns_matrix.shape[0]
 
     try:

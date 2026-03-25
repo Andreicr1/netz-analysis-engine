@@ -194,9 +194,9 @@ def upgrade() -> None:
             SELECT
                 cik,
                 time_bucket('3 months'::interval, report_date) AS quarter,
-                SUM(market_value) FILTER (WHERE asset_class = 'COM')
+                SUM(market_value) FILTER (WHERE asset_class = 'Shares')
                     AS total_equity_value,
-                COUNT(DISTINCT cusip) FILTER (WHERE asset_class = 'COM')
+                COUNT(DISTINCT cusip) FILTER (WHERE asset_class = 'Shares')
                     AS position_count
             FROM sec_13f_holdings
             GROUP BY cik, time_bucket('3 months'::interval, report_date)
@@ -236,11 +236,11 @@ def upgrade() -> None:
                         NULLIF(SUM(SUM(market_value)) OVER (PARTITION BY cik, report_date), 0)
                         AS sector_weight
                 FROM sec_13f_holdings
-                WHERE asset_class = 'COM' AND sector IS NOT NULL
+                WHERE asset_class = 'Shares' AND sector IS NOT NULL
                 GROUP BY cik, report_date, sector
             ) agg
             JOIN sec_13f_holdings h ON h.cik = agg.cik AND h.report_date = agg.report_date
-            WHERE h.asset_class = 'COM' AND h.sector = agg.sector
+            WHERE h.asset_class = 'Shares' AND h.sector = agg.sector
             ORDER BY h.cik, agg.report_date DESC, agg.sector_value DESC
         """)
 

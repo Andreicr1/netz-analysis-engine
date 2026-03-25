@@ -172,72 +172,77 @@ async def get_attribution(
                 "return_1d": float(row.return_1d),
             })
 
-    # 7. Compute attribution in thread
+    # 7. Compute attribution in thread (single instance, single thread hop)
     from vertical_engines.wealth.attribution.service import AttributionService
 
-    # Compute per-period
-    period_results = []
-    portfolio_period_returns: list[float] = []
-    benchmark_period_returns: list[float] = []
+    svc = AttributionService()
 
-    for period_start, period_end in periods:
-        # Benchmark returns per block for this period
-        benchmark_returns_period: dict[str, float] = {}
-        for bid in block_ids:
-            block_data = bench_by_block.get(bid, [])
-            period_data = [
-                d for d in block_data if period_start <= d["nav_date"] <= period_end
-            ]
-            if period_data:
-                compound = float(
-                    np.prod([1 + d["return_1d"] for d in period_data]) - 1
-                )
-                benchmark_returns_period[bid] = compound
+    def _compute_all_periods():
+        results = []
+        p_returns: list[float] = []
+        b_returns: list[float] = []
 
-        # Fund returns per block for this period
-        fund_returns_period: dict[str, float] = {}
-        for bid, inst_ids in instruments_by_block.items():
-            block_returns: list[float] = []
-            for iid in inst_ids:
-                inst_data = nav_returns.get(iid, [])
+        for period_start, period_end in periods:
+            # Benchmark returns per block for this period
+            benchmark_returns_period: dict[str, float] = {}
+            for bid in block_ids:
+                block_data = bench_by_block.get(bid, [])
                 period_data = [
-                    d for d in inst_data if period_start <= d["nav_date"] <= period_end
+                    d for d in block_data if period_start <= d["nav_date"] <= period_end
                 ]
                 if period_data:
                     compound = float(
                         np.prod([1 + d["return_1d"] for d in period_data]) - 1
                     )
-                    block_returns.append(compound)
-            if block_returns:
-                fund_returns_period[bid] = float(np.mean(block_returns))
+                    benchmark_returns_period[bid] = compound
 
-        svc = AttributionService()
-        result = await asyncio.to_thread(
-            svc.compute_portfolio_attribution,
-            strategic_allocations=sa_dicts,
-            fund_returns_by_block=fund_returns_period,
-            benchmark_returns_by_block=benchmark_returns_period,
-            block_labels=block_labels,
-        )
-        period_results.append(result)
+            # Fund returns per block for this period
+            fund_returns_period: dict[str, float] = {}
+            for bid, inst_ids in instruments_by_block.items():
+                block_returns: list[float] = []
+                for iid in inst_ids:
+                    inst_data = nav_returns.get(iid, [])
+                    period_data = [
+                        d for d in inst_data if period_start <= d["nav_date"] <= period_end
+                    ]
+                    if period_data:
+                        compound = float(
+                            np.prod([1 + d["return_1d"] for d in period_data]) - 1
+                        )
+                        block_returns.append(compound)
+                if block_returns:
+                    fund_returns_period[bid] = float(np.mean(block_returns))
 
-        # Period-level returns for Carino linking
-        p_ret = sum(
-            float(sa["target_weight"]) * fund_returns_period.get(sa["block_id"], 0.0)
-            for sa in sa_dicts
-        )
-        b_ret = sum(
-            float(sa["target_weight"]) * benchmark_returns_period.get(sa["block_id"], 0.0)
-            for sa in sa_dicts
-        )
-        portfolio_period_returns.append(p_ret)
-        benchmark_period_returns.append(b_ret)
+            result = svc.compute_portfolio_attribution(
+                strategic_allocations=sa_dicts,
+                fund_returns_by_block=fund_returns_period,
+                benchmark_returns_by_block=benchmark_returns_period,
+                block_labels=block_labels,
+            )
+            results.append(result)
 
-    # Multi-period linking
+            # Period-level returns for Carino linking
+            p_ret = sum(
+                float(sa["target_weight"]) * fund_returns_period.get(sa["block_id"], 0.0)
+                for sa in sa_dicts
+            )
+            b_ret = sum(
+                float(sa["target_weight"]) * benchmark_returns_period.get(sa["block_id"], 0.0)
+                for sa in sa_dicts
+            )
+            p_returns.append(p_ret)
+            b_returns.append(b_ret)
+
+        return results, p_returns, b_returns
+
+    period_results, portfolio_period_returns, benchmark_period_returns = (
+        await asyncio.to_thread(_compute_all_periods)
+    )
+
+    # Multi-period linking (reuse same svc)
     if len(period_results) > 1:
-        svc_final = AttributionService()
         final_result = await asyncio.to_thread(
-            svc_final.compute_multi_period,
+            svc.compute_multi_period,
             period_results=period_results,
             portfolio_period_returns=portfolio_period_returns,
             benchmark_period_returns=benchmark_period_returns,

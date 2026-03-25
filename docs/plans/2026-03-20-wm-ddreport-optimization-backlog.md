@@ -267,3 +267,85 @@ Tasks:
 - [ ] Run existing DD report tests
 - [ ] Run `make check`
 Continuation prompt:
+
+
+---
+
+## Hotfix — sec_13f continuous aggregates asset_class filter
+Status: DONE — 2026-03-24
+Priority: P0 — fixed before demo presentation
+Identified: 2026-03-24 during demo seeding audit
+
+### Problem
+
+Three continuous aggregates had 0 rows or NULL equity values due to a
+hardcoded `WHERE asset_class = 'COM'` filter in migrations 0025 and 0038.
+Actual data uses `'Shares'` and `'Principal'`.
+
+Additionally, `sec_13f_diffs` had 0 rows — diff computation had never run.
+
+### What was fixed
+
+| Issue | Root Cause | Fix |
+|---|---|---|
+| `sec_13f_holdings_agg` = 0 rows | `WHERE asset_class = 'COM'` | Dropped + recreated with `'Shares'` |
+| `sec_13f_drift_agg` = 0 rows | `sec_13f_diffs` table empty | Computed 1,071,320 diffs via SQL |
+| `sec_13f_latest_quarter` equity = NULL | Same `'COM'` filter in FILTER clauses | Dropped + recreated with `'Shares'` |
+| Migration 0038 | Hardcoded `'COM'` | Changed to `'Shares'` |
+| Migration 0025 | Hardcoded `'COM'` (4 occurrences) | Changed all to `'Shares'` |
+
+### Results after fix
+
+| Aggregate | Rows |
+|---|---|
+| `sec_13f_holdings_agg` | 1,964 |
+| `sec_13f_drift_agg` | 529 |
+| `sec_13f_latest_quarter` | 543 (now with real equity values) |
+
+---
+
+## Phase 5 — Unify Fund/Instrument model in workers (post-demo)
+Status: PENDING
+Priority: P1 — execute after demo presentation
+Identified: 2026-03-24 during demo seeding audit
+
+### Problem
+
+`risk_calc` and `portfolio_eval` workers still reference the deprecated `Fund`
+model / `funds_universe` table. The system has two parallel models:
+
+- `instruments_universe` — current model, org-scoped, used by all routes
+- `funds_universe` — legacy model, still queried by the two workers
+
+The seed script works around this by populating both tables with identical
+UUIDs. Any instrument created via the normal API path (inserted only into
+`instruments_universe`) will NOT have risk metrics or portfolio snapshots
+computed.
+
+### Impact
+
+- `fund_risk_metrics` only populated for instruments in BOTH tables
+- New tenants onboarded via UI will have broken risk and portfolio views
+  unless a manual double-write is performed
+
+### Exit Criteria
+
+- `risk_calc` reads from `instruments_universe` exclusively
+- `portfolio_eval` reads from `instruments_universe` exclusively
+- Seed script no longer needs to double-write to both tables
+- `funds_universe` marked deprecated in migration with `Sunset: 2026-09-30`
+- `make check` green
+
+### Files to Modify
+
+- `backend/app/domains/wealth/workers/risk_calc.py`
+- `backend/app/domains/wealth/workers/portfolio_eval.py`
+- `backend/app/core/db/migrations/versions/XXXX_deprecate_funds_universe.py`
+- `backend/scripts/seed_dev_tenant.py` — remove double-write workaround
+
+### Notes
+
+- Isolated PR — do not combine with engine optimization phases
+- After migration: run both workers against dev DB to confirm metrics
+  populate correctly from `instruments_universe` alone
+- `funds_universe` table drop in follow-up migration after 1 sprint monitoring

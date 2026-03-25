@@ -123,39 +123,44 @@ class RebalancingService:
         Will be wired to a scheduler/worker in a follow-up sprint.
         """
         from app.domains.wealth.models.model_portfolio import ModelPortfolio
-        from app.domains.wealth.models.portfolio import PortfolioSnapshot
 
         # Get latest N snapshots per profile to detect consecutive regime changes
         threshold = self._regime_threshold
         _STRESS_REGIMES = frozenset({"stress", "crisis"})
 
-        profiles_stmt = (
-            select(PortfolioSnapshot.profile)
-            .where(PortfolioSnapshot.organization_id == organization_id)
-            .distinct()
-        )
-        profiles = [
-            row[0] for row in db.execute(profiles_stmt).all()
-        ]
+        from sqlalchemy import text
+
+        rows = db.execute(text("""
+            SELECT p.profile, s.snapshot_date, s.regime
+            FROM (
+                SELECT DISTINCT profile
+                FROM portfolio_snapshots
+                WHERE organization_id = :org_id
+            ) p
+            CROSS JOIN LATERAL (
+                SELECT snapshot_date, regime
+                FROM portfolio_snapshots ps
+                WHERE ps.organization_id = :org_id AND ps.profile = p.profile
+                ORDER BY ps.snapshot_date DESC
+                LIMIT :threshold
+            ) s
+        """), {"org_id": organization_id, "threshold": threshold}).all()
+
+        # Group by profile
+        from collections import defaultdict
+        profile_snapshots: dict[str, list[tuple]] = defaultdict(list)
+        for profile_name, snapshot_date, regime in rows:
+            profile_snapshots[profile_name].append((snapshot_date, regime))
 
         results: list[RebalanceResult] = []
 
-        for profile in profiles:
-            snapshots = db.execute(
-                select(PortfolioSnapshot).where(
-                    PortfolioSnapshot.organization_id == organization_id,
-                    PortfolioSnapshot.profile == profile,
-                ).order_by(
-                    PortfolioSnapshot.snapshot_date.desc()
-                ).limit(threshold)
-            ).scalars().all()
-
+        for profile, snapshots in profile_snapshots.items():
             if len(snapshots) < threshold:
                 continue
 
             # Check if all recent snapshots are in stress regime
             consecutive_stress = all(
-                s.regime in _STRESS_REGIMES for s in snapshots
+                regime in _STRESS_REGIMES for _, regime in snapshots
             )
 
             if not consecutive_stress:

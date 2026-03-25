@@ -13,6 +13,8 @@ Design decisions:
 - Report fold consistency (N/5 positive Sharpe), NOT p-values. See Finucane (2004).
 """
 
+from concurrent.futures import ThreadPoolExecutor
+
 import numpy as np
 import structlog
 
@@ -82,13 +84,15 @@ def walk_forward_backtest(
     portfolio_returns = returns_matrix @ w  # (T,) weighted portfolio
 
     tscv = TimeSeriesSplit(n_splits=n_splits, gap=gap, test_size=test_size)
-    folds = []
 
-    for fold_idx, (train_idx, test_idx) in enumerate(tscv.split(portfolio_returns)):
-        if len(train_idx) < min_train_size:
-            logger.debug("Fold skipped: train too small", fold=fold_idx, train_size=len(train_idx))
-            continue
+    splits = [
+        (fold_idx, train_idx, test_idx)
+        for fold_idx, (train_idx, test_idx) in enumerate(tscv.split(portfolio_returns))
+        if len(train_idx) >= min_train_size
+    ]
 
+    def _evaluate_fold(args: tuple[int, np.ndarray, np.ndarray]) -> dict:
+        fold_idx, train_idx, test_idx = args
         test_returns = portfolio_returns[test_idx]
         metrics = _compute_fold_metrics(test_returns)
         metrics["fold"] = fold_idx
@@ -96,7 +100,10 @@ def walk_forward_backtest(
         metrics["test_size_actual"] = len(test_idx)
         metrics["train_end_idx"] = int(train_idx[-1])
         metrics["test_start_idx"] = int(test_idx[0])
-        folds.append(metrics)
+        return metrics
+
+    with ThreadPoolExecutor(max_workers=min(n_splits, 4)) as pool:
+        folds = list(pool.map(_evaluate_fold, splits))
 
     if not folds:
         return {

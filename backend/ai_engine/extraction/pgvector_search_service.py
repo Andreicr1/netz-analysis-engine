@@ -16,7 +16,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import Engine, create_engine, text
+from sqlalchemy import Engine, create_engine, func, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ai_engine.extraction.retrieval_signal import RetrievalSignal
@@ -197,6 +198,29 @@ def build_search_document(
 # ── Upsert ────────────────────────────────────────────────────────────
 
 
+def _doc_to_row(doc: dict[str, Any]) -> dict[str, Any]:
+    """Convert a document dict to a row dict matching VectorChunk columns."""
+    return {
+        "id": doc["id"],
+        "organization_id": doc.get("organization_id"),
+        "deal_id": doc.get("deal_id"),
+        "fund_id": doc.get("fund_id"),
+        "domain": doc.get("domain"),
+        "doc_type": doc.get("doc_type"),
+        "doc_id": doc.get("doc_id"),
+        "title": doc.get("title"),
+        "content": doc.get("content", ""),
+        "page_start": doc.get("page_start"),
+        "page_end": doc.get("page_end"),
+        "chunk_index": doc.get("chunk_index"),
+        "section_type": doc.get("section_type"),
+        "breadcrumb": doc.get("breadcrumb"),
+        "governance_critical": doc.get("governance_critical", False),
+        "embedding": doc.get("embedding"),
+        "embedding_model": doc.get("embedding_model"),
+    }
+
+
 async def upsert_chunks(
     db: AsyncSession,
     documents: list[dict[str, Any]],
@@ -224,59 +248,66 @@ async def upsert_chunks(
             f"First: {duplicates[0]}."
         )
 
+    # Import VectorChunk model so pgvector Vector type is registered
+    from app.domains.credit.documents.models.vector_chunk import VectorChunk
+
     succeeded = 0
     failed = 0
     errors: list[str] = []
 
-    for doc in documents:
-        try:
-            embedding = doc.get("embedding")
-            embedding_str = str(embedding) if embedding else None
+    vector_chunks_table = VectorChunk.__table__
+    batch_size = 100
 
-            await db.execute(
-                text("""
-                    INSERT INTO vector_chunks (
-                        id, organization_id, deal_id, fund_id, domain, doc_type,
-                        doc_id, title, content, page_start, page_end, chunk_index,
-                        section_type, breadcrumb, governance_critical,
-                        embedding, embedding_model
-                    ) VALUES (
-                        :id, CAST(:organization_id AS uuid), :deal_id, :fund_id, :domain,
-                        :doc_type, :doc_id, :title, :content, :page_start, :page_end,
-                        :chunk_index, :section_type, :breadcrumb, :governance_critical,
-                        CAST(:embedding AS vector), :embedding_model
-                    )
-                    ON CONFLICT (id) DO UPDATE SET
-                        content = EXCLUDED.content,
-                        embedding = EXCLUDED.embedding,
-                        embedding_model = EXCLUDED.embedding_model,
-                        updated_at = NOW()
-                """),
-                {
-                    "id": doc["id"],
-                    "organization_id": doc.get("organization_id"),
-                    "deal_id": doc.get("deal_id"),
-                    "fund_id": doc.get("fund_id"),
-                    "domain": doc.get("domain"),
-                    "doc_type": doc.get("doc_type"),
-                    "doc_id": doc.get("doc_id"),
-                    "title": doc.get("title"),
-                    "content": doc.get("content", ""),
-                    "page_start": doc.get("page_start"),
-                    "page_end": doc.get("page_end"),
-                    "chunk_index": doc.get("chunk_index"),
-                    "section_type": doc.get("section_type"),
-                    "breadcrumb": doc.get("breadcrumb"),
-                    "governance_critical": doc.get("governance_critical", False),
-                    "embedding": embedding_str,
-                    "embedding_model": doc.get("embedding_model"),
-                },
+    for i in range(0, len(documents), batch_size):
+        batch = documents[i : i + batch_size]
+        rows = [_doc_to_row(doc) for doc in batch]
+        try:
+            async with db.begin_nested():  # SAVEPOINT
+                stmt = pg_insert(vector_chunks_table).values(rows)
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["id"],
+                    set_={
+                        "content": stmt.excluded.content,
+                        "embedding": stmt.excluded.embedding,
+                        "embedding_model": stmt.excluded.embedding_model,
+                        "updated_at": func.now(),
+                    },
+                )
+                await db.execute(stmt)
+            succeeded += len(batch)
+        except Exception as batch_exc:
+            logger.warning(
+                "pgvector batch upsert failed, falling back to per-chunk",
+                batch_start=i,
+                batch_size=len(batch),
+                error=str(batch_exc),
             )
-            succeeded += 1
-        except Exception as exc:
-            failed += 1
-            errors.append(f"{doc.get('id', '?')}: {exc}")
-            logger.warning("pgvector upsert failed for chunk %s: %s", doc.get("id"), exc)
+            # Fallback: per-chunk insert for this batch
+            for doc in batch:
+                try:
+                    async with db.begin_nested():  # SAVEPOINT
+                        single_stmt = pg_insert(vector_chunks_table).values(
+                            [_doc_to_row(doc)]
+                        )
+                        single_stmt = single_stmt.on_conflict_do_update(
+                            index_elements=["id"],
+                            set_={
+                                "content": single_stmt.excluded.content,
+                                "embedding": single_stmt.excluded.embedding,
+                                "embedding_model": single_stmt.excluded.embedding_model,
+                                "updated_at": func.now(),
+                            },
+                        )
+                        await db.execute(single_stmt)
+                    succeeded += 1
+                except Exception as chunk_exc:
+                    failed += 1
+                    errors.append(f"{doc.get('id', '?')}: {chunk_exc}")
+                    logger.warning(
+                        "pgvector upsert failed for chunk %s: %s",
+                        doc.get("id"),
+                        chunk_exc,
+                    )
 
     logger.info("pgvector upserted %d/%d chunks", succeeded, len(documents))
     return UpsertResult(

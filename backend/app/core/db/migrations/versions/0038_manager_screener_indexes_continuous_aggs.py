@@ -62,7 +62,7 @@ def upgrade() -> None:
             "  SUM(market_value) AS sector_value, "
             "  COUNT(DISTINCT cusip) AS position_count "
             "FROM sec_13f_holdings "
-            "WHERE asset_class = 'COM' "
+            "WHERE asset_class = 'Shares' "
             "GROUP BY cik, time_bucket('3 months'::interval, report_date), sector "
             "WITH NO DATA"
         )

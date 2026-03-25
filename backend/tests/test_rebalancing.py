@@ -518,18 +518,17 @@ class TestRegimeChangeDetection:
     def test_consecutive_stress_triggers_rebalance(self):
         from vertical_engines.wealth.rebalancing.service import RebalancingService
 
-        snap1 = _make_snapshot(regime="stress", snapshot_date=date(2026, 3, 16))
-        snap2 = _make_snapshot(regime="stress", snapshot_date=date(2026, 3, 15))
-
         portfolio_id = uuid.uuid4()
 
         db = MagicMock()
-        # Calls return: 1) distinct profiles, 2) snapshots (via scalars), 3) portfolio IDs
+        # Calls: 1) LATERAL JOIN query → snapshot rows, 2) ModelPortfolio IDs
         db.execute.return_value.all.side_effect = [
-            [("moderate",)],          # distinct profiles
-            [(portfolio_id,)],        # ModelPortfolio IDs for this profile
+            [
+                ("moderate", date(2026, 3, 16), "stress"),
+                ("moderate", date(2026, 3, 15), "stress"),
+            ],
+            [(portfolio_id,)],
         ]
-        db.execute.return_value.scalars.return_value.all.return_value = [snap1, snap2]
 
         svc = RebalancingService(config={"regime_consecutive_threshold": 2})
         results = svc.detect_regime_trigger(db, "org-1")
@@ -542,12 +541,12 @@ class TestRegimeChangeDetection:
     def test_insufficient_consecutive_stress(self):
         from vertical_engines.wealth.rebalancing.service import RebalancingService
 
-        snap1 = _make_snapshot(regime="stress", snapshot_date=date(2026, 3, 16))
-        snap2 = _make_snapshot(regime="normal", snapshot_date=date(2026, 3, 15))
-
         db = MagicMock()
-        db.execute.return_value.all.return_value = [("moderate",)]
-        db.execute.return_value.scalars.return_value.all.return_value = [snap1, snap2]
+        # LATERAL JOIN returns one stress + one normal → not consecutive
+        db.execute.return_value.all.return_value = [
+            ("moderate", date(2026, 3, 16), "stress"),
+            ("moderate", date(2026, 3, 15), "normal"),
+        ]
 
         svc = RebalancingService(config={"regime_consecutive_threshold": 2})
         results = svc.detect_regime_trigger(db, "org-1")
@@ -558,8 +557,8 @@ class TestRegimeChangeDetection:
         from vertical_engines.wealth.rebalancing.service import RebalancingService
 
         db = MagicMock()
-        db.execute.return_value.all.return_value = [("moderate",)]
-        db.execute.return_value.scalars.return_value.all.return_value = []
+        # LATERAL JOIN returns no rows (no snapshots)
+        db.execute.return_value.all.return_value = []
 
         svc = RebalancingService()
         results = svc.detect_regime_trigger(db, "org-1")
@@ -569,13 +568,12 @@ class TestRegimeChangeDetection:
     def test_configurable_threshold(self):
         from vertical_engines.wealth.rebalancing.service import RebalancingService
 
-        # With threshold=3, 2 stress snapshots should NOT trigger
-        snap1 = _make_snapshot(regime="crisis", snapshot_date=date(2026, 3, 16))
-        snap2 = _make_snapshot(regime="stress", snapshot_date=date(2026, 3, 15))
-
+        # With threshold=3, only 2 stress snapshots should NOT trigger
         db = MagicMock()
-        db.execute.return_value.all.return_value = [("moderate",)]
-        db.execute.return_value.scalars.return_value.all.return_value = [snap1, snap2]
+        db.execute.return_value.all.return_value = [
+            ("moderate", date(2026, 3, 16), "crisis"),
+            ("moderate", date(2026, 3, 15), "stress"),
+        ]
 
         svc = RebalancingService(config={"regime_consecutive_threshold": 3})
         results = svc.detect_regime_trigger(db, "org-1")

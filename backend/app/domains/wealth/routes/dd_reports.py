@@ -48,6 +48,41 @@ logger = structlog.get_logger()
 
 router = APIRouter(prefix="/dd-reports", tags=["dd-reports"])
 
+# ---------------------------------------------------------------------------
+#  DD-specific concurrency cap (max 3 simultaneous report generations)
+# ---------------------------------------------------------------------------
+# CRITICAL: No module-level asyncio primitives (CLAUDE.md rule).
+_dd_generation_semaphore: asyncio.Semaphore | None = None
+_MAX_CONCURRENT_DD_REPORTS = 3
+
+
+def _get_dd_semaphore() -> asyncio.Semaphore:
+    """Return (or lazily create) the DD report generation semaphore."""
+    global _dd_generation_semaphore
+    if _dd_generation_semaphore is None:
+        _dd_generation_semaphore = asyncio.Semaphore(_MAX_CONCURRENT_DD_REPORTS)
+    return _dd_generation_semaphore
+
+
+async def _require_dd_slot() -> None:
+    """Try to acquire a DD generation slot without blocking.
+
+    Raises HTTP 429 if all slots are occupied. Callers must release
+    the slot by calling ``_get_dd_semaphore().release()`` in a finally block.
+    """
+    sem = _get_dd_semaphore()
+    try:
+        await asyncio.wait_for(sem.acquire(), timeout=0)
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=(
+                f"Too many concurrent DD report generations "
+                f"(limit: {_MAX_CONCURRENT_DD_REPORTS}). "
+                "Please retry shortly."
+            ),
+        )
+
 
 @router.get(
     "/",
@@ -168,9 +203,11 @@ async def trigger_dd_report(
 
     # Backpressure: reject if too many concurrent content tasks
     await require_content_slot()
+    # DD-specific concurrency cap
+    await _require_dd_slot()
 
     # Dispatch generation (fire-and-forget background task).
-    # The semaphore slot is released inside _run_generation's finally block.
+    # Both semaphore slots are released inside _run_generation's finally block.
     asyncio.create_task(
         _run_generation(
             report_id=str(report_id),
@@ -297,8 +334,10 @@ async def regenerate_dd_report(
 
     # Backpressure: reject if too many concurrent content tasks
     await require_content_slot()
+    # DD-specific concurrency cap
+    await _require_dd_slot()
 
-    # The semaphore slot is released inside _run_generation's finally block.
+    # Both semaphore slots are released inside _run_generation's finally block.
     asyncio.create_task(
         _run_generation(
             report_id=str(report_id),
@@ -580,6 +619,7 @@ async def _run_generation(
         if ttl_refresh_task is not None:
             ttl_refresh_task.cancel()
         _get_content_semaphore().release()
+        _get_dd_semaphore().release()
 
 
 def _sync_generate(
