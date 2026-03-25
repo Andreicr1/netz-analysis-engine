@@ -521,6 +521,60 @@ class SecNportHolding(Base):
     )
 
 
+class SecRegisteredFund(Base):
+    """Registered fund catalog — mutual funds, ETFs, closed-end, interval.
+
+    GLOBAL TABLE: No organization_id, no RLS.
+    Populated by nport_fund_discovery worker from EDGAR N-PORT headers.
+    PK is CIK (fund-level, not adviser-level).
+    """
+
+    __tablename__ = "sec_registered_funds"
+
+    cik: Mapped[str] = mapped_column(Text, primary_key=True)
+    crd_number: Mapped[str | None] = mapped_column(
+        Text, ForeignKey("sec_managers.crd_number", ondelete="SET NULL"),
+    )
+    fund_name: Mapped[str] = mapped_column(Text, nullable=False)
+    fund_type: Mapped[str] = mapped_column(Text, nullable=False)
+    ticker: Mapped[str | None] = mapped_column(Text)
+    isin: Mapped[str | None] = mapped_column(Text)
+    series_id: Mapped[str | None] = mapped_column(Text)
+    class_id: Mapped[str | None] = mapped_column(Text)
+    total_assets: Mapped[int | None] = mapped_column(BigInteger)
+    total_shareholder_accounts: Mapped[int | None] = mapped_column(Integer)
+    inception_date: Mapped[dt.date | None] = mapped_column(Date)
+    fiscal_year_end: Mapped[str | None] = mapped_column(Text)
+    currency: Mapped[str] = mapped_column(Text, nullable=False, server_default="USD")
+    domicile: Mapped[str] = mapped_column(Text, nullable=False, server_default="US")
+    last_nport_date: Mapped[dt.date | None] = mapped_column(Date)
+    aum_below_threshold: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    data_fetched_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+
+
+class SecFundStyleSnapshot(Base):
+    """Quarterly style classification derived from N-PORT holdings.
+
+    GLOBAL TABLE: No organization_id, no RLS.
+    Computed by nport_ingestion worker via quant_engine/style_analysis.py.
+    PK is (cik, report_date).
+    """
+
+    __tablename__ = "sec_fund_style_snapshots"
+
+    cik: Mapped[str] = mapped_column(Text, primary_key=True)
+    report_date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
+    style_label: Mapped[str] = mapped_column(Text, nullable=False)
+    growth_tilt: Mapped[float] = mapped_column(Float, nullable=False)
+    sector_weights: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    equity_pct: Mapped[float | None] = mapped_column(Float)
+    fixed_income_pct: Mapped[float | None] = mapped_column(Float)
+    cash_pct: Mapped[float | None] = mapped_column(Float)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  BIS + IMF Data Providers — Global Tables (no organization_id, no RLS)
 # ═══════════════════════════════════════════════════════════════════════════

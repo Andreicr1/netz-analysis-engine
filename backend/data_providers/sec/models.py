@@ -5,8 +5,9 @@ Fully standalone: zero imports from ``app.*``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 # ── CIK Resolution ───────────────────────────────────────────────
 
@@ -199,6 +200,60 @@ class NportHolding:
     pct_of_nav: float | None
     is_restricted: bool | None
     fair_value_level: str | None
+
+
+# ── Registered Funds (Mutual Funds, ETFs) ──────────────────────
+
+
+@dataclass(frozen=True)
+class RegisteredFund:
+    """Registered fund from SEC N-PORT filings (mutual fund, ETF, etc.)."""
+
+    cik: str
+    fund_name: str
+    fund_type: str  # 'mutual_fund' | 'etf' | 'closed_end' | 'interval_fund'
+    crd_number: str | None
+    ticker: str | None
+    isin: str | None
+    series_id: str | None
+    class_id: str | None
+    total_assets: int | None
+    total_shareholder_accounts: int | None
+    inception_date: date | None
+    fiscal_year_end: str | None
+    currency: str
+    domicile: str
+    last_nport_date: date | None
+    aum_below_threshold: bool
+    data_fetched_at: datetime
+
+
+@dataclass(frozen=True)
+class FundStyleSnapshot:
+    """Style classification snapshot derived from N-PORT holdings."""
+
+    cik: str
+    report_date: date
+    style_label: str
+    growth_tilt: float
+    sector_weights: dict[str, float]
+    equity_pct: float | None
+    fixed_income_pct: float | None
+    cash_pct: float | None
+    confidence: float
+
+
+@dataclass(frozen=True)
+class FundDataAvailability:
+    """Data availability matrix for a fund detail page."""
+
+    fund_universe: Literal["registered", "private"]
+    has_holdings: bool
+    has_nav_history: bool
+    has_style_analysis: bool
+    has_portfolio_manager: bool
+    has_peer_analysis: bool
+    disclosure_note: str | None
 
 
 # ── Generic Result Wrapper ───────────────────────────────────────

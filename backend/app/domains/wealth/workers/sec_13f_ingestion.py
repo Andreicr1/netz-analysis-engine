@@ -3,9 +3,13 @@
 Usage:
     python -m app.domains.wealth.workers.sec_13f_ingestion
 
-Iterates sec_managers with CIK, fetches 13F-HR filings via edgartools,
-upserts holdings into sec_13f_holdings hypertable, computes quarter-over-
-quarter diffs into sec_13f_diffs, and enriches missing sectors.
+Iterates REGISTERED investment managers with AUM >= $100M (the SEC 13F-HR
+filing threshold), fetches 13F-HR filings via edgartools, upserts holdings
+into sec_13f_holdings hypertable, computes quarter-over-quarter diffs into
+sec_13f_diffs, and enriches missing sectors.
+
+Only targets managers likely to file 13F-HR — filters out RIAs, brokers,
+and other financial services that don't file institutional holdings.
 
 GLOBAL TABLE: No organization_id, no RLS.
 Advisory lock ID = 900_021.
@@ -23,13 +27,23 @@ from app.shared.models import SecManager
 logger = structlog.get_logger()
 SEC_13F_LOCK_ID = 900_021
 
+# SEC 13F-HR filing threshold: institutional investment managers with
+# >= $100M in qualifying assets must file quarterly.
+_13F_AUM_THRESHOLD = 100_000_000
+
 
 async def run_sec_13f_ingestion(
     *,
     quarters: int = 8,
     enrich_sectors: bool = True,
+    aum_min: int = _13F_AUM_THRESHOLD,
+    target_ciks: list[str] | None = None,
 ) -> dict:
-    """Fetch 13F holdings for all active managers and upsert to hypertable.
+    """Fetch 13F holdings for registered investment managers and upsert.
+
+    Targets only managers with registration_status='Registered' and
+    AUM >= $100M (the 13F filing threshold). Pass ``target_ciks`` to
+    override with a specific CIK list.
 
     Steps per CIK:
     1. fetch_holdings(force_refresh=True) — EDGAR API → sec_13f_holdings
@@ -45,16 +59,30 @@ async def run_sec_13f_ingestion(
             return {"status": "skipped", "reason": "lock_held"}
 
         try:
-            result = await db.execute(
-                select(SecManager.cik).where(SecManager.cik.isnot(None))
-            )
-            ciks = [row[0] for row in result.all() if row[0]]
+            if target_ciks:
+                ciks = target_ciks
+            else:
+                # Only registered investment managers above 13F threshold
+                result = await db.execute(
+                    select(SecManager.cik)
+                    .where(
+                        SecManager.cik.isnot(None),
+                        SecManager.registration_status == "Registered",
+                        SecManager.aum_total >= aum_min,
+                    )
+                    .order_by(SecManager.aum_total.desc())
+                )
+                ciks = [row[0] for row in result.all() if row[0]]
 
             if not ciks:
                 logger.info("sec_13f_no_managers_with_cik")
                 return {"status": "completed", "managers": 0, "holdings": 0}
 
             logger.info("sec_13f_ingestion_start", managers=len(ciks))
+
+            # edgartools requires identity before any EDGAR API call
+            import edgar
+            edgar.set_identity("Netz Analysis Engine tech@netzco.com")
 
             from data_providers.sec.thirteenf_service import ThirteenFService
 

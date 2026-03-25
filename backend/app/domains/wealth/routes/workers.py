@@ -713,3 +713,61 @@ async def trigger_run_sec_adv_ingestion(
         run_sec_adv_ingestion,
         timeout_seconds=_HEAVY_WORKER_TIMEOUT,
     )
+
+
+@router.post(
+    "/run-nport-fund-discovery",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger N-PORT registered fund discovery",
+    description=(
+        "Schedules the N-PORT fund discovery worker as a background task. "
+        "Discovers registered funds (mutual funds, ETFs) that file N-PORT via "
+        "EDGAR EFTS, filters by AUM >= $50M, resolves adviser CIK to CRD, and "
+        "upserts into sec_registered_funds. Uses advisory lock 900_024. "
+        "Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_nport_fund_discovery(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.nport_fund_discovery import run_nport_fund_discovery
+
+    return await _dispatch_worker(
+        background_tasks, "run-nport-fund-discovery", "global",
+        run_nport_fund_discovery,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )
+
+
+@router.post(
+    "/run-nport-ticker-resolution",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger N-PORT ticker resolution via OpenFIGI",
+    description=(
+        "Schedules the N-PORT ticker resolution worker as a background task. "
+        "Resolves tickers for registered funds without ticker via OpenFIGI "
+        "batch API. Uses advisory lock 900_025. Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_nport_ticker_resolution(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.nport_ticker_resolution import run_nport_ticker_resolution
+
+    return await _dispatch_worker(
+        background_tasks, "run-nport-ticker-resolution", "global",
+        run_nport_ticker_resolution,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )

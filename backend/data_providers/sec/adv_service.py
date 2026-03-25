@@ -1150,3 +1150,142 @@ def _parse_team_from_brochure(
         )
 
     return members
+
+
+# ── Fund Data Availability ───────────────────────────────────────
+
+
+async def compute_fund_data_availability(
+    fund_cik: str,
+    fund_universe: str,
+    db: Any,
+) -> "FundDataAvailability":
+    """Compute data availability matrix for a fund detail page.
+
+    Queries sec_registered_funds, sec_nport_holdings, sec_fund_style_snapshots,
+    and sec_manager_team. Never raises — returns all-False on error.
+    """
+    from data_providers.sec.models import FundDataAvailability
+
+    try:
+        universe: str = "registered" if fund_universe == "registered" else "private"
+
+        # Check holdings
+        has_holdings = False
+        try:
+            r = await db.execute(
+                text("SELECT 1 FROM sec_nport_holdings WHERE cik = :cik LIMIT 1"),
+                {"cik": fund_cik},
+            )
+            has_holdings = r.scalar() is not None
+        except Exception:
+            pass
+
+        # Check NAV history
+        has_nav = False
+        try:
+            r = await db.execute(
+                text(
+                    "SELECT ticker FROM sec_registered_funds WHERE cik = :cik"
+                ),
+                {"cik": fund_cik},
+            )
+            row = r.fetchone()
+            if row and row[0]:
+                # Ticker exists — check if NAV data was ingested
+                r2 = await db.execute(
+                    text(
+                        "SELECT 1 FROM benchmark_nav WHERE ticker = :t LIMIT 1"
+                    ),
+                    {"t": row[0]},
+                )
+                has_nav = r2.scalar() is not None
+        except Exception:
+            pass
+
+        # Check style analysis
+        has_style = False
+        try:
+            r = await db.execute(
+                text(
+                    "SELECT 1 FROM sec_fund_style_snapshots WHERE cik = :cik LIMIT 1"
+                ),
+                {"cik": fund_cik},
+            )
+            has_style = r.scalar() is not None
+        except Exception:
+            pass
+
+        # Check portfolio manager
+        has_pm = False
+        try:
+            # Get CRD from registered fund, then check team
+            r = await db.execute(
+                text(
+                    "SELECT crd_number FROM sec_registered_funds WHERE cik = :cik"
+                ),
+                {"cik": fund_cik},
+            )
+            row = r.fetchone()
+            if row and row[0]:
+                r2 = await db.execute(
+                    text(
+                        "SELECT 1 FROM sec_manager_team WHERE crd_number = :crd LIMIT 1"
+                    ),
+                    {"crd": row[0]},
+                )
+                has_pm = r2.scalar() is not None
+        except Exception:
+            pass
+
+        # Check peer analysis (>= 3 funds with same style_label)
+        has_peer = False
+        try:
+            r = await db.execute(
+                text(
+                    "SELECT style_label FROM sec_fund_style_snapshots "
+                    "WHERE cik = :cik ORDER BY report_date DESC LIMIT 1"
+                ),
+                {"cik": fund_cik},
+            )
+            row = r.fetchone()
+            if row and row[0]:
+                r2 = await db.execute(
+                    text(
+                        "SELECT COUNT(DISTINCT cik) FROM sec_fund_style_snapshots "
+                        "WHERE style_label = :label AND cik != :cik"
+                    ),
+                    {"label": row[0], "cik": fund_cik},
+                )
+                count = r2.scalar() or 0
+                has_peer = count >= 3
+        except Exception:
+            pass
+
+        disclosure_note = None
+        if universe == "private":
+            disclosure_note = "Holdings not publicly available for private funds"
+
+        return FundDataAvailability(
+            fund_universe=universe,  # type: ignore[arg-type]
+            has_holdings=has_holdings,
+            has_nav_history=has_nav,
+            has_style_analysis=has_style,
+            has_portfolio_manager=has_pm,
+            has_peer_analysis=has_peer,
+            disclosure_note=disclosure_note,
+        )
+
+    except Exception as exc:
+        logger.warning("fund_data_availability_failed", cik=fund_cik, error=str(exc))
+        from data_providers.sec.models import FundDataAvailability
+
+        return FundDataAvailability(
+            fund_universe="private",  # type: ignore[arg-type]
+            has_holdings=False,
+            has_nav_history=False,
+            has_style_analysis=False,
+            has_portfolio_manager=False,
+            has_peer_analysis=False,
+            disclosure_note=None,
+        )

@@ -877,6 +877,85 @@ async def get_current_price_for_cusip(
         return None
 
 
+# ── CRD Resolution (Adviser CIK → CRD Number) ──────────────────
+
+
+def _iapd_search_crd(adviser_name: str) -> str | None:
+    """Search IAPD for CRD number by adviser name. Sync, rate-limited."""
+    try:
+        import httpx
+    except ImportError:
+        return None
+
+    check_iapd_rate()
+
+    try:
+        resp = httpx.get(
+            "https://api.adviserinfo.sec.gov/search/firm",
+            params={"query": adviser_name, "hl": "true", "nrows": "1"},
+            headers={"User-Agent": SEC_USER_AGENT},
+            timeout=10.0,
+        )
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        hits = data.get("hits", {}).get("hits", [])
+        if not hits:
+            return None
+        source = hits[0].get("_source", {})
+        crd = source.get("firm_crd_nb") or source.get("org_pk_num")
+        return str(crd) if crd else None
+    except Exception as exc:
+        logger.debug("iapd_crd_search_failed", adviser=adviser_name, error=str(exc))
+        return None
+
+
+async def resolve_crd_from_adviser_cik(
+    adviser_cik: str,
+    db: Any,
+    *,
+    adviser_name: str | None = None,
+) -> str | None:
+    """Resolve adviser CIK to CRD number.
+
+    Step 1: DB lookup (sec_managers.cik = adviser_cik).
+    Step 2: IAPD search by name (best-effort, only if adviser_name provided).
+    Returns None if unresolvable — caller must handle nullable crd_number.
+    Never raises.
+    """
+    try:
+        from sqlalchemy import text as sa_text
+
+        result = await db.execute(
+            sa_text("SELECT crd_number FROM sec_managers WHERE cik = :cik LIMIT 1"),
+            {"cik": adviser_cik},
+        )
+        row = result.fetchone()
+        if row and row[0]:
+            return str(row[0])
+    except Exception as exc:
+        logger.debug("crd_db_lookup_failed", adviser_cik=adviser_cik, error=str(exc))
+
+    # Step 2: IAPD search by name (best-effort)
+    if adviser_name:
+        safe_name = sanitize_entity_name(adviser_name)
+        if safe_name:
+            try:
+                crd = await run_in_sec_thread(_iapd_search_crd, safe_name)
+                if crd:
+                    logger.debug(
+                        "crd_resolved_via_iapd",
+                        adviser_cik=adviser_cik,
+                        adviser_name=safe_name,
+                        crd=crd,
+                    )
+                    return crd
+            except Exception as exc:
+                logger.debug("crd_iapd_failed", adviser_cik=adviser_cik, error=str(exc))
+
+    return None
+
+
 # ── Dedicated SEC Thread Pool ────────────────────────────────────
 
 _sec_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="sec-data")

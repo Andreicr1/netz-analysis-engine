@@ -958,6 +958,7 @@ async def get_manager_funds(
             detail="Invalid CRD number",
         )
 
+    # Try detailed fund records first
     stmt = (
         select(
             SecManagerFund.fund_type,
@@ -970,15 +971,48 @@ async def get_manager_funds(
     result = await db.execute(stmt)
     rows = result.all()
 
-    total = sum(r.fund_count for r in rows)
-    breakdown = [
-        SecManagerFundItem(
-            fund_type=r.fund_type or "Other",
-            fund_count=r.fund_count,
-            pct_of_total=r.fund_count / total if total > 0 else 0.0,
+    if rows:
+        total = sum(r.fund_count for r in rows)
+        breakdown = [
+            SecManagerFundItem(
+                fund_type=r.fund_type or "Other",
+                fund_count=r.fund_count,
+                pct_of_total=r.fund_count / total if total > 0 else 0.0,
+            )
+            for r in rows
+        ]
+        return SecManagerFundBreakdown(
+            crd_number=crd_number,
+            total_funds=total,
+            breakdown=breakdown,
         )
-        for r in rows
+
+    # Fallback: derive from aggregated counts on sec_managers
+    mgr = await db.execute(
+        select(SecManager).where(SecManager.crd_number == crd_number)
+    )
+    manager = mgr.scalars().first()
+    if not manager:
+        raise HTTPException(status_code=404, detail="Manager not found")
+
+    type_counts = [
+        ("Hedge Fund", manager.hedge_fund_count),
+        ("Private Equity", manager.pe_fund_count),
+        ("Venture Capital", manager.vc_fund_count),
+        ("Real Estate", manager.real_estate_fund_count),
+        ("Securitized Asset", manager.securitized_fund_count),
+        ("Liquidity", manager.liquidity_fund_count),
+        ("Other", manager.other_fund_count),
     ]
+    breakdown = []
+    total = manager.private_fund_count or 0
+    for fund_type, count in type_counts:
+        if count and count > 0:
+            breakdown.append(SecManagerFundItem(
+                fund_type=fund_type,
+                fund_count=count,
+                pct_of_total=count / total if total > 0 else 0.0,
+            ))
 
     return SecManagerFundBreakdown(
         crd_number=crd_number,
