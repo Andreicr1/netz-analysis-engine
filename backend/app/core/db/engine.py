@@ -63,7 +63,7 @@ _db_url = _clean_url(settings.database_url)
 
 engine = create_async_engine(
     _db_url,
-    echo=settings.is_development,
+    echo=False,  # SQL logging adds latency — use structlog for selective query logging
     pool_size=20,
     max_overflow=10,
     pool_pre_ping=True,
