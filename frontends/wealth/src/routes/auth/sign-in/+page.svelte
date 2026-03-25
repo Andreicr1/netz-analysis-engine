@@ -16,7 +16,10 @@
 	}
 
 	onMount(async () => {
-		const CLERK_PK = $page.data.clerkPublishableKey ?? "";
+		const CLERK_PK = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
+			?? $page.data.clerkPublishableKey
+			?? "";
+		console.log("[clerk] publishableKey length:", CLERK_PK.length, "source:", import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ? "vite" : "page");
 		if (DEV_MODE || !browser || !CLERK_PK) return;
 
 		const domain = clerkDomain(CLERK_PK);
