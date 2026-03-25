@@ -235,7 +235,7 @@ app.add_middleware(RateLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_origin_regex=r"https://[\w-]+\.netz-(wealth|credit|admin)\.pages\.dev",
+    allow_origin_regex=r"https://[\w-]+\.(netz-(wealth|credit|admin)\.pages\.dev|investintell\.com|up\.railway\.app)",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

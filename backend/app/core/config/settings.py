@@ -56,10 +56,16 @@ class Settings(BaseSettings):
         "http://localhost:5179",
         "http://localhost:5180",
         "http://localhost:4173",
-        # Cloudflare Pages (production)
+        # Production (investintell.com)
+        "https://wealth.investintell.com",
+        "https://credit.investintell.com",
+        "https://admin.investintell.com",
+        # Cloudflare Pages (legacy)
         "https://netz-wealth.pages.dev",
         "https://netz-credit.pages.dev",
         "https://netz-admin.pages.dev",
+        # Railway direct domains
+        "https://keen-courtesy-production.up.railway.app",
     ]
 
     # ── AI (REQUIRED) ────────────────────────────────────────
