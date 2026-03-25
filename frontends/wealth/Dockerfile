@@ -19,3 +19,4 @@ RUN pnpm --filter @netz/ui build && pnpm --filter netz-wealth-os build
 WORKDIR /app/frontends/wealth
 EXPOSE 3000
 CMD ["node", "build/index.js"]
+
