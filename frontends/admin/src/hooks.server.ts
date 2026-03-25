@@ -12,19 +12,19 @@ const CLERK_JWKS_URL = process.env.CLERK_JWKS_URL ?? import.meta.env.VITE_CLERK_
 const authHook = createClerkHook({
 	jwksUrl: CLERK_JWKS_URL,
 	devBypass: import.meta.env.DEV,
-	publicPrefixes: ["/auth/", "/health"],
+	publicPrefixes: ["/health"],
+	signInUrl: "https://accounts.investintell.com/sign-in",
 });
 
 /** Admin guard — only super_admin / admin roles can access admin panel. */
 const ADMIN_ROLES = new Set(["super_admin", "admin", "org:admin"]);
-const PUBLIC_PREFIXES = ["/auth/", "/health"];
 const adminGuardHook: Handle = async ({ event, resolve }) => {
-	if (PUBLIC_PREFIXES.some(p => event.url.pathname.startsWith(p))) {
+	if (event.url.pathname.startsWith("/health")) {
 		return resolve(event);
 	}
 	const actor = event.locals.actor as Actor | undefined;
 	if (!actor || !ADMIN_ROLES.has(actor.role)) {
-		throw redirect(303, "/auth/sign-in?error=unauthorized");
+		throw redirect(303, "https://accounts.investintell.com/sign-in");
 	}
 	return resolve(event);
 };

@@ -78,7 +78,9 @@
 
 	// Register 401 redirect handler
 	$effect(() => {
-		setAuthRedirectHandler(() => goto("/auth/sign-in"));
+		setAuthRedirectHandler(() => {
+			window.location.href = "https://accounts.investintell.com/sign-in";
+		});
 		setConflictHandler((msg: string) => {
 			conflictMessage = msg;
 			invalidateAll();

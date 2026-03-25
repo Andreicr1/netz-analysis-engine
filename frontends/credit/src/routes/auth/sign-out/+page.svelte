@@ -2,13 +2,10 @@
   Sign-out page — clears session and redirects to sign-in.
 -->
 <script lang="ts">
-	import { goto } from "$app/navigation";
 	import { onMount } from "svelte";
 
 	onMount(() => {
-		// Clerk sign-out will be handled here in production.
-		// For now, redirect to sign-in.
-		goto("/auth/sign-in");
+		window.location.href = "https://accounts.investintell.com/sign-in";
 	});
 </script>
 

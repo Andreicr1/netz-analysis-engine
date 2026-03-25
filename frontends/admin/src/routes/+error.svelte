@@ -14,7 +14,7 @@
 			<h1 class="mb-2 text-4xl font-bold text-(--netz-text-primary)">403</h1>
 			<p class="text-(--netz-text-secondary)">You don't have permission to access this page.</p>
 			<a
-				href="/auth/sign-in"
+				href="https://accounts.investintell.com/sign-in"
 				class="mt-4 inline-block rounded-md bg-(--netz-brand-primary) px-4 py-2 text-sm text-white hover:opacity-90"
 			>
 				Sign In

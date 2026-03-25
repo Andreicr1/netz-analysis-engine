@@ -70,8 +70,10 @@ export interface ClerkHookOptions {
 	devBypass?: boolean;
 	/** Static dev token to use as Bearer when devBypass is active (matches backend DEV_TOKEN). */
 	devToken?: string;
-	/** Public routes that skip auth (e.g., ["/auth/", "/health"]). */
+	/** Public routes that skip auth (e.g., ["/health"]). */
 	publicPrefixes?: string[];
+	/** Clerk hosted sign-in URL (e.g., https://accounts.example.com/sign-in). Required in production. */
+	signInUrl: string;
 }
 
 /** Default dev actor when no auth is provided in dev mode. */
@@ -115,12 +117,13 @@ let cachedJWKS: ReturnType<typeof createRemoteJWKSet> | null = null;
  * In production: JWKS verification → Actor in event.locals.
  * In dev mode with devBypass: X-DEV-ACTOR header or default dev actor.
  */
-export function createClerkHook(options: ClerkHookOptions = {}): Handle {
+export function createClerkHook(options: ClerkHookOptions): Handle {
 	const {
 		jwksUrl,
 		devBypass = false,
 		devToken = "dev-token",
-		publicPrefixes = ["/auth/", "/health"],
+		publicPrefixes = ["/health"],
+		signInUrl,
 	} = options;
 
 	const hook: Handle = async ({ event, resolve }) => {
@@ -165,7 +168,7 @@ export function createClerkHook(options: ClerkHookOptions = {}): Handle {
 				return resolve(event);
 			}
 			const { redirect } = await import("@sveltejs/kit");
-			throw redirect(303, "/auth/sign-in");
+			throw redirect(303, signInUrl);
 		}
 
 		// Decode JWT payload (used as fallback and for actor extraction)
