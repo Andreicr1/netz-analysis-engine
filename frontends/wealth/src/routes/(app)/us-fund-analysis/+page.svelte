@@ -26,14 +26,6 @@
 	const api = createClientApiClient(getToken);
 	let { data }: { data: PageData } = $props();
 
-	// ── Tab definitions ──
-	const tabs = [
-		{ value: "overview", label: "Overview" },
-		{ value: "holdings", label: "Holdings" },
-		{ value: "style-drift", label: "Style Drift" },
-		{ value: "reverse", label: "Reverse Lookup" },
-		{ value: "compare", label: "Peer Compare" },
-	];
 	let activeTab = $state("overview");
 
 	// ── SSR data ──
@@ -108,6 +100,15 @@
 		else if (next.size < 5) next.add(cik);
 		compareCiks = next;
 	}
+
+	// ── Tab definitions (after compareCiks for derived count) ──
+	let tabs = $derived([
+		{ value: "overview", label: "Overview" },
+		{ value: "holdings", label: "Holdings" },
+		{ value: "style-drift", label: "Style Drift" },
+		{ value: "reverse", label: "Reverse Lookup" },
+		{ value: "compare", label: `Peer Compare${compareCiks.size > 0 ? ` (${compareCiks.size})` : ""}` },
+	]);
 
 	// ── Page navigation ──
 	function goToPage(p: number) {
@@ -246,6 +247,8 @@
 				}}
 				onDetail={openDetail}
 				onPageChange={goToPage}
+				{compareCiks}
+				onToggleCompare={toggleCompare}
 			/>
 		{:else if activeTab === "holdings"}
 			<div class="ufa-tab-content">

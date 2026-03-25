@@ -8,11 +8,15 @@
 		onSelect,
 		onDetail,
 		onPageChange,
+		compareCiks = new Set<string>(),
+		onToggleCompare,
 	}: {
 		data: SecManagerSearchPage;
 		onSelect: (cik: string, name: string) => void;
 		onDetail: (cik: string) => void;
 		onPageChange: (page: number) => void;
+		compareCiks?: Set<string>;
+		onToggleCompare?: (cik: string) => void;
 	} = $props();
 
 	let totalPages = $derived(Math.ceil(data.total_count / data.page_size) || 1);
@@ -34,6 +38,7 @@
 		<table class="mt-table">
 			<thead>
 				<tr>
+					<th class="mt-th mt-th--check" style="width: 48px;"></th>
 					<th class="mt-th">Manager Name</th>
 					<th class="mt-th">Entity Type</th>
 					<th class="mt-th">State</th>
@@ -49,7 +54,19 @@
 						class:mt-row--no-cik={!mgr.cik}
 						onclick={() => mgr.cik && onSelect(mgr.cik, mgr.firm_name)}
 					>
-						<td class="mt-td mt-td--name">
+						<td class="mt-td mt-td--check">
+						{#if mgr.cik && onToggleCompare}
+							<input
+								type="checkbox"
+								checked={compareCiks.has(mgr.cik)}
+								onchange={() => onToggleCompare?.(mgr.cik!)}
+								onclick={(e) => e.stopPropagation()}
+								title="Select for comparison"
+								class="mt-checkbox"
+							/>
+						{/if}
+					</td>
+					<td class="mt-td mt-td--name">
 							<div class="mt-name-cell">
 								<div class="mt-avatar">
 									<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -301,6 +318,21 @@
 	.mt-badge--success {
 		background: #ecfdf5;
 		color: #009966;
+	}
+
+	.mt-th--check,
+	.mt-td--check {
+		width: 48px;
+		text-align: center;
+		padding: 0 12px;
+	}
+
+	.mt-checkbox {
+		width: 16px;
+		height: 16px;
+		border-radius: 4px;
+		cursor: pointer;
+		accent-color: #155dfc;
 	}
 
 	@media (max-width: 1024px) {
