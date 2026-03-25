@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import Float, String, literal, select, union_all
+from sqlalchemy import Float, String, case, literal, select, union_all
 from sqlalchemy import func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,7 +44,7 @@ from app.domains.wealth.schemas.screening import (
     ScreeningRunResponse,
 )
 from app.shared.enums import Role
-from app.shared.models import EsmaFund, EsmaIsinTickerMap, EsmaManager, SecManager
+from app.shared.models import EsmaFund, EsmaManager, SecCusipTickerMap
 
 logger = structlog.get_logger()
 
@@ -310,6 +310,14 @@ def _build_internal_query(
     approval_status: str | None,
 ):
     """Build a select for instruments_universe rows."""
+    _internal_geo_case = case(
+        (Instrument.geography == "north_america", literal("US")),
+        (Instrument.geography == "dm_europe", literal("Europe")),
+        (Instrument.geography == "dm_asia", literal("Asia")),
+        (Instrument.geography == "emerging", literal("Emerging Markets")),
+        (Instrument.geography == "global", literal("Global")),
+        else_=Instrument.geography,
+    )
     stmt = (
         select(
             Instrument.instrument_id.cast(String).label("instrument_id"),
@@ -319,7 +327,7 @@ def _build_internal_query(
             Instrument.isin.label("isin"),
             Instrument.ticker.label("ticker"),
             Instrument.asset_class.label("asset_class"),
-            Instrument.geography.label("geography"),
+            _internal_geo_case.label("geography"),
             Instrument.attributes["domicile"].astext.label("domicile"),
             Instrument.currency.label("currency"),
             Instrument.attributes["strategy"].astext.label("strategy"),
@@ -346,7 +354,7 @@ def _build_internal_query(
     if asset_class:
         stmt = stmt.where(Instrument.asset_class == asset_class)
     if geography:
-        stmt = stmt.where(Instrument.geography == geography)
+        stmt = stmt.where(_internal_geo_case == geography)
     if domicile:
         stmt = stmt.where(Instrument.attributes["domicile"].astext == domicile)
     if currency:
@@ -364,14 +372,40 @@ def _build_internal_query(
     return stmt
 
 
+_esma_geo_case = case(
+    (EsmaFund.fund_name.ilike("%emerging%"), literal("Emerging Markets")),
+    (EsmaFund.fund_name.ilike("%frontier%"), literal("Emerging Markets")),
+    (EsmaFund.fund_name.ilike("%latin america%"), literal("Latin America")),
+    (EsmaFund.fund_name.ilike("%latam%"), literal("Latin America")),
+    (EsmaFund.fund_name.ilike("%brazil%"), literal("Latin America")),
+    (EsmaFund.fund_name.ilike("%asia%"), literal("Asia")),
+    (EsmaFund.fund_name.ilike("%japan%"), literal("Asia")),
+    (EsmaFund.fund_name.ilike("%china%"), literal("Asia")),
+    (EsmaFund.fund_name.ilike("%india%"), literal("Asia")),
+    (EsmaFund.fund_name.ilike("%pacific%"), literal("Asia")),
+    (EsmaFund.fund_name.ilike("%nikkei%"), literal("Asia")),
+    (EsmaFund.fund_name.ilike("% us %"), literal("US")),
+    (EsmaFund.fund_name.ilike("%america%"), literal("US")),
+    (EsmaFund.fund_name.ilike("%s&p%"), literal("US")),
+    (EsmaFund.fund_name.ilike("%nasdaq%"), literal("US")),
+    (EsmaFund.fund_name.ilike("%russell%"), literal("US")),
+    (EsmaFund.fund_name.ilike("%global%"), literal("Global")),
+    (EsmaFund.fund_name.ilike("%world%"), literal("Global")),
+    (EsmaFund.fund_name.ilike("%international%"), literal("Global")),
+    (EsmaFund.fund_name.ilike("%europ%"), literal("Europe")),
+    (EsmaFund.fund_name.ilike("%euro %"), literal("Europe")),
+    (EsmaFund.fund_name.ilike("%stoxx%"), literal("Europe")),
+    else_=literal("Europe"),
+)
+
+
 def _build_esma_query(
     q: str | None,
     geography: str | None,
     domicile: str | None,
     currency: str | None,
 ):
-    """Build a select for esma_funds joined with ticker map."""
-    # Map domicile to currency/geography for ESMA
+    """Build a select for esma_funds — only funds with Yahoo tickers (investable)."""
     stmt = (
         select(
             literal(None).label("instrument_id"),
@@ -379,9 +413,9 @@ def _build_esma_query(
             literal("fund").label("instrument_type"),
             EsmaFund.fund_name.label("name"),
             EsmaFund.isin.label("isin"),
-            EsmaIsinTickerMap.yahoo_ticker.label("ticker"),
+            EsmaFund.yahoo_ticker.label("ticker"),
             literal("alternatives").label("asset_class"),
-            literal("dm_europe").label("geography"),
+            _esma_geo_case.label("geography"),
             EsmaFund.domicile.label("domicile"),
             literal("EUR").label("currency"),
             EsmaFund.fund_type.label("strategy"),
@@ -394,75 +428,89 @@ def _build_esma_query(
             literal("UCITS").label("structure"),
         )
         .select_from(EsmaFund)
-        .outerjoin(EsmaIsinTickerMap, EsmaFund.isin == EsmaIsinTickerMap.isin)
         .outerjoin(EsmaManager, EsmaFund.esma_manager_id == EsmaManager.esma_id)
+        .where(EsmaFund.yahoo_ticker.isnot(None))
+        .where(EsmaFund.yahoo_ticker != "")
     )
     if q:
         pattern = f"%{q}%"
         stmt = stmt.where(
             EsmaFund.fund_name.ilike(pattern)
             | EsmaFund.isin.ilike(pattern)
-            | EsmaIsinTickerMap.yahoo_ticker.ilike(pattern)
+            | EsmaFund.yahoo_ticker.ilike(pattern)
             | EsmaManager.company_name.ilike(pattern)
         )
     if domicile:
         stmt = stmt.where(EsmaFund.domicile == domicile)
-    if geography and geography != "dm_europe":
-        # ESMA only has European funds, filter out unless dm_europe or global
-        if geography != "global":
-            stmt = stmt.where(literal(False))
+    if geography:
+        stmt = stmt.where(_esma_geo_case == geography)
     return stmt
 
 
 def _build_sec_query(
     q: str | None,
     geography: str | None,
-    aum_min: float | None,
-    aum_max: float | None,
+    instrument_type: str | None,
 ):
-    """Build a select for sec_managers as fund-like searchable items.
+    """Build a select for US tradeable securities from sec_cusip_ticker_map.
 
-    SEC managers are US-based investment advisers from FOIA bulk data.
-    Only include Registered advisers with AUM > 0 for relevance.
+    These are equities, ETFs, closed-end funds, REITs, and ADRs held by
+    major institutional investors (13F filers). All have tickers for
+    YFinance pricing.
     """
+    type_case = case(
+        (SecCusipTickerMap.security_type == "Common Stock", literal("equity")),
+        (SecCusipTickerMap.security_type == "ETP", literal("fund")),
+        (SecCusipTickerMap.security_type == "Closed-End Fund", literal("fund")),
+        (SecCusipTickerMap.security_type == "Open-End Fund", literal("fund")),
+        (SecCusipTickerMap.security_type == "ADR", literal("equity")),
+        (SecCusipTickerMap.security_type == "REIT", literal("equity")),
+        (SecCusipTickerMap.security_type == "MLP", literal("equity")),
+        else_=literal("equity"),
+    )
+
+    asset_class_case = case(
+        (SecCusipTickerMap.security_type == "ETP", literal("fund")),
+        (SecCusipTickerMap.security_type == "Closed-End Fund", literal("fund")),
+        (SecCusipTickerMap.security_type == "Open-End Fund", literal("fund")),
+        (SecCusipTickerMap.security_type == "REIT", literal("real_estate")),
+        else_=literal("equity"),
+    )
+
     stmt = (
         select(
             literal(None).label("instrument_id"),
             literal("sec").label("source"),
-            literal("fund").label("instrument_type"),
-            SecManager.firm_name.label("name"),
+            type_case.label("instrument_type"),
+            SecCusipTickerMap.issuer_name.label("name"),
             literal(None).label("isin"),
-            SecManager.crd_number.label("ticker"),
-            literal("equity").label("asset_class"),
-            literal("north_america").label("geography"),
-            SecManager.state.label("domicile"),
+            SecCusipTickerMap.ticker.label("ticker"),
+            asset_class_case.label("asset_class"),
+            literal("US").label("geography"),
+            literal("US").label("domicile"),
             literal("USD").label("currency"),
-            literal(None).label("strategy"),
-            SecManager.aum_total.cast(String).label("aum"),
-            SecManager.firm_name.label("manager_name"),
-            SecManager.crd_number.label("manager_crd"),
+            SecCusipTickerMap.security_type.label("strategy"),
+            literal(None).label("aum"),
+            literal(None).label("manager_name"),
+            literal(None).label("manager_crd"),
             literal(None).label("esma_manager_id"),
             literal(None).label("approval_status"),
             literal(None).label("block_id"),
-            SecManager.registration_status.label("structure"),
+            SecCusipTickerMap.security_type.label("structure"),
         )
-        .where(SecManager.registration_status == "Registered")
-        .where(SecManager.aum_total > 0)
+        .where(SecCusipTickerMap.is_tradeable.is_(True))
     )
     if q:
         pattern = f"%{q}%"
         stmt = stmt.where(
-            SecManager.firm_name.ilike(pattern)
-            | (SecManager.crd_number == q)
-            | (SecManager.cik == q)
+            SecCusipTickerMap.issuer_name.ilike(pattern)
+            | SecCusipTickerMap.ticker.ilike(pattern)
+            | (SecCusipTickerMap.cusip == q)
         )
-    if geography and geography not in ("north_america", "global", "us"):
+    if instrument_type:
+        stmt = stmt.where(type_case == instrument_type)
+    if geography and geography not in ("US", "Global"):
         stmt = stmt.where(literal(False))
-    if aum_min is not None:
-        stmt = stmt.where(SecManager.aum_total >= aum_min)
-    if aum_max is not None:
-        stmt = stmt.where(SecManager.aum_total <= aum_max)
-    stmt = stmt.limit(1000)
     return stmt
 
 
@@ -511,28 +559,33 @@ async def search_instruments(
     ):
         queries.append(_build_esma_query(q, geography, domicile, currency))
 
-    # SEC/US managers (if source=sec, or source is None and type is fund-like or None)
+    # SEC/US tradeable securities (if source=sec, or source is None and compatible type)
     if source == "sec" or (
         source is None
-        and instrument_type in (None, "fund")
+        and instrument_type in (None, "fund", "equity")
         and block_id is None
         and approval_status is None
     ):
-        queries.append(_build_sec_query(q, geography, aum_min, aum_max))
+        queries.append(_build_sec_query(q, geography, instrument_type))
 
     if not queries:
         return InstrumentSearchPage(items=[], total=0, page=page, page_size=page_size, has_next=False)
 
     combined = union_all(*queries).subquery("combined")
 
-    # Count
-    count_stmt = select(sa_func.count()).select_from(combined)
-    total = (await db.execute(count_stmt)).scalar() or 0
-
-    # Paginate
+    # Count + paginate in one roundtrip using window function
     offset = (page - 1) * page_size
-    data_stmt = select(combined).order_by(combined.c.name).offset(offset).limit(page_size)
-    rows = (await db.execute(data_stmt)).all()
+    total_col = sa_func.count().over().label("_total")
+    data_stmt = (
+        select(combined, total_col)
+        .order_by(combined.c.name)
+        .offset(offset)
+        .limit(page_size)
+    )
+    rows_raw = (await db.execute(data_stmt)).all()
+
+    total = rows_raw[0]._total if rows_raw else 0
+    rows = rows_raw
 
     # Enrich with screening status (left join on instrument_id)
     instrument_ids = [r.instrument_id for r in rows if r.instrument_id]
@@ -633,6 +686,14 @@ async def get_screener_facets(
     result = await db.execute(base)
     instruments = result.scalars().all()
 
+    _GEO_DISPLAY_MAP = {
+        "north_america": "US",
+        "dm_europe": "Europe",
+        "dm_asia": "Asia",
+        "emerging": "Emerging Markets",
+        "global": "Global",
+    }
+
     type_counts: dict[str, int] = {}
     geo_counts: dict[str, int] = {}
     ac_counts: dict[str, int] = {}
@@ -644,7 +705,8 @@ async def get_screener_facets(
 
     for inst in instruments:
         type_counts[inst.instrument_type] = type_counts.get(inst.instrument_type, 0) + 1
-        geo_counts[inst.geography] = geo_counts.get(inst.geography, 0) + 1
+        geo_display = _GEO_DISPLAY_MAP.get(inst.geography, inst.geography)
+        geo_counts[geo_display] = geo_counts.get(geo_display, 0) + 1
         ac_counts[inst.asset_class] = ac_counts.get(inst.asset_class, 0) + 1
         cur_counts[inst.currency] = cur_counts.get(inst.currency, 0) + 1
         source_counts["internal"] += 1
@@ -658,35 +720,41 @@ async def get_screener_facets(
         if strat:
             strat_counts[strat] = strat_counts.get(strat, 0) + 1
 
-    # ESMA count (if not filtered to internal only)
+    # ESMA geography facets (only tickered funds)
     if source != "internal":
-        esma_count_stmt = select(sa_func.count()).select_from(EsmaFund)
+        esma_geo_stmt = (
+            select(_esma_geo_case, sa_func.count())
+            .select_from(EsmaFund)
+            .where(EsmaFund.yahoo_ticker.isnot(None))
+            .where(EsmaFund.yahoo_ticker != "")
+            .group_by(_esma_geo_case)
+        )
         if q:
-            esma_count_stmt = esma_count_stmt.where(
+            esma_geo_stmt = esma_geo_stmt.where(
                 EsmaFund.fund_name.ilike(f"%{q}%") | EsmaFund.isin.ilike(f"%{q}%")
             )
-        esma_count = (await db.execute(esma_count_stmt)).scalar() or 0
-        source_counts["esma"] = esma_count
-        type_counts["fund"] = type_counts.get("fund", 0) + esma_count
-        geo_counts["dm_europe"] = geo_counts.get("dm_europe", 0) + esma_count
+        esma_total = 0
+        for geo_label, cnt in (await db.execute(esma_geo_stmt)).all():
+            geo_counts[geo_label] = geo_counts.get(geo_label, 0) + cnt
+            esma_total += cnt
+        source_counts["esma"] = esma_total
+        type_counts["fund"] = type_counts.get("fund", 0) + esma_total
 
-    # SEC count (if not filtered to internal or esma only)
+    # SEC tradeable securities facets
     if source not in ("internal", "esma"):
         sec_count_stmt = (
             select(sa_func.count())
-            .select_from(SecManager)
-            .where(SecManager.registration_status == "Registered")
-            .where(SecManager.aum_total > 0)
+            .select_from(SecCusipTickerMap)
+            .where(SecCusipTickerMap.is_tradeable.is_(True))
         )
         if q:
             sec_count_stmt = sec_count_stmt.where(
-                SecManager.firm_name.ilike(f"%{q}%")
-                | (SecManager.crd_number == q)
+                SecCusipTickerMap.issuer_name.ilike(f"%{q}%")
+                | SecCusipTickerMap.ticker.ilike(f"%{q}%")
             )
         sec_count = (await db.execute(sec_count_stmt)).scalar() or 0
         source_counts["sec"] = sec_count
-        type_counts["fund"] = type_counts.get("fund", 0) + sec_count
-        geo_counts["north_america"] = geo_counts.get("north_america", 0) + sec_count
+        geo_counts["US"] = geo_counts.get("US", 0) + sec_count
 
     # Screening status facets
     sr_stmt = (
@@ -702,9 +770,8 @@ async def get_screener_facets(
         total_screened += sr_count
 
     def to_facets(counts: dict[str, int]) -> list[FacetItem]:
-        GEO_LABELS = {"dm_europe": "Europe (UCITS)", "north_america": "North America (SEC)"}
         return sorted(
-            [FacetItem(value=k, label=GEO_LABELS.get(k, k), count=v) for k, v in counts.items() if v > 0],
+            [FacetItem(value=k, label=k, count=v) for k, v in counts.items() if v > 0],
             key=lambda f: -f.count,
         )
 
@@ -752,5 +819,90 @@ async def import_esma_fund(
         "instrument_id": str(instrument.instrument_id),
         "name": instrument.name,
         "isin": instrument.isin,
+        "status": "imported",
+    }
+
+
+# ── SEC Import ──────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/import-sec/{ticker}",
+    status_code=status.HTTP_201_CREATED,
+    summary="Import a US security into instruments_universe",
+)
+async def import_sec_security(
+    ticker: str,
+    body: EsmaImportRequest,
+    db: AsyncSession = Depends(get_db_with_rls),
+    org_id: uuid.UUID = Depends(get_org_id),
+    actor: Actor = Depends(get_actor),
+) -> dict:
+    _require_investment_role(actor)
+
+    # Check not already imported
+    existing = (await db.execute(
+        select(Instrument).where(
+            Instrument.ticker == ticker.upper(),
+            Instrument.organization_id == org_id,
+        )
+    )).scalar_one_or_none()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Instrument with ticker {ticker} already exists",
+        )
+
+    # Lookup from sec_cusip_ticker_map
+    sec_row = (await db.execute(
+        select(SecCusipTickerMap).where(
+            SecCusipTickerMap.ticker == ticker.upper(),
+            SecCusipTickerMap.is_tradeable.is_(True),
+        ).limit(1)
+    )).scalar_one_or_none()
+    if not sec_row:
+        raise HTTPException(status_code=404, detail=f"Tradeable security with ticker {ticker} not found")
+
+    # Map security_type to instrument_type
+    _type_map = {
+        "Common Stock": "equity", "ETP": "fund", "Closed-End Fund": "fund",
+        "Open-End Fund": "fund", "ADR": "equity", "REIT": "equity", "MLP": "equity",
+    }
+    inst_type = _type_map.get(sec_row.security_type or "", "equity")
+    asset_class = "fund" if inst_type == "fund" else "equity"
+
+    instrument = Instrument(
+        organization_id=org_id,
+        instrument_type=inst_type,
+        name=sec_row.issuer_name,
+        isin=None,
+        ticker=sec_row.ticker,
+        asset_class=asset_class,
+        geography="north_america",
+        currency="USD",
+        block_id=body.block_id,
+        approval_status="pending",
+        attributes={
+            "cusip": sec_row.cusip,
+            "security_type": sec_row.security_type,
+            "exchange": sec_row.exchange,
+            "figi": sec_row.figi,
+            "composite_figi": sec_row.composite_figi,
+            "source": "sec",
+            "strategy": body.strategy,
+            # chk_fund_attrs requires these keys when instrument_type = 'fund'
+            "manager_name": sec_row.issuer_name,
+            "aum_usd": None,
+            "inception_date": None,
+        },
+    )
+    db.add(instrument)
+    await db.commit()
+    await db.refresh(instrument)
+
+    return {
+        "instrument_id": str(instrument.instrument_id),
+        "name": instrument.name,
+        "ticker": instrument.ticker,
         "status": "imported",
     }

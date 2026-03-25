@@ -29,7 +29,7 @@ class Instrument(OrganizationScopedMixin, Base):
         String(20), nullable=False
     )  # fund | bond | equity
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    isin: Mapped[str | None] = mapped_column(String(12))
+    isin: Mapped[str | None] = mapped_column(String(30))
     ticker: Mapped[str | None] = mapped_column(String(20))
     bloomberg_ticker: Mapped[str | None] = mapped_column(String(30))
     asset_class: Mapped[str] = mapped_column(String(50), nullable=False)

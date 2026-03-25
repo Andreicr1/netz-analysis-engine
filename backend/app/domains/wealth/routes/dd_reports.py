@@ -138,17 +138,23 @@ async def trigger_dd_report(
     background thread via asyncio.to_thread().
     """
     from app.domains.wealth.models.fund import Fund
+    from app.domains.wealth.models.instrument import Instrument
 
-    # Verify fund exists and belongs to org
-    fund_result = await db.execute(
-        select(Fund).where(Fund.fund_id == fund_id)
+    # Verify fund exists — check instruments_universe first, then legacy funds_universe
+    inst_result = await db.execute(
+        select(Instrument).where(Instrument.instrument_id == fund_id)
     )
-    fund = fund_result.scalar_one_or_none()
-    if not fund:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Fund {fund_id} not found",
+    instrument = inst_result.scalar_one_or_none()
+    if not instrument:
+        fund_result = await db.execute(
+            select(Fund).where(Fund.fund_id == fund_id)
         )
+        fund = fund_result.scalar_one_or_none()
+        if not fund:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Fund {fund_id} not found",
+            )
 
     # Mark previous report as not current
     existing_result = await db.execute(

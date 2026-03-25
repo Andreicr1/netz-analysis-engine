@@ -28,21 +28,16 @@
 	function exportCSV() {
 		const items = searchResults.items;
 		if (items.length === 0) return;
-		const headers = ["Name", "ISIN", "Ticker", "Type", "Source", "Manager", "Geography", "Currency", "AUM", "Score", "Status"];
+		const headers = ["Ticker", "Name", "Manager", "AUM", "Currency", "Geography"];
 		const lines = [
 			headers.join(","),
 			...items.map(r => [
-				`"${r.name ?? ""}"`,
-				r.isin ?? "",
 				r.ticker ?? "",
-				r.instrument_type ?? "",
-				r.source ?? "",
+				`"${r.name ?? ""}"`,
 				`"${r.manager_name ?? ""}"`,
-				r.geography ?? "",
-				r.currency ?? "",
 				r.aum ?? "",
-				r.screening_score ?? "",
-				r.screening_status ?? r.approval_status ?? "",
+				r.currency ?? "",
+				r.geography ?? "",
 			].join(","))
 		];
 		const blob = new Blob([lines.join("\n")], { type: "text/csv" });

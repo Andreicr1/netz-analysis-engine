@@ -44,9 +44,9 @@
 	let sendingToReview = $state(false);
 	let reviewError = $state<string | null>(null);
 
-	// Load first tab on mount
+	// Load first tab on mount (client-only — avoid SSR fetch)
 	$effect(() => {
-		if (panelCrd) {
+		if (panelCrd && typeof window !== "undefined") {
 			profileData = null;
 			holdingsData = null;
 			institutionalData = null;

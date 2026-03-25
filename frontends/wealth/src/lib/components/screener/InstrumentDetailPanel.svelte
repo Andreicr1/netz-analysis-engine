@@ -30,9 +30,12 @@
 			const api = createClientApiClient(getToken);
 			let instrumentId = selectedInstrument.instrument_id;
 
-			// For ESMA instruments not yet imported, import first
+			// For external instruments not yet imported, import first
 			if (!instrumentId && selectedInstrument.source === "esma" && selectedInstrument.isin) {
 				const imported = await api.post<{ instrument_id: string }>(`/screener/import-esma/${selectedInstrument.isin}`, {});
+				instrumentId = imported.instrument_id;
+			} else if (!instrumentId && selectedInstrument.source === "sec" && selectedInstrument.ticker) {
+				const imported = await api.post<{ instrument_id: string }>(`/screener/import-sec/${selectedInstrument.ticker}`, {});
 				instrumentId = imported.instrument_id;
 			}
 
@@ -102,8 +105,8 @@
 	</div>
 {/if}
 <div class="dt-section">
-	{#if selectedInstrument.source === "esma" && !selectedInstrument.instrument_id}
-		<p class="dt-empty-text">This ESMA fund is not yet in your universe.</p>
+	{#if !selectedInstrument.instrument_id && (selectedInstrument.source === "esma" || selectedInstrument.source === "sec")}
+		<p class="dt-empty-text">This {selectedInstrument.source === "esma" ? "ESMA fund" : "US security"} is not yet in your universe.</p>
 	{/if}
 	<Button size="sm" onclick={() => reviewDialogOpen = true} disabled={sendingToReview}>
 		{sendingToReview ? "Sending…" : "Send to Review"}
@@ -117,8 +120,8 @@
 <ConsequenceDialog
 	bind:open={reviewDialogOpen}
 	title="Send to DD Review"
-	impactSummary={selectedInstrument.source === "esma" && !selectedInstrument.instrument_id
-		? "This fund will be imported to your universe and a DD Report will be created for committee review."
+	impactSummary={!selectedInstrument.instrument_id && (selectedInstrument.source === "esma" || selectedInstrument.source === "sec")
+		? "This instrument will be imported to your universe and a DD Report will be created for committee review."
 		: "A DD Report will be created for this instrument for committee review."}
 	requireRationale={true}
 	rationaleLabel="Review justification"
@@ -126,7 +129,8 @@
 	rationaleMinLength={10}
 	confirmLabel="Send to Review"
 	metadata={[
-		{ label: "Fund", value: selectedInstrument?.name ?? "" },
+		{ label: "Instrument", value: selectedInstrument?.name ?? "" },
+		{ label: "Ticker", value: selectedInstrument?.ticker ?? "—" },
 		{ label: "ISIN", value: selectedInstrument?.isin ?? "—" },
 		{ label: "Source", value: selectedInstrument?.source ?? "" },
 	]}

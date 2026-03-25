@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.wealth.models.instrument import Instrument
-from app.shared.models import EsmaFund, EsmaIsinTickerMap
+from app.shared.models import EsmaFund, EsmaIsinTickerMap, EsmaManager
 
 # Map ESMA domicile (ISO-2) → geography + currency
 _DOMICILE_MAP: dict[str, tuple[str, str]] = {
@@ -79,17 +79,26 @@ async def import_esma_fund_to_universe(
     ticker_stmt = select(EsmaIsinTickerMap).where(EsmaIsinTickerMap.isin == isin)
     ticker_row = (await db.execute(ticker_stmt)).scalar_one_or_none()
 
+    # Fetch manager name
+    mgr_stmt = select(EsmaManager.company_name).where(
+        EsmaManager.esma_id == fund.esma_manager_id
+    )
+    manager_name = (await db.execute(mgr_stmt)).scalar_one_or_none()
+
     # Resolve geography/currency from domicile
     domicile = fund.domicile or ""
     geography, currency = _DOMICILE_MAP.get(domicile, ("dm_europe", "EUR"))
 
-    # Build attributes
+    # Build attributes — chk_fund_attrs requires aum_usd, manager_name, inception_date
     attributes: dict[str, object] = {
         "structure": "UCITS",
         "domicile": domicile,
         "fund_type": fund.fund_type,
         "esma_manager_id": fund.esma_manager_id,
         "source": "esma",
+        "manager_name": manager_name,
+        "aum_usd": None,
+        "inception_date": None,
     }
     if fund.host_member_states:
         attributes["host_member_states"] = fund.host_member_states

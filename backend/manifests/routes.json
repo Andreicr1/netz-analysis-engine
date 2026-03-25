@@ -1691,6 +1691,11 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/screener/import-sec/{ticker}",
+    "name": "import_sec_security"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/screener/run",
     "name": "trigger_screening"
   },
