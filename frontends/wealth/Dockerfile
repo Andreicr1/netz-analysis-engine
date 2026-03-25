@@ -13,10 +13,15 @@ COPY frontends/wealth/ frontends/wealth/
 # Install deps
 RUN pnpm install --frozen-lockfile
 
+# Build-time env vars (Railway injects these as build args automatically)
+ARG VITE_CLERK_PUBLISHABLE_KEY
+ARG VITE_API_BASE_URL
+ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
 # Build UI package then wealth frontend
 RUN pnpm --filter @netz/ui build && pnpm --filter netz-wealth-os build
 
 WORKDIR /app/frontends/wealth
 EXPOSE 3000
 CMD ["node", "build/index.js"]
-
