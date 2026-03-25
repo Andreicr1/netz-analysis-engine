@@ -47,6 +47,7 @@
 				if (document.querySelector("script[data-clerk-script]")) { resolve(); return; }
 				const script = document.createElement("script");
 				script.setAttribute("data-clerk-script", "");
+				script.setAttribute("data-clerk-publishable-key", pk);
 				script.async = true;
 				script.src = `https://${domain}/npm/@clerk/clerk-js@latest/dist/clerk.browser.js`;
 				script.onload = () => resolve();
@@ -58,12 +59,12 @@
 			if (!ClerkClass) return;
 
 			let clerk: any;
-			if (typeof ClerkClass.load === "function") {
-				clerk = ClerkClass;
-			} else {
+			if (typeof ClerkClass === "function" && !ClerkClass.load) {
 				clerk = new ClerkClass(pk);
+			} else {
+				clerk = ClerkClass;
 			}
-			await clerk.load({ routerPush: () => {}, routerReplace: () => {} });
+			await clerk.load({ publishableKey: pk, routerPush: () => {}, routerReplace: () => {} });
 
 			// Sync session token to cookie and reload for server-side access
 			if (clerk.session) {
