@@ -72,6 +72,8 @@ export interface ClerkHookOptions {
 	devToken?: string;
 	/** Public routes that skip auth (e.g., ["/auth/", "/health"]). */
 	publicPrefixes?: string[];
+	/** URL to redirect to when unauthenticated. Defaults to "/auth/sign-in". */
+	signInUrl?: string;
 }
 
 /** Default dev actor when no auth is provided in dev mode. */
@@ -121,6 +123,7 @@ export function createClerkHook(options: ClerkHookOptions = {}): Handle {
 		devBypass = false,
 		devToken = "dev-token",
 		publicPrefixes = ["/auth/", "/health"],
+		signInUrl = "/auth/sign-in",
 	} = options;
 
 	const hook: Handle = async ({ event, resolve }) => {
@@ -165,7 +168,7 @@ export function createClerkHook(options: ClerkHookOptions = {}): Handle {
 				return resolve(event);
 			}
 			const { redirect } = await import("@sveltejs/kit");
-			throw redirect(303, "/auth/sign-in");
+			throw redirect(303, signInUrl);
 		}
 
 		// Decode JWT payload (used as fallback and for actor extraction)
