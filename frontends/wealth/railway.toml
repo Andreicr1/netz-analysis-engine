@@ -1,6 +1,6 @@
 [build]
 builder = "railpack"
-buildCommand = "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @netz/ui build && pnpm --filter netz-wealth-os build"
+buildCommand = "npm install -g pnpm@10.28.1 && pnpm install --frozen-lockfile && pnpm --filter @netz/ui build && pnpm --filter netz-wealth-os build"
 
 [deploy]
 startCommand = "node frontends/wealth/build/index.js"
