@@ -121,11 +121,12 @@
 
 <div class="scr-data-header">
 	<span class="scr-data-count">
-		{totalCount} instrument{totalCount !== 1 ? "s" : ""}
-		{#if searchQ}
-			<span class="scr-data-count-muted">matching "{searchQ}"</span>
-		{/if}
+		Results
+		<span class="scr-count-badge">{totalCount} INSTRUMENT{totalCount !== 1 ? "S" : ""}</span>
 	</span>
+	{#if searchQ}
+		<span class="scr-data-count-muted">matching "{searchQ}"</span>
+	{/if}
 </div>
 
 {#if allItems.length === 0 && !loading}
@@ -223,6 +224,19 @@
 {/if}
 
 <style>
+	.scr-count-badge {
+		display: inline-flex;
+		align-items: center;
+		padding: 3px 10px;
+		background: #eff6ff;
+		border-radius: 8px;
+		font-size: 11px;
+		font-weight: 700;
+		color: #1447e6;
+		text-transform: uppercase;
+		letter-spacing: 0.55px;
+	}
+
 	.scr-scroll-sentinel {
 		padding: var(--netz-space-stack-sm, 12px) 0;
 		min-height: 1px;

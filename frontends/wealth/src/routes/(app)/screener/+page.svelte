@@ -91,10 +91,13 @@
 <PageHeader title="Screener">
 	{#snippet actions()}
 		<div class="scr-actions">
-			<Button size="sm" variant="outline" onclick={exportCSV}>Export</Button>
-			<Button size="sm" onclick={executeBatch} disabled={isRunning}>
-				{isRunning ? "Running\u2026" : "Run Screening"}
-			</Button>
+			<button class="scr-btn scr-btn--outline" onclick={exportCSV}>
+				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+				Export
+			</button>
+			<button class="scr-btn scr-btn--primary" onclick={executeBatch} disabled={isRunning}>
+				{isRunning ? "Running\u2026" : "Add to Portfolio"}
+			</button>
 		</div>
 	{/snippet}
 </PageHeader>
@@ -132,22 +135,63 @@
 	.scr-page {
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: 24px;
 		padding-bottom: 48px;
 	}
 
 	.scr-results {
-		background: var(--netz-surface-elevated);
-		border: 1px solid var(--netz-border-subtle);
+		background: white;
+		border: 1px solid #e2e8f0;
 		border-radius: 16px;
 		overflow: hidden;
-		box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+		box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1);
 	}
 
 	.scr-actions {
 		display: flex;
 		align-items: center;
+		gap: 10px;
+	}
+
+	.scr-btn {
+		display: inline-flex;
+		align-items: center;
 		gap: 8px;
+		padding: 10px 20px;
+		border-radius: 14px;
+		font-size: 14px;
+		font-weight: 600;
+		font-family: var(--netz-font-sans);
+		cursor: pointer;
+		transition: all 120ms ease;
+		border: none;
+	}
+
+	.scr-btn--outline {
+		background: white;
+		border: 1px solid #e2e8f0;
+		color: #45556c;
+		box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1);
+	}
+
+	.scr-btn--outline:hover {
+		background: #f8fafc;
+		border-color: #cbd5e1;
+	}
+
+	.scr-btn--primary {
+		background: #155dfc;
+		color: white;
+		box-shadow: 0 2px 8px rgba(37,99,235,0.25);
+	}
+
+	.scr-btn--primary:hover {
+		background: #1447e6;
+	}
+
+	.scr-btn--primary:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
 	}
 
 	.scr-error {

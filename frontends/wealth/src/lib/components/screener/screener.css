@@ -32,24 +32,27 @@
 
 .scr-label {
 	display: block;
-	font-size: var(--netz-text-label, 0.75rem);
-	font-weight: 500;
-	color: var(--netz-text-muted);
-	margin-bottom: 2px;
+	font-size: 12px;
+	font-weight: 700;
+	color: #62748e;
+	text-transform: uppercase;
+	letter-spacing: 1.2px;
+	margin-bottom: 6px;
 }
 
 .scr-input,
 .scr-select {
 	width: 100%;
-	height: var(--netz-space-control-height-sm, 30px);
-	padding: 0 var(--netz-space-inline-xs, 8px);
-	border: 1px solid var(--netz-border);
-	border-radius: var(--netz-radius-sm, 6px);
-	background: var(--netz-surface);
+	height: 45px;
+	padding: 0 16px;
+	border: 1px solid #e2e8f0;
+	border-radius: 14px;
+	background: white;
 	color: var(--netz-text-primary);
-	font-size: var(--netz-text-small, 0.8125rem);
+	font-size: 14px;
 	font-family: var(--netz-font-sans);
 	transition: border-color 120ms ease;
+	box-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 
 .scr-input--half { width: 50%; }
@@ -57,11 +60,11 @@
 .scr-input:focus,
 .scr-select:focus {
 	outline: none;
-	border-color: var(--netz-border-focus);
-	box-shadow: 0 0 0 2px color-mix(in srgb, var(--netz-brand-secondary) 20%, transparent);
+	border-color: #155dfc;
+	box-shadow: 0 0 0 3px rgba(21,93,252,0.1);
 }
 
-.scr-input::placeholder { color: var(--netz-text-muted); }
+.scr-input::placeholder { color: #90a1b9; }
 
 .scr-checkbox {
 	display: flex;
@@ -275,19 +278,23 @@
 .scr-data-header {
 	display: flex;
 	align-items: center;
-	padding: var(--netz-space-stack-xs, 10px) var(--netz-space-inline-md, 16px);
-	border-bottom: 1px solid var(--netz-border-subtle);
+	gap: 12px;
+	padding: 24px;
+	border-bottom: 1px solid #e2e8f0;
 	flex-shrink: 0;
 }
 
 .scr-data-count {
-	font-size: var(--netz-text-small, 0.8125rem);
-	font-weight: 500;
-	color: var(--netz-text-secondary);
+	font-size: 20px;
+	font-weight: 700;
+	color: #1d293d;
 	font-variant-numeric: tabular-nums;
+	display: flex;
+	align-items: center;
+	gap: 12px;
 }
 
-.scr-data-count-muted { color: var(--netz-text-muted); }
+.scr-data-count-muted { color: var(--netz-text-muted); font-size: 14px; font-weight: 500; }
 
 .scr-empty {
 	flex: 1;
@@ -307,7 +314,7 @@
 .scr-table {
 	width: 100%;
 	border-collapse: collapse;
-	font-size: var(--netz-text-small, 0.8125rem);
+	font-size: 14px;
 }
 
 .scr-table thead {
@@ -317,21 +324,22 @@
 }
 
 .scr-table th {
-	padding: var(--netz-space-stack-2xs, 5px) var(--netz-space-inline-sm, 10px);
+	padding: 14px 16px;
 	text-align: left;
-	font-size: var(--netz-text-label, 0.75rem);
-	font-weight: 600;
+	font-size: 11px;
+	font-weight: 700;
 	text-transform: uppercase;
-	letter-spacing: 0.02em;
-	color: var(--netz-text-muted);
-	background: var(--netz-surface-alt);
-	border-bottom: 1px solid var(--netz-border-subtle);
+	letter-spacing: 1.1px;
+	color: #62748e;
+	background: #f8fafc;
+	border-top: 1px solid #e2e8f0;
+	border-bottom: 1px solid #e2e8f0;
 	white-space: nowrap;
 }
 
 .scr-table td {
-	padding: var(--netz-space-stack-2xs, 6px) var(--netz-space-inline-sm, 10px);
-	border-bottom: 1px solid var(--netz-border-subtle);
+	padding: 16px;
+	border-bottom: 1px solid #f1f5f9;
 	vertical-align: middle;
 }
 
@@ -382,7 +390,9 @@
 .std-aum {
 	text-align: right;
 	font-variant-numeric: tabular-nums;
-	color: var(--netz-text-primary);
+	color: #314158;
+	font-size: 14px;
+	font-weight: 600;
 }
 
 .std-loc { color: var(--netz-text-secondary); }
@@ -914,57 +924,71 @@
 .scr-inst-row {
 	cursor: pointer;
 	transition: background-color 80ms ease;
+	height: 78px;
 }
 
 .scr-inst-row:hover {
-	background: var(--netz-surface-highlight, var(--netz-surface-alt));
+	background: rgba(248,250,252,0.8);
 }
 
 .inst-name {
 	display: block;
-	font-weight: 500;
-	color: var(--netz-text-primary);
-	max-width: 250px;
+	font-weight: 600;
+	font-size: 14px;
+	color: #1d293d;
+	max-width: 280px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
 .inst-ids {
-	display: block;
-	font-size: var(--netz-text-label, 0.75rem);
-	color: var(--netz-text-muted);
-	font-family: var(--netz-font-mono);
+	display: inline-block;
+	font-size: 11px;
+	color: #62748e;
+	font-family: Consolas, var(--netz-font-mono, monospace);
+	background: #f1f5f9;
+	border-radius: 4px;
+	padding: 1px 6px;
+	margin-top: 4px;
 }
 
 .std-manager {
-	max-width: 150px;
+	max-width: 180px;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
-	color: var(--netz-text-secondary);
+	color: #155dfc;
+	font-size: 14px;
+	font-weight: 500;
 }
 
 /* ── Source & type badges ── */
 .source-badge, .type-badge {
 	display: inline-block;
-	padding: 1px 8px;
-	border-radius: var(--netz-radius-full, 100px);
-	font-size: var(--netz-text-label, 0.75rem);
-	font-weight: 500;
+	padding: 3px 10px;
+	border-radius: 10px;
+	font-size: 10px;
+	font-weight: 700;
 	text-transform: uppercase;
 	letter-spacing: 0.02em;
 }
 
-.source-badge--internal { background: color-mix(in srgb, var(--netz-brand-primary) 12%, transparent); color: var(--netz-brand-primary); }
-.source-badge--esma { background: color-mix(in srgb, var(--netz-success) 12%, transparent); color: var(--netz-success); }
-.source-badge--sec { background: color-mix(in srgb, var(--netz-warning) 12%, transparent); color: var(--netz-warning); }
+.type-badge {
+	background: #eff6ff;
+	border: 1px solid #dbeafe;
+	color: #1447e6;
+}
 
-.type-badge--fund { background: color-mix(in srgb, var(--netz-brand-secondary) 12%, transparent); color: var(--netz-brand-secondary); }
-.type-badge--etf { background: color-mix(in srgb, var(--netz-info, #3b82f6) 12%, transparent); color: var(--netz-info, #3b82f6); }
-.type-badge--bond { background: color-mix(in srgb, var(--netz-success) 12%, transparent); color: var(--netz-success); }
-.type-badge--equity { background: color-mix(in srgb, var(--netz-warning) 12%, transparent); color: var(--netz-warning); }
-.type-badge--hedge { background: color-mix(in srgb, var(--netz-danger) 12%, transparent); color: var(--netz-danger); }
+.source-badge--internal { background: #eff6ff; border: 1px solid #dbeafe; color: #1447e6; }
+.source-badge--esma { background: #ecfdf5; border: 1px solid #d0fae5; color: #007a55; }
+.source-badge--sec { background: #ecfdf5; border: 1px solid #d0fae5; color: #007a55; }
+
+.type-badge--fund { background: #eff6ff; border: 1px solid #dbeafe; color: #1447e6; }
+.type-badge--etf { background: #eff6ff; border: 1px solid #dbeafe; color: #1447e6; }
+.type-badge--bond { background: #ecfdf5; border: 1px solid #d0fae5; color: #007a55; }
+.type-badge--equity { background: #fef9ec; border: 1px solid #fde68a; color: #b45309; }
+.type-badge--hedge { background: #fef2f2; border: 1px solid #fecaca; color: #dc2626; }
 
 /* ADV 2A Brochure tab */
 .dt-brochure-text {

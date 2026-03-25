@@ -5,7 +5,6 @@
 <script lang="ts">
   import "./screener.css";
   import { goto } from "$app/navigation";
-  import { Button } from "@netz/ui";
   import type { ScreenerTab, ScreenerFacets } from "$lib/types/screening";
   import { EMPTY_FACETS } from "$lib/types/screening";
 
@@ -286,79 +285,168 @@
 
     <!-- Actions -->
     <div class="filter-actions">
-      <Button size="sm" variant="ghost" onclick={clearFilters}>Clear</Button>
-      <Button size="sm" onclick={applyFilters}>Apply Filters</Button>
+      <button class="filter-clear-btn" onclick={clearFilters}>Clear</button>
+      <button class="filter-apply-btn" onclick={applyFilters}>Apply Filters</button>
     </div>
   </div>
 </div>
 
 <style>
   .filter-card {
-    border: 1px solid var(--netz-border-subtle);
+    border: 0.667px solid #e2e8f0;
     border-radius: 16px;
-    background: var(--netz-surface-elevated);
-    box-shadow: var(--netz-shadow-sm, 0 1px 3px rgba(0,0,0,0.06));
+    background: white;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1);
     overflow: hidden;
   }
 
+  /* Lifted tabs header */
   .filter-tabs {
     display: flex;
-    border-bottom: 1px solid var(--netz-border-subtle);
+    gap: 0;
+    padding: 16px 16px 0;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    height: 57px;
+    align-items: flex-end;
   }
 
   .filter-tab {
-    flex: 1;
-    padding: var(--netz-space-stack-xs, 10px) var(--netz-space-inline-md, 16px);
-    border: none;
-    border-bottom: 2px solid transparent;
-    background: transparent;
-    color: var(--netz-text-secondary);
-    font-size: var(--netz-text-small, 0.8125rem);
-    font-weight: 500;
-    font-family: var(--netz-font-sans);
+    padding: 10px 28px;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 10px 10px 0 0;
+    background: none;
+    font-size: 14px;
+    font-weight: 600;
+    color: #62748e;
     cursor: pointer;
-    transition: color 120ms ease, border-color 120ms ease;
+    font-family: var(--netz-font-sans);
+    transition: color 120ms, background 120ms;
+    margin-bottom: -1px;
+    position: relative;
   }
 
   .filter-tab:hover {
     color: var(--netz-text-primary);
-    background: var(--netz-surface-alt);
   }
 
   .filter-tab--active {
-    color: var(--netz-brand-primary);
-    border-bottom-color: var(--netz-brand-primary);
+    background: white;
+    border-color: #e2e8f0;
+    color: #1447e6;
     font-weight: 600;
+    box-shadow: 0 -2px 6px rgba(0,0,0,0.02);
   }
 
+  .filter-tab--active::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #155dfc;
+  }
+
+  /* Filter body */
   .filter-body {
-    padding: var(--netz-space-stack-sm, 14px) var(--netz-space-inline-md, 16px);
+    padding: 24px;
     display: flex;
     flex-direction: column;
-    gap: var(--netz-space-stack-sm, 12px);
+    gap: 20px;
   }
 
   .filter-search-input {
     width: 100%;
-    max-width: 480px;
+    max-width: 672px;
+    height: 45px;
+    padding: 0 16px 0 44px;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: rgba(248, 250, 252, 0.5);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    font-size: 14px;
+    color: var(--netz-text-primary);
+    font-family: var(--netz-font-sans);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2390a1b9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: 14px center;
   }
 
+  .filter-search-input::placeholder {
+    color: #90a1b9;
+  }
+
+  .filter-search-input:focus {
+    outline: none;
+    border-color: #155dfc;
+    box-shadow: 0 0 0 3px rgba(21,93,252,0.1);
+  }
+
+  .filter-search {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  /* Filter row */
   .filter-row {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--netz-space-inline-sm, 12px);
+    gap: 16px;
   }
 
   .filter-field {
     flex: 1;
     min-width: 160px;
-    max-width: 240px;
+    max-width: 260px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
 
+  /* Actions row */
   .filter-actions {
     display: flex;
     justify-content: flex-end;
-    gap: var(--netz-space-inline-xs, 8px);
+    gap: 12px;
+    border-top: 1px solid #f1f5f9;
+    padding-top: 24px;
+  }
+
+  .filter-clear-btn {
+    padding: 8px 20px;
+    border: none;
+    background: none;
+    font-size: 14px;
+    font-weight: 600;
+    color: #62748e;
+    cursor: pointer;
+    font-family: var(--netz-font-sans);
+    transition: color 120ms;
+  }
+
+  .filter-clear-btn:hover {
+    color: var(--netz-text-primary);
+  }
+
+  .filter-apply-btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 14px;
+    background: #155dfc;
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: var(--netz-font-sans);
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(37,99,235,0.25);
+    transition: background 120ms;
+  }
+
+  .filter-apply-btn:hover {
+    background: #1447e6;
   }
 
   @media (max-width: 768px) {
