@@ -29,7 +29,7 @@ const authHook = createClerkHook({
 	devBypass: import.meta.env.DEV,
 	devToken: DEV_TOKEN,
 	publicPrefixes: ["/health"],
-	signInUrl: "https://accounts.investintell.com/sign-in",
+	signInUrl: "https://accounts.investintell.com/sign-in?redirect_url=https://wealth.investintell.com",
 });
 
 /**
