@@ -1,5 +1,5 @@
 <!--
-  Manager detail panel — 7 tabs: profile, holdings, institutional, universe, drift, nport, docs.
+  Manager detail panel — 8 tabs: profile, holdings, institutional, universe, drift, nport, docs, brochure (ADV 2A).
 -->
 <script lang="ts">
 	import "./screener.css";
@@ -13,6 +13,7 @@
 	import { createClientApiClient } from "$lib/api/client";
 	import type {
 		ManagerProfile, HoldingsData, InstitutionalData, UniverseStatus, DetailTab,
+		ManagerBrochure,
 	} from "$lib/types/manager-screener";
 	import DriftTab from "./DriftTab.svelte";
 	import HoldingsTab from "./HoldingsTab.svelte";
@@ -33,6 +34,7 @@
 	let holdingsData = $state<HoldingsData | null>(null);
 	let institutionalData = $state<InstitutionalData | null>(null);
 	let universeData = $state<UniverseStatus | null>(null);
+	let brochureData = $state<ManagerBrochure | null>(null);
 
 	// Send to Review (add to universe + create DD report)
 	let reviewDialogOpen = $state(false);
@@ -49,6 +51,7 @@
 			holdingsData = null;
 			institutionalData = null;
 			universeData = null;
+			brochureData = null;
 			activeTab = "profile";
 			void fetchTab("profile");
 		}
@@ -72,6 +75,9 @@
 					break;
 				case "universe":
 					if (!universeData) universeData = await api.get<UniverseStatus>(`/manager-screener/managers/${panelCrd}/universe-status`);
+					break;
+				case "brochure":
+					if (!brochureData) brochureData = await api.get<ManagerBrochure>(`/manager-screener/managers/${panelCrd}/brochure/key-sections`);
 					break;
 			}
 		} catch {
@@ -129,13 +135,13 @@
 
 <!-- Tab bar -->
 <div class="dt-tabs">
-	{#each (["profile", "holdings", "institutional", "universe", "drift", "nport", "docs"] as DetailTab[]) as tab (tab)}
+	{#each (["profile", "holdings", "institutional", "universe", "drift", "nport", "docs", "brochure"] as DetailTab[]) as tab (tab)}
 		<button
 			class="dt-tab"
 			class:dt-tab--active={activeTab === tab}
 			onclick={() => tab === "drift" || tab === "nport" || tab === "docs" ? (activeTab = tab) : fetchTab(tab)}
 		>
-			{tab === "nport" ? "Holdings" : tab === "docs" ? "Docs" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+			{tab === "nport" ? "Holdings" : tab === "docs" ? "Docs" : tab === "brochure" ? "ADV 2A" : tab.charAt(0).toUpperCase() + tab.slice(1)}
 		</button>
 	{/each}
 </div>
@@ -299,6 +305,44 @@
 		<HoldingsTab crd={panelCrd} />
 	{:else if activeTab === "docs"}
 		<DocsTab crd={panelCrd} />
+	{:else if activeTab === "brochure"}
+		{#if brochureData}
+			{#if Object.keys(brochureData.sections).length === 0}
+				<div class="dt-empty">No ADV Part 2A brochure available for this manager.</div>
+			{:else}
+				{#if brochureData.sections.item_8}
+					<div class="dt-section">
+						<h4 class="dt-section-title">
+							Item 8 — Investment Strategy & Methods of Analysis
+							{#if brochureData.sections.item_8.filing_date}
+								<span class="dt-section-date">{brochureData.sections.item_8.filing_date}</span>
+							{/if}
+						</h4>
+						<p class="dt-brochure-text">{brochureData.sections.item_8.content}</p>
+					</div>
+				{/if}
+				{#if brochureData.sections.item_5}
+					<div class="dt-section">
+						<h4 class="dt-section-title">Item 5 — Fees and Compensation</h4>
+						<p class="dt-brochure-text">{brochureData.sections.item_5.content}</p>
+					</div>
+				{/if}
+				{#if brochureData.sections.item_9}
+					<div class="dt-section">
+						<h4 class="dt-section-title">Item 9 — Disciplinary Information</h4>
+						<p class="dt-brochure-text">{brochureData.sections.item_9.content}</p>
+					</div>
+				{/if}
+				{#if brochureData.sections.item_10}
+					<div class="dt-section">
+						<h4 class="dt-section-title">Item 10 — Other Financial Industry Activities</h4>
+						<p class="dt-brochure-text">{brochureData.sections.item_10.content}</p>
+					</div>
+				{/if}
+			{/if}
+		{:else}
+			<div class="dt-loading">Loading ADV Part 2A…</div>
+		{/if}
 	{/if}
 </div>
 

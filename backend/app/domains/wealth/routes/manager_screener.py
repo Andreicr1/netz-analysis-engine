@@ -33,10 +33,12 @@ from app.domains.wealth.queries.manager_screener_sql import (
     build_screener_queries,
 )
 from app.domains.wealth.schemas.manager_screener import (
+    BrochureKeySection,
     BrochureSearchHit,
     BrochureSearchResponse,
     BrochureSectionItem,
     BrochureSectionsResponse,
+    ManagerBrochureRead,
     DriftQuarter,
     HoldingRow,
     InstitutionalHolder,
@@ -783,6 +785,56 @@ async def search_brochure(
         ],
         total_results=len(rows),
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  GET /managers/{crd}/brochure/key-sections — full content of key ADV items
+# ═══════════════════════════════════════════════════════════════════════════
+
+_KEY_SECTIONS = ("item_5", "item_8", "item_9", "item_10")
+
+
+@router.get(
+    "/managers/{crd}/brochure/key-sections",
+    response_model=ManagerBrochureRead,
+    summary="Full content of key ADV Part 2A sections",
+)
+@route_cache(ttl=3600, global_key=True, key_prefix="mgr:brochure")
+async def get_brochure_key_sections(
+    crd: str = Path(...),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> ManagerBrochureRead:
+    """Return full text for item_5, item_8, item_9, item_10.
+
+    Deduplicates by latest filing_date per section.
+    Returns empty sections dict if no brochure data.
+    """
+    _require_investment_role(actor)
+    crd = _validate_crd(crd)
+    await _get_manager(db, crd)  # 404 if not found
+
+    result = await db.execute(
+        text(
+            "SELECT DISTINCT ON (section) section, content, filing_date "
+            "FROM sec_manager_brochure_text "
+            "WHERE crd_number = :crd "
+            "  AND section = ANY(:sections) "
+            "ORDER BY section, filing_date DESC"
+        ),
+        {"crd": crd, "sections": list(_KEY_SECTIONS)},
+    )
+    rows = result.mappings().all()
+
+    sections: dict[str, BrochureKeySection] = {}
+    for r in rows:
+        sections[r["section"]] = BrochureKeySection(
+            section=r["section"],
+            content=r["content"],
+            filing_date=r["filing_date"],
+        )
+
+    return ManagerBrochureRead(crd_number=crd, sections=sections)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

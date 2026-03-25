@@ -821,6 +821,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/manager-screener/managers/{crd}/brochure/key-sections",
+    "name": "get_brochure_key_sections"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/manager-screener/managers/{crd}/brochure/sections",
     "name": "get_brochure_sections"
   },

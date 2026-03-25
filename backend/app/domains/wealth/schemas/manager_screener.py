@@ -257,3 +257,14 @@ class BrochureSearchResponse(BaseModel):
     query: str
     results: list[BrochureSearchHit]
     total_results: int
+
+
+class BrochureKeySection(BaseModel):
+    section: str
+    content: str
+    filing_date: date | None = None
+
+
+class ManagerBrochureRead(BaseModel):
+    crd_number: str
+    sections: dict[str, BrochureKeySection]

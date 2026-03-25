@@ -83,7 +83,7 @@ export interface CompareResult {
 	jaccard_overlap: number;
 }
 
-export type DetailTab = "profile" | "holdings" | "institutional" | "universe" | "drift" | "nport" | "docs";
+export type DetailTab = "profile" | "holdings" | "institutional" | "universe" | "drift" | "nport" | "docs" | "brochure";
 
 // ── Drift tab ──
 export interface DriftQuarter {
@@ -151,6 +151,17 @@ export interface BrochureSearchResponse {
 	query: string;
 	results: BrochureSearchHit[];
 	total_results: number;
+}
+
+export interface BrochureKeySection {
+	section: string;
+	content: string;
+	filing_date: string | null;
+}
+
+export interface ManagerBrochure {
+	crd_number: string;
+	sections: Record<string, BrochureKeySection>;
 }
 
 export const EMPTY_SCREENER: ScreenerPage = {
