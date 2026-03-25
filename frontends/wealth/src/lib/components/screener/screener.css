@@ -982,7 +982,7 @@
 
 .source-badge--internal { background: #eff6ff; border: 1px solid #dbeafe; color: #1447e6; }
 .source-badge--esma { background: #ecfdf5; border: 1px solid #d0fae5; color: #007a55; }
-.source-badge--sec { background: #ecfdf5; border: 1px solid #d0fae5; color: #007a55; }
+.source-badge--sec { background: #fff7ed; border: 1px solid #fed7aa; color: #c2410c; }
 
 .type-badge--fund { background: #eff6ff; border: 1px solid #dbeafe; color: #1447e6; }
 .type-badge--etf { background: #eff6ff; border: 1px solid #dbeafe; color: #1447e6; }

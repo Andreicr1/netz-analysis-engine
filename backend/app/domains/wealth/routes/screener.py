@@ -44,7 +44,7 @@ from app.domains.wealth.schemas.screening import (
     ScreeningRunResponse,
 )
 from app.shared.enums import Role
-from app.shared.models import EsmaFund, EsmaIsinTickerMap, EsmaManager
+from app.shared.models import EsmaFund, EsmaIsinTickerMap, EsmaManager, SecManager
 
 logger = structlog.get_logger()
 
@@ -414,10 +414,62 @@ def _build_esma_query(
     return stmt
 
 
+def _build_sec_query(
+    q: str | None,
+    geography: str | None,
+    aum_min: float | None,
+    aum_max: float | None,
+):
+    """Build a select for sec_managers as fund-like searchable items.
+
+    SEC managers are US-based investment advisers from FOIA bulk data.
+    Only include Registered advisers with AUM > 0 for relevance.
+    """
+    stmt = (
+        select(
+            literal(None).label("instrument_id"),
+            literal("sec").label("source"),
+            literal("fund").label("instrument_type"),
+            SecManager.firm_name.label("name"),
+            literal(None).label("isin"),
+            SecManager.crd_number.label("ticker"),
+            literal("equity").label("asset_class"),
+            literal("north_america").label("geography"),
+            SecManager.state.label("domicile"),
+            literal("USD").label("currency"),
+            literal(None).label("strategy"),
+            SecManager.aum_total.cast(String).label("aum"),
+            SecManager.firm_name.label("manager_name"),
+            SecManager.crd_number.label("manager_crd"),
+            literal(None).label("esma_manager_id"),
+            literal(None).label("approval_status"),
+            literal(None).label("block_id"),
+            SecManager.registration_status.label("structure"),
+        )
+        .where(SecManager.registration_status == "Registered")
+        .where(SecManager.aum_total > 0)
+    )
+    if q:
+        pattern = f"%{q}%"
+        stmt = stmt.where(
+            SecManager.firm_name.ilike(pattern)
+            | (SecManager.crd_number == q)
+            | (SecManager.cik == q)
+        )
+    if geography and geography not in ("north_america", "global", "us"):
+        stmt = stmt.where(literal(False))
+    if aum_min is not None:
+        stmt = stmt.where(SecManager.aum_total >= aum_min)
+    if aum_max is not None:
+        stmt = stmt.where(SecManager.aum_total <= aum_max)
+    stmt = stmt.limit(1000)
+    return stmt
+
+
 @router.get(
     "/search",
     response_model=InstrumentSearchPage,
-    summary="Global instrument search across internal universe and ESMA",
+    summary="Global instrument search across internal universe, ESMA, and SEC",
 )
 @route_cache(ttl=60, key_prefix="screener:search")
 async def search_instruments(
@@ -458,6 +510,15 @@ async def search_instruments(
         and approval_status is None
     ):
         queries.append(_build_esma_query(q, geography, domicile, currency))
+
+    # SEC/US managers (if source=sec, or source is None and type is fund-like or None)
+    if source == "sec" or (
+        source is None
+        and instrument_type in (None, "fund")
+        and block_id is None
+        and approval_status is None
+    ):
+        queries.append(_build_sec_query(q, geography, aum_min, aum_max))
 
     if not queries:
         return InstrumentSearchPage(items=[], total=0, page=page, page_size=page_size, has_next=False)
@@ -578,7 +639,7 @@ async def get_screener_facets(
     dom_counts: dict[str, int] = {}
     cur_counts: dict[str, int] = {}
     strat_counts: dict[str, int] = {}
-    source_counts: dict[str, int] = {"internal": 0, "esma": 0}
+    source_counts: dict[str, int] = {"internal": 0, "esma": 0, "sec": 0}
     total_approved = 0
 
     for inst in instruments:
@@ -609,6 +670,24 @@ async def get_screener_facets(
         type_counts["fund"] = type_counts.get("fund", 0) + esma_count
         geo_counts["dm_europe"] = geo_counts.get("dm_europe", 0) + esma_count
 
+    # SEC count (if not filtered to internal or esma only)
+    if source not in ("internal", "esma"):
+        sec_count_stmt = (
+            select(sa_func.count())
+            .select_from(SecManager)
+            .where(SecManager.registration_status == "Registered")
+            .where(SecManager.aum_total > 0)
+        )
+        if q:
+            sec_count_stmt = sec_count_stmt.where(
+                SecManager.firm_name.ilike(f"%{q}%")
+                | (SecManager.crd_number == q)
+            )
+        sec_count = (await db.execute(sec_count_stmt)).scalar() or 0
+        source_counts["sec"] = sec_count
+        type_counts["fund"] = type_counts.get("fund", 0) + sec_count
+        geo_counts["north_america"] = geo_counts.get("north_america", 0) + sec_count
+
     # Screening status facets
     sr_stmt = (
         select(ScreeningResult.overall_status, sa_func.count())
@@ -623,7 +702,7 @@ async def get_screener_facets(
         total_screened += sr_count
 
     def to_facets(counts: dict[str, int]) -> list[FacetItem]:
-        GEO_LABELS = {"dm_europe": "Europe (UCITS)"}
+        GEO_LABELS = {"dm_europe": "Europe (UCITS)", "north_america": "North America (SEC)"}
         return sorted(
             [FacetItem(value=k, label=GEO_LABELS.get(k, k), count=v) for k, v in counts.items() if v > 0],
             key=lambda f: -f.count,
