@@ -766,11 +766,10 @@ class AdvService:
         SEC requires all Part 2A brochures to be text-searchable PDF
         (mandatory since 2010). No OCR needed — PyMuPDF text extraction.
         """
-        from ai_engine.pipeline.storage_routing import global_reference_path
         from app.services.storage_client import get_storage_client
 
         storage = get_storage_client()
-        storage_key = global_reference_path("sec_brochures", f"{crd_number}.pdf")
+        storage_key = f"gold/_global/sec_brochures/{crd_number}.pdf"
 
         # 1. Try StorageClient (worker-populated)
         try:

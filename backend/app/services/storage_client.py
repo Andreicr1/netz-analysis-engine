@@ -32,6 +32,19 @@ logger = logging.getLogger(__name__)
 
 # Matches safe path segments: alphanumeric start, then alphanumeric/dot/dash/underscore/space.
 _SAFE_PATH_SEGMENT_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._\- ]*$")
+_VALID_VERTICALS = frozenset({"credit", "wealth"})
+
+
+def _validate_storage_segment(value: str, label: str) -> None:
+    if not value:
+        raise ValueError(f"{label} must not be empty")
+    if not _SAFE_PATH_SEGMENT_RE.match(value):
+        raise ValueError(f"Invalid {label}: {value!r}")
+
+
+def _validate_storage_vertical(vertical: str) -> None:
+    if vertical not in _VALID_VERTICALS:
+        raise ValueError(f"Invalid vertical: {vertical!r}")
 
 
 class StorageClient(ABC):
@@ -179,11 +192,9 @@ class LocalStorageClient(StorageClient):
         return target.as_uri()
 
     def get_duckdb_path(self, tier: Literal["bronze", "silver", "gold"], org_id: UUID, vertical: str) -> str:
-        from ai_engine.pipeline.storage_routing import _validate_segment, _validate_vertical
-
-        _validate_segment(str(org_id), "org_id")
-        _validate_vertical(vertical)
-        _validate_segment(tier, "tier")
+        _validate_storage_segment(str(org_id), "org_id")
+        _validate_storage_vertical(vertical)
+        _validate_storage_segment(tier, "tier")
         resolved = self._resolve(f"{tier}/{org_id}/{vertical}")
         return str(resolved).replace("\\", "/") + "/"
 
@@ -295,11 +306,9 @@ class R2StorageClient(StorageClient):
         return url
 
     def get_duckdb_path(self, tier: Literal["bronze", "silver", "gold"], org_id: UUID, vertical: str) -> str:
-        from ai_engine.pipeline.storage_routing import _validate_segment, _validate_vertical
-
-        _validate_segment(str(org_id), "org_id")
-        _validate_vertical(vertical)
-        _validate_segment(tier, "tier")
+        _validate_storage_segment(str(org_id), "org_id")
+        _validate_storage_vertical(vertical)
+        _validate_storage_segment(tier, "tier")
         return f"s3://{self._bucket_name}/{tier}/{org_id}/{vertical}/"
 
 
