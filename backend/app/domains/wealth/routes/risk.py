@@ -1,5 +1,5 @@
 import asyncio
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import redis.asyncio as aioredis
 import structlog
@@ -246,12 +246,23 @@ async def get_cvar_history(
     user: CurrentUser = Depends(get_current_user),
 ) -> list[CVaRPoint]:
     _validate_profile(profile)
-    stmt = select(PortfolioSnapshot).where(PortfolioSnapshot.profile == profile)
-    if from_date is not None:
-        stmt = stmt.where(PortfolioSnapshot.snapshot_date >= from_date)
-    if to_date is not None:
-        stmt = stmt.where(PortfolioSnapshot.snapshot_date <= to_date)
-    stmt = stmt.order_by(PortfolioSnapshot.snapshot_date).offset(offset).limit(limit)
+
+    today = date.today()
+    # Default: last 6 months if no from_date — avoids full hypertable scan
+    if from_date is None:
+        from_date = today - timedelta(days=180)
+    if to_date is None:
+        to_date = today
+
+    stmt = (
+        select(PortfolioSnapshot)
+        .where(PortfolioSnapshot.profile == profile)
+        .where(PortfolioSnapshot.snapshot_date >= from_date)
+        .where(PortfolioSnapshot.snapshot_date <= to_date)
+        .order_by(PortfolioSnapshot.snapshot_date)
+        .offset(offset)
+        .limit(limit)
+    )
     result = await db.execute(stmt)
     return [
         CVaRPoint(
@@ -308,12 +319,22 @@ async def get_regime_history(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[RegimeHistoryPoint]:
-    stmt = select(PortfolioSnapshot).where(PortfolioSnapshot.regime.is_not(None))
-    if from_date is not None:
-        stmt = stmt.where(PortfolioSnapshot.snapshot_date >= from_date)
-    if to_date is not None:
-        stmt = stmt.where(PortfolioSnapshot.snapshot_date <= to_date)
-    stmt = stmt.order_by(PortfolioSnapshot.snapshot_date).offset(offset).limit(limit)
+    today = date.today()
+    # Default: last 6 months if no from_date — avoids full hypertable scan
+    if from_date is None:
+        from_date = today - timedelta(days=180)
+    if to_date is None:
+        to_date = today
+
+    stmt = (
+        select(PortfolioSnapshot)
+        .where(PortfolioSnapshot.regime.is_not(None))
+        .where(PortfolioSnapshot.snapshot_date >= from_date)
+        .where(PortfolioSnapshot.snapshot_date <= to_date)
+        .order_by(PortfolioSnapshot.snapshot_date)
+        .offset(offset)
+        .limit(limit)
+    )
     result = await db.execute(stmt)
     return [
         RegimeHistoryPoint(

@@ -14,6 +14,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.core.config.settings import settings
 from app.core.db.engine import engine
@@ -102,6 +103,7 @@ from app.domains.wealth.routes.model_portfolios import router as wealth_model_po
 from app.domains.wealth.routes.portfolios import router as wealth_portfolios_router
 from app.domains.wealth.routes.risk import router as wealth_risk_router
 from app.domains.wealth.routes.screener import router as wealth_screener_router
+from app.domains.wealth.routes.sec_analysis import router as wealth_sec_analysis_router
 from app.domains.wealth.routes.strategy_drift import router as wealth_strategy_drift_router
 from app.domains.wealth.routes.universe import router as wealth_universe_router
 from app.domains.wealth.routes.workers import router as wealth_workers_router
@@ -240,6 +242,31 @@ app.add_middleware(
 )
 
 
+
+# ── Global exception handler (CORS-safe error responses) ─────
+# When an unhandled exception occurs, FastAPI's default 500 response
+# bypasses CORSMiddleware header injection. This handler returns a
+# JSONResponse which CORSMiddleware (outermost) WILL enrich with
+# Access-Control-Allow-Origin, preventing the browser from masking
+# the real 500 as a "blocked by CORS" error.
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import structlog
+    slog = structlog.get_logger()
+    slog.error(
+        "unhandled_exception",
+        path=request.url.path,
+        method=request.method,
+        error=str(exc),
+        exc_type=type(exc).__name__,
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
+
+
 # ── Health endpoints ─────────────────────────────────────────
 
 
@@ -351,6 +378,7 @@ api_v1.include_router(wealth_correlation_regime_router)
 api_v1.include_router(wealth_esma_router)
 api_v1.include_router(wealth_exposure_router)
 api_v1.include_router(wealth_blended_benchmark_router)
+api_v1.include_router(wealth_sec_analysis_router)
 
 # ── Mount credit domain routes ───────────────────────────────
 

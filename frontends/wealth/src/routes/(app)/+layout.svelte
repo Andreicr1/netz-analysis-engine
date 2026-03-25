@@ -45,7 +45,11 @@
 	setContext<RiskStore>("netz:riskStore", riskStore);
 
 	onMount(() => {
-		riskStore.start();
+		try {
+			riskStore.start();
+		} catch (e) {
+			console.warn("Risk store failed to start:", e);
+		}
 		return () => riskStore.destroy();
 	});
 
