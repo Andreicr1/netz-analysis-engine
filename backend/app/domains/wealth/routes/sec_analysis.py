@@ -112,6 +112,7 @@ async def search_managers(
             Sec13fHolding.cik,
             func.max(Sec13fHolding.report_date).label("last_13f_date"),
         )
+        .where(Sec13fHolding.report_date <= date.today())
         .group_by(Sec13fHolding.cik)
         .subquery()
     )
@@ -223,7 +224,7 @@ async def search_managers(
             last_adv_filed_at=m.last_adv_filed_at,
             compliance_disclosures=m.compliance_disclosures,
             has_13f_filings=last_13f_date is not None,
-            last_filing_date=last_13f_date.isoformat() if last_13f_date else None,
+            last_filing_date=last_13f_date if last_13f_date else None,
         )
         for m, last_13f_date in rows
     ]

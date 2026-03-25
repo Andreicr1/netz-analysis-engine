@@ -33,7 +33,7 @@ class SecManagerItem(BaseModel):
     last_adv_filed_at: date | None = None
     compliance_disclosures: int | None = None
     has_13f_filings: bool = False
-    last_filing_date: str | None = None
+    last_filing_date: date | None = None
 
 
 class SecHoldingItem(BaseModel):

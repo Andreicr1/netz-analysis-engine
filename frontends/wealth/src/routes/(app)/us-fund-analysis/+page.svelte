@@ -150,6 +150,7 @@
 				{#if current === "overview"}
 					<div class="ufa-filters-section">
 						<div class="ufa-filters-header">
+							<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 3h12l-4.5 5.3V13l-3-1.5V8.3L2 3z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
 							<span class="ufa-filters-label">Filter Parameters</span>
 						</div>
 						<form class="ufa-filters-row" onsubmit={(e) => { e.preventDefault(); applyFilters(); }}>
@@ -327,8 +328,8 @@
 	}
 
 	.ufa-card {
-		background: var(--netz-surface-elevated);
-		border: 1px solid var(--netz-border-subtle);
+		background: #ffffff;
+		border: 1px solid #e2e8f0;
 		border-radius: 16px;
 		overflow: hidden;
 		box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
@@ -337,8 +338,8 @@
 	/* Filters */
 	.ufa-filters-section {
 		padding: 24px;
-		border-bottom: 1px solid var(--netz-border-subtle);
-		background: var(--netz-surface-elevated);
+		border-bottom: 1px solid #f1f5f9;
+		background: #ffffff;
 	}
 
 	.ufa-filters-header {
@@ -346,19 +347,20 @@
 		align-items: center;
 		gap: 8px;
 		margin-bottom: 16px;
+		color: #62748e;
 	}
 
 	.ufa-filters-label {
-		font-size: var(--netz-text-label, 0.75rem);
+		font-size: 11px;
 		font-weight: 700;
 		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--netz-text-muted);
+		letter-spacing: 1.1px;
+		color: #62748e;
 	}
 
 	.ufa-filters-row {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+		grid-template-columns: repeat(5, 1fr);
 		gap: 16px;
 	}
 
@@ -371,28 +373,30 @@
 	.ufa-field-label {
 		font-size: 12px;
 		font-weight: 700;
-		color: var(--netz-text-secondary);
+		color: #45556c;
 	}
 
 	.ufa-input,
 	.ufa-select {
 		padding: 8px 12px;
 		font-size: 14px;
-		border: 1px solid var(--netz-border-subtle);
+		height: 37px;
+		border: 1px solid #e2e8f0;
 		border-radius: 10px;
-		background: var(--netz-surface-alt);
-		color: var(--netz-text-primary);
+		background: #f8fafc;
+		color: #1d293d;
 		font-family: var(--netz-font-sans);
 	}
 
 	.ufa-input::placeholder {
-		color: var(--netz-text-muted);
+		color: #90a1b9;
+		font-weight: 500;
 	}
 
 	.ufa-input:focus,
 	.ufa-select:focus {
 		outline: none;
-		border-color: var(--netz-brand-primary);
+		border-color: #155dfc;
 	}
 
 	.ufa-input--search {
@@ -410,7 +414,7 @@
 		top: 50%;
 		transform: translateY(-50%);
 		font-size: 14px;
-		color: var(--netz-text-muted);
+		color: #90a1b9;
 		pointer-events: none;
 	}
 
@@ -420,14 +424,14 @@
 		gap: 12px;
 		margin-top: 16px;
 		padding-top: 16px;
-		border-top: 1px solid var(--netz-border-subtle);
+		border-top: 1px solid #f1f5f9;
 	}
 
 	.ufa-btn-clear {
 		padding: 8px 16px;
 		font-size: 14px;
 		font-weight: 700;
-		color: var(--netz-text-secondary);
+		color: #62748e;
 		background: none;
 		border: none;
 		border-radius: 10px;
@@ -435,7 +439,7 @@
 	}
 
 	.ufa-btn-clear:hover {
-		color: var(--netz-text-primary);
+		color: #1d293d;
 	}
 
 	.ufa-btn-apply {
@@ -443,7 +447,7 @@
 		font-size: 14px;
 		font-weight: 700;
 		color: white;
-		background: var(--netz-brand-primary);
+		background: #155dfc;
 		border: none;
 		border-radius: 10px;
 		cursor: pointer;
@@ -499,13 +503,19 @@
 		margin-top: 8px;
 	}
 
-	@media (max-width: 1024px) {
+	@media (max-width: 1200px) {
 		.ufa-filters-row {
 			grid-template-columns: repeat(3, 1fr);
 		}
 	}
 
-	@media (max-width: 600px) {
+	@media (max-width: 768px) {
+		.ufa-filters-row {
+			grid-template-columns: repeat(2, 1fr);
+		}
+	}
+
+	@media (max-width: 480px) {
 		.ufa-filters-row {
 			grid-template-columns: 1fr;
 		}

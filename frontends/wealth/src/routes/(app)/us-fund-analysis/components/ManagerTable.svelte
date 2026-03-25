@@ -64,9 +64,6 @@
 								>
 									{mgr.firm_name}
 								</button>
-								{#if mgr.compliance_disclosures && mgr.compliance_disclosures > 0}
-									<span class="mt-badge mt-badge--destructive" title="Has compliance disclosures">Flagged</span>
-								{/if}
 							</div>
 						</td>
 						<td class="mt-td mt-td--entity">
@@ -126,7 +123,7 @@
 	.mt-empty {
 		padding: 48px 24px;
 		text-align: center;
-		color: var(--netz-text-muted);
+		color: #62748e;
 		font-size: 14px;
 	}
 
@@ -135,8 +132,8 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 12px 24px;
-		font-size: var(--netz-text-small, 0.8125rem);
-		color: var(--netz-text-muted);
+		font-size: 13px;
+		color: #62748e;
 	}
 
 	.mt-table-wrap {
@@ -150,28 +147,33 @@
 
 	.mt-th {
 		padding: 12px 24px;
-		font-size: var(--netz-text-label, 0.75rem);
+		font-size: 11px;
 		font-weight: 700;
 		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--netz-text-muted);
+		letter-spacing: 1.1px;
+		color: #62748e;
 		text-align: left;
-		background: color-mix(in srgb, var(--netz-surface-alt) 50%, transparent);
-		border-bottom: 1px solid var(--netz-border-subtle);
+		background: rgba(248, 250, 252, 0.5);
+		border-bottom: 1px solid #f1f5f9;
 	}
 
 	.mt-th--right {
 		text-align: right;
 	}
 
+	.mt-th--center {
+		text-align: center;
+	}
+
 	.mt-row {
 		cursor: pointer;
-		border-bottom: 1px solid var(--netz-border-subtle);
+		border-bottom: 1px solid #f1f5f9;
 		transition: background 100ms ease;
+		height: 64px;
 	}
 
 	.mt-row:hover {
-		background: color-mix(in srgb, var(--netz-surface-alt) 30%, transparent);
+		background: rgba(248, 250, 252, 0.5);
 	}
 
 	.mt-row:last-child {
@@ -203,11 +205,11 @@
 		width: 32px;
 		height: 32px;
 		border-radius: 10px;
-		background: var(--netz-surface-alt);
+		background: #f1f5f9;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		color: var(--netz-text-muted);
+		color: #62748e;
 		flex-shrink: 0;
 	}
 
@@ -217,7 +219,7 @@
 		padding: 0;
 		font-size: 14px;
 		font-weight: 700;
-		color: var(--netz-text-primary);
+		color: #1d293d;
 		cursor: pointer;
 		text-align: left;
 	}
@@ -227,35 +229,34 @@
 	}
 
 	.mt-td--entity {
-		color: var(--netz-text-secondary);
+		color: #62748e;
+		font-weight: 500;
 	}
 
 	.mt-td--state {
-		color: var(--netz-text-secondary);
+		color: #62748e;
+		font-weight: 500;
 	}
 
 	.mt-td--13f {
 		text-align: center;
 	}
 
-	.mt-th--center {
-		text-align: center;
-	}
-
 	.mt-text-muted {
-		color: var(--netz-text-muted);
+		color: #90a1b9;
 	}
 
 	.mt-td--aum {
 		text-align: right;
 		font-weight: 900;
 		font-variant-numeric: tabular-nums;
-		color: var(--netz-text-primary);
+		color: #314158;
 	}
 
 	.mt-td--date {
 		text-align: right;
-		color: var(--netz-text-muted);
+		color: #90a1b9;
+		font-weight: 500;
 	}
 
 	.mt-pagination {
@@ -269,10 +270,10 @@
 	.mt-page-btn {
 		padding: 4px 12px;
 		font-size: 12px;
-		border: 1px solid var(--netz-border-subtle);
+		border: 1px solid #e2e8f0;
 		border-radius: 4px;
-		background: var(--netz-surface-primary);
-		color: var(--netz-text-primary);
+		background: #ffffff;
+		color: #1d293d;
 		cursor: pointer;
 	}
 
@@ -283,31 +284,23 @@
 
 	.mt-page-info {
 		font-size: 12px;
-		color: var(--netz-text-muted);
+		color: #62748e;
 	}
 
 	.mt-badge {
 		display: inline-block;
-		padding: 2px 8px;
+		padding: 4px 8px;
 		font-size: 11px;
 		font-weight: 700;
-		border-radius: 6px;
-		line-height: 1.4;
-	}
-
-	.mt-badge--warning {
-		background: color-mix(in srgb, var(--netz-status-warning, #f59e0b) 15%, transparent);
-		color: var(--netz-status-warning, #f59e0b);
-	}
-
-	.mt-badge--destructive {
-		background: color-mix(in srgb, var(--netz-status-error, #ef4444) 15%, transparent);
-		color: var(--netz-status-error, #ef4444);
+		border-radius: 4px;
+		line-height: 1;
+		text-transform: uppercase;
+		letter-spacing: 0.55px;
 	}
 
 	.mt-badge--success {
-		background: color-mix(in srgb, var(--netz-color-success, #22c55e) 15%, transparent);
-		color: var(--netz-color-success, #22c55e);
+		background: #ecfdf5;
+		color: #009966;
 	}
 
 	@media (max-width: 1024px) {
