@@ -29,6 +29,24 @@ logger = logging.getLogger(__name__)
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
+# Fixed namespace for deterministic Clerk org ID → UUID conversion.
+# Clerk org IDs are strings ("org_xxx"), but the DB uses UUID for organization_id.
+# uuid5(NAMESPACE, "org_xxx") always produces the same UUID for the same input.
+_CLERK_ORG_NAMESPACE = uuid.UUID("6ba7b814-9dad-11d1-80b4-00c04fd430c8")  # NAMESPACE_URL
+
+
+def clerk_org_to_uuid(clerk_org_id: str) -> uuid.UUID:
+    """Convert a Clerk organization ID (string) to a deterministic UUID.
+
+    Used both in auth (JWT → Actor) and in seed scripts to ensure the same
+    Clerk org ID always maps to the same internal UUID.
+    """
+    try:
+        return uuid.UUID(clerk_org_id)
+    except ValueError:
+        return uuid.uuid5(_CLERK_ORG_NAMESPACE, clerk_org_id)
+
+
 # Clerk org role slug → internal Role enum
 CLERK_TO_ROLE: dict[str, Role] = {
     "org:super_admin": Role.SUPER_ADMIN,
@@ -172,7 +190,7 @@ async def get_actor(
         name=decoded.get("name", ""),
         email=decoded.get("email", ""),
         roles=[internal_role],
-        organization_id=uuid.UUID(org_id_str) if org_id_str else None,
+        organization_id=clerk_org_to_uuid(org_id_str) if org_id_str else None,
         organization_slug=org_claims.get("slg"),
         fund_ids=None,  # Resolved from DB on demand in fund-scoped routes
     )
