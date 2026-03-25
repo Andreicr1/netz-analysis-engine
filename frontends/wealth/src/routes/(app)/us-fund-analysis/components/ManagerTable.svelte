@@ -43,7 +43,7 @@
 					<th class="mt-th">Entity Type</th>
 					<th class="mt-th">State</th>
 					<th class="mt-th mt-th--right">AUM ($)</th>
-					<th class="mt-th mt-th--center">13F Filings</th>
+					<th class="mt-th mt-th--center">Funds</th>
 					<th class="mt-th mt-th--right">Last Filing</th>
 				</tr>
 			</thead>
@@ -92,9 +92,15 @@
 						<td class="mt-td mt-td--aum">
 							{mgr.aum_total != null ? `$${formatNumber(mgr.aum_total, 0)}` : "\u2014"}
 						</td>
-						<td class="mt-td mt-td--13f">
-							{#if mgr.has_13f_filings}
-								<span class="mt-badge mt-badge--success">YES</span>
+						<td class="mt-td mt-td--funds">
+							{#if mgr.private_fund_count && mgr.private_fund_count > 0}
+								<span class="mt-fund-tags">
+									{#if mgr.hedge_fund_count}<span class="mt-fund-tag mt-fund-tag--hedge">HF {mgr.hedge_fund_count}</span>{/if}
+									{#if mgr.pe_fund_count}<span class="mt-fund-tag mt-fund-tag--pe">PE {mgr.pe_fund_count}</span>{/if}
+									{#if mgr.vc_fund_count}<span class="mt-fund-tag mt-fund-tag--vc">VC {mgr.vc_fund_count}</span>{/if}
+								</span>
+							{:else if mgr.has_13f_filings}
+								<span class="mt-badge mt-badge--success">13F</span>
 							{:else}
 								<span class="mt-text-muted">{"\u2014"}</span>
 							{/if}
@@ -255,9 +261,30 @@
 		font-weight: 500;
 	}
 
-	.mt-td--13f {
+	.mt-td--funds {
 		text-align: center;
 	}
+
+	.mt-fund-tags {
+		display: flex;
+		gap: 4px;
+		flex-wrap: wrap;
+		justify-content: center;
+	}
+
+	.mt-fund-tag {
+		display: inline-block;
+		padding: 2px 6px;
+		font-size: 10px;
+		font-weight: 700;
+		border-radius: 4px;
+		line-height: 1.2;
+		letter-spacing: 0.3px;
+	}
+
+	.mt-fund-tag--hedge { background: #eff6ff; color: #1447e6; }
+	.mt-fund-tag--pe { background: #f5f3ff; color: #7c3aed; }
+	.mt-fund-tag--vc { background: #ecfdf5; color: #059669; }
 
 	.mt-text-muted {
 		color: #90a1b9;

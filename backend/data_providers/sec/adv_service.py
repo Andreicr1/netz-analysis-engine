@@ -448,7 +448,7 @@ class AdvService:
                     "firm_name": firm_name,
                     "sec_number": (row.get("SEC#") or row.get("SEC Number") or "").strip() or None,
                     "registration_status": (
-                        row.get("Status") or row.get("Registration Status") or ""
+                        row.get("Status") or row.get("Registration Status") or row.get("Firm Type") or ""
                     ).strip()
                     or None,
                     "aum_total": aum_total,
@@ -461,6 +461,15 @@ class AdvService:
                     or None,
                     "website": (row.get("Website") or "").strip() or None,
                     "compliance_disclosures": _parse_int(row.get("Q11")),
+                    "private_fund_count": _parse_int(row.get("Count of Private Funds - 7B(1)")),
+                    "hedge_fund_count": _parse_int(row.get("Total number of Hedge funds")),
+                    "pe_fund_count": _parse_int(row.get("Total number of PE funds")),
+                    "vc_fund_count": _parse_int(row.get("Total number of VC funds")),
+                    "real_estate_fund_count": _parse_int(row.get("Total number of Real Estate funds")),
+                    "securitized_fund_count": _parse_int(row.get("Total number of Securitized funds")),
+                    "liquidity_fund_count": _parse_int(row.get("Total number of Liquidity funds")),
+                    "other_fund_count": _parse_int(row.get("Total number of Other funds")),
+                    "total_private_fund_assets": _parse_int(row.get("Total Gross Assets of Private Funds")),
                     "last_adv_filed_at": _parse_date(row.get("Most Recent ADV Filing Date")),
                     "data_fetched_at": datetime.now(timezone.utc),
                 }
@@ -491,6 +500,15 @@ class AdvService:
                         "country": stmt.excluded.country,
                         "website": stmt.excluded.website,
                         "compliance_disclosures": stmt.excluded.compliance_disclosures,
+                        "private_fund_count": stmt.excluded.private_fund_count,
+                        "hedge_fund_count": stmt.excluded.hedge_fund_count,
+                        "pe_fund_count": stmt.excluded.pe_fund_count,
+                        "vc_fund_count": stmt.excluded.vc_fund_count,
+                        "real_estate_fund_count": stmt.excluded.real_estate_fund_count,
+                        "securitized_fund_count": stmt.excluded.securitized_fund_count,
+                        "liquidity_fund_count": stmt.excluded.liquidity_fund_count,
+                        "other_fund_count": stmt.excluded.other_fund_count,
+                        "total_private_fund_assets": stmt.excluded.total_private_fund_assets,
                         "last_adv_filed_at": stmt.excluded.last_adv_filed_at,
                         "data_fetched_at": stmt.excluded.data_fetched_at,
                     },

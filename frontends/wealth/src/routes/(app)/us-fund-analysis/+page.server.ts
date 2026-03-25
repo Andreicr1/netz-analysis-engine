@@ -13,6 +13,7 @@ export const load: PageServerLoad = async ({ parent, url }) => {
 	const state = url.searchParams.get("state") ?? "";
 	const has_13f = url.searchParams.get("has_13f") ?? "";
 	const aum_min = url.searchParams.get("aum_min") ?? "";
+	const fund_type = url.searchParams.get("fund_type") ?? "";
 	const page = url.searchParams.get("page") ?? "1";
 
 	const params: Record<string, string> = { page, page_size: "25" };
@@ -21,6 +22,7 @@ export const load: PageServerLoad = async ({ parent, url }) => {
 	if (state) params.state = state;
 	if (has_13f) params.has_13f = has_13f;
 	if (aum_min) params.aum_min = aum_min;
+	if (fund_type) params.fund_type = fund_type;
 
 	const [searchResults, sicCodes] = await Promise.all([
 		api

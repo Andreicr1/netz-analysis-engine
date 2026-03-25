@@ -27,6 +27,7 @@ from app.core.cache import route_cache
 from app.core.security.clerk_auth import Actor, get_actor
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.schemas.sec_analysis import (
+    BrochureSection,
     PeerHoldingOverlap,
     ReverseLookupItem,
     SecHoldingItem,
@@ -46,7 +47,13 @@ from app.domains.wealth.schemas.sec_analysis import (
     StyleDriftSignal,
 )
 from app.shared.enums import Role
-from app.shared.models import Sec13fDiff, Sec13fHolding, SecManager, SecManagerBrochureText, SecManagerFund
+from app.shared.models import (
+    Sec13fDiff,
+    Sec13fHolding,
+    SecManager,
+    SecManagerBrochureText,
+    SecManagerFund,
+)
 
 logger = structlog.get_logger()
 
@@ -100,6 +107,8 @@ async def search_managers(
     has_disclosures: bool | None = Query(None),
     strategy_keywords: str | None = Query(None, max_length=200, description="Full-text search in ADV Part 2A Item 8 (investment strategy narrative)"),
     has_13f: bool | None = Query(None),
+    has_private_funds: bool | None = Query(None),
+    fund_type: str | None = Query(None, description="Filter by fund type: hedge, pe, vc, real_estate"),
     sort_by: str = Query("aum_total"),
     sort_dir: str = Query("desc"),
     page: int = Query(1, ge=1),
@@ -139,8 +148,12 @@ async def search_managers(
             )
         )
 
-    if entity_type:
+    if entity_type and entity_type != "all":
         conditions.append(SecManager.registration_status == entity_type)
+    elif not entity_type:
+        # Default: Registered advisers only (investment managers)
+        conditions.append(SecManager.registration_status == "Registered")
+    # entity_type == "all" → no filter
 
     if state:
         conditions.append(SecManager.state == state)
@@ -190,6 +203,24 @@ async def search_managers(
     elif has_13f is False:
         conditions.append(thirteen_f_sub.c.cik.is_(None))
 
+    if has_private_funds is True:
+        conditions.append(SecManager.private_fund_count > 0)
+    elif has_private_funds is False:
+        conditions.append(
+            (SecManager.private_fund_count.is_(None)) | (SecManager.private_fund_count == 0)
+        )
+
+    if fund_type:
+        fund_col_map = {
+            "hedge": SecManager.hedge_fund_count,
+            "pe": SecManager.pe_fund_count,
+            "vc": SecManager.vc_fund_count,
+            "real_estate": SecManager.real_estate_fund_count,
+        }
+        col = fund_col_map.get(fund_type)
+        if col is not None:
+            conditions.append(col > 0)
+
     for cond in conditions:
         stmt = stmt.where(cond)
         count_stmt = count_stmt.where(cond)
@@ -225,6 +256,11 @@ async def search_managers(
             compliance_disclosures=m.compliance_disclosures,
             has_13f_filings=last_13f_date is not None,
             last_filing_date=last_13f_date if last_13f_date else None,
+            private_fund_count=m.private_fund_count,
+            hedge_fund_count=m.hedge_fund_count,
+            pe_fund_count=m.pe_fund_count,
+            vc_fund_count=m.vc_fund_count,
+            total_private_fund_assets=m.total_private_fund_assets,
         )
         for m, last_13f_date in rows
     ]
@@ -290,6 +326,23 @@ async def get_manager_detail(
             holdings_count = int(row["cnt"])
             total_value = int(row["total"]) if row["total"] else None
 
+    # Brochure sections
+    brochure_stmt = (
+        select(SecManagerBrochureText)
+        .where(SecManagerBrochureText.crd_number == manager.crd_number)
+        .order_by(SecManagerBrochureText.section)
+    )
+    brochure_result = await db.execute(brochure_stmt)
+    brochure_rows = brochure_result.scalars().all()
+    brochure_sections = [
+        BrochureSection(
+            section=b.section,
+            content=b.content[:2000],
+            filing_date=b.filing_date.isoformat() if b.filing_date else None,
+        )
+        for b in brochure_rows
+    ] or None
+
     return SecManagerDetail(
         crd_number=manager.crd_number,
         cik=manager.cik,
@@ -305,6 +358,12 @@ async def get_manager_detail(
         latest_quarter=latest_quarter.isoformat() if latest_quarter else None,
         holdings_count=holdings_count,
         total_portfolio_value=total_value,
+        private_fund_count=manager.private_fund_count,
+        hedge_fund_count=manager.hedge_fund_count,
+        pe_fund_count=manager.pe_fund_count,
+        vc_fund_count=manager.vc_fund_count,
+        total_private_fund_assets=manager.total_private_fund_assets,
+        brochure_sections=brochure_sections,
     )
 
 

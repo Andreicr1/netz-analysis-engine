@@ -34,6 +34,11 @@ class SecManagerItem(BaseModel):
     compliance_disclosures: int | None = None
     has_13f_filings: bool = False
     last_filing_date: date | None = None
+    private_fund_count: int | None = None
+    hedge_fund_count: int | None = None
+    pe_fund_count: int | None = None
+    vc_fund_count: int | None = None
+    total_private_fund_assets: int | None = None
 
 
 class SecHoldingItem(BaseModel):
@@ -102,6 +107,14 @@ class SecManagerSearchPage(BaseModel):
     has_next: bool
 
 
+class BrochureSection(BaseModel):
+    """Single brochure section from Form ADV Part 2A."""
+
+    section: str
+    content: str
+    filing_date: str | None = None
+
+
 class SecManagerDetail(BaseModel):
     """Manager detail with latest holdings summary."""
 
@@ -121,6 +134,12 @@ class SecManagerDetail(BaseModel):
     latest_quarter: str | None = None
     holdings_count: int = 0
     total_portfolio_value: int | None = None
+    private_fund_count: int | None = None
+    hedge_fund_count: int | None = None
+    pe_fund_count: int | None = None
+    vc_fund_count: int | None = None
+    total_private_fund_assets: int | None = None
+    brochure_sections: list[BrochureSection] | None = None
 
 
 class SecHoldingsPage(BaseModel):

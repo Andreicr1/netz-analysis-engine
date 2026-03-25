@@ -128,6 +128,16 @@ class SecManager(Base):
     country: Mapped[str | None] = mapped_column(Text)
     website: Mapped[str | None] = mapped_column(Text)
     compliance_disclosures: Mapped[int | None] = mapped_column(Integer)
+    # Fund counts from Form ADV Section 7B
+    private_fund_count: Mapped[int | None] = mapped_column(Integer)
+    hedge_fund_count: Mapped[int | None] = mapped_column(Integer)
+    pe_fund_count: Mapped[int | None] = mapped_column(Integer)
+    vc_fund_count: Mapped[int | None] = mapped_column(Integer)
+    real_estate_fund_count: Mapped[int | None] = mapped_column(Integer)
+    securitized_fund_count: Mapped[int | None] = mapped_column(Integer)
+    liquidity_fund_count: Mapped[int | None] = mapped_column(Integer)
+    other_fund_count: Mapped[int | None] = mapped_column(Integer)
+    total_private_fund_assets: Mapped[int | None] = mapped_column(BigInteger)
     last_adv_filed_at: Mapped[dt.date | None] = mapped_column(Date)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
@@ -222,6 +232,30 @@ class SecManagerBrochureText(Base):
     section: Mapped[str] = mapped_column(Text, primary_key=True)
     filing_date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+
+
+class SecEntityLink(Base):
+    """Maps Registered advisers to related SEC entities (parent 13F filers, managed funds).
+
+    GLOBAL TABLE: No organization_id, no RLS.
+    The critical linkage that connects RIAs to their holdings data.
+    RIAs file ADV with one CIK; parent holding companies file 13F with a different CIK.
+    """
+
+    __tablename__ = "sec_entity_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    manager_crd: Mapped[str] = mapped_column(
+        Text, ForeignKey("sec_managers.crd_number", ondelete="CASCADE"), nullable=False,
+    )
+    related_cik: Mapped[str] = mapped_column(Text, nullable=False)
+    relationship: Mapped[str] = mapped_column(Text, nullable=False)  # parent_13f, subsidiary, managed_fund
+    related_name: Mapped[str | None] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(Text, nullable=False)  # name_match, foia_umbrella, manual
+    confidence: Mapped[float | None] = mapped_column(Float)  # 0.0-1.0 for fuzzy matches
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )

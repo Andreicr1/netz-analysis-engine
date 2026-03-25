@@ -14,6 +14,11 @@ export interface SecManagerItem {
 	compliance_disclosures: number | null;
 	has_13f_filings: boolean;
 	last_filing_date: string | null;
+	private_fund_count?: number | null;
+	hedge_fund_count?: number | null;
+	pe_fund_count?: number | null;
+	vc_fund_count?: number | null;
+	total_private_fund_assets?: number | null;
 }
 
 export interface SecManagerSearchPage {
@@ -22,6 +27,12 @@ export interface SecManagerSearchPage {
 	page: number;
 	page_size: number;
 	has_next: boolean;
+}
+
+export interface BrochureSection {
+	section: string;
+	content: string;
+	filing_date?: string | null;
 }
 
 export interface SecManagerDetail {
@@ -39,6 +50,12 @@ export interface SecManagerDetail {
 	latest_quarter: string | null;
 	holdings_count: number;
 	total_portfolio_value: number | null;
+	private_fund_count?: number | null;
+	hedge_fund_count?: number | null;
+	pe_fund_count?: number | null;
+	vc_fund_count?: number | null;
+	total_private_fund_assets?: number | null;
+	brochure_sections?: BrochureSection[] | null;
 }
 
 export interface SecHoldingItem {

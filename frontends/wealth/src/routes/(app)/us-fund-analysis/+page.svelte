@@ -36,7 +36,7 @@
 
 	// ── Filter state ──
 	let initParams = $derived((data.currentParams ?? {}) as Record<string, string>);
-	let filters = $state({ q: "", entity_type: "", state: "", has_13f: "", aum_min: "" });
+	let filters = $state({ q: "", entity_type: "", state: "", has_13f: "", aum_min: "", fund_type: "" });
 
 	$effect(() => {
 		filters.q = initParams.q ?? "";
@@ -44,6 +44,7 @@
 		filters.state = initParams.state ?? "";
 		filters.has_13f = initParams.has_13f ?? "";
 		filters.aum_min = initParams.aum_min ?? "";
+		filters.fund_type = initParams.fund_type ?? "";
 	});
 
 	function applyFilters() {
@@ -53,11 +54,12 @@
 		if (filters.state) params.set("state", filters.state);
 		if (filters.has_13f) params.set("has_13f", filters.has_13f);
 		if (filters.aum_min) params.set("aum_min", filters.aum_min);
+		if (filters.fund_type) params.set("fund_type", filters.fund_type);
 		goto(`/us-fund-analysis?${params.toString()}`, { invalidateAll: true });
 	}
 
 	function clearFilters() {
-		filters = { q: "", entity_type: "", state: "", has_13f: "", aum_min: "" };
+		filters = { q: "", entity_type: "", state: "", has_13f: "", aum_min: "", fund_type: "" };
 		goto("/us-fund-analysis", { invalidateAll: true });
 	}
 
@@ -118,6 +120,7 @@
 		if (filters.state) params.set("state", filters.state);
 		if (filters.has_13f) params.set("has_13f", filters.has_13f);
 		if (filters.aum_min) params.set("aum_min", filters.aum_min);
+		if (filters.fund_type) params.set("fund_type", filters.fund_type);
 		params.set("page", String(p));
 		goto(`/us-fund-analysis?${params.toString()}`, { invalidateAll: true });
 	}
@@ -196,12 +199,20 @@
 						</div>
 					</div>
 					<div class="ufa-filter-field">
-						<label class="ufa-field-label" for="ufa-entity">Entity Type</label>
+						<label class="ufa-field-label" for="ufa-entity">Manager Type</label>
 						<select id="ufa-entity" class="ufa-select" bind:value={filters.entity_type}>
-							<option value="">All Entities</option>
-							<option value="Registered">Registered</option>
-							<option value="Exempt Reporting Adviser">Exempt Reporting</option>
-							<option value="Not Registered">Not Registered</option>
+							<option value="">Investment Advisers</option>
+							<option value="all">All SEC Entities</option>
+						</select>
+					</div>
+					<div class="ufa-filter-field">
+						<label class="ufa-field-label" for="ufa-fund-type">Fund Type</label>
+						<select id="ufa-fund-type" class="ufa-select" bind:value={filters.fund_type}>
+							<option value="">All Types</option>
+							<option value="hedge">Hedge Funds</option>
+							<option value="pe">Private Equity</option>
+							<option value="vc">Venture Capital</option>
+							<option value="real_estate">Real Estate</option>
 						</select>
 					</div>
 					<div class="ufa-filter-field">
@@ -315,6 +326,54 @@
 				</div>
 			{/if}
 		</div>
+
+		<!-- Private Fund Breakdown -->
+		{#if detailManager.private_fund_count && detailManager.private_fund_count > 0}
+			<div class="ufa-fund-section">
+				<span class="ufa-fund-title">Private Fund Breakdown</span>
+				<div class="ufa-fund-grid">
+					{#if detailManager.hedge_fund_count}
+						<div class="ufa-fund-stat">
+							<span class="ufa-fund-stat__value">{detailManager.hedge_fund_count}</span>
+							<span class="ufa-fund-stat__label">Hedge Funds</span>
+						</div>
+					{/if}
+					{#if detailManager.pe_fund_count}
+						<div class="ufa-fund-stat">
+							<span class="ufa-fund-stat__value">{detailManager.pe_fund_count}</span>
+							<span class="ufa-fund-stat__label">PE Funds</span>
+						</div>
+					{/if}
+					{#if detailManager.vc_fund_count}
+						<div class="ufa-fund-stat">
+							<span class="ufa-fund-stat__value">{detailManager.vc_fund_count}</span>
+							<span class="ufa-fund-stat__label">VC Funds</span>
+						</div>
+					{/if}
+					{#if detailManager.total_private_fund_assets}
+						<div class="ufa-fund-stat">
+							<span class="ufa-fund-stat__value">{formatAUM(detailManager.total_private_fund_assets)}</span>
+							<span class="ufa-fund-stat__label">Total GAV</span>
+						</div>
+					{/if}
+				</div>
+			</div>
+		{/if}
+
+		<!-- ADV Brochure Highlights -->
+		{#if detailManager.brochure_sections && detailManager.brochure_sections.length > 0}
+			<div class="ufa-brochure-section">
+				<span class="ufa-fund-title">ADV Brochure Highlights</span>
+				{#each detailManager.brochure_sections as section}
+					<details class="ufa-brochure-item">
+						<summary class="ufa-brochure-summary">
+							{section.section.replace(/_/g, " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}
+						</summary>
+						<p class="ufa-brochure-content">{section.content}</p>
+					</details>
+				{/each}
+			</div>
+		{/if}
 
 		<!-- Fund Structure Donut (A-06) -->
 		{#if fundLoading}
@@ -497,7 +556,7 @@
 
 	.ufa-filters-row {
 		display: grid;
-		grid-template-columns: repeat(5, 1fr);
+		grid-template-columns: repeat(6, 1fr);
 		gap: 16px;
 	}
 
@@ -637,6 +696,69 @@
 		font-size: 13px;
 		color: var(--netz-text-muted);
 		margin-top: 8px;
+	}
+
+	.ufa-fund-grid {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: 12px;
+		margin-top: 12px;
+	}
+
+	.ufa-fund-stat {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.ufa-fund-stat__value {
+		font-size: 20px;
+		font-weight: 800;
+		color: var(--netz-text-primary, #1d293d);
+	}
+
+	.ufa-fund-stat__label {
+		font-size: 11px;
+		font-weight: 600;
+		color: var(--netz-text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.5px;
+	}
+
+	.ufa-brochure-section {
+		padding: 16px;
+		border-top: 1px solid var(--netz-border-subtle);
+	}
+
+	.ufa-brochure-item {
+		margin-top: 8px;
+		border: 1px solid var(--netz-border-subtle);
+		border-radius: 8px;
+		overflow: hidden;
+	}
+
+	.ufa-brochure-summary {
+		padding: 10px 12px;
+		font-size: 12px;
+		font-weight: 700;
+		color: var(--netz-text-secondary);
+		cursor: pointer;
+		background: rgba(248, 250, 252, 0.5);
+	}
+
+	.ufa-brochure-summary:hover {
+		background: rgba(248, 250, 252, 0.8);
+	}
+
+	.ufa-brochure-content {
+		padding: 12px;
+		font-size: 13px;
+		line-height: 1.6;
+		color: var(--netz-text-secondary);
+		max-height: 200px;
+		overflow-y: auto;
+		white-space: pre-wrap;
+		margin: 0;
 	}
 
 	@media (max-width: 1200px) {
