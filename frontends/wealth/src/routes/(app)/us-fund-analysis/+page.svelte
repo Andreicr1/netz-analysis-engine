@@ -6,7 +6,7 @@
 <script lang="ts">
 	import { getContext } from "svelte";
 	import { goto } from "$app/navigation";
-	import { PageHeader, PageTabs, ContextPanel, Button, formatAUM } from "@netz/ui";
+	import { ContextPanel, formatAUM } from "@netz/ui";
 	import { ChartContainer } from "@netz/ui/charts";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
@@ -137,99 +137,133 @@
 	}
 </script>
 
-<PageHeader title="US Fund Analysis" subtitle="Screen and analyze US-based fund managers, their holdings, and historical drift.">
-	{#snippet actions()}
-		<Button size="sm" variant="outline">Export Data</Button>
-	{/snippet}
-</PageHeader>
+<div class="ufa-header">
+	<div class="ufa-header-text">
+		<h1 class="ufa-title">US Fund Analysis</h1>
+		<p class="ufa-subtitle">Screen and analyze US-based fund managers, their holdings, and historical drift.</p>
+	</div>
+	<button class="ufa-export-btn" type="button">
+		<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+			<path d="M8 2v8m0 0l-3-3m3 3l3-3M3 12h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+		</svg>
+		Export Data
+	</button>
+</div>
 
 <div class="ufa-page">
 	<div class="ufa-card">
-		<PageTabs {tabs} active={activeTab} onChange={(t) => (activeTab = t)}>
-			{#snippet children(current)}
-				{#if current === "overview"}
-					<div class="ufa-filters-section">
-						<div class="ufa-filters-header">
-							<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 3h12l-4.5 5.3V13l-3-1.5V8.3L2 3z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
-							<span class="ufa-filters-label">Filter Parameters</span>
-						</div>
-						<form class="ufa-filters-row" onsubmit={(e) => { e.preventDefault(); applyFilters(); }}>
-							<div class="ufa-filter-field ufa-filter-field--search">
-								<label class="ufa-field-label" for="ufa-q">Search</label>
-								<div class="ufa-search-wrap">
-									<input
-										id="ufa-q"
-										class="ufa-input ufa-input--search"
-										type="text"
-										placeholder="Name, CIK, or CRD..."
-										bind:value={filters.q}
-									/>
-								</div>
-							</div>
-							<div class="ufa-filter-field">
-								<label class="ufa-field-label" for="ufa-entity">Entity Type</label>
-								<select id="ufa-entity" class="ufa-select" bind:value={filters.entity_type}>
-									<option value="">All Entities</option>
-									<option value="Registered">Registered</option>
-									<option value="Exempt Reporting Adviser">Exempt Reporting</option>
-									<option value="Not Registered">Not Registered</option>
-								</select>
-							</div>
-							<div class="ufa-filter-field">
-								<label class="ufa-field-label" for="ufa-state">State</label>
-								<input
-									id="ufa-state"
-									class="ufa-input"
-									type="text"
-									placeholder="e.g. NY, CA..."
-									bind:value={filters.state}
-								/>
-							</div>
-							<div class="ufa-filter-field">
-								<label class="ufa-field-label" for="ufa-13f">Has 13F Filings</label>
-								<select id="ufa-13f" class="ufa-select" bind:value={filters.has_13f}>
-									<option value="">All</option>
-									<option value="true">Yes</option>
-									<option value="false">No</option>
-								</select>
-							</div>
-							<div class="ufa-filter-field">
-								<label class="ufa-field-label" for="ufa-aum">Min AUM ($)</label>
-								<input
-									id="ufa-aum"
-									class="ufa-input"
-									type="number"
-									placeholder="e.g. 1000000000"
-									bind:value={filters.aum_min}
-								/>
-							</div>
-						</form>
-						<div class="ufa-filters-actions">
-							<button class="ufa-btn-clear" type="button" onclick={clearFilters}>Clear</button>
-							<button class="ufa-btn-apply" type="button" onclick={applyFilters}>Apply Filters</button>
+		<!-- Lifted tab header -->
+		<div class="ufa-tab-header">
+			{#each tabs as tab (tab.value)}
+				<button
+					class="ufa-tab"
+					class:ufa-tab--active={activeTab === tab.value}
+					onclick={() => (activeTab = tab.value)}
+					role="tab"
+					aria-selected={activeTab === tab.value}
+				>
+					{tab.label}
+					{#if activeTab === tab.value}
+						<span class="ufa-tab-accent"></span>
+					{/if}
+				</button>
+			{/each}
+		</div>
+
+		<!-- Tab content -->
+		{#if activeTab === "overview"}
+			<div class="ufa-filters-section">
+				<div class="ufa-filters-header">
+					<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 3h12l-4.5 5.3V13l-3-1.5V8.3L2 3z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+					<span class="ufa-filters-label">Filter Parameters</span>
+				</div>
+				<form class="ufa-filters-row" onsubmit={(e) => { e.preventDefault(); applyFilters(); }}>
+					<div class="ufa-filter-field ufa-filter-field--search">
+						<label class="ufa-field-label" for="ufa-q">Search</label>
+						<div class="ufa-search-wrap">
+							<svg class="ufa-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+								<circle cx="7" cy="7" r="4.5" stroke="#90a1b9" stroke-width="1.3"/>
+								<path d="M10.5 10.5L13.5 13.5" stroke="#90a1b9" stroke-width="1.3" stroke-linecap="round"/>
+							</svg>
+							<input
+								id="ufa-q"
+								class="ufa-input ufa-input--search"
+								type="text"
+								placeholder="Name, CIK, or CRD..."
+								bind:value={filters.q}
+							/>
 						</div>
 					</div>
+					<div class="ufa-filter-field">
+						<label class="ufa-field-label" for="ufa-entity">Entity Type</label>
+						<select id="ufa-entity" class="ufa-select" bind:value={filters.entity_type}>
+							<option value="">All Entities</option>
+							<option value="Registered">Registered</option>
+							<option value="Exempt Reporting Adviser">Exempt Reporting</option>
+							<option value="Not Registered">Not Registered</option>
+						</select>
+					</div>
+					<div class="ufa-filter-field">
+						<label class="ufa-field-label" for="ufa-state">State</label>
+						<input
+							id="ufa-state"
+							class="ufa-input"
+							type="text"
+							placeholder="e.g. NY, CA..."
+							bind:value={filters.state}
+						/>
+					</div>
+					<div class="ufa-filter-field">
+						<label class="ufa-field-label" for="ufa-13f">Has 13F Filings</label>
+						<select id="ufa-13f" class="ufa-select" bind:value={filters.has_13f}>
+							<option value="">All</option>
+							<option value="true">Yes</option>
+							<option value="false">No</option>
+						</select>
+					</div>
+					<div class="ufa-filter-field">
+						<label class="ufa-field-label" for="ufa-aum">Min AUM ($)</label>
+						<input
+							id="ufa-aum"
+							class="ufa-input"
+							type="number"
+							placeholder="e.g. 1000000000"
+							bind:value={filters.aum_min}
+						/>
+					</div>
+				</form>
+				<div class="ufa-filters-actions">
+					<button class="ufa-btn-clear" type="button" onclick={clearFilters}>Clear</button>
+					<button class="ufa-btn-apply" type="button" onclick={applyFilters}>Apply Filters</button>
+				</div>
+			</div>
 
-					<ManagerTable
-						data={searchResults}
-						onSelect={(cik, name) => {
-							selectManager(cik, name);
-							activeTab = "holdings";
-						}}
-						onDetail={openDetail}
-						onPageChange={goToPage}
-					/>
-				{:else if current === "holdings"}
-					<HoldingsTable {api} cik={selectedCik} managerName={selectedName} />
-				{:else if current === "style-drift"}
-					<StyleDriftChart {api} cik={selectedCik} managerName={selectedName} />
-				{:else if current === "reverse"}
-					<ReverseLookup {api} />
-				{:else if current === "compare"}
-					<PeerCompare {api} ciks={[...compareCiks]} />
-				{/if}
-			{/snippet}
-		</PageTabs>
+			<ManagerTable
+				data={searchResults}
+				onSelect={(cik, name) => {
+					selectManager(cik, name);
+					activeTab = "holdings";
+				}}
+				onDetail={openDetail}
+				onPageChange={goToPage}
+			/>
+		{:else if activeTab === "holdings"}
+			<div class="ufa-tab-content">
+				<HoldingsTable {api} cik={selectedCik} managerName={selectedName} />
+			</div>
+		{:else if activeTab === "style-drift"}
+			<div class="ufa-tab-content">
+				<StyleDriftChart {api} cik={selectedCik} managerName={selectedName} />
+			</div>
+		{:else if activeTab === "reverse"}
+			<div class="ufa-tab-content">
+				<ReverseLookup {api} />
+			</div>
+		{:else if activeTab === "compare"}
+			<div class="ufa-tab-content">
+				<PeerCompare {api} ciks={[...compareCiks]} />
+			</div>
+		{/if}
 	</div>
 </div>
 
@@ -323,6 +357,53 @@
 </ContextPanel>
 
 <style>
+	/* ── Header ── */
+	.ufa-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 40px var(--netz-space-inline-lg, 24px) 24px;
+	}
+
+	.ufa-title {
+		font-size: 28px;
+		font-weight: 800;
+		color: #1d293d;
+		letter-spacing: -0.7px;
+		line-height: 42px;
+		margin: 0;
+	}
+
+	.ufa-subtitle {
+		font-size: 14px;
+		font-weight: 500;
+		color: #62748e;
+		margin: 4px 0 0;
+		line-height: 20px;
+	}
+
+	.ufa-export-btn {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 8px 20px;
+		background: white;
+		border: 1px solid #e2e8f0;
+		border-radius: 10px;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.1);
+		font-size: 14px;
+		font-weight: 700;
+		color: #45556c;
+		cursor: pointer;
+		font-family: var(--netz-font-sans);
+		white-space: nowrap;
+	}
+
+	.ufa-export-btn:hover {
+		background: #f8fafc;
+	}
+
+	/* ── Page ── */
 	.ufa-page {
 		padding: 0 var(--netz-space-inline-lg, 24px) var(--netz-space-stack-xl, 48px);
 	}
@@ -335,7 +416,60 @@
 		box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
 	}
 
-	/* Filters */
+	/* ── Lifted tab header ── */
+	.ufa-tab-header {
+		display: flex;
+		align-items: flex-end;
+		gap: 0;
+		padding: 16px 16px 0;
+		background: rgba(248, 250, 252, 0.8);
+		border-bottom: 1px solid #e2e8f0;
+		height: 61px;
+	}
+
+	.ufa-tab {
+		position: relative;
+		padding: 12px 24px;
+		border: 1px solid transparent;
+		border-bottom: none;
+		border-radius: 14px 14px 0 0;
+		background: none;
+		font-size: 14px;
+		font-weight: 700;
+		color: #62748e;
+		cursor: pointer;
+		font-family: var(--netz-font-sans);
+		transition: color 120ms, background 120ms;
+		margin-bottom: -1px;
+		white-space: nowrap;
+	}
+
+	.ufa-tab:hover {
+		color: #1d293d;
+	}
+
+	.ufa-tab--active {
+		background: #ffffff;
+		border-color: #e2e8f0;
+		color: #1447e6;
+		box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.02);
+	}
+
+	.ufa-tab-accent {
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		height: 2px;
+		background: #155dfc;
+	}
+
+	/* ── Tab content padding for non-overview tabs ── */
+	.ufa-tab-content {
+		padding: 24px;
+	}
+
+	/* ── Filters ── */
 	.ufa-filters-section {
 		padding: 24px;
 		border-bottom: 1px solid #f1f5f9;
@@ -407,14 +541,11 @@
 		position: relative;
 	}
 
-	.ufa-search-wrap::before {
-		content: "\2315";
+	.ufa-search-icon {
 		position: absolute;
 		left: 12px;
 		top: 50%;
 		transform: translateY(-50%);
-		font-size: 14px;
-		color: #90a1b9;
 		pointer-events: none;
 	}
 
@@ -428,7 +559,8 @@
 	}
 
 	.ufa-btn-clear {
-		padding: 8px 16px;
+		height: 36px;
+		padding: 0 16px;
 		font-size: 14px;
 		font-weight: 700;
 		color: #62748e;
@@ -443,7 +575,8 @@
 	}
 
 	.ufa-btn-apply {
-		padding: 8px 20px;
+		height: 36px;
+		padding: 0 20px;
 		font-size: 14px;
 		font-weight: 700;
 		color: white;
