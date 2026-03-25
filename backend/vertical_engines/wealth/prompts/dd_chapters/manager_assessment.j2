@@ -40,6 +40,31 @@ Fee types reported to SEC: {{ adv_fee_structure | join(', ') }}.
 {% endfor %}
 {% endif %}
 
+{% if adv_brochure_sections is defined and adv_brochure_sections %}
+## ADV Part 2A — Regulatory Disclosures
+
+{% if adv_brochure_sections.item_8 is defined and adv_brochure_sections.item_8 %}
+### Investment Strategy & Methods of Analysis (Item 8)
+{{ adv_brochure_sections.item_8 | truncate(2000) }}
+{% endif %}
+
+{% if adv_brochure_sections.item_5 is defined and adv_brochure_sections.item_5 %}
+### Fee Schedule (Item 5)
+{{ adv_brochure_sections.item_5 | truncate(1000) }}
+{% endif %}
+
+{% if adv_brochure_sections.item_9 is defined and adv_brochure_sections.item_9 %}
+### Disciplinary Information (Item 9)
+{{ adv_brochure_sections.item_9 | truncate(500) }}
+{% endif %}
+
+{% if adv_brochure_sections.item_10 is defined and adv_brochure_sections.item_10 %}
+### Other Financial Activities (Item 10)
+{{ adv_brochure_sections.item_10 | truncate(500) }}
+{% endif %}
+
+{% endif %}
+
 {% if structured_data_complete is defined %}
 {% if structured_data_complete %}
 ## Data Availability
@@ -57,6 +82,9 @@ No structured data available for this chapter. State this clearly and do not spe
 {% endif %}
 
 ## Instructions
+{% if adv_brochure_sections is defined and adv_brochure_sections %}
+ADV Part 2A narrative content is provided above where available. Cite specific sections by item number (e.g., "Per Item 8 of the ADV Part 2A...") when referencing regulatory disclosures.
+{% endif %}
 Assess the fund manager on these dimensions:
 
 1. **Track Record** — Performance consistency, alpha generation, risk-adjusted returns

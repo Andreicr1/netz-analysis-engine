@@ -54,6 +54,7 @@ from vertical_engines.wealth.dd_report.quant_injection import (
 )
 from vertical_engines.wealth.dd_report.sec_injection import (
     gather_sec_13f_data,
+    gather_sec_adv_brochure,
     gather_sec_adv_data,
 )
 from vertical_engines.wealth.shared_protocols import CallOpenAiFn
@@ -316,6 +317,7 @@ class DDReportEngine:
         manager_name = fund.manager_name
         sec_13f = gather_sec_13f_data(db, manager_name=manager_name)
         sec_adv = gather_sec_adv_data(db, manager_name=manager_name)
+        adv_brochure = gather_sec_adv_brochure(db, sec_adv.get("crd_number"))
 
         return build_evidence_pack(
             fund_data=fund_data,
@@ -323,6 +325,7 @@ class DDReportEngine:
             risk_metrics=risk_metrics,
             sec_13f_data=sec_13f,
             sec_adv_data=sec_adv,
+            adv_brochure_sections=adv_brochure,
         )
 
     def _generate_all_chapters(

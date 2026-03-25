@@ -15,7 +15,7 @@ from datetime import date, timedelta
 from typing import Any
 
 import structlog
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 logger = structlog.get_logger()
@@ -203,10 +203,63 @@ def gather_sec_adv_data(
             "adv_team": adv_team,
             "adv_registration_status": manager.registration_status,
             "adv_firm_name": manager.firm_name,
+            "crd_number": resolved_crd,
         }
 
     except Exception:
         logger.exception("sec_adv_gather_failed", manager_name=manager_name)
+        return {}
+
+
+def gather_sec_adv_brochure(
+    db: Session,
+    crd_number: str | None,
+    sections: list[str] | None = None,
+) -> dict[str, str]:
+    """Fetch ADV Part 2A brochure narrative sections for a manager.
+
+    Returns dict keyed by section name with content text.
+    Never raises — returns empty dict on any failure.
+
+    Parameters
+    ----------
+    db : Session
+        Sync database session.
+    crd_number : str | None
+        Manager CRD number.
+    sections : list[str] | None
+        Section names to fetch. Defaults to the 4 most relevant for
+        manager_assessment: item_5, item_8, item_9, item_10.
+    """
+    if not crd_number:
+        return {}
+
+    if sections is None:
+        sections = ["item_5", "item_8", "item_9", "item_10"]
+
+    try:
+        rows = (
+            db.execute(
+                text("""
+                    SELECT section, content
+                    FROM sec_manager_brochure_text
+                    WHERE crd_number = :crd
+                      AND section = ANY(:sections)
+                    ORDER BY filing_date DESC, section
+                """),
+                {"crd": crd_number, "sections": sections},
+            )
+            .mappings()
+            .all()
+        )
+        # Latest filing wins — first occurrence per section
+        result: dict[str, str] = {}
+        for row in rows:
+            if row["section"] not in result:
+                result[row["section"]] = row["content"]
+        return result
+    except Exception:
+        logger.exception("sec_adv_brochure_gather_failed", crd_number=crd_number)
         return {}
 
 

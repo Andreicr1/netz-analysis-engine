@@ -43,6 +43,7 @@ _CHAPTER_FIELD_EXPECTATIONS: dict[str, dict[str, Any]] = {
         "fields": [
             "fund_name", "manager_name",
             "adv_aum_history", "adv_compliance_disclosures", "adv_team",
+            "adv_brochure_sections",
         ],
         "providers": ["YFinance", "SEC EDGAR ADV"],
         "primary_provider": "SEC EDGAR ADV",
@@ -155,6 +156,7 @@ class EvidencePack:
     adv_fee_structure: list[str] = field(default_factory=list)
     adv_funds: list[dict[str, Any]] = field(default_factory=list)
     adv_team: list[dict[str, Any]] = field(default_factory=list)
+    adv_brochure_sections: dict[str, str] = field(default_factory=dict)
 
     def to_context(self) -> dict[str, Any]:
         """Convert to template context dict for Jinja2 rendering."""
@@ -185,6 +187,7 @@ class EvidencePack:
             "adv_fee_structure": self.adv_fee_structure,
             "adv_funds": self.adv_funds,
             "adv_team": self.adv_team,
+            "adv_brochure_sections": self.adv_brochure_sections,
         }
 
     def filter_for_chapter(self, chapter_tag: str) -> dict[str, Any]:
@@ -266,6 +269,7 @@ def build_evidence_pack(
     macro_snapshot: dict[str, Any] | None = None,
     sec_13f_data: dict[str, Any] | None = None,
     sec_adv_data: dict[str, Any] | None = None,
+    adv_brochure_sections: dict[str, str] | None = None,
 ) -> EvidencePack:
     """Build a frozen evidence pack from gathered data.
 
@@ -287,6 +291,8 @@ def build_evidence_pack(
         SEC 13F holdings data (sector weights, drift).
     sec_adv_data : dict
         SEC ADV manager profile data (AUM, compliance, team).
+    adv_brochure_sections : dict
+        ADV Part 2A brochure narrative sections.
 
     Returns
     -------
@@ -327,4 +333,5 @@ def build_evidence_pack(
         adv_fee_structure=_adv.get("adv_fee_structure", []),
         adv_funds=_adv.get("adv_funds", []),
         adv_team=_adv.get("adv_team", []),
+        adv_brochure_sections=adv_brochure_sections or {},
     )
