@@ -99,14 +99,32 @@ async def search_managers(
     sic: str | None = Query(None, max_length=10),
     has_disclosures: bool | None = Query(None),
     strategy_keywords: str | None = Query(None, max_length=200, description="Full-text search in ADV Part 2A Item 8 (investment strategy narrative)"),
+    has_13f: bool | None = Query(None),
     sort_by: str = Query("aum_total"),
     sort_dir: str = Query("desc"),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
     db: AsyncSession = Depends(get_db_with_rls),
 ) -> SecManagerSearchPage:
-    stmt = select(SecManager)
-    count_stmt = select(func.count()).select_from(SecManager)
+    # Subquery: CIKs that have 13F filings + last filing date
+    thirteen_f_sub = (
+        select(
+            Sec13fHolding.cik,
+            func.max(Sec13fHolding.report_date).label("last_13f_date"),
+        )
+        .group_by(Sec13fHolding.cik)
+        .subquery()
+    )
+
+    stmt = (
+        select(SecManager, thirteen_f_sub.c.last_13f_date)
+        .outerjoin(thirteen_f_sub, SecManager.cik == thirteen_f_sub.c.cik)
+    )
+    count_stmt = (
+        select(func.count())
+        .select_from(SecManager)
+        .outerjoin(thirteen_f_sub, SecManager.cik == thirteen_f_sub.c.cik)
+    )
 
     conditions = []
 
@@ -166,6 +184,11 @@ async def search_managers(
         )
         conditions.append(SecManager.crd_number.in_(brochure_subq))
 
+    if has_13f is True:
+        conditions.append(thirteen_f_sub.c.cik.isnot(None))
+    elif has_13f is False:
+        conditions.append(thirteen_f_sub.c.cik.is_(None))
+
     for cond in conditions:
         stmt = stmt.where(cond)
         count_stmt = count_stmt.where(cond)
@@ -184,7 +207,7 @@ async def search_managers(
     count_result = await db.execute(count_stmt)
 
     total_count = count_result.scalar_one()
-    rows = data_result.scalars().all()
+    rows = data_result.all()
 
     managers = [
         SecManagerItem(
@@ -199,8 +222,10 @@ async def search_managers(
             sic_description=(m.client_types or {}).get("sic_description"),
             last_adv_filed_at=m.last_adv_filed_at,
             compliance_disclosures=m.compliance_disclosures,
+            has_13f_filings=last_13f_date is not None,
+            last_filing_date=last_13f_date.isoformat() if last_13f_date else None,
         )
-        for m in rows
+        for m, last_13f_date in rows
     ]
 
     return SecManagerSearchPage(

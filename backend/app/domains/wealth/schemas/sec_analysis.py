@@ -32,6 +32,8 @@ class SecManagerItem(BaseModel):
     sic_description: str | None = None
     last_adv_filed_at: date | None = None
     compliance_disclosures: int | None = None
+    has_13f_filings: bool = False
+    last_filing_date: str | None = None
 
 
 class SecHoldingItem(BaseModel):

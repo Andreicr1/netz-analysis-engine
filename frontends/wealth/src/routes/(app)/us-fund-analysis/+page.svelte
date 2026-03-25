@@ -22,8 +22,6 @@
 	import StyleDriftChart from "./components/StyleDriftChart.svelte";
 	import ReverseLookup from "./components/ReverseLookup.svelte";
 	import PeerCompare from "./components/PeerCompare.svelte";
-	import TopAdvisersWidget from "./components/TopAdvisersWidget.svelte";
-
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);
 	let { data }: { data: PageData } = $props();
@@ -46,26 +44,28 @@
 
 	// ── Filter state ──
 	let initParams = $derived((data.currentParams ?? {}) as Record<string, string>);
-	let filters = $state({ q: "", entity_type: "", aum_min: "", strategy_keywords: "" });
+	let filters = $state({ q: "", entity_type: "", state: "", has_13f: "", aum_min: "" });
 
 	$effect(() => {
 		filters.q = initParams.q ?? "";
 		filters.entity_type = initParams.entity_type ?? "";
+		filters.state = initParams.state ?? "";
+		filters.has_13f = initParams.has_13f ?? "";
 		filters.aum_min = initParams.aum_min ?? "";
-		filters.strategy_keywords = initParams.strategy_keywords ?? "";
 	});
 
 	function applyFilters() {
 		const params = new URLSearchParams();
 		if (filters.q) params.set("q", filters.q);
 		if (filters.entity_type) params.set("entity_type", filters.entity_type);
+		if (filters.state) params.set("state", filters.state);
+		if (filters.has_13f) params.set("has_13f", filters.has_13f);
 		if (filters.aum_min) params.set("aum_min", filters.aum_min);
-		if (filters.strategy_keywords) params.set("strategy_keywords", filters.strategy_keywords);
 		goto(`/us-fund-analysis?${params.toString()}`, { invalidateAll: true });
 	}
 
 	function clearFilters() {
-		filters = { q: "", entity_type: "", aum_min: "", strategy_keywords: "" };
+		filters = { q: "", entity_type: "", state: "", has_13f: "", aum_min: "" };
 		goto("/us-fund-analysis", { invalidateAll: true });
 	}
 
@@ -114,8 +114,9 @@
 		const params = new URLSearchParams();
 		if (filters.q) params.set("q", filters.q);
 		if (filters.entity_type) params.set("entity_type", filters.entity_type);
+		if (filters.state) params.set("state", filters.state);
+		if (filters.has_13f) params.set("has_13f", filters.has_13f);
 		if (filters.aum_min) params.set("aum_min", filters.aum_min);
-		if (filters.strategy_keywords) params.set("strategy_keywords", filters.strategy_keywords);
 		params.set("page", String(p));
 		goto(`/us-fund-analysis?${params.toString()}`, { invalidateAll: true });
 	}
@@ -174,6 +175,24 @@
 								</select>
 							</div>
 							<div class="ufa-filter-field">
+								<label class="ufa-field-label" for="ufa-state">State</label>
+								<input
+									id="ufa-state"
+									class="ufa-input"
+									type="text"
+									placeholder="e.g. NY, CA..."
+									bind:value={filters.state}
+								/>
+							</div>
+							<div class="ufa-filter-field">
+								<label class="ufa-field-label" for="ufa-13f">Has 13F Filings</label>
+								<select id="ufa-13f" class="ufa-select" bind:value={filters.has_13f}>
+									<option value="">All</option>
+									<option value="true">Yes</option>
+									<option value="false">No</option>
+								</select>
+							</div>
+							<div class="ufa-filter-field">
 								<label class="ufa-field-label" for="ufa-aum">Min AUM ($)</label>
 								<input
 									id="ufa-aum"
@@ -183,39 +202,12 @@
 									bind:value={filters.aum_min}
 								/>
 							</div>
-							<div class="ufa-filter-field">
-								<label class="ufa-field-label" for="ufa-strategy">
-									Strategy (ADV Part 2A)
-								</label>
-								<input
-									id="ufa-strategy"
-									class="ufa-input"
-									type="text"
-									placeholder="e.g. long short equity, real estate..."
-									bind:value={filters.strategy_keywords}
-								/>
-							</div>
 						</form>
 						<div class="ufa-filters-actions">
-							<div class="ufa-strategy-hint">
-								Strategy search uses ADV Item 8 narrative disclosures
-							</div>
 							<button class="ufa-btn-clear" type="button" onclick={clearFilters}>Clear</button>
 							<button class="ufa-btn-apply" type="button" onclick={applyFilters}>Apply Filters</button>
 						</div>
 					</div>
-
-					{#if !filters.q && !filters.entity_type && !filters.aum_min && !filters.strategy_keywords}
-						<div class="ufa-widget-section">
-							<TopAdvisersWidget
-								{api}
-								onSelect={(cik, name) => {
-									selectManager(cik, name);
-									activeTab = "holdings";
-								}}
-							/>
-						</div>
-					{/if}
 
 					<ManagerTable
 						data={searchResults}
@@ -505,18 +497,6 @@
 		font-size: 13px;
 		color: var(--netz-text-muted);
 		margin-top: 8px;
-	}
-
-	.ufa-widget-section {
-		padding: 20px 24px;
-		border-bottom: 1px solid var(--netz-border-subtle);
-	}
-
-	.ufa-strategy-hint {
-		font-size: 11px;
-		color: var(--netz-text-muted);
-		margin-right: auto;
-		font-style: italic;
 	}
 
 	@media (max-width: 1024px) {

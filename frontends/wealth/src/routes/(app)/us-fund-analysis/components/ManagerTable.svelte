@@ -1,16 +1,7 @@
 <!-- Overview tab: paginated manager table — Figma layout -->
 <script lang="ts">
 	import { formatNumber, formatDate } from "@netz/ui/utils";
-	import type { SecManagerSearchPage, SecManagerItem } from "$lib/types/sec-analysis";
-
-	const TWELVE_MONTHS_MS = 365 * 24 * 60 * 60 * 1000;
-
-	function filingStatus(mgr: SecManagerItem): "none" | "stale" | "ok" {
-		if (!mgr.last_adv_filed_at) return "none";
-		const filedDate = new Date(mgr.last_adv_filed_at);
-		const cutoff = Date.now() - TWELVE_MONTHS_MS;
-		return filedDate.getTime() < cutoff ? "stale" : "ok";
-	}
+	import type { SecManagerSearchPage } from "$lib/types/sec-analysis";
 
 	let {
 		data,
@@ -45,7 +36,9 @@
 				<tr>
 					<th class="mt-th">Manager Name</th>
 					<th class="mt-th">Entity Type</th>
+					<th class="mt-th">State</th>
 					<th class="mt-th mt-th--right">AUM ($)</th>
+					<th class="mt-th mt-th--center">13F Filings</th>
 					<th class="mt-th mt-th--right">Last Filing</th>
 				</tr>
 			</thead>
@@ -79,17 +72,26 @@
 						<td class="mt-td mt-td--entity">
 							{mgr.registration_status ?? "\u2014"}
 						</td>
+						<td class="mt-td mt-td--state">
+							{mgr.state ?? "\u2014"}
+						</td>
 						<td class="mt-td mt-td--aum">
 							{mgr.aum_total != null ? `$${formatNumber(mgr.aum_total, 0)}` : "\u2014"}
 						</td>
-						<td class="mt-td mt-td--date">
-							{#if filingStatus(mgr) === "none"}
-								<span class="mt-badge mt-badge--warning">No Filing</span>
-							{:else if filingStatus(mgr) === "stale"}
-								<span class="mt-badge mt-badge--destructive">Stale</span>
-								<span class="mt-filing-date">{formatDate(mgr.last_adv_filed_at!, "short")}</span>
+						<td class="mt-td mt-td--13f">
+							{#if mgr.has_13f_filings}
+								<span class="mt-badge mt-badge--success">YES</span>
 							{:else}
-								{formatDate(mgr.last_adv_filed_at!, "medium")}
+								<span class="mt-text-muted">{"\u2014"}</span>
+							{/if}
+						</td>
+						<td class="mt-td mt-td--date">
+							{#if mgr.last_filing_date}
+								{formatDate(mgr.last_filing_date, "short")}
+							{:else if mgr.last_adv_filed_at}
+								{formatDate(mgr.last_adv_filed_at, "short")}
+							{:else}
+								{"\u2014"}
 							{/if}
 						</td>
 					</tr>
@@ -228,6 +230,22 @@
 		color: var(--netz-text-secondary);
 	}
 
+	.mt-td--state {
+		color: var(--netz-text-secondary);
+	}
+
+	.mt-td--13f {
+		text-align: center;
+	}
+
+	.mt-th--center {
+		text-align: center;
+	}
+
+	.mt-text-muted {
+		color: var(--netz-text-muted);
+	}
+
 	.mt-td--aum {
 		text-align: right;
 		font-weight: 900;
@@ -287,10 +305,9 @@
 		color: var(--netz-status-error, #ef4444);
 	}
 
-	.mt-filing-date {
-		margin-left: 6px;
-		font-size: 12px;
-		color: var(--netz-text-muted);
+	.mt-badge--success {
+		background: color-mix(in srgb, var(--netz-color-success, #22c55e) 15%, transparent);
+		color: var(--netz-color-success, #22c55e);
 	}
 
 	@media (max-width: 1024px) {

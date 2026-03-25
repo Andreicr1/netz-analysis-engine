@@ -12,6 +12,8 @@ export interface SecManagerItem {
 	sic_description: string | null;
 	last_adv_filed_at: string | null;
 	compliance_disclosures: number | null;
+	has_13f_filings: boolean;
+	last_filing_date: string | null;
 }
 
 export interface SecManagerSearchPage {

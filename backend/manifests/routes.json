@@ -996,6 +996,51 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/sec/holdings/history",
+    "name": "get_holdings_history"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/sec/holdings/reverse",
+    "name": "reverse_lookup"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/sec/managers/compare",
+    "name": "compare_managers"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/sec/managers/search",
+    "name": "search_managers"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/sec/managers/sic-codes",
+    "name": "get_sic_codes"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/sec/managers/{cik}",
+    "name": "get_manager_detail"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/sec/managers/{cik}/holdings",
+    "name": "get_holdings"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/sec/managers/{cik}/style-drift",
+    "name": "get_style_drift"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/sec/managers/{crd_number}/funds",
+    "name": "get_manager_funds"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/universe",
     "name": "list_universe"
   },
