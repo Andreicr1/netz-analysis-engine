@@ -46,7 +46,7 @@ from app.domains.wealth.schemas.sec_analysis import (
     StyleDriftSignal,
 )
 from app.shared.enums import Role
-from app.shared.models import Sec13fDiff, Sec13fHolding, SecManager, SecManagerFund
+from app.shared.models import Sec13fDiff, Sec13fHolding, SecManager, SecManagerBrochureText, SecManagerFund
 
 logger = structlog.get_logger()
 
@@ -98,6 +98,7 @@ async def search_managers(
     filed_within_days: int | None = Query(None, ge=1, le=730),
     sic: str | None = Query(None, max_length=10),
     has_disclosures: bool | None = Query(None),
+    strategy_keywords: str | None = Query(None, max_length=200, description="Full-text search in ADV Part 2A Item 8 (investment strategy narrative)"),
     sort_by: str = Query("aum_total"),
     sort_dir: str = Query("desc"),
     page: int = Query(1, ge=1),
@@ -152,6 +153,18 @@ async def search_managers(
             (SecManager.compliance_disclosures.is_(None))
             | (SecManager.compliance_disclosures == 0)
         )
+
+    if strategy_keywords:
+        # Subquery: managers whose ADV Part 2A Item 8 mentions the keyword
+        kw = f"%{strategy_keywords.lower()}%"
+        brochure_subq = (
+            select(SecManagerBrochureText.crd_number)
+            .where(SecManagerBrochureText.section == "item_8")
+            .where(SecManagerBrochureText.content.ilike(kw))
+            .distinct()
+            .scalar_subquery()
+        )
+        conditions.append(SecManager.crd_number.in_(brochure_subq))
 
     for cond in conditions:
         stmt = stmt.where(cond)

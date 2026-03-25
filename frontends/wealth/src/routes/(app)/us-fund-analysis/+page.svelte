@@ -46,12 +46,13 @@
 
 	// ── Filter state ──
 	let initParams = $derived((data.currentParams ?? {}) as Record<string, string>);
-	let filters = $state({ q: "", entity_type: "", aum_min: "" });
+	let filters = $state({ q: "", entity_type: "", aum_min: "", strategy_keywords: "" });
 
 	$effect(() => {
 		filters.q = initParams.q ?? "";
 		filters.entity_type = initParams.entity_type ?? "";
 		filters.aum_min = initParams.aum_min ?? "";
+		filters.strategy_keywords = initParams.strategy_keywords ?? "";
 	});
 
 	function applyFilters() {
@@ -59,11 +60,12 @@
 		if (filters.q) params.set("q", filters.q);
 		if (filters.entity_type) params.set("entity_type", filters.entity_type);
 		if (filters.aum_min) params.set("aum_min", filters.aum_min);
+		if (filters.strategy_keywords) params.set("strategy_keywords", filters.strategy_keywords);
 		goto(`/us-fund-analysis?${params.toString()}`, { invalidateAll: true });
 	}
 
 	function clearFilters() {
-		filters = { q: "", entity_type: "", aum_min: "" };
+		filters = { q: "", entity_type: "", aum_min: "", strategy_keywords: "" };
 		goto("/us-fund-analysis", { invalidateAll: true });
 	}
 
@@ -113,6 +115,7 @@
 		if (filters.q) params.set("q", filters.q);
 		if (filters.entity_type) params.set("entity_type", filters.entity_type);
 		if (filters.aum_min) params.set("aum_min", filters.aum_min);
+		if (filters.strategy_keywords) params.set("strategy_keywords", filters.strategy_keywords);
 		params.set("page", String(p));
 		goto(`/us-fund-analysis?${params.toString()}`, { invalidateAll: true });
 	}
@@ -180,14 +183,29 @@
 									bind:value={filters.aum_min}
 								/>
 							</div>
+							<div class="ufa-filter-field">
+								<label class="ufa-field-label" for="ufa-strategy">
+									Strategy (ADV Part 2A)
+								</label>
+								<input
+									id="ufa-strategy"
+									class="ufa-input"
+									type="text"
+									placeholder="e.g. long short equity, real estate..."
+									bind:value={filters.strategy_keywords}
+								/>
+							</div>
 						</form>
 						<div class="ufa-filters-actions">
+							<div class="ufa-strategy-hint">
+								Strategy search uses ADV Item 8 narrative disclosures
+							</div>
 							<button class="ufa-btn-clear" type="button" onclick={clearFilters}>Clear</button>
 							<button class="ufa-btn-apply" type="button" onclick={applyFilters}>Apply Filters</button>
 						</div>
 					</div>
 
-					{#if !filters.q && !filters.entity_type && !filters.aum_min}
+					{#if !filters.q && !filters.entity_type && !filters.aum_min && !filters.strategy_keywords}
 						<div class="ufa-widget-section">
 							<TopAdvisersWidget
 								{api}
@@ -492,6 +510,13 @@
 	.ufa-widget-section {
 		padding: 20px 24px;
 		border-bottom: 1px solid var(--netz-border-subtle);
+	}
+
+	.ufa-strategy-hint {
+		font-size: 11px;
+		color: var(--netz-text-muted);
+		margin-right: auto;
+		font-style: italic;
 	}
 
 	@media (max-width: 1024px) {
