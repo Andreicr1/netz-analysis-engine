@@ -1,5 +1,6 @@
 export { default as InstrumentFilterSidebar } from "./InstrumentFilterSidebar.svelte";
 export { default as ManagerFilterSidebar } from "./ManagerFilterSidebar.svelte";
+export { default as ScreenerFilters } from "./ScreenerFilters.svelte";
 export { default as InstrumentTable } from "./InstrumentTable.svelte";
 export { default as PeerComparisonView } from "./PeerComparisonView.svelte";
 export { default as ManagerHierarchyTable } from "./ManagerHierarchyTable.svelte";

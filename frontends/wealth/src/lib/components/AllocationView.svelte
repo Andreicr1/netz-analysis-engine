@@ -1,26 +1,22 @@
 <!--
-  AllocationView — strategic, tactical, and effective views with cross-profile comparison table.
-  Hierarchical L1 (Geography) / L2 (Asset Class) grouping.
+  AllocationView — Figma redesign: profile tabs, KPI row, view sub-tabs,
+  hierarchical table (group → block → instruments).
   Governed save flow: simulate → preview CVaR → ConsequenceDialog with rationale.
 -->
 <script lang="ts">
 	import {
-		PageTabs,
-		EmptyState,
 		Button,
-		Input,
-		Skeleton,
 		formatNumber,
 		formatPercent,
 		formatBps,
 		MetricCard,
 		ConsequenceDialog,
+		ActionButton,
 	} from "@netz/ui";
-	import { ActionButton } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import { getContext } from "svelte";
-	import AllocationTable from "./allocation/AllocationTable.svelte";
-	import type { BlockMeta, AllocationRow as TableAllocationRow } from "./allocation/types";
+	import { BLOCK_INSTRUMENTS } from "./allocation/BLOCK_INSTRUMENTS";
+	import type { BlockMeta } from "./allocation/types";
 
 	type SimulationResult = {
 		profile: string;
@@ -36,19 +32,38 @@
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
+	// ── Profile state ──
+	type Profile = "conservative" | "moderate" | "growth";
+	type ViewTab = "target" | "adjustments" | "effective";
+
+	const PROFILES: { id: Profile; label: string }[] = [
+		{ id: "conservative", label: "Conservative Profile" },
+		{ id: "moderate", label: "Moderate Profile" },
+		{ id: "growth", label: "Growth Profile" },
+	];
+
+	const VIEW_TABS: { id: ViewTab; label: string }[] = [
+		{ id: "target", label: "Long-term Target" },
+		{ id: "adjustments", label: "Active Adjustments" },
+		{ id: "effective", label: "Final Portfolio" },
+	];
+
+	let activeProfile = $state<Profile>("moderate");
+	let activeView = $state<ViewTab>("effective");
+	let loading = $state(true);
+
+	// ── Backend data ──
 	type StrategicRow = {
 		block: string;
 		weight: number;
 		min_weight: number | null;
 		max_weight: number | null;
 	};
-
-	type TacticalPosition = {
+	type TacticalRow = {
 		block: string;
 		overweight: number;
 		conviction: number | null;
 	};
-
 	type EffectiveRow = {
 		block: string;
 		strategic_weight: number;
@@ -56,253 +71,159 @@
 		effective_weight: number;
 	};
 
-	// ── Profile & Block state ──
-	const profiles = ["conservative", "moderate", "growth"];
-	const profileLabels: Record<string, string> = {
-		conservative: "Conservative",
-		moderate: "Moderate",
-		growth: "Growth",
-	};
-
 	let blocks = $state<BlockMeta[]>([]);
-	let loading = $state(true);
+	let strategic = $state<StrategicRow[]>([]);
+	let tactical = $state<TacticalRow[]>([]);
+	let effective = $state<EffectiveRow[]>([]);
 
-	// All profiles' data fetched in parallel
-	let strategicByProfile = $state<Record<string, StrategicRow[]>>({});
-	let tacticalByProfile = $state<Record<string, TacticalPosition[]>>({});
-	let effectiveByProfile = $state<Record<string, EffectiveRow[]>>({});
-
-	// For editing, we work on a single profile
-	// svelte-ignore state_referenced_locally
-	let editingProfile = $state<string | null>(null);
-
-	type Tab = "strategic" | "tactical" | "effective";
-	const tabs: { value: Tab; label: string }[] = [
-		{ value: "strategic", label: "Strategic" },
-		{ value: "tactical", label: "Tactical" },
-		{ value: "effective", label: "Effective" },
-	];
-
-	// ── Cross-profile table data transforms ──
-	let strategicTableData = $derived.by((): Record<string, TableAllocationRow[]> => {
-		const result: Record<string, TableAllocationRow[]> = {};
-		for (const p of profiles) {
-			result[p] = (strategicByProfile[p] ?? []).map((r) => ({
-				block_id: r.block,
-				weight: r.weight,
-			}));
-		}
-		return result;
-	});
-
-	let tacticalTableData = $derived.by((): Record<string, TableAllocationRow[]> => {
-		const result: Record<string, TableAllocationRow[]> = {};
-		for (const p of profiles) {
-			result[p] = (tacticalByProfile[p] ?? []).map((r) => ({
-				block_id: r.block,
-				weight: r.overweight,
-			}));
-		}
-		return result;
-	});
-
-	let effectiveTableData = $derived.by((): Record<string, TableAllocationRow[]> => {
-		const result: Record<string, TableAllocationRow[]> = {};
-		for (const p of profiles) {
-			result[p] = (effectiveByProfile[p] ?? []).map((r) => ({
-				block_id: r.block,
-				weight: r.effective_weight,
-			}));
-		}
-		return result;
-	});
-
-	// ── Fetch all profiles in parallel ──
-	async function fetchAllData() {
+	async function fetchProfile(profile: Profile) {
 		loading = true;
 		try {
 			const api = createClientApiClient(getToken);
-
-			// Fetch blocks metadata + all 3 profiles × 3 tabs in parallel
-			const [blocksRes, ...profileResults] = await Promise.allSettled([
-				api.get("/blended-benchmarks/blocks"),
-				...profiles.flatMap((p) => [
-					api.get(`/allocation/${p}/strategic`),
-					api.get(`/allocation/${p}/tactical`),
-					api.get(`/allocation/${p}/effective`),
-				]),
+			const [b, s, t, e] = await Promise.all([
+				api.get<BlockMeta[]>("/blended-benchmarks/blocks"),
+				api.get<StrategicRow[]>(`/allocation/${profile}/strategic`),
+				api.get<TacticalRow[]>(`/allocation/${profile}/tactical`),
+				api.get<EffectiveRow[]>(`/allocation/${profile}/effective`),
 			]);
-
-			blocks = blocksRes.status === "fulfilled" ? (blocksRes.value as BlockMeta[]) : [];
-
-			// Map results back to profiles (3 results per profile: strategic, tactical, effective)
-			for (let i = 0; i < profiles.length; i++) {
-				const p = profiles[i]!;
-				const sIdx = i * 3;
-				const sRes = profileResults[sIdx]!;
-				const tRes = profileResults[sIdx + 1]!;
-				const eRes = profileResults[sIdx + 2]!;
-				strategicByProfile[p] = sRes.status === "fulfilled" ? (sRes.value as StrategicRow[]) : [];
-				tacticalByProfile[p] = tRes.status === "fulfilled" ? (tRes.value as TacticalPosition[]) : [];
-				effectiveByProfile[p] = eRes.status === "fulfilled" ? (eRes.value as EffectiveRow[]) : [];
-			}
+			blocks = b;
+			strategic = s;
+			tactical = t;
+			effective = e;
 		} finally {
 			loading = false;
 		}
 	}
 
-	// ── Summary metrics ──
-	let totalStrategicBlocks = $derived(
-		new Set(profiles.flatMap((p) => (strategicByProfile[p] ?? []).map((r) => r.block))).size,
+	$effect(() => {
+		fetchProfile(activeProfile);
+	});
+
+	// ── KPI computation ──
+	let assetCategoryCount = $derived(strategic.filter((r) => r.weight > 0).length);
+
+	let activeAdjustmentCount = $derived(
+		tactical.filter((r) => Math.abs(r.overweight) > 0.001).length,
 	);
 
-	let totalTacticalTilts = $derived(
-		profiles.reduce((sum, p) => sum + (tacticalByProfile[p]?.length ?? 0), 0),
-	);
+	let topOverweight = $derived.by(() => {
+		if (tactical.length === 0) return null;
+		const sorted = [...tactical].sort((a, b) => b.overweight - a.overweight);
+		const top = sorted[0];
+		if (!top || top.overweight <= 0) return null;
+		const blockMeta = blocks.find((b) => b.block_id === top.block);
+		return {
+			name: blockMeta?.display_name ?? top.block,
+			overweight: top.overweight,
+		};
+	});
 
-	// ── Edit Mode (per-profile) ──
-	let editing = $state(false);
-	let saving = $state(false);
-	let editError = $state<string | null>(null);
-	let editWeights = $state<Record<string, number>>({});
+	// ── Table data building ──
+	const GROUP_ORDER = ["equity", "fixed_income", "bond", "alternatives", "cash"];
+	const GROUP_LABELS: Record<string, string> = {
+		equity: "EQUITIES",
+		fixed_income: "FIXED INCOME",
+		bond: "FIXED INCOME",
+		alternatives: "ALTERNATIVES",
+		cash: "CASH & EQUIVALENTS",
+	};
 
-	function startEditing(profile: string) {
-		const rows = strategicByProfile[profile] ?? [];
-		editWeights = {};
-		for (const row of rows) {
-			editWeights[row.block] = row.weight * 100;
+	type TableRow =
+		| { kind: "group"; label: string }
+		| {
+				kind: "block";
+				block_id: string;
+				display_name: string;
+				target: number;
+				adjustment: number;
+				final: number;
+		  }
+		| {
+				kind: "instrument";
+				ticker: string;
+				name: string;
+				target: number;
+				adjustment: number;
+				final: number;
+		  };
+
+	let tableRows = $derived.by((): TableRow[] => {
+		if (blocks.length === 0 || strategic.length === 0) return [];
+
+		const tacMap: Record<string, number> = {};
+		for (const t of tactical) tacMap[t.block] = t.overweight;
+
+		const strMap: Record<string, number> = {};
+		for (const s of strategic) strMap[s.block] = s.weight;
+
+		const effMap: Record<string, number> = {};
+		for (const e of effective) effMap[e.block] = e.effective_weight;
+
+		// Group blocks by asset class
+		const groups: Record<string, BlockMeta[]> = {};
+		for (const b of blocks) {
+			const ac = b.asset_class?.toLowerCase() ?? "other";
+			if (!groups[ac]) groups[ac] = [];
+			groups[ac].push(b);
 		}
-		editError = null;
-		editing = true;
-		editingProfile = profile;
-	}
 
-	function cancelEditing() {
-		editing = false;
-		editingProfile = null;
-		editError = null;
-	}
+		const rows: TableRow[] = [];
+		const seenGroups = new Set<string>();
 
-	let editTotal = $derived(
-		Object.values(editWeights).reduce((sum, v) => sum + v, 0),
-	);
-	let editDelta = $derived(Math.abs(editTotal - 100));
-	let editValid = $derived(editDelta < 0.1);
+		const orderedKeys = [
+			...GROUP_ORDER.filter((k) => groups[k]),
+			...Object.keys(groups).filter((k) => !GROUP_ORDER.includes(k)),
+		];
 
-	function fmtPercentPoint(value: number, decimals = 1): string {
-		return `${formatNumber(value, decimals, "en-US")}%`;
-	}
+		for (const key of orderedKeys) {
+			const groupBlocks = groups[key] ?? [];
+			const label = GROUP_LABELS[key] ?? key.toUpperCase();
 
-	function fmtSignedPercentPoint(value: number, decimals = 1): string {
-		const formatted = formatNumber(value, decimals, "en-US");
-		return value >= 0 ? `+${formatted}%` : `${formatted}%`;
-	}
-
-	// Tactical edit (per-profile)
-	let editTactical = $state<Record<string, number>>({});
-	let editingTactical = $state(false);
-	let savingTactical = $state(false);
-
-	function startEditingTactical(profile: string) {
-		const positions = tacticalByProfile[profile] ?? [];
-		editTactical = {};
-		for (const pos of positions) {
-			editTactical[pos.block] = pos.overweight * 100;
-		}
-		editingTactical = true;
-		editingProfile = profile;
-	}
-
-	// ── Simulation + Governance ──
-	let simulationResult = $state<SimulationResult | null>(null);
-	let simulating = $state(false);
-	let simError = $state<string | null>(null);
-	let showConfirmDialog = $state(false);
-	let showTacticalDialog = $state(false);
-
-	function handleSaveTacticalClick() {
-		showTacticalDialog = true;
-	}
-
-	async function confirmSaveTactical({ rationale }: { rationale?: string }) {
-		if (!editingProfile) return;
-		savingTactical = true;
-		editError = null;
-		try {
-			const api = createClientApiClient(getToken);
-			const tilts: Record<string, number> = {};
-			for (const [block, w] of Object.entries(editTactical)) {
-				tilts[block] = w / 100;
+			if (!seenGroups.has(label)) {
+				seenGroups.add(label);
+				rows.push({ kind: "group", label });
 			}
-			await api.put(`/allocation/${editingProfile}/tactical`, {
-				tilts,
-				...(rationale ? { rationale } : {}),
-			});
-			editingTactical = false;
-			editingProfile = null;
-			await fetchAllData();
-		} catch (e) {
-			editError =
-				e instanceof Error ? e.message : "Failed to save tactical allocation";
-		} finally {
-			savingTactical = false;
-		}
-	}
 
-	async function runSimulation(): Promise<boolean> {
-		if (!editValid || !editingProfile) return false;
-		simulating = true;
-		simError = null;
-		simulationResult = null;
-		try {
-			const api = createClientApiClient(getToken);
-			const weights: Record<string, number> = {};
-			for (const [block, w] of Object.entries(editWeights)) {
-				weights[block] = w / 100;
+			for (const b of groupBlocks) {
+				const str = strMap[b.block_id] ?? 0;
+				const tac = tacMap[b.block_id] ?? 0;
+				const eff = effMap[b.block_id] ?? str + tac;
+
+				rows.push({
+					kind: "block",
+					block_id: b.block_id,
+					display_name: b.display_name,
+					target: str,
+					adjustment: tac,
+					final: eff,
+				});
+
+				const instruments = BLOCK_INSTRUMENTS[b.block_id] ?? [];
+				for (const inst of instruments) {
+					rows.push({
+						kind: "instrument",
+						ticker: inst.ticker,
+						name: inst.name,
+						target: str * inst.weight,
+						adjustment: tac * inst.weight,
+						final: eff * inst.weight,
+					});
+				}
 			}
-			const result = await api.post<SimulationResult>(
-				`/allocation/${editingProfile}/simulate`,
-				{ weights, rationale: "pre-save simulation" },
-			);
-			simulationResult = result;
-			return result.within_limit === true;
-		} catch (e) {
-			simError = e instanceof Error ? e.message : "Simulation failed";
-			return false;
-		} finally {
-			simulating = false;
 		}
+
+		return rows;
+	});
+
+	// ── Formatting helpers ──
+	function fmtPct(v: number): string {
+		return `${formatNumber(v * 100, 1, "en-US")}%`;
 	}
 
-	async function handleSaveStrategicClick() {
-		const withinLimit = await runSimulation();
-		if (!withinLimit) return;
-		showConfirmDialog = true;
-	}
-
-	async function confirmSaveStrategic({ rationale }: { rationale?: string }) {
-		if (!editValid || !editingProfile) return;
-		saving = true;
-		editError = null;
-		try {
-			const api = createClientApiClient(getToken);
-			const weights: Record<string, number> = {};
-			for (const [block, w] of Object.entries(editWeights)) {
-				weights[block] = w / 100;
-			}
-			await api.put(`/allocation/${editingProfile}/strategic`, {
-				weights,
-				...(rationale ? { rationale } : {}),
-			});
-			editing = false;
-			editingProfile = null;
-			simulationResult = null;
-			await fetchAllData();
-		} catch (e) {
-			editError = e instanceof Error ? e.message : "Failed to save allocation";
-		} finally {
-			saving = false;
-		}
+	function fmtAdj(v: number): string {
+		if (Math.abs(v) < 0.0005) return "—";
+		const sign = v > 0 ? "+" : "";
+		return `${sign}${formatNumber(v * 100, 1, "en-US")}%`;
 	}
 
 	function fmtSimBps(v: string | number | null | undefined): string {
@@ -317,201 +238,326 @@
 		return isNaN(n) ? "—" : formatPercent(n, 2, "en-US");
 	}
 
-	// Load on mount
-	fetchAllData();
+	// ── Strategic edit state ──
+	let editing = $state(false);
+	let editWeights = $state<Record<string, number>>({});
+	let editError = $state<string | null>(null);
+	let saving = $state(false);
+	let simulating = $state(false);
+	let simulationResult = $state<SimulationResult | null>(null);
+	let simError = $state<string | null>(null);
+	let showConfirmDialog = $state(false);
+
+	function startEditing() {
+		editWeights = {};
+		for (const row of strategic) editWeights[row.block] = row.weight * 100;
+		editError = null;
+		simError = null;
+		simulationResult = null;
+		editing = true;
+	}
+
+	function cancelEditing() {
+		editing = false;
+		editError = null;
+		simError = null;
+		simulationResult = null;
+	}
+
+	let editTotal = $derived(Object.values(editWeights).reduce((s, v) => s + v, 0));
+	let editValid = $derived(Math.abs(editTotal - 100) < 0.1);
+
+	async function handleSaveClick() {
+		if (!editValid) return;
+		simulating = true;
+		simError = null;
+		simulationResult = null;
+		try {
+			const api = createClientApiClient(getToken);
+			const weights: Record<string, number> = {};
+			for (const [b, w] of Object.entries(editWeights)) weights[b] = w / 100;
+			const result = await api.post<SimulationResult>(
+				`/allocation/${activeProfile}/simulate`,
+				{ weights, rationale: "pre-save simulation" },
+			);
+			simulationResult = result;
+			if (result.within_limit) {
+				showConfirmDialog = true;
+			}
+		} catch (e) {
+			simError = e instanceof Error ? e.message : "Simulation failed";
+		} finally {
+			simulating = false;
+		}
+	}
+
+	async function confirmSave({ rationale }: { rationale?: string }) {
+		saving = true;
+		editError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			const weights: Record<string, number> = {};
+			for (const [b, w] of Object.entries(editWeights)) weights[b] = w / 100;
+			await api.put(`/allocation/${activeProfile}/strategic`, {
+				weights,
+				...(rationale ? { rationale } : {}),
+			});
+			editing = false;
+			simulationResult = null;
+			await fetchProfile(activeProfile);
+		} catch (e) {
+			editError = e instanceof Error ? e.message : "Save failed";
+		} finally {
+			saving = false;
+		}
+	}
+
+	// ── Tactical edit state ──
+	let editingTactical = $state(false);
+	let editTactical = $state<Record<string, number>>({});
+	let savingTactical = $state(false);
+	let showTacticalDialog = $state(false);
+
+	function startEditingTactical() {
+		editTactical = {};
+		for (const pos of tactical) editTactical[pos.block] = pos.overweight * 100;
+		editError = null;
+		editingTactical = true;
+	}
+
+	function cancelEditingTactical() {
+		editingTactical = false;
+		editError = null;
+	}
+
+	function handleSaveTacticalClick() {
+		showTacticalDialog = true;
+	}
+
+	async function confirmSaveTactical({ rationale }: { rationale?: string }) {
+		savingTactical = true;
+		editError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			const tilts: Record<string, number> = {};
+			for (const [block, w] of Object.entries(editTactical)) tilts[block] = w / 100;
+			await api.put(`/allocation/${activeProfile}/tactical`, {
+				tilts,
+				...(rationale ? { rationale } : {}),
+			});
+			editingTactical = false;
+			await fetchProfile(activeProfile);
+		} catch (e) {
+			editError = e instanceof Error ? e.message : "Failed to save tactical allocation";
+		} finally {
+			savingTactical = false;
+		}
+	}
 </script>
 
-<div class="space-y-6">
+<div class="alloc">
+	<!-- PROFILE TABS -->
+	<div class="alloc-profile-tabs">
+		{#each PROFILES as p (p.id)}
+			<button
+				class="alloc-profile-tab"
+				class:alloc-profile-tab--active={activeProfile === p.id}
+				onclick={() => {
+					activeProfile = p.id;
+					editing = false;
+					editingTactical = false;
+				}}
+			>{p.label}</button>
+		{/each}
+	</div>
+
 	{#if loading}
-		<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-			{#each Array(3) as _}
-				<Skeleton class="h-24 rounded-xl" />
-			{/each}
-		</div>
-		<Skeleton class="h-64 rounded-xl" />
+		<div class="alloc-loading">Loading…</div>
 	{:else}
-		<!-- Summary metrics -->
-		<div class="grid gap-4 md:grid-cols-3">
-			<MetricCard label="Allocation Blocks" value={String(totalStrategicBlocks)} sublabel="Configured across profiles" />
-			<MetricCard label="Active Profiles" value={String(profiles.length)} sublabel="Conservative · Moderate · Growth" />
-			<MetricCard label="Tactical Tilts" value={String(totalTacticalTilts)} sublabel="Active across all profiles" />
+		<!-- KPI ROW -->
+		<div class="alloc-kpis">
+			<div class="alloc-kpi">
+				<span class="alloc-kpi-heading">ASSET CATEGORIES</span>
+				<span class="alloc-kpi-value">{assetCategoryCount}</span>
+				<span class="alloc-kpi-label">core building blocks</span>
+			</div>
+			<div class="alloc-kpi">
+				<span class="alloc-kpi-heading">ACTIVE ADJUSTMENTS</span>
+				<span class="alloc-kpi-value">{activeAdjustmentCount}</span>
+				<span class="alloc-kpi-label">market deviations</span>
+			</div>
+			<div class="alloc-kpi">
+				<span class="alloc-kpi-heading">TOP OVERWEIGHT</span>
+				{#if topOverweight}
+					<span class="alloc-kpi-value">{topOverweight.name}</span>
+					<span class="alloc-kpi-overweight">↗ +{formatNumber(topOverweight.overweight * 100, 1, "en-US")}% vs Target</span>
+				{:else}
+					<span class="alloc-kpi-value">—</span>
+				{/if}
+			</div>
+		</div>
+
+		<!-- VIEW TABS + ACTIONS -->
+		<div class="alloc-view-bar">
+			<div class="alloc-view-tabs">
+				{#each VIEW_TABS as vt (vt.id)}
+					<button
+						class="alloc-view-tab"
+						class:alloc-view-tab--active={activeView === vt.id}
+						onclick={() => {
+							activeView = vt.id;
+							editing = false;
+							editingTactical = false;
+						}}
+					>{vt.label}</button>
+				{/each}
+			</div>
+			<div class="alloc-view-actions">
+				{#if !editing && !editingTactical && activeView === "target"}
+					<Button size="sm" variant="outline" onclick={startEditing}>Edit Weights</Button>
+				{/if}
+				{#if !editing && !editingTactical && activeView === "adjustments"}
+					<Button size="sm" variant="outline" onclick={startEditingTactical}>Edit Tilts</Button>
+				{/if}
+				{#if editing}
+					<span class="alloc-edit-total" class:alloc-edit-total--ok={editValid}>
+						Total: {formatNumber(editTotal, 1, "en-US")}%
+					</span>
+					<Button size="sm" variant="outline" onclick={cancelEditing}>Cancel</Button>
+					<ActionButton
+						size="sm"
+						onclick={handleSaveClick}
+						loading={simulating || saving}
+						loadingText={simulating ? "Simulating…" : "Saving…"}
+						disabled={!editValid}
+					>Review & Save</ActionButton>
+				{/if}
+				{#if editingTactical}
+					<Button size="sm" variant="outline" onclick={cancelEditingTactical}>Cancel</Button>
+					<ActionButton
+						size="sm"
+						onclick={handleSaveTacticalClick}
+						loading={savingTactical}
+						loadingText="Saving…"
+					>Save Tilts</ActionButton>
+				{/if}
+			</div>
 		</div>
 
 		{#if editError}
-			<div class="rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
-				{editError}
-				<button class="ml-2 underline" onclick={() => (editError = null)}>dismiss</button>
+			<div class="alloc-error">{editError}</div>
+		{/if}
+
+		{#if simError}
+			<div class="alloc-error">{simError}</div>
+		{/if}
+
+		{#if simulationResult && !simulationResult.within_limit}
+			<div class="alloc-sim-preview">
+				<div class="alloc-sim-header">
+					<h3 class="alloc-sim-title">CVaR Simulation Preview</h3>
+					<span class="alloc-sim-badge alloc-sim-badge--breach">Exceeds CVaR Limit</span>
+				</div>
+				<div class="alloc-sim-grid">
+					<MetricCard label="Proposed CVaR 95%" value={fmtSimBps(simulationResult.proposed_cvar_95_3m)} sublabel="3-month horizon" status="breach" />
+					<MetricCard label="CVaR Utilization" value={fmtSimPct(simulationResult.cvar_utilization_pct)} sublabel="of limit" />
+					<MetricCard label="CVaR Delta" value={fmtSimBps(simulationResult.cvar_delta_vs_current)} sublabel="change from current" />
+					<MetricCard label="CVaR Limit" value={fmtSimBps(simulationResult.cvar_limit)} sublabel="hard limit" />
+				</div>
+				<p class="alloc-sim-warning">This allocation exceeds the CVaR limit. Adjust weights before submitting.</p>
 			</div>
 		{/if}
 
-		<PageTabs {tabs} defaultTab="strategic">
-			{#snippet children(activeTab)}
-				<!-- ═══════════ STRATEGIC ═══════════ -->
-				{#if activeTab === "strategic"}
-					{#if !editing}
-						<div class="av-tab-header">
-							<p class="av-tab-desc">IC-approved strategic weights by geography and asset class.</p>
-							<div class="av-edit-btns">
-								{#each profiles as profile (profile)}
-									<Button size="sm" variant="outline" onclick={() => startEditing(profile)}>
-										Edit {profileLabels[profile]}
-									</Button>
-								{/each}
-							</div>
-						</div>
-						<AllocationTable
-							{blocks}
-							data={strategicTableData}
-							{profiles}
-							{profileLabels}
-							mode="strategic"
-						/>
-					{:else if editingProfile}
-						<!-- Per-profile editor -->
-						<div class="av-editor">
-							<div class="av-editor-header">
-								<h3 class="av-editor-title">Editing: {profileLabels[editingProfile]}</h3>
-								<div class="flex items-center gap-2">
-									<span class="text-xs {editValid ? 'text-(--netz-success,#22c55e)' : 'text-(--netz-danger,#ef4444)'}">
-										Total: {fmtPercentPoint(editTotal)}
-										{editValid ? "" : `(${fmtSignedPercentPoint(editTotal - 100)})`}
-									</span>
-									<Button size="sm" variant="outline" onclick={cancelEditing}>Cancel</Button>
-									<ActionButton
-										size="sm"
-										onclick={handleSaveStrategicClick}
-										loading={simulating || saving}
-										loadingText={simulating ? "Simulating..." : "Saving..."}
-										disabled={!editValid}
-									>
-										Review & Save
-									</ActionButton>
-								</div>
-							</div>
-							<div class="av-editor-rows">
-								{#each strategicByProfile[editingProfile] ?? [] as row (row.block)}
-									{@const blockWeight = editWeights[row.block] ?? 0}
-									{@const belowMin = row.min_weight !== null && blockWeight < row.min_weight * 100}
-									{@const aboveMax = row.max_weight !== null && blockWeight > row.max_weight * 100}
-									{@const outOfBounds = belowMin || aboveMax}
-									<div class="av-editor-row">
-										<span class="av-editor-block">{row.block}</span>
-										{#if row.min_weight !== null && row.max_weight !== null}
-											<span class="av-editor-bounds">
-												[{formatPercent(row.min_weight, 0, "en-US")}–{formatPercent(row.max_weight, 0, "en-US")}]
-											</span>
-										{/if}
-										<Input
-											type="number"
-											class="w-20 text-right {outOfBounds ? 'border-(--netz-danger)' : ''}"
-											bind:value={editWeights[row.block]}
-											min={row.min_weight !== null ? row.min_weight * 100 : 0}
-											max={row.max_weight !== null ? row.max_weight * 100 : 100}
-											step="0.1"
-										/>
-										{#if outOfBounds}
-											<span class="text-xs text-(--netz-danger)">{belowMin ? "below min" : "above max"}</span>
-										{/if}
-									</div>
-								{/each}
-							</div>
-						</div>
-
-						{#if simError}
-							<div class="rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
-								{simError}
-								<button class="ml-2 underline" onclick={() => (simError = null)}>dismiss</button>
-							</div>
-						{/if}
-
-						{#if simulationResult}
-							<div class="rounded-lg border {simulationResult.within_limit ? 'border-(--netz-border)' : 'border-(--netz-status-error)'} bg-(--netz-surface-elevated) p-5">
-								<div class="mb-3 flex items-center justify-between">
-									<h3 class="text-sm font-semibold text-(--netz-text-primary)">CVaR Simulation Preview</h3>
-									{#if simulationResult.within_limit}
-										<span class="inline-flex items-center gap-1 rounded-full bg-(--netz-success,#22c55e)/15 px-2 py-0.5 text-xs font-medium text-(--netz-success,#22c55e)">Within Limit</span>
+		<!-- TABLE -->
+		<div class="alloc-table-wrap">
+			<table class="alloc-table">
+				<thead>
+					<tr>
+						<th class="alloc-th">ASSET CLASS / COMPONENT / INSTRUMENT</th>
+						<th class="alloc-th alloc-th--right">TARGET</th>
+						<th class="alloc-th alloc-th--right">ADJUSTMENT</th>
+						<th class="alloc-th alloc-th--right alloc-th--final">FINAL PORTFOLIO</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each tableRows as row (row.kind === "group" ? `g:${row.label}` : row.kind === "block" ? `b:${row.block_id}` : `i:${row.ticker}`)}
+						{#if row.kind === "group"}
+							<tr class="alloc-row-group">
+								<td colspan="4" class="alloc-td-group">{row.label}</td>
+							</tr>
+						{:else if row.kind === "block"}
+							<tr class="alloc-row-block">
+								<td class="alloc-td alloc-td--block">
+									{#if editing}
+										<div class="alloc-edit-row">
+											<span>{row.display_name}</span>
+											<input
+												type="number"
+												class="alloc-edit-input"
+												bind:value={editWeights[row.block_id]}
+												step="0.1"
+												min="0"
+												max="100"
+											/>
+										</div>
+									{:else if editingTactical}
+										<div class="alloc-edit-row">
+											<span>{row.display_name}</span>
+											<input
+												type="number"
+												class="alloc-edit-input"
+												bind:value={editTactical[row.block_id]}
+												step="0.1"
+											/>
+										</div>
 									{:else}
-										<span class="inline-flex items-center gap-1 rounded-full bg-(--netz-status-error)/15 px-2 py-0.5 text-xs font-medium text-(--netz-status-error)">Exceeds CVaR Limit</span>
+										{row.display_name}
 									{/if}
-								</div>
-								<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-									<MetricCard label="Proposed CVaR 95%" value={fmtSimBps(simulationResult.proposed_cvar_95_3m)} sublabel="3-month horizon" status={simulationResult.within_limit ? undefined : "breach"} />
-									<MetricCard
-										label="CVaR Utilization"
-										value={fmtSimPct(simulationResult.cvar_utilization_pct)}
-										sublabel="of limit"
-									/>
-									<MetricCard label="CVaR Delta" value={fmtSimBps(simulationResult.cvar_delta_vs_current)} sublabel="change from current" />
-									<MetricCard label="CVaR Limit" value={fmtSimBps(simulationResult.cvar_limit)} sublabel="hard limit" />
-								</div>
-								{#if !simulationResult.within_limit}
-									<p class="mt-3 text-sm font-medium text-(--netz-status-error)">
-										This allocation exceeds the CVaR limit. Adjust weights before submitting.
-									</p>
-								{/if}
-							</div>
+								</td>
+								<td class="alloc-td alloc-td--right">
+									{activeView === "adjustments" ? "—" : fmtPct(row.target)}
+								</td>
+								<td
+									class="alloc-td alloc-td--right"
+									class:alloc-positive={row.adjustment > 0.0005}
+									class:alloc-negative={row.adjustment < -0.0005}
+								>
+									{activeView === "target" ? "—" : fmtAdj(row.adjustment)}
+								</td>
+								<td class="alloc-td alloc-td--right alloc-td--final">
+									{activeView === "target"
+										? fmtPct(row.target)
+										: activeView === "adjustments"
+											? fmtAdj(row.adjustment)
+											: fmtPct(row.final)}
+								</td>
+							</tr>
+						{:else}
+							<tr class="alloc-row-instrument">
+								<td class="alloc-td alloc-td--instrument">{row.ticker} — {row.name}</td>
+								<td class="alloc-td alloc-td--right alloc-td--muted">
+									{activeView === "adjustments" ? "—" : fmtPct(row.target)}
+								</td>
+								<td
+									class="alloc-td alloc-td--right alloc-td--muted"
+									class:alloc-positive={row.adjustment > 0.0005}
+									class:alloc-negative={row.adjustment < -0.0005}
+								>
+									{activeView === "target" ? "—" : fmtAdj(row.adjustment)}
+								</td>
+								<td class="alloc-td alloc-td--right alloc-td--muted">
+									{activeView === "target"
+										? fmtPct(row.target)
+										: activeView === "adjustments"
+											? fmtAdj(row.adjustment)
+											: fmtPct(row.final)}
+								</td>
+							</tr>
 						{/if}
-					{/if}
-				{/if}
-
-				<!-- ═══════════ TACTICAL ═══════════ -->
-				{#if activeTab === "tactical"}
-					{#if !editingTactical}
-						<div class="av-tab-header">
-							<p class="av-tab-desc">Active tactical overweights — deviations from strategic weights. <span class="text-(--netz-success)">Green</span> = overweight, <span class="text-(--netz-danger)">red</span> = underweight.</p>
-							<div class="av-edit-btns">
-								{#each profiles as profile (profile)}
-									<Button size="sm" variant="outline" onclick={() => startEditingTactical(profile)}>
-										Edit {profileLabels[profile]}
-									</Button>
-								{/each}
-							</div>
-						</div>
-						<AllocationTable
-							{blocks}
-							data={tacticalTableData}
-							{profiles}
-							{profileLabels}
-							mode="tactical"
-						/>
-					{:else if editingProfile}
-						<div class="av-editor">
-							<div class="av-editor-header">
-								<h3 class="av-editor-title">Tactical Tilts: {profileLabels[editingProfile]}</h3>
-								<div class="flex gap-2">
-									<Button size="sm" variant="outline" onclick={() => { editingTactical = false; editingProfile = null; }}>Cancel</Button>
-									<ActionButton size="sm" onclick={handleSaveTacticalClick} loading={savingTactical} loadingText="Saving...">
-										Save
-									</ActionButton>
-								</div>
-							</div>
-							<div class="av-editor-rows">
-								{#each tacticalByProfile[editingProfile] ?? [] as pos (pos.block)}
-									<div class="av-editor-row">
-										<span class="av-editor-block">{pos.block}</span>
-										<Input type="number" class="w-20 text-right" bind:value={editTactical[pos.block]} step="0.1" />
-									</div>
-								{/each}
-							</div>
-						</div>
-					{/if}
-				{/if}
-
-				<!-- ═══════════ EFFECTIVE ═══════════ -->
-				{#if activeTab === "effective"}
-					<div class="av-tab-header">
-						<p class="av-tab-desc">Combined allocation: strategic weight + tactical tilt = effective exposure.</p>
-					</div>
-					<AllocationTable
-						{blocks}
-						data={effectiveTableData}
-						{profiles}
-						{profileLabels}
-						mode="effective"
-					/>
-				{/if}
-			{/snippet}
-		</PageTabs>
+					{/each}
+				</tbody>
+			</table>
+		</div>
 	{/if}
 </div>
 
@@ -519,11 +565,11 @@
 <ConsequenceDialog
 	bind:open={showConfirmDialog}
 	title="Confirm Strategic Allocation Change"
-	impactSummary="This will update the strategic weights for the {editingProfile ?? ''} profile. The change will affect effective allocation and CVaR calculations."
-	scopeText="Profile: {editingProfile ?? ''} — affects all model portfolios using this allocation profile."
+	impactSummary="This will update strategic weights for the {activeProfile} profile."
+	scopeText="Profile: {activeProfile} — affects all model portfolios using this allocation profile."
 	requireRationale
 	rationaleLabel="Rationale for allocation change"
-	rationalePlaceholder="State the investment thesis, market conditions, or committee direction behind this strategic change."
+	rationalePlaceholder="State the investment thesis or committee direction behind this change."
 	rationaleMinLength={20}
 	confirmLabel="Submit Allocation Change"
 	metadata={simulationResult
@@ -534,14 +580,14 @@
 				{ label: "Within Limit", value: simulationResult.within_limit ? "Yes" : "No", emphasis: !simulationResult.within_limit },
 			]
 		: []}
-	onConfirm={confirmSaveStrategic}
+	onConfirm={confirmSave}
 	onCancel={() => (showConfirmDialog = false)}
 >
 	{#snippet consequenceList()}
 		<ul class="space-y-1.5">
 			<li class="flex items-start gap-2">
 				<span class="mt-0.5 text-(--netz-warning)">&#9679;</span>
-				<span>This will update the strategic allocation for <strong class="text-(--netz-text-primary)">{editingProfile}</strong></span>
+				<span>This will update the strategic allocation for <strong class="text-(--netz-text-primary)">{activeProfile}</strong></span>
 			</li>
 			<li class="flex items-start gap-2">
 				<span class="mt-0.5 text-(--netz-warning)">&#9679;</span>
@@ -559,8 +605,8 @@
 <ConsequenceDialog
 	bind:open={showTacticalDialog}
 	title="Confirm Tactical Allocation Change"
-	impactSummary="This will update tactical tilts for the {editingProfile ?? ''} profile. Tilts adjust effective allocation away from strategic weights."
-	scopeText="Profile: {editingProfile ?? ''} — affects effective allocation for all model portfolios using this profile."
+	impactSummary="This will update tactical tilts for the {activeProfile} profile. Tilts adjust effective allocation away from strategic weights."
+	scopeText="Profile: {activeProfile} — affects effective allocation for all model portfolios using this profile."
 	requireRationale
 	rationaleLabel="Rationale for tactical change"
 	rationalePlaceholder="State the market signal, CIO directive, or tactical thesis driving this tilt."
@@ -573,7 +619,7 @@
 		<ul class="space-y-1.5">
 			<li class="flex items-start gap-2">
 				<span class="mt-0.5 text-(--netz-warning)">&#9679;</span>
-				<span>This will update tactical tilts for <strong class="text-(--netz-text-primary)">{editingProfile}</strong></span>
+				<span>This will update tactical tilts for <strong class="text-(--netz-text-primary)">{activeProfile}</strong></span>
 			</li>
 			<li class="flex items-start gap-2">
 				<span class="mt-0.5 text-(--netz-warning)">&#9679;</span>
@@ -588,75 +634,316 @@
 </ConsequenceDialog>
 
 <style>
-	.av-tab-header {
+	/* Profile tabs */
+	.alloc-profile-tabs {
 		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 16px;
-		margin-bottom: 16px;
-		flex-wrap: wrap;
-	}
-
-	.av-tab-desc {
-		font-size: var(--netz-text-small, 0.8125rem);
-		color: var(--netz-text-muted);
-		margin: 0;
-	}
-
-	.av-edit-btns {
-		display: flex;
-		gap: 6px;
-		flex-shrink: 0;
-	}
-
-	/* Editor */
-	.av-editor {
-		border: 1px solid var(--netz-border-accent);
-		border-radius: var(--netz-radius-md, 12px);
-		overflow: hidden;
-	}
-
-	.av-editor-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 12px;
-		padding: 12px 16px;
-		background: var(--netz-surface-alt);
+		gap: 0;
 		border-bottom: 1px solid var(--netz-border-subtle);
-		flex-wrap: wrap;
+		margin-bottom: 0;
 	}
 
-	.av-editor-title {
-		font-size: var(--netz-text-body, 0.9375rem);
-		font-weight: 700;
+	.alloc-profile-tab {
+		padding: 14px 24px 12px;
+		border: none;
+		border-bottom: 2px solid transparent;
+		background: none;
+		font-size: 14px;
+		font-weight: 500;
+		color: var(--netz-text-muted);
+		cursor: pointer;
+		font-family: var(--netz-font-sans);
+		transition: color 120ms, border-color 120ms;
+		margin-bottom: -1px;
+	}
+
+	.alloc-profile-tab:hover {
 		color: var(--netz-text-primary);
-		margin: 0;
 	}
 
-	.av-editor-rows {
-		padding: 12px 16px;
+	.alloc-profile-tab--active {
+		color: var(--netz-brand-primary);
+		border-bottom-color: var(--netz-brand-primary);
+		font-weight: 600;
+	}
+
+	/* KPI row */
+	.alloc-kpis {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		border-bottom: 1px solid var(--netz-border-subtle);
+		background: var(--netz-surface-elevated);
+	}
+
+	.alloc-kpi {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		padding: 24px 32px;
+		border-right: 1px solid var(--netz-border-subtle);
 	}
 
-	.av-editor-row {
+	.alloc-kpi:last-child {
+		border-right: none;
+	}
+
+	.alloc-kpi-heading {
+		font-size: 11px;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--netz-text-muted);
+		margin-bottom: 8px;
+	}
+
+	.alloc-kpi-value {
+		font-size: 22px;
+		font-weight: 700;
+		color: var(--netz-text-primary);
+		line-height: 1.2;
+	}
+
+	.alloc-kpi-label {
+		font-size: 13px;
+		color: var(--netz-text-muted);
+		margin-top: 2px;
+	}
+
+	.alloc-kpi-overweight {
+		font-size: 13px;
+		font-weight: 600;
+		color: #22c55e;
+		margin-top: 4px;
+	}
+
+	/* View bar */
+	.alloc-view-bar {
 		display: flex;
 		align-items: center;
-		gap: 12px;
+		justify-content: space-between;
+		padding: 0 24px 0 0;
+		border-bottom: 1px solid var(--netz-border-subtle);
+		background: var(--netz-surface-elevated);
 	}
 
-	.av-editor-block {
-		flex: 1;
-		font-size: var(--netz-text-small, 0.8125rem);
+	.alloc-view-tabs {
+		display: flex;
+	}
+
+	.alloc-view-tab {
+		padding: 12px 24px 10px;
+		border: none;
+		border-bottom: 2px solid transparent;
+		background: none;
+		font-size: 13px;
 		font-weight: 500;
+		color: var(--netz-text-muted);
+		cursor: pointer;
+		font-family: var(--netz-font-sans);
+		transition: color 120ms, border-color 120ms;
+		margin-bottom: -1px;
+	}
+
+	.alloc-view-tab:hover {
 		color: var(--netz-text-primary);
 	}
 
-	.av-editor-bounds {
-		font-size: var(--netz-text-label, 0.75rem);
+	.alloc-view-tab--active {
+		color: var(--netz-text-primary);
+		border-bottom-color: var(--netz-text-primary);
+		font-weight: 600;
+	}
+
+	.alloc-view-actions {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.alloc-edit-total {
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--netz-danger, #ef4444);
+	}
+
+	.alloc-edit-total--ok {
+		color: #22c55e;
+	}
+
+	/* Table */
+	.alloc-table-wrap {
+		overflow-x: auto;
+		background: var(--netz-surface-elevated);
+	}
+
+	.alloc-table {
+		width: 100%;
+		border-collapse: collapse;
+	}
+
+	.alloc-th {
+		padding: 10px 24px;
+		font-size: 11px;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
 		color: var(--netz-text-muted);
+		text-align: left;
+		background: color-mix(in srgb, var(--netz-surface-alt) 50%, transparent);
+		border-bottom: 1px solid var(--netz-border-subtle);
 		white-space: nowrap;
+	}
+
+	.alloc-th--right {
+		text-align: right;
+	}
+
+	.alloc-th--final {
+		color: var(--netz-text-primary);
+		font-weight: 800;
+	}
+
+	/* Group row */
+	.alloc-row-group {
+		background: color-mix(in srgb, var(--netz-surface-alt) 60%, transparent);
+	}
+
+	.alloc-td-group {
+		padding: 8px 24px;
+		font-size: 11px;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--netz-text-muted);
+	}
+
+	/* Block row */
+	.alloc-row-block {
+		border-bottom: 1px solid var(--netz-border-subtle);
+	}
+
+	.alloc-row-block:last-child {
+		border-bottom: none;
+	}
+
+	.alloc-td--block {
+		padding: 14px 24px;
+		font-size: 14px;
+		font-weight: 700;
+		color: var(--netz-text-primary);
+	}
+
+	/* Instrument row */
+	.alloc-row-instrument {
+		border-bottom: 1px solid color-mix(in srgb, var(--netz-border-subtle) 50%, transparent);
+	}
+
+	.alloc-td--instrument {
+		padding: 10px 24px 10px 40px;
+		font-size: 12px;
+		color: var(--netz-text-muted);
+	}
+
+	.alloc-td {
+		padding: 14px 24px;
+		vertical-align: middle;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.alloc-td--right {
+		text-align: right;
+	}
+
+	.alloc-td--muted {
+		color: var(--netz-text-muted);
+	}
+
+	.alloc-td--final {
+		font-weight: 900;
+		color: var(--netz-text-primary);
+	}
+
+	.alloc-positive {
+		color: #22c55e;
+		font-weight: 600;
+	}
+
+	.alloc-negative {
+		color: var(--netz-danger, #ef4444);
+		font-weight: 600;
+	}
+
+	.alloc-loading {
+		padding: 48px;
+		text-align: center;
+		color: var(--netz-text-muted);
+	}
+
+	.alloc-error {
+		padding: 12px 24px;
+		background: color-mix(in srgb, var(--netz-danger, #ef4444) 8%, transparent);
+		color: var(--netz-danger, #ef4444);
+		font-size: 13px;
+	}
+
+	/* Edit input */
+	.alloc-edit-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+	}
+
+	.alloc-edit-input {
+		width: 72px;
+		padding: 4px 8px;
+		text-align: right;
+		font-size: 13px;
+		border: 1px solid var(--netz-border);
+		border-radius: 6px;
+		background: var(--netz-surface-alt);
+		color: var(--netz-text-primary);
+		font-family: var(--netz-font-mono);
+	}
+
+	/* Simulation preview (breach) */
+	.alloc-sim-preview {
+		padding: 20px 24px;
+		border-bottom: 1px solid var(--netz-border-subtle);
+		background: color-mix(in srgb, var(--netz-danger, #ef4444) 4%, var(--netz-surface-elevated));
+	}
+
+	.alloc-sim-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 12px;
+	}
+
+	.alloc-sim-title {
+		font-size: 14px;
+		font-weight: 600;
+		color: var(--netz-text-primary);
+		margin: 0;
+	}
+
+	.alloc-sim-badge--breach {
+		font-size: 12px;
+		font-weight: 600;
+		color: var(--netz-danger, #ef4444);
+		background: color-mix(in srgb, var(--netz-danger, #ef4444) 12%, transparent);
+		padding: 2px 10px;
+		border-radius: 12px;
+	}
+
+	.alloc-sim-grid {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 12px;
+	}
+
+	.alloc-sim-warning {
+		margin: 12px 0 0;
+		font-size: 13px;
+		font-weight: 500;
+		color: var(--netz-danger, #ef4444);
 	}
 </style>
