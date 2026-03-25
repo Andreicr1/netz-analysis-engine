@@ -56,6 +56,7 @@ export interface SecManagerDetail {
 	vc_fund_count?: number | null;
 	total_private_fund_assets?: number | null;
 	brochure_sections?: BrochureSection[] | null;
+	linked_13f_ciks?: string[] | null;
 }
 
 export interface SecHoldingItem {

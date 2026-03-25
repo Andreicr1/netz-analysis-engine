@@ -47,10 +47,12 @@ async def run_sec_adv_ingestion(
             service = AdvService(db_session_factory=async_session)
 
             managers_upserted = await service.ingest_bulk_adv(csv_path=csv_path)
+            links_created = await service.build_entity_links()
 
             summary = {
                 "status": "completed",
                 "managers_upserted": managers_upserted,
+                "links_created": links_created,
             }
             logger.info("sec_adv_ingestion_complete", **summary)
             return summary

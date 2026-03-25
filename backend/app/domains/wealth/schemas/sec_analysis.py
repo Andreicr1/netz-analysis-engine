@@ -140,6 +140,7 @@ class SecManagerDetail(BaseModel):
     vc_fund_count: int | None = None
     total_private_fund_assets: int | None = None
     brochure_sections: list[BrochureSection] | None = None
+    linked_13f_ciks: list[str] | None = None
 
 
 class SecHoldingsPage(BaseModel):

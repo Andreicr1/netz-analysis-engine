@@ -479,12 +479,13 @@ class AdvService:
             logger.warning("adv_bulk_csv_empty")
             return 0
 
-        # Upsert in chunks of 2000
-        chunk_size = 2000
+        # 23 columns × chunk_size must stay under asyncpg's 32767 param limit.
+        # Commit per chunk to avoid long-lived transactions (Timescale Cloud timeout).
+        chunk_size = 1000
         upserted = 0
-        async with self._db_session_factory() as session, session.begin():
-            for i in range(0, len(managers), chunk_size):
-                chunk = managers[i : i + chunk_size]
+        for i in range(0, len(managers), chunk_size):
+            chunk = managers[i : i + chunk_size]
+            async with self._db_session_factory() as session, session.begin():
                 stmt = pg_insert(SecManager).values(chunk)
                 stmt = stmt.on_conflict_do_update(
                     index_elements=["crd_number"],
@@ -515,8 +516,63 @@ class AdvService:
                 )
                 await session.execute(stmt)
                 upserted += len(chunk)
+            logger.info("adv_bulk_chunk_upserted", chunk=i // chunk_size + 1, upserted=upserted)
 
         return upserted
+
+    async def build_entity_links(self) -> int:
+        """Build sec_entity_links by matching 13F parent CIKs to Registered advisers.
+
+        For each CIK in sec_13f_holdings, find Registered advisers whose
+        firm_name shares a significant prefix with the 13F filer's name.
+        E.g. "BlackRock, Inc." (13F filer) → "BLACKROCK FUND ADVISORS" (RIA).
+
+        Returns count of links created.
+        """
+        async with self._db_session_factory() as session, session.begin():
+            # Get all 13F filer CIKs and their names from sec_managers
+            result = await session.execute(text("""
+                SELECT DISTINCT h.cik, m.firm_name
+                FROM (SELECT DISTINCT cik FROM sec_13f_holdings) h
+                JOIN sec_managers m ON m.cik = h.cik
+            """))
+            filer_map = {row[0]: row[1] for row in result.fetchall()}
+
+            links_created = 0
+            for filer_cik, filer_name in filer_map.items():
+                # Extract name prefix for matching (first significant word)
+                # "BlackRock, Inc." → "BlackRock"
+                # "FRANKLIN RESOURCES INC" → "FRANKLIN"
+                prefix = filer_name.split(",")[0].split(" ")[0].strip()
+                if len(prefix) < 3:
+                    continue
+
+                # Find Registered advisers with matching name prefix
+                ria_result = await session.execute(text("""
+                    SELECT crd_number, firm_name, cik
+                    FROM sec_managers
+                    WHERE registration_status = 'Registered'
+                    AND firm_name ILIKE :pattern
+                    ORDER BY aum_total DESC NULLS LAST
+                """), {"pattern": f"{prefix}%"})
+
+                for ria in ria_result.fetchall():
+                    stmt = text("""
+                        INSERT INTO sec_entity_links
+                            (manager_crd, related_cik, relationship, related_name, source, confidence)
+                        VALUES (:crd, :cik, 'parent_13f', :name, 'name_match', :conf)
+                        ON CONFLICT (manager_crd, related_cik, relationship) DO NOTHING
+                    """)
+                    await session.execute(stmt, {
+                        "crd": ria[0],
+                        "cik": filer_cik,
+                        "name": filer_name,
+                        "conf": 0.8,
+                    })
+                    links_created += 1
+
+            logger.info("entity_links_built", links_created=links_created)
+            return links_created
 
     # ── DB Read (Stale-but-serve) ───────────────────────────────────
 

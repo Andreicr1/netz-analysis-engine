@@ -50,6 +50,7 @@ from app.shared.enums import Role
 from app.shared.models import (
     Sec13fDiff,
     Sec13fHolding,
+    SecEntityLink,
     SecManager,
     SecManagerBrochureText,
     SecManagerFund,
@@ -81,6 +82,35 @@ def _validate_cik(cik: str) -> str:
 
 def _require_investment_role_dep(actor: Actor = Depends(get_actor)) -> None:
     _require_investment_role(actor)
+
+
+async def _resolve_ciks(db: AsyncSession, cik: str, *, crd: str | None = None) -> list[str]:
+    """Resolve all CIKs for a manager: own CIK + parent 13F filer CIKs via entity links.
+
+    RIAs file ADV with one CIK, but parent holding companies file 13F
+    with a different CIK. This resolves both for holdings queries.
+    """
+    cik_list = [cik]
+
+    # Resolve via CRD if provided, otherwise look up CRD from CIK
+    if crd:
+        link_stmt = (
+            select(SecEntityLink.related_cik)
+            .where(SecEntityLink.manager_crd == crd)
+            .where(SecEntityLink.relationship == "parent_13f")
+        )
+    else:
+        link_stmt = (
+            select(SecEntityLink.related_cik)
+            .join(SecManager, SecManager.crd_number == SecEntityLink.manager_crd)
+            .where(SecManager.cik == cik)
+            .where(SecEntityLink.relationship == "parent_13f")
+        )
+
+    link_result = await db.execute(link_stmt)
+    linked_ciks = [row[0] for row in link_result.all()]
+    cik_list.extend(linked_ciks)
+    return cik_list
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -300,10 +330,13 @@ async def get_manager_detail(
 
     today = date.today()
 
+    # Resolve all CIKs (own + parent 13F filers via entity links)
+    cik_list = await _resolve_ciks(db, cik, crd=manager.crd_number)
+
     # Latest quarter summary — always filter report_date for chunk pruning
     latest_q_stmt = (
         select(func.max(Sec13fHolding.report_date))
-        .where(Sec13fHolding.cik == cik)
+        .where(Sec13fHolding.cik.in_(cik_list))
         .where(Sec13fHolding.report_date <= today)
     )
     lq_result = await db.execute(latest_q_stmt)
@@ -317,7 +350,7 @@ async def get_manager_detail(
                 func.count().label("cnt"),
                 func.sum(Sec13fHolding.market_value).label("total"),
             )
-            .where(Sec13fHolding.cik == cik)
+            .where(Sec13fHolding.cik.in_(cik_list))
             .where(Sec13fHolding.report_date == latest_quarter)
         )
         s_result = await db.execute(summary_stmt)
@@ -325,6 +358,9 @@ async def get_manager_detail(
         if row:
             holdings_count = int(row["cnt"])
             total_value = int(row["total"]) if row["total"] else None
+
+    # Linked 13F CIKs for frontend display
+    linked_13f_ciks = [c for c in cik_list if c != cik] or None
 
     # Brochure sections
     brochure_stmt = (
@@ -364,6 +400,7 @@ async def get_manager_detail(
         vc_fund_count=manager.vc_fund_count,
         total_private_fund_assets=manager.total_private_fund_assets,
         brochure_sections=brochure_sections,
+        linked_13f_ciks=linked_13f_ciks,
     )
 
 
@@ -391,10 +428,13 @@ async def get_holdings(
 
     today = date.today()
 
+    # Resolve all CIKs (own + parent 13F filers via entity links)
+    cik_list = await _resolve_ciks(db, cik)
+
     # Available quarters
     quarters_stmt = (
         select(Sec13fHolding.report_date)
-        .where(Sec13fHolding.cik == cik)
+        .where(Sec13fHolding.cik.in_(cik_list))
         .where(Sec13fHolding.report_date <= today)
         .distinct()
         .order_by(Sec13fHolding.report_date.desc())
@@ -416,7 +456,7 @@ async def get_holdings(
     count_stmt = (
         select(func.count())
         .select_from(Sec13fHolding)
-        .where(Sec13fHolding.cik == cik)
+        .where(Sec13fHolding.cik.in_(cik_list))
         .where(Sec13fHolding.report_date == target_date)
     )
     count_result = await db.execute(count_stmt)
@@ -425,7 +465,7 @@ async def get_holdings(
     # Total value
     value_stmt = (
         select(func.sum(Sec13fHolding.market_value))
-        .where(Sec13fHolding.cik == cik)
+        .where(Sec13fHolding.cik.in_(cik_list))
         .where(Sec13fHolding.report_date == target_date)
     )
     value_result = await db.execute(value_stmt)
@@ -435,7 +475,7 @@ async def get_holdings(
     offset = (page - 1) * page_size
     holdings_stmt = (
         select(Sec13fHolding)
-        .where(Sec13fHolding.cik == cik)
+        .where(Sec13fHolding.cik.in_(cik_list))
         .where(Sec13fHolding.report_date == target_date)
         .order_by(Sec13fHolding.market_value.desc().nulls_last())
         .limit(page_size)
@@ -448,7 +488,7 @@ async def get_holdings(
     diff_map: dict[str, tuple[int | None, int | None, str | None]] = {}
     diff_stmt = (
         select(Sec13fDiff)
-        .where(Sec13fDiff.cik == cik)
+        .where(Sec13fDiff.cik.in_(cik_list))
         .where(Sec13fDiff.quarter_to == target_date)
     )
     d_result = await db.execute(diff_stmt)
@@ -511,6 +551,9 @@ async def get_style_drift(
     today = date.today()
     cutoff = date(today.year - 2, today.month, today.day)
 
+    # Resolve all CIKs (own + parent 13F filers via entity links)
+    cik_list = await _resolve_ciks(db, cik)
+
     # Sector allocation per quarter — always filter report_date for chunk pruning
     stmt = (
         select(
@@ -518,7 +561,7 @@ async def get_style_drift(
             Sec13fHolding.sector,
             func.sum(Sec13fHolding.market_value).label("value"),
         )
-        .where(Sec13fHolding.cik == cik)
+        .where(Sec13fHolding.cik.in_(cik_list))
         .where(Sec13fHolding.report_date >= cutoff)
         .where(Sec13fHolding.report_date <= today)
         .group_by(Sec13fHolding.report_date, Sec13fHolding.sector)
@@ -728,10 +771,13 @@ async def compare_managers(
     for m in managers:
         cik = m.cik or ""
 
+        # Resolve all CIKs (own + parent 13F filers via entity links)
+        m_cik_list = await _resolve_ciks(db, cik, crd=m.crd_number)
+
         # Latest quarter
         lq_stmt = (
             select(func.max(Sec13fHolding.report_date))
-            .where(Sec13fHolding.cik == cik)
+            .where(Sec13fHolding.cik.in_(m_cik_list))
             .where(Sec13fHolding.report_date <= today)
         )
         lq_result = await db.execute(lq_stmt)
@@ -745,7 +791,7 @@ async def compare_managers(
         if latest_quarter:
             h_stmt = (
                 select(Sec13fHolding)
-                .where(Sec13fHolding.cik == cik)
+                .where(Sec13fHolding.cik.in_(m_cik_list))
                 .where(Sec13fHolding.report_date == latest_quarter)
             )
             h_result = await db.execute(h_stmt)
