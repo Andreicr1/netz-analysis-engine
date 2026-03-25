@@ -61,6 +61,7 @@ class RegionalScoreRead(BaseModel):
     coverage: float
     dimensions: dict[str, DimensionScoreRead] = {}
     data_freshness: dict[str, DataFreshnessRead] = {}
+    analysis_text: str | None = None
 
 
 class GlobalIndicatorsRead(BaseModel):

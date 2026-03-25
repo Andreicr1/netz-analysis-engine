@@ -69,6 +69,46 @@ logger = structlog.get_logger()
 
 router = APIRouter(prefix="/macro")
 
+_REGION_DISPLAY_NAMES: dict[str, str] = {
+    "US": "United States",
+    "EUROPE": "Europe",
+    "ASIA": "Asia",
+    "EM": "Emerging Markets",
+}
+
+
+def _build_analysis_text(
+    region_key: str,
+    composite_score: float,
+    dimensions: dict[str, DimensionScoreRead],
+) -> str:
+    """Build a short analytical summary from region scores and dimensions."""
+    name = _REGION_DISPLAY_NAMES.get(region_key, region_key)
+    if composite_score >= 70:
+        tone = "strong"
+    elif composite_score >= 55:
+        tone = "moderately positive"
+    elif composite_score >= 40:
+        tone = "mixed"
+    else:
+        tone = "weak"
+
+    parts = [
+        f"The {name} macro environment is currently {tone} with a composite score of {composite_score:.0f}/100."
+    ]
+
+    strong = [d for d, v in dimensions.items() if v.score >= 65]
+    weak = [d for d, v in dimensions.items() if v.score < 40]
+
+    if strong:
+        labels = ", ".join(d.replace("_", " ") for d in strong)
+        parts.append(f"Strength areas: {labels}.")
+    if weak:
+        labels = ", ".join(d.replace("_", " ") for d in weak)
+        parts.append(f"Areas of concern: {labels}.")
+
+    return " ".join(parts)
+
 
 @router.get(
     "/scores",
@@ -112,11 +152,15 @@ async def get_macro_scores(
             sid: DataFreshnessRead(**f_data)
             for sid, f_data in region_data.get("data_freshness", {}).items()
         }
+        analysis_text = _build_analysis_text(
+            region_key, region_data["composite_score"], dimensions,
+        )
         regions[region_key] = RegionalScoreRead(
             composite_score=region_data["composite_score"],
             coverage=region_data["coverage"],
             dimensions=dimensions,
             data_freshness=freshness,
+            analysis_text=analysis_text,
         )
 
     # Parse global indicators

@@ -42,6 +42,21 @@
 	);
 	let globalInd = $derived(scores?.global_indicators ?? null);
 
+	// ── Expandable region state ─────────────────────────────────────────
+
+	let expandedRegion = $state<string | null>(null);
+
+	// Expand first region once data loads
+	$effect(() => {
+		if (regions.length > 0 && expandedRegion === null) {
+			expandedRegion = regions[0]?.[0] ?? null;
+		}
+	});
+
+	function toggleRegion(regionName: string) {
+		expandedRegion = expandedRegion === regionName ? null : regionName;
+	}
+
 	// ── Chart state ──────────────────────────────────────────────────────
 
 	let selectedSeries = $state<Set<string>>(new Set());
@@ -172,10 +187,27 @@
 
 	// ── Helpers ───────────────────────────────────────────────────────────
 
+	const REGION_DISPLAY: Record<string, string> = {
+		US: "United States",
+		EUROPE: "Europe",
+		ASIA: "Asia",
+		EM: "Emerging Markets",
+	};
+
+	function regionDisplayName(key: string): string {
+		return REGION_DISPLAY[key] ?? key;
+	}
+
 	function scoreColor(score: number): string {
-		if (score >= 70) return "var(--netz-success)";
-		if (score >= 40) return "var(--netz-warning)";
-		return "var(--netz-danger)";
+		if (score >= 70) return "#22c55e";
+		if (score >= 40) return "#fe9a00";
+		return "#ff2056";
+	}
+
+	function stressBarColor(value: number): string {
+		if (value > 80) return "#ff2056";
+		if (value >= 40) return "#fe9a00";
+		return "#155dfc";
 	}
 
 	// ── Snapshot regime badge ────────────────────────────────────────────
@@ -186,69 +218,63 @@
 		return regime.replace(/_/g, " ").toUpperCase();
 	}
 
-	function snapshotRegimeBadgeColor(r: RegimeHierarchy | null): string {
-		if (!r) return "var(--netz-text-muted)";
-		return regimeColor(r.global_regime);
-	}
-
 	function formatLabel(key: string): string {
 		return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 	}
 </script>
 
-<PageHeader title="Macro Intelligence">
-	{#snippet actions()}
-		{#if regime}
-			<span class="macro-regime-badge" style:color={snapshotRegimeBadgeColor(regime)}>
-				Regime: {snapshotRegimeLabel(regime)} ●
-			</span>
-		{/if}
-		{#if regime?.regional_regimes}
-			{#each Object.entries(regime.regional_regimes) as [region, reg] (region)}
-				<span class="macro-region-badge" style:color={regimeColor(reg)}>
-					{region}
+<!-- ── Header ────────────────────────────────────────────────────────── -->
+<div class="macro-page">
+	<header class="macro-header">
+		<h1 class="macro-title">Macro Intelligence</h1>
+		<div class="macro-header-right">
+			{#if regime}
+				<span class="macro-regime-line">
+					REGIME: <strong class="regime-value">{snapshotRegimeLabel(regime)}</strong>
 				</span>
-			{/each}
-		{/if}
-		{#if scores}
-			<span class="macro-asof">as of {scores.as_of_date}</span>
-		{/if}
-	{/snippet}
-</PageHeader>
+				<span class="macro-regime-separator">&#x2022;</span>
+			{/if}
+			{#if regime?.regional_regimes}
+				{#each Object.keys(regime.regional_regimes) as region (region)}
+					<span class="macro-region-tag">{region}</span>
+				{/each}
+			{/if}
+			{#if scores}
+				<span class="macro-asof">AS OF {scores.as_of_date}</span>
+			{/if}
+		</div>
+	</header>
 
-<div class="macro-grid">
-	<!-- ═══════════════════════════════════════════════════════════════════ -->
-	<!-- ROW 1: Core indicators (VIX, Yield Curve, CPI, Fed Funds)          -->
-	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<!-- ── Card 1: Market Indicators ─────────────────────────────────── -->
 	{#if indicators}
-		<section class="macro-panel macro-panel--indicators">
-			<h3 class="macro-panel-title">Market Indicators</h3>
-			<div class="ind-grid">
-				<div class="ind-card">
+		<section class="fi-card">
+			<div class="fi-card-header">
+				<span class="fi-card-title">MARKET INDICATORS</span>
+			</div>
+			<div class="ind-row">
+				<div class="ind-col">
 					<span class="ind-label">VIX</span>
 					<span class="ind-value">{indicators.vix !== null ? formatNumber(indicators.vix) : "—"}</span>
 					{#if indicators.vix_date}
 						<span class="ind-date">{indicators.vix_date}</span>
 					{/if}
 				</div>
-				<div class="ind-card">
-					<span class="ind-label">10Y-2Y Spread</span>
-					<span class="ind-value" style:color={indicators.yield_curve_10y2y !== null && indicators.yield_curve_10y2y < 0 ? "var(--netz-danger)" : "var(--netz-text-primary)"}>
-						{indicators.yield_curve_10y2y !== null ? `${(indicators.yield_curve_10y2y * 100).toFixed(0)} bps` : "—"}
-					</span>
+				<div class="ind-col">
+					<span class="ind-label">10Y-2Y SPREAD</span>
+					<span class="ind-value">{indicators.yield_curve_10y2y !== null ? formatNumber(indicators.yield_curve_10y2y * 100, 0) + " bps" : "—"}</span>
 					{#if indicators.yield_curve_date}
 						<span class="ind-date">{indicators.yield_curve_date}</span>
 					{/if}
 				</div>
-				<div class="ind-card">
-					<span class="ind-label">CPI YoY</span>
+				<div class="ind-col">
+					<span class="ind-label">CPI YOY</span>
 					<span class="ind-value">{indicators.cpi_yoy !== null ? formatPercent(indicators.cpi_yoy) : "—"}</span>
 					{#if indicators.cpi_date}
 						<span class="ind-date">{indicators.cpi_date}</span>
 					{/if}
 				</div>
-				<div class="ind-card">
-					<span class="ind-label">Fed Funds</span>
+				<div class="ind-col ind-col--last">
+					<span class="ind-label">FED FUNDS</span>
 					<span class="ind-value">{indicators.fed_funds_rate !== null ? formatPercent(indicators.fed_funds_rate) : "—"}</span>
 					{#if indicators.fed_funds_date}
 						<span class="ind-date">{indicators.fed_funds_date}</span>
@@ -258,92 +284,130 @@
 		</section>
 	{/if}
 
-	<!-- ═══════════════════════════════════════════════════════════════════ -->
-	<!-- ROW 2: Global stress indicators                                    -->
-	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<!-- ── Card 2: Global Stress Index ───────────────────────────────── -->
 	{#if globalInd}
-		<section class="macro-panel">
-			<h3 class="macro-panel-title">Global Stress</h3>
-			<div class="ind-grid">
-				<div class="ind-card">
-					<span class="ind-label">Geopolitical Risk</span>
-					<span class="ind-value">{globalInd.geopolitical_risk_score.toFixed(1)}</span>
-					<div class="ind-bar-track">
-						<div class="ind-bar-fill" style:width="{globalInd.geopolitical_risk_score}%"></div>
+		<section class="fi-card">
+			<div class="fi-card-header">
+				<svg class="fi-icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#62748e" stroke-width="1.5"/><path d="M8 4v5M8 11v1" stroke="#62748e" stroke-width="1.5" stroke-linecap="round"/></svg>
+				<span class="fi-card-title">GLOBAL STRESS INDEX</span>
+			</div>
+			<div class="ind-row">
+				{#each [
+					{ label: "Geopolitical Risk", value: globalInd.geopolitical_risk_score },
+					{ label: "Energy Stress", value: globalInd.energy_stress },
+					{ label: "Commodity Stress", value: globalInd.commodity_stress },
+					{ label: "USD Strength", value: globalInd.usd_strength },
+				] as item, i (item.label)}
+					<div class="ind-col stress-col" class:ind-col--last={i === 3}>
+						<span class="stress-label">{item.label}</span>
+						<div class="stress-value-row">
+							<span class="stress-value">{item.value.toFixed(0)}</span>
+							<span class="stress-max">/ 100</span>
+						</div>
+						<div class="stress-bar-track">
+							<div class="stress-bar-fill" style:width="{item.value}%" style:background={stressBarColor(item.value)}></div>
+						</div>
 					</div>
-				</div>
-				<div class="ind-card">
-					<span class="ind-label">Energy Stress</span>
-					<span class="ind-value">{globalInd.energy_stress.toFixed(1)}</span>
-					<div class="ind-bar-track">
-						<div class="ind-bar-fill" style:width="{globalInd.energy_stress}%"></div>
-					</div>
-				</div>
-				<div class="ind-card">
-					<span class="ind-label">Commodity Stress</span>
-					<span class="ind-value">{globalInd.commodity_stress.toFixed(1)}</span>
-					<div class="ind-bar-track">
-						<div class="ind-bar-fill" style:width="{globalInd.commodity_stress}%"></div>
-					</div>
-				</div>
-				<div class="ind-card">
-					<span class="ind-label">USD Strength</span>
-					<span class="ind-value">{globalInd.usd_strength.toFixed(1)}</span>
-					<div class="ind-bar-track">
-						<div class="ind-bar-fill" style:width="{globalInd.usd_strength}%"></div>
-					</div>
-				</div>
+				{/each}
 			</div>
 		</section>
 	{/if}
 
-	<!-- ═══════════════════════════════════════════════════════════════════ -->
-	<!-- ROW 3: Regional scores + regime                                    -->
-	<!-- ═══════════════════════════════════════════════════════════════════ -->
-	{#each regions as [regionName, regionData] (regionName)}
-		<section class="macro-panel macro-panel--region">
-			<div class="region-header">
-				<h3 class="region-name">{regionName}</h3>
-				{#if regime?.regional_regimes[regionName]}
-					<span class="region-regime" style:color={regimeColor(regime.regional_regimes[regionName])}>
-						{formatLabel(regime.regional_regimes[regionName])}
-					</span>
-				{/if}
-			</div>
+	<!-- ── Section 3: Regional Analysis ──────────────────────────────── -->
+	{#if regions.length > 0}
+		<div class="section-label">REGIONAL ANALYSIS</div>
 
-			<div
-				class="region-score-hero"
-				style:color={scoreColor(regionData.composite_score)}
-				title="Composite score 0–100 based on multiple economic indicators. Higher = stronger economic conditions."
+		{#each regions as [regionName, regionData] (regionName)}
+			{@const isExpanded = expandedRegion === regionName}
+			{@const dimEntries = Object.entries(regionData.dimensions)}
+			<section
+				class="region-card"
+				class:region-card--expanded={isExpanded}
 			>
-				{regionData.composite_score.toFixed(0)}
-			</div>
+				<!-- Region header row -->
+				<button class="region-header" onclick={() => toggleRegion(regionName)}>
+					<div class="region-header-left">
+						<span class="region-name">{regionDisplayName(regionName)}</span>
+						{#if regime?.regional_regimes[regionName]}
+							<span class="region-regime-badge">{regime.regional_regimes[regionName].replace(/_/g, " ").toUpperCase()}</span>
+						{/if}
+						<span class="region-coverage">COVERAGE {(regionData.coverage * 100).toFixed(0)}%</span>
+					</div>
+					<div class="region-header-right">
+						<div class="region-score-group">
+							<span class="region-score-label">MACRO SCORE</span>
+							<span class="region-score-value" style:color={scoreColor(regionData.composite_score)}>
+								{regionData.composite_score.toFixed(0)}
+							</span>
+						</div>
+						<div class="region-chevron" class:region-chevron--open={isExpanded}>
+							<svg viewBox="0 0 20 20" fill="none" width="20" height="20"><path d="M6 8l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+						</div>
+					</div>
+				</button>
 
-			<div class="region-coverage">
-				Coverage: {(regionData.coverage * 100).toFixed(0)}%
-			</div>
+				<!-- Collapsed mini bars -->
+				{#if !isExpanded && dimEntries.length > 0}
+					<div class="region-mini-bars">
+						{#each dimEntries.slice(0, 3) as [, dim]}
+							<div class="mini-bar-track">
+								<div class="mini-bar-fill" style:width="{dim.score}%"></div>
+							</div>
+						{/each}
+					</div>
+				{/if}
 
-			{#if Object.keys(regionData.dimensions).length > 0}
-				<div class="region-dims">
-					{#each Object.entries(regionData.dimensions) as [dimName, dim] (dimName)}
-						<div class="region-dim">
-							<span class="dim-name">{formatLabel(dimName)}</span>
-							<span class="dim-score" style:color={scoreColor(dim.score)}>{dim.score.toFixed(0)}</span>
-							<div class="dim-bar-track">
-								<div class="dim-bar-fill" style:width="{dim.score}%"></div>
+				<!-- Expanded body -->
+				{#if isExpanded}
+					<div class="region-body">
+						<div class="region-body-inner">
+							<!-- Left: Score Breakdown -->
+							<div class="breakdown-section">
+								<span class="breakdown-title">MACRO SCORE BREAKDOWN</span>
+								<div class="breakdown-grid">
+									{#each dimEntries as [dimName, dim] (dimName)}
+										<div class="breakdown-item">
+											<div class="breakdown-item-header">
+												<span class="breakdown-dim-name">{formatLabel(dimName)}</span>
+												<span class="breakdown-dim-score" style:color={scoreColor(dim.score)}>{dim.score.toFixed(0)}</span>
+											</div>
+											<div class="breakdown-bar-track">
+												<div class="breakdown-bar-fill" style:width="{dim.score}%"></div>
+											</div>
+										</div>
+									{/each}
+								</div>
+							</div>
+
+							<!-- Right: Context & Analysis -->
+							<div class="analysis-card">
+								<div class="analysis-card-header">
+									<svg class="fi-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="#62748e" stroke-width="1.2"/><path d="M5 6h6M5 8.5h4" stroke="#62748e" stroke-width="1.2" stroke-linecap="round"/></svg>
+									<span class="analysis-card-title">CONTEXT & ANALYSIS</span>
+								</div>
+								<div class="analysis-card-body">
+									{#if regionData.analysis_text}
+										<p class="analysis-text">{regionData.analysis_text}</p>
+									{:else}
+										<p class="analysis-text analysis-text--empty">Analysis not available for this region.</p>
+									{/if}
+								</div>
+								<div class="analysis-card-footer">
+									<a href="/macro/reports/{regionName.toLowerCase()}" class="analysis-link">VIEW FULL DETAILED REPORT</a>
+								</div>
 							</div>
 						</div>
-					{/each}
-				</div>
-			{/if}
-		</section>
-	{/each}
+					</div>
+				{/if}
+			</section>
+		{/each}
+	{/if}
 
-	<!-- ═══════════════════════════════════════════════════════════════════ -->
-	<!-- ROW 4: Interactive Chart + Series Picker (full width)              -->
-	<!-- ═══════════════════════════════════════════════════════════════════ -->
-	<section class="macro-panel macro-panel--chart">
-		<h3 class="macro-panel-title">Macro Charting</h3>
+	<!-- ── Interactive Chart + Series Picker ──────────────────────────── -->
+	<section class="fi-card fi-card--full">
+		<div class="fi-card-header">
+			<span class="fi-card-title">MACRO CHARTING</span>
+		</div>
 		<div class="chart-layout">
 			<div class="chart-main">
 				<MacroChart
@@ -363,205 +427,473 @@
 		</div>
 	</section>
 
-	<!-- ═══════════════════════════════════════════════════════════════════ -->
-	<!-- ROW 5: Committee Reviews (full width)                              -->
-	<!-- ═══════════════════════════════════════════════════════════════════ -->
-	<section class="macro-panel macro-panel--full">
+	<!-- ── Committee Reviews ──────────────────────────────────────────── -->
+	<section class="fi-card fi-card--full">
 		<CommitteeReviews {initialReviews} {actorRole} />
 	</section>
 </div>
 
 <style>
-	/* ── Page grid ────────────────────────────────────────────────────────── */
-	.macro-grid {
-		display: grid;
-		grid-template-columns: repeat(4, 1fr);
-		gap: var(--netz-space-stack-sm, 12px);
-		padding: var(--netz-space-stack-md, 16px) var(--netz-space-inline-lg, 24px);
-		align-content: start;
+	/* ── Page layout ──────────────────────────────────────────────────── */
+	.macro-page {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+		padding: 24px;
 	}
 
-	.macro-regime-badge {
-		font-size: var(--netz-text-small, 0.8125rem);
+	/* ── Header ──────────────────────────────────────────────────────── */
+	.macro-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		flex-wrap: wrap;
+		gap: 12px;
+	}
+
+	.macro-title {
+		font-size: 28px;
+		font-weight: 800;
+		color: #1d293d;
+		margin: 0;
+		line-height: 1.2;
+	}
+
+	.macro-header-right {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		flex-wrap: wrap;
+	}
+
+	.macro-regime-line {
+		font-size: 11px;
 		font-weight: 700;
-		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: #62748e;
+		letter-spacing: 0.03em;
 	}
 
-	.macro-region-badge {
-		font-size: var(--netz-text-label, 0.75rem);
-		font-weight: 600;
-		letter-spacing: 0.02em;
+	.regime-value {
+		color: #1d293d;
+		font-weight: 900;
+	}
+
+	.macro-regime-separator {
+		color: #62748e;
+		font-size: 11px;
+	}
+
+	.macro-region-tag {
+		font-size: 11px;
+		font-weight: 700;
+		color: #62748e;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
 	}
 
 	.macro-asof {
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		font-size: 11px;
+		font-weight: 600;
+		color: #62748e;
+		text-transform: uppercase;
 	}
 
-	/* ── Panel base ──────────────────────────────────────────────────────── */
-	.macro-panel {
-		border: 1px solid var(--netz-border-subtle);
-		border-radius: var(--netz-radius-md, 12px);
-		background: var(--netz-surface-elevated);
+	/* ── Card base ───────────────────────────────────────────────────── */
+	.fi-card {
+		background: #fff;
+		border-radius: 16px;
+		box-shadow: 0 2px 8px rgba(0,0,0,0.02);
 		overflow: hidden;
 	}
 
-	.macro-panel--indicators {
-		grid-column: 1 / -1;
+	.fi-card--full {
+		width: 100%;
 	}
 
-	.macro-panel--chart {
-		grid-column: 1 / -1;
+	.fi-card-header {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 10px 20px;
+		background: rgba(248,250,252,0.5);
+		border-bottom: 1px solid #f1f5f9;
 	}
 
-	.macro-panel--full {
-		grid-column: 1 / -1;
-	}
-
-	.macro-panel--region {
-		grid-column: span 1;
-	}
-
-	.macro-panel-title {
-		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-md, 16px);
-		font-size: var(--netz-text-label, 0.75rem);
-		font-weight: 600;
-		letter-spacing: 0.04em;
+	.fi-card-title {
+		font-size: 11px;
+		font-weight: 700;
 		text-transform: uppercase;
-		color: var(--netz-text-muted);
-		border-bottom: 1px solid var(--netz-border-subtle);
-		background: var(--netz-surface-alt);
-		margin: 0;
+		color: #62748e;
+		letter-spacing: 1.1px;
 	}
 
-	/* ── Indicator grid ──────────────────────────────────────────────────── */
-	.ind-grid {
+	.fi-icon {
+		width: 14px;
+		height: 14px;
+		flex-shrink: 0;
+	}
+
+	/* ── Indicator row (shared by Market Indicators & Stress) ────────── */
+	.ind-row {
 		display: grid;
 		grid-template-columns: repeat(4, 1fr);
-		gap: 1px;
-		background: var(--netz-border-subtle);
 	}
 
-	.ind-card {
+	.ind-col {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		padding: var(--netz-space-stack-xs, 10px) var(--netz-space-inline-sm, 12px);
-		background: var(--netz-surface-elevated);
+		padding: 14px 20px;
+		border-right: 1px solid #f1f5f9;
+	}
+
+	.ind-col--last {
+		border-right: none;
 	}
 
 	.ind-label {
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		font-size: 10px;
+		font-weight: 700;
+		text-transform: uppercase;
+		color: #90a1b9;
+		letter-spacing: 0.5px;
 	}
 
 	.ind-value {
-		font-size: var(--netz-text-h4, 1.125rem);
-		font-weight: 700;
-		color: var(--netz-text-primary);
+		font-size: 24px;
+		font-weight: 900;
+		color: #1d293d;
 		font-variant-numeric: tabular-nums;
+		line-height: 1.2;
 	}
 
 	.ind-date {
 		font-size: 10px;
-		color: var(--netz-text-muted);
+		font-weight: 500;
+		color: #90a1b9;
 	}
 
-	.ind-bar-track {
-		height: 4px;
-		background: var(--netz-surface-alt);
-		border-radius: 2px;
+	/* ── Stress Index specifics ──────────────────────────────────────── */
+	.stress-col {
+		gap: 4px;
+	}
+
+	.stress-label {
+		font-size: 11px;
+		font-weight: 700;
+		text-transform: uppercase;
+		color: #90a1b9;
+		letter-spacing: 0.55px;
+	}
+
+	.stress-value-row {
+		display: flex;
+		align-items: baseline;
+		gap: 4px;
+	}
+
+	.stress-value {
+		font-size: 30px;
+		font-weight: 900;
+		color: #1d293d;
+		font-variant-numeric: tabular-nums;
+		line-height: 1.1;
+	}
+
+	.stress-max {
+		font-size: 10px;
+		font-weight: 700;
+		color: #90a1b9;
+	}
+
+	.stress-bar-track {
+		height: 6px;
+		background: #f1f5f9;
+		border-radius: 9999px;
 		overflow: hidden;
 		margin-top: 2px;
 	}
 
-	.ind-bar-fill {
+	.stress-bar-fill {
 		height: 100%;
-		background: var(--netz-brand-primary);
-		border-radius: 2px;
+		border-radius: 9999px;
 		transition: width 300ms ease;
 	}
 
-	/* ── Region cards ────────────────────────────────────────────────────── */
+	/* ── Section label ───────────────────────────────────────────────── */
+	.section-label {
+		font-size: 11px;
+		font-weight: 700;
+		text-transform: uppercase;
+		color: #62748e;
+		letter-spacing: 1.1px;
+		padding-top: 8px;
+	}
+
+	/* ── Region cards ────────────────────────────────────────────────── */
+	.region-card {
+		background: #fff;
+		border-radius: 16px;
+		box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+		overflow: hidden;
+		border: 1px solid transparent;
+		transition: border-color 0.15s, box-shadow 0.15s;
+	}
+
+	.region-card--expanded {
+		border-color: #bedbff;
+		box-shadow: 0 0 0 1px #eff6ff, 0 4px 6px -1px rgba(0,0,0,0.1);
+	}
+
 	.region-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-md, 16px);
-		border-bottom: 1px solid var(--netz-border-subtle);
-		background: var(--netz-surface-alt);
+		width: 100%;
+		padding: 16px 20px;
+		background: transparent;
+		border: none;
+		cursor: pointer;
+		text-align: left;
+		font-family: inherit;
+	}
+
+	.region-header:hover {
+		background: rgba(248,250,252,0.5);
+	}
+
+	.region-header-left {
+		display: flex;
+		align-items: center;
+		gap: 12px;
 	}
 
 	.region-name {
-		font-size: var(--netz-text-body, 0.9375rem);
-		font-weight: 600;
-		color: var(--netz-text-primary);
-		margin: 0;
-	}
-
-	.region-regime {
-		font-size: var(--netz-text-label, 0.75rem);
+		font-size: 20px;
 		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
+		color: #1d293d;
 	}
 
-	.region-score-hero {
-		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-md, 16px) 0;
-		font-size: var(--netz-text-h2, 1.75rem);
-		font-weight: 800;
-		font-variant-numeric: tabular-nums;
+	.region-regime-badge {
+		font-size: 10px;
+		font-weight: 700;
+		color: #90a1b9;
+		background: #f1f5f9;
+		padding: 2px 8px;
+		border-radius: 4px;
+		letter-spacing: 0.03em;
 	}
 
 	.region-coverage {
-		padding: 0 var(--netz-space-inline-md, 16px) var(--netz-space-stack-2xs, 4px);
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		font-size: 10px;
+		font-weight: 600;
+		color: #90a1b9;
+		letter-spacing: 0.03em;
 	}
 
-	.region-dims {
-		border-top: 1px solid var(--netz-border-subtle);
-		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-md, 16px);
+	.region-header-right {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+	}
+
+	.region-score-group {
 		display: flex;
 		flex-direction: column;
-		gap: var(--netz-space-stack-2xs, 4px);
+		align-items: flex-end;
+		gap: 0;
 	}
 
-	.region-dim {
-		display: grid;
-		grid-template-columns: 1fr 30px 60px;
-		align-items: center;
-		gap: var(--netz-space-inline-xs, 6px);
-		font-size: var(--netz-text-label, 0.75rem);
+	.region-score-label {
+		font-size: 10px;
+		font-weight: 700;
+		text-transform: uppercase;
+		color: #90a1b9;
+		letter-spacing: 0.5px;
 	}
 
-	.dim-name {
-		color: var(--netz-text-secondary);
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.dim-score {
-		font-weight: 600;
+	.region-score-value {
+		font-size: 36px;
+		font-weight: 900;
 		font-variant-numeric: tabular-nums;
-		text-align: right;
+		line-height: 1;
 	}
 
-	.dim-bar-track {
+	.region-chevron {
+		width: 32px;
+		height: 32px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: #eff6ff;
+		border-radius: 9999px;
+		color: #155dfc;
+		transition: transform 0.2s;
+	}
+
+	.region-chevron--open {
+		transform: rotate(180deg);
+	}
+
+	/* ── Collapsed mini bars ─────────────────────────────────────────── */
+	.region-mini-bars {
+		display: flex;
+		gap: 8px;
+		padding: 0 20px 14px;
+	}
+
+	.mini-bar-track {
+		flex: 1;
 		height: 4px;
-		background: var(--netz-surface-alt);
-		border-radius: 2px;
+		background: #f1f5f9;
+		border-radius: 9999px;
 		overflow: hidden;
 	}
 
-	.dim-bar-fill {
+	.mini-bar-fill {
 		height: 100%;
-		background: var(--netz-brand-primary);
-		border-radius: 2px;
+		background: #cad5e2;
+		border-radius: 9999px;
+		opacity: 0.5;
 	}
 
-	/* ── Chart layout ───────────────────────────────────────────────────── */
+	/* ── Expanded body ───────────────────────────────────────────────── */
+	.region-body {
+		background: rgba(248,250,252,0.5);
+		border-top: 1px solid #f1f5f9;
+		padding: 20px;
+	}
+
+	.region-body-inner {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 20px;
+	}
+
+	/* ── Score Breakdown ─────────────────────────────────────────────── */
+	.breakdown-section {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	.breakdown-title {
+		font-size: 11px;
+		font-weight: 700;
+		text-transform: uppercase;
+		color: #62748e;
+		letter-spacing: 1.1px;
+	}
+
+	.breakdown-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 12px;
+	}
+
+	.breakdown-item {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+
+	.breakdown-item-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+	}
+
+	.breakdown-dim-name {
+		font-size: 11px;
+		font-weight: 700;
+		color: #45556c;
+		text-transform: capitalize;
+	}
+
+	.breakdown-dim-score {
+		font-size: 14px;
+		font-weight: 900;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.breakdown-bar-track {
+		height: 8px;
+		background: rgba(226,232,240,0.6);
+		border-radius: 9999px;
+		overflow: hidden;
+	}
+
+	.breakdown-bar-fill {
+		height: 100%;
+		background: #155dfc;
+		border-radius: 9999px;
+		transition: width 300ms ease;
+	}
+
+	/* ── Analysis card ───────────────────────────────────────────────── */
+	.analysis-card {
+		background: #fff;
+		border: 1px solid #e2e8f0;
+		border-radius: 14px;
+		box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+		display: flex;
+		flex-direction: column;
+	}
+
+	.analysis-card-header {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 12px 16px;
+		border-bottom: 1px solid #f1f5f9;
+	}
+
+	.analysis-card-title {
+		font-size: 11px;
+		font-weight: 700;
+		text-transform: uppercase;
+		color: #62748e;
+		letter-spacing: 1.1px;
+	}
+
+	.analysis-card-body {
+		padding: 16px;
+		flex: 1;
+	}
+
+	.analysis-text {
+		font-size: 14px;
+		font-weight: 500;
+		color: #45556c;
+		line-height: 22.75px;
+		margin: 0;
+	}
+
+	.analysis-text--empty {
+		color: #90a1b9;
+		font-style: italic;
+	}
+
+	.analysis-card-footer {
+		padding: 12px 16px;
+		border-top: 1px solid #f1f5f9;
+	}
+
+	.analysis-link {
+		font-size: 12px;
+		font-weight: 700;
+		text-transform: uppercase;
+		color: #155dfc;
+		text-decoration: none;
+		letter-spacing: 0.03em;
+	}
+
+	.analysis-link:hover {
+		text-decoration: underline;
+	}
+
+	/* ── Chart layout ────────────────────────────────────────────────── */
 	.chart-layout {
 		display: flex;
 		gap: 0;
@@ -572,10 +904,14 @@
 		min-width: 0;
 	}
 
-	/* ── Responsive ──────────────────────────────────────────────────────── */
+	/* ── Responsive ──────────────────────────────────────────────────── */
 	@media (max-width: 1024px) {
-		.macro-grid {
+		.ind-row {
 			grid-template-columns: repeat(2, 1fr);
+		}
+
+		.region-body-inner {
+			grid-template-columns: 1fr;
 		}
 
 		.chart-layout {
@@ -584,16 +920,38 @@
 	}
 
 	@media (max-width: 600px) {
-		.macro-grid {
+		.macro-page {
+			padding: 16px;
+		}
+
+		.macro-header {
+			flex-direction: column;
+			gap: 8px;
+		}
+
+		.ind-row {
 			grid-template-columns: 1fr;
 		}
 
-		.macro-panel--indicators {
-			grid-column: 1;
+		.ind-col {
+			border-right: none;
+			border-bottom: 1px solid #f1f5f9;
 		}
 
-		.ind-grid {
-			grid-template-columns: repeat(2, 1fr);
+		.ind-col--last {
+			border-bottom: none;
+		}
+
+		.breakdown-grid {
+			grid-template-columns: 1fr;
+		}
+
+		.region-header-left {
+			flex-wrap: wrap;
+		}
+
+		.region-name {
+			font-size: 16px;
 		}
 	}
 </style>

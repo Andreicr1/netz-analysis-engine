@@ -29,6 +29,7 @@ export interface RegionalScore {
 	coverage: number;
 	dimensions: Record<string, DimensionScore>;
 	data_freshness: Record<string, DataFreshness>;
+	analysis_text: string | null;
 }
 
 export interface GlobalIndicators {
