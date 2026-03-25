@@ -32,4 +32,4 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
 
 # Run from backend/ so module resolution matches dev (app.main:app)
 WORKDIR /app/backend
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
