@@ -159,10 +159,9 @@ export function createClerkHook(options: ClerkHookOptions): Handle {
 				locals.token = devToken;
 				return resolve(event);
 			}
-			// Clerk dev keys use __client_uat cookie (not __session) to track sessions.
-			// If __client_uat > 0, user is signed in on client side — let the request
-			// through without actor. Client-side Clerk handles auth state, backend API
-			// verifies JWT on every call. Redirecting here causes infinite loops.
+			// Clerk hosted sign-in sets __client_uat on .domain but NOT __session.
+			// Let the page render so client-side Clerk JS (in root layout) can
+			// sync __session cookie and reload. Without this, infinite redirect loop.
 			const clerkUat = event.cookies.get("__client_uat");
 			if (clerkUat && clerkUat !== "0") {
 				return resolve(event);
