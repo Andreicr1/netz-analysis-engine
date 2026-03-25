@@ -11,52 +11,32 @@ concurrency:
 jobs:
   # ── Detect what changed ─────────────────────────────────────────────
   changes:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       credit: ${{ steps.filter.outputs.credit }}
       wealth: ${{ steps.filter.outputs.wealth }}
       admin: ${{ steps.filter.outputs.admin }}
-      infra: ${{ steps.filter.outputs.infra }}
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 2
       - id: filter
-        shell: pwsh
         run: |
-          Set-Location $env:GITHUB_WORKSPACE
-          git config --global --add safe.directory $env:GITHUB_WORKSPACE
-          Write-Host "Working directory: $(Get-Location)"
-          Write-Host "Git status check: $(git rev-parse --git-dir 2>&1)"
-          $diff = git diff --name-only HEAD~1 HEAD 2>&1
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "HEAD~1 failed, falling back to HEAD-only diff"
-            $diff = git diff --name-only HEAD 2>&1
-          }
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "WARNING: git diff failed — deploying everything"
-            $diff = @()
-            $backend = $true; $credit = $true; $wealth = $true; $admin = $true; $infra = $true
-          } else {
-            $diff = $diff -split "`n" | Where-Object { $_ -ne '' }
-            Write-Host "Changed files: $($diff -join ', ')"
-            $ui = [bool]($diff | Where-Object { $_ -match '^packages/ui/' })
-            $backend = [bool]($diff | Where-Object { $_ -match '^backend/' -or $_ -match '^pyproject\.toml' })
-            $credit = [bool]($diff | Where-Object { $_ -match '^frontends/credit/' }) -or $ui
-            $wealth = [bool]($diff | Where-Object { $_ -match '^frontends/wealth/' }) -or $ui
-            $admin = [bool]($diff | Where-Object { $_ -match '^frontends/admin/' }) -or $ui
-            $infra = [bool]($diff | Where-Object { $_ -match '^infra/' })
-            $lockfile = [bool]($diff | Where-Object { $_ -match '^pnpm-lock\.yaml' })
-            $ci = [bool]($diff | Where-Object { $_ -match '^\.github/' })
-            if ($ci -or $lockfile) { $backend = $true; $credit = $true; $wealth = $true; $admin = $true; $infra = $true }
-          }
-          echo "backend=$("$backend".ToLower())" >> $env:GITHUB_OUTPUT
-          echo "credit=$("$credit".ToLower())" >> $env:GITHUB_OUTPUT
-          echo "wealth=$("$wealth".ToLower())" >> $env:GITHUB_OUTPUT
-          echo "admin=$("$admin".ToLower())" >> $env:GITHUB_OUTPUT
-          echo "infra=$("$infra".ToLower())" >> $env:GITHUB_OUTPUT
-          Write-Host "backend=$backend credit=$credit wealth=$wealth admin=$admin infra=$infra"
+          diff=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || git diff --name-only HEAD)
+          backend=false; credit=false; wealth=false; admin=false
+          echo "$diff" | grep -qE '^backend/|^pyproject\.toml' && backend=true
+          ui=$(echo "$diff" | grep -qE '^packages/ui/' && echo true || echo false)
+          echo "$diff" | grep -qE '^frontends/credit/' && credit=true
+          echo "$diff" | grep -qE '^frontends/wealth/' && wealth=true
+          echo "$diff" | grep -qE '^frontends/admin/' && admin=true
+          [ "$ui" = "true" ] && credit=true && wealth=true && admin=true
+          echo "$diff" | grep -qE '^\.github/|^pnpm-lock\.yaml' && credit=true && wealth=true && admin=true
+          echo "backend=$backend" >> "$GITHUB_OUTPUT"
+          echo "credit=$credit" >> "$GITHUB_OUTPUT"
+          echo "wealth=$wealth" >> "$GITHUB_OUTPUT"
+          echo "admin=$admin" >> "$GITHUB_OUTPUT"
+          echo "backend=$backend credit=$credit wealth=$wealth admin=$admin"
 
   # ── CI (only if backend changed) ────────────────────────────────────
   ci:
@@ -65,21 +45,22 @@ jobs:
     uses: ./.github/workflows/ci.yml
 
   # ── Backend: deployed via Railway (auto-deploy on push to main) ────
-  # deploy-backend, deploy-workers, deploy-gateway, deploy-cron removed
   # Railway handles backend container deployment from Dockerfile
 
   # ── Frontend deploys (independent, only if their files changed) ─────
   deploy-credit:
     needs: [changes, ci]
     if: always() && needs.changes.outputs.credit == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
         with:
-          clean: true
-      - name: Clean stale node_modules
-        run: Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
-        shell: pwsh
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build @netz/ui
@@ -87,9 +68,6 @@ jobs:
       - name: Build credit frontend
         working-directory: frontends/credit
         run: pnpm build
-        env:
-          PUBLIC_BACKEND_URL: ${{ secrets.PUBLIC_BACKEND_URL }}
-          PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_CLERK_PUBLISHABLE_KEY }}
       - name: Deploy to Cloudflare Pages
         working-directory: frontends/credit
         run: npx wrangler pages deploy .svelte-kit/cloudflare --project-name=netz-credit --branch=main
@@ -100,14 +78,16 @@ jobs:
   deploy-wealth:
     needs: [changes, ci]
     if: always() && needs.changes.outputs.wealth == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
         with:
-          clean: true
-      - name: Clean stale node_modules
-        run: Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
-        shell: pwsh
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build @netz/ui
@@ -115,9 +95,6 @@ jobs:
       - name: Build wealth frontend
         working-directory: frontends/wealth
         run: pnpm build
-        env:
-          PUBLIC_BACKEND_URL: ${{ secrets.PUBLIC_BACKEND_URL }}
-          PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_CLERK_PUBLISHABLE_KEY }}
       - name: Deploy to Cloudflare Pages
         working-directory: frontends/wealth
         run: npx wrangler pages deploy .svelte-kit/cloudflare --project-name=netz-wealth --branch=main
@@ -128,14 +105,16 @@ jobs:
   deploy-admin:
     needs: [changes, ci]
     if: always() && needs.changes.outputs.admin == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
         with:
-          clean: true
-      - name: Clean stale node_modules
-        run: Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
-        shell: pwsh
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build @netz/ui
@@ -143,9 +122,6 @@ jobs:
       - name: Build admin frontend
         working-directory: frontends/admin
         run: pnpm build
-        env:
-          PUBLIC_BACKEND_URL: ${{ secrets.PUBLIC_BACKEND_URL }}
-          PUBLIC_CLERK_PUBLISHABLE_KEY: ${{ secrets.PUBLIC_CLERK_PUBLISHABLE_KEY }}
       - name: Deploy to Cloudflare Pages
         working-directory: frontends/admin
         run: npx wrangler pages deploy .svelte-kit/cloudflare --project-name=netz-admin --branch=main
