@@ -64,70 +64,9 @@ jobs:
     if: needs.changes.outputs.backend == 'true'
     uses: ./.github/workflows/ci.yml
 
-  # ── Backend infra deploys ───────────────────────────────────────────
-  deploy-backend:
-    needs: [changes, ci]
-    if: always() && needs.changes.outputs.infra == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
-    runs-on: self-hosted
-    steps:
-      - uses: actions/checkout@v5
-      - name: Install dependencies
-        working-directory: infra/cloudflare/backend
-        run: npm install
-      - name: Deploy backend container
-        working-directory: infra/cloudflare/backend
-        run: npx wrangler deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-
-  deploy-workers:
-    needs: [changes, ci]
-    if: always() && needs.changes.outputs.infra == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
-    runs-on: self-hosted
-    steps:
-      - uses: actions/checkout@v5
-      - name: Install dependencies
-        working-directory: infra/cloudflare/workers
-        run: npm install
-      - name: Deploy workers container
-        working-directory: infra/cloudflare/workers
-        run: npx wrangler deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-
-  deploy-gateway:
-    needs: [changes, ci]
-    if: always() && needs.changes.outputs.infra == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
-    runs-on: self-hosted
-    steps:
-      - uses: actions/checkout@v5
-      - name: Install dependencies
-        working-directory: infra/cloudflare/gateway
-        run: npm install
-      - name: Deploy gateway worker
-        working-directory: infra/cloudflare/gateway
-        run: npx wrangler deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-
-  deploy-cron:
-    needs: [changes, ci]
-    if: always() && needs.changes.outputs.infra == 'true' && (needs.ci.result == 'success' || needs.ci.result == 'skipped')
-    runs-on: self-hosted
-    steps:
-      - uses: actions/checkout@v5
-      - name: Install dependencies
-        working-directory: infra/cloudflare/cron
-        run: npm install
-      - name: Deploy cron worker
-        working-directory: infra/cloudflare/cron
-        run: npx wrangler deploy
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+  # ── Backend: deployed via Railway (auto-deploy on push to main) ────
+  # deploy-backend, deploy-workers, deploy-gateway, deploy-cron removed
+  # Railway handles backend container deployment from Dockerfile
 
   # ── Frontend deploys (independent, only if their files changed) ─────
   deploy-credit:
