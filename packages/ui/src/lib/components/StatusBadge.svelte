@@ -34,6 +34,7 @@
 		"approved",
 		"completed",
 		"healthy",
+		"live",
 		"ok",
 		"pass",
 		"published",
@@ -41,9 +42,9 @@
 		"resolved",
 		"success",
 	]);
-	const warningTokens = new Set(["pending", "warning", "warn"]);
+	const warningTokens = new Set(["pending", "risk_off", "warning", "warn"]);
 	const dangerTokens = new Set(["critical", "declined", "danger", "error", "failed", "rejected"]);
-	const infoTokens = new Set(["active", "generated", "in_progress", "info", "processing", "running"]);
+	const infoTokens = new Set(["active", "generated", "in_progress", "info", "processing", "risk_on", "running"]);
 
 	/** Tokens that are intentionally neutral — suppress dev warning for these. */
 	const NEUTRAL_STATUSES = new Set([
@@ -62,6 +63,7 @@
 		"paused",
 		"suspended",
 		"disabled",
+		"stale",
 	]);
 
 	function formatLabel(value: string): string {
