@@ -1,7 +1,3 @@
 [build]
 builder = "dockerfile"
 dockerfilePath = "frontends/wealth/Dockerfile"
-
-[deploy]
-startCommand = "node build/index.js"
-# Railway deploy trigger
