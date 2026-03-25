@@ -8,7 +8,6 @@
 	import { page } from "$app/stores";
 
 	const DEV_MODE = import.meta.env.DEV;
-	const CLERK_PK = $page.data.clerkPublishableKey ?? "";
 
 	/** Decode Clerk publishable key to get the frontend API domain. */
 	function clerkDomain(pk: string): string {
@@ -17,6 +16,7 @@
 	}
 
 	onMount(async () => {
+		const CLERK_PK = $page.data.clerkPublishableKey ?? "";
 		if (DEV_MODE || !browser || !CLERK_PK) return;
 
 		const domain = clerkDomain(CLERK_PK);
