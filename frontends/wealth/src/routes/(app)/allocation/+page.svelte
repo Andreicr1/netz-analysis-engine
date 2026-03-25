@@ -7,7 +7,7 @@
 	import AllocationView from "$lib/components/AllocationView.svelte";
 </script>
 
-<PageHeader title="Allocation" subtitle="Strategic targets, tactical tilts, and effective allocation across risk profiles" />
+<PageHeader title="Portfolio Allocation" subtitle="Review your base targets, active market adjustments, and final portfolio exposure." />
 
 <div class="alloc-page">
 	<AllocationView />

@@ -356,6 +356,7 @@
 </script>
 
 <div class="alloc">
+	<div class="alloc-card">
 	<!-- PROFILE TABS -->
 	<div class="alloc-profile-tabs">
 		{#each PROFILES as p (p.id)}
@@ -378,18 +379,24 @@
 		<div class="alloc-kpis">
 			<div class="alloc-kpi">
 				<span class="alloc-kpi-heading">ASSET CATEGORIES</span>
-				<span class="alloc-kpi-value">{assetCategoryCount}</span>
-				<span class="alloc-kpi-label">core building blocks</span>
+				<div class="alloc-kpi-body">
+					<span class="alloc-kpi-value">{assetCategoryCount}</span>
+					<span class="alloc-kpi-label">core building blocks</span>
+				</div>
 			</div>
 			<div class="alloc-kpi">
 				<span class="alloc-kpi-heading">ACTIVE ADJUSTMENTS</span>
-				<span class="alloc-kpi-value">{activeAdjustmentCount}</span>
-				<span class="alloc-kpi-label">market deviations</span>
+				<div class="alloc-kpi-body">
+					<span class="alloc-kpi-value">{activeAdjustmentCount}</span>
+					<span class="alloc-kpi-label">market deviations</span>
+				</div>
 			</div>
 			<div class="alloc-kpi">
 				<span class="alloc-kpi-heading">TOP OVERWEIGHT</span>
 				{#if topOverweight}
-					<span class="alloc-kpi-value">{topOverweight.name}</span>
+					<div class="alloc-kpi-body">
+						<span class="alloc-kpi-value">{topOverweight.name}</span>
+					</div>
 					<span class="alloc-kpi-overweight">↗ +{formatNumber(topOverweight.overweight * 100, 1, "en-US")}% vs Target</span>
 				{:else}
 					<span class="alloc-kpi-value">—</span>
@@ -412,6 +419,7 @@
 					>{vt.label}</button>
 				{/each}
 			</div>
+			<span class="alloc-view-hint">Current effective exposure</span>
 			<div class="alloc-view-actions">
 				{#if !editing && !editingTactical && activeView === "target"}
 					<Button size="sm" variant="outline" onclick={startEditing}>Edit Weights</Button>
@@ -559,6 +567,7 @@
 			</table>
 		</div>
 	{/if}
+	</div>
 </div>
 
 <!-- Governed strategic submit -->
@@ -634,25 +643,36 @@
 </ConsequenceDialog>
 
 <style>
-	/* Profile tabs */
+	/* Card container */
+	.alloc-card {
+		background: white;
+		border: 1px solid #e2e8f0;
+		border-radius: 16px;
+		overflow: hidden;
+		box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+	}
+
+	/* Profile tabs — lifted tab header */
 	.alloc-profile-tabs {
 		display: flex;
 		gap: 0;
-		border-bottom: 1px solid var(--netz-border-subtle);
-		margin-bottom: 0;
+		padding: 16px 16px 0;
+		background: #f8fafc;
+		border-bottom: 1px solid #e2e8f0;
 	}
 
 	.alloc-profile-tab {
-		padding: 14px 24px 12px;
-		border: none;
-		border-bottom: 2px solid transparent;
+		padding: 14px 32px;
+		border: 1px solid transparent;
+		border-bottom: none;
+		border-radius: 14px 14px 0 0;
 		background: none;
 		font-size: 14px;
-		font-weight: 500;
-		color: var(--netz-text-muted);
+		font-weight: 700;
+		color: #62748e;
 		cursor: pointer;
 		font-family: var(--netz-font-sans);
-		transition: color 120ms, border-color 120ms;
+		transition: color 120ms, background 120ms;
 		margin-bottom: -1px;
 	}
 
@@ -661,24 +681,39 @@
 	}
 
 	.alloc-profile-tab--active {
-		color: var(--netz-brand-primary);
-		border-bottom-color: var(--netz-brand-primary);
-		font-weight: 600;
+		background: white;
+		border-color: #e2e8f0;
+		color: #1447e6;
+		box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.02);
+		position: relative;
+	}
+
+	.alloc-profile-tab--active::after {
+		content: "";
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		height: 2px;
+		background: #155dfc;
 	}
 
 	/* KPI row */
 	.alloc-kpis {
 		display: grid;
 		grid-template-columns: repeat(3, 1fr);
-		border-bottom: 1px solid var(--netz-border-subtle);
-		background: var(--netz-surface-elevated);
+		margin: 32px 32px 0;
+		background: rgba(248, 250, 252, 0.5);
+		border: 1px solid #f1f5f9;
+		border-radius: 14px;
+		overflow: hidden;
 	}
 
 	.alloc-kpi {
 		display: flex;
 		flex-direction: column;
-		padding: 24px 32px;
-		border-right: 1px solid var(--netz-border-subtle);
+		padding: 24px;
+		border-right: 1px solid rgba(226, 232, 240, 0.6);
 	}
 
 	.alloc-kpi:last-child {
@@ -689,57 +724,69 @@
 		font-size: 11px;
 		font-weight: 700;
 		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: var(--netz-text-muted);
-		margin-bottom: 8px;
+		letter-spacing: 1.1px;
+		color: #62748e;
+		margin-bottom: 4px;
+	}
+
+	.alloc-kpi-body {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
 	}
 
 	.alloc-kpi-value {
-		font-size: 22px;
-		font-weight: 700;
-		color: var(--netz-text-primary);
-		line-height: 1.2;
+		font-size: 30px;
+		font-weight: 900;
+		color: #1d293d;
+		line-height: 36px;
+		letter-spacing: -1.5px;
+		display: inline;
 	}
 
 	.alloc-kpi-label {
-		font-size: 13px;
-		color: var(--netz-text-muted);
-		margin-top: 2px;
+		font-size: 14px;
+		font-weight: 500;
+		color: #62748e;
+		display: inline;
+		margin-left: 8px;
 	}
 
 	.alloc-kpi-overweight {
-		font-size: 13px;
+		font-size: 14px;
 		font-weight: 600;
-		color: #22c55e;
-		margin-top: 4px;
+		color: #009966;
+		margin-top: 2px;
 	}
 
-	/* View bar */
+	/* View bar — pill toggle */
 	.alloc-view-bar {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 0 24px 0 0;
-		border-bottom: 1px solid var(--netz-border-subtle);
-		background: var(--netz-surface-elevated);
+		padding: 0 32px;
+		margin-top: 64px;
 	}
 
 	.alloc-view-tabs {
 		display: flex;
+		background: #f1f5f9;
+		border-radius: 14px;
+		padding: 4px;
+		gap: 0;
 	}
 
 	.alloc-view-tab {
-		padding: 12px 24px 10px;
+		padding: 8px 24px;
 		border: none;
-		border-bottom: 2px solid transparent;
+		border-radius: 10px;
 		background: none;
-		font-size: 13px;
-		font-weight: 500;
-		color: var(--netz-text-muted);
+		font-size: 14px;
+		font-weight: 700;
+		color: #62748e;
 		cursor: pointer;
 		font-family: var(--netz-font-sans);
-		transition: color 120ms, border-color 120ms;
-		margin-bottom: -1px;
+		transition: color 120ms, background 120ms, box-shadow 120ms;
 	}
 
 	.alloc-view-tab:hover {
@@ -747,9 +794,15 @@
 	}
 
 	.alloc-view-tab--active {
-		color: var(--netz-text-primary);
-		border-bottom-color: var(--netz-text-primary);
-		font-weight: 600;
+		background: white;
+		color: #1447e6;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.1);
+	}
+
+	.alloc-view-hint {
+		font-size: 14px;
+		font-weight: 500;
+		color: #62748e;
 	}
 
 	.alloc-view-actions {
@@ -770,8 +823,11 @@
 
 	/* Table */
 	.alloc-table-wrap {
-		overflow-x: auto;
-		background: var(--netz-surface-elevated);
+		margin: 24px 32px 32px;
+		border: 1px solid #e2e8f0;
+		border-radius: 14px;
+		overflow: hidden;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
 	}
 
 	.alloc-table {
@@ -780,15 +836,15 @@
 	}
 
 	.alloc-th {
-		padding: 10px 24px;
+		padding: 16px 24px;
 		font-size: 11px;
 		font-weight: 700;
 		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--netz-text-muted);
+		letter-spacing: 1.1px;
+		color: #90a1b9;
 		text-align: left;
-		background: color-mix(in srgb, var(--netz-surface-alt) 50%, transparent);
-		border-bottom: 1px solid var(--netz-border-subtle);
+		background: #f8fafc;
+		border-bottom: 1px solid #e2e8f0;
 		white-space: nowrap;
 	}
 
@@ -797,22 +853,24 @@
 	}
 
 	.alloc-th--final {
-		color: var(--netz-text-primary);
+		color: #0f172b;
 		font-weight: 800;
 	}
 
 	/* Group row */
 	.alloc-row-group {
-		background: color-mix(in srgb, var(--netz-surface-alt) 60%, transparent);
+		background: rgba(241, 245, 249, 0.8);
+		border-top: 1px solid #e2e8f0;
+		border-bottom: 1px solid #e2e8f0;
 	}
 
 	.alloc-td-group {
-		padding: 8px 24px;
+		padding: 12px 24px;
 		font-size: 11px;
-		font-weight: 700;
+		font-weight: 800;
 		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: var(--netz-text-muted);
+		letter-spacing: 1.1px;
+		color: #314158;
 	}
 
 	/* Block row */
@@ -837,9 +895,22 @@
 	}
 
 	.alloc-td--instrument {
-		padding: 10px 24px 10px 40px;
-		font-size: 12px;
-		color: var(--netz-text-muted);
+		padding: 12px 24px 12px 48px;
+		font-size: 14px;
+		font-weight: 500;
+		color: #62748e;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.alloc-td--instrument::before {
+		content: "";
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: #cad5e2;
+		flex-shrink: 0;
 	}
 
 	.alloc-td {
@@ -850,15 +921,29 @@
 
 	.alloc-td--right {
 		text-align: right;
+		font-size: 16px;
+		font-weight: 500;
+		color: #90a1b9;
 	}
 
 	.alloc-td--muted {
-		color: var(--netz-text-muted);
+		color: #90a1b9;
 	}
 
 	.alloc-td--final {
 		font-weight: 900;
-		color: var(--netz-text-primary);
+		color: #1d293d;
+	}
+
+	.alloc-row-instrument .alloc-td--right {
+		font-size: 16px;
+		font-weight: 500;
+		color: #90a1b9;
+	}
+
+	.alloc-row-instrument .alloc-td--final {
+		font-weight: 600;
+		color: #314158;
 	}
 
 	.alloc-positive {
