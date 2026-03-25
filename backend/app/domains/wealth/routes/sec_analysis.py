@@ -611,7 +611,7 @@ async def reverse_lookup(
         ReverseLookupItem(
             cik=r["cik"],
             firm_name=cik_to_name.get(r["cik"], f"CIK {r['cik']}"),
-            shares=r["shares_or_principal"],
+            shares=r["shares"],
             market_value=r["market_value"],
             pct_of_total=(
                 (r["market_value"] or 0) / total_value if total_value > 0 else None
