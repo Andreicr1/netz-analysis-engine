@@ -1,3 +1,9 @@
+export type BlockInstrument = {
+	ticker: string;
+	name: string;
+	weight: number;
+};
+
 export type BlockMeta = {
 	block_id: string;
 	display_name: string;

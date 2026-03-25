@@ -98,6 +98,8 @@ export interface FacetItem {
 	count: number;
 }
 
+export type ScreenerTab = "fund" | "equity" | "bond" | "etf" | "instruments" | "managers";
+
 export interface ScreenerFacets {
 	instrument_types: FacetItem[];
 	geographies: FacetItem[];
@@ -107,6 +109,8 @@ export interface ScreenerFacets {
 	strategies: FacetItem[];
 	sources: FacetItem[];
 	screening_statuses: FacetItem[];
+	sectors: FacetItem[];
+	exchanges: FacetItem[];
 	total_universe: number;
 	total_screened: number;
 	total_approved: number;
@@ -129,6 +133,8 @@ export const EMPTY_FACETS: ScreenerFacets = {
 	strategies: [],
 	sources: [],
 	screening_statuses: [],
+	sectors: [],
+	exchanges: [],
 	total_universe: 0,
 	total_screened: 0,
 	total_approved: 0,
