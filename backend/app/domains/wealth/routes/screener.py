@@ -729,7 +729,6 @@ async def get_screener_facets(
 
 @router.post(
     "/import-esma/{isin}",
-    response_model=ScreeningResultRead,
     status_code=status.HTTP_201_CREATED,
     summary="Import an ESMA fund into instruments_universe",
 )
@@ -747,6 +746,8 @@ async def import_esma_fund(
     instrument = await import_esma_fund_to_universe(
         db, org_id, isin, block_id=body.block_id, strategy=body.strategy,
     )
+    await db.commit()
+
     return {
         "instrument_id": str(instrument.instrument_id),
         "name": instrument.name,
