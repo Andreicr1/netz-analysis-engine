@@ -5,10 +5,10 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import { browser } from "$app/environment";
-	import { env } from "$env/dynamic/public";
+	import { page } from "$app/stores";
 
 	const DEV_MODE = import.meta.env.DEV;
-	const CLERK_PK = env.PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
+	const CLERK_PK = $page.data.clerkPublishableKey ?? "";
 
 	/** Decode Clerk publishable key to get the frontend API domain. */
 	function clerkDomain(pk: string): string {
