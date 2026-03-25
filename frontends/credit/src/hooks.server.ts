@@ -10,7 +10,7 @@ const CLERK_JWKS_URL = process.env.CLERK_JWKS_URL ?? import.meta.env.VITE_CLERK_
 const authHook = createClerkHook({
 	jwksUrl: CLERK_JWKS_URL,
 	devBypass: import.meta.env.DEV,
-	publicPrefixes: ["/health"],
+	publicPrefixes: ["/health", "/.well-known/"],
 	signInUrl: "https://accounts.investintell.com/sign-in",
 });
 
