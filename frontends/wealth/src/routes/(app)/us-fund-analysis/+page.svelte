@@ -46,43 +46,24 @@
 
 	// ── Filter state ──
 	let initParams = $derived((data.currentParams ?? {}) as Record<string, string>);
-	let filters = $state({
-		q: "",
-		entity_type: "",
-		strategy: "",
-		asset_class: "",
-		aum_min: "",
-		filed_within_days: "",
-		sic: "",
-		has_disclosures: "",
-	});
+	let filters = $state({ q: "", entity_type: "", aum_min: "" });
 
 	$effect(() => {
 		filters.q = initParams.q ?? "";
 		filters.entity_type = initParams.entity_type ?? "";
-		filters.strategy = initParams.strategy ?? "";
-		filters.asset_class = initParams.asset_class ?? "";
 		filters.aum_min = initParams.aum_min ?? "";
-		filters.filed_within_days = initParams.filed_within_days ?? "";
-		filters.sic = initParams.sic ?? "";
-		filters.has_disclosures = initParams.has_disclosures ?? "";
 	});
 
 	function applyFilters() {
 		const params = new URLSearchParams();
 		if (filters.q) params.set("q", filters.q);
 		if (filters.entity_type) params.set("entity_type", filters.entity_type);
-		if (filters.strategy) params.set("strategy", filters.strategy);
-		if (filters.asset_class) params.set("asset_class", filters.asset_class);
 		if (filters.aum_min) params.set("aum_min", filters.aum_min);
-		if (filters.filed_within_days) params.set("filed_within_days", filters.filed_within_days);
-		if (filters.sic) params.set("sic", filters.sic);
-		if (filters.has_disclosures) params.set("has_disclosures", filters.has_disclosures);
 		goto(`/us-fund-analysis?${params.toString()}`, { invalidateAll: true });
 	}
 
 	function clearFilters() {
-		filters = { q: "", entity_type: "", strategy: "", asset_class: "", aum_min: "", filed_within_days: "", sic: "", has_disclosures: "" };
+		filters = { q: "", entity_type: "", aum_min: "" };
 		goto("/us-fund-analysis", { invalidateAll: true });
 	}
 
@@ -131,12 +112,7 @@
 		const params = new URLSearchParams();
 		if (filters.q) params.set("q", filters.q);
 		if (filters.entity_type) params.set("entity_type", filters.entity_type);
-		if (filters.strategy) params.set("strategy", filters.strategy);
-		if (filters.asset_class) params.set("asset_class", filters.asset_class);
 		if (filters.aum_min) params.set("aum_min", filters.aum_min);
-		if (filters.filed_within_days) params.set("filed_within_days", filters.filed_within_days);
-		if (filters.sic) params.set("sic", filters.sic);
-		if (filters.has_disclosures) params.set("has_disclosures", filters.has_disclosures);
 		params.set("page", String(p));
 		goto(`/us-fund-analysis?${params.toString()}`, { invalidateAll: true });
 	}
@@ -173,7 +149,7 @@
 							<span class="ufa-filters-label">Filter Parameters</span>
 						</div>
 						<form class="ufa-filters-row" onsubmit={(e) => { e.preventDefault(); applyFilters(); }}>
-							<div class="ufa-filter-field">
+							<div class="ufa-filter-field ufa-filter-field--search">
 								<label class="ufa-field-label" for="ufa-q">Search</label>
 								<div class="ufa-search-wrap">
 									<input
@@ -188,32 +164,10 @@
 							<div class="ufa-filter-field">
 								<label class="ufa-field-label" for="ufa-entity">Entity Type</label>
 								<select id="ufa-entity" class="ufa-select" bind:value={filters.entity_type}>
-									<option value="">All</option>
+									<option value="">All Entities</option>
 									<option value="Registered">Registered</option>
 									<option value="Exempt Reporting Adviser">Exempt Reporting</option>
 									<option value="Not Registered">Not Registered</option>
-								</select>
-							</div>
-							<div class="ufa-filter-field">
-								<label class="ufa-field-label" for="ufa-strategy">Strategy</label>
-								<select id="ufa-strategy" class="ufa-select" bind:value={filters.strategy}>
-									<option value="">All</option>
-									<option value="equity">Equity</option>
-									<option value="fixed_income">Fixed Income</option>
-									<option value="multi_asset">Multi-Asset</option>
-									<option value="alternatives">Alternatives</option>
-									<option value="real_estate">Real Estate</option>
-								</select>
-							</div>
-							<div class="ufa-filter-field">
-								<label class="ufa-field-label" for="ufa-asset-class">Asset Class</label>
-								<select id="ufa-asset-class" class="ufa-select" bind:value={filters.asset_class}>
-									<option value="">All</option>
-									<option value="equity">Equity</option>
-									<option value="fixed_income">Fixed Income</option>
-									<option value="balanced">Balanced</option>
-									<option value="money_market">Money Market</option>
-									<option value="alternatives">Alternatives</option>
 								</select>
 							</div>
 							<div class="ufa-filter-field">
@@ -226,34 +180,6 @@
 									bind:value={filters.aum_min}
 								/>
 							</div>
-							<div class="ufa-filter-field">
-								<label class="ufa-field-label" for="ufa-filed">Filing Recency</label>
-								<select id="ufa-filed" class="ufa-select" bind:value={filters.filed_within_days}>
-									<option value="">Any time</option>
-									<option value="30">Last 30 days</option>
-									<option value="90">Last 90 days</option>
-									<option value="180">Last 180 days</option>
-								</select>
-							</div>
-							<div class="ufa-filter-field">
-								<label class="ufa-field-label" for="ufa-sic">SIC Code</label>
-								<select id="ufa-sic" class="ufa-select" bind:value={filters.sic}>
-									<option value="">All</option>
-									{#each sicCodes as sc (sc.sic)}
-										<option value={sc.sic}>
-											{sc.sic_description ?? sc.sic} ({sc.count})
-										</option>
-									{/each}
-								</select>
-							</div>
-							<div class="ufa-filter-field">
-								<label class="ufa-field-label" for="ufa-disc">Compliance</label>
-								<select id="ufa-disc" class="ufa-select" bind:value={filters.has_disclosures}>
-									<option value="">All</option>
-									<option value="true">Flagged Only</option>
-									<option value="false">Clean Only</option>
-								</select>
-							</div>
 						</form>
 						<div class="ufa-filters-actions">
 							<button class="ufa-btn-clear" type="button" onclick={clearFilters}>Clear</button>
@@ -261,7 +187,7 @@
 						</div>
 					</div>
 
-					{#if !filters.q && !filters.entity_type && !filters.strategy && !filters.asset_class && !filters.aum_min && !filters.filed_within_days && !filters.sic && !filters.has_disclosures}
+					{#if !filters.q && !filters.entity_type && !filters.aum_min}
 						<div class="ufa-widget-section">
 							<TopAdvisersWidget
 								{api}
