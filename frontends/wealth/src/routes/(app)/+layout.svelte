@@ -12,7 +12,7 @@
 		Search, ClipboardList, Globe,
 		Briefcase, Zap, BarChart2, Map,
 		Landmark, FileText, Newspaper, Folders,
-		Search as SearchIcon, Bot, PieChart, ChevronRight
+		Search as SearchIcon, Bot, PieChart, ChevronDown
 	} from "lucide-svelte";
 
 	interface SidebarItem {
@@ -117,7 +117,7 @@
 							type="button"
 						>
 							<span class="section-label">{section.label}</span>
-							<ChevronRight
+							<ChevronDown
 								size={12}
 								strokeWidth={2}
 								class="section-chevron {openSections.has(section.id) ? 'open' : ''}"
@@ -415,6 +415,9 @@
 		overflow-x: hidden;
 		scrollbar-width: thin;
 		scrollbar-color: var(--netz-border) transparent;
+		padding-top: 24px;
+		padding-left: 16px;
+		padding-right: 16px;
 	}
 
 	/* ── Section header — clickable ── */
@@ -423,9 +426,9 @@
 		align-items: center;
 		justify-content: space-between;
 		width: 100%;
-		padding: 6px 8px;
-		margin-top: 20px;
-		margin-bottom: 8px;
+		padding: 0 16px;
+		margin-top: 32px;
+		margin-bottom: 12px;
 		border: none;
 		background: transparent;
 		cursor: pointer;
@@ -433,23 +436,29 @@
 	}
 
 	.section-header:first-child {
-		margin-top: 8px;
+		margin-top: 0;
 	}
 
 	.section-label {
-		font-size: 14px;
-		font-weight: 600;
-		color: var(--netz-text-primary);
+		font-size: 10px;
+		font-weight: 900;
+		text-transform: uppercase;
+		letter-spacing: 2px;
+		color: #90a1b9;
 	}
 
 	.section-header :global(.section-chevron) {
-		color: var(--netz-text-muted);
+		color: #90a1b9;
 		transition: transform 200ms var(--netz-ease-out, cubic-bezier(0,0,.2,1));
 		flex-shrink: 0;
 	}
 
 	.section-header :global(.section-chevron.open) {
-		transform: rotate(90deg);
+		transform: rotate(0deg);
+	}
+
+	.section-header :global(.section-chevron:not(.open)) {
+		transform: rotate(-90deg);
 	}
 
 	/* ── Accordion — grid trick (no height hacks) ── */
@@ -468,20 +477,10 @@
 		min-height: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 1px;
-		padding: 2px 8px 4px;
-		margin-left: 12px;
+		gap: 4px;
+		padding: 0;
+		margin-left: 0;
 		position: relative;
-	}
-
-	.section-items-inner::before {
-		content: "";
-		position: absolute;
-		left: 0;
-		top: 4px;
-		bottom: 4px;
-		width: 1px;
-		background: var(--netz-border-subtle, #e5e7eb);
 	}
 
 	/* ── Collapsed sections ── */
@@ -497,31 +496,31 @@
 		border-top: 1px solid var(--netz-border-subtle);
 	}
 
-	/* ── Nav item — TC: 15.2px, 4px radius, #e0efff active, #f3f4f6 hover ── */
+	/* ── Nav item ── */
 	.nav-item {
 		display: flex;
 		align-items: center;
-		gap: 9px;
-		padding: 6px 8px;
-		border-radius: var(--netz-radius-sm, 4px);
-		color: var(--netz-text-muted);
-		font-size: 0.95rem;
-		font-weight: 500;
-		line-height: 21.7px;
+		gap: 12px;
+		padding: 10px 16px;
+		border-radius: 14px;
+		color: #62748e;
+		font-size: 13px;
+		font-weight: 600;
+		line-height: 1;
 		transition: background 120ms ease, color 120ms ease;
 		text-decoration: none;
 		white-space: nowrap;
 	}
 
 	.nav-item:hover {
-		background: var(--netz-bg-hover, #f3f4f6);
+		background: rgba(239, 246, 255, 0.4);
 		color: var(--netz-text-primary);
 	}
 
 	.nav-item.active {
-		background: var(--netz-surface-highlight, #e0efff);
-		color: var(--netz-text-secondary);
-		font-weight: 600;
+		background: rgba(239, 246, 255, 0.8);
+		color: #1447e6;
+		font-weight: 700;
 	}
 
 	.nav-item--icon-only {
