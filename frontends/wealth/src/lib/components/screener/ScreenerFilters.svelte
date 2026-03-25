@@ -340,6 +340,7 @@
 
   .filter-search-input {
     width: 100%;
+    max-width: 480px;
   }
 
   .filter-row {

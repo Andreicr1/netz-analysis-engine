@@ -381,7 +381,7 @@ def _build_esma_query(
             EsmaFund.isin.label("isin"),
             EsmaIsinTickerMap.yahoo_ticker.label("ticker"),
             literal("alternatives").label("asset_class"),
-            sa_func.coalesce(EsmaFund.domicile, literal("dm_europe")).label("geography"),
+            literal("dm_europe").label("geography"),
             EsmaFund.domicile.label("domicile"),
             literal("EUR").label("currency"),
             EsmaFund.fund_type.label("strategy"),
@@ -623,8 +623,9 @@ async def get_screener_facets(
         total_screened += sr_count
 
     def to_facets(counts: dict[str, int]) -> list[FacetItem]:
+        GEO_LABELS = {"dm_europe": "Europe (UCITS)"}
         return sorted(
-            [FacetItem(value=k, label=k, count=v) for k, v in counts.items() if v > 0],
+            [FacetItem(value=k, label=GEO_LABELS.get(k, k), count=v) for k, v in counts.items() if v > 0],
             key=lambda f: -f.count,
         )
 

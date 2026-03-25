@@ -11,7 +11,7 @@
 	import type { PageData } from "./$types";
 	import type { InstrumentSearchPage, ScreenerFacets, InstrumentSearchItem, ScreenerTab } from "$lib/types/screening";
 	import { EMPTY_SEARCH_PAGE, EMPTY_FACETS } from "$lib/types/screening";
-	import { ScreenerFilters, InstrumentTable, InstrumentDetailPanel, FundDetailPanel } from "$lib/components/screener";
+	import { ScreenerFilters, InstrumentTable, InstrumentDetailPanel } from "$lib/components/screener";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	let { data }: { data: PageData } = $props();
@@ -23,6 +23,36 @@
 	// ── Tab from URL params ──
 	const initParams = (untrack(() => data.currentParams) as Record<string, string>) ?? {};
 	let activeTab = $state<ScreenerTab>((initParams.tab as ScreenerTab) ?? "fund");
+
+	// ── CSV Export ──
+	function exportCSV() {
+		const items = searchResults.items;
+		if (items.length === 0) return;
+		const headers = ["Name", "ISIN", "Ticker", "Type", "Source", "Manager", "Geography", "Currency", "AUM", "Score", "Status"];
+		const lines = [
+			headers.join(","),
+			...items.map(r => [
+				`"${r.name ?? ""}"`,
+				r.isin ?? "",
+				r.ticker ?? "",
+				r.instrument_type ?? "",
+				r.source ?? "",
+				`"${r.manager_name ?? ""}"`,
+				r.geography ?? "",
+				r.currency ?? "",
+				r.aum ?? "",
+				r.screening_score ?? "",
+				r.screening_status ?? r.approval_status ?? "",
+			].join(","))
+		];
+		const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement("a");
+		a.href = url;
+		a.download = `screener-${activeTab}-${new Date().toISOString().slice(0,10)}.csv`;
+		a.click();
+		URL.revokeObjectURL(url);
+	}
 
 	// ── Batch screening ──
 	let isRunning = $state(false);
@@ -61,6 +91,7 @@
 <PageHeader title="Screener">
 	{#snippet actions()}
 		<div class="scr-actions">
+			<Button size="sm" variant="outline" onclick={exportCSV}>Export</Button>
 			<Button size="sm" onclick={executeBatch} disabled={isRunning}>
 				{isRunning ? "Running\u2026" : "Run Screening"}
 			</Button>
@@ -93,11 +124,7 @@
 <!-- Context Panel -->
 <ContextPanel open={panelOpen} onClose={closePanel} title={panelTitle} width="min(45vw, 680px)">
 	{#if selectedItem}
-		{#if selectedItem.instrument_type === "fund" || selectedItem.instrument_type === "etf"}
-			<InstrumentDetailPanel selectedInstrument={selectedItem} />
-		{:else}
-			<InstrumentDetailPanel selectedInstrument={selectedItem} />
-		{/if}
+		<InstrumentDetailPanel selectedInstrument={selectedItem} />
 	{/if}
 </ContextPanel>
 

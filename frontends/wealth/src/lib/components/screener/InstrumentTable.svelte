@@ -193,7 +193,7 @@
 						<td onclick={(e) => e.stopPropagation()}>
 							{#if item.source === "esma" && !item.instrument_id}
 								<Button size="sm" variant="outline" onclick={() => onOpenInstrumentDetail?.(item)}>
-									Add
+									Add to Review
 								</Button>
 							{:else if item.instrument_id}
 								<Button size="sm" variant="ghost" onclick={() => onOpenInstrumentDetail?.(item)}>
