@@ -6,8 +6,6 @@ import type { LayoutServerLoad } from "./$types";
 import { createServerApiClient } from "$lib/api/client";
 import { defaultDarkBranding } from "@netz/ui/utils";
 import type { BrandingConfig } from "@netz/ui/utils";
-import { env } from "$env/dynamic/public";
-
 export const load: LayoutServerLoad = async ({ locals }) => {
 	const { actor, token } = locals;
 
@@ -24,6 +22,5 @@ export const load: LayoutServerLoad = async ({ locals }) => {
 		actor,
 		token,
 		branding,
-		clerkPublishableKey: env.PUBLIC_CLERK_PUBLISHABLE_KEY ?? "",
 	};
 };

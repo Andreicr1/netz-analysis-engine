@@ -165,13 +165,6 @@ export function createClerkHook(options: ClerkHookOptions): Handle {
 				locals.token = devToken;
 				return resolve(event);
 			}
-			// Clerk hosted sign-in sets __client_uat on .domain but NOT __session.
-			// Let the page render so client-side Clerk JS (in root layout) can
-			// sync __session cookie and reload. Without this, infinite redirect loop.
-			const clerkUat = event.cookies.get("__client_uat");
-			if (clerkUat && clerkUat !== "0") {
-				return resolve(event);
-			}
 			const { redirect } = await import("@sveltejs/kit");
 			throw redirect(303, signInUrl);
 		}
