@@ -287,6 +287,177 @@ async def optimize_portfolio(
     )
 
 
+@dataclass
+class FundOptimizationResult:
+    """Result from fund-level CLARABEL optimization with block-group constraints."""
+
+    weights: dict[str, float]  # instrument_id -> weight
+    block_weights: dict[str, float]  # block_id -> aggregate weight
+    expected_return: float
+    portfolio_volatility: float
+    sharpe_ratio: float
+    cvar_95: float | None  # parametric CVaR post-check (negative = loss)
+    cvar_limit: float | None
+    cvar_within_limit: bool
+    status: str
+    solver_info: str | None = None
+
+
+async def optimize_fund_portfolio(
+    fund_ids: list[str],
+    fund_blocks: dict[str, str],
+    expected_returns: dict[str, float],
+    cov_matrix: np.ndarray,
+    constraints: ProfileConstraints,
+    risk_free_rate: float = 0.04,
+) -> FundOptimizationResult:
+    """Optimize fund-level weights with block-group sum constraints.
+
+    Unlike optimize_portfolio() which works at block level, this optimizes
+    individual fund weights while enforcing block-level allocation bands
+    from StrategicAllocation.
+
+    Constraints:
+        sum(w) == 1                          (fully invested)
+        w >= 0                               (long only)
+        w_i <= max_single_fund_weight        (concentration limit)
+        sum(w[funds_in_block]) >= block_min  (block floor)
+        sum(w[funds_in_block]) <= block_max  (block ceiling)
+    """
+    n = len(fund_ids)
+    if n == 0:
+        return FundOptimizationResult(
+            weights={}, block_weights={}, expected_return=0.0,
+            portfolio_volatility=0.0, sharpe_ratio=0.0,
+            cvar_95=None, cvar_limit=constraints.cvar_limit,
+            cvar_within_limit=True, status="empty",
+        )
+
+    mu = np.array([expected_returns.get(fid, 0.0) for fid in fund_ids])
+    w = cp.Variable(n, nonneg=True)
+
+    port_return = mu @ w
+    port_risk = cp.quad_form(w, cp.psd_wrap(cov_matrix))
+
+    cvx_constraints = [cp.sum(w) == 1]
+
+    # Per-fund concentration limit
+    max_fund_w = constraints.max_single_fund_weight
+    for i in range(n):
+        cvx_constraints.append(w[i] <= max_fund_w)
+
+    # Block-group sum constraints from StrategicAllocation
+    block_map = {bc.block_id: bc for bc in constraints.blocks}
+    block_fund_indices: dict[str, list[int]] = {}
+    for i, fid in enumerate(fund_ids):
+        block = fund_blocks.get(fid)
+        if block:
+            block_fund_indices.setdefault(block, []).append(i)
+
+    for block_id, indices in block_fund_indices.items():
+        if block_id in block_map:
+            bc = block_map[block_id]
+            block_sum = cp.sum([w[i] for i in indices])
+            cvx_constraints.append(block_sum >= bc.min_weight)
+            cvx_constraints.append(block_sum <= bc.max_weight)
+
+    # Objective: risk-adjusted return (max Sharpe approximation)
+    risk_aversion = 2.0
+    prob = cp.Problem(
+        cp.Maximize(port_return - risk_aversion * port_risk),
+        cvx_constraints,
+    )
+
+    def _solve():
+        try:
+            prob.solve(solver=cp.CLARABEL, verbose=False)
+        except cp.SolverError:
+            try:
+                prob.solve(solver=cp.SCS, verbose=False)
+            except cp.SolverError:
+                pass
+
+    await asyncio.to_thread(_solve)
+
+    if prob.status is None or prob.status == "solver_error":
+        return FundOptimizationResult(
+            weights={}, block_weights={}, expected_return=0.0,
+            portfolio_volatility=0.0, sharpe_ratio=0.0,
+            cvar_95=None, cvar_limit=constraints.cvar_limit,
+            cvar_within_limit=False, status="solver_failed",
+            solver_info="Both CLARABEL and SCS failed",
+        )
+
+    if prob.status not in ("optimal", "optimal_inaccurate"):
+        return FundOptimizationResult(
+            weights={}, block_weights={}, expected_return=0.0,
+            portfolio_volatility=0.0, sharpe_ratio=0.0,
+            cvar_95=None, cvar_limit=constraints.cvar_limit,
+            cvar_within_limit=False, status=f"infeasible: {prob.status}",
+        )
+
+    opt_w = np.maximum(w.value, 0)
+    total = opt_w.sum()
+    if total == 0:
+        return FundOptimizationResult(
+            weights={}, block_weights={}, expected_return=0.0,
+            portfolio_volatility=0.0, sharpe_ratio=0.0,
+            cvar_95=None, cvar_limit=constraints.cvar_limit,
+            cvar_within_limit=False, status="infeasible: zero weights",
+        )
+    opt_w /= total
+
+    port_ret = float(mu @ opt_w)
+    port_vol = float(np.sqrt(opt_w @ cov_matrix @ opt_w))
+    sharpe = (port_ret - risk_free_rate) / port_vol if port_vol > 0 else 0.0
+
+    # CVaR post-check (parametric Cornish-Fisher, zero skew/kurtosis as conservative)
+    skewness = np.zeros(n)
+    excess_kurtosis = np.zeros(n)
+    cvar_val = parametric_cvar_cf(opt_w, mu, cov_matrix, skewness, excess_kurtosis)
+    cvar_neg = -cvar_val  # convention: negative = loss
+
+    cvar_limit = constraints.cvar_limit
+    cvar_ok = True
+    if cvar_limit is not None:
+        cvar_ok = cvar_neg >= cvar_limit  # e.g. -0.05 >= -0.08 means within limit
+
+    # Build per-fund weight dict
+    fund_weights = {fid: round(float(opt_w[i]), 6) for i, fid in enumerate(fund_ids)}
+
+    # Aggregate to block-level weights
+    blk_weights: dict[str, float] = {}
+    for fid, fw in fund_weights.items():
+        blk = fund_blocks.get(fid, "unknown")
+        blk_weights[blk] = blk_weights.get(blk, 0.0) + fw
+
+    solver_name = prob.solver_stats.solver_name if prob.solver_stats else None
+
+    logger.info(
+        "fund_portfolio_optimized",
+        n_funds=n,
+        sharpe=round(sharpe, 4),
+        volatility=round(port_vol, 6),
+        cvar_95=round(cvar_neg, 6),
+        cvar_limit=cvar_limit,
+        cvar_within_limit=cvar_ok,
+        solver=solver_name,
+    )
+
+    return FundOptimizationResult(
+        weights=fund_weights,
+        block_weights={k: round(v, 6) for k, v in blk_weights.items()},
+        expected_return=round(port_ret, 6),
+        portfolio_volatility=round(port_vol, 6),
+        sharpe_ratio=round(sharpe, 4),
+        cvar_95=round(cvar_neg, 6),
+        cvar_limit=cvar_limit,
+        cvar_within_limit=cvar_ok,
+        status="optimal",
+        solver_info=solver_name,
+    )
+
+
 async def optimize_portfolio_pareto(
     block_ids: list[str],
     expected_returns: dict[str, float],

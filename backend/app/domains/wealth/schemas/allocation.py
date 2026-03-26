@@ -99,6 +99,29 @@ class AllocationProposal(BaseModel):
         return v.strip()
 
 
+class BlockProposalRead(BaseModel):
+    """Single block in an allocation proposal."""
+
+    block_id: str
+    neutral_weight: Decimal
+    proposed_weight: Decimal
+    min_weight: Decimal
+    max_weight: Decimal
+    tilt_applied: Decimal
+    tilt_source: str
+
+
+class MacroAllocationProposalRead(BaseModel):
+    """Allocation proposal generated from macro regime analysis."""
+
+    profile: str
+    regime: str
+    proposals: list[BlockProposalRead]
+    total_weight: Decimal
+    rationale: str
+    regional_scores: dict[str, float]
+
+
 class SimulationResult(BaseModel):
     profile: str
     proposed_cvar_95_3m: Decimal | None = None

@@ -209,6 +209,90 @@ async def compute_inputs_from_nav(
     return annual_cov, expected_returns
 
 
+async def compute_fund_level_inputs(
+    db: AsyncSession,
+    instrument_ids: list[uuid.UUID],
+    lookback_days: int = TRADING_DAYS_PER_YEAR,
+    as_of_date: date | None = None,
+) -> tuple[np.ndarray, dict[str, float], list[str]]:
+    """Compute covariance matrix and expected returns for individual funds.
+
+    Unlike compute_inputs_from_nav (one proxy per block), this computes the
+    full NxN matrix across all provided instrument_ids so the optimizer can
+    allocate at fund level with inter-fund diversification.
+
+    Returns:
+        (annualized_cov_matrix, expected_returns_dict, ordered_fund_ids)
+        - cov_matrix: NxN where N = number of funds with sufficient data
+        - expected_returns_dict: {instrument_id_str: annualized_return}
+        - ordered_fund_ids: fund IDs matching matrix rows/cols
+
+    Raises:
+        ValueError: If <2 funds have aligned data or <120 trading days.
+    """
+    if as_of_date is None:
+        as_of_date = date.today()
+
+    start_date = as_of_date - timedelta(days=int(lookback_days * 1.5))
+
+    ret_stmt = (
+        select(NavTimeseries.instrument_id, NavTimeseries.nav_date, NavTimeseries.return_1d)
+        .where(
+            NavTimeseries.instrument_id.in_(instrument_ids),
+            NavTimeseries.nav_date >= start_date,
+            NavTimeseries.nav_date <= as_of_date,
+            NavTimeseries.return_1d.is_not(None),
+        )
+        .order_by(NavTimeseries.nav_date)
+    )
+    ret_result = await db.execute(ret_stmt)
+
+    fund_returns: dict[str, dict[date, float]] = defaultdict(dict)
+    for instrument_id, nav_date, return_1d in ret_result.all():
+        fund_returns[str(instrument_id)][nav_date] = float(return_1d)
+
+    # Keep only funds with data
+    available_ids = [str(iid) for iid in instrument_ids if str(iid) in fund_returns]
+    if len(available_ids) < 2:
+        raise ValueError(f"Need ≥2 funds with NAV data, found {len(available_ids)}")
+
+    all_date_sets = [set(fund_returns[fid].keys()) for fid in available_ids]
+    common_dates = sorted(set.intersection(*all_date_sets))
+
+    if len(common_dates) < MIN_OBSERVATIONS:
+        raise ValueError(
+            f"Insufficient aligned fund data: {len(common_dates)} trading days "
+            f"(minimum: {MIN_OBSERVATIONS})"
+        )
+
+    returns_matrix = np.array([
+        [fund_returns[fid][d] for fid in available_ids]
+        for d in common_dates
+    ])
+
+    daily_cov = np.cov(returns_matrix, rowvar=False)
+    annual_cov = daily_cov * TRADING_DAYS_PER_YEAR
+
+    # PSD adjustment
+    eigenvalues = np.linalg.eigvalsh(annual_cov)
+    if eigenvalues.min() < -1e-10:
+        eigvals, eigvecs = np.linalg.eigh(annual_cov)
+        eigvals = np.maximum(eigvals, 1e-10)
+        annual_cov = eigvecs @ np.diag(eigvals) @ eigvecs.T
+
+    daily_means = returns_matrix.mean(axis=0)
+    annual_returns = daily_means * TRADING_DAYS_PER_YEAR
+    expected_returns = {fid: float(annual_returns[i]) for i, fid in enumerate(available_ids)}
+
+    logger.info(
+        "fund_level_inputs_computed",
+        n_funds=len(available_ids),
+        observations=len(common_dates),
+    )
+
+    return annual_cov, expected_returns, available_ids
+
+
 # ── Drift queries ────────────────────────────────────────────────────
 
 

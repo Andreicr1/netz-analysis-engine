@@ -3,8 +3,8 @@
 All endpoints use get_db_with_rls and response_model + model_validate().
 IC role required for creation and construction.
 
-Construction invokes CLARABEL optimizer for mathematically rigorous block weights,
-then distributes within blocks by manager_score.
+Construction invokes CLARABEL fund-level optimizer with block-group constraints
+from StrategicAllocation and CVaR limit from profile config.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+import numpy as np
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -32,6 +33,19 @@ from app.domains.wealth.schemas.model_portfolio import (
 from app.shared.enums import Role
 
 logger = structlog.get_logger()
+
+# Default CVaR limits per profile (fallback if ConfigService unavailable)
+_DEFAULT_CVAR_LIMITS: dict[str, float] = {
+    "conservative": -0.08,
+    "moderate": -0.06,
+    "growth": -0.12,
+}
+
+_DEFAULT_MAX_SINGLE_FUND: dict[str, float] = {
+    "conservative": 0.10,
+    "moderate": 0.12,
+    "growth": 0.15,
+}
 
 router = APIRouter(prefix="/model-portfolios", tags=["model-portfolios"])
 
@@ -314,24 +328,30 @@ async def _run_construction_async(
     """Run optimizer-driven portfolio construction (fully async).
 
     Steps:
-    1. Load approved universe via UniverseService (sync, offloaded to thread)
-    2. Query StrategicAllocation for profile constraints
-    3. Compute expected returns + covariance from NAV timeseries
-    4. Invoke CLARABEL optimizer for optimal block weights
-    5. Distribute block weights to funds via portfolio_builder.construct()
+    1. Load approved universe + manager_score
+    2. Query StrategicAllocation for block constraints + CVaR limit
+    3. Compute fund-level covariance + expected returns from NAV timeseries
+    4. Invoke CLARABEL fund-level optimizer with block-group constraints
+    5. Build PortfolioComposition from optimizer output
+    6. Fallback to block-level heuristic if fund-level optimization fails
     """
-    from app.domains.wealth.services.quant_queries import compute_inputs_from_nav
+    from app.domains.wealth.services.quant_queries import compute_fund_level_inputs
     from quant_engine.optimizer_service import (
         BlockConstraint,
-        OptimizationResult,
+        FundOptimizationResult,
         ProfileConstraints,
-        optimize_portfolio,
+        optimize_fund_portfolio,
     )
     from vertical_engines.wealth.model_portfolio.models import OptimizationMeta
-    from vertical_engines.wealth.model_portfolio.portfolio_builder import construct
+    from vertical_engines.wealth.model_portfolio.portfolio_builder import (
+        construct,
+        construct_from_optimizer,
+    )
 
-    # ── 1. Load approved universe (sync service, offload to thread) ──
+    # ── 1. Load approved universe ──
     universe_funds = await _load_universe_funds(db, org_id)
+    if not universe_funds:
+        return {"funds": [], "profile": profile, "error": "No approved funds in universe"}
 
     # ── 2. Query strategic allocation for this profile ──
     today = date.today()
@@ -352,92 +372,124 @@ async def _run_construction_async(
     if not allocations:
         return {"funds": [], "profile": profile, "error": "No strategic allocation defined"}
 
-    block_ids = [a.block_id for a in allocations]
     strategic_targets = {a.block_id: float(a.target_weight) for a in allocations}
 
-    # ── 3. Compute optimization inputs from NAV timeseries ──
-    opt_result: OptimizationResult | None = None
-    optimized_weights: dict[str, float]
-    optimization_meta: OptimizationMeta | None = None
+    # ── Resolve CVaR limit from profile config ──
+    cvar_limit = await _resolve_cvar_limit(db, profile)
+
+    block_constraints = [
+        BlockConstraint(
+            block_id=a.block_id,
+            min_weight=float(a.min_weight),
+            max_weight=float(a.max_weight),
+        )
+        for a in allocations
+    ]
+
+    # Resolve max_single_fund_weight from profile config
+    max_single_fund = await _resolve_max_single_fund(db, profile)
+
+    constraints = ProfileConstraints(
+        blocks=block_constraints,
+        cvar_limit=cvar_limit,
+        max_single_fund_weight=max_single_fund,
+    )
+
+    # Build fund metadata lookup
+    fund_info: dict[str, dict[str, Any]] = {}
+    fund_blocks: dict[str, str] = {}
+    fund_instrument_ids: list[uuid.UUID] = []
+
+    for f in universe_funds:
+        fid = f["instrument_id"]
+        fund_info[fid] = f
+        if f.get("block_id"):
+            fund_blocks[fid] = f["block_id"]
+        fund_instrument_ids.append(uuid.UUID(fid))
+
+    # ── 3+4. Fund-level optimization ──
+    composition = None
 
     try:
-        cov_matrix, expected_returns = await compute_inputs_from_nav(db, block_ids)
+        cov_matrix, expected_returns, available_ids = await compute_fund_level_inputs(
+            db, fund_instrument_ids
+        )
 
-        # ── 4. Build constraints and invoke CLARABEL ──
-        block_constraints = [
-            BlockConstraint(
-                block_id=a.block_id,
-                min_weight=float(a.min_weight),
-                max_weight=float(a.max_weight),
-            )
-            for a in allocations
-        ]
-        constraints = ProfileConstraints(blocks=block_constraints)
+        # Filter to funds with NAV data
+        opt_fund_ids = [fid for fid in available_ids if fid in fund_blocks]
+        if len(opt_fund_ids) < 2:
+            raise ValueError(f"Need ≥2 funds with NAV + block, found {len(opt_fund_ids)}")
 
-        opt_result = await optimize_portfolio(
-            block_ids=block_ids,
-            expected_returns=expected_returns,
-            cov_matrix=cov_matrix,
+        # Re-index covariance to match opt_fund_ids
+        id_to_idx = {fid: i for i, fid in enumerate(available_ids)}
+        indices = [id_to_idx[fid] for fid in opt_fund_ids]
+        sub_cov = cov_matrix[np.ix_(indices, indices)]
+        sub_returns = {fid: expected_returns[fid] for fid in opt_fund_ids}
+        sub_blocks = {fid: fund_blocks[fid] for fid in opt_fund_ids}
+
+        fund_result: FundOptimizationResult = await optimize_fund_portfolio(
+            fund_ids=opt_fund_ids,
+            fund_blocks=sub_blocks,
+            expected_returns=sub_returns,
+            cov_matrix=sub_cov,
             constraints=constraints,
         )
 
-        if opt_result.status == "optimal" and opt_result.weights:
-            optimized_weights = opt_result.weights
-            optimization_meta = OptimizationMeta(
-                expected_return=opt_result.expected_return,
-                portfolio_volatility=opt_result.portfolio_volatility,
-                sharpe_ratio=opt_result.sharpe_ratio,
-                solver=opt_result.solver_info or "CLARABEL",
-                status=opt_result.status,
+        if fund_result.status == "optimal" and fund_result.weights:
+            opt_meta = OptimizationMeta(
+                expected_return=fund_result.expected_return,
+                portfolio_volatility=fund_result.portfolio_volatility,
+                sharpe_ratio=fund_result.sharpe_ratio,
+                solver=fund_result.solver_info or "CLARABEL",
+                status=fund_result.status,
+                cvar_95=fund_result.cvar_95,
+                cvar_limit=fund_result.cvar_limit,
+                cvar_within_limit=fund_result.cvar_within_limit,
+            )
+            composition = construct_from_optimizer(
+                profile, fund_result.weights, fund_info, opt_meta,
             )
             logger.info(
-                "optimizer_succeeded",
+                "fund_level_optimizer_succeeded",
                 profile=profile,
-                sharpe=opt_result.sharpe_ratio,
-                volatility=opt_result.portfolio_volatility,
-                solver=opt_result.solver_info,
+                n_funds=len(fund_result.weights),
+                sharpe=fund_result.sharpe_ratio,
+                cvar_95=fund_result.cvar_95,
+                cvar_limit=fund_result.cvar_limit,
+                cvar_within_limit=fund_result.cvar_within_limit,
             )
         else:
-            # Solver did not find optimal — fall back to strategic targets
             logger.warning(
-                "optimizer_non_optimal_fallback",
+                "fund_level_optimizer_non_optimal",
                 profile=profile,
-                solver_status=opt_result.status,
-                solver_info=opt_result.solver_info,
-            )
-            optimized_weights = strategic_targets
-            optimization_meta = OptimizationMeta(
-                expected_return=0.0,
-                portfolio_volatility=0.0,
-                sharpe_ratio=0.0,
-                solver="heuristic_fallback",
-                status=f"fallback:{opt_result.status}",
+                status=fund_result.status,
             )
 
     except ValueError as e:
-        # Insufficient NAV data — fall back to strategic allocation targets
         logger.warning(
-            "optimizer_insufficient_data_fallback",
+            "fund_level_optimizer_insufficient_data",
             profile=profile,
             error=str(e),
         )
-        optimized_weights = strategic_targets
-        optimization_meta = OptimizationMeta(
+
+    # ── 5. Fallback to block-level heuristic if fund-level failed ──
+    if composition is None:
+        fallback_meta = OptimizationMeta(
             expected_return=0.0,
             portfolio_volatility=0.0,
             sharpe_ratio=0.0,
             solver="heuristic_fallback",
-            status="fallback:insufficient_nav_data",
+            status="fallback:insufficient_fund_data",
+            cvar_95=None,
+            cvar_limit=cvar_limit,
+            cvar_within_limit=False,
+        )
+        composition = construct(
+            profile, universe_funds, strategic_targets,
+            optimization_meta=fallback_meta,
         )
 
-    # ── 5. Distribute block weights to individual funds ──
-    composition = construct(
-        profile,
-        universe_funds,
-        optimized_weights,
-        optimization_meta=optimization_meta,
-    )
-
+    # ── 6. Serialize result ──
     result: dict[str, Any] = {
         "profile": composition.profile,
         "total_weight": composition.total_weight,
@@ -453,7 +505,6 @@ async def _run_construction_async(
         ],
     }
 
-    # Attach optimization metadata for transparency
     if composition.optimization:
         result["optimization"] = {
             "expected_return": composition.optimization.expected_return,
@@ -461,6 +512,9 @@ async def _run_construction_async(
             "sharpe_ratio": composition.optimization.sharpe_ratio,
             "solver": composition.optimization.solver,
             "status": composition.optimization.status,
+            "cvar_95": composition.optimization.cvar_95,
+            "cvar_limit": composition.optimization.cvar_limit,
+            "cvar_within_limit": composition.optimization.cvar_within_limit,
         }
 
     return result
@@ -522,13 +576,56 @@ async def _load_universe_funds(
     ]
 
 
+async def _resolve_cvar_limit(
+    db: AsyncSession,
+    profile: str,
+) -> float:
+    """Resolve CVaR limit from ConfigService, falling back to hardcoded defaults."""
+    try:
+        from app.core.config.config_service import ConfigService
+
+        config_svc = ConfigService(db)
+        result = await config_svc.get("liquid_funds", "portfolio_profiles")
+        profiles = result.value.get("profiles", {})
+        profile_cfg = profiles.get(profile, {})
+        cvar_cfg = profile_cfg.get("cvar", {})
+        limit = cvar_cfg.get("limit")
+        if limit is not None:
+            return float(limit)
+    except Exception:
+        logger.debug("config_service_cvar_fallback", profile=profile)
+
+    return _DEFAULT_CVAR_LIMITS.get(profile, -0.08)
+
+
+async def _resolve_max_single_fund(
+    db: AsyncSession,
+    profile: str,
+) -> float:
+    """Resolve max single fund weight from ConfigService."""
+    try:
+        from app.core.config.config_service import ConfigService
+
+        config_svc = ConfigService(db)
+        result = await config_svc.get("liquid_funds", "portfolio_profiles")
+        profiles = result.value.get("profiles", {})
+        profile_cfg = profiles.get(profile, {})
+        max_w = profile_cfg.get("max_single_fund_weight")
+        if max_w is not None:
+            return float(max_w)
+    except Exception:
+        logger.debug("config_service_max_fund_fallback", profile=profile)
+
+    return _DEFAULT_MAX_SINGLE_FUND.get(profile, 0.15)
+
+
 async def _create_day0_snapshot(
     db: AsyncSession,
     portfolio: ModelPortfolio,
     fund_selection: dict[str, Any],
     org_id: str,
 ) -> None:
-    """Create day-0 PortfolioSnapshot so monitoring engine starts tracking."""
+    """Create day-0 PortfolioSnapshot with actual CVaR from optimizer."""
     funds = fund_selection.get("funds", [])
     if not funds:
         return
@@ -542,15 +639,33 @@ async def _create_day0_snapshot(
     optimization = fund_selection.get("optimization", {})
     snapshot_date = date.today()
 
+    # Use actual CVaR from optimizer (not volatility)
+    cvar_current_val = optimization.get("cvar_95")
+    cvar_limit_val = optimization.get("cvar_limit")
+
+    # Compute utilization: |cvar_current / cvar_limit| × 100
+    cvar_utilized = None
+    if cvar_current_val is not None and cvar_limit_val is not None and cvar_limit_val != 0:
+        cvar_utilized = round(abs(cvar_current_val / cvar_limit_val) * 100, 2)
+
+    # Determine trigger status from CVaR utilization
+    trigger = "ok"
+    if cvar_utilized is not None:
+        if cvar_utilized >= 100.0:
+            trigger = "urgent"
+        elif cvar_utilized >= 80.0:
+            trigger = "maintenance"
+
     snapshot = PortfolioSnapshot(
         organization_id=org_id,
         profile=portfolio.profile,
         snapshot_date=snapshot_date,
         weights=block_weights,
         fund_selection=fund_selection,
-        cvar_current=Decimal(str(round(optimization.get("portfolio_volatility", 0.0), 6)))
-        if optimization else None,
-        trigger_status="ok",
+        cvar_current=Decimal(str(round(cvar_current_val, 6))) if cvar_current_val is not None else None,
+        cvar_limit=Decimal(str(round(cvar_limit_val, 6))) if cvar_limit_val is not None else None,
+        cvar_utilized_pct=Decimal(str(cvar_utilized)) if cvar_utilized is not None else None,
+        trigger_status=trigger,
         consecutive_breach_days=0,
     )
     db.add(snapshot)
@@ -560,6 +675,9 @@ async def _create_day0_snapshot(
         profile=portfolio.profile,
         snapshot_date=str(snapshot_date),
         blocks=len(block_weights),
+        cvar_95=cvar_current_val,
+        cvar_limit=cvar_limit_val,
+        trigger_status=trigger,
     )
 
 

@@ -41,6 +41,9 @@ class OptimizationMeta:
     sharpe_ratio: float
     solver: str  # "CLARABEL", "SCS", "heuristic_fallback"
     status: str  # "optimal", "infeasible", "solver_failed", "fallback"
+    cvar_95: float | None = None  # parametric CVaR (negative = loss)
+    cvar_limit: float | None = None
+    cvar_within_limit: bool = True
 
 
 @dataclass(frozen=True, slots=True)

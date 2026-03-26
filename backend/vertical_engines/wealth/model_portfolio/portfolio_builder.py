@@ -2,11 +2,15 @@
 
 Pure sync function. Config as parameter. No I/O.
 
-Algorithm:
-1. Block weights come from CLARABEL optimizer (or fallback heuristic)
+Algorithm (primary — optimizer-driven):
+1. Fund weights come directly from CLARABEL fund-level optimizer
+2. Optimizer enforces block-group sum constraints + concentration limit + CVaR
+3. Returns frozen PortfolioComposition with weights summing to 1.0
+
+Algorithm (fallback — score-proportional):
+1. Block weights come from CLARABEL block-level optimizer (or strategic targets)
 2. Within each block, select top N funds by manager_score
-3. Funds weighted proportionally to score within optimized block weight
-4. Returns frozen PortfolioComposition with weights summing to 1.0
+3. Funds weighted proportionally to score within block weight
 """
 
 from __future__ import annotations
@@ -24,8 +28,61 @@ from vertical_engines.wealth.model_portfolio.models import (
 
 logger = structlog.get_logger()
 
-# Default number of top funds per block
+# Default number of top funds per block (fallback path only)
 _DEFAULT_TOP_N = 3
+
+
+def construct_from_optimizer(
+    profile: str,
+    fund_weights: dict[str, float],
+    fund_info: dict[str, dict[str, Any]],
+    optimization_meta: OptimizationMeta,
+) -> PortfolioComposition:
+    """Construct portfolio from fund-level optimizer output.
+
+    Parameters
+    ----------
+    profile : str
+        Portfolio profile (conservative, moderate, growth).
+    fund_weights : dict[str, float]
+        Optimized per-fund weights from CLARABEL (instrument_id -> weight).
+    fund_info : dict[str, dict]
+        Fund metadata keyed by instrument_id with keys: fund_name, block_id, manager_score.
+    optimization_meta : OptimizationMeta
+        Solver metadata (CVaR, Sharpe, solver name).
+
+    Returns
+    -------
+    PortfolioComposition
+        Frozen dataclass with per-fund weights summing to 1.0.
+    """
+    all_weights: list[FundWeight] = []
+    total = 0.0
+
+    for fid, weight in fund_weights.items():
+        if weight < 1e-6:
+            continue  # skip near-zero allocations
+        info = fund_info.get(fid, {})
+        all_weights.append(
+            FundWeight(
+                instrument_id=uuid.UUID(fid),
+                fund_name=info.get("fund_name", ""),
+                block_id=info.get("block_id", ""),
+                weight=round(weight, 6),
+                score=info.get("manager_score", 0) or 0,
+            )
+        )
+        total += weight
+
+    # Sort by block then weight descending for readability
+    all_weights.sort(key=lambda fw: (fw.block_id, -fw.weight))
+
+    return PortfolioComposition(
+        profile=profile,
+        funds=all_weights,
+        total_weight=round(total, 6),
+        optimization=optimization_meta,
+    )
 
 
 def construct(
@@ -35,7 +92,10 @@ def construct(
     config: dict[str, Any] | None = None,
     optimization_meta: OptimizationMeta | None = None,
 ) -> PortfolioComposition:
-    """Construct a model portfolio from universe assets and optimized block weights.
+    """Fallback: construct portfolio from block weights via score-proportional heuristic.
+
+    Used ONLY when the fund-level optimizer cannot run (insufficient NAV data).
+    For normal flow, use construct_from_optimizer() instead.
 
     Parameters
     ----------
@@ -44,17 +104,11 @@ def construct(
     universe_funds : list[dict]
         Approved funds with keys: instrument_id, fund_name, block_id, manager_score.
     block_weights : dict[str, float]
-        Optimized block weights from CLARABEL solver (or strategic allocation fallback).
-        Maps block_id -> weight, summing to ~1.0.
+        Block-level weights (block_id -> weight, summing to ~1.0).
     config : dict | None
         Optional config with top_n_per_block override.
     optimization_meta : OptimizationMeta | None
-        Solver metadata (expected return, volatility, sharpe, solver name).
-
-    Returns
-    -------
-    PortfolioComposition
-        Frozen dataclass with per-fund weights summing to 1.0.
+        Solver metadata.
     """
     top_n = (config or {}).get("top_n_per_block", _DEFAULT_TOP_N)
 

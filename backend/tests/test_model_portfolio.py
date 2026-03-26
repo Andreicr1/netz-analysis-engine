@@ -11,15 +11,19 @@ from vertical_engines.wealth.model_portfolio.models import (
     BacktestResult,
     FundWeight,
     LiveNAV,
+    OptimizationMeta,
     PortfolioComposition,
     StressResult,
 )
-from vertical_engines.wealth.model_portfolio.portfolio_builder import construct
+from vertical_engines.wealth.model_portfolio.portfolio_builder import (
+    construct,
+    construct_from_optimizer,
+)
 from vertical_engines.wealth.model_portfolio.stress_scenarios import SCENARIOS
 
 
 class TestPortfolioBuilder:
-    """Test portfolio construction algorithm."""
+    """Test portfolio construction algorithm (fallback path)."""
 
     def test_construct_with_single_block(self):
         funds = [
@@ -87,6 +91,211 @@ class TestPortfolioBuilder:
         assert len(result.funds) == 0
 
 
+class TestConstructFromOptimizer:
+    """Test optimizer-driven portfolio construction (primary path)."""
+
+    def test_construct_from_optimizer_weights_sum_to_one(self):
+        fid1 = str(uuid.uuid4())
+        fid2 = str(uuid.uuid4())
+        fid3 = str(uuid.uuid4())
+
+        fund_weights = {fid1: 0.5, fid2: 0.3, fid3: 0.2}
+        fund_info = {
+            fid1: {"fund_name": "Fund A", "block_id": "equity", "manager_score": 80},
+            fid2: {"fund_name": "Fund B", "block_id": "equity", "manager_score": 60},
+            fid3: {"fund_name": "Fund C", "block_id": "fi", "manager_score": 70},
+        }
+        meta = OptimizationMeta(
+            expected_return=0.08, portfolio_volatility=0.12,
+            sharpe_ratio=0.67, solver="CLARABEL", status="optimal",
+            cvar_95=-0.05, cvar_limit=-0.08, cvar_within_limit=True,
+        )
+
+        result = construct_from_optimizer("moderate", fund_weights, fund_info, meta)
+
+        assert result.validate_weights()
+        assert len(result.funds) == 3
+        assert result.optimization is not None
+        assert result.optimization.cvar_95 == -0.05
+        assert result.optimization.cvar_within_limit is True
+
+    def test_construct_from_optimizer_skips_near_zero(self):
+        fid1 = str(uuid.uuid4())
+        fid2 = str(uuid.uuid4())
+
+        fund_weights = {fid1: 0.9999, fid2: 0.0000001}  # near-zero
+        fund_info = {
+            fid1: {"fund_name": "Fund A", "block_id": "eq", "manager_score": 80},
+            fid2: {"fund_name": "Fund B", "block_id": "eq", "manager_score": 60},
+        }
+        meta = OptimizationMeta(
+            expected_return=0.1, portfolio_volatility=0.15,
+            sharpe_ratio=0.7, solver="CLARABEL", status="optimal",
+        )
+
+        result = construct_from_optimizer("growth", fund_weights, fund_info, meta)
+        assert len(result.funds) == 1
+
+    def test_construct_from_optimizer_preserves_block_id(self):
+        fid1 = str(uuid.uuid4())
+        fid2 = str(uuid.uuid4())
+
+        fund_weights = {fid1: 0.6, fid2: 0.4}
+        fund_info = {
+            fid1: {"fund_name": "Eq Fund", "block_id": "na_equity_large", "manager_score": 90},
+            fid2: {"fund_name": "FI Fund", "block_id": "fi_us_aggregate", "manager_score": 75},
+        }
+        meta = OptimizationMeta(
+            expected_return=0.07, portfolio_volatility=0.10,
+            sharpe_ratio=0.6, solver="CLARABEL", status="optimal",
+        )
+
+        result = construct_from_optimizer("conservative", fund_weights, fund_info, meta)
+        blocks = {f.block_id for f in result.funds}
+        assert "na_equity_large" in blocks
+        assert "fi_us_aggregate" in blocks
+
+
+class TestFundLevelOptimizer:
+    """Test fund-level CLARABEL optimizer with block-group constraints."""
+
+    @pytest.mark.asyncio
+    async def test_optimize_fund_portfolio_respects_block_bounds(self):
+        from quant_engine.optimizer_service import (
+            BlockConstraint,
+            ProfileConstraints,
+            optimize_fund_portfolio,
+        )
+
+        # 4 funds across 2 blocks
+        fids = [str(uuid.uuid4()) for _ in range(4)]
+        fund_blocks = {
+            fids[0]: "equity", fids[1]: "equity",
+            fids[2]: "fi", fids[3]: "fi",
+        }
+
+        np.random.seed(42)
+        cov = np.eye(4) * 0.04
+        cov[0, 1] = cov[1, 0] = 0.01
+        cov[2, 3] = cov[3, 2] = 0.005
+        expected = {fids[0]: 0.10, fids[1]: 0.08, fids[2]: 0.04, fids[3]: 0.03}
+
+        constraints = ProfileConstraints(
+            blocks=[
+                BlockConstraint("equity", 0.40, 0.70),
+                BlockConstraint("fi", 0.30, 0.60),
+            ],
+            cvar_limit=-0.12,
+            max_single_fund_weight=0.50,
+        )
+
+        result = await optimize_fund_portfolio(
+            fund_ids=fids,
+            fund_blocks=fund_blocks,
+            expected_returns=expected,
+            cov_matrix=cov,
+            constraints=constraints,
+        )
+
+        assert result.status == "optimal"
+        assert abs(sum(result.weights.values()) - 1.0) < 1e-4
+
+        # Verify block bounds
+        eq_sum = sum(result.weights[f] for f in fids[:2])
+        fi_sum = sum(result.weights[f] for f in fids[2:])
+        assert eq_sum >= 0.40 - 1e-4, f"equity sum {eq_sum} < 0.40"
+        assert eq_sum <= 0.70 + 1e-4, f"equity sum {eq_sum} > 0.70"
+        assert fi_sum >= 0.30 - 1e-4, f"fi sum {fi_sum} < 0.30"
+        assert fi_sum <= 0.60 + 1e-4, f"fi sum {fi_sum} > 0.60"
+
+    @pytest.mark.asyncio
+    async def test_optimize_fund_portfolio_cvar_computed(self):
+        from quant_engine.optimizer_service import (
+            BlockConstraint,
+            ProfileConstraints,
+            optimize_fund_portfolio,
+        )
+
+        fids = [str(uuid.uuid4()) for _ in range(3)]
+        fund_blocks = {fids[0]: "eq", fids[1]: "fi", fids[2]: "fi"}
+
+        # Very low-volatility assets → CVaR should be within generous limit
+        cov = np.diag([0.001, 0.0005, 0.0004])
+        expected = {fids[0]: 0.06, fids[1]: 0.03, fids[2]: 0.025}
+
+        constraints = ProfileConstraints(
+            blocks=[
+                BlockConstraint("eq", 0.2, 0.5),
+                BlockConstraint("fi", 0.5, 0.8),
+            ],
+            cvar_limit=-0.15,  # generous limit
+            max_single_fund_weight=0.60,
+        )
+
+        result = await optimize_fund_portfolio(
+            fund_ids=fids,
+            fund_blocks=fund_blocks,
+            expected_returns=expected,
+            cov_matrix=cov,
+            constraints=constraints,
+        )
+
+        assert result.status == "optimal"
+        assert result.cvar_95 is not None
+        assert result.cvar_95 < 0  # CVaR is negative (loss convention)
+        assert result.cvar_limit == -0.15
+        assert result.cvar_within_limit is True
+        assert result.cvar_95 >= result.cvar_limit  # e.g. -0.03 >= -0.15
+
+    @pytest.mark.asyncio
+    async def test_optimize_fund_portfolio_empty(self):
+        from quant_engine.optimizer_service import (
+            ProfileConstraints,
+            optimize_fund_portfolio,
+        )
+
+        result = await optimize_fund_portfolio(
+            fund_ids=[], fund_blocks={},
+            expected_returns={}, cov_matrix=np.array([]),
+            constraints=ProfileConstraints(blocks=[]),
+        )
+        assert result.status == "empty"
+
+    @pytest.mark.asyncio
+    async def test_optimize_fund_portfolio_concentration_limit(self):
+        """No single fund should exceed max_single_fund_weight."""
+        from quant_engine.optimizer_service import (
+            BlockConstraint,
+            ProfileConstraints,
+            optimize_fund_portfolio,
+        )
+
+        fids = [str(uuid.uuid4()) for _ in range(3)]
+        fund_blocks = {fids[0]: "eq", fids[1]: "eq", fids[2]: "eq"}
+
+        # One fund has much higher return — optimizer would concentrate without limit
+        cov = np.eye(3) * 0.04
+        expected = {fids[0]: 0.20, fids[1]: 0.02, fids[2]: 0.01}
+
+        constraints = ProfileConstraints(
+            blocks=[BlockConstraint("eq", 0.9, 1.0)],
+            cvar_limit=-0.15,
+            max_single_fund_weight=0.40,
+        )
+
+        result = await optimize_fund_portfolio(
+            fund_ids=fids,
+            fund_blocks=fund_blocks,
+            expected_returns=expected,
+            cov_matrix=cov,
+            constraints=constraints,
+        )
+
+        assert result.status == "optimal"
+        for fid, w in result.weights.items():
+            assert w <= 0.40 + 1e-4, f"Fund {fid} weight {w} exceeds 0.40 limit"
+
+
 class TestPortfolioModels:
     """Test frozen dataclasses."""
 
@@ -101,6 +310,25 @@ class TestPortfolioModels:
 
         comp2 = PortfolioComposition(profile="test", funds=[], total_weight=0.5)
         assert not comp2.validate_weights()
+
+    def test_optimization_meta_cvar_fields(self):
+        meta = OptimizationMeta(
+            expected_return=0.08, portfolio_volatility=0.12,
+            sharpe_ratio=0.67, solver="CLARABEL", status="optimal",
+            cvar_95=-0.05, cvar_limit=-0.08, cvar_within_limit=True,
+        )
+        assert meta.cvar_95 == -0.05
+        assert meta.cvar_limit == -0.08
+        assert meta.cvar_within_limit is True
+
+    def test_optimization_meta_defaults(self):
+        meta = OptimizationMeta(
+            expected_return=0.0, portfolio_volatility=0.0,
+            sharpe_ratio=0.0, solver="test", status="test",
+        )
+        assert meta.cvar_95 is None
+        assert meta.cvar_limit is None
+        assert meta.cvar_within_limit is True
 
     def test_backtest_result_frozen(self):
         bt = BacktestResult(portfolio_id=None, lookback_days=1260)

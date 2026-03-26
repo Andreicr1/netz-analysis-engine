@@ -23,6 +23,7 @@ from app.core.config.config_service import ConfigService
 from app.core.db.engine import async_session_factory
 from app.core.security.clerk_auth import CurrentUser, get_current_user, require_role
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
+from app.domains.wealth.models.allocation import StrategicAllocation
 from app.domains.wealth.models.macro_committee import MacroReview
 from app.domains.wealth.routes.common import _get_content_semaphore, require_content_slot
 from app.domains.wealth.schemas.macro import (
@@ -52,6 +53,11 @@ from app.shared.models import (
     MacroRegionalSnapshot,
     OfrHedgeFundData,
     TreasuryData,
+)
+from quant_engine.allocation_proposal_service import (
+    compute_regime_tilted_weights,
+    extract_regime_from_review,
+    extract_regional_scores_from_snapshot,
 )
 from quant_engine.regime_service import (
     REGIONAL_REGIME_SIGNALS,
@@ -341,13 +347,49 @@ async def generate_review(
             previous.data_json if previous else None,
         )
 
+        # Compute regime hierarchy and embed in report for downstream use
+        regime_data: dict[str, Any] | None = None
+        try:
+            config_service = ConfigService(db)
+            raw_config = await config_service.get(
+                "liquid_funds", "macro_intelligence", org_id,
+            )
+            regime_config = resolve_regional_regime_config(raw_config.value)
+            macro = await get_latest_macro_values(db)
+            vix_val = macro.get("VIXCLS", (None, None))[0]
+            cpi_val = macro.get("CPI_YOY", (None, None))[0]
+
+            regional_regimes: dict[str, str] = {}
+            for region, signal_ids in REGIONAL_REGIME_SIGNALS.items():
+                signal_values = {
+                    sid: macro.get(sid, (None, None))[0] for sid in signal_ids
+                }
+                rr = classify_regional_regime(
+                    region, signal_values,
+                    vix=vix_val if region == "US" else None,
+                    cpi_yoy=cpi_val,
+                    config=regime_config,
+                )
+                regional_regimes[region] = rr.regime
+
+            global_regime, composition_reasons = compose_global_regime(
+                regional_regimes, config=regime_config,
+            )
+            regime_data = {
+                "global": global_regime,
+                "regional": regional_regimes,
+                "composition_reasons": composition_reasons,
+            }
+        except Exception:
+            logger.warning("regime_embed_failed", exc_info=True)
+
         review = MacroReview(
             organization_id=org_id,
             status="pending",
             is_emergency=False,
             as_of_date=current.as_of_date,
             snapshot_id=current.id,
-            report_json=build_report_json(report),
+            report_json=build_report_json(report, regime_data=regime_data),
             created_by=user.actor_id,
         )
         db.add(review)
@@ -370,8 +412,13 @@ async def approve_review(
     body: MacroReviewApprove,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
+    org_id: UUID | None = Depends(get_org_id),
 ) -> MacroReviewRead:
-    """Approve a pending macro review."""
+    """Approve a pending macro review.
+
+    Side-effect: generates allocation proposals for all profiles and
+    upserts them as pending StrategicAllocation records (G1.1 + G1.2).
+    """
     stmt = (
         select(MacroReview)
         .where(MacroReview.id == review_id)
@@ -396,8 +443,124 @@ async def approve_review(
     review.approved_at = datetime.now(timezone.utc)
     review.decision_rationale = body.decision_rationale
 
+    # ── G1.1 + G1.2: Generate allocation proposals from regime ──
+    await _generate_allocation_proposals(db, review, user.actor_id, org_id)
+
     await db.flush()
     return MacroReviewRead.model_validate(review)
+
+
+async def _generate_allocation_proposals(
+    db: AsyncSession,
+    review: MacroReview,
+    actor_id: str,
+    org_id: UUID | None,
+) -> None:
+    """Generate regime-tilted allocation proposals for all profiles.
+
+    Called as a side-effect of macro review approval. Reads profile
+    configs via ConfigService, computes tilted weights, and upserts
+    StrategicAllocation records with actor_source='macro_proposal'.
+    """
+    config_service = ConfigService(db)
+    raw_config = await config_service.get("liquid_funds", "profiles", org_id)
+    profiles_config = raw_config.value if raw_config else {}
+    profiles_dict: dict = profiles_config.get("profiles", profiles_config)
+
+    # Extract regime + regional scores from the approved review
+    report_json = review.report_json or {}
+    global_regime = extract_regime_from_review(report_json)
+
+    # If regime data wasn't embedded in report, compute it live
+    if global_regime == "RISK_ON" and not report_json.get("regime"):
+        macro = await get_latest_macro_values(db)
+        raw_regime_config = await config_service.get(
+            "liquid_funds", "macro_intelligence", org_id,
+        )
+        regime_config = resolve_regional_regime_config(raw_regime_config.value)
+        vix_val = macro.get("VIXCLS", (None, None))[0]
+        cpi_val = macro.get("CPI_YOY", (None, None))[0]
+
+        regional_results: dict[str, str] = {}
+        for region, signal_ids in REGIONAL_REGIME_SIGNALS.items():
+            signal_values = {
+                sid: macro.get(sid, (None, None))[0] for sid in signal_ids
+            }
+            rr = classify_regional_regime(
+                region, signal_values,
+                vix=vix_val if region == "US" else None,
+                cpi_yoy=cpi_val,
+                config=regime_config,
+            )
+            regional_results[region] = rr.regime
+
+        global_regime_computed, _ = compose_global_regime(
+            regional_results, config=regime_config,
+        )
+        global_regime = global_regime_computed
+
+    # Get snapshot data for regional scores
+    regional_scores: dict[str, float] = {}
+    if review.snapshot_id:
+        snap_stmt = select(MacroRegionalSnapshot).where(
+            MacroRegionalSnapshot.id == review.snapshot_id,
+        )
+        snap_result = await db.execute(snap_stmt)
+        snapshot = snap_result.scalar_one_or_none()
+        if snapshot:
+            regional_scores = extract_regional_scores_from_snapshot(
+                snapshot.data_json,
+            )
+
+    today = date.today()
+
+    for profile_name, profile_data in profiles_dict.items():
+        strategic_config = profile_data.get("strategic_allocation", {})
+        if not strategic_config:
+            continue
+
+        proposal = compute_regime_tilted_weights(
+            profile_name=profile_name,
+            strategic_config=strategic_config,
+            global_regime=global_regime,
+            regional_scores=regional_scores,
+        )
+
+        # Expire current allocations with actor_source='macro_proposal'
+        expire_stmt = select(StrategicAllocation).where(
+            StrategicAllocation.profile == profile_name,
+            StrategicAllocation.actor_source == "macro_proposal",
+            StrategicAllocation.effective_from <= today,
+            (StrategicAllocation.effective_to.is_(None))
+            | (StrategicAllocation.effective_to >= today),
+        )
+        expire_result = await db.execute(expire_stmt)
+        for old_row in expire_result.scalars().all():
+            old_row.effective_to = today
+
+        # Insert new proposed allocations
+        for bp in proposal.proposals:
+            from decimal import Decimal as D
+
+            row = StrategicAllocation(
+                profile=profile_name,
+                block_id=bp.block_id,
+                target_weight=D(str(bp.proposed_weight)),
+                min_weight=D(str(bp.min_weight)),
+                max_weight=D(str(bp.max_weight)),
+                rationale=proposal.rationale,
+                approved_by=actor_id,
+                effective_from=today,
+                actor_source="macro_proposal",
+            )
+            db.add(row)
+
+    logger.info(
+        "allocation_proposals_generated",
+        review_id=str(review.id),
+        regime=global_regime,
+        profiles=list(profiles_dict.keys()),
+    )
 
 
 @router.patch(
