@@ -28,7 +28,7 @@
 	// 401 redirect + conflict handler
 	$effect(() => {
 		setAuthRedirectHandler(() => {
-			window.location.href = "https://accounts.investintell.com/sign-in?redirect_url=" + encodeURIComponent(window.location.href);
+			window.location.href = "https://accounts.investintell.com/sign-in?redirect_url=" + encodeURIComponent("https://wealth.investintell.com/auth/callback");
 		});
 		setConflictHandler((msg: string) => {
 			conflictMessage = msg;

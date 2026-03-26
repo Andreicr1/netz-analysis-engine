@@ -28,8 +28,8 @@ const authHook = createClerkHook({
 	jwksUrl: CLERK_JWKS_URL,
 	devBypass: import.meta.env.DEV,
 	devToken: DEV_TOKEN,
-	publicPrefixes: ["/health", "/.well-known/"],
-	signInUrl: "https://accounts.investintell.com/sign-in?redirect_url=https://wealth.investintell.com",
+	publicPrefixes: ["/health", "/.well-known/", "/auth/"],
+	signInUrl: "https://accounts.investintell.com/sign-in?redirect_url=https://wealth.investintell.com/auth/callback",
 });
 
 /**
