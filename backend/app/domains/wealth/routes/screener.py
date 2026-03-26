@@ -886,6 +886,32 @@ async def import_sec_security(
     inst_type = _type_map.get(sec_row.security_type or "", "equity")
     asset_class = "fund" if inst_type == "fund" else "equity"
 
+    # Resolve SEC registered fund linkage (CIK + universe) for N-PORT data
+    sec_cik: str | None = None
+    sec_universe: str | None = None
+    fund_manager_name = sec_row.issuer_name
+    if inst_type == "fund":
+        from app.shared.models import SecRegisteredFund
+        reg_fund = (await db.execute(
+            select(SecRegisteredFund).where(
+                SecRegisteredFund.ticker == sec_row.ticker,
+            ).limit(1)
+        )).scalar_one_or_none()
+        if reg_fund:
+            sec_cik = reg_fund.cik
+            sec_universe = "registered_us"
+            fund_manager_name = sec_row.issuer_name
+            # Resolve manager name from sec_managers if available
+            if reg_fund.crd_number:
+                from app.shared.models import SecManager
+                mgr = (await db.execute(
+                    select(SecManager.firm_name).where(
+                        SecManager.crd_number == reg_fund.crd_number,
+                    )
+                )).scalar_one_or_none()
+                if mgr:
+                    fund_manager_name = mgr
+
     instrument = Instrument(
         organization_id=org_id,
         instrument_type=inst_type,
@@ -906,9 +932,12 @@ async def import_sec_security(
             "source": "sec",
             "strategy": body.strategy,
             # chk_fund_attrs requires these keys when instrument_type = 'fund'
-            "manager_name": sec_row.issuer_name,
+            "manager_name": fund_manager_name,
             "aum_usd": None,
             "inception_date": None,
+            # SEC linkage for N-PORT fund-level data (Phase 1)
+            "sec_cik": sec_cik,
+            "sec_universe": sec_universe,
         },
     )
     db.add(instrument)
@@ -926,7 +955,12 @@ async def import_sec_security(
 # ── Unified Fund Catalog ──────────────────────────────────────────────
 
 
-def _build_disclosure(universe: str, has_holdings: bool, has_nav: bool) -> DisclosureMatrix:
+def _build_disclosure(
+    universe: str,
+    has_holdings: bool,
+    has_nav: bool,
+    has_13f_overlay: bool = False,
+) -> DisclosureMatrix:
     """Build DisclosureMatrix from universe type and computed flags."""
     if universe == "registered_us":
         return DisclosureMatrix(
@@ -935,7 +969,7 @@ def _build_disclosure(universe: str, has_holdings: bool, has_nav: bool) -> Discl
             has_quant_metrics=has_nav,
             has_private_fund_data=False,
             has_style_analysis=has_holdings,
-            has_13f_overlay=True,
+            has_13f_overlay=has_13f_overlay,
             has_peer_analysis=True,
             holdings_source="nport" if has_holdings else None,
             nav_source="yfinance" if has_nav else None,
@@ -948,7 +982,7 @@ def _build_disclosure(universe: str, has_holdings: bool, has_nav: bool) -> Discl
             has_quant_metrics=False,
             has_private_fund_data=True,
             has_style_analysis=False,
-            has_13f_overlay=False,
+            has_13f_overlay=has_13f_overlay,
             has_peer_analysis=False,
             holdings_source=None,
             nav_source=None,
@@ -1223,6 +1257,7 @@ async def get_catalog(
                     universe=r.universe,
                     has_holdings=bool(r.has_holdings),
                     has_nav=bool(r.has_nav),
+                    has_13f_overlay=bool(getattr(r, "has_13f_overlay", False)),
                 ),
             )
         )

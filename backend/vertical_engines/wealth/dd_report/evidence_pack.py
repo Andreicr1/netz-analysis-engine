@@ -28,10 +28,12 @@ _CHAPTER_FIELD_EXPECTATIONS: dict[str, dict[str, Any]] = {
     "investment_strategy": {
         "fields": [
             "fund_name", "fund_type", "geography", "asset_class",
+            "holdings_source",
+            "nport_available", "nport_sector_weights", "nport_asset_allocation",
             "thirteenf_available", "sector_weights",
         ],
-        "providers": ["YFinance", "SEC EDGAR 13F"],
-        "primary_provider": "YFinance",
+        "providers": ["YFinance", "SEC EDGAR N-PORT", "SEC EDGAR 13F"],
+        "primary_provider": "SEC EDGAR N-PORT",
     },
     "operational_dd": {
         "fields": ["fund_name", "manager_name", "domicile", "compliance_disclosures"],
@@ -39,13 +41,14 @@ _CHAPTER_FIELD_EXPECTATIONS: dict[str, dict[str, Any]] = {
         "primary_provider": "YFinance",
     },
     "manager_assessment": {
-        # ADV fields required for complete — YFinance identity alone is partial at best
+        # ADV fields for firm context; N-PORT fund_style for fund-level context
         "fields": [
             "fund_name", "manager_name",
             "adv_aum_history", "adv_compliance_disclosures", "adv_team",
             "adv_brochure_sections",
+            "nport_available", "fund_style",
         ],
-        "providers": ["YFinance", "SEC EDGAR ADV"],
+        "providers": ["YFinance", "SEC EDGAR ADV", "SEC EDGAR N-PORT"],
         "primary_provider": "SEC EDGAR ADV",
     },
     "performance_analysis": {
@@ -144,7 +147,20 @@ class EvidencePack:
     # Macro context
     macro_snapshot: dict[str, Any] = field(default_factory=dict)
 
-    # SEC 13F data (investment_strategy chapter)
+    # Holdings source resolution (DisclosureMatrix-aware)
+    holdings_source: str | None = None  # "nport" | "13f" | None
+
+    # SEC N-PORT data — fund-level (investment_strategy + manager_assessment)
+    nport_available: bool = False
+    nport_holdings_count: int = 0
+    nport_sector_weights: dict[str, float] = field(default_factory=dict)
+    nport_asset_allocation: dict[str, float] = field(default_factory=dict)
+    nport_top_holdings: list[dict[str, Any]] = field(default_factory=list)
+    nport_report_date: str | None = None
+    fund_style: dict[str, Any] = field(default_factory=dict)
+    fund_style_drift_detected: bool = False
+
+    # SEC 13F data — firm-level overlay (supplementary context)
     thirteenf_available: bool = False
     sector_weights: dict[str, float] = field(default_factory=dict)
     drift_detected: bool = False
@@ -178,6 +194,15 @@ class EvidencePack:
             "risk_metrics": self.risk_metrics,
             "scoring_data": self.scoring_data,
             "macro_snapshot": self.macro_snapshot,
+            "holdings_source": self.holdings_source,
+            "nport_available": self.nport_available,
+            "nport_holdings_count": self.nport_holdings_count,
+            "nport_sector_weights": self.nport_sector_weights,
+            "nport_asset_allocation": self.nport_asset_allocation,
+            "nport_top_holdings": self.nport_top_holdings,
+            "nport_report_date": self.nport_report_date,
+            "fund_style": self.fund_style,
+            "fund_style_drift_detected": self.fund_style_drift_detected,
             "thirteenf_available": self.thirteenf_available,
             "sector_weights": self.sector_weights,
             "drift_detected": self.drift_detected,
@@ -268,8 +293,10 @@ def build_evidence_pack(
     scoring_data: dict[str, Any] | None = None,
     macro_snapshot: dict[str, Any] | None = None,
     sec_13f_data: dict[str, Any] | None = None,
+    sec_nport_data: dict[str, Any] | None = None,
     sec_adv_data: dict[str, Any] | None = None,
     adv_brochure_sections: dict[str, str] | None = None,
+    holdings_source: str | None = None,
 ) -> EvidencePack:
     """Build a frozen evidence pack from gathered data.
 
@@ -288,11 +315,15 @@ def build_evidence_pack(
     macro_snapshot : dict
         Macro context (FRED indicators, regime).
     sec_13f_data : dict
-        SEC 13F holdings data (sector weights, drift).
+        SEC 13F holdings data (sector weights, drift) — firm-level overlay.
+    sec_nport_data : dict
+        SEC N-PORT fund-level holdings (sector weights, asset allocation, top holdings).
     sec_adv_data : dict
         SEC ADV manager profile data (AUM, compliance, team).
     adv_brochure_sections : dict
         ADV Part 2A brochure narrative sections.
+    holdings_source : str | None
+        "nport" for registered funds, None for private/UCITS.
 
     Returns
     -------
@@ -302,6 +333,7 @@ def build_evidence_pack(
     logger.info("building_evidence_pack", instrument_id=fund_data.get("instrument_id"))
 
     _13f = sec_13f_data or {}
+    _nport = sec_nport_data or {}
     _adv = sec_adv_data or {}
 
     return EvidencePack(
@@ -322,7 +354,18 @@ def build_evidence_pack(
         risk_metrics=risk_metrics or {},
         scoring_data=scoring_data or {},
         macro_snapshot=macro_snapshot or {},
-        # SEC 13F
+        # Holdings source resolution
+        holdings_source=holdings_source,
+        # SEC N-PORT (fund-level)
+        nport_available=bool(_nport),
+        nport_holdings_count=_nport.get("holdings_count", 0),
+        nport_sector_weights=_nport.get("sector_weights", {}),
+        nport_asset_allocation=_nport.get("asset_allocation", {}),
+        nport_top_holdings=_nport.get("top_holdings", []),
+        nport_report_date=_nport.get("report_date"),
+        fund_style=_nport.get("fund_style", {}),
+        fund_style_drift_detected=_nport.get("style_drift_detected", False),
+        # SEC 13F (firm-level overlay)
         thirteenf_available=_13f.get("thirteenf_available", False),
         sector_weights=_13f.get("sector_weights", {}),
         drift_detected=_13f.get("drift_detected", False),

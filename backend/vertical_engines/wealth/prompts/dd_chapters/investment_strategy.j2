@@ -1,8 +1,8 @@
 {#- metadata
   stage: investment_strategy
   type: DESCRIPTIVE
-  version: 1
-  description: Investment Strategy & Process chapter for fund DD report
+  version: 2
+  description: Investment Strategy & Process chapter for fund DD report (N-PORT primary, 13F overlay)
 -#}
 You are a senior investment analyst writing the Investment Strategy & Process chapter of a fund due diligence report.
 
@@ -29,19 +29,62 @@ No structured data available for this chapter. State this clearly and do not spe
 {% endif %}
 {% endif %}
 
+{# ── PRIMARY: N-PORT fund-level holdings (registered US funds) ── #}
+{% if nport_available is defined and nport_available %}
+## Fund Portfolio Holdings (SEC N-PORT, {{ nport_report_date }})
+This data comes from the fund's own monthly N-PORT filing — it reflects **this specific fund's** portfolio, not the manager firm's aggregate.
+
+{% if nport_asset_allocation %}
+### Asset Allocation
+{% for asset_class_name, pct in nport_asset_allocation.items() %}
+- {{ asset_class_name }}: {{ "%.1f"|format(pct * 100) }}%
+{% endfor %}
+{% endif %}
+
+{% if nport_sector_weights %}
+### Sector Exposure
+{% for sector, weight in nport_sector_weights.items() %}
+- {{ sector }}: {{ "%.1f"|format(weight * 100) }}%
+{% endfor %}
+{% endif %}
+
+{% if nport_top_holdings %}
+### Top 10 Holdings (by % of NAV)
+{% for h in nport_top_holdings[:10] %}
+- {{ h.name }} ({{ h.cusip }}): {{ "%.2f"|format(h.pct_of_nav) }}%
+{% endfor %}
+{% endif %}
+
+{% if fund_style %}
+### Style Classification (derived from holdings)
+- Equity %: {{ fund_style.equity_pct }}% | Fixed Income %: {{ fund_style.fi_pct }}% | Cash %: {{ fund_style.cash_pct }}%
+- Style: {{ fund_style.style_label }} (confidence: {{ "%.0f"|format(fund_style.confidence * 100) }}%)
+{% endif %}
+
+{% if fund_style_drift_detected is defined and fund_style_drift_detected %}
+**⚠ Style Drift Detected:** Fund style classification changed between the two most recent reporting periods. Flag for investment team review.
+{% endif %}
+
+Cross-reference the stated investment strategy against these fund-level portfolio holdings. If the fund's classification or stated strategy diverges from actual N-PORT holdings composition, note the divergence as a finding.
+{% endif %}
+
+{# ── OVERLAY: 13F manager firm context (supplementary, not primary) ── #}
 {% if thirteenf_available is defined and thirteenf_available %}
-## SEC 13F Holdings Verification ({{ drift_quarters }} quarters of data)
-The manager's most recent 13F-HR filing reports the following sector allocation:
+{% if nport_available is defined and nport_available %}
+## Manager Firm 13F Context (supplementary)
+The manager firm's aggregate 13F sector allocation is provided below for additional context. This represents the firm's overall equity positioning across **all** managed funds, not this specific fund's portfolio. Use it only for cross-referencing firm-level strategy alignment.
+{% else %}
+## Manager Firm 13F Holdings (proxy — no fund-level N-PORT available)
+⚠ This fund does not file N-PORT (likely a private fund or non-US vehicle). The following sector allocation is from the manager firm's aggregated 13F-HR filing and represents **all assets under the firm's discretion**, not this specific fund's portfolio. Interpret with caution.
+{% endif %}
+
 {% for sector, weight in sector_weights.items() %}
 - {{ sector }}: {{ "%.1f"|format(weight * 100) }}%
 {% endfor %}
-{% if drift_detected %}
-**⚠ Sector drift detected:** Material shift (>5pp) in sector weights between the two most recent quarters. Flag for investment team review.
-{% else %}
-Sector allocation is stable quarter-over-quarter (no material drift detected).
-{% endif %}
 
-Cross-reference the stated investment strategy against this 13F sector allocation. If the fund's classification or stated strategy diverges from actual holdings composition, note the divergence as a finding.
+{% if drift_detected %}
+**⚠ Firm-level sector drift detected** (>5pp shift between quarters) across {{ drift_quarters }} quarters of data.
+{% endif %}
 {% endif %}
 
 ## Instructions
@@ -52,8 +95,10 @@ Analyze and describe the fund's investment strategy and process. Cover:
 3. **Competitive Advantage** — What differentiates this manager's approach
 4. **Capacity Constraints** — AUM limits, liquidity management, market impact
 5. **Strategy Evolution** — How the strategy has adapted over time
-{% if thirteenf_available is defined and thirteenf_available %}
-6. **13F Holdings Alignment** — Whether the actual 13F sector allocation above is consistent with the fund's stated strategy and classification
+{% if nport_available is defined and nport_available %}
+6. **N-PORT Holdings Alignment** — Whether the actual fund-level portfolio composition above is consistent with the fund's stated strategy and classification
+{% elif thirteenf_available is defined and thirteenf_available %}
+6. **13F Holdings Alignment** — Whether the manager firm's aggregate 13F sector allocation is broadly consistent with the fund's strategy (noting this is firm-level, not fund-level data)
 {% endif %}
 
 Base your analysis on the fund identity and classification data provided. For strategy details not available from structured data, state plainly that the information is not available rather than speculating.

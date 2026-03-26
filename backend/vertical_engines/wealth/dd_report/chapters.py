@@ -162,28 +162,66 @@ def _build_user_content(
             if val is not None:
                 parts.append(f"- {key}: {val}")
 
-    # SEC 13F data for investment_strategy
-    if chapter_tag == "investment_strategy" and evidence_context.get("thirteenf_available"):
-        parts.append("\n## SEC 13F Holdings Data")
-        sector_weights = evidence_context.get("sector_weights", {})
-        if sector_weights:
-            parts.append("Sector allocation (most recent quarter):")
-            for sector, weight in sector_weights.items():
-                parts.append(f"- {sector}: {weight * 100:.1f}%")
-        if evidence_context.get("drift_detected"):
-            parts.append("⚠ Sector drift detected between recent quarters")
-        parts.append(f"Quarters of 13F data available: {evidence_context.get('drift_quarters', 0)}")
+    # SEC holdings data for investment_strategy (N-PORT primary, 13F overlay)
+    if chapter_tag == "investment_strategy":
+        if evidence_context.get("nport_available"):
+            parts.append(f"\n## Fund Portfolio Holdings (N-PORT, {evidence_context.get('nport_report_date', 'latest')})")
+            nport_aa = evidence_context.get("nport_asset_allocation", {})
+            if nport_aa:
+                parts.append("Asset Allocation:")
+                for ac, pct in nport_aa.items():
+                    parts.append(f"- {ac}: {pct * 100:.1f}%")
+            nport_sw = evidence_context.get("nport_sector_weights", {})
+            if nport_sw:
+                parts.append("Sector Exposure:")
+                for sector, weight in nport_sw.items():
+                    parts.append(f"- {sector}: {weight * 100:.1f}%")
+            top_h = evidence_context.get("nport_top_holdings", [])
+            if top_h:
+                parts.append("Top Holdings (by % of NAV):")
+                for h in top_h[:10]:
+                    parts.append(f"- {h.get('name', 'Unknown')} ({h.get('cusip', '')}): {h.get('pct_of_nav', 0):.2f}%")
+            fund_style = evidence_context.get("fund_style", {})
+            if fund_style:
+                parts.append(f"Style: {fund_style.get('style_label', 'N/A')} | "
+                             f"Equity: {fund_style.get('equity_pct', 'N/A')}% | "
+                             f"FI: {fund_style.get('fi_pct', 'N/A')}%")
+        if evidence_context.get("thirteenf_available"):
+            if evidence_context.get("nport_available"):
+                parts.append("\n## Manager Firm 13F Context (supplementary)")
+            else:
+                parts.append("\n## Manager Firm 13F Holdings (proxy — no fund-level N-PORT available)")
+            sector_weights = evidence_context.get("sector_weights", {})
+            if sector_weights:
+                parts.append("Firm-level sector allocation (most recent quarter):")
+                for sector, weight in sector_weights.items():
+                    parts.append(f"- {sector}: {weight * 100:.1f}%")
+            if evidence_context.get("drift_detected"):
+                parts.append("⚠ Sector drift detected between recent quarters")
+            parts.append(f"Quarters of 13F data available: {evidence_context.get('drift_quarters', 0)}")
 
-    # SEC ADV data for manager_assessment
+    # SEC ADV + N-PORT data for manager_assessment
     if chapter_tag == "manager_assessment":
+        # Fund-level context from N-PORT
+        if evidence_context.get("nport_available"):
+            fund_style = evidence_context.get("fund_style", {})
+            if fund_style:
+                parts.append("\n## Fund-Level Context (N-PORT)")
+                parts.append(f"- Style: {fund_style.get('style_label', 'N/A')}")
+                parts.append(f"- Equity: {fund_style.get('equity_pct', 'N/A')}% | "
+                             f"FI: {fund_style.get('fi_pct', 'N/A')}%")
+            if evidence_context.get("fund_style_drift_detected"):
+                parts.append("⚠ Style drift detected — fund classification changed recently")
+
+        # Firm-level context from ADV
         adv_aum = evidence_context.get("adv_aum_history", {})
         if adv_aum:
-            parts.append("\n## SEC ADV — Regulatory AUM")
+            parts.append("\n## Manager Firm Context (SEC ADV — supplementary)")
             for key, val in adv_aum.items():
-                parts.append(f"- {key}: {val}")
+                parts.append(f"- Firm {key}: {val}")
         adv_team = evidence_context.get("adv_team", [])
         if adv_team:
-            parts.append(f"\n## SEC ADV — Team ({len(adv_team)} members)")
+            parts.append(f"\n## SEC ADV — Firm Personnel ({len(adv_team)} members)")
             for member in adv_team:
                 line = f"- {member.get('person_name', 'Unknown')}"
                 if member.get("title"):

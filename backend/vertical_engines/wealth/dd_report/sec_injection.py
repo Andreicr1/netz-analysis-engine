@@ -98,6 +98,157 @@ def gather_sec_13f_data(
         return {}
 
 
+def gather_sec_nport_data(
+    db: Session,
+    *,
+    fund_cik: str | None,
+) -> dict[str, Any]:
+    """Gather N-PORT fund-level holdings for DD report evidence.
+
+    DB-only reads from sec_nport_holdings and sec_fund_style_snapshots.
+    Returns dict with sector_weights, asset_allocation, top_holdings,
+    report_date, fund_style, style_drift_detected. Empty dict if no data.
+
+    Parameters
+    ----------
+    db : Session
+        Sync database session.
+    fund_cik : str | None
+        Fund CIK from sec_registered_funds (N-PORT filer).
+    """
+    if not fund_cik:
+        return {}
+
+    try:
+        from app.shared.models import SecFundStyleSnapshot, SecNportHolding
+
+        # Find the 2 most recent report dates for this fund
+        lookback = date.today() - timedelta(days=400)  # ~13 months
+        dates_result = (
+            db.query(SecNportHolding.report_date)
+            .filter(
+                SecNportHolding.cik == fund_cik,
+                SecNportHolding.report_date >= lookback,
+            )
+            .distinct()
+            .order_by(SecNportHolding.report_date.desc())
+            .limit(2)
+            .all()
+        )
+
+        if not dates_result:
+            return {}
+
+        report_dates = [r[0] for r in dates_result]
+        latest_date = report_dates[0]
+
+        # Get all holdings for the latest report date
+        holdings = (
+            db.query(SecNportHolding)
+            .filter(
+                SecNportHolding.cik == fund_cik,
+                SecNportHolding.report_date == latest_date,
+            )
+            .all()
+        )
+
+        if not holdings:
+            return {}
+
+        # Compute sector weights (group by sector, sum pct_of_nav)
+        sector_totals: dict[str, float] = {}
+        for h in holdings:
+            sector = h.sector or "Unknown"
+            pct = float(h.pct_of_nav or 0)
+            sector_totals[sector] = sector_totals.get(sector, 0.0) + pct
+
+        sector_weights = {
+            s: round(v / 100, 4)  # pct_of_nav is 0-100, normalize to 0-1
+            for s, v in sorted(sector_totals.items(), key=lambda x: -x[1])
+            if v > 0
+        }
+
+        # Compute asset allocation (equity / fixed income / cash split)
+        asset_totals: dict[str, float] = {}
+        for h in holdings:
+            ac = (h.asset_class or "Other").strip()
+            pct = float(h.pct_of_nav or 0)
+            asset_totals[ac] = asset_totals.get(ac, 0.0) + pct
+
+        asset_allocation = {
+            ac: round(v / 100, 4)
+            for ac, v in sorted(asset_totals.items(), key=lambda x: -x[1])
+            if v > 0
+        }
+
+        # Top 10 holdings by pct_of_nav
+        sorted_holdings = sorted(
+            holdings, key=lambda h: float(h.pct_of_nav or 0), reverse=True,
+        )
+        top_holdings = [
+            {
+                "name": h.issuer_name or "Unknown",
+                "cusip": h.cusip,
+                "sector": h.sector,
+                "pct_of_nav": round(float(h.pct_of_nav or 0), 2),
+                "market_value": h.market_value,
+            }
+            for h in sorted_holdings[:10]
+        ]
+
+        # Get latest style snapshot
+        fund_style: dict[str, Any] = {}
+        style_row = (
+            db.query(SecFundStyleSnapshot)
+            .filter(SecFundStyleSnapshot.cik == fund_cik)
+            .order_by(SecFundStyleSnapshot.report_date.desc())
+            .first()
+        )
+        if style_row:
+            fund_style = {
+                "style_label": style_row.style_label,
+                "growth_tilt": style_row.growth_tilt,
+                "equity_pct": style_row.equity_pct,
+                "fi_pct": style_row.fixed_income_pct,
+                "cash_pct": style_row.cash_pct,
+                "confidence": style_row.confidence,
+            }
+
+        # Detect style drift: check if style_label changed in last 2 snapshots
+        style_drift_detected = False
+        style_history = (
+            db.query(SecFundStyleSnapshot.style_label, SecFundStyleSnapshot.report_date)
+            .filter(SecFundStyleSnapshot.cik == fund_cik)
+            .order_by(SecFundStyleSnapshot.report_date.desc())
+            .limit(2)
+            .all()
+        )
+        if len(style_history) >= 2 and style_history[0][0] != style_history[1][0]:
+            style_drift_detected = True
+
+        logger.info(
+            "sec_nport_gathered",
+            fund_cik=fund_cik,
+            report_date=str(latest_date),
+            holdings_count=len(holdings),
+            sectors=len(sector_weights),
+        )
+
+        return {
+            "report_date": str(latest_date),
+            "holdings_count": len(holdings),
+            "sector_weights": sector_weights,
+            "asset_allocation": asset_allocation,
+            "top_holdings": top_holdings,
+            "fund_style": fund_style,
+            "style_drift_detected": style_drift_detected,
+        }
+
+    except Exception:
+        logger.exception("sec_nport_gather_failed", fund_cik=fund_cik)
+        return {}
+
+
 def gather_sec_adv_data(
     db: Session,
     *,

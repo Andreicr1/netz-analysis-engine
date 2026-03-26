@@ -56,6 +56,7 @@ from vertical_engines.wealth.dd_report.sec_injection import (
     gather_sec_13f_data,
     gather_sec_adv_brochure,
     gather_sec_adv_data,
+    gather_sec_nport_data,
 )
 from vertical_engines.wealth.shared_protocols import CallOpenAiFn
 
@@ -283,39 +284,63 @@ class DDReportEngine:
         fund_id: str,
         organization_id: str,
     ) -> EvidencePack:
-        """Gather all evidence for the fund."""
-        from app.domains.wealth.models.fund import Fund
+        """Gather all evidence for the fund.
 
-        fund = (
-            db.query(Fund)
-            .filter(Fund.fund_id == fund_id, Fund.organization_id == organization_id)
+        Uses Instrument model (instruments_universe) with JSONB attributes
+        for SEC linkage. Branches on sec_universe to resolve N-PORT
+        (fund-level) vs 13F (firm-level overlay) holdings.
+        """
+        from app.domains.wealth.models.instrument import Instrument
+
+        instrument = (
+            db.query(Instrument)
+            .filter(
+                Instrument.instrument_id == fund_id,
+                Instrument.organization_id == organization_id,
+            )
             .first()
         )
-        if not fund:
-            logger.warning("fund_not_found", fund_id=fund_id)
+        if not instrument:
+            logger.warning("instrument_not_found", fund_id=fund_id)
             return EvidencePack()
 
+        attrs = instrument.attributes or {}
+
         fund_data = {
-            "instrument_id": str(fund.fund_id),
-            "name": fund.name,
-            "isin": fund.isin,
-            "ticker": fund.ticker,
-            "fund_type": fund.fund_type,
-            "geography": fund.geography,
-            "asset_class": fund.asset_class,
-            "manager_name": fund.manager_name,
-            "currency": fund.currency,
-            "domicile": fund.domicile,
-            "inception_date": fund.inception_date,
-            "aum_usd": fund.aum_usd,
+            "instrument_id": str(instrument.instrument_id),
+            "name": instrument.name,
+            "isin": instrument.isin,
+            "ticker": instrument.ticker,
+            "fund_type": attrs.get("fund_type") or instrument.asset_class,
+            "geography": instrument.geography,
+            "asset_class": instrument.asset_class,
+            "manager_name": attrs.get("manager_name"),
+            "currency": instrument.currency,
+            "domicile": attrs.get("domicile"),
+            "inception_date": attrs.get("inception_date"),
+            "aum_usd": attrs.get("aum_usd"),
         }
 
         quant_profile = gather_quant_metrics(db, instrument_id=fund_id, organization_id=organization_id)
         risk_metrics = gather_risk_metrics(db, instrument_id=fund_id, organization_id=organization_id)
 
-        # SEC data (global tables, no RLS — DB-only reads)
-        manager_name = fund.manager_name
+        # SEC linkage from JSONB attributes
+        fund_cik = attrs.get("sec_cik")
+        sec_universe = attrs.get("sec_universe")
+        manager_name = attrs.get("manager_name")
+
+        # N-PORT: fund-level holdings for registered US funds
+        sec_nport: dict = {}
+        holdings_source: str | None = None
+        if sec_universe == "registered_us" and fund_cik:
+            sec_nport = gather_sec_nport_data(db, fund_cik=fund_cik)
+            if sec_nport:
+                holdings_source = "nport"
+
+        # 13F: always gather as OVERLAY (manager firm context), never as primary
         sec_13f = gather_sec_13f_data(db, manager_name=manager_name)
+
+        # ADV: always gather (firm governance for ops/compliance chapters)
         sec_adv = gather_sec_adv_data(db, manager_name=manager_name)
         adv_brochure = gather_sec_adv_brochure(db, sec_adv.get("crd_number"))
 
@@ -324,8 +349,10 @@ class DDReportEngine:
             quant_profile=quant_profile,
             risk_metrics=risk_metrics,
             sec_13f_data=sec_13f,
+            sec_nport_data=sec_nport,
             sec_adv_data=sec_adv,
             adv_brochure_sections=adv_brochure,
+            holdings_source=holdings_source,
         )
 
     def _generate_all_chapters(

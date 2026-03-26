@@ -66,6 +66,7 @@ sec_managers = Table(
     "sec_managers",
     _meta,
     Column("crd_number", Text, primary_key=True),
+    Column("cik", Text),
     Column("firm_name", Text),
     extend_existing=True,
 )
@@ -80,6 +81,15 @@ sec_manager_funds = Table(
     Column("gross_asset_value", BigInteger),
     Column("investor_count", Integer),
     Column("is_fund_of_funds", Boolean),
+)
+
+sec_13f_holdings = Table(
+    "sec_13f_holdings",
+    _meta,
+    Column("report_date", Date, primary_key=True),
+    Column("cik", Text, primary_key=True),
+    Column("cusip", Text, primary_key=True),
+    extend_existing=True,
 )
 
 esma_funds = Table(
@@ -146,6 +156,23 @@ def _registered_us_branch(f: CatalogFilters) -> Select | None:
     if f.region and f.region != "US":
         return None
 
+    # Check if the fund's manager also files 13F (for overlay flag).
+    # sec_managers.cik is the firm's CIK used for 13F filings.
+    _mgr_cik = (
+        select(sec_managers.c.cik)
+        .where(sec_managers.c.crd_number == sec_registered_funds.c.crd_number)
+        .correlate(sec_registered_funds)
+        .scalar_subquery()
+    )
+    _13f_exists = (
+        select(literal(True))
+        .select_from(sec_13f_holdings)
+        .where(sec_13f_holdings.c.cik == _mgr_cik)
+        .where(sec_13f_holdings.c.report_date >= func.current_date() - 180)
+        .correlate(sec_registered_funds)
+        .exists()
+    )
+
     stmt = (
         select(
             literal("registered_us").label("universe"),
@@ -166,6 +193,7 @@ def _registered_us_branch(f: CatalogFilters) -> Select | None:
             # disclosure booleans — computed at SQL level for facets
             literal(True).label("has_holdings"),
             (sec_registered_funds.c.ticker.isnot(None)).label("has_nav"),
+            _13f_exists.label("has_13f_overlay"),
         )
         .select_from(sec_registered_funds)
         .outerjoin(
@@ -215,6 +243,22 @@ def _private_us_branch(f: CatalogFilters) -> Select | None:
     if f.has_nav is True:
         return None
 
+    # Check if the private fund's manager also files 13F.
+    _priv_mgr_cik = (
+        select(sec_managers.c.cik)
+        .where(sec_managers.c.crd_number == sec_manager_funds.c.crd_number)
+        .correlate(sec_manager_funds)
+        .scalar_subquery()
+    )
+    _priv_13f_exists = (
+        select(literal(True))
+        .select_from(sec_13f_holdings)
+        .where(sec_13f_holdings.c.cik == _priv_mgr_cik)
+        .where(sec_13f_holdings.c.report_date >= func.current_date() - 180)
+        .correlate(sec_manager_funds)
+        .exists()
+    )
+
     stmt = (
         select(
             literal("private_us").label("universe"),
@@ -235,6 +279,7 @@ def _private_us_branch(f: CatalogFilters) -> Select | None:
             # disclosure
             literal(False).label("has_holdings"),
             literal(False).label("has_nav"),
+            _priv_13f_exists.label("has_13f_overlay"),
         )
         .select_from(sec_manager_funds)
         .join(
@@ -295,6 +340,7 @@ def _ucits_eu_branch(f: CatalogFilters) -> Select | None:
             # disclosure
             literal(False).label("has_holdings"),
             literal(True).label("has_nav"),  # all have ticker (WHERE filter)
+            literal(False).label("has_13f_overlay"),
         )
         .select_from(esma_funds)
         .join(esma_managers, esma_funds.c.esma_manager_id == esma_managers.c.esma_id)

@@ -1,8 +1,8 @@
 {#- metadata
   stage: manager_assessment
   type: ANALYTICAL
-  version: 1
-  description: Fund Manager Assessment chapter for fund DD report
+  version: 2
+  description: Fund Manager Assessment chapter — fund PM focus with firm context separated
 -#}
 You are a senior investment analyst writing the Fund Manager Assessment chapter of a fund due diligence report.
 
@@ -13,43 +13,63 @@ You are a senior investment analyst writing the Fund Manager Assessment chapter 
 {% if aum_usd %}- **AUM (USD):** {{ "%.2f"|format(aum_usd) }}{% endif %}
 
 {% if quant_profile %}
-## Performance Metrics
+## Fund Performance Metrics
 {% if quant_profile.manager_score is not none %}- Manager Score: {{ quant_profile.manager_score }}/100{% endif %}
 {% if quant_profile.score_components %}- Score Components: {{ quant_profile.score_components }}{% endif %}
 {% if quant_profile.return_3y_ann is not none %}- 3Y Ann. Return: {{ quant_profile.return_3y_ann }}{% endif %}
 {% if quant_profile.sharpe_3y is not none %}- 3Y Sharpe: {{ quant_profile.sharpe_3y }}{% endif %}
 {% endif %}
 
+{# ── FUND-LEVEL CONTEXT (primary focus of this chapter) ── #}
+{% if nport_available is defined and nport_available %}
+## Fund-Level Context (N-PORT)
+{% if fund_style %}
+- Fund Style: {{ fund_style.style_label }}
+- Equity: {{ fund_style.equity_pct }}% | Fixed Income: {{ fund_style.fi_pct }}% | Cash: {{ fund_style.cash_pct }}%
+{% endif %}
+{% if fund_style_drift_detected is defined and fund_style_drift_detected %}
+⚠ **Style Drift Detected:** Fund style classification changed in the most recent reporting period. This may indicate a strategy shift — evaluate whether intentional or reactive.
+{% endif %}
+{% if nport_holdings_count is defined and nport_holdings_count > 0 %}
+- Holdings Count: {{ nport_holdings_count }}
+{% endif %}
+{% endif %}
+
+{# ── MANAGER FIRM CONTEXT (supplementary — clearly labeled) ── #}
 {% if adv_aum_history is defined and adv_aum_history %}
-## SEC ADV — Regulatory AUM (Form ADV Part 1A)
-{% if adv_aum_history.total is defined %}- Total Regulatory AUM: ${{ "%.0f"|format(adv_aum_history.total) }}{% endif %}
+## Manager Firm Context (SEC ADV — supplementary)
+**Note:** The following data describes the **entire RIA firm**, not this specific fund. Use it to assess organizational quality but do not conflate firm AUM with fund AUM or firm strategy with fund strategy.
+
+### Firm-Level Regulatory AUM (Form ADV Part 1A)
+{% if adv_aum_history.total is defined %}- Total Firm AUM: ${{ "%.0f"|format(adv_aum_history.total) }}{% endif %}
 {% if adv_aum_history.discretionary is defined %}- Discretionary: ${{ "%.0f"|format(adv_aum_history.discretionary) }}{% endif %}
 {% if adv_aum_history.non_discretionary is defined %}- Non-Discretionary: ${{ "%.0f"|format(adv_aum_history.non_discretionary) }}{% endif %}
 {% if adv_aum_history.total_accounts is defined %}- Total Accounts: {{ adv_aum_history.total_accounts }}{% endif %}
 {% endif %}
 
 {% if adv_fee_structure is defined and adv_fee_structure %}
-## SEC ADV — Fee Structure
+### Firm Fee Structure (SEC ADV)
 Fee types reported to SEC: {{ adv_fee_structure | join(', ') }}.
 {% endif %}
 
 {% if adv_team is defined and adv_team %}
-## SEC ADV — Key Personnel ({{ adv_team | length }} identified)
+## SEC ADV — Firm Key Personnel ({{ adv_team | length }} identified)
+**Note:** These are firm-level personnel from Form ADV Part 2A, not necessarily the portfolio manager(s) of this specific fund.
 {% for member in adv_team %}
 - **{{ member.person_name }}**{% if member.title %} — {{ member.title }}{% endif %}{% if member.years_experience %} ({{ member.years_experience }}y experience){% endif %}{% if member.certifications %} [{{ member.certifications | join(', ') }}]{% endif %}
 {% endfor %}
 {% endif %}
 
 {% if adv_brochure_sections is defined and adv_brochure_sections %}
-## ADV Part 2A — Regulatory Disclosures
+## ADV Part 2A — Firm Regulatory Disclosures
 
 {% if adv_brochure_sections.item_8 is defined and adv_brochure_sections.item_8 %}
-### Investment Strategy & Methods of Analysis (Item 8)
+### Firm Investment Strategy & Methods of Analysis (Item 8)
 {{ adv_brochure_sections.item_8 | truncate(2000) }}
 {% endif %}
 
 {% if adv_brochure_sections.item_5 is defined and adv_brochure_sections.item_5 %}
-### Fee Schedule (Item 5)
+### Firm Fee Schedule (Item 5)
 {{ adv_brochure_sections.item_5 | truncate(1000) }}
 {% endif %}
 
@@ -85,20 +105,30 @@ No structured data available for this chapter. State this clearly and do not spe
 {% if adv_brochure_sections is defined and adv_brochure_sections %}
 ADV Part 2A narrative content is provided above where available. Cite specific sections by item number (e.g., "Per Item 8 of the ADV Part 2A...") when referencing regulatory disclosures.
 {% endif %}
+
+**CRITICAL DISTINCTION:** This chapter must clearly separate two scopes:
+- **Fund-Level Assessment** (primary): The fund's own track record, strategy consistency, and style drift — use quant metrics and N-PORT data above.
+- **Manager Firm Assessment** (supplementary): The firm's organizational quality, infrastructure, compliance — use ADV data above.
+
+Do NOT penalize the fund for firm-level metrics. For example, if the firm AUM is $5T, that is relevant to organizational quality but says nothing about this specific fund's capacity discipline.
+
 Assess the fund manager on these dimensions:
 
-1. **Track Record** — Performance consistency, alpha generation, risk-adjusted returns
-2. **Team Stability** — Key person risk, succession planning, team tenure
+1. **Track Record** — Performance consistency, alpha generation, risk-adjusted returns (use fund quant metrics above as primary evidence)
+2. **Team & Key Person Risk** — Succession planning, team tenure
 {% if adv_team is defined and adv_team %}
-   Analyze the {{ adv_team | length }} team member(s) identified from SEC ADV filings above. Flag key person risk if fewer than 3 senior professionals are identified or if one individual holds multiple critical roles.
+   Analyze the {{ adv_team | length }} firm-level team member(s) identified from SEC ADV filings above. Note that these are firm personnel — the specific portfolio manager(s) of this fund may not be individually identified.
 {% else %}
    [Team data not available from SEC EDGAR ADV] — assess based on available information only.
 {% endif %}
-3. **AUM Growth** — Organic growth vs. performance-driven, capacity discipline
-{% if adv_aum_history is defined and adv_aum_history %}
-   Use the SEC-reported regulatory AUM figures above as authoritative. Compare against fund-level AUM if available.
+3. **Fund AUM & Strategy Consistency** — Fund-level growth, capacity discipline, strategy drift
+{% if nport_available is defined and nport_available %}
+   Use the N-PORT fund-level data above for strategy consistency assessment. Fund style drift is more meaningful than firm-level 13F drift.
 {% endif %}
-4. **Organizational Strength** — Infrastructure, compliance, operational resilience
+{% if adv_aum_history is defined and adv_aum_history %}
+   The firm-level AUM figures from SEC ADV are provided for context. Distinguish between fund AUM growth and firm AUM growth in your analysis.
+{% endif %}
+4. **Organizational Strength** — Infrastructure, compliance record, operational resilience (firm-level — appropriate scope for ADV data)
 5. **Alignment of Interests** — Co-investment, fee structure, investor communication
 {% if adv_fee_structure is defined and adv_fee_structure %}
    Reference the SEC-reported fee types above. Assess alignment with investor interests.
