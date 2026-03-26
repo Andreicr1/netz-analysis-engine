@@ -4,7 +4,7 @@
   Reactive: regime/trigger changes flash via CSS transition on $derived state.
 -->
 <script lang="ts">
-	import { getContext } from "svelte";
+	import { getContext, onMount } from "svelte";
 	import {
 		PageHeader, StatusBadge,
 		formatPercent, formatDateTime, formatNumber,
@@ -12,6 +12,11 @@
 	import type { RiskStore, CVaRStatus, CVaRPoint, DriftAlert, BehaviorAlert, RegimeData } from "$lib/stores/risk-store.svelte";
 
 	const riskStore = getContext<RiskStore>("netz:riskStore");
+
+	onMount(() => {
+		try { riskStore.start(); } catch (e) { console.warn("Risk store failed to start:", e); }
+		return () => riskStore.destroy();
+	});
 
 	// ── Derived reactive state from SSE ticks ─────────────────────────────
 

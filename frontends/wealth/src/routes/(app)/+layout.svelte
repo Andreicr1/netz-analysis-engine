@@ -5,14 +5,15 @@
 -->
 <script lang="ts">
 	import { page } from "$app/stores";
-	import { setContext, getContext, onMount, type Snippet } from "svelte";
+	import { setContext, getContext, type Snippet } from "svelte";
 	import { ThemeToggle } from "@netz/ui";
 	import { createRiskStore, type RiskStore } from "$lib/stores/risk-store.svelte";
 	import {
 		Search, ClipboardList, Globe,
 		Briefcase, Zap, BarChart2, Map,
 		Landmark, FileText, Newspaper, Folders,
-		Search as SearchIcon, Bot, PieChart, ChevronDown
+		Search as SearchIcon, Bot, PieChart, ChevronDown,
+		LayoutDashboard
 	} from "lucide-svelte";
 
 	interface SidebarItem {
@@ -43,18 +44,16 @@
 	});
 
 	setContext<RiskStore>("netz:riskStore", riskStore);
-
-	onMount(() => {
-		try {
-			riskStore.start();
-		} catch (e) {
-			console.warn("Risk store failed to start:", e);
-		}
-		return () => riskStore.destroy();
-	});
+	// riskStore.start() is NOT called here — Dashboard and Risk pages own their lifecycle.
 
 	// ── Navigation taxonomy — sectioned ──
 	const sections: SidebarSection[] = [
+		{
+			id: "overview", label: "Overview", defaultOpen: true,
+			items: [
+				{ label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+			],
+		},
 		{
 			id: "discovery", label: "Discovery & Screening", defaultOpen: true,
 			items: [
