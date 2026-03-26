@@ -58,7 +58,6 @@
 			id: "discovery", label: "Discovery & Screening", defaultOpen: true,
 			items: [
 				{ label: "Screener",          href: "/screener",          icon: Search },
-				{ label: "US Fund Analysis",  href: "/us-fund-analysis",  icon: Bot },
 				{ label: "DD Reports",        href: "/dd-reports",        icon: ClipboardList },
 			],
 		},

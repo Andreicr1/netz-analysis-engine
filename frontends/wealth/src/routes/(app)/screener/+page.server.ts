@@ -1,45 +1,90 @@
-/** Unified Screener SSR — instrument search with tab-based instrument_type filter. */
+/** Unified Screener SSR — all tabs route to GLOBAL endpoints (no RLS).
+ *
+ * Tab "catalog" (default): GET /screener/catalog + /screener/catalog/facets (3-universe funds)
+ * Tab "equities":           GET /screener/securities + /screener/securities/facets (global SEC)
+ * Tab "managers":           GET /sec/managers/search (global SEC ADV)
+ *
+ * ETF tab removed — ETFs are in Fund Catalog (registered_us + fund_type=etf).
+ * Bond tab removed — no global bond master table; bonds visible via N-PORT holdings.
+ *
+ * ARCHITECTURAL RULE: instruments_universe (RLS) is the DESTINATION, not the source.
+ * Screener is DISCOVERY → DD Report → Approval → Import to Universe.
+ */
 import type { PageServerLoad } from "./$types";
 import { createServerApiClient } from "$lib/api/client";
-import type { ScreeningResult, ScreeningRun, InstrumentSearchPage, ScreenerFacets } from "$lib/types/screening";
-
-const TAB_TO_INSTRUMENT_TYPE: Record<string, string> = {
-	fund: "fund",
-	equity: "equity",
-	bond: "bond",
-	etf: "etf",
-};
+import type { UnifiedCatalogPage, CatalogFacets, SecurityPage, SecurityFacets } from "$lib/types/catalog";
+import type { SecManagerSearchPage, SecSicCodeItem } from "$lib/types/sec-analysis";
+import { EMPTY_CATALOG_PAGE, EMPTY_FACETS, EMPTY_SECURITY_PAGE, EMPTY_SECURITY_FACETS } from "$lib/types/catalog";
+import { EMPTY_SEARCH_PAGE as EMPTY_MANAGER_PAGE } from "$lib/types/sec-analysis";
 
 export const load: PageServerLoad = async ({ parent, url }) => {
 	const { token } = await parent();
 	const api = createServerApiClient(token);
 
-	// Map tab param to instrument_type for backend
-	const tab = url.searchParams.get("tab") ?? "fund";
-	const instrumentType = TAB_TO_INSTRUMENT_TYPE[tab] ?? "fund";
+	const tab = url.searchParams.get("tab") ?? "catalog";
+	const page = url.searchParams.get("page") ?? "1";
+	const pageSize = url.searchParams.get("page_size") ?? "50";
 
-	// Search params for instrument mode
-	const searchParams: Record<string, string> = {};
-	for (const key of ["q", "asset_class", "geography", "domicile", "currency", "strategy", "source", "approval_status", "block_id", "aum_min", "aum_max", "fund_type", "manager", "sector", "exchange", "market_cap_min", "pe_max", "div_yield_min", "bond_asset_class", "maturity_range", "ytm_min", "fund_family", "expense_ratio_max"]) {
-		const val = url.searchParams.get(key);
-		if (val) searchParams[key] = val;
+	if (tab === "catalog") {
+		const catalogParams: Record<string, string> = { page, page_size: pageSize };
+		const q = url.searchParams.get("q");
+		if (q) catalogParams.q = q;
+		const universes = url.searchParams.getAll("universe");
+		if (universes.length) catalogParams.fund_universe = universes.join(",");
+		const regions = url.searchParams.getAll("region");
+		if (regions.length) catalogParams.region = regions.join(",");
+		const fundTypes = url.searchParams.getAll("fund_type");
+		if (fundTypes.length) catalogParams.fund_type = fundTypes.join(",");
+		const domiciles = url.searchParams.getAll("domicile");
+		if (domiciles.length) catalogParams.domicile = domiciles.join(",");
+		const aumMin = url.searchParams.get("aum_min");
+		if (aumMin) catalogParams.aum_min = aumMin;
+		const sort = url.searchParams.get("sort");
+		if (sort) catalogParams.sort = sort;
+
+		const [catalog, facets] = await Promise.all([
+			api.get<UnifiedCatalogPage>("/screener/catalog", catalogParams).catch(() => EMPTY_CATALOG_PAGE),
+			api.get<CatalogFacets>("/screener/catalog/facets", catalogParams).catch(() => EMPTY_FACETS),
+		]);
+
+		return { tab, catalog, catalogFacets: facets, currentParams: Object.fromEntries(url.searchParams.entries()) };
 	}
-	searchParams.instrument_type = instrumentType;
-	searchParams.page = url.searchParams.get("page") ?? "1";
-	searchParams.page_size = url.searchParams.get("page_size") ?? "50";
 
-	const [facets, searchResults, results, runs] = await Promise.all([
-		api.get<ScreenerFacets>("/screener/facets", searchParams).catch(() => null),
-		api.get<InstrumentSearchPage>("/screener/search", searchParams).catch(() => ({ items: [], total: 0, page: 1, page_size: 50, has_next: false }) as InstrumentSearchPage),
-		api.get<ScreeningResult[]>("/screener/results", { limit: "500" }).catch(() => [] as ScreeningResult[]),
-		api.get<ScreeningRun[]>("/screener/runs", { limit: "1" }).catch(() => [] as ScreeningRun[]),
-	]);
+	if (tab === "equities") {
+		// ── GLOBAL equities from sec_cusip_ticker_map (no RLS) ──
+		const secParams: Record<string, string> = { page, page_size: pageSize };
+		const q = url.searchParams.get("q");
+		if (q) secParams.q = q;
+		const secType = url.searchParams.get("security_type");
+		if (secType) secParams.security_type = secType;
+		const exchange = url.searchParams.get("exchange");
+		if (exchange) secParams.exchange = exchange;
+		const sort = url.searchParams.get("sort");
+		if (sort) secParams.sort = sort;
 
-	return {
-		facets,
-		searchResults,
-		results,
-		lastRun: runs[0] ?? null,
-		currentParams: Object.fromEntries(url.searchParams.entries()),
-	};
+		const [securities, secFacets] = await Promise.all([
+			api.get<SecurityPage>("/screener/securities", secParams).catch(() => EMPTY_SECURITY_PAGE),
+			api.get<SecurityFacets>("/screener/securities/facets", { q: q ?? "" }).catch(() => EMPTY_SECURITY_FACETS),
+		]);
+
+		return { tab, securities, securityFacets: secFacets, currentParams: Object.fromEntries(url.searchParams.entries()) };
+	}
+
+	if (tab === "managers") {
+		const params: Record<string, string> = { page, page_size: "25" };
+		for (const key of ["q", "entity_type", "state", "has_13f", "aum_min", "fund_type"]) {
+			const val = url.searchParams.get(key);
+			if (val) params[key] = val;
+		}
+
+		const [searchResults, sicCodes] = await Promise.all([
+			api.get<SecManagerSearchPage>("/sec/managers/search", params).catch(() => EMPTY_MANAGER_PAGE),
+			api.get<SecSicCodeItem[]>("/sec/managers/sic-codes").catch(() => [] as SecSicCodeItem[]),
+		]);
+
+		return { tab, managerResults: searchResults, sicCodes, currentParams: Object.fromEntries(url.searchParams.entries()) };
+	}
+
+	// Fallback: redirect unknown tabs to catalog
+	return { tab: "catalog", currentParams: Object.fromEntries(url.searchParams.entries()) };
 };
