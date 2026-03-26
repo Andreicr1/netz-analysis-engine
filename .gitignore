@@ -59,3 +59,4 @@ backend/.esma_seed_checkpoint.json
 
 playwright-report/
 test-results/
+cloudflared.exe

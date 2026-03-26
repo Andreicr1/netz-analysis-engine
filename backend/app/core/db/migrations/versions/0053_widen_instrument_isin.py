@@ -8,8 +8,8 @@ on import.
 revision = "0053_widen_instrument_isin"
 down_revision = "0052_sec_entity_links"
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 
 def upgrade() -> None:

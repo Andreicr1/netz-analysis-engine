@@ -22,12 +22,12 @@ import argparse
 import asyncio
 import sys
 import uuid
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "backend"))
 
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.db.engine import async_session_factory
