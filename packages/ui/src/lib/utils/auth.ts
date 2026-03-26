@@ -46,6 +46,12 @@ export function startSessionExpiryMonitor(
 		if (typeof exp !== "number") return () => {};
 
 		const expMs = exp * 1000;
+		const iat = payload.iat;
+		const tokenLifetimeMs = typeof iat === "number" ? (exp - iat) * 1000 : Infinity;
+
+		// Clerk JWTs are short-lived (~60s) and auto-refresh — skip warning for those.
+		if (tokenLifetimeMs < warningMs) return () => {};
+
 		const warningAt = expMs - warningMs;
 		const delay = warningAt - Date.now();
 
