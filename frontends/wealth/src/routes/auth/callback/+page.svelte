@@ -55,7 +55,8 @@
 
 			// Get session token and set cookie
 			if (clerk.session) {
-				const token = await clerk.session.getToken();
+				// Use JWT template 'netz-wealth' (3600s lifetime) — avoids 60s default expiry loop
+				const token = await clerk.session.getToken({ template: "netz-wealth" });
 				if (token) {
 					document.cookie = `__session=${token}; path=/; secure; samesite=lax; max-age=3600`;
 					// Success — redirect to app
