@@ -7,6 +7,7 @@ quant_engine walk-forward CV, live NAV computation, and stress scenario replay.
 from vertical_engines.wealth.model_portfolio.models import (
     BacktestResult,
     LiveNAV,
+    OptimizationMeta,
     PortfolioComposition,
     StressResult,
 )
@@ -21,6 +22,7 @@ from vertical_engines.wealth.model_portfolio.track_record import (
 __all__ = [
     "BacktestResult",
     "LiveNAV",
+    "OptimizationMeta",
     "PortfolioComposition",
     "SCENARIOS",
     "StressResult",

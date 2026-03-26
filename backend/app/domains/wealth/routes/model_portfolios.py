@@ -2,12 +2,17 @@
 
 All endpoints use get_db_with_rls and response_model + model_validate().
 IC role required for creation and construction.
+
+Construction invokes CLARABEL optimizer for mathematically rigorous block weights,
+then distributes within blocks by manager_score.
 """
 
 from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import date
+from decimal import Decimal
 from typing import Any
 
 import structlog
@@ -17,7 +22,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
+from app.domains.wealth.models.allocation import StrategicAllocation
 from app.domains.wealth.models.model_portfolio import ModelPortfolio
+from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.schemas.model_portfolio import (
     ModelPortfolioCreate,
     ModelPortfolioRead,
@@ -104,7 +111,7 @@ async def get_model_portfolio(
 @router.post(
     "/{portfolio_id}/construct",
     response_model=ModelPortfolioRead,
-    summary="Run fund selection from universe",
+    summary="Run optimizer-driven fund selection from universe",
 )
 async def construct_portfolio(
     portfolio_id: uuid.UUID,
@@ -113,7 +120,16 @@ async def construct_portfolio(
     actor: Actor = Depends(get_actor),
     org_id: str = Depends(get_org_id),
 ) -> ModelPortfolioRead:
-    """Run fund selection algorithm from approved universe assets. Requires IC role."""
+    """Run CLARABEL optimizer + fund selection from approved universe. Requires IC role.
+
+    Flow:
+    1. Load approved universe and strategic allocation
+    2. Compute expected returns + covariance from NAV timeseries
+    3. Invoke CLARABEL solver for optimal block weights
+    4. Distribute block weights to top-N funds by manager_score
+    5. Persist fund_selection_schema with optimization metadata
+    6. Create day-0 PortfolioSnapshot for monitoring engine
+    """
     _require_ic_role(actor)
 
     result = await db.execute(
@@ -126,20 +142,15 @@ async def construct_portfolio(
             detail=f"Model portfolio {portfolio_id} not found",
         )
 
-    def _construct() -> dict[str, Any]:
-        from app.core.db.session import sync_session_factory
-
-        with sync_session_factory() as sync_db:
-            sync_db.expire_on_commit = False
-            from sqlalchemy import text
-            sync_db.execute(text("SET LOCAL app.current_organization_id = :oid"), {"oid": org_id})
-            return _run_construction(sync_db, portfolio.profile, org_id)
-
-    fund_selection = await asyncio.to_thread(_construct)
+    fund_selection = await _run_construction_async(db, portfolio.profile, org_id)
 
     portfolio.fund_selection_schema = fund_selection
     portfolio.status = "backtesting"
     await db.flush()
+
+    # Create day-0 PortfolioSnapshot for monitoring engine tracking
+    await _create_day0_snapshot(db, portfolio, fund_selection, org_id)
+
     await db.refresh(portfolio)
     return ModelPortfolioRead.model_validate(portfolio)
 
@@ -295,48 +306,139 @@ def _extract_fund_weights(
     return fund_ids, weights
 
 
-def _run_construction(
-    db: Any,
+async def _run_construction_async(
+    db: AsyncSession,
     profile: str,
     org_id: str,
 ) -> dict[str, Any]:
-    """Run portfolio construction in sync thread."""
-    from vertical_engines.wealth.asset_universe import UniverseService
+    """Run optimizer-driven portfolio construction (fully async).
+
+    Steps:
+    1. Load approved universe via UniverseService (sync, offloaded to thread)
+    2. Query StrategicAllocation for profile constraints
+    3. Compute expected returns + covariance from NAV timeseries
+    4. Invoke CLARABEL optimizer for optimal block weights
+    5. Distribute block weights to funds via portfolio_builder.construct()
+    """
+    from app.domains.wealth.services.quant_queries import compute_inputs_from_nav
+    from quant_engine.optimizer_service import (
+        BlockConstraint,
+        OptimizationResult,
+        ProfileConstraints,
+        optimize_portfolio,
+    )
+    from vertical_engines.wealth.model_portfolio.models import OptimizationMeta
     from vertical_engines.wealth.model_portfolio.portfolio_builder import construct
 
-    # Get approved universe assets
-    svc = UniverseService()
-    assets = svc.list_universe(db, organization_id=org_id)
+    # ── 1. Load approved universe (sync service, offload to thread) ──
+    universe_funds = await _load_universe_funds(db, org_id)
 
-    # Get strategic allocation
-    from sqlalchemy import select as sa_select
-
-    from app.domains.wealth.models.allocation import StrategicAllocation
-
-    alloc_result = db.execute(
-        sa_select(StrategicAllocation).where(StrategicAllocation.profile == profile)
+    # ── 2. Query strategic allocation for this profile ──
+    today = date.today()
+    alloc_stmt = (
+        select(StrategicAllocation)
+        .where(
+            StrategicAllocation.profile == profile,
+            StrategicAllocation.effective_from <= today,
+        )
+        .where(
+            (StrategicAllocation.effective_to.is_(None))
+            | (StrategicAllocation.effective_to >= today)
+        )
     )
+    alloc_result = await db.execute(alloc_stmt)
     allocations = alloc_result.scalars().all()
-    strategic = {a.block_id: float(a.target_weight) for a in allocations}
 
-    if not strategic:
+    if not allocations:
         return {"funds": [], "profile": profile, "error": "No strategic allocation defined"}
 
-    # Build universe fund list for portfolio builder
-    universe_funds = [
-        {
-            "instrument_id": str(a.instrument_id),
-            "fund_name": a.fund_name,
-            "block_id": a.block_id,
-            "manager_score": None,  # Would be populated from risk metrics
-        }
-        for a in assets
-        if a.block_id
-    ]
+    block_ids = [a.block_id for a in allocations]
+    strategic_targets = {a.block_id: float(a.target_weight) for a in allocations}
 
-    composition = construct(profile, universe_funds, strategic)
+    # ── 3. Compute optimization inputs from NAV timeseries ──
+    opt_result: OptimizationResult | None = None
+    optimized_weights: dict[str, float]
+    optimization_meta: OptimizationMeta | None = None
 
-    return {
+    try:
+        cov_matrix, expected_returns = await compute_inputs_from_nav(db, block_ids)
+
+        # ── 4. Build constraints and invoke CLARABEL ──
+        block_constraints = [
+            BlockConstraint(
+                block_id=a.block_id,
+                min_weight=float(a.min_weight),
+                max_weight=float(a.max_weight),
+            )
+            for a in allocations
+        ]
+        constraints = ProfileConstraints(blocks=block_constraints)
+
+        opt_result = await optimize_portfolio(
+            block_ids=block_ids,
+            expected_returns=expected_returns,
+            cov_matrix=cov_matrix,
+            constraints=constraints,
+        )
+
+        if opt_result.status == "optimal" and opt_result.weights:
+            optimized_weights = opt_result.weights
+            optimization_meta = OptimizationMeta(
+                expected_return=opt_result.expected_return,
+                portfolio_volatility=opt_result.portfolio_volatility,
+                sharpe_ratio=opt_result.sharpe_ratio,
+                solver=opt_result.solver_info or "CLARABEL",
+                status=opt_result.status,
+            )
+            logger.info(
+                "optimizer_succeeded",
+                profile=profile,
+                sharpe=opt_result.sharpe_ratio,
+                volatility=opt_result.portfolio_volatility,
+                solver=opt_result.solver_info,
+            )
+        else:
+            # Solver did not find optimal — fall back to strategic targets
+            logger.warning(
+                "optimizer_non_optimal_fallback",
+                profile=profile,
+                solver_status=opt_result.status,
+                solver_info=opt_result.solver_info,
+            )
+            optimized_weights = strategic_targets
+            optimization_meta = OptimizationMeta(
+                expected_return=0.0,
+                portfolio_volatility=0.0,
+                sharpe_ratio=0.0,
+                solver="heuristic_fallback",
+                status=f"fallback:{opt_result.status}",
+            )
+
+    except ValueError as e:
+        # Insufficient NAV data — fall back to strategic allocation targets
+        logger.warning(
+            "optimizer_insufficient_data_fallback",
+            profile=profile,
+            error=str(e),
+        )
+        optimized_weights = strategic_targets
+        optimization_meta = OptimizationMeta(
+            expected_return=0.0,
+            portfolio_volatility=0.0,
+            sharpe_ratio=0.0,
+            solver="heuristic_fallback",
+            status="fallback:insufficient_nav_data",
+        )
+
+    # ── 5. Distribute block weights to individual funds ──
+    composition = construct(
+        profile,
+        universe_funds,
+        optimized_weights,
+        optimization_meta=optimization_meta,
+    )
+
+    result: dict[str, Any] = {
         "profile": composition.profile,
         "total_weight": composition.total_weight,
         "funds": [
@@ -350,6 +452,115 @@ def _run_construction(
             for fw in composition.funds
         ],
     }
+
+    # Attach optimization metadata for transparency
+    if composition.optimization:
+        result["optimization"] = {
+            "expected_return": composition.optimization.expected_return,
+            "portfolio_volatility": composition.optimization.portfolio_volatility,
+            "sharpe_ratio": composition.optimization.sharpe_ratio,
+            "solver": composition.optimization.solver,
+            "status": composition.optimization.status,
+        }
+
+    return result
+
+
+async def _load_universe_funds(
+    db: AsyncSession,
+    org_id: str,
+) -> list[dict[str, Any]]:
+    """Load approved universe instruments with manager_score from risk metrics."""
+    from app.domains.wealth.models.instrument import Instrument
+    from app.domains.wealth.models.risk import FundRiskMetrics
+    from app.domains.wealth.models.universe_approval import UniverseApproval
+
+    # Approved universe assets
+    stmt = (
+        select(
+            Instrument.instrument_id,
+            Instrument.name,
+            Instrument.block_id,
+        )
+        .join(
+            UniverseApproval,
+            (UniverseApproval.instrument_id == Instrument.instrument_id)
+            & (UniverseApproval.is_current == True)
+            & (UniverseApproval.decision == "approved"),
+        )
+        .where(Instrument.is_active == True, Instrument.block_id.isnot(None))
+    )
+    funds_result = await db.execute(stmt)
+    funds_rows = funds_result.all()
+
+    if not funds_rows:
+        return []
+
+    fund_ids = [r.instrument_id for r in funds_rows]
+
+    # Latest risk metrics for manager_score
+    risk_stmt = (
+        select(FundRiskMetrics.instrument_id, FundRiskMetrics.manager_score)
+        .where(FundRiskMetrics.instrument_id.in_(fund_ids))
+        .order_by(FundRiskMetrics.instrument_id, FundRiskMetrics.calc_date.desc())
+        .distinct(FundRiskMetrics.instrument_id)
+    )
+    risk_result = await db.execute(risk_stmt)
+    score_map = {
+        r.instrument_id: float(r.manager_score) if r.manager_score else None
+        for r in risk_result.all()
+    }
+
+    return [
+        {
+            "instrument_id": str(r.instrument_id),
+            "fund_name": r.name,
+            "block_id": r.block_id,
+            "manager_score": score_map.get(r.instrument_id),
+        }
+        for r in funds_rows
+    ]
+
+
+async def _create_day0_snapshot(
+    db: AsyncSession,
+    portfolio: ModelPortfolio,
+    fund_selection: dict[str, Any],
+    org_id: str,
+) -> None:
+    """Create day-0 PortfolioSnapshot so monitoring engine starts tracking."""
+    funds = fund_selection.get("funds", [])
+    if not funds:
+        return
+
+    # Aggregate fund weights to block-level for snapshot.weights
+    block_weights: dict[str, float] = {}
+    for f in funds:
+        bid = f["block_id"]
+        block_weights[bid] = block_weights.get(bid, 0.0) + f["weight"]
+
+    optimization = fund_selection.get("optimization", {})
+    snapshot_date = date.today()
+
+    snapshot = PortfolioSnapshot(
+        organization_id=org_id,
+        profile=portfolio.profile,
+        snapshot_date=snapshot_date,
+        weights=block_weights,
+        fund_selection=fund_selection,
+        cvar_current=Decimal(str(round(optimization.get("portfolio_volatility", 0.0), 6)))
+        if optimization else None,
+        trigger_status="ok",
+        consecutive_breach_days=0,
+    )
+    db.add(snapshot)
+    await db.flush()
+    logger.info(
+        "day0_snapshot_created",
+        profile=portfolio.profile,
+        snapshot_date=str(snapshot_date),
+        blocks=len(block_weights),
+    )
 
 
 def _run_backtest(

@@ -1,11 +1,11 @@
-"""Portfolio construction — score-weighted fund selection within blocks.
+"""Portfolio construction — optimizer-driven fund selection within blocks.
 
 Pure sync function. Config as parameter. No I/O.
 
 Algorithm:
-1. Strategic allocation defines weights per AllocationBlock
+1. Block weights come from CLARABEL optimizer (or fallback heuristic)
 2. Within each block, select top N funds by manager_score
-3. Funds weighted proportionally to score within block allocation
+3. Funds weighted proportionally to score within optimized block weight
 4. Returns frozen PortfolioComposition with weights summing to 1.0
 """
 
@@ -16,7 +16,11 @@ from typing import Any
 
 import structlog
 
-from vertical_engines.wealth.model_portfolio.models import FundWeight, PortfolioComposition
+from vertical_engines.wealth.model_portfolio.models import (
+    FundWeight,
+    OptimizationMeta,
+    PortfolioComposition,
+)
 
 logger = structlog.get_logger()
 
@@ -27,10 +31,11 @@ _DEFAULT_TOP_N = 3
 def construct(
     profile: str,
     universe_funds: list[dict[str, Any]],
-    strategic_allocation: dict[str, float],
+    block_weights: dict[str, float],
     config: dict[str, Any] | None = None,
+    optimization_meta: OptimizationMeta | None = None,
 ) -> PortfolioComposition:
-    """Construct a model portfolio from universe assets.
+    """Construct a model portfolio from universe assets and optimized block weights.
 
     Parameters
     ----------
@@ -38,10 +43,13 @@ def construct(
         Portfolio profile (conservative, moderate, growth).
     universe_funds : list[dict]
         Approved funds with keys: instrument_id, fund_name, block_id, manager_score.
-    strategic_allocation : dict[str, float]
-        Block weights summing to 1.0, e.g. {"equity_global": 0.4, "fixed_income": 0.3, ...}.
+    block_weights : dict[str, float]
+        Optimized block weights from CLARABEL solver (or strategic allocation fallback).
+        Maps block_id -> weight, summing to ~1.0.
     config : dict | None
         Optional config with top_n_per_block override.
+    optimization_meta : OptimizationMeta | None
+        Solver metadata (expected return, volatility, sharpe, solver name).
 
     Returns
     -------
@@ -54,13 +62,13 @@ def construct(
     funds_by_block: dict[str, list[dict[str, Any]]] = {}
     for fund in universe_funds:
         block = fund.get("block_id")
-        if block and block in strategic_allocation:
+        if block and block in block_weights:
             funds_by_block.setdefault(block, []).append(fund)
 
     all_weights: list[FundWeight] = []
     total_allocated = 0.0
 
-    for block_id, block_weight in strategic_allocation.items():
+    for block_id, block_weight in block_weights.items():
         block_funds = funds_by_block.get(block_id, [])
         if not block_funds:
             logger.warning(
@@ -113,4 +121,5 @@ def construct(
         profile=profile,
         funds=all_weights,
         total_weight=round(total_allocated, 6),
+        optimization=optimization_meta,
     )

@@ -25,10 +25,22 @@ class PortfolioComposition:
     profile: str
     funds: list[FundWeight] = field(default_factory=list)
     total_weight: float = 0.0
+    optimization: OptimizationMeta | None = None
 
     def validate_weights(self) -> bool:
         """Check that weights sum to approximately 1.0."""
         return abs(self.total_weight - 1.0) < 1e-6
+
+
+@dataclass(frozen=True, slots=True)
+class OptimizationMeta:
+    """Metadata from the CLARABEL/NSGA-II optimizer attached to a composition."""
+
+    expected_return: float
+    portfolio_volatility: float
+    sharpe_ratio: float
+    solver: str  # "CLARABEL", "SCS", "heuristic_fallback"
+    status: str  # "optimal", "infeasible", "solver_failed", "fallback"
 
 
 @dataclass(frozen=True, slots=True)
