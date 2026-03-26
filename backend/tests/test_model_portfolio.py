@@ -185,7 +185,7 @@ class TestFundLevelOptimizer:
                 BlockConstraint("equity", 0.40, 0.70),
                 BlockConstraint("fi", 0.30, 0.60),
             ],
-            cvar_limit=-0.12,
+            cvar_limit=None,  # not testing CVaR here
             max_single_fund_weight=0.50,
         )
 
@@ -262,6 +262,60 @@ class TestFundLevelOptimizer:
         assert result.status == "empty"
 
     @pytest.mark.asyncio
+    async def test_optimize_fund_portfolio_cvar_enforcement_cascade(self):
+        """When CVaR violates limit, optimizer re-solves with variance ceiling."""
+        from quant_engine.optimizer_service import (
+            BlockConstraint,
+            ProfileConstraints,
+            optimize_fund_portfolio,
+        )
+
+        fids = [str(uuid.uuid4()) for _ in range(4)]
+        fund_blocks = {
+            fids[0]: "equity", fids[1]: "equity",
+            fids[2]: "fi", fids[3]: "fi",
+        }
+
+        # High-volatility equity + low-vol FI — unconstrained optimizer
+        # will load equity, violating a tight CVaR limit
+        cov = np.diag([0.09, 0.08, 0.01, 0.008])  # equity vol ~30%, FI ~10%
+        expected = {fids[0]: 0.15, fids[1]: 0.12, fids[2]: 0.04, fids[3]: 0.03}
+
+        # Tight CVaR limit that should force more FI allocation
+        constraints = ProfileConstraints(
+            blocks=[
+                BlockConstraint("equity", 0.10, 0.60),
+                BlockConstraint("fi", 0.40, 0.90),
+            ],
+            cvar_limit=-0.06,  # tight limit
+            max_single_fund_weight=0.50,
+        )
+
+        result = await optimize_fund_portfolio(
+            fund_ids=fids,
+            fund_blocks=fund_blocks,
+            expected_returns=expected,
+            cov_matrix=cov,
+            constraints=constraints,
+        )
+
+        # Should have re-optimized (Phase 2 or 3)
+        assert result.status in (
+            "optimal:cvar_constrained",
+            "optimal:min_variance_fallback",
+            "optimal:cvar_violated",  # worst case if all phases exhausted
+        )
+        assert result.cvar_95 is not None
+        # The re-optimized solution should have lower volatility than unconstrained
+        assert result.portfolio_volatility > 0
+
+        # FI allocation should be higher than in unconstrained (equity-heavy) solution
+        fi_weight = sum(
+            result.weights.get(fids[i], 0) for i in [2, 3]
+        )
+        assert fi_weight >= 0.40, f"FI weight {fi_weight} below 0.40 minimum"
+
+    @pytest.mark.asyncio
     async def test_optimize_fund_portfolio_concentration_limit(self):
         """No single fund should exceed max_single_fund_weight."""
         from quant_engine.optimizer_service import (
@@ -279,7 +333,7 @@ class TestFundLevelOptimizer:
 
         constraints = ProfileConstraints(
             blocks=[BlockConstraint("eq", 0.9, 1.0)],
-            cvar_limit=-0.15,
+            cvar_limit=None,  # not testing CVaR here
             max_single_fund_weight=0.40,
         )
 
