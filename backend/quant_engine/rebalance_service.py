@@ -19,7 +19,7 @@ logger = structlog.get_logger()
 
 # Valid status transitions
 VALID_TRANSITIONS = {
-    "pending": {"approved", "rejected", "cancelled"},
+    "pending": {"approved", "rejected", "cancelled", "applied"},
     "approved": {"executed"},
     "rejected": set(),
     "cancelled": set(),

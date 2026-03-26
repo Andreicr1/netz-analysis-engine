@@ -212,6 +212,28 @@ def render_institutional(
         story.append(build_institutional_table(stress_rows, col_widths=col_w, styles=styles))
         story.append(Spacer(1, 4 * mm))
 
+    # ── Fee Drag Analysis ─────────────────────────────────────────
+    if data.fee_drag:
+        story.append(Paragraph(labels["fee_drag_analysis"], styles["section_heading"]))
+        fd = data.fee_drag
+        summary_header = [
+            labels["fd_instruments"],
+            labels["fd_gross_return"],
+            labels["fd_net_return"],
+            labels["fd_drag_ratio"],
+            labels["fd_inefficient"],
+        ]
+        summary_row = [
+            str(fd["total_instruments"]),
+            format_pct(fd["weighted_gross_return"], 2, language),
+            format_pct(fd["weighted_net_return"], 2, language),
+            format_pct(fd["weighted_fee_drag_pct"] * 100, 1, language),
+            str(fd["inefficient_count"]),
+        ]
+        col_w = [usable_w / 5] * 5
+        story.append(build_institutional_table([summary_header, summary_row], col_widths=col_w, styles=styles))
+        story.append(Spacer(1, 4 * mm))
+
     # ── ESG placeholder ────────────────────────────────────────────
     story.append(Paragraph(labels["esg_section"], styles["section_heading"]))
     story.append(Paragraph(labels["esg_placeholder"], styles["body"]))

@@ -366,6 +366,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/analytics/entity/{entity_id}",
+    "name": "get_entity_analytics"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/analytics/optimize/pareto/{job_id}/stream",
     "name": "stream_pareto_progress"
   },
@@ -931,6 +936,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/reporting/model-portfolios/{portfolio_id}/long-form-report/stream/{job_id}",
+    "name": "stream_long_form_report"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/risk/macro",
     "name": "get_macro"
   },
@@ -966,6 +976,16 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/screener/catalog",
+    "name": "get_catalog"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/screener/catalog/facets",
+    "name": "get_catalog_facets"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/screener/facets",
     "name": "get_screener_facets"
   },
@@ -993,6 +1013,31 @@
     "method": "GET",
     "path": "/api/v1/screener/search",
     "name": "search_instruments"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/screener/securities",
+    "name": "get_global_securities"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/screener/securities/facets",
+    "name": "get_securities_facets"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/sec/funds/{cik}",
+    "name": "get_fund_detail"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/sec/funds/{cik}/holdings",
+    "name": "get_fund_holdings"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/sec/funds/{cik}/style-history",
+    "name": "get_style_history"
   },
   {
     "method": "GET",
@@ -1038,6 +1083,16 @@
     "method": "GET",
     "path": "/api/v1/sec/managers/{crd_number}/funds",
     "name": "get_manager_funds"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/sec/managers/{crd}/private-funds",
+    "name": "get_private_funds"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/sec/managers/{crd}/registered-funds",
+    "name": "get_registered_funds"
   },
   {
     "method": "GET",
@@ -1686,6 +1741,16 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/rebalancing/proposals/{proposal_id}/apply",
+    "name": "apply_rebalance_proposal"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/reporting/model-portfolios/{portfolio_id}/long-form-report",
+    "name": "generate_long_form_report"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/screener/import-esma/{isin}",
     "name": "import_esma_fund"
   },
@@ -1786,8 +1851,18 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/workers/run-nport-fund-discovery",
+    "name": "trigger_run_nport_fund_discovery"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/workers/run-nport-ingestion",
     "name": "trigger_run_nport_ingestion"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-nport-ticker-resolution",
+    "name": "trigger_run_nport_ticker_resolution"
   },
   {
     "method": "POST",

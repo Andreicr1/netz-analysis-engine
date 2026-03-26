@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import date
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,6 +124,9 @@ class FactSheetData:
 
     # Regime overlay (institutional only)
     regimes: list[RegimePoint] = field(default_factory=list)
+
+    # Fee drag (institutional only)
+    fee_drag: dict[str, Any] | None = None
 
     # LLM-generated commentary (set by engine after prompt call)
     manager_commentary: str = ""

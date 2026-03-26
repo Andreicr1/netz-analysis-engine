@@ -75,6 +75,7 @@
 			items: [
 				{ label: "Risk",      href: "/risk",      icon: Zap },
 				{ label: "Analytics", href: "/analytics", icon: BarChart2 },
+				{ label: "Entity Vitrine", href: "/entity-analytics", icon: BarChart2 },
 				{ label: "Exposure",  href: "/exposure",  icon: Map },
 				{ label: "Macro",     href: "/macro",     icon: Landmark },
 			],

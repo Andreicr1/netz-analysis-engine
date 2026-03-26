@@ -90,6 +90,7 @@ from app.domains.wealth.routes.content import router as wealth_content_router
 from app.domains.wealth.routes.correlation_regime import router as wealth_correlation_regime_router
 from app.domains.wealth.routes.dd_reports import router as wealth_dd_reports_router
 from app.domains.wealth.routes.documents import router as wealth_documents_router
+from app.domains.wealth.routes.entity_analytics import router as wealth_entity_analytics_router
 from app.domains.wealth.routes.esma import router as wealth_esma_router
 from app.domains.wealth.routes.exposure import router as wealth_exposure_router
 from app.domains.wealth.routes.fact_sheets import router as wealth_fact_sheets_router
@@ -97,10 +98,12 @@ from app.domains.wealth.routes.fact_sheets import router as wealth_fact_sheets_r
 # ── Wealth domain routers ────────────────────────────────────
 from app.domains.wealth.routes.funds import router as wealth_funds_router
 from app.domains.wealth.routes.instruments import router as wealth_instruments_router
+from app.domains.wealth.routes.long_form_reports import router as wealth_long_form_reports_router
 from app.domains.wealth.routes.macro import router as wealth_macro_router
 from app.domains.wealth.routes.manager_screener import router as wealth_manager_screener_router
 from app.domains.wealth.routes.model_portfolios import router as wealth_model_portfolios_router
 from app.domains.wealth.routes.portfolios import router as wealth_portfolios_router
+from app.domains.wealth.routes.rebalancing import router as wealth_rebalancing_router
 from app.domains.wealth.routes.risk import router as wealth_risk_router
 from app.domains.wealth.routes.screener import router as wealth_screener_router
 from app.domains.wealth.routes.sec_analysis import router as wealth_sec_analysis_router
@@ -361,6 +364,7 @@ api_v1.include_router(wealth_funds_router)
 api_v1.include_router(wealth_instruments_router)
 api_v1.include_router(wealth_allocation_router)
 api_v1.include_router(wealth_analytics_router)
+api_v1.include_router(wealth_entity_analytics_router)
 api_v1.include_router(wealth_portfolios_router)
 api_v1.include_router(wealth_risk_router)
 api_v1.include_router(wealth_macro_router)
@@ -369,7 +373,9 @@ api_v1.include_router(wealth_dd_reports_router)
 api_v1.include_router(wealth_documents_router)
 api_v1.include_router(wealth_universe_router)
 api_v1.include_router(wealth_model_portfolios_router)
+api_v1.include_router(wealth_rebalancing_router)
 api_v1.include_router(wealth_fact_sheets_router)
+api_v1.include_router(wealth_long_form_reports_router)
 api_v1.include_router(wealth_content_router)
 api_v1.include_router(wealth_screener_router)
 api_v1.include_router(wealth_manager_screener_router)

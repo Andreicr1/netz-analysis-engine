@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from vertical_engines.wealth.fact_sheet.i18n import LABELS, Language
 from vertical_engines.wealth.fact_sheet.models import (
     AllocationBlock,
+    AttributionRow,
     FactSheetData,
     HoldingRow,
     ReturnMetrics,
@@ -44,7 +45,7 @@ class FactSheetEngine:
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         self._config = config or {}
 
-    def generate(
+    def generate(  # noqa: A003
         self,
         db: Session,
         *,
@@ -69,7 +70,7 @@ class FactSheetEngine:
         labels = LABELS[language]
 
         # ── Load data ──────────────────────────────────────────────
-        data = self._build_fact_sheet_data(db, portfolio_id, organization_id, as_of)
+        data = self._build_fact_sheet_data(db, portfolio_id, organization_id, as_of, format=format)
 
         # ── Render charts in parallel ──────────────────────────────
         charts = self._render_charts(data, language=language, format=format)
@@ -105,6 +106,7 @@ class FactSheetEngine:
         portfolio_id: str,
         organization_id: str,
         as_of: date,
+        format: FactSheetFormat = "executive",
     ) -> FactSheetData:
         """Load portfolio + track-record data and build FactSheetData."""
         from sqlalchemy import select
@@ -155,6 +157,13 @@ class FactSheetEngine:
         # Build stress results
         stress = self._compute_stress(db, pid, funds_data)
 
+        # Institutional-only: attribution and fee_drag
+        attribution: list[AttributionRow] = []
+        fee_drag_data: dict[str, Any] | None = None
+        if format == "institutional":
+            attribution = self._compute_attribution(db, pid, funds_data, block_weights)
+            fee_drag_data = self._compute_fee_drag(funds_data, block_weights)
+
         return FactSheetData(
             portfolio_id=pid,
             portfolio_name=portfolio.display_name or f"{portfolio.profile.title()} Portfolio",
@@ -165,7 +174,9 @@ class FactSheetEngine:
             risk=risk,
             holdings=holdings,
             allocations=allocations,
+            attribution=attribution,
             stress=stress,
+            fee_drag=fee_drag_data,
             benchmark_label=portfolio.benchmark_composite or "",
         )
 
@@ -267,6 +278,162 @@ class FactSheetEngine:
         except Exception:
             logger.warning("fact_sheet_stress_failed", exc_info=True)
             return []
+
+    def _compute_attribution(
+        self,
+        db: Session,
+        portfolio_id: uuid.UUID,
+        funds_data: list[dict[str, Any]],
+        block_weights: dict[str, float],
+    ) -> list[AttributionRow]:
+        """Compute Brinson-Fachler attribution by connecting existing engine."""
+        if not funds_data or not block_weights:
+            return []
+
+        try:
+            from app.domains.wealth.services.benchmark_resolver import (
+                fetch_benchmark_nav_series_sync,
+            )
+            from vertical_engines.wealth.attribution.service import AttributionService
+
+            # Get benchmark data
+            sa_block_weights, benchmark_navs = fetch_benchmark_nav_series_sync(
+                db, portfolio_id,
+            )
+            if not benchmark_navs:
+                return []
+
+            # Build fund returns by block (weighted average within each block)
+            fund_returns_by_block: dict[str, float] = {}
+            for f in funds_data:
+                bid = f.get("block_id", "other")
+                # Use expected_return or fallback to 0
+                attrs = f.get("attributes", {})
+                expected_return = attrs.get("expected_return_pct", 0.0)
+                try:
+                    expected_return = float(expected_return)
+                except (TypeError, ValueError):
+                    expected_return = 0.0
+                block_total = block_weights.get(bid, 0)
+                if block_total > 0:
+                    weight_in_block = f.get("weight", 0) / block_total
+                    fund_returns_by_block[bid] = (
+                        fund_returns_by_block.get(bid, 0.0)
+                        + weight_in_block * expected_return
+                    )
+
+            # Build benchmark returns by block (use last available monthly return)
+            benchmark_returns_by_block: dict[str, float] = {}
+            for block_id, nav_rows in benchmark_navs.items():
+                if nav_rows:
+                    # Compute total return over last ~21 trading days (monthly proxy)
+                    recent = nav_rows[-min(21, len(nav_rows)):]
+                    total_r = 1.0
+                    for row in recent:
+                        total_r *= (1.0 + row["return_1d"])
+                    benchmark_returns_by_block[block_id] = total_r - 1.0
+
+            # Build strategic allocations list
+            strategic_allocations = [
+                {"block_id": bid, "target_weight": w}
+                for bid, w in sa_block_weights.items()
+            ]
+
+            # Block labels
+            from sqlalchemy import select
+
+            from app.domains.wealth.models.block import AllocationBlock as BlockModel
+            label_result = db.execute(
+                select(BlockModel.block_id, BlockModel.display_name)
+            )
+            block_labels = {r[0]: r[1] for r in label_result.all()}
+
+            svc = AttributionService(config=self._config)
+            result = svc.compute_portfolio_attribution(
+                strategic_allocations=strategic_allocations,
+                fund_returns_by_block=fund_returns_by_block,
+                benchmark_returns_by_block=benchmark_returns_by_block,
+                block_labels=block_labels,
+                actual_weights_by_block=block_weights,
+            )
+
+            if not result.benchmark_available:
+                return []
+
+            return [
+                AttributionRow(
+                    block_name=s.sector,
+                    allocation_effect=s.allocation_effect,
+                    selection_effect=s.selection_effect,
+                    interaction_effect=s.interaction_effect,
+                    total_effect=s.total_effect,
+                )
+                for s in result.sectors
+            ]
+        except Exception:
+            logger.warning("fact_sheet_attribution_failed", exc_info=True)
+            return []
+
+    def _compute_fee_drag(
+        self,
+        funds_data: list[dict[str, Any]],
+        block_weights: dict[str, float],
+    ) -> dict[str, Any] | None:
+        """Compute portfolio fee drag by connecting existing engine."""
+        if not funds_data:
+            return None
+
+        try:
+            from vertical_engines.wealth.fee_drag.service import FeeDragService
+
+            instruments = []
+            for f in funds_data:
+                iid = f.get("instrument_id")
+                if not iid:
+                    continue
+                instruments.append({
+                    "instrument_id": uuid.UUID(iid),
+                    "name": f.get("fund_name", "Unknown"),
+                    "instrument_type": f.get("instrument_type", "fund"),
+                    "attributes": f.get("attributes", {}),
+                })
+
+            if not instruments:
+                return None
+
+            weights = {
+                uuid.UUID(f["instrument_id"]): f.get("weight", 0.0)
+                for f in funds_data
+                if f.get("instrument_id")
+            }
+
+            svc = FeeDragService()
+            result = svc.compute_portfolio_fee_drag(instruments, weights=weights)
+
+            return {
+                "total_instruments": result.total_instruments,
+                "weighted_gross_return": round(result.weighted_gross_return, 4),
+                "weighted_net_return": round(result.weighted_net_return, 4),
+                "weighted_fee_drag_pct": round(result.weighted_fee_drag_pct, 4),
+                "inefficient_count": result.inefficient_count,
+                "instruments": [
+                    {
+                        "name": r.instrument_name,
+                        "fee_breakdown": {
+                            "management": round(r.fee_breakdown.management_fee_pct, 4),
+                            "performance": round(r.fee_breakdown.performance_fee_pct, 4),
+                            "other": round(r.fee_breakdown.other_fees_pct, 4),
+                            "total": round(r.fee_breakdown.total_fee_pct, 4),
+                        },
+                        "fee_drag_pct": round(r.fee_drag_pct, 4),
+                        "fee_efficient": r.fee_efficient,
+                    }
+                    for r in result.results
+                ],
+            }
+        except Exception:
+            logger.warning("fact_sheet_fee_drag_failed", exc_info=True)
+            return None
 
     def _render_charts(
         self,

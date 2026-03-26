@@ -93,7 +93,7 @@ frontends/
   wealth/           ← SvelteKit "netz-wealth-os"
 ```
 
-**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0042_bis_imf_hypertables`.
+**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0055_model_portfolio_nav`.
 
 **Auth:** Clerk JWT v2. `organization_id` from `o.id` claim. RLS via `SET LOCAL app.current_organization_id`. Dev bypass: `X-DEV-ACTOR` header.
 
@@ -205,6 +205,7 @@ Background workers ingest all external time-series data into hypertables. Routes
 | `bis_ingestion` | 900_014 | global | `bis_statistics` (1yr chunks) | BIS SDMX API (credit gap, DSR, property) | Quarterly |
 | `imf_ingestion` | 900_015 | global | `imf_weo_forecasts` (1yr chunks) | IMF DataMapper API (GDP, inflation, fiscal) | Quarterly |
 | `drift_check` | 42 | org | `strategy_drift_alerts` | Computed (DTW drift) | Daily |
+| `portfolio_nav_synthesizer` | 900_030 | org | `model_portfolio_nav` (1mo chunks) | Computed (weighted NAV from nav_timeseries) | Daily |
 
 **Credit market_data** reads all macro data from `macro_data` hypertable (zero FRED API calls at runtime, `fred_client.py` eliminated). Regional Case-Shiller (20 metros) also from `macro_data`.
 

@@ -10,6 +10,7 @@ from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.lipper import LipperRating
 from app.domains.wealth.models.macro import MacroData
 from app.domains.wealth.models.model_portfolio import ModelPortfolio
+from app.domains.wealth.models.model_portfolio_nav import ModelPortfolioNav
 from app.domains.wealth.models.nav import NavTimeseries
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.models.rebalance import RebalanceEvent
@@ -32,6 +33,7 @@ __all__ = [
     "LipperRating",
     "MacroData",
     "ModelPortfolio",
+    "ModelPortfolioNav",
     "NavTimeseries",
     "PortfolioSnapshot",
     "RebalanceEvent",

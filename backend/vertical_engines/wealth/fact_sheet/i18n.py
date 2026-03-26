@@ -66,6 +66,13 @@ LABELS: dict[str, dict[str, str]] = {
         "rebalance_history": "Histórico de Rebalanceamento",
         "rebalance_date": "Data",
         "rebalance_reason": "Motivo",
+        # Fee Drag
+        "fee_drag_analysis": "Análise de Arrasto de Taxas",
+        "fd_instruments": "Instrumentos",
+        "fd_gross_return": "Retorno Bruto",
+        "fd_net_return": "Retorno Líquido",
+        "fd_drag_ratio": "Arrasto (%)",
+        "fd_inefficient": "Ineficientes",
         # ESG
         "esg_section": "ESG",
         "esg_placeholder": "Dados ESG serão incorporados quando disponíveis.",
@@ -155,6 +162,13 @@ LABELS: dict[str, dict[str, str]] = {
         "rebalance_history": "Rebalance History",
         "rebalance_date": "Date",
         "rebalance_reason": "Reason",
+        # Fee Drag
+        "fee_drag_analysis": "Fee Drag Analysis",
+        "fd_instruments": "Instruments",
+        "fd_gross_return": "Gross Return",
+        "fd_net_return": "Net Return",
+        "fd_drag_ratio": "Drag (%)",
+        "fd_inefficient": "Inefficient",
         # ESG
         "esg_section": "ESG",
         "esg_placeholder": "ESG data will be incorporated when available.",

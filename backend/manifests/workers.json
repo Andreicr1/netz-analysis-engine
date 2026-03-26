@@ -51,8 +51,18 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/workers/run-nport-fund-discovery",
+    "name": "trigger_run_nport_fund_discovery"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/workers/run-nport-ingestion",
     "name": "trigger_run_nport_ingestion"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-nport-ticker-resolution",
+    "name": "trigger_run_nport_ticker_resolution"
   },
   {
     "method": "POST",

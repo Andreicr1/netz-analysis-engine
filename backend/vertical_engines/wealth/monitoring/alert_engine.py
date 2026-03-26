@@ -156,7 +156,7 @@ def _check_rebalance_overdue(db: Session, organization_id: str) -> list[Alert]:
     latest_rebalances = (
         db.query(
             RebalanceEvent.profile,
-            func.max(RebalanceEvent.trigger_date).label("latest_date"),
+            func.max(RebalanceEvent.event_date).label("latest_date"),
         )
         .filter(
             RebalanceEvent.organization_id == organization_id,
