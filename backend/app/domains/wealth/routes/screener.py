@@ -7,6 +7,8 @@ GET  /screener/results  — latest results with filters
 GET  /screener/results/{instrument_id} — screening history
 GET  /screener/search   — global instrument search (server-side)
 GET  /screener/facets   — facet counts for filter sidebar
+GET  /screener/securities         — global equity/ETF discovery (no RLS)
+GET  /screener/securities/facets  — facets for global securities
 POST /screener/import-esma/{isin} — import ESMA fund to universe
 """
 
@@ -20,6 +22,7 @@ from datetime import datetime, timezone
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import Float, String, case, literal, select, union_all
 from sqlalchemy import func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +33,18 @@ from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_curr
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.screening_result import ScreeningResult, ScreeningRun
+from app.domains.wealth.queries.catalog_sql import (
+    CatalogFilters,
+    build_catalog_facets_query,
+    build_catalog_query,
+)
+from app.domains.wealth.schemas.catalog import (
+    CatalogFacetItem,
+    CatalogFacets,
+    DisclosureMatrix,
+    UnifiedCatalogPage,
+    UnifiedFundItem,
+)
 from app.domains.wealth.schemas.instrument_search import (
     EsmaImportRequest,
     FacetItem,
@@ -906,3 +921,402 @@ async def import_sec_security(
         "ticker": instrument.ticker,
         "status": "imported",
     }
+
+
+# ── Unified Fund Catalog ──────────────────────────────────────────────
+
+
+def _build_disclosure(universe: str, has_holdings: bool, has_nav: bool) -> DisclosureMatrix:
+    """Build DisclosureMatrix from universe type and computed flags."""
+    if universe == "registered_us":
+        return DisclosureMatrix(
+            has_holdings=has_holdings,
+            has_nav_history=has_nav,
+            has_quant_metrics=has_nav,
+            has_private_fund_data=False,
+            has_style_analysis=has_holdings,
+            has_13f_overlay=True,
+            has_peer_analysis=True,
+            holdings_source="nport" if has_holdings else None,
+            nav_source="yfinance" if has_nav else None,
+            aum_source="nport",
+        )
+    elif universe == "private_us":
+        return DisclosureMatrix(
+            has_holdings=False,
+            has_nav_history=False,
+            has_quant_metrics=False,
+            has_private_fund_data=True,
+            has_style_analysis=False,
+            has_13f_overlay=False,
+            has_peer_analysis=False,
+            holdings_source=None,
+            nav_source=None,
+            aum_source="schedule_d",
+        )
+    else:  # ucits_eu
+        return DisclosureMatrix(
+            has_holdings=False,
+            has_nav_history=has_nav,
+            has_quant_metrics=has_nav,
+            has_private_fund_data=False,
+            has_style_analysis=False,
+            has_13f_overlay=False,
+            has_peer_analysis=has_nav,
+            holdings_source=None,
+            nav_source="yfinance" if has_nav else None,
+            aum_source="yfinance" if has_nav else None,
+        )
+
+
+# ── Global Securities Discovery (Mandate 1: no RLS, no instruments_universe) ──
+
+
+class SecurityItem(BaseModel):
+    """A tradeable security from the global SEC CUSIP/ticker map."""
+
+    cusip: str
+    ticker: str | None = None
+    name: str
+    security_type: str
+    exchange: str | None = None
+    asset_class: str  # equity | real_estate
+    figi: str | None = None
+    is_tradeable: bool = True
+
+
+class SecurityPage(BaseModel):
+    items: list[SecurityItem]
+    total: int
+    page: int
+    page_size: int
+    has_next: bool
+
+
+class SecurityFacets(BaseModel):
+    security_types: list[FacetItem] = []
+    exchanges: list[FacetItem] = []
+    total: int = 0
+
+
+@router.get(
+    "/securities",
+    response_model=SecurityPage,
+    summary="Global equity/ETF discovery from SEC CUSIP map (no RLS)",
+)
+@route_cache(ttl=120, key_prefix="screener:securities", global_key=True)
+async def get_global_securities(
+    q: str | None = Query(None, description="Search by name, ticker, or CUSIP"),
+    security_type: str | None = Query(
+        None, description="Common Stock, ETP, ADR, REIT, MLP, Closed-End Fund",
+    ),
+    exchange: str | None = Query(None, description="NYSE, NASDAQ, etc."),
+    asset_class: str | None = Query(
+        None, description="equity or real_estate",
+    ),
+    sort: str = Query("name_asc", description="name_asc | name_desc"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db_with_rls),
+) -> SecurityPage:
+    """Query sec_cusip_ticker_map directly — global, no tenant filter.
+
+    This is the correct screener endpoint for equity/ETF discovery.
+    instruments_universe (RLS) is the DESTINATION, not the source.
+    """
+    ac_case = case(
+        (SecCusipTickerMap.security_type == "REIT", literal("real_estate")),
+        else_=literal("equity"),
+    )
+
+    stmt = (
+        select(
+            SecCusipTickerMap.cusip,
+            SecCusipTickerMap.ticker,
+            SecCusipTickerMap.issuer_name.label("name"),
+            SecCusipTickerMap.security_type,
+            SecCusipTickerMap.exchange,
+            ac_case.label("asset_class"),
+            SecCusipTickerMap.figi,
+            SecCusipTickerMap.is_tradeable,
+            sa_func.count().over().label("_total"),
+        )
+        .where(SecCusipTickerMap.is_tradeable.is_(True))
+    )
+
+    if q:
+        pattern = f"%{q}%"
+        stmt = stmt.where(
+            SecCusipTickerMap.issuer_name.ilike(pattern)
+            | SecCusipTickerMap.ticker.ilike(pattern)
+            | (SecCusipTickerMap.cusip == q.upper())
+        )
+    if security_type:
+        stmt = stmt.where(SecCusipTickerMap.security_type == security_type)
+    if exchange:
+        stmt = stmt.where(SecCusipTickerMap.exchange == exchange)
+    if asset_class:
+        stmt = stmt.where(ac_case == asset_class)
+
+    order = SecCusipTickerMap.issuer_name.asc() if sort == "name_asc" else SecCusipTickerMap.issuer_name.desc()
+    offset = (page - 1) * page_size
+    stmt = stmt.order_by(order).offset(offset).limit(page_size)
+
+    rows = (await db.execute(stmt)).all()
+    total = rows[0]._total if rows else 0
+
+    items = [
+        SecurityItem(
+            cusip=r.cusip,
+            ticker=r.ticker,
+            name=r.name or "",
+            security_type=r.security_type or "unknown",
+            exchange=r.exchange,
+            asset_class=r.asset_class,
+            figi=r.figi,
+            is_tradeable=r.is_tradeable,
+        )
+        for r in rows
+    ]
+
+    return SecurityPage(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        has_next=(offset + page_size) < total,
+    )
+
+
+@router.get(
+    "/securities/facets",
+    response_model=SecurityFacets,
+    summary="Facet counts for global securities",
+)
+@route_cache(ttl=300, key_prefix="screener:securities:facets", global_key=True)
+async def get_securities_facets(
+    q: str | None = Query(None),
+    db: AsyncSession = Depends(get_db_with_rls),
+) -> SecurityFacets:
+    stmt = (
+        select(
+            SecCusipTickerMap.security_type,
+            SecCusipTickerMap.exchange,
+            sa_func.count().label("cnt"),
+        )
+        .where(SecCusipTickerMap.is_tradeable.is_(True))
+        .group_by(SecCusipTickerMap.security_type, SecCusipTickerMap.exchange)
+    )
+    if q:
+        pattern = f"%{q}%"
+        stmt = stmt.where(
+            SecCusipTickerMap.issuer_name.ilike(pattern)
+            | SecCusipTickerMap.ticker.ilike(pattern)
+        )
+
+    rows = (await db.execute(stmt)).all()
+
+    type_counts: dict[str, int] = {}
+    exchange_counts: dict[str, int] = {}
+    grand_total = 0
+
+    for r in rows:
+        cnt = r.cnt
+        grand_total += cnt
+        st = r.security_type or "unknown"
+        type_counts[st] = type_counts.get(st, 0) + cnt
+        ex = r.exchange or "Other"
+        exchange_counts[ex] = exchange_counts.get(ex, 0) + cnt
+
+    def to_facets(counts: dict[str, int]) -> list[FacetItem]:
+        return sorted(
+            [FacetItem(value=k, label=k, count=v) for k, v in counts.items() if v > 0],
+            key=lambda f: -f.count,
+        )
+
+    return SecurityFacets(
+        security_types=to_facets(type_counts),
+        exchanges=to_facets(exchange_counts),
+        total=grand_total,
+    )
+
+
+@router.get(
+    "/catalog",
+    response_model=UnifiedCatalogPage,
+    summary="Unified fund catalog across US registered, US private, and EU UCITS",
+)
+@route_cache(ttl=120, key_prefix="screener:catalog", global_key=True)
+async def get_catalog(
+    q: str | None = Query(None, description="Text search (name, ticker, ISIN, manager)"),
+    region: str | None = Query(None, description="US or EU"),
+    fund_universe: str | None = Query(None, description="registered | private | ucits | all"),
+    fund_type: str | None = Query(None, description="mutual_fund, etf, hedge_fund, pe, vc, ucits"),
+    aum_min: float | None = Query(None, ge=0, description="Minimum AUM in USD"),
+    has_nav: bool | None = Query(None, description="Only funds with NAV history (ticker)"),
+    domicile: str | None = Query(None),
+    manager: str | None = Query(None, description="Manager name text search"),
+    sort: str = Query("name_asc", description="name_asc | name_desc | aum_desc | aum_asc"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db_with_rls),
+) -> UnifiedCatalogPage:
+    filters = CatalogFilters(
+        q=q,
+        region=region,
+        fund_universe=fund_universe,
+        fund_type=fund_type,
+        aum_min=aum_min,
+        has_nav=has_nav,
+        domicile=domicile,
+        manager=manager,
+        sort=sort,
+        page=page,
+        page_size=page_size,
+    )
+
+    stmt = build_catalog_query(filters)
+    if stmt is None:
+        return UnifiedCatalogPage(
+            items=[], total=0, page=page, page_size=page_size, has_next=False,
+        )
+
+    rows = (await db.execute(stmt)).all()
+
+    total = rows[0]._total if rows else 0
+    offset = (page - 1) * page_size
+
+    items: list[UnifiedFundItem] = []
+    for r in rows:
+        aum_val: float | None = None
+        if r.aum is not None:
+            try:
+                aum_val = float(r.aum)
+            except (ValueError, TypeError):
+                pass
+
+        inception: str | None = None
+        if r.inception_date is not None:
+            try:
+                inception = r.inception_date
+            except (ValueError, TypeError):
+                pass
+
+        items.append(
+            UnifiedFundItem(
+                external_id=str(r.external_id),
+                universe=r.universe,
+                name=r.name or "",
+                ticker=r.ticker,
+                isin=r.isin,
+                region=r.region,
+                fund_type=r.fund_type or "unknown",
+                domicile=r.domicile,
+                currency=r.currency,
+                manager_name=r.manager_name,
+                manager_id=r.manager_id,
+                aum=aum_val,
+                inception_date=inception,
+                total_shareholder_accounts=r.total_shareholder_accounts,
+                investor_count=r.investor_count,
+                disclosure=_build_disclosure(
+                    universe=r.universe,
+                    has_holdings=bool(r.has_holdings),
+                    has_nav=bool(r.has_nav),
+                ),
+            )
+        )
+
+    return UnifiedCatalogPage(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        has_next=(offset + page_size) < total,
+    )
+
+
+@router.get(
+    "/catalog/facets",
+    response_model=CatalogFacets,
+    summary="Facet counts for the unified fund catalog filters",
+)
+@route_cache(ttl=300, key_prefix="screener:catalog:facets", global_key=True)
+async def get_catalog_facets(
+    q: str | None = Query(None),
+    region: str | None = Query(None),
+    fund_universe: str | None = Query(None),
+    fund_type: str | None = Query(None),
+    aum_min: float | None = Query(None, ge=0),
+    has_nav: bool | None = Query(None),
+    domicile: str | None = Query(None),
+    manager: str | None = Query(None),
+    db: AsyncSession = Depends(get_db_with_rls),
+) -> CatalogFacets:
+    filters = CatalogFilters(
+        q=q,
+        region=region,
+        fund_universe=fund_universe,
+        fund_type=fund_type,
+        aum_min=aum_min,
+        has_nav=has_nav,
+        domicile=domicile,
+        manager=manager,
+    )
+
+    stmt = build_catalog_facets_query(filters)
+    if stmt is None:
+        return CatalogFacets(total=0)
+
+    rows = (await db.execute(stmt)).all()
+
+    universe_counts: dict[str, int] = {}
+    region_counts: dict[str, int] = {}
+    type_counts: dict[str, int] = {}
+    domicile_counts: dict[str, int] = {}
+    grand_total = 0
+
+    for r in rows:
+        cnt = r.cnt
+        grand_total += cnt
+
+        u = r.universe or "unknown"
+        universe_counts[u] = universe_counts.get(u, 0) + cnt
+
+        reg = r.region or "unknown"
+        region_counts[reg] = region_counts.get(reg, 0) + cnt
+
+        ft = r.fund_type or "unknown"
+        type_counts[ft] = type_counts.get(ft, 0) + cnt
+
+        dom = r.domicile
+        if dom:
+            domicile_counts[dom] = domicile_counts.get(dom, 0) + cnt
+
+    _UNIVERSE_LABELS = {
+        "registered_us": "US Registered",
+        "private_us": "US Private",
+        "ucits_eu": "EU UCITS",
+    }
+
+    def to_facets(counts: dict[str, int], labels: dict[str, str] | None = None) -> list[CatalogFacetItem]:
+        return sorted(
+            [
+                CatalogFacetItem(
+                    value=k,
+                    label=(labels or {}).get(k, k),
+                    count=v,
+                )
+                for k, v in counts.items()
+                if v > 0
+            ],
+            key=lambda f: -f.count,
+        )
+
+    return CatalogFacets(
+        universes=to_facets(universe_counts, _UNIVERSE_LABELS),
+        regions=to_facets(region_counts),
+        fund_types=to_facets(type_counts),
+        domiciles=to_facets(domicile_counts),
+        total=grand_total,
+    )
