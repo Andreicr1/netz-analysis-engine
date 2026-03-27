@@ -543,6 +543,7 @@ async def _generate_allocation_proposals(
             from decimal import Decimal as D
 
             row = StrategicAllocation(
+                organization_id=org_id,
                 profile=profile_name,
                 block_id=bp.block_id,
                 target_weight=D(str(bp.proposed_weight)),
