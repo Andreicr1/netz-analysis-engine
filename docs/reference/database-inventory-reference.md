@@ -1,6 +1,6 @@
 # Database Inventory Reference
 
-**Last updated:** 2026-03-24
+**Last updated:** 2026-03-27
 **Database:** Timescale Cloud (PostgreSQL 16 + TimescaleDB + pgvector)
 **Total tables:** 124 | **Total data rows:** ~3.4M across key tables
 
@@ -10,7 +10,7 @@
 
 The Netz Analysis Engine database aggregates financial data from 7 authoritative sources spanning US institutional asset management (SEC), European UCITS funds (ESMA), and global macroeconomic indicators (FRED, Treasury, BIS, IMF, OFR). The database provides:
 
-- **976,980 US investment managers** from SEC FOIA bulk data, including 15,963 registered investment advisers managing $38+ trillion in combined AUM
+- **976,980 US investment managers** from SEC FOIA bulk data + IAPD XML enrichment, including 15,963 registered investment advisers managing $50+ trillion in combined AUM, with 99.5% Form ADV Part 1A coverage on fund managers (AUM, fees, client types, compliance)
 - **10,436 European UCITS funds** from 658 ESMA-registered managers across 25 countries
 - **1.09M institutional holdings** (13F-HR) from 12 major institutional investors, with 25 years of quarterly history
 - **132,823 fund portfolio holdings** (N-PORT) from 69 US registered investment companies
@@ -26,11 +26,14 @@ The Netz Analysis Engine database aggregates financial data from 7 authoritative
 
 | Attribute | Value |
 |---|---|
-| **Source** | SEC FOIA Bulk CSV (IA_FIRM_SEC_Feed, IA_FIRM_STATE_Feed) |
+| **Source** | SEC FOIA Bulk CSV + IAPD XML Feeds (Form ADV Part 1A structured data) |
 | **Worker** | `sec_adv_ingestion` (lock ID 900_022) |
-| **Frequency** | Monthly |
+| **Enrichment** | `iapd_xml_parser.py` — streaming XML parser for IA_FIRM_SEC_Feed / IA_FIRM_STATE_Feed |
+| **Frequency** | Monthly (CSV bulk) + on-demand (XML enrichment via env vars or CLI) |
 | **Table** | `sec_managers` |
 | **Rows** | 976,980 |
+
+**Data sources:** The FOIA CSV provides the base population (976,980 entities). The IAPD XML feeds (Form ADV Part 1A) enrich with structured Item 5 (AUM, accounts, fees, client types), Item 1 (website), Item 11 (compliance disclosures), and filing metadata. SEC feed (23,037 SEC-registered firms) updated 16,595 rows; STATE feed (21,532 state-registered firms) updated 237 additional rows.
 
 #### Registration Breakdown
 
@@ -46,27 +49,42 @@ The Netz Analysis Engine database aggregates financial data from 7 authoritative
 
 | AUM Bracket | Count | Notable Firms |
 |---|---|---|
-| > $100B | 210 | Vanguard ($7.9T), Fidelity ($3.96T), Capital Research ($3.3T) |
-| $10B - $100B | 957 | |
-| $1B - $10B | 3,553 | |
-| $100M - $1B | 9,452 | |
-| < $100M | 1,149 | |
-| No AUM reported | 642 | |
+| > $100B | 239 | Vanguard ($10.2T), Fidelity ($4.73T), Capital Research ($3.75T) |
+| $10B - $100B | 1,039 | |
+| $1B - $10B | 4,006 | |
+| $100M - $1B | 10,179 | |
+| < $100M | 1,249 | |
+| No AUM reported | 776 | |
 
 #### Top 10 Registered Advisers by AUM
 
 | Firm | State | AUM | Accounts |
 |---|---|---|---|
-| Vanguard Group | PA | $7.91T | 209 |
-| Fidelity Management & Research | MA | $3.96T | 31,349 |
-| Capital Research and Management | CA | $3.32T | 22,262 |
-| BlackRock Fund Advisors | CA | $3.05T | 522 |
-| PIMCO | CA | $2.62T | 2,811 |
-| J.P. Morgan Investment Management | NY | $2.55T | 92,898 |
-| T. Rowe Price Associates | MD | $1.75T | 4,696 |
-| Goldman Sachs Asset Management | NY | $1.66T | 189,311 |
-| Morgan Stanley | NY | $1.40T | 2,405,783 |
-| BlackRock Financial Management | NY | $1.29T | 2,184 |
+| Vanguard Group | PA | $10.25T | 212 |
+| Fidelity Management & Research | MA | $4.73T | 36,290 |
+| Capital Research and Management | CA | $3.75T | 22,833 |
+| BlackRock Fund Advisors | CA | $3.54T | 541 |
+| PIMCO | CA | $2.99T | 2,793 |
+| J.P. Morgan Investment Management | NY | $2.99T | 114,499 |
+| Goldman Sachs Asset Management | NY | $2.06T | 220,874 |
+| T. Rowe Price Associates | MD | $1.93T | 5,924 |
+| Merrill Lynch, Pierce, Fenner & Smith | NY | $1.78T | 3,253,265 |
+| Morgan Stanley | NY | $1.65T | 2,539,760 |
+
+#### Fund Manager Enrichment Coverage (IAPD XML — 2026-03-27)
+
+5,657 fund managers (advisers with private_fund_count > 0):
+
+| Field | Populated | Coverage | Source |
+|---|---|---|---|
+| `aum_total` | 5,629 | 99.5% | Item 5F — Q5F2C |
+| `aum_discretionary` | 5,629 | 99.5% | Item 5F — Q5F2A |
+| `total_accounts` | 5,629 | 99.5% | Item 5F — Q5F2F |
+| `fee_types` | 5,649 | 99.9% | Item 5E — Y/N flags → JSON array |
+| `client_types` | 5,635 | 99.6% | Item 5D — count + AUM per type → JSONB |
+| `website` | 5,232 | 92.5% | Item 1 — WebAddrs |
+| `compliance_disclosures` | 5,652 | 99.9% | Item 11 — count of "Y" answers |
+| `last_adv_filed_at` | 5,652 | 99.9% | Filing/@Dt |
 
 #### Geographic Distribution (Top US States)
 
@@ -82,6 +100,13 @@ The Netz Analysis Engine database aggregates financial data from 7 authoritative
 #### Available Fields per Manager
 
 `crd_number`, `cik`, `firm_name`, `sec_number`, `registration_status`, `aum_total`, `aum_discretionary`, `aum_non_discretionary`, `total_accounts`, `fee_types`, `client_types`, `state`, `country`, `website`, `compliance_disclosures`, `last_adv_filed_at`
+
+#### Brochure & Team Extraction (ADV Part 2A/2B)
+
+| Table | Description | Source |
+|---|---|---|
+| `sec_manager_brochure_text` | 18 classified sections per brochure (Items 4-18 + philosophy/risk/ESG + full_brochure fallback) | ADV Part 2A PDF (PyMuPDF extraction) |
+| `sec_manager_team` | Key personnel: name, title, certifications (CFA/CFP/CAIA/CPA/FRM/CIPM), years_experience, bio_summary | ADV Part 2B supplement (regex extraction) |
 
 ---
 
@@ -609,7 +634,7 @@ CVaR current, CVaR limit, CVaR utilized %, trigger status (ok/warning/breach), c
 | `ofr_ingestion` | 900_012 | global | Weekly | OFR API | `ofr_hedge_fund_data` |
 | `nport_ingestion` | 900_018 | global | Weekly | SEC EDGAR | `sec_nport_holdings` |
 | `sec_13f_ingestion` | 900_021 | global | Weekly | SEC EDGAR | `sec_13f_holdings`, `sec_13f_diffs` |
-| `sec_adv_ingestion` | 900_022 | global | Monthly | SEC FOIA CSV | `sec_managers`, `sec_manager_funds` |
+| `sec_adv_ingestion` | 900_022 | global | Monthly | SEC FOIA CSV + IAPD XML | `sec_managers`, `sec_manager_funds` |
 | `esma_ingestion` | — | global | Daily | ESMA Register | `esma_funds`, `esma_managers` |
 | `bis_ingestion` | 900_014 | global | Quarterly | BIS SDMX API | `bis_statistics` |
 | `imf_ingestion` | 900_015 | global | Quarterly | IMF DataMapper | `imf_weo_forecasts` |
@@ -620,8 +645,9 @@ CVaR current, CVaR limit, CVaR utilized %, trigger status (ok/warning/breach), c
 
 | Dimension | Metric | Value |
 |---|---|---|
-| **Coverage — US Managers** | Registered investment advisers | 15,963 |
-| **Coverage — US Managers** | Combined RIA AUM | $38+ trillion |
+| **Coverage — US Managers** | Registered investment advisers | 15,963 (16,712 with AUM data from IAPD XML) |
+| **Coverage — US Managers** | Combined RIA AUM | $50+ trillion (refreshed via IAPD XML 2026-03-24) |
+| **Coverage — US Fund Managers** | Fund managers with Form ADV Part 1A data | 5,629 / 5,657 (99.5%) |
 | **Coverage — US Institutional** | 13F filers tracked | 12 institutions |
 | **Coverage — US Institutional** | Combined latest-quarter AUM | $8.9+ trillion |
 | **Coverage — European Funds** | UCITS funds | 10,436 |

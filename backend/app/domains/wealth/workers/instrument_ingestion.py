@@ -45,6 +45,8 @@ _LOOKBACK_TO_PERIOD = {
     365: "1y",
     730: "2y",
     1095: "3y",
+    1825: "5y",
+    3650: "10y",
 }
 
 
@@ -53,12 +55,12 @@ def _resolve_period(lookback_days: int) -> str:
     for threshold, period in sorted(_LOOKBACK_TO_PERIOD.items()):
         if lookback_days <= threshold:
             return period
-    return "3y"
+    return "10y"
 
 
 async def run_instrument_ingestion(
     org_id: uuid.UUID,
-    lookback_days: int = 30,
+    lookback_days: int = 3650,
 ) -> dict[str, int | list[str]]:
     """Fetch NAV history for all active instruments in the universe.
 

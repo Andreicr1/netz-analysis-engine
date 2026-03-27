@@ -346,7 +346,7 @@ async def trigger_run_screening_batch(
 )
 async def trigger_run_instrument_ingestion(
     background_tasks: BackgroundTasks,
-    lookback_days: int = Query(default=30, ge=1, le=1095),
+    lookback_days: int = Query(default=3650, ge=1, le=3650),
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
 ) -> WorkerScheduledResponse:
@@ -377,6 +377,7 @@ async def trigger_run_instrument_ingestion(
 )
 async def trigger_run_benchmark_ingest(
     background_tasks: BackgroundTasks,
+    lookback_days: int = Query(default=3650, ge=1, le=3650),
     user: CurrentUser = Depends(get_current_user),
     actor: Actor = Depends(get_actor),
 ) -> WorkerScheduledResponse:
@@ -386,7 +387,7 @@ async def trigger_run_benchmark_ingest(
 
     return await _dispatch_worker(
         background_tasks, "run-benchmark-ingest", "global",
-        run_benchmark_ingest,
+        run_benchmark_ingest, lookback_days,
         timeout_seconds=_HEAVY_WORKER_TIMEOUT,
     )
 

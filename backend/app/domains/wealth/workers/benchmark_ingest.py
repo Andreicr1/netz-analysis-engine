@@ -62,7 +62,7 @@ def _batch_download(tickers: list[str], start: str, end: str):
     )
 
 
-async def run_benchmark_ingest(lookback_days: int = 730) -> dict[str, int | list[str]]:
+async def run_benchmark_ingest(lookback_days: int = 3650) -> dict[str, int | list[str]]:
     """Fetch benchmark NAV for all active allocation blocks.
 
     Returns dict with blocks_updated, rows_upserted, stale_blocks, skipped_tickers.
