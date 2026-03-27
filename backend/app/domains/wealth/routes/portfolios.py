@@ -296,23 +296,40 @@ async def execute_rebalance(
 
     # Get current snapshot as basis for new weights
     current_snap = await get_latest_snapshot(db, profile)
+    today = date.today()
 
-    # Create new snapshot with the event's proposed weights
-    new_snap = PortfolioSnapshot(
-        organization_id=org_id,
-        profile=profile,
-        snapshot_date=date.today(),
-        weights=event.weights_after or (current_snap.weights if current_snap else None),
-        fund_selection=current_snap.fund_selection if current_snap else None,
-        cvar_current=current_snap.cvar_current if current_snap else None,
-        cvar_limit=current_snap.cvar_limit if current_snap else None,
-        cvar_utilized_pct=current_snap.cvar_utilized_pct if current_snap else None,
-        trigger_status=current_snap.trigger_status if current_snap else "ok",
-        regime=current_snap.regime if current_snap else None,
-        core_weight=current_snap.core_weight if current_snap else None,
-        satellite_weight=current_snap.satellite_weight if current_snap else None,
+    # Check if snapshot already exists for today (e.g. from construct)
+    existing_stmt = select(PortfolioSnapshot).where(
+        PortfolioSnapshot.organization_id == org_id,
+        PortfolioSnapshot.profile == profile,
+        PortfolioSnapshot.snapshot_date == today,
     )
-    db.add(new_snap)
+    existing_result = await db.execute(existing_stmt)
+    existing_snap = existing_result.scalar_one_or_none()
+
+    new_weights = event.weights_after or (current_snap.weights if current_snap else None)
+
+    if existing_snap:
+        # Update existing snapshot with rebalanced weights
+        existing_snap.weights = new_weights
+        existing_snap.trigger_status = "rebalance_executed"
+        new_snap = existing_snap
+    else:
+        new_snap = PortfolioSnapshot(
+            organization_id=org_id,
+            profile=profile,
+            snapshot_date=today,
+            weights=new_weights,
+            fund_selection=current_snap.fund_selection if current_snap else None,
+            cvar_current=current_snap.cvar_current if current_snap else None,
+            cvar_limit=current_snap.cvar_limit if current_snap else None,
+            cvar_utilized_pct=current_snap.cvar_utilized_pct if current_snap else None,
+            trigger_status="rebalance_executed",
+            regime=current_snap.regime if current_snap else None,
+            core_weight=current_snap.core_weight if current_snap else None,
+            satellite_weight=current_snap.satellite_weight if current_snap else None,
+        )
+        db.add(new_snap)
 
     # Transition event to executed
     event.status = "executed"
