@@ -97,7 +97,14 @@ def generate_chapter(
             max_tokens=ch_def["max_tokens"],
         )
 
-        raw_content = response.get("content") or response.get("text") or ""
+        logger.info("chapter_llm_response_keys", chapter_tag=chapter_tag, keys=list(response.keys())[:10])
+        raw_content = response.get("content") or response.get("content_md") or response.get("text") or response.get("analysis") or response.get("markdown") or ""
+        if not raw_content:
+            # Try first string value as fallback
+            for v in response.values():
+                if isinstance(v, str) and len(v) > 100:
+                    raw_content = v
+                    break
 
         # Sanitize LLM output (6-stage pipeline)
         content_md = sanitize_llm_text(raw_content) if raw_content else None
