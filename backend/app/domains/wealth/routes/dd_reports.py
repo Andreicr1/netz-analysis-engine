@@ -204,7 +204,7 @@ async def trigger_dd_report(
 
     # Register job for SSE
     job_id = f"dd:{org_id}:{report_id}"
-    await register_job_owner(job_id, org_id)
+    await register_job_owner(job_id, str(org_id))
 
     # Backpressure: reject if too many concurrent content tasks
     await require_content_slot()
@@ -335,7 +335,7 @@ async def regenerate_dd_report(
     await db.flush()
 
     job_id = f"dd:{org_id}:{report_id}"
-    await register_job_owner(job_id, org_id)
+    await register_job_owner(job_id, str(org_id))
 
     # Backpressure: reject if too many concurrent content tasks
     await require_content_slot()
