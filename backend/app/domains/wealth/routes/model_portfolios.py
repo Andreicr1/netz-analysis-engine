@@ -383,7 +383,7 @@ async def _run_construction_async(
         )
         .where(
             (StrategicAllocation.effective_to.is_(None))
-            | (StrategicAllocation.effective_to >= today)
+            | (StrategicAllocation.effective_to > today)
         )
     )
     alloc_result = await db.execute(alloc_stmt)
@@ -391,6 +391,14 @@ async def _run_construction_async(
 
     if not allocations:
         return {"funds": [], "profile": profile, "error": "No strategic allocation defined"}
+
+    # Defense in depth: collapse duplicate active rows to the latest version per block.
+    seen_blocks: dict[str, StrategicAllocation] = {}
+    for allocation in allocations:
+        current = seen_blocks.get(allocation.block_id)
+        if current is None or allocation.effective_from > current.effective_from:
+            seen_blocks[allocation.block_id] = allocation
+    allocations = list(seen_blocks.values())
 
     strategic_targets = {a.block_id: float(a.target_weight) for a in allocations}
 
