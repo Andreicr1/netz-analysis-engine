@@ -20,7 +20,7 @@ make down               # docker-compose down
 # Frontend (pnpm + Turborepo)
 make dev-credit         # Credit frontend dev server
 make dev-wealth         # Wealth frontend dev server
-make dev-admin          # Admin frontend dev server
+make dev-admin          # Admin frontend dev server (being retired → /settings in Wealth+Credit)
 make dev-all            # All packages in parallel (Turborepo)
 make build-all          # Build all packages (topological order)
 make check-all          # Check all frontend packages
@@ -36,7 +36,7 @@ backend/
     domains/
       credit/       ← analytical modules only (deals, portfolio, documents, reporting, dashboard, dataroom, actions, global_agent)
         modules/ai/ ← IC memos, deep review, extraction, pipeline deals, copilot, compliance
-      wealth/       ← models, routes, schemas, workers (26 tables, 15 workers, 18 route modules)
+      wealth/       ← models, routes, schemas, workers (28 tables, 17 workers, 18 route modules)
     services/
       storage_client.py ← StorageClient abstraction (LocalStorage dev, R2 prod, ADLS deprecated)
     shared/         ← enums, exceptions
@@ -47,7 +47,7 @@ backend/
     ingestion/      ← pipeline_ingest_runner, document_scanner, registry_bridge, monitoring
     validation/     ← vector_integrity_guard, deep_review validation, eval runner, evidence quality
     prompts/        ← Jinja2 templates (Netz IP — never expose to clients)
-  quant_engine/     ← CVaR, regime, optimizer, scoring, drift, rebalance, FRED, Treasury, OFR, regional macro, stress severity, momentum
+  quant_engine/     ← CVaR, regime, optimizer (CLARABEL 4-phase cascade + robust SOCP), Black-Litterman, factor model (PCA), GARCH, scoring, drift, rebalance, FRED, Treasury, OFR, regional macro, stress severity, momentum
   vertical_engines/
     base/           ← BaseAnalyzer ABC — shared interface all verticals implement
     credit/         ← 12 modular packages (Wave 1 complete):
@@ -64,8 +64,9 @@ backend/
       retrieval/    ← retrieval governance
       sponsor/      ← sponsor engine
       underwriting/ ← underwriting artifact
-    wealth/         ← 14 modular packages + 6 standalone engines:
+    wealth/         ← 15 modular packages + 6 standalone engines:
       dd_report/    ← 8-chapter DD report engine (evidence, confidence scoring, critic)
+      long_form_report/ ← multi-chapter long-form DD report (SSE streaming, Semaphore(2))
       fact_sheet/   ← PDF renderers (Executive/Institutional, PT/EN i18n)
       screener/     ← 3-layer deterministic screening (eliminatory → mandate fit → quant)
       correlation/  ← rolling correlation, Marchenko-Pastur denoising, absorption ratio
@@ -88,12 +89,15 @@ backend/
 profiles/           ← YAML analysis profiles — SEED DATA ONLY (runtime config in PostgreSQL)
 calibration/        ← YAML quant configs — SEED DATA ONLY (runtime config in PostgreSQL)
 packages/ui/        ← @netz/ui (Tailwind tokens, shadcn-svelte, layouts)
+data_providers/
+  sec/              ← SEC EDGAR data providers (adv_service, thirteenf_service, nport_service, iapd_xml_parser)
 frontends/
   credit/           ← SvelteKit "netz-credit-intelligence"
   wealth/           ← SvelteKit "netz-wealth-os"
+  admin/            ← SvelteKit admin (BEING RETIRED — migrating to /settings in Wealth+Credit)
 ```
 
-**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0056_wealth_content`.
+**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0059_wealth_vector_chunks`.
 
 **Auth:** Clerk JWT v2. `organization_id` from `o.id` claim. RLS via `SET LOCAL app.current_organization_id`. Dev bypass: `X-DEV-ACTOR` header.
 
@@ -105,7 +109,7 @@ frontends/
 
 **Classification:** Three-layer hybrid classifier (no external ML APIs). Layer 1: filename + keyword rules (~60% of docs). Layer 2: TF-IDF + cosine similarity (~30%). Layer 3: LLM fallback (~10%). Cross-encoder local reranker for IC memo evidence (replaced Cohere).
 
-**1439+ tests.** All passing. Enforced by `make check` (lint + typecheck + test). CI: GitHub Actions (`pip install -e ".[dev,ai,quant]"`).
+**2900+ tests.** All passing. Enforced by `make check` (lint + typecheck + test). CI: GitHub Actions (`pip install -e ".[dev,ai,quant]"`).
 
 ## Product Scope — Analytical Core Only
 
@@ -135,7 +139,7 @@ The engine contains only analytical domains. Operational modules were intentiona
 - **expire_on_commit=False:** Always. Prevents implicit I/O in async context.
 - **lazy="raise":** Set on ALL relationships. Forces explicit `selectinload()`/`joinedload()`.
 - **RLS subselect:** All RLS policies must use `(SELECT current_setting(...))` not bare `current_setting()`. Without subselect, per-row evaluation causes 1000x slowdown.
-- **Global tables:** `macro_data`, `allocation_blocks`, `vertical_config_defaults`, `benchmark_nav`, `macro_regional_snapshots`, `treasury_data`, `ofr_hedge_fund_data`, `bis_statistics`, `imf_weo_forecasts`, `sec_*` tables have NO `organization_id`, NO RLS. They are shared across all tenants.
+- **Global tables:** `macro_data`, `allocation_blocks`, `vertical_config_defaults`, `benchmark_nav`, `macro_regional_snapshots`, `treasury_data`, `ofr_hedge_fund_data`, `bis_statistics`, `imf_weo_forecasts`, `sec_*` tables, `esma_funds`, `esma_managers` have NO `organization_id`, NO RLS. They are shared across all tenants.
 - **No module-level asyncio primitives:** Create `Semaphore`, `Lock`, `Event` lazily inside async functions. Module-level causes "attached to different event loop" errors.
 - **ORM thread safety:** Extract scalar attributes into frozen dataclasses before crossing any async/thread boundary.
 - **SET LOCAL not SET:** RLS context must use `SET LOCAL` (transaction-scoped). `SET` leaks across pooled connections.
@@ -146,7 +150,7 @@ The engine contains only analytical domains. Operational modules were intentiona
 - **Dual-write ordering:** StorageClient write (source of truth) BEFORE pgvector upsert (derived index). If storage write fails, pipeline continues with warning. If pgvector upsert fails, data is safe in storage and can be rebuilt via `search_rebuild.py`.
 - **Path routing via `storage_routing.py`:** Never build storage paths with f-strings in callers. Use `bronze_document_path()`, `silver_chunks_path()`, `silver_metadata_path()`, `gold_memo_path()`. All paths validated with `_SAFE_PATH_SEGMENT_RE`.
 - **Parquet schema must include embedding metadata:** All silver layer Parquet files must have `embedding_model` and `embedding_dim` columns. `search_rebuild.py` validates dimension match before upserting — prevents silent corruption on model upgrade.
-- **`organization_id` in vector search:** All pgvector queries MUST include `WHERE organization_id = :org_id` (SQL parameterized). All Parquet DuckDB queries MUST include `WHERE organization_id = ?`. Never query without tenant filter. (Azure Search files deprecated — `$filter=organization_id eq '{org_id}'` pattern no longer applies.)
+- **`organization_id` in vector search:** Credit `vector_chunks`: all queries MUST include `WHERE organization_id = :org_id`. Wealth `wealth_vector_chunks`: org-scoped queries use `WHERE organization_id = :org_id`; global queries (brochure, ESMA) do NOT filter by org_id (data is shared, org_id is NULL). All Parquet DuckDB queries MUST include `WHERE organization_id = ?`. Never query without tenant filter on tenant-scoped data.
 - **No Cohere dependency:** Hybrid classifier (rules → cosine_similarity → LLM) replaced Cohere Rerank. Cross-encoder reranker (`local_reranker.py`) replaced Cohere for IC memo evidence. Zero external ML API calls for classification.
 - **DB-first for external data:** All time-series external data (FRED, Treasury, OFR, Yahoo Finance, SEC EDGAR) is ingested by background workers into TimescaleDB hypertables. Routes and vertical engines read from DB only — never call external APIs in user-facing requests. Workers use `pg_try_advisory_lock(ID)` with deterministic lock IDs (never `hash()`), unlock in `finally`.
 - **SEC data providers — DB-only in hot path:** `data_providers/sec/` services expose both DB-only reads and EDGAR API calls. Routes and DD reports must use ONLY DB-only methods: `ThirteenFService.read_holdings()`, `read_holdings_for_date()`, `get_sector_aggregation()`, `get_concentration_metrics()`, `compute_diffs()`; `AdvService.fetch_manager()`, `fetch_manager_funds()`, `fetch_manager_team()`; `InstitutionalService.read_investors_in_manager()`. NEVER call `fetch_holdings()` (triggers EDGAR) or `discover_institutional_filers()` (triggers EFTS) from user-facing code — those are for `sec_13f_ingestion` and `sec_adv_ingestion` workers only.
@@ -159,7 +163,7 @@ Two-layer architecture: universal core (`ai_engine/`) + vertical specializations
 - `ai_engine/` — domain-agnostic: unified pipeline, hybrid classification, extraction, chunking, embedding, OCR, governance, validation, storage routing, search rebuild. Never modified per vertical.
 - `vertical_engines/{vertical}/` — domain-specific: analysis logic, prompts, scoring. One directory per asset class.
 - `vertical_engines/credit/` — 12 modular packages (Wave 1 complete, PR #9-#19). Each package has `models.py`, `service.py`, and domain helpers. `service.py` is the entry point; helpers must NOT import from `service.py` (enforced by import-linter).
-- `vertical_engines/wealth/` — 14 modular packages (dd_report, fact_sheet, screener, correlation, attribution, fee_drag, monitoring, watchlist, mandate_fit, peer_group, rebalancing, asset_universe, model_portfolio, critic) + 6 standalone engines (fund_analyzer, macro_committee_engine, quant_analyzer, flash_report, investment_outlook, manager_spotlight). Each package follows same structure as credit: `models.py`, `service.py`, domain helpers.
+- `vertical_engines/wealth/` — 15 modular packages (dd_report, long_form_report, fact_sheet, screener, correlation, attribution, fee_drag, monitoring, watchlist, mandate_fit, peer_group, rebalancing, asset_universe, model_portfolio, critic) + 6 standalone engines (fund_analyzer, macro_committee_engine, quant_analyzer, flash_report, investment_outlook, manager_spotlight). Each package follows same structure as credit: `models.py`, `service.py`, domain helpers.
 - `ProfileLoader` connects `profiles/` YAML config to `vertical_engines/` code via `ConfigService`.
 - **Do not rewrite vertical_engines/credit/ business logic.** Only session injection allowed (caller provides `db: Session`).
 - `quant_engine/` services receive config as parameter (no YAML loading, no `@lru_cache`). Config resolved once at async entry point via `ConfigService.get()`, passed down to sync functions.
@@ -206,12 +210,82 @@ Background workers ingest all external time-series data into hypertables. Routes
 | `imf_ingestion` | 900_015 | global | `imf_weo_forecasts` (1yr chunks) | IMF DataMapper API (GDP, inflation, fiscal) | Quarterly |
 | `drift_check` | 42 | org | `strategy_drift_alerts` | Computed (DTW drift) | Daily |
 | `portfolio_nav_synthesizer` | 900_030 | org | `model_portfolio_nav` (1mo chunks) | Computed (weighted NAV from nav_timeseries) | Daily |
+| `nport_fund_discovery` | 900_024 | global | `sec_registered_funds`, `sec_fund_classes` | SEC EDGAR N-PORT headers | Weekly |
+| `esma_ingestion` | — | global | `esma_funds`, `esma_managers` | ESMA Fund Register | Weekly |
+| `wealth_embedding` | 900_041 | global | `wealth_vector_chunks` | OpenAI text-embedding-3-large (5 sources) | Daily |
 
 **Credit market_data** reads all macro data from `macro_data` hypertable (zero FRED API calls at runtime, `fred_client.py` eliminated). Regional Case-Shiller (20 metros) also from `macro_data`.
 
 **Momentum signals** (RSI, Bollinger, OBV flow) are pre-computed by `risk_calc` worker into `fund_risk_metrics` columns (`rsi_14`, `bb_position`, `nav_momentum_score`, `flow_momentum_score`, `blended_momentum_score`). Scoring route reads pre-computed values — no in-request TA-Lib computation.
 
 **Analytics caching:** `POST /analytics/optimize` results cached in Redis (SHA-256 of inputs including date, 1h TTL). `POST /analytics/optimize/pareto` runs as background job with SSE progress (returns 202 immediately).
+
+## Fund-Centric Model (Three-Universe Architecture)
+
+The engine is organized around **funds as the primary analytical entity**. Three heterogeneous data sources are unified into a single polymorphic catalog:
+
+| Universe | Source | PK | Table | Holdings | NAV |
+|----------|--------|-----|-------|----------|-----|
+| `registered_us` | SEC N-PORT | CIK | `sec_registered_funds` | N-PORT quarterly | Yahoo Finance via ticker |
+| `private_us` | ADV Schedule D | UUID | `sec_manager_funds` | None | None |
+| `ucits_eu` | ESMA Register | ISIN | `esma_funds` | None | Yahoo Finance via ticker |
+
+**Catalog query:** `UNION ALL` of 3 SQL branches in `catalog_sql.py`. `LEFT JOIN sec_fund_classes` produces one row per share class for registered funds. Frontend groups by `external_id` and renders tree view.
+
+**Share classes:** `sec_fund_classes` (CIK → series_id → class_id → ticker). One fund CIK can have multiple series, each with multiple share classes.
+
+**DisclosureMatrix:** Computed at SQL level per-universe branch. Frontend checks `disclosure.has_holdings` (not `universe === "registered_us"`). Drives all conditional rendering.
+
+**Fund lifecycle:** Discovery (workers) → Catalog browsing → Import to universe → 3-layer screening → DD Report (8 chapters) → Universe approval → Portfolio construction.
+
+**Identifier architecture:** Fund CIK ≠ Adviser CIK. `crd_number` links them. `instrument.attributes.sec_cik` and `instrument.attributes.sec_crd` bridge tenant-scoped instruments to global SEC tables.
+
+## Quant Upgrade (Sprints 1-3, 2026-03-27)
+
+Portfolio construction is an 11-step pipeline with CLARABEL 4-phase cascade optimizer:
+
+- **Black-Litterman** expected returns (prior + IC views from `portfolio_views` table)
+- **Ledoit-Wolf shrinkage** on covariance matrix
+- **Regime-conditioned covariance** (short window in stress, long in normality)
+- **Robust optimization** (Phase 1.5 — ellipsoidal uncertainty sets, SOCP)
+- **Regime CVaR multipliers** (RISK_OFF=0.85, CRISIS=0.70)
+- **Turnover penalty** (L1 slack variables)
+- **PCA factor decomposition** (`factor_model_service.py`)
+- **GARCH(1,1)** conditional volatility per fund (`garch_service.py`, `arch>=7.0`)
+- **Stress testing** — 4 parametric scenarios (GFC, COVID, Taper, Rate Shock) via `POST /stress-test`
+
+**Optimizer cascade:** Phase 1 (max risk-adj return) → Phase 1.5 (robust SOCP) → Phase 2 (variance-capped) → Phase 3 (min-variance) → heuristic fallback. CLARABEL → SCS solver fallback per phase.
+
+**New columns in `fund_risk_metrics`** (migration 0058): `volatility_garch`, `cvar_95_conditional`.
+
+**Reference docs:** `docs/reference/portfolio-construction-reference-v2-post-quant-upgrade.md`, `docs/reference/institutional-portfolio-lifecycle-reference.md`.
+
+## Wealth Vector Embedding (2026-03-27)
+
+Separate vector table `wealth_vector_chunks` for fund-centric RAG (distinct from credit's deal-centric `vector_chunks`).
+
+**5 embedding sources:**
+
+| Source | entity_type | Scope | Volume |
+|--------|-------------|-------|--------|
+| ADV brochures (6 sections) | `"firm"` | global | ~7k chunks |
+| ESMA funds | `"fund"` | global | ~10k chunks |
+| ESMA managers | `"firm"` | global | ~660 chunks |
+| DD chapters | `"fund"` | org-scoped | growing |
+| Macro reviews | `"macro"` | org-scoped | growing |
+
+**entity_type values:** `"firm"` (RIA/ManCo), `"fund"` (instrument), `"macro"` (review). NEVER `"manager"` — manager = PM individual in the system.
+
+**Search functions** in `pgvector_search_service.py`:
+- `search_fund_firm_context_sync()` — firm context via `sec_crd` or `esma_manager_id`
+- `search_esma_funds_sync()` — semantic UCITS fund search
+- `search_fund_analysis_sync()` — org-scoped DD chapters + macro reviews
+
+**Worker:** `wealth_embedding_worker` (lock 900_041, daily 03:00 UTC). Incremental — processes only pending rows.
+
+**No RLS on table** — `organization_id` nullable (global SEC/ESMA data). WHERE-clause filtering in all queries.
+
+**Reference docs:** `docs/reference/wealth-vector-embedding-reference.md`, `docs/reference/wealth-vector-embedding-spec.md`.
 
 ## Environment Variables
 
@@ -268,7 +342,7 @@ Custom skills live in `.claude/skills/`. Each subfolder contains a `SKILL.md` wi
 
 Simplified stack (2026-03-18), ~$100-200/month:
 - **Timescale Cloud** — managed PostgreSQL 16 (pgvector + TimescaleDB nativo)
-- **Railway** — container hosting (FastAPI backend + 3 SvelteKit frontends)
+- **Railway** — container hosting (FastAPI backend + 2 SvelteKit frontends — admin being retired)
 - **Upstash** — serverless Redis (SSE pub/sub, job tracking, worker idempotency, advisory locks)
 - **OpenAI API** (direct, with retry backoff) — LLM + embeddings
 - **Mistral** — OCR
@@ -291,10 +365,13 @@ Scale triggers for re-adding services (Milestone 3+, >50 tenants):
 
 ## Deployment
 
-- **Backend:** `railway.toml` at repo root. Health check: `/api/v1/admin/health`.
-- **Frontends:** Railway or Vercel/Cloudflare Pages with SvelteKit adapter.
-- **Database:** Timescale Cloud managed PostgreSQL 16 with pgvector + TimescaleDB.
+- **Backend:** `railway.toml` at repo root. Health check: `/health` and `/api/health`. Production: `api.investintell.com` (Railway Pro).
+- **Frontend Wealth:** Production: `wealth.investintell.com` (Railway Pro).
+- **Frontend Credit:** Railway or Cloudflare Pages with SvelteKit adapter.
+- **Frontend Admin:** Being retired — migrating settings to Wealth/Credit `/settings` pages (see `docs/prompts/retire-admin-frontend.md`).
+- **Database:** Timescale Cloud managed PostgreSQL 16 with pgvector + TimescaleDB. Alembic uses `DIRECT_DATABASE_URL` (port 5432, not pooler).
 - **Local dev:** `docker-compose up` (PostgreSQL 16 + TimescaleDB + pgvector + Redis 7).
+- **Deploy checklist:** `docs/reference/deploy-checklist.md` — full validation sequence for Railway Pro + Timescale Cloud.
 
 ## Origins
 
@@ -307,6 +384,13 @@ Scale triggers for re-adding services (Milestone 3+, >50 tenants):
 - **Credit Modularization Plan:** `docs/plans/2026-03-15-refactor-credit-deep-review-modularization-wave2-plan.md` (Wave 2 — deep review modules)
 - **Wealth Modularization Plan:** `docs/plans/2026-03-15-feat-wealth-vertical-complete-modularization-plan.md`
 - **Infrastructure Completion Plan:** `docs/plans/2026-03-18-feat-duckdb-data-lake-inspection-layer-plan.md`
+- **Fund-Centric Model Reference:** `docs/reference/fund-centric-model-reference.md`
+- **Portfolio Construction v2:** `docs/reference/portfolio-construction-reference-v2-post-quant-upgrade.md`
+- **Portfolio Lifecycle E2E:** `docs/reference/institutional-portfolio-lifecycle-reference.md`
+- **Vector Embedding Reference:** `docs/reference/wealth-vector-embedding-reference.md`
+- **Vector Embedding Spec:** `docs/reference/wealth-vector-embedding-spec.md`
+- **Deploy Checklist:** `docs/reference/deploy-checklist.md`
+- **Admin Retirement Prompt:** `docs/prompts/retire-admin-frontend.md`
 - **Private Credit OS:** `C:\Users\andre\projetos\Netz-Private-Credit-OS` (archived after data migration)
 - **Wealth OS:** `C:\Users\andre\projetos\netz-wealth-os` (archived after migration)
 
