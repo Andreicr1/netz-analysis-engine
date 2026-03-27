@@ -140,12 +140,14 @@ async def run_nport_fund_discovery() -> dict:
                         "class_id": fund_data.get("class_id"),
                         "total_assets": total_assets,
                         "total_shareholder_accounts": fund_data.get("total_shareholder_accounts"),
+                        "_fund_classes": fund_data.get("fund_classes", []),
                     })
 
                     # Flush in chunks
                     if len(batch) >= _UPSERT_CHUNK_SIZE:
                         count = await _upsert_batch(db, batch)
                         upserted += count
+                        await _upsert_fund_classes(db, batch)
                         batch.clear()
 
                 except Exception as exc:
@@ -481,32 +483,57 @@ async def _upsert_batch(db: object, batch: list[dict]) -> int:
 
 
 def _parse_series_class_header(sgml_text: str, result: dict) -> None:
-    """Extract first series ticker from EDGAR filing header SGML.
+    """Extract ALL series and classes from EDGAR filing header SGML.
 
-    The ``-index-headers.html`` file contains SERIES-AND-CLASSES-CONTRACTS-DATA
-    with tickers per class.  We grab the first ticker found as representative.
-    Also populates series_id and class_id if not already set.
+    Populates result["fund_classes"] with list of dicts:
+    [{"series_id": "S000027379", "series_name": "...", "class_id": "C000082624",
+      "class_name": "Class A", "ticker": "AUNAX"}, ...]
+
+    Also sets result["ticker"] to the first found ticker (for backward compat),
+    and result["series_id"]/result["class_id"] to the first found.
     """
     import re
 
-    # Extract first SERIES-ID
-    if not result.get("series_id"):
-        m = re.search(r"<SERIES-ID>\s*(\S+)", sgml_text)
-        if m:
-            result["series_id"] = m.group(1).strip()
+    classes: list[dict] = []
 
-    # Extract first CLASS-CONTRACT-ID
-    if not result.get("class_id"):
-        m = re.search(r"<CLASS-CONTRACT-ID>\s*(\S+)", sgml_text)
-        if m:
-            result["class_id"] = m.group(1).strip()
+    series_blocks = re.split(r"<SERIES>", sgml_text)
+    for block in series_blocks[1:]:  # skip text before first <SERIES>
+        sid_m = re.search(r"<SERIES-ID>\s*(\S+)", block)
+        sname_m = re.search(r"<SERIES-NAME>\s*(.+?)(?:\n|<)", block)
+        series_id = sid_m.group(1).strip() if sid_m else None
+        series_name = sname_m.group(1).strip() if sname_m else None
 
-    # Extract first CLASS-CONTRACT-TICKER-SYMBOL
-    m = re.search(r"<CLASS-CONTRACT-TICKER-SYMBOL>\s*(\S+)", sgml_text)
-    if m:
-        ticker = m.group(1).strip().upper()
-        if ticker and len(ticker) <= 10:
-            result["ticker"] = ticker
+        if not series_id:
+            continue
+
+        class_blocks = re.split(r"<CLASS-CONTRACT>", block)
+        for cb in class_blocks[1:]:
+            cid_m = re.search(r"<CLASS-CONTRACT-ID>\s*(\S+)", cb)
+            cname_m = re.search(r"<CLASS-CONTRACT-NAME>\s*(.+?)(?:\n|<)", cb)
+            ticker_m = re.search(r"<CLASS-CONTRACT-TICKER-SYMBOL>\s*(\S+)", cb)
+
+            if not cid_m:
+                continue
+
+            classes.append({
+                "series_id": series_id,
+                "series_name": series_name,
+                "class_id": cid_m.group(1).strip(),
+                "class_name": cname_m.group(1).strip() if cname_m else None,
+                "ticker": ticker_m.group(1).strip().upper() if ticker_m else None,
+            })
+
+    result["fund_classes"] = classes
+
+    # Backward compat: set first ticker/series/class on result
+    if classes:
+        first = classes[0]
+        if not result.get("ticker") and first.get("ticker"):
+            result["ticker"] = first["ticker"]
+        if not result.get("series_id"):
+            result["series_id"] = first["series_id"]
+        if not result.get("class_id"):
+            result["class_id"] = first["class_id"]
 
 
 if __name__ == "__main__":

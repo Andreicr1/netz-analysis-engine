@@ -16,8 +16,9 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 # Timeout tiers (match existing workers.py constants)
-_HEAVY = 600  # 10 min
-_LIGHT = 300  # 5 min
+_HEAVY = 600   # 10 min
+_LIGHT = 300   # 5 min
+_BULK = 7200   # 2 hours — for large batch downloads (e.g. brochure PDFs)
 
 
 def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int]]:
@@ -66,8 +67,8 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
         "sec_refresh": (run_sec_refresh, "global", _HEAVY),
         "sec_13f_ingestion": (run_sec_13f_ingestion, "global", _HEAVY),
         "sec_adv_ingestion": (run_sec_adv_ingestion, "global", _HEAVY),
-        "brochure_download": (run_brochure_download, "global", _HEAVY),
-        "brochure_extract": (run_brochure_extract, "global", _HEAVY),
+        "brochure_download": (run_brochure_download, "global", _BULK),
+        "brochure_extract": (run_brochure_extract, "global", _BULK),
         "drift_check": (run_drift_check, "global", _LIGHT),
         "regime_fit": (run_regime_fit, "global", _LIGHT),
         # ── Org-scoped workers (dispatched per active org) ────
