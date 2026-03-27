@@ -447,15 +447,35 @@ async def _run_construction_async(
         sub_returns = {fid: expected_returns[fid] for fid in opt_fund_ids}
         sub_blocks = {fid: fund_blocks[fid] for fid in opt_fund_ids}
 
-        # Filter constraints to blocks that have at least one fund
+        # Filter and rescale constraints to covered blocks only.
+        # When universe covers a subset of blocks, original min/max don't
+        # sum to 1.0 → infeasible.  Rescale proportionally so the optimizer
+        # can find a valid fully-invested allocation.
         covered_blocks = set(sub_blocks.values())
-        active_block_constraints = [
-            bc for bc in block_constraints if bc.block_id in covered_blocks
-        ]
+        active_raw = [bc for bc in block_constraints if bc.block_id in covered_blocks]
+
+        target_sum = sum(
+            strategic_targets.get(bc.block_id, bc.max_weight) for bc in active_raw
+        )
+        if target_sum > 0 and len(active_raw) < len(block_constraints):
+            scale = 1.0 / target_sum
+            active_block_constraints = [
+                BlockConstraint(
+                    block_id=bc.block_id,
+                    min_weight=0.0,  # relax floor — partial universe
+                    max_weight=min(bc.max_weight * scale, 1.0),
+                )
+                for bc in active_raw
+            ]
+        else:
+            active_block_constraints = active_raw
+
         active_constraints = ProfileConstraints(
             blocks=active_block_constraints,
             cvar_limit=cvar_limit,
-            max_single_fund_weight=max_single_fund,
+            max_single_fund_weight=min(max_single_fund * (1.0 / max(target_sum, 0.01)), 1.0)
+            if target_sum > 0 and len(active_raw) < len(block_constraints)
+            else max_single_fund,
         )
 
         fund_result: FundOptimizationResult = await optimize_fund_portfolio(
