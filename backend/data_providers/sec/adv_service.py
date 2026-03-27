@@ -521,6 +521,79 @@ class AdvService:
 
         return upserted
 
+    # ── IAPD XML Enrichment ──────────────────────────────────────────
+
+    async def ingest_iapd_xml(self, xml_path: str) -> int:
+        """Enrich sec_managers with Form ADV Part 1A data from IAPD XML feed.
+
+        Parses the XML, then batch UPDATEs existing sec_managers rows.
+        Only updates rows where crd_number already exists (no INSERT).
+        Returns count of managers updated.
+        """
+        import json
+
+        from data_providers.sec.iapd_xml_parser import parse_iapd_xml
+
+        def _to_date(val: str | None) -> date | None:
+            if not val:
+                return None
+            try:
+                return date.fromisoformat(val)
+            except (ValueError, TypeError):
+                return None
+
+        records = await run_in_sec_thread(parse_iapd_xml, xml_path)
+        if not records:
+            logger.warning("iapd_xml_empty", xml_path=xml_path)
+            return 0
+
+        logger.info("iapd_xml_parsed", xml_path=xml_path, firms=len(records))
+
+        _UPDATE_SQL = text("""
+            UPDATE sec_managers SET
+                aum_total = COALESCE(:aum_total, aum_total),
+                aum_discretionary = COALESCE(:aum_discretionary, aum_discretionary),
+                aum_non_discretionary = COALESCE(:aum_non_discretionary, aum_non_discretionary),
+                total_accounts = COALESCE(:total_accounts, total_accounts),
+                fee_types = CASE WHEN CAST(:fee_types AS jsonb) != '[]' THEN CAST(:fee_types AS jsonb) ELSE fee_types END,
+                client_types = CASE WHEN CAST(:client_types AS jsonb) != '{}' THEN CAST(:client_types AS jsonb) ELSE client_types END,
+                website = COALESCE(:website, website),
+                compliance_disclosures = COALESCE(:compliance_disclosures, compliance_disclosures),
+                last_adv_filed_at = COALESCE(:last_adv_filed_at, last_adv_filed_at)
+            WHERE crd_number = :crd_number
+        """)
+
+        chunk_size = 500
+        updated = 0
+        for i in range(0, len(records), chunk_size):
+            chunk = records[i : i + chunk_size]
+            async with self._db_session_factory() as session, session.begin():
+                for rec in chunk:
+                    result = await session.execute(
+                        _UPDATE_SQL,
+                        {
+                            "crd_number": rec["crd_number"],
+                            "aum_total": rec.get("aum_total"),
+                            "aum_discretionary": rec.get("aum_discretionary"),
+                            "aum_non_discretionary": rec.get("aum_non_discretionary"),
+                            "total_accounts": rec.get("total_accounts"),
+                            "fee_types": json.dumps(rec.get("fee_types", [])),
+                            "client_types": json.dumps(rec.get("client_types", {})),
+                            "website": rec.get("website"),
+                            "compliance_disclosures": rec.get("compliance_disclosures"),
+                            "last_adv_filed_at": _to_date(rec.get("last_adv_filed_at")),
+                        },
+                    )
+                    updated += result.rowcount
+            logger.info(
+                "iapd_xml_chunk_updated",
+                chunk=i // chunk_size + 1,
+                updated=updated,
+            )
+
+        logger.info("iapd_xml_enrichment_complete", total_updated=updated)
+        return updated
+
     async def build_entity_links(self) -> int:
         """Build sec_entity_links by matching 13F parent CIKs to Registered advisers.
 

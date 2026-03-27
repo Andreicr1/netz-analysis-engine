@@ -49,10 +49,28 @@ async def run_sec_adv_ingestion(
             managers_upserted = await service.ingest_bulk_adv(csv_path=csv_path)
             links_created = await service.build_entity_links()
 
+            # IAPD XML enrichment — optional, via env vars
+            import os
+
+            xml_enriched = 0
+            xml_sec_path = os.environ.get("IAPD_SEC_XML_PATH")
+            xml_state_path = os.environ.get("IAPD_STATE_XML_PATH")
+
+            if xml_sec_path and os.path.exists(xml_sec_path):
+                enriched = await service.ingest_iapd_xml(xml_sec_path)
+                logger.info("adv_xml_enrichment.sec", enriched=enriched)
+                xml_enriched += enriched
+
+            if xml_state_path and os.path.exists(xml_state_path):
+                enriched = await service.ingest_iapd_xml(xml_state_path)
+                logger.info("adv_xml_enrichment.state", enriched=enriched)
+                xml_enriched += enriched
+
             summary = {
                 "status": "completed",
                 "managers_upserted": managers_upserted,
                 "links_created": links_created,
+                "xml_enriched": xml_enriched,
             }
             logger.info("sec_adv_ingestion_complete", **summary)
             return summary

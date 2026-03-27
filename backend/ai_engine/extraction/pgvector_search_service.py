@@ -841,3 +841,137 @@ def search_and_rerank_fund_policy_sync(
 
     reranked = rerank_sync(query_text, raw, top_k=top)
     return RerankedResult(chunks=reranked, signal=RetrievalSignal.from_results(reranked))
+
+
+# ── Wealth fund-centric search (wealth_vector_chunks) ────────────────
+
+
+def search_fund_firm_context_sync(
+    *,
+    query_vector: list[float],
+    sec_crd: str | None = None,
+    esma_manager_id: str | None = None,
+    section_filter: list[str] | None = None,
+    top: int = 20,
+) -> list[dict[str, Any]]:
+    """Semantic search for firm context of a fund.
+
+    Fund-centric: caller resolves instrument_id → sec_crd before calling.
+    Accepts sec_crd (US funds via ADV brochure) or esma_manager_id (UCITS).
+    Returns entity_type="firm" from wealth_vector_chunks.
+    """
+    if not sec_crd and not esma_manager_id:
+        return []
+
+    params: dict[str, Any] = {
+        "embedding": str(query_vector),
+        "entity_type": "firm",
+        "top": top,
+    }
+    if sec_crd:
+        params["firm_crd"] = sec_crd
+        extra_filter = "AND firm_crd = :firm_crd"
+    else:
+        params["esma_manager_id"] = esma_manager_id
+        extra_filter = "AND entity_id = :esma_manager_id"
+
+    section_clause = ""
+    if section_filter:
+        params["sections"] = section_filter
+        section_clause = "AND section = ANY(:sections)"
+
+    query = text(f"""
+        SELECT id, entity_id, entity_type, source_type, section,
+               content, source_row_id, firm_crd, filing_date,
+               1 - (embedding <=> CAST(:embedding AS vector)) AS score
+        FROM wealth_vector_chunks
+        WHERE entity_type = :entity_type
+          {extra_filter}
+          {section_clause}
+          AND embedding IS NOT NULL
+        ORDER BY embedding <=> CAST(:embedding AS vector)
+        LIMIT :top
+    """)
+    engine = _get_sync_engine()
+    with engine.connect() as conn:
+        result = conn.execute(query, params)
+        return [dict(r) for r in result.mappings().all()]
+
+
+def search_esma_funds_sync(
+    *,
+    query_vector: list[float],
+    domicile_filter: str | None = None,
+    top: int = 20,
+) -> list[dict[str, Any]]:
+    """Semantic search for UCITS funds by name/type/domicile.
+
+    Returns entity_type="fund" (ESMA funds, direct analysis objects).
+    """
+    params: dict[str, Any] = {
+        "embedding": str(query_vector),
+        "top": top,
+        "source_type": "esma_fund",
+    }
+    extra = ""
+    if domicile_filter:
+        params["domicile"] = f"% {domicile_filter}%"
+        extra = "AND content LIKE :domicile"
+
+    query = text(f"""
+        SELECT id, entity_id, source_type, content, source_row_id,
+               1 - (embedding <=> CAST(:embedding AS vector)) AS score
+        FROM wealth_vector_chunks
+        WHERE source_type = :source_type
+          AND embedding IS NOT NULL
+          {extra}
+        ORDER BY embedding <=> CAST(:embedding AS vector)
+        LIMIT :top
+    """)
+    engine = _get_sync_engine()
+    with engine.connect() as conn:
+        result = conn.execute(query, params)
+        return [dict(r) for r in result.mappings().all()]
+
+
+def search_fund_analysis_sync(
+    *,
+    organization_id: str,
+    query_vector: list[float],
+    instrument_id: str | None = None,
+    source_type: str | None = None,
+    top: int = 20,
+) -> list[dict[str, Any]]:
+    """Semantic search over org-scoped fund analyses.
+
+    Fund-centric: instrument_id filters chunks for a specific fund.
+    Used for DD chapters (source_type="dd_chapter") and macro reviews.
+    """
+    params: dict[str, Any] = {
+        "embedding": str(query_vector),
+        "org_id": validate_uuid(organization_id, "organization_id"),
+        "top": top,
+    }
+    clauses: list[str] = []
+    if source_type:
+        params["source_type"] = source_type
+        clauses.append("AND source_type = :source_type")
+    if instrument_id:
+        params["instrument_id"] = validate_uuid(instrument_id, "instrument_id")
+        clauses.append("AND entity_id = :instrument_id")
+
+    query = text(f"""
+        SELECT id, entity_id, entity_type, source_type, section,
+               content, source_row_id,
+               1 - (embedding <=> CAST(:embedding AS vector)) AS score
+        FROM wealth_vector_chunks
+        WHERE organization_id = CAST(:org_id AS uuid)
+          AND embedding IS NOT NULL
+          {''.join(clauses)}
+        ORDER BY embedding <=> CAST(:embedding AS vector)
+        LIMIT :top
+    """)
+    engine = _get_sync_engine()
+    with engine.connect() as conn:
+        result = conn.execute(query, params)
+        return [dict(r) for r in result.mappings().all()]

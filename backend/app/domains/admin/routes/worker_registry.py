@@ -51,6 +51,7 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
     from app.domains.wealth.workers.sec_refresh import run_sec_refresh
     from app.domains.wealth.workers.treasury_ingestion import run_treasury_ingestion
     from app.domains.wealth.workers.watchlist_batch import run_watchlist_check
+    from app.domains.wealth.workers.wealth_embedding_worker import run_wealth_embedding
 
     return {
         # ── Global workers (no org_id) ────────────────────────
@@ -69,6 +70,7 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
         "sec_adv_ingestion": (run_sec_adv_ingestion, "global", _HEAVY),
         "brochure_download": (run_brochure_download, "global", _BULK),
         "brochure_extract": (run_brochure_extract, "global", _BULK),
+        "wealth_embedding": (run_wealth_embedding, "global", _HEAVY),
         "drift_check": (run_drift_check, "global", _LIGHT),
         "regime_fit": (run_regime_fit, "global", _LIGHT),
         # ── Org-scoped workers (dispatched per active org) ────

@@ -107,6 +107,12 @@ name = "nport_fund_discovery"
 schedule = "0 4 * * 0"
 command = "python -m app.workers.cli nport_fund_discovery"
 
+# ── Daily 03:00 UTC — Wealth embedding (after brochure extract) ──
+[[crons]]
+name = "wealth_embedding"
+schedule = "0 3 * * *"
+command = "python -m app.workers.cli wealth_embedding"
+
 # ── Weekly — Monday 04:00 UTC ────────────────────────────────
 [[crons]]
 name = "esma_ingestion"
