@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db.engine import async_session_factory as async_session
 from app.core.jobs.tracker import get_redis_pool
 from app.core.tenancy.middleware import set_rls_context
-from app.domains.wealth.models.fund import Fund
+from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.macro import MacroData
 from app.domains.wealth.models.nav import NavTimeseries
 from app.domains.wealth.models.risk import FundRiskMetrics
@@ -314,7 +314,7 @@ def _compute_momentum_from_nav(
 
 
 def _compute_metrics_from_returns(
-    fund: Fund,
+    fund: Instrument,
     returns_raw: list[float],
     as_of_date: date,
     risk_free_rate: float = 0.04,
@@ -326,11 +326,11 @@ def _compute_metrics_from_returns(
     run_risk_calc after the batch-fetch refactor.
     """
     if len(returns_raw) < 21:  # Need at least 1 month of data
-        logger.info("Insufficient data for risk calc", fund_id=str(fund.fund_id), points=len(returns_raw))
+        logger.info("Insufficient data for risk calc", fund_id=str(fund.instrument_id), points=len(returns_raw))
         return None
 
     returns = np.array(returns_raw)
-    metrics: dict = {"instrument_id": fund.fund_id, "calc_date": as_of_date}
+    metrics: dict = {"instrument_id": fund.instrument_id, "calc_date": as_of_date}
 
     # CVaR and VaR for each window
     for label, days in WINDOW_CONFIGS.items():
@@ -364,7 +364,7 @@ def _compute_metrics_from_returns(
 
 async def compute_fund_risk_metrics(
     db: AsyncSession,
-    fund: Fund,
+    fund: Instrument,
     as_of_date: date | None = None,
     risk_free_rate: float = 0.04,
 ) -> dict | None:
@@ -378,9 +378,9 @@ async def compute_fund_risk_metrics(
 
     start_date = as_of_date - timedelta(days=3 * 365 + 30)
 
-    return_type_map = await _batch_resolve_return_types(db, [fund.fund_id], start_date, as_of_date)
-    nav_map = await _batch_fetch_nav_returns(db, [fund.fund_id], return_type_map, start_date, as_of_date)
-    raw = nav_map.get(str(fund.fund_id), [])
+    return_type_map = await _batch_resolve_return_types(db, [fund.instrument_id], start_date, as_of_date)
+    nav_map = await _batch_fetch_nav_returns(db, [fund.instrument_id], return_type_map, start_date, as_of_date)
+    raw = nav_map.get(str(fund.instrument_id), [])
     return _compute_metrics_from_returns(fund, raw, as_of_date, risk_free_rate)
 
 
@@ -451,7 +451,7 @@ async def _fetch_block_returns_batch(
 
 async def _compute_block_dtw_scores(
     db: AsyncSession,
-    funds_with_metrics: list[tuple["Fund", dict]],
+    funds_with_metrics: list[tuple["Instrument", dict]],
     as_of_date: date,
     dtw_window: int = 63,
 ) -> dict[str, DtwDriftResult]:
@@ -463,7 +463,7 @@ async def _compute_block_dtw_scores(
     Returns a dict mapping fund_id (str) → DtwDriftResult.
     """
     # Group funds by block_id
-    block_funds: dict[str | None, list[tuple[Fund, dict]]] = defaultdict(list)
+    block_funds: dict[str | None, list[tuple[Instrument, dict]]] = defaultdict(list)
     for fund, metrics in funds_with_metrics:
         block_funds[fund.block_id].append((fund, metrics))
 
@@ -473,7 +473,7 @@ async def _compute_block_dtw_scores(
         if len(block_fund_list) < 2:
             # Can't compute meaningful drift vs self — degraded, not fake zero
             for fund, _ in block_fund_list:
-                dtw_scores[str(fund.fund_id)] = DtwDriftResult(
+                dtw_scores[str(fund.instrument_id)] = DtwDriftResult(
                     score=None,
                     status=DtwDriftStatus.degraded,
                     reason="single fund in block — no peer comparison possible",
@@ -481,7 +481,7 @@ async def _compute_block_dtw_scores(
             continue
 
         # Batch-fetch returns for all funds in this block — single query, no N+1
-        block_fund_ids = [fund.fund_id for fund, _ in block_fund_list]
+        block_fund_ids = [fund.instrument_id for fund, _ in block_fund_list]
         returns_by_fund = await _fetch_block_returns_batch(
             db, block_fund_ids, as_of_date, window_days=dtw_window
         )
@@ -489,7 +489,7 @@ async def _compute_block_dtw_scores(
         fund_return_arrays: list[np.ndarray] = []
         fund_ids: list[str] = []
         for fund, _ in block_fund_list:
-            fid = str(fund.fund_id)
+            fid = str(fund.instrument_id)
             arr = returns_by_fund.get(fid, np.array([], dtype=float))
             fund_return_arrays.append(arr)
             fund_ids.append(fid)
@@ -530,7 +530,7 @@ async def _compute_block_dtw_scores(
 async def _write_risk_cache(
     org_id: "uuid.UUID",
     eval_date: date,
-    computed: list[tuple["Fund", dict]],
+    computed: list[tuple["Instrument", dict]],
 ) -> None:
     """Write risk/scoring cache to Redis for fast dashboard reads."""
     try:
@@ -551,7 +551,7 @@ async def _write_risk_cache(
             leaderboard = []
             for fund, metrics in computed:
                 leaderboard.append({
-                    "fund_id": str(fund.fund_id),
+                    "fund_id": str(fund.instrument_id),
                     "ticker": fund.ticker,
                     "sharpe_1y": metrics.get("sharpe_1y"),
                     "return_1y": metrics.get("return_1y"),
@@ -596,7 +596,11 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
             rfr = await get_risk_free_rate(db)
             logger.info("Risk-free rate for this run", rate=rfr)
 
-            stmt = select(Fund).where(Fund.is_active == True, Fund.ticker.is_not(None))
+            stmt = select(Instrument).where(
+                Instrument.is_active == True,
+                Instrument.ticker.is_not(None),
+                Instrument.instrument_type == "fund",
+            )
             result = await db.execute(stmt)
             funds = result.scalars().all()
 
@@ -606,7 +610,7 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
             # 3 years + 30-day buffer — same window used in compute_fund_risk_metrics
             start_date = eval_date - timedelta(days=3 * 365 + 30)
 
-            all_fund_ids = [fund.fund_id for fund in funds]
+            all_fund_ids = [fund.instrument_id for fund in funds]
 
             # Batch 1: resolve return_type for every fund — 1 query instead of N
             return_type_by_fund = await _batch_resolve_return_types(
@@ -621,9 +625,9 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
             logger.info("NAV returns batch-fetched", n_funds=len(nav_returns_by_fund))
 
             # Pass 1: compute standard risk metrics from pre-fetched data — no DB queries in loop
-            computed: list[tuple[Fund, dict]] = []
+            computed: list[tuple[Instrument, dict]] = []
             for fund in funds:
-                fid_str = str(fund.fund_id)
+                fid_str = str(fund.instrument_id)
                 returns_raw = nav_returns_by_fund.get(fid_str, [])
                 metrics = _compute_metrics_from_returns(fund, returns_raw, eval_date, risk_free_rate=rfr)
                 if metrics is None:
@@ -636,7 +640,7 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
             logger.info("NAV prices batch-fetched for momentum", n_funds=len(nav_price_map))
 
             for fund, metrics in computed:
-                fid_str = str(fund.fund_id)
+                fid_str = str(fund.instrument_id)
                 nav_data = nav_price_map.get(fid_str)
                 if nav_data is None:
                     metrics.update({
@@ -659,7 +663,7 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
             # Pass 3: upsert metrics + dtw_drift_score (all in one transaction)
             try:
                 for fund, metrics in computed:
-                    fid_str = str(fund.fund_id)
+                    fid_str = str(fund.instrument_id)
                     dtw_result = dtw_scores.get(
                         fid_str,
                         DtwDriftResult(score=None, status=DtwDriftStatus.degraded, reason="fund not in dtw_scores"),
@@ -683,7 +687,7 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
                         set_={k: upsert.excluded[k] for k in metrics if k not in ("instrument_id", "calc_date", "organization_id")},
                     )
                     await db.execute(upsert)
-                    results[fund.ticker or str(fund.fund_id)] = 1
+                    results[fund.ticker or str(fund.instrument_id)] = 1
                     logger.info("Risk metrics staged", ticker=fund.ticker, dtw_drift=metrics["dtw_drift_score"])
 
                 # Single commit for the entire batch — atomic and WAL-efficient
