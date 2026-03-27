@@ -13,6 +13,7 @@ from app.domains.wealth.models.model_portfolio import ModelPortfolio
 from app.domains.wealth.models.model_portfolio_nav import ModelPortfolioNav
 from app.domains.wealth.models.nav import NavTimeseries
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
+from app.domains.wealth.models.portfolio_view import PortfolioView
 from app.domains.wealth.models.rebalance import RebalanceEvent
 from app.domains.wealth.models.risk import FundRiskMetrics
 from app.domains.wealth.models.screening_metrics import InstrumentScreeningMetrics
@@ -36,6 +37,7 @@ __all__ = [
     "ModelPortfolioNav",
     "NavTimeseries",
     "PortfolioSnapshot",
+    "PortfolioView",
     "RebalanceEvent",
     "ScreeningResult",
     "ScreeningRun",

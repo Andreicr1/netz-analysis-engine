@@ -29,6 +29,7 @@ from app.domains.wealth.models.nav import NavTimeseries
 from app.domains.wealth.models.risk import FundRiskMetrics
 from quant_engine.cvar_service import compute_cvar_from_returns
 from quant_engine.drift_service import DtwDriftResult, DtwDriftStatus, compute_dtw_drift_batch
+from quant_engine.garch_service import fit_garch
 from quant_engine.talib_momentum_service import (
     compute_flow_momentum,
     compute_momentum_signals_talib,
@@ -358,6 +359,14 @@ def _compute_metrics_from_returns(
     metrics["sharpe_1y"] = _round_or_none(_compute_sharpe(returns, 252, risk_free_rate))
     metrics["sharpe_3y"] = _round_or_none(_compute_sharpe(returns, 3 * 252, risk_free_rate))
     metrics["sortino_1y"] = _round_or_none(_compute_sortino(returns, 252, risk_free_rate))
+
+    # GARCH(1,1) conditional volatility (BL-11)
+    garch_result = fit_garch(returns)
+    if garch_result is not None and garch_result.converged and garch_result.volatility_garch is not None:
+        metrics["volatility_garch"] = round(garch_result.volatility_garch, 6)
+    else:
+        # Fallback: use sample volatility (already computed above)
+        metrics["volatility_garch"] = metrics.get("volatility_1y")
 
     return metrics
 

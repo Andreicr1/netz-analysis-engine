@@ -92,6 +92,55 @@ class BreachStatus:
     consecutive_breach_days: int
 
 
+def compute_regime_cvar(
+    returns: np.ndarray,
+    regime_probs: np.ndarray,
+    confidence: float = 0.95,
+    regime_threshold: float = 0.5,
+) -> float:
+    """CVaR conditional on stress regime.
+
+    Uses only observations where regime_probs > threshold.
+    Falls back to unconditional CVaR if stress subset has < 30 observations.
+
+    Parameters
+    ----------
+    returns : np.ndarray
+        (T,) portfolio returns.
+    regime_probs : np.ndarray
+        (T,) probability of being in stress regime per observation.
+    confidence : float
+        Confidence level (e.g. 0.95).
+    regime_threshold : float
+        Minimum regime probability to classify as stress.
+
+    Returns
+    -------
+    float
+        Conditional CVaR (negative = loss).
+
+    """
+    if len(returns) != len(regime_probs):
+        logger.warning(
+            "regime_cvar_length_mismatch",
+            returns_len=len(returns),
+            probs_len=len(regime_probs),
+        )
+        min_len = min(len(returns), len(regime_probs))
+        returns = returns[-min_len:]
+        regime_probs = regime_probs[-min_len:]
+
+    stress_mask = regime_probs > regime_threshold
+    if stress_mask.sum() >= 30:
+        stress_returns = returns[stress_mask]
+    else:
+        logger.warning("cvar_conditional_insufficient_data", n=int(stress_mask.sum()))
+        stress_returns = returns
+
+    cvar, _ = compute_cvar_from_returns(stress_returns, confidence)
+    return cvar
+
+
 def compute_cvar_from_returns(
     returns: np.ndarray,
     confidence: float = 0.95,

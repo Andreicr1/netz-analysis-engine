@@ -59,6 +59,7 @@ quant = [
     "statsmodels>=0.14",
     "scikit-learn>=1.6",
     "datacommons-client[Pandas]>=1.0",
+    "arch>=7.0",
 ]
 edgar = [
     "edgartools>=5.23,<6.0",

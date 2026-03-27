@@ -21,6 +21,11 @@
   },
   {
     "method": "DELETE",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/views/{view_id}",
+    "name": "delete_view"
+  },
+  {
+    "method": "DELETE",
     "path": "/api/v1/pipeline/deals/{deal_id}/cashflows/{cashflow_id}",
     "name": "delete_cashflow"
   },
@@ -881,6 +886,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/views",
+    "name": "list_views"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/pipeline/deals",
     "name": "list_deals"
   },
@@ -1698,6 +1708,16 @@
     "method": "POST",
     "path": "/api/v1/model-portfolios/{portfolio_id}/stress",
     "name": "trigger_stress"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/stress-test",
+    "name": "run_parametric_stress_test"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/views",
+    "name": "create_view"
   },
   {
     "method": "POST",

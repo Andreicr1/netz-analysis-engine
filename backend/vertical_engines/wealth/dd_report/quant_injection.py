@@ -85,6 +85,8 @@ def gather_quant_metrics(
             "manager_score": _to_float(row.manager_score),
             "score_components": row.score_components or {},
             "dtw_drift_score": _to_float(row.dtw_drift_score),
+            "volatility_garch": _to_float(getattr(row, "volatility_garch", None)),
+            "cvar_95_conditional": _to_float(getattr(row, "cvar_95_conditional", None)),
         }
 
     except Exception:
@@ -110,11 +112,13 @@ def gather_risk_metrics(
             "6m": profile.get("cvar_95_6m"),
             "12m": profile.get("cvar_95_12m"),
         },
+        "cvar_95_conditional": profile.get("cvar_95_conditional"),
         "var_windows": {
             "1m": profile.get("var_95_1m"),
             "3m": profile.get("var_95_3m"),
         },
         "volatility_1y": profile.get("volatility_1y"),
+        "volatility_garch": profile.get("volatility_garch"),
         "max_drawdown_1y": profile.get("max_drawdown_1y"),
         "sharpe_1y": profile.get("sharpe_1y"),
         "sortino_1y": profile.get("sortino_1y"),

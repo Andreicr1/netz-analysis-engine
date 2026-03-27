@@ -115,6 +115,7 @@ ALLOWLISTED_GLOBAL_TABLE_CONSUMERS: dict[str, str] = {
     "app/domains/wealth/routes/entity_analytics.py": "read — SELECT only on AllocationBlock and BenchmarkNav for benchmark resolution; no writes",
     "app/domains/wealth/services/blended_benchmark_service.py": "read — SELECT only on AllocationBlock and BenchmarkNav; no writes",
     "app/domains/wealth/services/benchmark_resolver.py": "read — SELECT only on AllocationBlock and BenchmarkNav for composite benchmark resolution; no writes",
+    "app/domains/wealth/routes/model_portfolios.py": "read — SELECT only on MacroData (VIX series) for regime-conditioned covariance in portfolio construction; no writes",
     "app/domains/wealth/routes/screener.py": "read — SELECT only on SecManager (and EsmaFund/EsmaManager) for global instrument search; no writes; global tables shared across tenants",
     "app/domains/wealth/routes/sec_analysis.py": "read — SELECT only on SecManager, Sec13fHolding, Sec13fDiff, SecManagerFund; no writes; global SEC data shared across tenants",
     # ── Background workers — use async_session_factory directly (no RLS) ────

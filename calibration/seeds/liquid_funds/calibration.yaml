@@ -44,6 +44,21 @@ rebalance:
   drift_threshold_pct: 5.0
   min_rebalance_interval_days: 30
   consecutive_breach_days_trigger: 5
+  turnover_penalty: 0.001
+  dead_band_pct: 0.005
+
+optimizer:
+  apply_shrinkage: true
+  robust: true
+  uncertainty_level: 0.5
+
+regime_cvar_multipliers:
+  RISK_OFF: 0.85
+  CRISIS: 0.70
+
+bl:
+  risk_aversion: 2.5
+  tau: 0.05
 
 regime_detection:
   lookback_days: 252

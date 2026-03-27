@@ -62,5 +62,11 @@ class FundRiskMetrics(OrganizationScopedMixin, Base):
     flow_momentum_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
     blended_momentum_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
 
+    # GARCH(1,1) conditional volatility (annualized, 1-step-ahead forecast)
+    volatility_garch: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
+
+    # CVaR conditional on stress regime (BL-9)
+    cvar_95_conditional: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
+
     # DTW drift signal (derivative DTW vs block benchmark, length-normalized)
     dtw_drift_score: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))

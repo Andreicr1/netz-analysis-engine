@@ -84,6 +84,25 @@ def _redistribute_proportionally(
     return {k: round(v / total_new, 6) for k, v in new_weights.items()}
 
 
+def apply_dead_band(
+    proposed_weights: dict[str, float],
+    current_weights: dict[str, float],
+    dead_band_pct: float = 0.005,
+) -> dict[str, float]:
+    """Suppress trades below the dead-band threshold.
+
+    For each fund/block, if |proposed - current| < dead_band_pct,
+    keep the current weight (no trade). This reduces unnecessary
+    churn and transaction costs.
+    """
+    result = dict(proposed_weights)
+    for fund_id, new_w in proposed_weights.items():
+        current_w = current_weights.get(fund_id, 0.0)
+        if abs(new_w - current_w) < dead_band_pct:
+            result[fund_id] = current_w
+    return result
+
+
 def propose_weights(
     db: Session,
     portfolio_id: uuid.UUID,

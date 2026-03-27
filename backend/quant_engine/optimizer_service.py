@@ -314,6 +314,13 @@ async def optimize_fund_portfolio(
     cov_matrix: np.ndarray,
     constraints: ProfileConstraints,
     risk_free_rate: float = 0.04,
+    skewness: np.ndarray | None = None,
+    excess_kurtosis: np.ndarray | None = None,
+    current_weights: np.ndarray | None = None,
+    turnover_cost: float = 0.0,
+    robust: bool = False,
+    uncertainty_level: float = 0.5,
+    regime_cvar_multiplier: float = 1.0,
 ) -> FundOptimizationResult:
     """Optimize fund-level weights with block-group sum constraints.
 
@@ -399,11 +406,13 @@ async def optimize_fund_portfolio(
             return None
         return w_arr / total
 
+    # Resolve moments: use provided arrays or fall back to zeros
+    _skew = skewness if skewness is not None else np.zeros(n)
+    _kurt = excess_kurtosis if excess_kurtosis is not None else np.zeros(n)
+
     def _compute_cvar(w_arr: np.ndarray) -> float:
-        """Compute parametric CVaR (Cornish-Fisher, zero skew/kurtosis)."""
-        skew = np.zeros(n)
-        kurt = np.zeros(n)
-        return -parametric_cvar_cf(w_arr, mu, cov_matrix, skew, kurt)
+        """Compute parametric CVaR (Cornish-Fisher)."""
+        return -parametric_cvar_cf(w_arr, mu, cov_matrix, _skew, _kurt)
 
     def _build_result(
         w_arr: np.ndarray, solver: str | None, status: str,
@@ -442,19 +451,42 @@ async def optimize_fund_portfolio(
             cvar_within_limit=False, status=status, solver_info=solver,
         )
 
-    # ── Phase 1: Max risk-adjusted return ──
+    # ── Phase 1: Max risk-adjusted return (with optional turnover penalty) ──
     w1 = cp.Variable(n, nonneg=True)
     risk_aversion = 2.0
-    prob1 = cp.Problem(
-        cp.Maximize(mu @ w1 - risk_aversion * cp.quad_form(w1, psd_cov)),
-        _build_base_constraints(w1),
-    )
+    objective_expr = mu @ w1 - risk_aversion * cp.quad_form(w1, psd_cov)
+    phase1_constraints = _build_base_constraints(w1)
+
+    if current_weights is not None and turnover_cost > 0:
+        t1 = cp.Variable(n, nonneg=True)  # slack for |w - w_current|
+        phase1_constraints += [
+            t1 >= w1 - current_weights,
+            t1 >= current_weights - w1,
+        ]
+        objective_expr = objective_expr - turnover_cost * cp.sum(t1)
+
+    prob1 = cp.Problem(cp.Maximize(objective_expr), phase1_constraints)
 
     status1 = await _solve_problem(prob1)
     if status1 in (None, "solver_error"):
         return _empty_result("solver_failed", "Both CLARABEL and SCS failed")
     if status1 not in ("optimal", "optimal_inaccurate"):
-        return _empty_result(f"infeasible: {status1}")
+        # If turnover penalty caused infeasibility, retry without it
+        if current_weights is not None and turnover_cost > 0:
+            logger.warning("turnover_penalty_infeasible_retrying_without")
+            w1_retry = cp.Variable(n, nonneg=True)
+            prob1_retry = cp.Problem(
+                cp.Maximize(mu @ w1_retry - risk_aversion * cp.quad_form(w1_retry, psd_cov)),
+                _build_base_constraints(w1_retry),
+            )
+            status1 = await _solve_problem(prob1_retry)
+            if status1 in ("optimal", "optimal_inaccurate"):
+                w1 = w1_retry
+                prob1 = prob1_retry
+            else:
+                return _empty_result(f"infeasible: {status1}")
+        else:
+            return _empty_result(f"infeasible: {status1}")
 
     opt_w = _extract_weights(w1)
     if opt_w is None:
@@ -466,15 +498,79 @@ async def optimize_fund_portfolio(
     cvar_neg = _compute_cvar(opt_w)
     cvar_ok = cvar_neg >= cvar_limit if cvar_limit is not None else True
 
-    if cvar_ok or cvar_limit is None:
+    # Apply regime CVaR multiplier (tighter limit in adverse regimes)
+    effective_cvar_limit = cvar_limit
+    if cvar_limit is not None and regime_cvar_multiplier != 1.0:
+        effective_cvar_limit = cvar_limit * regime_cvar_multiplier
+        logger.info(
+            "regime_cvar_multiplier_applied",
+            original_limit=cvar_limit,
+            effective_limit=effective_cvar_limit,
+            multiplier=regime_cvar_multiplier,
+        )
+        # Re-check with effective limit
+        cvar_ok = cvar_neg >= effective_cvar_limit
+
+    if cvar_ok or effective_cvar_limit is None:
         result = _build_result(opt_w, solver_name, "optimal")
         logger.info(
             "fund_portfolio_optimized",
             n_funds=n, sharpe=result.sharpe_ratio,
-            cvar_95=result.cvar_95, cvar_limit=cvar_limit,
+            cvar_95=result.cvar_95, cvar_limit=effective_cvar_limit,
             solver=solver_name, status="optimal",
         )
         return result
+
+    # ── Phase 1.5: Robust optimization (ellipsoidal uncertainty set) ──
+    if robust:
+        try:
+            kappa = uncertainty_level * np.sqrt(n)
+            # Cholesky of PSD-wrapped covariance for SOCP norm
+            try:
+                L = np.linalg.cholesky(cov_matrix)
+            except np.linalg.LinAlgError:
+                # Fallback: eigenvalue clipping for near-PSD matrices
+                eigvals, eigvecs = np.linalg.eigh(cov_matrix)
+                eigvals = np.maximum(eigvals, 1e-8)
+                L = eigvecs @ np.diag(np.sqrt(eigvals))
+
+            w_robust = cp.Variable(n, nonneg=True)
+            robust_penalty = kappa * cp.norm(L.T @ w_robust, 2)
+            robust_obj = cp.Maximize(
+                mu @ w_robust - robust_penalty - risk_aversion * cp.quad_form(w_robust, psd_cov)
+            )
+            robust_constraints = _build_base_constraints(w_robust)
+            prob_robust = cp.Problem(robust_obj, robust_constraints)
+
+            status_robust = await _solve_problem(prob_robust)
+            if status_robust in ("optimal", "optimal_inaccurate"):
+                opt_w_robust = _extract_weights(w_robust)
+                if opt_w_robust is not None:
+                    cvar_robust = _compute_cvar(opt_w_robust)
+                    cvar_ok_robust = (
+                        cvar_robust >= effective_cvar_limit
+                        if effective_cvar_limit is not None
+                        else True
+                    )
+                    if cvar_ok_robust:
+                        result = _build_result(opt_w_robust, "CLARABEL:robust", "optimal:robust")
+                        logger.info(
+                            "robust_optimization_succeeded",
+                            sharpe=result.sharpe_ratio,
+                            cvar_95=result.cvar_95,
+                            kappa=round(kappa, 4),
+                        )
+                        return result
+                    else:
+                        logger.warning(
+                            "robust_cvar_still_violated",
+                            cvar_95=round(cvar_robust, 6),
+                            limit=effective_cvar_limit,
+                        )
+            else:
+                logger.warning("robust_optimization_infeasible", status=status_robust)
+        except Exception as e:
+            logger.warning("robust_optimization_failed", error=str(e))
 
     # ── Phase 2: CVaR violated — re-solve with variance ceiling ──
     # Derive σ_max from cvar_limit under normal approximation:

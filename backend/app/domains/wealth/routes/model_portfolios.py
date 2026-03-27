@@ -156,7 +156,7 @@ async def construct_portfolio(
             detail=f"Model portfolio {portfolio_id} not found",
         )
 
-    fund_selection = await _run_construction_async(db, portfolio.profile, org_id)
+    fund_selection = await _run_construction_async(db, portfolio.profile, org_id, portfolio_id=portfolio_id)
 
     portfolio.fund_selection_schema = fund_selection
     portfolio.status = "backtesting"
@@ -318,6 +318,87 @@ async def trigger_stress(
     }
 
 
+@router.post(
+    "/{portfolio_id}/stress-test",
+    summary="Run parametric stress scenario on portfolio",
+)
+async def run_parametric_stress_test(
+    portfolio_id: uuid.UUID,
+    body: dict[str, Any],
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Run parametric stress scenario against portfolio block weights.
+
+    Body:
+        scenario_name: "gfc_2008" | "covid_2020" | "taper_2013" | "rate_shock_200bps" | "custom"
+        shocks: {block_id: shock_return}  — required only if scenario_name="custom"
+    """
+    result = await db.execute(
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
+    )
+    portfolio = result.scalar_one_or_none()
+    if portfolio is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model portfolio {portfolio_id} not found",
+        )
+
+    if not portfolio.fund_selection_schema:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Portfolio has no fund selection. Run /construct first.",
+        )
+
+    scenario_name = body.get("scenario_name", "custom")
+    custom_shocks = body.get("shocks")
+
+    from vertical_engines.wealth.model_portfolio.stress_scenarios import (
+        PRESET_SCENARIOS,
+        run_stress_scenario,
+    )
+
+    if scenario_name == "custom":
+        if not custom_shocks or not isinstance(custom_shocks, dict):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Custom scenario requires 'shocks' dict in body",
+            )
+        shocks = {k: float(v) for k, v in custom_shocks.items()}
+    else:
+        shocks = PRESET_SCENARIOS.get(scenario_name)
+        if shocks is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unknown scenario: {scenario_name}. Available: {list(PRESET_SCENARIOS.keys())}",
+            )
+
+    # Extract block weights from fund_selection
+    funds = portfolio.fund_selection_schema.get("funds", [])
+    block_weights: dict[str, float] = {}
+    for f in funds:
+        bid = f.get("block_id")
+        if bid:
+            block_weights[bid] = block_weights.get(bid, 0.0) + f.get("weight", 0.0)
+
+    stress_result = run_stress_scenario(
+        weights_by_block=block_weights,
+        shocks=shocks,
+        historical_returns=None,  # on-demand — no historical fetch
+        scenario_name=scenario_name,
+    )
+
+    return {
+        "portfolio_id": str(portfolio_id),
+        "scenario_name": stress_result.scenario_name,
+        "nav_impact_pct": stress_result.nav_impact_pct,
+        "cvar_stressed": stress_result.cvar_stressed,
+        "block_impacts": stress_result.block_impacts,
+        "worst_block": stress_result.worst_block,
+        "best_block": stress_result.best_block,
+    }
+
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
@@ -344,6 +425,7 @@ async def _run_construction_async(
     db: AsyncSession,
     profile: str,
     org_id: str,
+    portfolio_id: uuid.UUID | None = None,
 ) -> dict[str, Any]:
     """Run optimizer-driven portfolio construction (fully async).
 
@@ -439,8 +521,48 @@ async def _run_construction_async(
     composition = None
 
     try:
-        cov_matrix, expected_returns, available_ids = await compute_fund_level_inputs(
-            db, fund_instrument_ids,
+        # ── BL-5: Fetch regime probs for regime-conditioned covariance ──
+        regime_config: dict[str, Any] = {}
+        try:
+            regime_snap = await db.execute(
+                select(PortfolioSnapshot.regime_probs)
+                .where(PortfolioSnapshot.regime_probs.isnot(None))
+                .order_by(PortfolioSnapshot.snapshot_date.desc())
+                .limit(1),
+            )
+            regime_row = regime_snap.scalar_one_or_none()
+            if regime_row and isinstance(regime_row, dict):
+                p_high = regime_row.get("p_high_vol")
+                if p_high is not None:
+                    # Build a synthetic probs array from VIX history for the lookback
+                    from app.domains.wealth.models.macro import MacroData
+
+                    vix_stmt = (
+                        select(MacroData.value)
+                        .where(MacroData.series_id == "VIXCLS")
+                        .order_by(MacroData.obs_date.desc())
+                        .limit(504)
+                    )
+                    vix_result = await db.execute(vix_stmt)
+                    vix_values = [float(r[0]) for r in vix_result.all()]
+                    if len(vix_values) >= 63:
+                        vix_values.reverse()
+                        # Simple threshold-based probs as proxy (full HMM runs in worker)
+                        vix_arr = np.array(vix_values)
+                        median_vix = float(np.median(vix_arr))
+                        regime_probs = (vix_arr / (median_vix + vix_arr)).tolist()
+                        regime_config["_regime_probs"] = regime_probs
+        except Exception:
+            logger.debug("regime_probs_fetch_failed_using_standard_cov")
+
+        cov_matrix, expected_returns, available_ids, fund_skewness, fund_excess_kurtosis = (
+            await compute_fund_level_inputs(
+                db,
+                fund_instrument_ids,
+                config=regime_config or None,
+                portfolio_id=portfolio_id,
+                profile=profile,
+            )
         )
 
         # Filter to funds with NAV data
@@ -454,6 +576,8 @@ async def _run_construction_async(
         sub_cov = cov_matrix[np.ix_(indices, indices)]
         sub_returns = {fid: expected_returns[fid] for fid in opt_fund_ids}
         sub_blocks = {fid: fund_blocks[fid] for fid in opt_fund_ids}
+        sub_skewness = fund_skewness[indices]
+        sub_excess_kurtosis = fund_excess_kurtosis[indices]
 
         # Filter and rescale constraints to covered blocks only.
         # When universe covers a subset of blocks, original min/max don't
@@ -528,6 +652,8 @@ async def _run_construction_async(
             expected_returns=sub_returns,
             cov_matrix=sub_cov,
             constraints=active_constraints,
+            skewness=sub_skewness,
+            excess_kurtosis=sub_excess_kurtosis,
         )
 
         if fund_result.status.startswith("optimal") and fund_result.weights:
@@ -612,7 +738,78 @@ async def _run_construction_async(
             "cvar_within_limit": composition.optimization.cvar_within_limit,
         }
 
+    # ── BL-7: Factor decomposition (best-effort, never blocks) ──
+    if composition.optimization and composition.optimization.status.startswith("optimal"):
+        try:
+            factor_result = await _compute_factor_exposures(
+                db, fund_instrument_ids, fund_result.weights, opt_fund_ids,
+            )
+            if factor_result:
+                result["optimization"]["factor_exposures"] = factor_result
+        except Exception:
+            logger.debug("factor_decomposition_skipped")
+
     return result
+
+
+async def _compute_factor_exposures(
+    db: AsyncSession,
+    fund_instrument_ids: list[uuid.UUID],
+    fund_weights_dict: dict[str, float],
+    opt_fund_ids: list[str],
+) -> dict[str, float] | None:
+    """Compute PCA factor exposures for the optimized portfolio (best-effort)."""
+    try:
+        from app.domains.wealth.models.nav import NavTimeseries
+        from quant_engine.factor_model_service import decompose_factors
+
+        # Fetch aligned returns matrix for optimized funds
+        end_date = date.today()
+        start_date = date.today() - __import__("datetime").timedelta(days=504)
+
+        from collections import defaultdict as _dd
+
+        returns_by_fund: dict[str, list[float]] = _dd(list)
+        stmt = (
+            select(NavTimeseries.instrument_id, NavTimeseries.return_1d)
+            .where(
+                NavTimeseries.instrument_id.in_([uuid.UUID(fid) for fid in opt_fund_ids]),
+                NavTimeseries.nav_date >= start_date,
+                NavTimeseries.nav_date <= end_date,
+                NavTimeseries.return_1d.isnot(None),
+                NavTimeseries.return_type == "log",
+            )
+            .order_by(NavTimeseries.instrument_id, NavTimeseries.nav_date)
+        )
+        result = await db.execute(stmt)
+        for inst_id, ret in result.all():
+            returns_by_fund[str(inst_id)].append(float(ret))
+
+        # Align to common length
+        valid_ids = [fid for fid in opt_fund_ids if len(returns_by_fund.get(fid, [])) >= 60]
+        if len(valid_ids) < 3:
+            return None
+
+        min_len = min(len(returns_by_fund[fid]) for fid in valid_ids)
+        returns_matrix = np.column_stack([
+            np.array(returns_by_fund[fid][-min_len:]) for fid in valid_ids
+        ])
+
+        weights = np.array([fund_weights_dict.get(fid, 0.0) for fid in valid_ids])
+        w_sum = weights.sum()
+        if w_sum > 0:
+            weights = weights / w_sum
+
+        factor_result = decompose_factors(
+            returns_matrix=returns_matrix,
+            macro_proxies=None,
+            portfolio_weights=weights,
+            n_factors=min(3, len(valid_ids) - 1),
+        )
+        return factor_result.portfolio_factor_exposures
+    except Exception:
+        logger.debug("factor_exposure_computation_failed")
+        return None
 
 
 async def _load_universe_funds(
