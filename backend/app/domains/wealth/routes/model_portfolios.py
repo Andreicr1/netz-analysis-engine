@@ -475,6 +475,20 @@ async def _run_construction_async(
                 )
                 for bc in active_raw
             ]
+            # Feasibility check: if sum of scaled maxes < 1.0, block constraints
+            # are mathematically infeasible with sum(w)==1.0. Relax to unconstrained.
+            sum_of_scaled_maxes = sum(bc.max_weight for bc in active_block_constraints)
+            if sum_of_scaled_maxes < 1.0:
+                logger.info(
+                    "block_constraints_relaxed_sparse_universe",
+                    covered_blocks=list(covered_blocks),
+                    sum_of_maxes=round(sum_of_scaled_maxes, 4),
+                    reason="sum_of_maxes < 1.0 — only max_single_fund applies",
+                )
+                active_block_constraints = [
+                    BlockConstraint(block_id=bc.block_id, min_weight=0.0, max_weight=1.0)
+                    for bc in active_block_constraints
+                ]
         else:
             active_block_constraints = active_raw
 
