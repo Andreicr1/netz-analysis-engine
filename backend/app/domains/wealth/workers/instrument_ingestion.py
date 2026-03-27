@@ -18,6 +18,7 @@ from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.db.session import async_session_factory
 from app.core.tenancy.middleware import set_rls_context
 from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.nav import NavTimeseries
@@ -58,7 +59,6 @@ def _resolve_period(lookback_days: int) -> str:
 
 
 async def run_instrument_ingestion(
-    db: AsyncSession,
     org_id: uuid.UUID,
     lookback_days: int = 30,
 ) -> dict[str, int | list[str]]:
@@ -76,27 +76,29 @@ async def run_instrument_ingestion(
         lookback_days=lookback_days,
     )
 
-    await set_rls_context(db, org_id)
+    async with async_session_factory() as db:
+        db.expire_on_commit = False
+        await set_rls_context(db, org_id)
 
-    # Advisory lock — skip if already running
-    lock_result = await db.execute(
-        text(f"SELECT pg_try_advisory_lock({INSTRUMENT_INGESTION_LOCK_ID})")
-    )
-    if not lock_result.scalar():
-        logger.warning("Instrument ingestion already running — skipping")
-        return {
-            "instruments_processed": 0,
-            "rows_upserted": 0,
-            "skipped_tickers": [],
-            "errors": [],
-        }
-
-    try:
-        return await _do_ingest(db, org_id, lookback_days)
-    finally:
-        await db.execute(
-            text(f"SELECT pg_advisory_unlock({INSTRUMENT_INGESTION_LOCK_ID})")
+        # Advisory lock — skip if already running
+        lock_result = await db.execute(
+            text(f"SELECT pg_try_advisory_lock({INSTRUMENT_INGESTION_LOCK_ID})")
         )
+        if not lock_result.scalar():
+            logger.warning("Instrument ingestion already running — skipping")
+            return {
+                "instruments_processed": 0,
+                "rows_upserted": 0,
+                "skipped_tickers": [],
+                "errors": [],
+            }
+
+        try:
+            return await _do_ingest(db, org_id, lookback_days)
+        finally:
+            await db.execute(
+                text(f"SELECT pg_advisory_unlock({INSTRUMENT_INGESTION_LOCK_ID})")
+            )
 
 
 async def _do_ingest(
