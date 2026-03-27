@@ -13,7 +13,7 @@
 		Briefcase, Zap, BarChart2, Map,
 		Landmark, FileText, Newspaper, Folders,
 		Search as SearchIcon, Bot, PieChart, ChevronDown,
-		LayoutDashboard
+		LayoutDashboard, Settings,
 	} from "lucide-svelte";
 
 	interface SidebarItem {
@@ -85,6 +85,12 @@
 			items: [
 				{ label: "Documents", href: "/documents", icon: FileText },
 				{ label: "Content",   href: "/content",   icon: Newspaper },
+			],
+		},
+		{
+			id: "admin", label: "Administration", defaultOpen: false,
+			items: [
+				{ label: "Settings", href: "/settings", icon: Settings },
 			],
 		},
 	];

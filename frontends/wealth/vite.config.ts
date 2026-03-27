@@ -30,7 +30,16 @@ export default defineConfig({
 		],
 	},
 	ssr: {
-		noExternal: ["@tanstack/svelte-table"],
+		noExternal: [
+			"@tanstack/svelte-table",
+			"@codemirror/state",
+			"@codemirror/view",
+			"@codemirror/lang-json",
+			"@codemirror/lint",
+			"@codemirror/commands",
+			"@codemirror/merge",
+			"codemirror-json-schema",
+		],
 	},
 	build: {
 		chunkSizeWarningLimit: 1000,
