@@ -146,13 +146,13 @@ class SecManager(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )
 
-    funds: Mapped[list["SecManagerFund"]] = relationship(
+    funds: Mapped[list[SecManagerFund]] = relationship(
         back_populates="manager", lazy="raise", cascade="all, delete-orphan",
     )
-    team: Mapped[list["SecManagerTeam"]] = relationship(
+    team: Mapped[list[SecManagerTeam]] = relationship(
         back_populates="manager", lazy="raise", cascade="all, delete-orphan",
     )
-    brochure_sections: Mapped[list["SecManagerBrochureText"]] = relationship(
+    brochure_sections: Mapped[list[SecManagerBrochureText]] = relationship(
         lazy="raise", cascade="all, delete-orphan",
     )
 
@@ -182,7 +182,7 @@ class SecManagerFund(Base, IdMixin):
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )
 
-    manager: Mapped["SecManager"] = relationship(back_populates="funds", lazy="raise")
+    manager: Mapped[SecManager] = relationship(back_populates="funds", lazy="raise")
 
 
 class SecManagerTeam(Base, IdMixin):
@@ -211,7 +211,7 @@ class SecManagerTeam(Base, IdMixin):
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )
 
-    manager: Mapped["SecManager"] = relationship(back_populates="team", lazy="raise")
+    manager: Mapped[SecManager] = relationship(back_populates="team", lazy="raise")
 
 
 class SecManagerBrochureText(Base):
@@ -430,7 +430,7 @@ class EsmaManager(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )
 
-    funds: Mapped[list["EsmaFund"]] = relationship(
+    funds: Mapped[list[EsmaFund]] = relationship(
         back_populates="manager", lazy="raise", cascade="all, delete-orphan",
     )
 
@@ -464,7 +464,7 @@ class EsmaFund(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )
 
-    manager: Mapped["EsmaManager"] = relationship(back_populates="funds", lazy="raise")
+    manager: Mapped[EsmaManager] = relationship(back_populates="funds", lazy="raise")
 
 
 class EsmaIsinTickerMap(Base):
@@ -549,6 +549,32 @@ class SecRegisteredFund(Base):
     domicile: Mapped[str] = mapped_column(Text, nullable=False, server_default="US")
     last_nport_date: Mapped[dt.date | None] = mapped_column(Date)
     aum_below_threshold: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    data_fetched_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+
+
+class SecFundClass(Base):
+    """Share class within a registered fund series.
+
+    GLOBAL TABLE: No organization_id, no RLS.
+    Populated by nport_fund_discovery worker from EDGAR filing header SGML.
+    Composite PK: (cik, series_id, class_id).
+    """
+
+    __tablename__ = "sec_fund_classes"
+
+    cik: Mapped[str] = mapped_column(
+        Text, ForeignKey("sec_registered_funds.cik", ondelete="CASCADE"), primary_key=True,
+    )
+    series_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    class_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    series_name: Mapped[str | None] = mapped_column(Text)
+    class_name: Mapped[str | None] = mapped_column(Text)
+    ticker: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
     data_fetched_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )

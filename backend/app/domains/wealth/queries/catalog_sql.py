@@ -62,6 +62,17 @@ sec_registered_funds = Table(
     Column("aum_below_threshold", Boolean),
 )
 
+sec_fund_classes = Table(
+    "sec_fund_classes",
+    _meta,
+    Column("cik", Text, primary_key=True),
+    Column("series_id", Text, primary_key=True),
+    Column("class_id", Text, primary_key=True),
+    Column("series_name", Text),
+    Column("class_name", Text),
+    Column("ticker", Text),
+)
+
 sec_managers = Table(
     "sec_managers",
     _meta,
@@ -173,12 +184,20 @@ def _registered_us_branch(f: CatalogFilters) -> Select | None:
         .exists()
     )
 
+    # Prefer class-level ticker over fund-level ticker for NAV resolution
+    _effective_ticker = func.coalesce(
+        sec_fund_classes.c.ticker, sec_registered_funds.c.ticker,
+    )
+
     stmt = (
         select(
             literal("registered_us").label("universe"),
             sec_registered_funds.c.cik.label("external_id"),
-            sec_registered_funds.c.fund_name.label("name"),
-            sec_registered_funds.c.ticker,
+            func.coalesce(
+                sec_fund_classes.c.class_name + literal(" - ") + sec_registered_funds.c.fund_name,
+                sec_registered_funds.c.fund_name,
+            ).label("name"),
+            _effective_ticker.label("ticker"),
             sec_registered_funds.c.isin,
             literal("US").label("region"),
             sec_registered_funds.c.fund_type,
@@ -190,12 +209,21 @@ def _registered_us_branch(f: CatalogFilters) -> Select | None:
             sec_registered_funds.c.inception_date,
             sec_registered_funds.c.total_shareholder_accounts,
             literal_column("NULL").label("investor_count"),
+            # series / class
+            sec_fund_classes.c.series_id,
+            sec_fund_classes.c.series_name,
+            sec_fund_classes.c.class_id,
+            sec_fund_classes.c.class_name,
             # disclosure booleans — computed at SQL level for facets
             literal(True).label("has_holdings"),
-            (sec_registered_funds.c.ticker.isnot(None)).label("has_nav"),
+            (_effective_ticker.isnot(None)).label("has_nav"),
             _13f_exists.label("has_13f_overlay"),
         )
         .select_from(sec_registered_funds)
+        .outerjoin(
+            sec_fund_classes,
+            sec_registered_funds.c.cik == sec_fund_classes.c.cik,
+        )
         .outerjoin(
             sec_managers,
             sec_registered_funds.c.crd_number == sec_managers.c.crd_number,
@@ -216,15 +244,19 @@ def _common_conditions_registered(f: CatalogFilters) -> list:
         conditions.append(
             sec_registered_funds.c.fund_name.ilike(pattern)
             | sec_registered_funds.c.ticker.ilike(pattern)
+            | sec_fund_classes.c.ticker.ilike(pattern)
             | sec_registered_funds.c.isin.ilike(pattern)
-            | sec_managers.c.firm_name.ilike(pattern)
+            | sec_managers.c.firm_name.ilike(pattern),
         )
     if f.fund_type:
         conditions.append(sec_registered_funds.c.fund_type == f.fund_type)
     if f.aum_min is not None:
         conditions.append(sec_registered_funds.c.total_assets >= int(f.aum_min))
     if f.has_nav is True:
-        conditions.append(sec_registered_funds.c.ticker.isnot(None))
+        _eff_ticker = func.coalesce(
+            sec_fund_classes.c.ticker, sec_registered_funds.c.ticker,
+        )
+        conditions.append(_eff_ticker.isnot(None))
     if f.domicile:
         conditions.append(sec_registered_funds.c.domicile == f.domicile)
     if f.manager:
@@ -276,6 +308,11 @@ def _private_us_branch(f: CatalogFilters) -> Select | None:
             literal_column("NULL").label("inception_date"),
             literal_column("NULL").label("total_shareholder_accounts"),
             sec_manager_funds.c.investor_count,
+            # series / class (N/A for private)
+            literal_column("NULL").label("series_id"),
+            literal_column("NULL").label("series_name"),
+            literal_column("NULL").label("class_id"),
+            literal_column("NULL").label("class_name"),
             # disclosure
             literal(False).label("has_holdings"),
             literal(False).label("has_nav"),
@@ -294,7 +331,7 @@ def _private_us_branch(f: CatalogFilters) -> Select | None:
         pattern = f"%{escaped}%"
         conditions.append(
             sec_manager_funds.c.fund_name.ilike(pattern)
-            | sec_managers.c.firm_name.ilike(pattern)
+            | sec_managers.c.firm_name.ilike(pattern),
         )
     if f.fund_type:
         conditions.append(sec_manager_funds.c.fund_type == f.fund_type)
@@ -337,6 +374,11 @@ def _ucits_eu_branch(f: CatalogFilters) -> Select | None:
             literal_column("NULL").label("inception_date"),
             literal_column("NULL").label("total_shareholder_accounts"),
             literal_column("NULL").label("investor_count"),
+            # series / class (N/A for UCITS)
+            literal_column("NULL").label("series_id"),
+            literal_column("NULL").label("series_name"),
+            literal_column("NULL").label("class_id"),
+            literal_column("NULL").label("class_name"),
             # disclosure
             literal(False).label("has_holdings"),
             literal(True).label("has_nav"),  # all have ticker (WHERE filter)
@@ -356,7 +398,7 @@ def _ucits_eu_branch(f: CatalogFilters) -> Select | None:
             esma_funds.c.fund_name.ilike(pattern)
             | esma_funds.c.isin.ilike(pattern)
             | esma_funds.c.yahoo_ticker.ilike(pattern)
-            | esma_managers.c.company_name.ilike(pattern)
+            | esma_managers.c.company_name.ilike(pattern),
         )
     if f.fund_type:
         conditions.append(esma_funds.c.fund_type == f.fund_type)

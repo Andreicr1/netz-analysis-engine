@@ -39,6 +39,12 @@ class UnifiedFundItem(BaseModel):
     ticker: str | None = None
     isin: str | None = None
 
+    # Series / share class (registered_us only)
+    series_id: str | None = None
+    series_name: str | None = None
+    class_id: str | None = None
+    class_name: str | None = None
+
     # Classification
     region: Literal["US", "EU"]
     fund_type: str

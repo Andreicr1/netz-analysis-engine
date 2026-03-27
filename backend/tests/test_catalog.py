@@ -366,3 +366,162 @@ class TestCatalogFacets:
         assert item.value == "registered_us"
         assert item.label == "US Registered"
         assert item.count == 50000
+
+
+class TestParseSeriesClassHeader:
+    """Test _parse_series_class_header extracts ALL series/classes."""
+
+    SGML_MULTI_CLASS = """\
+<SERIES-AND-CLASSES-CONTRACTS-DATA>
+<EXISTING-SERIES-AND-CLASSES-CONTRACTS>
+<SERIES>
+<OWNER-CIK>0000003794
+<SERIES-ID>S000027379
+<SERIES-NAME>AB Municipal Bond Inflation Strategy
+<CLASS-CONTRACT>
+<CLASS-CONTRACT-ID>C000082624
+<CLASS-CONTRACT-NAME>Class A
+<CLASS-CONTRACT-TICKER-SYMBOL>AUNAX
+</CLASS-CONTRACT>
+<CLASS-CONTRACT>
+<CLASS-CONTRACT-ID>C000082625
+<CLASS-CONTRACT-NAME>Class C
+<CLASS-CONTRACT-TICKER-SYMBOL>AUNCX
+</CLASS-CONTRACT>
+</SERIES>
+<SERIES>
+<OWNER-CIK>0000003794
+<SERIES-ID>S000027380
+<SERIES-NAME>AB Short Duration Income
+<CLASS-CONTRACT>
+<CLASS-CONTRACT-ID>C000082630
+<CLASS-CONTRACT-NAME>Advisor Class
+<CLASS-CONTRACT-TICKER-SYMBOL>ADFIX
+</CLASS-CONTRACT>
+</SERIES>
+</EXISTING-SERIES-AND-CLASSES-CONTRACTS>
+</SERIES-AND-CLASSES-CONTRACTS-DATA>
+"""
+
+    def test_extracts_all_classes(self):
+        from app.domains.wealth.workers.nport_fund_discovery import (
+            _parse_series_class_header,
+        )
+
+        result: dict = {"ticker": None, "series_id": None, "class_id": None}
+        _parse_series_class_header(self.SGML_MULTI_CLASS, result)
+
+        classes = result["fund_classes"]
+        assert len(classes) == 3
+
+        # First series, two classes
+        assert classes[0]["series_id"] == "S000027379"
+        assert classes[0]["series_name"] == "AB Municipal Bond Inflation Strategy"
+        assert classes[0]["class_id"] == "C000082624"
+        assert classes[0]["class_name"] == "Class A"
+        assert classes[0]["ticker"] == "AUNAX"
+
+        assert classes[1]["series_id"] == "S000027379"
+        assert classes[1]["class_id"] == "C000082625"
+        assert classes[1]["class_name"] == "Class C"
+        assert classes[1]["ticker"] == "AUNCX"
+
+        # Second series, one class
+        assert classes[2]["series_id"] == "S000027380"
+        assert classes[2]["series_name"] == "AB Short Duration Income"
+        assert classes[2]["class_id"] == "C000082630"
+        assert classes[2]["ticker"] == "ADFIX"
+
+    def test_backward_compat_first_ticker(self):
+        from app.domains.wealth.workers.nport_fund_discovery import (
+            _parse_series_class_header,
+        )
+
+        result: dict = {"ticker": None, "series_id": None, "class_id": None}
+        _parse_series_class_header(self.SGML_MULTI_CLASS, result)
+
+        assert result["ticker"] == "AUNAX"
+        assert result["series_id"] == "S000027379"
+        assert result["class_id"] == "C000082624"
+
+    def test_preserves_existing_ticker(self):
+        from app.domains.wealth.workers.nport_fund_discovery import (
+            _parse_series_class_header,
+        )
+
+        result: dict = {"ticker": "EXISTING", "series_id": None, "class_id": None}
+        _parse_series_class_header(self.SGML_MULTI_CLASS, result)
+
+        # Should NOT overwrite existing ticker
+        assert result["ticker"] == "EXISTING"
+
+    def test_empty_sgml(self):
+        from app.domains.wealth.workers.nport_fund_discovery import (
+            _parse_series_class_header,
+        )
+
+        result: dict = {"ticker": None, "series_id": None, "class_id": None}
+        _parse_series_class_header("<html>no series data</html>", result)
+
+        assert result["fund_classes"] == []
+        assert result["ticker"] is None
+
+    def test_class_without_ticker(self):
+        from app.domains.wealth.workers.nport_fund_discovery import (
+            _parse_series_class_header,
+        )
+
+        sgml = """\
+<SERIES>
+<SERIES-ID>S000099999
+<SERIES-NAME>Test Fund
+<CLASS-CONTRACT>
+<CLASS-CONTRACT-ID>C000111111
+<CLASS-CONTRACT-NAME>Institutional
+</CLASS-CONTRACT>
+</SERIES>
+"""
+        result: dict = {"ticker": None, "series_id": None, "class_id": None}
+        _parse_series_class_header(sgml, result)
+
+        assert len(result["fund_classes"]) == 1
+        assert result["fund_classes"][0]["ticker"] is None
+        assert result["fund_classes"][0]["class_name"] == "Institutional"
+        # No ticker to set
+        assert result["ticker"] is None
+
+
+class TestUnifiedFundItemWithClassFields:
+    """Test that UnifiedFundItem accepts series/class fields."""
+
+    def test_registered_with_class_info(self):
+        item = UnifiedFundItem(
+            external_id="0001234567",
+            universe="registered_us",
+            name="Class A - Vanguard 500 Index Fund",
+            ticker="VFIAX",
+            region="US",
+            fund_type="mutual_fund",
+            series_id="S000002956",
+            series_name="Vanguard 500 Index Fund",
+            class_id="C000007859",
+            class_name="Admiral Shares",
+            disclosure=DisclosureMatrix(has_holdings=True),
+        )
+        assert item.series_id == "S000002956"
+        assert item.class_name == "Admiral Shares"
+        data = item.model_dump()
+        assert data["series_id"] == "S000002956"
+        assert data["class_id"] == "C000007859"
+
+    def test_private_no_class_info(self):
+        item = UnifiedFundItem(
+            external_id="abc",
+            universe="private_us",
+            name="Some Fund",
+            region="US",
+            fund_type="hedge_fund",
+            disclosure=DisclosureMatrix(),
+        )
+        assert item.series_id is None
+        assert item.class_id is None

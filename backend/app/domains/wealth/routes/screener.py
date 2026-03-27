@@ -18,7 +18,7 @@ import asyncio
 import hashlib
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -110,7 +110,7 @@ async def trigger_screening(
     config_l3 = (await config_svc.get("liquid_funds", "screening_layer3", org_id)).value
 
     config_hash = hashlib.sha256(
-        json.dumps({"l1": config_l1, "l2": config_l2, "l3": config_l3}, sort_keys=True).encode()
+        json.dumps({"l1": config_l1, "l2": config_l2, "l3": config_l3}, sort_keys=True).encode(),
     ).hexdigest()
 
     # Create screening run
@@ -142,7 +142,7 @@ async def trigger_screening(
         lambda: [
             screener.screen_instrument(**inst_dict)
             for inst_dict in instrument_dicts
-        ]
+        ],
     )
 
     # Mark previous results as not current
@@ -153,7 +153,7 @@ async def trigger_screening(
                 ScreeningResult.instrument_id == inst_dict["instrument_id"],
                 ScreeningResult.is_current.is_(True),
             )
-            .with_for_update()
+            .with_for_update(),
         )
 
     # Persist results
@@ -172,7 +172,7 @@ async def trigger_screening(
         db.add(screening_result)
 
     run.status = "completed"
-    run.completed_at = datetime.now(timezone.utc)
+    run.completed_at = datetime.now(UTC)
     await db.commit()
 
     return ScreeningRunResponse(
@@ -195,7 +195,7 @@ async def list_runs(
     result = await db.execute(
         select(ScreeningRun)
         .order_by(ScreeningRun.started_at.desc())
-        .limit(limit)
+        .limit(limit),
     )
     runs = result.scalars().all()
     return [ScreeningRunRead.model_validate(r) for r in runs]
@@ -212,7 +212,7 @@ async def get_run(
     user: CurrentUser = Depends(get_current_user),
 ) -> ScreeningRunRead:
     result = await db.execute(
-        select(ScreeningRun).where(ScreeningRun.run_id == run_id)
+        select(ScreeningRun).where(ScreeningRun.run_id == run_id),
     )
     run = result.scalar_one_or_none()
     if not run:
@@ -302,7 +302,7 @@ async def get_instrument_results(
         select(ScreeningResult)
         .where(ScreeningResult.instrument_id == instrument_id)
         .order_by(ScreeningResult.screened_at.desc())
-        .limit(limit)
+        .limit(limit),
     )
     results = result.scalars().all()
     return [ScreeningResultRead.model_validate(r) for r in results]
@@ -362,7 +362,7 @@ def _build_internal_query(
             Instrument.name.ilike(pattern)
             | Instrument.isin.ilike(pattern)
             | Instrument.ticker.ilike(pattern)
-            | Instrument.attributes["manager_name"].astext.ilike(pattern)
+            | Instrument.attributes["manager_name"].astext.ilike(pattern),
         )
     if instrument_type:
         stmt = stmt.where(Instrument.instrument_type == instrument_type)
@@ -453,7 +453,7 @@ def _build_esma_query(
             EsmaFund.fund_name.ilike(pattern)
             | EsmaFund.isin.ilike(pattern)
             | EsmaFund.yahoo_ticker.ilike(pattern)
-            | EsmaManager.company_name.ilike(pattern)
+            | EsmaManager.company_name.ilike(pattern),
         )
     if domicile:
         stmt = stmt.where(EsmaFund.domicile == domicile)
@@ -520,7 +520,7 @@ def _build_sec_query(
         stmt = stmt.where(
             SecCusipTickerMap.issuer_name.ilike(pattern)
             | SecCusipTickerMap.ticker.ilike(pattern)
-            | (SecCusipTickerMap.cusip == q)
+            | (SecCusipTickerMap.cusip == q),
         )
     if instrument_type:
         stmt = stmt.where(type_case == instrument_type)
@@ -562,7 +562,7 @@ async def search_instruments(
                 q, instrument_type, asset_class, geography,
                 domicile, currency, strategy, aum_min, aum_max,
                 block_id, approval_status,
-            )
+            ),
         )
 
     # ESMA (if source=esma, or source is None and instrument_type is fund-like or None)
@@ -652,7 +652,7 @@ async def search_instruments(
                 screening_score=scr_score,
                 block_id=r.block_id,
                 structure=r.structure,
-            )
+            ),
         )
 
     return InstrumentSearchPage(
@@ -689,7 +689,7 @@ async def get_screener_facets(
     if q:
         pattern = f"%{q}%"
         base = base.where(
-            Instrument.name.ilike(pattern) | Instrument.isin.ilike(pattern) | Instrument.ticker.ilike(pattern)
+            Instrument.name.ilike(pattern) | Instrument.isin.ilike(pattern) | Instrument.ticker.ilike(pattern),
         )
     if instrument_type:
         base = base.where(Instrument.instrument_type == instrument_type)
@@ -746,7 +746,7 @@ async def get_screener_facets(
         )
         if q:
             esma_geo_stmt = esma_geo_stmt.where(
-                EsmaFund.fund_name.ilike(f"%{q}%") | EsmaFund.isin.ilike(f"%{q}%")
+                EsmaFund.fund_name.ilike(f"%{q}%") | EsmaFund.isin.ilike(f"%{q}%"),
             )
         esma_total = 0
         for geo_label, cnt in (await db.execute(esma_geo_stmt)).all():
@@ -765,7 +765,7 @@ async def get_screener_facets(
         if q:
             sec_count_stmt = sec_count_stmt.where(
                 SecCusipTickerMap.issuer_name.ilike(f"%{q}%")
-                | SecCusipTickerMap.ticker.ilike(f"%{q}%")
+                | SecCusipTickerMap.ticker.ilike(f"%{q}%"),
             )
         sec_count = (await db.execute(sec_count_stmt)).scalar() or 0
         source_counts["sec"] = sec_count
@@ -860,7 +860,7 @@ async def import_sec_security(
         select(Instrument).where(
             Instrument.ticker == ticker.upper(),
             Instrument.organization_id == org_id,
-        )
+        ),
     )).scalar_one_or_none()
     if existing:
         raise HTTPException(
@@ -873,7 +873,7 @@ async def import_sec_security(
         select(SecCusipTickerMap).where(
             SecCusipTickerMap.ticker == ticker.upper(),
             SecCusipTickerMap.is_tradeable.is_(True),
-        ).limit(1)
+        ).limit(1),
     )).scalar_one_or_none()
     if not sec_row:
         raise HTTPException(status_code=404, detail=f"Tradeable security with ticker {ticker} not found")
@@ -895,7 +895,7 @@ async def import_sec_security(
         reg_fund = (await db.execute(
             select(SecRegisteredFund).where(
                 SecRegisteredFund.ticker == sec_row.ticker,
-            ).limit(1)
+            ).limit(1),
         )).scalar_one_or_none()
         if reg_fund:
             sec_cik = reg_fund.cik
@@ -907,7 +907,7 @@ async def import_sec_security(
                 mgr = (await db.execute(
                     select(SecManager.firm_name).where(
                         SecManager.crd_number == reg_fund.crd_number,
-                    )
+                    ),
                 )).scalar_one_or_none()
                 if mgr:
                     fund_manager_name = mgr
@@ -975,7 +975,7 @@ def _build_disclosure(
             nav_source="yfinance" if has_nav else None,
             aum_source="nport",
         )
-    elif universe == "private_us":
+    if universe == "private_us":
         return DisclosureMatrix(
             has_holdings=False,
             has_nav_history=False,
@@ -988,19 +988,19 @@ def _build_disclosure(
             nav_source=None,
             aum_source="schedule_d",
         )
-    else:  # ucits_eu
-        return DisclosureMatrix(
-            has_holdings=False,
-            has_nav_history=has_nav,
-            has_quant_metrics=has_nav,
-            has_private_fund_data=False,
-            has_style_analysis=False,
-            has_13f_overlay=False,
-            has_peer_analysis=has_nav,
-            holdings_source=None,
-            nav_source="yfinance" if has_nav else None,
-            aum_source="yfinance" if has_nav else None,
-        )
+    # ucits_eu
+    return DisclosureMatrix(
+        has_holdings=False,
+        has_nav_history=has_nav,
+        has_quant_metrics=has_nav,
+        has_private_fund_data=False,
+        has_style_analysis=False,
+        has_13f_overlay=False,
+        has_peer_analysis=has_nav,
+        holdings_source=None,
+        nav_source="yfinance" if has_nav else None,
+        aum_source="yfinance" if has_nav else None,
+    )
 
 
 # ── Global Securities Discovery (Mandate 1: no RLS, no instruments_universe) ──
@@ -1083,7 +1083,7 @@ async def get_global_securities(
         stmt = stmt.where(
             SecCusipTickerMap.issuer_name.ilike(pattern)
             | SecCusipTickerMap.ticker.ilike(pattern)
-            | (SecCusipTickerMap.cusip == q.upper())
+            | (SecCusipTickerMap.cusip == q.upper()),
         )
     if security_type:
         stmt = stmt.where(SecCusipTickerMap.security_type == security_type)
@@ -1145,7 +1145,7 @@ async def get_securities_facets(
         pattern = f"%{q}%"
         stmt = stmt.where(
             SecCusipTickerMap.issuer_name.ilike(pattern)
-            | SecCusipTickerMap.ticker.ilike(pattern)
+            | SecCusipTickerMap.ticker.ilike(pattern),
         )
 
     rows = (await db.execute(stmt)).all()
@@ -1243,6 +1243,10 @@ async def get_catalog(
                 name=r.name or "",
                 ticker=r.ticker,
                 isin=r.isin,
+                series_id=getattr(r, "series_id", None),
+                series_name=getattr(r, "series_name", None),
+                class_id=getattr(r, "class_id", None),
+                class_name=getattr(r, "class_name", None),
                 region=r.region,
                 fund_type=r.fund_type or "unknown",
                 domicile=r.domicile,
@@ -1259,7 +1263,7 @@ async def get_catalog(
                     has_nav=bool(r.has_nav),
                     has_13f_overlay=bool(getattr(r, "has_13f_overlay", False)),
                 ),
-            )
+            ),
         )
 
     return UnifiedCatalogPage(

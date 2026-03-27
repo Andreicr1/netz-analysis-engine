@@ -11,6 +11,7 @@ Advisory lock ID = 900_024.
 """
 
 import asyncio
+from datetime import UTC
 from xml.etree import ElementTree
 
 import structlog
@@ -29,7 +30,7 @@ async def run_nport_fund_discovery() -> dict:
     """Discover registered funds filing N-PORT and populate sec_registered_funds."""
     async with async_session() as db:
         lock_result = await db.execute(
-            text(f"SELECT pg_try_advisory_lock({NPORT_DISCOVERY_LOCK_ID})")
+            text(f"SELECT pg_try_advisory_lock({NPORT_DISCOVERY_LOCK_ID})"),
         )
         if not lock_result.scalar():
             logger.warning("nport_fund_discovery already running (advisory lock not acquired)")
@@ -44,7 +45,7 @@ async def run_nport_fund_discovery() -> dict:
 
             # Step 1: Get existing CIKs and their last fetch dates
             existing_result = await db.execute(
-                text("SELECT cik, data_fetched_at FROM sec_registered_funds")
+                text("SELECT cik, data_fetched_at FROM sec_registered_funds"),
             )
             existing = {
                 row[0]: row[1]
@@ -53,7 +54,7 @@ async def run_nport_fund_discovery() -> dict:
 
             # Step 2: Discover N-PORT filers via EDGAR EFTS
             discovered_ciks = await run_in_sec_thread(
-                _discover_nport_filers, SEC_USER_AGENT
+                _discover_nport_filers, SEC_USER_AGENT,
             )
 
             # Merge EFTS results with existing DB CIKs (EFTS has a 10k cap
@@ -73,9 +74,9 @@ async def run_nport_fund_discovery() -> dict:
             )
 
             # Step 3: Filter to CIKs needing refresh
-            from datetime import datetime, timedelta, timezone
+            from datetime import datetime, timedelta
 
-            cutoff = datetime.now(timezone.utc) - timedelta(days=_STALENESS_DAYS)
+            cutoff = datetime.now(UTC) - timedelta(days=_STALENESS_DAYS)
             ciks_to_process = []
             for cik in all_ciks:
                 fetched = existing.get(cik)
@@ -97,7 +98,7 @@ async def run_nport_fund_discovery() -> dict:
             for cik in ciks_to_process:
                 try:
                     fund_data = await run_in_sec_thread(
-                        _fetch_nport_header, cik, SEC_USER_AGENT
+                        _fetch_nport_header, cik, SEC_USER_AGENT,
                     )
                     if fund_data is None:
                         continue
@@ -113,7 +114,7 @@ async def run_nport_fund_discovery() -> dict:
                                 text(
                                     "UPDATE sec_registered_funds "
                                     "SET aum_below_threshold = TRUE, data_fetched_at = now() "
-                                    "WHERE cik = :cik"
+                                    "WHERE cik = :cik",
                                 ),
                                 {"cik": cik},
                             )
@@ -158,6 +159,7 @@ async def run_nport_fund_discovery() -> dict:
             if batch:
                 count = await _upsert_batch(db, batch)
                 upserted += count
+                await _upsert_fund_classes(db, batch)
 
             summary = {
                 "status": "completed",
@@ -172,7 +174,7 @@ async def run_nport_fund_discovery() -> dict:
 
         finally:
             await db.execute(
-                text(f"SELECT pg_advisory_unlock({NPORT_DISCOVERY_LOCK_ID})")
+                text(f"SELECT pg_advisory_unlock({NPORT_DISCOVERY_LOCK_ID})"),
             )
 
 
@@ -480,6 +482,39 @@ async def _upsert_batch(db: object, batch: list[dict]) -> int:
 
     await db.commit()  # type: ignore[union-attr]
     return count
+
+
+async def _upsert_fund_classes(db: object, batch: list[dict]) -> None:
+    """Upsert fund classes from a batch of fund records into sec_fund_classes.
+
+    Must be called AFTER _upsert_batch so the parent CIK exists (FK constraint).
+    """
+    for record in batch:
+        cik = record["cik"]
+        fund_classes = record.get("_fund_classes", [])
+        if not fund_classes:
+            continue
+        for fc in fund_classes:
+            try:
+                await db.execute(  # type: ignore[union-attr]
+                    text("""
+                        INSERT INTO sec_fund_classes
+                            (cik, series_id, series_name, class_id, class_name, ticker, data_fetched_at)
+                        VALUES (:cik, :series_id, :series_name, :class_id, :class_name, :ticker, now())
+                        ON CONFLICT (cik, series_id, class_id) DO UPDATE SET
+                            series_name = COALESCE(EXCLUDED.series_name, sec_fund_classes.series_name),
+                            class_name = COALESCE(EXCLUDED.class_name, sec_fund_classes.class_name),
+                            ticker = COALESCE(EXCLUDED.ticker, sec_fund_classes.ticker),
+                            data_fetched_at = now()
+                    """),
+                    {"cik": cik, **fc},
+                )
+            except Exception as exc:
+                logger.warning(
+                    "nport_fund_class_upsert_failed",
+                    cik=cik, class_id=fc.get("class_id"), error=str(exc),
+                )
+    await db.commit()  # type: ignore[union-attr]
 
 
 def _parse_series_class_header(sgml_text: str, result: dict) -> None:
