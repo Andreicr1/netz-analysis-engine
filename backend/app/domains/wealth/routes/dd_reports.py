@@ -586,9 +586,10 @@ async def _run_generation(
         })
 
         # Import here to avoid circular imports
+        from ai_engine.llm import call_openai as _call_openai
         from vertical_engines.wealth.dd_report import DDReportEngine
 
-        engine = DDReportEngine(config=config)
+        engine = DDReportEngine(config=config, call_openai_fn=_call_openai)
 
         # Run sync generation in a thread
         result = await asyncio.to_thread(
@@ -649,7 +650,7 @@ def _sync_generate(
         db.execute(text("SET LOCAL app.current_organization_id = :oid"), {"oid": org_id})
         result = engine.generate(
             db,
-            fund_id=fund_id,
+            instrument_id=fund_id,
             actor_id=actor_id,
             organization_id=org_id,
             force=force,
