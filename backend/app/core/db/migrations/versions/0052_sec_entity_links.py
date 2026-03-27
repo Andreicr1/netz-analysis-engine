@@ -16,7 +16,7 @@ depends_on = None
 
 def upgrade() -> None:
     op.execute("""
-        CREATE TABLE sec_entity_links (
+        CREATE TABLE IF NOT EXISTS sec_entity_links (
             id SERIAL PRIMARY KEY,
             manager_crd TEXT NOT NULL REFERENCES sec_managers(crd_number) ON DELETE CASCADE,
             related_cik TEXT NOT NULL,
@@ -28,8 +28,8 @@ def upgrade() -> None:
             UNIQUE (manager_crd, related_cik, relationship)
         )
     """)
-    op.execute("CREATE INDEX idx_sec_entity_links_crd ON sec_entity_links (manager_crd)")
-    op.execute("CREATE INDEX idx_sec_entity_links_cik ON sec_entity_links (related_cik)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_sec_entity_links_crd ON sec_entity_links (manager_crd)")
+    op.execute("CREATE INDEX IF NOT EXISTS idx_sec_entity_links_cik ON sec_entity_links (related_cik)")
 
 
 def downgrade() -> None:

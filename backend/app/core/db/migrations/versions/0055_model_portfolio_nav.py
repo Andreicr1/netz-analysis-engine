@@ -36,14 +36,6 @@ def upgrade() -> None:
         );
     """)
 
-    # RLS
-    op.execute("ALTER TABLE model_portfolio_nav ENABLE ROW LEVEL SECURITY;")
-    op.execute("""
-        CREATE POLICY model_portfolio_nav_org_isolation ON model_portfolio_nav
-            USING (organization_id = (SELECT current_setting('app.current_organization_id', TRUE)))
-            WITH CHECK (organization_id = (SELECT current_setting('app.current_organization_id', TRUE)));
-    """)
-
     # Indexes for common query patterns
     op.execute("""
         CREATE INDEX IF NOT EXISTS ix_model_portfolio_nav_portfolio_date
@@ -54,20 +46,28 @@ def upgrade() -> None:
             ON model_portfolio_nav (organization_id);
     """)
 
-    # Compression policy — compress after 3 months, segment by portfolio_id
+    # NOTE: Compression skipped — PG18 + TimescaleDB does not allow columnstore
+    # on hypertables with RLS enabled. RLS is mandatory for multi-tenant isolation.
+    # Compression can be revisited when TimescaleDB lifts this restriction.
+
+    # RLS
+    op.execute("ALTER TABLE model_portfolio_nav ENABLE ROW LEVEL SECURITY;")
     op.execute("""
-        ALTER TABLE model_portfolio_nav SET (
-            timescaledb.compress,
-            timescaledb.compress_segmentby = 'portfolio_id,organization_id',
-            timescaledb.compress_orderby = 'nav_date DESC'
-        );
-    """)
-    op.execute("""
-        SELECT add_compression_policy('model_portfolio_nav', INTERVAL '3 months', if_not_exists => TRUE);
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_policies
+                WHERE tablename = 'model_portfolio_nav'
+                  AND policyname = 'model_portfolio_nav_org_isolation'
+            ) THEN
+                CREATE POLICY model_portfolio_nav_org_isolation ON model_portfolio_nav
+                    USING (organization_id = (SELECT current_setting('app.current_organization_id', TRUE)))
+                    WITH CHECK (organization_id = (SELECT current_setting('app.current_organization_id', TRUE)));
+            END IF;
+        END $$;
     """)
 
 
 def downgrade() -> None:
-    op.execute("SELECT remove_compression_policy('model_portfolio_nav', if_not_exists => TRUE);")
     op.execute("DROP POLICY IF EXISTS model_portfolio_nav_org_isolation ON model_portfolio_nav;")
     op.execute("DROP TABLE IF EXISTS model_portfolio_nav CASCADE;")

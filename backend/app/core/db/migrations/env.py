@@ -9,6 +9,10 @@ from __future__ import annotations
 import os
 from logging.config import fileConfig
 
+from dotenv import load_dotenv
+
+load_dotenv()  # Load .env so DATABASE_URL_SYNC is available
+
 from alembic import context
 from sqlalchemy import create_engine, pool, text
 

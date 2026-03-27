@@ -3,20 +3,13 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import replace
 from datetime import date
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from vertical_engines.wealth.fact_sheet.fact_sheet_engine import FactSheetEngine
 from vertical_engines.wealth.fact_sheet.models import (
-    AllocationBlock,
     AttributionRow,
     FactSheetData,
-    HoldingRow,
-    ReturnMetrics,
-    RiskMetrics,
 )
 
 
