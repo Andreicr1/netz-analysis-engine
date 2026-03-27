@@ -102,7 +102,7 @@ async def generate_fact_sheet(
             return _run_fact_sheet_generation(
                 sync_db,
                 portfolio_id=str(portfolio_id),
-                organization_id=org_id,
+                organization_id=str(org_id),
                 format=fmt,
                 language=language,
             )
