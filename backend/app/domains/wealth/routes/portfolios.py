@@ -215,7 +215,7 @@ async def approve_rebalance(
     event_id: uuid.UUID,
     body: RebalanceApproveRequest,
     db: AsyncSession = Depends(get_db_with_rls),
-    user: CurrentUser = Depends(require_ic_member),
+    user: CurrentUser = Depends(require_ic_member()),
 ) -> RebalanceEventRead:
     _validate_profile(profile)
     # SELECT FOR UPDATE to prevent concurrent approval race condition
@@ -258,7 +258,7 @@ async def execute_rebalance(
     profile: str,
     event_id: uuid.UUID,
     db: AsyncSession = Depends(get_db_with_rls),
-    user: CurrentUser = Depends(require_ic_member),
+    user: CurrentUser = Depends(require_ic_member()),
 ) -> RebalanceEventRead:
     """Execute a previously approved rebalance event.
 
