@@ -19,7 +19,7 @@ VALID_PROFILES = {"conservative", "moderate", "growth"}
 # The semaphore is created lazily on first access inside an async context.
 
 _content_semaphore: asyncio.Semaphore | None = None
-_MAX_CONCURRENT_CONTENT_TASKS = 4
+_MAX_CONCURRENT_CONTENT_TASKS = 8
 
 
 def _get_content_semaphore() -> asyncio.Semaphore:
