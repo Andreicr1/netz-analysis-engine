@@ -171,9 +171,19 @@ async def _verify_config_completeness() -> None:
         logger.error("Config health check failed — DB may not be migrated: %s", e)
 
 
+def _configure_logging() -> None:
+    """Disable Rich show_locals to prevent credential leakage in tracebacks."""
+    try:
+        import rich.traceback
+        rich.traceback.install(show_locals=False)
+    except ImportError:
+        pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """App lifespan: validate secrets, log startup, cleanup on shutdown."""
+    _configure_logging()
     settings.validate_production_secrets()
 
     # SEC EDGAR identity — must be set once before any edgartools calls.
