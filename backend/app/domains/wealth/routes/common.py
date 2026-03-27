@@ -37,6 +37,11 @@ async def require_content_slot() -> None:
     slot by calling ``_get_content_semaphore().release()`` in a finally block.
     """
     sem = _get_content_semaphore()
+    import logging as _log
+    _log.getLogger(__name__).info(
+        "content_semaphore_acquire value=%s locked=%s pid=%s",
+        sem._value, sem.locked(), __import__("os").getpid(),
+    )
     try:
         await asyncio.wait_for(sem.acquire(), timeout=0)
     except asyncio.TimeoutError:
