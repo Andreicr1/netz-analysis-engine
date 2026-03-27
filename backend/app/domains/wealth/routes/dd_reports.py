@@ -195,7 +195,7 @@ async def trigger_dd_report(
         status=DDReportStatus.generating.value,
         is_current=True,
         config_snapshot=body.config_overrides if body else None,
-        created_by=user.user_id,
+        created_by=user.actor_id,
     )
     db.add(report)
     await db.flush()
@@ -218,7 +218,7 @@ async def trigger_dd_report(
             report_id=str(report_id),
             fund_id=str(fund_id),
             org_id=str(org_id),
-            actor_id=user.user_id,
+            actor_id=user.actor_id,
             config=body.config_overrides if body else None,
             job_id=job_id,
         )
@@ -348,7 +348,7 @@ async def regenerate_dd_report(
             report_id=str(report_id),
             fund_id=str(report.instrument_id),
             org_id=str(org_id),
-            actor_id=user.user_id,
+            actor_id=user.actor_id,
             config=report.config_snapshot,
             job_id=job_id,
             force=True,

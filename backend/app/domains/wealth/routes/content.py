@@ -85,7 +85,7 @@ async def trigger_outlook(
         title="Investment Outlook",
         language=language,
         status="draft",
-        created_by=user.user_id,
+        created_by=user.actor_id,
     )
     db.add(content)
     await db.flush()
@@ -97,7 +97,7 @@ async def trigger_outlook(
             content_id=str(content_id),
             content_type="investment_outlook",
             org_id=org_id,
-            actor_id=user.user_id,
+            actor_id=user.actor_id,
             language=language,
             config=body.config_overrides if body else None,
         )
@@ -131,7 +131,7 @@ async def trigger_flash_report(
         title="Market Flash Report",
         language=language,
         status="draft",
-        created_by=user.user_id,
+        created_by=user.actor_id,
     )
     db.add(content)
     await db.flush()
@@ -143,7 +143,7 @@ async def trigger_flash_report(
             content_id=str(content_id),
             content_type="flash_report",
             org_id=org_id,
-            actor_id=user.user_id,
+            actor_id=user.actor_id,
             language=language,
             config=body.config_overrides if body else None,
             event_context=body.config_overrides if body else None,
@@ -193,7 +193,7 @@ async def trigger_spotlight(
         language=language,
         status="draft",
         content_data={"instrument_id": str(instrument_id)},
-        created_by=user.user_id,
+        created_by=user.actor_id,
     )
     db.add(content)
     await db.flush()
@@ -205,7 +205,7 @@ async def trigger_spotlight(
             content_id=str(content_id),
             content_type="manager_spotlight",
             org_id=org_id,
-            actor_id=user.user_id,
+            actor_id=user.actor_id,
             language=language,
             config=body.config_overrides if body else None,
             instrument_id=str(instrument_id),
@@ -285,14 +285,14 @@ async def approve_content(
         )
 
     # Self-approval prevention
-    if content.created_by == user.user_id:
+    if content.created_by == user.actor_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Self-approval is not allowed. A different IC member must approve.",
         )
 
     content.status = "approved"
-    content.approved_by = user.user_id
+    content.approved_by = user.actor_id
     content.approved_at = datetime.now(UTC)
     await db.commit()
 
