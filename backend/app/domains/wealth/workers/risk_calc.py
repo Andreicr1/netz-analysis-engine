@@ -42,6 +42,8 @@ RISK_CALC_LOCK_ID = 900_007
 TRADING_DAYS_PER_YEAR = 252
 RISK_FREE_RATE_FALLBACK = 0.04  # Fallback ~4% if FRED DFF unavailable
 
+MIN_STRESS_OBS = 10  # Minimum stress observations for conditional CVaR
+
 
 async def get_risk_free_rate(db: AsyncSession) -> float:
     """Get latest Fed Funds Rate from macro_data, fallback to 4%.
@@ -227,6 +229,76 @@ async def _batch_fetch_nav_returns(
         for row_instrument_id, return_1d in result.all():
             fid = str(row_instrument_id)
             raw_by_fund.setdefault(fid, []).append(float(return_1d))
+
+    return raw_by_fund
+
+
+async def _fetch_stress_dates(
+    db: AsyncSession,
+    start_date: date,
+    as_of_date: date,
+) -> frozenset[date]:
+    """Fetch dates classified as RISK_OFF or CRISIS from macro_regime_history.
+
+    regime_fit worker persists the full HMM-classified regime series daily.
+    If macro_regime_history is empty (first run before regime_fit executes),
+    returns empty frozenset — caller handles this via MIN_STRESS_OBS guard.
+
+    macro_regime_history is a global table — no org_id, no RLS.
+    """
+    result = await db.execute(
+        text("""
+            SELECT regime_date
+            FROM macro_regime_history
+            WHERE regime_date >= :start_date
+              AND regime_date <= :as_of_date
+              AND classified_regime IN ('RISK_OFF', 'CRISIS')
+            ORDER BY regime_date
+        """),
+        {"start_date": start_date, "as_of_date": as_of_date},
+    )
+    return frozenset(row[0] for row in result.all())
+
+
+async def _batch_fetch_dated_returns(
+    db: AsyncSession,
+    fund_ids: list[uuid.UUID],
+    return_type_by_fund: dict[str, str],
+    start_date: date,
+    as_of_date: date,
+) -> dict[str, list[tuple[date, float]]]:
+    """Batch-fetch NAV returns with dates for regime-conditional CVaR.
+
+    Same logic as _batch_fetch_nav_returns but includes nav_date in output
+    for alignment with VIX stress dates.
+    """
+    if not fund_ids:
+        return {}
+
+    log_fund_ids = [fid for fid in fund_ids if return_type_by_fund.get(str(fid), "log") == "log"]
+    arith_fund_ids = [fid for fid in fund_ids if return_type_by_fund.get(str(fid), "log") == "arithmetic"]
+
+    raw_by_fund: dict[str, list[tuple[date, float]]] = {}
+
+    for type_label, typed_ids in [("log", log_fund_ids), ("arithmetic", arith_fund_ids)]:
+        if not typed_ids:
+            continue
+
+        stmt = (
+            select(NavTimeseries.instrument_id, NavTimeseries.nav_date, NavTimeseries.return_1d)
+            .where(
+                NavTimeseries.instrument_id.in_(typed_ids),
+                NavTimeseries.nav_date >= start_date,
+                NavTimeseries.nav_date <= as_of_date,
+                NavTimeseries.return_1d.is_not(None),
+                NavTimeseries.return_type == type_label,
+            )
+            .order_by(NavTimeseries.instrument_id, NavTimeseries.nav_date)
+        )
+        result = await db.execute(stmt)
+        for row_instrument_id, nav_date, return_1d in result.all():
+            fid = str(row_instrument_id)
+            raw_by_fund.setdefault(fid, []).append((nav_date, float(return_1d)))
 
     return raw_by_fund
 
@@ -663,6 +735,31 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
                 close, aum = nav_data
                 momentum = _compute_momentum_from_nav(close, aum)
                 metrics.update(momentum)
+
+            # Pass 1.6: compute regime-conditional CVaR (BL-9)
+            # Reads HMM-classified RISK_OFF/CRISIS dates from macro_regime_history.
+            stress_dates = await _fetch_stress_dates(db, start_date, eval_date)
+            logger.info("Regime stress dates fetched", n_stress_dates=len(stress_dates))
+
+            if stress_dates:
+                dated_returns_by_fund = await _batch_fetch_dated_returns(
+                    db, all_fund_ids, return_type_by_fund, start_date, eval_date,
+                )
+                for fund, metrics in computed:
+                    fid_str = str(fund.instrument_id)
+                    dated_returns = dated_returns_by_fund.get(fid_str, [])
+                    stress_returns = [r for d, r in dated_returns if d in stress_dates]
+                    if len(stress_returns) >= MIN_STRESS_OBS:
+                        cvar_cond, _ = compute_cvar_from_returns(
+                            np.array(stress_returns), confidence=0.95,
+                        )
+                        metrics["cvar_95_conditional"] = round(cvar_cond, 6)
+                    else:
+                        metrics["cvar_95_conditional"] = None
+            else:
+                logger.warning("No regime stress dates in lookback — cvar_95_conditional will be NULL")
+                for _, metrics in computed:
+                    metrics["cvar_95_conditional"] = None
 
             # Pass 2: compute DTW drift scores per block (reuses DB session, no extra query per fund)
             logger.info("Computing DTW drift scores", n_funds=len(computed))
