@@ -57,9 +57,10 @@
 
 		// If already signed in, sync session cookie and redirect to app
 		if (clerk.session) {
-			const token = await clerk.session.getToken();
+			// Use JWT template 'netz-wealth' (3600s lifetime) — avoids 60s default expiry loop
+			const token = await clerk.session.getToken({ template: "netz-wealth" });
 			if (token) {
-				document.cookie = `__session=${token}; path=/; secure; samesite=lax`;
+				document.cookie = `__session=${token}; path=/; secure; samesite=lax; max-age=3600`;
 				window.location.href = "/";
 				return;
 			}
@@ -80,8 +81,8 @@
 		// After sign-in completes, sync session cookie before navigation
 		clerk.addListener(({ session }: any) => {
 			if (session) {
-				session.getToken().then((t: string) => {
-					if (t) document.cookie = `__session=${t}; path=/; secure; samesite=lax`;
+				session.getToken({ template: "netz-wealth" }).then((t: string) => {
+					if (t) document.cookie = `__session=${t}; path=/; secure; samesite=lax; max-age=3600`;
 				});
 			}
 		});
