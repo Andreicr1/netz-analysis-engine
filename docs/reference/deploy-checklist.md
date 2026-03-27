@@ -25,7 +25,9 @@ Confirmar zero violações. Especialmente:
 make check
 ```
 
-Esperado: **2858 passed, 0 failed** (com DB local). Sem DB: 2858 - 56 failures de `asyncpg.InvalidPasswordError` — aceitável.
+Esperado: **2905+ passed, 0 failed** (com DB local). Sem DB: ~56 failures de `asyncpg.InvalidPasswordError` — aceitável.
+
+> Contagem atualizada após Quant Upgrade Sprints 1-3 (BL-1 a BL-11): 8 novos arquivos de teste adicionados.
 
 ### 0.3 Migrations pendentes
 
@@ -37,6 +39,7 @@ alembic upgrade head  # se divergirem
 ```
 
 > ⚠️ Migration crítica: `0055_model_portfolio_nav.py` usa autocommit — verificar que não está dentro de transaction block.
+> ⚠️ Migration `0058_add_garch_and_conditional_cvar.py` adiciona `volatility_garch` e `cvar_95_conditional` a `fund_risk_metrics`. Sem downtime (ADD COLUMN nullable).
 
 ---
 
@@ -102,6 +105,9 @@ Confirmar:
 - `POST /api/v1/wealth/rebalancing/proposals/{id}/apply` — Sprint 5
 - `POST /api/v1/wealth/reporting/model-portfolios/{id}/long-form-report` — Sprint 6
 - `GET /api/v1/wealth/reporting/model-portfolios/{id}/long-form-report/stream/{job_id}` — Sprint 6
+- `POST /api/v1/model-portfolios/{id}/stress-test` — Quant Sprint 3 (BL-10)
+- `POST /api/v1/model-portfolios/{id}/views` — Quant Sprint 1 (BL-3)
+- `GET /api/v1/model-portfolios/{id}/views` — Quant Sprint 1 (BL-3)
 
 ### 2.3 Semaphore do LongFormReport
 
@@ -130,7 +136,7 @@ Esperado na lista:
 | `macro_data` | global | 1 mês |
 | `benchmark_nav` | global | 1 mês |
 | `nav_timeseries` | tenant-scoped | — |
-| `fund_risk_metrics` | tenant-scoped | — |
+| `fund_risk_metrics` | tenant-scoped | — (migration 0058: +`volatility_garch`, +`cvar_95_conditional`) |
 | `model_portfolio_nav` | tenant-scoped | 1 mês, compress 3 meses (nova — Sprint 3) |
 | `sec_nport_holdings` | global | 3 meses |
 | `sec_13f_holdings` | global | 3 meses |
@@ -165,6 +171,7 @@ ORDER BY tablename;
 | `strategic_allocations` | `allocation_blocks` |
 | `model_portfolios` | |
 | `portfolio_snapshots` | |
+| `portfolio_views` (BL-3) | |
 
 ### 3.4 pgvector
 
@@ -328,7 +335,7 @@ GET /api/v1/wealth/model-portfolios/{portfolio_id}/snapshots/latest
 
 Checar campos do snapshot (ref: Section 2.4 e 2.9):
 
-- `solver_status`: um de `optimal` | `optimal:cvar_constrained` | `optimal:min_variance_fallback` | `optimal:cvar_violated`
+- `solver_status`: um de `optimal` | `optimal:robust` | `optimal:cvar_constrained` | `optimal:min_variance_fallback` | `optimal:cvar_violated`
 - `cvar_current < cvar_limit` (se status ≠ `cvar_violated`)
 - `cvar_utilized_pct > 0`
 - `trigger_source = "construct"`
@@ -343,10 +350,14 @@ Verificar `fund_selection_schema` (ref: Section 2.8):
     "status": "optimal",
     "cvar_within_limit": true,
     "expected_return": "> 0",
-    "sharpe_ratio": "> 0"
+    "sharpe_ratio": "> 0",
+    "factor_exposures": {"factor_1": 0.23, "factor_2": -0.09, "factor_3": 0.01}
   }
 }
 ```
+
+> `factor_exposures` presente quando ≥3 fundos com ≥60 obs de NAV. Omitido silenciosamente se dados insuficientes.
+> `solver` pode ser `"CLARABEL:robust"` se Phase 1.5 (BL-8) foi ativada.
 
 Verificar covariância PSD (indiretamente — se CLARABEL retornou `optimal`, a matriz PSD passou):
 
@@ -505,6 +516,84 @@ GET /fact-sheets/{portfolio_id}?mode=institutional&lang=en
 # Labels de "Fee Drag Analysis" e "Attribution" devem mudar por idioma
 ```
 
+### 5.7 Quant Upgrade — Sprints 1-3 (BL-1 a BL-11)
+
+```bash
+# Migration 0058 — confirmar colunas novas
+```
+
+```sql
+SELECT column_name FROM information_schema.columns
+WHERE table_name = 'fund_risk_metrics'
+  AND column_name IN ('volatility_garch', 'cvar_95_conditional');
+-- Esperado: 2 rows
+```
+
+```bash
+# GARCH no risk_calc worker
+POST /api/v1/workers/run-risk-calc
+```
+
+```sql
+-- Após execução, verificar que GARCH populou
+SELECT instrument_id, calc_date, volatility_garch, volatility_1y
+FROM fund_risk_metrics
+WHERE volatility_garch IS NOT NULL
+ORDER BY calc_date DESC
+LIMIT 5;
+-- volatility_garch deve ser próximo de volatility_1y (mesma ordem de grandeza)
+```
+
+```bash
+# Stress test paramétrico (BL-10)
+POST /api/v1/model-portfolios/{portfolio_id}/stress-test
+body: {"scenario_name": "gfc_2008"}
+```
+
+Verificar:
+
+- `nav_impact_pct < 0` para portfolio equity-heavy (GFC é negativo para equity)
+- `block_impacts` contém os blocks do portfolio
+- `worst_block` e `best_block` preenchidos
+- `cvar_stressed` = null (sem historical_returns no on-demand)
+
+```bash
+# Cenário custom
+POST /api/v1/model-portfolios/{portfolio_id}/stress-test
+body: {"scenario_name": "custom", "shocks": {"na_equity_large": -0.20}}
+```
+
+```bash
+# Re-construct para validar cascade de 4 fases e factor exposures (BL-7, BL-8)
+POST /api/v1/model-portfolios/{portfolio_id}/construct
+```
+
+Inspecionar `fund_selection_schema`:
+
+- `optimization.status`: pode ser `optimal`, `optimal:robust`, ou fallback
+- `optimization.solver`: pode ser `CLARABEL`, `CLARABEL:robust`, etc.
+- `optimization.factor_exposures`: dict com labels e floats (se ≥3 fundos, ≥60 obs)
+  - Se ausente: dados insuficientes para PCA — aceitável
+
+```bash
+# Portfolio views CRUD (BL-3)
+POST /api/v1/model-portfolios/{portfolio_id}/views
+body: {"name": "smoke-test-view", "filters": {"block_id": "na_equity_large"}, "sort_by": "weight", "sort_desc": true}
+# Salvar {view_id}
+
+GET /api/v1/model-portfolios/{portfolio_id}/views
+# Esperado: array com a view criada
+
+DELETE /api/v1/model-portfolios/{portfolio_id}/views/{view_id}
+# Esperado: 204
+```
+
+```bash
+# arch library no container
+python -c "from arch import arch_model; print('OK')"
+# Esperado: OK (se falhar, pip install arch>=7.0 no Dockerfile)
+```
+
 ---
 
 ## Fase 6 — Testes de Performance
@@ -516,7 +605,8 @@ GET /fact-sheets/{portfolio_id}?mode=institutional&lang=en
 | `GET /health` | < 50ms | > 200ms |
 | `GET /analytics/entity/{id}` | < 500ms | > 2s |
 | `GET /screener/catalog` | < 200ms | > 500ms (cache 120s) |
-| `POST /construct` (CLARABEL) | < 10s | > 30s |
+| `POST /construct` (CLARABEL 4-phase) | < 10s | > 30s |
+| `POST /stress-test` (paramétrico) | < 500ms | > 2s |
 | `POST /macro/reviews/generate` | < 5s | > 15s |
 | `GET /fact-sheets` institucional | < 8s | > 20s |
 | Worker `macro_ingestion` | < 5min | > 15min |
@@ -701,8 +791,16 @@ ORDER BY objid;
 | 26 | Advisory locks | Sem colisão de IDs durante workers | - [ ] |
 | 27 | Manifest workers | `portfolio_nav_synthesizer` registrado | - [ ] |
 | 28 | Railway Cron Jobs | `[[crons]]` no `railway.toml`, workers executando via `python -m app.workers.cli` | - [ ] |
+| **Quant Upgrade Sprints 1-3 (BL-1 a BL-11)** | | |
+| 29 | Migration 0058 aplicada | `alembic current` inclui `0058`. Colunas `volatility_garch`, `cvar_95_conditional` existem em `fund_risk_metrics` | - [ ] |
+| 30 | GARCH no risk_calc | Após `run-risk-calc`, `volatility_garch IS NOT NULL` para fundos com ≥100 obs de NAV | - [ ] |
+| 31 | Stress test endpoint | `POST /model-portfolios/{id}/stress-test` com `{"scenario_name":"gfc_2008"}` retorna `nav_impact_pct < 0` para portfolio equity-heavy | - [ ] |
+| 32 | Robust optimizer (BL-8) | Re-construct com `optimizer.robust=true`. Status pode ser `optimal:robust` ou fallback normal | - [ ] |
+| 33 | Factor exposures (BL-7) | `fund_selection_schema.optimization.factor_exposures` presente com ≥3 fundos, ≥60 obs | - [ ] |
+| 34 | Portfolio views CRUD (BL-3) | `POST/GET/PUT/DELETE /model-portfolios/{id}/views` — org-scoped, RLS ativo | - [ ] |
+| 35 | `arch` library | `python -c "from arch import arch_model"` não falha no container de produção | - [ ] |
 
-**Todos 28 itens marcados = sistema em produção.**
+**Todos 35 itens marcados = sistema em produção.**
 
 ---
 
@@ -717,6 +815,8 @@ Descobertas durante execução do checklist em 2026-03-26:
 | I3 | `CLERK_SECRET_KEY` no system env do Windows bloqueia dev mode local | Apenas ambiente local Windows | Usar `.env` com prefixo ou `unset CLERK_SECRET_KEY` antes de rodar localmente. |
 | I4 | SEC 13F rate-limited pelo EDGAR API (~7-10 min para 180 managers) | Não bloqueia deploy — worker é trimestral | Garantir `EDGAR_IDENTITY` configurado. Rodar off-peak. |
 | I5 | Clarabel >= 0.9 renomeou tolerâncias (`eps_abs` → `tol_gap_abs`, etc.) | `prob.solve()` lançava `TypeError` em produção | Fix aplicado em 2026-03-27: removidos kwargs `eps_abs`/`eps_rel` do `optimizer_service.py`. Defaults do Clarabel são suficientes. |
+| I6 | `arch>=7.0` é nova dependência do `[quant]` extra (BL-11 GARCH). | Se não instalada, GARCH fallback para vol amostral — sem crash, sem degradação visível. | Garantir `pip install -e ".[dev,ai,quant]"` no Dockerfile/Railway build. Worker `risk_calc` já faz fallback graceful. |
+| I7 | Robust optimization (BL-8) depende de PSD da covariância para Cholesky. | Se eigenvalue clipping falhar, Phase 1.5 é silenciosamente skipada. | Cascade continua normalmente para Phase 2/3. Log warning emitido. |
 
 ---
 
@@ -803,12 +903,120 @@ Executado via Prompt D. Validação de infra, RLS, performance e scheduling.
 
 ## Resultado Final do Deploy Checklist
 
-**28/28 GO — SISTEMA EM PRODUÇÃO.**
+**28/28 GO — SISTEMA EM PRODUÇÃO.** (baseline 2026-03-27)
 
-Data de conclusão: 2026-03-27
+**+7 itens pendentes — Quant Upgrade Sprints 1-3** (adicionados 2026-03-27)
 
 | Fase | Itens | Data | Status |
 |------|-------|------|--------|
 | Fase 0-4 (Infra + Seed) | #1–#7 | 2026-03-26 | ✅ |
 | Fase 5 (Smoke test E2E) | #8–#22 | 2026-03-27 | ✅ |
 | Fase 6-8 (Perf + Integridade) | #23–#28 | 2026-03-27 | ✅ |
+| Quant Upgrade (BL-1 a BL-11) | #29–#35 | — | ⏳ PENDENTE |
+
+> Itens #29-#35 requerem: `alembic upgrade head` (migration 0058), `pip install arch>=7.0`, re-execução de `run-risk-calc`, e smoke test dos novos endpoints.
+
+---
+
+## Fase 9 — Validação Wealth Vector Embedding + Fund-Centric Model
+
+Implementações realizadas em 2026-03-27, pendentes de e2e em produção.
+Referências: `docs/reference/wealth-vector-embedding-reference.md`, `docs/reference/fund-centric-model-reference.md`
+Prompt de execução: `docs/prompts/e2e-prompt-e-quant-upgrade-validation.md` (itens #29-#35)
++ Prompt F a criar para itens #36-#45 abaixo.
+
+### 9.1 Pré-condições
+
+```bash
+# 1. Migrations aplicadas
+alembic current
+# Deve mostrar 0059_wealth_vector_chunks como head
+
+# 2. arch library instalada no container
+python -c "import arch; print(arch.__version__)"   # >= 7.0
+
+# 3. Worker wealth_embedding registrado
+GET /api/v1/workers/manifest
+# Deve listar "wealth_embedding" (lock_id 900_041)
+
+# 4. Cron configurado
+# railway.toml deve ter [[crons]] com schedule = "0 3 * * *"
+# command = "python -m app.workers.cli wealth_embedding"
+```
+
+### 9.2 Seed inicial do embedding
+
+```bash
+# Disparar o worker manualmente (seed inicial ~18k chunks, ~$1.43 OpenAI)
+POST /api/v1/workers/run-wealth-embedding
+# Aguardar ~5-10 min
+
+# Verificar via SQL
+SELECT entity_type, source_type, COUNT(*) as chunks
+FROM wealth_vector_chunks
+GROUP BY entity_type, source_type
+ORDER BY entity_type, source_type;
+
+# Esperado após seed:
+# firm  | brochure      | ~7,000
+# firm  | esma_manager  | ~660
+# fund  | esma_fund     | ~10,400
+# fund  | dd_chapter    | ~96 (se existirem DD reports)
+# macro | macro_review  | ~4 (se existirem macro reviews)
+```
+
+### 9.3 Go/No-Go — Itens #36-#45
+
+| # | Item | Critério | Status |
+|---|------|----------|--------|
+| 36 | Migration 0059 | `wealth_vector_chunks` existe com HNSW index `halfvec_cosine_ops` | ⏳ |
+| 37 | Worker registrado | `wealth_embedding` presente no manifest (lock 900_041) | ⏳ |
+| 38 | Seed executado — brochures | `COUNT(*) >= 5000` para `source_type='brochure'` | ⏳ |
+| 39 | Seed executado — ESMA funds | `COUNT(*) >= 10000` para `source_type='esma_fund'` | ⏳ |
+| 40 | entity_type correto | Zero rows com `entity_type='manager'` (proibido — usar `'firm'`) | ⏳ |
+| 41 | firm_crd preenchido | Brochures têm `firm_crd IS NOT NULL`; ESMA managers com CRD linkado também | ⏳ |
+| 42 | Busca fund-centric firma | `search_fund_firm_context_sync(sec_crd=...)` retorna chunks de brochure | ⏳ |
+| 43 | Busca ESMA funds | `search_esma_funds_sync(query_vector=...)` retorna fundos UCITS | ⏳ |
+| 44 | Busca org-scoped | `search_fund_analysis_sync(organization_id=..., source_type='dd_chapter')` retorna chunks | ⏳ |
+| 45 | Idempotência | Segunda execução do worker não duplica chunks (ON CONFLICT DO UPDATE) | ⏳ |
+
+### 9.4 Go/No-Go — Itens #46-#52 (Fund-Centric Model)
+
+Ref: `docs/reference/fund-centric-model-reference.md`
+
+| # | Item | Critério | Status |
+|---|------|----------|--------|
+| 46 | sec_fund_classes populado | `SELECT COUNT(*) FROM sec_fund_classes` > 0 após `run-nport-fund-discovery` | ⏳ |
+| 47 | Catalog retorna classes | `GET /screener/catalog?fund_universe=registered_us` retorna rows com `class_id` preenchido | ⏳ |
+| 48 | Import fundo (não firma) | `POST /manager-screener/managers/{crd}/registered-funds` retorna lista de fundos | ⏳ |
+| 49 | add-to-universe com fund_cik | `POST /manager-screener/managers/{crd}/add-to-universe` com `fund_cik` → `attributes.sec_cik` = CIK do fundo (não da firma) | ⏳ |
+| 50 | DisclosureMatrix holdings_source | Fundo importado com `sec_cik` tem `disclosure.holdings_source = "nport"` no catalog | ⏳ |
+| 51 | has_13f_overlay | Fundo cujo manager faz 13F tem `disclosure.has_13f_overlay = true` | ⏳ |
+| 52 | Identifier bridge | `instrument.attributes.sec_cik` (fund CIK) ≠ `instrument.attributes.sec_crd` (firm CRD) — não confundir adviser CIK com fund CIK | ⏳ |
+
+---
+
+## Issues Conhecidas — Pós 2026-03-27
+
+| # | Issue | Impacto | Ação |
+|---|-------|---------|------|
+| I8 | DD Report usa 13F (firma) em vez de N-PORT (fundo) — sec_injection.py | DD Report mostra alocação setorial da firma, não do fundo | Fix documentado em `fund-centric-pivot-audit.md` — próximo sprint |
+| I9 | `manager-screener/add-to-universe` legado adiciona firma como instrumento | `attributes.sec_cik` = CIK da firma → DD Report usa 13F errado | Fix documentado em `docs/prompts/manager-screener-fund-centric-fix.md` |
+| I10 | `wealth_vector_chunks` sem dados em produção | Agente AI sem contexto de gestores/ESMA até seed ser executado | Executar `run-wealth-embedding` após migration 0059 |
+| I11 | `sec_fund_classes` sem dados em produção | Catalog não expõe share classes | Executar `run-nport-fund-discovery` após migration |
+
+---
+
+## Resultado Consolidado
+
+| Fase | Itens | Data | Status |
+|------|-------|------|--------|
+| Fase 0-4 (Infra + Seed) | #1–#7 | 2026-03-26 | ✅ |
+| Fase 5 (Smoke test E2E) | #8–#22 | 2026-03-27 | ✅ |
+| Fase 6-8 (Perf + Integridade) | #23–#28 | 2026-03-27 | ✅ |
+| Fase 9a (Quant Upgrade BL-1..11) | #29–#35 | — | ⏳ PENDENTE |
+| Fase 9b (Wealth Vector Embedding) | #36–#45 | — | ⏳ PENDENTE |
+| Fase 9c (Fund-Centric Model) | #46–#52 | — | ⏳ PENDENTE |
+
+**Total GO confirmados: 28/52**
+**Pendentes: 24 itens (#29-#52) — requerem segundo e2e após migrations 0058+0059**
