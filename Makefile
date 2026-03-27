@@ -1,5 +1,5 @@
 .PHONY: check test lint typecheck architecture serve migrate migration help pipeline \
-       dev-ui build-ui dev-credit build-credit dev-wealth build-wealth dev-admin build-admin \
+       dev-ui build-ui dev-credit build-credit dev-wealth build-wealth \
        dev-all build-all lint-frontend check-all types
 
 # ── Unified gate ──────────────────────────────────────────
@@ -56,12 +56,6 @@ dev-wealth:
 build-wealth:
 	pnpm --filter netz-wealth-os build
 
-dev-admin:
-	pnpm --filter netz-admin dev
-
-build-admin:
-	pnpm --filter netz-admin build
-
 dev-all:
 	pnpm exec turbo run dev
 
@@ -95,7 +89,6 @@ help:
 	@echo "make build-ui    - Build @netz/ui package"
 	@echo "make dev-credit  - Credit frontend dev server"
 	@echo "make dev-wealth  - Wealth frontend dev server"
-	@echo "make dev-admin   - Admin frontend dev server"
 	@echo "make dev-all     - All packages in parallel (Turborepo)"
 	@echo "make build-all   - Build all packages (topological order)"
 	@echo "make lint-frontend - ESLint all frontend packages"

@@ -28,14 +28,6 @@ export default defineConfig({
 				baseURL: "http://localhost:5174",
 			},
 		},
-		{
-			name: "admin",
-			testDir: "./e2e/admin",
-			use: {
-				...devices["Desktop Chrome"],
-				baseURL: "http://localhost:5175",
-			},
-		},
 	],
 	webServer: [
 		{
@@ -47,12 +39,6 @@ export default defineConfig({
 		{
 			command: "pnpm --filter netz-wealth-os dev",
 			port: 5174,
-			reuseExistingServer: !process.env.CI,
-			timeout: 60_000,
-		},
-		{
-			command: "pnpm --filter netz-admin dev",
-			port: 5175,
 			reuseExistingServer: !process.env.CI,
 			timeout: 60_000,
 		},
