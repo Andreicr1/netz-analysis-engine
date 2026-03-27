@@ -8,3 +8,117 @@ healthcheckPath = "/health"
 healthcheckTimeout = 60
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
+
+# ── Railway Cron Jobs ────────────────────────────────────────
+# Replaces Cloudflare Cron Worker (infra/_deprecated/cloudflare/cron/).
+# Each job invokes the worker directly via CLI — no HTTP overhead.
+# Workers use pg_try_advisory_lock internally to prevent overlap.
+# Times are UTC.
+
+# ── Daily 06:00 — Global data ingestion (parallel, no deps) ─
+[[crons]]
+name = "macro_ingestion"
+schedule = "0 6 * * *"
+command = "python -m app.workers.cli macro_ingestion"
+
+[[crons]]
+name = "treasury_ingestion"
+schedule = "0 6 * * *"
+command = "python -m app.workers.cli treasury_ingestion"
+
+[[crons]]
+name = "benchmark_ingest"
+schedule = "0 6 * * *"
+command = "python -m app.workers.cli benchmark_ingest"
+
+# ── Daily 06:30 — Org-scoped ingestion ──────────────────────
+[[crons]]
+name = "ingestion"
+schedule = "30 6 * * *"
+command = "python -m app.workers.cli ingestion"
+
+[[crons]]
+name = "instrument_ingestion"
+schedule = "30 6 * * *"
+command = "python -m app.workers.cli instrument_ingestion"
+
+# ── Daily 07:00 — Risk + portfolio (after ingestion) ────────
+[[crons]]
+name = "risk_calc"
+schedule = "0 7 * * *"
+command = "python -m app.workers.cli risk_calc"
+
+[[crons]]
+name = "portfolio_eval"
+schedule = "0 7 * * *"
+command = "python -m app.workers.cli portfolio_eval"
+
+# ── Daily 07:30 — Post-eval workers ─────────────────────────
+[[crons]]
+name = "portfolio_nav_synthesizer"
+schedule = "30 7 * * *"
+command = "python -m app.workers.cli portfolio_nav_synthesizer"
+
+[[crons]]
+name = "drift_check"
+schedule = "30 7 * * *"
+command = "python -m app.workers.cli drift_check"
+
+[[crons]]
+name = "regime_fit"
+schedule = "30 7 * * *"
+command = "python -m app.workers.cli regime_fit"
+
+# ── Daily 08:00 — Screening + watchlist ──────────────────────
+[[crons]]
+name = "screening_batch"
+schedule = "0 8 * * *"
+command = "python -m app.workers.cli screening_batch"
+
+[[crons]]
+name = "watchlist_batch"
+schedule = "0 8 * * *"
+command = "python -m app.workers.cli watchlist_batch"
+
+# ── Weekly — Sunday 02:00 UTC ────────────────────────────────
+[[crons]]
+name = "ofr_ingestion"
+schedule = "0 2 * * 0"
+command = "python -m app.workers.cli ofr_ingestion"
+
+[[crons]]
+name = "nport_ingestion"
+schedule = "0 2 * * 0"
+command = "python -m app.workers.cli nport_ingestion"
+
+# ── Weekly — Monday 04:00 UTC ────────────────────────────────
+[[crons]]
+name = "esma_ingestion"
+schedule = "0 4 * * 1"
+command = "python -m app.workers.cli esma_ingestion"
+
+# ── Quarterly — 1st of Jan, Apr, Jul, Oct at 03:00 UTC ──────
+[[crons]]
+name = "sec_13f_ingestion"
+schedule = "0 3 1 1,4,7,10 *"
+command = "python -m app.workers.cli sec_13f_ingestion"
+
+[[crons]]
+name = "sec_adv_ingestion"
+schedule = "0 3 1 1,4,7,10 *"
+command = "python -m app.workers.cli sec_adv_ingestion"
+
+[[crons]]
+name = "bis_ingestion"
+schedule = "0 3 1 1,4,7,10 *"
+command = "python -m app.workers.cli bis_ingestion"
+
+[[crons]]
+name = "imf_ingestion"
+schedule = "0 3 1 1,4,7,10 *"
+command = "python -m app.workers.cli imf_ingestion"
+
+[[crons]]
+name = "sec_refresh"
+schedule = "0 5 1 1,4,7,10 *"
+command = "python -m app.workers.cli sec_refresh"

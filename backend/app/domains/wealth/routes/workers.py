@@ -716,6 +716,36 @@ async def trigger_run_sec_adv_ingestion(
 
 
 @router.post(
+    "/run-portfolio-nav-synthesizer",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger portfolio NAV synthesis",
+    description=(
+        "Schedules the portfolio NAV synthesizer worker as a background task. "
+        "Computes weighted synthetic NAV for all model portfolios with "
+        "fund_selection_schema. Uses advisory lock 900_030 to prevent "
+        "concurrent runs. Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_portfolio_nav_synthesizer(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.portfolio_nav_synthesizer import run_portfolio_nav_synthesizer
+
+    org_id = user.organization_id
+    return await _dispatch_worker(
+        background_tasks, "run-portfolio-nav-synthesizer", str(org_id),
+        run_portfolio_nav_synthesizer, org_id,
+        timeout_seconds=_LIGHT_WORKER_TIMEOUT, org_id=org_id,
+    )
+
+
+@router.post(
     "/run-nport-fund-discovery",
     response_model=WorkerScheduledResponse,
     status_code=status.HTTP_202_ACCEPTED,

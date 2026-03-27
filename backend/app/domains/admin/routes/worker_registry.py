@@ -1,13 +1,13 @@
 """Worker registry — maps worker names to async entry points.
 
-Used by the internal dispatch endpoint (Cloudflare Cron Workers)
-and can be imported by other admin tooling.
+Used by the Railway Cron CLI (app.workers.cli), the internal dispatch
+endpoint, and admin tooling.
 
 Each entry maps a string key to a tuple of:
     (coroutine_function, scope_type, timeout_seconds)
 
 scope_type is either "global" or "org" — org-scoped workers are
-dispatched once per active organization by the dispatch endpoint.
+dispatched once per active organization.
 """
 
 from __future__ import annotations
@@ -32,13 +32,17 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
         run_brochure_extract,
     )
     from app.domains.wealth.workers.drift_check import run_drift_check
+    from app.domains.wealth.workers.esma_ingestion import run_esma_ingestion
     from app.domains.wealth.workers.imf_ingestion import run_imf_ingestion
     from app.domains.wealth.workers.ingestion import run_ingestion
     from app.domains.wealth.workers.instrument_ingestion import run_instrument_ingestion
     from app.domains.wealth.workers.macro_ingestion import run_macro_ingestion
+    from app.domains.wealth.workers.nport_fund_discovery import run_nport_fund_discovery
     from app.domains.wealth.workers.nport_ingestion import run_nport_ingestion
+    from app.domains.wealth.workers.nport_ticker_resolution import run_nport_ticker_resolution
     from app.domains.wealth.workers.ofr_ingestion import run_ofr_ingestion
     from app.domains.wealth.workers.portfolio_eval import run_portfolio_eval
+    from app.domains.wealth.workers.portfolio_nav_synthesizer import run_portfolio_nav_synthesizer
     from app.domains.wealth.workers.regime_fit import run_regime_fit
     from app.domains.wealth.workers.risk_calc import run_risk_calc
     from app.domains.wealth.workers.screening_batch import run_screening_batch
@@ -57,6 +61,9 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
         "bis_ingestion": (run_bis_ingestion, "global", _HEAVY),
         "imf_ingestion": (run_imf_ingestion, "global", _HEAVY),
         "nport_ingestion": (run_nport_ingestion, "global", _HEAVY),
+        "nport_fund_discovery": (run_nport_fund_discovery, "global", _HEAVY),
+        "nport_ticker_resolution": (run_nport_ticker_resolution, "global", _HEAVY),
+        "esma_ingestion": (run_esma_ingestion, "global", _HEAVY),
         "sec_refresh": (run_sec_refresh, "global", _HEAVY),
         "sec_13f_ingestion": (run_sec_13f_ingestion, "global", _HEAVY),
         "sec_adv_ingestion": (run_sec_adv_ingestion, "global", _HEAVY),
@@ -69,6 +76,7 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
         "instrument_ingestion": (run_instrument_ingestion, "org", _HEAVY),
         "risk_calc": (run_risk_calc, "org", _HEAVY),
         "portfolio_eval": (run_portfolio_eval, "org", _LIGHT),
+        "portfolio_nav_synthesizer": (run_portfolio_nav_synthesizer, "org", _LIGHT),
         "screening_batch": (run_screening_batch, "org", _LIGHT),
         "watchlist_batch": (run_watchlist_check, "org", _LIGHT),
     }

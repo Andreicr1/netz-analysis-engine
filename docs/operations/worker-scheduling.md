@@ -2,107 +2,124 @@
 
 All workers live in `backend/app/domains/wealth/workers/`.
 
+## Scheduler: Railway Cron Jobs
+
+Workers are scheduled via `[[crons]]` entries in `railway.toml` at the repo root.
+Each cron job invokes workers directly via CLI:
+
+```bash
+python -m app.workers.cli <worker_name>
+```
+
+The CLI:
+- Resolves the worker from `worker_registry.py`
+- For org-scoped workers, queries all active orgs and runs once per org
+- Uses `asyncio.run()` — same async pattern as the HTTP endpoints
+- Returns exit code 0 (success) or 1 (failure/timeout) — Railway uses this for alerting
+
+Advisory locks (`pg_try_advisory_lock`) inside each worker prevent concurrent execution
+even if Railway fires overlapping cron runs.
+
 ## Daily Pipeline Order
 
 Workers that form the daily pipeline must run in this sequence:
 
 ```
-macro_ingestion -> ingestion -> risk_calc -> portfolio_eval -> regime_fit -> bayesian_cvar -> drift_check
+06:00  macro_ingestion, treasury_ingestion, benchmark_ingest  (parallel, global)
+06:30  ingestion, instrument_ingestion                        (parallel, org-scoped)
+07:00  risk_calc, portfolio_eval                              (parallel, org-scoped)
+07:30  portfolio_nav_synthesizer, drift_check, regime_fit     (parallel, post-eval)
+08:00  screening_batch, watchlist_batch                       (parallel, org-scoped)
 ```
 
-## Worker Inventory
+## Complete Worker Inventory
 
-### HTTP-Triggered Workers (via `/api/wealth/workers/`)
+### Global Workers (no org_id)
 
-These workers have POST endpoints in `routes/workers.py`. They can be triggered by the admin UI, CI pipelines, or an external scheduler hitting the HTTP endpoint. All require `ADMIN` or `INVESTMENT_TEAM` role.
+| Worker | Schedule | Lock ID | Entry Point | Source | Timeout |
+|--------|----------|---------|-------------|--------|---------|
+| `macro_ingestion` | `0 6 * * *` | 43 | `run_macro_ingestion()` | FRED API (~65 series) | 10min |
+| `treasury_ingestion` | `0 6 * * *` | 900_011 | `run_treasury_ingestion()` | US Treasury API | 10min |
+| `benchmark_ingest` | `0 6 * * *` | 900_004 | `run_benchmark_ingest()` | Yahoo Finance | 10min |
+| `ofr_ingestion` | `0 2 * * 0` | 900_012 | `run_ofr_ingestion()` | OFR API | 10min |
+| `nport_ingestion` | `0 2 * * 0` | 900_018 | `run_nport_ingestion()` | SEC EDGAR N-PORT | 10min |
+| `nport_fund_discovery` | manual | 900_024 | `run_nport_fund_discovery()` | SEC EDGAR EFTS | 10min |
+| `nport_ticker_resolution` | manual | 900_025 | `run_nport_ticker_resolution()` | OpenFIGI | 10min |
+| `esma_ingestion` | `0 4 * * 1` | 900_019 | `run_esma_ingestion()` | ESMA Solr | 10min |
+| `sec_13f_ingestion` | `0 3 1 1,4,7,10 *` | 900_021 | `run_sec_13f_ingestion()` | SEC EDGAR 13F | 10min |
+| `sec_adv_ingestion` | `0 3 1 1,4,7,10 *` | 900_022 | `run_sec_adv_ingestion()` | SEC FOIA CSV | 10min |
+| `sec_refresh` | `0 5 1 1,4,7,10 *` | 900_016 | `run_sec_refresh()` | Computed | 10min |
+| `bis_ingestion` | `0 3 1 1,4,7,10 *` | 900_014 | `run_bis_ingestion()` | BIS SDMX API | 10min |
+| `imf_ingestion` | `0 3 1 1,4,7,10 *` | 900_015 | `run_imf_ingestion()` | IMF DataMapper | 10min |
+| `brochure_download` | manual | 900_019 | `run_brochure_download()` | IAPD | 10min |
+| `brochure_extract` | manual | 900_020 | `run_brochure_extract()` | Local PDFs | 10min |
+| `drift_check` | `30 7 * * *` | 42 | `run_drift_check()` | Computed (DTW) | 5min |
+| `regime_fit` | `30 7 * * *` | — | `run_regime_fit()` | Computed (HMM) | 5min |
+| `fact_sheet_gen` | manual | 900_001 | `run_monthly_fact_sheets()` | Computed + OpenAI | 10min |
 
-| Worker | Route | Entry Point | Advisory Lock ID | Dependencies | Recommended Interval |
-|---|---|---|---|---|---|
-| `ingestion.py` | `POST /workers/run-ingestion` | `run_ingestion()` | `900_006` | PostgreSQL, Yahoo Finance API | Daily, after market close |
-| `risk_calc.py` | `POST /workers/run-risk-calc` | `run_risk_calc()` | `900_007` | PostgreSQL | Daily, after `ingestion` |
-| `portfolio_eval.py` | `POST /workers/run-portfolio-eval` | `run_portfolio_eval()` | `900_008` | PostgreSQL, Redis (alerts) | Daily, after `risk_calc` |
-| `macro_ingestion.py` | `POST /workers/run-macro-ingestion` | `run_macro_ingestion()` | `43` | PostgreSQL, FRED API (`FRED_API_KEY`) | Daily, before `risk_calc` |
-| `fact_sheet_gen.py` | `POST /workers/run-fact-sheet-gen` | `run_monthly_fact_sheets()` | `900_001` | PostgreSQL, OpenAI API | Monthly (1st business day) |
-| `screening_batch.py` | `POST /workers/run-screening-batch` | `run_screening_batch(org_id)` | `900_002` | PostgreSQL | Weekly |
-| `watchlist_batch.py` | `POST /workers/run-watchlist-check` | `run_watchlist_check(org_id)` | `900_003` | PostgreSQL, Redis (alerts) | Weekly |
-| `benchmark_ingest.py` | `POST /workers/run-benchmark-ingest` | `run_benchmark_ingest()` | `900_004` | PostgreSQL, Yahoo Finance API | Daily, after market close |
+### Org-Scoped Workers (dispatched per active org)
 
-### Scheduler-Only Workers (no HTTP route)
+| Worker | Schedule | Lock ID | Entry Point | Source | Timeout |
+|--------|----------|---------|-------------|--------|---------|
+| `ingestion` | `30 6 * * *` | 900_006 | `run_ingestion()` | Yahoo Finance | 10min |
+| `instrument_ingestion` | `30 6 * * *` | 900_010 | `run_instrument_ingestion()` | Yahoo Finance | 10min |
+| `risk_calc` | `0 7 * * *` | 900_007 | `run_risk_calc()` | Computed | 10min |
+| `portfolio_eval` | `0 7 * * *` | 900_008 | `run_portfolio_eval()` | Computed | 5min |
+| `portfolio_nav_synthesizer` | `30 7 * * *` | 900_030 | `run_portfolio_nav_synthesizer()` | Computed (weighted NAV) | 5min |
+| `screening_batch` | `0 8 * * *` | 900_002 | `run_screening_batch()` | Computed | 5min |
+| `watchlist_batch` | `0 8 * * *` | 900_003 | `run_watchlist_check()` | Computed | 5min |
 
-These workers have **no HTTP endpoint**. They must be invoked via an external scheduler (cron, Azure Functions Timer Trigger, etc.) using `python -m app.workers.<name>` or by importing and calling the async entry point directly.
+## Manual Trigger
 
-| Worker | Entry Point | Advisory Lock ID | Dependencies | Recommended Interval | Notes |
-|---|---|---|---|---|---|
-| `drift_check.py` | `run_drift_check()` | `42` | PostgreSQL, `quant_engine` | Daily, after `portfolio_eval` | Creates rebalance events when drift exceeds thresholds. Runs for all 3 profiles (conservative, moderate, growth). |
-| `regime_fit.py` | `run_regime_fit()` | None | PostgreSQL, **statsmodels** (`[timeseries]` extra) | Daily, after `portfolio_eval` | Fits 2-state Markov HMM on VIX log-levels. Requires 252+ VIX observations. Skips gracefully if statsmodels is not installed. |
-| `bayesian_cvar.py` | `run_bayesian_cvar()` | None | PostgreSQL, **PyMC >= 5.0** (`[bayesian]` extra) | Daily, after `portfolio_eval` | ADVI approximation for CVaR credible intervals. Gated by `FEATURE_BAYESIAN_CVAR=true` feature flag. Skips entirely if PyMC is not installed or flag is disabled. CPU-intensive (offloads to thread pool). |
-| `fred_ingestion.py` | `run_fred_ingestion()` | None | PostgreSQL, FRED API (`FRED_API_KEY`) | **DEPRECATED** -- do not schedule | Superseded by `macro_ingestion.py` (45 series vs 10, regional scoring). Do not run both simultaneously -- they write to the same `macro_data` rows. Pending removal in cleanup sprint. |
+All workers with HTTP endpoints can be triggered manually via the admin API:
+
+```bash
+POST /api/v1/workers/run-{name}
+# Requires ADMIN or INVESTMENT_TEAM role
+# Returns 202 Accepted, runs in background
+# Returns 409 if already running or recently completed
+```
 
 ## CLI Invocation
 
-All workers support direct CLI execution for debugging and one-off runs:
+For debugging and one-off runs:
 
 ```bash
-# HTTP-triggered workers (can also be called via CLI)
-python -m app.domains.wealth.workers.ingestion
-python -m app.domains.wealth.workers.risk_calc
-python -m app.domains.wealth.workers.portfolio_eval
-python -m app.domains.wealth.workers.macro_ingestion
+# Via the Railway Cron CLI (same as cron uses)
+python -m app.workers.cli macro_ingestion
+python -m app.workers.cli risk_calc
 
-# Scheduler-only workers (must be called via CLI or external trigger)
-python -m app.domains.wealth.workers.drift_check
-python -m app.domains.wealth.workers.regime_fit
-python -m app.domains.wealth.workers.bayesian_cvar
+# Direct module invocation (some workers support this)
+python -m app.domains.wealth.workers.portfolio_nav_synthesizer
 ```
 
 ## Advisory Lock Registry
 
-All locks use `pg_try_advisory_lock` (non-blocking). If the lock is already held, the worker skips its run and logs a warning.
+All locks use `pg_try_advisory_lock` (non-blocking). If the lock is already held,
+the worker skips its run and logs a warning.
 
 | Lock ID | Worker | Purpose |
-|---|---|---|
-| `42` | `drift_check.py` | Pipeline serialization |
-| `43` | `macro_ingestion.py` | Macro ingestion serialization |
-| `900_001` | `fact_sheet_gen.py` | Fact sheet generation |
-| `900_002` | `screening_batch.py` | Batch screening |
-| `900_003` | `watchlist_batch.py` | Watchlist re-evaluation |
-| `900_004` | `benchmark_ingest.py` | Benchmark NAV ingestion |
-| `900_006` | `ingestion.py` | NAV ingestion |
-| `900_007` | `risk_calc.py` | Risk calculation |
-| `900_008` | `portfolio_eval.py` | Portfolio evaluation |
-
-## Optional Dependencies
-
-| Extra Group | Package | Workers |
-|---|---|---|
-| `[timeseries]` | statsmodels | `regime_fit.py` |
-| `[bayesian]` | pymc >= 5.0, arviz | `bayesian_cvar.py` |
-
-Both workers degrade gracefully (skip with a log warning) when their optional dependency is not installed.
-
-## Feature Flags
-
-| Flag | Default | Worker |
-|---|---|---|
-| `FEATURE_BAYESIAN_CVAR` | `false` | `bayesian_cvar.py` -- worker exits immediately when disabled |
-
-## Example Cron Schedule (Production)
-
-```cron
-# Daily pipeline (US market close = 16:00 ET = 21:00 UTC)
-00 21 * * 1-5  macro_ingestion
-05 21 * * 1-5  ingestion
-05 21 * * 1-5  benchmark_ingest
-20 21 * * 1-5  risk_calc
-35 21 * * 1-5  portfolio_eval
-50 21 * * 1-5  regime_fit
-55 21 * * 1-5  bayesian_cvar
-00 22 * * 1-5  drift_check
-
-# Weekly (Sunday night)
-00 22 * * 0    screening_batch
-15 22 * * 0    watchlist_batch
-
-# Monthly (1st of month)
-00 23 1 * *    fact_sheet_gen
-```
+|---------|--------|---------|
+| 42 | `drift_check` | Pipeline serialization |
+| 43 | `macro_ingestion` | Macro ingestion serialization |
+| 900_001 | `fact_sheet_gen` | Fact sheet generation |
+| 900_002 | `screening_batch` | Batch screening |
+| 900_003 | `watchlist_batch` | Watchlist re-evaluation |
+| 900_004 | `benchmark_ingest` | Benchmark NAV ingestion |
+| 900_006 | `ingestion` | NAV ingestion |
+| 900_007 | `risk_calc` | Risk calculation |
+| 900_008 | `portfolio_eval` | Portfolio evaluation |
+| 900_010 | `instrument_ingestion` | Instrument NAV ingestion |
+| 900_011 | `treasury_ingestion` | Treasury data ingestion |
+| 900_012 | `ofr_ingestion` | OFR hedge fund data |
+| 900_014 | `bis_ingestion` | BIS statistics |
+| 900_015 | `imf_ingestion` | IMF WEO forecasts |
+| 900_016 | `sec_refresh` | SEC aggregate refresh |
+| 900_018 | `nport_ingestion` | N-PORT holdings |
+| 900_019 | `brochure_download`, `esma_ingestion` | Brochure download / ESMA |
+| 900_020 | `brochure_extract` | Brochure text extraction |
+| 900_021 | `sec_13f_ingestion` | SEC 13F holdings |
+| 900_022 | `sec_adv_ingestion` | SEC ADV bulk CSV |
+| 900_024 | `nport_fund_discovery` | N-PORT fund discovery |
+| 900_025 | `nport_ticker_resolution` | N-PORT ticker resolution |
+| 900_030 | `portfolio_nav_synthesizer` | Portfolio NAV synthesis |

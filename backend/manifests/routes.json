@@ -1876,6 +1876,11 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/workers/run-portfolio-nav-synthesizer",
+    "name": "trigger_run_portfolio_nav_synthesizer"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/workers/run-risk-calc",
     "name": "trigger_run_risk_calc"
   },
