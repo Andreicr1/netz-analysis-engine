@@ -20,7 +20,7 @@ from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config.config_service import ConfigService
-from app.core.db.session import async_session_factory
+from app.core.db.engine import async_session_factory
 from app.core.tenancy.middleware import set_rls_context
 from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.screening_result import ScreeningResult, ScreeningRun

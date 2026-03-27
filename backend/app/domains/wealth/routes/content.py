@@ -383,7 +383,7 @@ async def _run_content_generation(
             )
 
             # Update content record with result
-            from app.core.db.session import async_session_factory
+            from app.core.db.engine import async_session_factory
 
             async with async_session_factory() as db:
                 safe_oid = str(uuid.UUID(org_id)).replace("'", "")

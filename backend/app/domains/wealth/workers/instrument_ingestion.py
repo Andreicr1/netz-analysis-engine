@@ -18,7 +18,7 @@ from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.db.session import async_session_factory
+from app.core.db.engine import async_session_factory
 from app.core.tenancy.middleware import set_rls_context
 from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.nav import NavTimeseries
