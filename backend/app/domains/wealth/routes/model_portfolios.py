@@ -478,6 +478,19 @@ async def _run_construction_async(
             else max_single_fund,
         )
 
+        logger.info(
+            "optimizer_constraints_prepared",
+            n_funds=len(opt_fund_ids),
+            covered_blocks=list(covered_blocks),
+            total_blocks=len(block_constraints),
+            target_sum=round(target_sum, 4) if target_sum else None,
+            active_blocks=[
+                {"id": bc.block_id, "min": bc.min_weight, "max": bc.max_weight}
+                for bc in active_block_constraints
+            ],
+            max_single_fund=active_constraints.max_single_fund_weight,
+        )
+
         fund_result: FundOptimizationResult = await optimize_fund_portfolio(
             fund_ids=opt_fund_ids,
             fund_blocks=sub_blocks,
