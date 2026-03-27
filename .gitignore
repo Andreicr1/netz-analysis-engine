@@ -60,3 +60,10 @@ backend/.esma_seed_checkpoint.json
 playwright-report/
 test-results/
 cloudflared.exe
+
+# Temporary e2e / debug scripts and JWT files (never commit)
+tmp_*.py
+tmp_*.json
+tmp_*.txt
+backend/tmp_*.json
+backend/tmp_*.txt
