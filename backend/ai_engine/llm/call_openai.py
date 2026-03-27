@@ -47,16 +47,8 @@ def call_openai(
     from ai_engine.openai_client import create_completion
     from app.core.config import settings
 
-    has_openai = bool(settings.OPENAI_API_KEY)
-    has_azure_openai = bool(
-        settings.AZURE_OPENAI_ENDPOINT and settings.AZURE_OPENAI_KEY,
-    )
-    has_foundry = bool(settings.AZURE_AI_FOUNDRY_KEY)
-    if not has_openai and not has_azure_openai and not has_foundry:
-        raise ValueError(
-            "No AI provider configured. "
-            "Set OPENAI_API_KEY, AZURE_OPENAI_ENDPOINT+KEY, or AZURE_AI_FOUNDRY_KEY.",
-        )
+    if not settings.openai_api_key:
+        raise ValueError("OPENAI_API_KEY not configured.")
 
     effective_model = model or _MODEL
 
