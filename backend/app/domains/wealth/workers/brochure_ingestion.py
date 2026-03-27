@@ -50,7 +50,15 @@ async def run_brochure_download() -> dict:
 
         try:
             result = await db.execute(
-                sa_text("SELECT crd_number FROM sec_managers ORDER BY crd_number")
+                sa_text(
+                    "SELECT crd_number FROM sec_managers "
+                    "WHERE private_fund_count > 0 "
+                    "   OR hedge_fund_count > 0 "
+                    "   OR pe_fund_count > 0 "
+                    "   OR vc_fund_count > 0 "
+                    "   OR real_estate_fund_count > 0 "
+                    "ORDER BY crd_number"
+                )
             )
             all_crds = [row[0] for row in result.fetchall()]
 
@@ -188,6 +196,11 @@ async def run_brochure_extract() -> dict:
                     "LEFT JOIN sec_manager_brochure_text b "
                     "  ON m.crd_number = b.crd_number "
                     "WHERE b.crd_number IS NULL "
+                    "  AND (m.private_fund_count > 0 "
+                    "    OR m.hedge_fund_count > 0 "
+                    "    OR m.pe_fund_count > 0 "
+                    "    OR m.vc_fund_count > 0 "
+                    "    OR m.real_estate_fund_count > 0) "
                     "ORDER BY m.crd_number"
                 )
             )
