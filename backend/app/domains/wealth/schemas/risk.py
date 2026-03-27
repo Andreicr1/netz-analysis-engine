@@ -39,6 +39,8 @@ class FundRiskRead(BaseModel):
     nav_momentum_score: Decimal | None = None
     flow_momentum_score: Decimal | None = None
     blended_momentum_score: Decimal | None = None
+    volatility_garch: Decimal | None = None
+    cvar_95_conditional: Decimal | None = None
     dtw_drift_score: Decimal | None = None
     manager_score: Decimal | None = None
     score_components: dict[str, Any] | None = None

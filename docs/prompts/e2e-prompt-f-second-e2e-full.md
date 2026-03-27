@@ -23,7 +23,7 @@ Verificar localmente:
 ```powershell
 cd D:\Projetos\netz-analysis-engine\backend
 
-# 1. Migrations 0058 e 0059 aplicadas em produção
+# 1. Migrations 0058, 0059 e 0060 aplicadas em produção
 $env:DATABASE_URL = (Get-Content .env | Select-String "^DIRECT_DATABASE_URL").ToString().Split("=",2)[1]
 python -c "
 import asyncio, asyncpg, os
@@ -31,16 +31,29 @@ from dotenv import load_dotenv; load_dotenv()
 url = os.environ['DIRECT_DATABASE_URL'].replace('postgresql+asyncpg://','postgresql://')
 async def check():
     conn = await asyncpg.connect(url)
-    rows = await conn.fetch(\"SELECT version_num FROM alembic_version\")
-    print('migrations:', [r['version_num'] for r in rows])
-    tables = await conn.fetch(\"SELECT tablename FROM pg_tables WHERE tablename IN ('wealth_vector_chunks','sec_fund_classes') AND schemaname='public'\")
-    print('tabelas novas:', [r['tablename'] for r in tables])
+    rows = await conn.fetch('SELECT version_num FROM alembic_version')
+    print('migration head:', [r['version_num'] for r in rows])
+    # Esperado: ['0060_portfolio_views'] (chain linear, 1 head)
+    tables = await conn.fetch(\"\"\"
+        SELECT tablename FROM pg_tables
+        WHERE tablename IN ('wealth_vector_chunks','sec_fund_classes','portfolio_views')
+        AND schemaname='public'
+    \"\"\")
+    print('tabelas novas:', sorted([r['tablename'] for r in tables]))
+    # Esperado: as 3 tabelas presentes
     await conn.close()
 asyncio.run(check())
 "
 
-# 2. arch library disponível
-.\.venv\Scripts\python.exe -c "import arch; print('arch:', arch.__version__)"
+# Nota: após sessão regime-history-persistence, adicionar '0061_macro_regime_history'
+# ao check de tabelas acima e verificar macro_regime_history na lista.
+
+# 2. arch e aeon disponíveis (agora deps principais, não opcionais)
+.\.venv\Scripts\python.exe -c "
+import arch, aeon
+print('arch:', arch.__version__)   # esperado: 8.0.0
+print('aeon:', aeon.__version__)   # esperado: 1.4.0
+"
 ```
 
 Se migration pendente: `alembic upgrade head`
@@ -79,6 +92,16 @@ def post(path, body=None, **kw):
 ### Etapa 1.1 — Re-rodar risk_calc e construct com upgrade ativo
 
 ```python
+# ORDEM IMPORTA: regime_fit deve rodar antes de risk_calc.
+# regime_fit popula macro_regime_history; risk_calc lê de lá para cvar_95_conditional.
+# Nota: após a sessão regime-history-persistence, esta ordem passa a ser obrigatória.
+# Antes dela, risk_calc usa VIX>=25 como proxy e a ordem não importa.
+
+r = post("/api/v1/workers/run-regime-fit")
+print(f"regime_fit: {r.status_code} — {r.text[:80]}")
+print("Aguardando 60s para regime_fit completar...")
+time.sleep(60)
+
 # Re-rodar risk_calc para popular volatility_garch e cvar_95_conditional
 r = post("/api/v1/workers/run-risk-calc")
 print(f"risk_calc: {r.status_code} — {r.text[:80]}")
@@ -106,6 +129,11 @@ if r.status_code == 200:
     m = r.json()
     print(f"volatility_garch:    {m.get('volatility_garch')}")
     print(f"cvar_95_conditional: {m.get('cvar_95_conditional')}")
+    # Nota: cvar_95_conditional usa macro_regime_history (RISK_OFF/CRISIS) como fonte
+    # de datas de stress. Se a tabela estiver vazia (regime_fit ainda não rodou ou
+    # sessão regime-history-persistence não foi executada), retorna None — correto.
+    # Para OAKMX com histórico desde ~2016, deve ser não-None após regime_fit rodar
+    # (períodos 2020 COVID e 2022 rate shock qualificam como stress).
     go_29 = m.get('volatility_garch') is not None or m.get('cvar_95_conditional') is not None
 else:
     print("Endpoint não expõe — verificar via SQL direto:")

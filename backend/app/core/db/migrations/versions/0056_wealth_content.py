@@ -4,7 +4,7 @@ ORG-SCOPED: has organization_id + RLS.
 """
 
 revision = "0056_wealth_content"
-down_revision = "0055_model_portfolio_nav"
+down_revision = "0056_dd_report_status_add_failed"
 
 import sqlalchemy as sa
 from alembic import op

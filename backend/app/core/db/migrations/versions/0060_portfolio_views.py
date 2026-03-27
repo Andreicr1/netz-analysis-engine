@@ -1,7 +1,7 @@
 """Add portfolio_views table for Black-Litterman IC views.
 
-Revision ID: a1b2c3d4e5f6
-Revises: f5aca0aa8f32
+Revision ID: 0060_portfolio_views
+Revises: 0059_wealth_vector_chunks
 Create Date: 2026-03-27
 """
 
@@ -9,8 +9,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects.postgresql import UUID
 
-revision = "a1b2c3d4e5f6"
-down_revision = "f5aca0aa8f32"
+revision = "0060_portfolio_views"
+down_revision = "0059_wealth_vector_chunks"
 branch_labels = None
 depends_on = None
 
