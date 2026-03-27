@@ -259,6 +259,7 @@ async def execute_rebalance(
     event_id: uuid.UUID,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(require_ic_member()),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> RebalanceEventRead:
     """Execute a previously approved rebalance event.
 
@@ -298,6 +299,7 @@ async def execute_rebalance(
 
     # Create new snapshot with the event's proposed weights
     new_snap = PortfolioSnapshot(
+        organization_id=org_id,
         profile=profile,
         snapshot_date=date.today(),
         weights=event.weights_after or (current_snap.weights if current_snap else None),
