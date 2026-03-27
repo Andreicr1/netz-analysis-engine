@@ -28,7 +28,7 @@ class UniverseAssetRead(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    fund_id: uuid.UUID
+    instrument_id: uuid.UUID
     fund_name: str
     block_id: str | None = None
     geography: str | None = None
