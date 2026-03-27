@@ -179,6 +179,8 @@ async def get_track_record(
     user: CurrentUser = Depends(get_current_user),
 ) -> dict[str, Any]:
     """Get combined track-record: backtest, live NAV, and stress data."""
+    from app.domains.wealth.models.model_portfolio_nav import ModelPortfolioNav
+
     result = await db.execute(
         select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id)
     )
@@ -189,13 +191,29 @@ async def get_track_record(
             detail=f"Model portfolio {portfolio_id} not found",
         )
 
+    # Query synthesized NAV series
+    nav_result = await db.execute(
+        select(ModelPortfolioNav)
+        .where(ModelPortfolioNav.portfolio_id == portfolio_id)
+        .order_by(ModelPortfolioNav.nav_date)
+    )
+    nav_rows = nav_result.scalars().all()
+    nav_series = [
+        {
+            "date": str(r.nav_date),
+            "nav": float(r.nav),
+            "daily_return": float(r.daily_return) if r.daily_return is not None else None,
+        }
+        for r in nav_rows
+    ]
+
     return {
         "portfolio_id": str(portfolio_id),
         "profile": portfolio.profile,
         "status": portfolio.status,
         "fund_selection": portfolio.fund_selection_schema,
+        "nav_series": nav_series,
         "backtest": None,  # Populated by POST /backtest
-        "live_nav": None,  # Populated by daily worker
         "stress": None,  # Populated by POST /stress
     }
 
@@ -657,6 +675,17 @@ async def _create_day0_snapshot(
             trigger = "urgent"
         elif cvar_utilized >= 80.0:
             trigger = "maintenance"
+
+    # Delete existing snapshot for this date (re-construct replaces it)
+    from sqlalchemy import delete
+
+    await db.execute(
+        delete(PortfolioSnapshot).where(
+            PortfolioSnapshot.organization_id == org_id,
+            PortfolioSnapshot.profile == portfolio.profile,
+            PortfolioSnapshot.snapshot_date == snapshot_date,
+        )
+    )
 
     snapshot = PortfolioSnapshot(
         organization_id=org_id,
