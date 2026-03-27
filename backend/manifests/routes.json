@@ -1216,6 +1216,11 @@
   },
   {
     "method": "PATCH",
+    "path": "/api/v1/instruments/{instrument_id}",
+    "name": "update_instrument"
+  },
+  {
+    "method": "PATCH",
     "path": "/api/v1/macro/reviews/{review_id}/approve",
     "name": "approve_review"
   },
@@ -1858,11 +1863,6 @@
     "method": "POST",
     "path": "/api/v1/workers/run-nport-ingestion",
     "name": "trigger_run_nport_ingestion"
-  },
-  {
-    "method": "POST",
-    "path": "/api/v1/workers/run-nport-ticker-resolution",
-    "name": "trigger_run_nport_ticker_resolution"
   },
   {
     "method": "POST",

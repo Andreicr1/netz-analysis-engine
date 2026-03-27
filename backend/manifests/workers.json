@@ -61,11 +61,6 @@
   },
   {
     "method": "POST",
-    "path": "/api/v1/workers/run-nport-ticker-resolution",
-    "name": "trigger_run_nport_ticker_resolution"
-  },
-  {
-    "method": "POST",
     "path": "/api/v1/workers/run-ofr-ingestion",
     "name": "trigger_run_ofr_ingestion"
   },

@@ -107,11 +107,6 @@ name = "nport_fund_discovery"
 schedule = "0 4 * * 0"
 command = "python -m app.workers.cli nport_fund_discovery"
 
-[[crons]]
-name = "nport_ticker_resolution"
-schedule = "30 4 * * 0"
-command = "python -m app.workers.cli nport_ticker_resolution"
-
 # ── Weekly — Monday 04:00 UTC ────────────────────────────────
 [[crons]]
 name = "esma_ingestion"

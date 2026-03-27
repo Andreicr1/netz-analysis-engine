@@ -39,7 +39,6 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
     from app.domains.wealth.workers.macro_ingestion import run_macro_ingestion
     from app.domains.wealth.workers.nport_fund_discovery import run_nport_fund_discovery
     from app.domains.wealth.workers.nport_ingestion import run_nport_ingestion
-    from app.domains.wealth.workers.nport_ticker_resolution import run_nport_ticker_resolution
     from app.domains.wealth.workers.ofr_ingestion import run_ofr_ingestion
     from app.domains.wealth.workers.portfolio_eval import run_portfolio_eval
     from app.domains.wealth.workers.portfolio_nav_synthesizer import run_portfolio_nav_synthesizer
@@ -62,7 +61,7 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
         "imf_ingestion": (run_imf_ingestion, "global", _HEAVY),
         "nport_ingestion": (run_nport_ingestion, "global", _HEAVY),
         "nport_fund_discovery": (run_nport_fund_discovery, "global", _HEAVY),
-        "nport_ticker_resolution": (run_nport_ticker_resolution, "global", _HEAVY),
+
         "esma_ingestion": (run_esma_ingestion, "global", _HEAVY),
         "sec_refresh": (run_sec_refresh, "global", _HEAVY),
         "sec_13f_ingestion": (run_sec_13f_ingestion, "global", _HEAVY),

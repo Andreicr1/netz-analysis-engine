@@ -125,6 +125,7 @@ async def run_nport_fund_discovery() -> dict:
                         "crd_number": crd_number,
                         "fund_name": fund_data.get("fund_name", f"Fund {cik}"),
                         "fund_type": fund_data.get("fund_type", "mutual_fund"),
+                        "ticker": fund_data.get("ticker"),
                         "series_id": fund_data.get("series_id"),
                         "class_id": fund_data.get("class_id"),
                         "total_assets": total_assets,
@@ -304,9 +305,21 @@ def _fetch_nport_header(cik: str, user_agent: str) -> dict | None:
         elif "closed" in sic_desc or sic == "6726":
             fund_type = "closed_end"
 
+        # Extract ticker from submissions JSON — tickers array at top level
+        tickers_list = data.get("tickers", [])
+        ticker = None
+        if tickers_list:
+            # Pick first non-empty ticker
+            for t in tickers_list:
+                val = t.get("ticker") if isinstance(t, dict) else t
+                if val and isinstance(val, str) and val.strip():
+                    ticker = val.strip().upper()
+                    break
+
         result: dict = {
             "fund_name": fund_name,
             "fund_type": fund_type,
+            "ticker": ticker,
             "total_assets": None,
             "total_shareholder_accounts": None,
             "series_id": None,
@@ -337,6 +350,26 @@ def _fetch_nport_header(cik: str, user_agent: str) -> dict | None:
                         _parse_nport_xml(xml_resp.text, result)
                 except Exception as exc:
                     logger.debug("nport_xml_fetch_failed", cik=cik, error=str(exc))
+
+            # Step 3: If no ticker yet, extract from filing header SGML
+            # (umbrella funds have tickers per series/class in the header)
+            if not result.get("ticker"):
+                check_edgar_rate()
+                try:
+                    header_url = (
+                        f"https://www.sec.gov/Archives/edgar/data/"
+                        f"{cik.lstrip('0') or '0'}/{accession_nodash}/"
+                        f"{accession_raw}-index-headers.html"
+                    )
+                    hdr_resp = httpx.get(
+                        header_url,
+                        headers={"User-Agent": user_agent},
+                        timeout=15.0,
+                    )
+                    if hdr_resp.status_code == 200:
+                        _parse_series_class_header(hdr_resp.text, result)
+                except Exception as exc:
+                    logger.debug("nport_header_sgml_failed", cik=cik, error=str(exc))
 
         return result
 
@@ -408,18 +441,19 @@ async def _upsert_batch(db: object, batch: list[dict]) -> int:
             await db.execute(  # type: ignore[union-attr]
                 text("""
                     INSERT INTO sec_registered_funds
-                        (cik, crd_number, fund_name, fund_type, series_id, class_id,
+                        (cik, crd_number, fund_name, fund_type, ticker, series_id, class_id,
                          total_assets, total_shareholder_accounts, aum_below_threshold,
                          data_fetched_at)
                     VALUES
-                        (:cik, :crd_number, :fund_name, :fund_type, :series_id, :class_id,
+                        (:cik, :crd_number, :fund_name, :fund_type, :ticker, :series_id, :class_id,
                          :total_assets, :total_shareholder_accounts, FALSE, now())
                     ON CONFLICT (cik) DO UPDATE SET
                         crd_number = EXCLUDED.crd_number,
                         fund_name = EXCLUDED.fund_name,
                         fund_type = EXCLUDED.fund_type,
-                        series_id = EXCLUDED.series_id,
-                        class_id = EXCLUDED.class_id,
+                        ticker = COALESCE(EXCLUDED.ticker, sec_registered_funds.ticker),
+                        series_id = COALESCE(EXCLUDED.series_id, sec_registered_funds.series_id),
+                        class_id = COALESCE(EXCLUDED.class_id, sec_registered_funds.class_id),
                         total_assets = EXCLUDED.total_assets,
                         total_shareholder_accounts = EXCLUDED.total_shareholder_accounts,
                         aum_below_threshold = FALSE,
@@ -433,6 +467,35 @@ async def _upsert_batch(db: object, batch: list[dict]) -> int:
 
     await db.commit()  # type: ignore[union-attr]
     return count
+
+
+def _parse_series_class_header(sgml_text: str, result: dict) -> None:
+    """Extract first series ticker from EDGAR filing header SGML.
+
+    The ``-index-headers.html`` file contains SERIES-AND-CLASSES-CONTRACTS-DATA
+    with tickers per class.  We grab the first ticker found as representative.
+    Also populates series_id and class_id if not already set.
+    """
+    import re
+
+    # Extract first SERIES-ID
+    if not result.get("series_id"):
+        m = re.search(r"<SERIES-ID>\s*(\S+)", sgml_text)
+        if m:
+            result["series_id"] = m.group(1).strip()
+
+    # Extract first CLASS-CONTRACT-ID
+    if not result.get("class_id"):
+        m = re.search(r"<CLASS-CONTRACT-ID>\s*(\S+)", sgml_text)
+        if m:
+            result["class_id"] = m.group(1).strip()
+
+    # Extract first CLASS-CONTRACT-TICKER-SYMBOL
+    m = re.search(r"<CLASS-CONTRACT-TICKER-SYMBOL>\s*(\S+)", sgml_text)
+    if m:
+        ticker = m.group(1).strip().upper()
+        if ticker and len(ticker) <= 10:
+            result["ticker"] = ticker
 
 
 if __name__ == "__main__":

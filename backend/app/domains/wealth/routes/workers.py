@@ -775,29 +775,3 @@ async def trigger_run_nport_fund_discovery(
     )
 
 
-@router.post(
-    "/run-nport-ticker-resolution",
-    response_model=WorkerScheduledResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-    summary="Trigger N-PORT ticker resolution via OpenFIGI",
-    description=(
-        "Schedules the N-PORT ticker resolution worker as a background task. "
-        "Resolves tickers for registered funds without ticker via OpenFIGI "
-        "batch API. Uses advisory lock 900_025. Returns immediately."
-    ),
-    tags=["workers"],
-)
-async def trigger_run_nport_ticker_resolution(
-    background_tasks: BackgroundTasks,
-    user: CurrentUser = Depends(get_current_user),
-    actor: Actor = Depends(get_actor),
-) -> WorkerScheduledResponse:
-    _require_admin_role(actor)
-
-    from app.domains.wealth.workers.nport_ticker_resolution import run_nport_ticker_resolution
-
-    return await _dispatch_worker(
-        background_tasks, "run-nport-ticker-resolution", "global",
-        run_nport_ticker_resolution,
-        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
-    )
