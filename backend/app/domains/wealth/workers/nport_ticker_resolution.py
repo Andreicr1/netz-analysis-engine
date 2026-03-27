@@ -42,7 +42,6 @@ async def run_nport_ticker_resolution() -> dict:
                     FROM sec_registered_funds
                     WHERE ticker IS NULL
                       AND aum_below_threshold = FALSE
-                      AND series_id IS NOT NULL
                     ORDER BY total_assets DESC NULLS LAST
                     LIMIT :limit
                 """),
