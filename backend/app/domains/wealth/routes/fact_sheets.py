@@ -94,10 +94,11 @@ async def generate_fact_sheet(
     def _generate() -> dict[str, Any]:
         from app.core.db.session import sync_session_factory
 
-        with sync_session_factory() as sync_db:
+        with sync_session_factory() as sync_db, sync_db.begin():
             sync_db.expire_on_commit = False
             from sqlalchemy import text
-            sync_db.execute(text("SET LOCAL app.current_organization_id = :oid"), {"oid": org_id})
+            safe_oid = str(org_id).replace("'", "")
+            sync_db.execute(text(f"SET LOCAL app.current_organization_id = '{safe_oid}'"))
             return _run_fact_sheet_generation(
                 sync_db,
                 portfolio_id=str(portfolio_id),

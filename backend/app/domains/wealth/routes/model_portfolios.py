@@ -235,10 +235,11 @@ async def trigger_backtest(
     def _backtest() -> dict[str, Any]:
         from app.core.db.session import sync_session_factory
 
-        with sync_session_factory() as sync_db:
+        with sync_session_factory() as sync_db, sync_db.begin():
             sync_db.expire_on_commit = False
             from sqlalchemy import text
-            sync_db.execute(text("SET LOCAL app.current_organization_id = :oid"), {"oid": _org_id})
+            safe_oid = str(_org_id).replace("'", "")
+            sync_db.execute(text(f"SET LOCAL app.current_organization_id = '{safe_oid}'"))
             return _run_backtest(sync_db, portfolio.fund_selection_schema, portfolio_id)
 
     backtest_result = await asyncio.to_thread(_backtest)
@@ -284,10 +285,11 @@ async def trigger_stress(
     def _stress() -> dict[str, Any]:
         from app.core.db.session import sync_session_factory
 
-        with sync_session_factory() as sync_db:
+        with sync_session_factory() as sync_db, sync_db.begin():
             sync_db.expire_on_commit = False
             from sqlalchemy import text
-            sync_db.execute(text("SET LOCAL app.current_organization_id = :oid"), {"oid": _org_id_stress})
+            safe_oid = str(_org_id_stress).replace("'", "")
+            sync_db.execute(text(f"SET LOCAL app.current_organization_id = '{safe_oid}'"))
             return _run_stress(sync_db, portfolio.fund_selection_schema, portfolio_id)
 
     stress_result = await asyncio.to_thread(_stress)

@@ -29,6 +29,14 @@ logger = structlog.get_logger()
 
 router = APIRouter(prefix="/universe", tags=["universe"])
 
+
+def _set_rls_sync(session, org_id) -> None:
+    """SET LOCAL for RLS in sync sessions (asyncio.to_thread context)."""
+    from sqlalchemy import text as _text
+
+    safe_oid = str(org_id).replace("'", "")
+    session.execute(_text(f"SET LOCAL app.current_organization_id = '{safe_oid}'"))
+
 _APPROVE_DECISIONS = {UniverseDecision.approved.value, UniverseDecision.watchlist.value}
 
 
@@ -53,8 +61,9 @@ async def list_universe(
     def _list() -> list:
         from app.core.db.session import sync_session_factory
 
-        with sync_session_factory() as sync_db:
+        with sync_session_factory() as sync_db, sync_db.begin():
             sync_db.expire_on_commit = False
+            _set_rls_sync(sync_db, org_id)
             assets = svc.list_universe(
                 sync_db,
                 organization_id=org_id,
@@ -97,8 +106,9 @@ async def list_pending_approvals(
     def _list_pending() -> list:
         from app.core.db.session import sync_session_factory
 
-        with sync_session_factory() as sync_db:
+        with sync_session_factory() as sync_db, sync_db.begin():
             sync_db.expire_on_commit = False
+            _set_rls_sync(sync_db, org_id)
             approvals = svc.list_pending(sync_db, organization_id=org_id)
             return [UniverseApprovalRead.model_validate(a) for a in approvals]
 
@@ -133,8 +143,9 @@ async def approve_fund(
     def _approve() -> tuple[UniverseApprovalRead, str]:
         from app.core.db.session import sync_session_factory
 
-        with sync_session_factory() as sync_db:
+        with sync_session_factory() as sync_db, sync_db.begin():
             sync_db.expire_on_commit = False
+            _set_rls_sync(sync_db, org_id)
             # Find current pending approval for this fund
             from sqlalchemy import select
 
@@ -180,7 +191,6 @@ async def approve_fund(
                     detail="Self-approval is not allowed",
                 )
 
-            sync_db.commit()
             return UniverseApprovalRead.model_validate(updated), old_decision
 
     approval_result, old_decision = await asyncio.to_thread(_approve)
@@ -231,8 +241,9 @@ async def reject_fund(
     def _reject() -> tuple[UniverseApprovalRead, str]:
         from app.core.db.session import sync_session_factory
 
-        with sync_session_factory() as sync_db:
+        with sync_session_factory() as sync_db, sync_db.begin():
             sync_db.expire_on_commit = False
+            _set_rls_sync(sync_db, org_id)
             from sqlalchemy import select
 
             from app.domains.wealth.models.universe_approval import UniverseApproval
@@ -271,7 +282,6 @@ async def reject_fund(
                     detail="Self-approval is not allowed",
                 )
 
-            sync_db.commit()
             return UniverseApprovalRead.model_validate(updated), old_decision
 
     rejection_result, old_decision = await asyncio.to_thread(_reject)
