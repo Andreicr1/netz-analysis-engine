@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security.clerk_auth import CurrentUser, get_current_user, require_ic_member
-from app.core.tenancy.middleware import get_db_with_rls
+from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.models.rebalance import RebalanceEvent
 from app.domains.wealth.routes.common import VALID_PROFILES, get_latest_snapshot
@@ -133,11 +133,13 @@ async def trigger_rebalance(
     body: RebalanceRequest,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
+    org_id: uuid.UUID = Depends(get_org_id),
 ) -> RebalanceEventRead:
     _validate_profile(profile)
     snap = await get_latest_snapshot(db, profile)
 
     event = RebalanceEvent(
+        organization_id=org_id,
         profile=profile,
         event_date=date.today(),
         event_type="manual",
