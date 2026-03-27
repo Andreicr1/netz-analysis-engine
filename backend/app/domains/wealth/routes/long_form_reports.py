@@ -59,7 +59,7 @@ async def generate_long_form_report(
 ) -> dict:
     # Validate portfolio exists
     result = await db.execute(
-        select(ModelPortfolio.id).where(ModelPortfolio.id == portfolio_id)
+        select(ModelPortfolio.id).where(ModelPortfolio.id == portfolio_id),
     )
     if result.scalar_one_or_none() is None:
         raise HTTPException(
@@ -87,7 +87,7 @@ async def generate_long_form_report(
             portfolio_id=str(portfolio_id),
             organization_id=str(org_id),
             semaphore=sem,
-        )
+        ),
     )
 
     return {"job_id": job_id, "portfolio_id": str(portfolio_id)}

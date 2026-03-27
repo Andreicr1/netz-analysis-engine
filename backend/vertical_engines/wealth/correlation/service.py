@@ -5,7 +5,7 @@ Pure sync, designed for asyncio.to_thread().
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
@@ -47,6 +47,7 @@ class CorrelationService:
             Portfolio weights. None = equal weight.
         profile : str
             Portfolio profile name.
+
         """
         result = compute_correlation_regime(
             returns_matrix=returns_matrix,
@@ -73,7 +74,7 @@ class CorrelationService:
                 average_correlation=0.0,
                 baseline_average_correlation=0.0,
                 regime_shift_detected=False,
-                computed_at=datetime.now(timezone.utc).isoformat(),
+                computed_at=datetime.now(UTC).isoformat(),
             )
 
         # Map pair indices to instrument identifiers
@@ -116,5 +117,5 @@ class CorrelationService:
             average_correlation=result.average_correlation,
             baseline_average_correlation=result.baseline_average_correlation,
             regime_shift_detected=result.regime_shift_detected,
-            computed_at=datetime.now(timezone.utc).isoformat(),
+            computed_at=datetime.now(UTC).isoformat(),
         )

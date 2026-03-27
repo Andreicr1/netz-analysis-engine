@@ -38,11 +38,11 @@ class InstrumentScreeningMetrics(OrganizationScopedMixin, Base):
     calc_date: Mapped[date] = mapped_column(Date, nullable=False)
     metrics: Mapped[dict] = mapped_column(JSONB, nullable=False)
     source: Mapped[str] = mapped_column(
-        String(30), nullable=False
+        String(30), nullable=False,
     )  # yahoo_finance | csv | computed
     data_period_days: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), server_default=func.now(),
     )
 
     __table_args__ = (

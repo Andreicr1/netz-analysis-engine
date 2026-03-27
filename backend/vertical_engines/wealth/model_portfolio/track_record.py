@@ -60,13 +60,14 @@ def compute_backtest(
         Optional portfolio ID for result tracking.
     config : dict | None
         Optional backtest config overrides.
+
     """
     if not fund_ids:
         return BacktestResult(portfolio_id=portfolio_id, lookback_days=lookback_days)
 
     # Fetch returns matrix
     returns_matrix, valid_funds, valid_weights, youngest_start = _fetch_returns_matrix(
-        db, fund_ids, weights, lookback_days
+        db, fund_ids, weights, lookback_days,
     )
 
     if returns_matrix is None or returns_matrix.shape[0] < MIN_HISTORY_DAYS:
@@ -137,7 +138,7 @@ def compute_live_nav(
         select(NavTimeseries.instrument_id, NavTimeseries.return_1d).where(
             NavTimeseries.instrument_id.in_(fund_ids),
             NavTimeseries.nav_date == as_of,
-        )
+        ),
     )
     returns_by_fund = {row.instrument_id: float(row.return_1d) for row in result if row.return_1d is not None}
 
@@ -191,7 +192,7 @@ def compute_stress(
             NavTimeseries.nav_date <= latest,
             NavTimeseries.return_1d.isnot(None),
         )
-        .order_by(NavTimeseries.nav_date)
+        .order_by(NavTimeseries.nav_date),
     )
 
     # Build returns lookup: {(fund_id, date): return}
@@ -242,7 +243,7 @@ def compute_stress(
                 end_date=scenario.end_date,
                 portfolio_return=round(total_return, 6),
                 max_drawdown=round(max_dd, 6),
-            )
+            ),
         )
 
     return StressResult(portfolio_id=portfolio_id, scenarios=scenario_results)
@@ -275,7 +276,7 @@ def _fetch_returns_matrix(
             NavTimeseries.nav_date >= cutoff,
             NavTimeseries.return_1d.isnot(None),
         )
-        .order_by(NavTimeseries.nav_date)
+        .order_by(NavTimeseries.nav_date),
     )
 
     # Group by fund

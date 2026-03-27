@@ -47,6 +47,7 @@ def analyze_sponsor(
     Returns:
         Sponsor analysis dict conforming to the output schema.
         Returns a default NOT_ASSESSED dict if inputs are insufficient.
+
     """
     try:
         return _run_analysis(
@@ -142,7 +143,7 @@ def _run_analysis(
             final=sponsor_curation_meta.get("final_count", 0),
         )
     else:
-        effective_corpus = sponsor_evidence_text if sponsor_evidence_text else corpus
+        effective_corpus = sponsor_evidence_text or corpus
 
     corpus_trimmed = (
         effective_corpus[:SPONSOR_CORPUS_LIMIT]

@@ -242,7 +242,8 @@ async def test_all_sessions_closed_on_any_path(monkeypatch):
 @pytest.mark.asyncio
 async def test_failure_after_artifact_persist_still_writes_terminal(monkeypatch):
     """Failure injection: artifacts persisted, then status update fails,
-    safety net still writes a terminal FAILED state."""
+    safety net still writes a terminal FAILED state.
+    """
     artifact_session = FakeSession()
     # Status session will fail on commit — simulates crash after artifact persist
     status_session = FakeSession(fail_on_commit=True)

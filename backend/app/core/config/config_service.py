@@ -1,5 +1,4 @@
-"""
-ConfigService — Read-Only Vertical Configuration (Sprint 3)
+"""ConfigService — Read-Only Vertical Configuration (Sprint 3)
 ============================================================
 
 Resolves configuration for a given vertical + config_type + optional org_id.
@@ -65,7 +64,7 @@ class ConfigService:
     # IP protection: prompts, chapters, and internal config types never returned
     # to clients. Chapters expose IC memo structure (analytical methodology IP).
     CLIENT_VISIBLE_TYPES: ClassVar[frozenset[str]] = frozenset(
-        {"calibration", "scoring", "blocks", "portfolio_profiles"}
+        {"calibration", "scoring", "blocks", "portfolio_profiles"},
     )
 
     def __init__(self, db: AsyncSession) -> None:
@@ -98,6 +97,7 @@ class ConfigService:
         ------
         ConfigMissError
             If the config domain is registered as required and all sources miss.
+
         """
         ConfigRegistry.validate_lookup(vertical, config_type)
         cache_key = f"config:{vertical}:{config_type}:{org_id or 'default'}"
@@ -113,7 +113,7 @@ class ConfigService:
             select(VerticalConfigDefault.config).where(
                 VerticalConfigDefault.vertical == vertical,
                 VerticalConfigDefault.config_type == config_type,
-            )
+            ),
         )
         default_config = default_row.scalar_one_or_none()
 
@@ -133,7 +133,7 @@ class ConfigService:
                     VerticalConfigOverride.config_type == config_type,
                     # Belt-and-suspenders with RLS — explicit org_id filter
                     VerticalConfigOverride.organization_id == org_id,
-                )
+                ),
             )
             override_config = override_row.scalar_one_or_none()
 
@@ -234,7 +234,7 @@ class ConfigService:
             select(
                 VerticalConfigDefault.config_type,
                 VerticalConfigDefault.description,
-            ).where(VerticalConfigDefault.vertical == vertical)
+            ).where(VerticalConfigDefault.vertical == vertical),
         )
         defaults = defaults_result.all()
 
@@ -245,7 +245,7 @@ class ConfigService:
                 select(VerticalConfigOverride.config_type).where(
                     VerticalConfigOverride.vertical == vertical,
                     VerticalConfigOverride.organization_id == org_id,
-                )
+                ),
             )
             override_types = {row[0] for row in overrides_result.all()}
 
@@ -260,7 +260,7 @@ class ConfigService:
                     config_type=config_type,
                     has_override=config_type in override_types,
                     description=description,
-                )
+                ),
             )
 
         return entries
@@ -312,7 +312,7 @@ class ConfigService:
                 VerticalConfigDefault,
                 (VerticalConfigOverride.vertical == VerticalConfigDefault.vertical)
                 & (VerticalConfigOverride.config_type == VerticalConfigDefault.config_type),
-            ).where(VerticalConfigDefault.guardrails.isnot(None))
+            ).where(VerticalConfigDefault.guardrails.isnot(None)),
         )
 
         invalid: list[dict] = []

@@ -21,9 +21,9 @@ from vertical_engines.credit.critic.service import (
 )
 
 __all__ = [
-    "critique_intelligence",
+    "INSTRUMENT_TYPE_PROFILES",
+    "CriticVerdict",
     "build_critic_packet",
     "classify_instrument_type",
-    "CriticVerdict",
-    "INSTRUMENT_TYPE_PROFILES",
+    "critique_intelligence",
 ]

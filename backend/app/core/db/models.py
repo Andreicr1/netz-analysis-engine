@@ -1,5 +1,4 @@
-"""
-Core DB models — infrastructure tables that live outside domain boundaries.
+"""Core DB models — infrastructure tables that live outside domain boundaries.
 
 AuditEvent: RLS-scoped audit trail for entity-level changes (CREATE, UPDATE, DELETE).
 Used by write_audit_event() / get_audit_log() in app.core.db.audit.
@@ -35,32 +34,32 @@ class AuditEvent(Base, IdMixin, OrganizationScopedMixin, AuditMetaMixin):
     __tablename__ = "audit_events"
 
     fund_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True), nullable=True, index=True
+        Uuid(as_uuid=True), nullable=True, index=True,
     )
     access_level: Mapped[str] = mapped_column(
-        String(32), default="internal", nullable=False
+        String(32), default="internal", nullable=False,
     )
     actor_id: Mapped[str] = mapped_column(
-        String(128), nullable=False, index=True
+        String(128), nullable=False, index=True,
     )
     actor_roles: Mapped[list[str]] = mapped_column(
-        ARRAY(Text), nullable=False, server_default="{}"
+        ARRAY(Text), nullable=False, server_default="{}",
     )
     action: Mapped[str] = mapped_column(
-        String(32), nullable=False, index=True
+        String(32), nullable=False, index=True,
     )
     entity_type: Mapped[str] = mapped_column(
-        String(64), nullable=False, index=True
+        String(64), nullable=False, index=True,
     )
     entity_id: Mapped[str] = mapped_column(
-        String(128), nullable=False, index=True
+        String(128), nullable=False, index=True,
     )
     before_state: Mapped[dict[str, object] | None] = mapped_column(
-        JSONB, nullable=True
+        JSONB, nullable=True,
     )
     after_state: Mapped[dict[str, object] | None] = mapped_column(
-        JSONB, nullable=True
+        JSONB, nullable=True,
     )
     request_id: Mapped[str | None] = mapped_column(
-        String(128), nullable=True
+        String(128), nullable=True,
     )

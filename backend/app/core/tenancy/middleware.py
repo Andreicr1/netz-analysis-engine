@@ -1,5 +1,4 @@
-"""
-Multi-Tenancy RLS Middleware — Netz Analysis Engine
+"""Multi-Tenancy RLS Middleware — Netz Analysis Engine
 ====================================================
 
 Sets PostgreSQL session variable `app.current_organization_id` per transaction
@@ -61,6 +60,6 @@ async def get_db_with_rls(
             # "unrecognized configuration parameter". Queries return no rows
             # (nil UUID matches nothing) which is the correct fail-closed behavior.
             await session.execute(
-                text("SET LOCAL app.current_organization_id = '00000000-0000-0000-0000-000000000000'")
+                text("SET LOCAL app.current_organization_id = '00000000-0000-0000-0000-000000000000'"),
             )
         yield session

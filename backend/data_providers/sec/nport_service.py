@@ -11,8 +11,9 @@ Lifecycle: Instantiate ONCE in FastAPI lifespan().
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from datetime import date, timedelta
-from typing import Any, Callable
+from typing import Any
 from xml.etree.ElementTree import Element
 
 import structlog
@@ -268,7 +269,7 @@ class NportService:
                     SecNportHoldingModel.cik == cik,
                     SecNportHoldingModel.report_date >= cutoff,
                 )
-                .order_by(SecNportHoldingModel.report_date.desc())
+                .order_by(SecNportHoldingModel.report_date.desc()),
             )
             rows = result.scalars().all()
             return [

@@ -29,6 +29,7 @@ _DEFAULT_ABSORPTION_CRITICAL = 0.90
 @dataclass(frozen=True, slots=True)
 class PairCorrelation:
     """Correlation between two instruments."""
+
     index_a: int
     index_b: int
     current_correlation: float
@@ -40,6 +41,7 @@ class PairCorrelation:
 @dataclass(frozen=True, slots=True)
 class ConcentrationResult:
     """Eigenvalue concentration analysis."""
+
     eigenvalues: tuple[float, ...]
     explained_variance_ratios: tuple[float, ...]
     first_eigenvalue_ratio: float
@@ -53,6 +55,7 @@ class ConcentrationResult:
 @dataclass(frozen=True, slots=True)
 class CorrelationRegimeResult:
     """Full correlation regime analysis result."""
+
     instrument_count: int
     window_days: int
     correlation_matrix: tuple[tuple[float, ...], ...]
@@ -210,6 +213,7 @@ def compute_correlation_regime(
         If None, equal weights assumed.
     config : dict | None
         Config overrides.
+
     """
     cfg = _resolve_config(config)
     T, N = returns_matrix.shape

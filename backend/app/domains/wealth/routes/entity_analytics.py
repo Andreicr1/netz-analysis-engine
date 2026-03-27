@@ -58,20 +58,20 @@ _WINDOW_DAYS = {"3m": 63, "6m": 126, "1y": 252, "3y": 756, "5y": 1260}
 
 
 async def _resolve_entity_meta(
-    db: AsyncSession, entity_id: uuid.UUID
+    db: AsyncSession, entity_id: uuid.UUID,
 ) -> tuple[str, str, str | None]:
     """Return (entity_type, entity_name, block_id | None)."""
     if await is_model_portfolio(db, entity_id):
         row = await db.execute(
-            select(ModelPortfolio.display_name).where(ModelPortfolio.id == entity_id)
+            select(ModelPortfolio.display_name).where(ModelPortfolio.id == entity_id),
         )
         name = row.scalar_one_or_none() or "Model Portfolio"
         return "model_portfolio", name, None
 
     row = await db.execute(
         select(Instrument.name, Instrument.block_id).where(
-            Instrument.instrument_id == entity_id
-        )
+            Instrument.instrument_id == entity_id,
+        ),
     )
     inst = row.one_or_none()
     if inst is None:
@@ -103,13 +103,13 @@ async def _resolve_benchmark_returns(
     if entity_block_id:
         block_row = await db.execute(
             select(AllocationBlock.benchmark_ticker, AllocationBlock.display_name).where(
-                AllocationBlock.block_id == entity_block_id
-            )
+                AllocationBlock.block_id == entity_block_id,
+            ),
         )
         block = block_row.one_or_none()
         if block and block[0]:
             bm_map = await _fetch_benchmark_nav_returns(
-                db, entity_block_id, start_date, end_date
+                db, entity_block_id, start_date, end_date,
             )
             if bm_map:
                 return bm_map, "block", block[0]
@@ -117,8 +117,8 @@ async def _resolve_benchmark_returns(
     # (3) SPY fallback — find any block with benchmark_ticker='SPY'
     spy_row = await db.execute(
         select(AllocationBlock.block_id).where(
-            AllocationBlock.benchmark_ticker == "SPY"
-        ).limit(1)
+            AllocationBlock.benchmark_ticker == "SPY",
+        ).limit(1),
     )
     spy_block = spy_row.scalar_one_or_none()
     if spy_block:
@@ -130,7 +130,7 @@ async def _resolve_benchmark_returns(
 
 
 async def _fetch_benchmark_nav_returns(
-    db: AsyncSession, block_id: str, start_date: date, end_date: date
+    db: AsyncSession, block_id: str, start_date: date, end_date: date,
 ) -> dict[date, float]:
     """Fetch daily returns from benchmark_nav hypertable."""
     stmt = (
@@ -194,7 +194,7 @@ def _compute_capture_ratios(
 
 
 def _monthly_returns_from_daily(
-    dates: list[date], returns: list[float]
+    dates: list[date], returns: list[float],
 ) -> tuple[list[str], list[float]]:
     """Aggregate daily returns to monthly geometric returns.
 
@@ -293,7 +293,7 @@ async def get_entity_analytics(
 
     # ── Resolve benchmark ────────────────────────────────────────────
     bm_map, bm_source, bm_label = await _resolve_benchmark_returns(
-        db, block_id, benchmark_id, dates_list[0], dates_list[-1]
+        db, block_id, benchmark_id, dates_list[0], dates_list[-1],
     )
 
     # Align benchmark returns to entity dates
@@ -364,7 +364,7 @@ async def get_entity_analytics(
     # ── 3. Capture Ratios ────────────────────────────────────────────
     # Aggregate to monthly for capture calculation
     entity_labels, entity_monthly = _monthly_returns_from_daily(
-        dates_list, returns.tolist()
+        dates_list, returns.tolist(),
     )
     capture = CaptureRatios(benchmark_source=bm_source, benchmark_label=bm_label)
     if bm_map and entity_monthly:
@@ -375,7 +375,7 @@ async def get_entity_analytics(
         n_months = min(len(entity_monthly), len(bm_monthly))
         if n_months >= 3:
             capture = _compute_capture_ratios(
-                entity_monthly[-n_months:], bm_monthly[-n_months:]
+                entity_monthly[-n_months:], bm_monthly[-n_months:],
             )
             capture.benchmark_source = bm_source
             capture.benchmark_label = bm_label
@@ -390,7 +390,7 @@ async def get_entity_analytics(
                 values=r.values,
             )
             for r in rolling_results
-        ]
+        ],
     )
 
     # ── 5. Return Distribution ───────────────────────────────────────

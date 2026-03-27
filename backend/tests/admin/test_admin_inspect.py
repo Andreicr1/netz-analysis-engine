@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import uuid
 from unittest.mock import AsyncMock, patch
@@ -30,8 +29,8 @@ SUPER_ADMIN_HEADER = {
             "roles": ["SUPER_ADMIN"],
             "fund_ids": [],
             "org_id": ORG_ID,
-        }
-    )
+        },
+    ),
 }
 
 REGULAR_ADMIN_HEADER = {
@@ -41,8 +40,8 @@ REGULAR_ADMIN_HEADER = {
             "roles": ["ADMIN"],
             "fund_ids": [],
             "org_id": ORG_ID,
-        }
-    )
+        },
+    ),
 }
 
 BASE = f"/api/v1/admin/inspect/{ORG_ID}/credit"
@@ -174,7 +173,7 @@ class TestAuthAndValidation:
 
     async def test_504_on_timeout(self, client: AsyncClient):
         mock = _mock_client()
-        mock.async_document_coverage.side_effect = asyncio.TimeoutError()
+        mock.async_document_coverage.side_effect = TimeoutError()
         with patch("app.domains.admin.routes.inspect.get_duckdb_client", return_value=mock):
             # Patch wait_for to raise TimeoutError immediately
             resp = await client.get(f"{BASE}/coverage", headers=SUPER_ADMIN_HEADER)

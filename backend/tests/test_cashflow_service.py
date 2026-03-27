@@ -59,7 +59,7 @@ class TestListCashflows:
         assert len(result) == 2
         assert isinstance(result[0], CashflowEntry)
         assert result[0].flow_type == "disbursement"
-        assert result[0].amount == Decimal("100000")
+        assert result[0].amount == Decimal(100000)
         assert result[1].flow_type == "repayment_interest"
 
     def test_empty_when_no_cashflows(self):
@@ -149,7 +149,7 @@ class TestCalculatePortfolioMonitoringMetrics:
         ])
 
         result = calculate_portfolio_monitoring_metrics(
-            mock_db, fund_id=FUND_ID, deal_id=DEAL_ID
+            mock_db, fund_id=FUND_ID, deal_id=DEAL_ID,
         )
 
         assert result["total_contributions"] == 200_000
@@ -178,7 +178,7 @@ class TestCalculatePortfolioMonitoringMetrics:
         ])
 
         result = calculate_portfolio_monitoring_metrics(
-            mock_db, fund_id=FUND_ID, deal_id=DEAL_ID
+            mock_db, fund_id=FUND_ID, deal_id=DEAL_ID,
         )
 
         assert result["total_contributions"] == 0

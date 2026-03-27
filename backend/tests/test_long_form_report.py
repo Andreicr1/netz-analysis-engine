@@ -93,7 +93,7 @@ class TestChapterIsolation:
         engine._chapter_macro_context = _exploding_macro  # type: ignore[assignment]
 
         result = await engine._generate_chapter(
-            "macro_context", 1, "Macro Context", context, db
+            "macro_context", 1, "Macro Context", context, db,
         )
 
         assert result.status == "failed"
@@ -169,7 +169,7 @@ class TestChapterMacroContext:
                     "regions": [{"name": "US", "outlook": "positive"}],
                     "risk_assessment": "Low risk",
                 },
-            }
+            },
         }
         result = await engine._chapter_macro_context(context, AsyncMock())
         assert result["global_summary"] == "Markets stable"
@@ -212,7 +212,7 @@ class TestChapterPerFundHighlights:
             "funds": [
                 {"instrument_id": fund_a},
                 {"instrument_id": fund_b},
-            ]
+            ],
         }
 
         context: dict[str, Any] = {

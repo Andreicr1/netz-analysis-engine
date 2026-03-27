@@ -35,7 +35,7 @@ _MAX_NAN_RATIO = 0.05  # 5%
 
 # Dedicated thread pool for blocking provider calls
 _io_executor = concurrent.futures.ThreadPoolExecutor(
-    max_workers=2, thread_name_prefix="instrument-io"
+    max_workers=2, thread_name_prefix="instrument-io",
 )
 
 # Map lookback_days to yfinance period strings
@@ -80,7 +80,7 @@ async def run_instrument_ingestion(
 
         # Advisory lock — skip if already running
         lock_result = await db.execute(
-            text(f"SELECT pg_try_advisory_lock({INSTRUMENT_INGESTION_LOCK_ID})")
+            text(f"SELECT pg_try_advisory_lock({INSTRUMENT_INGESTION_LOCK_ID})"),
         )
         if not lock_result.scalar():
             logger.warning("Instrument ingestion already running — skipping")
@@ -95,7 +95,7 @@ async def run_instrument_ingestion(
             return await _do_ingest(db, org_id, lookback_days)
         finally:
             await db.execute(
-                text(f"SELECT pg_advisory_unlock({INSTRUMENT_INGESTION_LOCK_ID})")
+                text(f"SELECT pg_advisory_unlock({INSTRUMENT_INGESTION_LOCK_ID})"),
             )
 
 
@@ -105,7 +105,6 @@ async def _do_ingest(
     lookback_days: int,
 ) -> dict[str, int | list[str]]:
     """Core ingestion logic — separated for advisory lock cleanup."""
-
     # 1. Query active instruments with tickers
     stmt = (
         select(Instrument)
@@ -130,7 +129,7 @@ async def _do_ingest(
     for inst in instruments:
         ticker = inst.ticker.strip().upper()
         ticker_map.setdefault(ticker, []).append(
-            (inst.instrument_id, inst.currency or "USD")
+            (inst.instrument_id, inst.currency or "USD"),
         )
 
     unique_tickers = list(ticker_map.keys())
@@ -275,7 +274,7 @@ async def _do_ingest(
                             "return_type": "log",
                             "currency": currency,
                             "source": "yahoo",
-                        }
+                        },
                     )
 
             instruments_processed.add(ticker)

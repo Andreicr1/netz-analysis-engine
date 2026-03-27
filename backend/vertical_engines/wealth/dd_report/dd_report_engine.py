@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -112,6 +112,7 @@ class DDReportEngine:
         DDReportResult
             Complete report result (frozen dataclass, safe to cross
             back to async context).
+
         """
         logger.info(
             "dd_report_generation_started",
@@ -525,12 +526,12 @@ class DDReportEngine:
 
         # Delete existing chapters before re-inserting (regeneration safety)
         db.query(DDChapter).filter(
-            DDChapter.dd_report_id == report_id
+            DDChapter.dd_report_id == report_id,
         ).delete(synchronize_session="fetch")
         db.flush()
 
         # Batch persist chapters
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         chapter_models = []
         for ch in chapters:
             chapter_models.append(DDChapter(

@@ -1,5 +1,6 @@
 """Wealth domain: funds universe, NAV timeseries, risk metrics, portfolio,
-allocation, blocks, rebalance, macro, lipper, backtest."""
+allocation, blocks, rebalance, macro, lipper, backtest.
+"""
 
 import sqlalchemy as sa
 from alembic import op

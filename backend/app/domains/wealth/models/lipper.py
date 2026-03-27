@@ -25,7 +25,7 @@ class LipperRating(OrganizationScopedMixin, Base):
     __tablename__ = "lipper_ratings"
 
     instrument_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("instruments_universe.instrument_id"), primary_key=True
+        Uuid(as_uuid=True), ForeignKey("instruments_universe.instrument_id"), primary_key=True,
     )
     rating_date: Mapped[date] = mapped_column(Date, primary_key=True)
     overall_rating: Mapped[int | None] = mapped_column(Integer)

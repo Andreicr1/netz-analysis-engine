@@ -59,7 +59,7 @@ def upgrade() -> None:
             "  chunk_time_interval => INTERVAL '3 months',"
             "  migrate_data => true,"
             "  if_not_exists => true"
-            ")"
+            ")",
         )
 
         cursor.execute(
@@ -67,18 +67,18 @@ def upgrade() -> None:
             "  timescaledb.compress,"
             "  timescaledb.compress_orderby = 'obs_date DESC',"
             "  timescaledb.compress_segmentby = 'series_id'"
-            ")"
+            ")",
         )
 
         cursor.execute(
             "SELECT add_compression_policy("
             "  'ofr_hedge_fund_data', INTERVAL '6 months', if_not_exists => true"
-            ")"
+            ")",
         )
 
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_ofr_hedge_fund_series_obs_date "
-            "ON ofr_hedge_fund_data (series_id, obs_date DESC)"
+            "ON ofr_hedge_fund_data (series_id, obs_date DESC)",
         )
 
         cursor.close()
@@ -92,13 +92,13 @@ def downgrade() -> None:
         cursor = conn.cursor()
 
         cursor.execute(
-            "SELECT remove_compression_policy('ofr_hedge_fund_data', if_exists => true)"
+            "SELECT remove_compression_policy('ofr_hedge_fund_data', if_exists => true)",
         )
         cursor.execute(
             "SELECT decompress_chunk(c.chunk_name) "
             "FROM timescaledb_information.chunks c "
             "WHERE c.hypertable_name = 'ofr_hedge_fund_data' "
-            "AND c.is_compressed = true"
+            "AND c.is_compressed = true",
         )
         cursor.execute("DROP INDEX IF EXISTS idx_ofr_hedge_fund_series_obs_date")
         cursor.close()

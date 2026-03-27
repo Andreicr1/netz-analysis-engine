@@ -25,9 +25,9 @@ import asyncio
 import logging
 import sys
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Sequence
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +75,7 @@ def _coerce_uuid_list(
         return None
     if len(values) > _MAX_DEAL_IDS:
         raise ValueError(
-            f"{field_name} exceeds maximum allowed length of {_MAX_DEAL_IDS} items"
+            f"{field_name} exceeds maximum allowed length of {_MAX_DEAL_IDS} items",
         )
     coerced: list[uuid.UUID] = []
     for idx, value in enumerate(values):
@@ -90,7 +90,7 @@ def _create_ingest_job(db, *, fund_id: uuid.UUID, actor_id: str):
     job = PipelineIngestJob(
         fund_id=str(fund_id),
         status=IngestJobStatus.RUNNING,
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
         created_by=actor_id,
         updated_by=actor_id,
     )
@@ -111,7 +111,7 @@ def _finalise_job(db, job, *, result: PipelineIngestResult, failed: bool):
     """Persist final counters and status to the PipelineIngestJob row."""
     from app.domains.credit.modules.ai.ingest_job_model import IngestJobStatus
 
-    job.finished_at = datetime.now(timezone.utc)
+    job.finished_at = datetime.now(UTC)
     job.documents_discovered = result.documents_scanned
     job.documents_bridged = result.documents_bridged
     job.documents_ingested = result.documents_ingested
@@ -150,7 +150,7 @@ def run_full_pipeline_ingest(
     """
     fund_id = _coerce_uuid(fund_id, field_name="fund_id")
     deal_ids = _coerce_uuid_list(deal_ids, field_name="deal_ids")
-    result = PipelineIngestResult(started_at=datetime.now(timezone.utc).isoformat())
+    result = PipelineIngestResult(started_at=datetime.now(UTC).isoformat())
     db = _get_db_session()
 
     # ── Create audit job row ──────────────────────────────────────────
@@ -187,8 +187,8 @@ def run_full_pipeline_ingest(
             from app.domains.credit.modules.deals.models import PipelineDeal
             pre_existing_deal_ids = set(
                 db.execute(
-                    sa_select(PipelineDeal.id).where(PipelineDeal.fund_id == fund_id)
-                ).scalars().all()
+                    sa_select(PipelineDeal.id).where(PipelineDeal.fund_id == fund_id),
+                ).scalars().all(),
             )
         except Exception:
             logger.debug("Could not query pre-existing deals for auto-detect", exc_info=True)
@@ -222,7 +222,7 @@ def run_full_pipeline_ingest(
             else:
                 logger.info(
                     "No new deals detected — Stages 3-4 run unfiltered "
-                    "(last_indexed_at protects against re-processing)"
+                    "(last_indexed_at protects against re-processing)",
                 )
         elif deal_ids:
             logger.info("User-specified deal filter: %d deal(s)", len(deal_ids))
@@ -270,7 +270,7 @@ def run_full_pipeline_ingest(
                 for dr in review_result.get("results", []):
                     if "error" in dr:
                         result.errors.append(
-                            f"Deep review failed for deal {dr.get('dealId', '?')}: {dr['error']}"
+                            f"Deep review failed for deal {dr.get('dealId', '?')}: {dr['error']}",
                         )
             except Exception as exc:
                 error = f"Stage 5 (deep-review) failed: {exc}"
@@ -287,7 +287,7 @@ def run_full_pipeline_ingest(
         pipeline_failed = True
 
     finally:
-        result.finished_at = datetime.now(timezone.utc).isoformat()
+        result.finished_at = datetime.now(UTC).isoformat()
 
         # Determine failure: explicit fatal OR any stage errors
         if result.errors:
@@ -339,7 +339,7 @@ async def async_run_full_pipeline_ingest(
     """
     fund_id = _coerce_uuid(fund_id, field_name="fund_id")
     deal_ids_coerced = _coerce_uuid_list(deal_ids, field_name="deal_ids")
-    result = PipelineIngestResult(started_at=datetime.now(timezone.utc).isoformat())
+    result = PipelineIngestResult(started_at=datetime.now(UTC).isoformat())
     db = _get_db_session()
 
     # ── Create audit job row ──────────────────────────────────────────
@@ -382,8 +382,8 @@ async def async_run_full_pipeline_ingest(
             from app.domains.credit.modules.deals.models import PipelineDeal
             pre_existing_deal_ids = set(
                 db.execute(
-                    sa_select(PipelineDeal.id).where(PipelineDeal.fund_id == fund_id)
-                ).scalars().all()
+                    sa_select(PipelineDeal.id).where(PipelineDeal.fund_id == fund_id),
+                ).scalars().all(),
             )
         except Exception:
             logger.debug("Could not query pre-existing deals for auto-detect", exc_info=True)
@@ -442,7 +442,7 @@ async def async_run_full_pipeline_ingest(
                         DocumentRegistry.blob_path,
                     ).where(
                         DocumentRegistry.fund_id == fund_id,
-                    )
+                    ),
                 ).all()
 
                 # Partition by deal name match in Python
@@ -551,7 +551,7 @@ async def async_run_full_pipeline_ingest(
                 for dr in review_result.get("results", []):
                     if "error" in dr:
                         result.errors.append(
-                            f"Deep review failed for deal {dr.get('dealId', '?')}: {dr['error']}"
+                            f"Deep review failed for deal {dr.get('dealId', '?')}: {dr['error']}",
                         )
             except Exception as exc:
                 error = f"Stage 5 (deep-review) failed: {exc}"
@@ -567,7 +567,7 @@ async def async_run_full_pipeline_ingest(
         pipeline_failed = True
 
     finally:
-        result.finished_at = datetime.now(timezone.utc).isoformat()
+        result.finished_at = datetime.now(UTC).isoformat()
 
         if result.errors:
             pipeline_failed = True
@@ -580,7 +580,7 @@ async def async_run_full_pipeline_ingest(
                 from sqlalchemy import select as sa_select
 
                 refreshed_job = finalize_db.execute(
-                    sa_select(PipelineIngestJob).where(PipelineIngestJob.id == job.id)
+                    sa_select(PipelineIngestJob).where(PipelineIngestJob.id == job.id),
                 ).scalar_one()
                 _finalise_job(finalize_db, refreshed_job, result=result, failed=pipeline_failed)
                 logger.info(

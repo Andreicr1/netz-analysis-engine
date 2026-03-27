@@ -19,7 +19,7 @@ def upgrade() -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_sec_13f_holdings_cik
         ON sec_13f_holdings (cik)
-        """
+        """,
     )
     # Also index sec_managers.cik for the join condition
     op.execute(
@@ -27,7 +27,7 @@ def upgrade() -> None:
         CREATE INDEX IF NOT EXISTS idx_sec_managers_cik
         ON sec_managers (cik)
         WHERE cik IS NOT NULL
-        """
+        """,
     )
 
 

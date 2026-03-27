@@ -112,7 +112,7 @@ async def _fetch_bis_data(db) -> list[BisDataPoint] | None:
                 BisStatistics.indicator,
                 BisStatistics.value,
                 BisStatistics.period,
-            ).where(BisStatistics.period >= func.now() - text("interval '180 days'"))
+            ).where(BisStatistics.period >= func.now() - text("interval '180 days'")),
         )
         return [
             BisDataPoint(r.country_code, r.indicator, float(r.value), r.period.date())
@@ -132,7 +132,7 @@ async def _fetch_imf_data(db) -> list[ImfDataPoint] | None:
                 ImfWeoForecast.indicator,
                 ImfWeoForecast.value,
                 ImfWeoForecast.year,
-            ).where(ImfWeoForecast.year >= func.extract("year", func.now()) - 1)
+            ).where(ImfWeoForecast.year >= func.extract("year", func.now()) - 1),
         )
         return [
             ImfDataPoint(r.country_code, r.indicator, r.year, float(r.value))
@@ -155,7 +155,7 @@ async def run_macro_ingestion(
     if not api_key:
         logger.error(
             "FRED_API_KEY not set — skipping macro ingestion. "
-            "Get a free key at https://fred.stlouisfed.org/docs/api/api_key.html"
+            "Get a free key at https://fred.stlouisfed.org/docs/api/api_key.html",
         )
         return {"status": "skipped", "reason": "no_api_key"}
 
@@ -172,7 +172,7 @@ async def run_macro_ingestion(
     # ── Acquire advisory lock ──────────────────────────────────
     async with async_session() as db:
         lock_result = await db.execute(
-            text(f"SELECT pg_try_advisory_lock({MACRO_INGESTION_LOCK_ID})")
+            text(f"SELECT pg_try_advisory_lock({MACRO_INGESTION_LOCK_ID})"),
         )
         acquired = lock_result.scalar()
         if not acquired:
@@ -284,7 +284,7 @@ async def run_macro_ingestion(
         finally:
             try:
                 await db.execute(
-                    text(f"SELECT pg_advisory_unlock({MACRO_INGESTION_LOCK_ID})")
+                    text(f"SELECT pg_advisory_unlock({MACRO_INGESTION_LOCK_ID})"),
                 )
             except Exception:
                 pass

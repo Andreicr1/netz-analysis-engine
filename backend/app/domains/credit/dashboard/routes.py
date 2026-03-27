@@ -95,7 +95,6 @@ async def portfolio_summary(
     actor: Actor = Depends(get_actor),
 ) -> dict[str, Any]:
     """Portfolio KPIs: AUM, active count, high-risk count, avg confidence."""
-
     # Active loans
     result = await db.execute(
         select(Loan).where(
@@ -170,7 +169,6 @@ async def pipeline_summary(
     actor: Actor = Depends(get_actor),
 ) -> dict[str, Any]:
     """Deal pipeline KPIs: totals, AI-ready, pending IC, converted QTD."""
-
     result = await db.execute(
         select(PipelineDeal).where(
             PipelineDeal.fund_id == fund_id,
@@ -215,7 +213,6 @@ async def macro_snapshot(
     actor: Actor = Depends(get_actor),
 ) -> dict[str, Any]:
     """Latest FRED macro indicators from cached MacroSnapshot."""
-
     today = dt.date.today()
     result = await db.execute(
         select(MacroSnapshot).where(MacroSnapshot.as_of_date == today),
@@ -265,7 +262,6 @@ async def compliance_alerts(
     actor: Actor = Depends(get_actor),
 ) -> dict[str, Any]:
     """Upcoming regulatory deadlines extracted from deal research_output.compliance."""
-
     today = dt.date.today()
     days_ahead = 90  # look-ahead window
 
@@ -733,7 +729,7 @@ async def credit_market_data(
             MacroData.series_id.in_(_ALL_CREDIT_MARKET_IDS),
             MacroData.obs_date >= cutoff,
         )
-        .order_by(MacroData.series_id, MacroData.obs_date)
+        .order_by(MacroData.series_id, MacroData.obs_date),
     )
     rows = result.all()
 

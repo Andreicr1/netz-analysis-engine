@@ -156,7 +156,7 @@ class TestRegimeTilts:
         """CRISIS must have the lowest equity allocation of all regimes."""
         results = {
             regime: _total_equity(
-                compute_regime_tilted_weights("moderate", MODERATE_CONFIG, regime)
+                compute_regime_tilted_weights("moderate", MODERATE_CONFIG, regime),
             )
             for regime in REGIME_TILTS
         }

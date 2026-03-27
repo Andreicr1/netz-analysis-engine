@@ -104,6 +104,7 @@ def backtest_pd_model(
 
     Returns:
         CreditBacktestResult with AUC-ROC, Brier, LGD MAE, vintage cohorts.
+
     """
     error = _validate_input(inp)
     if error:

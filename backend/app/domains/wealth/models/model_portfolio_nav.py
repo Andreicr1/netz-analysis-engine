@@ -28,5 +28,5 @@ class ModelPortfolioNav(OrganizationScopedMixin, Base):
     nav: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     daily_return: Mapped[Decimal | None] = mapped_column(Numeric(12, 8))
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
     )

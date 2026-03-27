@@ -139,7 +139,7 @@ async def apply_rebalance_proposal(
     nav_breakpoint = pg_insert(ModelPortfolioNav).values(
         portfolio_id=portfolio.id,
         nav_date=today,
-        nav=Decimal("0"),  # placeholder — worker recalculates
+        nav=Decimal(0),  # placeholder — worker recalculates
         daily_return=Decimal("0.0"),
         organization_id=org_id,
     )

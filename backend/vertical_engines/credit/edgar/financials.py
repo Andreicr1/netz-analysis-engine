@@ -97,6 +97,7 @@ def extract_structured_financials(
     Fallback: EntityFacts for BDCs with custom taxonomies.
 
     Never raises — returns empty FinancialStatements on failure.
+
     """
     result = FinancialStatements()
 

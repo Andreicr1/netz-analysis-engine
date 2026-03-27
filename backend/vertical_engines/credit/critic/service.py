@@ -43,6 +43,7 @@ def critique_intelligence(
 
     Returns:
         CriticVerdict dataclass.
+
     """
     if call_openai_fn is None:
         logger.error("critic_missing_openai_fn")

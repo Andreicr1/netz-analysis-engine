@@ -38,11 +38,11 @@ def upgrade() -> None:
     # ── 1. Indexes on sec_managers ──────────────────────────────
     op.execute(
         "CREATE INDEX IF NOT EXISTS idx_sec_managers_aum "
-        "ON sec_managers (aum_total DESC)"
+        "ON sec_managers (aum_total DESC)",
     )
     op.execute(
         "CREATE INDEX IF NOT EXISTS idx_sec_managers_compliance_aum "
-        "ON sec_managers (compliance_disclosures, aum_total DESC)"
+        "ON sec_managers (compliance_disclosures, aum_total DESC)",
     )
 
     # ── 2. Continuous aggregates (require autocommit) ───────────
@@ -64,12 +64,12 @@ def upgrade() -> None:
             "FROM sec_13f_holdings "
             "WHERE asset_class = 'Shares' "
             "GROUP BY cik, time_bucket('3 months'::interval, report_date), sector "
-            "WITH NO DATA"
+            "WITH NO DATA",
         )
 
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_sec_13f_holdings_agg_cik_quarter "
-            "ON sec_13f_holdings_agg (cik, quarter DESC)"
+            "ON sec_13f_holdings_agg (cik, quarter DESC)",
         )
 
         cursor.execute(
@@ -79,7 +79,7 @@ def upgrade() -> None:
             "  end_offset => INTERVAL '1 day', "
             "  schedule_interval => INTERVAL '1 day', "
             "  if_not_exists => true"
-            ")"
+            ")",
         )
 
         # ── sec_13f_drift_agg ───────────────────────────────────
@@ -92,12 +92,12 @@ def upgrade() -> None:
             "  COUNT(*) AS total_changes "
             "FROM sec_13f_diffs "
             "GROUP BY cik, time_bucket('3 months'::interval, quarter_to) "
-            "WITH NO DATA"
+            "WITH NO DATA",
         )
 
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_sec_13f_drift_agg_cik_quarter "
-            "ON sec_13f_drift_agg (cik, quarter DESC)"
+            "ON sec_13f_drift_agg (cik, quarter DESC)",
         )
 
         cursor.execute(
@@ -107,19 +107,19 @@ def upgrade() -> None:
             "  end_offset => INTERVAL '1 day', "
             "  schedule_interval => INTERVAL '1 day', "
             "  if_not_exists => true"
-            ")"
+            ")",
         )
 
         # ── 3. Seed initial data ────────────────────────────────
         cursor.execute(
             "CALL refresh_continuous_aggregate("
             "  'sec_13f_holdings_agg', NULL, NULL"
-            ")"
+            ")",
         )
         cursor.execute(
             "CALL refresh_continuous_aggregate("
             "  'sec_13f_drift_agg', NULL, NULL"
-            ")"
+            ")",
         )
 
         cursor.close()
@@ -136,12 +136,12 @@ def downgrade() -> None:
         cursor.execute(
             "SELECT remove_continuous_aggregate_policy("
             "  'sec_13f_drift_agg', if_not_exists => true"
-            ")"
+            ")",
         )
         cursor.execute(
             "SELECT remove_continuous_aggregate_policy("
             "  'sec_13f_holdings_agg', if_not_exists => true"
-            ")"
+            ")",
         )
 
         cursor.execute("DROP MATERIALIZED VIEW IF EXISTS sec_13f_drift_agg CASCADE")

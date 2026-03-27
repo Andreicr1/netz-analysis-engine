@@ -25,8 +25,7 @@ def _default_host() -> str:
         from app.core.config.settings import settings as _settings
         url = _settings.local_llm_url  # e.g. "http://127.0.0.1:1234/v1"
         host = url.replace("http://", "").replace("https://", "").rstrip("/")
-        if host.endswith("/v1"):
-            host = host[:-3]
+        host = host.removesuffix("/v1")
         return host
     except Exception:
         return "127.0.0.1:1234"

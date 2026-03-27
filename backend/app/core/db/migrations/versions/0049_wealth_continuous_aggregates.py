@@ -53,12 +53,12 @@ def upgrade() -> None:
             "WHERE return_1d IS NOT NULL "
             "GROUP BY instrument_id, organization_id, "
             "  time_bucket('1 month', nav_date) "
-            "WITH NO DATA"
+            "WITH NO DATA",
         )
 
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_nav_monthly_returns_agg_inst_month "
-            "ON nav_monthly_returns_agg (instrument_id, month DESC)"
+            "ON nav_monthly_returns_agg (instrument_id, month DESC)",
         )
 
         cursor.execute(
@@ -68,7 +68,7 @@ def upgrade() -> None:
             "  end_offset => INTERVAL '1 day', "
             "  schedule_interval => INTERVAL '1 day', "
             "  if_not_exists => true"
-            ")"
+            ")",
         )
 
         # ── benchmark_monthly_returns_agg ─────────────────────────
@@ -85,12 +85,12 @@ def upgrade() -> None:
             "WHERE return_1d IS NOT NULL "
             "GROUP BY block_id, "
             "  time_bucket('1 month', nav_date) "
-            "WITH NO DATA"
+            "WITH NO DATA",
         )
 
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_benchmark_monthly_returns_agg_block_month "
-            "ON benchmark_monthly_returns_agg (block_id, month DESC)"
+            "ON benchmark_monthly_returns_agg (block_id, month DESC)",
         )
 
         cursor.execute(
@@ -100,19 +100,19 @@ def upgrade() -> None:
             "  end_offset => INTERVAL '1 day', "
             "  schedule_interval => INTERVAL '1 day', "
             "  if_not_exists => true"
-            ")"
+            ")",
         )
 
         # ── Seed initial data ─────────────────────────────────────
         cursor.execute(
             "CALL refresh_continuous_aggregate("
             "  'nav_monthly_returns_agg', NULL, NULL"
-            ")"
+            ")",
         )
         cursor.execute(
             "CALL refresh_continuous_aggregate("
             "  'benchmark_monthly_returns_agg', NULL, NULL"
-            ")"
+            ")",
         )
 
         cursor.close()
@@ -129,19 +129,19 @@ def downgrade() -> None:
         cursor.execute(
             "SELECT remove_continuous_aggregate_policy("
             "  'benchmark_monthly_returns_agg', if_not_exists => true"
-            ")"
+            ")",
         )
         cursor.execute(
             "SELECT remove_continuous_aggregate_policy("
             "  'nav_monthly_returns_agg', if_not_exists => true"
-            ")"
+            ")",
         )
 
         cursor.execute(
-            "DROP MATERIALIZED VIEW IF EXISTS benchmark_monthly_returns_agg CASCADE"
+            "DROP MATERIALIZED VIEW IF EXISTS benchmark_monthly_returns_agg CASCADE",
         )
         cursor.execute(
-            "DROP MATERIALIZED VIEW IF EXISTS nav_monthly_returns_agg CASCADE"
+            "DROP MATERIALIZED VIEW IF EXISTS nav_monthly_returns_agg CASCADE",
         )
 
         cursor.close()

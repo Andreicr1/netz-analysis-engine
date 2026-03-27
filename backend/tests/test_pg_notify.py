@@ -1,5 +1,4 @@
-"""
-Tests for PgNotifier callback dispatch — sync and async handler normalization.
+"""Tests for PgNotifier callback dispatch — sync and async handler normalization.
 
 Validates ASYNC-04: both sync and async handlers are invoked exactly once
 with the expected payload, with no unawaited-coroutine warnings.
@@ -23,10 +22,9 @@ def _make_notifier() -> PgNotifier:
 
 
 def _simulate_notification(
-    notifier: PgNotifier, channel: str, payload: dict
+    notifier: PgNotifier, channel: str, payload: dict,
 ) -> None:
-    """
-    Simulate the asyncpg notification callback by directly invoking
+    """Simulate the asyncpg notification callback by directly invoking
     the internal _notification_handler closure logic.
 
     Since _notification_handler is built inside _connect_and_listen,
@@ -44,7 +42,7 @@ def _simulate_notification(
     for handler in handlers:
         if inspect.iscoroutinefunction(handler):
             asyncio.ensure_future(
-                PgNotifier._invoke_async_handler(handler, data, channel)
+                PgNotifier._invoke_async_handler(handler, data, channel),
             )
         else:
             handler(data)

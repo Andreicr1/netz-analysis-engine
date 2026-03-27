@@ -68,7 +68,7 @@ def upgrade() -> None:
             "  chunk_time_interval => INTERVAL '3 months',"
             "  migrate_data => true,"
             "  if_not_exists => true"
-            ")"
+            ")",
         )
 
         cursor.execute(
@@ -76,23 +76,23 @@ def upgrade() -> None:
             "  timescaledb.compress,"
             "  timescaledb.compress_orderby = 'report_date DESC',"
             "  timescaledb.compress_segmentby = 'cik'"
-            ")"
+            ")",
         )
 
         cursor.execute(
             "SELECT add_compression_policy("
             "  'sec_nport_holdings', INTERVAL '3 months', if_not_exists => true"
-            ")"
+            ")",
         )
 
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_sec_nport_holdings_cik_date "
-            "ON sec_nport_holdings (cik, report_date DESC)"
+            "ON sec_nport_holdings (cik, report_date DESC)",
         )
 
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_sec_nport_holdings_cusip_date "
-            "ON sec_nport_holdings (cusip, report_date DESC)"
+            "ON sec_nport_holdings (cusip, report_date DESC)",
         )
 
         cursor.close()
@@ -106,13 +106,13 @@ def downgrade() -> None:
         cursor = conn.cursor()
 
         cursor.execute(
-            "SELECT remove_compression_policy('sec_nport_holdings', if_exists => true)"
+            "SELECT remove_compression_policy('sec_nport_holdings', if_exists => true)",
         )
         cursor.execute(
             "SELECT decompress_chunk(c.chunk_name) "
             "FROM timescaledb_information.chunks c "
             "WHERE c.hypertable_name = 'sec_nport_holdings' "
-            "AND c.is_compressed = true"
+            "AND c.is_compressed = true",
         )
         cursor.execute("DROP INDEX IF EXISTS idx_sec_nport_holdings_cik_date")
         cursor.execute("DROP INDEX IF EXISTS idx_sec_nport_holdings_cusip_date")

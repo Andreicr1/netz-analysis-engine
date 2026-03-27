@@ -43,7 +43,7 @@ def _is_hypertable(cursor, table: str) -> bool:
     """Check if table is already a TimescaleDB hypertable (idempotent guard)."""
     cursor.execute(
         "SELECT 1 FROM timescaledb_information.hypertables "
-        "WHERE hypertable_name = %s", (table,)
+        "WHERE hypertable_name = %s", (table,),
     )
     return cursor.fetchone() is not None
 
@@ -51,10 +51,10 @@ def _is_hypertable(cursor, table: str) -> bool:
 def _ensure_created_at_not_null(cursor, table: str) -> None:
     """Backfill NULLs and set NOT NULL on created_at for hypertable conversion."""
     cursor.execute(
-        f"UPDATE {table} SET created_at = NOW() WHERE created_at IS NULL"
+        f"UPDATE {table} SET created_at = NOW() WHERE created_at IS NULL",
     )
     cursor.execute(
-        f"ALTER TABLE {table} ALTER COLUMN created_at SET NOT NULL"
+        f"ALTER TABLE {table} ALTER COLUMN created_at SET NOT NULL",
     )
 
 
@@ -81,40 +81,40 @@ def upgrade() -> None:
             _ensure_created_at_not_null(cursor, "performance_drift_flags")
             cursor.execute(
                 "ALTER TABLE performance_drift_flags "
-                "DROP CONSTRAINT IF EXISTS performance_drift_flags_pkey"
+                "DROP CONSTRAINT IF EXISTS performance_drift_flags_pkey",
             )
             cursor.execute(
-                "DROP INDEX IF EXISTS ix_performance_drift_flags_fund_investment"
+                "DROP INDEX IF EXISTS ix_performance_drift_flags_fund_investment",
             )
             cursor.execute(
                 "SELECT create_hypertable("
                 "  'performance_drift_flags', 'created_at',"
                 "  chunk_time_interval => INTERVAL '1 month',"
-                "  migrate_data => true, if_not_exists => true)"
+                "  migrate_data => true, if_not_exists => true)",
             )
             cursor.execute(
                 "ALTER TABLE performance_drift_flags "
-                "DROP CONSTRAINT IF EXISTS performance_drift_flags_pkey"
+                "DROP CONSTRAINT IF EXISTS performance_drift_flags_pkey",
             )
             cursor.execute(
                 "ALTER TABLE performance_drift_flags "
                 "ADD CONSTRAINT performance_drift_flags_pkey "
-                "PRIMARY KEY (created_at, id)"
+                "PRIMARY KEY (created_at, id)",
             )
             cursor.execute(
                 "ALTER TABLE performance_drift_flags SET ("
                 "  timescaledb.compress,"
                 "  timescaledb.compress_orderby = 'created_at DESC',"
-                "  timescaledb.compress_segmentby = 'fund_id')"
+                "  timescaledb.compress_segmentby = 'fund_id')",
             )
             cursor.execute(
                 "SELECT add_compression_policy("
                 "  'performance_drift_flags', INTERVAL '3 months',"
-                "  if_not_exists => true)"
+                "  if_not_exists => true)",
             )
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_perf_drift_flags_fund_investment "
-                "ON performance_drift_flags (fund_id, investment_id, created_at DESC)"
+                "ON performance_drift_flags (fund_id, investment_id, created_at DESC)",
             )
 
         # ═══════════════════════════════════════════════════════════
@@ -135,7 +135,7 @@ def upgrade() -> None:
             cursor.execute("ALTER TABLE strategy_drift_alerts DISABLE ROW LEVEL SECURITY")
             cursor.execute(
                 "ALTER TABLE strategy_drift_alerts "
-                "DROP CONSTRAINT IF EXISTS strategy_drift_alerts_pkey"
+                "DROP CONSTRAINT IF EXISTS strategy_drift_alerts_pkey",
             )
             cursor.execute("DROP INDEX IF EXISTS uq_drift_alerts_current")
             cursor.execute("DROP INDEX IF EXISTS ix_drift_alerts_severity")
@@ -143,39 +143,39 @@ def upgrade() -> None:
                 "SELECT create_hypertable("
                 "  'strategy_drift_alerts', 'detected_at',"
                 "  chunk_time_interval => INTERVAL '1 month',"
-                "  migrate_data => true, if_not_exists => true)"
+                "  migrate_data => true, if_not_exists => true)",
             )
             cursor.execute(
                 "ALTER TABLE strategy_drift_alerts "
-                "DROP CONSTRAINT IF EXISTS strategy_drift_alerts_pkey"
+                "DROP CONSTRAINT IF EXISTS strategy_drift_alerts_pkey",
             )
             cursor.execute(
                 "ALTER TABLE strategy_drift_alerts "
                 "ADD CONSTRAINT strategy_drift_alerts_pkey "
-                "PRIMARY KEY (detected_at, id)"
+                "PRIMARY KEY (detected_at, id)",
             )
             cursor.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS "
                 "idx_strategy_drift_alerts_org_instrument_current "
                 "ON strategy_drift_alerts (detected_at, organization_id, instrument_id) "
-                "WHERE is_current = true"
+                "WHERE is_current = true",
             )
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS "
                 "idx_strategy_drift_alerts_org_severity_current "
                 "ON strategy_drift_alerts (organization_id, severity, detected_at DESC) "
-                "WHERE is_current = true"
+                "WHERE is_current = true",
             )
             cursor.execute(
                 "ALTER TABLE strategy_drift_alerts SET ("
                 "  timescaledb.compress,"
                 "  timescaledb.compress_orderby = 'detected_at DESC',"
-                "  timescaledb.compress_segmentby = 'instrument_id')"
+                "  timescaledb.compress_segmentby = 'instrument_id')",
             )
             cursor.execute(
                 "SELECT add_compression_policy("
                 "  'strategy_drift_alerts', INTERVAL '3 months',"
-                "  if_not_exists => true)"
+                "  if_not_exists => true)",
             )
 
         # ═══════════════════════════════════════════════════════════
@@ -192,38 +192,38 @@ def upgrade() -> None:
             _ensure_created_at_not_null(cursor, "governance_alerts")
             cursor.execute(
                 "ALTER TABLE governance_alerts "
-                "DROP CONSTRAINT IF EXISTS governance_alerts_pkey"
+                "DROP CONSTRAINT IF EXISTS governance_alerts_pkey",
             )
             cursor.execute("DROP INDEX IF EXISTS ix_governance_alerts_fund_alert_id")
             cursor.execute(
                 "SELECT create_hypertable("
                 "  'governance_alerts', 'created_at',"
                 "  chunk_time_interval => INTERVAL '1 month',"
-                "  migrate_data => true, if_not_exists => true)"
+                "  migrate_data => true, if_not_exists => true)",
             )
             cursor.execute(
                 "ALTER TABLE governance_alerts "
-                "DROP CONSTRAINT IF EXISTS governance_alerts_pkey"
+                "DROP CONSTRAINT IF EXISTS governance_alerts_pkey",
             )
             cursor.execute(
                 "ALTER TABLE governance_alerts "
                 "ADD CONSTRAINT governance_alerts_pkey "
-                "PRIMARY KEY (created_at, id)"
+                "PRIMARY KEY (created_at, id)",
             )
             cursor.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_governance_alerts_fund_alert "
-                "ON governance_alerts (created_at, fund_id, alert_id)"
+                "ON governance_alerts (created_at, fund_id, alert_id)",
             )
             cursor.execute(
                 "ALTER TABLE governance_alerts SET ("
                 "  timescaledb.compress,"
                 "  timescaledb.compress_orderby = 'created_at DESC',"
-                "  timescaledb.compress_segmentby = 'organization_id')"
+                "  timescaledb.compress_segmentby = 'organization_id')",
             )
             cursor.execute(
                 "SELECT add_compression_policy("
                 "  'governance_alerts', INTERVAL '3 months',"
-                "  if_not_exists => true)"
+                "  if_not_exists => true)",
             )
 
         # ═══════════════════════════════════════════════════════════
@@ -242,38 +242,38 @@ def upgrade() -> None:
             _ensure_created_at_not_null(cursor, "pipeline_alerts")
             cursor.execute(
                 "ALTER TABLE pipeline_alerts "
-                "DROP CONSTRAINT IF EXISTS pipeline_alerts_pkey"
+                "DROP CONSTRAINT IF EXISTS pipeline_alerts_pkey",
             )
             cursor.execute("DROP INDEX IF EXISTS ix_pipeline_alerts_fund_deal")
             cursor.execute(
                 "SELECT create_hypertable("
                 "  'pipeline_alerts', 'created_at',"
                 "  chunk_time_interval => INTERVAL '1 month',"
-                "  migrate_data => true, if_not_exists => true)"
+                "  migrate_data => true, if_not_exists => true)",
             )
             cursor.execute(
                 "ALTER TABLE pipeline_alerts "
-                "DROP CONSTRAINT IF EXISTS pipeline_alerts_pkey"
+                "DROP CONSTRAINT IF EXISTS pipeline_alerts_pkey",
             )
             cursor.execute(
                 "ALTER TABLE pipeline_alerts "
                 "ADD CONSTRAINT pipeline_alerts_pkey "
-                "PRIMARY KEY (created_at, id)"
+                "PRIMARY KEY (created_at, id)",
             )
             cursor.execute(
                 "ALTER TABLE pipeline_alerts SET ("
                 "  timescaledb.compress,"
                 "  timescaledb.compress_orderby = 'created_at DESC',"
-                "  timescaledb.compress_segmentby = 'organization_id')"
+                "  timescaledb.compress_segmentby = 'organization_id')",
             )
             cursor.execute(
                 "SELECT add_compression_policy("
                 "  'pipeline_alerts', INTERVAL '3 months',"
-                "  if_not_exists => true)"
+                "  if_not_exists => true)",
             )
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_pipeline_alerts_fund_deal "
-                "ON pipeline_alerts (fund_id, deal_id, created_at DESC)"
+                "ON pipeline_alerts (fund_id, deal_id, created_at DESC)",
             )
 
         cursor.close()
@@ -291,16 +291,16 @@ def downgrade() -> None:
             "governance_alerts", "pipeline_alerts",
         ):
             cursor.execute(
-                f"SELECT remove_compression_policy('{table}', if_exists => true)"
+                f"SELECT remove_compression_policy('{table}', if_exists => true)",
             )
             cursor.execute(
                 f"SELECT decompress_chunk(c.chunk_name) "
                 f"FROM timescaledb_information.chunks c "
                 f"WHERE c.hypertable_name = '{table}' "
-                f"AND c.is_compressed = true"
+                f"AND c.is_compressed = true",
             )
             cursor.execute(
-                f"ALTER TABLE {table} SET (timescaledb.compress = false)"
+                f"ALTER TABLE {table} SET (timescaledb.compress = false)",
             )
 
         # NOTE: Tables remain hypertables. Full revert requires drop + recreate.
@@ -310,27 +310,27 @@ def downgrade() -> None:
             "performance_drift_flags", "governance_alerts", "pipeline_alerts",
         ):
             cursor.execute(
-                f"ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey"
+                f"ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey",
             )
             cursor.execute(
-                f"ALTER TABLE {table} ADD CONSTRAINT {table}_pkey PRIMARY KEY (id)"
+                f"ALTER TABLE {table} ADD CONSTRAINT {table}_pkey PRIMARY KEY (id)",
             )
 
         # strategy_drift_alerts uses detected_at
         cursor.execute(
             "ALTER TABLE strategy_drift_alerts "
-            "DROP CONSTRAINT IF EXISTS strategy_drift_alerts_pkey"
+            "DROP CONSTRAINT IF EXISTS strategy_drift_alerts_pkey",
         )
         cursor.execute(
             "ALTER TABLE strategy_drift_alerts "
-            "ADD CONSTRAINT strategy_drift_alerts_pkey PRIMARY KEY (id)"
+            "ADD CONSTRAINT strategy_drift_alerts_pkey PRIMARY KEY (id)",
         )
 
         # Restore original indexes
         cursor.execute("DROP INDEX IF EXISTS idx_perf_drift_flags_fund_investment")
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS ix_performance_drift_flags_fund_investment "
-            "ON performance_drift_flags (fund_id, investment_id)"
+            "ON performance_drift_flags (fund_id, investment_id)",
         )
 
         cursor.execute("DROP INDEX IF EXISTS idx_strategy_drift_alerts_org_instrument_current")
@@ -339,25 +339,25 @@ def downgrade() -> None:
             "CREATE UNIQUE INDEX IF NOT EXISTS "
             "ix_strategy_drift_alerts_org_instrument_current "
             "ON strategy_drift_alerts (organization_id, instrument_id) "
-            "WHERE is_current = true"
+            "WHERE is_current = true",
         )
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS "
             "ix_strategy_drift_alerts_org_severity_current "
             "ON strategy_drift_alerts (organization_id, severity) "
-            "WHERE is_current = true"
+            "WHERE is_current = true",
         )
 
         cursor.execute("DROP INDEX IF EXISTS idx_governance_alerts_fund_alert")
         cursor.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS ix_governance_alerts_fund_alert_id "
-            "ON governance_alerts (fund_id, alert_id)"
+            "ON governance_alerts (fund_id, alert_id)",
         )
 
         cursor.execute("DROP INDEX IF EXISTS idx_pipeline_alerts_fund_deal")
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS ix_pipeline_alerts_fund_deal "
-            "ON pipeline_alerts (fund_id, deal_id)"
+            "ON pipeline_alerts (fund_id, deal_id)",
         )
 
         cursor.close()

@@ -26,10 +26,10 @@ if TYPE_CHECKING:
     )
 
 __all__ = [
+    "build_edgar_multi_entity_context",
     "extract_searchable_entities",
     "fetch_edgar_data",
     "fetch_edgar_multi_entity",
-    "build_edgar_multi_entity_context",
 ]
 
 

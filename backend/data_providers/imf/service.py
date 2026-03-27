@@ -10,7 +10,7 @@ quant_engine, or ai_engine.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 import structlog
@@ -100,7 +100,7 @@ async def fetch_imf_indicator(
         return []
 
     # Derive edition from current date (April/October)
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     edition = f"{now.year}{now.month:02d}"
 
     results: list[ImfForecast] = []

@@ -234,7 +234,7 @@ async def run_portfolio_nav_synthesizer(org_id: uuid.UUID) -> dict[str, Any]:
         await set_rls_context(db, org_id)
 
         lock_result = await db.execute(
-            text(f"SELECT pg_try_advisory_lock({NAV_SYNTH_LOCK_ID})")
+            text(f"SELECT pg_try_advisory_lock({NAV_SYNTH_LOCK_ID})"),
         )
         if not lock_result.scalar():
             logger.info("worker_skipped", reason="another instance running")
@@ -283,7 +283,7 @@ async def run_portfolio_nav_synthesizer(org_id: uuid.UUID) -> dict[str, Any]:
         finally:
             try:
                 await db.execute(
-                    text(f"SELECT pg_advisory_unlock({NAV_SYNTH_LOCK_ID})")
+                    text(f"SELECT pg_advisory_unlock({NAV_SYNTH_LOCK_ID})"),
                 )
             except Exception:
                 pass

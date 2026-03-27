@@ -1,5 +1,5 @@
 import asyncio
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import redis.asyncio as aioredis
 import structlog
@@ -173,7 +173,7 @@ async def get_risk_summary_batch(
 
     return BatchRiskSummaryOut(
         profiles=results,
-        computed_at=datetime.now(timezone.utc),
+        computed_at=datetime.now(UTC),
         profile_count=len(results),
     )
 

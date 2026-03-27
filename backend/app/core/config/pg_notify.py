@@ -1,5 +1,4 @@
-"""
-PgNotifier — Dedicated asyncpg listener for pg_notify cache invalidation.
+"""PgNotifier — Dedicated asyncpg listener for pg_notify cache invalidation.
 
 Uses a dedicated connection (NOT from pool — pool drops listeners on release).
 TCP keepalives for health, exponential backoff reconnect.
@@ -12,8 +11,9 @@ import asyncio
 import inspect
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +127,7 @@ class PgNotifier:
             logger.info("PgNotifier: listening on channel '%s'", channel)
 
         self._connected = True
-        self._last_reconnect_at = datetime.now(timezone.utc)
+        self._last_reconnect_at = datetime.now(UTC)
 
         # Keep connection alive — asyncpg listens until connection drops
         while self._running:
@@ -135,7 +135,7 @@ class PgNotifier:
 
     @staticmethod
     async def _invoke_async_handler(
-        handler: Callable[[dict], Any], data: dict, channel: str
+        handler: Callable[[dict], Any], data: dict, channel: str,
     ) -> None:
         """Await an async handler and log failures explicitly."""
         try:

@@ -62,6 +62,7 @@ class DealStagePatch(BaseModel):
 
 class DealContextPatch(BaseModel):
     """Investment parameters that live only in deal_context.json on blob — no DB columns."""
+
     geography: str | None = Field(default=None, max_length=300)
     currency: str | None = Field(default=None, max_length=3)
     commitment_usd: str | None = Field(default=None, max_length=64)

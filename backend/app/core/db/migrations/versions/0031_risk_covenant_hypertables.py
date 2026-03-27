@@ -35,7 +35,7 @@ def _is_hypertable(cursor, table: str) -> bool:
     """Check if table is already a TimescaleDB hypertable (idempotent guard)."""
     cursor.execute(
         "SELECT 1 FROM timescaledb_information.hypertables "
-        "WHERE hypertable_name = %s", (table,)
+        "WHERE hypertable_name = %s", (table,),
     )
     return cursor.fetchone() is not None
 
@@ -43,10 +43,10 @@ def _is_hypertable(cursor, table: str) -> bool:
 def _ensure_created_at_not_null(cursor, table: str) -> None:
     """Backfill NULLs and set NOT NULL on created_at for hypertable conversion."""
     cursor.execute(
-        f"UPDATE {table} SET created_at = NOW() WHERE created_at IS NULL"
+        f"UPDATE {table} SET created_at = NOW() WHERE created_at IS NULL",
     )
     cursor.execute(
-        f"ALTER TABLE {table} ALTER COLUMN created_at SET NOT NULL"
+        f"ALTER TABLE {table} ALTER COLUMN created_at SET NOT NULL",
     )
 
 
@@ -73,10 +73,10 @@ def upgrade() -> None:
 
             cursor.execute(
                 "ALTER TABLE covenant_status_register "
-                "DROP CONSTRAINT IF EXISTS covenant_status_register_pkey"
+                "DROP CONSTRAINT IF EXISTS covenant_status_register_pkey",
             )
             cursor.execute(
-                "DROP INDEX IF EXISTS ix_covenant_status_register_fund_investment"
+                "DROP INDEX IF EXISTS ix_covenant_status_register_fund_investment",
             )
 
             cursor.execute(
@@ -86,13 +86,13 @@ def upgrade() -> None:
                 "  chunk_time_interval => INTERVAL '1 month',"
                 "  migrate_data => true,"
                 "  if_not_exists => true"
-                ")"
+                ")",
             )
 
             cursor.execute(
                 "ALTER TABLE covenant_status_register "
                 "ADD CONSTRAINT covenant_status_register_pkey "
-                "PRIMARY KEY (created_at, id)"
+                "PRIMARY KEY (created_at, id)",
             )
 
             cursor.execute(
@@ -100,19 +100,19 @@ def upgrade() -> None:
                 "  timescaledb.compress,"
                 "  timescaledb.compress_orderby = 'created_at DESC',"
                 "  timescaledb.compress_segmentby = 'investment_id'"
-                ")"
+                ")",
             )
 
             cursor.execute(
                 "SELECT add_compression_policy("
                 "  'covenant_status_register', INTERVAL '3 months',"
                 "  if_not_exists => true"
-                ")"
+                ")",
             )
 
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_covenant_status_fund_investment "
-                "ON covenant_status_register (fund_id, investment_id, created_at DESC)"
+                "ON covenant_status_register (fund_id, investment_id, created_at DESC)",
             )
 
         # ═══════════════════════════════════════════════════════════
@@ -131,10 +131,10 @@ def upgrade() -> None:
 
             cursor.execute(
                 "ALTER TABLE investment_risk_registry "
-                "DROP CONSTRAINT IF EXISTS investment_risk_registry_pkey"
+                "DROP CONSTRAINT IF EXISTS investment_risk_registry_pkey",
             )
             cursor.execute(
-                "DROP INDEX IF EXISTS ix_investment_risk_registry_fund_investment"
+                "DROP INDEX IF EXISTS ix_investment_risk_registry_fund_investment",
             )
 
             cursor.execute(
@@ -144,13 +144,13 @@ def upgrade() -> None:
                 "  chunk_time_interval => INTERVAL '1 month',"
                 "  migrate_data => true,"
                 "  if_not_exists => true"
-                ")"
+                ")",
             )
 
             cursor.execute(
                 "ALTER TABLE investment_risk_registry "
                 "ADD CONSTRAINT investment_risk_registry_pkey "
-                "PRIMARY KEY (created_at, id)"
+                "PRIMARY KEY (created_at, id)",
             )
 
             cursor.execute(
@@ -158,19 +158,19 @@ def upgrade() -> None:
                 "  timescaledb.compress,"
                 "  timescaledb.compress_orderby = 'created_at DESC',"
                 "  timescaledb.compress_segmentby = 'investment_id'"
-                ")"
+                ")",
             )
 
             cursor.execute(
                 "SELECT add_compression_policy("
                 "  'investment_risk_registry', INTERVAL '3 months',"
                 "  if_not_exists => true"
-                ")"
+                ")",
             )
 
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_investment_risk_fund_investment "
-                "ON investment_risk_registry (fund_id, investment_id, created_at DESC)"
+                "ON investment_risk_registry (fund_id, investment_id, created_at DESC)",
             )
 
         # ═══════════════════════════════════════════════════════════
@@ -189,7 +189,7 @@ def upgrade() -> None:
 
             cursor.execute(
                 "ALTER TABLE deal_risk_flags "
-                "DROP CONSTRAINT IF EXISTS deal_risk_flags_pkey"
+                "DROP CONSTRAINT IF EXISTS deal_risk_flags_pkey",
             )
             cursor.execute("DROP INDEX IF EXISTS ix_deal_risk_flags_fund_deal")
 
@@ -200,13 +200,13 @@ def upgrade() -> None:
                 "  chunk_time_interval => INTERVAL '1 month',"
                 "  migrate_data => true,"
                 "  if_not_exists => true"
-                ")"
+                ")",
             )
 
             cursor.execute(
                 "ALTER TABLE deal_risk_flags "
                 "ADD CONSTRAINT deal_risk_flags_pkey "
-                "PRIMARY KEY (created_at, id)"
+                "PRIMARY KEY (created_at, id)",
             )
 
             cursor.execute(
@@ -214,18 +214,18 @@ def upgrade() -> None:
                 "  timescaledb.compress,"
                 "  timescaledb.compress_orderby = 'created_at DESC',"
                 "  timescaledb.compress_segmentby = 'deal_id'"
-                ")"
+                ")",
             )
 
             cursor.execute(
                 "SELECT add_compression_policy("
                 "  'deal_risk_flags', INTERVAL '3 months', if_not_exists => true"
-                ")"
+                ")",
             )
 
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_deal_risk_flags_fund_deal "
-                "ON deal_risk_flags (fund_id, deal_id, created_at DESC)"
+                "ON deal_risk_flags (fund_id, deal_id, created_at DESC)",
             )
 
         cursor.close()
@@ -245,16 +245,16 @@ def downgrade() -> None:
 
         for table in tables:
             cursor.execute(
-                f"SELECT remove_compression_policy('{table}', if_exists => true)"
+                f"SELECT remove_compression_policy('{table}', if_exists => true)",
             )
             cursor.execute(
                 f"SELECT decompress_chunk(c.chunk_name) "
                 f"FROM timescaledb_information.chunks c "
                 f"WHERE c.hypertable_name = '{table}' "
-                f"AND c.is_compressed = true"
+                f"AND c.is_compressed = true",
             )
             cursor.execute(
-                f"ALTER TABLE {table} SET (timescaledb.compress = false)"
+                f"ALTER TABLE {table} SET (timescaledb.compress = false)",
             )
 
         # NOTE: Tables remain hypertables. Full revert requires drop + recreate.
@@ -262,29 +262,29 @@ def downgrade() -> None:
         # Restore original PKs
         for table in tables:
             cursor.execute(
-                f"ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey"
+                f"ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey",
             )
             cursor.execute(
-                f"ALTER TABLE {table} ADD CONSTRAINT {table}_pkey PRIMARY KEY (id)"
+                f"ALTER TABLE {table} ADD CONSTRAINT {table}_pkey PRIMARY KEY (id)",
             )
 
         # Drop hypertable-specific indexes and restore originals
         cursor.execute("DROP INDEX IF EXISTS idx_covenant_status_fund_investment")
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS ix_covenant_status_register_fund_investment "
-            "ON covenant_status_register (fund_id, investment_id)"
+            "ON covenant_status_register (fund_id, investment_id)",
         )
 
         cursor.execute("DROP INDEX IF EXISTS idx_investment_risk_fund_investment")
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS ix_investment_risk_registry_fund_investment "
-            "ON investment_risk_registry (fund_id, investment_id)"
+            "ON investment_risk_registry (fund_id, investment_id)",
         )
 
         cursor.execute("DROP INDEX IF EXISTS idx_deal_risk_flags_fund_deal")
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS ix_deal_risk_flags_fund_deal "
-            "ON deal_risk_flags (fund_id, deal_id)"
+            "ON deal_risk_flags (fund_id, deal_id)",
         )
 
         cursor.close()

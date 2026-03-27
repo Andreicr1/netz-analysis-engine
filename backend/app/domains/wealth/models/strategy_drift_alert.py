@@ -25,7 +25,7 @@ class StrategyDriftAlert(OrganizationScopedMixin, Base):
     __tablename__ = "strategy_drift_alerts"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4,
     )
     instrument_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
@@ -39,20 +39,20 @@ class StrategyDriftAlert(OrganizationScopedMixin, Base):
     total_metrics: Mapped[int] = mapped_column(Integer, nullable=False)
     metric_details: Mapped[dict] = mapped_column(JSONB, nullable=False)
     is_current: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="true"
+        Boolean, nullable=False, server_default="true",
     )
     detected_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
+        DateTime(timezone=True), nullable=False,
     )
     snapshot_date: Mapped[dt.date | None] = mapped_column(Date, nullable=True)
     drift_magnitude: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
     drift_threshold: Mapped[Decimal | None] = mapped_column(Numeric(10, 6), nullable=True)
     rebalance_triggered: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), server_default=func.now(),
     )
     updated_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
     )
 
     # Relationship (lazy="raise" per CLAUDE.md)

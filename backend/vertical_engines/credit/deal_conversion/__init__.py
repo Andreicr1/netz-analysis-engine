@@ -12,6 +12,6 @@ from vertical_engines.credit.deal_conversion.models import ConversionResult
 from vertical_engines.credit.deal_conversion.service import convert_pipeline_to_portfolio
 
 __all__ = [
-    "convert_pipeline_to_portfolio",
     "ConversionResult",
+    "convert_pipeline_to_portfolio",
 ]

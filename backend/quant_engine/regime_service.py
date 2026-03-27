@@ -151,6 +151,7 @@ def classify_regime_multi_signal(
     Args:
         thresholds: Pre-resolved thresholds (takes precedence).
         config: Raw calibration config dict from ConfigService (resolved if thresholds is None).
+
     """
     if thresholds is None:
         thresholds = resolve_regime_thresholds(config)
@@ -221,6 +222,7 @@ def detect_regime(
 
     Args:
         config: Raw calibration config dict from ConfigService.
+
     """
     thresholds = resolve_regime_thresholds(config)
 
@@ -353,6 +355,7 @@ def classify_regional_regime(
         vix: VIX value (used for US region only).
         cpi_yoy: CPI YoY for inflation detection.
         config: Regional regime config.
+
     """
     if config is None:
         config = resolve_regional_regime_config(None)
@@ -442,6 +445,7 @@ def compose_global_regime(
 
     Returns:
         Tuple of (global_regime, composition_reasons).
+
     """
     if config is None:
         config = resolve_regional_regime_config(None)
@@ -570,6 +574,7 @@ async def get_current_regime(
             Callers provide their own fallback strategy:
             - Wealth: pre-fetches from PortfolioSnapshot.regime
             - Credit: uses stress_severity level or defaults to "RISK_ON"
+
     """
     macro = await get_latest_macro_values(db)
 
@@ -580,7 +585,7 @@ async def get_current_regime(
 
     if vix_val is not None:
         regime, reasons = classify_regime_multi_signal(
-            vix_val, yield_val, cpi_val, sahm_rule=sahm_val, config=config
+            vix_val, yield_val, cpi_val, sahm_rule=sahm_val, config=config,
         )
 
         as_of = None

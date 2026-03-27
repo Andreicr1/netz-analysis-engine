@@ -20,6 +20,7 @@ def detect_transition(
     Returns:
         Tuple of (direction, message) where direction is one of
         "improvement", "deterioration", or "stable".
+
     """
     previous_norm = previous_outcome.strip().upper()
     new_norm = new_outcome.strip().upper()

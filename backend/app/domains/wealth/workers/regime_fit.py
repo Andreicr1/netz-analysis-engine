@@ -67,7 +67,7 @@ def _fit_markov_regime(vix_series: list[float]) -> list[float] | None:
     except ImportError:
         logger.error(
             "statsmodels not installed — cannot run Markov regime fitting. "
-            "Install with: pip install netz-wealth-os[timeseries]"
+            "Install with: pip install netz-wealth-os[timeseries]",
         )
         return None
 

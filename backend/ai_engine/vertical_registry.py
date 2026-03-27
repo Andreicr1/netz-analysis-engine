@@ -41,7 +41,7 @@ def get_vertical_entry(profile_name: str) -> VerticalEntry:
     except KeyError as exc:
         raise ValueError(
             f"No vertical engine registered for profile: {profile_name!r}. "
-            f"Available: {sorted(_REGISTRY)}"
+            f"Available: {sorted(_REGISTRY)}",
         ) from exc
 
 
@@ -58,7 +58,7 @@ def resolve_vertical_export(profile_name: str, export_name: str) -> Any:
         return getattr(module, export_name)
     except AttributeError as exc:
         raise AttributeError(
-            f"Vertical module {module.__name__!r} does not export {export_name!r}"
+            f"Vertical module {module.__name__!r} does not export {export_name!r}",
         ) from exc
 
 

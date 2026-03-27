@@ -15,7 +15,7 @@ Covers:
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -275,8 +275,8 @@ class TestFetchManager:
         mock_row.country = "US"
         mock_row.website = "https://test.com"
         mock_row.compliance_disclosures = 0
-        mock_row.last_adv_filed_at = datetime(2026, 1, 15, tzinfo=timezone.utc)
-        mock_row.data_fetched_at = datetime(2026, 3, 1, tzinfo=timezone.utc)
+        mock_row.last_adv_filed_at = datetime(2026, 1, 15, tzinfo=UTC)
+        mock_row.data_fetched_at = datetime(2026, 3, 1, tzinfo=UTC)
 
         mock_session = AsyncMock()
         mock_result = MagicMock()

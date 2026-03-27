@@ -20,11 +20,11 @@ from vertical_engines.wealth.model_portfolio.track_record import (
 )
 
 __all__ = [
+    "SCENARIOS",
     "BacktestResult",
     "LiveNAV",
     "OptimizationMeta",
     "PortfolioComposition",
-    "SCENARIOS",
     "StressResult",
     "compute_backtest",
     "compute_live_nav",

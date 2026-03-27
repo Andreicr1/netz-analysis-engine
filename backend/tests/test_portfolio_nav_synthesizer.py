@@ -172,7 +172,7 @@ class TestSynthesizePortfolioNav:
             id=uuid.uuid4(),
             organization_id="test",
             fund_selection_schema=None,
-            inception_nav=Decimal("1000"),
+            inception_nav=Decimal(1000),
             inception_date=None,
             backtest_start_date=None,
         )
@@ -189,7 +189,7 @@ class TestSynthesizePortfolioNav:
             id=uuid.uuid4(),
             organization_id="test",
             fund_selection_schema={"funds": []},
-            inception_nav=Decimal("1000"),
+            inception_nav=Decimal(1000),
             inception_date=None,
             backtest_start_date=None,
         )
@@ -239,12 +239,11 @@ class TestSynthesizePortfolioNav:
             if call_count == 1:
                 # _get_last_nav
                 return mock_last
-            elif call_count == 2:
+            if call_count == 2:
                 # _fetch_fund_returns
                 return mock_returns
-            else:
-                # day0 insert and batch upserts
-                return MagicMock()
+            # day0 insert and batch upserts
+            return MagicMock()
 
         db.execute = AsyncMock(side_effect=mock_execute)
 
@@ -288,7 +287,8 @@ class TestModelPortfolioNavModel:
 
 class TestDuckTypingPolymorphism:
     """Ensure model_portfolio_nav has compatible schema with nav_timeseries
-    for analytics code that expects (id, date, nav, return) tuples."""
+    for analytics code that expects (id, date, nav, return) tuples.
+    """
 
     def test_compatible_columns(self):
         from app.domains.wealth.models.model_portfolio_nav import ModelPortfolioNav

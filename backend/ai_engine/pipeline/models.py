@@ -48,6 +48,7 @@ class PipelineStageResult:
 
     ``data`` is ``None`` on failure — callers MUST check ``success`` first.
     """
+
     stage: str                    # "ocr", "classification", "chunking", "extraction", "embedding"
     success: bool
     data: Any                     # Stage output payload
@@ -63,6 +64,7 @@ class HybridClassificationResult:
     Named ``HybridClassificationResult`` to avoid collision with the existing
     ``document_intelligence.ClassificationResult`` (which uses int confidence 0-100).
     """
+
     doc_type: str
     vehicle_type: str
     confidence: float             # 0.0–1.0 unified scale
@@ -85,6 +87,7 @@ class IngestRequest:
     If ``None``, metadata extraction proceeds without alias enrichment
     (degraded but functional).
     """
+
     source: Literal["ui", "batch", "api"]
     org_id: UUID                  # FROM JWT actor.organization_id ONLY
     vertical: str                 # "credit" | "wealth"

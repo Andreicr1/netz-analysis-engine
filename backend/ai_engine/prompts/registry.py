@@ -195,7 +195,7 @@ class PromptRegistry:
         backend_root = Path(__file__).resolve().parents[2]  # ai_engine/prompts/registry.py -> parents[2] = backend/
         if not str(resolved).startswith(str(backend_root)):
             raise ValueError(
-                f"Template search path must be within the backend directory: {resolved}"
+                f"Template search path must be within the backend directory: {resolved}",
             )
         if not resolved.is_dir():
             raise ValueError(f"Template search path is not a directory: {resolved}")

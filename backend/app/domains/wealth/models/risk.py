@@ -14,7 +14,7 @@ class FundRiskMetrics(OrganizationScopedMixin, Base):
     __tablename__ = "fund_risk_metrics"
 
     instrument_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("instruments_universe.instrument_id"), primary_key=True
+        Uuid(as_uuid=True), ForeignKey("instruments_universe.instrument_id"), primary_key=True,
     )
     calc_date: Mapped[date] = mapped_column(Date, primary_key=True)
 

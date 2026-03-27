@@ -1,5 +1,4 @@
-"""
-ConfigWriter — Admin write operations for vertical config overrides.
+"""ConfigWriter — Admin write operations for vertical config overrides.
 
 Validates against guardrails (JSON Schema), optimistic locking via version column,
 and audit logging for all mutations.
@@ -10,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -68,7 +67,7 @@ class ConfigWriter:
             select(VerticalConfigDefault.guardrails, VerticalConfigDefault.config).where(
                 VerticalConfigDefault.vertical == vertical,
                 VerticalConfigDefault.config_type == config_type,
-            )
+            ),
         )
         default = default_row.one_or_none()
         if default is None:
@@ -103,7 +102,7 @@ class ConfigWriter:
                 VerticalConfigOverride.vertical == vertical,
                 VerticalConfigOverride.config_type == config_type,
                 VerticalConfigOverride.organization_id == org_id,
-            )
+            ),
         )
         current = current_row.scalar_one_or_none()
 
@@ -121,7 +120,7 @@ class ConfigWriter:
                     VerticalConfigOverride.version == expected_version,
                 )
                 .values(config=config, version=VerticalConfigOverride.version + 1)
-                .returning(VerticalConfigOverride.version)
+                .returning(VerticalConfigOverride.version),
             )
             new_version_row = result.scalar_one_or_none()
             if new_version_row is None:
@@ -179,7 +178,7 @@ class ConfigWriter:
                 VerticalConfigOverride.vertical == vertical,
                 VerticalConfigOverride.config_type == config_type,
                 VerticalConfigOverride.organization_id == org_id,
-            )
+            ),
         )
         current_config = current_row.scalar_one_or_none()
 
@@ -188,7 +187,7 @@ class ConfigWriter:
                 VerticalConfigOverride.vertical == vertical,
                 VerticalConfigOverride.config_type == config_type,
                 VerticalConfigOverride.organization_id == org_id,
-            )
+            ),
         )
 
         if result.rowcount == 0:
@@ -220,7 +219,7 @@ class ConfigWriter:
             select(VerticalConfigDefault).where(
                 VerticalConfigDefault.vertical == vertical,
                 VerticalConfigDefault.config_type == config_type,
-            )
+            ),
         )
         current = current_row.scalar_one_or_none()
         if current is None:
@@ -256,7 +255,7 @@ class ConfigWriter:
                 VerticalConfigDefault.vertical == vertical,
                 VerticalConfigDefault.config_type == config_type,
             )
-            .values(config=config, version=VerticalConfigDefault.version + 1)
+            .values(config=config, version=VerticalConfigDefault.version + 1),
         )
 
         # Audit
@@ -285,7 +284,7 @@ class ConfigWriter:
             select(VerticalConfigDefault.config).where(
                 VerticalConfigDefault.vertical == vertical,
                 VerticalConfigDefault.config_type == config_type,
-            )
+            ),
         )
         default_config = default_row.scalar_one_or_none() or {}
 
@@ -294,7 +293,7 @@ class ConfigWriter:
                 VerticalConfigOverride.vertical == vertical,
                 VerticalConfigOverride.config_type == config_type,
                 VerticalConfigOverride.organization_id == org_id,
-            )
+            ),
         )
         override_config = override_row.scalar_one_or_none()
 
@@ -317,7 +316,7 @@ class ConfigWriter:
             changed_keys=changed_keys,
             tenant_count_affected=1,  # TODO: count tenants without override when org_id is None
             has_override=override_config is not None,
-            computed_at=datetime.now(timezone.utc),
+            computed_at=datetime.now(UTC),
         )
 
     async def validate_override(
@@ -331,7 +330,7 @@ class ConfigWriter:
             select(VerticalConfigDefault.guardrails).where(
                 VerticalConfigDefault.vertical == vertical,
                 VerticalConfigDefault.config_type == config_type,
-            )
+            ),
         )
         guardrails = default_row.scalar_one_or_none()
         errors = _validate_against_guardrails(config, guardrails)

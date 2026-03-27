@@ -26,7 +26,7 @@ def _validate_segment(value: str, label: str) -> None:
         raise ValueError(f"{label} must not be empty")
     if not _SAFE_PATH_SEGMENT_RE.match(value):
         raise ValueError(
-            f"Invalid {label}: {value!r} — must match {_SAFE_PATH_SEGMENT_RE.pattern}"
+            f"Invalid {label}: {value!r} — must match {_SAFE_PATH_SEGMENT_RE.pattern}",
         )
 
 

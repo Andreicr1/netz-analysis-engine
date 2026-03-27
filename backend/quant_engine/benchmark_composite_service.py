@@ -49,6 +49,7 @@ def compute_composite_nav(
     -------
     list[NavRow]
         Composite NAV series, ordered by date ascending.
+
     """
     if not block_weights or not benchmark_navs:
         return []

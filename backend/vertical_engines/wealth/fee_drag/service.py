@@ -71,6 +71,7 @@ class FeeDragService:
 
         Returns:
             FeeDragResult with fee breakdown and efficiency flag.
+
         """
         fees = self._extract_fees(instrument_type, attributes)
         gross = gross_expected_return
@@ -111,6 +112,7 @@ class FeeDragService:
 
         Returns:
             PortfolioFeeDrag with weighted aggregates.
+
         """
         results: list[FeeDragResult] = []
 

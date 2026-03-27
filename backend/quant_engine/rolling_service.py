@@ -58,6 +58,7 @@ def compute_rolling_returns(
     -------
     list[RollingSeriesResult]
         One entry per window that has enough data.
+
     """
     if windows is None:
         windows = ROLLING_WINDOWS

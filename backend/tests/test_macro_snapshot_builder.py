@@ -100,7 +100,7 @@ class TestBuildRegionalSnapshot:
                     "sentiment": 0.10,
                 },
                 "min_coverage": 0.30,
-            }
+            },
         }
         custom_result = build_regional_snapshot(
             obs, as_of=date(2026, 3, 15), config=custom_config,

@@ -83,7 +83,7 @@ def _retrieve_context(
 
     if retrieval_signal.confidence == "LOW":
         context_parts.append(
-            "Note: limited documentary evidence was found for this query."
+            "Note: limited documentary evidence was found for this query.",
         )
 
     for chunk in chunks:
@@ -309,10 +309,9 @@ def run_deal_ai_analysis(
             db, deal_id=deal_id, fund_id=fund_id, deal_name=deal_name, sponsor_name=sponsor_name,
             organization_id=organization_id,
         )
-    elif domain == AIMode.PORTFOLIO or domain == "portfolio":
+    if domain == AIMode.PORTFOLIO or domain == "portfolio":
         return run_portfolio_analysis(
             db, deal_id=deal_id, fund_id=fund_id, deal_name=deal_name, sponsor_name=sponsor_name,
             organization_id=organization_id,
         )
-    else:
-        raise ValueError(f"Unknown domain: {domain}")
+    raise ValueError(f"Unknown domain: {domain}")

@@ -44,6 +44,6 @@ class ConfigMissError(AppError):
         self.config_type = config_type
         super().__init__(
             f"Required config missing: ({vertical}, {config_type}). "
-            f"Check migration 0004 seed data."
+            f"Check migration 0004 seed data.",
         )
 

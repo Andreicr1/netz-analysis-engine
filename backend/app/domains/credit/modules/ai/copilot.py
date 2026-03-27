@@ -8,7 +8,6 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-import app.domains.credit.modules.ai.service as service
 from ai_engine.openai_client import create_completion as _llm_completion
 from ai_engine.prompts import prompt_registry
 from app.core.db.audit import write_audit_event
@@ -17,6 +16,7 @@ from app.core.middleware.audit import get_request_id
 from app.core.security.clerk_auth import Actor, get_actor, require_readonly_allowed, require_roles
 from app.domains.credit.ai.services.agent_context import AgentUIContext, build_agent_runtime_context
 from app.domains.credit.ai.services.ai_scope import enforce_root_folder_scope
+from app.domains.credit.modules.ai import service
 from app.domains.credit.modules.ai._helpers import (
     _blob_path_for_response,
     _limit,
@@ -534,7 +534,7 @@ def answer(
         access_level="internal",
         question_id=q_row.id,
         model_version=f"openai-chat:{_llm_model}",
-        answer_text=ans if ans else "Insufficient evidence in the Data Room",
+        answer_text=ans or "Insufficient evidence in the Data Room",
         prompt={
             "system": system_prompt,
             "user": user_prompt,

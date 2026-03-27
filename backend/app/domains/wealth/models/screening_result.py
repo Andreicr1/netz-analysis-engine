@@ -34,17 +34,17 @@ class ScreeningRun(OrganizationScopedMixin, Base):
     __tablename__ = "screening_runs"
 
     run_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4,
     )
     run_type: Mapped[str] = mapped_column(String(20), nullable=False)  # batch | on_demand
     instrument_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     config_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     started_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), server_default=func.now(),
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default="running"
+        String(20), nullable=False, server_default="running",
     )
 
 
@@ -52,7 +52,7 @@ class ScreeningResult(OrganizationScopedMixin, Base):
     __tablename__ = "screening_results"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4,
     )
     instrument_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
@@ -67,17 +67,17 @@ class ScreeningResult(OrganizationScopedMixin, Base):
         index=True,
     )
     overall_status: Mapped[str] = mapped_column(
-        String(20), nullable=False
+        String(20), nullable=False,
     )  # PASS | FAIL | WATCHLIST
     score: Mapped[float | None] = mapped_column(Numeric(5, 4))
     failed_at_layer: Mapped[int | None] = mapped_column(SmallInteger)
     layer_results: Mapped[dict] = mapped_column(JSONB, nullable=False)
     required_analysis_type: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default="dd_report"
+        String(20), nullable=False, server_default="dd_report",
     )  # dd_report | bond_brief | none
     screened_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), server_default=func.now(),
     )
     is_current: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="true"
+        Boolean, nullable=False, server_default="true",
     )

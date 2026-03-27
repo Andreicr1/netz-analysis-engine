@@ -241,7 +241,7 @@ class TestCancellationBehavior:
                 "DGS10",
                 start_date="2025-01-01",
                 end_date="2025-01-31",
-            )
+            ),
         )
         # Give it a tick to start
         await asyncio.sleep(0)

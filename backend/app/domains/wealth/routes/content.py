@@ -100,7 +100,7 @@ async def trigger_outlook(
             actor_id=user.actor_id,
             language=language,
             config=body.config_overrides if body else None,
-        )
+        ),
     )
 
     await db.commit()
@@ -147,7 +147,7 @@ async def trigger_flash_report(
             language=language,
             config=body.config_overrides if body else None,
             event_context=body.config_overrides if body else None,
-        )
+        ),
     )
 
     await db.commit()
@@ -177,7 +177,7 @@ async def trigger_spotlight(
     from app.domains.wealth.models.fund import Fund
 
     fund_result = await db.execute(
-        select(Fund).where(Fund.fund_id == instrument_id)
+        select(Fund).where(Fund.fund_id == instrument_id),
     )
     fund = fund_result.scalar_one_or_none()
     if not fund:
@@ -209,7 +209,7 @@ async def trigger_spotlight(
             language=language,
             config=body.config_overrides if body else None,
             instrument_id=str(instrument_id),
-        )
+        ),
     )
 
     await db.commit()
@@ -263,7 +263,7 @@ async def approve_content(
     _require_ic_role(actor)
 
     result = await db.execute(
-        select(WealthContent).where(WealthContent.id == content_id).with_for_update()
+        select(WealthContent).where(WealthContent.id == content_id).with_for_update(),
     )
     content = result.scalar_one_or_none()
     if content is None:
@@ -315,7 +315,7 @@ async def download_content(
     _require_feature()
 
     result = await db.execute(
-        select(WealthContent).where(WealthContent.id == content_id)
+        select(WealthContent).where(WealthContent.id == content_id),
     )
     content = result.scalar_one_or_none()
     if content is None:
@@ -406,7 +406,7 @@ async def _run_content_generation(
                 status=result.get("status"),
             )
 
-        except Exception as exc:
+        except Exception:
             logger.exception(
                 "content_generation_background_failed",
                 content_id=content_id,
@@ -466,7 +466,7 @@ def _sync_generate_content(
                 "status": result.status,
             }
 
-        elif content_type == "flash_report":
+        if content_type == "flash_report":
             from vertical_engines.wealth.flash_report import FlashReport
 
             engine = FlashReport(config=config, call_openai_fn=_call_openai)
@@ -479,7 +479,7 @@ def _sync_generate_content(
                 "status": result.status,
             }
 
-        elif content_type == "manager_spotlight":
+        if content_type == "manager_spotlight":
             from vertical_engines.wealth.manager_spotlight import ManagerSpotlight
 
             if not instrument_id:

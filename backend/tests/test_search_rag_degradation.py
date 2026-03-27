@@ -117,7 +117,8 @@ class TestGlobalAgentDegradation:
 
     def test_partial_degradation_with_results(self):
         """When some domains fail but others return results, the answer
-        should still include a degradation warning."""
+        should still include a degradation warning.
+        """
         from ai_engine.extraction.kb_schema import ComplianceChunk
         from app.domains.credit.global_agent.agent import NetzGlobalAgent
 

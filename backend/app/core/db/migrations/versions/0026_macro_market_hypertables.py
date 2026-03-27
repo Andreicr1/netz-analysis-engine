@@ -55,7 +55,7 @@ def upgrade() -> None:
             "  chunk_time_interval => INTERVAL '1 month',"
             "  migrate_data => true,"
             "  if_not_exists => true"
-            ")"
+            ")",
         )
 
         cursor.execute(
@@ -63,19 +63,19 @@ def upgrade() -> None:
             "  timescaledb.compress,"
             "  timescaledb.compress_orderby = 'obs_date DESC',"
             "  timescaledb.compress_segmentby = 'series_id'"
-            ")"
+            ")",
         )
 
         cursor.execute(
             "SELECT add_compression_policy("
             "  'macro_data', INTERVAL '3 months', if_not_exists => true"
-            ")"
+            ")",
         )
 
         # Index for querying a specific series by date range
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_macro_data_series_obs_date "
-            "ON macro_data (series_id, obs_date DESC)"
+            "ON macro_data (series_id, obs_date DESC)",
         )
 
         # ═══════════════════════════════════════════════════════════
@@ -87,25 +87,25 @@ def upgrade() -> None:
 
         # Ensure created_at NOT NULL (from _audit(), no explicit NOT NULL)
         cursor.execute(
-            "UPDATE macro_snapshots SET created_at = NOW() WHERE created_at IS NULL"
+            "UPDATE macro_snapshots SET created_at = NOW() WHERE created_at IS NULL",
         )
         cursor.execute(
-            "ALTER TABLE macro_snapshots ALTER COLUMN created_at SET NOT NULL"
+            "ALTER TABLE macro_snapshots ALTER COLUMN created_at SET NOT NULL",
         )
 
         # Drop UUID PK — TimescaleDB requires partition key in all unique constraints
         cursor.execute(
-            "ALTER TABLE macro_snapshots DROP CONSTRAINT IF EXISTS macro_snapshots_pkey"
+            "ALTER TABLE macro_snapshots DROP CONSTRAINT IF EXISTS macro_snapshots_pkey",
         )
 
         # Drop unique on as_of_date (will be recreated — it's OK since as_of_date
         # IS the partition column so single-column unique is allowed)
         cursor.execute(
             "ALTER TABLE macro_snapshots "
-            "DROP CONSTRAINT IF EXISTS macro_snapshots_as_of_date_key"
+            "DROP CONSTRAINT IF EXISTS macro_snapshots_as_of_date_key",
         )
         cursor.execute(
-            "DROP INDEX IF EXISTS ix_macro_snapshots_as_of_date"
+            "DROP INDEX IF EXISTS ix_macro_snapshots_as_of_date",
         )
 
         cursor.execute(
@@ -115,41 +115,41 @@ def upgrade() -> None:
             "  chunk_time_interval => INTERVAL '1 month',"
             "  migrate_data => true,"
             "  if_not_exists => true"
-            ")"
+            ")",
         )
 
         # New PK with partition column first (idempotent: drop first)
         cursor.execute(
             "ALTER TABLE macro_snapshots "
-            "DROP CONSTRAINT IF EXISTS macro_snapshots_pkey"
+            "DROP CONSTRAINT IF EXISTS macro_snapshots_pkey",
         )
         cursor.execute(
             "ALTER TABLE macro_snapshots "
             "ADD CONSTRAINT macro_snapshots_pkey "
-            "PRIMARY KEY (as_of_date, id)"
+            "PRIMARY KEY (as_of_date, id)",
         )
 
         # Restore unique on as_of_date (partition column — allowed as single-col unique)
         cursor.execute(
             "ALTER TABLE macro_snapshots "
-            "DROP CONSTRAINT IF EXISTS uq_macro_snapshots_as_of_date"
+            "DROP CONSTRAINT IF EXISTS uq_macro_snapshots_as_of_date",
         )
         cursor.execute(
             "ALTER TABLE macro_snapshots "
-            "ADD CONSTRAINT uq_macro_snapshots_as_of_date UNIQUE (as_of_date)"
+            "ADD CONSTRAINT uq_macro_snapshots_as_of_date UNIQUE (as_of_date)",
         )
 
         cursor.execute(
             "ALTER TABLE macro_snapshots SET ("
             "  timescaledb.compress,"
             "  timescaledb.compress_orderby = 'as_of_date DESC'"
-            ")"
+            ")",
         )
 
         cursor.execute(
             "SELECT add_compression_policy("
             "  'macro_snapshots', INTERVAL '3 months', if_not_exists => true"
-            ")"
+            ")",
         )
 
         # ═══════════════════════════════════════════════════════════
@@ -163,27 +163,27 @@ def upgrade() -> None:
         # Drop inbound FK from macro_reviews (SET NULL on delete)
         cursor.execute(
             "ALTER TABLE macro_reviews "
-            "DROP CONSTRAINT IF EXISTS macro_reviews_snapshot_id_fkey"
+            "DROP CONSTRAINT IF EXISTS macro_reviews_snapshot_id_fkey",
         )
 
         # Ensure created_at NOT NULL
         cursor.execute(
-            "UPDATE macro_regional_snapshots SET created_at = NOW() WHERE created_at IS NULL"
+            "UPDATE macro_regional_snapshots SET created_at = NOW() WHERE created_at IS NULL",
         )
         cursor.execute(
-            "ALTER TABLE macro_regional_snapshots ALTER COLUMN created_at SET NOT NULL"
+            "ALTER TABLE macro_regional_snapshots ALTER COLUMN created_at SET NOT NULL",
         )
 
         cursor.execute(
             "ALTER TABLE macro_regional_snapshots "
-            "DROP CONSTRAINT IF EXISTS macro_regional_snapshots_pkey"
+            "DROP CONSTRAINT IF EXISTS macro_regional_snapshots_pkey",
         )
         cursor.execute(
             "ALTER TABLE macro_regional_snapshots "
-            "DROP CONSTRAINT IF EXISTS macro_regional_snapshots_as_of_date_key"
+            "DROP CONSTRAINT IF EXISTS macro_regional_snapshots_as_of_date_key",
         )
         cursor.execute(
-            "DROP INDEX IF EXISTS ix_macro_regional_snapshots_as_of_date"
+            "DROP INDEX IF EXISTS ix_macro_regional_snapshots_as_of_date",
         )
 
         cursor.execute(
@@ -193,40 +193,40 @@ def upgrade() -> None:
             "  chunk_time_interval => INTERVAL '1 month',"
             "  migrate_data => true,"
             "  if_not_exists => true"
-            ")"
+            ")",
         )
 
         cursor.execute(
             "ALTER TABLE macro_regional_snapshots "
-            "DROP CONSTRAINT IF EXISTS macro_regional_snapshots_pkey"
+            "DROP CONSTRAINT IF EXISTS macro_regional_snapshots_pkey",
         )
         cursor.execute(
             "ALTER TABLE macro_regional_snapshots "
             "ADD CONSTRAINT macro_regional_snapshots_pkey "
-            "PRIMARY KEY (as_of_date, id)"
+            "PRIMARY KEY (as_of_date, id)",
         )
 
         cursor.execute(
             "ALTER TABLE macro_regional_snapshots "
-            "DROP CONSTRAINT IF EXISTS uq_macro_regional_snapshots_as_of_date"
+            "DROP CONSTRAINT IF EXISTS uq_macro_regional_snapshots_as_of_date",
         )
         cursor.execute(
             "ALTER TABLE macro_regional_snapshots "
             "ADD CONSTRAINT uq_macro_regional_snapshots_as_of_date "
-            "UNIQUE (as_of_date)"
+            "UNIQUE (as_of_date)",
         )
 
         cursor.execute(
             "ALTER TABLE macro_regional_snapshots SET ("
             "  timescaledb.compress,"
             "  timescaledb.compress_orderby = 'as_of_date DESC'"
-            ")"
+            ")",
         )
 
         cursor.execute(
             "SELECT add_compression_policy("
             "  'macro_regional_snapshots', INTERVAL '3 months', if_not_exists => true"
-            ")"
+            ")",
         )
 
         # ═══════════════════════════════════════════════════════════
@@ -242,7 +242,7 @@ def upgrade() -> None:
             "  chunk_time_interval => INTERVAL '1 month',"
             "  migrate_data => true,"
             "  if_not_exists => true"
-            ")"
+            ")",
         )
 
         cursor.execute(
@@ -250,19 +250,19 @@ def upgrade() -> None:
             "  timescaledb.compress,"
             "  timescaledb.compress_orderby = 'nav_date DESC',"
             "  timescaledb.compress_segmentby = 'block_id'"
-            ")"
+            ")",
         )
 
         cursor.execute(
             "SELECT add_compression_policy("
             "  'benchmark_nav', INTERVAL '3 months', if_not_exists => true"
-            ")"
+            ")",
         )
 
         # Index for querying a specific block by date range
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_benchmark_nav_block_date "
-            "ON benchmark_nav (block_id, nav_date DESC)"
+            "ON benchmark_nav (block_id, nav_date DESC)",
         )
 
         cursor.close()
@@ -280,16 +280,16 @@ def downgrade() -> None:
             "macro_regional_snapshots", "benchmark_nav",
         ):
             cursor.execute(
-                f"SELECT remove_compression_policy('{table}', if_exists => true)"
+                f"SELECT remove_compression_policy('{table}', if_exists => true)",
             )
             cursor.execute(
                 f"SELECT decompress_chunk(c.chunk_name) "
                 f"FROM timescaledb_information.chunks c "
                 f"WHERE c.hypertable_name = '{table}' "
-                f"AND c.is_compressed = true"
+                f"AND c.is_compressed = true",
             )
             cursor.execute(
-                f"ALTER TABLE {table} SET (timescaledb.compress = false)"
+                f"ALTER TABLE {table} SET (timescaledb.compress = false)",
             )
 
         # NOTE: TimescaleDB does not support reverting hypertables to regular
@@ -299,36 +299,36 @@ def downgrade() -> None:
         # Restore macro_snapshots original PK structure
         cursor.execute(
             "ALTER TABLE macro_snapshots "
-            "DROP CONSTRAINT IF EXISTS uq_macro_snapshots_as_of_date"
+            "DROP CONSTRAINT IF EXISTS uq_macro_snapshots_as_of_date",
         )
         cursor.execute(
-            "ALTER TABLE macro_snapshots DROP CONSTRAINT IF EXISTS macro_snapshots_pkey"
-        )
-        cursor.execute(
-            "ALTER TABLE macro_snapshots "
-            "ADD CONSTRAINT macro_snapshots_pkey PRIMARY KEY (id)"
+            "ALTER TABLE macro_snapshots DROP CONSTRAINT IF EXISTS macro_snapshots_pkey",
         )
         cursor.execute(
             "ALTER TABLE macro_snapshots "
-            "ADD CONSTRAINT macro_snapshots_as_of_date_key UNIQUE (as_of_date)"
+            "ADD CONSTRAINT macro_snapshots_pkey PRIMARY KEY (id)",
+        )
+        cursor.execute(
+            "ALTER TABLE macro_snapshots "
+            "ADD CONSTRAINT macro_snapshots_as_of_date_key UNIQUE (as_of_date)",
         )
 
         # Restore macro_regional_snapshots original PK structure
         cursor.execute(
             "ALTER TABLE macro_regional_snapshots "
-            "DROP CONSTRAINT IF EXISTS uq_macro_regional_snapshots_as_of_date"
+            "DROP CONSTRAINT IF EXISTS uq_macro_regional_snapshots_as_of_date",
         )
         cursor.execute(
             "ALTER TABLE macro_regional_snapshots "
-            "DROP CONSTRAINT IF EXISTS macro_regional_snapshots_pkey"
+            "DROP CONSTRAINT IF EXISTS macro_regional_snapshots_pkey",
         )
         cursor.execute(
             "ALTER TABLE macro_regional_snapshots "
-            "ADD CONSTRAINT macro_regional_snapshots_pkey PRIMARY KEY (id)"
+            "ADD CONSTRAINT macro_regional_snapshots_pkey PRIMARY KEY (id)",
         )
         cursor.execute(
             "ALTER TABLE macro_regional_snapshots "
-            "ADD CONSTRAINT macro_regional_snapshots_as_of_date_key UNIQUE (as_of_date)"
+            "ADD CONSTRAINT macro_regional_snapshots_as_of_date_key UNIQUE (as_of_date)",
         )
 
         # Restore macro_reviews FK to macro_regional_snapshots
@@ -336,7 +336,7 @@ def downgrade() -> None:
             "ALTER TABLE macro_reviews "
             "ADD CONSTRAINT macro_reviews_snapshot_id_fkey "
             "FOREIGN KEY (snapshot_id) REFERENCES macro_regional_snapshots(id) "
-            "ON DELETE SET NULL"
+            "ON DELETE SET NULL",
         )
 
         # Drop hypertable-specific indexes

@@ -96,7 +96,7 @@ async def get_attribution(
 
     # 2. Load block labels
     block_stmt = select(AllocationBlock.block_id, AllocationBlock.display_name).where(
-        AllocationBlock.block_id.in_(block_ids)
+        AllocationBlock.block_id.in_(block_ids),
     )
     block_result = await db.execute(block_stmt)
     block_labels: dict[str, str] = {
@@ -192,7 +192,7 @@ async def get_attribution(
                 ]
                 if period_data:
                     compound = float(
-                        np.prod([1 + d["return_1d"] for d in period_data]) - 1
+                        np.prod([1 + d["return_1d"] for d in period_data]) - 1,
                     )
                     benchmark_returns_period[bid] = compound
 
@@ -207,7 +207,7 @@ async def get_attribution(
                     ]
                     if period_data:
                         compound = float(
-                            np.prod([1 + d["return_1d"] for d in period_data]) - 1
+                            np.prod([1 + d["return_1d"] for d in period_data]) - 1,
                         )
                         block_returns.append(compound)
                 if block_returns:

@@ -327,7 +327,7 @@ if set(DOC_TYPE_DESCRIPTIONS.keys()) != CANONICAL_DOC_TYPES:
     raise RuntimeError(
         f"DOC_TYPE_DESCRIPTIONS keys mismatch: "
         f"extra={set(DOC_TYPE_DESCRIPTIONS.keys()) - CANONICAL_DOC_TYPES}, "
-        f"missing={CANONICAL_DOC_TYPES - set(DOC_TYPE_DESCRIPTIONS.keys())}"
+        f"missing={CANONICAL_DOC_TYPES - set(DOC_TYPE_DESCRIPTIONS.keys())}",
     )
 
 
@@ -389,7 +389,7 @@ if set(VEHICLE_TYPE_DESCRIPTIONS.keys()) != CANONICAL_VEHICLE_TYPES:
     raise RuntimeError(
         f"VEHICLE_TYPE_DESCRIPTIONS keys mismatch: "
         f"extra={set(VEHICLE_TYPE_DESCRIPTIONS.keys()) - CANONICAL_VEHICLE_TYPES}, "
-        f"missing={CANONICAL_VEHICLE_TYPES - set(VEHICLE_TYPE_DESCRIPTIONS.keys())}"
+        f"missing={CANONICAL_VEHICLE_TYPES - set(VEHICLE_TYPE_DESCRIPTIONS.keys())}",
     )
 
 
@@ -400,80 +400,80 @@ if set(VEHICLE_TYPE_DESCRIPTIONS.keys()) != CANONICAL_VEHICLE_TYPES:
 
 _FILENAME_RULES: list[tuple[re.Pattern[str], str]] = [
     # --- Legal documents (most specific) ---
-    (re.compile(r"\bLPA\b|\bLimited\s+Partnership\s+Agreement\b", re.I), "legal_lpa"),
-    (re.compile(r"\bSide\s+Letter\b", re.I), "legal_side_letter"),
-    (re.compile(r"\bSubscription\s+(?:Booklet|Agreement|Doc(?:ument)?)\b", re.I), "legal_subscription"),
-    (re.compile(r"\bCredit\s+Agreement\b|\bLoan\s+Agreement\b|\bFacility\s+Agreement\b", re.I), "legal_credit_agreement"),
-    (re.compile(r"\bMaster\s+Participation\b|\bParticipation\s+Agreement\b", re.I), "legal_agreement"),
+    (re.compile(r"\bLPA\b|\bLimited\s+Partnership\s+Agreement\b", re.IGNORECASE), "legal_lpa"),
+    (re.compile(r"\bSide\s+Letter\b", re.IGNORECASE), "legal_side_letter"),
+    (re.compile(r"\bSubscription\s+(?:Booklet|Agreement|Doc(?:ument)?)\b", re.IGNORECASE), "legal_subscription"),
+    (re.compile(r"\bCredit\s+Agreement\b|\bLoan\s+Agreement\b|\bFacility\s+Agreement\b", re.IGNORECASE), "legal_credit_agreement"),
+    (re.compile(r"\bMaster\s+Participation\b|\bParticipation\s+Agreement\b", re.IGNORECASE), "legal_agreement"),
 
     # --- Financial ---
-    (re.compile(r"\bFinancial\s+Statements?\b|\bAudit(?:ed)?\s+(?:Financial|Report)\b", re.I), "financial_statements"),
+    (re.compile(r"\bFinancial\s+Statements?\b|\bAudit(?:ed)?\s+(?:Financial|Report)\b", re.IGNORECASE), "financial_statements"),
 
     # --- Fund documents (specific before generic) ---
-    (re.compile(r"\bFact[\s_\-]?Card\b|\bFact[\s_\-]?Sheet\b", re.I), "fund_profile"),
-    (re.compile(r"\bFund\s+Profile\b|\bFund\s+Overview\b", re.I), "fund_profile"),
-    (re.compile(r"\bStructure\s+(?:Chart|Diagram)\b|\bEntity\s+Chart\b", re.I), "fund_structure"),
-    (re.compile(r"\bStrategy\s+(?:Profile|Overview)\b", re.I), "strategy_profile"),
-    (re.compile(r"\b(?:Podcast|Interview|Webinar|Commentary|Market[\s_\-]Update|White[\s_\-]Paper)\b", re.I), "strategy_profile"),
-    (re.compile(r"\bCapital\s+Rais(?:ing|e)\b|\bFundraising\b|\bRoadshow\b", re.I), "capital_raising"),
+    (re.compile(r"\bFact[\s_\-]?Card\b|\bFact[\s_\-]?Sheet\b", re.IGNORECASE), "fund_profile"),
+    (re.compile(r"\bFund\s+Profile\b|\bFund\s+Overview\b", re.IGNORECASE), "fund_profile"),
+    (re.compile(r"\bStructure\s+(?:Chart|Diagram)\b|\bEntity\s+Chart\b", re.IGNORECASE), "fund_structure"),
+    (re.compile(r"\bStrategy\s+(?:Profile|Overview)\b", re.IGNORECASE), "strategy_profile"),
+    (re.compile(r"\b(?:Podcast|Interview|Webinar|Commentary|Market[\s_\-]Update|White[\s_\-]Paper)\b", re.IGNORECASE), "strategy_profile"),
+    (re.compile(r"\bCapital\s+Rais(?:ing|e)\b|\bFundraising\b|\bRoadshow\b", re.IGNORECASE), "capital_raising"),
 
     # --- Policy / Operational ---
-    (re.compile(r"\bCredit\s+Policy\b|\bUnderwriting\s+(?:Guide|Policy|Manual)\b", re.I), "credit_policy"),
-    (re.compile(r"\bCompliance\s+(?:Manual|Program)\b|\bSupervisory\s+Procedures?\b", re.I), "fund_policy"),
-    (re.compile(r"\bEmployee\s+Handbook\b|\bHR\s+(?:Policy|Manual|Handbook)\b", re.I), "operational_service"),
-    (re.compile(r"\bIT\s+(?:Policy|Disaster|Security)\b|\bBusiness\s+Continuity\b|\bDisaster\s+Recovery\b", re.I), "operational_service"),
-    (re.compile(r"\bCode\s+of\s+(?:Ethics|Conduct)\b", re.I), "operational_service"),
-    (re.compile(r"\bOrg(?:anization(?:al)?)?[\s_\-]?Chart\b", re.I), "org_chart"),
-    (re.compile(r"\bRisk\s+Assessment\b", re.I), "risk_assessment"),
-    (re.compile(r"\bQDD\b", re.I), "regulatory_qdd"),
+    (re.compile(r"\bCredit\s+Policy\b|\bUnderwriting\s+(?:Guide|Policy|Manual)\b", re.IGNORECASE), "credit_policy"),
+    (re.compile(r"\bCompliance\s+(?:Manual|Program)\b|\bSupervisory\s+Procedures?\b", re.IGNORECASE), "fund_policy"),
+    (re.compile(r"\bEmployee\s+Handbook\b|\bHR\s+(?:Policy|Manual|Handbook)\b", re.IGNORECASE), "operational_service"),
+    (re.compile(r"\bIT\s+(?:Policy|Disaster|Security)\b|\bBusiness\s+Continuity\b|\bDisaster\s+Recovery\b", re.IGNORECASE), "operational_service"),
+    (re.compile(r"\bCode\s+of\s+(?:Ethics|Conduct)\b", re.IGNORECASE), "operational_service"),
+    (re.compile(r"\bOrg(?:anization(?:al)?)?[\s_\-]?Chart\b", re.IGNORECASE), "org_chart"),
+    (re.compile(r"\bRisk\s+Assessment\b", re.IGNORECASE), "risk_assessment"),
+    (re.compile(r"\bQDD\b", re.IGNORECASE), "regulatory_qdd"),
 
     # --- Legal: PPM / Offering Memorandum (before generic presentation rules) ---
-    (re.compile(r"\bPPM\b|\bPrivate\s+Placement\s+Memorandum\b|\bOffering\s+Memorandum\b|\bConfidential\s+(?:Information\s+)?Memorandum\b", re.I), "legal_lpa"),
+    (re.compile(r"\bPPM\b|\bPrivate\s+Placement\s+Memorandum\b|\bOffering\s+Memorandum\b|\bConfidential\s+(?:Information\s+)?Memorandum\b", re.IGNORECASE), "legal_lpa"),
 
     # --- Deal / investment-level memos ---
-    (re.compile(r"\bIntro\s+Materials?\b", re.I), "investment_memo"),
-    (re.compile(r"\b(?:Investment|Credit|IC|Deal)[\s\-]?Memo(?:randum)?\b", re.I), "investment_memo"),
-    (re.compile(r"\bDue\s+Diligence\s+Report\b", re.I), "investment_memo"),
+    (re.compile(r"\bIntro\s+Materials?\b", re.IGNORECASE), "investment_memo"),
+    (re.compile(r"\b(?:Investment|Credit|IC|Deal)[\s\-]?Memo(?:randum)?\b", re.IGNORECASE), "investment_memo"),
+    (re.compile(r"\bDue\s+Diligence\s+Report\b", re.IGNORECASE), "investment_memo"),
 
     # --- Investor letters (before generic presentation/quarterly rules) ---
-    (re.compile(r"\b(?:Investor|Quarterly|Annual)\s+Letter\b", re.I), "fund_presentation"),
-    (re.compile(r"\bShareholder\s+(?:Update|Letter|Report)\b", re.I), "fund_presentation"),
-    (re.compile(r"\bQuarterly\s+(?:Investor\s+)?(?:Letter|Report|Update)\b", re.I), "fund_presentation"),
+    (re.compile(r"\b(?:Investor|Quarterly|Annual)\s+Letter\b", re.IGNORECASE), "fund_presentation"),
+    (re.compile(r"\bShareholder\s+(?:Update|Letter|Report)\b", re.IGNORECASE), "fund_presentation"),
+    (re.compile(r"\bQuarterly\s+(?:Investor\s+)?(?:Letter|Report|Update)\b", re.IGNORECASE), "fund_presentation"),
 
     # --- Fund pipeline / condensed presentations ---
-    (re.compile(r"\bPipeline\b|\bSourcing\b", re.I), "fund_presentation"),
-    (re.compile(r"\bCondensed\s+Version\b|\bBrochure\b|\bTeaser\b", re.I), "fund_presentation"),
-    (re.compile(r"\bPresentation\b|\bInvestor\s+Deck\b|\bPitch\s*Book\b", re.I), "fund_presentation"),
+    (re.compile(r"\bPipeline\b|\bSourcing\b", re.IGNORECASE), "fund_presentation"),
+    (re.compile(r"\bCondensed\s+Version\b|\bBrochure\b|\bTeaser\b", re.IGNORECASE), "fund_presentation"),
+    (re.compile(r"\bPresentation\b|\bInvestor\s+Deck\b|\bPitch\s*Book\b", re.IGNORECASE), "fund_presentation"),
 
     # --- Quarterly / periodic (WEAKEST — checked last) ---
     (re.compile(
         r"\b(?:1Q|2Q|3Q|4Q|Q1|Q2|Q3|Q4|YTD)[\s_\-]?\d{2,4}\b"
         r"|\b\d{2,4}[\s_\-]?(?:1Q|2Q|3Q|4Q|Q1|Q2|Q3|Q4)\b"
         r"|\b\d{4}[\s_\-]?(?:annual|year.end|semi.annual)\b",
-        re.I,
+        re.IGNORECASE,
     ), "fund_presentation"),
 ]
 
 # Content rules: patterns in the first 500 chars of OCR text that are
 # unambiguous enough to classify without any ML.
 _CONTENT_RULES: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"AUDITED\s+FINANCIAL\s+STATEMENTS", re.I), "financial_statements"),
-    (re.compile(r"INDEPENDENT\s+AUDITOR.?S\s+REPORT", re.I), "financial_statements"),
-    (re.compile(r"STATEMENT\s+OF\s+(?:FINANCIAL\s+POSITION|ASSETS\s+AND\s+LIABILITIES)", re.I), "financial_statements"),
-    (re.compile(r"LIMITED\s+PARTNERSHIP\s+AGREEMENT", re.I), "legal_lpa"),
-    (re.compile(r"AMENDED\s+AND\s+RESTATED\s+(?:LIMITED\s+PARTNERSHIP|LPA)", re.I), "legal_lpa"),
-    (re.compile(r"SUBSCRIPTION\s+(?:AGREEMENT|BOOKLET)", re.I), "legal_subscription"),
-    (re.compile(r"POWER\s+OF\s+ATTORNEY", re.I), "legal_poa"),
-    (re.compile(r"CREDIT\s+(?:AGREEMENT|FACILITY)", re.I), "legal_credit_agreement"),
-    (re.compile(r"INTERCREDITOR\s+AGREEMENT", re.I), "legal_intercreditor"),
-    (re.compile(r"SECURITY\s+(?:AGREEMENT|INTEREST)", re.I), "legal_security"),
-    (re.compile(r"PLEDGE\s+AGREEMENT", re.I), "legal_security"),
-    (re.compile(r"CERTIFICATE\s+OF\s+INSURANCE", re.I), "operational_insurance"),
-    (re.compile(r"NET\s+ASSET\s+VALUE\s+(?:REPORT|STATEMENT)", re.I), "financial_nav"),
-    (re.compile(r"PRIVATE\s+PLACEMENT\s+MEMORANDUM", re.I), "legal_lpa"),
-    (re.compile(r"CONFIDENTIAL\s+(?:INFORMATION\s+)?MEMORANDUM", re.I), "legal_lpa"),
-    (re.compile(r"OFFERING\s+MEMORANDUM", re.I), "legal_lpa"),
-    (re.compile(r"INVESTMENT\s+(?:COMMITTEE\s+)?MEMORANDUM", re.I), "investment_memo"),
+    (re.compile(r"AUDITED\s+FINANCIAL\s+STATEMENTS", re.IGNORECASE), "financial_statements"),
+    (re.compile(r"INDEPENDENT\s+AUDITOR.?S\s+REPORT", re.IGNORECASE), "financial_statements"),
+    (re.compile(r"STATEMENT\s+OF\s+(?:FINANCIAL\s+POSITION|ASSETS\s+AND\s+LIABILITIES)", re.IGNORECASE), "financial_statements"),
+    (re.compile(r"LIMITED\s+PARTNERSHIP\s+AGREEMENT", re.IGNORECASE), "legal_lpa"),
+    (re.compile(r"AMENDED\s+AND\s+RESTATED\s+(?:LIMITED\s+PARTNERSHIP|LPA)", re.IGNORECASE), "legal_lpa"),
+    (re.compile(r"SUBSCRIPTION\s+(?:AGREEMENT|BOOKLET)", re.IGNORECASE), "legal_subscription"),
+    (re.compile(r"POWER\s+OF\s+ATTORNEY", re.IGNORECASE), "legal_poa"),
+    (re.compile(r"CREDIT\s+(?:AGREEMENT|FACILITY)", re.IGNORECASE), "legal_credit_agreement"),
+    (re.compile(r"INTERCREDITOR\s+AGREEMENT", re.IGNORECASE), "legal_intercreditor"),
+    (re.compile(r"SECURITY\s+(?:AGREEMENT|INTEREST)", re.IGNORECASE), "legal_security"),
+    (re.compile(r"PLEDGE\s+AGREEMENT", re.IGNORECASE), "legal_security"),
+    (re.compile(r"CERTIFICATE\s+OF\s+INSURANCE", re.IGNORECASE), "operational_insurance"),
+    (re.compile(r"NET\s+ASSET\s+VALUE\s+(?:REPORT|STATEMENT)", re.IGNORECASE), "financial_nav"),
+    (re.compile(r"PRIVATE\s+PLACEMENT\s+MEMORANDUM", re.IGNORECASE), "legal_lpa"),
+    (re.compile(r"CONFIDENTIAL\s+(?:INFORMATION\s+)?MEMORANDUM", re.IGNORECASE), "legal_lpa"),
+    (re.compile(r"OFFERING\s+MEMORANDUM", re.IGNORECASE), "legal_lpa"),
+    (re.compile(r"INVESTMENT\s+(?:COMMITTEE\s+)?MEMORANDUM", re.IGNORECASE), "investment_memo"),
 ]
 
 
@@ -490,7 +490,7 @@ _vehicle_type_labels: list[str] | None = None
 _vehicle_type_matrix: np.ndarray | None = None
 
 
-def _ensure_doc_type_vectorizer() -> tuple[TfidfVectorizer, list[str], "np.ndarray"]:
+def _ensure_doc_type_vectorizer() -> tuple[TfidfVectorizer, list[str], np.ndarray]:
     """Lazy-init TF-IDF vectorizer for doc_type classification."""
     global _doc_type_vectorizer, _doc_type_labels, _doc_type_matrix
     if _doc_type_vectorizer is not None:
@@ -515,7 +515,7 @@ def _ensure_doc_type_vectorizer() -> tuple[TfidfVectorizer, list[str], "np.ndarr
     return vectorizer, labels, matrix
 
 
-def _ensure_vehicle_type_vectorizer() -> tuple[TfidfVectorizer, list[str], "np.ndarray"]:
+def _ensure_vehicle_type_vectorizer() -> tuple[TfidfVectorizer, list[str], np.ndarray]:
     """Lazy-init TF-IDF vectorizer for vehicle_type classification."""
     global _vehicle_type_vectorizer, _vehicle_type_labels, _vehicle_type_matrix
     if _vehicle_type_vectorizer is not None:
@@ -560,7 +560,7 @@ def _classify_cosine(
     text: str,
     vectorizer: TfidfVectorizer,
     labels: list[str],
-    matrix: "np.ndarray",
+    matrix: np.ndarray,
 ) -> tuple[str, float, bool]:
     """Classify text using TF-IDF cosine similarity.
 

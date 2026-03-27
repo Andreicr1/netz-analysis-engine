@@ -24,7 +24,7 @@ class PortfolioSnapshot(OrganizationScopedMixin, Base):
     )
 
     snapshot_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
     )
     profile: Mapped[str] = mapped_column(String(20), nullable=False)
     snapshot_date: Mapped[date] = mapped_column(Date, nullable=False)

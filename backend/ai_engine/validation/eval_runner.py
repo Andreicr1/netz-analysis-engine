@@ -97,7 +97,7 @@ def run_ic_memo_eval(
     golden_set_name: str = "ic_memo_default",
     force_rerun: bool = False,
 ) -> EvalRunReport:
-    started_at = dt.datetime.now(dt.timezone.utc)
+    started_at = dt.datetime.now(dt.UTC)
     run_id = uuid.uuid4()
     provider_manifest = _build_provider_manifest()
     prompt_manifest_hash = _compute_prompt_manifest_hash()
@@ -120,7 +120,7 @@ def run_ic_memo_eval(
             model_manifest_hash=model_manifest_hash,
             provider_manifest=provider_manifest,
             started_at=started_at,
-            completed_at=dt.datetime.now(dt.timezone.utc),
+            completed_at=dt.datetime.now(dt.UTC),
             classification=RegressionState.DATA_ISSUE,
             classification_reason="No eligible deals found for evaluation.",
             summary=EvalRunSummary(),
@@ -156,7 +156,7 @@ def run_ic_memo_eval(
                 deal=deal,
                 golden_set_name=golden_set_name,
                 provider_manifest=provider_manifest,
-            )
+            ),
         )
 
     run_summary = _summarise_run(deal_summaries)
@@ -175,7 +175,7 @@ def run_ic_memo_eval(
         model_manifest_hash=model_manifest_hash,
         provider_manifest=provider_manifest,
         started_at=started_at,
-        completed_at=dt.datetime.now(dt.timezone.utc),
+        completed_at=dt.datetime.now(dt.UTC),
         classification=classification,
         classification_reason=reason,
         blocking_layer=blocking_layer,
@@ -199,7 +199,7 @@ def _resolve_deals(
         rows = db.execute(
             select(PipelineDeal)
             .where(PipelineDeal.fund_id == fund_id, PipelineDeal.id.in_(deal_ids))
-            .order_by(PipelineDeal.created_at.asc())
+            .order_by(PipelineDeal.created_at.asc()),
         ).scalars().all()
         return list(rows)[:sample_size]
 
@@ -207,7 +207,7 @@ def _resolve_deals(
         select(PipelineDeal)
         .where(PipelineDeal.fund_id == fund_id, PipelineDeal.deal_folder_path.is_not(None))
         .order_by(PipelineDeal.created_at.asc())
-        .limit(sample_size)
+        .limit(sample_size),
     ).scalars().all()
     return list(rows)
 
@@ -229,7 +229,7 @@ def _evaluate_single_deal(
             MemoEvidencePack.is_current == True,  # noqa: E712
         )
         .order_by(MemoEvidencePack.generated_at.desc())
-        .limit(1)
+        .limit(1),
     ).scalar_one_or_none()
     chapters = []
     if pack is not None:
@@ -242,8 +242,8 @@ def _evaluate_single_deal(
                     MemoChapter.evidence_pack_id == pack.id,
                     MemoChapter.is_current == True,  # noqa: E712
                 )
-                .order_by(MemoChapter.chapter_number.asc())
-            ).scalars().all()
+                .order_by(MemoChapter.chapter_number.asc()),
+            ).scalars().all(),
         )
     artifact = db.execute(
         select(DealUnderwritingArtifact)
@@ -253,7 +253,7 @@ def _evaluate_single_deal(
             DealUnderwritingArtifact.is_active == True,  # noqa: E712
         )
         .order_by(DealUnderwritingArtifact.generated_at.desc())
-        .limit(1)
+        .limit(1),
     ).scalar_one_or_none()
     profile = db.execute(
         select(DealIntelligenceProfile)
@@ -262,7 +262,7 @@ def _evaluate_single_deal(
             DealIntelligenceProfile.deal_id == deal.id,
         )
         .order_by(DealIntelligenceProfile.last_ai_refresh.desc())
-        .limit(1)
+        .limit(1),
     ).scalar_one_or_none()
 
     deal_name = deal.deal_name or deal.title
@@ -293,7 +293,7 @@ def _evaluate_single_deal(
                     chapter=chapter,
                     provider_manifest=provider_manifest,
                     reason=f"Partial memo detected: found {len(chapters)} of {EXPECTED_CHAPTER_COUNT} chapters.",
-                )
+                ),
             )
         return _summarise_deal(
             deal=deal,
@@ -376,7 +376,7 @@ def _evaluate_single_deal(
                 classification_reason=reason,
                 comparison_summary=comparison_summary,
                 provider_info=provider_manifest,
-            )
+            ),
         )
 
     baseline_kind = _deal_baseline_kind(chapter_scores)
@@ -425,7 +425,7 @@ def _safe_layer4(
                     status=MetricStatus.DATA_ISSUE,
                     score=0.0,
                     reason=f"Judge unavailable: {exc}",
-                )
+                ),
             ],
             warnings=[str(exc)],
         )
@@ -502,7 +502,7 @@ def _resolve_baseline(
             EvalChapterScoreRow.classification == RegressionState.PASS.value,
         )
         .order_by(EvalChapterScoreRow.created_at.desc())
-        .limit(1)
+        .limit(1),
     ).scalar_one_or_none()
     if last_pass:
         return BaselineReference(
@@ -559,7 +559,7 @@ def _classify_chapter(
                 EvalChapterScoreRow.deal_id == deal_id,
                 EvalChapterScoreRow.chapter_tag == chapter_tag,
             )
-            .limit(1)
+            .limit(1),
         ).scalar_one_or_none()
         if last_pass and last_pass.aggregate_score_json:
             baseline_overall = float((last_pass.aggregate_score_json or {}).get("overall", 0.0))
@@ -704,7 +704,7 @@ def _persist_eval_run(
                     provider_info_json=chapter.provider_info,
                     created_by=actor_id,
                     updated_by=actor_id,
-                )
+                ),
             )
 
 

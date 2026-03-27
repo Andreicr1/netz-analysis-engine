@@ -20,7 +20,7 @@ class TestComputeMissingDocuments:
 
     def test_audited_financials_detected(self):
         chunks = [
-            {"doc_type": "financial_statements", "title": "audited financial statement", "content": ""}
+            {"doc_type": "financial_statements", "title": "audited financial statement", "content": ""},
         ]
         result = _compute_missing_documents(chunks, [])
         missing_types = {d["document_type"] for d in result}
@@ -28,7 +28,7 @@ class TestComputeMissingDocuments:
 
     def test_credit_agreement_detected(self):
         chunks = [
-            {"doc_type": "", "title": "credit agreement", "content": "This credit agreement between..."}
+            {"doc_type": "", "title": "credit agreement", "content": "This credit agreement between..."},
         ]
         result = _compute_missing_documents(chunks, [])
         missing_types = {d["document_type"] for d in result}
@@ -36,7 +36,7 @@ class TestComputeMissingDocuments:
 
     def test_insurance_detected(self):
         chunks = [
-            {"doc_type": "", "title": "certificate of insurance", "content": ""}
+            {"doc_type": "", "title": "certificate of insurance", "content": ""},
         ]
         result = _compute_missing_documents(chunks, [])
         missing_types = {d["document_type"] for d in result}
@@ -44,7 +44,7 @@ class TestComputeMissingDocuments:
 
     def test_structured_missing_merged(self):
         structured = [
-            {"document_type": "Custom Missing Doc", "priority": "high", "weight": 5}
+            {"document_type": "Custom Missing Doc", "priority": "high", "weight": 5},
         ]
         result = _compute_missing_documents([], structured)
         types = {d["document_type"] for d in result}
@@ -52,7 +52,7 @@ class TestComputeMissingDocuments:
 
     def test_no_duplicate_entries(self):
         structured = [
-            {"document_type": "Audited Financial Statements", "priority": "critical", "weight": 15}
+            {"document_type": "Audited Financial Statements", "priority": "critical", "weight": 15},
         ]
         result = _compute_missing_documents([], structured)
         type_counts = {}
@@ -65,7 +65,7 @@ class TestComputeMissingDocuments:
 
     def test_tax_returns_detected(self):
         chunks = [
-            {"doc_type": "", "title": "tax return filing", "content": ""}
+            {"doc_type": "", "title": "tax return filing", "content": ""},
         ]
         result = _compute_missing_documents(chunks, [])
         missing_types = {d["document_type"] for d in result}
@@ -73,7 +73,7 @@ class TestComputeMissingDocuments:
 
     def test_collateral_valuation_detected(self):
         chunks = [
-            {"doc_type": "", "title": "", "content": "appraisal report for the collateral property"}
+            {"doc_type": "", "title": "", "content": "appraisal report for the collateral property"},
         ]
         result = _compute_missing_documents(chunks, [])
         missing_types = {d["document_type"] for d in result}
@@ -81,7 +81,7 @@ class TestComputeMissingDocuments:
 
     def test_ucc_lien_detected(self):
         chunks = [
-            {"doc_type": "", "title": "UCC filing search", "content": ""}
+            {"doc_type": "", "title": "UCC filing search", "content": ""},
         ]
         result = _compute_missing_documents(chunks, [])
         missing_types = {d["document_type"] for d in result}

@@ -37,6 +37,7 @@ def compute_macro_stress_severity(snapshot: dict[str, Any]) -> dict[str, Any]:
     Note: This function delegates to quant_engine.stress_severity_service
     but converts the result back to the legacy dict format with UPPERCASE
     grade levels for backward compatibility with existing consumers.
+
     """
     from quant_engine.stress_severity_service import compute_stress_severity
 

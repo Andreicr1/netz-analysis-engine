@@ -53,6 +53,7 @@ async def fetch_returns_matrix(
 
     Raises:
         ValueError: If <2 blocks have data or <120 aligned dates.
+
     """
     start_date = date.today() - timedelta(days=int(lookback_days * 1.5))
 
@@ -95,7 +96,7 @@ async def fetch_returns_matrix(
 
     if len(common_dates) < 120:
         raise ValueError(
-            f"Insufficient aligned return data: {len(common_dates)} common dates (need ≥120)"
+            f"Insufficient aligned return data: {len(common_dates)} common dates (need ≥120)",
         )
 
     T, N = len(common_dates), len(fund_ids)
@@ -127,6 +128,7 @@ async def compute_inputs_from_nav(
 
     Raises:
         ValueError: If insufficient aligned data (<120 trading days).
+
     """
     if as_of_date is None:
         as_of_date = date.today()
@@ -177,7 +179,7 @@ async def compute_inputs_from_nav(
     if len(common_dates) < MIN_OBSERVATIONS:
         raise ValueError(
             f"Insufficient aligned data: {len(common_dates)} trading days "
-            f"(minimum: {MIN_OBSERVATIONS}). Some funds may have sparse history."
+            f"(minimum: {MIN_OBSERVATIONS}). Some funds may have sparse history.",
         )
 
     returns_matrix = np.array([
@@ -229,6 +231,7 @@ async def compute_fund_level_inputs(
 
     Raises:
         ValueError: If <2 funds have aligned data or <120 trading days.
+
     """
     if as_of_date is None:
         as_of_date = date.today()
@@ -262,7 +265,7 @@ async def compute_fund_level_inputs(
     if len(common_dates) < MIN_OBSERVATIONS:
         raise ValueError(
             f"Insufficient aligned fund data: {len(common_dates)} trading days "
-            f"(minimum: {MIN_OBSERVATIONS})"
+            f"(minimum: {MIN_OBSERVATIONS})",
         )
 
     returns_matrix = np.array([
@@ -355,7 +358,7 @@ async def compute_drift(
         )
         .where(
             (StrategicAllocation.effective_to.is_(None))
-            | (StrategicAllocation.effective_to >= as_of_date)
+            | (StrategicAllocation.effective_to >= as_of_date),
         )
     )
     alloc_result = await db.execute(alloc_stmt)
@@ -369,7 +372,7 @@ async def compute_drift(
         )
         .where(
             (TacticalPosition.valid_to.is_(None))
-            | (TacticalPosition.valid_to >= as_of_date)
+            | (TacticalPosition.valid_to >= as_of_date),
         )
     )
     tact_result = await db.execute(tact_stmt)

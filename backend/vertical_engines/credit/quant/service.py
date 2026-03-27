@@ -66,6 +66,7 @@ def compute_quant_profile(
 
     Returns:
         QuantProfile with all metrics populated deterministically.
+
     """
     # ── Ensure v2 schema ─────────────────────────────────────────
     analysis = _ensure_v2(structured_analysis)

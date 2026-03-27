@@ -93,6 +93,7 @@ class DataCommonsService:
 
     Args:
         api_key: Data Commons API key (from settings.dc_api_key).
+
     """
 
     def __init__(self, api_key: str):
@@ -109,7 +110,7 @@ class DataCommonsService:
             except ImportError:
                 logger.error(
                     "datacommons_client not installed. "
-                    "Install with: pip install 'datacommons-client[Pandas]'"
+                    "Install with: pip install 'datacommons-client[Pandas]'",
                 )
                 raise
         return self._client
@@ -171,7 +172,7 @@ class DataCommonsService:
             return None
 
     def _fetch_geo_hierarchy_sync(
-        self, parent_dcid: str, child_type: str = "County"
+        self, parent_dcid: str, child_type: str = "County",
     ) -> list[dict[str, str]]:
         """Sync fetch child entities for a geography."""
         try:
@@ -263,7 +264,7 @@ class DataCommonsService:
                    Median_Income_Household, etc.
         """
         records = await asyncio.to_thread(
-            self._fetch_observations_sync, entity_dcids, variables, date
+            self._fetch_observations_sync, entity_dcids, variables, date,
         )
         results: list[EconomicObservation] = []
         for rec in records:
@@ -274,7 +275,7 @@ class DataCommonsService:
                         variable=rec.get("variable", ""),
                         date=str(rec.get("date", "")),
                         value=float(rec.get("value", 0)),
-                    )
+                    ),
                 )
             except (ValueError, TypeError):
                 continue
@@ -301,11 +302,11 @@ class DataCommonsService:
         return await asyncio.to_thread(self._resolve_entity_sync, name, entity_type)
 
     async def fetch_geographic_hierarchy(
-        self, parent_dcid: str, child_type: str = "County"
+        self, parent_dcid: str, child_type: str = "County",
     ) -> list[GeoEntity]:
         """List child entities for a geography (e.g., all counties in a state)."""
         raw = await asyncio.to_thread(
-            self._fetch_geo_hierarchy_sync, parent_dcid, child_type
+            self._fetch_geo_hierarchy_sync, parent_dcid, child_type,
         )
         return [
             GeoEntity(

@@ -53,13 +53,13 @@ async def get_branding(
     if actor.organization_id is not None:
         result = await db.execute(
             select(TenantAsset.asset_type, TenantAsset.updated_at).where(
-                TenantAsset.organization_id == actor.organization_id
-            )
+                TenantAsset.organization_id == actor.organization_id,
+            ),
         )
         for asset_type, updated_at in result.all():
             ts = updated_at.isoformat() if updated_at else ""
             asset_hashes[asset_type] = hashlib.md5(  # noqa: S324
-                ts.encode()
+                ts.encode(),
             ).hexdigest()[:8]
 
     # Template the org_slug into URL patterns and add cache-bust

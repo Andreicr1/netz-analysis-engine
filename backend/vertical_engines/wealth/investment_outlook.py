@@ -182,7 +182,7 @@ class InvestmentOutlook:
                 if isinstance(sd, dict):
                     parts.append(
                         f"- {sd.get('region', '?')}: {sd.get('delta', 0):+.1f} "
-                        f"({sd.get('previous_score', '?')} → {sd.get('current_score', '?')})"
+                        f"({sd.get('previous_score', '?')} → {sd.get('current_score', '?')})",
                     )
 
         return "\n".join(parts)

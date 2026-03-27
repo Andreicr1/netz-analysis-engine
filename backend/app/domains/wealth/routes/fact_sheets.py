@@ -71,7 +71,7 @@ async def generate_fact_sheet(
     _require_ic_role(actor)
 
     result = await db.execute(
-        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id)
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
     )
     portfolio = result.scalar_one_or_none()
     if portfolio is None:
@@ -137,7 +137,7 @@ async def list_fact_sheets(
 
     # Check portfolio exists
     result = await db.execute(
-        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id)
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
     )
     if result.scalar_one_or_none() is None:
         raise HTTPException(
@@ -206,7 +206,7 @@ async def download_fact_sheet(
             detail="Fact-sheet not found",
         )
 
-    filename = fact_sheet_path.split("/")[-1]
+    filename = fact_sheet_path.rsplit("/", maxsplit=1)[-1]
     return Response(
         content=data,
         media_type="application/pdf",
@@ -233,7 +233,7 @@ async def download_dd_report_pdf(
     result = await db.execute(
         select(DDReport)
         .options(selectinload(DDReport.chapters))
-        .where(DDReport.id == report_id)
+        .where(DDReport.id == report_id),
     )
     report = result.scalar_one_or_none()
     if report is None:
@@ -252,7 +252,7 @@ async def download_dd_report_pdf(
     from app.domains.wealth.models.fund import Fund
 
     fund_result = await db.execute(
-        select(Fund.name).where(Fund.fund_id == report.instrument_id)
+        select(Fund.name).where(Fund.fund_id == report.instrument_id),
     )
     fund_name_row = fund_result.scalar_one_or_none()
     fund_name = fund_name_row or "Unknown Fund"

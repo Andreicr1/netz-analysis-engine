@@ -599,7 +599,7 @@ class TestProviderProtocol:
 class TestScreeningModels:
     def test_criterion_result_frozen(self):
         cr = CriterionResult(
-            criterion="min_aum", expected="100M", actual="200M", passed=True, layer=1
+            criterion="min_aum", expected="100M", actual="200M", passed=True, layer=1,
         )
         with pytest.raises(AttributeError):
             cr.passed = False  # type: ignore[misc]

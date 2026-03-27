@@ -47,7 +47,7 @@ class LayerEvaluator:
 
         for criterion, expected in type_criteria.items():
             result = self._evaluate_criterion(
-                criterion, expected, attributes, instrument_type, layer=1
+                criterion, expected, attributes, instrument_type, layer=1,
             )
             if result is not None:
                 results.append(result)
@@ -71,7 +71,7 @@ class LayerEvaluator:
 
         for criterion, expected in block_criteria.items():
             result = self._evaluate_criterion(
-                criterion, expected, attributes, instrument_type, layer=2
+                criterion, expected, attributes, instrument_type, layer=2,
             )
             if result is not None:
                 results.append(result)
@@ -228,6 +228,7 @@ def determine_status(
 
     Returns:
         'PASS', 'FAIL', or 'WATCHLIST'.
+
     """
     if score is None:
         return "WATCHLIST"

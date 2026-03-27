@@ -151,7 +151,7 @@ async def get_private_funds(
             SecManagerFund.is_fund_of_funds,
         )
         .where(SecManagerFund.crd_number == crd)
-        .order_by(SecManagerFund.gross_asset_value.desc().nullslast())
+        .order_by(SecManagerFund.gross_asset_value.desc().nullslast()),
     )
     rows = result.all()
 
@@ -169,7 +169,7 @@ async def get_private_funds(
     # Fallback: if no Schedule D records, derive from aggregated counts
     if not funds:
         mgr = await db.execute(
-            select(SecManager).where(SecManager.crd_number == crd)
+            select(SecManager).where(SecManager.crd_number == crd),
         )
         manager = mgr.scalars().first()
         if manager and manager.private_fund_count and manager.private_fund_count > 0:
@@ -219,7 +219,7 @@ async def get_fund_detail(
 
     # 1. Load fund record
     fund_result = await db.execute(
-        select(SecRegisteredFund).where(SecRegisteredFund.cik == cik)
+        select(SecRegisteredFund).where(SecRegisteredFund.cik == cik),
     )
     fund = fund_result.scalars().first()
     if not fund:
@@ -232,7 +232,7 @@ async def get_fund_detail(
         select(SecFundStyleSnapshot)
         .where(SecFundStyleSnapshot.cik == cik)
         .order_by(SecFundStyleSnapshot.report_date.desc())
-        .limit(1)
+        .limit(1),
     )
     avail_q = compute_fund_data_availability(cik, "registered", db)
 
@@ -241,10 +241,10 @@ async def get_fund_detail(
     team_q = None
     if fund.crd_number:
         manager_q = db.execute(
-            select(SecManager).where(SecManager.crd_number == fund.crd_number)
+            select(SecManager).where(SecManager.crd_number == fund.crd_number),
         )
         team_q = db.execute(
-            select(SecManagerTeam).where(SecManagerTeam.crd_number == fund.crd_number)
+            select(SecManagerTeam).where(SecManagerTeam.crd_number == fund.crd_number),
         )
 
     # Await in parallel
@@ -447,7 +447,7 @@ async def get_style_history(
         select(SecFundStyleSnapshot)
         .where(SecFundStyleSnapshot.cik == cik)
         .order_by(SecFundStyleSnapshot.report_date.desc())
-        .limit(limit)
+        .limit(limit),
     )
     rows = result.scalars().all()
 

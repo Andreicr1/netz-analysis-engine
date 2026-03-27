@@ -142,7 +142,7 @@ def _run_hard_policy_checks(
     concentration_dict: dict[str, Any],
     analysis: dict[str, Any],
     deal_fields: dict[str, Any],
-    policy: PolicyThresholds | None = None,  # noqa: F821
+    policy: PolicyThresholds | None = None,
 ) -> dict[str, Any]:
     """Deterministic hard policy limit checks.  NEVER LLM-decided.
 
@@ -419,9 +419,9 @@ def _run_policy_compliance(
 
 
 __all__ = [
+    "_gather_policy_context",
     "_get_policy_compliance_system",
     "_parse_lockup_to_years",
-    "_gather_policy_context",
     "_run_hard_policy_checks",
     "_run_policy_compliance",
 ]

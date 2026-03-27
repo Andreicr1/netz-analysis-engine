@@ -54,7 +54,7 @@ async def _load_worker_config(db: AsyncSession) -> dict:
             select(VerticalConfigDefault.config).where(
                 VerticalConfigDefault.vertical == "liquid_funds",
                 VerticalConfigDefault.config_type == "portfolio_profiles",
-            )
+            ),
         )
         config = result.scalar_one_or_none()
         if config is not None:
@@ -75,7 +75,7 @@ async def _get_profile_weights(db: AsyncSession, profile: str) -> dict[str, floa
         )
         .where(
             (StrategicAllocation.effective_to.is_(None))
-            | (StrategicAllocation.effective_to >= today)
+            | (StrategicAllocation.effective_to >= today),
         )
     )
     result = await db.execute(stmt)
@@ -194,7 +194,7 @@ async def evaluate_profile(
         }
 
     fund_returns, fund_weights = await _get_fund_returns_by_block(
-        db, block_weights, profile_config["window_months"]
+        db, block_weights, profile_config["window_months"],
     )
 
     if fund_returns and fund_weights:
@@ -263,7 +263,7 @@ async def run_portfolio_eval(org_id: uuid.UUID) -> dict[str, str]:
         async with async_session() as db:
             await set_rls_context(db, org_id)
             lock_result = await db.execute(
-                text(f"SELECT pg_try_advisory_lock({PORTFOLIO_EVAL_LOCK_ID})")
+                text(f"SELECT pg_try_advisory_lock({PORTFOLIO_EVAL_LOCK_ID})"),
             )
             acquired = lock_result.scalar()
             if not acquired:
@@ -324,7 +324,7 @@ async def run_portfolio_eval(org_id: uuid.UUID) -> dict[str, str]:
             finally:
                 try:
                     await db.execute(
-                        text(f"SELECT pg_advisory_unlock({PORTFOLIO_EVAL_LOCK_ID})")
+                        text(f"SELECT pg_advisory_unlock({PORTFOLIO_EVAL_LOCK_ID})"),
                     )
                 except Exception:
                     pass

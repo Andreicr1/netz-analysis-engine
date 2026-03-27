@@ -12,7 +12,7 @@ Covers:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -40,7 +40,7 @@ class TestTransitionAlert:
             new_outcome="pass",
             direction="improvement",
             message="Candidate for DD initiation",
-            detected_at=datetime.now(timezone.utc),
+            detected_at=datetime.now(UTC),
         )
         assert alert.direction == "improvement"
         assert alert.new_outcome == "pass"
@@ -53,7 +53,7 @@ class TestTransitionAlert:
             new_outcome="fail",
             direction="deterioration",
             message="Candidate for removal",
-            detected_at=datetime.now(timezone.utc),
+            detected_at=datetime.now(UTC),
         )
         with pytest.raises(AttributeError):
             alert.direction = "stable"  # type: ignore[misc]
@@ -66,7 +66,7 @@ class TestTransitionAlert:
             new_outcome="pass",
             direction="improvement",
             message="msg",
-            detected_at=datetime.now(timezone.utc),
+            detected_at=datetime.now(UTC),
         )
         assert hasattr(alert, "__slots__")
 
@@ -83,7 +83,7 @@ class TestWatchlistRunResult:
             deteriorations=1,
             stable=7,
             alerts=(),
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
         )
         assert result.total_screened == 10
         assert result.improvements == 2
@@ -97,7 +97,7 @@ class TestWatchlistRunResult:
             deteriorations=0,
             stable=5,
             alerts=(),
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
         )
         with pytest.raises(AttributeError):
             result.total_screened = 99  # type: ignore[misc]
@@ -110,7 +110,7 @@ class TestWatchlistRunResult:
             new_outcome="pass",
             direction="improvement",
             message="msg",
-            detected_at=datetime.now(timezone.utc),
+            detected_at=datetime.now(UTC),
         )
         result = WatchlistRunResult(
             run_id=uuid.uuid4(),
@@ -120,7 +120,7 @@ class TestWatchlistRunResult:
             deteriorations=0,
             stable=0,
             alerts=(alert,),
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
         )
         assert len(result.alerts) == 1
         assert result.alerts[0].direction == "improvement"

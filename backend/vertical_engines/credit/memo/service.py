@@ -213,7 +213,7 @@ def generate_memo_book(
         ch_model = get_model(ch_tag) if ch_tag != "ch13_recommendation" else get_model("ch13_recommendation")
 
         if use_batch and ch_tag != "ch13_recommendation":
-            chunk_source = evidence_chunks if evidence_chunks else evidence_map
+            chunk_source = evidence_chunks or evidence_map
             ch_evidence = select_chapter_chunks(chunk_source, ch_tag)
             batch_pending.append({
                 "ch_num": ch_num, "ch_tag": ch_tag, "ch_title": ch_title,
@@ -243,7 +243,7 @@ def generate_memo_book(
             if decision_anchor:
                 recommendation = decision_anchor["finalDecision"]
         else:
-            chunk_source = evidence_chunks if evidence_chunks else evidence_map
+            chunk_source = evidence_chunks or evidence_map
             ch_evidence = select_chapter_chunks(chunk_source, ch_tag)
 
             chapter_result = generate_chapter(
@@ -493,16 +493,7 @@ def generate_memo_book(
     if appendix_2:
         full_memo += "\n\n---\n\n" + appendix_2
 
-    logger.info("MEMO_BOOK_COMPLETE", **{
-        "chapters_generated": chapters_generated,
-        "chapters_from_cache": chapters_from_cache,
-        "total_memo_chars": len(full_memo),
-        "recommendation": recommendation,
-        "citations_total": len(all_citations),
-        "citations_real": len(real_citations),
-        "unsupported_claims_detected": unsupported_claims_detected,
-        "critical_gaps_total": len(all_critical_gaps),
-    })
+    logger.info("MEMO_BOOK_COMPLETE", chapters_generated=chapters_generated, chapters_from_cache=chapters_from_cache, total_memo_chars=len(full_memo), recommendation=recommendation, citations_total=len(all_citations), citations_real=len(real_citations), unsupported_claims_detected=unsupported_claims_detected, critical_gaps_total=len(all_critical_gaps))
 
     return {
         "fullMemo": full_memo,
@@ -616,7 +607,7 @@ async def async_generate_memo_book(
     chapter_results: dict[str, dict[str, Any]] = {}
 
     if parallel_chapters:
-        chunk_source = evidence_chunks if evidence_chunks else evidence_map
+        chunk_source = evidence_chunks or evidence_map
 
         async def _gen_chapter(
             ch_num: int, ch_tag: str, ch_title: str, ch_model: str,
@@ -774,14 +765,7 @@ async def async_generate_memo_book(
     if appendix_2:
         full_memo += "\n\n---\n\n" + appendix_2
 
-    logger.info("ASYNC_MEMO_BOOK_COMPLETE", **{
-        "chapters_generated": chapters_generated,
-        "chapters_from_cache": chapters_from_cache,
-        "total_memo_chars": len(full_memo),
-        "recommendation": recommendation,
-        "citations_total": len(all_citations),
-        "citations_real": len(real_citations),
-    })
+    logger.info("ASYNC_MEMO_BOOK_COMPLETE", chapters_generated=chapters_generated, chapters_from_cache=chapters_from_cache, total_memo_chars=len(full_memo), recommendation=recommendation, citations_total=len(all_citations), citations_real=len(real_citations))
 
     return {
         "fullMemo": full_memo,

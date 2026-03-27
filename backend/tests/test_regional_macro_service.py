@@ -160,7 +160,7 @@ class TestResolveScoringConfig:
             "regional_scoring": {
                 "lookback_years": 5,
                 "min_coverage": 0.30,
-            }
+            },
         })
         assert cfg["lookback_years"] == 5
         assert cfg["min_coverage"] == 0.30

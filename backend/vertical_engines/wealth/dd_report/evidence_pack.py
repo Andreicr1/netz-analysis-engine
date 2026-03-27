@@ -93,7 +93,7 @@ _CHAPTER_FIELD_EXPECTATIONS: dict[str, dict[str, Any]] = {
 }
 
 
-def _resolve_field(pack: "EvidencePack", field_path: str) -> Any:
+def _resolve_field(pack: EvidencePack, field_path: str) -> Any:
     """Resolve a dotted field path against the evidence pack.
 
     Supports top-level attributes and one-level dict nesting:
@@ -329,6 +329,7 @@ def build_evidence_pack(
     -------
     EvidencePack
         Frozen, thread-safe evidence surface.
+
     """
     logger.info("building_evidence_pack", instrument_id=fund_data.get("instrument_id"))
 

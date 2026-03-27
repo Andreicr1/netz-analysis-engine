@@ -10,7 +10,7 @@ Publishes alerts via Redis pub/sub for SSE consumption.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import structlog
@@ -66,7 +66,7 @@ def scan_alerts(
 
     return AlertBatch(
         alerts=alerts,
-        scanned_at=datetime.now(timezone.utc),
+        scanned_at=datetime.now(UTC),
         organization_id=organization_id,
     )
 
@@ -80,7 +80,7 @@ def _check_dd_expiry(db: Session, organization_id: str) -> list[Alert]:
     from app.domains.wealth.models.dd_report import DDReport
     from app.domains.wealth.models.fund import Fund
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=_DD_EXPIRY_MONTHS * 30)
+    cutoff = datetime.now(UTC) - timedelta(days=_DD_EXPIRY_MONTHS * 30)
     alerts: list[Alert] = []
 
     # Single LEFT JOIN: all active funds with their latest current DDReport
@@ -110,7 +110,7 @@ def _check_dd_expiry(db: Session, organization_id: str) -> list[Alert]:
                 entity_type="fund",
             ))
         elif latest_report.created_at and latest_report.created_at < cutoff:
-            age_days = (datetime.now(timezone.utc) - latest_report.created_at).days
+            age_days = (datetime.now(UTC) - latest_report.created_at).days
             alerts.append(Alert(
                 alert_type="dd_expiry",
                 severity="warning",

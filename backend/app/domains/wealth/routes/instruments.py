@@ -80,7 +80,7 @@ async def get_instrument(
     user: CurrentUser = Depends(get_current_user),
 ) -> InstrumentRead:
     result = await db.execute(
-        select(Instrument).where(Instrument.instrument_id == instrument_id)
+        select(Instrument).where(Instrument.instrument_id == instrument_id),
     )
     instrument = result.scalar_one_or_none()
     if not instrument:
@@ -101,7 +101,7 @@ async def update_instrument(
 ) -> InstrumentRead:
     _require_investment_role(actor)
     result = await db.execute(
-        select(Instrument).where(Instrument.instrument_id == instrument_id)
+        select(Instrument).where(Instrument.instrument_id == instrument_id),
     )
     instrument = result.scalar_one_or_none()
     if not instrument:

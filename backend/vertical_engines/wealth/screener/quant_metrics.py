@@ -51,6 +51,7 @@ def compute_quant_metrics(
 
     Returns:
         QuantMetrics or None if insufficient data.
+
     """
     if history is None or history.empty:
         return None
@@ -123,6 +124,7 @@ def compute_bond_metrics(attributes: dict[str, Any]) -> BondQuantMetrics | None:
 
     Returns:
         BondQuantMetrics or None if insufficient data.
+
     """
     try:
         coupon = float(attributes.get("coupon_rate_pct", 0) or 0)
@@ -179,6 +181,7 @@ def composite_score(
 
     Returns:
         Composite score 0.0-1.0, or None if insufficient data.
+
     """
     if lower_is_better is None:
         lower_is_better = frozenset({

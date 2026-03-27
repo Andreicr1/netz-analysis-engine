@@ -169,7 +169,7 @@ class TestGoldMemoPath:
 class TestGoldFactSheetPath:
     def test_basic_path(self):
         result = gold_fact_sheet_path(
-            ORG_ID, "wealth", "port1", "2026-03-01", "pt", "factsheet.pdf"
+            ORG_ID, "wealth", "port1", "2026-03-01", "pt", "factsheet.pdf",
         )
         assert result == f"gold/{ORG_ID}/wealth/fact_sheets/port1/2026-03-01/pt/factsheet.pdf"
 

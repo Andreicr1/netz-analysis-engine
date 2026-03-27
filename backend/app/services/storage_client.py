@@ -115,7 +115,7 @@ class StorageClient(ABC):
         R2StorageClient     → s3://{bucket}/{tier}/{org_id}/{vertical}/
         """
         raise NotImplementedError(
-            f"{self.__class__.__name__} does not support DuckDB path resolution"
+            f"{self.__class__.__name__} does not support DuckDB path resolution",
         )
 
 
@@ -269,7 +269,7 @@ class R2StorageClient(StorageClient):
             await asyncio.to_thread(
                 self._s3.delete_object, Bucket=self._bucket_name, Key=path,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             from botocore.exceptions import ClientError
             if isinstance(exc, ClientError) and exc.response["Error"]["Code"] in ("404", "NoSuchKey"):
                 return  # already gone — idempotent

@@ -146,7 +146,7 @@ class TestBuildReturnDict:
             "tone_signal_original": "NEUTRAL",
             "tone_signal_final": "BALANCED",
             "full_memo_text": "# Full Memo\n\nContent here.",
-            "now": dt.datetime(2026, 3, 15, 12, 0, 0, tzinfo=dt.timezone.utc),
+            "now": dt.datetime(2026, 3, 15, 12, 0, 0, tzinfo=dt.UTC),
         }
         defaults.update(overrides)
         return build_return_dict(**defaults)

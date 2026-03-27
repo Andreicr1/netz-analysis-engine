@@ -285,7 +285,7 @@ class TestTreasuryDbReaders:
         mock_row = type("Row", (), {
             "obs_date": date(2026, 3, 15),
             "series_id": "DEBT_TOTAL_PUBLIC",
-            "value": Decimal("35000000000000"),
+            "value": Decimal(35000000000000),
         })()
 
         mock_result = MagicMock()

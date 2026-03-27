@@ -70,7 +70,7 @@ class TestDtwDriftResult:
 
     def test_degraded_result_not_usable(self):
         result = DtwDriftResult(
-            score=None, status=DtwDriftStatus.degraded, reason="aeon not installed"
+            score=None, status=DtwDriftStatus.degraded, reason="aeon not installed",
         )
         assert result.is_usable is False
         assert result.score is None
@@ -78,7 +78,7 @@ class TestDtwDriftResult:
 
     def test_failed_result_not_usable(self):
         result = DtwDriftResult(
-            score=None, status=DtwDriftStatus.failed, reason="numpy error"
+            score=None, status=DtwDriftStatus.failed, reason="numpy error",
         )
         assert result.is_usable is False
 
@@ -88,14 +88,14 @@ class TestDtwDriftResult:
 
     def test_score_or_default_returns_default_when_degraded(self):
         result = DtwDriftResult(
-            score=None, status=DtwDriftStatus.degraded, reason="test"
+            score=None, status=DtwDriftStatus.degraded, reason="test",
         )
         assert result.score_or_default(0.0) == 0.0
         assert result.score_or_default(-1.0) == -1.0
 
     def test_score_or_default_returns_default_when_failed(self):
         result = DtwDriftResult(
-            score=None, status=DtwDriftStatus.failed, reason="boom"
+            score=None, status=DtwDriftStatus.failed, reason="boom",
         )
         assert result.score_or_default(0.0) == 0.0
 
@@ -103,7 +103,7 @@ class TestDtwDriftResult:
         """Core acceptance criterion: computed zero and failure are NOT the same."""
         genuine_zero = DtwDriftResult(score=0.0, status=DtwDriftStatus.ok)
         failure = DtwDriftResult(
-            score=None, status=DtwDriftStatus.failed, reason="computation error"
+            score=None, status=DtwDriftStatus.failed, reason="computation error",
         )
 
         # Both would have been 0.0 before FAIL-03 — now they differ
@@ -285,7 +285,7 @@ class TestRiskCalcConsumer:
     def test_failed_result_fallback_is_explicit(self):
         """Failed result: score_or_default returns caller's chosen default."""
         failed = DtwDriftResult(
-            score=None, status=DtwDriftStatus.failed, reason="crash"
+            score=None, status=DtwDriftStatus.failed, reason="crash",
         )
         assert failed.score_or_default(0.0) == 0.0
         assert failed.score_or_default(-999.0) == -999.0
@@ -332,7 +332,7 @@ class TestDashboardAdapter:
 
     def test_failed_serialization(self):
         result = DtwDriftResult(
-            score=None, status=DtwDriftStatus.failed, reason="runtime error"
+            score=None, status=DtwDriftStatus.failed, reason="runtime error",
         )
         data = {
             "score": result.score,

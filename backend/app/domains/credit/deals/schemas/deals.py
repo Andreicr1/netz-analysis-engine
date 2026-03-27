@@ -120,7 +120,7 @@ class ICMemoOut(BaseModel):
     updated_at: datetime
 
     @model_validator(mode="after")
-    def coerce_committee_fields(self) -> "ICMemoOut":
+    def coerce_committee_fields(self) -> ICMemoOut:
         if self.committee_votes and isinstance(self.committee_votes[0], dict):
             self.committee_votes = [CommitteeVoteOut(**v) for v in self.committee_votes]
         if self.committee_members and isinstance(self.committee_members[0], dict):

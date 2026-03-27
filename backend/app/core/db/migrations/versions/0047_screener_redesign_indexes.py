@@ -27,7 +27,7 @@ def upgrade() -> None:
         CREATE INDEX IF NOT EXISTS idx_sec_managers_registered_aum
         ON sec_managers (aum_total DESC NULLS LAST)
         WHERE registration_status = 'Registered'
-        """
+        """,
     )
 
     # GIN on client_types JSONB for strategy/SIC filtering
@@ -37,7 +37,7 @@ def upgrade() -> None:
         CREATE INDEX IF NOT EXISTS idx_sec_managers_client_types_gin
         ON sec_managers USING gin (client_types jsonb_path_ops)
         WHERE client_types IS NOT NULL
-        """
+        """,
     )
 
     # Last ADV filing date for "Last Filing" column sort + display
@@ -46,7 +46,7 @@ def upgrade() -> None:
         CREATE INDEX IF NOT EXISTS idx_sec_managers_last_adv_filed
         ON sec_managers (last_adv_filed_at DESC NULLS LAST)
         WHERE last_adv_filed_at IS NOT NULL
-        """
+        """,
     )
 
     # Composite: registration_status + AUM for filtered sort (covers both tabs)
@@ -54,7 +54,7 @@ def upgrade() -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_sec_managers_status_aum
         ON sec_managers (registration_status, aum_total DESC NULLS LAST)
-        """
+        """,
     )
 
     # ── instruments_global ────────────────────────────────────────────
@@ -65,7 +65,7 @@ def upgrade() -> None:
         CREATE INDEX IF NOT EXISTS idx_instruments_global_exchange
         ON instruments_global (exchange)
         WHERE exchange IS NOT NULL
-        """
+        """,
     )
 
     # Market cap for Equities tab min filter + sort
@@ -74,7 +74,7 @@ def upgrade() -> None:
         CREATE INDEX IF NOT EXISTS idx_instruments_global_market_cap
         ON instruments_global (market_cap DESC NULLS LAST)
         WHERE market_cap IS NOT NULL
-        """
+        """,
     )
 
     # GIN on attributes JSONB for ETF/Bond tab-specific filters
@@ -83,7 +83,7 @@ def upgrade() -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_instruments_global_attributes_gin
         ON instruments_global USING gin (attributes jsonb_path_ops)
-        """
+        """,
     )
 
     # Composite: instrument_type + market_cap (Equities tab sorted by cap)
@@ -91,7 +91,7 @@ def upgrade() -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_instruments_global_type_cap
         ON instruments_global (instrument_type, market_cap DESC NULLS LAST)
-        """
+        """,
     )
 
     # ── sec_manager_funds ─────────────────────────────────────────────
@@ -102,7 +102,7 @@ def upgrade() -> None:
         CREATE INDEX IF NOT EXISTS idx_sec_manager_funds_type
         ON sec_manager_funds (fund_type)
         WHERE fund_type IS NOT NULL
-        """
+        """,
     )
 
     # CRD + fund type composite for per-manager strategy breakdown
@@ -110,7 +110,7 @@ def upgrade() -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_sec_manager_funds_crd_type
         ON sec_manager_funds (crd_number, fund_type)
-        """
+        """,
     )
 
 

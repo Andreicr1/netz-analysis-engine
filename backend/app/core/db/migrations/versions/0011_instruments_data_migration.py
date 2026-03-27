@@ -71,13 +71,13 @@ def upgrade() -> None:
 
     # Assert rowcount matches
     fund_count = bind.execute(
-        sa.text("SELECT COUNT(*) FROM funds_universe")
+        sa.text("SELECT COUNT(*) FROM funds_universe"),
     ).scalar()
     instrument_count = bind.execute(
         sa.text(
             "SELECT COUNT(*) FROM instruments_universe "
-            "WHERE instrument_type = 'fund'"
-        )
+            "WHERE instrument_type = 'fund'",
+        ),
     ).scalar()
     assert fund_count == instrument_count, (
         f"Data migration mismatch: {fund_count} funds vs {instrument_count} instruments"
@@ -264,7 +264,7 @@ def downgrade() -> None:
             DELETE FROM vertical_config_defaults
             WHERE vertical = 'liquid_funds'
             AND config_type IN ('screening_layer1', 'screening_layer2', 'screening_layer3')
-        """)
+        """),
     )
 
     # ── Reverse universe_approvals renames ────────────────────────

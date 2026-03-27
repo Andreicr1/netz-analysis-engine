@@ -77,7 +77,7 @@ def _get_cross_encoder():
             logger.warning(
                 "sentence-transformers not installed — reranker disabled, "
                 "falling back to cosine similarity scores. "
-                "Install with: pip install -e '.[reranker]'"
+                "Install with: pip install -e '.[reranker]'",
             )
             _load_failed = True
             return None
@@ -122,6 +122,7 @@ def rerank(
         mutated in-place with the new ``score_key`` field.  If the model
         is unavailable, documents are returned unchanged (sorted by
         original ``score``).
+
     """
     if not documents:
         return documents

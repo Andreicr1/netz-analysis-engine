@@ -65,7 +65,7 @@ def safe_parse_json_object(text: str) -> dict[str, Any]:
 def health_check_foundry() -> FoundryHealth:
     try:
         c = FoundryResponsesClient()
-        _ = c.generate_answer(system_prompt="Return JSON: {\"answer\":\"ok\",\"citations\":[{\"chunk_id\":\"x\",\"rationale\":\"y\"}]}", user_prompt="Ping")
+        _ = c.generate_answer(system_prompt='Return JSON: {"answer":"ok","citations":[{"chunk_id":"x","rationale":"y"}]}', user_prompt="Ping")
         return FoundryHealth(ok=True)
     except Exception as e:
         msg = str(e) or repr(e)

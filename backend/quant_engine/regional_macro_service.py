@@ -374,6 +374,7 @@ def percentile_rank_score(
         history: Full available history as numpy array.
         invert: If True, higher raw values map to lower scores
                 (e.g. VIX=80 → score ~5, meaning "very bad conditions").
+
     """
     if len(history) < MIN_HISTORY_OBS:
         return 50.0
@@ -464,6 +465,7 @@ def score_region(
         raw_observations: Mapping series_id → observations (asc order).
         as_of: Reference date for staleness computation.
         config: Scoring configuration.
+
     """
     specs = REGION_SERIES.get(region, [])
     if not specs:
@@ -522,7 +524,7 @@ def score_region(
         if weight <= 0:
             continue
         dim_indicator_map.setdefault(spec.dimension, []).append(
-            (spec.series_id, score, weight)
+            (spec.series_id, score, weight),
         )
 
     # Compute dimension scores (staleness-weighted average within dimension)

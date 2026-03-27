@@ -70,7 +70,7 @@ async def run(worker_name: str) -> None:
 
         duration = round(time.monotonic() - t0, 2)
         log.info("cli.done", duration_seconds=duration)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         duration = round(time.monotonic() - t0, 2)
         log.error("cli.timeout", duration_seconds=duration)
         sys.exit(1)

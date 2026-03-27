@@ -203,7 +203,7 @@ class TestOfrDbReaders:
         mock_row = type("Row", (), {
             "obs_date": date(2026, 3, 1),
             "series_id": "OFR_INDUSTRY_GAV",
-            "value": Decimal("5000000"),
+            "value": Decimal(5000000),
         })()
 
         mock_result = MagicMock()
@@ -220,7 +220,7 @@ class TestOfrDbReaders:
     async def test_get_ofr_repo_volumes_from_db(self) -> None:
         mock_row = type("Row", (), {
             "obs_date": date(2026, 3, 1),
-            "value": Decimal("800000000"),
+            "value": Decimal(800000000),
         })()
 
         mock_result = MagicMock()

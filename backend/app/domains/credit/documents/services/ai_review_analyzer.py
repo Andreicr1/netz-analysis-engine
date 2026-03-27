@@ -238,7 +238,7 @@ def _heuristic_fallback(
             "excerpt": best_match,
             "reasoning": "Heuristic keyword match (LLM unavailable)",
         }
-    elif best_score >= 0.2:
+    if best_score >= 0.2:
         return {
             "status": "UNCLEAR",
             "confidence": int(best_score * 50),

@@ -81,7 +81,7 @@ async def import_esma_fund_to_universe(
 
     # Fetch manager name
     mgr_stmt = select(EsmaManager.company_name).where(
-        EsmaManager.esma_id == fund.esma_manager_id
+        EsmaManager.esma_id == fund.esma_manager_id,
     )
     manager_name = (await db.execute(mgr_stmt)).scalar_one_or_none()
 

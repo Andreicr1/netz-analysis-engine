@@ -245,7 +245,7 @@ async def upsert_chunks(
     if duplicates:
         raise RuntimeError(
             f"Duplicate chunk IDs in batch ({len(duplicates)} collisions). "
-            f"First: {duplicates[0]}."
+            f"First: {duplicates[0]}.",
         )
 
     # Import VectorChunk model so pgvector Vector type is registered
@@ -287,7 +287,7 @@ async def upsert_chunks(
                 try:
                     async with db.begin_nested():  # SAVEPOINT
                         single_stmt = pg_insert(vector_chunks_table).values(
-                            [_doc_to_row(doc)]
+                            [_doc_to_row(doc)],
                         )
                         single_stmt = single_stmt.on_conflict_do_update(
                             index_elements=["id"],
@@ -643,7 +643,7 @@ async def search_and_rerank_deal(
     candidates: int = 50,
     domain_filter: str | None = None,
 ) -> RerankedResult:
-    """pgvector cosine recall → cross-encoder rerank → top results.
+    """Pgvector cosine recall → cross-encoder rerank → top results.
 
     Parameters
     ----------
@@ -651,6 +651,7 @@ async def search_and_rerank_deal(
         Number of cosine-similarity candidates to retrieve before reranking.
     top : int
         Number of results to return after reranking.
+
     """
     raw = await search_deal_chunks(
         db,
@@ -681,7 +682,7 @@ async def search_and_rerank_fund_policy(
     candidates: int = 50,
     domain_filter: str = "POLICY",
 ) -> RerankedResult:
-    """pgvector cosine recall → cross-encoder rerank for fund policy."""
+    """Pgvector cosine recall → cross-encoder rerank for fund policy."""
     raw = await search_fund_policy_chunks(
         db,
         fund_id=fund_id,

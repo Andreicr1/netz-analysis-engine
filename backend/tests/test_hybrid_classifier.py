@@ -220,14 +220,14 @@ class TestVehicleTypeRules:
     def test_standalone_fund_markers(self):
         result = classify_vehicle_rules(
             "fund.pdf",
-            "Fund VI Limited Partnership capital deployed"
+            "Fund VI Limited Partnership capital deployed",
         )
         assert result == "standalone_fund"
 
     def test_reit_is_standalone(self):
         result = classify_vehicle_rules(
             "reit.pdf",
-            "This non-traded REIT is structured as a real estate investment vehicle"
+            "This non-traded REIT is structured as a real estate investment vehicle",
         )
         assert result == "standalone_fund"
 

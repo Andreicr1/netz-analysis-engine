@@ -21,11 +21,11 @@ from vertical_engines.credit.portfolio.risk import reclassify_investment_risk
 from vertical_engines.credit.portfolio.service import run_portfolio_ingest
 
 __all__ = [
-    "run_portfolio_ingest",
+    "build_board_monitoring_briefs",
+    "build_covenant_surveillance",
+    "detect_performance_drift",
     "discover_active_investments",
     "extract_portfolio_metrics",
-    "detect_performance_drift",
-    "build_covenant_surveillance",
     "reclassify_investment_risk",
-    "build_board_monitoring_briefs",
+    "run_portfolio_ingest",
 ]

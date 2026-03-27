@@ -211,7 +211,7 @@ def _build_deal_review_prompt_v2(
 
 
 __all__ = [
+    "_build_deal_review_prompt_v2",
     "_deal_review_template_context",
     "_pre_classify_from_corpus",
-    "_build_deal_review_prompt_v2",
 ]

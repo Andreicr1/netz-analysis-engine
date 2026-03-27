@@ -12,7 +12,7 @@ import csv
 import io
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 import structlog
@@ -78,7 +78,7 @@ def _drift_result_to_alert_dict(
             for m in result.metrics
         ],
         "is_current": True,
-        "detected_at": datetime.now(timezone.utc),
+        "detected_at": datetime.now(UTC),
     }
 
 
@@ -135,7 +135,7 @@ async def _do_drift_scan(
             alerts=[],
             stable_count=0,
             insufficient_data_count=0,
-            scan_timestamp=datetime.now(timezone.utc),
+            scan_timestamp=datetime.now(UTC),
         )
 
     instrument_ids = [row.instrument_id for row in instruments]
@@ -180,7 +180,7 @@ async def _do_drift_scan(
                 StrategyDriftAlert.instrument_id.in_(scanned_ids),
                 StrategyDriftAlert.is_current == True,  # noqa: E712
             )
-            .values(is_current=False)
+            .values(is_current=False),
         )
 
     # Insert new alerts for all scanned instruments — batch upsert
@@ -267,8 +267,8 @@ async def list_drift_alerts(
     if inst_ids:
         inst_result = await db.execute(
             select(Instrument.instrument_id, Instrument.name).where(
-                Instrument.instrument_id.in_(inst_ids)
-            )
+                Instrument.instrument_id.in_(inst_ids),
+            ),
         )
         name_map = {row.instrument_id: row.name for row in inst_result.all()}
     else:
@@ -302,12 +302,12 @@ async def _query_drift_history(
     Returns (instrument_name, alerts). Raises 404 if instrument not found.
     """
     inst_result = await db.execute(
-        select(Instrument.name).where(Instrument.instrument_id == instrument_id)
+        select(Instrument.name).where(Instrument.instrument_id == instrument_id),
     )
     inst_name = inst_result.scalar()
     if inst_name is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Instrument not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Instrument not found",
         )
 
     stmt = select(StrategyDriftAlert).where(
@@ -372,7 +372,7 @@ async def get_drift_history(
         instrument_name=inst_name,
         events=events,
         total=len(events),
-        computed_at=datetime.now(timezone.utc),
+        computed_at=datetime.now(UTC),
     )
 
 
@@ -446,7 +446,7 @@ async def get_instrument_drift(
 ) -> StrategyDriftRead:
     # Verify instrument exists
     inst_result = await db.execute(
-        select(Instrument.name).where(Instrument.instrument_id == instrument_id)
+        select(Instrument.name).where(Instrument.instrument_id == instrument_id),
     )
     inst_name = inst_result.scalar()
     if inst_name is None:

@@ -173,6 +173,7 @@ def match_peers(
 
     Returns:
         PeerGroup if sufficient peers found, PeerGroupNotFound otherwise.
+
     """
     if not target_block_id:
         return PeerGroupNotFound(

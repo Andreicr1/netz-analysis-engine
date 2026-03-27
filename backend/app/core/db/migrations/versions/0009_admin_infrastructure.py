@@ -52,7 +52,7 @@ def upgrade() -> None:
             server_default=sa.text("gen_random_uuid()"),
         ),
         sa.Column(
-            "organization_id", sa.Uuid(as_uuid=True), nullable=False, index=True
+            "organization_id", sa.Uuid(as_uuid=True), nullable=False, index=True,
         ),
         sa.Column("asset_type", sa.Text(), nullable=False),
         sa.Column("content_type", sa.Text(), nullable=False),
@@ -70,7 +70,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.UniqueConstraint(
-            "organization_id", "asset_type", name="uq_tenant_assets_org_type"
+            "organization_id", "asset_type", name="uq_tenant_assets_org_type",
         ),
     )
 
@@ -100,13 +100,13 @@ def upgrade() -> None:
             server_default=sa.text("gen_random_uuid()"),
         ),
         sa.Column(
-            "organization_id", sa.Uuid(as_uuid=True), nullable=True, index=True
+            "organization_id", sa.Uuid(as_uuid=True), nullable=True, index=True,
         ),
         sa.Column("vertical", sa.Text(), nullable=False),
         sa.Column("template_name", sa.Text(), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
         sa.Column(
-            "version", sa.Integer(), nullable=False, server_default="1"
+            "version", sa.Integer(), nullable=False, server_default="1",
         ),
         sa.Column("updated_by", sa.Text(), nullable=False),
         sa.Column(

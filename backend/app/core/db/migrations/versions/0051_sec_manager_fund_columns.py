@@ -21,11 +21,11 @@ def upgrade() -> None:
     op.add_column("sec_managers", sa.Column("total_private_fund_assets", sa.BigInteger))
     op.execute(
         "CREATE INDEX IF NOT EXISTS idx_sec_managers_private_fund_count "
-        "ON sec_managers (private_fund_count) WHERE private_fund_count > 0"
+        "ON sec_managers (private_fund_count) WHERE private_fund_count > 0",
     )
     op.execute(
         "CREATE INDEX IF NOT EXISTS idx_sec_managers_registration_status "
-        "ON sec_managers (registration_status)"
+        "ON sec_managers (registration_status)",
     )
 
 

@@ -60,6 +60,7 @@ async def check_worker_status(
         None — worker is idle, safe to dispatch
         dict with "status" key — worker is running/completed, caller should
             return appropriate HTTP response
+
     """
     pool = get_redis_pool()
     r = aioredis.Redis(connection_pool=pool)
@@ -164,6 +165,7 @@ async def idempotent_worker_wrapper(
         scope: Tenant scope — org_id string or "global"
         coro_func: The async worker function to call
         *args, **kwargs: Forwarded to coro_func
+
     """
     try:
         result = await coro_func(*args, **kwargs)

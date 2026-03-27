@@ -1,5 +1,4 @@
-"""
-Clerk JWT Authentication — Netz Analysis Engine
+"""Clerk JWT Authentication — Netz Analysis Engine
 =================================================
 
 Verifies Clerk JWT v2 tokens (API version 2025-04-10+).
@@ -285,6 +284,6 @@ async def _resolve_fund_ids(actor_id: str, organization_id: uuid.UUID) -> list[u
             select(FundMembership.fund_id).where(
                 FundMembership.actor_id == actor_id,
                 FundMembership.organization_id == organization_id,
-            )
+            ),
         )
         return list(result.scalars().all())

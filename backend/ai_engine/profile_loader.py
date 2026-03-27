@@ -96,13 +96,14 @@ class ProfileLoader:
         ------
         ValueError
             If the profile name is not in the registry.
+
         """
         try:
             entry = get_vertical_entry(profile_name)
         except ValueError as exc:
             raise ValueError(
                 f"Unknown profile: {profile_name!r}. "
-                f"Available: {available_vertical_profiles()}"
+                f"Available: {available_vertical_profiles()}",
             ) from exc
 
         vertical = entry.vertical_name
@@ -154,6 +155,7 @@ class ProfileLoader:
         -------
         ModuleType
             The vertical engine module (e.g. ``vertical_engines.credit``).
+
         """
         return import_vertical_module(profile_name)
 

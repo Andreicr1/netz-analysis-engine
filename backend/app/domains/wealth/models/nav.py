@@ -12,7 +12,7 @@ class NavTimeseries(OrganizationScopedMixin, Base):
     __tablename__ = "nav_timeseries"
 
     instrument_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("instruments_universe.instrument_id"), primary_key=True
+        Uuid(as_uuid=True), ForeignKey("instruments_universe.instrument_id"), primary_key=True,
     )
     nav_date: Mapped[date] = mapped_column(Date, primary_key=True)
     nav: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))

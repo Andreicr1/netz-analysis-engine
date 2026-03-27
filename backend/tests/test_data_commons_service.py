@@ -44,16 +44,16 @@ class TestFetchEconomicIndicators:
                 "UnemploymentRate_Person": {
                     "byEntity": {
                         "geoId/06": {
-                            "orderedFacets": [{"observations": [{"date": "2025", "value": 4.2}]}]
-                        }
-                    }
+                            "orderedFacets": [{"observations": [{"date": "2025", "value": 4.2}]}],
+                        },
+                    },
                 },
                 "Count_Person": {
                     "byEntity": {
                         "geoId/06": {
-                            "orderedFacets": [{"observations": [{"date": "2025", "value": 39_500_000}]}]
-                        }
-                    }
+                            "orderedFacets": [{"observations": [{"date": "2025", "value": 39_500_000}]}],
+                        },
+                    },
                 },
             },
             "facets": {},
@@ -158,8 +158,8 @@ class TestResolveEntity:
         mock_resolve_response = MagicMock()
         mock_resolve_response.to_dict.return_value = {
             "entities": [
-                {"node": "California", "candidates": [{"dcid": "geoId/06"}]}
-            ]
+                {"node": "California", "candidates": [{"dcid": "geoId/06"}]},
+            ],
         }
 
         mock_dc = _mock_client()
@@ -176,7 +176,7 @@ class TestResolveEntity:
 
         mock_resolve_response = MagicMock()
         mock_resolve_response.to_dict.return_value = {
-            "entities": [{"node": "Atlantis", "candidates": []}]
+            "entities": [{"node": "Atlantis", "candidates": []}],
         }
 
         mock_dc = _mock_client()
@@ -215,7 +215,7 @@ class TestFetchGeographicHierarchy:
             "geoId/06": [
                 {"dcid": "geoId/06001", "name": "Alameda County", "type": "County"},
                 {"dcid": "geoId/06003", "name": "Alpine County", "type": "County"},
-            ]
+            ],
         }
 
         with patch.object(svc, "_get_client", return_value=mock_dc):

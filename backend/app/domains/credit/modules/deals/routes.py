@@ -528,7 +528,7 @@ def get_deal_monitoring(
     metrics = cf_svc.calculate_portfolio_monitoring_metrics(db, fund_id=fund_id, deal_id=deal_id)
     return MonitoringMetricsOut(
         deal_id=deal_id,
-        computed_at=dt.datetime.now(dt.timezone.utc),
+        computed_at=dt.datetime.now(dt.UTC),
         **metrics,
     )
 

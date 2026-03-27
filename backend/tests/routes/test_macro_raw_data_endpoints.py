@@ -19,21 +19,21 @@ _TEAM_HEADER = {
     "X-DEV-ACTOR": (
         '{"actor_id": "team-user", "roles": ["INVESTMENT_TEAM"], '
         '"fund_ids": [], "org_id": "00000000-0000-0000-0000-000000000001"}'
-    )
+    ),
 }
 
 _ADMIN_HEADER = {
     "X-DEV-ACTOR": (
         '{"actor_id": "admin-user", "roles": ["ADMIN"], '
         '"fund_ids": [], "org_id": "00000000-0000-0000-0000-000000000001"}'
-    )
+    ),
 }
 
 _INVESTOR_HEADER = {
     "X-DEV-ACTOR": (
         '{"actor_id": "investor-user", "roles": ["INVESTOR"], '
         '"fund_ids": [], "org_id": "00000000-0000-0000-0000-000000000001"}'
-    )
+    ),
 }
 
 

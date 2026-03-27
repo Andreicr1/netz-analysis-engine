@@ -5,6 +5,6 @@ This re-export will be removed after migration is verified.
 """
 
 # Re-export from canonical location
-from app.shared.models import MacroData  # noqa: F401
+from app.shared.models import MacroData
 
 __all__ = ["MacroData"]

@@ -43,10 +43,11 @@ warnings.warn(
 
 class Fund(OrganizationScopedMixin, Base):
     """DEPRECATED: Use :class:`Instrument` for all new code."""
+
     __tablename__ = "funds_universe"
 
     fund_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
     )
     isin: Mapped[str | None] = mapped_column(String(12))
     ticker: Mapped[str | None] = mapped_column(String(20))
@@ -57,7 +58,7 @@ class Fund(OrganizationScopedMixin, Base):
     asset_class: Mapped[str | None] = mapped_column(String(50))
     sub_category: Mapped[str | None] = mapped_column(String(80))
     block_id: Mapped[str | None] = mapped_column(
-        String(80), ForeignKey("allocation_blocks.block_id"), index=True
+        String(80), ForeignKey("allocation_blocks.block_id"), index=True,
     )
     currency: Mapped[str | None] = mapped_column(String(3))
     domicile: Mapped[str | None] = mapped_column(String(50))
@@ -67,11 +68,11 @@ class Fund(OrganizationScopedMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
     data_source: Mapped[str | None] = mapped_column(String(30))
     approval_status: Mapped[str | None] = mapped_column(
-        String(20), server_default="pending_dd"
+        String(20), server_default="pending_dd",
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), server_default=func.now(),
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
     )

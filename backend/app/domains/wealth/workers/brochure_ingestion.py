@@ -42,7 +42,7 @@ async def run_brochure_download() -> dict:
 
     async with async_session() as db:
         lock = await db.execute(
-            sa_text(f"SELECT pg_try_advisory_lock({BROCHURE_DOWNLOAD_LOCK_ID})")
+            sa_text(f"SELECT pg_try_advisory_lock({BROCHURE_DOWNLOAD_LOCK_ID})"),
         )
         if not lock.scalar():
             logger.warning("brochure_download.lock_held")
@@ -57,8 +57,8 @@ async def run_brochure_download() -> dict:
                     "   OR pe_fund_count > 0 "
                     "   OR vc_fund_count > 0 "
                     "   OR real_estate_fund_count > 0 "
-                    "ORDER BY crd_number"
-                )
+                    "ORDER BY crd_number",
+                ),
             )
             all_crds = [row[0] for row in result.fetchall()]
 
@@ -122,7 +122,7 @@ async def run_brochure_download() -> dict:
 
             for i, crd in enumerate(pending):
                 status_code, pdf_bytes = await run_in_sec_thread(
-                    _download_one, crd
+                    _download_one, crd,
                 )
 
                 if status_code == "ok" and pdf_bytes:
@@ -135,7 +135,7 @@ async def run_brochure_download() -> dict:
                 elif status_code == "not_found":
                     # Write empty marker so we skip next time
                     await storage.write(
-                        _storage_path(crd), b"", content_type="application/pdf"
+                        _storage_path(crd), b"", content_type="application/pdf",
                     )
                     stats["not_found"] += 1
                 else:
@@ -164,8 +164,8 @@ async def run_brochure_download() -> dict:
             try:
                 await db.execute(
                     sa_text(
-                        f"SELECT pg_advisory_unlock({BROCHURE_DOWNLOAD_LOCK_ID})"
-                    )
+                        f"SELECT pg_advisory_unlock({BROCHURE_DOWNLOAD_LOCK_ID})",
+                    ),
                 )
             except Exception:
                 pass
@@ -182,7 +182,7 @@ async def run_brochure_extract() -> dict:
 
     async with async_session() as db:
         lock = await db.execute(
-            sa_text(f"SELECT pg_try_advisory_lock({BROCHURE_EXTRACT_LOCK_ID})")
+            sa_text(f"SELECT pg_try_advisory_lock({BROCHURE_EXTRACT_LOCK_ID})"),
         )
         if not lock.scalar():
             logger.warning("brochure_extract.lock_held")
@@ -201,8 +201,8 @@ async def run_brochure_extract() -> dict:
                     "    OR m.pe_fund_count > 0 "
                     "    OR m.vc_fund_count > 0 "
                     "    OR m.real_estate_fund_count > 0) "
-                    "ORDER BY m.crd_number"
-                )
+                    "ORDER BY m.crd_number",
+                ),
             )
             pending_crds = [row[0] for row in result.fetchall()]
 
@@ -229,7 +229,7 @@ async def run_brochure_extract() -> dict:
                 }
 
             logger.info(
-                "brochure_extract.starting", total=len(crds_with_pdf)
+                "brochure_extract.starting", total=len(crds_with_pdf),
             )
 
             from data_providers.sec.adv_service import (
@@ -253,7 +253,7 @@ async def run_brochure_extract() -> dict:
 
                     # PyMuPDF extraction in thread to avoid blocking event loop
                     full_text = await asyncio.to_thread(
-                        _extract_text_from_pdf, pdf_bytes
+                        _extract_text_from_pdf, pdf_bytes,
                     )
 
                     if not full_text or len(full_text) < 100:
@@ -295,8 +295,8 @@ async def run_brochure_extract() -> dict:
             try:
                 await db.execute(
                     sa_text(
-                        f"SELECT pg_advisory_unlock({BROCHURE_EXTRACT_LOCK_ID})"
-                    )
+                        f"SELECT pg_advisory_unlock({BROCHURE_EXTRACT_LOCK_ID})",
+                    ),
                 )
             except Exception:
                 pass

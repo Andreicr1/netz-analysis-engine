@@ -217,7 +217,7 @@ async def _fetch_portfolio_returns(
                 NavTimeseries.nav_date >= start_date,
                 NavTimeseries.nav_date <= cutoff,
                 NavTimeseries.return_1d.isnot(None),
-            )
+            ),
         )
         .order_by(NavTimeseries.nav_date)
     )
@@ -322,33 +322,32 @@ async def run_bayesian_cvar() -> dict[str, Any]:
     # Phase 3: Short write transaction — seconds, not minutes.
     # All three profile updates are committed atomically.
     # ------------------------------------------------------------------
-    async with async_session() as db:
-        async with db.begin():
-            for profile, ci in ci_by_profile.items():
-                stmt = (
-                    update(PortfolioSnapshot)
-                    .where(
-                        PortfolioSnapshot.profile == profile,
-                        PortfolioSnapshot.snapshot_date == today,
-                    )
-                    .values(
-                        cvar_lower_5=ci["cvar_lower_5"],
-                        cvar_upper_95=ci["cvar_upper_95"],
-                    )
+    async with async_session() as db, db.begin():
+        for profile, ci in ci_by_profile.items():
+            stmt = (
+                update(PortfolioSnapshot)
+                .where(
+                    PortfolioSnapshot.profile == profile,
+                    PortfolioSnapshot.snapshot_date == today,
                 )
-                await db.execute(stmt)
+                .values(
+                    cvar_lower_5=ci["cvar_lower_5"],
+                    cvar_upper_95=ci["cvar_upper_95"],
+                )
+            )
+            await db.execute(stmt)
 
-                seed = derive_seed(profile, today)
-                input_hash = compute_input_hash(returns_by_profile[profile])
-                results[profile] = {
-                    "status": "ok",
-                    "cvar_mean": ci["cvar_mean"],
-                    "cvar_lower_5": ci["cvar_lower_5"],
-                    "cvar_upper_95": ci["cvar_upper_95"],
-                    "n_obs": len(returns_by_profile[profile]),
-                    "seed": seed,
-                    "input_hash": input_hash,
-                }
-                logger.info("bayesian_cvar_computed", profile=profile, **ci)
+            seed = derive_seed(profile, today)
+            input_hash = compute_input_hash(returns_by_profile[profile])
+            results[profile] = {
+                "status": "ok",
+                "cvar_mean": ci["cvar_mean"],
+                "cvar_lower_5": ci["cvar_lower_5"],
+                "cvar_upper_95": ci["cvar_upper_95"],
+                "n_obs": len(returns_by_profile[profile]),
+                "seed": seed,
+                "input_hash": input_hash,
+            }
+            logger.info("bayesian_cvar_computed", profile=profile, **ci)
 
     return results

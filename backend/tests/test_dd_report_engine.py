@@ -134,7 +134,7 @@ class TestParallelExecution:
             return ChapterResult(
                 tag=chapter_tag,
                 order=next(
-                    (ch["order"] for ch in CHAPTER_REGISTRY if ch["tag"] == chapter_tag), 0
+                    (ch["order"] for ch in CHAPTER_REGISTRY if ch["tag"] == chapter_tag), 0,
                 ),
                 title=chapter_tag,
                 content_md="## Test\n\nContent.",
@@ -171,7 +171,7 @@ class TestParallelExecution:
             return ChapterResult(
                 tag=chapter_tag,
                 order=next(
-                    (ch["order"] for ch in CHAPTER_REGISTRY if ch["tag"] == chapter_tag), 0
+                    (ch["order"] for ch in CHAPTER_REGISTRY if ch["tag"] == chapter_tag), 0,
                 ),
                 title=chapter_tag,
                 content_md="## Test\n\nContent.",
@@ -221,7 +221,7 @@ class TestDeterministicOrdering:
             side_effect=lambda fn, chapter_tag, evidence_context, **kwargs: ChapterResult(
                 tag=chapter_tag,
                 order=next(
-                    (ch["order"] for ch in CHAPTER_REGISTRY if ch["tag"] == chapter_tag), 0
+                    (ch["order"] for ch in CHAPTER_REGISTRY if ch["tag"] == chapter_tag), 0,
                 ),
                 title=chapter_tag,
                 content_md="## Test\n\nContent.",
@@ -255,7 +255,7 @@ class TestDeterministicOrdering:
             side_effect=lambda fn, chapter_tag, evidence_context, **kwargs: ChapterResult(
                 tag=chapter_tag,
                 order=next(
-                    (ch["order"] for ch in CHAPTER_REGISTRY if ch["tag"] == chapter_tag), 0
+                    (ch["order"] for ch in CHAPTER_REGISTRY if ch["tag"] == chapter_tag), 0,
                 ),
                 title=chapter_tag,
                 content_md="## Generated\n\nContent.",
@@ -288,7 +288,7 @@ class TestDeterministicOrdering:
             side_effect=lambda fn, chapter_tag, evidence_context, **kwargs: ChapterResult(
                 tag=chapter_tag,
                 order=next(
-                    (ch["order"] for ch in CHAPTER_REGISTRY if ch["tag"] == chapter_tag), 0
+                    (ch["order"] for ch in CHAPTER_REGISTRY if ch["tag"] == chapter_tag), 0,
                 ),
                 title=chapter_tag,
                 content_md="## Test\n\nContent.",
@@ -319,7 +319,7 @@ class TestDeterministicOrdering:
                 side_effect=lambda fn, chapter_tag, evidence_context, **kwargs: ChapterResult(
                     tag=chapter_tag,
                     order=next(
-                        (ch["order"] for ch in CHAPTER_REGISTRY if ch["tag"] == chapter_tag), 0
+                        (ch["order"] for ch in CHAPTER_REGISTRY if ch["tag"] == chapter_tag), 0,
                     ),
                     title=chapter_tag,
                     content_md="## Test\n\nContent.",
@@ -351,12 +351,12 @@ class TestResumeSafety:
             side_effect=lambda fn, chapter_tag, evidence_context, **kwargs: ChapterResult(
                 tag=chapter_tag,
                 order=next(
-                    (ch["order"] for ch in CHAPTER_REGISTRY if ch["tag"] == chapter_tag), 0
+                    (ch["order"] for ch in CHAPTER_REGISTRY if ch["tag"] == chapter_tag), 0,
                 ),
                 title=chapter_tag,
                 content_md="## Generated\n\nContent.",
                 status="completed",
-            )
+            ),
         )
 
         # All non-recommendation chapters cached
@@ -393,7 +393,7 @@ class TestResumeSafety:
             return ChapterResult(
                 tag=chapter_tag,
                 order=next(
-                    (ch["order"] for ch in CHAPTER_REGISTRY if ch["tag"] == chapter_tag), 0
+                    (ch["order"] for ch in CHAPTER_REGISTRY if ch["tag"] == chapter_tag), 0,
                 ),
                 title=chapter_tag,
                 content_md="## Regenerated\n\nContent.",
@@ -439,7 +439,7 @@ class TestResumeSafety:
             return ChapterResult(
                 tag=chapter_tag,
                 order=next(
-                    (ch["order"] for ch in CHAPTER_REGISTRY if ch["tag"] == chapter_tag), 0
+                    (ch["order"] for ch in CHAPTER_REGISTRY if ch["tag"] == chapter_tag), 0,
                 ),
                 title=chapter_tag,
                 content_md="## Content" if succeed else None,

@@ -47,6 +47,7 @@ class QuantAnalyzer:
         -------
         dict
             Quant analysis result (CVaR, scores, drift, regime).
+
         """
         logger.info("running_quant_analysis", instrument_id=instrument_id, as_of=as_of)
 
@@ -77,7 +78,7 @@ class QuantAnalyzer:
                 NavTimeseries.return_1d.isnot(None),
             )
             .order_by(NavTimeseries.nav_date.desc())
-            .limit(252)
+            .limit(252),
         ).scalars().all()
 
         if len(navs) < 30:
@@ -110,7 +111,7 @@ class QuantAnalyzer:
             select(FundRiskMetrics)
             .where(FundRiskMetrics.instrument_id == fund_id)
             .order_by(FundRiskMetrics.calc_date.desc())
-            .limit(1)
+            .limit(1),
         ).scalar_one_or_none()
 
         if risk is None:
@@ -129,11 +130,11 @@ class QuantAnalyzer:
         }
 
     def _compute_peer_comparison(
-        self, db: Session, fund_id: uuid.UUID
+        self, db: Session, fund_id: uuid.UUID,
     ) -> dict[str, Any] | None:
         """Rank fund against peers in same block."""
         fund = db.execute(
-            select(Fund).where(Fund.fund_id == fund_id)
+            select(Fund).where(Fund.fund_id == fund_id),
         ).scalar_one_or_none()
 
         if fund is None or not fund.block_id:

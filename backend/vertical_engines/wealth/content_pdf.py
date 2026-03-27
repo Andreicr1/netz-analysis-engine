@@ -36,6 +36,7 @@ def render_content_pdf(
     Returns
     -------
     BytesIO with the built PDF, seeked to position 0.
+
     """
     from datetime import date
 

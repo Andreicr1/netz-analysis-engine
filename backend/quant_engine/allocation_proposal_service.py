@@ -199,6 +199,7 @@ def compute_regime_tilted_weights(
 
     Returns:
         AllocationProposalResult with per-block proposals and rationale.
+
     """
     regime_tilt = REGIME_TILTS.get(global_regime, REGIME_TILTS["RISK_ON"])
     regional_scores = regional_scores or {}

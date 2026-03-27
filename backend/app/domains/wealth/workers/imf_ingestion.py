@@ -6,7 +6,7 @@ Upserts into imf_weo_forecasts hypertable.
 """
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 
 import structlog
@@ -24,7 +24,7 @@ IMF_INGESTION_LOCK_ID = 900_015
 
 def _imf_to_rows(forecasts: list[ImfForecast]) -> list[dict]:
     """Convert ImfForecast dataclasses to upsert-ready dicts."""
-    now = datetime.now(tz=timezone.utc)
+    now = datetime.now(tz=UTC)
     rows: list[dict] = []
     for fc in forecasts:
         try:
@@ -51,7 +51,7 @@ async def run_imf_ingestion() -> dict:
 
     async with async_session() as db:
         lock_result = await db.execute(
-            text(f"SELECT pg_try_advisory_lock({IMF_INGESTION_LOCK_ID})")
+            text(f"SELECT pg_try_advisory_lock({IMF_INGESTION_LOCK_ID})"),
         )
         acquired = lock_result.scalar()
         if not acquired:
@@ -112,7 +112,7 @@ async def run_imf_ingestion() -> dict:
         finally:
             try:
                 await db.execute(
-                    text(f"SELECT pg_advisory_unlock({IMF_INGESTION_LOCK_ID})")
+                    text(f"SELECT pg_advisory_unlock({IMF_INGESTION_LOCK_ID})"),
                 )
             except Exception:
                 pass

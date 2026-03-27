@@ -33,7 +33,7 @@ class TestClassifyEndpoint:
     def test_compute_heavy_ic_memo(self) -> None:
         assert (
             _classify_endpoint(
-                "/api/v1/funds/123/deals/456/ic-memo"
+                "/api/v1/funds/123/deals/456/ic-memo",
             )
             == "compute"
         )
@@ -41,7 +41,7 @@ class TestClassifyEndpoint:
     def test_compute_heavy_deep_review(self) -> None:
         assert (
             _classify_endpoint(
-                "/api/v1/funds/123/deals/456/deep-review"
+                "/api/v1/funds/123/deals/456/deep-review",
             )
             == "compute"
         )
@@ -49,7 +49,7 @@ class TestClassifyEndpoint:
     def test_compute_heavy_document_reviews(self) -> None:
         assert (
             _classify_endpoint(
-                "/api/v1/funds/123/document-reviews"
+                "/api/v1/funds/123/document-reviews",
             )
             == "compute"
         )
@@ -66,7 +66,7 @@ class TestExtractOrgIdFromJwt:
 
         payload = {"sub": "user_123", "o": {"id": "org_abc", "rol": "org:admin"}}
         encoded = base64.urlsafe_b64encode(
-            json.dumps(payload).encode()
+            json.dumps(payload).encode(),
         ).rstrip(b"=").decode()
         fake_jwt = f"header.{encoded}.signature"
 
@@ -78,7 +78,7 @@ class TestExtractOrgIdFromJwt:
 
         payload = {"sub": "user_123"}
         encoded = base64.urlsafe_b64encode(
-            json.dumps(payload).encode()
+            json.dumps(payload).encode(),
         ).rstrip(b"=").decode()
         fake_jwt = f"header.{encoded}.signature"
 

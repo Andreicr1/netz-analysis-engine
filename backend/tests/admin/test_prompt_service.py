@@ -94,7 +94,7 @@ class TestHardenedPromptEnvironment:
             self._render(env, "{{ name|pprint }}", name="test")
 
     def test_attr_filter_removed(self, env):
-        """attr filter must be removed — used in SSTI vectors."""
+        """Attr filter must be removed — used in SSTI vectors."""
         with pytest.raises(jinja2.exceptions.TemplateAssertionError):
             self._render(env, "{{ ''|attr('__class__') }}")
 

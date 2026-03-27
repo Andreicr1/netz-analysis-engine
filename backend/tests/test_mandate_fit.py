@@ -84,7 +84,7 @@ class TestModels:
 
     def test_run_result_frozen(self):
         r = MandateFitRunResult(
-            total_evaluated=0, eligible_count=0, ineligible_count=0, results=()
+            total_evaluated=0, eligible_count=0, ineligible_count=0, results=(),
         )
         assert r.total_evaluated == 0
 

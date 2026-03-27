@@ -74,6 +74,7 @@ class CsvImportAdapter:
 
         Returns:
             CsvImportResult with imported instruments and any row errors.
+
         """
         if instrument_type not in _REQUIRED_COLUMNS:
             return CsvImportResult(
@@ -198,7 +199,7 @@ class CsvImportAdapter:
         }
         result = dict(attrs)
         for field_name in numeric_fields:
-            if field_name in result and result[field_name]:
+            if result.get(field_name):
                 try:
                     val = float(result[field_name])
                     if val < 0 and field_name in ("aum_usd", "market_cap_usd"):

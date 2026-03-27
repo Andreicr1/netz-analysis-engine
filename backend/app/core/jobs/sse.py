@@ -1,5 +1,4 @@
-"""
-SSE Stream Generator — Netz Analysis Engine
+"""SSE Stream Generator — Netz Analysis Engine
 =============================================
 
 Uses sse-starlette for proper SSE wire protocol (event framing, id, retry, ping).

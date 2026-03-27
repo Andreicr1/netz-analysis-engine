@@ -287,7 +287,7 @@ def run_extraction_pipeline(
                 deals_filter=deals_filter,
                 dry_run=dry_run,
                 no_index=no_index,
-            )
+            ),
         )
         ok_count = len([item for item in results if item["status"] == "ok"])
         dry_run_count = len([item for item in results if item["status"] == "dry_run"])
@@ -507,6 +507,7 @@ async def process(
     Returns the final ``PipelineStageResult`` with aggregated metrics
     from all stages.  On gate failure the pipeline halts and returns
     the failing stage result.
+
     """
     t0 = time.monotonic()
     metrics: dict[str, Any] = {"source": request.source}
@@ -796,7 +797,7 @@ async def process(
         "page_count": page_count,
     }).encode()
     parquet_bytes = await asyncio.to_thread(
-        _build_chunks_parquet, chunks, doc_id_str, str(request.org_id)
+        _build_chunks_parquet, chunks, doc_id_str, str(request.org_id),
     )
     meta_payload = json.dumps({
         "document_id": doc_id_str,
@@ -903,9 +904,9 @@ async def process(
                 has_numbers=chunk.get("has_numbers"),
                 char_count=chunk.get("char_count"),
                 governance_critical=gov_critical,
-                governance_flags=gov_flags if gov_flags else None,
+                governance_flags=gov_flags or None,
                 organization_id=request.org_id,
-                extraction_degraded=extraction_degraded if extraction_degraded else None,
+                extraction_degraded=extraction_degraded or None,
                 extraction_quality=extraction_quality_codes if extraction_degraded else None,
             )
             search_docs.append(search_doc)
@@ -953,7 +954,7 @@ async def process(
         terminal_state = "failed"
         pipeline_success = False
         warnings.append(
-            f"Search indexing failed completely: 0/{upsert_result.attempted_chunk_count} chunks indexed"
+            f"Search indexing failed completely: 0/{upsert_result.attempted_chunk_count} chunks indexed",
         )
     elif storage_partial_failed:
         terminal_state = "degraded"
@@ -963,7 +964,7 @@ async def process(
         pipeline_success = True  # pipeline itself succeeded; indexing is partial
         warnings.append(
             f"Search indexing degraded: {upsert_result.successful_chunk_count}/"
-            f"{upsert_result.attempted_chunk_count} chunks indexed"
+            f"{upsert_result.attempted_chunk_count} chunks indexed",
         )
     else:
         terminal_state = "success"
@@ -980,7 +981,7 @@ async def process(
                 successful_chunk_count=upsert_result.successful_chunk_count,
                 failed_chunk_count=upsert_result.failed_chunk_count,
                 retryable=upsert_result.retryable,
-                errors=upsert_result.batch_errors if upsert_result.batch_errors else None,
+                errors=upsert_result.batch_errors or None,
             )
         except Exception:
             logger.warning("Failed to persist job state for %s", request.version_id, exc_info=True)

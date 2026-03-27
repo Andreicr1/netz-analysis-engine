@@ -510,7 +510,7 @@ class TestInferResponsibleParty:
         ],
     )
     def test_infer_responsible_party(
-        self, source: str, text: str, expected: str
+        self, source: str, text: str, expected: str,
     ) -> None:
         assert _infer_responsible_party(source, text) == expected
 

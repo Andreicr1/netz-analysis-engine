@@ -54,6 +54,7 @@ def fetch_edgar_data(
         status, cik, matched_name, entity_metadata, financial_metrics,
         metrics_type, going_concern, form_d, warnings, lookup_entity,
         resolution_method, resolution_confidence
+
     """
     check_edgar_rate()
 
@@ -80,7 +81,7 @@ def fetch_edgar_data(
         if cik_result.confidence < 0.7 and cik_result.cik:
             warnings.append(
                 f"Low confidence CIK match ({cik_result.confidence:.0%}): "
-                f"'{entity_name}' matched to '{cik_result.company_name}'"
+                f"'{entity_name}' matched to '{cik_result.company_name}'",
             )
 
     if not result.cik:

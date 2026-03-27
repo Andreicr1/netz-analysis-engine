@@ -235,9 +235,8 @@ def compute_institutional_decision(score: EngineScore) -> str:
     """Map an aggregate EngineScore to a one-line institutional decision."""
     if score.engine_winner == "V4" and score.confidence >= 0.7:
         return "V4 recommended for institutional adoption. Superior risk coverage, sponsor analysis, and evidence grounding."
-    elif score.engine_winner == "V4" and score.confidence >= 0.5:
+    if score.engine_winner == "V4" and score.confidence >= 0.5:
         return "V4 shows marginal improvement. Consider expanded benchmark before full adoption."
-    elif score.engine_winner == "V3":
+    if score.engine_winner == "V3":
         return "V3 retains advantage. V4 requires further calibration before deployment."
-    else:
-        return "Inconclusive. Expand sample size or review individual deal deltas."
+    return "Inconclusive. Expand sample size or review individual deal deltas."

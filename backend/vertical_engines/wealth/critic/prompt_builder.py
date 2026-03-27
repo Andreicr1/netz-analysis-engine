@@ -42,6 +42,7 @@ def build_critic_prompt(
     -------
     tuple[str, str]
         (system_prompt, user_content)
+
     """
     registry = get_prompt_registry()
 

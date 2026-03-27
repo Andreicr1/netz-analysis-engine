@@ -57,6 +57,7 @@ class MandateFitService:
 
         Returns:
             MandateFitResult with eligibility and constraint details.
+
         """
         results: list[ConstraintResult] = [
             evaluate_risk_bucket(asset_class, attributes, profile),
@@ -93,6 +94,7 @@ class MandateFitService:
 
         Returns:
             MandateFitRunResult with aggregate counts and individual results.
+
         """
         results: list[MandateFitResult] = []
 

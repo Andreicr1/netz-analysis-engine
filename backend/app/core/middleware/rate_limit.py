@@ -1,5 +1,4 @@
-"""
-Redis-based API Rate Limiter — Netz Analysis Engine
+"""Redis-based API Rate Limiter — Netz Analysis Engine
 ====================================================
 
 Sliding-window counter using Redis INCR + EXPIRE.
@@ -119,7 +118,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     """Sliding-window rate limiter backed by Redis INCR + EXPIRE."""
 
     async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
+        self, request: Request, call_next: RequestResponseEndpoint,
     ) -> Response:
         # Always pass through CORS preflight — CORSMiddleware handles these.
         if request.method == "OPTIONS":
@@ -187,7 +186,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             response.headers["X-RateLimit-Limit"] = str(rpm)
             response.headers["X-RateLimit-Remaining"] = str(
-                max(0, rpm - current_count)
+                max(0, rpm - current_count),
             )
             return response
 

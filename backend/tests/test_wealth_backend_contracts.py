@@ -6,7 +6,7 @@ import csv
 import io
 import json
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -22,8 +22,8 @@ DEV_ACTOR_HEADER = {
             "roles": ["ADMIN"],
             "fund_ids": [],
             "org_id": "00000000-0000-0000-0000-000000000001",
-        }
-    )
+        },
+    ),
 }
 
 ORG_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")
@@ -74,11 +74,11 @@ def _fake_drift_alert(
     alert.anomalous_count = 3
     alert.total_metrics = 7
     alert.metric_details = [
-        {"metric_name": "volatility_1y", "z_score": 3.5, "is_anomalous": True}
+        {"metric_name": "volatility_1y", "z_score": 3.5, "is_anomalous": True},
     ]
     alert.is_current = True
-    alert.detected_at = detected_at or datetime(2026, 3, 15, 12, 0, 0, tzinfo=timezone.utc)
-    alert.created_at = datetime(2026, 3, 15, 12, 0, 0, tzinfo=timezone.utc)
+    alert.detected_at = detected_at or datetime(2026, 3, 15, 12, 0, 0, tzinfo=UTC)
+    alert.created_at = datetime(2026, 3, 15, 12, 0, 0, tzinfo=UTC)
     return alert
 
 
@@ -98,7 +98,7 @@ class TestPortfolioComputedAt:
             side_effect=_mock_get_latest,
         ):
             resp = await client.get(
-                "/api/v1/portfolios/conservative", headers=DEV_ACTOR_HEADER
+                "/api/v1/portfolios/conservative", headers=DEV_ACTOR_HEADER,
             )
 
         assert resp.status_code == 200
@@ -138,7 +138,7 @@ class TestPortfolioComputedAt:
             side_effect=_mock_get_latest,
         ):
             resp = await client.get(
-                "/api/v1/portfolios/conservative", headers=DEV_ACTOR_HEADER
+                "/api/v1/portfolios/conservative", headers=DEV_ACTOR_HEADER,
             )
 
         assert resp.status_code == 200
@@ -180,12 +180,12 @@ class TestDriftExportCSV:
         with patch("app.domains.wealth.routes.strategy_drift.get_db_with_rls") as mock_dep:
             app.dependency_overrides[
                 __import__(
-                    "app.core.tenancy.middleware", fromlist=["get_db_with_rls"]
+                    "app.core.tenancy.middleware", fromlist=["get_db_with_rls"],
                 ).get_db_with_rls
             ] = lambda: mock_db
             try:
                 resp = await client.get(
-                    f"{EXPORT_BASE}?format=csv", headers=DEV_ACTOR_HEADER
+                    f"{EXPORT_BASE}?format=csv", headers=DEV_ACTOR_HEADER,
                 )
             finally:
                 app.dependency_overrides.clear()
@@ -214,7 +214,7 @@ class TestDriftExportCSV:
         app.dependency_overrides[get_db_with_rls] = lambda: mock_db
         try:
             resp = await client.get(
-                f"{EXPORT_BASE}?format=json", headers=DEV_ACTOR_HEADER
+                f"{EXPORT_BASE}?format=json", headers=DEV_ACTOR_HEADER,
             )
         finally:
             app.dependency_overrides.clear()

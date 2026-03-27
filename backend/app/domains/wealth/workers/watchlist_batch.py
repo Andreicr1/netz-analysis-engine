@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import select, text, update
@@ -44,7 +44,7 @@ async def run_watchlist_check(org_id: uuid.UUID) -> dict:
         await set_rls_context(db, org_id)
         # 1. Non-blocking advisory lock
         lock_result = await db.execute(
-            text(f"SELECT pg_try_advisory_lock({WATCHLIST_BATCH_LOCK_ID})")
+            text(f"SELECT pg_try_advisory_lock({WATCHLIST_BATCH_LOCK_ID})"),
         )
         acquired = lock_result.scalar()
         if not acquired:
@@ -55,7 +55,7 @@ async def run_watchlist_check(org_id: uuid.UUID) -> dict:
             return await _execute_watchlist_check(db, org_id)
         finally:
             await db.execute(
-                text(f"SELECT pg_advisory_unlock({WATCHLIST_BATCH_LOCK_ID})")
+                text(f"SELECT pg_advisory_unlock({WATCHLIST_BATCH_LOCK_ID})"),
             )
 
 
@@ -72,7 +72,7 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
         select(Instrument).where(
             Instrument.is_active.is_(True),
             Instrument.approval_status == "watchlist",
-        )
+        ),
     )
     instruments = result.scalars().all()
 
@@ -98,7 +98,7 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
         select(ScreeningResult.instrument_id, ScreeningResult.overall_status).where(
             ScreeningResult.instrument_id.in_(instrument_ids),
             ScreeningResult.is_current.is_(True),
-        )
+        ),
     )
     previous_outcomes: dict[uuid.UUID, str] = {
         row.instrument_id: row.overall_status for row in prev_results
@@ -138,7 +138,7 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
                 block_id=inst.get("block_id"),
             )
             for inst in instrument_dicts
-        ]
+        ],
     )
 
     # 7. Write screening results in batches of 200
@@ -150,7 +150,7 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
                 ScreeningResult.instrument_id.in_(batch_ids),
                 ScreeningResult.is_current.is_(True),
             )
-            .values(is_current=False)
+            .values(is_current=False),
         )
 
         for sr in batch:
@@ -172,7 +172,7 @@ async def _execute_watchlist_check(db: AsyncSession, org_id: uuid.UUID) -> dict:
 
     # 8. Mark run completed
     run.status = "completed"
-    run.completed_at = datetime.now(timezone.utc)
+    run.completed_at = datetime.now(UTC)
     await db.commit()
     await set_rls_context(db, org_id)
 

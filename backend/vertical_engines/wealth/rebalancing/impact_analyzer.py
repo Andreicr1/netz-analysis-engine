@@ -37,6 +37,7 @@ def compute_impact(
 
     Returns:
         RebalanceImpact with affected portfolio IDs and weight gap.
+
     """
     from app.domains.wealth.models.model_portfolio import ModelPortfolio
 
@@ -46,7 +47,7 @@ def compute_impact(
             ModelPortfolio.organization_id == organization_id,
             ModelPortfolio.status == "active",
             ModelPortfolio.fund_selection_schema.isnot(None),
-        )
+        ),
     ).scalars().all()
 
     affected_ids: list[uuid.UUID] = []

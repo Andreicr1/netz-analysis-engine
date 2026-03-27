@@ -1,5 +1,4 @@
-"""
-FastAPI Application — Netz Analysis Engine
+"""FastAPI Application — Netz Analysis Engine
 ============================================
 
 Unified backend serving credit and wealth verticals.
@@ -138,7 +137,7 @@ async def _verify_config_completeness() -> None:
                 select(
                     VerticalConfigDefault.vertical,
                     VerticalConfigDefault.config_type,
-                )
+                ),
             )
             found = {(row[0], row[1]) for row in result.all()}
 
@@ -154,10 +153,10 @@ async def _verify_config_completeness() -> None:
                 raise RuntimeError(
                     f"Boot-time config check failed: {len(missing)} config defaults "
                     f"missing from DB. Run 'alembic upgrade head' to seed defaults. "
-                    f"Missing: {sorted(missing)}"
+                    f"Missing: {sorted(missing)}",
                 )
             logger.warning(
-                "Config defaults missing — continuing in dev mode (YAML fallback active)"
+                "Config defaults missing — continuing in dev mode (YAML fallback active)",
             )
         else:
             logger.info("Config health check OK — all %d defaults present", len(expected_pairs))
@@ -166,7 +165,7 @@ async def _verify_config_completeness() -> None:
     except Exception as e:
         if not settings.is_development:
             raise RuntimeError(
-                f"Boot-time config check failed — DB may not be migrated: {e}"
+                f"Boot-time config check failed — DB may not be migrated: {e}",
             ) from e
         logger.error("Config health check failed — DB may not be migrated: %s", e)
 

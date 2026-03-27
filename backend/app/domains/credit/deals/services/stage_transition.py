@@ -62,7 +62,6 @@ async def transition_deal_stage(
 
     Raises ``ValueError`` with a descriptive message if the transition is invalid.
     """
-
     from_stage = deal.stage
     allowed = VALID_TRANSITIONS.get(from_stage, [])
 

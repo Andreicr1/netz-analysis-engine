@@ -48,7 +48,7 @@ async def run_bis_ingestion() -> dict:
 
     async with async_session() as db:
         lock_result = await db.execute(
-            text(f"SELECT pg_try_advisory_lock({BIS_INGESTION_LOCK_ID})")
+            text(f"SELECT pg_try_advisory_lock({BIS_INGESTION_LOCK_ID})"),
         )
         acquired = lock_result.scalar()
         if not acquired:
@@ -109,7 +109,7 @@ async def run_bis_ingestion() -> dict:
         finally:
             try:
                 await db.execute(
-                    text(f"SELECT pg_advisory_unlock({BIS_INGESTION_LOCK_ID})")
+                    text(f"SELECT pg_advisory_unlock({BIS_INGESTION_LOCK_ID})"),
                 )
             except Exception:
                 pass

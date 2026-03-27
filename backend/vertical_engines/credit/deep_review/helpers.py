@@ -240,10 +240,10 @@ def _now_utc() -> dt.datetime:
 
 __all__ = [
     "_MODEL",
-    "_call_openai",
     "_async_call_openai",
-    "_parse_json_payload",
-    "_trunc",
-    "_title_case_strategy",
+    "_call_openai",
     "_now_utc",
+    "_parse_json_payload",
+    "_title_case_strategy",
+    "_trunc",
 ]

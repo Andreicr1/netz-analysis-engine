@@ -1,5 +1,4 @@
-"""
-SQLAlchemy Base + Mixins — Netz Analysis Engine
+"""SQLAlchemy Base + Mixins — Netz Analysis Engine
 ================================================
 
 Unified mixins for all domain models. Every tenant-scoped table uses

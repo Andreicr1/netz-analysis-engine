@@ -13,7 +13,7 @@ Covers:
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
@@ -130,7 +130,7 @@ class TestModels:
             impact=impact,
             proposals=(),
             all_feasible=True,
-            computed_at=datetime.now(timezone.utc),
+            computed_at=datetime.now(UTC),
         )
         with pytest.raises(AttributeError):
             result.all_feasible = False  # type: ignore[misc]
@@ -169,7 +169,7 @@ class TestModels:
             impact=impact,
             proposals=(),
             all_feasible=True,
-            computed_at=datetime.now(timezone.utc),
+            computed_at=datetime.now(UTC),
         )
         assert result.all_feasible is True
         assert len(result.proposals) == 0
@@ -190,7 +190,7 @@ class TestImpactAnalyzer:
             fund_selection={"funds": [
                 {"instrument_id": str(instrument_id), "weight": 0.15},
                 {"instrument_id": str(uuid.uuid4()), "weight": 0.85},
-            ]}
+            ]},
         )
 
         db = MagicMock()
@@ -211,12 +211,12 @@ class TestImpactAnalyzer:
         p1 = _make_portfolio(
             fund_selection={"funds": [
                 {"instrument_id": str(instrument_id), "weight": 0.10},
-            ]}
+            ]},
         )
         p2 = _make_portfolio(
             fund_selection={"funds": [
                 {"instrument_id": str(instrument_id), "weight": 0.20},
-            ]}
+            ]},
         )
 
         db = MagicMock()
@@ -246,7 +246,7 @@ class TestImpactAnalyzer:
         portfolio = _make_portfolio(
             fund_selection={"funds": [
                 {"instrument_id": str(other_id), "weight": 1.0},
-            ]}
+            ]},
         )
 
         db = MagicMock()
@@ -372,7 +372,7 @@ class TestWeightProposer:
         p1 = _make_portfolio(
             fund_selection={"funds": [
                 {"instrument_id": str(instrument_id), "weight": 0.123456},
-            ]}
+            ]},
         )
 
         db = MagicMock()
@@ -617,7 +617,7 @@ class TestUniverseServiceIntegration:
             ),
             proposals=(),
             all_feasible=True,
-            computed_at=datetime.now(timezone.utc),
+            computed_at=datetime.now(UTC),
         )
 
         db = MagicMock()

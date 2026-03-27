@@ -89,7 +89,7 @@ class YahooFinanceProvider:
         return results
 
     def fetch_batch_history(
-        self, tickers: list[str], period: str = "3y"
+        self, tickers: list[str], period: str = "3y",
     ) -> dict[str, pd.DataFrame]:
         """Batch download price history. Uses yf.download(threads=True).
 
@@ -121,7 +121,7 @@ class YahooFinanceProvider:
                                 result[t] = ticker_df
             except Exception:
                 logger.warning(
-                    "yf.download failed for chunk starting at %d", i, exc_info=True
+                    "yf.download failed for chunk starting at %d", i, exc_info=True,
                 )
             if i + _BATCH_CHUNK_SIZE < len(tickers):
                 time.sleep(_BATCH_CHUNK_SLEEP)

@@ -32,14 +32,14 @@ DEV_ACTOR_HEADER = {
     "X-DEV-ACTOR": (
         '{"actor_id": "test-user", "roles": ["ADMIN"], '
         '"fund_ids": [], "org_id": "00000000-0000-0000-0000-000000000001"}'
-    )
+    ),
 }
 
 _VIEWER_HEADER = {
     "X-DEV-ACTOR": (
         '{"actor_id": "viewer-user", "roles": ["INVESTOR"], '
         '"fund_ids": [], "org_id": "00000000-0000-0000-0000-000000000001"}'
-    )
+    ),
 }
 
 
@@ -95,7 +95,7 @@ def _compile_sql(stmt) -> str:
         stmt.compile(
             dialect=postgresql.dialect(),
             compile_kwargs={"literal_binds": True},
-        )
+        ),
     )
 
 

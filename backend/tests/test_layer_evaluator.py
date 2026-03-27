@@ -25,7 +25,7 @@ class TestLayer1:
     def test_min_threshold_passes(self, evaluator):
         criteria = {"fund": {"min_aum": 100_000_000}}
         results = evaluator.evaluate_layer1(
-            "fund", {"aum": 200_000_000}, criteria
+            "fund", {"aum": 200_000_000}, criteria,
         )
         assert len(results) == 1
         assert results[0].passed is True
@@ -34,21 +34,21 @@ class TestLayer1:
     def test_min_threshold_fails(self, evaluator):
         criteria = {"fund": {"min_aum": 100_000_000}}
         results = evaluator.evaluate_layer1(
-            "fund", {"aum": 50_000_000}, criteria
+            "fund", {"aum": 50_000_000}, criteria,
         )
         assert results[0].passed is False
 
     def test_max_threshold_passes(self, evaluator):
         criteria = {"fund": {"max_volatility": 20.0}}
         results = evaluator.evaluate_layer1(
-            "fund", {"volatility": 15.0}, criteria
+            "fund", {"volatility": 15.0}, criteria,
         )
         assert results[0].passed is True
 
     def test_max_threshold_fails(self, evaluator):
         criteria = {"fund": {"max_volatility": 20.0}}
         results = evaluator.evaluate_layer1(
-            "fund", {"volatility": 25.0}, criteria
+            "fund", {"volatility": 25.0}, criteria,
         )
         assert results[0].passed is False
 
@@ -61,63 +61,63 @@ class TestLayer1:
     def test_allowed_list_passes(self, evaluator):
         criteria = {"fund": {"allowed_strategy": ["equity", "credit", "macro"]}}
         results = evaluator.evaluate_layer1(
-            "fund", {"strategy": "credit"}, criteria
+            "fund", {"strategy": "credit"}, criteria,
         )
         assert results[0].passed is True
 
     def test_allowed_list_fails(self, evaluator):
         criteria = {"fund": {"allowed_strategy": ["equity", "credit"]}}
         results = evaluator.evaluate_layer1(
-            "fund", {"strategy": "crypto"}, criteria
+            "fund", {"strategy": "crypto"}, criteria,
         )
         assert results[0].passed is False
 
     def test_excluded_list_passes(self, evaluator):
         criteria = {"fund": {"excluded_geography": ["sanctioned_country"]}}
         results = evaluator.evaluate_layer1(
-            "fund", {"geography": "USA"}, criteria
+            "fund", {"geography": "USA"}, criteria,
         )
         assert results[0].passed is True
 
     def test_excluded_list_fails(self, evaluator):
         criteria = {"fund": {"excluded_geography": ["sanctioned_country"]}}
         results = evaluator.evaluate_layer1(
-            "fund", {"geography": "sanctioned_country"}, criteria
+            "fund", {"geography": "sanctioned_country"}, criteria,
         )
         assert results[0].passed is False
 
     def test_empty_exclusion_list_passes(self, evaluator):
         criteria = {"fund": {"excluded_geography": []}}
         results = evaluator.evaluate_layer1(
-            "fund", {"geography": "anything"}, criteria
+            "fund", {"geography": "anything"}, criteria,
         )
         assert results[0].passed is True
 
     def test_boolean_criterion(self, evaluator):
         criteria = {"fund": {"sanctions_check": True}}
         results = evaluator.evaluate_layer1(
-            "fund", {"sanctions_check": True}, criteria
+            "fund", {"sanctions_check": True}, criteria,
         )
         assert results[0].passed is True
 
     def test_boolean_criterion_fails(self, evaluator):
         criteria = {"fund": {"sanctions_check": True}}
         results = evaluator.evaluate_layer1(
-            "fund", {"sanctions_check": False}, criteria
+            "fund", {"sanctions_check": False}, criteria,
         )
         assert results[0].passed is False
 
     def test_credit_rating_floor_passes(self, evaluator):
         criteria = {"bond": {"min_credit_rating": "BBB-"}}
         results = evaluator.evaluate_layer1(
-            "bond", {"credit_rating_sp": "A+"}, criteria
+            "bond", {"credit_rating_sp": "A+"}, criteria,
         )
         assert results[0].passed is True
 
     def test_credit_rating_floor_fails(self, evaluator):
         criteria = {"bond": {"min_credit_rating": "BBB-"}}
         results = evaluator.evaluate_layer1(
-            "bond", {"credit_rating_sp": "BB+"}, criteria
+            "bond", {"credit_rating_sp": "BB+"}, criteria,
         )
         assert results[0].passed is False
 
@@ -129,14 +129,14 @@ class TestLayer1:
     def test_asset_class_exact_match(self, evaluator):
         criteria = {"fund": {"asset_class": "equity"}}
         results = evaluator.evaluate_layer1(
-            "fund", {"asset_class": "Equity"}, criteria
+            "fund", {"asset_class": "Equity"}, criteria,
         )
         assert results[0].passed is True  # case-insensitive
 
     def test_geography_exact_match(self, evaluator):
         criteria = {"fund": {"geography": "us"}}
         results = evaluator.evaluate_layer1(
-            "fund", {"geography": "US"}, criteria
+            "fund", {"geography": "US"}, criteria,
         )
         assert results[0].passed is True
 
@@ -148,7 +148,7 @@ class TestLayer1:
     def test_numeric_field_with_usd_suffix(self, evaluator):
         criteria = {"fund": {"min_aum": 100}}
         results = evaluator.evaluate_layer1(
-            "fund", {"aum_usd": 200}, criteria
+            "fund", {"aum_usd": 200}, criteria,
         )
         assert results[0].passed is True
 
@@ -161,12 +161,12 @@ class TestLayer2:
         criteria = {
             "blocks": {
                 "block_a": {
-                    "criteria": {"min_aum": 50_000_000}
-                }
-            }
+                    "criteria": {"min_aum": 50_000_000},
+                },
+            },
         }
         results = evaluator.evaluate_layer2(
-            "fund", {"aum": 100_000_000}, "block_a", criteria
+            "fund", {"aum": 100_000_000}, "block_a", criteria,
         )
         assert len(results) == 1
         assert results[0].passed is True
@@ -204,7 +204,7 @@ class TestDetermineStatus:
         # Above threshold + buffer → promoted
         assert determine_status(
             DEFAULT_PASS_THRESHOLD + DEFAULT_HYSTERESIS_BUFFER + 0.01,
-            "WATCHLIST"
+            "WATCHLIST",
         ) == "PASS"
 
     def test_watchlist_to_fail_requires_buffer(self):
@@ -214,19 +214,19 @@ class TestDetermineStatus:
         # Well below → FAIL
         assert determine_status(
             DEFAULT_WATCHLIST_THRESHOLD - DEFAULT_HYSTERESIS_BUFFER - 0.01,
-            "WATCHLIST"
+            "WATCHLIST",
         ) == "FAIL"
 
     def test_pass_to_watchlist_requires_buffer(self):
         # Just below threshold but within buffer → stays PASS
         assert determine_status(
             DEFAULT_PASS_THRESHOLD - DEFAULT_HYSTERESIS_BUFFER + 0.01,
-            "PASS"
+            "PASS",
         ) == "PASS"
         # Well below threshold → demoted
         assert determine_status(
             DEFAULT_PASS_THRESHOLD - DEFAULT_HYSTERESIS_BUFFER - 0.01,
-            "PASS"
+            "PASS",
         ) == "WATCHLIST"
 
     def test_pass_to_fail(self):

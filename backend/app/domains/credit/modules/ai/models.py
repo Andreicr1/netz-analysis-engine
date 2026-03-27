@@ -428,6 +428,7 @@ from app.shared.models import MacroSnapshot  # noqa: F401
 
 class InvestmentMemorandumDraft(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """AI-generated Investment Memorandum draft for IC review."""
+
     __tablename__ = "investment_memorandum_drafts"
 
     deal_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("pipeline_deals.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -461,6 +462,7 @@ class MemoEvidencePack(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, 
     Generated once per deal version.  Every memo chapter reads from this
     artifact — no chapter may mutate it.  ≤ 5 000 tokens.
     """
+
     __tablename__ = "memo_evidence_packs"
 
     deal_id: Mapped[uuid.UUID] = mapped_column(
@@ -489,6 +491,7 @@ class MemoChapter(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, Audit
     plus a small set of relevant evidence chunks.  Persisted immediately
     after generation for resume safety.
     """
+
     __tablename__ = "memo_chapters"
 
     deal_id: Mapped[uuid.UUID] = mapped_column(
@@ -532,6 +535,7 @@ class DealUnderwritingArtifact(Base, IdMixin, OrganizationScopedMixin, FundScope
     and missing-document checklist exclusively from the active artifact.
     Previous artifacts are retained for audit (``is_active=False``).
     """
+
     __tablename__ = "deal_underwriting_artifacts"
 
     deal_id: Mapped[uuid.UUID] = mapped_column(
@@ -562,6 +566,7 @@ class DealUnderwritingArtifact(Base, IdMixin, OrganizationScopedMixin, FundScope
 
 class PeriodicReviewReport(Base, IdMixin, OrganizationScopedMixin, FundScopedMixin, AuditMetaMixin):
     """AI-generated periodic review of an active investment."""
+
     __tablename__ = "periodic_review_reports"
 
     investment_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("active_investments.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -592,6 +597,7 @@ class DeepReviewValidationRun(Base, IdMixin, AuditMetaMixin):
     One row per (run_id, deal_id).  Stores the full delta JSON and
     deterministic winner for institutional audit.
     """
+
     __tablename__ = "deep_review_validation_runs"
 
     fund_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -623,6 +629,7 @@ class DeepReviewValidationRun(Base, IdMixin, AuditMetaMixin):
 
 class EvalRun(Base, IdMixin, AuditMetaMixin):
     """Top-level execution record for the hybrid IC memo eval framework."""
+
     __tablename__ = "eval_runs"
 
     fund_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -652,6 +659,7 @@ class EvalRun(Base, IdMixin, AuditMetaMixin):
 
 class EvalChapterScore(Base, IdMixin, AuditMetaMixin):
     """Per-chapter score row for a hybrid IC memo eval run."""
+
     __tablename__ = "eval_chapter_scores"
 
     run_id: Mapped[uuid.UUID] = mapped_column(nullable=False, index=True)

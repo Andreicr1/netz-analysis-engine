@@ -30,6 +30,7 @@ _TIMEOUT = 180  # seconds — large PDFs can take a while
 @dataclass(frozen=True)
 class PageBlock:
     """A page-tagged block of markdown text from OCR."""
+
     page_start: int
     page_end: int
     text: str

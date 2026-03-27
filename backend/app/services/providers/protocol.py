@@ -38,7 +38,7 @@ class InstrumentDataProvider(Protocol):
     def fetch_batch(self, tickers: list[str]) -> list[RawInstrumentData]: ...
 
     def fetch_batch_history(
-        self, tickers: list[str], period: str = "3y"
+        self, tickers: list[str], period: str = "3y",
     ) -> dict[str, pd.DataFrame]: ...
 
 

@@ -169,7 +169,7 @@ async def process_pending(
         select(Document).where(
             Document.fund_id == fund_id,
             Document.id.in_(doc_ids),
-        )
+        ),
     )
     docs_by_id = {d.id: d for d in doc_result.scalars().all()}
 

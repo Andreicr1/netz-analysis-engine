@@ -10,7 +10,7 @@ Session injection pattern: caller provides db session.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
@@ -92,7 +92,7 @@ class PeerGroupService:
                 Instrument.instrument_id == instrument_id,
                 Instrument.organization_id == organization_id,
                 Instrument.is_active.is_(True),
-            )
+            ),
         ).scalar_one_or_none()
 
         if target is None:
@@ -113,7 +113,7 @@ class PeerGroupService:
                 Instrument.organization_id == organization_id,
                 Instrument.instrument_type == target.instrument_type,
                 Instrument.is_active.is_(True),
-            )
+            ),
         ).scalars().all()
 
         universe = [
@@ -174,7 +174,7 @@ class PeerGroupService:
             select(Instrument).where(
                 Instrument.organization_id == organization_id,
                 Instrument.is_active.is_(True),
-            )
+            ),
         ).scalars().all()
 
         instruments_by_id: dict[uuid.UUID, Any] = {}
@@ -218,7 +218,7 @@ class PeerGroupService:
 
         # 3. Load metrics for ALL peer group members — single query
         all_metrics = self._load_peer_metrics(
-            db, tuple(all_member_ids), organization_id
+            db, tuple(all_member_ids), organization_id,
         ) if all_member_ids else {}
 
         # 4. Rank each instrument using shared metrics
@@ -253,7 +253,7 @@ class PeerGroupService:
     ) -> PeerRanking | PeerGroupNotFound:
         """Compute percentile rankings within a peer group (loads metrics from DB)."""
         peer_metrics = self._load_peer_metrics(
-            db, peer_group.members, organization_id
+            db, peer_group.members, organization_id,
         )
         return self._rank_instrument_from_metrics(
             instrument_id=instrument_id,
@@ -361,7 +361,7 @@ class PeerGroupService:
             fallback_level=peer_group.fallback_level,
             rankings=tuple(rankings),
             composite_percentile=composite,
-            ranked_at=datetime.now(timezone.utc),
+            ranked_at=datetime.now(UTC),
         )
 
     def _load_peer_metrics(
@@ -386,7 +386,7 @@ class PeerGroupService:
             .order_by(
                 InstrumentScreeningMetrics.instrument_id,
                 InstrumentScreeningMetrics.calc_date.desc(),
-            )
+            ),
         ).scalars().all()
 
         # Keep only latest per instrument

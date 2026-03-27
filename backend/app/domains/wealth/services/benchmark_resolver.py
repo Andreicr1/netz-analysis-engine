@@ -42,10 +42,11 @@ async def fetch_benchmark_nav_series(
         (block_weights, benchmark_navs) where:
         - block_weights: block_id → target weight from strategic allocation
         - benchmark_navs: block_id → [{nav_date, return_1d}] from benchmark_nav
+
     """
     # 1. Load portfolio to get profile
     result = await db.execute(
-        select(ModelPortfolio.profile).where(ModelPortfolio.id == portfolio_id)
+        select(ModelPortfolio.profile).where(ModelPortfolio.id == portfolio_id),
     )
     profile = result.scalar_one_or_none()
     if not profile:
@@ -64,7 +65,7 @@ async def fetch_benchmark_nav_series(
         )
         .where(
             (StrategicAllocation.effective_to.is_(None))
-            | (StrategicAllocation.effective_to >= today)
+            | (StrategicAllocation.effective_to >= today),
         )
     )
     alloc_result = await db.execute(stmt)
@@ -129,7 +130,7 @@ def fetch_benchmark_nav_series_sync(
 ) -> tuple[dict[str, float], dict[str, list[dict[str, Any]]]]:
     """Sync version for to_thread contexts."""
     result = db.execute(
-        select(ModelPortfolio.profile).where(ModelPortfolio.id == portfolio_id)
+        select(ModelPortfolio.profile).where(ModelPortfolio.id == portfolio_id),
     )
     profile = result.scalar_one_or_none()
     if not profile:
@@ -147,7 +148,7 @@ def fetch_benchmark_nav_series_sync(
         )
         .where(
             (StrategicAllocation.effective_to.is_(None))
-            | (StrategicAllocation.effective_to >= today)
+            | (StrategicAllocation.effective_to >= today),
         )
     )
     alloc_result = db.execute(stmt)

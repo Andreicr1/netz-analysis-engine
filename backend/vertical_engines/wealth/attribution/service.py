@@ -62,6 +62,7 @@ class AttributionService:
             block_id -> display name.
         actual_weights_by_block : dict | None
             block_id -> actual portfolio weight. If None, uses strategic targets.
+
         """
         # Build aligned arrays — only blocks that have BOTH fund and benchmark data
         block_ids: list[str] = []
@@ -137,7 +138,7 @@ class AttributionService:
         # Check for Carino edge case: total excess near zero
         total_excess = float(
             np.prod([1 + r for r in portfolio_period_returns])
-            - np.prod([1 + r for r in benchmark_period_returns])
+            - np.prod([1 + r for r in benchmark_period_returns]),
         )
 
         if abs(total_excess) < 1e-10:
@@ -193,7 +194,7 @@ class AttributionService:
                     selection_effect=round(effects["selection"], 6),
                     interaction_effect=round(effects["interaction"], 6),
                     total_effect=round(total, 6),
-                )
+                ),
             )
 
         avg_p = total_p / n

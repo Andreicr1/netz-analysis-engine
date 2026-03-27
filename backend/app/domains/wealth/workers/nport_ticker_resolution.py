@@ -28,7 +28,7 @@ async def run_nport_ticker_resolution() -> dict:
     """Resolve tickers for registered funds without ticker via OpenFIGI."""
     async with async_session() as db:
         lock_result = await db.execute(
-            text(f"SELECT pg_try_advisory_lock({TICKER_LOCK_ID})")
+            text(f"SELECT pg_try_advisory_lock({TICKER_LOCK_ID})"),
         )
         if not lock_result.scalar():
             logger.warning("nport_ticker_resolution already running (advisory lock not acquired)")
@@ -71,7 +71,7 @@ async def run_nport_ticker_resolution() -> dict:
                                 text(
                                     "UPDATE sec_registered_funds "
                                     "SET ticker = :ticker "
-                                    "WHERE cik = :cik"
+                                    "WHERE cik = :cik",
                                 ),
                                 {"cik": cik, "ticker": ticker},
                             )
@@ -101,7 +101,7 @@ async def run_nport_ticker_resolution() -> dict:
 
         finally:
             await db.execute(
-                text(f"SELECT pg_advisory_unlock({TICKER_LOCK_ID})")
+                text(f"SELECT pg_advisory_unlock({TICKER_LOCK_ID})"),
             )
 
 
@@ -149,7 +149,7 @@ async def _resolve_batch_openfigi(
 
             tickers: list[str | None] = []
             for result in results:
-                if "data" in result and result["data"]:
+                if result.get("data"):
                     ticker = result["data"][0].get("ticker")
                     tickers.append(ticker)
                 else:

@@ -259,7 +259,6 @@ class TestConfigServiceGetIntegration:
     @pytest.mark.asyncio
     async def test_optional_miss_cached(self):
         """Optional miss result is cached so subsequent calls don't re-query."""
-
         db = AsyncMock()
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None

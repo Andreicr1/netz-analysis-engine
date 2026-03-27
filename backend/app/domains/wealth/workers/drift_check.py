@@ -49,7 +49,7 @@ async def run_drift_check() -> dict[str, str]:
                 sa_select(VerticalConfigDefault.config).where(
                     VerticalConfigDefault.vertical == "liquid_funds",
                     VerticalConfigDefault.config_type == "calibration",
-                )
+                ),
             )
             config = cfg_result.scalar_one_or_none()
         except Exception:

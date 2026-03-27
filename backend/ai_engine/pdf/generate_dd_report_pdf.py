@@ -58,6 +58,7 @@ def generate_dd_report_pdf(
 
     Returns:
         BytesIO seeked to 0 containing the PDF.
+
     """
     labels = LABELS[language]
     styles = build_netz_styles()

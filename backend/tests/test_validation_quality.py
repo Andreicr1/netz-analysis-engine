@@ -113,7 +113,7 @@ class TestCrossValidateAnswer:
     def test_multiple_claim_types(self) -> None:
         answer = "MOIC of 2.5x, yield 7.2%, and commitment of $10 million."
         chunks = [
-            _chunk(chunk_text="moic 2.5x confirmed, yield 7.2%, commitment $10 million")
+            _chunk(chunk_text="moic 2.5x confirmed, yield 7.2%, commitment $10 million"),
         ]
         result = cross_validate_answer(answer, chunks)
         assert result["overall_status"] == "CONFIRMED"
@@ -159,7 +159,7 @@ class TestRecencyAnalysis:
         assert result["mixed_revisions"] is True
         assert result["most_recent"] == "2025-01-15"
         assert result["revisions_detected"] == sorted(
-            ["2024-06-01", "2024-11-20", "2025-01-15"]
+            ["2024-06-01", "2024-11-20", "2025-01-15"],
         )
         assert result["last_modified_range"]["earliest"] == "2024-06-01"
         assert result["last_modified_range"]["latest"] == "2025-01-15"
@@ -270,7 +270,7 @@ class TestFormatCitations:
                 doc_type="ppm",
                 domain="credit",
                 search_score=0.92,
-            )
+            ),
         ]
         citations = format_citations(chunks)
         c = citations[0]

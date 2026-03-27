@@ -56,7 +56,7 @@ async def get_stale_embeddings(
             client.async_stale_embeddings(org_id, vertical, current_model, expected_dim),
             timeout=_TIMEOUT_SECONDS,
         )
-    except (TimeoutError, asyncio.TimeoutError):
+    except TimeoutError:
         raise HTTPException(status_code=504, detail="DuckDB query timed out")
     items = [StaleEmbeddingOut.model_validate(r, from_attributes=True) for r in results]
     return InspectResultOut(
@@ -84,7 +84,7 @@ async def get_document_coverage(
             client.async_document_coverage(org_id, vertical),
             timeout=_TIMEOUT_SECONDS,
         )
-    except (TimeoutError, asyncio.TimeoutError):
+    except TimeoutError:
         raise HTTPException(status_code=504, detail="DuckDB query timed out")
     items = [DocumentCoverageOut.model_validate(r, from_attributes=True) for r in results]
     return InspectResultOut(
@@ -113,7 +113,7 @@ async def get_extraction_quality(
             client.async_extraction_quality(org_id, vertical, min_chars),
             timeout=_TIMEOUT_SECONDS,
         )
-    except (TimeoutError, asyncio.TimeoutError):
+    except TimeoutError:
         raise HTTPException(status_code=504, detail="DuckDB query timed out")
     items = [ExtractionQualityOut.model_validate(r, from_attributes=True) for r in results]
     return InspectResultOut(
@@ -141,7 +141,7 @@ async def get_chunk_stats(
             client.async_chunk_stats(org_id, vertical),
             timeout=_TIMEOUT_SECONDS,
         )
-    except (TimeoutError, asyncio.TimeoutError):
+    except TimeoutError:
         raise HTTPException(status_code=504, detail="DuckDB query timed out")
     return ChunkStatsOut(
         total_chunks=result.total_chunks,
@@ -174,7 +174,7 @@ async def get_embedding_audit(
             client.async_embedding_dimension_audit(org_id, vertical, expected_dim),
             timeout=_TIMEOUT_SECONDS,
         )
-    except (TimeoutError, asyncio.TimeoutError):
+    except TimeoutError:
         raise HTTPException(status_code=504, detail="DuckDB query timed out")
     items = [DimensionMismatchOut.model_validate(r, from_attributes=True) for r in results]
     return InspectResultOut(

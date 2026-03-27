@@ -26,6 +26,7 @@ async def run_monthly_fact_sheets() -> dict[str, Any]:
 
     Returns:
         Summary dict with generation results.
+
     """
     from app.core.db.session import sync_session_factory
     from app.domains.wealth.models.model_portfolio import ModelPortfolio

@@ -12,7 +12,7 @@ import argparse
 import json
 import os
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from io import BytesIO
 
 from reportlab.lib.units import mm
@@ -76,7 +76,7 @@ def generate_pipeline_memo_pdf(data, output_path=None):
     deal_name = data.get("deal_name", "Unknown")
     sponsor   = data.get("sponsor", "Unknown")
     gen_at    = data.get("generated_at")
-    as_of     = gen_at.strftime("%Y-%m-%d %H:%M UTC") if gen_at else datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    as_of     = gen_at.strftime("%Y-%m-%d %H:%M UTC") if gen_at else datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     thesis    = ro.get("investment_thesis", {}) or {}
     signal    = thesis.get("recommendation", "") if isinstance(thesis, dict) else ""
     sig_rat   = thesis.get("recommendation_rationale", "") if isinstance(thesis, dict) else ""

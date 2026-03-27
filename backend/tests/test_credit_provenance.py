@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -24,8 +24,8 @@ DEV_ACTOR_HEADER = {
             "roles": ["ADMIN"],
             "fund_ids": [str(FUND_ID)],
             "org_id": ORG_ID,
-        }
-    )
+        },
+    ),
 }
 
 BASE = f"/api/v1/funds/{FUND_ID}/deals/{DEAL_ID}"
@@ -58,7 +58,7 @@ def _fake_review():
     review.classification_layer = 2
     review.classification_model = None
     review.routing_basis = "Embedding similarity to term sheet corpus"
-    review.submitted_at = datetime(2026, 3, 15, 10, 0, 0, tzinfo=timezone.utc)
+    review.submitted_at = datetime(2026, 3, 15, 10, 0, 0, tzinfo=UTC)
     review.status = "APPROVED"
     review.metadata_json = {"embedding_model": "text-embedding-3-large", "embedding_dim": 3072}
     review.fund_id = FUND_ID
@@ -73,8 +73,8 @@ def _fake_memo(version: int = 1):
     memo.version = version
     memo.recommendation = "APPROVED"
     memo.created_by = "analyst@netz.capital"
-    memo.created_at = datetime(2026, 3, 14, 9, 0, 0, tzinfo=timezone.utc)
-    memo.updated_at = datetime(2026, 3, 14, 10, 0, 0, tzinfo=timezone.utc)
+    memo.created_at = datetime(2026, 3, 14, 9, 0, 0, tzinfo=UTC)
+    memo.updated_at = datetime(2026, 3, 14, 10, 0, 0, tzinfo=UTC)
     memo.committee_votes = [
         {
             "email": "ic-member@netz.capital",
@@ -82,7 +82,7 @@ def _fake_memo(version: int = 1):
             "signed_at": "2026-03-14T11:00:00+00:00",
             "actor_capacity": "ic_member",
             "rationale": "Solid deal structure",
-        }
+        },
     ]
     return memo
 
@@ -97,7 +97,7 @@ def _fake_audit_event(action: str, before: dict | None, after: dict | None):
     ae.fund_id = FUND_ID
     ae.before_state = before
     ae.after_state = after
-    ae.created_at = datetime(2026, 3, 15, 12, 0, 0, tzinfo=timezone.utc)
+    ae.created_at = datetime(2026, 3, 15, 12, 0, 0, tzinfo=UTC)
     return ae
 
 
@@ -202,7 +202,7 @@ class TestMemoTimeline:
         app.dependency_overrides[get_db_with_rls] = lambda: mock_db
         try:
             resp = await client.get(
-                f"{BASE}/ic-memo/timeline", headers=DEV_ACTOR_HEADER
+                f"{BASE}/ic-memo/timeline", headers=DEV_ACTOR_HEADER,
             )
         finally:
             app.dependency_overrides.clear()
@@ -225,7 +225,7 @@ class TestMemoTimeline:
         app.dependency_overrides[get_db_with_rls] = lambda: mock_db
         try:
             resp = await client.get(
-                f"{BASE}/ic-memo/timeline", headers=DEV_ACTOR_HEADER
+                f"{BASE}/ic-memo/timeline", headers=DEV_ACTOR_HEADER,
             )
         finally:
             app.dependency_overrides.clear()
@@ -254,7 +254,7 @@ class TestDecisionAudit:
         app.dependency_overrides[get_db_with_rls] = lambda: mock_db
         try:
             resp = await client.get(
-                f"{BASE}/decision-audit", headers=DEV_ACTOR_HEADER
+                f"{BASE}/decision-audit", headers=DEV_ACTOR_HEADER,
             )
         finally:
             app.dependency_overrides.clear()
@@ -277,7 +277,7 @@ class TestDecisionAudit:
         app.dependency_overrides[get_db_with_rls] = lambda: mock_db
         try:
             resp = await client.get(
-                f"{BASE}/decision-audit", headers=DEV_ACTOR_HEADER
+                f"{BASE}/decision-audit", headers=DEV_ACTOR_HEADER,
             )
         finally:
             app.dependency_overrides.clear()
@@ -295,7 +295,7 @@ class TestDecisionAudit:
         app.dependency_overrides[get_db_with_rls] = lambda: mock_db
         try:
             resp = await client.get(
-                f"{BASE}/decision-audit", headers=DEV_ACTOR_HEADER
+                f"{BASE}/decision-audit", headers=DEV_ACTOR_HEADER,
             )
         finally:
             app.dependency_overrides.clear()

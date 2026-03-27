@@ -500,11 +500,10 @@ class TestTickerResolver:
         with patch(
             "data_providers.esma.ticker_resolver.resolve_isin_to_ticker_batch",
             return_value=mock_results,
-        ):
-            with patch("data_providers.esma.ticker_resolver.check_openfigi_rate"):
-                async with TickerResolver(api_key="test") as resolver:
-                    results = await resolver.resolve_batch(["IE00B4L5Y983"])
-                    assert results == mock_results
+        ), patch("data_providers.esma.ticker_resolver.check_openfigi_rate"):
+            async with TickerResolver(api_key="test") as resolver:
+                results = await resolver.resolve_batch(["IE00B4L5Y983"])
+                assert results == mock_results
 
     async def test_resolve_all_chunks_batches(self):
         """resolve_all splits ISINs into OPENFIGI_BATCH_SIZE chunks."""

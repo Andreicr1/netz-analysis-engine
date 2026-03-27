@@ -26,9 +26,9 @@ from __future__ import annotations
 import io
 import re
 import zipfile
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import date, timedelta
-from typing import Iterator
 from xml.etree.ElementTree import iterparse
 
 import httpx
@@ -178,6 +178,7 @@ class FirdsService:
             zip_data: Raw ZIP file bytes.
             lei_filter: If provided, only yield instruments whose LEI
                 is in this set. Dramatically reduces output for large files.
+
         """
         # Extract XML from ZIP
         with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:

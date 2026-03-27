@@ -14,8 +14,9 @@ Lifecycle: Instantiate ONCE in FastAPI lifespan().
 from __future__ import annotations
 
 import re
-from datetime import date, datetime, timedelta, timezone
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
 import structlog
 from sqlalchemy import select
@@ -482,7 +483,7 @@ class ThirteenFService:
                 )
                 holdings_df = holdings_df.head(_MAX_HOLDINGS_PER_FILING)
 
-            now_iso = datetime.now(timezone.utc).isoformat()
+            now_iso = datetime.now(UTC).isoformat()
 
             for _, row in holdings_df.iterrows():
                 cusip = str(row.get("Cusip", "") or "").strip()
@@ -705,7 +706,7 @@ class ThirteenFService:
 
     async def _upsert_holdings(self, holdings: list[ThirteenFHolding]) -> None:
         """Bulk upsert holdings to sec_13f_holdings. Chunks at 2000."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         rows = [
             {
                 "cik": h.cik,

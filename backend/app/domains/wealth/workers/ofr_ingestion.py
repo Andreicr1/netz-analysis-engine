@@ -41,7 +41,7 @@ async def run_ofr_ingestion(lookback_years: int = 5) -> dict:
     """Fetch OFR hedge fund data and upsert to ofr_hedge_fund_data hypertable."""
     async with async_session() as db:
         lock_result = await db.execute(
-            text(f"SELECT pg_try_advisory_lock({OFR_LOCK_ID})")
+            text(f"SELECT pg_try_advisory_lock({OFR_LOCK_ID})"),
         )
         if not lock_result.scalar():
             logger.warning("OFR ingestion already running (advisory lock not acquired)")
@@ -223,7 +223,7 @@ async def run_ofr_ingestion(lookback_years: int = 5) -> dict:
         finally:
             try:
                 await db.execute(
-                    text(f"SELECT pg_advisory_unlock({OFR_LOCK_ID})")
+                    text(f"SELECT pg_advisory_unlock({OFR_LOCK_ID})"),
                 )
             except Exception:
                 pass  # lock auto-released on session close

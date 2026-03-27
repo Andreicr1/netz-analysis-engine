@@ -48,6 +48,7 @@ def aggregate(
         Annual risk-free rate (default 4%).
     config : dict | None
         Optional overrides.
+
     """
     if len(portfolio_returns) == 0:
         return PortfolioMetrics()

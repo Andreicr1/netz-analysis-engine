@@ -38,6 +38,7 @@ def parse_critic_response(
     -------
     CriticVerdict
         Parsed verdict (frozen dataclass).
+
     """
     sanitized = sanitize_llm_text(raw_response) or ""
 

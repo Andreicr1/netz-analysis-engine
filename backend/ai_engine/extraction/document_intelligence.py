@@ -145,6 +145,7 @@ CANONICAL_TO_AFFINITY: dict[str, frozenset[str]] = {
 @dataclass
 class ClassificationResult:
     """LLM classification output."""
+
     doc_type: str
     sub_type: str = ""
     confidence: int = 0
@@ -155,6 +156,7 @@ class ClassificationResult:
 @dataclass
 class MetadataResult:
     """LLM metadata extraction output."""
+
     entities: dict[str, list[str]] = field(default_factory=dict)
     financial_figures: dict[str, Any] = field(default_factory=dict)
     dates: dict[str, str] = field(default_factory=dict)
@@ -168,6 +170,7 @@ class MetadataResult:
 @dataclass
 class SummaryResult:
     """LLM summary output."""
+
     summary: str = ""
     key_findings: list[str] = field(default_factory=list)
     deal_relevance_score: int = 0
@@ -176,6 +179,7 @@ class SummaryResult:
 @dataclass
 class DocumentIntelligenceResult:
     """Combined result from all 3 components."""
+
     classification: ClassificationResult
     metadata: MetadataResult
     summary: SummaryResult
@@ -453,6 +457,7 @@ async def async_run_document_intelligence(
 @dataclass
 class FullIntelligenceResult:
     """Combined result from hybrid classification + governance + LLM extraction."""
+
     doc_type: str
     doc_type_score: float
     vehicle_type: str

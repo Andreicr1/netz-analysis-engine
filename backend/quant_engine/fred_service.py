@@ -148,6 +148,7 @@ class FredService:
         api_key: FRED API key (from settings.fred_api_key).
         base_url: FRED API base URL.
         rate_limiter: Shared rate limiter instance. If None, creates default.
+
     """
 
     def __init__(
@@ -173,7 +174,7 @@ class FredService:
     def __enter__(self) -> FredService:
         return self
 
-    def __exit__(self, *_: Any) -> None:
+    def __exit__(self, *_: object) -> None:
         self.close()
 
     def fetch_series(
@@ -206,6 +207,7 @@ class FredService:
         Returns:
             List of FredObservation with parsed values.
             Missing values (".", "#N/A") are filtered out.
+
         """
         self._rate_limiter.acquire()
 
@@ -368,6 +370,7 @@ class FredService:
 
         Returns:
             Flat dict mapping series_id to observations list (all domains merged).
+
         """
         merged: dict[str, list[FredObservation]] = {}
 

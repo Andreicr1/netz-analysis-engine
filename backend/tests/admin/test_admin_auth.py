@@ -147,9 +147,9 @@ class TestGetActorPrecedence:
                     (
                         clerk_auth.settings.dev_actor_header.lower().encode(),
                         b'{"actor_id":"header-user","roles":["SUPER_ADMIN"]}',
-                    )
+                    ),
                 ],
-            }
+            },
         )
         credentials = HTTPAuthorizationCredentials(
             scheme="Bearer",
@@ -169,7 +169,7 @@ class TestGetActorPrecedence:
             return_value={
                 "sub": "jwt-user",
                 "o": {"id": str(uuid.uuid4()), "rol": "org:investor", "slg": "acme"},
-            }
+            },
         )
         monkeypatch.setattr(clerk_auth, "_verify_clerk_jwt", verify_mock)
 
@@ -196,7 +196,7 @@ class TestGetActorPrecedence:
                 "name": "JWT User",
                 "email": "jwt@example.com",
                 "o": {"id": org_id, "rol": "org:admin", "slg": "acme"},
-            }
+            },
         )
         monkeypatch.setattr(clerk_auth, "_verify_clerk_jwt", verify_mock)
 

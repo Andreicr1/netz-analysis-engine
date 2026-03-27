@@ -39,7 +39,7 @@ class TestCreditSensitivityIntegration:
         assert summary["dominant_driver"] in ("default_rate", "balanced", "recovery_rate")
 
     def test_quant_package_exports_correctly(self) -> None:
-        """quant package exports build_sensitivity_2d."""
+        """Quant package exports build_sensitivity_2d."""
         from vertical_engines.credit.quant.sensitivity import build_sensitivity_2d as sens_2d
 
         grid = sens_2d(8.5, [])
@@ -253,7 +253,7 @@ class TestRegimeDecoupled:
 class TestCreditBacktest:
     """Unit tests for credit PD/LGD backtest service."""
 
-    def _make_synthetic_data(self, n_obs: int = 200, default_rate: float = 0.1) -> "BacktestInput":
+    def _make_synthetic_data(self, n_obs: int = 200, default_rate: float = 0.1) -> BacktestInput:
         from vertical_engines.credit.quant import BacktestInput
 
         rng = np.random.default_rng(42)

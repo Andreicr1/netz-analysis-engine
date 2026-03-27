@@ -50,6 +50,7 @@ def determine_cascade_action(
         config: portfolio_profiles config dict from ConfigService.
 
     Returns (event_type, trigger_reason) or (None, None) if no action needed.
+
     """
     profiles = resolve_cvar_config(config)
     profile_config = profiles[profile]

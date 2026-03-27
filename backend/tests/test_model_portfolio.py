@@ -503,7 +503,7 @@ class TestAttributionService:
         R_b2 = float(np.sum(w_b * r_b2))
 
         linked = compute_multi_period_attribution(
-            [p1, p2], [R_p1, R_p2], [R_b1, R_b2]
+            [p1, p2], [R_p1, R_p2], [R_b1, R_b2],
         )
 
         assert linked.n_periods == 2

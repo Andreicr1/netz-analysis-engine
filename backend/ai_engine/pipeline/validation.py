@@ -46,7 +46,7 @@ def validate_ocr_output(text: str, filename: str) -> PipelineStageResult:
     if char_count < MIN_OCR_CHARS:
         errors.append(
             f"OCR produced only {char_count} chars (minimum: {MIN_OCR_CHARS}) "
-            f"for '{filename}'"
+            f"for '{filename}'",
         )
 
     if char_count > 0:
@@ -62,7 +62,7 @@ def validate_ocr_output(text: str, filename: str) -> PipelineStageResult:
         if ratio > MAX_NON_PRINTABLE_RATIO:
             errors.append(
                 f"Non-printable character ratio {ratio:.1%} exceeds "
-                f"{MAX_NON_PRINTABLE_RATIO:.0%} for '{filename}'"
+                f"{MAX_NON_PRINTABLE_RATIO:.0%} for '{filename}'",
             )
 
     return PipelineStageResult(
@@ -87,13 +87,13 @@ def validate_classification(result: HybridClassificationResult) -> PipelineStage
 
     if result.doc_type not in CANONICAL_DOC_TYPES:
         errors.append(
-            f"Invalid doc_type '{result.doc_type}' not in canonical set"
+            f"Invalid doc_type '{result.doc_type}' not in canonical set",
         )
 
     if result.confidence < MIN_CLASSIFICATION_CONFIDENCE:
         warnings.append(
             f"Low classification confidence {result.confidence:.2f} "
-            f"(threshold: {MIN_CLASSIFICATION_CONFIDENCE}) — proceeding with caution"
+            f"(threshold: {MIN_CLASSIFICATION_CONFIDENCE}) — proceeding with caution",
         )
 
     return PipelineStageResult(
@@ -146,12 +146,12 @@ def validate_chunks(
         if loss_ratio > MAX_CONTENT_LOSS_RATIO:
             errors.append(
                 f"Content loss {loss_ratio:.1%} exceeds {MAX_CONTENT_LOSS_RATIO:.0%} "
-                f"threshold ({input_char_count} input → {output_chars} output chars)"
+                f"threshold ({input_char_count} input → {output_chars} output chars)",
             )
         elif output_chars > input_char_count * 1.5:
             warnings.append(
                 f"Content expansion detected: {input_char_count} input → "
-                f"{output_chars} output chars (50%+ expansion)"
+                f"{output_chars} output chars (50%+ expansion)",
             )
 
     # Max chunk size check
@@ -163,7 +163,7 @@ def validate_chunks(
         if oversized:
             warnings.append(
                 f"{len(oversized)} chunks exceed max size {max_chunk_size}: "
-                f"indices {oversized[:5]}"
+                f"indices {oversized[:5]}",
             )
 
     return PipelineStageResult(
@@ -197,7 +197,7 @@ def validate_embeddings(
 
     if emb_count != chunk_count:
         errors.append(
-            f"Embedding count {emb_count} != chunk count {chunk_count}"
+            f"Embedding count {emb_count} != chunk count {chunk_count}",
         )
 
     # Check for NaN values and dimension consistency
@@ -211,7 +211,7 @@ def validate_embeddings(
                     first_dim = dim
                 elif dim != first_dim:
                     errors.append(
-                        f"Dimension mismatch at index {i}: {dim} != {first_dim}"
+                        f"Dimension mismatch at index {i}: {dim} != {first_dim}",
                     )
                 # Check for NaN (only if numeric)
                 if hasattr(vec, "__iter__"):

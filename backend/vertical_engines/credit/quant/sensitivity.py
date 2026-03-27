@@ -35,6 +35,7 @@ def build_sensitivity_2d(
         proxy_flags: Proxy flag list (passed for interface compat, not used).
         default_rates: Override default rate grid axis.
         recovery_rates: Override recovery rate grid axis.
+
     """
     if base_return_pct is None:
         return []
@@ -68,6 +69,7 @@ def build_sensitivity_3d_summary(
         base_return_pct: Base return percentage.
         sensitivity_2d: Output from build_sensitivity_2d().
         rate_shocks_bps: Override rate shock axis (basis points).
+
     """
     if base_return_pct is None or not sensitivity_2d:
         return {}

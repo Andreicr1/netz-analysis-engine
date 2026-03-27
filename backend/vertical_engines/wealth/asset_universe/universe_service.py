@@ -50,11 +50,11 @@ class UniverseService:
         """
         # Verify the fund exists (check Instrument first, fallback to Fund)
         inst = db.execute(
-            select(Instrument).where(Instrument.instrument_id == instrument_id)
+            select(Instrument).where(Instrument.instrument_id == instrument_id),
         ).scalar_one_or_none()
         if inst is None:
             fund = db.execute(
-                select(Fund).where(Fund.fund_id == instrument_id)
+                select(Fund).where(Fund.fund_id == instrument_id),
             ).scalar_one_or_none()
             if fund is None:
                 raise ValueError(f"Fund {instrument_id} not found")
@@ -171,7 +171,7 @@ class UniverseService:
                 UniverseApproval.organization_id == organization_id,
                 UniverseApproval.is_current.is_(True),
                 UniverseApproval.decision == "pending",
-            ).order_by(UniverseApproval.created_at.desc())
+            ).order_by(UniverseApproval.created_at.desc()),
         )
         return list(result.scalars().all())
 
@@ -192,7 +192,7 @@ class UniverseService:
             select(Instrument).where(
                 Instrument.instrument_id == instrument_id,
                 Instrument.organization_id == organization_id,
-            ).with_for_update()
+            ).with_for_update(),
         ).scalar_one_or_none()
 
         if inst is None:
@@ -201,7 +201,7 @@ class UniverseService:
                 select(Fund).where(
                     Fund.fund_id == instrument_id,
                     Fund.organization_id == organization_id,
-                ).with_for_update()
+                ).with_for_update(),
             ).scalar_one_or_none()
             if fund is None:
                 raise ValueError(f"Fund {instrument_id} not found")
@@ -218,7 +218,7 @@ class UniverseService:
                 UniverseApproval.organization_id == organization_id,
                 UniverseApproval.is_current.is_(True),
                 UniverseApproval.decision == "approved",
-            )
+            ),
         ).scalar_one_or_none()
 
         rebalance_needed = approval is not None

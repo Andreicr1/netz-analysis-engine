@@ -50,7 +50,7 @@ def _make_high_confidence_chunks(n: int = 6) -> list[dict]:
                 chunk_index=i,
                 reranker_score=5.0 - i * 0.1,
                 score=0.8 - i * 0.01,
-            )
+            ),
         )
     return chunks
 
@@ -77,7 +77,7 @@ def _make_moderate_confidence_chunks(n: int = 5) -> list[dict]:
                 chunk_id=f"c{i}",
                 chunk_index=i,
                 reranker_score=5.0 - i * 0.05,
-            )
+            ),
         )
     return chunks
 
@@ -109,7 +109,7 @@ def _patch_dependencies():
         yield
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_embeddings():
     """Patch embedding service to return a dummy vector."""
     emb_result = MagicMock()

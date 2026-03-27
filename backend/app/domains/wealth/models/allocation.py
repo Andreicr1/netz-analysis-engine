@@ -13,11 +13,11 @@ class StrategicAllocation(OrganizationScopedMixin, Base):
     __tablename__ = "strategic_allocation"
 
     allocation_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
     )
     profile: Mapped[str] = mapped_column(String(20), nullable=False)
     block_id: Mapped[str] = mapped_column(
-        String(80), ForeignKey("allocation_blocks.block_id"), nullable=False
+        String(80), ForeignKey("allocation_blocks.block_id"), nullable=False,
     )
     target_weight: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False)
     min_weight: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False)
@@ -29,7 +29,7 @@ class StrategicAllocation(OrganizationScopedMixin, Base):
     effective_to: Mapped[date | None] = mapped_column(Date)
     actor_source: Mapped[str | None] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), server_default=func.now(),
     )
 
 
@@ -37,11 +37,11 @@ class TacticalPosition(OrganizationScopedMixin, Base):
     __tablename__ = "tactical_positions"
 
     position_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4,
     )
     profile: Mapped[str] = mapped_column(String(20), nullable=False)
     block_id: Mapped[str] = mapped_column(
-        String(80), ForeignKey("allocation_blocks.block_id"), nullable=False
+        String(80), ForeignKey("allocation_blocks.block_id"), nullable=False,
     )
     overweight: Mapped[Decimal] = mapped_column(Numeric(6, 4), nullable=False)
     conviction_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
@@ -51,5 +51,5 @@ class TacticalPosition(OrganizationScopedMixin, Base):
     valid_to: Mapped[date | None] = mapped_column(Date)
     actor_source: Mapped[str | None] = mapped_column(String(20))
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), server_default=func.now(),
     )

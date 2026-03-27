@@ -34,7 +34,8 @@ class TestBaseInterfaces:
 
 class TestCreditModuleStructure:
     """Verify that all expected credit modules can be found (not imported —
-    they have heavy dependencies).  We check the module spec exists."""
+    they have heavy dependencies).  We check the module spec exists.
+    """
 
     EXPECTED_MODULES = [
         "vertical_engines.credit.deep_review",

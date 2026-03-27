@@ -7,7 +7,7 @@ Helpers used by UniverseService. Must NOT import from universe_service.py
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -46,16 +46,16 @@ def validate_dd_report(db: Session, analysis_report_id: uuid.UUID, instrument_id
         select(DDReport).where(
             DDReport.id == analysis_report_id,
             DDReport.instrument_id == instrument_id,
-        )
+        ),
     ).scalar_one_or_none()
 
     if report is None:
         raise MissingDDReportError(
-            f"DD Report {analysis_report_id} not found for fund {instrument_id}"
+            f"DD Report {analysis_report_id} not found for fund {instrument_id}",
         )
     if report.status not in ("completed", "escalated"):
         raise MissingDDReportError(
-            f"DD Report {analysis_report_id} has status '{report.status}', expected 'completed' or 'escalated'"
+            f"DD Report {analysis_report_id} has status '{report.status}', expected 'completed' or 'escalated'",
         )
     return report
 
@@ -71,7 +71,7 @@ def create_pending_approval(db: Session, request: ApprovalRequest) -> UniverseAp
             UniverseApproval.instrument_id == request.instrument_id,
             UniverseApproval.organization_id == request.organization_id,
             UniverseApproval.is_current.is_(True),
-        )
+        ),
     ).scalar_one_or_none()
 
     if existing is not None:
@@ -98,14 +98,14 @@ def decide_approval(db: Session, decision: ApprovalDecision) -> UniverseApproval
     """
     if decision.decision not in VALID_DECISIONS:
         raise InvalidDecisionError(
-            f"Invalid decision '{decision.decision}'. Valid: {', '.join(sorted(VALID_DECISIONS))}"
+            f"Invalid decision '{decision.decision}'. Valid: {', '.join(sorted(VALID_DECISIONS))}",
         )
 
     # Load approval with FOR UPDATE to prevent concurrent decisions
     approval = db.execute(
         select(UniverseApproval)
         .where(UniverseApproval.id == decision.approval_id)
-        .with_for_update()
+        .with_for_update(),
     ).scalar_one_or_none()
 
     if approval is None:
@@ -113,21 +113,21 @@ def decide_approval(db: Session, decision: ApprovalDecision) -> UniverseApproval
 
     if approval.decision != "pending":
         raise ValueError(
-            f"Approval {decision.approval_id} already decided: {approval.decision}"
+            f"Approval {decision.approval_id} already decided: {approval.decision}",
         )
 
     # Self-approval prevention
     if approval.created_by and approval.created_by == decision.decided_by:
         raise SelfApprovalError(
             "Self-approval is not allowed: the person who submitted the fund "
-            "for approval cannot be the same person who decides on it"
+            "for approval cannot be the same person who decides on it",
         )
 
     # Lock the fund row to prevent concurrent state corruption
     fund = db.execute(
         select(Fund)
         .where(Fund.fund_id == approval.instrument_id)
-        .with_for_update()
+        .with_for_update(),
     ).scalar_one_or_none()
 
     if fund is None:
@@ -137,7 +137,7 @@ def decide_approval(db: Session, decision: ApprovalDecision) -> UniverseApproval
     approval.decision = decision.decision
     approval.rationale = decision.rationale
     approval.decided_by = decision.decided_by
-    approval.decided_at = datetime.now(timezone.utc)
+    approval.decided_at = datetime.now(UTC)
 
     # Update fund approval_status
     fund.approval_status = _DECISION_TO_FUND_STATUS[decision.decision]

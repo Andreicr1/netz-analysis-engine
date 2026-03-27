@@ -600,7 +600,7 @@ async def download_monthly_pack(
     return Response(
         content=data,
         media_type="application/json",
-        headers={"Content-Disposition": f"attachment; filename=\"{filename}\""},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         status_code=status.HTTP_200_OK,
     )
 
@@ -742,7 +742,7 @@ async def download_investor_statement(
     return Response(
         content=data,
         media_type="application/json",
-        headers={"Content-Disposition": f"attachment; filename=\"{filename}\""},
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         status_code=status.HTTP_200_OK,
     )
 
@@ -756,7 +756,6 @@ async def get_reporting_archive(
     _role_guard: Actor = Depends(require_role(["ADMIN", "GP", "COMPLIANCE", "AUDITOR", "INVESTMENT_TEAM"])),
 ) -> dict[str, Any]:
     """Read-only archive of persisted reporting artifacts (no client-side derivation)."""
-
     period_month = (period_month or "").strip() or None
     if period_month:
         try:

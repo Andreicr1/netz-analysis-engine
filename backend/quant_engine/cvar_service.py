@@ -158,6 +158,7 @@ def check_breach_status(
             Caller fetches from PortfolioSnapshot.consecutive_breach_days.
         config: portfolio_profiles config dict from ConfigService.
                Falls back to hardcoded defaults if None.
+
     """
     profiles = resolve_cvar_config(config)
     profile_config = profiles.get(profile, _DEFAULT_CVAR_CONFIG.get(profile, {}))

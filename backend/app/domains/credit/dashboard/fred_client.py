@@ -135,6 +135,7 @@ class AsyncFredClient:
     Lifecycle:
         Use as an async context manager or call aclose() explicitly.
         Module-level singleton created via ``get_shared_client()``.
+
     """
 
     def __init__(
@@ -168,7 +169,7 @@ class AsyncFredClient:
     async def __aenter__(self) -> AsyncFredClient:
         return self
 
-    async def __aexit__(self, *_: Any) -> None:
+    async def __aexit__(self, *_: object) -> None:
         await self.aclose()
 
     # ------------------------------------------------------------------
@@ -185,6 +186,7 @@ class AsyncFredClient:
             httpx.TimeoutException: on connect/read timeout.
             httpx.HTTPStatusError: on 4xx/5xx responses.
             asyncio.CancelledError: propagated unchanged (caller can cancel).
+
         """
         url = f"{self._base_url}/{path.lstrip('/')}"
         all_params = {**self._base_params(), **params}

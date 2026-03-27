@@ -13,7 +13,7 @@ Advisory lock ID = 900_023.
 
 import asyncio
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import text
@@ -36,7 +36,7 @@ async def run_esma_ingestion() -> dict:
     """
     async with async_session() as db:
         lock_result = await db.execute(
-            text(f"SELECT pg_try_advisory_lock({ESMA_LOCK_ID})")
+            text(f"SELECT pg_try_advisory_lock({ESMA_LOCK_ID})"),
         )
         if not lock_result.scalar():
             logger.warning("ESMA ingestion already running (advisory lock not acquired)")
@@ -52,7 +52,7 @@ async def run_esma_ingestion() -> dict:
             )
             from data_providers.esma.ticker_resolver import TickerResolver
 
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
 
             # ── Single pass: extract funds + managers from raw Solr docs ──
             funds_dc: list[EsmaFundDC] = []
@@ -243,7 +243,7 @@ async def run_esma_ingestion() -> dict:
                     await db.execute(
                         text(
                             "UPDATE esma_funds SET yahoo_ticker = :ticker, "
-                            "ticker_resolved_at = :now WHERE isin = :isin"
+                            "ticker_resolved_at = :now WHERE isin = :isin",
                         ),
                         {"ticker": ticker, "now": now, "isin": isin},
                     )
@@ -261,7 +261,7 @@ async def run_esma_ingestion() -> dict:
 
         finally:
             await db.execute(
-                text(f"SELECT pg_advisory_unlock({ESMA_LOCK_ID})")
+                text(f"SELECT pg_advisory_unlock({ESMA_LOCK_ID})"),
             )
 
 

@@ -23,10 +23,10 @@ from vertical_engines.credit.underwriting.persistence import (
 )
 
 __all__ = [
-    "persist_underwriting_artifact",
+    "compute_evidence_pack_hash",
+    "confidence_to_level",
+    "derive_risk_band",
     "get_active_artifact",
     "get_artifact_history",
-    "derive_risk_band",
-    "confidence_to_level",
-    "compute_evidence_pack_hash",
+    "persist_underwriting_artifact",
 ]

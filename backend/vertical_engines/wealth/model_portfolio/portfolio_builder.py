@@ -55,6 +55,7 @@ def construct_from_optimizer(
     -------
     PortfolioComposition
         Frozen dataclass with per-fund weights summing to 1.0.
+
     """
     all_weights: list[FundWeight] = []
     total = 0.0
@@ -70,7 +71,7 @@ def construct_from_optimizer(
                 block_id=info.get("block_id", ""),
                 weight=round(weight, 6),
                 score=info.get("manager_score", 0) or 0,
-            )
+            ),
         )
         total += weight
 
@@ -109,6 +110,7 @@ def construct(
         Optional config with top_n_per_block override.
     optimization_meta : OptimizationMeta | None
         Solver metadata.
+
     """
     top_n = (config or {}).get("top_n_per_block", _DEFAULT_TOP_N)
 
@@ -150,7 +152,7 @@ def construct(
                     block_id=block_id,
                     weight=round(fund_weight, 6),
                     score=score,
-                )
+                ),
             )
             total_allocated += fund_weight
 
@@ -166,7 +168,7 @@ def construct(
                     block_id=fw.block_id,
                     weight=round(fw.weight * factor, 6),
                     score=fw.score,
-                )
+                ),
             )
         all_weights = normalized
         total_allocated = 1.0

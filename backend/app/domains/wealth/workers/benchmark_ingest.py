@@ -38,7 +38,7 @@ _STALE_THRESHOLD_DAYS = 7
 
 # Dedicated thread pool — isolates from default asyncio pool
 _io_executor = concurrent.futures.ThreadPoolExecutor(
-    max_workers=2, thread_name_prefix="benchmark-io"
+    max_workers=2, thread_name_prefix="benchmark-io",
 )
 
 
@@ -73,7 +73,7 @@ async def run_benchmark_ingest(lookback_days: int = 730) -> dict[str, int | list
     async with async_session() as db:
         # Advisory lock — skip if already running (non-blocking)
         lock_result = await db.execute(
-            text(f"SELECT pg_try_advisory_lock({BENCHMARK_INGEST_LOCK_ID})")
+            text(f"SELECT pg_try_advisory_lock({BENCHMARK_INGEST_LOCK_ID})"),
         )
         if not lock_result.scalar():
             logger.warning("Benchmark ingest already running — skipping")
@@ -83,13 +83,12 @@ async def run_benchmark_ingest(lookback_days: int = 730) -> dict[str, int | list
             return await _do_ingest(db, lookback_days)
         finally:
             await db.execute(
-                text(f"SELECT pg_advisory_unlock({BENCHMARK_INGEST_LOCK_ID})")
+                text(f"SELECT pg_advisory_unlock({BENCHMARK_INGEST_LOCK_ID})"),
             )
 
 
 async def _do_ingest(db, lookback_days: int) -> dict[str, int | list[str]]:
     """Core ingestion logic — separated for advisory lock cleanup."""
-
     # 1. Load blocks with benchmark tickers
     stmt = select(AllocationBlock).where(
         AllocationBlock.benchmark_ticker.is_not(None),
@@ -101,7 +100,7 @@ async def _do_ingest(db, lookback_days: int) -> dict[str, int | list[str]]:
     if not blocks:
         raise RuntimeError(
             "No allocation blocks with benchmark_ticker configured. "
-            "Populate allocation_blocks.benchmark_ticker before running benchmark ingestion."
+            "Populate allocation_blocks.benchmark_ticker before running benchmark ingestion.",
         )
 
     # 2. Deduplicate tickers — multiple blocks may share a ticker (e.g., SPY)

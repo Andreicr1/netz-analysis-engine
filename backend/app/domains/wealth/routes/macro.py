@@ -9,7 +9,7 @@ Phase 3A: GET /bis, GET /imf, GET /treasury, GET /ofr — raw hypertable data
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Literal
 from uuid import UUID
 
@@ -100,7 +100,7 @@ def _build_analysis_text(
         tone = "weak"
 
     parts = [
-        f"The {name} macro environment is currently {tone} with a composite score of {composite_score:.0f}/100."
+        f"The {name} macro environment is currently {tone} with a composite score of {composite_score:.0f}/100.",
     ]
 
     strong = [d for d, v in dimensions.items() if v.score >= 65]
@@ -440,7 +440,7 @@ async def approve_review(
 
     review.status = "approved"
     review.approved_by = user.actor_id
-    review.approved_at = datetime.now(timezone.utc)
+    review.approved_at = datetime.now(UTC)
     review.decision_rationale = body.decision_rationale
 
     # ── G1.1 + G1.2: Generate allocation proposals from regime ──
@@ -673,7 +673,7 @@ async def get_bis_data(
     if cached is not None:
         return BisDataResponse(country=country, indicator=indicator, data=cached)
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+    cutoff = datetime.now(UTC) - timedelta(days=_DEFAULT_LOOKBACK_DAYS)
     stmt = (
         select(BisStatistics.period, BisStatistics.value)
         .where(
@@ -719,7 +719,7 @@ async def get_imf_data(
     if cached is not None:
         return ImfDataResponse(country=country, indicator=indicator, data=cached)
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+    cutoff = datetime.now(UTC) - timedelta(days=_DEFAULT_LOOKBACK_DAYS)
     stmt = (
         select(ImfWeoForecast.year, ImfWeoForecast.value)
         .where(

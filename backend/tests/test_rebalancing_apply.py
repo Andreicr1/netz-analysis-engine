@@ -122,9 +122,9 @@ class TestNavBreakpointSemantics:
 
     def test_breakpoint_nav_is_placeholder(self) -> None:
         """NAV value is a placeholder — worker recalculates from new weights."""
-        breakpoint_nav = Decimal("0")
+        breakpoint_nav = Decimal(0)
         # The worker will overwrite this with the correct NAV
-        assert breakpoint_nav == Decimal("0")
+        assert breakpoint_nav == Decimal(0)
 
 
 # ═══════════════════════════════════════════════════════════════════

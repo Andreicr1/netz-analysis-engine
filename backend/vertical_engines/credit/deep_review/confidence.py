@@ -520,4 +520,4 @@ def _score_to_level(score: int) -> str:
     return "LOW"
 
 
-__all__ = ["compute_underwriting_confidence", "apply_tone_normalizer_adjustment"]
+__all__ = ["apply_tone_normalizer_adjustment", "compute_underwriting_confidence"]

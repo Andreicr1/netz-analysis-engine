@@ -23,10 +23,10 @@ class Instrument(OrganizationScopedMixin, Base):
     __tablename__ = "instruments_universe"
 
     instrument_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4,
     )
     instrument_type: Mapped[str] = mapped_column(
-        String(20), nullable=False
+        String(20), nullable=False,
     )  # fund | bond | equity
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     isin: Mapped[str | None] = mapped_column(String(30))
@@ -35,19 +35,19 @@ class Instrument(OrganizationScopedMixin, Base):
     asset_class: Mapped[str] = mapped_column(String(50), nullable=False)
     geography: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     currency: Mapped[str] = mapped_column(
-        String(3), nullable=False, server_default="USD"
+        String(3), nullable=False, server_default="USD",
     )
     block_id: Mapped[str | None] = mapped_column(
-        String(80), ForeignKey("allocation_blocks.block_id"), index=True
+        String(80), ForeignKey("allocation_blocks.block_id"), index=True,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
     approval_status: Mapped[str] = mapped_column(
-        String(20), server_default="pending"
+        String(20), server_default="pending",
     )
     attributes: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), server_default=func.now(),
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
     )

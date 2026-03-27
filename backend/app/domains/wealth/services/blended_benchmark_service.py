@@ -49,7 +49,7 @@ async def list_available_blocks(db: AsyncSession) -> list[BlockRead]:
 
 
 async def get_active_benchmark(
-    db: AsyncSession, profile: str
+    db: AsyncSession, profile: str,
 ) -> BlendedBenchmarkRead | None:
     """Get the currently active blended benchmark for a profile."""
     stmt = (
@@ -83,7 +83,7 @@ async def get_active_benchmark(
                 weight=c.weight,
                 display_name=block.display_name if block else None,
                 benchmark_ticker=block.benchmark_ticker if block else None,
-            )
+            ),
         )
 
     return BlendedBenchmarkRead(
@@ -98,7 +98,7 @@ async def get_active_benchmark(
 
 
 async def create_blended_benchmark(
-    db: AsyncSession, profile: str, payload: BlendedBenchmarkCreate
+    db: AsyncSession, profile: str, payload: BlendedBenchmarkCreate,
 ) -> BlendedBenchmarkRead:
     """Create or replace the active blended benchmark for a profile.
 
@@ -169,7 +169,7 @@ async def create_blended_benchmark(
                 weight=Decimal(str(comp.weight)),
                 display_name=block.display_name if block else None,
                 benchmark_ticker=block.benchmark_ticker if block else None,
-            )
+            ),
         )
 
     return BlendedBenchmarkRead(
@@ -196,7 +196,7 @@ async def deactivate_benchmark(db: AsyncSession, benchmark_id: uuid.UUID) -> boo
 
 
 async def compute_blended_nav(
-    db: AsyncSession, benchmark_id: uuid.UUID, lookback_days: int = 365
+    db: AsyncSession, benchmark_id: uuid.UUID, lookback_days: int = 365,
 ) -> list[BlendedBenchmarkNAV]:
     """Compute blended NAV series from weighted constituent returns.
 
@@ -272,7 +272,7 @@ async def compute_blended_nav(
                 date=d,
                 nav=round(nav_value, 4),
                 return_1d=round(blended_return, 8),
-            )
+            ),
         )
 
     return nav_series

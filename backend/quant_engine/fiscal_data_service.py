@@ -182,6 +182,7 @@ class FiscalDataService:
         http_client: Injected httpx.AsyncClient (allows test mocking).
         rate_limiter: Shared async rate limiter. If None, creates default (5 req/s).
         base_url: Treasury Fiscal Data API base URL.
+
     """
 
     BASE_URL = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service"
@@ -307,7 +308,7 @@ class FiscalDataService:
                         record_date=row.get("record_date", ""),
                         security_desc=row.get("security_desc", ""),
                         avg_interest_rate_amt=rate,
-                    )
+                    ),
                 )
         return results
 
@@ -333,7 +334,7 @@ class FiscalDataService:
                         tot_pub_debt_out_amt=total,
                         intragov_hold_amt=intragov,
                         debt_held_public_amt=public,
-                    )
+                    ),
                 )
         return results
 
@@ -357,9 +358,9 @@ class FiscalDataService:
                     security_term=row.get("security_term", ""),
                     high_yield=_parse_float(row.get("high_yield"), "high_yield"),
                     bid_to_cover_ratio=_parse_float(
-                        row.get("bid_to_cover_ratio"), "bid_to_cover_ratio"
+                        row.get("bid_to_cover_ratio"), "bid_to_cover_ratio",
                     ),
-                )
+                ),
             )
         return results
 
@@ -382,7 +383,7 @@ class FiscalDataService:
                         record_date=row.get("record_date", ""),
                         country_currency_desc=row.get("country_currency_desc", ""),
                         exchange_rate=rate,
-                    )
+                    ),
                 )
         return results
 
@@ -407,7 +408,7 @@ class FiscalDataService:
                         expense_catg_desc=row.get("expense_catg_desc", ""),
                         month_expense_amt=month_amt,
                         fytd_expense_amt=fytd_amt,
-                    )
+                    ),
                 )
         return results
 

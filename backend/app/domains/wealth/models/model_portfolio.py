@@ -21,7 +21,7 @@ class ModelPortfolio(OrganizationScopedMixin, Base):
     __tablename__ = "model_portfolios"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4,
     )
     profile: Mapped[str] = mapped_column(String(20), nullable=False)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -30,13 +30,13 @@ class ModelPortfolio(OrganizationScopedMixin, Base):
     inception_date: Mapped[date | None] = mapped_column(Date)
     backtest_start_date: Mapped[date | None] = mapped_column(Date)
     inception_nav: Mapped[Decimal] = mapped_column(
-        Numeric(12, 4), nullable=False, server_default="1000.0"
+        Numeric(12, 4), nullable=False, server_default="1000.0",
     )
     status: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default="draft"
+        String(20), nullable=False, server_default="draft",
     )
     fund_selection_schema: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
     )
     created_by: Mapped[str | None] = mapped_column(String(128))

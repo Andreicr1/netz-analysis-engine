@@ -19,9 +19,9 @@ class BlendedBenchmarkCreate(BaseModel):
     components: list[BlendedBenchmarkComponentCreate] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def validate_weights_sum(self) -> "BlendedBenchmarkCreate":
+    def validate_weights_sum(self) -> BlendedBenchmarkCreate:
         total = sum(c.weight for c in self.components)
-        if abs(total - Decimal("1")) > Decimal("0.0001"):
+        if abs(total - Decimal(1)) > Decimal("0.0001"):
             msg = f"Component weights must sum to 1.0 (got {total})"
             raise ValueError(msg)
         return self

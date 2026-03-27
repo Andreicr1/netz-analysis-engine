@@ -1198,6 +1198,7 @@ class FundContext:
     Returned in-memory by async_bootstrap_deal() — not written to disk.
     Propagated to Stage 4 (orchestrator) for enrichment context.
     """
+
     fund_name: str
     deal_name: str
     aliases: dict[str, str]          # alias_key -> full_name

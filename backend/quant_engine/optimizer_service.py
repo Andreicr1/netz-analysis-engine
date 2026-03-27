@@ -78,6 +78,7 @@ def parametric_cvar_cf(
 @dataclass
 class ParetoResult:
     """Result from multi-objective NSGA-II optimization."""
+
     pareto_weights: list[list[float]]   # N Pareto-optimal weight vectors
     pareto_sharpe: list[float]          # Sharpe for each solution
     pareto_cvar: list[float]            # CVaR for each solution
@@ -100,6 +101,7 @@ def _make_portfolio_problem_class():
         ALWAYS use Repair for weight constraints — penalty approach requires
         per-run tuning and is numerically unreliable for budget constraints.
         """
+
         def _do(self, problem, Z, **kwargs):
             Z = np.clip(Z, problem.xl, problem.xu)
             Z[Z < 1e-4] = 0.0
@@ -113,6 +115,7 @@ def _make_portfolio_problem_class():
 
         Constraint: portfolio_cvar <= cvar_limit (G[i] <= 0 = feasible).
         """
+
         def __init__(
             self,
             block_ids: list[str],
@@ -191,6 +194,7 @@ async def optimize_portfolio(
         constraints: per-block min/max bounds and portfolio CVaR limit
         risk_free_rate: annualized risk-free rate
         objective: 'max_sharpe' or 'min_variance'
+
     """
     n = len(block_ids)
 
@@ -576,7 +580,7 @@ async def optimize_portfolio_pareto(
     except ImportError:
         logger.warning(
             "pymoo not installed; falling back to CLARABEL single-objective. "
-            "Install with: pip install netz-wealth-os[multiobjective]"
+            "Install with: pip install netz-wealth-os[multiobjective]",
         )
         # Graceful fallback
         single = await optimize_portfolio(

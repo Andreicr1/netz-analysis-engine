@@ -181,11 +181,10 @@ def extract_searchable_entities(
             _add(deal_name, "sponsor/manager")
         else:
             _add(deal_name, "fund/vehicle")
+    elif deal_is_sponsor:
+        _add(deal_name, "sponsor/manager")
     else:
-        if deal_is_sponsor:
-            _add(deal_name, "sponsor/manager")
-        else:
-            _add(deal_name, "fund/vehicle", ticker, is_direct_target=True)
+        _add(deal_name, "fund/vehicle", ticker, is_direct_target=True)
 
     _add(sponsor_name, "sponsor/manager")
     _add(deal_fields.get("borrower_name"), "borrower")

@@ -483,7 +483,7 @@ async def _compute_block_dtw_scores(
         # Batch-fetch returns for all funds in this block — single query, no N+1
         block_fund_ids = [fund.instrument_id for fund, _ in block_fund_list]
         returns_by_fund = await _fetch_block_returns_batch(
-            db, block_fund_ids, as_of_date, window_days=dtw_window
+            db, block_fund_ids, as_of_date, window_days=dtw_window,
         )
 
         fund_return_arrays: list[np.ndarray] = []
@@ -539,7 +539,7 @@ async def _write_risk_cache(
             pipe = r.pipeline()
 
             # Cache 1: correlation refresh marker
-            correlation_key = f"correlation:{str(org_id)}:{eval_date.isoformat()}"
+            correlation_key = f"correlation:{org_id!s}:{eval_date.isoformat()}"
             correlation_value = json.dumps({
                 "status": "refreshed",
                 "funds_computed": len(computed),
@@ -562,7 +562,7 @@ async def _write_risk_cache(
                 key=lambda x: (x["sharpe_1y"] is not None, x["sharpe_1y"] or 0),
                 reverse=True,
             )
-            leaderboard_key = f"scoring:leaderboard:{str(org_id)}"
+            leaderboard_key = f"scoring:leaderboard:{org_id!s}"
             pipe.set(leaderboard_key, json.dumps(leaderboard[:50]), ex=86400)
 
             await pipe.execute()
@@ -585,7 +585,7 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
     async with async_session() as db:
         await set_rls_context(db, org_id)
         lock_result = await db.execute(
-            text(f"SELECT pg_try_advisory_lock({RISK_CALC_LOCK_ID})")
+            text(f"SELECT pg_try_advisory_lock({RISK_CALC_LOCK_ID})"),
         )
         acquired = lock_result.scalar()
         if not acquired:
@@ -614,13 +614,13 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
 
             # Batch 1: resolve return_type for every fund — 1 query instead of N
             return_type_by_fund = await _batch_resolve_return_types(
-                db, all_fund_ids, start_date, eval_date
+                db, all_fund_ids, start_date, eval_date,
             )
             logger.info("Return types resolved", n_funds=len(return_type_by_fund))
 
             # Batch 2: fetch all NAV returns — at most 2 queries instead of N
             nav_returns_by_fund = await _batch_fetch_nav_returns(
-                db, all_fund_ids, return_type_by_fund, start_date, eval_date
+                db, all_fund_ids, return_type_by_fund, start_date, eval_date,
             )
             logger.info("NAV returns batch-fetched", n_funds=len(nav_returns_by_fund))
 
@@ -702,7 +702,7 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
         finally:
             try:
                 await db.execute(
-                    text(f"SELECT pg_advisory_unlock({RISK_CALC_LOCK_ID})")
+                    text(f"SELECT pg_advisory_unlock({RISK_CALC_LOCK_ID})"),
                 )
             except Exception:
                 pass

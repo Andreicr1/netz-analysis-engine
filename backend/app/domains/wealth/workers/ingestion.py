@@ -32,7 +32,7 @@ BACKOFF_BASE = 1  # 1s, 4s, 16s
 # Dedicated thread pool for data I/O — isolates from default asyncio pool
 # Prevents thread starvation when pipeline runs concurrently with API requests
 _io_executor = concurrent.futures.ThreadPoolExecutor(
-    max_workers=2, thread_name_prefix="data-io"
+    max_workers=2, thread_name_prefix="data-io",
 )
 
 
@@ -59,7 +59,7 @@ async def run_ingestion(org_id: uuid.UUID, lookback_days: int = 30) -> dict[str,
     for upsert. Single commit after all funds processed.
     """
     logger.warning(
-        "run_ingestion is deprecated — use run_instrument_ingestion instead"
+        "run_ingestion is deprecated — use run_instrument_ingestion instead",
     )
     logger.info("Starting NAV ingestion", lookback_days=lookback_days)
     results: dict[str, int] = {}
@@ -67,7 +67,7 @@ async def run_ingestion(org_id: uuid.UUID, lookback_days: int = 30) -> dict[str,
     async with async_session() as db:
         await set_rls_context(db, org_id)
         lock_result = await db.execute(
-            text(f"SELECT pg_try_advisory_lock({NAV_INGESTION_LOCK_ID})")
+            text(f"SELECT pg_try_advisory_lock({NAV_INGESTION_LOCK_ID})"),
         )
         acquired = lock_result.scalar()
         if not acquired:
@@ -229,7 +229,7 @@ async def run_ingestion(org_id: uuid.UUID, lookback_days: int = 30) -> dict[str,
         finally:
             try:
                 await db.execute(
-                    text(f"SELECT pg_advisory_unlock({NAV_INGESTION_LOCK_ID})")
+                    text(f"SELECT pg_advisory_unlock({NAV_INGESTION_LOCK_ID})"),
                 )
             except Exception:
                 pass

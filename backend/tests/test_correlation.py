@@ -37,7 +37,7 @@ class TestCorrelationMatrix:
         base = rng.normal(0, 0.01, (100, 1))
         returns = np.hstack([base, base])
         result = compute_correlation_regime(
-            returns, config={"apply_denoising": False, "apply_shrinkage": False, "min_observations": 10}
+            returns, config={"apply_denoising": False, "apply_shrinkage": False, "min_observations": 10},
         )
         assert result.sufficient_data
         # Diagonal should be 1.0
@@ -50,7 +50,7 @@ class TestCorrelationMatrix:
         rng = np.random.default_rng(42)
         returns = rng.normal(0, 0.01, (500, 3))
         result = compute_correlation_regime(
-            returns, config={"apply_denoising": False, "apply_shrinkage": False, "min_observations": 10, "window_days": 500}
+            returns, config={"apply_denoising": False, "apply_shrinkage": False, "min_observations": 10, "window_days": 500},
         )
         for i in range(3):
             for j in range(3):
@@ -64,7 +64,7 @@ class TestCorrelationMatrix:
         base = rng.normal(0, 0.01, (200, 1))
         returns = np.hstack([base, -base])
         result = compute_correlation_regime(
-            returns, config={"apply_denoising": False, "apply_shrinkage": False, "min_observations": 10}
+            returns, config={"apply_denoising": False, "apply_shrinkage": False, "min_observations": 10},
         )
         assert result.correlation_matrix[0][1] < -0.99
 

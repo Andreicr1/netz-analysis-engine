@@ -11,7 +11,7 @@ evaluations triggers rebalancing. Threshold configurable via ConfigService.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -90,7 +90,7 @@ class RebalancingService:
             impact=impact,
             proposals=tuple(proposals),
             all_feasible=all_feasible,
-            computed_at=datetime.now(timezone.utc),
+            computed_at=datetime.now(UTC),
         )
 
     def propose_adjustments(
@@ -180,7 +180,7 @@ class RebalancingService:
                         ModelPortfolio.organization_id == organization_id,
                         ModelPortfolio.profile == profile,
                         ModelPortfolio.status == "active",
-                    )
+                    ),
                 ).all()
             ]
 
@@ -195,7 +195,7 @@ class RebalancingService:
                 impact=regime_impact,
                 proposals=(),
                 all_feasible=True,
-                computed_at=datetime.now(timezone.utc),
+                computed_at=datetime.now(UTC),
             ))
 
         return results

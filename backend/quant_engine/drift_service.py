@@ -184,6 +184,7 @@ def compute_dtw_drift(
 
     Returns a typed DtwDriftResult instead of a bare float, so that
     computation failures are never silently encoded as 0.0.
+
     """
     try:
         from aeon.distances import ddtw_distance
@@ -239,6 +240,7 @@ def compute_dtw_drift_batch(
 
     Returns a list of typed DtwDriftResult instead of bare floats,
     so that computation failures are never silently encoded as 0.0.
+
     """
     fund_returns_matrix = fund_returns_matrix[:, -max_lookback_days:]
     benchmark_returns = benchmark_returns[-max_lookback_days:]

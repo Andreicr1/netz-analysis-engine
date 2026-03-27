@@ -127,6 +127,7 @@ def audit_rls_from_db(conn) -> list[str]:  # noqa: ANN001
         Database connection with access to pg_catalog.
 
     Returns list of errors (empty = pass).
+
     """
     errors: list[str] = []
 
@@ -188,12 +189,12 @@ def audit_rls_from_db(conn) -> list[str]:  # noqa: ANN001
             if not policy["has_using"]:
                 errors.append(
                     f"NO_USING: '{table}' policy '{policy['name']}' — "
-                    f"missing USING clause"
+                    f"missing USING clause",
                 )
             if not policy["has_with_check"]:
                 errors.append(
                     f"NO_WITH_CHECK: '{table}' policy '{policy['name']}' — "
-                    f"missing WITH CHECK clause"
+                    f"missing WITH CHECK clause",
                 )
 
     # Verify global tables do NOT have RLS
@@ -202,7 +203,7 @@ def audit_rls_from_db(conn) -> list[str]:  # noqa: ANN001
             rls_enabled, _ = db_tables[table]
             if rls_enabled:
                 errors.append(
-                    f"UNEXPECTED_RLS: global table '{table}' has RLS enabled"
+                    f"UNEXPECTED_RLS: global table '{table}' has RLS enabled",
                 )
 
     return errors

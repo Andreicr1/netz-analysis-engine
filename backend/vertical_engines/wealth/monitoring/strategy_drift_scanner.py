@@ -17,7 +17,7 @@ NOTE: If METRICS_TO_CHECK is reduced below 3, "severe" becomes unreachable.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import numpy as np
@@ -92,9 +92,10 @@ def scan_strategy_drift(
     -------
     StrategyDriftResult
         With status "stable", "drift_detected", or "insufficient_data".
+
     """
     cfg = _resolve_config(config)
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(UTC).isoformat()
 
     if not metrics_history:
         return StrategyDriftResult(
@@ -179,7 +180,7 @@ def scan_strategy_drift(
                     baseline_std=0.0,
                     z_score=0.0,
                     is_anomalous=False,
-                )
+                ),
             )
             continue
 
@@ -198,7 +199,7 @@ def scan_strategy_drift(
                 baseline_std=round(sigma_baseline, 6),
                 z_score=round(z, 4),
                 is_anomalous=is_anomalous,
-            )
+            ),
         )
 
     # Severity grading
@@ -243,8 +244,9 @@ def scan_all_strategy_drift(
     -------
     StrategyDriftScanResult
         With only drift_detected instruments in alerts.
+
     """
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(UTC).isoformat()
     alerts: list[StrategyDriftResult] = []
     all_results: list[StrategyDriftResult] = []
     stable_count = 0

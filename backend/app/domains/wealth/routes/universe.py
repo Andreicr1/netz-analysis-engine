@@ -156,7 +156,7 @@ async def approve_fund(
                     UniverseApproval.instrument_id == instrument_id,
                     UniverseApproval.organization_id == org_id,
                     UniverseApproval.is_current.is_(True),
-                ).with_for_update()
+                ).with_for_update(),
             )
             approval = result.scalar_one_or_none()
             if approval is None:
@@ -253,7 +253,7 @@ async def reject_fund(
                     UniverseApproval.instrument_id == instrument_id,
                     UniverseApproval.organization_id == org_id,
                     UniverseApproval.is_current.is_(True),
-                ).with_for_update()
+                ).with_for_update(),
             )
             approval = result.scalar_one_or_none()
             if approval is None:

@@ -14,7 +14,7 @@ import hashlib
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,7 +45,7 @@ async def run_screening_batch(org_id: uuid.UUID) -> dict:
         await set_rls_context(db, org_id)
         # 1. Non-blocking advisory lock
         lock_result = await db.execute(
-            text(f"SELECT pg_try_advisory_lock({SCREENING_BATCH_LOCK_ID})")
+            text(f"SELECT pg_try_advisory_lock({SCREENING_BATCH_LOCK_ID})"),
         )
         acquired = lock_result.scalar()
         if not acquired:
@@ -56,7 +56,7 @@ async def run_screening_batch(org_id: uuid.UUID) -> dict:
             return await _execute_batch(db, org_id)
         finally:
             await db.execute(
-                text(f"SELECT pg_advisory_unlock({SCREENING_BATCH_LOCK_ID})")
+                text(f"SELECT pg_advisory_unlock({SCREENING_BATCH_LOCK_ID})"),
             )
 
 
@@ -69,12 +69,12 @@ async def _execute_batch(db: AsyncSession, org_id: uuid.UUID) -> dict:
     config_l3 = (await config_svc.get("liquid_funds", "screening_layer3", org_id)).value
 
     config_hash = hashlib.sha256(
-        json.dumps({"l1": config_l1, "l2": config_l2, "l3": config_l3}, sort_keys=True).encode()
+        json.dumps({"l1": config_l1, "l2": config_l2, "l3": config_l3}, sort_keys=True).encode(),
     ).hexdigest()
 
     # 3. Load all active instruments (short transaction)
     result = await db.execute(
-        select(Instrument).where(Instrument.is_active.is_(True))
+        select(Instrument).where(Instrument.is_active.is_(True)),
     )
     instruments = result.scalars().all()
 
@@ -112,7 +112,7 @@ async def _execute_batch(db: AsyncSession, org_id: uuid.UUID) -> dict:
         lambda: [
             screener.screen_instrument(**inst_dict)
             for inst_dict in instrument_dicts
-        ]
+        ],
     )
 
     # 6. Write in batches of 200 (short transactions)
@@ -125,7 +125,7 @@ async def _execute_batch(db: AsyncSession, org_id: uuid.UUID) -> dict:
                 ScreeningResult.instrument_id.in_(batch_ids),
                 ScreeningResult.is_current.is_(True),
             )
-            .values(is_current=False)
+            .values(is_current=False),
         )
 
         # Insert new results
@@ -148,7 +148,7 @@ async def _execute_batch(db: AsyncSession, org_id: uuid.UUID) -> dict:
 
     # 7. Mark run as completed
     run.status = "completed"
-    run.completed_at = datetime.now(timezone.utc)
+    run.completed_at = datetime.now(UTC)
     await db.commit()
     await set_rls_context(db, org_id)
 

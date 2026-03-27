@@ -45,7 +45,7 @@ _HYPERTABLE_TABLES = [
 def _has_timescaledb(bind) -> bool:
     """Check if TimescaleDB extension is available."""
     result = bind.execute(
-        text("SELECT 1 FROM pg_extension WHERE extname = 'timescaledb'")
+        text("SELECT 1 FROM pg_extension WHERE extname = 'timescaledb'"),
     )
     return result.scalar() is not None
 
@@ -96,18 +96,18 @@ def upgrade() -> None:
 
             cursor.execute(
                 f"SELECT create_hypertable('{table}', '{time_col}', "
-                f"migrate_data => true, if_not_exists => true)"
+                f"migrate_data => true, if_not_exists => true)",
             )
             cursor.execute(
                 f"ALTER TABLE {table} SET ("
                 f"  timescaledb.compress,"
                 f"  timescaledb.compress_segmentby = 'organization_id',"
                 f"  timescaledb.compress_orderby = '{orderby}'"
-                f")"
+                f")",
             )
             cursor.execute(
                 f"SELECT add_compression_policy('{table}', "
-                f"INTERVAL '30 days', if_not_exists => true)"
+                f"INTERVAL '30 days', if_not_exists => true)",
             )
 
         cursor.close()
@@ -117,10 +117,10 @@ def downgrade() -> None:
     for spec in reversed(_HYPERTABLE_TABLES):
         table = spec["table"]
         op.execute(
-            f"SELECT remove_compression_policy('{table}', if_exists => true)"
+            f"SELECT remove_compression_policy('{table}', if_exists => true)",
         )
         op.execute(
-            f"ALTER TABLE {table} SET (timescaledb.compress = false)"
+            f"ALTER TABLE {table} SET (timescaledb.compress = false)",
         )
     # NOTE: TimescaleDB does not support reverting a hypertable back to a
     # regular table. The tables remain hypertables after downgrade but

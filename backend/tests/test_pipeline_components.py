@@ -10,6 +10,7 @@ import pytest
 @dataclass
 class _FakeChunk:
     """Minimal chunk-like object with a .text attribute for validation tests."""
+
     text: str
     chunk_index: int = 0
 

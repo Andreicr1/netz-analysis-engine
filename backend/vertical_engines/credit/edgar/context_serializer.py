@@ -373,7 +373,7 @@ def _render_insider_signals(
     lines.extend(signal_lines)
 
 
-def _fmt_val(v: float | int, key: str = "") -> str:
+def _fmt_val(v: float, key: str = "") -> str:
     """Format a financial value for display."""
     if abs(v) >= 1e9:
         return f"${v / 1e9:,.1f}B"

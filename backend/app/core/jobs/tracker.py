@@ -1,5 +1,4 @@
-"""
-Job Progress Tracker — Redis Pub/Sub
+"""Job Progress Tracker — Redis Pub/Sub
 ======================================
 
 Workers publish progress events to Redis channels.

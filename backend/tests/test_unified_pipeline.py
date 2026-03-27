@@ -153,7 +153,7 @@ class TestCheckGate:
         from ai_engine.pipeline.unified_pipeline import _check_gate
 
         gate = PipelineStageResult(
-            stage="test", success=True, data="ok", metrics={}
+            stage="test", success=True, data="ok", metrics={},
         )
         request = IngestRequest(
             source="ui",

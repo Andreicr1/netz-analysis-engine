@@ -20,6 +20,7 @@ class AssetObligation(Base, IdMixin, OrganizationScopedMixin, AuditMetaMixin):
     - Loan -> COVENANT_TEST monthly
 
     Fund scoping is enforced via join to PortfolioAsset.
+
     """
 
     __tablename__ = "asset_obligations"

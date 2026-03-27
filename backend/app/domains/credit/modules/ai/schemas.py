@@ -276,6 +276,7 @@ class PipelineICBriefOut(BaseModel):
 
 class UnderwritingArtifactOut(BaseModel):
     """Unified underwriting truth object from Deep Review V4."""
+
     recommendation: str
     confidenceLevel: str
     riskBand: str
@@ -598,6 +599,7 @@ class RiskMonitoringItem(BaseModel):
 
 class PortfolioDealMonitoringResponse(DataEnvelope):
     """Full portfolio-deal monitoring record (capital-at-risk)."""
+
     investmentId: uuid.UUID
     dealId: uuid.UUID | None = None
     dealName: str
@@ -672,6 +674,7 @@ class DeepReviewV4Request(BaseModel):
 
 class MemoChapterOut(BaseModel):
     """Single chapter of the 13-chapter memo book."""
+
     chapter_number: int
     chapter_tag: str
     chapter_title: str
@@ -684,6 +687,7 @@ class MemoChapterOut(BaseModel):
 
 class MemoChapterSummary(BaseModel):
     """Lightweight chapter summary (no content — used in list responses)."""
+
     chapter_number: int
     chapter_tag: str
     chapter_title: str
@@ -691,6 +695,7 @@ class MemoChapterSummary(BaseModel):
 
 class DealDeepReviewV4Response(BaseModel):
     """Response for a single-deal V4 deep review run."""
+
     dealId: str
     dealName: str | None = None
     pipelineVersion: str = "v4"
@@ -717,6 +722,7 @@ class DealDeepReviewV4Response(BaseModel):
 
 class DeepReviewV4BatchResponse(BaseModel):
     """Response for batch V4 deep review across all deals."""
+
     asOf: dt.datetime
     pipelineVersion: str = "v4"
     totalDeals: int = 0
@@ -727,6 +733,7 @@ class DeepReviewV4BatchResponse(BaseModel):
 
 class MemoChaptersResponse(DataEnvelope):
     """All chapters for a deal's current evidence pack."""
+
     dealId: str
     evidencePackId: str | None = None
     versionTag: str | None = None
@@ -735,6 +742,7 @@ class MemoChaptersResponse(DataEnvelope):
 
 class EvidencePackResponse(DataEnvelope):
     """Frozen evidence pack for a deal."""
+
     dealId: str
     evidencePackId: str | None = None
     versionTag: str | None = None
@@ -791,6 +799,7 @@ class MemoChapterRegenerateResponse(BaseModel):
 
 class CriticalGapItem(BaseModel):
     """A single approval-blocking data gap flagged during IC Memo generation."""
+
     chapter_tag: str
     chapter_num: int
     chapter_title: str
@@ -799,6 +808,7 @@ class CriticalGapItem(BaseModel):
 
 class CriticalGapsResponse(DataEnvelope):
     """Structured critical_gaps for a pipeline deal, aggregated across all memo chapters."""
+
     dealId: str
     totalGaps: int = 0
     gaps: list[CriticalGapItem] = []

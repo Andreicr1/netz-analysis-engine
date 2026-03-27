@@ -43,6 +43,7 @@ def gather_peer_context(
     -------
     dict
         Peer context with metric annotations and group metadata.
+
     """
     try:
         from vertical_engines.wealth.peer_group.models import PeerGroupNotFound
@@ -70,7 +71,7 @@ def gather_peer_context(
                 annotations.append(
                     f"{r.metric}: {r.value:.2f} "
                     f"(top {pctile_display}% of {result.peer_count} peers "
-                    f"in {result.peer_group_key})"
+                    f"in {result.peer_group_key})",
                 )
 
         return {

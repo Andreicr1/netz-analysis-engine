@@ -64,10 +64,10 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
-    "get_macro_snapshot",
-    "compute_macro_stress_severity",
-    "compute_macro_stress_flag",
-    "resolve_metro_key",
-    "fetch_regional_case_shiller",
     "FRED_SERIES_REGISTRY",
+    "compute_macro_stress_flag",
+    "compute_macro_stress_severity",
+    "fetch_regional_case_shiller",
+    "get_macro_snapshot",
+    "resolve_metro_key",
 ]

@@ -141,12 +141,12 @@ async def trigger_dd_report(
 
     # Verify fund exists — check instruments_universe first, then legacy funds_universe
     inst_result = await db.execute(
-        select(Instrument).where(Instrument.instrument_id == fund_id)
+        select(Instrument).where(Instrument.instrument_id == fund_id),
     )
     instrument = inst_result.scalar_one_or_none()
     if not instrument:
         fund_result = await db.execute(
-            select(Fund).where(Fund.fund_id == fund_id)
+            select(Fund).where(Fund.fund_id == fund_id),
         )
         fund = fund_result.scalar_one_or_none()
         if not fund:
@@ -161,7 +161,7 @@ async def trigger_dd_report(
             DDReport.instrument_id == fund_id,
             DDReport.organization_id == org_id,
             DDReport.is_current.is_(True),
-        )
+        ),
     )
     existing = existing_result.scalar_one_or_none()
 
@@ -190,7 +190,7 @@ async def trigger_dd_report(
             DDReport.organization_id == org_id,
         )
         .order_by(DDReport.version.desc())
-        .limit(1)
+        .limit(1),
     )
     max_version_row = max_version_result.scalar_one_or_none()
     next_version = (max_version_row + 1) if max_version_row else 1
@@ -229,7 +229,7 @@ async def trigger_dd_report(
             actor_id=user.actor_id,
             config=body.config_overrides if body else None,
             job_id=job_id,
-        )
+        ),
     )
 
     await db.commit()
@@ -297,7 +297,7 @@ async def get_dd_report(
     result = await db.execute(
         select(DDReport)
         .options(selectinload(DDReport.chapters))
-        .where(DDReport.id == report_id)
+        .where(DDReport.id == report_id),
     )
     report = result.scalar_one_or_none()
     if not report:
@@ -324,7 +324,7 @@ async def regenerate_dd_report(
 ) -> DDReportSummary:
     """Force regeneration of specific chapters or entire report."""
     result = await db.execute(
-        select(DDReport).where(DDReport.id == report_id)
+        select(DDReport).where(DDReport.id == report_id),
     )
     report = result.scalar_one_or_none()
     if not report:
@@ -366,7 +366,7 @@ async def regenerate_dd_report(
             config=report.config_snapshot,
             job_id=job_id,
             force=True,
-        )
+        ),
     )
 
     await db.commit()
@@ -388,7 +388,7 @@ async def approve_dd_report(
     result = await db.execute(
         select(DDReport)
         .options(selectinload(DDReport.chapters))
-        .where(DDReport.id == report_id)
+        .where(DDReport.id == report_id),
     )
     report = result.scalar_one_or_none()
     if not report:
@@ -442,7 +442,7 @@ async def approve_dd_report(
     from app.domains.wealth.models.universe_approval import UniverseApproval
 
     inst_result = await db.execute(
-        select(Instrument).where(Instrument.instrument_id == report.instrument_id)
+        select(Instrument).where(Instrument.instrument_id == report.instrument_id),
     )
     instrument = inst_result.scalar_one_or_none()
     if instrument:
@@ -479,7 +479,7 @@ async def reject_dd_report(
 ) -> DDReportSummary:
     """Reject a DD report back to draft with rationale."""
     result = await db.execute(
-        select(DDReport).where(DDReport.id == report_id)
+        select(DDReport).where(DDReport.id == report_id),
     )
     report = result.scalar_one_or_none()
     if not report:
@@ -519,7 +519,7 @@ async def reject_dd_report(
     from app.domains.wealth.models.instrument import Instrument
 
     inst_result = await db.execute(
-        select(Instrument).where(Instrument.instrument_id == report.instrument_id)
+        select(Instrument).where(Instrument.instrument_id == report.instrument_id),
     )
     instrument = inst_result.scalar_one_or_none()
     if instrument and instrument.approval_status == "approved":

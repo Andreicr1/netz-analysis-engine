@@ -1,5 +1,4 @@
-"""
-SQLAlchemy models for vertical configuration tables.
+"""SQLAlchemy models for vertical configuration tables.
 
 vertical_config_defaults: Global (no RLS, no organization_id). Netz-managed.
 vertical_config_overrides: Tenant-scoped (RLS on organization_id).
@@ -52,7 +51,7 @@ class VerticalConfigOverride(Base, IdMixin, OrganizationScopedMixin, AuditMetaMi
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), nullable=False, index=True
+        Uuid(as_uuid=True), nullable=False, index=True,
     )
     vertical: Mapped[str] = mapped_column(String(50), nullable=False)
     config_type: Mapped[str] = mapped_column(String(50), nullable=False)

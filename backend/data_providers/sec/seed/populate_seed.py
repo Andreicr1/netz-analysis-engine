@@ -27,7 +27,7 @@ import asyncio
 import json
 import os
 import time
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -346,7 +346,7 @@ async def phase3_compute_diffs(*, dry_run: bool = False) -> dict[str, int]:
             "SELECT cik, array_agg(DISTINCT report_date ORDER BY report_date) "
             "FROM sec_13f_holdings "
             "GROUP BY cik "
-            "HAVING COUNT(DISTINCT report_date) >= 2"
+            "HAVING COUNT(DISTINCT report_date) >= 2",
         ))
         managers_with_history = result.fetchall()
 
@@ -373,7 +373,7 @@ async def phase3_compute_diffs(*, dry_run: bool = False) -> dict[str, int]:
                 existing = await session.execute(text(
                     "SELECT 1 FROM sec_13f_diffs "
                     "WHERE cik = :cik AND quarter_from = :qf AND quarter_to = :qt "
-                    "LIMIT 1"
+                    "LIMIT 1",
                 ), {"cik": cik, "qf": quarter_from, "qt": quarter_to})
                 if existing.scalar_one_or_none() is not None:
                     stats["already_existed"] += 1
@@ -420,7 +420,7 @@ async def phase4_sector_enrichment(*, dry_run: bool = False) -> dict[str, int]:
     async with db_factory() as session:
         result = await session.execute(text(
             "SELECT DISTINCT cik FROM sec_13f_holdings "
-            "WHERE sector IS NULL ORDER BY cik"
+            "WHERE sector IS NULL ORDER BY cik",
         ))
         unenriched_ciks = [row[0] for row in result.fetchall()]
 
@@ -437,7 +437,7 @@ async def phase4_sector_enrichment(*, dry_run: bool = False) -> dict[str, int]:
         # Get latest quarter for this manager
         async with db_factory() as session:
             result = await session.execute(text(
-                "SELECT MAX(report_date) FROM sec_13f_holdings WHERE cik = :cik"
+                "SELECT MAX(report_date) FROM sec_13f_holdings WHERE cik = :cik",
             ), {"cik": cik})
             latest_quarter = result.scalar()
 
@@ -578,7 +578,7 @@ async def phase6_cusip_ticker_mapping(
                 "LEFT JOIN sec_cusip_ticker_map m ON h.cusip = m.cusip "
                 "WHERE m.cusip IS NULL "
                 "   OR m.resolved_via = 'unresolved' "
-                "ORDER BY h.cusip"
+                "ORDER BY h.cusip",
             ))
         else:
             result = await session.execute(text(
@@ -586,7 +586,7 @@ async def phase6_cusip_ticker_mapping(
                 "FROM sec_13f_holdings h "
                 "LEFT JOIN sec_cusip_ticker_map m ON h.cusip = m.cusip "
                 "WHERE m.cusip IS NULL "
-                "ORDER BY h.cusip"
+                "ORDER BY h.cusip",
             ))
         unresolved_rows = result.fetchall()
 
@@ -632,7 +632,7 @@ async def phase6_cusip_ticker_mapping(
             )
 
             # Upsert to sec_cusip_ticker_map
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             rows = [
                 {
                     "cusip": r.cusip,
@@ -726,7 +726,7 @@ async def phase7_brochure_download(
         from sqlalchemy import text as sa_text
 
         result = await session.execute(
-            sa_text("SELECT crd_number FROM sec_managers ORDER BY crd_number")
+            sa_text("SELECT crd_number FROM sec_managers ORDER BY crd_number"),
         )
         all_crds = [row[0] for row in result.fetchall()]
 
@@ -830,8 +830,8 @@ async def phase7_brochure_extract(
                 "LEFT JOIN sec_manager_brochure_text b "
                 "  ON m.crd_number = b.crd_number "
                 "WHERE b.crd_number IS NULL "
-                "ORDER BY m.crd_number"
-            )
+                "ORDER BY m.crd_number",
+            ),
         )
         pending_crds = {row[0] for row in result.fetchall()}
 

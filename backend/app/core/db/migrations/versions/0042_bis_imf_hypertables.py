@@ -74,23 +74,23 @@ def upgrade() -> None:
             "  chunk_time_interval => INTERVAL '1 year',"
             "  migrate_data => true,"
             "  if_not_exists => true"
-            ")"
+            ")",
         )
         cursor.execute(
             "ALTER TABLE bis_statistics SET ("
             "  timescaledb.compress,"
             "  timescaledb.compress_orderby = 'period DESC',"
             "  timescaledb.compress_segmentby = 'country_code'"
-            ")"
+            ")",
         )
         cursor.execute(
             "SELECT add_compression_policy("
             "  'bis_statistics', INTERVAL '1 year', if_not_exists => true"
-            ")"
+            ")",
         )
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_bis_statistics_country_indicator_period "
-            "ON bis_statistics (country_code, indicator, period DESC)"
+            "ON bis_statistics (country_code, indicator, period DESC)",
         )
 
         # ── imf_weo_forecasts hypertable ──────────────────────────
@@ -101,23 +101,23 @@ def upgrade() -> None:
             "  chunk_time_interval => INTERVAL '1 year',"
             "  migrate_data => true,"
             "  if_not_exists => true"
-            ")"
+            ")",
         )
         cursor.execute(
             "ALTER TABLE imf_weo_forecasts SET ("
             "  timescaledb.compress,"
             "  timescaledb.compress_orderby = 'period DESC',"
             "  timescaledb.compress_segmentby = 'country_code'"
-            ")"
+            ")",
         )
         cursor.execute(
             "SELECT add_compression_policy("
             "  'imf_weo_forecasts', INTERVAL '1 year', if_not_exists => true"
-            ")"
+            ")",
         )
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_imf_weo_forecasts_country_indicator_period "
-            "ON imf_weo_forecasts (country_code, indicator, period DESC)"
+            "ON imf_weo_forecasts (country_code, indicator, period DESC)",
         )
 
         cursor.close()
@@ -132,25 +132,25 @@ def downgrade() -> None:
 
         # ── bis_statistics ────────────────────────────────────────
         cursor.execute(
-            "SELECT remove_compression_policy('bis_statistics', if_exists => true)"
+            "SELECT remove_compression_policy('bis_statistics', if_exists => true)",
         )
         cursor.execute(
             "SELECT decompress_chunk(c.chunk_name) "
             "FROM timescaledb_information.chunks c "
             "WHERE c.hypertable_name = 'bis_statistics' "
-            "AND c.is_compressed = true"
+            "AND c.is_compressed = true",
         )
         cursor.execute("DROP INDEX IF EXISTS idx_bis_statistics_country_indicator_period")
 
         # ── imf_weo_forecasts ─────────────────────────────────────
         cursor.execute(
-            "SELECT remove_compression_policy('imf_weo_forecasts', if_exists => true)"
+            "SELECT remove_compression_policy('imf_weo_forecasts', if_exists => true)",
         )
         cursor.execute(
             "SELECT decompress_chunk(c.chunk_name) "
             "FROM timescaledb_information.chunks c "
             "WHERE c.hypertable_name = 'imf_weo_forecasts' "
-            "AND c.is_compressed = true"
+            "AND c.is_compressed = true",
         )
         cursor.execute("DROP INDEX IF EXISTS idx_imf_weo_forecasts_country_indicator_period")
 

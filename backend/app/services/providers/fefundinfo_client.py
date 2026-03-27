@@ -117,6 +117,7 @@ class FEFundInfoTokenManager:
         client_id: OAuth2 client ID.
         client_secret: OAuth2 client secret.
         token_url: Token endpoint URL.
+
     """
 
     def __init__(
@@ -181,6 +182,7 @@ class FEFundInfoClient:
         subscription_key: Fefi-Apim-Subscription-Key header value.
         http_client: Optional injected httpx.AsyncClient (for testing).
         rate_limiter: Optional rate limiter. Defaults to 10 req/s.
+
     """
 
     # Base URLs for the 7 APIs
@@ -254,14 +256,14 @@ class FEFundInfoClient:
                     return {}
                 wait = min(2**attempt * 2, 30)
                 logger.warning(
-                    "fefundinfo retrying", url=url, attempt=attempt + 1, wait=wait
+                    "fefundinfo retrying", url=url, attempt=attempt + 1, wait=wait,
                 )
                 await asyncio.sleep(wait)
 
             except (httpx.TimeoutException, httpx.ConnectError) as e:
                 wait = min(2**attempt * 2, 30)
                 logger.warning(
-                    "fefundinfo connection error", url=url, error=str(e), wait=wait
+                    "fefundinfo connection error", url=url, error=str(e), wait=wait,
                 )
                 await asyncio.sleep(wait)
 
@@ -289,7 +291,7 @@ class FEFundInfoClient:
     # ── Static API ──────────────────────────────────────────────
 
     async def _static_get(
-        self, endpoint: str, isins: list[str]
+        self, endpoint: str, isins: list[str],
     ) -> list[dict[str, Any]]:
         """Helper for Static API GET requests."""
         results: list[dict[str, Any]] = []
@@ -319,7 +321,7 @@ class FEFundInfoClient:
     # ── Static Key Facts API ──────────────────────────────────
 
     async def _key_facts_get(
-        self, endpoint: str, isins: list[str]
+        self, endpoint: str, isins: list[str],
     ) -> list[dict[str, Any]]:
         """Helper for Static Key Facts API GET requests."""
         results: list[dict[str, Any]] = []
@@ -391,31 +393,31 @@ class FEFundInfoClient:
         return results
 
     async def get_pricing(
-        self, isins: list[str], date_from: str | None = None
+        self, isins: list[str], date_from: str | None = None,
     ) -> list[dict[str, Any]]:
         """Fetch current and historical fund pricing."""
         return await self._dynamic_get("Pricing", isins, date_from=date_from)
 
     async def get_aum(
-        self, isins: list[str], date_from: str | None = None
+        self, isins: list[str], date_from: str | None = None,
     ) -> list[dict[str, Any]]:
         """Fetch assets under management data."""
         return await self._dynamic_get("Aum", isins, date_from=date_from)
 
     async def get_dividends(
-        self, isins: list[str], date_from: str | None = None
+        self, isins: list[str], date_from: str | None = None,
     ) -> list[dict[str, Any]]:
         """Fetch dividend and yield data."""
         return await self._dynamic_get("Dividends", isins, date_from=date_from)
 
     async def get_analytics(
-        self, isins: list[str], date_from: str | None = None
+        self, isins: list[str], date_from: str | None = None,
     ) -> list[dict[str, Any]]:
         """Fetch analytics data."""
         return await self._dynamic_get("Analytics", isins, date_from=date_from)
 
     async def get_ratings(
-        self, isins: list[str], date_from: str | None = None
+        self, isins: list[str], date_from: str | None = None,
     ) -> list[dict[str, Any]]:
         """Fetch fund ratings data."""
         return await self._dynamic_get("Ratings", isins, date_from=date_from)
@@ -437,6 +439,7 @@ class FEFundInfoClient:
         Args:
             series_type: 1=Bid, 2=BidTr, 3=BidGtr, 7=NavPublished, etc.
             period: Daily, Weekly, Monthly, Quarterly, Yearly.
+
         """
         results: list[dict[str, Any]] = []
         for chunk in self._chunk_isins(isins):
@@ -489,6 +492,7 @@ class FEFundInfoClient:
 
         Args:
             period_end: 1=DayEnd, 2=MonthEnd, 3=QuarterEnd, 4=YearEnd.
+
         """
         results: list[dict[str, Any]] = []
         for chunk in self._chunk_isins(isins):
@@ -507,7 +511,7 @@ class FEFundInfoClient:
         return results
 
     async def get_annualised_performance(
-        self, isins: list[str], currency: str = "USD"
+        self, isins: list[str], currency: str = "USD",
     ) -> list[dict[str, Any]]:
         """Fetch annualised performance data."""
         results: list[dict[str, Any]] = []
@@ -529,7 +533,7 @@ class FEFundInfoClient:
     # ── Ratios & Exposures API ──────────────────────────────────
 
     async def get_holdings_breakdown(
-        self, isins: list[str]
+        self, isins: list[str],
     ) -> list[dict[str, Any]]:
         """Fetch top holdings breakdown (FE fundinfo format)."""
         results: list[dict[str, Any]] = []
@@ -555,6 +559,7 @@ class FEFundInfoClient:
         Args:
             breakdown_types: AS=AssetClass, AR=Region, SC=Sector, CU=Currency,
                             CR=CreditRating, HD=Top10Holdings (default).
+
         """
         if breakdown_types is None:
             breakdown_types = ["AS", "AR", "SC", "CU", "HD"]

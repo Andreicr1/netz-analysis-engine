@@ -55,6 +55,7 @@ class RetrievalSignal:
         score_key : str
             Primary score key.  Falls back to ``"score"`` if the key is
             absent on the first result.
+
         """
         if not results:
             return cls(

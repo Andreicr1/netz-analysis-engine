@@ -1,5 +1,4 @@
-"""
-Route-level Redis cache decorator for read-heavy GET endpoints.
+"""Route-level Redis cache decorator for read-heavy GET endpoints.
 
 Usage:
     from app.core.cache.route_cache import route_cache
@@ -39,13 +38,13 @@ def _params_hash(kwargs: dict) -> str:
 
 
 def route_cache(ttl: int = 60, key_prefix: str = "route", global_key: bool = False) -> Callable:
-    """
-    Decorator for FastAPI async route handlers.
+    """Decorator for FastAPI async route handlers.
 
     Args:
         ttl: Cache TTL in seconds.
         key_prefix: Redis key prefix e.g. "screener:facets".
         global_key: If True, key is not org-scoped (for public/global data).
+
     """
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)

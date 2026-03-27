@@ -120,7 +120,7 @@ class TestFundAccessDevHeader:
     async def test_investor_authorized_fund_succeeds(self, client: AsyncClient):
         """INVESTOR with fund A in dev header can access fund A routes."""
         header = {
-            "X-DEV-ACTOR": f'{{"actor_id": "inv-1", "roles": ["INVESTOR"], "fund_ids": ["{FUND_A}"], "org_id": "{ORG_ID}"}}'
+            "X-DEV-ACTOR": f'{{"actor_id": "inv-1", "roles": ["INVESTOR"], "fund_ids": ["{FUND_A}"], "org_id": "{ORG_ID}"}}',
         }
         # Use investor portal as representative fund-scoped route
         response = await client.get(
@@ -133,7 +133,7 @@ class TestFundAccessDevHeader:
     async def test_investor_unauthorized_fund_denied(self, client: AsyncClient):
         """INVESTOR with fund A in dev header is denied for fund B."""
         header = {
-            "X-DEV-ACTOR": f'{{"actor_id": "inv-1", "roles": ["INVESTOR"], "fund_ids": ["{FUND_A}"], "org_id": "{ORG_ID}"}}'
+            "X-DEV-ACTOR": f'{{"actor_id": "inv-1", "roles": ["INVESTOR"], "fund_ids": ["{FUND_A}"], "org_id": "{ORG_ID}"}}',
         }
         response = await client.get(
             f"/api/v1/funds/{FUND_B}/investor/report-packs",
@@ -146,7 +146,7 @@ class TestFundAccessDevHeader:
     async def test_admin_empty_fund_ids_bypasses(self, client: AsyncClient):
         """ADMIN with empty fund_ids can access any fund."""
         header = {
-            "X-DEV-ACTOR": f'{{"actor_id": "admin-1", "roles": ["ADMIN"], "fund_ids": [], "org_id": "{ORG_ID}"}}'
+            "X-DEV-ACTOR": f'{{"actor_id": "admin-1", "roles": ["ADMIN"], "fund_ids": [], "org_id": "{ORG_ID}"}}',
         }
         response = await client.get(
             f"/api/v1/funds/{FUND_A}/investor/report-packs",
@@ -158,7 +158,7 @@ class TestFundAccessDevHeader:
     async def test_super_admin_empty_fund_ids_bypasses(self, client: AsyncClient):
         """SUPER_ADMIN with empty fund_ids can access any fund."""
         header = {
-            "X-DEV-ACTOR": f'{{"actor_id": "sa-1", "roles": ["SUPER_ADMIN"], "fund_ids": [], "org_id": "{ORG_ID}"}}'
+            "X-DEV-ACTOR": f'{{"actor_id": "sa-1", "roles": ["SUPER_ADMIN"], "fund_ids": [], "org_id": "{ORG_ID}"}}',
         }
         response = await client.get(
             f"/api/v1/funds/{FUND_B}/investor/report-packs",
@@ -170,7 +170,7 @@ class TestFundAccessDevHeader:
     async def test_gp_no_fund_ids_denied(self, client: AsyncClient):
         """GP with no fund_ids in dev header is denied (no DB fallback in dev header path)."""
         header = {
-            "X-DEV-ACTOR": f'{{"actor_id": "gp-1", "roles": ["GP"], "fund_ids": [], "org_id": "{ORG_ID}"}}'
+            "X-DEV-ACTOR": f'{{"actor_id": "gp-1", "roles": ["GP"], "fund_ids": [], "org_id": "{ORG_ID}"}}',
         }
         response = await client.get(
             f"/api/v1/funds/{FUND_A}/investor/report-packs",
@@ -182,7 +182,7 @@ class TestFundAccessDevHeader:
     async def test_advisor_authorized_fund_succeeds(self, client: AsyncClient):
         """ADVISOR with fund A in dev header can access fund A investor portal."""
         header = {
-            "X-DEV-ACTOR": f'{{"actor_id": "adv-1", "roles": ["ADVISOR"], "fund_ids": ["{FUND_A}"], "org_id": "{ORG_ID}"}}'
+            "X-DEV-ACTOR": f'{{"actor_id": "adv-1", "roles": ["ADVISOR"], "fund_ids": ["{FUND_A}"], "org_id": "{ORG_ID}"}}',
         }
         response = await client.get(
             f"/api/v1/funds/{FUND_A}/investor/report-packs",
@@ -194,7 +194,7 @@ class TestFundAccessDevHeader:
     async def test_multiple_fund_ids_investor(self, client: AsyncClient):
         """INVESTOR with multiple fund_ids can access both."""
         header = {
-            "X-DEV-ACTOR": f'{{"actor_id": "inv-2", "roles": ["INVESTOR"], "fund_ids": ["{FUND_A}", "{FUND_B}"], "org_id": "{ORG_ID}"}}'
+            "X-DEV-ACTOR": f'{{"actor_id": "inv-2", "roles": ["INVESTOR"], "fund_ids": ["{FUND_A}", "{FUND_B}"], "org_id": "{ORG_ID}"}}',
         }
         resp_a = await client.get(
             f"/api/v1/funds/{FUND_A}/investor/report-packs",

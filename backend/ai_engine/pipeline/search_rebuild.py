@@ -35,6 +35,7 @@ except ImportError:
 @dataclass
 class RebuildResult:
     """Summary of a search rebuild operation."""
+
     documents_processed: int = 0
     chunks_upserted: int = 0
     documents_skipped: int = 0
@@ -64,8 +65,8 @@ async def rebuild_search_index(
 
     Returns:
         ``RebuildResult`` with counts and any errors.
-    """
 
+    """
     import redis.asyncio as aioredis
 
     from app.core.jobs.tracker import get_redis_pool
@@ -155,10 +156,10 @@ async def _do_rebuild(
         try:
             duckdb = get_duckdb_client()
             stale = duckdb.stale_embeddings(
-                org_id, vertical, EMBEDDING_MODEL_NAME, EMBEDDING_DIMENSIONS
+                org_id, vertical, EMBEDDING_MODEL_NAME, EMBEDDING_DIMENSIONS,
             )
             dim_mismatches = duckdb.embedding_dimension_audit(
-                org_id, vertical, EMBEDDING_DIMENSIONS
+                org_id, vertical, EMBEDDING_DIMENSIONS,
             )
             logger.info(
                 "[rebuild] Pre-rebuild audit: stale=%d docs, dim_mismatch=%d docs",
@@ -244,7 +245,7 @@ def _rebuild_single_document(
             raise ValueError(
                 f"Embedding dimension mismatch: file has {mismatched[0]}, "
                 f"current model expects {EMBEDDING_DIMENSIONS}. "
-                f"Re-embed the document before rebuilding."
+                f"Re-embed the document before rebuilding.",
             )
 
     # ── Build search documents ────────────────────────────────────

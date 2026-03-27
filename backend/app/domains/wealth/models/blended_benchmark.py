@@ -19,16 +19,16 @@ class BlendedBenchmark(Base):
     __tablename__ = "blended_benchmarks"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4,
     )
     portfolio_profile: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     created_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), server_default=func.now(),
     )
     updated_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
     )
 
     components: Mapped[list[BlendedBenchmarkComponent]] = relationship(
@@ -43,7 +43,7 @@ class BlendedBenchmarkComponent(Base):
     __tablename__ = "blended_benchmark_components"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4,
     )
     benchmark_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
@@ -57,13 +57,13 @@ class BlendedBenchmarkComponent(Base):
         nullable=False,
     )
     weight: Mapped[float] = mapped_column(
-        Numeric(6, 4), nullable=False
+        Numeric(6, 4), nullable=False,
     )
     created_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), server_default=func.now(),
     )
 
     benchmark: Mapped[BlendedBenchmark] = relationship(
-        "BlendedBenchmark", back_populates="components", lazy="raise"
+        "BlendedBenchmark", back_populates="components", lazy="raise",
     )
     block = relationship("AllocationBlock", lazy="raise")

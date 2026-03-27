@@ -22,8 +22,8 @@ SUPER_ADMIN_DEV_ACTOR_HEADER = {
             "roles": ["SUPER_ADMIN"],
             "fund_ids": [],
             "org_id": "00000000-0000-0000-0000-000000000001",
-        }
-    )
+        },
+    ),
 }
 
 

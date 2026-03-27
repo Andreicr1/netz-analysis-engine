@@ -1,5 +1,4 @@
-"""
-Application Settings — Netz Analysis Engine
+"""Application Settings — Netz Analysis Engine
 ============================================
 
 Merged from Private Credit OS + Wealth OS. Single source of truth for all
@@ -199,7 +198,7 @@ class Settings(BaseSettings):
         # auth bypass (X-DEV-ACTOR header).
         if self.is_development:
             _production_secrets_present = bool(
-                self.clerk_secret_key and self.clerk_jwks_url
+                self.clerk_secret_key and self.clerk_jwks_url,
             )
             if _production_secrets_present:
                 _log.critical(

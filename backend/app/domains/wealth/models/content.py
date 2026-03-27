@@ -20,17 +20,17 @@ class WealthContent(OrganizationScopedMixin, Base):
     __tablename__ = "wealth_content"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4,
     )
     content_type: Mapped[str] = mapped_column(
-        String(30), nullable=False, index=True
+        String(30), nullable=False, index=True,
     )  # investment_outlook, flash_report, manager_spotlight
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     language: Mapped[str] = mapped_column(
-        String(5), nullable=False, server_default="pt"
+        String(5), nullable=False, server_default="pt",
     )
     status: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default="draft"
+        String(20), nullable=False, server_default="draft",
     )  # draft, review, approved, published
     content_md: Mapped[str | None] = mapped_column(Text)
     content_data: Mapped[dict | None] = mapped_column(JSONB)
@@ -39,8 +39,8 @@ class WealthContent(OrganizationScopedMixin, Base):
     approved_by: Mapped[str | None] = mapped_column(String(128))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False,
     )

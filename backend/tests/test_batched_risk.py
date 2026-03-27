@@ -19,8 +19,8 @@ DEV_ACTOR_HEADER = {
             "roles": ["ADMIN"],
             "fund_ids": [],
             "org_id": "00000000-0000-0000-0000-000000000001",
-        }
-    )
+        },
+    ),
 }
 
 SUMMARY_URL = "/api/v1/risk/summary"
@@ -69,7 +69,7 @@ class TestBatchRiskSummary:
         app.dependency_overrides[get_db_with_rls] = lambda: mock_db
         try:
             resp = await client.get(
-                f"{SUMMARY_URL}?profiles=conservative", headers=DEV_ACTOR_HEADER
+                f"{SUMMARY_URL}?profiles=conservative", headers=DEV_ACTOR_HEADER,
             )
         finally:
             app.dependency_overrides.clear()
@@ -129,14 +129,14 @@ class TestBatchRiskSummary:
 
     async def test_empty_profiles_returns_422(self, client: AsyncClient):
         resp = await client.get(
-            f"{SUMMARY_URL}?profiles=", headers=DEV_ACTOR_HEADER
+            f"{SUMMARY_URL}?profiles=", headers=DEV_ACTOR_HEADER,
         )
         assert resp.status_code == 422
 
     async def test_too_many_profiles_returns_422(self, client: AsyncClient):
         many = ",".join(f"profile{i}" for i in range(21))
         resp = await client.get(
-            f"{SUMMARY_URL}?profiles={many}", headers=DEV_ACTOR_HEADER
+            f"{SUMMARY_URL}?profiles={many}", headers=DEV_ACTOR_HEADER,
         )
         assert resp.status_code == 422
         assert "Too many profiles" in resp.json()["detail"]

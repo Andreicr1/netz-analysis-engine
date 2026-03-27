@@ -471,7 +471,6 @@ def get_portfolio_deal_monitoring(
     _role_guard: Actor = Depends(require_roles([Role.ADMIN, Role.GP, Role.COMPLIANCE, Role.INVESTMENT_TEAM, Role.AUDITOR])),
 ) -> PortfolioDealMonitoringResponse:
     """Full portfolio deal monitoring record (capital-at-risk)."""
-
     investment = db.execute(
         select(ActiveInvestment).where(
             ActiveInvestment.fund_id == fund_id,

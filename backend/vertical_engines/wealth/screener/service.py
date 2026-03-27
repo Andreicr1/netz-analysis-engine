@@ -15,7 +15,7 @@ import hashlib
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from vertical_engines.wealth.screener.layer_evaluator import LayerEvaluator, determine_status
@@ -83,12 +83,13 @@ class ScreenerService:
 
         Returns:
             InstrumentScreeningResult with all layer results.
+
         """
         all_results: list[CriterionResult] = []
 
         # ── Layer 1: Eliminatory ──────────────────────────────────
         l1_results = self._evaluator.evaluate_layer1(
-            instrument_type, attributes, self._config_layer1
+            instrument_type, attributes, self._config_layer1,
         )
         all_results.extend(l1_results)
 
@@ -105,7 +106,7 @@ class ScreenerService:
 
         # ── Layer 2: Mandate fit ──────────────────────────────────
         l2_results = self._evaluator.evaluate_layer2(
-            instrument_type, attributes, block_id, self._config_layer2
+            instrument_type, attributes, block_id, self._config_layer2,
         )
         all_results.extend(l2_results)
 
@@ -133,7 +134,7 @@ class ScreenerService:
 
         # ── Layer 3: Quant scoring ────────────────────────────────
         score = self._compute_layer3_score(
-            instrument_type, quant_metrics, peer_values
+            instrument_type, quant_metrics, peer_values,
         )
 
         # Add Layer 3 criterion results for audit trail
@@ -175,9 +176,10 @@ class ScreenerService:
 
         Returns:
             ScreeningRunResult with all individual results.
+
         """
         run_id = uuid.uuid4()
-        started_at = datetime.now(timezone.utc)
+        started_at = datetime.now(UTC)
         results: list[InstrumentScreeningResult] = []
 
         for inst in instruments:
@@ -207,7 +209,7 @@ class ScreenerService:
             config_hash=self.config_hash,
             results=results,
             started_at=started_at,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
         )
 
     def _compute_layer3_score(

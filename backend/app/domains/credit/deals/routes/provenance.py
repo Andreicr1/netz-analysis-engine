@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
@@ -28,10 +28,10 @@ router = APIRouter(prefix="/funds/{fund_id}/deals", tags=["Deals — Provenance"
 
 
 async def _get_deal_or_404(
-    db: AsyncSession, fund_id: uuid.UUID, deal_id: uuid.UUID
+    db: AsyncSession, fund_id: uuid.UUID, deal_id: uuid.UUID,
 ) -> Deal:
     result = await db.execute(
-        select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id)
+        select(Deal).where(Deal.fund_id == fund_id, Deal.id == deal_id),
     )
     deal = result.scalar_one_or_none()
     if deal is None:
@@ -61,7 +61,7 @@ async def get_ai_provenance(
             DocumentReview.fund_id == fund_id,
             DocumentReview.deal_id == deal_id,
             DocumentReview.document_id == document_id,
-        )
+        ),
     )
     review = result.scalar_one_or_none()
     if review is None:
@@ -71,7 +71,7 @@ async def get_ai_provenance(
     count_result = await db.execute(
         select(func.count()).select_from(ReviewEvent).where(
             ReviewEvent.review_id == review.id,
-        )
+        ),
     )
     review_count = count_result.scalar() or 0
 
@@ -116,7 +116,7 @@ async def get_memo_timeline(
     memo_result = await db.execute(
         select(ICMemo)
         .where(ICMemo.deal_id == deal_id)
-        .order_by(ICMemo.version.asc())
+        .order_by(ICMemo.version.asc()),
     )
     memos = list(memo_result.scalars().all())
 
@@ -159,7 +159,7 @@ async def get_memo_timeline(
         deal_id=deal_id,
         memo_count=len(memos),
         events=events,
-        computed_at=datetime.now(timezone.utc),
+        computed_at=datetime.now(UTC),
     )
 
 
@@ -186,7 +186,7 @@ async def get_decision_audit(
             AuditEvent.entity_id == str(deal_id),
             AuditEvent.fund_id == fund_id,
         )
-        .order_by(AuditEvent.created_at.asc())
+        .order_by(AuditEvent.created_at.asc()),
     )
     audit_events = list(result.scalars().all())
 
@@ -245,5 +245,5 @@ async def get_decision_audit(
         deal_id=deal_id,
         events=events,
         total_events=len(events),
-        computed_at=datetime.now(timezone.utc),
+        computed_at=datetime.now(UTC),
     )

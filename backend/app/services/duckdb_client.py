@@ -120,7 +120,7 @@ class DuckDBClient:
             blocked_found = _BLOCKED_COLUMNS & set(cols)
             if blocked_found:
                 raise ValueError(
-                    f"Blocked column(s) in result: {', '.join(sorted(blocked_found))}"
+                    f"Blocked column(s) in result: {', '.join(sorted(blocked_found))}",
                 )
 
             return [dict(zip(cols, row, strict=False)) for row in result.fetchall()]
@@ -259,7 +259,7 @@ class DuckDBClient:
             WHERE organization_id = ?
         """
         rows_a = self._execute(
-            sql_a, org_id, [glob, str(org_id)], method="chunk_stats.aggregates"
+            sql_a, org_id, [glob, str(org_id)], method="chunk_stats.aggregates",
         )
 
         # Query B: doc_type distribution
@@ -270,7 +270,7 @@ class DuckDBClient:
             GROUP BY doc_type
         """
         rows_b = self._execute(
-            sql_b, org_id, [glob, str(org_id)], method="chunk_stats.distribution"
+            sql_b, org_id, [glob, str(org_id)], method="chunk_stats.distribution",
         )
 
         if not rows_a:
@@ -337,7 +337,7 @@ class DuckDBClient:
             self._semaphore = asyncio.Semaphore(2)
         async with self._semaphore:
             return await asyncio.to_thread(
-                self.stale_embeddings, org_id, vertical, current_model, expected_dim
+                self.stale_embeddings, org_id, vertical, current_model, expected_dim,
             )
 
     async def async_document_coverage(
@@ -360,7 +360,7 @@ class DuckDBClient:
             self._semaphore = asyncio.Semaphore(2)
         async with self._semaphore:
             return await asyncio.to_thread(
-                self.extraction_quality, org_id, vertical, min_chars
+                self.extraction_quality, org_id, vertical, min_chars,
             )
 
     async def async_chunk_stats(
@@ -383,7 +383,7 @@ class DuckDBClient:
             self._semaphore = asyncio.Semaphore(2)
         async with self._semaphore:
             return await asyncio.to_thread(
-                self.embedding_dimension_audit, org_id, vertical, expected_dim
+                self.embedding_dimension_audit, org_id, vertical, expected_dim,
             )
 
 

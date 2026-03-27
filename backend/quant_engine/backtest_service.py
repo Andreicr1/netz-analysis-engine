@@ -72,12 +72,13 @@ def walk_forward_backtest(
 
     Returns:
         dict with folds, mean_sharpe, std_sharpe, positive_folds, n_splits_computed.
+
     """
     try:
         from sklearn.model_selection import TimeSeriesSplit
     except ImportError:
         raise RuntimeError(
-            "scikit-learn not installed. Install with: pip install netz-wealth-os[timeseries]"
+            "scikit-learn not installed. Install with: pip install netz-wealth-os[timeseries]",
         )
 
     w = np.array(weights, dtype=float)

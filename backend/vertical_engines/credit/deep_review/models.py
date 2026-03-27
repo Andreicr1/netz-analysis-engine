@@ -78,6 +78,6 @@ class StageOutcome:
 
 __all__: list[str] = [
     "_LLM_CONCURRENCY",
-    "get_llm_concurrency",
     "StageOutcome",
+    "get_llm_concurrency",
 ]

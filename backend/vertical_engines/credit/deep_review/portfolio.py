@@ -192,6 +192,6 @@ def run_all_portfolio_reviews(
 
 __all__ = [
     "get_current_im_draft",
-    "run_portfolio_review",
     "run_all_portfolio_reviews",
+    "run_portfolio_review",
 ]

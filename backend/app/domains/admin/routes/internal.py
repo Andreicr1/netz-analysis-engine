@@ -67,7 +67,7 @@ async def _run_worker_with_timeout(
         await asyncio.wait_for(coro_fn(*args), timeout=timeout_seconds)
         duration = round(time.monotonic() - t0, 2)
         log.info("worker.completed", duration_seconds=duration)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         duration = round(time.monotonic() - t0, 2)
         log.error("worker.timeout", duration_seconds=duration)
     except Exception:

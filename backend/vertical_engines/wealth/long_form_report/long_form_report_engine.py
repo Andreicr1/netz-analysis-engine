@@ -70,6 +70,7 @@ class LongFormReportEngine:
         -------
         LongFormReportResult
             Complete report with all chapters (frozen, safe to serialize).
+
         """
         as_of = as_of or date.today()
         pid = uuid.UUID(portfolio_id)
@@ -125,7 +126,7 @@ class LongFormReportEngine:
 
         # Load portfolio
         result = await db.execute(
-            select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id)
+            select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
         )
         portfolio = result.scalar_one_or_none()
         if portfolio is None:
@@ -158,7 +159,7 @@ class LongFormReportEngine:
             )
             .where(
                 (StrategicAllocation.effective_to.is_(None))
-                | (StrategicAllocation.effective_to >= as_of)
+                | (StrategicAllocation.effective_to >= as_of),
             )
         )
         sa_result = await db.execute(sa_stmt)
@@ -169,7 +170,7 @@ class LongFormReportEngine:
 
         # Load block labels
         block_result = await db.execute(
-            select(AllocationBlock.block_id, AllocationBlock.display_name)
+            select(AllocationBlock.block_id, AllocationBlock.display_name),
         )
         block_labels = {r[0]: r[1] for r in block_result.all()}
 
@@ -256,7 +257,7 @@ class LongFormReportEngine:
     # ── Chapter handlers ────────────────────────────────────────────
 
     async def _chapter_macro_context(
-        self, context: dict[str, Any], db: AsyncSession
+        self, context: dict[str, Any], db: AsyncSession,
     ) -> dict[str, Any]:
         """Ch1: Macro Context — latest approved MacroReview."""
         macro = context.get("macro_review")
@@ -271,7 +272,7 @@ class LongFormReportEngine:
         }
 
     async def _chapter_strategic_allocation(
-        self, context: dict[str, Any], db: AsyncSession
+        self, context: dict[str, Any], db: AsyncSession,
     ) -> dict[str, Any]:
         """Ch2: Strategic Allocation Rationale."""
         allocations = context.get("strategic_allocations", [])
@@ -290,7 +291,7 @@ class LongFormReportEngine:
         }
 
     async def _chapter_portfolio_composition(
-        self, context: dict[str, Any], db: AsyncSession
+        self, context: dict[str, Any], db: AsyncSession,
     ) -> dict[str, Any]:
         """Ch3: Portfolio Composition & Changes — current vs previous snapshot."""
         current = context.get("current_snapshot")
@@ -321,7 +322,7 @@ class LongFormReportEngine:
         }
 
     async def _chapter_performance_attribution(
-        self, context: dict[str, Any], db: AsyncSession
+        self, context: dict[str, Any], db: AsyncSession,
     ) -> dict[str, Any]:
         """Ch4: Performance Attribution — Brinson-Fachler via attribution/service.py."""
         funds_data = context.get("funds_data", [])
@@ -401,7 +402,7 @@ class LongFormReportEngine:
         return await asyncio.to_thread(_run_attribution)
 
     async def _chapter_risk_decomposition(
-        self, context: dict[str, Any], db: AsyncSession
+        self, context: dict[str, Any], db: AsyncSession,
     ) -> dict[str, Any]:
         """Ch5: Risk Decomposition — CVaR per block via quant_engine."""
         funds_data = context.get("funds_data", [])
@@ -463,7 +464,7 @@ class LongFormReportEngine:
         }
 
     async def _chapter_fee_analysis(
-        self, context: dict[str, Any], db: AsyncSession
+        self, context: dict[str, Any], db: AsyncSession,
     ) -> dict[str, Any]:
         """Ch6: Fee Analysis — fee_drag/service.py."""
         funds_data = context.get("funds_data", [])
@@ -518,7 +519,7 @@ class LongFormReportEngine:
         return await asyncio.to_thread(_run_fee_drag)
 
     async def _chapter_per_fund_highlights(
-        self, context: dict[str, Any], db: AsyncSession
+        self, context: dict[str, Any], db: AsyncSession,
     ) -> dict[str, Any]:
         """Ch7: Per-Fund Highlights — top movers, newcomers, exits."""
         funds_data = context.get("funds_data", [])
@@ -556,7 +557,7 @@ class LongFormReportEngine:
         }
 
     async def _chapter_forward_outlook(
-        self, context: dict[str, Any], db: AsyncSession
+        self, context: dict[str, Any], db: AsyncSession,
     ) -> dict[str, Any]:
         """Ch8: Forward Outlook — from latest InvestmentOutlook if available."""
         from app.domains.wealth.models.content import WealthContent

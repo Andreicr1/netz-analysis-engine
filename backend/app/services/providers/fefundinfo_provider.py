@@ -39,8 +39,7 @@ def _run_async(coro: Any) -> Any:
         # We're inside an async context (e.g., called from to_thread)
         # Create a new loop in this thread
         return asyncio.run(coro)
-    else:
-        return asyncio.run(coro)
+    return asyncio.run(coro)
 
 
 class FEFundInfoProvider:
@@ -48,6 +47,7 @@ class FEFundInfoProvider:
 
     Args:
         client: Configured FEFundInfoClient instance.
+
     """
 
     def __init__(self, client: FEFundInfoClient):
@@ -90,7 +90,7 @@ class FEFundInfoProvider:
         return results
 
     def fetch_batch_history(
-        self, tickers: list[str], period: str = "3y"
+        self, tickers: list[str], period: str = "3y",
     ) -> dict[str, pd.DataFrame]:
         """Fetch NAV time series via Dynamic Data Series API.
 
@@ -98,7 +98,7 @@ class FEFundInfoProvider:
         """
         try:
             series_data = _run_async(
-                self._client.get_nav_series(tickers, series_type=2, period="Daily")
+                self._client.get_nav_series(tickers, series_type=2, period="Daily"),
             )
         except Exception:
             logger.warning("fefundinfo fetch_batch_history failed", exc_info=True)
@@ -138,7 +138,7 @@ class FEFundInfoProvider:
     # ── Extended async methods (FE fundinfo specific) ───────────
 
     async def fetch_risk_profile(
-        self, isin: str, currency: str = "USD"
+        self, isin: str, currency: str = "USD",
     ) -> dict[str, Any]:
         """Fetch risk/analytics ratios for a single fund."""
         try:
@@ -149,7 +149,7 @@ class FEFundInfoProvider:
             return {}
 
     async def fetch_performance_summary(
-        self, isin: str, currency: str = "USD"
+        self, isin: str, currency: str = "USD",
     ) -> dict[str, Any]:
         """Fetch cumulative + annualised performance."""
         try:
@@ -194,7 +194,7 @@ class FEFundInfoProvider:
             return []
 
     async def fetch_fund_snapshot(
-        self, isin: str, currency: str = "USD"
+        self, isin: str, currency: str = "USD",
     ) -> dict[str, Any]:
         """Aggregate call: instrument + risk + performance + fees + AUM.
 

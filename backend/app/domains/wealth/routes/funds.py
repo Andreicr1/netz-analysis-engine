@@ -73,7 +73,7 @@ async def get_fund_scoring(
         return []
 
     fund_ids = [f.fund_id for f in funds]
-    _ = {f.fund_id: f for f in funds}  # noqa: F841 — kept for future use
+    _ = {f.fund_id: f for f in funds}
 
     # Fetch latest risk metrics for all funds in one query using DISTINCT ON
     risk_stmt = (
@@ -99,7 +99,7 @@ async def get_fund_scoring(
         )
         if risk is not None:
             score_val, components = compute_fund_score(
-                risk, flows_momentum_score=flows_momentum_score, config=scoring_config
+                risk, flows_momentum_score=flows_momentum_score, config=scoring_config,
             )
         else:
             score_val, components = 50.0, {}
@@ -113,7 +113,7 @@ async def get_fund_scoring(
                 cvar_95_3m=risk.cvar_95_3m if risk else None,
                 sharpe_1y=risk.sharpe_1y if risk else None,
                 return_1y=risk.return_1y if risk else None,
-            )
+            ),
         )
 
     scored.sort(key=lambda s: s.manager_score or 0, reverse=True)

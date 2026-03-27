@@ -82,6 +82,7 @@ def compute_attribution(
     -------
     AttributionResult
         Attribution breakdown. benchmark_available=False if no benchmark data.
+
     """
     if benchmark_weights is None or benchmark_returns is None:
         # No benchmark data — return empty result

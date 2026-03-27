@@ -85,6 +85,7 @@ def calculate_performance(
         net_cashflow: total_received - total_invested
         moic: total_received / total_invested (None if no outflows)
         cash_to_cash_days: days between first outflow and first inflow (None if no inflows)
+
     """
     stmt = (
         select(
@@ -200,7 +201,7 @@ def _compute_cash_to_cash_days(
             DealCashflow.deal_id == deal_id,
             DealCashflow.fund_id == fund_id,
             DealCashflow.flow_type.in_(list(_OUTFLOW_TYPES)),
-        )
+        ),
     ).scalar()
 
     if first_out is None:
@@ -211,7 +212,7 @@ def _compute_cash_to_cash_days(
             DealCashflow.deal_id == deal_id,
             DealCashflow.fund_id == fund_id,
             DealCashflow.flow_type.in_(list(_INFLOW_TYPES)),
-        )
+        ),
     ).scalar()
 
     if first_in is None:
@@ -242,7 +243,7 @@ def _estimate_irr(
             DealCashflow.deal_id == deal_id,
             DealCashflow.fund_id == fund_id,
             DealCashflow.flow_type.in_(list(_INFLOW_TYPES)),
-        )
+        ),
     ).scalar()
 
     total_inflows = float(total_inflows_result) if total_inflows_result else 0.0
@@ -258,7 +259,7 @@ def _estimate_irr(
                 DealCashflow.deal_id == deal_id,
                 DealCashflow.fund_id == fund_id,
                 DealCashflow.flow_type.in_(list(_OUTFLOW_TYPES)),
-            )
+            ),
         ).scalar()
         if first_out is None:
             return None

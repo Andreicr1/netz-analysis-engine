@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from vertical_engines.wealth.macro_committee_engine import (
     WeeklyReportData,
@@ -132,11 +132,11 @@ class TestEmergencyCooldown:
         assert check_emergency_cooldown(None) is True
 
     def test_within_cooldown_blocks(self):
-        recent = datetime.now(timezone.utc) - timedelta(hours=12)
+        recent = datetime.now(UTC) - timedelta(hours=12)
         assert check_emergency_cooldown(recent, cooldown_hours=24) is False
 
     def test_after_cooldown_allows(self):
-        old = datetime.now(timezone.utc) - timedelta(hours=25)
+        old = datetime.now(UTC) - timedelta(hours=25)
         assert check_emergency_cooldown(old, cooldown_hours=24) is True
 
     def test_naive_datetime_handled(self):

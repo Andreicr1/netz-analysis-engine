@@ -8,7 +8,7 @@ Session injection pattern: caller provides db session.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -46,9 +46,10 @@ class WatchlistService:
 
         Returns:
             List of TransitionAlert for non-stable transitions.
+
         """
         alerts: list[TransitionAlert] = []
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         for inst in instruments:
             instrument_id = inst["instrument_id"]
@@ -82,7 +83,7 @@ class WatchlistService:
                         direction=direction,
                         message=message,
                         detected_at=now,
-                    )
+                    ),
                 )
 
         return alerts

@@ -39,6 +39,7 @@ def gather_quant_metrics(
     -------
     dict
         Quant profile with CVaR, Sharpe, returns, scoring data.
+
     """
     logger.info("gathering_quant_metrics", instrument_id=instrument_id)
 

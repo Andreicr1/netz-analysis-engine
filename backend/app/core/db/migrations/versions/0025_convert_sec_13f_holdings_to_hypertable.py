@@ -66,10 +66,10 @@ def upgrade() -> None:
         # constraints). Also drop the unique constraint and old indexes
         # that will be recreated post-conversion.
         cursor.execute(
-            "ALTER TABLE sec_13f_holdings DROP CONSTRAINT IF EXISTS sec_13f_holdings_pkey"
+            "ALTER TABLE sec_13f_holdings DROP CONSTRAINT IF EXISTS sec_13f_holdings_pkey",
         )
         cursor.execute(
-            "ALTER TABLE sec_13f_holdings DROP CONSTRAINT IF EXISTS uq_sec_13f_holdings_cik_date_cusip"
+            "ALTER TABLE sec_13f_holdings DROP CONSTRAINT IF EXISTS uq_sec_13f_holdings_cik_date_cusip",
         )
         cursor.execute("DROP INDEX IF EXISTS idx_sec_13f_holdings_cik_report_date")
         cursor.execute("DROP INDEX IF EXISTS idx_sec_13f_holdings_cusip_report_date")
@@ -87,14 +87,14 @@ def upgrade() -> None:
             "  chunk_time_interval => INTERVAL '3 months',"
             "  migrate_data => true,"
             "  if_not_exists => true"
-            ")"
+            ")",
         )
 
         # Step 3: Re-create PK including partition column
         cursor.execute(
             "ALTER TABLE sec_13f_holdings "
             "ADD CONSTRAINT sec_13f_holdings_pkey "
-            "PRIMARY KEY (report_date, cik, cusip)"
+            "PRIMARY KEY (report_date, cik, cusip)",
         )
 
         # Step 4: Enable compression
@@ -103,29 +103,29 @@ def upgrade() -> None:
             "  timescaledb.compress,"
             "  timescaledb.compress_orderby = 'report_date DESC',"
             "  timescaledb.compress_segmentby = 'cik'"
-            ")"
+            ")",
         )
 
         # Step 5: Auto-compress chunks older than 6 months
         cursor.execute(
             "SELECT add_compression_policy("
             "  'sec_13f_holdings', INTERVAL '6 months', if_not_exists => true"
-            ")"
+            ")",
         )
 
         # Step 6: Re-create indexes optimized for hypertable
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_sec_13f_holdings_cik_report_date "
-            "ON sec_13f_holdings (cik, report_date DESC)"
+            "ON sec_13f_holdings (cik, report_date DESC)",
         )
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_sec_13f_holdings_cusip_report_date "
             "ON sec_13f_holdings (cusip, report_date DESC) "
-            "INCLUDE (cik, shares, market_value)"
+            "INCLUDE (cik, shares, market_value)",
         )
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_sec_13f_holdings_sector "
-            "ON sec_13f_holdings (cik, report_date DESC, sector)"
+            "ON sec_13f_holdings (cik, report_date DESC, sector)",
         )
 
         # ═══════════════════════════════════════════════════════════
@@ -133,10 +133,10 @@ def upgrade() -> None:
         # ═══════════════════════════════════════════════════════════
 
         cursor.execute(
-            "ALTER TABLE sec_13f_diffs DROP CONSTRAINT IF EXISTS sec_13f_diffs_pkey"
+            "ALTER TABLE sec_13f_diffs DROP CONSTRAINT IF EXISTS sec_13f_diffs_pkey",
         )
         cursor.execute(
-            "ALTER TABLE sec_13f_diffs DROP CONSTRAINT IF EXISTS uq_sec_13f_diffs_cik_cusip_quarters"
+            "ALTER TABLE sec_13f_diffs DROP CONSTRAINT IF EXISTS uq_sec_13f_diffs_cik_cusip_quarters",
         )
         cursor.execute("DROP INDEX IF EXISTS idx_sec_13f_diffs_cik_quarter_to")
         cursor.execute("DROP INDEX IF EXISTS idx_sec_13f_diffs_cusip_quarter_to")
@@ -151,14 +151,14 @@ def upgrade() -> None:
             "  chunk_time_interval => INTERVAL '3 months',"
             "  migrate_data => true,"
             "  if_not_exists => true"
-            ")"
+            ")",
         )
 
         # PK must include partition column (quarter_to)
         cursor.execute(
             "ALTER TABLE sec_13f_diffs "
             "ADD CONSTRAINT sec_13f_diffs_pkey "
-            "PRIMARY KEY (quarter_to, cik, cusip, quarter_from)"
+            "PRIMARY KEY (quarter_to, cik, cusip, quarter_from)",
         )
 
         cursor.execute(
@@ -166,22 +166,22 @@ def upgrade() -> None:
             "  timescaledb.compress,"
             "  timescaledb.compress_orderby = 'quarter_to DESC',"
             "  timescaledb.compress_segmentby = 'cik'"
-            ")"
+            ")",
         )
 
         cursor.execute(
             "SELECT add_compression_policy("
             "  'sec_13f_diffs', INTERVAL '6 months', if_not_exists => true"
-            ")"
+            ")",
         )
 
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_sec_13f_diffs_cik_quarter_to "
-            "ON sec_13f_diffs (cik, quarter_to DESC)"
+            "ON sec_13f_diffs (cik, quarter_to DESC)",
         )
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_sec_13f_diffs_cusip_quarter_to "
-            "ON sec_13f_diffs (cusip, quarter_to DESC)"
+            "ON sec_13f_diffs (cusip, quarter_to DESC)",
         )
 
         # ═══════════════════════════════════════════════════════════
@@ -210,7 +210,7 @@ def upgrade() -> None:
             "  end_offset => INTERVAL '1 day',"
             "  schedule_interval => INTERVAL '1 day',"
             "  if_not_exists => true"
-            ")"
+            ")",
         )
 
         # ═══════════════════════════════════════════════════════════
@@ -246,7 +246,7 @@ def upgrade() -> None:
 
         cursor.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_sec_13f_manager_sector_latest_cik "
-            "ON sec_13f_manager_sector_latest (cik)"
+            "ON sec_13f_manager_sector_latest (cik)",
         )
 
         cursor.close()
@@ -265,10 +265,10 @@ def downgrade() -> None:
 
         # Remove compression policies
         cursor.execute(
-            "SELECT remove_compression_policy('sec_13f_holdings', if_exists => true)"
+            "SELECT remove_compression_policy('sec_13f_holdings', if_exists => true)",
         )
         cursor.execute(
-            "SELECT remove_compression_policy('sec_13f_diffs', if_exists => true)"
+            "SELECT remove_compression_policy('sec_13f_diffs', if_exists => true)",
         )
 
         # Disable compression (decompress all chunks first)
@@ -277,10 +277,10 @@ def downgrade() -> None:
                 f"SELECT decompress_chunk(c.chunk_name) "
                 f"FROM timescaledb_information.chunks c "
                 f"WHERE c.hypertable_name = '{table}' "
-                f"AND c.is_compressed = true"
+                f"AND c.is_compressed = true",
             )
             cursor.execute(
-                f"ALTER TABLE {table} SET (timescaledb.compress = false)"
+                f"ALTER TABLE {table} SET (timescaledb.compress = false)",
             )
 
         # NOTE: TimescaleDB does not support reverting a hypertable back to
@@ -291,38 +291,38 @@ def downgrade() -> None:
         # Re-add id column and restore original PK structure
         # sec_13f_holdings
         cursor.execute(
-            "ALTER TABLE sec_13f_holdings DROP CONSTRAINT IF EXISTS sec_13f_holdings_pkey"
+            "ALTER TABLE sec_13f_holdings DROP CONSTRAINT IF EXISTS sec_13f_holdings_pkey",
         )
         cursor.execute(
             "ALTER TABLE sec_13f_holdings "
-            "ADD COLUMN id uuid DEFAULT gen_random_uuid() NOT NULL"
+            "ADD COLUMN id uuid DEFAULT gen_random_uuid() NOT NULL",
         )
         cursor.execute(
             "ALTER TABLE sec_13f_holdings "
-            "ADD CONSTRAINT sec_13f_holdings_pkey PRIMARY KEY (id)"
+            "ADD CONSTRAINT sec_13f_holdings_pkey PRIMARY KEY (id)",
         )
         cursor.execute(
             "ALTER TABLE sec_13f_holdings "
             "ADD CONSTRAINT uq_sec_13f_holdings_cik_date_cusip "
-            "UNIQUE (cik, report_date, cusip)"
+            "UNIQUE (cik, report_date, cusip)",
         )
 
         # sec_13f_diffs
         cursor.execute(
-            "ALTER TABLE sec_13f_diffs DROP CONSTRAINT IF EXISTS sec_13f_diffs_pkey"
+            "ALTER TABLE sec_13f_diffs DROP CONSTRAINT IF EXISTS sec_13f_diffs_pkey",
         )
         cursor.execute(
             "ALTER TABLE sec_13f_diffs "
-            "ADD COLUMN id uuid DEFAULT gen_random_uuid() NOT NULL"
+            "ADD COLUMN id uuid DEFAULT gen_random_uuid() NOT NULL",
         )
         cursor.execute(
             "ALTER TABLE sec_13f_diffs "
-            "ADD CONSTRAINT sec_13f_diffs_pkey PRIMARY KEY (id)"
+            "ADD CONSTRAINT sec_13f_diffs_pkey PRIMARY KEY (id)",
         )
         cursor.execute(
             "ALTER TABLE sec_13f_diffs "
             "ADD CONSTRAINT uq_sec_13f_diffs_cik_cusip_quarters "
-            "UNIQUE (cik, cusip, quarter_from, quarter_to)"
+            "UNIQUE (cik, cusip, quarter_from, quarter_to)",
         )
 
         cursor.close()

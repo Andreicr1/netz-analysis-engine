@@ -63,6 +63,7 @@ def build_deterministic_scenarios(
 
     Returns:
         (scenarios, proxy_flags) tuple.
+
     """
     proxy_flags: list[str] = []
     _cm = credit_metrics or {}

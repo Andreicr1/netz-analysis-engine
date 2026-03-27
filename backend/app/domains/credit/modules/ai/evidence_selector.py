@@ -21,6 +21,7 @@ def curate_all_chapter_surfaces(
         (curated_surfaces, curation_metadata)
         - curated_surfaces: {chapter_type: [chunks]}
         - curation_metadata: {chapter_type: {original_count, final_count, ...}}
+
     """
     if not raw_chunks:
         return {}, {}
@@ -93,6 +94,7 @@ def curate_chunks_by_chapter(
 
     Returns:
         (curated_chunks, curation_metadata)
+
     """
     if not chunks:
         return [], {"original_count": 0, "final_count": 0, "chapter": chapter}

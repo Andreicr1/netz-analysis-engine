@@ -21,7 +21,7 @@ import logging
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from io import BytesIO
 from typing import Any
 
@@ -78,7 +78,7 @@ def _load_review_data(
             row = db.execute(
                 sa_text(
                     "SELECT id, deal_name, title, sponsor_name, borrower_name, fund_id "
-                    "FROM pipeline_deals WHERE id = :did"
+                    "FROM pipeline_deals WHERE id = :did",
                 ),
                 {"did": deal_id},
             ).fetchone()
@@ -86,7 +86,7 @@ def _load_review_data(
             row = db.execute(
                 sa_text(
                     "SELECT id, deal_name, title, sponsor_name, borrower_name, fund_id "
-                    "FROM pipeline_deals WHERE deal_name ILIKE :n LIMIT 1"
+                    "FROM pipeline_deals WHERE deal_name ILIKE :n LIMIT 1",
                 ),
                 {"n": f"%{deal_name}%"},
             ).fetchone()
@@ -104,7 +104,7 @@ def _load_review_data(
                 "SELECT strategy_type, geography, sector_focus, target_return, "
                 "risk_band, liquidity_profile, capital_structure_type, "
                 "key_risks, differentiators, summary_ic_ready, last_ai_refresh "
-                "FROM deal_intelligence_profiles WHERE deal_id = :d AND fund_id = :f"
+                "FROM deal_intelligence_profiles WHERE deal_id = :d AND fund_id = :f",
             ),
             {"d": did, "f": fid},
         ).fetchone()
@@ -113,7 +113,7 @@ def _load_review_data(
             sa_text(
                 "SELECT risk_type, severity, reasoning "
                 "FROM deal_risk_flags WHERE deal_id = :d AND fund_id = :f "
-                "ORDER BY CASE severity WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END"
+                "ORDER BY CASE severity WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END",
             ),
             {"d": did, "f": fid},
         ).fetchall()
@@ -122,7 +122,7 @@ def _load_review_data(
             sa_text(
                 "SELECT executive_summary, opportunity_overview, return_profile, "
                 "downside_case, risk_summary, comparison_peer_funds, recommendation_signal "
-                "FROM deal_ic_briefs WHERE deal_id = :d AND fund_id = :f"
+                "FROM deal_ic_briefs WHERE deal_id = :d AND fund_id = :f",
             ),
             {"d": did, "f": fid},
         ).fetchone()
@@ -135,7 +135,7 @@ def _load_review_data(
                 "risk_summary_section, peer_comparison_section, "
                 "recommendation, recommendation_rationale, generated_at, model_version "
                 "FROM investment_memorandum_drafts WHERE deal_id = :d AND fund_id = :f "
-                "ORDER BY generated_at DESC LIMIT 1"
+                "ORDER BY generated_at DESC LIMIT 1",
             ),
             {"d": did, "f": fid},
         ).fetchone()
@@ -143,7 +143,7 @@ def _load_review_data(
         research = db.execute(
             sa_text(
                 "SELECT research_output, intelligence_status, intelligence_generated_at "
-                "FROM pipeline_deals WHERE id = :d"
+                "FROM pipeline_deals WHERE id = :d",
             ),
             {"d": did},
         ).fetchone()
@@ -154,7 +154,7 @@ def _load_review_data(
                 "status, total_matches, pep_hits, sanctions_hits, adverse_media_hits "
                 "FROM kyc_screenings "
                 "WHERE deal_id = :d AND fund_id = :f "
-                "ORDER BY entity_type, entity_name"
+                "ORDER BY entity_type, entity_name",
             ),
             {"d": did, "f": fid},
         ).fetchall()
@@ -191,7 +191,7 @@ def _parse_json_field(raw: Any) -> Any:
 def _badge_para(text: str, color: Any, styles: dict) -> Paragraph:
     """Render a coloured signal badge as a centred Table-wrapped Paragraph."""
     return Paragraph(
-        safe_text(text), styles["badge_green"]
+        safe_text(text), styles["badge_green"],
     )  # overridden by Table bg below
 
 
@@ -225,8 +225,8 @@ def _signal_badge_table(
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("TOPPADDING", (0, 0), (-1, -1), 2),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-            ]
-        )
+            ],
+        ),
     )
     # Centre wrapper
     wrapper = Table([[tbl]], colWidths=[A4[0] - 30 * mm])
@@ -239,8 +239,8 @@ def _signal_badge_table(
                 ("RIGHTPADDING", (0, 0), (-1, -1), 0),
                 ("TOPPADDING", (0, 0), (-1, -1), 0),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-            ]
-        )
+            ],
+        ),
     )
     return wrapper
 
@@ -284,7 +284,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
     kyc_rows = data.get("kyc_screenings") or []
 
     # ── Timestamps ───────────────────────────────────────────────
-    as_of = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    as_of = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     if profile and profile[10]:
         as_of = profile[10].strftime("%Y-%m-%d %H:%M UTC")
     elif im and im[11]:
@@ -308,7 +308,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
         research_data = _parse_json_field(research[0]) or {}
 
     critic_score = research_data.get("confidence_score") or research_data.get(
-        "critic_score"
+        "critic_score",
     )
 
     # ── Document setup ───────────────────────────────────────────
@@ -342,7 +342,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
             critic_score=critic_score,
             version_tag=version_tag,
             styles=styles,
-        )
+        ),
     )
     story.append(PageBreak())
 
@@ -376,7 +376,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
                 profile_data,
                 col_widths=[55 * mm, 120 * mm],
                 styles=styles,
-            )
+            ),
         )
         story.append(Spacer(1, 3 * mm))
 
@@ -415,7 +415,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
                     rows,
                     col_widths=[60 * mm, 115 * mm],
                     styles=styles,
-                )
+                ),
             )
         else:
             story.append(Paragraph(safe_text(str(terms)), styles["body"]))
@@ -439,7 +439,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
                     rows,
                     col_widths=[60 * mm, 115 * mm],
                     styles=styles,
-                )
+                ),
             )
         else:
             story.append(Paragraph(safe_text(str(struct)), styles["body"]))
@@ -467,14 +467,14 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
                     safe_text(str(r[0])),
                     safe_text(r[1] or "LOW"),
                     safe_text(str(r[2])[:300]),
-                ]
+                ],
             )
         story.append(
             build_institutional_table(
                 risk_rows,
                 col_widths=[55 * mm, 22 * mm, 98 * mm],
                 styles=styles,
-            )
+            ),
         )
         story.append(Spacer(1, 3 * mm))
 
@@ -518,7 +518,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
                         Paragraph(
                             f"<font color='green'>+</font>  {safe_text(str(s))}",
                             styles["body"],
-                        )
+                        ),
                     )
 
             weaknesses = thesis.get("weaknesses", [])
@@ -529,7 +529,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
                         Paragraph(
                             f"<font color='red'>-</font>  {safe_text(str(w))}",
                             styles["body"],
-                        )
+                        ),
                     )
 
             rec = thesis.get("recommendation", "")
@@ -549,14 +549,14 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
                         safe_text(str(ex.get("probability", ""))),
                         safe_text(ex.get("timeline", "")),
                         safe_text(ex.get("recovery", "")),
-                    ]
+                    ],
                 )
             story.append(
                 build_institutional_table(
                     exit_rows,
                     col_widths=[60 * mm, 30 * mm, 40 * mm, 45 * mm],
                     styles=styles,
-                )
+                ),
             )
             story.append(Spacer(1, 3 * mm))
 
@@ -571,14 +571,14 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
                         safe_text(c.get("deal_name", "")),
                         safe_text(c.get("similarity", "")),
                         safe_text(c.get("outcome", "")),
-                    ]
+                    ],
                 )
             story.append(
                 build_institutional_table(
                     comp_rows,
                     col_widths=[60 * mm, 60 * mm, 55 * mm],
                     styles=styles,
-                )
+                ),
             )
             story.append(Spacer(1, 3 * mm))
 
@@ -586,7 +586,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
         memo = research_data.get("investment_memo", "")
         if memo and len(memo) > 200:
             story.append(
-                Paragraph("13. Full Investment Memorandum", styles["section_heading"])
+                Paragraph("13. Full Investment Memorandum", styles["section_heading"]),
             )
             for para in memo.split("\n\n"):
                 para = para.strip()
@@ -618,7 +618,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
             Paragraph(
                 "Appendix I — KYC / AML Screening Results",
                 styles["section_heading"],
-            )
+            ),
         )
         story.append(Spacer(1, 3 * mm))
         story.append(
@@ -627,7 +627,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
                 "and Adverse Media databases. Results below cover all entities and key "
                 "persons identified during the Deep Review analysis.",
                 styles["body"],
-            )
+            ),
         )
         story.append(Spacer(1, 4 * mm))
 
@@ -647,7 +647,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
         if org_rows:
             story.append(Paragraph("Organisation Screening", styles["subsection"]))
             org_tdata: list[list[str | Paragraph]] = [
-                ["Entity Name", "Status", "Matches", "PEP", "Sanctions", "Adv. Media"]
+                ["Entity Name", "Status", "Matches", "PEP", "Sanctions", "Adv. Media"],
             ]
             for r in org_rows:
                 # r: entity_type(0), first(1), last(2), entity_name(3), status(4),
@@ -660,14 +660,14 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
                         str(r[6] or 0),
                         str(r[7] or 0),
                         str(r[8] or 0),
-                    ]
+                    ],
                 )
             story.append(
                 build_institutional_table(
                     org_tdata,
                     col_widths=[55 * mm, 25 * mm, 20 * mm, 20 * mm, 25 * mm, 25 * mm],
                     styles=styles,
-                )
+                ),
             )
             story.append(Spacer(1, 4 * mm))
 
@@ -675,7 +675,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
         if person_rows:
             story.append(Paragraph("Key Person Screening", styles["subsection"]))
             person_tdata: list[list[str | Paragraph]] = [
-                ["Person Name", "Status", "Matches", "PEP", "Sanctions", "Adv. Media"]
+                ["Person Name", "Status", "Matches", "PEP", "Sanctions", "Adv. Media"],
             ]
             for r in person_rows:
                 name = f"{r[1] or ''} {r[2] or ''}".strip() or r[3] or ""
@@ -687,14 +687,14 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
                         str(r[6] or 0),
                         str(r[7] or 0),
                         str(r[8] or 0),
-                    ]
+                    ],
                 )
             story.append(
                 build_institutional_table(
                     person_tdata,
                     col_widths=[55 * mm, 25 * mm, 20 * mm, 20 * mm, 25 * mm, 25 * mm],
                     styles=styles,
-                )
+                ),
             )
             story.append(Spacer(1, 4 * mm))
 
@@ -707,7 +707,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
                 f"<b>Summary:</b> {total} entities screened — "
                 f"{cleared} cleared, {flagged} flagged.",
                 styles["body"],
-            )
+            ),
         )
 
     # ═══════════════════════════════════════════════════════════════
@@ -721,7 +721,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
             thickness=0.3,
             color=MED_GREY,
             spaceAfter=3 * mm,
-        )
+        ),
     )
     story.append(
         Paragraph(
@@ -733,7 +733,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
             "AI-generated content may contain errors or omissions. Unauthorised distribution is "
             "strictly prohibited.",
             styles["disclaimer"],
-        )
+        ),
     )
 
     # ── Build ─────────────────────────────────────────────────────
@@ -771,7 +771,7 @@ def _generate_v4_pdf(deal_id: str, output: str | None = None) -> str:
         chapters = db.execute(
             select(MemoChapter)
             .where(MemoChapter.deal_id == deal_id, MemoChapter.is_current.is_(True))
-            .order_by(MemoChapter.chapter_number)
+            .order_by(MemoChapter.chapter_number),
         ).scalars().all()
 
         if not chapters:
@@ -810,7 +810,7 @@ def _generate_v4_pdf(deal_id: str, output: str | None = None) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate AI Deep Review PDF (ReportLab / Unicode)"
+        description="Generate AI Deep Review PDF (ReportLab / Unicode)",
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--deal", type=str, help="Deal name (partial match)")

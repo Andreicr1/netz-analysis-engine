@@ -503,7 +503,7 @@ def regenerate_memo_chapter(
     corpus_result = build_ic_corpus(chapter_evidence)
     raw_chunks = corpus_result["raw_chunks"]
     evidence_map = corpus_result["evidence_map"]
-    chunk_source = raw_chunks if raw_chunks else evidence_map
+    chunk_source = raw_chunks or evidence_map
 
     from ai_engine.model_config import get_model
     from ai_engine.openai_client import create_completion

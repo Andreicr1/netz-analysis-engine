@@ -24,7 +24,7 @@ import asyncio
 import json
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -88,7 +88,6 @@ async def phase1_register_ingest(
     dry_run: bool = False,
 ) -> dict[str, int]:
     """Fetch UCITS fund data from ESMA Solr API. Upserts managers and funds."""
-
     from data_providers.esma.register_service import RegisterService
 
     stats = {"managers": 0, "funds": 0, "skipped": 0, "errors": 0}
@@ -120,7 +119,7 @@ async def phase1_register_ingest(
                     "esma_id": mid,
                     "company_name": f"Manager {mid}",  # placeholder
                     "fund_count": 0,
-                    "data_fetched_at": datetime.now(timezone.utc),
+                    "data_fetched_at": datetime.now(UTC),
                 }
             managers[mid]["fund_count"] = managers[mid].get("fund_count", 0) + 1
 
@@ -132,7 +131,7 @@ async def phase1_register_ingest(
                 "domicile": fund.domicile,
                 "fund_type": fund.fund_type,
                 "host_member_states": fund.host_member_states or None,
-                "data_fetched_at": datetime.now(timezone.utc),
+                "data_fetched_at": datetime.now(UTC),
             })
 
             # Flush in batches
@@ -246,7 +245,7 @@ async def phase1_5_firds_isin_mapping(
     # Fetch all fund LEIs from esma_funds
     async with db_factory() as session:
         result = await session.execute(
-            sa_text("SELECT isin FROM esma_funds ORDER BY isin")
+            sa_text("SELECT isin FROM esma_funds ORDER BY isin"),
         )
         fund_leis = {row[0] for row in result.fetchall()}
 
@@ -277,7 +276,7 @@ async def phase1_5_firds_isin_mapping(
                 "fund_lei": instrument.lei,
                 "resolved_via": "firds",
                 "is_tradeable": False,  # will be updated by Phase 2
-                "last_verified_at": datetime.now(timezone.utc),
+                "last_verified_at": datetime.now(UTC),
             })
 
             # Flush in batches of 2000
@@ -363,8 +362,8 @@ async def phase2_isin_resolution(
             sa_text(
                 "SELECT isin FROM esma_isin_ticker_map "
                 "WHERE yahoo_ticker IS NULL "
-                "ORDER BY isin"
-            )
+                "ORDER BY isin",
+            ),
         )
         all_isins = [row[0] for row in result.fetchall()]
 
@@ -409,14 +408,14 @@ async def phase2_isin_resolution(
                                 "    resolved_via = :resolved_via, "
                                 "    is_tradeable = :is_tradeable, "
                                 "    last_verified_at = :last_verified_at "
-                                "WHERE isin = :isin"
+                                "WHERE isin = :isin",
                             ),
                             {
                                 "ticker": r.yahoo_ticker,
                                 "exchange": r.exchange,
                                 "resolved_via": r.resolved_via,
                                 "is_tradeable": r.is_tradeable,
-                                "last_verified_at": datetime.now(timezone.utc),
+                                "last_verified_at": datetime.now(UTC),
                                 "isin": r.isin,
                             },
                         )
@@ -434,7 +433,7 @@ async def phase2_isin_resolution(
                             "FROM esma_isin_ticker_map m "
                             "WHERE f.isin = m.fund_lei "
                             "  AND m.yahoo_ticker IS NOT NULL "
-                            "  AND m.isin = ANY(:isins)"
+                            "  AND m.isin = ANY(:isins)",
                         ),
                         {"isins": [r.isin for r in results]},
                     )
@@ -483,8 +482,8 @@ async def phase3_nav_backfill(
             sa_text(
                 "SELECT isin, yahoo_ticker FROM esma_isin_ticker_map "
                 "WHERE is_tradeable = true AND yahoo_ticker IS NOT NULL "
-                "ORDER BY isin"
-            )
+                "ORDER BY isin",
+            ),
         )
         ticker_map = {row[0]: row[1] for row in result.fetchall()}
 
@@ -584,7 +583,7 @@ async def _backfill_single_ticker(
                     "INSERT INTO esma_nav_history (isin, yahoo_ticker, nav_date, nav_value) "
                     "VALUES (:isin, :ticker, :nav_date, :nav_value) "
                     "ON CONFLICT (isin, nav_date) DO UPDATE "
-                    "SET nav_value = EXCLUDED.nav_value"
+                    "SET nav_value = EXCLUDED.nav_value",
                 ),
                 {"isin": isin, "ticker": ticker, "nav_date": nav_date, "nav_value": nav_value},
             )
@@ -614,8 +613,8 @@ async def phase4_sec_crossref(
             sa_text(
                 "SELECT esma_id, company_name, lei FROM esma_managers "
                 "WHERE sec_crd_number IS NULL "
-                "ORDER BY esma_id"
-            )
+                "ORDER BY esma_id",
+            ),
         )
         esma_managers = [
             {"esma_id": row[0], "company_name": row[1], "lei": row[2]}
@@ -624,7 +623,7 @@ async def phase4_sec_crossref(
 
         # Fetch SEC managers for matching
         sec_result = await session.execute(
-            sa_text("SELECT crd_number, firm_name FROM sec_managers")
+            sa_text("SELECT crd_number, firm_name FROM sec_managers"),
         )
         sec_managers = [
             {"crd_number": row[0], "firm_name": row[1]}
@@ -678,7 +677,7 @@ async def phase4_sec_crossref(
                     await session.execute(
                         sa_text(
                             "UPDATE esma_managers SET sec_crd_number = :crd "
-                            "WHERE esma_id = :esma_id"
+                            "WHERE esma_id = :esma_id",
                         ),
                         {"crd": best_crd, "esma_id": esma_mgr["esma_id"]},
                     )

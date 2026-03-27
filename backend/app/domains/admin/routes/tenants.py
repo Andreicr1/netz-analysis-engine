@@ -55,7 +55,7 @@ async def list_tenants(
             VerticalConfigOverride.organization_id,
             func.count(VerticalConfigOverride.id).label("config_count"),
         )
-        .group_by(VerticalConfigOverride.organization_id)
+        .group_by(VerticalConfigOverride.organization_id),
     )
     tenant_configs = {row[0]: row[1] for row in result.all()}
 
@@ -65,7 +65,7 @@ async def list_tenants(
             TenantAsset.organization_id,
             func.count(TenantAsset.id).label("asset_count"),
         )
-        .group_by(TenantAsset.organization_id)
+        .group_by(TenantAsset.organization_id),
     )
     tenant_assets = {row[0]: row[1] for row in asset_result.all()}
 
@@ -129,14 +129,14 @@ async def get_tenant(
     # Configs
     configs_result = await db.execute(
         select(VerticalConfigOverride)
-        .where(VerticalConfigOverride.organization_id == org_id)
+        .where(VerticalConfigOverride.organization_id == org_id),
     )
     configs = configs_result.scalars().all()
 
     # Assets
     assets_result = await db.execute(
         select(TenantAsset)
-        .where(TenantAsset.organization_id == org_id)
+        .where(TenantAsset.organization_id == org_id),
     )
     assets = assets_result.scalars().all()
 
@@ -210,7 +210,7 @@ async def seed_tenant(
             config=d.config,
             version=1,
         ).on_conflict_do_nothing(
-            constraint="uq_overrides_org_vertical_type"
+            constraint="uq_overrides_org_vertical_type",
         )
         result = await db.execute(stmt)
         if result.rowcount > 0:
@@ -302,7 +302,7 @@ async def delete_asset(
         sa_delete(TenantAsset).where(
             TenantAsset.organization_id == org_id,
             TenantAsset.asset_type == asset_type,
-        )
+        ),
     )
 
     if result.rowcount == 0:

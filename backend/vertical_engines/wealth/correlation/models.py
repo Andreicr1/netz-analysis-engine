@@ -10,6 +10,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True, slots=True)
 class InstrumentCorrelation:
     """Correlation pair with instrument identifiers."""
+
     instrument_a_id: str
     instrument_a_name: str
     instrument_b_id: str
@@ -23,6 +24,7 @@ class InstrumentCorrelation:
 @dataclass(frozen=True, slots=True)
 class ConcentrationAnalysis:
     """Eigenvalue concentration with portfolio context."""
+
     eigenvalues: tuple[float, ...]
     explained_variance_ratios: tuple[float, ...]
     first_eigenvalue_ratio: float
@@ -38,6 +40,7 @@ class ConcentrationAnalysis:
 @dataclass(frozen=True, slots=True)
 class PortfolioCorrelationResult:
     """Full correlation regime result for a portfolio."""
+
     profile: str
     instrument_count: int
     window_days: int

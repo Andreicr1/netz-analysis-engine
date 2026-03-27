@@ -69,7 +69,7 @@ async def get_tenant_asset(org_slug: str, asset_type: str) -> Response:
             select(TenantAsset.data, TenantAsset.content_type).where(
                 TenantAsset.org_slug == org_slug,
                 TenantAsset.asset_type == asset_type,
-            )
+            ),
         )
         row = result.first()
 

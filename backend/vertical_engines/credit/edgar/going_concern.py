@@ -101,6 +101,7 @@ def check_going_concern(
         method: "auditor_report" | "broad_scan" | "not_found"
         filing_date: str
         accession: str
+
     """
     try:
         if filing is None:

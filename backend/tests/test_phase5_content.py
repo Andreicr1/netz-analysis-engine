@@ -10,7 +10,7 @@ Focus areas (per plan):
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from io import BytesIO
 from typing import Any
 from unittest.mock import MagicMock
@@ -133,7 +133,7 @@ class TestFlashReportGeneration:
 
         db = MagicMock()
         # Simulate recent flash report (within 48h cooldown)
-        recent_time = datetime.now(timezone.utc)
+        recent_time = datetime.now(UTC)
         mock_result = MagicMock()
         mock_result.__getitem__ = lambda self, idx: recent_time
         db.query.return_value.filter.return_value.order_by.return_value.first.return_value = mock_result
@@ -354,7 +354,7 @@ class TestAlertEngine:
         from vertical_engines.wealth.monitoring.alert_engine import AlertBatch
 
         batch = AlertBatch(
-            alerts=[], scanned_at=datetime.now(timezone.utc),
+            alerts=[], scanned_at=datetime.now(UTC),
             organization_id="org-1",
         )
         with pytest.raises(AttributeError):
@@ -375,7 +375,7 @@ class TestAlertEngine:
             ),
         ]
         batch = AlertBatch(
-            alerts=alerts, scanned_at=datetime.now(timezone.utc),
+            alerts=alerts, scanned_at=datetime.now(UTC),
             organization_id="org-1",
         )
         result = alerts_to_json(batch)
@@ -413,7 +413,7 @@ class TestDriftMonitor:
             ),
         ]
         result = DriftScanResult(
-            alerts=alerts, scanned_at=datetime.now(timezone.utc),
+            alerts=alerts, scanned_at=datetime.now(UTC),
             organization_id="org-1",
         )
         json_data = drift_alerts_to_json(result)

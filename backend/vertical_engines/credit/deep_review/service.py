@@ -443,7 +443,7 @@ def run_deal_deep_review_v4(
         deal_fields=deal_fields,
         analysis=analysis,
         call_openai_fn=_sponsor_call_openai,
-        index_key_persons=index_key_persons if index_key_persons else None,
+        index_key_persons=index_key_persons or None,
         sponsor_evidence_text=sponsor_evidence_text,
     )
 
@@ -1603,7 +1603,7 @@ async def async_run_deal_deep_review_v4(
             deal_fields=deal_fields,
             analysis=analysis,
             call_openai_fn=_sponsor_call,
-            index_key_persons=index_key_persons if index_key_persons else None,
+            index_key_persons=index_key_persons or None,
             sponsor_evidence_text=sponsor_evidence_text,
         )
 
@@ -2398,7 +2398,6 @@ def run_all_deals_deep_review_v4(
     Session-isolated: each deal runs in its own session to prevent
     cascading corruption.
     """
-
     deals = list(
         db.execute(
             select(Deal).where(
@@ -2592,8 +2591,8 @@ async def async_run_all_deals_deep_review_v4(
 
 
 __all__ = [
-    "run_deal_deep_review_v4",
+    "async_run_all_deals_deep_review_v4",
     "async_run_deal_deep_review_v4",
     "run_all_deals_deep_review_v4",
-    "async_run_all_deals_deep_review_v4",
+    "run_deal_deep_review_v4",
 ]

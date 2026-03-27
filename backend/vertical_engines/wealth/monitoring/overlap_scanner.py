@@ -65,6 +65,7 @@ def compute_overlap(
 
     Returns:
         OverlapResult with per-CUSIP and per-sector exposures + breaches.
+
     """
     if not holdings:
         return OverlapResult(

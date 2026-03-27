@@ -29,7 +29,6 @@ async def convert_deal_to_asset(
 
     The caller is responsible for ``db.commit()``.
     """
-
     try:
         asset_type = AssetType[deal.deal_type.value]
     except Exception as e:

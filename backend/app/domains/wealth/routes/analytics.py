@@ -137,7 +137,7 @@ async def create_backtest(
             )
             .where(
                 (StrategicAllocation.effective_to.is_(None))
-                | (StrategicAllocation.effective_to >= today)
+                | (StrategicAllocation.effective_to >= today),
             )
         )
         alloc_result = await db.execute(alloc_stmt)
@@ -196,7 +196,7 @@ async def get_backtest(
     run = result.scalar_one_or_none()
     if run is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Backtest run not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Backtest run not found",
         )
     return BacktestRunRead.model_validate(run)
 
@@ -228,7 +228,7 @@ async def optimize(
         )
         .where(
             (StrategicAllocation.effective_to.is_(None))
-            | (StrategicAllocation.effective_to >= today)
+            | (StrategicAllocation.effective_to >= today),
         )
     )
     alloc_result = await db.execute(alloc_stmt)
@@ -253,7 +253,7 @@ async def optimize(
         )
 
     # Use provided expected returns or computed ones
-    expected_returns = body.expected_returns if body.expected_returns else computed_returns
+    expected_returns = body.expected_returns or computed_returns
 
     # Check Redis cache
     returns_list = [expected_returns[bid] for bid in block_ids] if isinstance(expected_returns, dict) else list(expected_returns)
@@ -325,7 +325,7 @@ async def optimize_pareto(
         )
         .where(
             (StrategicAllocation.effective_to.is_(None))
-            | (StrategicAllocation.effective_to >= today)
+            | (StrategicAllocation.effective_to >= today),
         )
     )
     alloc_result = await db.execute(alloc_stmt)
@@ -348,7 +348,7 @@ async def optimize_pareto(
             detail="Insufficient NAV data to compute optimization inputs",
         )
 
-    expected_returns = body.expected_returns if body.expected_returns else computed_returns
+    expected_returns = body.expected_returns or computed_returns
 
     # Generate job ID for SSE tracking
     job_id = str(uuid.uuid4())
@@ -445,7 +445,7 @@ async def get_correlation(
     block_list = [b.strip() for b in blocks.split(",") if b.strip()]
     if not block_list:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="At least one block required"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="At least one block required",
         )
     if len(block_list) < 2:
         raise HTTPException(
@@ -512,7 +512,7 @@ async def get_rolling_correlation(
 
     # Load instrument names
     inst_stmt = select(Instrument.instrument_id, Instrument.name).where(
-        Instrument.instrument_id.in_([inst_a, inst_b])
+        Instrument.instrument_id.in_([inst_a, inst_b]),
     )
     inst_result = await db.execute(inst_stmt)
     name_map = {row.instrument_id: row.name for row in inst_result.all()}

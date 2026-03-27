@@ -65,7 +65,7 @@ class TestFactSheetAttribution:
             return_value=(mock_block_weights, mock_bm_navs),
         ):
             result = engine._compute_attribution(
-                db, uuid.uuid4(), funds_data, block_weights
+                db, uuid.uuid4(), funds_data, block_weights,
             )
 
         assert isinstance(result, list)
@@ -87,7 +87,7 @@ class TestFactSheetAttribution:
             return_value=({}, {}),
         ):
             result = engine._compute_attribution(
-                db, uuid.uuid4(), [], {}
+                db, uuid.uuid4(), [], {},
             )
 
         assert result == []

@@ -41,7 +41,7 @@ class NavRow:
 async def is_model_portfolio(db: AsyncSession, entity_id: uuid.UUID) -> bool:
     """Check if entity_id refers to a model portfolio."""
     result = await db.execute(
-        select(ModelPortfolio.id).where(ModelPortfolio.id == entity_id).limit(1)
+        select(ModelPortfolio.id).where(ModelPortfolio.id == entity_id).limit(1),
     )
     return result.scalar_one_or_none() is not None
 
@@ -49,7 +49,7 @@ async def is_model_portfolio(db: AsyncSession, entity_id: uuid.UUID) -> bool:
 def is_model_portfolio_sync(db: Session, entity_id: uuid.UUID) -> bool:
     """Sync version — for use in to_thread contexts."""
     result = db.execute(
-        select(ModelPortfolio.id).where(ModelPortfolio.id == entity_id).limit(1)
+        select(ModelPortfolio.id).where(ModelPortfolio.id == entity_id).limit(1),
     )
     return result.scalar_one_or_none() is not None
 

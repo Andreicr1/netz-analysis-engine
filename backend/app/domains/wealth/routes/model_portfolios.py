@@ -94,7 +94,7 @@ async def list_model_portfolios(
 ) -> list[ModelPortfolioRead]:
     """List all model portfolios for the organization."""
     result = await db.execute(
-        select(ModelPortfolio).order_by(ModelPortfolio.created_at.desc())
+        select(ModelPortfolio).order_by(ModelPortfolio.created_at.desc()),
     )
     return [ModelPortfolioRead.model_validate(p) for p in result.scalars().all()]
 
@@ -111,7 +111,7 @@ async def get_model_portfolio(
 ) -> ModelPortfolioRead:
     """Get a model portfolio with its fund selection schema."""
     result = await db.execute(
-        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id)
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
     )
     portfolio = result.scalar_one_or_none()
     if portfolio is None:
@@ -147,7 +147,7 @@ async def construct_portfolio(
     _require_ic_role(actor)
 
     result = await db.execute(
-        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id)
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
     )
     portfolio = result.scalar_one_or_none()
     if portfolio is None:
@@ -182,7 +182,7 @@ async def get_track_record(
     from app.domains.wealth.models.model_portfolio_nav import ModelPortfolioNav
 
     result = await db.execute(
-        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id)
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
     )
     portfolio = result.scalar_one_or_none()
     if portfolio is None:
@@ -195,7 +195,7 @@ async def get_track_record(
     nav_result = await db.execute(
         select(ModelPortfolioNav)
         .where(ModelPortfolioNav.portfolio_id == portfolio_id)
-        .order_by(ModelPortfolioNav.nav_date)
+        .order_by(ModelPortfolioNav.nav_date),
     )
     nav_rows = nav_result.scalars().all()
     nav_series = [
@@ -233,7 +233,7 @@ async def trigger_backtest(
     _require_ic_role(actor)
 
     result = await db.execute(
-        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id)
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
     )
     portfolio = result.scalar_one_or_none()
     if portfolio is None:
@@ -283,7 +283,7 @@ async def trigger_stress(
     _require_ic_role(actor)
 
     result = await db.execute(
-        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id)
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
     )
     portfolio = result.scalar_one_or_none()
     if portfolio is None:
@@ -383,7 +383,7 @@ async def _run_construction_async(
         )
         .where(
             (StrategicAllocation.effective_to.is_(None))
-            | (StrategicAllocation.effective_to > today)
+            | (StrategicAllocation.effective_to > today),
         )
     )
     alloc_result = await db.execute(alloc_stmt)
@@ -440,7 +440,7 @@ async def _run_construction_async(
 
     try:
         cov_matrix, expected_returns, available_ids = await compute_fund_level_inputs(
-            db, fund_instrument_ids
+            db, fund_instrument_ids,
         )
 
         # Filter to funds with NAV data
@@ -759,7 +759,7 @@ async def _create_day0_snapshot(
             PortfolioSnapshot.organization_id == org_id,
             PortfolioSnapshot.profile == portfolio.profile,
             PortfolioSnapshot.snapshot_date == snapshot_date,
-        )
+        ),
     )
 
     snapshot = PortfolioSnapshot(
@@ -797,7 +797,7 @@ def _run_backtest(
 
     fund_ids, weights = _extract_fund_weights(fund_selection)
     result = compute_backtest(
-        db, fund_ids=fund_ids, weights=weights, portfolio_id=portfolio_id
+        db, fund_ids=fund_ids, weights=weights, portfolio_id=portfolio_id,
     )
 
     return {
@@ -829,7 +829,7 @@ def _run_stress(
 
     fund_ids, weights = _extract_fund_weights(fund_selection)
     result = compute_stress(
-        db, fund_ids=fund_ids, weights=weights, portfolio_id=portfolio_id
+        db, fund_ids=fund_ids, weights=weights, portfolio_id=portfolio_id,
     )
 
     return {

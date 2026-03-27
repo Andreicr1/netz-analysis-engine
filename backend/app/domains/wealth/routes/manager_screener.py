@@ -457,7 +457,7 @@ async def get_drift(
                 decreased=actions["DECREASED"],
                 unchanged=actions["UNCHANGED"],
                 total_changes=total,
-            )
+            ),
         )
 
     return ManagerDriftRead(
@@ -505,7 +505,7 @@ async def get_institutional(
             .where(Sec13fHolding.cik == manager.cik)
             .where(Sec13fHolding.report_date >= cutoff)
             .where(Sec13fHolding.report_date <= today)
-            .distinct()
+            .distinct(),
         ))
         .where(SecInstitutionalAllocation.report_date >= cutoff)
         .where(SecInstitutionalAllocation.report_date <= today)
@@ -710,7 +710,7 @@ async def get_brochure_sections(
             "SELECT crd_number, section, LEFT(content, 200) AS content_excerpt, filing_date "
             "FROM sec_manager_brochure_text "
             "WHERE crd_number = :crd "
-            "ORDER BY filing_date DESC, section"
+            "ORDER BY filing_date DESC, section",
         ),
         {"crd": crd},
     )
@@ -820,7 +820,7 @@ async def get_brochure_key_sections(
             "FROM sec_manager_brochure_text "
             "WHERE crd_number = :crd "
             "  AND section = ANY(:sections) "
-            "ORDER BY section, filing_date DESC"
+            "ORDER BY section, filing_date DESC",
         ),
         {"crd": crd, "sections": list(_KEY_SECTIONS)},
     )
@@ -1039,7 +1039,7 @@ async def compare_managers(
                 Sec13fDiff.quarter_to,
                 func.count().label("total"),
                 func.count().filter(
-                    Sec13fDiff.action.in_(["NEW_POSITION", "EXITED"])
+                    Sec13fDiff.action.in_(["NEW_POSITION", "EXITED"]),
                 ).label("churn"),
             )
             .where(Sec13fDiff.cik == m.cik)

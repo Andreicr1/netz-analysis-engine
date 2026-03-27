@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -238,7 +238,7 @@ def _load_review_data(
             "strategy_type, target_return, committed_capital_usd, "
             "deployed_capital_usd, current_nav_usd, last_monitoring_at, "
             "fund_id, deal_id "
-            "FROM active_investments WHERE id = :iid"
+            "FROM active_investments WHERE id = :iid",
         ), {"iid": investment_id}).fetchone()
 
         if not inv:
@@ -254,7 +254,7 @@ def _load_review_data(
                 "performance_assessment, covenant_compliance, material_changes, "
                 "risk_evolution, liquidity_assessment, valuation_view, "
                 "recommended_actions, reviewed_at, model_version "
-                "FROM periodic_review_reports WHERE id = :rid AND investment_id = :iid"
+                "FROM periodic_review_reports WHERE id = :rid AND investment_id = :iid",
             ), {"rid": review_id, "iid": investment_id}).fetchone()
         else:
             review = db.execute(sa_text(
@@ -263,7 +263,7 @@ def _load_review_data(
                 "risk_evolution, liquidity_assessment, valuation_view, "
                 "recommended_actions, reviewed_at, model_version "
                 "FROM periodic_review_reports WHERE investment_id = :iid "
-                "ORDER BY reviewed_at DESC LIMIT 1"
+                "ORDER BY reviewed_at DESC LIMIT 1",
             ), {"iid": investment_id}).fetchone()
 
         # 3. CovenantStatusRegister
@@ -271,14 +271,14 @@ def _load_review_data(
             "SELECT covenant_name, status, severity, details, "
             "last_tested_at, next_test_due_at "
             "FROM covenant_status_register WHERE investment_id = :iid AND fund_id = :fid "
-            "ORDER BY CASE severity WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END"
+            "ORDER BY CASE severity WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END",
         ), {"iid": investment_id, "fid": fund_id}).fetchall()
 
         # 4. InvestmentRiskRegistry
         risks = db.execute(sa_text(
             "SELECT risk_type, risk_level, trend, rationale "
             "FROM investment_risk_registry WHERE investment_id = :iid AND fund_id = :fid "
-            "ORDER BY CASE risk_level WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END"
+            "ORDER BY CASE risk_level WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END",
         ), {"iid": investment_id, "fid": fund_id}).fetchall()
 
         # 5. BoardMonitoringBrief
@@ -286,14 +286,14 @@ def _load_review_data(
             "SELECT executive_summary, performance_view, covenant_view, "
             "liquidity_view, risk_reclassification_view, recommended_actions, "
             "last_generated_at "
-            "FROM board_monitoring_briefs WHERE investment_id = :iid AND fund_id = :fid"
+            "FROM board_monitoring_briefs WHERE investment_id = :iid AND fund_id = :fid",
         ), {"iid": investment_id, "fid": fund_id}).fetchone()
 
         # 6. monitoring_output JSONB from portfolio deal
         monitoring_output = None
         if deal_id:
             mo_row = db.execute(sa_text(
-                "SELECT monitoring_output FROM deals WHERE id = :did"
+                "SELECT monitoring_output FROM deals WHERE id = :did",
             ), {"did": deal_id}).fetchone()
             if mo_row and mo_row[0]:
                 monitoring_output = mo_row[0]
@@ -333,6 +333,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
 
     Returns:
         Absolute path to the generated PDF file.
+
     """
     investment_name = data["investment_name"]
     manager_name = data["manager_name"]
@@ -353,7 +354,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
         overall_rating = review[2] or "N/A"
         review_type = review[1] or "PERIODIC"
 
-    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     as_of = reviewed_at_str if review else now_str
 
     styles = _build_styles()
@@ -413,7 +414,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
     ))
 
     story.append(Paragraph(
-        f"Generated: {now_str}", styles["cover_meta"]
+        f"Generated: {now_str}", styles["cover_meta"],
     ))
     story.append(Paragraph(
         "CONFIDENTIAL — For authorised personnel of Netz International only",
@@ -432,7 +433,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
         # Monitoring status from overall_rating
         status_label = overall_rating.upper() if overall_rating else "N/A"
         story.append(Paragraph(
-            f"<b>Monitoring Status:</b> {_clean(status_label)}", styles["body"]
+            f"<b>Monitoring Status:</b> {_clean(status_label)}", styles["body"],
         ))
 
         exec_summary = review[3] or "No executive summary available."
@@ -524,7 +525,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
         ))
     else:
         story.append(Paragraph(
-            "No covenant data available for this investment.", styles["body"]
+            "No covenant data available for this investment.", styles["body"],
         ))
 
     if review:
@@ -556,7 +557,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
         ))
     else:
         story.append(Paragraph(
-            "No risk entries registered for this investment.", styles["body"]
+            "No risk entries registered for this investment.", styles["body"],
         ))
 
     if review:
@@ -595,7 +596,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
             story.append(Paragraph(_clean(summary), styles["body"]))
     else:
         story.append(Paragraph(
-            "No concentration data available in monitoring output.", styles["body"]
+            "No concentration data available in monitoring output.", styles["body"],
         ))
 
     # ══════════════════════════════════════════════════════════════════
@@ -629,7 +630,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
             story.append(Paragraph("Macro indicators present but empty.", styles["body"]))
     else:
         story.append(Paragraph(
-            "No macro context snapshot available.", styles["body"]
+            "No macro context snapshot available.", styles["body"],
         ))
 
     # ══════════════════════════════════════════════════════════════════
@@ -658,7 +659,7 @@ def generate_pdf(data: dict, output_path: str | None = None) -> str:
                 story.append(Paragraph(f"• {_clean(action)}", styles["body"]))
     else:
         story.append(Paragraph(
-            "No board monitoring brief has been generated.", styles["body"]
+            "No board monitoring brief has been generated.", styles["body"],
         ))
 
     # ══════════════════════════════════════════════════════════════════

@@ -432,7 +432,7 @@ def get_pipeline_deal_detail(
         riskFlags=risk_out,
         icBrief=brief_out,
         researchOutput=research_output,
-        documents=documents_out if documents_out else None,
+        documents=documents_out or None,
         icReady=ic_ready,
         underwritingArtifact=artifact_out,
     )

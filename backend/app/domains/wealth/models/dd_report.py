@@ -34,7 +34,7 @@ class DDReport(OrganizationScopedMixin, Base):
     __tablename__ = "dd_reports"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4,
     )
     instrument_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
@@ -42,28 +42,28 @@ class DDReport(OrganizationScopedMixin, Base):
         index=True,
     )
     report_type: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default="dd_report"
+        String(20), nullable=False, server_default="dd_report",
     )  # dd_report | bond_brief
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     status: Mapped[str] = mapped_column(
-        String(30), nullable=False, server_default="draft"
+        String(30), nullable=False, server_default="draft",
     )  # values: see DDReportStatus enum
     config_snapshot: Mapped[dict | None] = mapped_column(JSONB)
     confidence_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     decision_anchor: Mapped[str | None] = mapped_column(String(20))
     is_current: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="true"
+        Boolean, nullable=False, server_default="true",
     )
     schema_version: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="1"
+        Integer, nullable=False, server_default="1",
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
     )
     created_by: Mapped[str | None] = mapped_column(String(128))
     approved_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        DateTime(timezone=True), nullable=True,
     )
     rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -87,10 +87,10 @@ class DDChapter(OrganizationScopedMixin, Base):
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4,
     )
     dd_report_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid(as_uuid=True), nullable=False, index=True
+        Uuid(as_uuid=True), nullable=False, index=True,
     )
     chapter_tag: Mapped[str] = mapped_column(String(50), nullable=False)
     chapter_order: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -98,10 +98,10 @@ class DDChapter(OrganizationScopedMixin, Base):
     evidence_refs: Mapped[dict | None] = mapped_column(JSONB)
     quant_data: Mapped[dict | None] = mapped_column(JSONB)
     critic_iterations: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="0"
+        Integer, nullable=False, server_default="0",
     )
     critic_status: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default="pending"
+        String(20), nullable=False, server_default="pending",
     )
     generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

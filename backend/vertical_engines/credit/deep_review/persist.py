@@ -484,10 +484,10 @@ async def write_gold_memo(
 
 
 __all__ = [
-    "_index_chapter_citations",
     "_build_tone_artifacts",
+    "_index_chapter_citations",
     "build_profile_metadata",
-    "persist_review_artifacts",
     "build_return_dict",
+    "persist_review_artifacts",
     "write_gold_memo",
 ]

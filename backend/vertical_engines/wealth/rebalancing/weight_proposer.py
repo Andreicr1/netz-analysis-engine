@@ -111,7 +111,7 @@ def propose_weights(
         select(ModelPortfolio).where(
             ModelPortfolio.id == portfolio_id,
             ModelPortfolio.organization_id == organization_id,
-        )
+        ),
     ).scalar_one_or_none()
 
     if portfolio is None:
@@ -132,7 +132,7 @@ def propose_weights(
         select(PortfolioSnapshot).where(
             PortfolioSnapshot.organization_id == organization_id,
             PortfolioSnapshot.profile == profile,
-        ).order_by(PortfolioSnapshot.snapshot_date.desc()).limit(1)
+        ).order_by(PortfolioSnapshot.snapshot_date.desc()).limit(1),
     ).scalar_one_or_none()
 
     if snapshot is None:
@@ -157,7 +157,7 @@ def propose_weights(
             StrategicAllocation.organization_id == organization_id,
             StrategicAllocation.profile == profile,
             StrategicAllocation.effective_to.is_(None),
-        )
+        ),
     ).scalars().all()
 
     if not allocations:

@@ -7,7 +7,7 @@ real DB connections and auth.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock
 
@@ -48,7 +48,7 @@ def _make_dd_report(
     report.confidence_score = Decimal("75.50")
     report.decision_anchor = "invest"
     report.is_current = True
-    report.created_at = datetime(2026, 3, 19, 12, 0, 0, tzinfo=timezone.utc)
+    report.created_at = datetime(2026, 3, 19, 12, 0, 0, tzinfo=UTC)
     report.created_by = created_by
     report.approved_by = None
     report.approved_at = None

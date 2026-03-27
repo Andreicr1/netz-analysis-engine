@@ -18,7 +18,7 @@ from app.core.jobs.worker_idempotency import (
 )
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_redis():
     """Mock Redis connection via get_redis_pool."""
     redis_mock = AsyncMock()
@@ -49,13 +49,13 @@ class TestStatusKey:
 
 
 class TestCheckWorkerStatus:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_returns_none_when_no_key(self, mock_redis):
         mock_redis.get.return_value = None
         result = await check_worker_status("run-risk-calc", "org-123")
         assert result is None
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_returns_state_when_running(self, mock_redis):
         state = {"status": "running", "worker": "run-risk-calc"}
         mock_redis.get.return_value = json.dumps(state)
@@ -63,7 +63,7 @@ class TestCheckWorkerStatus:
         assert result is not None
         assert result["status"] == "running"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_returns_state_when_completed(self, mock_redis):
         state = {"status": "completed", "worker": "run-risk-calc"}
         mock_redis.get.return_value = json.dumps(state)
@@ -71,7 +71,7 @@ class TestCheckWorkerStatus:
         assert result is not None
         assert result["status"] == "completed"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_returns_none_when_failed(self, mock_redis):
         """Failed status does NOT block re-triggers."""
         state = {"status": "failed", "worker": "run-risk-calc", "error": "boom"}
@@ -81,7 +81,7 @@ class TestCheckWorkerStatus:
 
 
 class TestMarkWorkerRunning:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_sets_running_with_ttl(self, mock_redis):
         await mark_worker_running("run-risk-calc", "org-123")
         mock_redis.set.assert_called_once()
@@ -96,7 +96,7 @@ class TestMarkWorkerRunning:
 
 
 class TestMarkWorkerCompleted:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_sets_completed_with_ttl(self, mock_redis):
         await mark_worker_completed("run-risk-calc", "org-123", {"funds": 5})
         mock_redis.set.assert_called_once()
@@ -109,7 +109,7 @@ class TestMarkWorkerCompleted:
 
 
 class TestMarkWorkerFailed:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_sets_failed_with_error(self, mock_redis):
         await mark_worker_failed("run-risk-calc", "org-123", "DB connection lost")
         mock_redis.set.assert_called_once()
@@ -123,7 +123,7 @@ class TestMarkWorkerFailed:
 
 
 class TestIdempotentWorkerWrapper:
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_marks_completed_on_success(self, mock_redis):
         async def fake_worker():
             return {"ok": True}
@@ -136,7 +136,7 @@ class TestIdempotentWorkerWrapper:
         value = json.loads(mock_redis.set.call_args[0][1])
         assert value["status"] == "completed"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_marks_failed_on_exception(self, mock_redis):
         async def failing_worker():
             raise ValueError("something broke")

@@ -72,7 +72,7 @@ def _make_stable_history(n: int = 100) -> list[dict]:
                 alpha_1y=0.02 + np.random.normal(0, 0.003),
                 beta_1y=0.95 + np.random.normal(0, 0.02),
                 tracking_error_1y=0.03 + np.random.normal(0, 0.002),
-            )
+            ),
         )
     return rows
 
@@ -136,7 +136,7 @@ class TestModels:
 
 class TestZScoreFormula:
     def test_basic_z_score(self):
-        """z = (μ_recent - μ_baseline) / σ_baseline."""
+        """Z = (μ_recent - μ_baseline) / σ_baseline."""
         # Manually construct: baseline mean=100, std=10, recent mean=120
         # z = (120-100)/10 = 2.0
         baseline = [{"calc_date": f"d{i}", "volatility_1y": 100.0} for i in range(30)]
@@ -188,7 +188,7 @@ class TestGoldenBoundaries:
         return baseline_rows + recent_rows
 
     def test_z_exactly_2_0_not_anomalous(self):
-        """z = 2.0 exactly → is_anomalous = False (strict >)."""
+        """Z = 2.0 exactly → is_anomalous = False (strict >)."""
         # Build history where volatility z-score lands exactly at threshold
         # We need: (recent_mean - baseline_mean) / baseline_std = 2.0
         history = _make_stable_history(100)

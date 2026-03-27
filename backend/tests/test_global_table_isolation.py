@@ -262,7 +262,7 @@ class _GlobalTableWriteVisitor(ast.NodeVisitor):
             return isinstance(node.value, ast.Name) and node.value.id in ALL_GLOBAL_MODEL_NAMES
         return False
 
-    def visit_Call(self, node: ast.Call) -> None:  # noqa: N802
+    def visit_Call(self, node: ast.Call) -> None:
         # Pattern: db.add(GlobalModel(...))
         if (
             isinstance(node.func, ast.Attribute)
@@ -277,7 +277,7 @@ class _GlobalTableWriteVisitor(ast.NodeVisitor):
                 else getattr(node.args[0].func, "attr", "?")
             )
             self.write_operations.append(
-                (node.lineno, f"db.add({model_name}(...))")
+                (node.lineno, f"db.add({model_name}(...))"),
             )
 
         # Pattern: insert(GlobalModel) / pg_insert(GlobalModel)
@@ -286,7 +286,7 @@ class _GlobalTableWriteVisitor(ast.NodeVisitor):
         if isinstance(node.func, ast.Name) and node.func.id in ("insert", "pg_insert", "update", "delete", "sa_delete"):
             if node.args and self._is_global_model_name(node.args[0]):
                 self.write_operations.append(
-                    (node.lineno, f"{node.func.id}({node.args[0].id if isinstance(node.args[0], ast.Name) else '...'})")
+                    (node.lineno, f"{node.func.id}({node.args[0].id if isinstance(node.args[0], ast.Name) else '...'})"),
                 )
 
         self.generic_visit(node)

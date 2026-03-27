@@ -1,5 +1,4 @@
-"""
-PromptService — Admin prompt management with cascade resolution.
+"""PromptService — Admin prompt management with cascade resolution.
 
 Resolution cascade:
   1. prompt_overrides WHERE organization_id = org_id (org-specific)
@@ -90,7 +89,6 @@ class HardenedPromptEnvironment(SandboxedEnvironment):
 class SecurityError(Exception):
     """Raised when a template contains blocked patterns."""
 
-    pass
 
 
 def _create_hardened_env() -> HardenedPromptEnvironment:
@@ -237,7 +235,7 @@ class PromptService:
                     PromptOverride.vertical == vertical,
                     PromptOverride.template_name == template_name,
                     PromptOverride.organization_id == org_id,
-                )
+                ),
             )
             override = row.scalar_one_or_none()
             if override:
@@ -253,7 +251,7 @@ class PromptService:
                 PromptOverride.vertical == vertical,
                 PromptOverride.template_name == template_name,
                 PromptOverride.organization_id.is_(None),
-            )
+            ),
         )
         global_override = row.scalar_one_or_none()
         if global_override:
@@ -308,7 +306,7 @@ class PromptService:
                 PromptOverride.organization_id == org_id
                 if org_id
                 else PromptOverride.organization_id.is_(None),
-            )
+            ),
         )
         existing = row.scalar_one_or_none()
 
@@ -327,7 +325,7 @@ class PromptService:
                     content=content,
                     updated_by=actor_id,
                     change_summary=change_summary,
-                )
+                ),
             )
         else:
             new_version = 1
@@ -345,7 +343,7 @@ class PromptService:
                     content=content,
                     updated_by=actor_id,
                     change_summary=change_summary,
-                )
+                ),
             ]
             self._db.add(override)
 
@@ -359,7 +357,7 @@ class PromptService:
                 target_org_id=org_id,
                 before_hash=before_hash,
                 after_hash=after_hash,
-            )
+            ),
         )
 
         return {"template_name": template_name, "version": new_version}
@@ -377,7 +375,7 @@ class PromptService:
             select(PromptOverride).where(
                 PromptOverride.vertical == vertical,
                 PromptOverride.organization_id.is_(None),
-            )
+            ),
         )
         for override in row.scalars().all():
             key = override.template_name
@@ -400,7 +398,7 @@ class PromptService:
                 select(PromptOverride).where(
                     PromptOverride.vertical == vertical,
                     PromptOverride.organization_id == org_id,
-                )
+                ),
             )
             for override in row.scalars().all():
                 key = override.template_name
@@ -578,7 +576,7 @@ class PromptService:
             select(PromptOverrideVersion).where(
                 PromptOverrideVersion.prompt_override_id == override.id,
                 PromptOverrideVersion.version == target_version,
-            )
+            ),
         )
         target = version_row.scalar_one_or_none()
         if target is None:
@@ -634,7 +632,7 @@ class PromptService:
                 target_org_id=org_id,
                 before_hash=before_hash,
                 after_hash=None,
-            )
+            ),
         )
 
     @staticmethod

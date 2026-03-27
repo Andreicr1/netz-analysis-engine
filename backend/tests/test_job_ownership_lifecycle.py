@@ -80,7 +80,7 @@ class FakeRedis:
         self._ttls.pop(key, None)
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_redis():
     """Provide a FakeRedis and patch tracker to use it."""
     r = FakeRedis()

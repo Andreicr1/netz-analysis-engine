@@ -10,7 +10,7 @@ Covers:
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -33,7 +33,7 @@ class TestBisIndicator:
         bi = BisIndicator(
             country_code="US",
             indicator="credit_to_gdp_gap",
-            period=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            period=datetime(2024, 1, 1, tzinfo=UTC),
             value=5.2,
             dataset="WS_CREDIT_GAP",
         )
@@ -41,13 +41,13 @@ class TestBisIndicator:
         assert bi.indicator == "credit_to_gdp_gap"
         assert bi.value == 5.2
         assert bi.dataset == "WS_CREDIT_GAP"
-        assert bi.period == datetime(2024, 1, 1, tzinfo=timezone.utc)
+        assert bi.period == datetime(2024, 1, 1, tzinfo=UTC)
 
     def test_frozen_immutability(self):
         bi = BisIndicator(
             country_code="BR",
             indicator="debt_service_ratio",
-            period=datetime(2023, 7, 1, tzinfo=timezone.utc),
+            period=datetime(2023, 7, 1, tzinfo=UTC),
             value=12.3,
             dataset="WS_DSR",
         )
@@ -58,7 +58,7 @@ class TestBisIndicator:
         kwargs = dict(
             country_code="DE",
             indicator="property_prices",
-            period=datetime(2024, 4, 1, tzinfo=timezone.utc),
+            period=datetime(2024, 4, 1, tzinfo=UTC),
             value=3.1,
             dataset="WS_SPP",
         )
@@ -68,7 +68,7 @@ class TestBisIndicator:
         bi = BisIndicator(
             country_code="JP",
             indicator="credit_to_gdp_gap",
-            period=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            period=datetime(2024, 1, 1, tzinfo=UTC),
             value=-2.5,
             dataset="WS_CREDIT_GAP",
         )
@@ -78,7 +78,7 @@ class TestBisIndicator:
         bi = BisIndicator(
             country_code="CN",
             indicator="debt_service_ratio",
-            period=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            period=datetime(2024, 1, 1, tzinfo=UTC),
             value=0.0,
             dataset="WS_DSR",
         )
@@ -91,19 +91,19 @@ class TestBisIndicator:
 class TestParseQuarter:
     def test_q1(self):
         result = _parse_quarter("2024-Q1")
-        assert result == datetime(2024, 1, 1, tzinfo=timezone.utc)
+        assert result == datetime(2024, 1, 1, tzinfo=UTC)
 
     def test_q2(self):
         result = _parse_quarter("2024-Q2")
-        assert result == datetime(2024, 4, 1, tzinfo=timezone.utc)
+        assert result == datetime(2024, 4, 1, tzinfo=UTC)
 
     def test_q3(self):
         result = _parse_quarter("2023-Q3")
-        assert result == datetime(2023, 7, 1, tzinfo=timezone.utc)
+        assert result == datetime(2023, 7, 1, tzinfo=UTC)
 
     def test_q4(self):
         result = _parse_quarter("2023-Q4")
-        assert result == datetime(2023, 10, 1, tzinfo=timezone.utc)
+        assert result == datetime(2023, 10, 1, tzinfo=UTC)
 
     def test_empty_string(self):
         assert _parse_quarter("") is None
@@ -198,7 +198,7 @@ class TestFetchBisDataset:
         assert results[0].indicator == "credit_to_gdp_gap"
         assert results[0].value == 5.2
         assert results[0].dataset == "WS_CREDIT_GAP"
-        assert results[0].period == datetime(2024, 1, 1, tzinfo=timezone.utc)
+        assert results[0].period == datetime(2024, 1, 1, tzinfo=UTC)
 
         assert results[1].country_code == "BR"
         assert results[1].value == -1.3
@@ -291,7 +291,7 @@ class TestFetchBisDataset:
                 "Server Error",
                 request=httpx.Request("GET", "https://test"),
                 response=httpx.Response(500),
-            )
+            ),
         )
 
         client = AsyncMock(spec=httpx.AsyncClient)
@@ -303,7 +303,7 @@ class TestFetchBisDataset:
     async def test_connection_error_returns_empty(self):
         client = AsyncMock(spec=httpx.AsyncClient)
         client.get = AsyncMock(
-            side_effect=httpx.ConnectError("Connection refused")
+            side_effect=httpx.ConnectError("Connection refused"),
         )
 
         results = await fetch_bis_dataset(client, "WS_DSR", "debt_service_ratio")
@@ -357,9 +357,9 @@ class TestFetchAllBisData:
     @patch("data_providers.bis.service.fetch_bis_dataset")
     async def test_aggregates_all_datasets(self, mock_fetch):
         mock_fetch.side_effect = [
-            [BisIndicator("US", "credit_to_gdp_gap", datetime(2024, 1, 1, tzinfo=timezone.utc), 5.0, "WS_CREDIT_GAP")],
-            [BisIndicator("US", "debt_service_ratio", datetime(2024, 1, 1, tzinfo=timezone.utc), 12.0, "WS_DSR")],
-            [BisIndicator("US", "property_prices", datetime(2024, 1, 1, tzinfo=timezone.utc), 3.0, "WS_SPP")],
+            [BisIndicator("US", "credit_to_gdp_gap", datetime(2024, 1, 1, tzinfo=UTC), 5.0, "WS_CREDIT_GAP")],
+            [BisIndicator("US", "debt_service_ratio", datetime(2024, 1, 1, tzinfo=UTC), 12.0, "WS_DSR")],
+            [BisIndicator("US", "property_prices", datetime(2024, 1, 1, tzinfo=UTC), 3.0, "WS_SPP")],
         ]
 
         results = await fetch_all_bis_data()
@@ -372,9 +372,9 @@ class TestFetchAllBisData:
     @patch("data_providers.bis.service.fetch_bis_dataset")
     async def test_handles_partial_failures(self, mock_fetch):
         mock_fetch.side_effect = [
-            [BisIndicator("US", "credit_to_gdp_gap", datetime(2024, 1, 1, tzinfo=timezone.utc), 5.0, "WS_CREDIT_GAP")],
+            [BisIndicator("US", "credit_to_gdp_gap", datetime(2024, 1, 1, tzinfo=UTC), 5.0, "WS_CREDIT_GAP")],
             [],  # DSR failed
-            [BisIndicator("US", "property_prices", datetime(2024, 1, 1, tzinfo=timezone.utc), 3.0, "WS_SPP")],
+            [BisIndicator("US", "property_prices", datetime(2024, 1, 1, tzinfo=UTC), 3.0, "WS_SPP")],
         ]
 
         results = await fetch_all_bis_data()

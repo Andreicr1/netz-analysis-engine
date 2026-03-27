@@ -190,6 +190,7 @@ def _has_financial_figures(text: str) -> bool:
 @dataclass
 class Block:
     """A structural unit from the markdown: header, paragraph, table, or list."""
+
     type:  str   # "header" | "table" | "paragraph" | "list"
     level: int   # header level (1-6), 0 for non-headers
     text:  str
@@ -261,7 +262,7 @@ def _split_html_table(table_html: str, max_chars: int) -> list[str]:
         inner = (header_row or "") + "".join(current_rows)
         sub_tables.append(f"<table>{inner}</table>")
 
-    return sub_tables if sub_tables else [table_html]
+    return sub_tables or [table_html]
 
 
 def _parse_markdown_blocks(markdown: str) -> list[Block]:

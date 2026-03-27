@@ -22,7 +22,7 @@ class TestResolveRegionalRegimeConfig:
             "regional_regime": {
                 "oas_risk_off_bp": 600,
                 "oas_crisis_bp": 900,
-            }
+            },
         })
         assert cfg["oas_risk_off_bp"] == 600
         assert cfg["oas_crisis_bp"] == 900
@@ -82,7 +82,7 @@ class TestClassifyRegionalRegime:
 
     def test_custom_config_thresholds(self):
         cfg = resolve_regional_regime_config({
-            "regional_regime": {"oas_risk_off_bp": 300, "oas_crisis_bp": 500}
+            "regional_regime": {"oas_risk_off_bp": 300, "oas_crisis_bp": 500},
         })
         result = classify_regional_regime(
             "EUROPE", {"BAMLHE00EHYIOAS": 350.0},

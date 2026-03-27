@@ -1,5 +1,4 @@
-"""
-SQLAlchemy models for admin infrastructure tables.
+"""SQLAlchemy models for admin infrastructure tables.
 
 tenant_assets: Tenant-scoped (RLS on organization_id). Stores logo/favicon bytes.
 prompt_overrides: Nullable organization_id (global overrides have NULL org_id).
@@ -32,7 +31,7 @@ class TenantAsset(Base, IdMixin, OrganizationScopedMixin):
     __tablename__ = "tenant_assets"
     __table_args__ = (
         UniqueConstraint(
-            "organization_id", "asset_type", name="uq_tenant_assets_org_type"
+            "organization_id", "asset_type", name="uq_tenant_assets_org_type",
         ),
     )
 
@@ -41,10 +40,10 @@ class TenantAsset(Base, IdMixin, OrganizationScopedMixin):
     content_type: Mapped[str] = mapped_column(Text, nullable=False)
     data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     created_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), server_default=func.now(),
     )
     updated_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
     )
 
 
@@ -66,7 +65,7 @@ class PromptOverride(Base, IdMixin):
     )
 
     organization_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True), nullable=True, index=True
+        Uuid(as_uuid=True), nullable=True, index=True,
     )
     vertical: Mapped[str] = mapped_column(Text, nullable=False)
     template_name: Mapped[str] = mapped_column(Text, nullable=False)
@@ -74,10 +73,10 @@ class PromptOverride(Base, IdMixin):
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     updated_by: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), server_default=func.now(),
     )
     updated_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
     )
 
     # Relationship to version history
@@ -104,7 +103,7 @@ class PromptOverrideVersion(Base, IdMixin):
     updated_by: Mapped[str] = mapped_column(Text, nullable=False)
     change_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), server_default=func.now(),
     )
 
     # Relationship back to parent
@@ -124,10 +123,10 @@ class AdminAuditLog(Base, IdMixin):
     resource_type: Mapped[str] = mapped_column(Text, nullable=False)
     resource_id: Mapped[str] = mapped_column(Text, nullable=False)
     target_org_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True), nullable=True, index=True
+        Uuid(as_uuid=True), nullable=True, index=True,
     )
     before_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     after_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), server_default=func.now(),
     )

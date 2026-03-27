@@ -155,7 +155,7 @@ class TestPolicyBenchmarkAttribution:
 
         # Excess return = portfolio - benchmark
         np.testing.assert_almost_equal(
-            result.total_excess_return, expected_p - expected_b, decimal=6
+            result.total_excess_return, expected_p - expected_b, decimal=6,
         )
 
         # Brinson identity: allocation + selection + interaction = excess return
@@ -403,7 +403,7 @@ class TestMultiPeriodCarino:
                     selection_effect=sel,
                     interaction_effect=inter,
                     total_effect=alloc + sel + inter,
-                )
+                ),
             )
         return AttributionResult(
             total_portfolio_return=p_ret,
@@ -473,7 +473,7 @@ class TestMultiPeriodCarino:
                         ("Equity", excess * 0.5, excess * 0.3, excess * 0.1),
                         ("Bonds", excess * 0.05, excess * 0.03, excess * 0.02),
                     ],
-                )
+                ),
             )
 
         result = self.svc.compute_multi_period(periods, p_rets, b_rets)
@@ -714,7 +714,7 @@ class TestRouteHelpers:
         from app.domains.wealth.routes.attribution import _generate_period_boundaries
 
         periods = _generate_period_boundaries(
-            date(2025, 1, 1), date(2025, 4, 1), "monthly"
+            date(2025, 1, 1), date(2025, 4, 1), "monthly",
         )
         assert len(periods) == 3
         assert periods[0] == (date(2025, 1, 1), date(2025, 2, 1))
@@ -725,7 +725,7 @@ class TestRouteHelpers:
         from app.domains.wealth.routes.attribution import _generate_period_boundaries
 
         periods = _generate_period_boundaries(
-            date(2025, 1, 1), date(2025, 7, 1), "quarterly"
+            date(2025, 1, 1), date(2025, 7, 1), "quarterly",
         )
         assert len(periods) == 2
         assert periods[0] == (date(2025, 1, 1), date(2025, 4, 1))
@@ -736,7 +736,7 @@ class TestRouteHelpers:
         from app.domains.wealth.routes.attribution import _generate_period_boundaries
 
         periods = _generate_period_boundaries(
-            date(2025, 1, 1), date(2025, 2, 15), "monthly"
+            date(2025, 1, 1), date(2025, 2, 15), "monthly",
         )
         assert len(periods) == 2
         assert periods[0] == (date(2025, 1, 1), date(2025, 2, 1))

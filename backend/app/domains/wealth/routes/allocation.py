@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -214,8 +214,8 @@ async def get_effective(
     for block_id in sorted(all_blocks):
         s = strategic_map.get(block_id)
         t = tactical_map.get(block_id)
-        s_weight = s.target_weight if s else Decimal("0")
-        t_weight = t.overweight if t else Decimal("0")
+        s_weight = s.target_weight if s else Decimal(0)
+        t_weight = t.overweight if t else Decimal(0)
         effective.append(
             EffectiveAllocationRead(
                 profile=profile,
@@ -225,7 +225,7 @@ async def get_effective(
                 effective_weight=s_weight + t_weight,
                 min_weight=s.min_weight if s else None,
                 max_weight=s.max_weight if s else None,
-            )
+            ),
         )
     return effective
 
@@ -249,7 +249,7 @@ async def simulate_allocation(
 
     # --- validate weights sum ≈ 1.0 ---
     weights_sum = sum(body.weights.values())
-    if abs(weights_sum - Decimal("1")) > Decimal("0.001"):
+    if abs(weights_sum - Decimal(1)) > Decimal("0.001"):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"weights must sum to ~1.0 (tolerance 0.001), got {weights_sum}",
@@ -302,13 +302,13 @@ async def simulate_allocation(
         if unmapped:
             warnings.append(
                 f"Could not map {len(unmapped)} instrument(s) to blocks: "
-                f"{', '.join(unmapped[:5])}. They are excluded from CVaR calculation."
+                f"{', '.join(unmapped[:5])}. They are excluded from CVaR calculation.",
             )
 
         if len(block_ids) < 2:
             warnings.append(
                 "Need at least 2 instruments mapped to blocks for CVaR calculation; "
-                f"only {len(block_ids)} mapped."
+                f"only {len(block_ids)} mapped.",
             )
         else:
             # Fetch aligned daily returns matrix
@@ -332,7 +332,7 @@ async def simulate_allocation(
 
     # --- compute utilization if limit is known ---
     if proposed_cvar_95_3m is not None and cvar_limit is not None and cvar_limit != 0:
-        cvar_utilization_pct = (proposed_cvar_95_3m / cvar_limit) * Decimal("100")
+        cvar_utilization_pct = (proposed_cvar_95_3m / cvar_limit) * Decimal(100)
 
     # --- determine within_limit ---
     if proposed_cvar_95_3m is not None and cvar_limit is not None:
@@ -354,5 +354,5 @@ async def simulate_allocation(
         tracking_error_expected=tracking_error_expected,
         within_limit=within_limit,
         warnings=warnings,
-        computed_at=datetime.now(timezone.utc),
+        computed_at=datetime.now(UTC),
     )

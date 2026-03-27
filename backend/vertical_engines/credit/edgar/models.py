@@ -19,6 +19,7 @@ from data_providers.sec.models import CikResolution as CikResolution
 
 class InsiderSignalType(str, Enum):
     """Types of credit-relevant insider trading signals."""
+
     NET_SELLING_THRESHOLD = "net_selling_threshold"
     CLUSTER_SELLING = "cluster_selling"
     EXECUTIVE_SALE = "executive_sale"
@@ -26,6 +27,7 @@ class InsiderSignalType(str, Enum):
 
 class SignalSeverity(str, Enum):
     """Severity levels for insider trading signals."""
+
     WATCH = "watch"
     ELEVATED = "elevated"
     CRITICAL = "critical"
@@ -33,6 +35,7 @@ class SignalSeverity(str, Enum):
 
 class GoingConcernVerdict(str, Enum):
     """Three-tier going concern classification."""
+
     CONFIRMED = "confirmed"
     MITIGATED = "mitigated"
     NONE = "none"
@@ -48,6 +51,7 @@ class FinancialStatements:
     Each statement is a list of period dicts: [{period, line_item_1, line_item_2, ...}]
     Ratios are credit-relevant only: leverage, NII coverage, ICR, DSCR.
     """
+
     income_statement: list[dict[str, Any]] | None = None
     balance_sheet: list[dict[str, Any]] | None = None
     cash_flow: list[dict[str, Any]] | None = None
@@ -62,6 +66,7 @@ class FinancialStatements:
 @dataclass
 class InsiderSignal:
     """Detected insider trading signal relevant to credit analysis."""
+
     signal_type: InsiderSignalType
     severity: SignalSeverity
     entity_name: str
@@ -79,6 +84,7 @@ class InsiderSignal:
 @dataclass
 class EdgarEntityResult:
     """Per-entity EDGAR data result. Never raises — errors go to warnings."""
+
     entity_name: str
     role: str
     cik: str | None = None

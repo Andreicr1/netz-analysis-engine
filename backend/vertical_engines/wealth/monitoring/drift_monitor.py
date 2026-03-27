@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -63,10 +63,10 @@ def scan_drift(
     alerts: list[DriftAlert] = []
 
     alerts.extend(
-        _check_style_drift(db, organization_id, drift_threshold, portfolio_map)
+        _check_style_drift(db, organization_id, drift_threshold, portfolio_map),
     )
     alerts.extend(
-        _check_universe_removal_impact(db, organization_id, portfolio_map)
+        _check_universe_removal_impact(db, organization_id, portfolio_map),
     )
 
     logger.info(
@@ -77,7 +77,7 @@ def scan_drift(
 
     return DriftScanResult(
         alerts=alerts,
-        scanned_at=datetime.now(timezone.utc),
+        scanned_at=datetime.now(UTC),
         organization_id=organization_id,
     )
 

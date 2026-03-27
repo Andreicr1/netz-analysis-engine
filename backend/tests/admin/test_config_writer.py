@@ -49,7 +49,7 @@ class TestGuardrailValidation:
         guardrails = {
             "type": "object",
             "properties": {
-                "threshold": {"type": "number", "minimum": 0, "maximum": 100}
+                "threshold": {"type": "number", "minimum": 0, "maximum": 100},
             },
         }
         errors = _validate_against_guardrails({"threshold": 50}, guardrails)
@@ -61,7 +61,7 @@ class TestGuardrailValidation:
         guardrails = {
             "type": "object",
             "properties": {
-                "threshold": {"type": "number", "minimum": 0, "maximum": 100}
+                "threshold": {"type": "number", "minimum": 0, "maximum": 100},
             },
         }
         errors = _validate_against_guardrails({"threshold": 200}, guardrails)
@@ -78,7 +78,7 @@ class TestGuardrailValidation:
         guardrails = {
             "type": "object",
             "properties": {
-                "name": {"type": "string"}
+                "name": {"type": "string"},
             },
         }
         errors = _validate_against_guardrails({"name": 12345}, guardrails)

@@ -25,7 +25,7 @@ def upgrade() -> None:
         CREATE INDEX IF NOT EXISTS idx_sec_managers_investment
         ON sec_managers (aum_total DESC NULLS LAST)
         WHERE registration_status = 'investment'
-        """
+        """,
     )
 
     # Company name text search (trigram) for screener search box
@@ -34,7 +34,7 @@ def upgrade() -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_sec_managers_name_trgm
         ON sec_managers USING gin (firm_name gin_trgm_ops)
-        """
+        """,
     )
 
     # Registration status for filtering
@@ -42,7 +42,7 @@ def upgrade() -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_sec_managers_reg_status
         ON sec_managers (registration_status)
-        """
+        """,
     )
 
     # ── esma_funds (10K rows) ─────────────────────────────────────
@@ -50,19 +50,19 @@ def upgrade() -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_esma_funds_domicile
         ON esma_funds (domicile)
-        """
+        """,
     )
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_esma_funds_fund_type
         ON esma_funds (fund_type)
-        """
+        """,
     )
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_esma_funds_domicile_type
         ON esma_funds (domicile, fund_type)
-        """
+        """,
     )
 
     # ── esma_managers (658 rows) ──────────────────────────────────
@@ -70,13 +70,13 @@ def upgrade() -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_esma_managers_country
         ON esma_managers (country)
-        """
+        """,
     )
     op.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_esma_managers_name_trgm
         ON esma_managers USING gin (company_name gin_trgm_ops)
-        """
+        """,
     )
 
 

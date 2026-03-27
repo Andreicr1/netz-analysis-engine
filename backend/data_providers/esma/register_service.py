@@ -4,7 +4,8 @@ Fully standalone: zero imports from ``app.*``.
 """
 from __future__ import annotations
 
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 import structlog
@@ -240,7 +241,7 @@ def parse_manager_from_doc(doc: dict[str, Any]) -> EsmaManager | None:
         company_name=str(company_name).strip(),
         country=_str_or_none(doc.get("funds_ca_cou_code")),
         authorization_status=_str_or_none(
-            doc.get("funds_status_code_name")
+            doc.get("funds_status_code_name"),
         ),
         fund_count=None,  # Computed during aggregation
     )
@@ -251,4 +252,4 @@ def _str_or_none(val: Any) -> str | None:
     if val is None:
         return None
     s = str(val).strip()
-    return s if s else None
+    return s or None

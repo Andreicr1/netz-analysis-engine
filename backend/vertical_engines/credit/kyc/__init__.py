@@ -13,7 +13,7 @@ from vertical_engines.credit.kyc.persistence import persist_kyc_screenings_to_db
 from vertical_engines.credit.kyc.service import run_kyc_screenings
 
 __all__ = [
-    "run_kyc_screenings",
     "build_kyc_appendix",
     "persist_kyc_screenings_to_db",
+    "run_kyc_screenings",
 ]

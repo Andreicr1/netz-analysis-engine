@@ -112,6 +112,7 @@ def analyze_drawdowns(
         Trading dates corresponding to ``navs``.
     top_n : int
         Number of worst drawdown periods to return.
+
     """
     dd_series = compute_drawdown_series(navs)
     periods = extract_drawdown_periods(dates, dd_series, top_n=top_n)

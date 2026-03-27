@@ -55,6 +55,7 @@ def generate_chapter(
     -------
     ChapterResult
         Generated chapter content (frozen dataclass).
+
     """
     ch_def = _get_chapter_def(chapter_tag)
     if not ch_def:
@@ -147,7 +148,7 @@ def _build_user_content(
     # Quant metrics for relevant chapters
     quant = evidence_context.get("quant_profile", {})
     if quant and chapter_tag in (
-        "executive_summary", "performance_analysis", "risk_framework", "recommendation"
+        "executive_summary", "performance_analysis", "risk_framework", "recommendation",
     ):
         parts.append("\n## Quantitative Metrics")
         for key, val in quant.items():

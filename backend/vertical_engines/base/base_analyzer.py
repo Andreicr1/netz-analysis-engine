@@ -57,6 +57,7 @@ class BaseAnalyzer(ABC):
         -------
         dict
             Analysis result (structure is vertical-specific).
+
         """
 
     @abstractmethod
@@ -88,6 +89,7 @@ class BaseAnalyzer(ABC):
         -------
         dict
             Portfolio analysis result.
+
         """
 
     def run_pipeline_analysis(
@@ -118,5 +120,6 @@ class BaseAnalyzer(ABC):
         -------
         dict
             Pipeline analysis result.
+
         """
         return {"status": "not_applicable", "vertical": self.vertical}

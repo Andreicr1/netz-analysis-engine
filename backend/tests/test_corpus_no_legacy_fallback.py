@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
-@pytest.fixture()
+@pytest.fixture
 def _fake_deal():
     deal = MagicMock()
     deal.id = uuid.uuid4()
@@ -18,7 +18,7 @@ def _fake_deal():
     return deal
 
 
-@pytest.fixture()
+@pytest.fixture
 def _fake_investment():
     inv = MagicMock()
     inv.id = uuid.uuid4()

@@ -110,7 +110,7 @@ class TestRunInstrumentIngestion:
         mock_db.execute = AsyncMock(side_effect=mock_execute)
 
         mock_provider.fetch_batch_history.return_value = {
-            "SPY": _make_history_df([100.0, 101.0, 102.0])
+            "SPY": _make_history_df([100.0, 101.0, 102.0]),
         }
 
         with patch(
@@ -169,7 +169,7 @@ class TestRunInstrumentIngestion:
         instruments_result.scalars.return_value.all.return_value = [inst]
 
         mock_provider.fetch_batch_history.return_value = {
-            "SPY": _make_history_df([100.0, 102.0])
+            "SPY": _make_history_df([100.0, 102.0]),
         }
 
         upserted_values = []
@@ -213,7 +213,7 @@ class TestRunInstrumentIngestion:
 
         prices = [100.0, 110.0, 105.0]
         mock_provider.fetch_batch_history.return_value = {
-            "SPY": _make_history_df(prices)
+            "SPY": _make_history_df(prices),
         }
 
         captured_rows: list[dict] = []
@@ -321,7 +321,7 @@ class TestRunInstrumentIngestion:
         instruments_result.scalars.return_value.all.return_value = [inst]
 
         mock_provider.fetch_batch_history.return_value = {
-            "SPY": _make_history_df([100.0, 101.0])
+            "SPY": _make_history_df([100.0, 101.0]),
         }
 
         upsert_count = 0

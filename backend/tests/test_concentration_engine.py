@@ -164,7 +164,8 @@ class TestCheckBoardOverride:
 
     def test_safety_net_manager_breach_without_trigger_config(self) -> None:
         """Even if board_override_triggers does not list single_manager,
-        the safety net should still fire for manager breach."""
+        the safety net should still fire for manager breach.
+        """
         profile = ConcentrationProfile(manager_limit_breached=True)
         policy = self._make_policy(
             board_override_triggers=ThresholdEntry(
@@ -190,7 +191,8 @@ class TestCheckBoardOverride:
 
     def test_geography_breach_not_in_triggers(self) -> None:
         """Geography breach should NOT trigger override if not in trigger list
-        and it is not the safety-net case (manager)."""
+        and it is not the safety-net case (manager).
+        """
         profile = ConcentrationProfile(geography_limit_breached=True)
         policy = self._make_policy(
             board_override_triggers=ThresholdEntry(

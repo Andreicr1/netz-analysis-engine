@@ -14,7 +14,6 @@ def run_minimum_qualification(deal) -> tuple[bool, str, RejectionCode | None]:
     Non-qualifying:
       - EQUITY_STAKE  — out of mandate (pure equity, no credit component)
     """
-
     deal_type_value = deal.deal_type.value if hasattr(deal.deal_type, "value") else str(deal.deal_type)
 
     qualifying_types = {

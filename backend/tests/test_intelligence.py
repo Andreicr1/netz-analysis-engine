@@ -54,7 +54,7 @@ class TestCallGptJson:
     @patch("vertical_engines.credit.pipeline.intelligence.create_completion")
     def test_basic_json_response(self, mock_completion):
         mock_completion.return_value = self._mock_completion(
-            '{"deal_overview": "Test deal", "key_risks": []}'
+            '{"deal_overview": "Test deal", "key_risks": []}',
         )
         result = _call_gpt_json("system", "user", model="gpt-4.1-mini")
         assert result["deal_overview"] == "Test deal"
@@ -64,7 +64,7 @@ class TestCallGptJson:
     @patch("vertical_engines.credit.pipeline.intelligence.create_completion")
     def test_strips_markdown_fences(self, mock_completion):
         mock_completion.return_value = self._mock_completion(
-            '```json\n{"value": 42}\n```'
+            '```json\n{"value": 42}\n```',
         )
         result = _call_gpt_json("system", "user", model="gpt-4.1-mini")
         assert result["value"] == 42
@@ -82,14 +82,14 @@ class TestCallGptJson:
     def test_custom_call_label(self, mock_completion):
         mock_completion.return_value = self._mock_completion('{"data": true}')
         result = _call_gpt_json(
-            "system", "user", model="gpt-4.1-mini", call_label="memo"
+            "system", "user", model="gpt-4.1-mini", call_label="memo",
         )
         assert result["_meta"]["call"] == "memo"
 
     @patch("vertical_engines.credit.pipeline.intelligence.create_completion")
     def test_existing_meta_preserved(self, mock_completion):
         mock_completion.return_value = self._mock_completion(
-            '{"data": true, "_meta": {"custom_field": "keep"}}'
+            '{"data": true, "_meta": {"custom_field": "keep"}}',
         )
         result = _call_gpt_json("system", "user", model="gpt-4.1-mini")
         assert result["_meta"]["custom_field"] == "keep"
@@ -105,7 +105,7 @@ class TestCallGptJson:
     def test_max_tokens_passed(self, mock_completion):
         mock_completion.return_value = self._mock_completion('{"ok": true}')
         _call_gpt_json(
-            "system", "user", model="gpt-4.1-mini", max_tokens=5000
+            "system", "user", model="gpt-4.1-mini", max_tokens=5000,
         )
         call_kwargs = mock_completion.call_args
         assert call_kwargs.kwargs.get("max_tokens") == 5000 or \

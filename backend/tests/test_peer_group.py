@@ -11,7 +11,7 @@ Covers:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -106,7 +106,7 @@ class TestModels:
             fallback_level=0,
             rankings=(),
             composite_percentile=75.0,
-            ranked_at=datetime.now(timezone.utc),
+            ranked_at=datetime.now(UTC),
         )
         with pytest.raises(AttributeError):
             pr.peer_count = 30  # type: ignore[misc]
@@ -692,11 +692,11 @@ class TestPeerInjection:
                 MetricRanking(metric="max_drawdown_pct", value=-8.5, percentile=65.0, lower_is_better=True),
             ),
             composite_percentile=71.0,
-            ranked_at=datetime.now(timezone.utc),
+            ranked_at=datetime.now(UTC),
         )
 
         with patch(
-            "vertical_engines.wealth.peer_group.service.PeerGroupService"
+            "vertical_engines.wealth.peer_group.service.PeerGroupService",
         ) as MockSvc:
             instance = MockSvc.return_value
             instance.compute_rankings.return_value = mock_ranking
@@ -719,7 +719,7 @@ class TestPeerInjection:
         from vertical_engines.wealth.dd_report.peer_injection import gather_peer_context
 
         with patch(
-            "vertical_engines.wealth.peer_group.service.PeerGroupService"
+            "vertical_engines.wealth.peer_group.service.PeerGroupService",
         ) as MockSvc:
             instance = MockSvc.return_value
             instance.compute_rankings.return_value = PeerGroupNotFound(
@@ -740,7 +740,7 @@ class TestPeerInjection:
         from vertical_engines.wealth.dd_report.peer_injection import gather_peer_context
 
         with patch(
-            "vertical_engines.wealth.peer_group.service.PeerGroupService"
+            "vertical_engines.wealth.peer_group.service.PeerGroupService",
         ) as MockSvc:
             MockSvc.side_effect = RuntimeError("boom")
 

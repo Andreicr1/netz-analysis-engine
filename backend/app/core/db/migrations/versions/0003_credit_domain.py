@@ -991,7 +991,7 @@ def upgrade() -> None:
         op.execute(
             f"CREATE POLICY org_isolation ON {t} "
             f"USING (organization_id = (SELECT current_setting('app.current_organization_id')::uuid)) "
-            f"WITH CHECK (organization_id = (SELECT current_setting('app.current_organization_id')::uuid))"
+            f"WITH CHECK (organization_id = (SELECT current_setting('app.current_organization_id')::uuid))",
         )
 
 

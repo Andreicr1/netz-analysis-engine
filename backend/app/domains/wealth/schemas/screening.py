@@ -56,7 +56,7 @@ class ScreeningRunRequest(BaseModel):
     instrument_type: str | None = None
     block_id: str | None = None
     instrument_ids: list[uuid.UUID] | None = Field(
-        default=None, max_length=100
+        default=None, max_length=100,
     )
 
 

@@ -548,7 +548,7 @@ class TestMarketValueConversion:
         assert h.market_value == 150_000_000
 
     def test_parse_13f_value_no_extra_multiplication(self):
-        """edgartools Value is already in USD — no multiplication needed."""
+        """Edgartools Value is already in USD — no multiplication needed."""
         # edgartools converts the raw XML thousands to dollars internally.
         # The service just does int(float(raw_value)).
         raw_value = 150_000  # edgartools already converted to dollars

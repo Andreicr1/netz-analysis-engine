@@ -27,10 +27,10 @@ from vertical_engines.credit.pipeline.screening import (
 from vertical_engines.credit.pipeline.service import run_pipeline_ingest
 
 __all__ = [
+    "aggregate_deal_documents",
+    "compute_completeness_score",
+    "discover_pipeline_deals",
     "generate_pipeline_intelligence",
     "run_pipeline_ingest",
-    "discover_pipeline_deals",
-    "aggregate_deal_documents",
     "run_pipeline_monitoring",
-    "compute_completeness_score",
 ]

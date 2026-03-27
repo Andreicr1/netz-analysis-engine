@@ -9,7 +9,7 @@ from sqlalchemy import inspect
 
 
 def utcnow() -> dt.datetime:
-    return dt.datetime.now(dt.timezone.utc)
+    return dt.datetime.now(dt.UTC)
 
 
 def new_uuid() -> uuid.UUID:

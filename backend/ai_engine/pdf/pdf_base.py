@@ -54,7 +54,8 @@ _LOGO_HEIGHT_HEADER =  7 * mm   # running header logo height
 
 def _logo_image(path: str, height: float) -> Any | None:
     """Platypus flowable scaled to *height*, preserving aspect ratio.
-    Supports PNG/JPEG via ReportLab RLImage and SVG via svglib."""
+    Supports PNG/JPEG via ReportLab RLImage and SVG via svglib.
+    """
     if not os.path.isfile(path):
         return None
     if path.lower().endswith(".svg"):
@@ -93,7 +94,8 @@ def _logo_on_canvas(
     max_width: float | None = None,
 ) -> float:
     """Draw logo at canvas coords (x, y-bottom). Returns rendered width, 0 on failure.
-    Supports PNG/JPEG via drawImage and SVG via svglib renderPDF."""
+    Supports PNG/JPEG via drawImage and SVG via svglib renderPDF.
+    """
     if not os.path.isfile(path):
         return 0.0
     # SVG path: render via svglib
@@ -207,7 +209,7 @@ def build_netz_styles() -> dict[str, ParagraphStyle]:
             textColor=WHITE, fontName="Helvetica-Bold",
             backColor=NAVY_DEEP,
             spaceBefore=8 * mm, spaceAfter=3 * mm,
-            borderPadding=cast(Any, (2 * mm, 3 * mm, 2 * mm, 3 * mm)),
+            borderPadding=cast("Any", (2 * mm, 3 * mm, 2 * mm, 3 * mm)),
         ),
         "subsection": ParagraphStyle(
             "SubSection",
@@ -241,7 +243,7 @@ def build_netz_styles() -> dict[str, ParagraphStyle]:
             textColor=colors.HexColor("#CC4400"),  # burnt orange — visible but not alarming
             fontName="Helvetica-Oblique",
             spaceBefore=2 * mm, spaceAfter=2 * mm,
-            borderPadding=cast(Any, (1 * mm, 2 * mm, 1 * mm, 2 * mm)),
+            borderPadding=cast("Any", (1 * mm, 2 * mm, 1 * mm, 2 * mm)),
         ),
         # ── Table ────────────────────────────────────────────────────
         "table_header": ParagraphStyle(

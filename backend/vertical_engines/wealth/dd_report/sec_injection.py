@@ -43,6 +43,7 @@ def gather_sec_13f_data(
         Fund manager name for SEC linkage.
     cik : str | None
         Direct CIK override (skips manager_name lookup).
+
     """
     if not cik and not manager_name:
         return {}
@@ -115,6 +116,7 @@ def gather_sec_nport_data(
         Sync database session.
     fund_cik : str | None
         Fund CIK from sec_registered_funds (N-PORT filer).
+
     """
     if not fund_cik:
         return {}
@@ -268,6 +270,7 @@ def gather_sec_adv_data(
         Fund manager name for SEC linkage.
     crd_number : str | None
         Direct CRD override (skips manager_name lookup).
+
     """
     if not crd_number and not manager_name:
         return {}
@@ -381,6 +384,7 @@ def gather_sec_adv_brochure(
     sections : list[str] | None
         Section names to fetch. Defaults to the 4 most relevant for
         manager_assessment: item_5, item_8, item_9, item_10.
+
     """
     if not crd_number:
         return {}

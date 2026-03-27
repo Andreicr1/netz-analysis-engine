@@ -31,7 +31,7 @@ def upgrade() -> None:
     op.execute(
         "CREATE INDEX ix_sec_brochure_text_fts "
         "ON sec_manager_brochure_text "
-        "USING gin (to_tsvector('english', content))"
+        "USING gin (to_tsvector('english', content))",
     )
 
     # Index for fast lookup by CRD

@@ -59,7 +59,7 @@ async def write_audit_event(
     # Resolve organization_id from RLS context if not provided
     if organization_id is None:
         row = await db.execute(
-            text("SELECT current_setting('app.current_organization_id', true)")
+            text("SELECT current_setting('app.current_organization_id', true)"),
         )
         org_str = row.scalar()
         if org_str:

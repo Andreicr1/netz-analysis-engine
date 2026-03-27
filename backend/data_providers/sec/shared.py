@@ -9,8 +9,9 @@ import asyncio
 import os
 import re
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 import structlog
 
@@ -221,13 +222,12 @@ def _resolve_via_edgartools(
                     method="fuzzy",
                     confidence=similarity,
                 )
-            else:
-                logger.debug(
-                    "fuzzy_match_below_threshold",
-                    entity=entity_name,
-                    best_match=best.name,
-                    similarity=round(similarity, 3),
-                )
+            logger.debug(
+                "fuzzy_match_below_threshold",
+                entity=entity_name,
+                best_match=best.name,
+                similarity=round(similarity, 3),
+            )
     except Exception as exc:
         logger.debug("fuzzy_search_failed", entity=entity_name, error=str(exc))
 
@@ -554,17 +554,17 @@ def _canonicalize_sector(sector: str | None) -> str | None:
 
 # Issuer name keyword heuristic — last resort.
 _ISSUER_SECTOR_KEYWORDS: list[tuple[re.Pattern[str], str]] = [
-    (re.compile(r"\b(REIT|REALTY|PROPERTIES|PROPERTY|REAL ESTATE)\b", re.I), "Real Estate"),
-    (re.compile(r"\b(PHARMA|BIOTECH|THERAPEUTICS|BIOSCIENCE|MEDICAL|HEALTH)\b", re.I), "Health Care"),
-    (re.compile(r"\b(SEMICONDUCTOR|SOFTWARE|TECHNOLOGY|TECH|CYBER|CLOUD|DATA)\b", re.I), "Information Technology"),
-    (re.compile(r"\b(ENERGY|PETROLEUM|OIL|GAS|SOLAR|WIND|PIPELINE)\b", re.I), "Energy"),
-    (re.compile(r"\b(BANCORP|BANK|FINANCIAL|INSURANCE|ASSET MGMT)\b", re.I), "Financials"),
-    (re.compile(r"\b(UTILITY|UTILITIES|ELECTRIC|POWER|WATER)\b", re.I), "Utilities"),
-    (re.compile(r"\b(TELECOM|COMMUNICATIONS|MEDIA|BROADCAST)\b", re.I), "Communication Services"),
-    (re.compile(r"\b(MINING|CHEMICAL|STEEL|METALS|MATERIALS)\b", re.I), "Materials"),
-    (re.compile(r"\b(FOOD|BEVERAGE|CONSUMER|GROCERY|TOBACCO)\b", re.I), "Consumer Staples"),
-    (re.compile(r"\b(AIRLINE|AEROSPACE|DEFENSE|TRANSPORT|LOGISTICS)\b", re.I), "Industrials"),
-    (re.compile(r"\b(RETAIL|RESTAURANT|HOTEL|LEISURE|GAMING|AUTO)\b", re.I), "Consumer Discretionary"),
+    (re.compile(r"\b(REIT|REALTY|PROPERTIES|PROPERTY|REAL ESTATE)\b", re.IGNORECASE), "Real Estate"),
+    (re.compile(r"\b(PHARMA|BIOTECH|THERAPEUTICS|BIOSCIENCE|MEDICAL|HEALTH)\b", re.IGNORECASE), "Health Care"),
+    (re.compile(r"\b(SEMICONDUCTOR|SOFTWARE|TECHNOLOGY|TECH|CYBER|CLOUD|DATA)\b", re.IGNORECASE), "Information Technology"),
+    (re.compile(r"\b(ENERGY|PETROLEUM|OIL|GAS|SOLAR|WIND|PIPELINE)\b", re.IGNORECASE), "Energy"),
+    (re.compile(r"\b(BANCORP|BANK|FINANCIAL|INSURANCE|ASSET MGMT)\b", re.IGNORECASE), "Financials"),
+    (re.compile(r"\b(UTILITY|UTILITIES|ELECTRIC|POWER|WATER)\b", re.IGNORECASE), "Utilities"),
+    (re.compile(r"\b(TELECOM|COMMUNICATIONS|MEDIA|BROADCAST)\b", re.IGNORECASE), "Communication Services"),
+    (re.compile(r"\b(MINING|CHEMICAL|STEEL|METALS|MATERIALS)\b", re.IGNORECASE), "Materials"),
+    (re.compile(r"\b(FOOD|BEVERAGE|CONSUMER|GROCERY|TOBACCO)\b", re.IGNORECASE), "Consumer Staples"),
+    (re.compile(r"\b(AIRLINE|AEROSPACE|DEFENSE|TRANSPORT|LOGISTICS)\b", re.IGNORECASE), "Industrials"),
+    (re.compile(r"\b(RETAIL|RESTAURANT|HOTEL|LEISURE|GAMING|AUTO)\b", re.IGNORECASE), "Consumer Discretionary"),
 ]
 
 # In-process sector cache (bounded, no Redis dependency).
@@ -855,7 +855,7 @@ async def get_current_price_for_cusip(
             result = await session.execute(
                 sa_text(
                     "SELECT ticker FROM sec_cusip_ticker_map "
-                    "WHERE cusip = :c AND is_tradeable = true"
+                    "WHERE cusip = :c AND is_tradeable = true",
                 ),
                 {"c": cusip},
             )

@@ -206,6 +206,7 @@ def compute_stress_severity(
 
     Returns:
         StressSeverityResult with score, level, triggers, sub_dimensions.
+
     """
     resolved = resolve_stress_config(config)
     dimensions = resolved.get("dimensions", _DEFAULT_CREDIT_DIMENSIONS)
@@ -254,15 +255,14 @@ def compute_stress_severity(
                     pts = ind.get("elevated_points", 0)
                     dim_score += pts
                     all_triggers.append(f"{label} elevated ({value:.2f})")
-            else:
-                if value >= severe_thresh:
-                    pts = ind.get("severe_points", 0)
-                    dim_score += pts
-                    all_triggers.append(f"{label} severely stressed ({value:.2f} >= {severe_thresh})")
-                elif value > elevated_thresh:
-                    pts = ind.get("elevated_points", 0)
-                    dim_score += pts
-                    all_triggers.append(f"{label} elevated ({value:.2f})")
+            elif value >= severe_thresh:
+                pts = ind.get("severe_points", 0)
+                dim_score += pts
+                all_triggers.append(f"{label} severely stressed ({value:.2f} >= {severe_thresh})")
+            elif value > elevated_thresh:
+                pts = ind.get("elevated_points", 0)
+                dim_score += pts
+                all_triggers.append(f"{label} elevated ({value:.2f})")
 
         total_score += dim_score
         sub_dimensions[dim_name] = _grade_score(dim_score, _DEFAULT_SUBDIM_BOUNDARIES)

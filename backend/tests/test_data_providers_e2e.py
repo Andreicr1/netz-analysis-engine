@@ -15,7 +15,6 @@ APIs tested:
 """
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime
 
 import httpx
@@ -51,7 +50,7 @@ class TestBisE2E:
                     "credit_to_gdp_gap",
                     countries=["US"],
                 )
-        except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+        except (TimeoutError, httpx.HTTPError) as exc:
             _skip_on_network_error(exc)
 
         assert len(results) > 0, "BIS should return credit gap data for US"
@@ -76,7 +75,7 @@ class TestBisE2E:
                     "debt_service_ratio",
                     countries=["US", "BR"],
                 )
-        except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+        except (TimeoutError, httpx.HTTPError) as exc:
             _skip_on_network_error(exc)
 
         assert len(results) > 0
@@ -96,7 +95,7 @@ class TestBisE2E:
                     "property_prices",
                     countries=["DE"],
                 )
-        except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+        except (TimeoutError, httpx.HTTPError) as exc:
             _skip_on_network_error(exc)
 
         assert len(results) > 0
@@ -109,7 +108,7 @@ class TestBisE2E:
 
         try:
             results = await fetch_all_bis_data(countries=["US", "GB"])
-        except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+        except (TimeoutError, httpx.HTTPError) as exc:
             _skip_on_network_error(exc)
 
         assert len(results) > 0
@@ -141,7 +140,7 @@ class TestImfE2E:
                     "NGDP_RPCH",
                     countries=["USA"],
                 )
-        except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+        except (TimeoutError, httpx.HTTPError) as exc:
             _skip_on_network_error(exc)
 
         assert len(results) > 0, "IMF should return GDP growth for USA"
@@ -165,7 +164,7 @@ class TestImfE2E:
                     "PCPIPCH",
                     countries=["BRA"],
                 )
-        except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+        except (TimeoutError, httpx.HTTPError) as exc:
             _skip_on_network_error(exc)
 
         assert len(results) > 0
@@ -182,7 +181,7 @@ class TestImfE2E:
                     "GGXCNL_NGDP",
                     countries=["DEU"],
                 )
-        except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+        except (TimeoutError, httpx.HTTPError) as exc:
             _skip_on_network_error(exc)
 
         assert len(results) > 0
@@ -199,7 +198,7 @@ class TestImfE2E:
                     "GGXWDG_NGDP",
                     countries=["JPN"],
                 )
-        except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+        except (TimeoutError, httpx.HTTPError) as exc:
             _skip_on_network_error(exc)
 
         assert len(results) > 0
@@ -214,7 +213,7 @@ class TestImfE2E:
 
         try:
             results = await fetch_all_imf_data(countries=["USA", "GBR"])
-        except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+        except (TimeoutError, httpx.HTTPError) as exc:
             _skip_on_network_error(exc)
 
         assert len(results) > 0
@@ -246,7 +245,7 @@ class TestSecNportE2E:
         Validates XML → NportHolding conversion with real-world data.
         """
         try:
-            from edgartools import Company  # noqa: F401
+            from edgartools import Company
         except ImportError:
             pytest.skip("edgartools not installed")
 
@@ -282,7 +281,7 @@ class TestSecNportE2E:
 
             holdings = _parse_nport_xml_holdings(root, "102909", report_date)
 
-        except (httpx.HTTPError, asyncio.TimeoutError, ConnectionError) as exc:
+        except (TimeoutError, httpx.HTTPError, ConnectionError) as exc:
             _skip_on_network_error(exc)
         except Exception as exc:
             if "rate" in str(exc).lower() or "limit" in str(exc).lower():
@@ -323,7 +322,7 @@ class TestSecAdvE2E:
 
         try:
             results = await svc.search_managers("Bridgewater Associates")
-        except (httpx.HTTPError, asyncio.TimeoutError, ConnectionError) as exc:
+        except (TimeoutError, httpx.HTTPError, ConnectionError) as exc:
             _skip_on_network_error(exc)
         except Exception as exc:
             if "rate" in str(exc).lower():
@@ -356,7 +355,7 @@ class TestEsmaRegisterE2E:
         try:
             async with RegisterService(page_size=10) as svc:
                 count = await svc.get_total_count()
-        except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+        except (TimeoutError, httpx.HTTPError) as exc:
             _skip_on_network_error(exc)
 
         assert count > 30_000, f"ESMA should have >30K UCITS funds, got {count}"
@@ -371,7 +370,7 @@ class TestEsmaRegisterE2E:
                 funds: list[EsmaFund] = []
                 async for fund in svc.iter_ucits_funds(max_pages=1):
                     funds.append(fund)
-        except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+        except (TimeoutError, httpx.HTTPError) as exc:
             _skip_on_network_error(exc)
 
         assert len(funds) > 0, "Should get funds from first page"
@@ -389,7 +388,7 @@ class TestEsmaRegisterE2E:
         try:
             async with RegisterService(page_size=10) as svc:
                 data = await svc._fetch_page(start=0)
-        except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+        except (TimeoutError, httpx.HTTPError) as exc:
             _skip_on_network_error(exc)
 
         docs = data.get("response", {}).get("docs", [])
@@ -421,7 +420,7 @@ class TestOpenFigiE2E:
                     [known_isin],
                     http_client=client,
                 )
-        except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+        except (TimeoutError, httpx.HTTPError) as exc:
             _skip_on_network_error(exc)
 
         assert len(results) == 1
@@ -448,7 +447,7 @@ class TestOpenFigiE2E:
                     isins,
                     http_client=client,
                 )
-        except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+        except (TimeoutError, httpx.HTTPError) as exc:
             _skip_on_network_error(exc)
 
         assert len(results) == 3
@@ -467,7 +466,7 @@ class TestOpenFigiE2E:
                     ["XX0000000000"],
                     http_client=client,
                 )
-        except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+        except (TimeoutError, httpx.HTTPError) as exc:
             _skip_on_network_error(exc)
 
         assert len(results) == 1
@@ -480,7 +479,7 @@ class TestOpenFigiE2E:
         try:
             async with TickerResolver() as resolver:
                 results = await resolver.resolve_batch(["IE00B4L5Y983"])
-        except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+        except (TimeoutError, httpx.HTTPError) as exc:
             _skip_on_network_error(exc)
 
         assert len(results) == 1
@@ -508,7 +507,7 @@ class TestCrossProviderE2E:
                 imf_results = await fetch_imf_indicator(
                     client, "NGDP_RPCH", countries=["USA"],
                 )
-        except (httpx.HTTPError, asyncio.TimeoutError) as exc:
+        except (TimeoutError, httpx.HTTPError) as exc:
             _skip_on_network_error(exc)
 
         assert len(bis_results) > 0, "BIS should have US data"

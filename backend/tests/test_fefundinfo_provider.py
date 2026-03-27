@@ -59,7 +59,7 @@ class TestTokenManager:
     async def test_caches_token(self) -> None:
         """Second call reuses cached token without hitting the token endpoint."""
         mgr = FEFundInfoTokenManager(
-            client_id="cid", client_secret="csec", token_url="https://test/token"
+            client_id="cid", client_secret="csec", token_url="https://test/token",
         )
         # Directly set cached token to avoid HTTP calls
         mgr._access_token = "tok-abc"
@@ -82,7 +82,7 @@ class TestTokenManager:
             return _json_response({"access_token": "new-token", "expires_in": 3600})
 
         mgr = FEFundInfoTokenManager(
-            client_id="cid", client_secret="csec", token_url="https://test/token"
+            client_id="cid", client_secret="csec", token_url="https://test/token",
         )
         mgr._access_token = "old-token"
         mgr._expires_at = 0.0  # Already expired
@@ -116,7 +116,7 @@ class TestGetAnalytics:
                     "Volatility3Y": 12.5,
                     "SharpeRatio3Y": 0.85,
                     "MaxDrawdown": -15.2,
-                }
+                },
             ]))
 
         client = _make_client(handler)
@@ -137,7 +137,7 @@ class TestGetCumulativePerformanceV2:
                     "Performance1Y": 8.5,
                     "Performance3Y": 25.3,
                     "Rank1Y": 15,
-                }
+                },
             ]))
 
         client = _make_client(handler)
@@ -156,7 +156,7 @@ class TestGetFees:
                     "Isin": "IE00B4L5Y983",
                     "OngoingChargeFigure": 0.22,
                     "ManagementFee": 0.20,
-                }
+                },
             ]))
 
         client = _make_client(handler)
@@ -171,7 +171,7 @@ class TestGetKeyFacts:
     async def test_listing(self) -> None:
         async def handler(request: httpx.Request) -> httpx.Response:
             return _json_response(_success_envelope([
-                {"Isin": "IE00TEST", "CitiCode": "QXR5", "OFST060000": "IWDA LN"}
+                {"Isin": "IE00TEST", "CitiCode": "QXR5", "OFST060000": "IWDA LN"},
             ]))
 
         client = _make_client(handler)
@@ -183,7 +183,7 @@ class TestGetKeyFacts:
     async def test_classification(self) -> None:
         async def handler(request: httpx.Request) -> httpx.Response:
             return _json_response(_success_envelope([
-                {"Isin": "IE00TEST", "OFST350000": "Non-complex"}
+                {"Isin": "IE00TEST", "OFST350000": "Non-complex"},
             ]))
 
         client = _make_client(handler)
@@ -194,7 +194,7 @@ class TestGetKeyFacts:
     async def test_fund_information(self) -> None:
         async def handler(request: httpx.Request) -> httpx.Response:
             return _json_response(_success_envelope([
-                {"Isin": "IE00TEST", "ShareClassName": "Test Fund", "CurrencyCode": "USD"}
+                {"Isin": "IE00TEST", "ShareClassName": "Test Fund", "CurrencyCode": "USD"},
             ]))
 
         client = _make_client(handler)
@@ -206,7 +206,7 @@ class TestGetKeyFacts:
     async def test_share_class(self) -> None:
         async def handler(request: httpx.Request) -> httpx.Response:
             return _json_response(_success_envelope([
-                {"Isin": "IE00TEST", "DistributionType": "Accumulation"}
+                {"Isin": "IE00TEST", "DistributionType": "Accumulation"},
             ]))
 
         client = _make_client(handler)
@@ -313,7 +313,7 @@ class TestProviderFetchInstrument:
                 "SectorName": "Global Equity Large Cap",
                 "InstrumentTypeName": "ETF",
                 "CitiCode": "QXR5",
-            }
+            },
         ])
 
         provider = FEFundInfoProvider(client)
@@ -397,12 +397,12 @@ class TestProviderFetchBatchHistory:
                                         {"seriesData": "2026-01-02", "seriesValue": "101.5"},
                                         {"seriesData": "2026-01-03", "seriesValue": "102.3"},
                                     ],
-                                }
+                                },
                             ],
-                        }
-                    ]
-                }
-            }
+                        },
+                    ],
+                },
+            },
         ])
 
         provider = FEFundInfoProvider(client)
@@ -425,7 +425,7 @@ class TestProviderExtendedMethods:
     async def test_fetch_risk_profile(self) -> None:
         client = MagicMock(spec=FEFundInfoClient)
         client.get_analytics = AsyncMock(return_value=[
-            {"Isin": "IE00TEST", "Volatility3Y": 12.5}
+            {"Isin": "IE00TEST", "Volatility3Y": 12.5},
         ])
 
         provider = FEFundInfoProvider(client)
@@ -469,7 +469,7 @@ class TestAssetClassInference:
     def test_bond_sector(self) -> None:
         client = MagicMock(spec=FEFundInfoClient)
         client.get_fund_information = AsyncMock(return_value=[
-            {"Isin": "TEST", "ShareClassName": "Bond Fund", "SectorName": "USD Corporate Bond"}
+            {"Isin": "TEST", "ShareClassName": "Bond Fund", "SectorName": "USD Corporate Bond"},
         ])
         provider = FEFundInfoProvider(client)
         result = provider.fetch_instrument("TEST")
@@ -479,7 +479,7 @@ class TestAssetClassInference:
     def test_money_market_sector(self) -> None:
         client = MagicMock(spec=FEFundInfoClient)
         client.get_fund_information = AsyncMock(return_value=[
-            {"Isin": "TEST", "ShareClassName": "MM Fund", "SectorName": "USD Money Market"}
+            {"Isin": "TEST", "ShareClassName": "MM Fund", "SectorName": "USD Money Market"},
         ])
         provider = FEFundInfoProvider(client)
         result = provider.fetch_instrument("TEST")
@@ -489,7 +489,7 @@ class TestAssetClassInference:
     def test_multi_asset_sector(self) -> None:
         client = MagicMock(spec=FEFundInfoClient)
         client.get_fund_information = AsyncMock(return_value=[
-            {"Isin": "TEST", "ShareClassName": "MA Fund", "SectorName": "Multi Asset Balanced"}
+            {"Isin": "TEST", "ShareClassName": "MA Fund", "SectorName": "Multi Asset Balanced"},
         ])
         provider = FEFundInfoProvider(client)
         result = provider.fetch_instrument("TEST")

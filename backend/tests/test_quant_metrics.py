@@ -209,7 +209,7 @@ class TestCompositeScore:
         lower_is_better = frozenset({"max_drawdown_pct"})
 
         result = composite_score(
-            metrics, peer_values, weights, lower_is_better=lower_is_better
+            metrics, peer_values, weights, lower_is_better=lower_is_better,
         )
         assert result is not None
         # -20 is lowest value → highest rank after inversion

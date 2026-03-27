@@ -246,6 +246,7 @@ class NetzGlobalAgent:
         tuple[list[Any], list[str]]
             (chunks, degraded_domains) — degraded_domains lists domains where
             retrieval failed due to search index unavailability.
+
         """
         futures: dict[Any, str] = {}
         all_chunks: list[Any] = []
@@ -438,7 +439,7 @@ class NetzGlobalAgent:
                 import concurrent.futures
                 with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                     data = pool.submit(
-                        lambda: asyncio.run(storage.read(path))
+                        lambda: asyncio.run(storage.read(path)),
                     ).result(timeout=10)
             else:
                 data = asyncio.run(storage.read(path))

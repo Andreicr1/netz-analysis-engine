@@ -52,7 +52,7 @@ async def fetch_portfolio_holdings_exploded(
     """
     # 1. Load portfolio
     result = await db.execute(
-        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id)
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
     )
     portfolio = result.scalar_one_or_none()
     if portfolio is None or not portfolio.fund_selection_schema:

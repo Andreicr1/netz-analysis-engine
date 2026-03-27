@@ -201,6 +201,7 @@ def build_screener_queries(
     Returns
     -------
     tuple of (data_query, count_query) for ``asyncio.gather()`` execution.
+
     """
     if latest_quarter is None:
         latest_quarter = date.today()
@@ -224,7 +225,7 @@ def build_screener_queries(
     if filters.compliance_clean is True:
         conditions.append(
             (sec_managers.c.compliance_disclosures == 0)
-            | (sec_managers.c.compliance_disclosures.is_(None))
+            | (sec_managers.c.compliance_disclosures.is_(None)),
         )
     if filters.adv_filed_after:
         conditions.append(sec_managers.c.last_adv_filed_at >= filters.adv_filed_after)
@@ -233,13 +234,13 @@ def build_screener_queries(
     if filters.text_search:
         escaped = _escape_ilike(filters.text_search)
         conditions.append(
-            sec_managers.c.firm_name.ilike(f"%{escaped}%")
+            sec_managers.c.firm_name.ilike(f"%{escaped}%"),
         )
     if filters.fee_types:
         # fee_types JSONB contains keys like {"performance_fee": true}
         for ft in filters.fee_types:
             conditions.append(
-                sec_managers.c.fee_types[ft].astext.cast(String) == "true"
+                sec_managers.c.fee_types[ft].astext.cast(String) == "true",
             )
 
     # ── Holdings subquery (Block 2 uses this) ───────────────────
@@ -292,7 +293,7 @@ def build_screener_queries(
             instruments_universe.c.approval_status,
         )
         .where(
-            instruments_universe.c.organization_id == cast(literal_column("'" + str(org_id).replace("'", "''") + "'"), PG_UUID)
+            instruments_universe.c.organization_id == cast(literal_column("'" + str(org_id).replace("'", "''") + "'"), PG_UUID),
         )
         .where(instruments_universe.c.attributes["source"].astext == "sec_manager")
         .subquery("universe_status")

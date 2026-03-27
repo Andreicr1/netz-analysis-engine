@@ -16,8 +16,9 @@ import csv
 import io
 import re
 import zipfile
-from datetime import date, datetime, timezone
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import UTC, date, datetime
+from typing import Any
 
 import structlog
 from sqlalchemy import select, text
@@ -45,25 +46,25 @@ _ADV_BROCHURE_URL = "https://reports.adviserinfo.sec.gov/reports/ADV/{crd}/R_0{c
 # ── Brochure section classification ─────────────────────────────
 # Map section headings (from ADV Part 2A standard Items) to stable keys.
 _SECTION_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("advisory_business", re.compile(r"item\s*4.*advisory\s*business", re.I)),
-    ("fees_compensation", re.compile(r"item\s*5.*fees\s*and\s*compensation", re.I)),
-    ("performance_fees", re.compile(r"item\s*6.*performance.based\s*fees", re.I)),
-    ("client_types", re.compile(r"item\s*7.*types\s*of\s*clients", re.I)),
-    ("methods_of_analysis", re.compile(r"item\s*8.*methods\s*of\s*analysis", re.I)),
-    ("disciplinary_information", re.compile(r"item\s*9.*disciplinary\s*info", re.I)),
-    ("other_financial_activities", re.compile(r"item\s*10.*other\s*financial", re.I)),
-    ("code_of_ethics", re.compile(r"item\s*11.*code\s*of\s*ethics", re.I)),
-    ("brokerage_practices", re.compile(r"item\s*12.*brokerage\s*practices", re.I)),
-    ("review_of_accounts", re.compile(r"item\s*13.*review\s*of\s*accounts", re.I)),
-    ("client_referrals", re.compile(r"item\s*14.*client\s*referrals", re.I)),
-    ("custody", re.compile(r"item\s*15.*custody", re.I)),
-    ("investment_discretion", re.compile(r"item\s*16.*investment\s*discretion", re.I)),
-    ("voting_client_securities", re.compile(r"item\s*17.*voting\s*client\s*securities", re.I)),
-    ("financial_information", re.compile(r"item\s*18.*financial\s*info", re.I)),
+    ("advisory_business", re.compile(r"item\s*4.*advisory\s*business", re.IGNORECASE)),
+    ("fees_compensation", re.compile(r"item\s*5.*fees\s*and\s*compensation", re.IGNORECASE)),
+    ("performance_fees", re.compile(r"item\s*6.*performance.based\s*fees", re.IGNORECASE)),
+    ("client_types", re.compile(r"item\s*7.*types\s*of\s*clients", re.IGNORECASE)),
+    ("methods_of_analysis", re.compile(r"item\s*8.*methods\s*of\s*analysis", re.IGNORECASE)),
+    ("disciplinary_information", re.compile(r"item\s*9.*disciplinary\s*info", re.IGNORECASE)),
+    ("other_financial_activities", re.compile(r"item\s*10.*other\s*financial", re.IGNORECASE)),
+    ("code_of_ethics", re.compile(r"item\s*11.*code\s*of\s*ethics", re.IGNORECASE)),
+    ("brokerage_practices", re.compile(r"item\s*12.*brokerage\s*practices", re.IGNORECASE)),
+    ("review_of_accounts", re.compile(r"item\s*13.*review\s*of\s*accounts", re.IGNORECASE)),
+    ("client_referrals", re.compile(r"item\s*14.*client\s*referrals", re.IGNORECASE)),
+    ("custody", re.compile(r"item\s*15.*custody", re.IGNORECASE)),
+    ("investment_discretion", re.compile(r"item\s*16.*investment\s*discretion", re.IGNORECASE)),
+    ("voting_client_securities", re.compile(r"item\s*17.*voting\s*client\s*securities", re.IGNORECASE)),
+    ("financial_information", re.compile(r"item\s*18.*financial\s*info", re.IGNORECASE)),
     # Common non-numbered sections
-    ("investment_philosophy", re.compile(r"investment\s*(philosophy|approach|strategy)", re.I)),
-    ("risk_management", re.compile(r"risk\s*management", re.I)),
-    ("esg_integration", re.compile(r"\besg\b.*integration|responsible\s*invest", re.I)),
+    ("investment_philosophy", re.compile(r"investment\s*(philosophy|approach|strategy)", re.IGNORECASE)),
+    ("risk_management", re.compile(r"risk\s*management", re.IGNORECASE)),
+    ("esg_integration", re.compile(r"\besg\b.*integration|responsible\s*invest", re.IGNORECASE)),
 ]
 
 # Team extraction patterns (Part 2B brochure supplement)
@@ -77,7 +78,7 @@ _TEAM_PERSON_RE = re.compile(
 )
 
 _CERTIFICATION_RE = re.compile(r"\b(CFA|CFP|CAIA|CPA|FRM|CIPM)\b")
-_EXPERIENCE_RE = re.compile(r"(\d{1,2})\s*(?:\+\s*)?years?\s*(?:of\s*)?(?:experience|in\s*the\s*industry)", re.I)
+_EXPERIENCE_RE = re.compile(r"(\d{1,2})\s*(?:\+\s*)?years?\s*(?:of\s*)?(?:experience|in\s*the\s*industry)", re.IGNORECASE)
 
 # Bulk ZIP — known URLs with fallback (SEC filename pattern is not deterministic).
 # DD in ia{MM}{DD}{YY}.zip varies by month — no reliable formula.
@@ -153,7 +154,7 @@ def _parse_iapd_hit(hit: dict[str, Any]) -> AdvManager | None:
         website=None,
         compliance_disclosures=None,
         last_adv_filed_at=None,
-        data_fetched_at=datetime.now(timezone.utc).isoformat(),
+        data_fetched_at=datetime.now(UTC).isoformat(),
     )
 
 
@@ -343,7 +344,7 @@ class AdvService:
         """
         import httpx
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Generate candidate URLs: current month + 3 prior, DD in {01,02,03}
         candidate_urls: list[str] = []
@@ -410,7 +411,7 @@ class AdvService:
 
         raise ValueError(
             f"No valid ADV ZIP found. Tried {len(candidate_urls)} URLs. "
-            f"Last error: {last_error}"
+            f"Last error: {last_error}",
         )
 
     async def _upsert_from_csv(self, csv_content: str) -> int:
@@ -471,8 +472,8 @@ class AdvService:
                     "other_fund_count": _parse_int(row.get("Total number of Other funds")),
                     "total_private_fund_assets": _parse_int(row.get("Total Gross Assets of Private Funds")),
                     "last_adv_filed_at": _parse_date(row.get("Most Recent ADV Filing Date")),
-                    "data_fetched_at": datetime.now(timezone.utc),
-                }
+                    "data_fetched_at": datetime.now(UTC),
+                },
             )
 
         if not managers:
@@ -852,14 +853,14 @@ class AdvService:
                 if len(pdf_bytes) > 1024:
                     logger.debug("adv_brochure_from_storage", crd=crd_number)
                     return await asyncio.to_thread(
-                        self._extract_text_from_bytes, crd_number, pdf_bytes
+                        self._extract_text_from_bytes, crd_number, pdf_bytes,
                     )
         except Exception:
             pass  # fall through to legacy/download
 
         # 2. Try legacy local path (seed script)
         pdf_bytes = await run_in_sec_thread(
-            self._resolve_pdf_sync, crd_number
+            self._resolve_pdf_sync, crd_number,
         )
         if not pdf_bytes:
             return ""
@@ -867,13 +868,13 @@ class AdvService:
         # Persist to StorageClient for future reads
         try:
             await storage.write(
-                storage_key, pdf_bytes, content_type="application/pdf"
+                storage_key, pdf_bytes, content_type="application/pdf",
             )
         except Exception:
             pass  # non-fatal — extraction still works
 
         return await asyncio.to_thread(
-            self._extract_text_from_bytes, crd_number, pdf_bytes
+            self._extract_text_from_bytes, crd_number, pdf_bytes,
         )
 
     @staticmethod
@@ -981,7 +982,7 @@ class AdvService:
                 "certifications": m.certifications or None,
                 "years_experience": m.years_experience,
                 "bio_summary": m.bio_summary,
-                "data_fetched_at": datetime.now(timezone.utc),
+                "data_fetched_at": datetime.now(UTC),
             }
             for m in members
         ]
@@ -1159,7 +1160,7 @@ async def compute_fund_data_availability(
     fund_cik: str,
     fund_universe: str,
     db: Any,
-) -> "FundDataAvailability":
+) -> FundDataAvailability:
     """Compute data availability matrix for a fund detail page.
 
     Queries sec_registered_funds, sec_nport_holdings, sec_fund_style_snapshots,
@@ -1186,7 +1187,7 @@ async def compute_fund_data_availability(
         try:
             r = await db.execute(
                 text(
-                    "SELECT ticker FROM sec_registered_funds WHERE cik = :cik"
+                    "SELECT ticker FROM sec_registered_funds WHERE cik = :cik",
                 ),
                 {"cik": fund_cik},
             )
@@ -1195,7 +1196,7 @@ async def compute_fund_data_availability(
                 # Ticker exists — check if NAV data was ingested
                 r2 = await db.execute(
                     text(
-                        "SELECT 1 FROM benchmark_nav WHERE ticker = :t LIMIT 1"
+                        "SELECT 1 FROM benchmark_nav WHERE ticker = :t LIMIT 1",
                     ),
                     {"t": row[0]},
                 )
@@ -1208,7 +1209,7 @@ async def compute_fund_data_availability(
         try:
             r = await db.execute(
                 text(
-                    "SELECT 1 FROM sec_fund_style_snapshots WHERE cik = :cik LIMIT 1"
+                    "SELECT 1 FROM sec_fund_style_snapshots WHERE cik = :cik LIMIT 1",
                 ),
                 {"cik": fund_cik},
             )
@@ -1222,7 +1223,7 @@ async def compute_fund_data_availability(
             # Get CRD from registered fund, then check team
             r = await db.execute(
                 text(
-                    "SELECT crd_number FROM sec_registered_funds WHERE cik = :cik"
+                    "SELECT crd_number FROM sec_registered_funds WHERE cik = :cik",
                 ),
                 {"cik": fund_cik},
             )
@@ -1230,7 +1231,7 @@ async def compute_fund_data_availability(
             if row and row[0]:
                 r2 = await db.execute(
                     text(
-                        "SELECT 1 FROM sec_manager_team WHERE crd_number = :crd LIMIT 1"
+                        "SELECT 1 FROM sec_manager_team WHERE crd_number = :crd LIMIT 1",
                     ),
                     {"crd": row[0]},
                 )
@@ -1244,7 +1245,7 @@ async def compute_fund_data_availability(
             r = await db.execute(
                 text(
                     "SELECT style_label FROM sec_fund_style_snapshots "
-                    "WHERE cik = :cik ORDER BY report_date DESC LIMIT 1"
+                    "WHERE cik = :cik ORDER BY report_date DESC LIMIT 1",
                 ),
                 {"cik": fund_cik},
             )
@@ -1253,7 +1254,7 @@ async def compute_fund_data_availability(
                 r2 = await db.execute(
                     text(
                         "SELECT COUNT(DISTINCT cik) FROM sec_fund_style_snapshots "
-                        "WHERE style_label = :label AND cik != :cik"
+                        "WHERE style_label = :label AND cik != :cik",
                     ),
                     {"label": row[0], "cik": fund_cik},
                 )

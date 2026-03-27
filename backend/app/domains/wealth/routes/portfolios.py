@@ -199,7 +199,7 @@ async def get_rebalance_event(
     event = result.scalar_one_or_none()
     if event is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Rebalance event not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Rebalance event not found",
         )
     return RebalanceEventRead.model_validate(event)
 
@@ -231,7 +231,7 @@ async def approve_rebalance(
     event = result.scalar_one_or_none()
     if event is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Rebalance event not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Rebalance event not found",
         )
     from quant_engine.rebalance_service import validate_status_transition
 
@@ -285,7 +285,7 @@ async def execute_rebalance(
     event = result.scalar_one_or_none()
     if event is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Rebalance event not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Rebalance event not found",
         )
 
     if not validate_status_transition(event.status, "executed"):

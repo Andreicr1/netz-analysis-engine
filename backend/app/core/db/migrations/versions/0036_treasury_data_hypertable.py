@@ -60,7 +60,7 @@ def upgrade() -> None:
             "  chunk_time_interval => INTERVAL '1 month',"
             "  migrate_data => true,"
             "  if_not_exists => true"
-            ")"
+            ")",
         )
 
         cursor.execute(
@@ -68,19 +68,19 @@ def upgrade() -> None:
             "  timescaledb.compress,"
             "  timescaledb.compress_orderby = 'obs_date DESC',"
             "  timescaledb.compress_segmentby = 'series_id'"
-            ")"
+            ")",
         )
 
         cursor.execute(
             "SELECT add_compression_policy("
             "  'treasury_data', INTERVAL '3 months', if_not_exists => true"
-            ")"
+            ")",
         )
 
         # Index for querying a specific series by date range
         cursor.execute(
             "CREATE INDEX IF NOT EXISTS idx_treasury_data_series_obs_date "
-            "ON treasury_data (series_id, obs_date DESC)"
+            "ON treasury_data (series_id, obs_date DESC)",
         )
 
         cursor.close()
@@ -94,13 +94,13 @@ def downgrade() -> None:
         cursor = conn.cursor()
 
         cursor.execute(
-            "SELECT remove_compression_policy('treasury_data', if_exists => true)"
+            "SELECT remove_compression_policy('treasury_data', if_exists => true)",
         )
         cursor.execute(
             "SELECT decompress_chunk(c.chunk_name) "
             "FROM timescaledb_information.chunks c "
             "WHERE c.hypertable_name = 'treasury_data' "
-            "AND c.is_compressed = true"
+            "AND c.is_compressed = true",
         )
         cursor.execute("DROP INDEX IF EXISTS idx_treasury_data_series_obs_date")
         cursor.close()

@@ -33,7 +33,7 @@ async def run_sec_adv_ingestion(
     """
     async with async_session() as db:
         lock_result = await db.execute(
-            text(f"SELECT pg_try_advisory_lock({SEC_ADV_LOCK_ID})")
+            text(f"SELECT pg_try_advisory_lock({SEC_ADV_LOCK_ID})"),
         )
         if not lock_result.scalar():
             logger.warning("sec_adv_ingestion already running (advisory lock not acquired)")
@@ -59,7 +59,7 @@ async def run_sec_adv_ingestion(
 
         finally:
             await db.execute(
-                text(f"SELECT pg_advisory_unlock({SEC_ADV_LOCK_ID})")
+                text(f"SELECT pg_advisory_unlock({SEC_ADV_LOCK_ID})"),
             )
 
 

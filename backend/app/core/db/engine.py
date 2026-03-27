@@ -1,5 +1,4 @@
-"""
-Async Database Engine — Netz Analysis Engine
+"""Async Database Engine — Netz Analysis Engine
 =============================================
 
 Pattern from netz-wealth-os/backend/app/database.py, adapted with:

@@ -61,6 +61,7 @@ def build_regional_snapshot(
                 ...
             },
         }
+
     """
     if as_of is None:
         as_of = date.today()

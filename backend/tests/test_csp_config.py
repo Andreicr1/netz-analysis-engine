@@ -1,5 +1,4 @@
-"""
-CSP configuration tests — prevent nonce/inline regressions.
+"""CSP configuration tests — prevent nonce/inline regressions.
 
 CSP is set via static/_headers (Cloudflare Pages) in each frontend, NOT via
 SvelteKit csp config (which injects nonces that disable unsafe-inline).

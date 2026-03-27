@@ -45,7 +45,7 @@ class FactSheetEngine:
     def __init__(self, config: dict[str, Any] | None = None) -> None:
         self._config = config or {}
 
-    def generate(  # noqa: A003
+    def generate(
         self,
         db: Session,
         *,
@@ -65,6 +65,7 @@ class FactSheetEngine:
 
         Returns:
             BytesIO seeked to 0 containing the PDF.
+
         """
         as_of = as_of or date.today()
         labels = LABELS[language]
@@ -87,18 +88,17 @@ class FactSheetEngine:
                 nav_chart=charts.get("nav"),
                 allocation_chart=charts.get("allocation"),
             )
-        else:
-            from vertical_engines.wealth.fact_sheet.institutional_renderer import (
-                render_institutional,
-            )
+        from vertical_engines.wealth.fact_sheet.institutional_renderer import (
+            render_institutional,
+        )
 
-            return render_institutional(
-                data,
-                language=language,
-                nav_chart=charts.get("nav"),
-                allocation_chart=charts.get("allocation"),
-                regime_chart=charts.get("regime"),
-            )
+        return render_institutional(
+            data,
+            language=language,
+            nav_chart=charts.get("nav"),
+            allocation_chart=charts.get("allocation"),
+            regime_chart=charts.get("regime"),
+        )
 
     def _build_fact_sheet_data(
         self,
@@ -116,7 +116,7 @@ class FactSheetEngine:
         pid = uuid.UUID(portfolio_id)
 
         result = db.execute(
-            select(ModelPortfolio).where(ModelPortfolio.id == pid)
+            select(ModelPortfolio).where(ModelPortfolio.id == pid),
         )
         portfolio = result.scalar_one_or_none()
         if portfolio is None:
@@ -344,7 +344,7 @@ class FactSheetEngine:
 
             from app.domains.wealth.models.block import AllocationBlock as BlockModel
             label_result = db.execute(
-                select(BlockModel.block_id, BlockModel.display_name)
+                select(BlockModel.block_id, BlockModel.display_name),
             )
             block_labels = {r[0]: r[1] for r in label_result.all()}
 

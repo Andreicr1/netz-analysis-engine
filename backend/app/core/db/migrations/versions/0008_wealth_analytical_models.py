@@ -82,7 +82,7 @@ def upgrade() -> None:
         "funds_universe",
         ["block_id", "is_active", "approval_status", "aum_usd"],
         postgresql_where=sa.text(
-            "is_active = true AND approval_status = 'approved'"
+            "is_active = true AND approval_status = 'approved'",
         ),
     )
 
@@ -100,7 +100,7 @@ def upgrade() -> None:
             server_default=sa.text("gen_random_uuid()"),
         ),
         sa.Column(
-            "organization_id", sa.Uuid(as_uuid=True), nullable=False, index=True
+            "organization_id", sa.Uuid(as_uuid=True), nullable=False, index=True,
         ),
         sa.Column(
             "fund_id",
@@ -120,10 +120,10 @@ def upgrade() -> None:
         sa.Column("confidence_score", sa.Numeric(5, 2), nullable=True),
         sa.Column("decision_anchor", sa.String(20), nullable=True),
         sa.Column(
-            "is_current", sa.Boolean(), nullable=False, server_default="true"
+            "is_current", sa.Boolean(), nullable=False, server_default="true",
         ),
         sa.Column(
-            "schema_version", sa.Integer(), nullable=False, server_default="1"
+            "schema_version", sa.Integer(), nullable=False, server_default="1",
         ),
         sa.Column(
             "created_at",
@@ -189,7 +189,7 @@ def upgrade() -> None:
         ),
         # Direct organization_id for independent RLS (not join-based)
         sa.Column(
-            "organization_id", sa.Uuid(as_uuid=True), nullable=False, index=True
+            "organization_id", sa.Uuid(as_uuid=True), nullable=False, index=True,
         ),
         sa.Column(
             "dd_report_id",
@@ -252,7 +252,7 @@ def upgrade() -> None:
             server_default=sa.text("gen_random_uuid()"),
         ),
         sa.Column(
-            "organization_id", sa.Uuid(as_uuid=True), nullable=False, index=True
+            "organization_id", sa.Uuid(as_uuid=True), nullable=False, index=True,
         ),
         # fund_id is NON-nullable (no bond polymorphism — fix #30)
         sa.Column(
@@ -280,7 +280,7 @@ def upgrade() -> None:
         sa.Column("decided_by", sa.String(128), nullable=True),
         sa.Column("decided_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
-            "is_current", sa.Boolean(), nullable=False, server_default="true"
+            "is_current", sa.Boolean(), nullable=False, server_default="true",
         ),
         sa.Column(
             "created_at",
@@ -316,7 +316,7 @@ def upgrade() -> None:
             server_default=sa.text("gen_random_uuid()"),
         ),
         sa.Column(
-            "organization_id", sa.Uuid(as_uuid=True), nullable=False, index=True
+            "organization_id", sa.Uuid(as_uuid=True), nullable=False, index=True,
         ),
         sa.Column("profile", sa.String(20), nullable=False),
         sa.Column("display_name", sa.String(255), nullable=False),
@@ -400,7 +400,7 @@ def downgrade() -> None:
     # Restore global isin unique
     op.drop_index("uq_funds_universe_org_isin", table_name="funds_universe")
     op.create_unique_constraint(
-        "funds_universe_isin_key", "funds_universe", ["isin"]
+        "funds_universe_isin_key", "funds_universe", ["isin"],
     )
 
     # Restore original portfolio_snapshots unique (without org_id)

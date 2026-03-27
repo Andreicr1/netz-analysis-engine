@@ -12,7 +12,7 @@ from __future__ import annotations
 import csv
 import io
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import httpx
 import structlog
@@ -60,7 +60,7 @@ def _parse_quarter(period_str: str) -> datetime | None:
         year = int(parts[0])
         quarter = int(parts[1])
         month = (quarter - 1) * 3 + 1
-        return datetime(year, month, 1, tzinfo=timezone.utc)
+        return datetime(year, month, 1, tzinfo=UTC)
     except (ValueError, IndexError):
         return None
 

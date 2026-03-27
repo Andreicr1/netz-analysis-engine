@@ -10,7 +10,7 @@ Pure sync report generation functions. Async workflow methods receive DB session
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import structlog
@@ -59,6 +59,7 @@ def generate_weekly_report(
         current_snapshot: Current macro_regional_snapshot.data_json.
         previous_snapshot: Previous week's snapshot (None if first run).
         score_delta_threshold: Minimum score change to flag (default 5 points).
+
     """
     as_of = date.fromisoformat(current_snapshot.get("as_of_date", str(date.today())))
     current_regions = current_snapshot.get("regions", {})
@@ -177,11 +178,12 @@ def check_emergency_cooldown(
     Args:
         last_emergency_at: Timestamp of most recent emergency review.
         cooldown_hours: Minimum hours between emergency reviews.
+
     """
     if last_emergency_at is None:
         return True
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if last_emergency_at.tzinfo is None:
-        last_emergency_at = last_emergency_at.replace(tzinfo=timezone.utc)
+        last_emergency_at = last_emergency_at.replace(tzinfo=UTC)
     elapsed = now - last_emergency_at
     return elapsed >= timedelta(hours=cooldown_hours)

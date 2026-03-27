@@ -149,17 +149,17 @@ async def main() -> None:
                 pg_version = row.scalar()
 
                 row = await session.execute(text(
-                    "SELECT extname FROM pg_extension WHERE extname IN ('vector', 'timescaledb') ORDER BY extname"
+                    "SELECT extname FROM pg_extension WHERE extname IN ('vector', 'timescaledb') ORDER BY extname",
                 ))
                 extensions = [r[0] for r in row.fetchall()]
 
                 row = await session.execute(text(
-                    "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'"
+                    "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'",
                 ))
                 table_count = row.scalar()
 
                 row = await session.execute(text(
-                    "SELECT MAX(version_num) FROM alembic_version"
+                    "SELECT MAX(version_num) FROM alembic_version",
                 ))
                 migration_head = row.scalar()
 
@@ -384,29 +384,28 @@ async def main() -> None:
                 from app.domains.wealth.models.instrument import Instrument
                 from app.domains.wealth.workers.instrument_ingestion import run_instrument_ingestion
 
-                async with async_session_factory() as session:
-                    async with session.begin():
-                        await set_rls(session)
+                async with async_session_factory() as session, session.begin():
+                    await set_rls(session)
 
-                        for raw in raw_instruments:
-                            inst_id = uuid.uuid4()
-                            instrument_ids[raw.ticker] = inst_id
-                            # fund type requires aum_usd, manager_name, inception_date in attributes
-                            attrs = raw.raw_attributes or {}
-                            inst = Instrument(
-                                instrument_id=inst_id,
-                                instrument_type="fund",
-                                name=raw.name or raw.ticker,
-                                ticker=raw.ticker,
-                                asset_class=attrs.get("quoteType", "ETF"),
-                                geography="US",
-                                currency=raw.currency or "USD",
-                                is_active=True,
-                                approval_status="approved",
-                                attributes=attrs,
-                                organization_id=TEST_ORG,
-                            )
-                            session.add(inst)
+                    for raw in raw_instruments:
+                        inst_id = uuid.uuid4()
+                        instrument_ids[raw.ticker] = inst_id
+                        # fund type requires aum_usd, manager_name, inception_date in attributes
+                        attrs = raw.raw_attributes or {}
+                        inst = Instrument(
+                            instrument_id=inst_id,
+                            instrument_type="fund",
+                            name=raw.name or raw.ticker,
+                            ticker=raw.ticker,
+                            asset_class=attrs.get("quoteType", "ETF"),
+                            geography="US",
+                            currency=raw.currency or "USD",
+                            is_active=True,
+                            approval_status="approved",
+                            attributes=attrs,
+                            organization_id=TEST_ORG,
+                        )
+                        session.add(inst)
 
                 # Run ingestion — needs its own session (not inside begin() context)
                 async with async_session_factory() as session:
@@ -414,29 +413,27 @@ async def main() -> None:
                     await session.commit()
 
                 # Check nav count
-                async with async_session_factory() as session:
-                    async with session.begin():
-                        await set_rls(session)
-                        row = await session.execute(text(
-                            "SELECT count(*) FROM nav_timeseries WHERE organization_id = :org"
-                        ), {"org": TEST_ORG})
-                        nav_count = row.scalar()
+                async with async_session_factory() as session, session.begin():
+                    await set_rls(session)
+                    row = await session.execute(text(
+                        "SELECT count(*) FROM nav_timeseries WHERE organization_id = :org",
+                    ), {"org": TEST_ORG})
+                    nav_count = row.scalar()
 
                 ok("3.4 DB round-trip", f"instruments={len(instrument_ids)}, nav_rows={nav_count}, ingestion={result}")
 
                 # Load returns for Group 4
-                async with async_session_factory() as session:
-                    async with session.begin():
-                        await set_rls(session)
-                        for ticker, inst_id in instrument_ids.items():
-                            rows = await session.execute(text(
-                                "SELECT nav_date, return_1d FROM nav_timeseries "
-                                "WHERE instrument_id = :iid AND return_1d IS NOT NULL "
-                                "ORDER BY nav_date"
-                            ), {"iid": inst_id})
-                            data = rows.fetchall()
-                            if data:
-                                nav_data[ticker] = np.array([float(r[1]) for r in data])
+                async with async_session_factory() as session, session.begin():
+                    await set_rls(session)
+                    for ticker, inst_id in instrument_ids.items():
+                        rows = await session.execute(text(
+                            "SELECT nav_date, return_1d FROM nav_timeseries "
+                            "WHERE instrument_id = :iid AND return_1d IS NOT NULL "
+                            "ORDER BY nav_date",
+                        ), {"iid": inst_id})
+                        data = rows.fetchall()
+                        if data:
+                            nav_data[ticker] = np.array([float(r[1]) for r in data])
 
             except Exception as e:
                 fail("3.4 DB round-trip", f"{e}\n{traceback.format_exc()}")
@@ -619,10 +616,9 @@ async def main() -> None:
         g5 = time.time()
 
         try:
-            async with async_session_factory() as session:
-                async with session.begin():
-                    row = await session.execute(text("SELECT count(*) FROM macro_data"))
-                    macro_count = row.scalar()
+            async with async_session_factory() as session, session.begin():
+                row = await session.execute(text("SELECT count(*) FROM macro_data"))
+                macro_count = row.scalar()
 
             if macro_count and macro_count > 0:
                 from quant_engine.regime_service import get_current_regime
@@ -650,7 +646,7 @@ async def main() -> None:
                 async with session.begin():
                     row = await session.execute(text(
                         "SELECT count(*) FROM information_schema.tables "
-                        "WHERE table_schema = 'public' AND table_name IN ('wealth_documents', 'wealth_document_versions')"
+                        "WHERE table_schema = 'public' AND table_name IN ('wealth_documents', 'wealth_document_versions')",
                     ))
                     table_exists_count = row.scalar()
                     ok("6.1 Document models", f"tables found={table_exists_count}/2")
@@ -681,7 +677,7 @@ async def main() -> None:
                     row = await session.execute(text(
                         "SELECT column_name FROM information_schema.columns "
                         "WHERE table_name = 'dd_reports' "
-                        "AND column_name IN ('approved_by', 'approved_at', 'rejection_reason')"
+                        "AND column_name IN ('approved_by', 'approved_at', 'rejection_reason')",
                     ))
                     cols = [r[0] for r in row.fetchall()]
                     if len(cols) == 3:
@@ -773,7 +769,7 @@ async def main() -> None:
                                 await set_rls(session)
                                 await session.execute(text(
                                     "UPDATE dd_reports SET status = 'pending_approval', approved_by = NULL, approved_at = NULL "
-                                    "WHERE id = :id AND organization_id = :org"
+                                    "WHERE id = :id AND organization_id = :org",
                                 ), {"id": dd_report_id, "org": TEST_ORG})
 
                         resp = await ac.post(
@@ -796,7 +792,7 @@ async def main() -> None:
                                 await set_rls(session)
                                 await session.execute(text(
                                     "UPDATE dd_reports SET status = 'approved', approved_by = 'smoke-reviewer' "
-                                    "WHERE id = :id AND organization_id = :org"
+                                    "WHERE id = :id AND organization_id = :org",
                                 ), {"id": dd_report_id, "org": TEST_ORG})
 
                         resp = await ac.post(
@@ -818,7 +814,7 @@ async def main() -> None:
                                 await set_rls(session)
                                 await session.execute(text(
                                     "UPDATE dd_reports SET status = 'pending_approval', approved_by = NULL, approved_at = NULL, rejection_reason = NULL "
-                                    "WHERE id = :id AND organization_id = :org"
+                                    "WHERE id = :id AND organization_id = :org",
                                 ), {"id": dd_report_id, "org": TEST_ORG})
 
                         resp = await ac.post(
@@ -842,7 +838,7 @@ async def main() -> None:
                                 await set_rls(session)
                                 await session.execute(text(
                                     "UPDATE dd_reports SET status = 'pending_approval' "
-                                    "WHERE id = :id AND organization_id = :org"
+                                    "WHERE id = :id AND organization_id = :org",
                                 ), {"id": dd_report_id, "org": TEST_ORG})
 
                         resp = await ac.post(
@@ -865,7 +861,7 @@ async def main() -> None:
                                 await set_rls(session)
                                 # First set existing report as not current
                                 await session.execute(text(
-                                    "UPDATE dd_reports SET is_current = false WHERE id = :id AND organization_id = :org"
+                                    "UPDATE dd_reports SET is_current = false WHERE id = :id AND organization_id = :org",
                                 ), {"id": dd_report_id, "org": TEST_ORG})
                                 await session.execute(text("""
                                     INSERT INTO dd_reports (id, instrument_id, report_type, version, status,
@@ -915,7 +911,7 @@ async def main() -> None:
                                 await set_rls(session)
                                 await session.execute(text(
                                     "UPDATE dd_reports SET status = 'draft' "
-                                    "WHERE id = :id AND organization_id = :org"
+                                    "WHERE id = :id AND organization_id = :org",
                                 ), {"id": dd_report_id, "org": TEST_ORG})
 
                         resp = await ac.get(
@@ -936,7 +932,7 @@ async def main() -> None:
                                 await set_rls(session)
                                 await session.execute(text(
                                     "UPDATE dd_reports SET status = 'approved', approved_by = 'smoke-reviewer', approved_at = NOW() "
-                                    "WHERE id = :id AND organization_id = :org"
+                                    "WHERE id = :id AND organization_id = :org",
                                 ), {"id": dd_report_id, "org": TEST_ORG})
 
                         resp = await ac.get(
@@ -1401,10 +1397,9 @@ Sharpe Ratio: 1.85
                     doc["embedding_model"] = "text-embedding-3-large"
                     search_docs.append(doc)
 
-                async with async_session_factory() as session:
-                    async with session.begin():
-                        await set_rls(session)
-                        result = await upsert_chunks(session, search_docs)
+                async with async_session_factory() as session, session.begin():
+                    await set_rls(session)
+                    result = await upsert_chunks(session, search_docs)
 
                 ok("9.2 Vector Upsert", f"attempted={result.attempted_chunk_count}, succeeded={result.successful_chunk_count}, failed={result.failed_chunk_count}")
             except Exception as e:
@@ -1416,7 +1411,7 @@ Sharpe Ratio: 1.85
                     async with session.begin():
                         await set_rls(session)
                         row = await session.execute(text(
-                            "SELECT count(*) FROM vector_chunks WHERE organization_id = :org AND deal_id = :deal"
+                            "SELECT count(*) FROM vector_chunks WHERE organization_id = :org AND deal_id = :deal",
                         ), {"org": TEST_ORG, "deal": str(SMOKE_DEAL_ID)})
                         count = row.scalar()
                 assert count == len(corpus), f"Expected {len(corpus)} rows, got {count}"
@@ -1430,19 +1425,18 @@ Sharpe Ratio: 1.85
 
                 # Query about financial projections → should match financial_model chunk
                 q_emb = await with_timeout(async_generate_embeddings(
-                    ["What are the revenue projections and EBITDA margins for the borrower?"]
+                    ["What are the revenue projections and EBITDA margins for the borrower?"],
                 ), 15)
 
-                async with async_session_factory() as session:
-                    async with session.begin():
-                        await set_rls(session)
-                        results = await search_deal_chunks(
-                            session,
-                            deal_id=SMOKE_DEAL_ID,
-                            organization_id=TEST_ORG,
-                            query_vector=q_emb.vectors[0],
-                            top=5,
-                        )
+                async with async_session_factory() as session, session.begin():
+                    await set_rls(session)
+                    results = await search_deal_chunks(
+                        session,
+                        deal_id=SMOKE_DEAL_ID,
+                        organization_id=TEST_ORG,
+                        query_vector=q_emb.vectors[0],
+                        top=5,
+                    )
 
                 top_result = results[0]
                 top_score = top_result["score"]
@@ -1457,19 +1451,18 @@ Sharpe Ratio: 1.85
             # 9.5 Semantic search — legal query should rank legal chunks highest
             try:
                 q_emb2 = await with_timeout(async_generate_embeddings(
-                    ["What is the collateral package and security interest perfection status?"]
+                    ["What is the collateral package and security interest perfection status?"],
                 ), 15)
 
-                async with async_session_factory() as session:
-                    async with session.begin():
-                        await set_rls(session)
-                        results2 = await search_deal_chunks(
-                            session,
-                            deal_id=SMOKE_DEAL_ID,
-                            organization_id=TEST_ORG,
-                            query_vector=q_emb2.vectors[0],
-                            top=5,
-                        )
+                async with async_session_factory() as session, session.begin():
+                    await set_rls(session)
+                    results2 = await search_deal_chunks(
+                        session,
+                        deal_id=SMOKE_DEAL_ID,
+                        organization_id=TEST_ORG,
+                        query_vector=q_emb2.vectors[0],
+                        top=5,
+                    )
 
                 top2 = results2[0]
                 correct2 = top2["doc_type"] == "legal_opinion"
@@ -1482,19 +1475,18 @@ Sharpe Ratio: 1.85
             # 9.6 Semantic search — environmental query
             try:
                 q_emb3 = await with_timeout(async_generate_embeddings(
-                    ["Were there any environmental contamination issues found in the site assessment?"]
+                    ["Were there any environmental contamination issues found in the site assessment?"],
                 ), 15)
 
-                async with async_session_factory() as session:
-                    async with session.begin():
-                        await set_rls(session)
-                        results3 = await search_deal_chunks(
-                            session,
-                            deal_id=SMOKE_DEAL_ID,
-                            organization_id=TEST_ORG,
-                            query_vector=q_emb3.vectors[0],
-                            top=5,
-                        )
+                async with async_session_factory() as session, session.begin():
+                    await set_rls(session)
+                    results3 = await search_deal_chunks(
+                        session,
+                        deal_id=SMOKE_DEAL_ID,
+                        organization_id=TEST_ORG,
+                        query_vector=q_emb3.vectors[0],
+                        top=5,
+                    )
 
                 top3 = results3[0]
                 correct3 = top3["doc_type"] == "risk_assessment"
@@ -1520,19 +1512,18 @@ Sharpe Ratio: 1.85
             try:
                 OTHER_ORG = uuid.UUID("00000000-0000-0000-0000-000000000099")
 
-                async with async_session_factory() as session:
-                    async with session.begin():
-                        # Set RLS to OTHER org (f-string like set_rls helper)
-                        await session.execute(text(
-                            f"SET LOCAL app.current_organization_id = '{OTHER_ORG}'"
-                        ))
-                        results_other = await search_deal_chunks(
-                            session,
-                            deal_id=SMOKE_DEAL_ID,
-                            organization_id=OTHER_ORG,
-                            query_vector=q_emb.vectors[0],
-                            top=5,
-                        )
+                async with async_session_factory() as session, session.begin():
+                    # Set RLS to OTHER org (f-string like set_rls helper)
+                    await session.execute(text(
+                        f"SET LOCAL app.current_organization_id = '{OTHER_ORG}'",
+                    ))
+                    results_other = await search_deal_chunks(
+                        session,
+                        deal_id=SMOKE_DEAL_ID,
+                        organization_id=OTHER_ORG,
+                        query_vector=q_emb.vectors[0],
+                        top=5,
+                    )
 
                 ok("9.8 Tenant Isolation", f"other_org_results={len(results_other)}, expected=0")
                 if len(results_other) > 0:
@@ -1558,29 +1549,28 @@ Sharpe Ratio: 1.85
         print(f"{'='*60}")
 
         try:
-            async with async_session_factory() as session:
-                async with session.begin():
-                    await set_rls(session)
+            async with async_session_factory() as session, session.begin():
+                await set_rls(session)
 
-                    # Order matters: dd_chapters before dd_reports (FK)
-                    r1 = await session.execute(text(
-                        "DELETE FROM dd_chapters WHERE organization_id = :org"
-                    ), {"org": TEST_ORG})
-                    r2 = await session.execute(text(
-                        "DELETE FROM dd_reports WHERE organization_id = :org"
-                    ), {"org": TEST_ORG})
-                    r3 = await session.execute(text(
-                        "DELETE FROM nav_timeseries WHERE organization_id = :org"
-                    ), {"org": TEST_ORG})
-                    r4 = await session.execute(text(
-                        "DELETE FROM instruments_universe WHERE organization_id = :org"
-                    ), {"org": TEST_ORG})
-                    r5 = await session.execute(text(
-                        "DELETE FROM vector_chunks WHERE organization_id = :org"
-                    ), {"org": TEST_ORG})
-                    r6 = await session.execute(text(
-                        "DELETE FROM audit_events WHERE organization_id = :org"
-                    ), {"org": TEST_ORG})
+                # Order matters: dd_chapters before dd_reports (FK)
+                r1 = await session.execute(text(
+                    "DELETE FROM dd_chapters WHERE organization_id = :org",
+                ), {"org": TEST_ORG})
+                r2 = await session.execute(text(
+                    "DELETE FROM dd_reports WHERE organization_id = :org",
+                ), {"org": TEST_ORG})
+                r3 = await session.execute(text(
+                    "DELETE FROM nav_timeseries WHERE organization_id = :org",
+                ), {"org": TEST_ORG})
+                r4 = await session.execute(text(
+                    "DELETE FROM instruments_universe WHERE organization_id = :org",
+                ), {"org": TEST_ORG})
+                r5 = await session.execute(text(
+                    "DELETE FROM vector_chunks WHERE organization_id = :org",
+                ), {"org": TEST_ORG})
+                r6 = await session.execute(text(
+                    "DELETE FROM audit_events WHERE organization_id = :org",
+                ), {"org": TEST_ORG})
 
             print(f"  Cleaned up TEST_ORG rows: chapters={r1.rowcount}, reports={r2.rowcount}, nav={r3.rowcount}, instruments={r4.rowcount}, vectors={r5.rowcount}, audit={r6.rowcount}")
         except Exception as e:

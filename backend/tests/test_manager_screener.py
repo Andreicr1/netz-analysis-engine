@@ -86,7 +86,7 @@ class TestBuildScreenerQueries:
         """Empty filters should produce valid SQL with no extra WHERE conditions."""
         filters = ScreenerFilters()
         data_q, count_q = build_screener_queries(
-            filters, "org-1", latest_quarter=date(2026, 3, 1)
+            filters, "org-1", latest_quarter=date(2026, 3, 1),
         )
         sql = _compile_sql(data_q)
         assert "sec_managers" in sql
@@ -95,7 +95,7 @@ class TestBuildScreenerQueries:
     def test_aum_filter(self) -> None:
         filters = ScreenerFilters(aum_min=1_000_000, aum_max=10_000_000_000)
         data_q, _ = build_screener_queries(
-            filters, "org-1", latest_quarter=date(2026, 3, 1)
+            filters, "org-1", latest_quarter=date(2026, 3, 1),
         )
         sql = _compile_sql(data_q)
         assert "aum_total >=" in sql
@@ -104,7 +104,7 @@ class TestBuildScreenerQueries:
     def test_text_search_in_sql(self) -> None:
         filters = ScreenerFilters(text_search="Black%Rock")
         data_q, _ = build_screener_queries(
-            filters, "org-1", latest_quarter=date(2026, 3, 1)
+            filters, "org-1", latest_quarter=date(2026, 3, 1),
         )
         sql = _compile_sql(data_q)
         assert "ILIKE" in sql or "ilike" in sql.lower()
@@ -115,7 +115,7 @@ class TestBuildScreenerQueries:
         """Unknown sort column falls back to aum_total."""
         filters = ScreenerFilters(sort_by="'; DROP TABLE sec_managers; --")
         data_q, _ = build_screener_queries(
-            filters, "org-1", latest_quarter=date(2026, 3, 1)
+            filters, "org-1", latest_quarter=date(2026, 3, 1),
         )
         sql = _compile_sql(data_q)
         assert "DROP TABLE" not in sql
@@ -124,7 +124,7 @@ class TestBuildScreenerQueries:
     def test_sort_asc(self) -> None:
         filters = ScreenerFilters(sort_by="firm_name", sort_dir="asc")
         data_q, _ = build_screener_queries(
-            filters, "org-1", latest_quarter=date(2026, 3, 1)
+            filters, "org-1", latest_quarter=date(2026, 3, 1),
         )
         sql = _compile_sql(data_q)
         assert "ASC" in sql
@@ -132,7 +132,7 @@ class TestBuildScreenerQueries:
     def test_pagination_offset(self) -> None:
         filters = ScreenerFilters(page=3, page_size=10)
         data_q, _ = build_screener_queries(
-            filters, "org-1", latest_quarter=date(2026, 3, 1)
+            filters, "org-1", latest_quarter=date(2026, 3, 1),
         )
         sql = _compile_sql(data_q)
         assert "LIMIT" in sql
@@ -140,10 +140,11 @@ class TestBuildScreenerQueries:
 
     def test_holdings_subquery_always_filters_quarter(self) -> None:
         """Invariant: holdings aggregate subquery must include quarter filter
-        for TimescaleDB chunk pruning."""
+        for TimescaleDB chunk pruning.
+        """
         filters = ScreenerFilters()
         data_q, _ = build_screener_queries(
-            filters, "org-1", latest_quarter=date(2026, 3, 1)
+            filters, "org-1", latest_quarter=date(2026, 3, 1),
         )
         sql = _compile_sql(data_q)
         # The holdings subquery should filter by quarter
@@ -155,7 +156,7 @@ class TestBuildScreenerQueries:
         """Invariant: drift aggregate subquery must include quarter filter."""
         filters = ScreenerFilters()
         data_q, _ = build_screener_queries(
-            filters, "org-1", latest_quarter=date(2026, 3, 1)
+            filters, "org-1", latest_quarter=date(2026, 3, 1),
         )
         sql = _compile_sql(data_q)
         assert "sec_13f_drift_agg" in sql
@@ -164,7 +165,7 @@ class TestBuildScreenerQueries:
         """instruments_universe join must filter by organization_id."""
         filters = ScreenerFilters()
         data_q, _ = build_screener_queries(
-            filters, "org-123", latest_quarter=date(2026, 3, 1)
+            filters, "org-123", latest_quarter=date(2026, 3, 1),
         )
         sql = _compile_sql(data_q)
         assert "org-123" in sql
@@ -173,7 +174,7 @@ class TestBuildScreenerQueries:
     def test_state_filter(self) -> None:
         filters = ScreenerFilters(states=["NY", "CA"])
         data_q, _ = build_screener_queries(
-            filters, "org-1", latest_quarter=date(2026, 3, 1)
+            filters, "org-1", latest_quarter=date(2026, 3, 1),
         )
         sql = _compile_sql(data_q)
         assert "NY" in sql
@@ -182,7 +183,7 @@ class TestBuildScreenerQueries:
     def test_compliance_clean_filter(self) -> None:
         filters = ScreenerFilters(compliance_clean=True)
         data_q, _ = build_screener_queries(
-            filters, "org-1", latest_quarter=date(2026, 3, 1)
+            filters, "org-1", latest_quarter=date(2026, 3, 1),
         )
         sql = _compile_sql(data_q)
         assert "compliance_disclosures" in sql
@@ -190,7 +191,7 @@ class TestBuildScreenerQueries:
     def test_position_count_filter(self) -> None:
         filters = ScreenerFilters(position_count_min=50, position_count_max=500)
         data_q, _ = build_screener_queries(
-            filters, "org-1", latest_quarter=date(2026, 3, 1)
+            filters, "org-1", latest_quarter=date(2026, 3, 1),
         )
         sql = _compile_sql(data_q)
         assert "total_positions" in sql

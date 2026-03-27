@@ -102,14 +102,14 @@ class TestValidateClassification:
 
     def test_confidence_exactly_at_threshold(self):
         result = validate_classification(
-            self._make_result(confidence=MIN_CLASSIFICATION_CONFIDENCE)
+            self._make_result(confidence=MIN_CLASSIFICATION_CONFIDENCE),
         )
         assert result.success is True
         assert len(result.warnings) == 0
 
     def test_confidence_just_below_threshold(self):
         result = validate_classification(
-            self._make_result(confidence=MIN_CLASSIFICATION_CONFIDENCE - 0.01)
+            self._make_result(confidence=MIN_CLASSIFICATION_CONFIDENCE - 0.01),
         )
         assert result.success is True
         assert len(result.warnings) > 0

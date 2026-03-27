@@ -68,7 +68,8 @@ class TestEmptyHoldings:
 class TestSingleFundNoOverlap:
     def test_no_breach_below_limit(self) -> None:
         """Fund A = 50% of portfolio. Holds NVDA at 8% of fund NAV.
-        Weighted: 0.50 × 0.08 = 0.04 = 4% < 5% limit → no breach."""
+        Weighted: 0.50 × 0.08 = 0.04 = 4% < 5% limit → no breach.
+        """
         holdings = [
             _h("NVDA_CUSIP", FUND_A, 0.50, 8.0, "NVIDIA Corp", "Technology"),
             _h("AAPL_CUSIP", FUND_A, 0.50, 6.0, "Apple Inc", "Technology"),

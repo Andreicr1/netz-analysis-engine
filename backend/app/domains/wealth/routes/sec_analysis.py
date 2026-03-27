@@ -175,7 +175,7 @@ async def search_managers(
                 SecManager.firm_name.ilike(q_lower),
                 SecManager.cik == q if q.isdigit() else False,  # type: ignore[arg-type]
                 SecManager.crd_number == q,
-            )
+            ),
         )
 
     if entity_type and entity_type != "all":
@@ -205,7 +205,7 @@ async def search_managers(
 
     if sic:
         conditions.append(
-            SecManager.client_types["sic"].astext == sic
+            SecManager.client_types["sic"].astext == sic,
         )
 
     if has_disclosures is True:
@@ -213,7 +213,7 @@ async def search_managers(
     elif has_disclosures is False:
         conditions.append(
             (SecManager.compliance_disclosures.is_(None))
-            | (SecManager.compliance_disclosures == 0)
+            | (SecManager.compliance_disclosures == 0),
         )
 
     if strategy_keywords:
@@ -237,7 +237,7 @@ async def search_managers(
         conditions.append(SecManager.private_fund_count > 0)
     elif has_private_funds is False:
         conditions.append(
-            (SecManager.private_fund_count.is_(None)) | (SecManager.private_fund_count == 0)
+            (SecManager.private_fund_count.is_(None)) | (SecManager.private_fund_count == 0),
         )
 
     if fund_type:
@@ -285,7 +285,7 @@ async def search_managers(
             last_adv_filed_at=m.last_adv_filed_at,
             compliance_disclosures=m.compliance_disclosures,
             has_13f_filings=last_13f_date is not None,
-            last_filing_date=last_13f_date if last_13f_date else None,
+            last_filing_date=last_13f_date or None,
             private_fund_count=m.private_fund_count,
             hedge_fund_count=m.hedge_fund_count,
             pe_fund_count=m.pe_fund_count,
@@ -513,7 +513,7 @@ async def get_holdings(
                 delta_shares=delta[0],
                 delta_value=delta[1],
                 delta_action=delta[2],
-            )
+            ),
         )
 
     return SecHoldingsPage(
@@ -594,7 +594,7 @@ async def get_style_drift(
                     quarter=q.isoformat(),
                     sector=sector,
                     weight_pct=val / total,
-                )
+                ),
             )
 
     # Drift signals: compare last two quarters
@@ -607,7 +607,7 @@ async def get_style_drift(
         curr_total = quarter_totals[curr_q]
 
         all_sectors = set(quarter_sectors.get(prev_q, {}).keys()) | set(
-            quarter_sectors.get(curr_q, {}).keys()
+            quarter_sectors.get(curr_q, {}).keys(),
         )
 
         for sector in sorted(all_sectors):
@@ -630,7 +630,7 @@ async def get_style_drift(
                     weight_prev=w_prev,
                     delta=delta,
                     signal=signal,
-                )
+                ),
             )
 
     return SecStyleDrift(cik=cik, history=history, drift_signals=drift_signals)
@@ -833,7 +833,7 @@ async def compare_managers(
                 latest_quarter=latest_quarter.isoformat() if latest_quarter else None,
                 holdings_count=holdings_count,
                 total_portfolio_value=total_value,
-            )
+            ),
         )
 
     # Pairwise CUSIP overlap
@@ -989,7 +989,7 @@ async def get_manager_funds(
 
     # Fallback: derive from aggregated counts on sec_managers
     mgr = await db.execute(
-        select(SecManager).where(SecManager.crd_number == crd_number)
+        select(SecManager).where(SecManager.crd_number == crd_number),
     )
     manager = mgr.scalars().first()
     if not manager:

@@ -31,16 +31,16 @@ class BenchmarkNav(Base):
     nav: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     return_1d: Mapped[Decimal | None] = mapped_column(Numeric(12, 8))
     return_type: Mapped[str] = mapped_column(
-        String(10), nullable=False, server_default="log"
+        String(10), nullable=False, server_default="log",
     )
     source: Mapped[str] = mapped_column(
-        String(30), nullable=False, server_default="yfinance"
+        String(30), nullable=False, server_default="yfinance",
     )
     created_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
+        DateTime(timezone=True), server_default=func.now(),
     )
     updated_at: Mapped[dt.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
     )
 
     # Relationship (lazy="raise" per CLAUDE.md)

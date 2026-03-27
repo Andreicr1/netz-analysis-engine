@@ -86,7 +86,6 @@ def build_evidence_pack(
         Curation metadata from the evidence_selector dual-surface pipeline.
 
     """
-
     deal_fields = deal_fields or {}
     investment_terms = analysis.get("investmentTerms", {}) if isinstance(analysis, dict) else {}
     if not isinstance(investment_terms, dict):

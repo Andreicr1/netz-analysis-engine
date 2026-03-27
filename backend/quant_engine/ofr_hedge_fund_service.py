@@ -153,6 +153,7 @@ class OFRHedgeFundService:
         http_client: Injected httpx.AsyncClient (allows test mocking).
         rate_limiter: Shared async rate limiter. If None, creates default (5 req/s).
         base_url: OFR HFM API base URL.
+
     """
 
     BASE_URL = "https://data.financialresearch.gov/hf/v1"
@@ -318,12 +319,12 @@ class OFRHedgeFundService:
             series = await self.fetch_timeseries(mnemonic, start_date)
             for date_str, val in series:
                 results.append(
-                    StrategySnapshot(date=date_str, strategy=strategy.lower(), gav_sum=val)
+                    StrategySnapshot(date=date_str, strategy=strategy.lower(), gav_sum=val),
                 )
         return sorted(results, key=lambda s: s.date, reverse=True)
 
     async def fetch_counterparty_concentration(
-        self, start_date: str
+        self, start_date: str,
     ) -> list[CounterpartySnapshot]:
         """Counterparty risk metrics from SCOOS (FRB dealer financing survey)."""
         mnemonics = [
@@ -340,7 +341,7 @@ class OFRHedgeFundService:
     async def fetch_repo_volumes(self, start_date: str) -> list[RepoVolumeSnapshot]:
         """FICC sponsored repo service volumes."""
         series = await self.fetch_timeseries(
-            "FICC-SPONSORED_REPO_VOL", start_date, periodicity="M"
+            "FICC-SPONSORED_REPO_VOL", start_date, periodicity="M",
         )
         return [RepoVolumeSnapshot(date=d, volume=v) for d, v in series]
 
@@ -357,7 +358,7 @@ class OFRHedgeFundService:
             series = await self.fetch_timeseries(mne, start_date)
             for date_str, val in series:
                 results.append(
-                    RiskScenarioSnapshot(date=date_str, scenario=scenario_name, value=val)
+                    RiskScenarioSnapshot(date=date_str, scenario=scenario_name, value=val),
                 )
         return sorted(results, key=lambda s: s.date, reverse=True)
 

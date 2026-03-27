@@ -16,7 +16,7 @@ from app.main import app
 DEV_HEADERS = {"X-DEV-ACTOR": "dev|org-test-001|ADMIN"}
 ORG_ID = "00000000-0000-0000-0000-000000000001"
 DEV_ACTOR_HEADER = {
-    "X-DEV-ACTOR": f'{{"actor_id": "test-user", "roles": ["ADMIN"], "fund_ids": [], "org_id": "{ORG_ID}"}}'
+    "X-DEV-ACTOR": f'{{"actor_id": "test-user", "roles": ["ADMIN"], "fund_ids": [], "org_id": "{ORG_ID}"}}',
 }
 
 BASE_URL = "/api/v1/wealth/documents"

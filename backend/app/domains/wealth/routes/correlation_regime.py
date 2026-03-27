@@ -92,7 +92,7 @@ async def get_correlation_regime(
 
     # 3. Load instrument names
     inst_stmt = select(Instrument.instrument_id, Instrument.name).where(
-        Instrument.instrument_id.in_(instrument_ids)
+        Instrument.instrument_id.in_(instrument_ids),
     )
     inst_result = await db.execute(inst_stmt)
     name_map = {row.instrument_id: row.name for row in inst_result.all()}
@@ -222,7 +222,7 @@ async def get_pair_correlation(
 ) -> PairCorrelationTimeseriesRead:
     # Load instrument names
     inst_stmt = select(Instrument.instrument_id, Instrument.name).where(
-        Instrument.instrument_id.in_([inst_a, inst_b])
+        Instrument.instrument_id.in_([inst_a, inst_b]),
     )
     inst_result = await db.execute(inst_stmt)
     name_map = {row.instrument_id: row.name for row in inst_result.all()}

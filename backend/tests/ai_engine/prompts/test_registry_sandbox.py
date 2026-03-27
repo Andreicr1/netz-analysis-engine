@@ -9,7 +9,7 @@ from jinja2.sandbox import SandboxedEnvironment
 from ai_engine.prompts.registry import PromptRegistry
 
 
-@pytest.fixture()
+@pytest.fixture
 def tmp_prompts(tmp_path: Path) -> Path:
     """Create a minimal template directory for testing."""
     tpl = tmp_path / "hello.j2"

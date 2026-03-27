@@ -706,7 +706,7 @@ def regenerate_chapter_with_critic(
         f"ORIGINAL CHAPTER TEXT:\n{original_text[:12_000]}\n\n"
         f"EVIDENCE PACK:\n{json.dumps(evidence_pack.get('deal_overview', {}), default=str)[:4_000]}\n\n"
         "Rewrite this chapter addressing the critic findings. "
-        "Return JSON: {{\"section_text\": \"...revised markdown...\"}}"
+        'Return JSON: {{"section_text": "...revised markdown..."}}'
     )
 
     try:

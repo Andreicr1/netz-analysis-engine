@@ -30,7 +30,7 @@ async def run_nport_ingestion(months: int = 12) -> dict:
     """Fetch N-PORT holdings for active funds and upsert to hypertable."""
     async with async_session() as db:
         lock_result = await db.execute(
-            text(f"SELECT pg_try_advisory_lock({NPORT_LOCK_ID})")
+            text(f"SELECT pg_try_advisory_lock({NPORT_LOCK_ID})"),
         )
         if not lock_result.scalar():
             logger.warning("N-PORT ingestion already running (advisory lock not acquired)")
@@ -43,7 +43,7 @@ async def run_nport_ingestion(months: int = 12) -> dict:
             if not ciks:
                 # Fallback: sec_managers (bootstrap, before discovery runs)
                 result = await db.execute(
-                    select(SecManager.cik).where(SecManager.cik.isnot(None))
+                    select(SecManager.cik).where(SecManager.cik.isnot(None)),
                 )
                 ciks = [row[0] for row in result.all() if row[0]]
                 logger.info("nport_fallback_to_sec_managers", count=len(ciks))
@@ -97,7 +97,7 @@ async def run_nport_ingestion(months: int = 12) -> dict:
 
         finally:
             await db.execute(
-                text(f"SELECT pg_advisory_unlock({NPORT_LOCK_ID})")
+                text(f"SELECT pg_advisory_unlock({NPORT_LOCK_ID})"),
             )
 
 

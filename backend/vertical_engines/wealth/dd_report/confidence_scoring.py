@@ -44,6 +44,7 @@ def compute_confidence_score(
     -------
     float
         Confidence score between 0.0 and 100.0.
+
     """
     scores: dict[str, float] = {}
 
@@ -108,6 +109,7 @@ def derive_decision_anchor(
     -------
     str or None
         'APPROVE', 'CONDITIONAL', or 'REJECT'. None if insufficient data.
+
     """
     # Try to get from recommendation chapter content
     rec_chapter = next(

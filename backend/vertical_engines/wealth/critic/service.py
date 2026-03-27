@@ -51,6 +51,7 @@ def critique_dd_report(
     -------
     CriticReport
         Aggregate critic results (frozen dataclass).
+
     """
     cfg = config or {}
     max_iterations = cfg.get("max_iterations", _DEFAULT_MAX_ITERATIONS)

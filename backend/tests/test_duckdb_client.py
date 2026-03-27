@@ -57,7 +57,7 @@ def _make_test_parquet(
         "governance_critical": pa.array(governance_critical, type=pa.bool_()),
         "governance_flags": pa.array(["[]"] * num_chunks, type=pa.string()),
         "embedding": pa.array(
-            [[0.1] * 3 for _ in range(num_chunks)], type=pa.list_(pa.float32())
+            [[0.1] * 3 for _ in range(num_chunks)], type=pa.list_(pa.float32()),
         ),
         "embedding_model": pa.array([embedding_model] * num_chunks, type=pa.string()),
         "embedding_dim": pa.array([embedding_dim] * num_chunks, type=pa.int32()),
@@ -76,7 +76,7 @@ def _make_test_parquet(
 # ── Fixtures ──────────────────────────────────────────────────────
 
 
-@pytest.fixture()
+@pytest.fixture
 def setup(tmp_path):
     """Standard fixture with 3 docs: doc-A (3 chunks), doc-B (2 chunks), doc-C (1 chunk)."""
     org_id = str(uuid.UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"))
@@ -104,7 +104,7 @@ def setup(tmp_path):
     return client, uuid.UUID(org_id)
 
 
-@pytest.fixture()
+@pytest.fixture
 def tenant_isolation_setup(tmp_path):
     """Two tenants: org_A and org_B with separate data."""
     org_a = str(uuid.UUID("aaaa0000-0000-0000-0000-000000000001"))
@@ -130,12 +130,12 @@ class TestStaleEmbeddings:
     def test_detects_stale_model(self, tmp_path):
         org_id = str(uuid.UUID("aaaa0000-0000-0000-0000-000000000099"))
         _make_test_parquet(
-            tmp_path, org_id, "doc-old", embedding_model="old-model", num_chunks=2
+            tmp_path, org_id, "doc-old", embedding_model="old-model", num_chunks=2,
         )
         storage = LocalStorageClient(root=tmp_path)
         client = DuckDBClient(storage)
         result = client.stale_embeddings(
-            uuid.UUID(org_id), "credit", "text-embedding-3-large", 3072
+            uuid.UUID(org_id), "credit", "text-embedding-3-large", 3072,
         )
         assert len(result) == 1
         assert result[0].doc_id == "doc-old"
@@ -221,12 +221,12 @@ class TestEmbeddingDimensionAudit:
     def test_detects_wrong_dim(self, tmp_path):
         org_id = str(uuid.UUID("aaaa0000-0000-0000-0000-000000000077"))
         _make_test_parquet(
-            tmp_path, org_id, "doc-bad-dim", embedding_dim=1536, num_chunks=3
+            tmp_path, org_id, "doc-bad-dim", embedding_dim=1536, num_chunks=3,
         )
         storage = LocalStorageClient(root=tmp_path)
         client = DuckDBClient(storage)
         result = client.embedding_dimension_audit(
-            uuid.UUID(org_id), "credit", expected_dim=3072
+            uuid.UUID(org_id), "credit", expected_dim=3072,
         )
         assert len(result) == 1
         assert result[0].doc_id == "doc-bad-dim"
@@ -266,7 +266,7 @@ class TestLegacyFile:
         """Parquet without organization_id column → DuckDB returns empty (IOException or no match)."""
         org_id = str(uuid.uuid4())
         _make_test_parquet(
-            tmp_path, org_id, "doc-legacy", num_chunks=2, include_org_id=False
+            tmp_path, org_id, "doc-legacy", num_chunks=2, include_org_id=False,
         )
         storage = LocalStorageClient(root=tmp_path)
         client = DuckDBClient(storage)

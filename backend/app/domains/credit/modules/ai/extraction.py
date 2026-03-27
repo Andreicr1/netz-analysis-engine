@@ -30,7 +30,7 @@ def ingest_pipeline_intelligence(
 ) -> PipelineIngestResponse:
     # LEGACY: sync path kept for backward compat — prefer /pipeline/ingest/full
     logger.warning(
-        "DEPRECATED: /pipeline/ingest is a legacy sync path — use /pipeline/ingest/full for canonical pipeline dispatch"
+        "DEPRECATED: /pipeline/ingest is a legacy sync path — use /pipeline/ingest/full for canonical pipeline dispatch",
     )
     result = run_pipeline_ingest(db, fund_id=fund_id, actor_id=actor.actor_id)
     as_of = dt.datetime.fromisoformat(str(result["asOf"]))

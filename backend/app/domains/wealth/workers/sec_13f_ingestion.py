@@ -52,7 +52,7 @@ async def run_sec_13f_ingestion(
     """
     async with async_session() as db:
         lock_result = await db.execute(
-            text(f"SELECT pg_try_advisory_lock({SEC_13F_LOCK_ID})")
+            text(f"SELECT pg_try_advisory_lock({SEC_13F_LOCK_ID})"),
         )
         if not lock_result.scalar():
             logger.warning("sec_13f_ingestion already running (advisory lock not acquired)")
@@ -70,7 +70,7 @@ async def run_sec_13f_ingestion(
                         SecManager.registration_status == "Registered",
                         SecManager.aum_total >= aum_min,
                     )
-                    .order_by(SecManager.aum_total.desc())
+                    .order_by(SecManager.aum_total.desc()),
                 )
                 ciks = [row[0] for row in result.all() if row[0]]
 
@@ -148,7 +148,7 @@ async def run_sec_13f_ingestion(
 
         finally:
             await db.execute(
-                text(f"SELECT pg_advisory_unlock({SEC_13F_LOCK_ID})")
+                text(f"SELECT pg_advisory_unlock({SEC_13F_LOCK_ID})"),
             )
 
 

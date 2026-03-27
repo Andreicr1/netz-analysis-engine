@@ -262,7 +262,7 @@ def compute_concentration(
     if profile.investment_count == 0 or total_exposure <= 0:
         profile.metrics_status = "INSUFFICIENT_DATA"
         return profile
-    elif excluded_count > 0:
+    if excluded_count > 0:
         profile.metrics_status = "PARTIAL"
     else:
         profile.metrics_status = "COMPLETE"

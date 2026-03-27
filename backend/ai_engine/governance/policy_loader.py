@@ -167,6 +167,7 @@ _DEFAULTS: dict[str, dict] = {
 # ─────────────────────────────────────────────────────────────────────
 class ThresholdEntry(BaseModel):
     """A single policy threshold with full audit trail."""
+
     value: float | list[str]   # numeric limit or list of trigger names
     source: str = "DEFAULT"
     document: str = ""
@@ -181,6 +182,7 @@ _KNOWN_THRESHOLD_FIELDS: list[str] = list(_DEFAULTS.keys())
 
 class PolicyThresholds(BaseModel):
     """Full set of thresholds and governance rules for the concentration engine."""
+
     model_config = ConfigDict(extra="ignore")
 
     # Concentration limits (% of total portfolio exposure) — hard limits

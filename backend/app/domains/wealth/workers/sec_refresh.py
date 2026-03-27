@@ -38,7 +38,7 @@ async def run_sec_refresh() -> dict:
     """Refresh SEC continuous aggregates and cache per-manager stats in Redis."""
     async with async_session() as db:
         lock_result = await db.execute(
-            text(f"SELECT pg_try_advisory_lock({SEC_REFRESH_LOCK_ID})")
+            text(f"SELECT pg_try_advisory_lock({SEC_REFRESH_LOCK_ID})"),
         )
         if not lock_result.scalar():
             logger.warning("SEC refresh already running (advisory lock not acquired)")
@@ -48,11 +48,11 @@ async def run_sec_refresh() -> dict:
             # ── Step 1: Refresh continuous aggregates ────────────────
             logger.info("Refreshing sec_13f_holdings_agg continuous aggregate")
             await db.execute(
-                text("CALL refresh_continuous_aggregate('sec_13f_holdings_agg', NULL, NULL)")
+                text("CALL refresh_continuous_aggregate('sec_13f_holdings_agg', NULL, NULL)"),
             )
             logger.info("Refreshing sec_13f_drift_agg continuous aggregate")
             await db.execute(
-                text("CALL refresh_continuous_aggregate('sec_13f_drift_agg', NULL, NULL)")
+                text("CALL refresh_continuous_aggregate('sec_13f_drift_agg', NULL, NULL)"),
             )
             await db.commit()
             logger.info("Continuous aggregates refreshed")
@@ -83,7 +83,7 @@ async def run_sec_refresh() -> dict:
                         .where(holdings_agg.c.cik == holdings_agg.c.cik)
                         .where(holdings_agg.c.quarter == latest_quarter_sub.c.latest_quarter)
                         .correlate(holdings_agg)
-                        .scalar_subquery()
+                        .scalar_subquery(),
                     ).label("top_sector"),
                 )
                 .join(
@@ -135,7 +135,7 @@ async def run_sec_refresh() -> dict:
                 total = sum(values)
                 if total > 0:
                     hhi_by_cik[cik] = round(
-                        sum((v / total) ** 2 for v in values), 6
+                        sum((v / total) ** 2 for v in values), 6,
                     )
                 else:
                     hhi_by_cik[cik] = 0.0
@@ -178,7 +178,7 @@ async def run_sec_refresh() -> dict:
 
             # ── Step 3: Get all managers and build Redis payloads ────
             managers_result = await db.execute(
-                select(sec_managers.c.crd_number, sec_managers.c.cik)
+                select(sec_managers.c.crd_number, sec_managers.c.cik),
             )
             managers = managers_result.all()
 
@@ -229,7 +229,7 @@ async def run_sec_refresh() -> dict:
 
         finally:
             await db.execute(
-                text(f"SELECT pg_advisory_unlock({SEC_REFRESH_LOCK_ID})")
+                text(f"SELECT pg_advisory_unlock({SEC_REFRESH_LOCK_ID})"),
             )
 
 

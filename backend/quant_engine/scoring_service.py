@@ -73,6 +73,7 @@ def compute_fund_score(
     Args:
         config: Scoring config dict from ConfigService.get("liquid_funds", "scoring").
                Falls back to hardcoded defaults if None.
+
     """
     components: dict[str, float] = {}
 

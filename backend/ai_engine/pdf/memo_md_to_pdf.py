@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from io import BytesIO
 from typing import Any
 
@@ -153,7 +153,7 @@ def _normalise_md(md: str) -> str:
                 # Case B: duplicate numbered heading (## N. Title repeated)
                 elif _numbered.match(next_stripped):
                     dup_bare = re.sub(
-                        r"^#{1,2}\s+\d+\.\s*", "", next_stripped
+                        r"^#{1,2}\s+\d+\.\s*", "", next_stripped,
                     ).strip().lower()
                     if dup_bare == numbered_bare:
                         # Exact same chapter title repeated — skip the duplicate
@@ -362,7 +362,7 @@ def _build_story_from_md(
             m_chart = _CHART_MARKER_RE.match(stripped)
             if m_chart:
                 flowables = _resolve_chart_marker(
-                    m_chart, chart_data_index or {}, styles
+                    m_chart, chart_data_index or {}, styles,
                 )
                 story.extend(flowables)
                 i += 1
@@ -475,7 +475,7 @@ def generate_memo_pdf(
     output_path: str | None = None,
 ) -> str:
     """Read a markdown investment memo and produce an institutional PDF."""
-    with open(md_path, "r", encoding="utf-8") as f:
+    with open(md_path, encoding="utf-8") as f:
         raw_md = f.read()
 
     # 1. Pre-process: normalise Unicode dashes + remove LLM structural noise
@@ -489,7 +489,7 @@ def generate_memo_pdf(
         deal_name = h1.group(1).strip() if h1 else "Unknown Deal"
 
     recommendation = meta.get("IC Recommendation", "CONDITIONAL")
-    generated      = meta.get("Generated", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+    generated      = meta.get("Generated", datetime.now(UTC).strftime("%Y-%m-%d"))
     version_tag    = meta.get("Version Tag", "")
 
     # 3. Build document
@@ -570,7 +570,7 @@ def generate_memo_pdf(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert Investment Memo Markdown to Institutional PDF"
+        description="Convert Investment Memo Markdown to Institutional PDF",
     )
     parser.add_argument("--input",  "-i", required=True, help="Input .md file")
     parser.add_argument("--output", "-o", help="Output .pdf file (auto-named if omitted)")

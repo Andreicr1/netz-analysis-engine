@@ -212,7 +212,8 @@ _PREFIX_RE = re.compile(
 
 def _is_reasoning_model(model_id: str) -> bool:
     """Return ``True`` if *model_id* is an o-series reasoning model that
-    does NOT accept the temperature parameter."""
+    does NOT accept the temperature parameter.
+    """
     return bool(_PREFIX_RE.match(model_id))
 
 
@@ -328,7 +329,7 @@ def _create_completion_local(
     temperature: float = 0.2,
     max_tokens: int = 4096,
     response_format: dict[str, str] | None = None,
-) -> "CompletionResult":
+) -> CompletionResult:
     """Route completion request to local LM Studio server.
 
     DEV ONLY — never call in production (gated by settings.use_local_llm).
@@ -868,6 +869,7 @@ def create_embedding(
 
     When ``ENABLE_PIPELINE_CACHE=true``, cached embeddings are returned
     without an API call.  Only cache misses are sent to OpenAI.
+
     """
     from ai_engine.validation.vector_integrity_guard import EMBEDDING_MODEL_NAME
 

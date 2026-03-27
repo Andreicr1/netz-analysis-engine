@@ -14,8 +14,9 @@ Lifecycle: Instantiate ONCE in FastAPI lifespan().
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from datetime import date
-from typing import Any, Callable
+from typing import Any
 
 import structlog
 from sqlalchemy import select

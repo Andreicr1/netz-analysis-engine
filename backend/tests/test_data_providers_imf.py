@@ -272,7 +272,7 @@ class TestFetchImfIndicator:
                 "Server Error",
                 request=httpx.Request("GET", "https://test"),
                 response=httpx.Response(500),
-            )
+            ),
         )
 
         client = AsyncMock(spec=httpx.AsyncClient)
@@ -284,7 +284,7 @@ class TestFetchImfIndicator:
     async def test_connection_error_returns_empty(self):
         client = AsyncMock(spec=httpx.AsyncClient)
         client.get = AsyncMock(
-            side_effect=httpx.ConnectError("Connection refused")
+            side_effect=httpx.ConnectError("Connection refused"),
         )
 
         results = await fetch_imf_indicator(client, "PCPIPCH")

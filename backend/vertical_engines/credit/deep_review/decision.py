@@ -43,7 +43,6 @@ def _compute_decision_anchor(
         policyStatus, confirmedFatalFlaws, hardBreaches, icGate.
 
     """
-
     _critic = critic_dict or {}
     _concentration = concentration_dict or {}
 
@@ -184,7 +183,6 @@ def _compute_confidence_score(
       - quant_quality modulates critic reliability (amplifier, not addend).
       - policy contributes as gate input, not as independent score addend.
     """
-
     # -- Layer 1: Evidence Confidence --
     # "Do we have enough data to underwrite?"
     # Sources: quant completeness (evidence quality) x critic quality
@@ -305,6 +303,6 @@ def _compute_confidence_score(
 
 
 __all__ = [
-    "_compute_decision_anchor",
     "_compute_confidence_score",
+    "_compute_decision_anchor",
 ]
