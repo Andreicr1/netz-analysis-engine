@@ -463,7 +463,7 @@ async def _generate_allocation_proposals(
     StrategicAllocation records with actor_source='macro_proposal'.
     """
     config_service = ConfigService(db)
-    raw_config = await config_service.get("liquid_funds", "profiles", org_id)
+    raw_config = await config_service.get("liquid_funds", "portfolio_profiles", org_id)
     profiles_config = raw_config.value if raw_config else {}
     profiles_dict: dict = profiles_config.get("profiles", profiles_config)
 
