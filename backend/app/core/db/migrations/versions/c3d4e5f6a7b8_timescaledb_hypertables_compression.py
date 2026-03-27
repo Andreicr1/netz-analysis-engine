@@ -15,8 +15,13 @@ Revises: b2c3d4e5f6a7
 Create Date: 2026-03-18
 """
 
+import logging
+
 import psycopg
 from alembic import op
+from sqlalchemy import text
+
+logger = logging.getLogger(__name__)
 
 revision = "c3d4e5f6a7b8"
 down_revision = "b2c3d4e5f6a7"
@@ -37,19 +42,46 @@ _HYPERTABLE_TABLES = [
 ]
 
 
+def _has_timescaledb(bind) -> bool:
+    """Check if TimescaleDB extension is available."""
+    result = bind.execute(
+        text("SELECT 1 FROM pg_extension WHERE extname = 'timescaledb'")
+    )
+    return result.scalar() is not None
+
+
+def _get_conninfo(bind) -> str:
+    """Get psycopg-compatible connection string from the SQLAlchemy engine.
+
+    ``alembic_dbapi.info.dsn`` strips the password for security, so we
+    derive the conninfo from the engine URL instead.
+    """
+    url = bind.engine.url.render_as_string(hide_password=False)
+    # Strip SQLAlchemy dialect prefix → standard postgresql://
+    for prefix in ("postgresql+psycopg2://", "postgresql+psycopg://", "postgresql+asyncpg://"):
+        if url.startswith(prefix):
+            url = "postgresql://" + url[len(prefix):]
+            break
+    return url
+
+
 def upgrade() -> None:
-    # We need a completely separate connection to escape Alembic's
-    # transactional DDL. The main connection's transaction has all prior
-    # migrations (including 0003 which created RLS). We commit that first,
-    # then use a fresh connection with autocommit for the hypertable work.
-    alembic_dbapi = op.get_bind().connection.dbapi_connection
-    conninfo = alembic_dbapi.info.dsn
-    alembic_dbapi.commit()
+    bind = op.get_bind()
+
+    # Skip gracefully when TimescaleDB is not installed (CI, plain PG).
+    if not _has_timescaledb(bind):
+        logger.info("TimescaleDB extension not found — skipping hypertable creation")
+        return
+
+    # We need a separate autocommit connection because create_hypertable
+    # with migrate_data cannot run inside a transaction block.
+    conninfo = _get_conninfo(bind)
+    bind.execute(text("COMMIT"))
 
     with psycopg.connect(conninfo, autocommit=True) as conn:
         cursor = conn.cursor()
 
-        # Phase 1: Drop RLS
+        # Phase 1: Drop RLS (incompatible with compression)
         for spec in _HYPERTABLE_TABLES:
             table = spec["table"]
             cursor.execute(f"DROP POLICY IF EXISTS org_isolation ON {table}")
