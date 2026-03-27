@@ -447,12 +447,23 @@ async def _run_construction_async(
         sub_returns = {fid: expected_returns[fid] for fid in opt_fund_ids}
         sub_blocks = {fid: fund_blocks[fid] for fid in opt_fund_ids}
 
+        # Filter constraints to blocks that have at least one fund
+        covered_blocks = set(sub_blocks.values())
+        active_block_constraints = [
+            bc for bc in block_constraints if bc.block_id in covered_blocks
+        ]
+        active_constraints = ProfileConstraints(
+            blocks=active_block_constraints,
+            cvar_limit=cvar_limit,
+            max_single_fund_weight=max_single_fund,
+        )
+
         fund_result: FundOptimizationResult = await optimize_fund_portfolio(
             fund_ids=opt_fund_ids,
             fund_blocks=sub_blocks,
             expected_returns=sub_returns,
             cov_matrix=sub_cov,
-            constraints=constraints,
+            constraints=active_constraints,
         )
 
         if fund_result.status == "optimal" and fund_result.weights:
