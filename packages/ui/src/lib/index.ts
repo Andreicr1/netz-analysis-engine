@@ -54,6 +54,15 @@ export { default as PeriodSelector } from "./components/PeriodSelector.svelte";
 export { default as EntityContextHeader } from "./components/EntityContextHeader.svelte";
 export { default as LongRunningAction } from "./components/LongRunningAction.svelte";
 
+// ── Admin Components ────────────────────────────────────────
+export { default as ConfigEditor } from "./components/admin/ConfigEditor.svelte";
+export { default as ConfigDiffView } from "./components/admin/ConfigDiffView.svelte";
+export type { ConfigDiffOut } from "./components/admin/ConfigDiffView.svelte";
+export { default as ServiceHealthCard } from "./components/admin/ServiceHealthCard.svelte";
+export { default as WorkerLogFeed } from "./components/admin/WorkerLogFeed.svelte";
+export { default as CodeEditor } from "./components/admin/CodeEditor.svelte";
+export { resolveAdminStatus } from "./utils/admin-status.js";
+
 // ── Layouts ─────────────────────────────────────────────────
 export { default as AppLayout } from "./layouts/AppLayout.svelte";
 export { default as AppShell } from "./layouts/AppShell.svelte";
