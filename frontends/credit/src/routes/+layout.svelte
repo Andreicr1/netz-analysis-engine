@@ -16,6 +16,7 @@
 		{ label: "Dashboard", href: "/dashboard" },
 		{ label: "Funds", href: "/funds" },
 		{ label: "Copilot", href: "/copilot" },
+		{ label: "Settings", href: "/settings" },
 	];
 </script>
 
