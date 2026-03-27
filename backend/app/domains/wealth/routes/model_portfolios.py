@@ -530,7 +530,7 @@ async def _run_construction_async(
             constraints=active_constraints,
         )
 
-        if fund_result.status == "optimal" and fund_result.weights:
+        if fund_result.status.startswith("optimal") and fund_result.weights:
             opt_meta = OptimizationMeta(
                 expected_return=fund_result.expected_return,
                 portfolio_volatility=fund_result.portfolio_volatility,
