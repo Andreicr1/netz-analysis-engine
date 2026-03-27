@@ -104,6 +104,33 @@
 		selectedSecurity = null;
 	}
 
+	// ── Send selected classes to DD Review ──
+	async function sendClassesToDDReview(items: UnifiedFundItem[]) {
+		if (items.length === 0) return;
+		// For single selection, import + create DD report + navigate
+		if (items.length === 1) {
+			const item = items[0]!;
+			try {
+				let instrumentId = item.instrument_id;
+				if (!instrumentId && item.universe === "ucits_eu" && item.isin) {
+					const imported = await api.post<{ instrument_id: string }>(`/screener/import-esma/${item.isin}`, {});
+					instrumentId = imported.instrument_id;
+				} else if (!instrumentId && item.ticker) {
+					const imported = await api.post<{ instrument_id: string }>(`/screener/import-sec/${item.ticker}`, {});
+					instrumentId = imported.instrument_id;
+				}
+				if (!instrumentId) return;
+				const ddReport = await api.post<{ id: string }>(`/dd-reports/funds/${instrumentId}`, {});
+				goto(`/dd-reports/${instrumentId}/${ddReport.id}`);
+			} catch {
+				// Fail silently — user can retry via detail panel
+			}
+			return;
+		}
+		// For multiple: navigate to DD reports list (batch creation not yet supported)
+		goto("/dd-reports");
+	}
+
 	// ── Securities tab methods (global equities — no RLS) ──
 	let selectedSecurity = $state<SecurityItem | null>(null);
 
@@ -298,6 +325,7 @@
 					{catalog}
 					searchQ={catalogSearchQ}
 					onSelectFund={openFundDetail}
+					onSendToDDReview={sendClassesToDDReview}
 					onPageChange={catalogPageChange}
 				/>
 			</div>

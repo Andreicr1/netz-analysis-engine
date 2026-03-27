@@ -36,6 +36,12 @@ export interface UnifiedFundItem {
 	total_shareholder_accounts: number | null;
 	investor_count: number | null;
 
+	// Share class fields (populated for registered_us funds with classes)
+	series_id: string | null;
+	series_name: string | null;
+	class_id: string | null;
+	class_name: string | null;
+
 	instrument_id: string | null;
 	screening_status: "PASS" | "FAIL" | "WATCHLIST" | null;
 	screening_score: number | null;
