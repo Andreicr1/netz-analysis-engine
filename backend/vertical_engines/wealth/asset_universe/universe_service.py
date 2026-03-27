@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domains.wealth.models.fund import Fund
+from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.universe_approval import UniverseApproval
 from vertical_engines.wealth.asset_universe.fund_approval import (
     create_pending_approval,
@@ -47,18 +48,22 @@ class UniverseService:
         Creates a pending UniverseApproval record. The fund must have a
         completed (or escalated) DD Report before it can be submitted.
         """
-        # Verify the fund exists
-        fund = db.execute(
-            select(Fund).where(Fund.fund_id == instrument_id)
+        # Verify the fund exists (check Instrument first, fallback to Fund)
+        inst = db.execute(
+            select(Instrument).where(Instrument.instrument_id == instrument_id)
         ).scalar_one_or_none()
-        if fund is None:
-            raise ValueError(f"Fund {instrument_id} not found")
+        if inst is None:
+            fund = db.execute(
+                select(Fund).where(Fund.fund_id == instrument_id)
+            ).scalar_one_or_none()
+            if fund is None:
+                raise ValueError(f"Fund {instrument_id} not found")
+            fund.approval_status = "dd_complete"
+        else:
+            inst.approval_status = "dd_complete"
 
         # Verify DD report is valid
         validate_dd_report(db, analysis_report_id, instrument_id)
-
-        # Update fund status to indicate DD is complete
-        fund.approval_status = "dd_complete"
 
         request = ApprovalRequest(
             instrument_id=instrument_id,
@@ -117,41 +122,41 @@ class UniverseService:
     ) -> list[UniverseAsset]:
         """List approved funds in the universe with optional filters."""
         stmt = (
-            select(Fund, UniverseApproval)
+            select(Instrument, UniverseApproval)
             .join(
                 UniverseApproval,
-                (UniverseApproval.instrument_id == Fund.fund_id)
+                (UniverseApproval.instrument_id == Instrument.instrument_id)
                 & (UniverseApproval.is_current.is_(True))
                 & (UniverseApproval.decision == "approved"),
             )
             .where(
-                Fund.is_active.is_(True),
-                Fund.organization_id == organization_id,
+                Instrument.is_active.is_(True),
+                Instrument.organization_id == organization_id,
             )
         )
 
         if block_id is not None:
-            stmt = stmt.where(Fund.block_id == block_id)
+            stmt = stmt.where(Instrument.block_id == block_id)
         if geography is not None:
-            stmt = stmt.where(Fund.geography == geography)
+            stmt = stmt.where(Instrument.geography == geography)
         if asset_class is not None:
-            stmt = stmt.where(Fund.asset_class == asset_class)
+            stmt = stmt.where(Instrument.asset_class == asset_class)
 
-        stmt = stmt.order_by(Fund.name)
+        stmt = stmt.order_by(Instrument.name)
 
         rows = db.execute(stmt).all()
         return [
             UniverseAsset(
-                instrument_id=fund.fund_id,
-                fund_name=fund.name,
-                block_id=fund.block_id,
-                geography=fund.geography,
-                asset_class=fund.asset_class,
-                approval_status=fund.approval_status,
+                instrument_id=inst.instrument_id,
+                fund_name=inst.name,
+                block_id=inst.block_id,
+                geography=inst.geography,
+                asset_class=inst.asset_class,
+                approval_status=inst.approval_status,
                 approval_decision=approval.decision,
                 approved_at=approval.decided_at,
             )
-            for fund, approval in rows
+            for inst, approval in rows
         ]
 
     def list_pending(
@@ -179,22 +184,32 @@ class UniverseService:
     ) -> tuple[DeactivationResult, RebalanceResult | None]:
         """Remove a fund from the active universe.
 
-        Sets Fund.is_active = False and marks current approval as not current.
+        Sets Instrument.is_active = False and marks current approval as not current.
         Returns (DeactivationResult, RebalanceResult | None). RebalanceResult
         is computed when the fund was previously approved.
         """
-        fund = db.execute(
-            select(Fund).where(
-                Fund.fund_id == instrument_id,
-                Fund.organization_id == organization_id,
+        inst = db.execute(
+            select(Instrument).where(
+                Instrument.instrument_id == instrument_id,
+                Instrument.organization_id == organization_id,
             ).with_for_update()
         ).scalar_one_or_none()
 
-        if fund is None:
-            raise ValueError(f"Fund {instrument_id} not found")
-
-        was_active = fund.is_active
-        fund.is_active = False
+        if inst is None:
+            # Fallback to legacy Fund table
+            fund = db.execute(
+                select(Fund).where(
+                    Fund.fund_id == instrument_id,
+                    Fund.organization_id == organization_id,
+                ).with_for_update()
+            ).scalar_one_or_none()
+            if fund is None:
+                raise ValueError(f"Fund {instrument_id} not found")
+            was_active = fund.is_active
+            fund.is_active = False
+        else:
+            was_active = inst.is_active
+            inst.is_active = False
 
         # Check if fund was approved (rebalance needed)
         approval = db.execute(

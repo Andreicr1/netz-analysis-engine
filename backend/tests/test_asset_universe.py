@@ -189,7 +189,7 @@ class TestUniverseSchemas:
         from app.domains.wealth.schemas.universe import UniverseAssetRead
 
         asset = UniverseAssetRead(
-            fund_id=uuid.uuid4(),
+            instrument_id=uuid.uuid4(),
             fund_name="Test Fund",
             block_id="equity_global",
             geography="US",
