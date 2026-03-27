@@ -22,6 +22,7 @@ from app.domains.wealth.schemas.instrument import (
     InstrumentImportCsvResponse,
     InstrumentImportYahoo,
     InstrumentRead,
+    InstrumentUpdate,
 )
 from app.shared.enums import Role
 
@@ -84,6 +85,35 @@ async def get_instrument(
     instrument = result.scalar_one_or_none()
     if not instrument:
         raise HTTPException(status_code=404, detail="Instrument not found")
+    return InstrumentRead.model_validate(instrument)
+
+
+@router.patch(
+    "/{instrument_id}",
+    response_model=InstrumentRead,
+    summary="Update instrument fields",
+)
+async def update_instrument(
+    instrument_id: uuid.UUID,
+    body: InstrumentUpdate,
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> InstrumentRead:
+    _require_investment_role(actor)
+    result = await db.execute(
+        select(Instrument).where(Instrument.instrument_id == instrument_id)
+    )
+    instrument = result.scalar_one_or_none()
+    if not instrument:
+        raise HTTPException(status_code=404, detail="Instrument not found")
+
+    updates = body.model_dump(exclude_unset=True)
+    for field, value in updates.items():
+        setattr(instrument, field, value)
+
+    await db.flush()
+    await db.refresh(instrument)
+    await db.commit()
     return InstrumentRead.model_validate(instrument)
 
 

@@ -43,6 +43,17 @@ class InstrumentCreate(BaseModel):
     attributes: dict[str, Any] = Field(default_factory=dict)
 
 
+class InstrumentUpdate(BaseModel):
+    """Partial update for an instrument."""
+
+    name: str | None = None
+    block_id: str | None = None
+    asset_class: str | None = None
+    geography: str | None = None
+    currency: str | None = None
+    is_active: bool | None = None
+
+
 class InstrumentImportYahoo(BaseModel):
     """Request to import instruments via Yahoo Finance ticker(s)."""
 
