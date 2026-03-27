@@ -56,18 +56,28 @@ async def run_nport_fund_discovery() -> dict:
                 _discover_nport_filers, SEC_USER_AGENT
             )
 
-            if not discovered_ciks:
+            # Merge EFTS results with existing DB CIKs (EFTS has a 10k cap
+            # and can return partial results on 500 errors — the DB has the
+            # full universe from prior runs)
+            all_ciks = sorted(set(discovered_ciks) | set(existing.keys()))
+
+            if not all_ciks:
                 logger.info("nport_discovery_no_filers")
                 return {"status": "completed", "discovered": 0, "upserted": 0}
 
-            logger.info("nport_discovery_filers_found", total=len(discovered_ciks))
+            logger.info(
+                "nport_discovery_filers_found",
+                from_efts=len(discovered_ciks),
+                from_db=len(existing),
+                merged=len(all_ciks),
+            )
 
             # Step 3: Filter to CIKs needing refresh
             from datetime import datetime, timedelta, timezone
 
             cutoff = datetime.now(timezone.utc) - timedelta(days=_STALENESS_DAYS)
             ciks_to_process = []
-            for cik in discovered_ciks:
+            for cik in all_ciks:
                 fetched = existing.get(cik)
                 if fetched is None or fetched < cutoff:
                     ciks_to_process.append(cik)
@@ -328,13 +338,15 @@ def _fetch_nport_header(cik: str, user_agent: str) -> dict | None:
             "adviser_name": None,
         }
 
-        # Step 2: Fetch N-PORT XML for totalAssets + adviser info
+        # Step 2: Fetch N-PORT filing data (totalAssets, adviser, ticker, series/class)
         if accessions and nport_idx < len(accessions):
             accession_raw = accessions[nport_idx]
             accession_nodash = accession_raw.replace("-", "")
             primary_doc = primary_docs[nport_idx] if nport_idx < len(primary_docs) else None
 
-            if primary_doc:
+            # 2a: Try raw XML for totalAssets + adviser info
+            #     Skip XSLT-rendered docs (xslForm*) — they aren't valid XML
+            if primary_doc and "xsl" not in primary_doc.lower():
                 check_edgar_rate()
                 try:
                     xml_url = (
@@ -351,25 +363,24 @@ def _fetch_nport_header(cik: str, user_agent: str) -> dict | None:
                 except Exception as exc:
                     logger.debug("nport_xml_fetch_failed", cik=cik, error=str(exc))
 
-            # Step 3: If no ticker yet, extract from filing header SGML
-            # (umbrella funds have tickers per series/class in the header)
-            if not result.get("ticker"):
-                check_edgar_rate()
-                try:
-                    header_url = (
-                        f"https://www.sec.gov/Archives/edgar/data/"
-                        f"{cik.lstrip('0') or '0'}/{accession_nodash}/"
-                        f"{accession_raw}-index-headers.html"
-                    )
-                    hdr_resp = httpx.get(
-                        header_url,
-                        headers={"User-Agent": user_agent},
-                        timeout=15.0,
-                    )
-                    if hdr_resp.status_code == 200:
-                        _parse_series_class_header(hdr_resp.text, result)
-                except Exception as exc:
-                    logger.debug("nport_header_sgml_failed", cik=cik, error=str(exc))
+            # 2b: Always fetch filing header SGML for ticker + series/class
+            #     This works for all fund types (umbrella and single-series)
+            check_edgar_rate()
+            try:
+                header_url = (
+                    f"https://www.sec.gov/Archives/edgar/data/"
+                    f"{cik.lstrip('0') or '0'}/{accession_nodash}/"
+                    f"{accession_raw}-index-headers.html"
+                )
+                hdr_resp = httpx.get(
+                    header_url,
+                    headers={"User-Agent": user_agent},
+                    timeout=15.0,
+                )
+                if hdr_resp.status_code == 200:
+                    _parse_series_class_header(hdr_resp.text, result)
+            except Exception as exc:
+                logger.debug("nport_header_sgml_failed", cik=cik, error=str(exc))
 
         return result
 
