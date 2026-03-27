@@ -166,10 +166,18 @@ async def trigger_dd_report(
     existing = existing_result.scalar_one_or_none()
 
     if existing and existing.status == DDReportStatus.generating:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="DD Report generation already in progress for this fund",
-        )
+        # Auto-recover stuck reports: if generating for > 15 min, mark as failed
+        from datetime import timedelta
+        stuck_threshold = datetime.now(UTC) - timedelta(minutes=15)
+        if existing.created_at and existing.created_at.replace(tzinfo=UTC) < stuck_threshold:
+            logger.warning("dd_report_stuck_recovery", report_id=str(existing.id), fund_id=str(fund_id))
+            existing.status = DDReportStatus.failed.value
+            existing.is_current = False
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="DD Report generation already in progress for this fund",
+            )
 
     if existing:
         existing.is_current = False
