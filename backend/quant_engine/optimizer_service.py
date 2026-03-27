@@ -371,10 +371,16 @@ async def optimize_fund_portfolio(
         """Solve with CLARABEL → SCS fallback. Returns status."""
         def _do():
             try:
-                prob.solve(solver=cp.CLARABEL, verbose=False)
+                prob.solve(solver=cp.CLARABEL, verbose=False,
+                           eps_abs=1e-7, eps_rel=1e-7)
+                if prob.status not in ("optimal", "optimal_inaccurate"):
+                    # CLARABEL failed — try SCS with looser tolerances
+                    prob.solve(solver=cp.SCS, verbose=False,
+                               eps=1e-5, max_iters=10000)
             except cp.SolverError:
                 try:
-                    prob.solve(solver=cp.SCS, verbose=False)
+                    prob.solve(solver=cp.SCS, verbose=False,
+                               eps=1e-5, max_iters=10000)
                 except cp.SolverError:
                     pass
         await asyncio.to_thread(_do)
