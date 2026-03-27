@@ -15,13 +15,11 @@ import uuid
 
 import structlog
 from sqlalchemy import select, text
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.engine import async_session_factory
 from app.core.tenancy.middleware import set_rls_context
 from app.domains.wealth.models.instrument import Instrument
-from app.domains.wealth.models.nav import NavTimeseries
 from app.services.providers import get_instrument_provider
 
 logger = structlog.get_logger()
@@ -30,7 +28,7 @@ INSTRUMENT_INGESTION_LOCK_ID = 900_010
 
 MAX_RETRIES = 3
 BACKOFF_BASE = 1  # 1s, 4s, 16s
-UPSERT_CHUNK = 5000
+UPSERT_CHUNK = 500
 
 # Maximum NaN ratio before rejecting a ticker's data
 _MAX_NAN_RATIO = 0.05  # 5%
@@ -292,26 +290,39 @@ async def _do_ingest(
             errors.append(f"{ticker}: {e}")
             continue
 
-    # 4. Chunked batch upsert
+    # 4. Chunked batch upsert — raw SQL to avoid SQLAlchemy RETURNING on hypertables
     total_upserted = 0
     if all_rows:
+        upsert_sql = text("""
+            INSERT INTO nav_timeseries
+                (organization_id, instrument_id, nav_date, nav, return_1d, return_type, currency, source)
+            VALUES
+                (:organization_id, :instrument_id, :nav_date, :nav, :return_1d, :return_type, :currency, :source)
+            ON CONFLICT (instrument_id, nav_date)
+            DO UPDATE SET
+                nav = EXCLUDED.nav,
+                return_1d = EXCLUDED.return_1d,
+                return_type = EXCLUDED.return_type,
+                currency = EXCLUDED.currency,
+                source = EXCLUDED.source
+        """)
         for i in range(0, len(all_rows), UPSERT_CHUNK):
             chunk = all_rows[i : i + UPSERT_CHUNK]
-            stmt = pg_insert(NavTimeseries).values(chunk)
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["instrument_id", "nav_date"],
-                set_={
-                    "nav": stmt.excluded.nav,
-                    "return_1d": stmt.excluded.return_1d,
-                    "return_type": stmt.excluded.return_type,
-                    "currency": stmt.excluded.currency,
-                    "source": stmt.excluded.source,
-                },
-            )
-            await db.execute(stmt)
-            await db.commit()
-            await set_rls_context(db, org_id)
-            total_upserted += len(chunk)
+            try:
+                await db.execute(upsert_sql, chunk)
+                await db.commit()
+                await set_rls_context(db, org_id)
+                total_upserted += len(chunk)
+            except Exception as chunk_err:
+                logger.warning(
+                    "Chunk upsert failed — rolling back chunk",
+                    chunk_index=i,
+                    chunk_size=len(chunk),
+                    error=str(chunk_err)[:200],
+                )
+                await db.rollback()
+                await set_rls_context(db, org_id)
+                errors.append(f"chunk {i}: {str(chunk_err)[:100]}")
 
     logger.info(
         "Instrument ingestion complete",
