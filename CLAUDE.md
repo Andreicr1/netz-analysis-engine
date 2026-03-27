@@ -20,7 +20,6 @@ make down               # docker-compose down
 # Frontend (pnpm + Turborepo)
 make dev-credit         # Credit frontend dev server
 make dev-wealth         # Wealth frontend dev server
-make dev-admin          # Admin frontend dev server (being retired → /settings in Wealth+Credit)
 make dev-all            # All packages in parallel (Turborepo)
 make build-all          # Build all packages (topological order)
 make check-all          # Check all frontend packages
@@ -94,12 +93,11 @@ data_providers/
 frontends/
   credit/           ← SvelteKit "netz-credit-intelligence"
   wealth/           ← SvelteKit "netz-wealth-os"
-  admin/            ← SvelteKit admin (BEING RETIRED — migrating to /settings in Wealth+Credit)
 ```
 
 **Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0059_wealth_vector_chunks`.
 
-**Auth:** Clerk JWT v2. `organization_id` from `o.id` claim. RLS via `SET LOCAL app.current_organization_id`. Dev bypass: `X-DEV-ACTOR` header.
+**Auth:** Clerk JWT v2. `organization_id` from `o.id` claim. RLS via `SET LOCAL app.current_organization_id`. Dev bypass: `X-DEV-ACTOR` header. **Tenant and user management is 100% via Clerk Dashboard** — no custom admin UI. Organizations, user invites, and role assignment (`ADMIN`, `INVESTMENT_TEAM`, `investor`) are all managed in Clerk. `ConfigService` defaults mean new tenants work immediately without provisioning.
 
 **SSE:** `sse-starlette` EventSourceResponse. Redis pub/sub for worker→SSE bridging. Frontend uses `fetch()` + `ReadableStream` (not EventSource — auth headers needed).
 
@@ -144,6 +142,7 @@ The engine contains only analytical domains. Operational modules were intentiona
 - **ORM thread safety:** Extract scalar attributes into frozen dataclasses before crossing any async/thread boundary.
 - **SET LOCAL not SET:** RLS context must use `SET LOCAL` (transaction-scoped). `SET` leaks across pooled connections.
 - **Frontends never cross-import:** `frontends/credit/` and `frontends/wealth/` share only via `@netz/ui` and the backend API.
+- **No custom tenant/user admin UI:** Tenant (Organization) and user management is 100% Clerk Dashboard. Do not build CRUD screens for creating tenants, inviting users, or assigning roles. `ConfigService` defaults handle new tenants automatically.
 - **ConfigService for all config:** Never read `calibration/` or `profiles/` YAML at runtime. Use `ConfigService.get(vertical, config_type, org_id)`. YAML files are seed data only.
 - **Prompts are Netz IP:** Never expose prompt content in client-facing API responses. Use `CLIENT_VISIBLE_TYPES` allowlist in ConfigService. Use `jinja2.SandboxedEnvironment` for all prompt rendering.
 - **StorageClient for all storage:** Never call R2/ADLS SDK directly. Use `StorageClient` abstraction (`create_storage_client()` resolves R2 > ADLS > LocalStorage based on feature flags).
@@ -342,7 +341,7 @@ Custom skills live in `.claude/skills/`. Each subfolder contains a `SKILL.md` wi
 
 Simplified stack (2026-03-18), ~$100-200/month:
 - **Timescale Cloud** — managed PostgreSQL 16 (pgvector + TimescaleDB nativo)
-- **Railway** — container hosting (FastAPI backend + 2 SvelteKit frontends — admin being retired)
+- **Railway** — container hosting (FastAPI backend + 2 SvelteKit frontends)
 - **Upstash** — serverless Redis (SSE pub/sub, job tracking, worker idempotency, advisory locks)
 - **OpenAI API** (direct, with retry backoff) — LLM + embeddings
 - **Mistral** — OCR
@@ -368,7 +367,6 @@ Scale triggers for re-adding services (Milestone 3+, >50 tenants):
 - **Backend:** `railway.toml` at repo root. Health check: `/health` and `/api/health`. Production: `api.investintell.com` (Railway Pro).
 - **Frontend Wealth:** Production: `wealth.investintell.com` (Railway Pro).
 - **Frontend Credit:** Railway or Cloudflare Pages with SvelteKit adapter.
-- **Frontend Admin:** Being retired — migrating settings to Wealth/Credit `/settings` pages (see `docs/prompts/retire-admin-frontend.md`).
 - **Database:** Timescale Cloud managed PostgreSQL 16 with pgvector + TimescaleDB. Alembic uses `DIRECT_DATABASE_URL` (port 5432, not pooler).
 - **Local dev:** `docker-compose up` (PostgreSQL 16 + TimescaleDB + pgvector + Redis 7).
 - **Deploy checklist:** `docs/reference/deploy-checklist.md` — full validation sequence for Railway Pro + Timescale Cloud.
@@ -390,7 +388,6 @@ Scale triggers for re-adding services (Milestone 3+, >50 tenants):
 - **Vector Embedding Reference:** `docs/reference/wealth-vector-embedding-reference.md`
 - **Vector Embedding Spec:** `docs/reference/wealth-vector-embedding-spec.md`
 - **Deploy Checklist:** `docs/reference/deploy-checklist.md`
-- **Admin Retirement Prompt:** `docs/prompts/retire-admin-frontend.md`
 - **Private Credit OS:** `C:\Users\andre\projetos\Netz-Private-Credit-OS` (archived after data migration)
 - **Wealth OS:** `C:\Users\andre\projetos\netz-wealth-os` (archived after migration)
 
