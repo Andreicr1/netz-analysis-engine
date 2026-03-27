@@ -334,10 +334,16 @@ async def regenerate_dd_report(
         )
 
     if report.status == DDReportStatus.generating:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="DD Report generation already in progress",
-        )
+        # Auto-recover stuck reports: if generating for > 15 min, allow re-trigger
+        from datetime import timedelta
+        stuck_threshold = datetime.now(UTC) - timedelta(minutes=15)
+        if report.created_at and report.created_at.replace(tzinfo=UTC) < stuck_threshold:
+            logger.warning("dd_report_stuck_recovery_regenerate", report_id=str(report_id))
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="DD Report generation already in progress",
+            )
 
     report.status = DDReportStatus.generating.value
     await db.flush()

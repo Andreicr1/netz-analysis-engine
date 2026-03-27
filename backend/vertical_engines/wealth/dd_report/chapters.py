@@ -90,21 +90,14 @@ def generate_chapter(
 
         user_content = _build_user_content(chapter_tag, evidence_context)
 
-        # Call LLM
-        response = call_openai_fn(
+        # Call LLM in text mode (chapters produce markdown, not JSON)
+        from ai_engine.llm import call_openai_text
+
+        raw_content = call_openai_text(
             system_prompt,
             user_content,
             max_tokens=ch_def["max_tokens"],
         )
-
-        logger.info("chapter_llm_response_keys", chapter_tag=chapter_tag, keys=list(response.keys())[:10])
-        raw_content = response.get("content") or response.get("content_md") or response.get("text") or response.get("analysis") or response.get("markdown") or ""
-        if not raw_content:
-            # Try first string value as fallback
-            for v in response.values():
-                if isinstance(v, str) and len(v) > 100:
-                    raw_content = v
-                    break
 
         # Sanitize LLM output (6-stage pipeline)
         content_md = sanitize_llm_text(raw_content) if raw_content else None

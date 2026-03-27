@@ -523,6 +523,12 @@ class DDReportEngine:
             report.confidence_score = confidence_score
             report.decision_anchor = decision_anchor
 
+        # Delete existing chapters before re-inserting (regeneration safety)
+        db.query(DDChapter).filter(
+            DDChapter.dd_report_id == report_id
+        ).delete(synchronize_session="fetch")
+        db.flush()
+
         # Batch persist chapters
         now = datetime.now(timezone.utc)
         chapter_models = []

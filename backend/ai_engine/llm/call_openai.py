@@ -93,3 +93,33 @@ def call_openai(
         error=str(last_exc) if last_exc else "unknown",
     )
     raise ValueError(f"LLM returned invalid JSON: {last_exc}") from last_exc
+
+
+def call_openai_text(
+    system_prompt: str,
+    user_content: str,
+    *,
+    max_tokens: int = 4000,
+    model: str | None = None,
+) -> str:
+    """Call OpenAI returning raw text (no JSON mode).
+
+    Used for DD Report chapters which generate markdown content.
+    """
+    from ai_engine.openai_client import create_completion
+    from app.core.config import settings
+
+    if not settings.openai_api_key:
+        raise ValueError("OPENAI_API_KEY not configured.")
+
+    effective_model = model or _MODEL
+
+    result = create_completion(
+        system_prompt=system_prompt,
+        user_prompt=user_content,
+        model=effective_model,
+        max_tokens=max_tokens,
+        temperature=0.2,
+    )
+
+    return result.text or ""
