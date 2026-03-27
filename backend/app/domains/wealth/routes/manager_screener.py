@@ -6,7 +6,8 @@ GET  /manager-screener/managers/{crd}/holdings — sector allocation, top 10, HH
 GET  /manager-screener/managers/{crd}/drift    — turnover timeline
 GET  /manager-screener/managers/{crd}/institutional — 13F reverse lookup
 GET  /manager-screener/managers/{crd}/universe-status — instrument universe status
-POST /manager-screener/managers/{crd}/add-to-universe — add manager to universe
+GET  /manager-screener/managers/{crd}/registered-funds — list N-PORT registered funds
+POST /manager-screener/managers/{crd}/add-to-universe — add fund to universe (fund-centric)
 POST /manager-screener/managers/compare        — compare 2-5 managers
 """
 
@@ -20,7 +21,7 @@ from datetime import date
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from sqlalchemy import func, select, text
+from sqlalchemy import String, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -49,6 +50,8 @@ from app.domains.wealth.schemas.manager_screener import (
     ManagerHoldingsRead,
     ManagerInstitutionalRead,
     ManagerProfileRead,
+    ManagerRegisteredFundItem,
+    ManagerRegisteredFundsResponse,
     ManagerRow,
     ManagerScreenerPage,
     ManagerTeamMemberRead,
@@ -64,6 +67,7 @@ from app.shared.models import (
     SecInstitutionalAllocation,
     SecManager,
     SecNportHolding,
+    SecRegisteredFund,
 )
 
 logger = structlog.get_logger()
@@ -838,6 +842,87 @@ async def get_brochure_key_sections(
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+#  GET /managers/{crd}/registered-funds
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@router.get(
+    "/managers/{crd}/registered-funds",
+    response_model=ManagerRegisteredFundsResponse,
+    summary="List registered funds (N-PORT filers) for a manager",
+)
+@route_cache(ttl=3600, global_key=True, key_prefix="mgr:reg_funds")
+async def get_registered_funds(
+    crd: str = Path(...),
+    db: AsyncSession = Depends(get_db_with_rls),
+    org_id: uuid.UUID = Depends(get_org_id),
+    actor: Actor = Depends(get_actor),
+) -> ManagerRegisteredFundsResponse:
+    """List registered funds (sec_registered_funds) with N-PORT data for a firm.
+
+    Returns only funds with last_nport_date IS NOT NULL.
+    For each fund, checks if already imported into the tenant's universe.
+    Ordered by total_assets DESC (largest first).
+    """
+    _require_investment_role(actor)
+    crd = _validate_crd(crd)
+    manager = await _get_manager(db, crd)
+
+    # Fetch registered funds for this firm (global table, no RLS)
+    funds_result = await db.execute(
+        select(SecRegisteredFund)
+        .where(SecRegisteredFund.crd_number == crd)
+        .where(SecRegisteredFund.last_nport_date.isnot(None))
+        .order_by(SecRegisteredFund.total_assets.desc().nulls_last())
+    )
+    funds = funds_result.scalars().all()
+
+    if not funds:
+        logger.info("mgr.no_registered_funds", crd=crd)
+        return ManagerRegisteredFundsResponse(
+            crd_number=crd,
+            firm_name=manager.firm_name,
+            funds=[],
+            total_funds=0,
+        )
+
+    # Check which fund CIKs are already in the tenant's universe (org-scoped)
+    fund_ciks = [f.cik for f in funds]
+    universe_map: dict[str, str] = {}  # cik → instrument_id
+    existing_result = await db.execute(
+        select(
+            Instrument.attributes["sec_cik"].astext.label("sec_cik"),
+            Instrument.instrument_id.cast(String).label("instrument_id"),
+        )
+        .where(Instrument.attributes["sec_cik"].astext.in_(fund_ciks))
+    )
+    for row in existing_result.mappings().all():
+        universe_map[row["sec_cik"]] = row["instrument_id"]
+
+    return ManagerRegisteredFundsResponse(
+        crd_number=crd,
+        firm_name=manager.firm_name,
+        funds=[
+            ManagerRegisteredFundItem(
+                cik=f.cik,
+                fund_name=f.fund_name,
+                fund_type=f.fund_type,
+                ticker=f.ticker,
+                isin=f.isin,
+                total_assets=f.total_assets,
+                inception_date=f.inception_date,
+                last_nport_date=f.last_nport_date,
+                aum_below_threshold=f.aum_below_threshold,
+                already_in_universe=f.cik in universe_map,
+                universe_instrument_id=universe_map.get(f.cik),
+            )
+            for f in funds
+        ],
+        total_funds=len(funds),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 #  POST /managers/{crd}/add-to-universe
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -846,7 +931,7 @@ async def get_brochure_key_sections(
     "/managers/{crd}/add-to-universe",
     response_model=ManagerUniverseRead,
     status_code=status.HTTP_201_CREATED,
-    summary="Add manager to instrument universe",
+    summary="Add a specific registered fund to instrument universe",
 )
 async def add_to_universe(
     body: ManagerToUniverseRequest,
@@ -855,37 +940,65 @@ async def add_to_universe(
     org_id: uuid.UUID = Depends(get_org_id),
     actor: Actor = Depends(get_actor),
 ) -> ManagerUniverseRead:
+    """Add a specific fund (by fund_cik) to the tenant's instrument universe.
+
+    Fund-centric: requires fund_cik of the N-PORT fund, never uses firm CIK.
+    The fund_cik comes from GET /managers/{crd}/registered-funds.
+
+    attributes["sec_cik"] = fund CIK (fund, not firm) — enables N-PORT in DD Report.
+    attributes["sec_universe"] = "registered_us"
+    """
     _require_investment_role(actor)
     crd = _validate_crd(crd)
 
-    # Check if already in universe
-    existing_stmt = (
-        select(Instrument)
-        .where(Instrument.attributes["source"].astext == "sec_manager")
-        .where(Instrument.attributes["sec_crd_number"].astext == crd)
+    # Validate firm exists
+    manager = await _get_manager(db, crd)
+
+    # Validate that fund exists and belongs to this firm
+    fund_result = await db.execute(
+        select(SecRegisteredFund)
+        .where(SecRegisteredFund.cik == body.fund_cik)
+        .where(SecRegisteredFund.crd_number == crd)
     )
-    existing_result = await db.execute(existing_stmt)
+    fund = fund_result.scalar_one_or_none()
+    if not fund:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Fund with CIK {body.fund_cik} not found for manager {crd}",
+        )
+
+    # Check if already imported (idempotency via sec_cik)
+    existing_result = await db.execute(
+        select(Instrument)
+        .where(Instrument.attributes["sec_cik"].astext == body.fund_cik)
+        .where(Instrument.organization_id == org_id)
+    )
     if existing_result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Manager {crd} already in universe",
+            detail=f"Fund {fund.fund_name} (CIK {body.fund_cik}) already in universe",
         )
 
-    # Fetch manager to get name and CIK
-    manager = await _get_manager(db, crd)
-
     instrument = Instrument(
+        organization_id=org_id,
         instrument_type="fund",
-        name=manager.firm_name,
+        name=fund.fund_name,
+        ticker=fund.ticker,
+        isin=fund.isin,
         asset_class=body.asset_class,
         geography=body.geography,
-        currency=body.currency,
+        currency=fund.currency or body.currency,
         block_id=body.block_id,
         approval_status="pending",
         attributes={
-            "source": "sec_manager",
-            "sec_crd_number": crd,
-            "sec_cik": manager.cik,
+            "sec_cik": body.fund_cik,
+            "sec_crd": crd,
+            "sec_universe": "registered_us",
+            "manager_name": manager.firm_name,
+            "fund_type": fund.fund_type,
+            "source": "manager_screener",
+            "aum_usd": fund.total_assets,
+            "inception_date": fund.inception_date.isoformat() if fund.inception_date else None,
         },
     )
     db.add(instrument)

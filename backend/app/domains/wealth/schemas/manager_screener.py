@@ -23,10 +23,11 @@ class ManagerCompareRequest(BaseModel):
 
 
 class ManagerToUniverseRequest(BaseModel):
-    """Add a SEC manager to the tenant's instrument universe."""
+    """Add a specific registered fund to the tenant's instrument universe."""
 
-    asset_class: str
-    geography: str
+    fund_cik: str  # CIK of the specific fund (N-PORT), not the firm
+    asset_class: str = "alternatives"
+    geography: str = "north_america"
     currency: str = "USD"
     block_id: str | None = None
 
@@ -268,3 +269,31 @@ class BrochureKeySection(BaseModel):
 class ManagerBrochureRead(BaseModel):
     crd_number: str
     sections: dict[str, BrochureKeySection]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Registered funds (fund-centric add-to-universe)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class ManagerRegisteredFundItem(BaseModel):
+    """A registered fund (N-PORT filer) from the manager's firm."""
+
+    cik: str
+    fund_name: str
+    fund_type: str
+    ticker: str | None = None
+    isin: str | None = None
+    total_assets: int | None = None
+    inception_date: date | None = None
+    last_nport_date: date | None = None
+    aum_below_threshold: bool = False
+    already_in_universe: bool = False
+    universe_instrument_id: str | None = None
+
+
+class ManagerRegisteredFundsResponse(BaseModel):
+    crd_number: str
+    firm_name: str
+    funds: list[ManagerRegisteredFundItem]
+    total_funds: int

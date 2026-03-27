@@ -309,6 +309,7 @@ class TestManagerScreenerEndpoints:
             "/api/v1/manager-screener/managers/NONEXISTENT999/add-to-universe",
             headers=DEV_ACTOR_HEADER,
             json={
+                "fund_cik": "0000000000",
                 "asset_class": "equity",
                 "geography": "US",
                 "currency": "USD",
@@ -355,7 +356,7 @@ class TestManagerScreenerEndpoints:
         resp = await client.post(
             "/api/v1/manager-screener/managers/CRD1/add-to-universe",
             headers=_READONLY_HEADER,
-            json={"asset_class": "equity", "geography": "US"},
+            json={"fund_cik": "0000000000", "asset_class": "equity", "geography": "US"},
         )
         assert resp.status_code == 403
 
