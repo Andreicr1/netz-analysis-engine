@@ -69,13 +69,12 @@ async def generate_long_form_report(
 
     # Try to acquire generation slot
     sem = _get_semaphore()
-    try:
-        await asyncio.wait_for(sem.acquire(), timeout=0)
-    except asyncio.TimeoutError:
+    if sem.locked():
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=f"Too many concurrent long-form reports (max {_MAX_CONCURRENT})",
         )
+    await sem.acquire()
 
     # Register job for SSE
     job_id = f"lfr-{portfolio_id}-{uuid.uuid4().hex[:8]}"

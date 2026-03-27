@@ -233,13 +233,12 @@ async def stream_worker_logs(
     sem = _get_worker_log_semaphore()
 
     # Non-blocking acquire: if all slots are taken, return 429 immediately.
-    try:
-        await asyncio.wait_for(sem.acquire(), timeout=0)
-    except (asyncio.TimeoutError, TimeoutError):
+    if sem.locked():
         return JSONResponse(
             status_code=429,
             content={"detail": "Too many SSE connections"},
         )
+    await sem.acquire()
 
     # Semaphore slot acquired — release it when the generator finishes.
     async def event_generator():

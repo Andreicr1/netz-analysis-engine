@@ -19,7 +19,7 @@ VALID_PROFILES = {"conservative", "moderate", "growth"}
 # The semaphore is created lazily on first access inside an async context.
 
 _content_semaphore: asyncio.Semaphore | None = None
-_MAX_CONCURRENT_CONTENT_TASKS = 8
+_MAX_CONCURRENT_CONTENT_TASKS = 4
 
 
 def _get_content_semaphore() -> asyncio.Semaphore:
@@ -37,14 +37,7 @@ async def require_content_slot() -> None:
     slot by calling ``_get_content_semaphore().release()`` in a finally block.
     """
     sem = _get_content_semaphore()
-    import logging as _log
-    _log.getLogger(__name__).info(
-        "content_semaphore_acquire value=%s locked=%s pid=%s",
-        sem._value, sem.locked(), __import__("os").getpid(),
-    )
-    try:
-        await asyncio.wait_for(sem.acquire(), timeout=0)
-    except asyncio.TimeoutError:
+    if sem.locked():
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=(
@@ -53,6 +46,7 @@ async def require_content_slot() -> None:
                 "Please retry shortly."
             ),
         )
+    await sem.acquire()
 
 
 def validate_profile(profile: str) -> str:

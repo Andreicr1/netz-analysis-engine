@@ -71,9 +71,7 @@ async def _require_dd_slot() -> None:
     the slot by calling ``_get_dd_semaphore().release()`` in a finally block.
     """
     sem = _get_dd_semaphore()
-    try:
-        await asyncio.wait_for(sem.acquire(), timeout=0)
-    except asyncio.TimeoutError:
+    if sem.locked():
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=(
@@ -82,6 +80,7 @@ async def _require_dd_slot() -> None:
                 "Please retry shortly."
             ),
         )
+    await sem.acquire()
 
 
 @router.get(
