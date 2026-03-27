@@ -91,6 +91,27 @@ name = "nport_ingestion"
 schedule = "0 2 * * 0"
 command = "python -m app.workers.cli nport_ingestion"
 
+# ── Weekly — Sunday 03:00 UTC (SEC brochures + fund discovery) ─
+[[crons]]
+name = "brochure_download"
+schedule = "0 3 * * 0"
+command = "python -m app.workers.cli brochure_download"
+
+[[crons]]
+name = "brochure_extract"
+schedule = "30 3 * * 0"
+command = "python -m app.workers.cli brochure_extract"
+
+[[crons]]
+name = "nport_fund_discovery"
+schedule = "0 4 * * 0"
+command = "python -m app.workers.cli nport_fund_discovery"
+
+[[crons]]
+name = "nport_ticker_resolution"
+schedule = "30 4 * * 0"
+command = "python -m app.workers.cli nport_ticker_resolution"
+
 # ── Weekly — Monday 04:00 UTC ────────────────────────────────
 [[crons]]
 name = "esma_ingestion"
