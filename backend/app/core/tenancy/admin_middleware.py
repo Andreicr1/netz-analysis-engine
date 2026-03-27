@@ -24,9 +24,8 @@ async def get_db_for_tenant(org_id: uuid.UUID) -> AsyncGenerator[AsyncSession, N
         await session.execute(text("SET LOCAL app.admin_mode = 'true'"))
         # Validate UUID and use string interpolation safely — SET LOCAL
         # does not support parameter binding in asyncpg.
-        oid = str(uuid.UUID(str(org_id)))  # Re-validate as UUID
+        safe_oid = str(uuid.UUID(str(org_id))).replace("'", "")
         await session.execute(
-            text("SET LOCAL app.current_organization_id = :oid"),
-            {"oid": oid},
+            text(f"SET LOCAL app.current_organization_id = '{safe_oid}'"),
         )
         yield session

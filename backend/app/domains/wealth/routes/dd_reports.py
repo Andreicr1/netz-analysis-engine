@@ -647,7 +647,8 @@ def _sync_generate(
     with sync_session_factory() as db:
         db.expire_on_commit = False
         from sqlalchemy import text
-        db.execute(text("SET LOCAL app.current_organization_id = :oid"), {"oid": org_id})
+        safe_oid = str(org_id).replace("'", "")
+        db.execute(text(f"SET LOCAL app.current_organization_id = '{safe_oid}'"))
         result = engine.generate(
             db,
             instrument_id=fund_id,

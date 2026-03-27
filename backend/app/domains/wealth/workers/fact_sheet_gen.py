@@ -132,7 +132,8 @@ def _generate_for_portfolio(
 
     with sync_session_factory() as db:
         db.expire_on_commit = False
-        db.execute(text("SET LOCAL app.current_organization_id = :oid"), {"oid": organization_id})
+        safe_oid = str(organization_id).replace("'", "")
+        db.execute(text(f"SET LOCAL app.current_organization_id = '{safe_oid}'"))
 
         for fmt in ("executive", "institutional"):
             pdf_buf = engine.generate(

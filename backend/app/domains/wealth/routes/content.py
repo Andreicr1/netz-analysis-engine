@@ -386,9 +386,9 @@ async def _run_content_generation(
             from app.core.db.session import async_session_factory
 
             async with async_session_factory() as db:
+                safe_oid = str(uuid.UUID(org_id)).replace("'", "")
                 await db.execute(
-                    text("SET LOCAL app.current_organization_id = :oid"),
-                    {"oid": str(uuid.UUID(org_id))},  # Re-validate UUID
+                    text(f"SET LOCAL app.current_organization_id = '{safe_oid}'"),
                 )
                 stmt = select(WealthContent).where(WealthContent.id == uuid.UUID(content_id))
                 row = await db.execute(stmt)
@@ -415,9 +415,9 @@ async def _run_content_generation(
             # Mark content as failed so the UI can display the error
             try:
                 async with async_session_factory() as err_db:
+                    safe_oid2 = str(uuid.UUID(org_id)).replace("'", "")
                     await err_db.execute(
-                        text("SET LOCAL app.current_organization_id = :oid"),
-                        {"oid": str(uuid.UUID(org_id))},
+                        text(f"SET LOCAL app.current_organization_id = '{safe_oid2}'"),
                     )
                     stmt = select(WealthContent).where(WealthContent.id == uuid.UUID(content_id))
                     row = await err_db.execute(stmt)
@@ -451,7 +451,8 @@ def _sync_generate_content(
     with sync_session_factory() as db:
         db.expire_on_commit = False
         from sqlalchemy import text
-        db.execute(text("SET LOCAL app.current_organization_id = :oid"), {"oid": org_id})
+        safe_oid = str(org_id).replace("'", "")
+        db.execute(text(f"SET LOCAL app.current_organization_id = '{safe_oid}'"))
 
         if content_type == "investment_outlook":
             from vertical_engines.wealth.investment_outlook import InvestmentOutlook
