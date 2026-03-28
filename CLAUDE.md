@@ -211,7 +211,8 @@ Background workers ingest all external time-series data into hypertables. Routes
 | `portfolio_nav_synthesizer` | 900_030 | org | `model_portfolio_nav` (1mo chunks) | Computed (weighted NAV from nav_timeseries) | Daily |
 | `nport_fund_discovery` | 900_024 | global | `sec_registered_funds`, `sec_fund_classes` | SEC EDGAR N-PORT headers | Weekly |
 | `esma_ingestion` | — | global | `esma_funds`, `esma_managers` | ESMA Fund Register | Weekly |
-| `wealth_embedding` | 900_041 | global | `wealth_vector_chunks` | OpenAI text-embedding-3-large (5 sources) | Daily |
+| `wealth_embedding` | 900_041 | global | `wealth_vector_chunks` | OpenAI text-embedding-3-large (12 sources) | Daily |
+| `sec_bulk_ingestion` | 900_050 | global | sec_etfs, sec_bdcs, sec_money_market_funds, sec_mmf_metrics, sec_registered_funds, strategy_label | SEC DERA bulk ZIPs (N-CEN, N-MFP, N-PORT, BDC) | Quarterly |
 
 **Credit market_data** reads all macro data from `macro_data` hypertable (zero FRED API calls at runtime, `fred_client.py` eliminated). Regional Case-Shiller (20 metros) also from `macro_data`.
 

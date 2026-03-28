@@ -835,3 +835,33 @@ async def trigger_run_nport_fund_discovery(
     )
 
 
+@router.post(
+    "/run-sec-bulk-ingestion",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger quarterly SEC bulk data ingestion",
+    description=(
+        "Orchestrates quarterly refresh of all SEC EDGAR bulk datasets: "
+        "N-CEN (registered funds + ETFs), N-MFP (money market), N-PORT, "
+        "BDC list, and strategy_label backfill. Downloads ZIPs from SEC DERA, "
+        "extracts, and runs all seed pipelines. "
+        "Uses advisory lock 900_050. Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_sec_bulk_ingestion(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.sec_bulk_ingestion import run_sec_bulk_ingestion
+
+    return await _dispatch_worker(
+        background_tasks, "run-sec-bulk-ingestion", "global",
+        run_sec_bulk_ingestion,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )
+
+
