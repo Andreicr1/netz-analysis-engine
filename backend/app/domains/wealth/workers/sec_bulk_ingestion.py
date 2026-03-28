@@ -23,7 +23,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import io
-import os
 import shutil
 import tempfile
 import zipfile
@@ -135,7 +134,8 @@ async def _download_and_extract(
 
 async def _step_ncen(ncen_dir: Path, db_session) -> dict:
     """Process N-CEN: enrich sec_registered_funds + sec_etfs."""
-    from scripts.seed_etfs_ncen import _build_etf_rows, _parse_all as parse_etfs
+    from scripts.seed_etfs_ncen import _build_etf_rows
+    from scripts.seed_etfs_ncen import _parse_all as parse_etfs
     from scripts.seed_registered_funds_ncen import (
         _discover_dirs,
         _parse_all_quarters,
@@ -170,7 +170,8 @@ async def _step_nmfp(nmfp_dir: Path) -> dict:
     """Process N-MFP: update sec_money_market_funds + sec_mmf_metrics."""
     stats = {}
     try:
-        from scripts.seed_mmf_catalog import _build_mmf_rows, _parse_all as parse_mmf
+        from scripts.seed_mmf_catalog import _build_mmf_rows
+        from scripts.seed_mmf_catalog import _parse_all as parse_mmf
 
         submission, series_info = parse_mmf(nmfp_dir)
         rows = _build_mmf_rows(submission, series_info)
