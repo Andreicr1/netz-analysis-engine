@@ -4,6 +4,12 @@ Downloads Form ADV PDFs for managers with private funds, parses
 Section 7.B.(1) to extract individual fund details, and upserts
 into sec_manager_funds via direct DB connection.
 
+Fund type detection uses **checkbox image analysis**: SEC Form ADV PDFs
+render Q10 checkboxes as small JPEG images (17×21 px). The checked
+checkbox uses a different image xref than the unchecked ones. We detect
+the minority xref among the 6–7 checkbox images to identify the selected
+fund type. Fallback: ``sec_managers`` fund-type counters.
+
 Usage (local seed):
     python -m scripts.seed_private_funds --download --parse --upsert
     python -m scripts.seed_private_funds --parse --upsert   # skip download if PDFs exist
@@ -20,6 +26,7 @@ import os
 import re
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 
 import structlog
@@ -175,43 +182,129 @@ _GAV_RE = re.compile(
 _INVESTOR_RE = re.compile(
     r"Approximate number of.*?beneficial owners:\s*\n?\s*(\d+)", re.IGNORECASE,
 )
-_FUND_TYPE_RE = re.compile(
-    r"What type of fund.*?\n(.*?)(?:\n\s*NOTE|\n\s*11\.)", re.IGNORECASE | re.DOTALL,
-)
 _FOF_RE = re.compile(
     r'Is this private fund a .fund of funds.\?\s*\n',
     re.IGNORECASE,
 )
 
-# Fund type keywords to detect from the checkbox section
-_FUND_TYPE_KEYWORDS = [
+# ── Q10 fund type: checkbox image detection ──────────────────────
+#
+# SEC Form ADV PDFs render Q10 as 6–7 small JPEG images (17×21 px)
+# next to text labels. Checked vs unchecked use different image xrefs.
+# We detect the minority xref (= checked) and map by X-position to labels.
+
+_Q10_LABEL_KEYWORDS: list[tuple[str, str]] = [
     ("hedge fund", "Hedge Fund"),
-    ("private equity fund", "Private Equity Fund"),
-    ("venture capital fund", "Venture Capital Fund"),
-    ("real estate fund", "Real Estate Fund"),
     ("liquidity fund", "Liquidity Fund"),
+    ("private equity fund", "Private Equity Fund"),
+    ("real estate fund", "Real Estate Fund"),
     ("securitized asset fund", "Securitized Asset Fund"),
-    ("other private fund", "Other Private Fund"),
+    ("venture capital fund", "Venture Capital Fund"),
 ]
 
 
-def _extract_fund_type(text_block: str) -> str | None:
-    """Extract fund type from the Q10 checkbox section."""
-    lower = text_block.lower()
-    for keyword, label in _FUND_TYPE_KEYWORDS:
-        if keyword in lower:
-            return label
-    return None
+def _detect_fund_types_on_page(page) -> list[tuple[str, float]]:  # noqa: ANN001
+    """Detect checked fund types on a PDF page via checkbox image xrefs.
+
+    Returns list of (fund_type_label, checkbox_x) for checked boxes.
+    Empty list if detection fails.
+    """
+    # 1. Find Q10 label positions by matching span text
+    blocks = page.get_text("dict")
+    labels: list[tuple[str, float, float]] = []  # (label, x, y)
+    for block in blocks.get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                t = span["text"].strip().lower()
+                bbox = span["bbox"]
+                for kw, lbl in _Q10_LABEL_KEYWORDS:
+                    if t == kw:
+                        labels.append((lbl, bbox[0], bbox[1]))
+                        break
+                # "Other private fund:" — text starts with "other"
+                if labels and t.startswith("other") and abs(bbox[1] - labels[0][2]) < 2:
+                    labels.append(("Other Private Fund", bbox[0], bbox[1]))
+
+    if len(labels) < 5:
+        return []
+
+    q10_y = labels[0][2]
+
+    # 2. Find small images (checkboxes) aligned with Q10 labels
+    checkboxes: list[tuple[float, int]] = []  # (x, xref)
+    for img in page.get_image_info(xrefs=True):
+        if img["width"] <= 20 and img["height"] <= 25:
+            img_y = img["bbox"][1]
+            if abs(img_y - q10_y + 8) < 15:
+                checkboxes.append((img["bbox"][0], img["xref"]))
+
+    if len(checkboxes) < 6:
+        return []
+
+    # 3. Majority xref = unchecked, minority = checked
+    xref_counts = Counter(xr for _, xr in checkboxes)
+    if len(xref_counts) < 2:
+        return []  # all same — can't distinguish
+
+    unchecked_xref = xref_counts.most_common(1)[0][0]
+    checked = [(x, xr) for x, xr in checkboxes if xr != unchecked_xref]
+
+    results = []
+    for cx, _ in checked:
+        nearest = min(labels, key=lambda t: abs(t[1] - cx - 15))
+        results.append((nearest[0], cx))
+
+    return results
 
 
-def _parse_section_7b(text: str) -> list[dict]:
-    """Parse all private funds from Section 7.B.(1) text."""
+def _build_page_fund_type_map(doc) -> dict[int, str]:  # noqa: ANN001
+    """Build page_number → fund_type map for all Q10 sections in the PDF.
+
+    Each fund in Section 7.B.(1) occupies ~1 page. We scan every page
+    that contains "What type of fund" and detect the checked checkbox.
+    Returns {page_index: fund_type_label}.
+    """
+    page_types: dict[int, str] = {}
+
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+        text = page.get_text("text")
+        if "what type of fund" not in text.lower():
+            continue
+
+        detected = _detect_fund_types_on_page(page)
+        if detected:
+            # Usually one checked box per Q10; take the first
+            page_types[page_num] = detected[0][0]
+
+    return page_types
+
+
+def _parse_section_7b(
+    text: str,
+    page_fund_types: dict[int, str] | None = None,
+) -> list[dict]:
+    """Parse all private funds from Section 7.B.(1) text.
+
+    ``page_fund_types`` maps page indices to detected fund types from
+    checkbox image analysis.  Fund sections are matched to pages by
+    order (fund 0 → first Q10 page, fund 1 → second Q10 page, etc.).
+    """
     funds: list[dict] = []
+
+    # Build ordered list of fund types from page map
+    ordered_types: list[str] = []
+    if page_fund_types:
+        ordered_types = [
+            page_fund_types[p] for p in sorted(page_fund_types)
+        ]
 
     # Split on "A. PRIVATE FUND" markers — each is a new fund
     sections = re.split(r"A\.\s*PRIVATE FUND\b", text)
 
-    for section in sections[1:]:  # skip text before first fund
+    for idx, section in enumerate(sections[1:]):  # skip text before first fund
         fund: dict = {}
 
         # Fund name (Q1a)
@@ -242,19 +335,14 @@ def _parse_section_7b(text: str) -> list[dict]:
             except ValueError:
                 pass
 
-        # Fund type (Q10)
-        m = _FUND_TYPE_RE.search(section)
-        if m:
-            fund["fund_type"] = _extract_fund_type(m.group(1))
+        # Fund type (Q10) — from checkbox image detection
+        if idx < len(ordered_types):
+            fund["fund_type"] = ordered_types[idx]
 
         # Fund of funds (Q8)
         m = _FOF_RE.search(section)
         if m:
-            # Look for Yes/No after the question — heuristic
             after = section[m.end():m.end() + 200].strip()
-            # In the PDF text, checked boxes often appear as text
-            # "Yes No" with only one highlighted, but in text extraction
-            # we often just see both. Use NOTE context.
             fund["is_fund_of_funds"] = "yes" in after[:50].lower() and "no" not in after[:10].lower()
 
         if fund.get("fund_name"):
@@ -264,7 +352,10 @@ def _parse_section_7b(text: str) -> list[dict]:
 
 
 def parse_pdfs() -> int:
-    """Parse all downloaded PDFs and write JSONL."""
+    """Parse all downloaded PDFs and write JSONL.
+
+    Uses checkbox image analysis for fund type detection (Q10).
+    """
     import fitz  # pymupdf
 
     PARSED_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -273,6 +364,8 @@ def parse_pdfs() -> int:
     total = len(pdf_files)
     fund_count = 0
     manager_count = 0
+    img_detect_ok = 0
+    img_detect_fail = 0
 
     with open(PARSED_FILE, "w", encoding="utf-8") as out:
         for i, pdf_path in enumerate(pdf_files):
@@ -280,36 +373,45 @@ def parse_pdfs() -> int:
 
             try:
                 doc = fitz.open(str(pdf_path))
-                full_text = "\n".join(
-                    page.get_text("text") for page in doc
-                )
-                doc.close()
             except Exception as e:
                 logger.warning("pdf_parse_error", crd=crd, error=str(e))
                 continue
 
-            # Check if this adviser has private funds
-            if "SECTION 7.B.(1)" not in full_text:
-                continue
+            try:
+                full_text = "\n".join(
+                    page.get_text("text") for page in doc
+                )
 
-            # Extract only the Section 7.B.(1) portion
-            start = full_text.index("SECTION 7.B.(1)")
-            # Section ends at Section 7.B.(2) or Item 8 or SCHEDULE A
-            end = len(full_text)
-            for marker in ["SECTION 7.B.(2)", "Item 8 ", "SCHEDULE A", "Schedule A"]:
-                idx = full_text.find(marker, start + 100)
-                if idx != -1 and idx < end:
-                    end = idx
+                # Check if this adviser has private funds
+                if "SECTION 7.B.(1)" not in full_text:
+                    continue
 
-            section_text = full_text[start:end]
-            funds = _parse_section_7b(section_text)
+                # Detect fund types via checkbox images (before closing doc)
+                page_fund_types = _build_page_fund_type_map(doc)
+                if page_fund_types:
+                    img_detect_ok += 1
+                else:
+                    img_detect_fail += 1
 
-            if funds:
-                manager_count += 1
-                for f in funds:
-                    f["crd_number"] = crd
-                    out.write(json.dumps(f, ensure_ascii=False) + "\n")
-                    fund_count += 1
+                # Extract only the Section 7.B.(1) portion
+                start = full_text.index("SECTION 7.B.(1)")
+                end = len(full_text)
+                for marker in ["SECTION 7.B.(2)", "Item 8 ", "SCHEDULE A", "Schedule A"]:
+                    idx = full_text.find(marker, start + 100)
+                    if idx != -1 and idx < end:
+                        end = idx
+
+                section_text = full_text[start:end]
+                funds = _parse_section_7b(section_text, page_fund_types)
+
+                if funds:
+                    manager_count += 1
+                    for f in funds:
+                        f["crd_number"] = crd
+                        out.write(json.dumps(f, ensure_ascii=False) + "\n")
+                        fund_count += 1
+            finally:
+                doc.close()
 
             if (i + 1) % 500 == 0:
                 logger.info(
@@ -317,6 +419,8 @@ def parse_pdfs() -> int:
                     progress=f"{i + 1}/{total}",
                     managers=manager_count,
                     funds=fund_count,
+                    img_ok=img_detect_ok,
+                    img_fail=img_detect_fail,
                 )
 
     logger.info(
@@ -324,6 +428,8 @@ def parse_pdfs() -> int:
         total_pdfs=total,
         managers_with_funds=manager_count,
         total_funds=fund_count,
+        img_detect_ok=img_detect_ok,
+        img_detect_fail=img_detect_fail,
     )
     return fund_count
 

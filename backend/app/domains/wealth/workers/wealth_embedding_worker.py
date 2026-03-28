@@ -559,26 +559,33 @@ async def _embed_sec_13f_summaries(db: AsyncSession) -> dict:
 
 
 async def _embed_sec_private_funds(db: AsyncSession) -> dict:
-    """Embed private fund portfolios → entity_type='firm', source_type='sec_private_funds'."""
+    """Embed private fund portfolios → entity_type='firm', source_type='sec_private_funds'.
+
+    AUM floor: only managers with combined GAV ≥ $1B are embedded.
+    """
     result = await db.execute(text("""
         WITH fund_agg AS (
             SELECT f.crd_number,
                    COUNT(*) AS fund_count,
                    SUM(f.gross_asset_value) AS total_gav,
                    COUNT(*) FILTER (WHERE f.is_fund_of_funds) AS fof_count,
-                   string_agg(DISTINCT f.fund_type, ', ' ORDER BY f.fund_type) FILTER (WHERE f.fund_type IS NOT NULL) AS type_breakdown,
+                   string_agg(DISTINCT f.strategy_label, ', ' ORDER BY f.strategy_label)
+                       FILTER (WHERE f.strategy_label IS NOT NULL) AS strategy_breakdown,
+                   string_agg(DISTINCT f.fund_type, ', ' ORDER BY f.fund_type)
+                       FILTER (WHERE f.fund_type IS NOT NULL) AS type_breakdown,
                    string_agg(
                        f.fund_name ||
-                       COALESCE(' (' || f.fund_type || ')', '') ||
+                       COALESCE(' [' || f.strategy_label || ']', '') ||
                        ': GAV ' || COALESCE('$' || TRIM(TO_CHAR(f.gross_asset_value, '999,999,999,999')), 'N/A') ||
                        ', ' || COALESCE(f.investor_count::text, '?') || ' investors',
                        '; ' ORDER BY f.gross_asset_value DESC NULLS LAST
                    ) AS fund_list
             FROM sec_manager_funds f
             GROUP BY f.crd_number
+            HAVING SUM(f.gross_asset_value) >= 1000000000
         )
         SELECT fa.crd_number, fa.fund_count, fa.total_gav, fa.fof_count,
-               fa.type_breakdown, fa.fund_list,
+               fa.strategy_breakdown, fa.type_breakdown, fa.fund_list,
                m.firm_name
         FROM fund_agg fa
         JOIN sec_managers m ON m.crd_number = fa.crd_number
@@ -599,7 +606,9 @@ async def _embed_sec_private_funds(db: AsyncSession) -> dict:
             f"Private fund portfolio of {r.firm_name} (CRD {r.crd_number}): "
             f"{r.fund_count} private funds, total GAV: {_format_aum(r.total_gav)}.\n\n"
             f"Funds:\n{r.fund_list or 'N/A'}.\n\n"
-            f"Fund-of-funds: {r.fof_count}. Fund types: {r.type_breakdown or 'N/A'}."
+            f"Fund-of-funds: {r.fof_count}. "
+            f"Strategies: {r.strategy_breakdown or 'N/A'}. "
+            f"SEC types: {r.type_breakdown or 'N/A'}."
         )
         texts.append(text_content)
 

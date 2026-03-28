@@ -173,6 +173,7 @@ class SecManagerFund(Base, IdMixin):
     fund_id: Mapped[str | None] = mapped_column(Text)
     gross_asset_value: Mapped[int | None] = mapped_column(BigInteger)
     fund_type: Mapped[str | None] = mapped_column(Text)
+    strategy_label: Mapped[str | None] = mapped_column(Text)
     is_fund_of_funds: Mapped[bool | None] = mapped_column(Boolean)
     investor_count: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[dt.datetime] = mapped_column(
