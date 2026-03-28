@@ -556,6 +556,232 @@ class SecRegisteredFund(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )
 
+    # N-CEN classification flags
+    is_index: Mapped[bool | None] = mapped_column(Boolean)
+    is_non_diversified: Mapped[bool | None] = mapped_column(Boolean)
+    is_target_date: Mapped[bool | None] = mapped_column(Boolean)
+    is_fund_of_fund: Mapped[bool | None] = mapped_column(Boolean)
+    is_master_feeder: Mapped[bool | None] = mapped_column(Boolean)
+    lei: Mapped[str | None] = mapped_column(String)
+
+    # Costs
+    management_fee: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    net_operating_expenses: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    has_expense_limit: Mapped[bool | None] = mapped_column(Boolean)
+    has_expense_waived: Mapped[bool | None] = mapped_column(Boolean)
+
+    # Performance (annual, from N-CEN filing period)
+    return_before_fees: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    return_after_fees: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    return_stdv_before_fees: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    return_stdv_after_fees: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+
+    # AUM & NAV
+    monthly_avg_net_assets: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))
+    daily_avg_net_assets: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))
+    nav_per_share: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+    market_price_per_share: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+
+    # Operational
+    is_sec_lending_authorized: Mapped[bool | None] = mapped_column(Boolean)
+    did_lend_securities: Mapped[bool | None] = mapped_column(Boolean)
+    has_line_of_credit: Mapped[bool | None] = mapped_column(Boolean)
+    has_interfund_borrowing: Mapped[bool | None] = mapped_column(Boolean)
+    has_swing_pricing: Mapped[bool | None] = mapped_column(Boolean)
+    did_pay_broker_research: Mapped[bool | None] = mapped_column(Boolean)
+
+    # N-CEN metadata
+    ncen_accession_number: Mapped[str | None] = mapped_column(String)
+    ncen_report_date: Mapped[dt.date | None] = mapped_column(Date)
+    ncen_fund_id: Mapped[str | None] = mapped_column(String)
+
+
+class SecEtf(Base):
+    """ETF catalog derived from N-CEN filings.
+
+    GLOBAL TABLE: No organization_id, no RLS.
+    PK is series_id (S000xxxxx).  Seeded from EDGAR N-CEN datasets.
+    """
+
+    __tablename__ = "sec_etfs"
+
+    series_id: Mapped[str] = mapped_column(String, primary_key=True)
+    cik: Mapped[str] = mapped_column(String, nullable=False)
+    fund_id: Mapped[str | None] = mapped_column(String)
+    fund_name: Mapped[str] = mapped_column(String, nullable=False)
+    lei: Mapped[str | None] = mapped_column(String)
+    ticker: Mapped[str | None] = mapped_column(String)
+    isin: Mapped[str | None] = mapped_column(String)
+
+    strategy_label: Mapped[str | None] = mapped_column(String)
+    asset_class: Mapped[str | None] = mapped_column(String)
+    index_tracked: Mapped[str | None] = mapped_column(String)
+    is_index: Mapped[bool | None] = mapped_column(Boolean, server_default="true")
+    is_in_kind_etf: Mapped[bool | None] = mapped_column(Boolean)
+
+    creation_unit_size: Mapped[int | None] = mapped_column(Integer)
+    pct_in_kind_creation: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    pct_in_kind_redemption: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    tracking_difference_gross: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    tracking_difference_net: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+
+    management_fee: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    net_operating_expenses: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    return_before_fees: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    return_after_fees: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+
+    monthly_avg_net_assets: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))
+    daily_avg_net_assets: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))
+    nav_per_share: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+    market_price_per_share: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+
+    is_sec_lending_authorized: Mapped[bool | None] = mapped_column(Boolean)
+    did_lend_securities: Mapped[bool | None] = mapped_column(Boolean)
+    has_expense_limit: Mapped[bool | None] = mapped_column(Boolean)
+
+    ncen_report_date: Mapped[dt.date | None] = mapped_column(Date)
+    domicile: Mapped[str] = mapped_column(String(2), nullable=False, server_default="US")
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="USD")
+    inception_date: Mapped[dt.date | None] = mapped_column(Date)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+
+
+class SecBdc(Base):
+    """BDC (Business Development Company) catalog from N-CEN filings.
+
+    GLOBAL TABLE: No organization_id, no RLS.
+    PK is series_id (S000xxxxx or CIK fallback).
+    """
+
+    __tablename__ = "sec_bdcs"
+
+    series_id: Mapped[str] = mapped_column(String, primary_key=True)
+    cik: Mapped[str] = mapped_column(String, nullable=False)
+    fund_id: Mapped[str | None] = mapped_column(String)
+    fund_name: Mapped[str] = mapped_column(String, nullable=False)
+    lei: Mapped[str | None] = mapped_column(String)
+    ticker: Mapped[str | None] = mapped_column(String)
+    isin: Mapped[str | None] = mapped_column(String)
+
+    strategy_label: Mapped[str | None] = mapped_column(String, server_default="Private Credit")
+    investment_focus: Mapped[str | None] = mapped_column(String)
+
+    management_fee: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    net_operating_expenses: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    return_before_fees: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    return_after_fees: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+
+    monthly_avg_net_assets: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))
+    daily_avg_net_assets: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))
+    nav_per_share: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+    market_price_per_share: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+
+    is_externally_managed: Mapped[bool | None] = mapped_column(Boolean)
+    is_sec_lending_authorized: Mapped[bool | None] = mapped_column(Boolean)
+    has_line_of_credit: Mapped[bool | None] = mapped_column(Boolean)
+    has_interfund_borrowing: Mapped[bool | None] = mapped_column(Boolean)
+
+    ncen_report_date: Mapped[dt.date | None] = mapped_column(Date)
+    domicile: Mapped[str] = mapped_column(String(2), nullable=False, server_default="US")
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="USD")
+    inception_date: Mapped[dt.date | None] = mapped_column(Date)
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+
+
+class SecMoneyMarketFund(Base):
+    """Money Market Fund catalog from N-MFP filings.
+
+    GLOBAL TABLE: No organization_id, no RLS.
+    PK is series_id (S000xxxxx).
+    """
+
+    __tablename__ = "sec_money_market_funds"
+
+    series_id: Mapped[str] = mapped_column(String, primary_key=True)
+    cik: Mapped[str] = mapped_column(String, nullable=False)
+    accession_number: Mapped[str | None] = mapped_column(String)
+    fund_name: Mapped[str] = mapped_column(String, nullable=False)
+    lei_series: Mapped[str | None] = mapped_column(String)
+    lei_registrant: Mapped[str | None] = mapped_column(String)
+
+    mmf_category: Mapped[str] = mapped_column(String, nullable=False)
+    strategy_label: Mapped[str | None] = mapped_column(String)
+    is_govt_fund: Mapped[bool | None] = mapped_column(Boolean)
+    is_retail: Mapped[bool | None] = mapped_column(Boolean)
+    is_exempt_retail: Mapped[bool | None] = mapped_column(Boolean)
+
+    weighted_avg_maturity: Mapped[int | None] = mapped_column(Integer)
+    weighted_avg_life: Mapped[int | None] = mapped_column(Integer)
+    seven_day_gross_yield: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+
+    net_assets: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))
+    shares_outstanding: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))
+    total_portfolio_securities: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))
+    cash: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))
+
+    pct_daily_liquid_latest: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    pct_weekly_liquid_latest: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+
+    seeks_stable_nav: Mapped[bool | None] = mapped_column(Boolean)
+    stable_nav_price: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+
+    reporting_period: Mapped[dt.date | None] = mapped_column(Date)
+    investment_adviser: Mapped[str | None] = mapped_column(String)
+    domicile: Mapped[str] = mapped_column(String(2), nullable=False, server_default="US")
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, server_default="USD")
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+
+    metrics: Mapped[list[SecMmfMetric]] = relationship(
+        "SecMmfMetric", back_populates="fund", lazy="raise",
+    )
+
+
+class SecMmfMetric(Base):
+    """Daily MMF metrics time-series from N-MFP filings.
+
+    GLOBAL TABLE: No organization_id, no RLS.
+    TimescaleDB hypertable partitioned by metric_date (1-month chunks).
+    Compression: 3 months. segmentby: series_id, class_id.
+    """
+
+    __tablename__ = "sec_mmf_metrics"
+
+    metric_date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
+    series_id: Mapped[str] = mapped_column(
+        String, ForeignKey("sec_money_market_funds.series_id"), primary_key=True,
+    )
+    class_id: Mapped[str] = mapped_column(String, primary_key=True)
+    accession_number: Mapped[str] = mapped_column(String, nullable=False)
+
+    seven_day_net_yield: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+
+    daily_gross_subscriptions: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))
+    daily_gross_redemptions: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))
+
+    pct_daily_liquid: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    pct_weekly_liquid: Mapped[Decimal | None] = mapped_column(Numeric(8, 4))
+    total_daily_liquid_assets: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))
+    total_weekly_liquid_assets: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))
+
+    fund: Mapped[SecMoneyMarketFund] = relationship(
+        "SecMoneyMarketFund", back_populates="metrics", lazy="raise",
+    )
+
 
 class SecFundClass(Base):
     """Share class within a registered fund series.
@@ -581,6 +807,19 @@ class SecFundClass(Base):
     data_fetched_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )
+
+    # OEF XBRL data (from N-CSR inline XBRL — per share class)
+    expense_ratio_pct: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+    advisory_fees_paid: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))
+    expenses_paid: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
+    avg_annual_return_pct: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+    net_assets: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))
+    holdings_count: Mapped[int | None] = mapped_column(Integer)
+    portfolio_turnover_pct: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+    fund_name: Mapped[str | None] = mapped_column(String)
+    perf_inception_date: Mapped[dt.date | None] = mapped_column(Date)
+    xbrl_accession: Mapped[str | None] = mapped_column(String)
+    xbrl_period_end: Mapped[dt.date | None] = mapped_column(Date)
 
 
 class SecFundStyleSnapshot(Base):

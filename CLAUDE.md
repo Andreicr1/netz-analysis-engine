@@ -95,7 +95,7 @@ frontends/
   wealth/           ← SvelteKit "netz-wealth-os"
 ```
 
-**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0063_add_strategy_label`.
+**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0066_fund_class_xbrl_fees`.
 
 **Auth:** Clerk JWT v2. `organization_id` from `o.id` claim. RLS via `SET LOCAL app.current_organization_id`. Dev bypass: `X-DEV-ACTOR` header. **Tenant and user management is 100% via Clerk Dashboard** — no custom admin UI. Organizations, user invites, and role assignment (`ADMIN`, `INVESTMENT_TEAM`, `investor`) are all managed in Clerk. `ConfigService` defaults mean new tenants work immediately without provisioning.
 
@@ -226,6 +226,9 @@ The engine is organized around **funds as the primary analytical entity**. Three
 | Universe | Source | PK | Table | Holdings | NAV |
 |----------|--------|-----|-------|----------|-----|
 | `registered_us` | SEC N-PORT | CIK | `sec_registered_funds` | N-PORT quarterly | Yahoo Finance via ticker |
+| `etf` | SEC N-CEN | series_id | `sec_etfs` | N-PORT quarterly | Yahoo Finance via ticker |
+| `bdc` | SEC N-CEN | series_id | `sec_bdcs` | N-PORT quarterly | Yahoo Finance via ticker |
+| `money_market` | SEC N-MFP | series_id | `sec_money_market_funds` | N-MFP monthly | Stable NAV |
 | `private_us` | ADV Schedule D | UUID | `sec_manager_funds` | None | None |
 | `ucits_eu` | ESMA Register | ISIN | `esma_funds` | None | Yahoo Finance via ticker |
 
@@ -243,6 +246,18 @@ The engine is organized around **funds as the primary analytical entity**. Three
 - `fund_type` — SEC Form ADV Q10 categories (7 values: Hedge Fund, Private Equity Fund, Venture Capital Fund, Real Estate Fund, Securitized Asset Fund, Liquidity Fund, Other Private Fund). Extracted via **checkbox image xref detection** in ADV Part 1 PDFs (checked checkbox uses a different JPEG xref than unchecked).
 - `strategy_label` — 37 granular strategy categories (Private Credit, Infrastructure, Multi-Strategy, Long/Short Equity, Growth Equity, Buyout, etc.). Derived by 3-layer keyword classifier: (1) fund name regex, (2) hedge sub-strategy refinement, (3) brochure content enrichment. Script: `backend/scripts/backfill_strategy_label.py` (idempotent).
 - **AUM floor:** Embedding worker (`_embed_sec_private_funds`) only processes managers with combined GAV ≥ $1B (2,087 managers, 45,942 funds).
+
+**Dedicated vehicle tables (migration 0064):**
+- `sec_etfs` — 985 ETFs seeded from N-CEN (ETF mechanics, tracking difference, creation units). PK: `series_id`.
+- `sec_bdcs` — 196 BDCs migrated from `sec_registered_funds`. PK: `series_id`. Default `strategy_label = 'Private Credit'`.
+- `sec_money_market_funds` — 373 MMFs seeded from N-MFP (WAM, WAL, 7-day yield, liquidity). PK: `series_id`. `mmf_category` CHECK: Government, Prime, Other Tax Exempt, Single State.
+- `sec_mmf_metrics` — TimescaleDB hypertable (1-month chunks, compression 3 months, segmentby series_id+class_id). 20,270 daily metrics (yield, flows, liquidity). PK: `(metric_date, series_id, class_id)`.
+- `sec_registered_funds` now only contains `mutual_fund`, `closed_end`, `interval_fund` (CHECK constraint enforced). ETF/BDC/MMF rows removed.
+- Seed scripts: `scripts/seed_etfs_ncen.py` (--ncen-dir), `scripts/seed_bdcs_ncen.py` (--bdc-xml), `scripts/seed_mmf_catalog.py` (--nmfp-dir), `scripts/seed_mmf_metrics.py` (--nmfp-dir).
+
+**N-CEN enrichment (migration 0065):** `sec_registered_funds` enriched with 27 new columns from EDGAR N-CEN filings (classification flags, LEI, fees, performance, AUM/NAV, operational flags, N-CEN metadata). Processed 16 quarters (2021 Q3 – 2025 Q4). Coverage: 2,232/3,652 mutual funds (61.1%, $11.97T AUM), 1/965 closed-end (CEFs don't file N-CEN). Script: `scripts/seed_registered_funds_ncen.py` (--ncen-dir for parent dir with subdirs, --extra-dir for additional quarters). Note: N-CEN `MANAGEMENT_FEE` is only reported for closed-end/interval funds — open-end mutual fund expense ratios come from XBRL (see migration 0066).
+
+**XBRL fee enrichment (migration 0066):** `sec_fund_classes` enriched with 11 new columns from N-CSR inline XBRL filings using OEF taxonomy. Per-share-class data: `expense_ratio_pct`, `advisory_fees_paid`, `expenses_paid`, `avg_annual_return_pct`, `net_assets`, `holdings_count`, `portfolio_turnover_pct`, `fund_name`, `perf_inception_date`. Source: `data.sec.gov/submissions/` → N-CSR XBRL instance. Script: `scripts/seed_fund_class_fees_xbrl.py` (asyncio + aiohttp, SEC 10 req/s rate limit).
 
 ## Quant Upgrade (Sprints 1-3, 2026-03-27)
 
@@ -268,14 +283,20 @@ Portfolio construction is an 11-step pipeline with CLARABEL 4-phase cascade opti
 
 Separate vector table `wealth_vector_chunks` for fund-centric RAG (distinct from credit's deal-centric `vector_chunks`).
 
-**6 embedding sources:**
+**12 embedding sources:**
 
 | Source | entity_type | Scope | Volume |
 |--------|-------------|-------|--------|
 | ADV brochures (6 sections) | `"firm"` | global | ~7k chunks |
-| ESMA funds | `"fund"` | global | ~10k chunks |
+| SEC manager profiles | `"firm"` | global | ~2k chunks |
+| SEC fund profiles (N-CEN + XBRL) | `"fund"` | global | ~4.6k chunks |
+| SEC 13F summaries | `"firm"` | global | ~1k chunks |
+| SEC private funds (GAV ≥ $1B) | `"firm"` | global | ~2k chunks |
+| ESMA funds (+ strategy_label) | `"fund"` | global | ~10k chunks |
 | ESMA managers | `"firm"` | global | ~660 chunks |
-| SEC private funds (GAV ≥ $1B) | `"firm"` | global | ~2k chunks (pending) |
+| SEC ETFs (N-CEN) | `"fund"` | global | ~985 chunks |
+| SEC BDCs | `"fund"` | global | ~196 chunks |
+| SEC MMFs (N-MFP) | `"fund"` | global | ~373 chunks |
 | DD chapters | `"fund"` | org-scoped | growing |
 | Macro reviews | `"macro"` | org-scoped | growing |
 
