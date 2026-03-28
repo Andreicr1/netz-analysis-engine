@@ -32,11 +32,13 @@
 			let instrumentId = selectedInstrument.instrument_id;
 
 			// For external instruments not yet imported, import first
-			if (!instrumentId && selectedInstrument.source === "esma" && selectedInstrument.isin) {
-				const imported = await api.post<{ instrument_id: string }>(`/screener/import-esma/${selectedInstrument.isin}`, {});
-				instrumentId = imported.instrument_id;
-			} else if (!instrumentId && selectedInstrument.source === "sec" && selectedInstrument.ticker) {
-				const imported = await api.post<{ instrument_id: string }>(`/screener/import-sec/${selectedInstrument.ticker}`, {});
+			if (!instrumentId) {
+				const identifier = selectedInstrument.isin || selectedInstrument.ticker;
+				if (!identifier) {
+					reviewError = "Cannot import: no ISIN or ticker available.";
+					return;
+				}
+				const imported = await api.post<{ instrument_id: string }>(`/screener/import/${identifier}`, {});
 				instrumentId = imported.instrument_id;
 			}
 

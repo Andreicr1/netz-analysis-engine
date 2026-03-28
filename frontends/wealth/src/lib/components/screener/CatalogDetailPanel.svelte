@@ -57,11 +57,13 @@
 		try {
 			let instrumentId = fund.instrument_id;
 
-			if (!instrumentId && fund.universe === "ucits_eu" && fund.isin) {
-				const imported = await api.post<{ instrument_id: string }>(`/screener/import-esma/${fund.isin}`, {});
-				instrumentId = imported.instrument_id;
-			} else if (!instrumentId && fund.ticker) {
-				const imported = await api.post<{ instrument_id: string }>(`/screener/import-sec/${fund.ticker}`, {});
+			if (!instrumentId) {
+				const identifier = fund.isin || fund.ticker;
+				if (!identifier) {
+					reviewError = "Cannot import: no ISIN or ticker available.";
+					return;
+				}
+				const imported = await api.post<{ instrument_id: string }>(`/screener/import/${identifier}`, {});
 				instrumentId = imported.instrument_id;
 			}
 

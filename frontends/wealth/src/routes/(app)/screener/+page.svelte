@@ -113,11 +113,10 @@
 			const item = items[0]!;
 			try {
 				let instrumentId = item.instrument_id;
-				if (!instrumentId && item.universe === "ucits_eu" && item.isin) {
-					const imported = await api.post<{ instrument_id: string }>(`/screener/import-esma/${item.isin}`, {});
-					instrumentId = imported.instrument_id;
-				} else if (!instrumentId && item.ticker) {
-					const imported = await api.post<{ instrument_id: string }>(`/screener/import-sec/${item.ticker}`, {});
+				if (!instrumentId) {
+					const identifier = item.isin || item.ticker;
+					if (!identifier) return;
+					const imported = await api.post<{ instrument_id: string }>(`/screener/import/${identifier}`, {});
 					instrumentId = imported.instrument_id;
 				}
 				if (!instrumentId) return;

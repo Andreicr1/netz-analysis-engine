@@ -9,7 +9,9 @@ GET  /screener/search   — global instrument search (server-side)
 GET  /screener/facets   — facet counts for filter sidebar
 GET  /screener/securities         — global equity/ETF discovery (no RLS)
 GET  /screener/securities/facets  — facets for global securities
-POST /screener/import-esma/{isin} — import ESMA fund to universe
+POST /screener/import/{identifier}  — unified import (auto-detect ISIN or ticker)
+POST /screener/import-esma/{isin}    — import ESMA fund to universe (alias)
+POST /screener/import-sec/{ticker}   — import SEC security to universe (alias)
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import re
 import uuid
 from datetime import UTC, datetime
 
@@ -836,6 +839,33 @@ async def import_esma_fund(
         "isin": instrument.isin,
         "status": "imported",
     }
+
+
+# ── Unified Import ─────────────────────────────────────────────────────
+
+_ISIN_RE = re.compile(r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$")
+
+
+@router.post(
+    "/import/{identifier}",
+    status_code=status.HTTP_201_CREATED,
+    summary="Import a fund by ISIN (ESMA) or ticker (SEC) into instruments_universe",
+)
+async def import_fund(
+    identifier: str,
+    body: EsmaImportRequest,
+    db: AsyncSession = Depends(get_db_with_rls),
+    org_id: uuid.UUID = Depends(get_org_id),
+    actor: Actor = Depends(get_actor),
+) -> dict:
+    """Auto-detect identifier format and route to the correct importer."""
+    if _ISIN_RE.match(identifier.upper()):
+        return await import_esma_fund(
+            isin=identifier.upper(), body=body, db=db, org_id=org_id, actor=actor,
+        )
+    return await import_sec_security(
+        ticker=identifier.upper(), body=body, db=db, org_id=org_id, actor=actor,
+    )
 
 
 # ── SEC Import ──────────────────────────────────────────────────────────
