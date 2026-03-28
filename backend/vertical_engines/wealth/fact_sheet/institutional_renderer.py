@@ -1,5 +1,9 @@
 """Institutional Complete PDF renderer (4-6 pages).
 
+DEPRECATED: Migrating to Playwright PDF stack (vertical_engines/wealth/pdf/).
+This file will be removed after Fact Sheet and content reports are migrated.
+Do NOT use for new report types.
+
 Everything from executive summary PLUS: attribution analysis,
 regime overlay, stress scenarios, rebalance history, ESG placeholder,
 and regulatory disclaimer.

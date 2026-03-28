@@ -24,6 +24,9 @@ COPY calibration/ calibration/
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
     pip install --no-cache-dir ".[ai,quant,edgar]"
 
+# Install Playwright Chromium for HTML→PDF rendering
+RUN python -m playwright install chromium --with-deps
+
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
 

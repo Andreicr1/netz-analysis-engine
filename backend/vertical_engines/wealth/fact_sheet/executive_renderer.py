@@ -1,5 +1,9 @@
 """Executive Summary PDF renderer (1-2 pages).
 
+DEPRECATED: Migrating to Playwright PDF stack (vertical_engines/wealth/pdf/).
+This file will be removed after Fact Sheet and content reports are migrated.
+Do NOT use for new report types.
+
 Renders a concise fact-sheet with: cover info, NAV chart, returns table,
 allocation pie, top holdings, and key risk metrics.
 

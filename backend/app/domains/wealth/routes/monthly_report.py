@@ -1,9 +1,14 @@
-"""Long-Form Report API route — trigger generation with SSE progress.
+"""Monthly Client Report API routes.
 
-POST /reporting/model-portfolios/{portfolio_id}/long-form-report
-  → dispatches async generation, returns SSE stream with per-chapter progress.
+POST /reporting/model-portfolios/{portfolio_id}/monthly-report
+  → generate report, return job_id
+
+GET  /reporting/model-portfolios/{portfolio_id}/monthly-report/{job_id}/status
+  → check generation status (via generic /jobs/{job_id}/status)
+
+GET  /reporting/model-portfolios/{portfolio_id}/monthly-report/{job_id}/pdf
+  → download PDF bytes
 """
-
 from __future__ import annotations
 
 import asyncio
@@ -30,33 +35,31 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/reporting", tags=["reporting"])
 
 # Lazy semaphore (no module-level asyncio primitives)
-_lfr_semaphore: asyncio.Semaphore | None = None
+_mcr_semaphore: asyncio.Semaphore | None = None
 _MAX_CONCURRENT = 2
 
 
 def _get_semaphore() -> asyncio.Semaphore:
-    global _lfr_semaphore
-    if _lfr_semaphore is None:
-        _lfr_semaphore = asyncio.Semaphore(_MAX_CONCURRENT)
-    return _lfr_semaphore
+    global _mcr_semaphore
+    if _mcr_semaphore is None:
+        _mcr_semaphore = asyncio.Semaphore(_MAX_CONCURRENT)
+    return _mcr_semaphore
 
 
 @router.post(
-    "/model-portfolios/{portfolio_id}/long-form-report",
+    "/model-portfolios/{portfolio_id}/monthly-report",
     status_code=status.HTTP_202_ACCEPTED,
-    summary="Generate long-form client report (SSE)",
-    description=(
-        "Triggers 8-chapter long-form report generation for a model portfolio. "
-        "Returns a job_id for SSE streaming of per-chapter progress."
-    ),
+    summary="Generate Monthly Client Report (SSE)",
+    description="Triggers Monthly Client Report PDF generation. Returns job_id for SSE streaming.",
 )
-async def generate_long_form_report(
+async def generate_monthly_report(
     portfolio_id: uuid.UUID,
     request: Request,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     org_id: uuid.UUID = Depends(get_org_id),
 ) -> dict:
+    """Trigger Monthly Client Report generation. Returns job_id."""
     # Validate portfolio exists
     result = await db.execute(
         select(ModelPortfolio.id).where(ModelPortfolio.id == portfolio_id),
@@ -72,17 +75,17 @@ async def generate_long_form_report(
     if sem.locked():
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Too many concurrent long-form reports (max {_MAX_CONCURRENT})",
+            detail=f"Too many concurrent monthly reports (max {_MAX_CONCURRENT})",
         )
     await sem.acquire()
 
     # Register job for SSE
-    job_id = f"lfr-{portfolio_id}-{uuid.uuid4().hex[:8]}"
+    job_id = f"mcr-{portfolio_id}-{uuid.uuid4().hex[:8]}"
     await register_job_owner(job_id, str(org_id))
 
     # Fire background generation
     asyncio.create_task(
-        _run_generation(
+        _run_monthly_generation(
             job_id=job_id,
             portfolio_id=str(portfolio_id),
             organization_id=str(org_id),
@@ -94,10 +97,10 @@ async def generate_long_form_report(
 
 
 @router.get(
-    "/model-portfolios/{portfolio_id}/long-form-report/stream/{job_id}",
-    summary="SSE stream for long-form report generation progress",
+    "/model-portfolios/{portfolio_id}/monthly-report/stream/{job_id}",
+    summary="SSE stream for monthly report generation progress",
 )
-async def stream_long_form_report(
+async def stream_monthly_report(
     portfolio_id: uuid.UUID,
     job_id: str,
     request: Request,
@@ -110,18 +113,18 @@ async def stream_long_form_report(
 
 
 @router.get(
-    "/model-portfolios/{portfolio_id}/long-form-report/{job_id}/pdf",
-    summary="Download Long-Form Report PDF",
+    "/model-portfolios/{portfolio_id}/monthly-report/{job_id}/pdf",
+    summary="Download Monthly Report PDF",
     description="Download generated PDF. Job must be in 'done' status.",
 )
-async def download_long_form_pdf(
+async def download_monthly_report_pdf(
     portfolio_id: uuid.UUID,
     job_id: str,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
     org_id: uuid.UUID = Depends(get_org_id),
 ) -> Response:
-    """Return PDF bytes as application/pdf."""
+    """Download generated Monthly Report PDF from Redis cache."""
     if not await verify_job_owner(job_id, str(org_id)):
         raise HTTPException(status_code=403, detail="Job not found")
 
@@ -154,7 +157,7 @@ async def download_long_form_pdf(
             detail="PDF file not found in storage.",
         )
 
-    filename = f"long-form-dd-{portfolio_id}-{job_id}.pdf"
+    filename = f"monthly-report-{portfolio_id}-{job_id}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -162,14 +165,14 @@ async def download_long_form_pdf(
     )
 
 
-async def _run_generation(
+async def _run_monthly_generation(
     *,
     job_id: str,
     portfolio_id: str,
     organization_id: str,
     semaphore: asyncio.Semaphore,
 ) -> None:
-    """Background task: run LongFormReportEngine and publish SSE events."""
+    """Background task: run MonthlyReportEngine and publish SSE events."""
     from app.core.db.engine import async_session_factory
     from app.core.tenancy.middleware import set_rls_context
 
@@ -177,93 +180,64 @@ async def _run_generation(
         async with async_session_factory() as db:
             await set_rls_context(db, uuid.UUID(organization_id))
 
-            from vertical_engines.wealth.long_form_report import LongFormReportEngine
+            from vertical_engines.wealth.monthly_report import MonthlyReportEngine
 
-            engine = LongFormReportEngine()
+            engine = MonthlyReportEngine()
 
             await publish_event(job_id, "started", {
                 "portfolio_id": portfolio_id,
-                "total_chapters": 8,
             })
 
-            result = await engine.generate(
+            pdf_bytes = await engine.generate(
                 db,
                 portfolio_id=portfolio_id,
                 organization_id=organization_id,
             )
 
-            # Publish per-chapter progress
-            for ch in result.chapters:
-                await publish_event(job_id, "chapter_complete", {
-                    "chapter": ch.tag,
-                    "order": ch.order,
-                    "title": ch.title,
-                    "status": ch.status,
-                    "confidence": ch.confidence,
+            if pdf_bytes:
+                # Store PDF via StorageClient
+                storage_key = (
+                    f"gold/{organization_id}/wealth/reports/"
+                    f"monthly-{portfolio_id}-{job_id}.pdf"
+                )
+                try:
+                    from app.services.storage_client import create_storage_client
+
+                    storage = create_storage_client()
+                    await storage.write(storage_key, pdf_bytes)
+
+                    # Persist PDF key in Redis for download endpoint
+                    import redis.asyncio as aioredis
+
+                    from app.core.jobs.tracker import get_redis_pool
+
+                    pool = get_redis_pool()
+                    r = aioredis.Redis(connection_pool=pool)
+                    try:
+                        await r.set(
+                            f"job:{job_id}:pdf_key",
+                            storage_key,
+                            ex=86400,  # 24h TTL
+                        )
+                    finally:
+                        await r.aclose()
+                except Exception:
+                    logger.warning("monthly_report_storage_failed", exc_info=True)
+                    storage_key = ""
+
+                await publish_terminal_event(job_id, "done", {
+                    "status": "completed",
+                    "pdf_storage_key": storage_key,
+                    "size_bytes": len(pdf_bytes),
+                })
+            else:
+                await publish_terminal_event(job_id, "error", {
+                    "status": "failed",
+                    "error": "PDF generation returned None",
                 })
 
-            # Generate PDF after chapters complete
-            pdf_storage_key = ""
-            if result.status != "failed":
-                try:
-                    from vertical_engines.wealth.long_form_report.pdf_renderer import (
-                        LongFormPDFRenderer,
-                    )
-
-                    renderer = LongFormPDFRenderer()
-                    pdf_bytes = await renderer.render(
-                        result, db=db, organization_id=organization_id,
-                    )
-                    if pdf_bytes:
-                        pdf_storage_key = (
-                            f"gold/{organization_id}/wealth/reports/"
-                            f"long-form-dd-{portfolio_id}-{job_id}.pdf"
-                        )
-                        from app.services.storage_client import create_storage_client
-
-                        storage = create_storage_client()
-                        await storage.write(pdf_storage_key, pdf_bytes)
-
-                        # Persist PDF key in Redis for download endpoint
-                        import redis.asyncio as aioredis
-
-                        from app.core.jobs.tracker import get_redis_pool
-
-                        pool = get_redis_pool()
-                        r = aioredis.Redis(connection_pool=pool)
-                        try:
-                            await r.set(
-                                f"job:{job_id}:pdf_key",
-                                pdf_storage_key,
-                                ex=86400,  # 24h TTL
-                            )
-                        finally:
-                            await r.aclose()
-
-                        logger.info(
-                            "long_form_pdf_stored",
-                            key=pdf_storage_key,
-                            size_bytes=len(pdf_bytes),
-                        )
-                except Exception:
-                    logger.warning("long_form_pdf_generation_failed", exc_info=True)
-
-            await publish_terminal_event(
-                job_id,
-                "done" if result.status != "failed" else "error",
-                {
-                    "status": result.status,
-                    "chapters_completed": sum(
-                        1 for ch in result.chapters if ch.status == "completed"
-                    ),
-                    "total_chapters": len(result.chapters),
-                    "pdf_storage_key": pdf_storage_key,
-                    "error": result.error,
-                },
-            )
-
     except Exception as exc:
-        logger.exception("long_form_report_background_failed", job_id=job_id)
+        logger.exception("monthly_report_background_failed", job_id=job_id)
         await publish_terminal_event(job_id, "error", {"error": str(exc)})
     finally:
         semaphore.release()

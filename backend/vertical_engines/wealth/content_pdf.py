@@ -1,5 +1,9 @@
 """Shared PDF renderer for content-production engines.
 
+DEPRECATED: Migrating to Playwright PDF stack (vertical_engines/wealth/pdf/).
+This file will be removed after Fact Sheet and content reports are migrated.
+Do NOT use for new report types.
+
 Extracts the common render logic from InvestmentOutlook, FlashReport, and
 ManagerSpotlight into a single reusable function. Each engine's ``render_pdf``
 becomes a thin wrapper that calls ``render_content_pdf``.
