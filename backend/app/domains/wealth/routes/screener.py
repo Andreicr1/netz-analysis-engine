@@ -1274,8 +1274,9 @@ async def get_securities_facets(
 async def get_catalog(
     q: str | None = Query(None, description="Text search (name, ticker, ISIN, manager)"),
     region: str | None = Query(None, description="US or EU"),
-    fund_universe: str | None = Query(None, description="registered | private | ucits | all"),
-    fund_type: str | None = Query(None, description="mutual_fund, etf, hedge_fund, pe, vc, ucits"),
+    fund_universe: str | None = Query(None, description="Comma-separated categories: mutual_fund,etf,closed_end,bdc,hedge_fund,private_fund,ucits"),
+    fund_type: str | None = Query(None, description="Additional fund_type filter within universe"),
+    strategy_label: str | None = Query(None, description="Comma-separated strategy labels"),
     aum_min: float | None = Query(None, ge=0, description="Minimum AUM in USD"),
     has_nav: bool | None = Query(None, description="Only funds with NAV history (ticker)"),
     domicile: str | None = Query(None),
@@ -1290,6 +1291,7 @@ async def get_catalog(
         region=region,
         fund_universe=fund_universe,
         fund_type=fund_type,
+        strategy_label=strategy_label,
         aum_min=aum_min,
         has_nav=has_nav,
         domicile=domicile,
@@ -1376,6 +1378,7 @@ async def get_catalog_facets(
     region: str | None = Query(None),
     fund_universe: str | None = Query(None),
     fund_type: str | None = Query(None),
+    strategy_label: str | None = Query(None),
     aum_min: float | None = Query(None, ge=0),
     has_nav: bool | None = Query(None),
     domicile: str | None = Query(None),
@@ -1387,6 +1390,7 @@ async def get_catalog_facets(
         region=region,
         fund_universe=fund_universe,
         fund_type=fund_type,
+        strategy_label=strategy_label,
         aum_min=aum_min,
         has_nav=has_nav,
         domicile=domicile,
@@ -1402,6 +1406,7 @@ async def get_catalog_facets(
     universe_counts: dict[str, int] = {}
     region_counts: dict[str, int] = {}
     type_counts: dict[str, int] = {}
+    strategy_counts: dict[str, int] = {}
     domicile_counts: dict[str, int] = {}
     grand_total = 0
 
@@ -1417,6 +1422,10 @@ async def get_catalog_facets(
 
         ft = r.fund_type or "unknown"
         type_counts[ft] = type_counts.get(ft, 0) + cnt
+
+        sl = r.strategy_label
+        if sl:
+            strategy_counts[sl] = strategy_counts.get(sl, 0) + cnt
 
         dom = r.domicile
         if dom:
@@ -1446,6 +1455,7 @@ async def get_catalog_facets(
         universes=to_facets(universe_counts, _UNIVERSE_LABELS),
         regions=to_facets(region_counts),
         fund_types=to_facets(type_counts),
+        strategy_labels=to_facets(strategy_counts),
         domiciles=to_facets(domicile_counts),
         total=grand_total,
     )

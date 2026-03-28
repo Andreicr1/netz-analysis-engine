@@ -81,6 +81,7 @@ class CatalogFacets(BaseModel):
     universes: list[CatalogFacetItem] = Field(default_factory=list)
     regions: list[CatalogFacetItem] = Field(default_factory=list)
     fund_types: list[CatalogFacetItem] = Field(default_factory=list)
+    strategy_labels: list[CatalogFacetItem] = Field(default_factory=list)
     domiciles: list[CatalogFacetItem] = Field(default_factory=list)
     total: int = 0
 

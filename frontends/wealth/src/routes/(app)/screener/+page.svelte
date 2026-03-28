@@ -12,7 +12,7 @@
 	import type { PageData } from "./$types";
 
 	// Catalog + Securities types
-	import type { UnifiedFundItem, UnifiedCatalogPage, CatalogFacets, SecurityPage, SecurityFacets, SecurityItem } from "$lib/types/catalog";
+	import type { UnifiedFundItem, UnifiedCatalogPage, CatalogFacets, SecurityPage, SecurityFacets, SecurityItem, CatalogCategory } from "$lib/types/catalog";
 	import { EMPTY_CATALOG_PAGE, EMPTY_FACETS, EMPTY_SECURITY_PAGE, EMPTY_SECURITY_FACETS } from "$lib/types/catalog";
 
 	// Manager types
@@ -53,36 +53,36 @@
 	let secSelectedExchanges = $state<string[]>(initParams.exchange ? [initParams.exchange] : []);
 
 	// Catalog filter state (from URL params)
-	let selectedUniverses = $state<string[]>(initParams.universe ? initParams.universe.split(",") : []);
-	let selectedRegions = $state<string[]>(initParams.region ? initParams.region.split(",") : []);
+	let selectedCategories = $state<CatalogCategory[]>(
+		initParams.category ? (initParams.category.split(",") as CatalogCategory[]) : [],
+	);
 	let selectedFundTypes = $state<string[]>(initParams.fund_type ? initParams.fund_type.split(",") : []);
+	let selectedStrategyLabels = $state<string[]>(initParams.strategy_label ? initParams.strategy_label.split(",") : []);
 	let selectedDomiciles = $state<string[]>(initParams.domicile ? initParams.domicile.split(",") : []);
 	let catalogSearchQ = $state(initParams.q ?? "");
 	let catalogAumMin = $state(initParams.aum_min ?? "");
 
-	function applyCatalogFilters() {
+	function buildCatalogParams(): URLSearchParams {
 		const params = new URLSearchParams();
 		params.set("tab", "catalog");
 		if (catalogSearchQ) params.set("q", catalogSearchQ);
-		for (const u of selectedUniverses) params.append("universe", u);
-		for (const r of selectedRegions) params.append("region", r);
-		for (const ft of selectedFundTypes) params.append("fund_type", ft);
+		if (selectedCategories.length) params.set("category", selectedCategories.join(","));
+		if (selectedFundTypes.length) params.set("fund_type", selectedFundTypes.join(","));
+		if (selectedStrategyLabels.length) params.set("strategy_label", selectedStrategyLabels.join(","));
 		for (const d of selectedDomiciles) params.append("domicile", d);
 		if (catalogAumMin) params.set("aum_min", catalogAumMin);
+		return params;
+	}
+
+	function applyCatalogFilters() {
+		const params = buildCatalogParams();
 		params.set("page", "1");
 		params.set("page_size", "50");
 		goto(`/screener?${params.toString()}`, { invalidateAll: true });
 	}
 
 	function catalogPageChange(page: number) {
-		const params = new URLSearchParams();
-		params.set("tab", "catalog");
-		if (catalogSearchQ) params.set("q", catalogSearchQ);
-		for (const u of selectedUniverses) params.append("universe", u);
-		for (const r of selectedRegions) params.append("region", r);
-		for (const ft of selectedFundTypes) params.append("fund_type", ft);
-		for (const d of selectedDomiciles) params.append("domicile", d);
-		if (catalogAumMin) params.set("aum_min", catalogAumMin);
+		const params = buildCatalogParams();
 		params.set("page", String(page));
 		params.set("page_size", "50");
 		goto(`/screener?${params.toString()}`, { invalidateAll: true });
@@ -310,9 +310,9 @@
 	<div class="scr-master-detail">
 		<CatalogFilterSidebar
 			facets={catalogFacets}
-			bind:selectedUniverses
-			bind:selectedRegions
+			bind:selectedCategories
 			bind:selectedFundTypes
+			bind:selectedStrategyLabels
 			bind:selectedDomiciles
 			bind:searchQ={catalogSearchQ}
 			bind:aumMin={catalogAumMin}

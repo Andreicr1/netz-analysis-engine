@@ -29,12 +29,13 @@ export const load: PageServerLoad = async ({ parent, url }) => {
 		const catalogParams: Record<string, string> = { page, page_size: pageSize };
 		const q = url.searchParams.get("q");
 		if (q) catalogParams.q = q;
-		const universes = url.searchParams.getAll("universe");
-		if (universes.length) catalogParams.fund_universe = universes.join(",");
-		const regions = url.searchParams.getAll("region");
-		if (regions.length) catalogParams.region = regions.join(",");
-		const fundTypes = url.searchParams.getAll("fund_type");
-		if (fundTypes.length) catalogParams.fund_type = fundTypes.join(",");
+		// Category-based universe filter (7 categories → backend fund_universe)
+		const category = url.searchParams.get("category");
+		if (category) catalogParams.fund_universe = category;
+		const fundTypes = url.searchParams.get("fund_type");
+		if (fundTypes) catalogParams.fund_type = fundTypes;
+		const strategyLabel = url.searchParams.get("strategy_label");
+		if (strategyLabel) catalogParams.strategy_label = strategyLabel;
 		const domiciles = url.searchParams.getAll("domicile");
 		if (domiciles.length) catalogParams.domicile = domiciles.join(",");
 		const aumMin = url.searchParams.get("aum_min");

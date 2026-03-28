@@ -60,6 +60,7 @@ export interface CatalogFacets {
 	universes: CatalogFacetItem[];
 	regions: CatalogFacetItem[];
 	fund_types: CatalogFacetItem[];
+	strategy_labels: CatalogFacetItem[];
 	domiciles: CatalogFacetItem[];
 	total: number;
 }
@@ -86,6 +87,7 @@ export const EMPTY_FACETS: CatalogFacets = {
 	universes: [],
 	regions: [],
 	fund_types: [],
+	strategy_labels: [],
 	domiciles: [],
 	total: 0,
 };
@@ -99,6 +101,59 @@ export const UNIVERSE_LABELS: Record<FundUniverse, string> = {
 export const REGION_LABELS: Record<FundRegion, string> = {
 	US: "United States",
 	EU: "European Union",
+};
+
+// ── Expanded universe categories (7 options) ──
+
+export type CatalogCategory =
+	| "mutual_fund"
+	| "etf"
+	| "closed_end"
+	| "bdc"
+	| "hedge_fund"
+	| "private_fund"
+	| "ucits";
+
+export interface CategoryDef {
+	key: CatalogCategory;
+	label: string;
+	universe: FundUniverse;
+	group: "us_regulated" | "us_private" | "eu";
+}
+
+export const CATALOG_CATEGORIES: CategoryDef[] = [
+	{ key: "mutual_fund", label: "Mutual Funds", universe: "registered_us", group: "us_regulated" },
+	{ key: "etf", label: "ETFs", universe: "registered_us", group: "us_regulated" },
+	{ key: "closed_end", label: "Closed-End Funds", universe: "registered_us", group: "us_regulated" },
+	{ key: "bdc", label: "BDC", universe: "registered_us", group: "us_regulated" },
+	{ key: "hedge_fund", label: "Hedge Funds", universe: "private_us", group: "us_private" },
+	{ key: "private_fund", label: "Private Funds", universe: "private_us", group: "us_private" },
+	{ key: "ucits", label: "UCITS", universe: "ucits_eu", group: "eu" },
+];
+
+export const CATEGORY_LABELS: Record<CatalogCategory, string> = Object.fromEntries(
+	CATALOG_CATEGORIES.map((c) => [c.key, c.label]),
+) as Record<CatalogCategory, string>;
+
+/**
+ * Fund type labels for display (raw DB values → human labels).
+ * Covers registered_us, private_us, and ucits_eu fund_type values.
+ */
+export const FUND_TYPE_LABELS: Record<string, string> = {
+	// registered_us
+	mutual_fund: "Mutual Fund",
+	interval_fund: "Interval Fund",
+	closed_end: "Closed-End",
+	etf: "ETF",
+	bdc: "BDC",
+	// private_us (Form ADV categories)
+	"Hedge Fund": "Hedge Fund",
+	"Private Equity Fund": "Private Equity",
+	"Venture Capital Fund": "Venture Capital",
+	"Real Estate Fund": "Real Estate",
+	"Securitized Asset Fund": "Securitized Asset",
+	"Liquidity Fund": "Liquidity",
+	"Other Private Fund": "Other Private",
 };
 
 // ── Global Securities (equities/ETFs from sec_cusip_ticker_map — no RLS) ──
