@@ -1,9 +1,9 @@
-"""Backfill strategy_label in sec_manager_funds.
+"""Backfill strategy_label across all three fund tables.
 
-Applies a three-layer keyword classifier:
-  1. Fund name keywords (most specific first) — covers ~87% of funds
-  2. Hedge fund sub-strategy keywords on remaining generic "Hedge Fund" — +2%
-  3. Brochure content (methods_of_analysis, investment_philosophy, advisory_business)
+Applies keyword classifiers to:
+  - sec_manager_funds (private): 3-layer (name → hedge refinement → brochure)
+  - esma_funds (UCITS): name keywords (asset class + geography + ESG)
+  - sec_registered_funds (mutual/ETF): name keywords
 
 Idempotent: re-running overwrites all strategy_label values.
 

@@ -453,6 +453,7 @@ class EsmaFund(Base):
     )
     domicile: Mapped[str | None] = mapped_column(Text)
     fund_type: Mapped[str | None] = mapped_column(Text)
+    strategy_label: Mapped[str | None] = mapped_column(Text)
     host_member_states: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
     yahoo_ticker: Mapped[str | None] = mapped_column(Text)
     ticker_resolved_at: Mapped[dt.datetime | None] = mapped_column(
@@ -538,6 +539,7 @@ class SecRegisteredFund(Base):
     )
     fund_name: Mapped[str] = mapped_column(Text, nullable=False)
     fund_type: Mapped[str] = mapped_column(Text, nullable=False)
+    strategy_label: Mapped[str | None] = mapped_column(Text)
     ticker: Mapped[str | None] = mapped_column(Text)
     isin: Mapped[str | None] = mapped_column(Text)
     series_id: Mapped[str | None] = mapped_column(Text)
