@@ -261,6 +261,10 @@ The engine is organized around **funds as the primary analytical entity**. Three
 
 **XBRL fee enrichment (migration 0066):** `sec_fund_classes` enriched with 11 new columns from N-CSR inline XBRL filings using OEF taxonomy. Per-share-class data: `expense_ratio_pct`, `advisory_fees_paid`, `expenses_paid`, `avg_annual_return_pct`, `net_assets`, `holdings_count`, `portfolio_turnover_pct`, `fund_name`, `perf_inception_date`. Source: `data.sec.gov/submissions/` → N-CSR XBRL instance. Script: `scripts/seed_fund_class_fees_xbrl.py` (asyncio + aiohttp, SEC 10 req/s rate limit).
 
+**Fund enrichment at import (2026-03-28):** `import_sec_security()` in `screener.py` enriches instrument attributes with N-CEN flags + XBRL fees at import time. Multi-table lookup chain: SecRegisteredFund → SecFundClass (by ticker) → SecEtf → SecBdc → SecMoneyMarketFund. Enriched attributes include `strategy_label`, `is_index`, `is_target_date`, `is_fund_of_fund`, `expense_ratio_pct`, `holdings_count`, `portfolio_turnover_pct`, `sec_crd`, `fund_inception_date`. These flow into screening, scoring, DD reports, and fee drag without additional queries. Screener layer 1 can use enriched attributes for new eliminatory rules (e.g. `max_expense_ratio_pct`, `excluded_is_index`, `excluded_is_target_date`) without code changes.
+
+**Fund scoring model (6 default components, sum = 1.0):** `quant_engine/scoring_service.py`. Lipper removed (provider never contracted). `fee_efficiency` is a default component (weight 0.10). `insider_sentiment` is opt-in (add weight > 0 in scoring config to activate). Formula: `fee_efficiency = max(0, 100 - expense_ratio_pct * 50)` — 0% ER → 100, 2% ER → 0, None → 50 (neutral). Components: `return_consistency` (0.20), `risk_adjusted_return` (0.25), `drawdown_control` (0.20), `information_ratio` (0.15), `flows_momentum` (0.10), `fee_efficiency` (0.10).
+
 ## Quant Upgrade (Sprints 1-3, 2026-03-27)
 
 Portfolio construction is an 11-step pipeline with CLARABEL 4-phase cascade optimizer:

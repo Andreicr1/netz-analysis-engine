@@ -234,6 +234,39 @@ def render_institutional(
         story.append(build_institutional_table([summary_header, summary_row], col_widths=col_w, styles=styles))
         story.append(Spacer(1, 4 * mm))
 
+        # ── Per-fund fee comparison table ────────────────────────────
+        fund_fees = fd.get("instruments")
+        if fund_fees:
+            story.append(Paragraph(labels["fee_comparison"], styles["section_heading"]))
+            fc_header = [
+                labels["fc_fund"], labels["fc_mgmt_fee"], labels["fc_perf_fee"],
+                labels["fc_other_fee"], labels["fc_total_fee"],
+                labels["fc_drag"], labels["fc_status"],
+            ]
+            fc_rows: list[list[str]] = [fc_header]
+            for fi in fund_fees:
+                fb = fi.get("fee_breakdown", {})
+                status_label = (
+                    labels["fc_efficient"] if fi.get("fee_efficient")
+                    else labels["fc_inefficient"]
+                )
+                fc_rows.append([
+                    safe_text(fi.get("name", "")),
+                    format_pct(fb.get("management", 0), 2, language),
+                    format_pct(fb.get("performance", 0), 2, language),
+                    format_pct(fb.get("other", 0), 2, language),
+                    format_pct(fb.get("total", 0), 2, language),
+                    format_pct(fi.get("fee_drag_pct", 0) * 100, 1, language),
+                    status_label,
+                ])
+            fc_col_w = [
+                usable_w * 0.28, usable_w * 0.12, usable_w * 0.12,
+                usable_w * 0.12, usable_w * 0.12,
+                usable_w * 0.12, usable_w * 0.12,
+            ]
+            story.append(build_institutional_table(fc_rows, col_widths=fc_col_w, styles=styles))
+            story.append(Spacer(1, 4 * mm))
+
     # ── ESG placeholder ────────────────────────────────────────────
     story.append(Paragraph(labels["esg_section"], styles["section_heading"]))
     story.append(Paragraph(labels["esg_placeholder"], styles["body"]))

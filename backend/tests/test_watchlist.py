@@ -425,3 +425,98 @@ class TestWatchlistBatchLock:
         # screening_batch uses 900_002 — must not collide
         assert WATCHLIST_BATCH_LOCK_ID == 900_003
         assert WATCHLIST_BATCH_LOCK_ID != 900_002
+
+
+# ═══════════════════════════════════════════════════════════════════
+#  Enrichment change detection tests
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestCheckEnrichmentChanges:
+    """Tests for WatchlistService.check_enrichment_changes()."""
+
+    _ID_A = uuid.UUID("00000000-0000-0000-0000-000000000001")
+    _ID_B = uuid.UUID("00000000-0000-0000-0000-000000000002")
+
+    def test_fee_increase_above_threshold(self):
+        """ER from 0.50 to 0.60 (+10bps) → alert with direction='enrichment_change'."""
+        instruments = [
+            {"instrument_id": self._ID_A, "name": "Fund A", "attributes": {"expense_ratio_pct": 0.60}},
+        ]
+        previous = {self._ID_A: {"expense_ratio_pct": 0.50}}
+
+        alerts = WatchlistService.check_enrichment_changes(instruments, previous)
+
+        assert len(alerts) == 1
+        assert alerts[0].direction == "enrichment_change"
+        assert "0.5%" in alerts[0].message
+        assert "0.6%" in alerts[0].message
+
+    def test_fee_increase_below_threshold(self):
+        """ER from 0.50 to 0.54 (+4bps) → no alert."""
+        instruments = [
+            {"instrument_id": self._ID_A, "name": "Fund A", "attributes": {"expense_ratio_pct": 0.54}},
+        ]
+        previous = {self._ID_A: {"expense_ratio_pct": 0.50}}
+
+        alerts = WatchlistService.check_enrichment_changes(instruments, previous)
+        assert len(alerts) == 0
+
+    def test_fee_decrease_no_alert(self):
+        """ER decrease (0.80 → 0.50) → no alert (only increases flagged)."""
+        instruments = [
+            {"instrument_id": self._ID_A, "name": "Fund A", "attributes": {"expense_ratio_pct": 0.50}},
+        ]
+        previous = {self._ID_A: {"expense_ratio_pct": 0.80}}
+
+        alerts = WatchlistService.check_enrichment_changes(instruments, previous)
+        assert len(alerts) == 0
+
+    def test_strategy_label_change(self):
+        """Strategy label changes → alert."""
+        instruments = [
+            {
+                "instrument_id": self._ID_A,
+                "name": "Fund A",
+                "attributes": {"strategy_label": "US Large Cap Value"},
+            },
+        ]
+        previous = {self._ID_A: {"strategy_label": "US Large Cap Growth"}}
+
+        alerts = WatchlistService.check_enrichment_changes(instruments, previous)
+
+        assert len(alerts) == 1
+        assert alerts[0].direction == "enrichment_change"
+        assert "US Large Cap Growth" in alerts[0].message
+        assert "US Large Cap Value" in alerts[0].message
+
+    def test_no_previous_snapshot(self):
+        """Empty previous snapshot → no alerts."""
+        instruments = [
+            {"instrument_id": self._ID_A, "name": "Fund A", "attributes": {"expense_ratio_pct": 0.60}},
+        ]
+        previous: dict[uuid.UUID, dict] = {}
+
+        alerts = WatchlistService.check_enrichment_changes(instruments, previous)
+        assert len(alerts) == 0
+
+    def test_mixed_changes(self):
+        """One fund with fee increase, one with strategy change → 2 alerts."""
+        instruments = [
+            {"instrument_id": self._ID_A, "name": "Fund A", "attributes": {"expense_ratio_pct": 0.80}},
+            {
+                "instrument_id": self._ID_B,
+                "name": "Fund B",
+                "attributes": {"strategy_label": "US Small Cap Value"},
+            },
+        ]
+        previous = {
+            self._ID_A: {"expense_ratio_pct": 0.50},
+            self._ID_B: {"strategy_label": "US Small Cap Growth"},
+        }
+
+        alerts = WatchlistService.check_enrichment_changes(instruments, previous)
+        assert len(alerts) == 2
+
+        directions = {a.direction for a in alerts}
+        assert directions == {"enrichment_change"}

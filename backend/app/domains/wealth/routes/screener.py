@@ -930,6 +930,33 @@ async def import_sec_security(
                     enrichment_attrs["tracking_difference_net"] = float(etf_row.tracking_difference_net)
                 enrichment_attrs["index_tracked"] = etf_row.index_tracked
 
+        # Fallback: search sec_bdcs by ticker
+        if not reg_fund and not enrichment_attrs.get("sec_universe"):
+            from app.shared.models import SecBdc
+
+            bdc_row = (await db.execute(
+                select(SecBdc).where(SecBdc.ticker == sec_row.ticker).limit(1),
+            )).scalar_one_or_none()
+            if bdc_row:
+                enrichment_attrs["sec_universe"] = "bdc"
+                enrichment_attrs["strategy_label"] = bdc_row.strategy_label
+                if bdc_row.net_operating_expenses is not None:
+                    enrichment_attrs["expense_ratio_pct"] = float(bdc_row.net_operating_expenses)
+                enrichment_attrs["investment_focus"] = bdc_row.investment_focus
+                enrichment_attrs["is_externally_managed"] = bdc_row.is_externally_managed
+
+        # Fallback: search sec_money_market_funds by ticker
+        if not reg_fund and not enrichment_attrs.get("sec_universe"):
+            from app.shared.models import SecMoneyMarketFund
+
+            mmf_row = (await db.execute(
+                select(SecMoneyMarketFund).where(SecMoneyMarketFund.ticker == sec_row.ticker).limit(1),
+            )).scalar_one_or_none()
+            if mmf_row:
+                enrichment_attrs["sec_universe"] = "money_market"
+                enrichment_attrs["strategy_label"] = mmf_row.strategy_label
+                enrichment_attrs["mmf_category"] = mmf_row.mmf_category
+
         if reg_fund:
             sec_cik = reg_fund.cik
             sec_universe = "registered_us"
