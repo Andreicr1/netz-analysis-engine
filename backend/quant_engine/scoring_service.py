@@ -25,13 +25,15 @@ class RiskMetrics(Protocol):
 
 
 # Hardcoded fallback — used only if config parameter is not provided.
+# fee_efficiency replaces Lipper rating (provider never contracted).
+# insider_sentiment is opt-in (add weight > 0 in config to activate).
 _DEFAULT_SCORING_WEIGHTS: dict[str, float] = {
     "return_consistency": 0.20,
     "risk_adjusted_return": 0.25,
     "drawdown_control": 0.20,
     "information_ratio": 0.15,
     "flows_momentum": 0.10,
-    "lipper_rating": 0.10,
+    "fee_efficiency": 0.10,
 }
 
 
@@ -64,15 +66,21 @@ def _normalize(value: float | None, min_val: float, max_val: float) -> float:
 
 def compute_fund_score(
     metrics: RiskMetrics,
-    lipper_score: float = 50.0,
     flows_momentum_score: float = 50.0,
     config: dict | None = None,
+    expense_ratio_pct: float | None = None,
+    insider_sentiment_score: float | None = None,
 ) -> tuple[float, dict[str, float]]:
     """Compute composite score from risk metrics. Returns (score, components).
 
     Args:
         config: Scoring config dict from ConfigService.get("liquid_funds", "scoring").
                Falls back to hardcoded defaults if None.
+        expense_ratio_pct: XBRL expense ratio (%). Used for fee_efficiency
+               component (default weight 0.10). Falls back to 50.0 (neutral)
+               when None — no penalty for missing data.
+        insider_sentiment_score: Insider buy/sell sentiment (0-100). Opt-in:
+               only used when config includes "insider_sentiment" weight > 0.
 
     """
     components: dict[str, float] = {}
@@ -90,9 +98,20 @@ def compute_fund_score(
     components["information_ratio"] = _normalize(ir, -1.0, 2.0)
 
     components["flows_momentum"] = flows_momentum_score
-    components["lipper_rating"] = lipper_score
+
+    # Fee efficiency — default component (replaces Lipper rating).
+    # 0% ER → 100 (best), 2% ER → 0 (worst). Neutral 50.0 when no data.
+    if expense_ratio_pct is not None:
+        components["fee_efficiency"] = max(0.0, 100.0 - expense_ratio_pct * 50.0)
+    else:
+        components["fee_efficiency"] = 50.0
 
     weights = resolve_scoring_weights(config)
+
+    # Opt-in insider sentiment (activated when config includes "insider_sentiment" weight > 0)
+    if insider_sentiment_score is not None and weights.get("insider_sentiment", 0) > 0:
+        components["insider_sentiment"] = insider_sentiment_score
+
     score = sum(
         components.get(k, 50.0) * w
         for k, w in weights.items()

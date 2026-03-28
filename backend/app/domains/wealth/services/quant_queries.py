@@ -24,7 +24,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from app.core.config.settings import settings
 from app.domains.wealth.models.allocation import StrategicAllocation, TacticalPosition
 from app.domains.wealth.models.fund import Fund
 from app.domains.wealth.models.nav import NavTimeseries
@@ -497,6 +496,27 @@ async def compute_fund_level_inputs(
             expected_returns = {fid: float(mu_bl[i]) for i, fid in enumerate(available_ids)}
             use_bl = True
 
+    # ── Fee adjustment: subtract expense ratio from expected returns ──
+    fee_adjusted = False
+    if config and config.get("fee_adjustment", {}).get("enabled"):
+        from app.domains.wealth.models.instrument import Instrument
+
+        inst_rows = (
+            await db.execute(
+                select(Instrument).where(
+                    Instrument.instrument_id.in_(instrument_ids),
+                ),
+            )
+        ).scalars().all()
+        instruments_by_id = {str(i.instrument_id): i for i in inst_rows}
+        for fid in available_ids:
+            inst = instruments_by_id.get(fid)
+            if inst and inst.attributes:
+                er = inst.attributes.get("expense_ratio_pct")
+                if er is not None:
+                    expected_returns[fid] -= float(er) / 100.0  # pct → decimal
+                    fee_adjusted = True
+
     logger.info(
         "fund_level_inputs_computed",
         n_funds=len(available_ids),
@@ -505,6 +525,7 @@ async def compute_fund_level_inputs(
         apply_shrinkage=apply_shrinkage,
         use_bl=use_bl,
         regime_conditioned=regime_cov is not None,
+        fee_adjusted=fee_adjusted,
     )
 
     return annual_cov, expected_returns, available_ids, skewness, excess_kurtosis
@@ -911,52 +932,3 @@ async def process_cascade(
         event_id=event.event_id,
         reason=reason,
     )
-
-
-# ── Lipper queries ───────────────────────────────────────────────────
-
-LIPPER_SCORE_FIELDS = [
-    "overall_rating",
-    "consistent_return",
-    "preservation",
-    "total_return",
-]
-
-
-async def get_fund_lipper_score(
-    db: AsyncSession,
-    fund_id: uuid.UUID,
-    as_of_date: date | None = None,
-) -> float:
-    """Get normalized Lipper score for a fund (0-100).
-
-    Returns 50.0 (neutral) when FEATURE_LIPPER_ENABLED=false
-    or when no Lipper data exists for the fund.
-    """
-    if not settings.feature_lipper_enabled:
-        return 50.0
-
-    from app.domains.wealth.models.lipper import LipperRating
-
-    stmt = (
-        select(LipperRating)
-        .where(LipperRating.fund_id == fund_id)
-        .order_by(LipperRating.rating_date.desc())
-        .limit(1)
-    )
-    if as_of_date:
-        stmt = stmt.where(LipperRating.rating_date <= as_of_date)
-
-    result = await db.execute(stmt)
-    rating = result.scalar_one_or_none()
-
-    if rating is None:
-        return 50.0
-
-    scores = []
-    for field_name in LIPPER_SCORE_FIELDS:
-        val = getattr(rating, field_name, None)
-        if val is not None:
-            scores.append((val - 1) / 4 * 100)
-
-    return round(sum(scores) / len(scores), 2) if scores else 50.0

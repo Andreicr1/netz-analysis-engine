@@ -97,7 +97,6 @@ class Settings(BaseSettings):
     rate_limit_compute_rpm: int = 10
 
     # ── Feature Flags ────────────────────────────────────────
-    feature_lipper_enabled: bool = False
     feature_auto_rebalance: bool = False
     feature_adls_enabled: bool = False  # DEPRECATED: ADLS removed, kept for env var compat
     feature_wealth_fact_sheets: bool = True

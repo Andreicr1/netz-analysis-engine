@@ -28,6 +28,32 @@ No structured data available for this chapter. State this clearly and do not spe
 {% endif %}
 {% endif %}
 
+{# ── SEC enrichment: XBRL share-class fees + N-CEN fund-level fees ── #}
+{% if fund_enrichment is defined and fund_enrichment.enrichment_available is defined and fund_enrichment.enrichment_available %}
+## SEC Fee Data
+{% if fund_enrichment.share_classes %}
+### Per-Share-Class Fees (SEC N-CSR XBRL)
+| Class | Ticker | Expense Ratio | Advisory Fees | Net Assets | Turnover |
+|-------|--------|---------------|---------------|------------|----------|
+{% for sc in fund_enrichment.share_classes %}
+| {{ sc.class_id }} | {{ sc.ticker or 'N/A' }} | {{ "%.3f"|format(sc.expense_ratio_pct) if sc.expense_ratio_pct is not none else 'N/A' }}% | {{ "$%.1fM"|format(sc.advisory_fees_paid) if sc.advisory_fees_paid is not none else 'N/A' }} | {{ "$%.0fM"|format(sc.net_assets) if sc.net_assets is not none else 'N/A' }} | {{ "%.1f"|format(sc.portfolio_turnover_pct) if sc.portfolio_turnover_pct is not none else 'N/A' }}% |
+{% endfor %}
+{% endif %}
+{% if fund_enrichment.ncen_fees %}
+{% if fund_enrichment.ncen_fees.management_fee is not none %}
+- **Management Fee (N-CEN):** {{ fund_enrichment.ncen_fees.management_fee }}%
+{% endif %}
+{% if fund_enrichment.ncen_fees.net_operating_expenses is not none %}
+- **Net Operating Expenses (N-CEN):** {{ fund_enrichment.ncen_fees.net_operating_expenses }}%
+{% endif %}
+{% endif %}
+{% if fund_enrichment.vehicle_specific is defined and fund_enrichment.vehicle_specific.type == 'etf' %}
+- **ETF Tracking Difference (Net):** {{ fund_enrichment.vehicle_specific.tracking_difference_net }}%
+{% endif %}
+
+Use the SEC fee data above as the primary source for your analysis. Cross-reference different fee measures (XBRL expense ratio vs N-CEN management fee) to validate consistency.
+{% endif %}
+
 ## Instructions
 Analyze the fund's fee structure comprehensively:
 

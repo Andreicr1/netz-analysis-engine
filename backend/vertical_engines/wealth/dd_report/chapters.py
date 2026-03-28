@@ -229,6 +229,61 @@ def _build_user_content(
                     line += f" ({member['title']})"
                 parts.append(line)
 
+    # Fund enrichment (N-CEN + XBRL) for relevant chapters
+    enrichment = evidence_context.get("fund_enrichment", {})
+    if enrichment.get("enrichment_available"):
+        if chapter_tag == "fee_analysis":
+            share_classes = enrichment.get("share_classes", [])
+            if share_classes:
+                parts.append("\n## Share Class Fee Data (SEC N-CSR XBRL)")
+                for sc in share_classes:
+                    ticker = sc.get("ticker") or sc.get("class_id", "N/A")
+                    er = sc.get("expense_ratio_pct")
+                    er_str = f"ER {er}%" if er is not None else "ER N/A"
+                    na = sc.get("net_assets")
+                    na_str = f"Net Assets ${na:,.0f}M" if na is not None else ""
+                    turn = sc.get("portfolio_turnover_pct")
+                    turn_str = f"Turnover {turn}%" if turn is not None else ""
+                    parts.append(f"- {ticker}: {er_str} | {na_str} | {turn_str}".rstrip(" |"))
+            ncen_fees = enrichment.get("ncen_fees", {})
+            if ncen_fees.get("management_fee") is not None:
+                parts.append(f"Management Fee (N-CEN): {ncen_fees['management_fee']}%")
+            if ncen_fees.get("net_operating_expenses") is not None:
+                parts.append(f"Net Operating Expenses (N-CEN): {ncen_fees['net_operating_expenses']}%")
+            vehicle = enrichment.get("vehicle_specific", {})
+            if vehicle.get("type") == "etf":
+                if vehicle.get("tracking_difference_net") is not None:
+                    parts.append(f"ETF Tracking Difference (Net): {vehicle['tracking_difference_net']}%")
+
+        if chapter_tag in ("investment_strategy", "executive_summary", "recommendation"):
+            if enrichment.get("strategy_label"):
+                parts.append(f"\nSEC Strategy Classification: {enrichment['strategy_label']}")
+            classification = enrichment.get("classification", {})
+            flags = [k for k, v in classification.items() if v]
+            if flags:
+                parts.append(f"Fund Flags: {', '.join(flags)}")
+
+        if chapter_tag == "operational_dd":
+            ops = enrichment.get("operational", {})
+            if ops.get("is_sec_lending_authorized") is not None:
+                if ops["is_sec_lending_authorized"]:
+                    lending_status = "Active" if ops.get("did_lend_securities") else "Authorized, not active"
+                    parts.append(f"\n## Securities Lending: {lending_status}")
+                else:
+                    parts.append("\n## Securities Lending: Not authorized")
+            if ops.get("has_swing_pricing"):
+                parts.append("Swing Pricing: Yes")
+            if ops.get("did_pay_broker_research") is not None:
+                parts.append(f"Soft Dollar / Broker Research: {'Yes' if ops['did_pay_broker_research'] else 'No'}")
+            classification = enrichment.get("classification", {})
+            flags = [k for k, v in classification.items() if v]
+            if flags:
+                parts.append(f"Fund Classification Flags: {', '.join(flags)}")
+
+        if chapter_tag == "manager_assessment":
+            if enrichment.get("strategy_label"):
+                parts.append(f"\nSEC Strategy Classification: {enrichment['strategy_label']}")
+
     # Compliance disclosures for operational_dd
     if chapter_tag == "operational_dd":
         disclosures = evidence_context.get("compliance_disclosures")

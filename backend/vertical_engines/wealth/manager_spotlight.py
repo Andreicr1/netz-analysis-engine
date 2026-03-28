@@ -147,7 +147,7 @@ class ManagerSpotlight:
             return {"instrument_id": instrument_id, "name": "Unknown Fund"}
 
         attrs = instrument.attributes or {}
-        return {
+        fund_data: dict[str, Any] = {
             "instrument_id": str(instrument.instrument_id),
             "name": instrument.name,
             "isin": instrument.isin,
@@ -162,6 +162,23 @@ class ManagerSpotlight:
             "aum_usd": float(attrs["aum_usd"]) if attrs.get("aum_usd") else None,
             "sec_crd": attrs.get("sec_crd"),
         }
+
+        # Enrich with SEC fund data if available
+        fund_cik = attrs.get("sec_cik")
+        if fund_cik:
+            from vertical_engines.wealth.dd_report.sec_injection import gather_fund_enrichment
+
+            enrichment = gather_fund_enrichment(
+                db, fund_cik=fund_cik, sec_universe=attrs.get("sec_universe"),
+            )
+            if enrichment.get("enrichment_available"):
+                fund_data["strategy_label"] = enrichment.get("strategy_label")
+                share_classes = enrichment.get("share_classes", [])
+                if share_classes:
+                    fund_data["expense_ratio_pct"] = share_classes[0].get("expense_ratio_pct")
+                fund_data["classification"] = enrichment.get("classification", {})
+
+        return fund_data
 
     def _gather_vector_context(
         self,
@@ -266,6 +283,14 @@ class ManagerSpotlight:
             parts.append(f"- Asset Class: {fund_data['asset_class']}")
         if fund_data.get("aum_usd"):
             parts.append(f"- AUM (USD): {fund_data['aum_usd']:,.0f}")
+        if fund_data.get("strategy_label"):
+            parts.append(f"- Strategy: {fund_data['strategy_label']}")
+        if fund_data.get("expense_ratio_pct") is not None:
+            parts.append(f"- Expense Ratio: {fund_data['expense_ratio_pct']}%")
+        classification = fund_data.get("classification", {})
+        flags = [k for k, v in classification.items() if v]
+        if flags:
+            parts.append(f"- Fund Flags: {', '.join(flags)}")
 
         if quant_profile:
             parts.append("\n## Quantitative Metrics")

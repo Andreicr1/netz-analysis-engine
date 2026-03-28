@@ -21,9 +21,12 @@ logger = structlog.get_logger()
 # which data providers supply them, and the primary provider.
 _CHAPTER_FIELD_EXPECTATIONS: dict[str, dict[str, Any]] = {
     "fee_analysis": {
-        "fields": ["fund_name", "fund_type", "currency"],
-        "providers": ["YFinance"],
-        "primary_provider": "YFinance",
+        "fields": [
+            "fund_name", "fund_type", "currency",
+            "fund_enrichment",
+        ],
+        "providers": ["YFinance", "SEC N-CSR XBRL", "SEC N-CEN"],
+        "primary_provider": "SEC N-CSR XBRL",
     },
     "investment_strategy": {
         "fields": [
@@ -31,14 +34,18 @@ _CHAPTER_FIELD_EXPECTATIONS: dict[str, dict[str, Any]] = {
             "holdings_source",
             "nport_available", "nport_sector_weights", "nport_asset_allocation",
             "thirteenf_available", "sector_weights",
+            "fund_enrichment",
             "documents",
         ],
-        "providers": ["YFinance", "SEC EDGAR N-PORT", "SEC EDGAR 13F"],
+        "providers": ["YFinance", "SEC EDGAR N-PORT", "SEC EDGAR 13F", "SEC N-CEN"],
         "primary_provider": "SEC EDGAR N-PORT",
     },
     "operational_dd": {
-        "fields": ["fund_name", "manager_name", "domicile", "compliance_disclosures"],
-        "providers": ["YFinance", "SEC EDGAR ADV"],
+        "fields": [
+            "fund_name", "manager_name", "domicile", "compliance_disclosures",
+            "fund_enrichment",
+        ],
+        "providers": ["YFinance", "SEC EDGAR ADV", "SEC N-CEN"],
         "primary_provider": "YFinance",
     },
     "manager_assessment": {
@@ -48,9 +55,10 @@ _CHAPTER_FIELD_EXPECTATIONS: dict[str, dict[str, Any]] = {
             "adv_aum_history", "adv_compliance_disclosures", "adv_team",
             "adv_brochure_sections",
             "nport_available", "fund_style",
+            "fund_enrichment",
             "documents",
         ],
-        "providers": ["YFinance", "SEC EDGAR ADV", "SEC EDGAR N-PORT"],
+        "providers": ["YFinance", "SEC EDGAR ADV", "SEC EDGAR N-PORT", "SEC N-CEN"],
         "primary_provider": "SEC EDGAR ADV",
     },
     "performance_analysis": {
@@ -78,8 +86,9 @@ _CHAPTER_FIELD_EXPECTATIONS: dict[str, dict[str, Any]] = {
             "fund_name", "fund_type", "geography", "asset_class",
             "quant_profile.sharpe_1y", "quant_profile.return_1y",
             "quant_profile.cvar_95_3m",
+            "fund_enrichment",
         ],
-        "providers": ["YFinance"],
+        "providers": ["YFinance", "SEC N-CEN"],
         "primary_provider": "YFinance",
     },
     "recommendation": {
@@ -89,8 +98,9 @@ _CHAPTER_FIELD_EXPECTATIONS: dict[str, dict[str, Any]] = {
             "quant_profile.sharpe_1y", "quant_profile.return_1y",
             "quant_profile.cvar_95_3m",
             "risk_metrics",
+            "fund_enrichment",
         ],
-        "providers": ["YFinance"],
+        "providers": ["YFinance", "SEC N-CEN"],
         "primary_provider": "YFinance",
     },
 }
@@ -177,6 +187,9 @@ class EvidencePack:
     adv_team: list[dict[str, Any]] = field(default_factory=list)
     adv_brochure_sections: dict[str, str] = field(default_factory=dict)
 
+    # Fund enrichment (N-CEN classification + XBRL fees + vehicle-specific)
+    fund_enrichment: dict[str, Any] = field(default_factory=dict)
+
     def to_context(self) -> dict[str, Any]:
         """Convert to template context dict for Jinja2 rendering."""
         return {
@@ -216,6 +229,7 @@ class EvidencePack:
             "adv_funds": self.adv_funds,
             "adv_team": self.adv_team,
             "adv_brochure_sections": self.adv_brochure_sections,
+            "fund_enrichment": self.fund_enrichment,
         }
 
     def filter_for_chapter(self, chapter_tag: str) -> dict[str, Any]:
@@ -300,6 +314,7 @@ def build_evidence_pack(
     sec_adv_data: dict[str, Any] | None = None,
     adv_brochure_sections: dict[str, str] | None = None,
     holdings_source: str | None = None,
+    fund_enrichment: dict[str, Any] | None = None,
 ) -> EvidencePack:
     """Build a frozen evidence pack from gathered data.
 
@@ -381,4 +396,5 @@ def build_evidence_pack(
         adv_funds=_adv.get("adv_funds", []),
         adv_team=_adv.get("adv_team", []),
         adv_brochure_sections=adv_brochure_sections or {},
+        fund_enrichment=fund_enrichment or {},
     )

@@ -889,18 +889,78 @@ async def import_sec_security(
     # Resolve SEC registered fund linkage (CIK + universe) for N-PORT data
     sec_cik: str | None = None
     sec_universe: str | None = None
+    sec_crd: str | None = None
     fund_manager_name = sec_row.issuer_name
+    enrichment_attrs: dict[str, object] = {}
     if inst_type == "fund":
-        from app.shared.models import SecRegisteredFund
+        from app.shared.models import SecEtf, SecFundClass, SecRegisteredFund
+
         reg_fund = (await db.execute(
             select(SecRegisteredFund).where(
                 SecRegisteredFund.ticker == sec_row.ticker,
             ).limit(1),
         )).scalar_one_or_none()
+
+        # Fallback: search sec_fund_classes by ticker → find parent CIK
+        if not reg_fund:
+            fc_row = (await db.execute(
+                select(SecFundClass).where(
+                    SecFundClass.ticker == sec_row.ticker,
+                ).limit(1),
+            )).scalar_one_or_none()
+            if fc_row:
+                reg_fund = (await db.execute(
+                    select(SecRegisteredFund).where(
+                        SecRegisteredFund.cik == fc_row.cik,
+                    ),
+                )).scalar_one_or_none()
+
+        # Fallback: search sec_etfs by ticker
+        if not reg_fund:
+            etf_row = (await db.execute(
+                select(SecEtf).where(SecEtf.ticker == sec_row.ticker).limit(1),
+            )).scalar_one_or_none()
+            if etf_row:
+                enrichment_attrs["sec_universe"] = "etf"
+                enrichment_attrs["strategy_label"] = etf_row.strategy_label
+                enrichment_attrs["is_index"] = etf_row.is_index
+                if etf_row.net_operating_expenses is not None:
+                    enrichment_attrs["expense_ratio_pct"] = float(etf_row.net_operating_expenses)
+                if etf_row.tracking_difference_net is not None:
+                    enrichment_attrs["tracking_difference_net"] = float(etf_row.tracking_difference_net)
+                enrichment_attrs["index_tracked"] = etf_row.index_tracked
+
         if reg_fund:
             sec_cik = reg_fund.cik
             sec_universe = "registered_us"
+            sec_crd = reg_fund.crd_number
             fund_manager_name = sec_row.issuer_name
+
+            # Enrich with N-CEN flags
+            enrichment_attrs["strategy_label"] = reg_fund.strategy_label
+            enrichment_attrs["is_index"] = reg_fund.is_index
+            enrichment_attrs["is_target_date"] = reg_fund.is_target_date
+            enrichment_attrs["is_fund_of_fund"] = reg_fund.is_fund_of_fund
+            if reg_fund.inception_date:
+                enrichment_attrs["fund_inception_date"] = str(reg_fund.inception_date)
+
+            # Enrich with XBRL per-share-class data (best class for this ticker)
+            class_rows = (await db.execute(
+                select(SecFundClass).where(SecFundClass.cik == sec_cik),
+            )).scalars().all()
+            if class_rows:
+                # Prefer the class matching the imported ticker
+                best = next(
+                    (c for c in class_rows if c.ticker == sec_row.ticker),
+                    max(class_rows, key=lambda c: float(c.net_assets or 0)),
+                )
+                if best.expense_ratio_pct is not None:
+                    enrichment_attrs["expense_ratio_pct"] = float(best.expense_ratio_pct)
+                if best.holdings_count is not None:
+                    enrichment_attrs["holdings_count"] = best.holdings_count
+                if best.portfolio_turnover_pct is not None:
+                    enrichment_attrs["portfolio_turnover_pct"] = float(best.portfolio_turnover_pct)
+
             # Resolve manager name from sec_managers if available
             if reg_fund.crd_number:
                 from app.shared.models import SecManager
@@ -937,7 +997,10 @@ async def import_sec_security(
             "inception_date": None,
             # SEC linkage for N-PORT fund-level data (Phase 1)
             "sec_cik": sec_cik,
-            "sec_universe": sec_universe,
+            "sec_crd": sec_crd,
+            "sec_universe": sec_universe or enrichment_attrs.get("sec_universe"),
+            # Enrichment from N-CEN + XBRL (Phase 2)
+            **enrichment_attrs,
         },
     )
     db.add(instrument)

@@ -82,7 +82,7 @@ def _fund_key_levels(block_id: str, attrs: dict[str, Any]) -> list[str]:
 
     Returns keys from most specific (level 0) to least (level 2).
     """
-    strategy = str(attrs.get("strategy", "unknown"))
+    strategy = str(attrs.get("strategy_label") or attrs.get("strategy", "unknown"))
     aum = _aum_bucket(attrs.get("aum_usd"))
     return [
         f"{block_id}::{strategy}::{aum}",       # level 0: full

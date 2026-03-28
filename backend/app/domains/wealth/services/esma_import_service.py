@@ -104,6 +104,9 @@ async def import_esma_fund_to_universe(
         attributes["host_member_states"] = fund.host_member_states
     if strategy:
         attributes["strategy"] = strategy
+    # Enrich with ESMA strategy_label if available
+    if hasattr(fund, "strategy_label") and fund.strategy_label:
+        attributes["strategy_label"] = fund.strategy_label
 
     instrument = Instrument(
         organization_id=org_id,

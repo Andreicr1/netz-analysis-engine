@@ -182,7 +182,12 @@ class FeeDragService:
         attributes: dict[str, Any],
     ) -> FeeBreakdown:
         """Extract fee components from JSONB attributes by instrument type."""
-        mgmt = max(0.0, _safe_float(attributes.get("management_fee_pct", 0.0)))
+        # Prefer XBRL expense_ratio_pct (authoritative) over manual management_fee_pct
+        mgmt = max(0.0, _safe_float(
+            attributes.get("expense_ratio_pct")
+            or attributes.get("management_fee_pct")
+            or 0.0,
+        ))
         perf = max(0.0, _safe_float(attributes.get("performance_fee_pct", 0.0)))
         other = 0.0
 

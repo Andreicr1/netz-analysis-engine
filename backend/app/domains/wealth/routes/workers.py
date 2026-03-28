@@ -865,3 +865,32 @@ async def trigger_run_sec_bulk_ingestion(
     )
 
 
+@router.post(
+    "/run-form345-ingestion",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger Form 345 insider transaction ingestion",
+    description=(
+        "Downloads quarterly Form 3/4/5 insider transaction data from SEC EDGAR, "
+        "parses SUBMISSION/REPORTINGOWNER/NONDERIV_TRANS TSV files, and upserts "
+        "into sec_insider_transactions. Refreshes sec_insider_sentiment materialized view. "
+        "Uses advisory lock 900_051. Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_form345_ingestion(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.form345_ingestion import run_form345_ingestion
+
+    return await _dispatch_worker(
+        background_tasks, "run-form345-ingestion", "global",
+        run_form345_ingestion,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )
+
+

@@ -7,7 +7,6 @@ from app.domains.wealth.models.dd_report import DDChapter, DDReport
 from app.domains.wealth.models.document import WealthDocument, WealthDocumentVersion
 from app.domains.wealth.models.fund import Fund  # DEPRECATED: use Instrument (SR-4)
 from app.domains.wealth.models.instrument import Instrument
-from app.domains.wealth.models.lipper import LipperRating
 from app.domains.wealth.models.macro import MacroData
 from app.domains.wealth.models.model_portfolio import ModelPortfolio
 from app.domains.wealth.models.model_portfolio_nav import ModelPortfolioNav
@@ -31,7 +30,6 @@ __all__ = [
     "FundRiskMetrics",
     "Instrument",
     "InstrumentScreeningMetrics",
-    "LipperRating",
     "MacroData",
     "ModelPortfolio",
     "ModelPortfolioNav",

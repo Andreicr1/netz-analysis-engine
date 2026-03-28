@@ -87,3 +87,65 @@ class WatchlistService:
                 )
 
         return alerts
+
+    @staticmethod
+    def check_enrichment_changes(
+        instruments: list[dict[str, Any]],
+        previous_snapshots: dict[uuid.UUID, dict[str, Any]],
+    ) -> list[TransitionAlert]:
+        """Detect material enrichment attribute changes.
+
+        Compares current instrument attributes against previous snapshots
+        for fee increases (>5bps) and strategy_label changes.
+
+        Args:
+            instruments: List of dicts with instrument_id, name, attributes.
+            previous_snapshots: Map of instrument_id -> previous attributes dict.
+
+        Returns:
+            List of TransitionAlert for detected enrichment changes.
+
+        """
+        alerts: list[TransitionAlert] = []
+        now = datetime.now(UTC)
+
+        for inst in instruments:
+            instrument_id = inst["instrument_id"]
+            instrument_name = inst.get("name", str(instrument_id))
+            current_attrs = inst.get("attributes", {})
+            prev_attrs = previous_snapshots.get(instrument_id, {})
+
+            if not prev_attrs:
+                continue
+
+            # Fee increase detection (>5bps = 0.05 pct points)
+            curr_er = current_attrs.get("expense_ratio_pct")
+            prev_er = prev_attrs.get("expense_ratio_pct")
+            if curr_er is not None and prev_er is not None:
+                delta = float(curr_er) - float(prev_er)
+                if delta > 0.05:
+                    alerts.append(TransitionAlert(
+                        instrument_id=instrument_id,
+                        instrument_name=instrument_name,
+                        previous_outcome=f"ER {prev_er}%",
+                        new_outcome=f"ER {curr_er}%",
+                        direction="enrichment_change",
+                        message=f"Expense ratio increased by {delta:.3f}pp ({prev_er}% → {curr_er}%)",
+                        detected_at=now,
+                    ))
+
+            # Strategy label change detection
+            curr_strat = current_attrs.get("strategy_label")
+            prev_strat = prev_attrs.get("strategy_label")
+            if curr_strat and prev_strat and curr_strat != prev_strat:
+                alerts.append(TransitionAlert(
+                    instrument_id=instrument_id,
+                    instrument_name=instrument_name,
+                    previous_outcome=prev_strat,
+                    new_outcome=curr_strat,
+                    direction="enrichment_change",
+                    message=f"Strategy label changed: {prev_strat} → {curr_strat}",
+                    detected_at=now,
+                ))
+
+        return alerts

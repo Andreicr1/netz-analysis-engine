@@ -53,6 +53,7 @@ from vertical_engines.wealth.dd_report.quant_injection import (
     gather_risk_metrics,
 )
 from vertical_engines.wealth.dd_report.sec_injection import (
+    gather_fund_enrichment,
     gather_sec_13f_data,
     gather_sec_adv_brochure,
     gather_sec_adv_data,
@@ -345,16 +346,20 @@ class DDReportEngine:
         def _run_adv() -> dict:
             return gather_sec_adv_data(db, manager_name=manager_name)
 
+        def _run_enrichment() -> dict:
+            return gather_fund_enrichment(db, fund_cik=fund_cik, sec_universe=sec_universe)
+
         tasks = {
             "quant": _run_quant,
             "risk": _run_risk,
             "nport": _run_nport,
             "thirteenf": _run_13f,
             "adv": _run_adv,
+            "enrichment": _run_enrichment,
         }
 
         results: dict[str, Any] = {}
-        with ThreadPoolExecutor(max_workers=5) as pool:
+        with ThreadPoolExecutor(max_workers=6) as pool:
             futures = {pool.submit(fn): name for name, fn in tasks.items()}
             for future in as_completed(futures):
                 name = futures[future]
@@ -369,6 +374,7 @@ class DDReportEngine:
         sec_nport = results["nport"]
         sec_13f = results["thirteenf"]
         sec_adv = results["adv"]
+        enrichment = results.get("enrichment", {})
 
         holdings_source: str | None = None
         if sec_nport:
@@ -417,6 +423,7 @@ class DDReportEngine:
             sec_adv_data=sec_adv,
             adv_brochure_sections=adv_brochure,
             holdings_source=holdings_source,
+            fund_enrichment=enrichment,
         )
 
     def _generate_all_chapters(

@@ -897,6 +897,38 @@ class ImfWeoForecast(Base):
     )
 
 
+class SecInsiderTransaction(Base):
+    """Form 3/4/5 insider transactions (Officers, Directors, 10% Owners).
+
+    GLOBAL TABLE: No organization_id, no RLS.
+    Regular table (not hypertable — ~60k rows/quarter doesn't justify).
+    trans_value is GENERATED ALWAYS AS (trans_shares * trans_price_per_share) STORED.
+    """
+
+    __tablename__ = "sec_insider_transactions"
+    __table_args__ = (
+        {"comment": "Form 3/4/5 insider transactions. Global table, no RLS."},
+    )
+
+    accession_number: Mapped[str] = mapped_column(String, primary_key=True)
+    trans_sk: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    issuer_cik: Mapped[str] = mapped_column(String, nullable=False)
+    issuer_ticker: Mapped[str | None] = mapped_column(String)
+    owner_cik: Mapped[str] = mapped_column(String, nullable=False)
+    owner_name: Mapped[str | None] = mapped_column(String)
+    owner_relationship: Mapped[str | None] = mapped_column(String)
+    owner_title: Mapped[str | None] = mapped_column(String)
+    trans_date: Mapped[dt.date] = mapped_column(Date, nullable=False)
+    period_of_report: Mapped[dt.date | None] = mapped_column(Date)
+    document_type: Mapped[str | None] = mapped_column(String(1))
+    trans_code: Mapped[str] = mapped_column(String(2), nullable=False)
+    trans_acquired_disp: Mapped[str | None] = mapped_column(String(1))
+    trans_shares: Mapped[Decimal | None] = mapped_column(Numeric(20, 4))
+    trans_price_per_share: Mapped[Decimal | None] = mapped_column(Numeric(12, 4))
+    trans_value: Mapped[Decimal | None] = mapped_column(Numeric(20, 2))  # GENERATED ALWAYS — read only
+    shares_owned_after: Mapped[Decimal | None] = mapped_column(Numeric(20, 4))
+
+
 class SecInstitutionalAllocation(Base):
     """Institutional 13F reverse lookup — who holds what.
 

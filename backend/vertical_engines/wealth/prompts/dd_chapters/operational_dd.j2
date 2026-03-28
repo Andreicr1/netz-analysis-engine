@@ -39,6 +39,26 @@ No compliance disclosures on file with SEC/IAPD. Clean regulatory record as of m
 [SEC registration not confirmed] — Manager not found in SEC/IAPD database. This may indicate the manager is not SEC-registered, operates under state registration, or is domiciled outside US jurisdiction.
 {% endif %}
 
+{# ── SEC enrichment: operational flags from N-CEN ── #}
+{% if fund_enrichment is defined and fund_enrichment.enrichment_available is defined and fund_enrichment.enrichment_available %}
+## SEC Operational Data (N-CEN)
+{% if fund_enrichment.operational %}
+{% set ops = fund_enrichment.operational %}
+{% if ops.is_sec_lending_authorized is not none %}
+- **Securities Lending:** {% if ops.is_sec_lending_authorized %}{% if ops.did_lend_securities %}Active{% else %}Authorized, not active{% endif %}{% else %}Not authorized{% endif %}
+{% endif %}
+{% if ops.has_swing_pricing %}- **Swing Pricing:** Yes{% endif %}
+{% if ops.did_pay_broker_research is not none %}- **Soft Dollar / Broker Research:** {% if ops.did_pay_broker_research %}Yes{% else %}No{% endif %}{% endif %}
+{% endif %}
+{% if fund_enrichment.classification %}
+{% set flags = [] %}
+{% for k, v in fund_enrichment.classification.items() if v %}{% if flags.append(k) %}{% endif %}{% endfor %}
+{% if flags %}- **Fund Flags:** {{ flags | join(', ') }}{% endif %}
+{% endif %}
+
+Incorporate the N-CEN operational data above into your assessment of compliance, governance, and operational infrastructure.
+{% endif %}
+
 ## Instructions
 Assess the fund's operational infrastructure:
 

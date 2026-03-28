@@ -866,6 +866,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/manager-screener/managers/{crd}/registered-funds",
+    "name": "get_registered_funds"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/manager-screener/managers/{crd}/universe-status",
     "name": "get_universe_status"
   },
@@ -1856,6 +1861,11 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/workers/run-form345-ingestion",
+    "name": "trigger_run_form345_ingestion"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/workers/run-imf-ingestion",
     "name": "trigger_run_imf_ingestion"
   },
@@ -1901,6 +1911,11 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/workers/run-regime-fit",
+    "name": "trigger_run_regime_fit"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/workers/run-risk-calc",
     "name": "trigger_run_risk_calc"
   },
@@ -1921,6 +1936,11 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/workers/run-sec-bulk-ingestion",
+    "name": "trigger_run_sec_bulk_ingestion"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/workers/run-sec-refresh",
     "name": "trigger_run_sec_refresh"
   },
@@ -1933,6 +1953,11 @@
     "method": "POST",
     "path": "/api/v1/workers/run-watchlist-check",
     "name": "trigger_run_watchlist_check"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-wealth-embedding",
+    "name": "trigger_run_wealth_embedding"
   },
   {
     "method": "POST",

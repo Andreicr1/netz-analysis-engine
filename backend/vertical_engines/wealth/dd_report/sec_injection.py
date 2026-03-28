@@ -228,6 +228,38 @@ def gather_sec_nport_data(
         if len(style_history) >= 2 and style_history[0][0] != style_history[1][0]:
             style_drift_detected = True
 
+        # Portfolio-level insider sentiment (weighted by pct_of_nav)
+        portfolio_insider_score: float | None = None
+        try:
+            from app.domains.wealth.services.insider_queries import (
+                get_insider_sentiment_score,
+            )
+
+            insider_scores: list[tuple[float, float]] = []
+            for h in sorted_holdings[:20]:  # top 20 by pct_of_nav
+                # Equity holdings: match via issuer_name → ticker not in N-PORT,
+                # but cusip is available. Try CUSIP prefix as issuer identifier.
+                # For now use issuer_name-based ticker if available.
+                score = 50.0
+                if h.cusip:
+                    # Try issuer_cik from cusip — not available directly,
+                    # so try ticker match via issuer_name
+                    score = get_insider_sentiment_score(db, issuer_cik=h.cusip[:6])
+                if score == 50.0:
+                    continue
+                weight = float(h.pct_of_nav or 0) / 100
+                if weight > 0:
+                    insider_scores.append((score, weight))
+
+            if insider_scores:
+                total_weight = sum(w for _, w in insider_scores)
+                if total_weight > 0:
+                    portfolio_insider_score = round(
+                        sum(s * w for s, w in insider_scores) / total_weight, 1,
+                    )
+        except Exception:
+            logger.debug("nport_insider_sentiment_skipped", fund_cik=fund_cik)
+
         logger.info(
             "sec_nport_gathered",
             fund_cik=fund_cik,
@@ -236,7 +268,7 @@ def gather_sec_nport_data(
             sectors=len(sector_weights),
         )
 
-        return {
+        result_data: dict[str, Any] = {
             "report_date": str(latest_date),
             "holdings_count": len(holdings),
             "sector_weights": sector_weights,
@@ -245,9 +277,184 @@ def gather_sec_nport_data(
             "fund_style": fund_style,
             "style_drift_detected": style_drift_detected,
         }
+        if portfolio_insider_score is not None:
+            result_data["portfolio_insider_sentiment"] = portfolio_insider_score
+
+        return result_data
 
     except Exception:
         logger.exception("sec_nport_gather_failed", fund_cik=fund_cik)
+        return {}
+
+
+def gather_fund_enrichment(
+    db: Session,
+    *,
+    fund_cik: str | None,
+    sec_universe: str | None,
+) -> dict[str, Any]:
+    """Gather N-CEN classification flags and XBRL fee data for DD report.
+
+    Queries SecRegisteredFund (N-CEN), SecFundClass (XBRL), and dedicated
+    vehicle tables (SecEtf, SecBdc, SecMoneyMarketFund) for enrichment.
+    Returns empty dict on error or no data — never raises.
+
+    Parameters
+    ----------
+    db : Session
+        Sync database session.
+    fund_cik : str | None
+        Fund CIK from sec_registered_funds.
+    sec_universe : str | None
+        Universe tag (e.g. "registered_us").
+
+    """
+    if not fund_cik or sec_universe != "registered_us":
+        return {}
+
+    try:
+        from app.shared.models import (
+            SecBdc,
+            SecEtf,
+            SecFundClass,
+            SecMoneyMarketFund,
+            SecRegisteredFund,
+        )
+
+        fund = (
+            db.query(SecRegisteredFund)
+            .filter(SecRegisteredFund.cik == fund_cik)
+            .first()
+        )
+        if not fund:
+            return {}
+
+        result: dict[str, Any] = {
+            "enrichment_available": True,
+            "strategy_label": fund.strategy_label,
+            "classification": {
+                "is_index": fund.is_index,
+                "is_non_diversified": fund.is_non_diversified,
+                "is_target_date": fund.is_target_date,
+                "is_fund_of_fund": fund.is_fund_of_fund,
+                "is_master_feeder": fund.is_master_feeder,
+            },
+            "operational": {
+                "is_sec_lending_authorized": fund.is_sec_lending_authorized,
+                "did_lend_securities": fund.did_lend_securities,
+                "has_swing_pricing": fund.has_swing_pricing,
+                "did_pay_broker_research": fund.did_pay_broker_research,
+            },
+            "ncen_fees": {},
+            "share_classes": [],
+            "monthly_avg_net_assets": (
+                float(fund.monthly_avg_net_assets)
+                if fund.monthly_avg_net_assets is not None
+                else None
+            ),
+            "fund_inception_date": (
+                str(fund.inception_date)
+                if fund.inception_date
+                else None
+            ),
+        }
+
+        # N-CEN fees (only reported for closed-end / interval funds)
+        if fund.management_fee is not None or fund.net_operating_expenses is not None:
+            result["ncen_fees"] = {
+                "management_fee": float(fund.management_fee) if fund.management_fee is not None else None,
+                "net_operating_expenses": float(fund.net_operating_expenses) if fund.net_operating_expenses is not None else None,
+            }
+
+        # XBRL per-share-class data
+        class_rows = (
+            db.query(SecFundClass)
+            .filter(SecFundClass.cik == fund_cik)
+            .all()
+        )
+        for sc in class_rows:
+            result["share_classes"].append({
+                "class_id": sc.class_id,
+                "ticker": sc.ticker,
+                "expense_ratio_pct": float(sc.expense_ratio_pct) if sc.expense_ratio_pct is not None else None,
+                "advisory_fees_paid": float(sc.advisory_fees_paid) if sc.advisory_fees_paid is not None else None,
+                "net_assets": float(sc.net_assets) if sc.net_assets is not None else None,
+                "holdings_count": sc.holdings_count,
+                "portfolio_turnover_pct": float(sc.portfolio_turnover_pct) if sc.portfolio_turnover_pct is not None else None,
+                "avg_annual_return_pct": float(sc.avg_annual_return_pct) if sc.avg_annual_return_pct is not None else None,
+            })
+
+        # Vehicle-specific data (ETF / BDC / MMF)
+        if fund.series_id:
+            etf = (
+                db.query(SecEtf)
+                .filter(SecEtf.series_id == fund.series_id)
+                .first()
+            )
+            if etf:
+                result["vehicle_specific"] = {
+                    "type": "etf",
+                    "tracking_difference_gross": float(etf.tracking_difference_gross) if etf.tracking_difference_gross is not None else None,
+                    "tracking_difference_net": float(etf.tracking_difference_net) if etf.tracking_difference_net is not None else None,
+                    "index_tracked": etf.index_tracked,
+                }
+            else:
+                bdc = (
+                    db.query(SecBdc)
+                    .filter(SecBdc.series_id == fund.series_id)
+                    .first()
+                )
+                if bdc:
+                    result["vehicle_specific"] = {
+                        "type": "bdc",
+                        "investment_focus": bdc.investment_focus,
+                        "is_externally_managed": bdc.is_externally_managed,
+                    }
+                else:
+                    mmf = (
+                        db.query(SecMoneyMarketFund)
+                        .filter(SecMoneyMarketFund.series_id == fund.series_id)
+                        .first()
+                    )
+                    if mmf:
+                        result["vehicle_specific"] = {
+                            "type": "mmf",
+                            "mmf_category": mmf.mmf_category,
+                            "weighted_avg_maturity": mmf.weighted_avg_maturity,
+                            "weighted_avg_life": mmf.weighted_avg_life,
+                            "seven_day_gross_yield": float(mmf.seven_day_gross_yield) if mmf.seven_day_gross_yield is not None else None,
+                        }
+
+        # Insider sentiment (aggregate from portfolio holdings or direct)
+        try:
+            from app.domains.wealth.services.insider_queries import (
+                get_insider_sentiment_score,
+                get_insider_summary,
+            )
+
+            # Try direct issuer CIK first (single-stock or ETF tracking an issuer)
+            insider_score = get_insider_sentiment_score(db, issuer_cik=fund_cik)
+            if insider_score != 50.0:
+                result["insider_sentiment_score"] = insider_score
+                insider_detail = get_insider_summary(db, issuer_cik=fund_cik)
+                if insider_detail:
+                    result["insider_summary"] = insider_detail
+        except Exception:
+            logger.debug("insider_sentiment_skipped", fund_cik=fund_cik)
+
+        logger.info(
+            "fund_enrichment_gathered",
+            fund_cik=fund_cik,
+            strategy_label=result.get("strategy_label"),
+            share_classes=len(result["share_classes"]),
+            has_vehicle_specific="vehicle_specific" in result,
+            has_insider="insider_sentiment_score" in result,
+        )
+
+        return result
+
+    except Exception:
+        logger.exception("fund_enrichment_gather_failed", fund_cik=fund_cik)
         return {}
 
 

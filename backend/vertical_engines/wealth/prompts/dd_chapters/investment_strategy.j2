@@ -29,6 +29,21 @@ No structured data available for this chapter. State this clearly and do not spe
 {% endif %}
 {% endif %}
 
+{# ── SEC enrichment: strategy label + classification flags ── #}
+{% if fund_enrichment is defined and fund_enrichment.enrichment_available is defined and fund_enrichment.enrichment_available %}
+## SEC Fund Classification (N-CEN)
+{% if fund_enrichment.strategy_label %}- **Strategy:** {{ fund_enrichment.strategy_label }}{% endif %}
+{% if fund_enrichment.classification %}
+{% set flags = [] %}
+{% for k, v in fund_enrichment.classification.items() if v %}{% if flags.append(k) %}{% endif %}{% endfor %}
+{% if flags %}- **Flags:** {{ flags | join(', ') }}{% endif %}
+{% endif %}
+{% if fund_enrichment.monthly_avg_net_assets is not none %}- **Monthly Avg Net Assets:** ${{ "%.0f"|format(fund_enrichment.monthly_avg_net_assets / 1e6) }}M{% endif %}
+{% if fund_enrichment.fund_inception_date %}- **Inception Date:** {{ fund_enrichment.fund_inception_date }}{% endif %}
+
+Cross-reference the SEC strategy classification and flags above with the actual portfolio holdings below. Note any divergence between stated strategy and portfolio composition.
+{% endif %}
+
 {# ── PRIMARY: N-PORT fund-level holdings (registered US funds) ── #}
 {% if nport_available is defined and nport_available %}
 ## Fund Portfolio Holdings (SEC N-PORT, {{ nport_report_date }})

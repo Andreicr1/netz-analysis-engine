@@ -1,5 +1,11 @@
 # Fund Scoring Weights — Used by scoring_service.py
 # Total must sum to 1.0. Adjust via calibration notebooks.
+#
+# fee_efficiency: derived from SEC XBRL expense_ratio_pct (replaces Lipper).
+#   0% ER → score 100, 2% ER → score 0. Neutral 50.0 when data unavailable.
+#
+# insider_sentiment: opt-in (add with weight > 0 to activate).
+#   Derived from SEC Form 345 buy/sell ratio via sec_insider_sentiment MV.
 
 scoring_weights:
   return_consistency: 0.20
@@ -7,4 +13,4 @@ scoring_weights:
   drawdown_control: 0.20
   information_ratio: 0.15
   flows_momentum: 0.10
-  lipper_rating: 0.10
+  fee_efficiency: 0.10
