@@ -35,7 +35,7 @@ backend/
     domains/
       credit/       ← analytical modules only (deals, portfolio, documents, reporting, dashboard, dataroom, actions, global_agent)
         modules/ai/ ← IC memos, deep review, extraction, pipeline deals, copilot, compliance
-      wealth/       ← models, routes, schemas, workers (28 tables, 17 workers, 18 route modules)
+      wealth/       ← models, routes, schemas, workers (28 tables, 17 workers, 17 route modules)
     services/
       storage_client.py ← StorageClient abstraction (LocalStorage dev, R2 prod, ADLS deprecated)
     shared/         ← enums, exceptions

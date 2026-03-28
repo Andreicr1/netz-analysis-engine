@@ -90,7 +90,6 @@ from app.domains.wealth.routes.correlation_regime import router as wealth_correl
 from app.domains.wealth.routes.dd_reports import router as wealth_dd_reports_router
 from app.domains.wealth.routes.documents import router as wealth_documents_router
 from app.domains.wealth.routes.entity_analytics import router as wealth_entity_analytics_router
-from app.domains.wealth.routes.esma import router as wealth_esma_router
 from app.domains.wealth.routes.exposure import router as wealth_exposure_router
 from app.domains.wealth.routes.fact_sheets import router as wealth_fact_sheets_router
 
@@ -393,7 +392,6 @@ api_v1.include_router(wealth_manager_screener_router)
 api_v1.include_router(wealth_strategy_drift_router)
 api_v1.include_router(wealth_attribution_router)
 api_v1.include_router(wealth_correlation_regime_router)
-api_v1.include_router(wealth_esma_router)
 api_v1.include_router(wealth_exposure_router)
 api_v1.include_router(wealth_blended_benchmark_router)
 api_v1.include_router(wealth_sec_analysis_router)

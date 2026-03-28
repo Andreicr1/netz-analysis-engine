@@ -541,31 +541,6 @@
   },
   {
     "method": "GET",
-    "path": "/api/v1/esma/funds",
-    "name": "list_esma_funds"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/esma/funds/{isin}",
-    "name": "get_esma_fund"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/esma/managers",
-    "name": "list_esma_managers"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/esma/managers/{esma_id}",
-    "name": "get_esma_manager"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/esma/managers/{esma_id}/sec-crossref",
-    "name": "get_esma_sec_crossref"
-  },
-  {
-    "method": "GET",
     "path": "/api/v1/fact-sheets/dd-reports/{report_id}/download",
     "name": "download_dd_report_pdf"
   },

@@ -1,7 +1,8 @@
 /** Model Portfolio detail — metadata + track record (backtest, stress) + fact sheets. */
 import type { PageServerLoad } from "./$types";
 import { createServerApiClient } from "$lib/api/client";
-import type { ModelPortfolio, TrackRecord } from "$lib/types/model-portfolio";
+import type { ModelPortfolio, TrackRecord, PortfolioView } from "$lib/types/model-portfolio";
+import type { UniverseAsset } from "$lib/types/universe";
 
 interface FactSheet {
 	path: string;
@@ -17,16 +18,20 @@ export const load: PageServerLoad = async ({ parent, params }) => {
 	const { token, actor } = await parent();
 	const api = createServerApiClient(token);
 
-	const [portfolio, trackRecord, factSheets] = await Promise.all([
+	const [portfolio, trackRecord, factSheets, views, instruments] = await Promise.all([
 		api.get<ModelPortfolio>(`/model-portfolios/${params.portfolioId}`),
 		api.get<TrackRecord>(`/model-portfolios/${params.portfolioId}/track-record`).catch(() => null),
 		api.get<FactSheet[]>(`/fact-sheets/model-portfolios/${params.portfolioId}`).catch(() => [] as FactSheet[]),
+		api.get<PortfolioView[]>(`/model-portfolios/${params.portfolioId}/views`).catch(() => [] as PortfolioView[]),
+		api.get<UniverseAsset[]>("/universe").catch(() => [] as UniverseAsset[]),
 	]);
 
 	return {
 		portfolio,
 		trackRecord,
 		factSheets,
+		views,
+		instruments,
 		portfolioId: params.portfolioId!,
 		actorRole: actor?.role ?? null,
 	};

@@ -12,7 +12,9 @@
 	} from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
-	import type { ModelPortfolio, TrackRecord, InstrumentWeight, BacktestFold, StressScenario } from "$lib/types/model-portfolio";
+	import type { ModelPortfolio, TrackRecord, InstrumentWeight, BacktestFold, StressScenario, PortfolioView } from "$lib/types/model-portfolio";
+	import type { UniverseAsset } from "$lib/types/universe";
+	import ICViewsPanel from "$lib/components/model-portfolio/ICViewsPanel.svelte";
 	import { instrumentTypeLabel, instrumentTypeColor } from "$lib/types/universe";
 	import { scenarioLabel, profileColor } from "$lib/types/model-portfolio";
 
@@ -23,6 +25,13 @@
 	let portfolio = $derived(data.portfolio as ModelPortfolio);
 	let trackRecord = $derived(data.trackRecord as TrackRecord | null);
 	let portfolioId = $derived(data.portfolioId as string);
+
+	let actorRole = $derived((data.actorRole ?? null) as string | null);
+	let views = $derived((data.views ?? []) as PortfolioView[]);
+	let instruments = $derived((data.instruments ?? []) as UniverseAsset[]);
+
+	const IC_ROLES = ["investment_team", "director", "admin"];
+	let canEdit = $derived(actorRole !== null && IC_ROLES.includes(actorRole));
 
 	let backtest = $derived(trackRecord?.backtest ?? null);
 	let stress = $derived(trackRecord?.stress ?? null);
@@ -313,6 +322,11 @@
 			</div>
 		{/if}
 	</section>
+
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<!-- IC VIEWS (Black-Litterman)                                         -->
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<ICViewsPanel {portfolioId} {views} {instruments} {canEdit} />
 
 	<!-- ═══════════════════════════════════════════════════════════════════ -->
 	<!-- FACT SHEETS                                                        -->

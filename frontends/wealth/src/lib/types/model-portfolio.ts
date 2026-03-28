@@ -84,6 +84,21 @@ export function scenarioLabel(name: string): string {
 	}
 }
 
+export interface PortfolioView {
+	id: string;
+	portfolio_id: string;
+	asset_instrument_id: string | null;
+	peer_instrument_id: string | null;
+	view_type: "absolute" | "relative";
+	expected_return: number;
+	confidence: number;
+	rationale: string | null;
+	created_by: string | null;
+	effective_from: string;
+	effective_to: string | null;
+	created_at: string;
+}
+
 export function profileColor(profile: string): string {
 	switch (profile) {
 		case "conservative": return "var(--netz-info)";
