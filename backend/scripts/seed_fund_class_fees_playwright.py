@@ -230,11 +230,12 @@ async def _run(dsn: str, max_ciks: int | None, concurrency: int) -> None:
 
     # Launch browser
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        context = await browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            extra_http_headers={"Accept-Encoding": "gzip, deflate, br"},
+        browser = await p.chromium.launch(
+            headless=False,
+            channel="msedge",
+            args=["--window-position=-2000,-2000", "--window-size=1,1"],  # off-screen
         )
+        context = await browser.new_context()
 
         sem = asyncio.Semaphore(concurrency)
         all_xbrl: list[tuple[bytes, str, str]] = []  # (xml_bytes, accession, cik)
@@ -245,7 +246,10 @@ async def _run(dsn: str, max_ciks: int | None, concurrency: int) -> None:
         chunk_size = concurrency * 4
         for i in range(0, len(pending_ciks), chunk_size):
             chunk = pending_ciks[i:i + chunk_size]
-            tasks = [_download_cik(context, cik, sem) for cik in chunk]
+            tasks = [
+                asyncio.wait_for(_download_cik(context, cik, sem), timeout=60)
+                for cik in chunk
+            ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             for j, r in enumerate(results):

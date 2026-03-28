@@ -531,7 +531,7 @@ async def main() -> None:
                 max_drawdown_1y: float | None = -0.15
                 information_ratio_1y: float | None = 0.5
 
-            score, breakdown = compute_fund_score(MockRiskMetrics(), 50.0, 50.0, None)
+            score, breakdown = compute_fund_score(MockRiskMetrics(), 50.0, None)
             in_range = 0 <= score <= 100
             ok("4.5 Scoring", f"score={score:.1f}, in_range={in_range}, breakdown={breakdown}")
         except Exception as e:

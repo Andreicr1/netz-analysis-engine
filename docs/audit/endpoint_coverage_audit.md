@@ -1,432 +1,390 @@
 # Auditoria de Endpoints — Wealth Vertical
 
-**Data:** 2026-03-23
+**Data:** 2026-03-27
 **Branch:** `main`
-**Metodo:** Grep exaustivo em `frontends/wealth/src/routes/` e `frontends/wealth/src/lib/` contra todos os endpoints extraidos de `backend/app/domains/wealth/routes/*.py`. Calls em `_legacy_routes/` NAO contam como cobertura (arquivos mortos, fora do router SvelteKit ativo).
-
----
-
-## Principio Arquitetural: DB-First
-
-Antes de classificar cobertura, e essencial entender o modelo de dados:
-
-```
-data_providers/         Workers (cron)          Routes (user-facing)
-sec/ esma/ bis/ imf/  → ingest → Hypertables → SELECT do DB
-                                  (sec_*, esma_*, bis_*, imf_*)
-```
-
-**Regra:** Rotas e vertical engines NUNCA chamam APIs externas no hot path. Todos os dados vem do DB (Timescale hypertables). `data_providers/` sao ingestores que populam as tabelas. O Screener, Quant Engine e DD Report consomem do DB para computacao rapida.
-
-**Implicacao para cobertura:**
-- Endpoints em `/esma/*` sao rotas de **browse** de tabelas globais (DB-only reads) — uteis para exploracao isolada, mas os dados ESMA ja fluem pelo screener via `union_all` entre `instruments_universe` e `esma_funds`
-- Endpoints em `/manager-screener/managers/{crd}/*` sao rotas de **leitura DB** (`SecManager`, `Sec13fHolding`, `Sec13fDiff`, `SecNportHolding`) — zero chamadas EDGAR/EFTS
-- Classificar esses endpoints como "desconectados" nao significa funcionalidade perdida se os dados ja sao acessiveis por outro caminho
+**Vertical:** Wealth
 
 ---
 
 ## Resumo Executivo
 
 | Metrica | Valor |
-|---------|-------|
-| **Endpoints backend wealth total** | **131** |
-| **Workers (infra/cron, sem UI)** | **20** |
-| **Browse/convenience (dados acessiveis por outro caminho)** | **9** |
-| **Endpoints de produto (excl. workers + browse)** | **102** |
-| **Conectados no frontend atual** | **83** |
-| **Desconectados com funcionalidade perdida** | **19** |
-| **Cobertura efetiva (produto)** | **81.4%** (83/102) |
-| **Cobertura total (incl. workers + browse as covered)** | **85.5%** (83 + 20 + 9 = 112/131) |
+|---|---|
+| Total de endpoints backend (Wealth) | **129** |
+| Conectados ao frontend | **73** (56.6%) |
+| Desconectados | **56** (43.4%) |
+| Phantom calls (frontend sem backend) | **31** (was 39, -8 legacy route cleanup 2026-03-27) |
 
-### Veredicto
+### Breakdown por Dominio
 
-O claim de "~98-99% cobertura" do documento `wm-coverage-implementation-reference.md` e **otimista**. A cobertura efetiva de produto e **~81%**. A discrepancia vem de:
+| Dominio | Total | Conectados | Desconectados | % Cobertura |
+|---|---|---|---|---|
+| Analytics | ~16 | 10 | 6 | 63% |
+| Screener / Catalog | ~12 | 3 | 9 | 25% |
+| Model Portfolios | ~8 | 4 | 4 | 50% |
+| DD Reports | ~7 | 3 | 4 | 43% |
+| Instruments | ~5 | 3 | 2 | 60% |
+| Content Generation | ~5 | 1 | 4 | 20% |
+| Portfolios / Rebalancing | ~10 | 8 | 2 | 80% |
+| Risk / Regime | ~8 | 7 | 1 | 88% |
+| Macro | ~10 | 6 | 4 | 60% |
+| Manager Screener | ~11 | 7 | 4 | 64% |
+| ESMA Registry | ~5 | 0 | 5 | 0% |
+| Allocation | ~6 | 3 | 3 | 50% |
+| Universe | ~4 | 3 | 1 | 75% |
+| Wealth Documents | ~5 | 3 | 2* | 60% |
+| Fact Sheets | ~3 | 1 | 2 | 33% |
+| Exposure | ~2 | 1 | 1 | 50% |
 
-1. **Contagem de falsos negativos inflada:** o audit original contou endpoints que so existem em `_legacy_routes/` (arquivos mortos) como "ja conectados"
-2. **Modulos com migracao incompleta:** macro reviews (5 endpoints), analytics backtest/correlation (4), manager-screener tabs avancadas (4)
-3. **Endpoints pontuais omitidos:** `POST /model-portfolios`, `DELETE /blended-benchmarks/{id}`, `GET /universe/funds/{id}/audit-trail`, etc.
-
-### Reclassificacao vs audit anterior
-
-| Categoria | Anterior (inflado) | Atual (real) |
-|-----------|-------------------|-------------|
-| ESMA browse (5 endpoints) | "desconectado — P1" | Browse/convenience — dados ja fluem pelo screener (`/screener/search` faz `union_all` com `EsmaFund`) |
-| Manager screener drift/nport/brochure (4 endpoints) | "desconectado — P2" | Split: drift e nport sao dados DB ricos que agregam valor no panel (desconectados reais); brochure depende de ingestion previa |
-| Funds scoring/nav (2 endpoints) | "desconectado" | Deprecated — funcionalidade coberta por `/instruments` + `/risk/{profile}/cvar` |
-
----
-
-## Endpoints Browse/Convenience — Dados Acessiveis por Outro Caminho (9)
-
-Estes endpoints leem do DB (correto), mas a funcionalidade ja e acessivel pelo screener ou por outros modulos. Nao representam funcionalidade perdida.
-
-| Endpoint | Tipo | Como os dados ja fluem |
-|----------|------|----------------------|
-| `GET /esma/managers` | Browse global | Screener `/search?source=esma` faz union com EsmaFund+EsmaManager |
-| `GET /esma/managers/{esma_id}` | Browse detalhe | Dados do manager acessiveis via screener panel |
-| `GET /esma/funds` | Browse global | Screener `/search` inclui ESMA funds |
-| `GET /esma/funds/{isin}` | Browse detalhe | `/screener/import-esma/{isin}` ja importa |
-| `GET /esma/managers/{esma_id}/sec-crossref` | Cross-ref | Dado enrichment — util mas nao bloqueante |
-| `GET /funds/scoring` | Deprecated | Substituido por `/risk/{profile}/cvar` + risk-store |
-| `GET /funds/{fund_id}/nav` | Deprecated | NAV via `/instruments/{id}` ou risk-store |
-| `GET /funds/{fund_id}/risk` | Parcial | Usado em universe/+page.svelte; coberto por risk-store para profiles |
-| `POST /instruments/import/csv` | Util | InstrumentsView tem o endpoint conectado (confirmado) |
-
-**Nota:** `POST /instruments/import/csv` foi erroneamente listado como desconectado — esta conectado em `InstrumentsView.svelte:185`.
+> *Wealth document upload endpoints (3) usam presigned-URL flow que o scanner nao rastreia como call direta.
 
 ---
 
-## Endpoints Desconectados — Funcionalidade Realmente Perdida (19)
+## Endpoints Conectados (73)
 
-### P1 (ALTA) — Workflows interrompidos
+### Shared (usados por Wealth)
 
-#### Macro Reviews (5 endpoints)
-Workflow completo de geracao, listagem, aprovacao e rejeicao de macro reviews. So existe em `_legacy_routes`. A macro page atual mostra scores, regime, BIS, IMF, Treasury, OFR — mas o workflow de **committee reviews** nao foi migrado.
+| Endpoint | Componente |
+|---|---|
+| `DELETE /blended-benchmarks/{benchmark_id}` | BlendedBenchmarkEditor.svelte |
+| `GET /funds` | SSR loader |
+| `GET /funds/{fund_id}` | SSR loader |
 
-| Endpoint | Status |
-|----------|--------|
-| `GET /macro/snapshot` | Legacy only |
-| `GET /macro/reviews` | Legacy only |
-| `POST /macro/reviews/generate` | Legacy only |
-| `PATCH /macro/reviews/{review_id}/approve` | Legacy only |
-| `PATCH /macro/reviews/{review_id}/reject` | Legacy only |
+### Wealth Frontend
 
-#### Analytics — Backtest + Correlation (4 endpoints)
-Backtest standalone (submit + poll) e correlation matrix/pairwise. Pareto optimization foi migrado, mas backtest individual e pairwise correlation nao.
-
-| Endpoint | Status |
-|----------|--------|
-| `POST /analytics/backtest` | Legacy only |
-| `GET /analytics/backtest/{run_id}` | Legacy only |
-| `GET /analytics/correlation` | Legacy only |
-| `GET /analytics/correlation-regime/{profile}/pair/{inst_a}/{inst_b}` | Legacy only |
-
-### P2 (MEDIA) — Funcionalidade complementar
-
-#### Manager Screener — tabs avancadas (4 endpoints)
-O screener principal foi migrado (list, profile, holdings, institutional, universe-status, compare). Mas drift (turnover timeline), nport (N-PORT holdings), brochure (ADV Part 2A) agregam valor significativo para due diligence e so existem em `_legacy_routes`.
-
-| Endpoint | Dados | Status |
-|----------|-------|--------|
-| `GET /manager-screener/managers/{crd}/drift` | `Sec13fDiff` — turnover por quarter | Legacy only |
-| `GET /manager-screener/managers/{crd}/nport` | `SecNportHolding` — holdings atuais | Legacy only |
-| `GET /manager-screener/managers/{crd}/brochure/sections` | Brochure ADV Part 2A | Legacy only |
-| `GET /manager-screener/managers/{crd}/brochure` | Brochure search | Legacy only |
-
-#### Fact Sheets — Model Portfolios (3 endpoints)
-Fact sheets de DD reports foram migradas. Fact sheets de model portfolios so em `_legacy_routes`.
-
-| Endpoint | Status |
-|----------|--------|
-| `POST /fact-sheets/model-portfolios/{portfolio_id}` | Legacy only |
-| `GET /fact-sheets/model-portfolios/{portfolio_id}` | Legacy only |
-| `GET /fact-sheets/{fact_sheet_path}/download` | Legacy only |
-
-### P3 (BAIXA) — Endpoints pontuais
-
-| Endpoint | Status | Nota |
-|----------|--------|------|
-| `POST /model-portfolios` | Legacy only | Criar novo model portfolio |
-| `DELETE /blended-benchmarks/{benchmark_id}` | Nenhuma chamada | Deletar benchmark |
-| `GET /universe/funds/{instrument_id}/audit-trail` | Nenhuma chamada | Audit trail do universe |
-| `GET /portfolios/{profile}/history` | Legacy only | Historico de snapshots |
-| `GET /screener/runs/{run_id}` | Legacy only | Detalhe de um screening run |
-
----
-
-## Bug Encontrado: Path Mismatch no Exposure
-
-| Arquivo | Chamada | Backend real | Impacto |
-|---------|---------|-------------|---------|
-| `routes/(app)/exposure/+page.server.ts:11-12` | `/exposure/matrix` | `/wealth/exposure/matrix` | **Chamada falha silenciosamente** (`.catch(() => null)`). Dados so aparecem porque `ExposureView.svelte` usa o path correto `/wealth/exposure/matrix` no client-side. SSR retorna null, client-side hydration corrige. |
-
----
-
-## Cobertura por Modulo
-
-| Modulo | Total | Conectados | % | Nota |
-|--------|-------|-----------|---|------|
-| Allocation | 6 | 6 | 100% | |
-| Analytics (core) | 6 | 4 | 67% | backtest + correlation legacy |
-| Strategy Drift | 5 | 5 | 100% | |
-| Blended Benchmarks | 5 | 4 | 80% | DELETE missing |
-| Content | 6 | 6 | 100% | |
-| DD Reports | 8 | 8 | 100% | |
-| Documents | 6 | 6 | 100% | |
-| ESMA | 5 | 0 | — | Browse/convenience (dados fluem pelo screener) |
-| Exposure | 2 | 2 | 100% | Bug: server load path errado |
-| Fact Sheets | 4 | 1 | 25% | So DD report download |
-| Funds | 5 | 2 | — | Deprecated (coberto por instruments + risk) |
-| Instruments | 5 | 5 | 100% | Inclui CSV import |
-| Macro | 11 | 6 | 55% | Reviews + snapshot legacy |
-| Manager Screener | 11 | 7 | 64% | drift/nport/brochure legacy |
-| Model Portfolios | 7 | 6 | 86% | POST create missing |
-| Portfolios | 9 | 8 | 89% | history legacy |
-| Risk | 7 | 7 | 100% | |
-| Screener | 8 | 7 | 88% | run detail legacy |
-| Universe | 5 | 4 | 80% | audit-trail missing |
-| Workers | 20 | N/A | — | Infra/cron |
-| **TOTAL** | **131** | **83 + 20 infra + 9 browse** | **~85%** | |
+| Metodo | Endpoint | Pagina/Componente |
+|---|---|---|
+| `GET` | `/analytics/attribution/{profile}` | Page |
+| `GET` | `/analytics/correlation` | SSR loader |
+| `GET` | `/analytics/correlation-regime/{profile}` | SSR loader |
+| `GET` | `/analytics/correlation-regime/{profile}/pair/{inst_a}/{inst_b}` | Page |
+| `GET` | `/analytics/strategy-drift/alerts` | SSR loader, risk-store.svelte.ts |
+| `GET` | `/analytics/strategy-drift/{instrument_id}` | Page |
+| `GET` | `/content` | SSR loader |
+| `GET` | `/dd-reports/funds/{fund_id}` | SSR loader |
+| `GET` | `/dd-reports/{report_id}` | SSR loader |
+| `GET` | `/fact-sheets/model-portfolios/{portfolio_id}` | SSR loader |
+| `GET` | `/instruments` | InstrumentsView.svelte |
+| `GET` | `/instruments/{instrument_id}` | InstrumentsView.svelte |
+| `GET` | `/macro/regime` | SSR loader |
+| `GET` | `/macro/reviews` | SSR loader |
+| `GET` | `/macro/scores` | SSR loader |
+| `GET` | `/macro/snapshot` | SSR loader |
+| `GET` | `/manager-screener/managers/{crd}/brochure/sections` | Page |
+| `GET` | `/manager-screener/managers/{crd}/drift` | Page |
+| `GET` | `/manager-screener/managers/{crd}/holdings` | Page |
+| `GET` | `/manager-screener/managers/{crd}/institutional` | Page |
+| `GET` | `/manager-screener/managers/{crd}/nport` | Page |
+| `GET` | `/manager-screener/managers/{crd}/profile` | Page |
+| `GET` | `/manager-screener/managers/{crd}/universe-status` | Page |
+| `GET` | `/model-portfolios` | SSR loader |
+| `GET` | `/model-portfolios/{portfolio_id}` | SSR loader |
+| `GET` | `/model-portfolios/{portfolio_id}/track-record` | Page, SSR loader |
+| `GET` | `/portfolios` | SSR loader |
+| `GET` | `/portfolios/{profile}` | SSR loader |
+| `GET` | `/portfolios/{profile}/history` | SSR loader |
+| `GET` | `/portfolios/{profile}/snapshot` | SSR loader |
+| `GET` | `/risk/macro` | SSR loader, risk-store.svelte.ts |
+| `GET` | `/risk/regime` | SSR loader, risk-store.svelte.ts |
+| `GET` | `/risk/regime/history` | SSR loader, risk-store.svelte.ts |
+| `GET` | `/risk/summary` | SSR loader |
+| `GET` | `/risk/{profile}/cvar` | SSR loader |
+| `GET` | `/risk/{profile}/cvar/history` | SSR loader, risk-store.svelte.ts |
+| `GET` | `/screener/results` | SSR loader |
+| `GET` | `/screener/runs` | SSR loader |
+| `GET` | `/screener/runs/{run_id}` | Page |
+| `GET` | `/universe` | UniverseView.svelte |
+| `GET` | `/universe/pending` | UniverseView.svelte |
+| `GET` | `/wealth/documents` | SSR loader |
+| `GET` | `/wealth/documents/{document_id}` | SSR loader |
+| `GET` | `/wealth/exposure/metadata` | ExposureView.svelte |
+| `PATCH` | `/macro/reviews/{review_id}/approve` | Page |
+| `PATCH` | `/macro/reviews/{review_id}/reject` | Page |
+| `POST` | `/analytics/backtest` | Page |
+| `POST` | `/analytics/optimize` | Page |
+| `POST` | `/analytics/optimize/pareto` | Page |
+| `POST` | `/analytics/strategy-drift/scan` | Page |
+| `POST` | `/content/{content_id}/approve` | Page |
+| `POST` | `/dd-reports/{report_id}/approve` | Page |
+| `POST` | `/dd-reports/{report_id}/regenerate` | Page |
+| `POST` | `/dd-reports/{report_id}/reject` | Page |
+| `POST` | `/fact-sheets/model-portfolios/{portfolio_id}` | Page |
+| `POST` | `/instruments` | EsmaManagerDrawer.svelte, InstrumentsView.svelte |
+| `POST` | `/instruments/import/yahoo` | InstrumentsView.svelte |
+| `POST` | `/macro/reviews/generate` | Page |
+| `POST` | `/manager-screener/managers/compare` | Page |
+| `POST` | `/manager-screener/managers/{crd}/add-to-universe` | ManagerDetailPanel.svelte, Page |
+| `POST` | `/model-portfolios` | Page |
+| `POST` | `/model-portfolios/{portfolio_id}/backtest` | Page |
+| `POST` | `/model-portfolios/{portfolio_id}/construct` | Page |
+| `POST` | `/model-portfolios/{portfolio_id}/stress` | Page |
+| `POST` | `/portfolios/{profile}/rebalance` | Page, RebalancingTab.svelte |
+| `POST` | `/portfolios/{profile}/rebalance/{event_id}/approve` | RebalancingTab.svelte |
+| `POST` | `/portfolios/{profile}/rebalance/{event_id}/execute` | RebalancingTab.svelte |
+| `POST` | `/screener/run` | Page |
+| `POST` | `/universe/funds/{instrument_id}/approve` | UniverseView.svelte |
+| `POST` | `/universe/funds/{instrument_id}/reject` | UniverseView.svelte |
+| `POST` | `/wealth/documents/ingestion/process-pending` | Page |
+| `PUT` | `/allocation/{profile}/strategic` | AllocationView.svelte |
+| `PUT` | `/allocation/{profile}/tactical` | AllocationView.svelte |
 
 ---
 
-## Endpoints Conectados — Inventario Completo (83)
+## Endpoints Desconectados (56)
 
-### Allocation (6/6)
-| Endpoint | Frontend |
-|----------|----------|
-| `GET /allocation/{profile}/strategic` | AllocationView.svelte, +page.server.ts |
-| `PUT /allocation/{profile}/strategic` | AllocationView.svelte |
-| `GET /allocation/{profile}/tactical` | AllocationView.svelte, +page.server.ts |
-| `PUT /allocation/{profile}/tactical` | AllocationView.svelte |
-| `GET /allocation/{profile}/effective` | AllocationView.svelte, +page.server.ts |
-| `POST /allocation/{profile}/simulate` | AllocationView.svelte |
+### P1 — Mutativos sem Frontend
 
-### Analytics (4/6)
-| Endpoint | Frontend |
-|----------|----------|
-| `POST /analytics/optimize` | analytics/+page.svelte |
-| `POST /analytics/optimize/pareto` | analytics/+page.svelte |
-| `GET /analytics/optimize/pareto/{job_id}/stream` | analytics/+page.svelte (SSE) |
-| `GET /analytics/attribution/{profile}` | analytics/+page.server.ts |
+#### Wealth — Content Generation (4 endpoints)
 
-### Strategy Drift (5/5)
-| Endpoint | Frontend |
-|----------|----------|
-| `POST /analytics/strategy-drift/scan` | risk/+page.svelte |
-| `GET /analytics/strategy-drift/alerts` | analytics/+page.server.ts, risk-store |
-| `GET /analytics/strategy-drift/{instrument_id}/history` | DriftHistoryPanel.svelte |
-| `GET /analytics/strategy-drift/{instrument_id}/export` | DriftHistoryPanel.svelte |
-| `GET /analytics/strategy-drift/{instrument_id}` | risk/+page.svelte |
+| Metodo | Endpoint | Impacto |
+|---|---|---|
+| `POST` | `/content/flash-reports` | Gerar flash reports nao exposto na UI |
+| `POST` | `/content/outlooks` | Gerar outlooks nao exposto na UI |
+| `POST` | `/content/spotlights` | Gerar spotlights nao exposto na UI |
+| `GET` | `/content/{content_id}/download` | Download de conteudo gerado sem link na UI |
 
-### Blended Benchmarks (4/5)
-| Endpoint | Frontend |
-|----------|----------|
-| `GET /blended-benchmarks/blocks` | BlendedBenchmarkEditor.svelte |
-| `GET /blended-benchmarks/{profile}` | BlendedBenchmarkEditor.svelte |
-| `POST /blended-benchmarks/{profile}` | BlendedBenchmarkEditor.svelte |
-| `GET /blended-benchmarks/{benchmark_id}/nav` | BlendedBenchmarkEditor.svelte |
+> **Nota:** A pagina `/content` mostra lista e aprova, mas a geracao de flash-reports, outlooks e spotlights nao tem botoes — apenas `macro/reviews/generate` esta conectado.
 
-### Content (6/6)
-| Endpoint | Frontend |
-|----------|----------|
-| `POST /content/outlooks` | content/+page.svelte (dynamic) |
-| `POST /content/flash-reports` | content/+page.svelte (dynamic) |
-| `POST /content/spotlights` | content/+page.svelte |
-| `GET /content` | content/+page.server.ts |
-| `POST /content/{content_id}/approve` | content/+page.svelte |
-| `GET /content/{content_id}/download` | content/+page.svelte (fetch) |
+#### Wealth — Model Portfolio Actions (4 endpoints)
 
-### DD Reports (8/8)
-| Endpoint | Frontend |
-|----------|----------|
-| `POST /dd-reports/funds/{fund_id}` | dd-reports/[fundId]/+page.svelte |
-| `GET /dd-reports/funds/{fund_id}` | dd-reports/[fundId]/+page.server.ts |
-| `GET /dd-reports/{report_id}/audit-trail` | dd-reports/.../+page.svelte |
-| `GET /dd-reports/{report_id}` | dd-reports/.../+page.server.ts |
-| `POST /dd-reports/{report_id}/regenerate` | dd-reports/.../+page.svelte |
-| `POST /dd-reports/{report_id}/approve` | dd-reports/.../+page.svelte |
-| `POST /dd-reports/{report_id}/reject` | dd-reports/.../+page.svelte |
-| `GET /dd-reports/{report_id}/stream` | dd-reports/.../+page.svelte (SSE) |
+| Metodo | Endpoint | Impacto |
+|---|---|---|
+| `POST` | `/model-portfolios/{portfolio_id}/stress-test` | Stress test separado do `/stress` — provavel duplicata ou endpoint legacy |
+| `GET` | `/model-portfolios/{portfolio_id}/views` | Listar views BL (Black-Litterman) |
+| `POST` | `/model-portfolios/{portfolio_id}/views` | Criar views BL |
+| `DELETE` | `/model-portfolios/{portfolio_id}/views/{view_id}` | Deletar view BL |
 
-### Documents (6/6)
-| Endpoint | Frontend |
-|----------|----------|
-| `POST /wealth/documents/upload-url` | documents/upload/+page.svelte |
-| `POST /wealth/documents/upload-complete` | documents/upload/+page.svelte |
-| `POST /wealth/documents/upload` | documents/upload/+page.svelte |
-| `POST /wealth/documents/ingestion/process-pending` | documents/+page.svelte, upload/+page.svelte |
-| `GET /wealth/documents` | documents/+page.server.ts |
-| `GET /wealth/documents/{document_id}` | documents/[documentId]/+page.server.ts |
+> **Nota:** Views BL (portfolio_views) foram adicionados no quant upgrade (Sprint 3). Frontend usa `/construct` que aplica views implicitamente, mas CRUD de views individuais nao esta exposto.
 
-### Exposure (2/2 — bug no server load)
-| Endpoint | Frontend |
-|----------|----------|
-| `GET /wealth/exposure/matrix` | ExposureView.svelte (correto), +page.server.ts (**path errado**) |
-| `GET /wealth/exposure/metadata` | ExposureView.svelte |
+#### Wealth — DD Reports Actions (4 endpoints)
 
-### Funds (2/5 — modulo deprecated)
-| Endpoint | Frontend |
-|----------|----------|
-| `GET /funds` | FundsView.svelte, content/+page.server.ts |
-| `GET /funds/{fund_id}` | dd-reports/[fundId]/+page.server.ts |
+| Metodo | Endpoint | Impacto |
+|---|---|---|
+| `GET` | `/dd-reports` | Listar todos DD reports (sem filtro por fund) |
+| `POST` | `/dd-reports/funds/{fund_id}` | Disparar geracao de DD report |
+| `GET` | `/dd-reports/{report_id}/audit-trail` | Audit trail do report |
+| `GET` | `/dd-reports/{report_id}/stream` | SSE stream de progresso |
 
-### Instruments (5/5)
-| Endpoint | Frontend |
-|----------|----------|
-| `GET /instruments` | InstrumentsView.svelte |
-| `GET /instruments/{instrument_id}` | InstrumentsView.svelte |
-| `POST /instruments` | InstrumentsView.svelte |
-| `POST /instruments/import/yahoo` | InstrumentsView.svelte |
-| `POST /instruments/import/csv` | InstrumentsView.svelte |
+> **Nota:** Frontend acessa `/dd-reports/funds/{fund_id}` (GET, lista por fund) e `/dd-reports/{report_id}` (GET, detalhe). Mas o POST para **disparar** geracao e o SSE de progresso nao estao conectados. O botao "Generate" no frontend pode estar usando uma chamada que o scanner nao detectou (template literal dinâmica) — verificar `+page.svelte` de DD reports.
 
-### Macro (6/11)
-| Endpoint | Frontend |
-|----------|----------|
-| `GET /macro/scores` | macro/+page.server.ts |
-| `GET /macro/regime` | macro/+page.server.ts |
-| `GET /macro/bis` | macro/+page.svelte |
-| `GET /macro/imf` | macro/+page.svelte |
-| `GET /macro/treasury` | macro/+page.svelte |
-| `GET /macro/ofr` | macro/+page.svelte |
+#### Wealth — Instruments (2 endpoints)
 
-### Manager Screener (7/11)
-| Endpoint | Frontend |
-|----------|----------|
-| `GET /manager-screener/` | screener/+page.server.ts |
-| `GET /manager-screener/managers/{crd}/profile` | screener/+page.svelte |
-| `GET /manager-screener/managers/{crd}/holdings` | screener/+page.svelte |
-| `GET /manager-screener/managers/{crd}/institutional` | screener/+page.svelte |
-| `GET /manager-screener/managers/{crd}/universe-status` | screener/+page.svelte |
-| `POST /manager-screener/managers/{crd}/add-to-universe` | screener/+page.svelte |
-| `POST /manager-screener/managers/compare` | screener/+page.svelte |
+| Metodo | Endpoint | Impacto |
+|---|---|---|
+| `POST` | `/instruments/import/csv` | Import CSV de instrumentos sem botao na UI |
+| `PATCH` | `/instruments/{instrument_id}` | Editar instrumento sem form na UI |
 
-### Model Portfolios (6/7)
-| Endpoint | Frontend |
-|----------|----------|
-| `GET /model-portfolios` | model-portfolios/+page.server.ts |
-| `GET /model-portfolios/{portfolio_id}` | [portfolioId]/+page.server.ts |
-| `POST /model-portfolios/{portfolio_id}/construct` | [portfolioId]/+page.svelte |
-| `GET /model-portfolios/{portfolio_id}/track-record` | [portfolioId]/+page.server.ts |
-| `POST /model-portfolios/{portfolio_id}/backtest` | [portfolioId]/+page.svelte |
-| `POST /model-portfolios/{portfolio_id}/stress` | [portfolioId]/+page.svelte |
+#### Wealth — Allocation Writes (1 endpoint)
 
-### Portfolios (8/9)
-| Endpoint | Frontend |
-|----------|----------|
-| `GET /portfolios` | portfolios/+page.server.ts |
-| `GET /portfolios/{profile}` | portfolios/[profile]/+page.server.ts |
-| `GET /portfolios/{profile}/snapshot` | portfolios/[profile]/+page.server.ts |
-| `POST /portfolios/{profile}/rebalance` | portfolios/[profile]/+page.svelte |
-| `GET /portfolios/{profile}/rebalance` | RebalancingTab.svelte |
-| `GET /portfolios/{profile}/rebalance/{event_id}` | RebalancingTab.svelte |
-| `POST /portfolios/{profile}/rebalance/{event_id}/approve` | RebalancingTab.svelte |
-| `POST /portfolios/{profile}/rebalance/{event_id}/execute` | RebalancingTab.svelte |
+| Metodo | Endpoint | Impacto |
+|---|---|---|
+| `POST` | `/allocation/{profile}/simulate` | Simulacao de alocacao sem botao na UI |
 
-### Risk (7/7)
-| Endpoint | Frontend |
-|----------|----------|
-| `GET /risk/summary` | risk-store.svelte.ts |
-| `GET /risk/{profile}/cvar` | risk-store.svelte.ts |
-| `GET /risk/{profile}/cvar/history` | risk-store.svelte.ts |
-| `GET /risk/regime` | risk-store.svelte.ts |
-| `GET /risk/regime/history` | risk-store.svelte.ts |
-| `GET /risk/macro` | risk-store.svelte.ts, macro/+page.server.ts |
-| `GET /risk/stream` | risk-store.svelte.ts (SSE) |
+#### Wealth — Other (documentos + exposure) (4 endpoints)
 
-### Screener (7/8)
-| Endpoint | Frontend |
-|----------|----------|
-| `POST /screener/run` | screener/+page.svelte |
-| `GET /screener/runs` | screener/+page.server.ts |
-| `GET /screener/results` | screener/+page.server.ts |
-| `GET /screener/results/{instrument_id}` | screener/+page.svelte |
-| `GET /screener/search` | screener/+page.server.ts |
-| `GET /screener/facets` | screener/+page.server.ts |
-| `POST /screener/import-esma/{isin}` | screener/+page.svelte |
+| Metodo | Endpoint | Impacto |
+|---|---|---|
+| `POST` | `/wealth/documents/upload` | Upload direto (sem presigned URL) |
+| `POST` | `/wealth/documents/upload-complete` | Completar upload |
+| `POST` | `/wealth/documents/upload-url` | Obter presigned URL |
+| `GET` | `/wealth/exposure/matrix` | Matriz de exposicao (geo/sector) |
 
-### Universe (4/5)
-| Endpoint | Frontend |
-|----------|----------|
-| `GET /universe` | universe/+page.server.ts |
-| `GET /universe/pending` | UniverseView.svelte |
-| `POST /universe/funds/{instrument_id}/approve` | UniverseView.svelte |
-| `POST /universe/funds/{instrument_id}/reject` | UniverseView.svelte |
+> **Nota:** ExposureView.svelte consome `/wealth/exposure/metadata` mas chama `/wealth/exposure/matrix` via template literal com query params — scanner detectou como phantom call por causa do formato `?dimension=geographic&aggregation={param}`.
 
-### Fact Sheets (1/4)
-| Endpoint | Frontend |
-|----------|----------|
-| `GET /fact-sheets/dd-reports/{report_id}/download` | dd-reports/.../+page.svelte (fetch) |
+### P2 — Reads de Valor sem Frontend
+
+#### Wealth — Screener Detail (9 endpoints)
+
+| Metodo | Endpoint | Impacto |
+|---|---|---|
+| `GET` | `/screener/catalog` | Catalogo unificado (3 universos) |
+| `GET` | `/screener/catalog/facets` | Facetas do catalogo |
+| `GET` | `/screener/facets` | Facetas do screener |
+| `POST` | `/screener/import-esma/{isin}` | Import ESMA fund ao screener |
+| `POST` | `/screener/import-sec/{ticker}` | Import SEC fund ao screener |
+| `GET` | `/screener/results/{instrument_id}` | Resultado individual de screening |
+| `GET` | `/screener/search` | Busca textual no screener |
+| `GET` | `/screener/securities` | Lista de securities |
+| `GET` | `/screener/securities/facets` | Facetas de securities |
+
+> **Nota:** O frontend usa `/screener/results` (lista) e `/screener/runs`, mas o catalogo unificado, search, e detail individual nao estao conectados. Estes endpoints sao a base do Fund Catalog — provavel que `+page.server.ts` do screener use chamadas via template literals que o scanner nao capturou.
+
+#### Wealth — Analytics (6 endpoints)
+
+| Metodo | Endpoint | Impacto |
+|---|---|---|
+| `GET` | `/analytics/backtest/{run_id}` | Detalhe de backtest individual |
+| `GET` | `/analytics/entity/{entity_id}` | Analytics por entidade |
+| `GET` | `/analytics/optimize/pareto/{job_id}/stream` | SSE stream de Pareto optimization |
+| `GET` | `/analytics/rolling-correlation` | Rolling correlation matrix |
+| `GET` | `/analytics/strategy-drift/{instrument_id}/export` | Export CSV de drift |
+| `GET` | `/analytics/strategy-drift/{instrument_id}/history` | Historico de drift |
+
+> **Nota:** Pareto stream (`/pareto/{job_id}/stream`) e consumido via poller generico — o scanner pode nao ter detectado a conexao indireta via `poller.svelte.ts`.
+
+#### Wealth — ESMA Registry (5 endpoints)
+
+| Metodo | Endpoint | Impacto |
+|---|---|---|
+| `GET` | `/esma/funds` | Listar fundos ESMA |
+| `GET` | `/esma/funds/{isin}` | Detalhe fund ESMA |
+| `GET` | `/esma/managers` | Listar managers ESMA |
+| `GET` | `/esma/managers/{esma_id}` | Detalhe manager ESMA |
+| `GET` | `/esma/managers/{esma_id}/sec-crossref` | Cross-referencia SEC ↔ ESMA |
+
+> **Nota:** ESMA endpoints existem em `_legacy_routes` e foram migrados para `/screener` (catalog unificado). Os endpoints diretos `/esma/*` provavelmente sao consumidos via legacy routes que o scanner detectou como phantom.
+
+#### Wealth — Macro Data (4 endpoints)
+
+| Metodo | Endpoint | Impacto |
+|---|---|---|
+| `GET` | `/macro/bis` | BIS statistics |
+| `GET` | `/macro/imf` | IMF WEO forecasts |
+| `GET` | `/macro/ofr` | OFR hedge fund data |
+| `GET` | `/macro/treasury` | US Treasury data |
+
+> **Nota:** Dados macro granulares (BIS, IMF, OFR, Treasury) nao tem UI dedicada. O dashboard de risk usa `/macro/snapshot` e `/macro/regime` que sao agregados. Considerar tab de "Macro Deep Dive" no risk dashboard.
+
+#### Wealth — Manager Screener (4 endpoints)
+
+| Metodo | Endpoint | Impacto |
+|---|---|---|
+| `GET` | `/manager-screener` | Lista/search de managers (endpoint raiz) |
+| `GET` | `/manager-screener/managers/{crd}/brochure` | Brochure completa |
+| `GET` | `/manager-screener/managers/{crd}/brochure/key-sections` | Key sections extraidas |
+| `GET` | `/manager-screener/managers/{crd}/registered-funds` | Fundos registrados do manager |
+
+> **Nota:** O endpoint raiz `/manager-screener` e consumido via legacy route com query params (`/?{param}`) — scanner detectou como phantom. `/brochure/key-sections` e usado internamente pelo DD report engine.
+
+### P3 — Nice-to-Have
+
+#### Wealth — Asset Universe (1 endpoint)
+
+| Metodo | Endpoint | Impacto |
+|---|---|---|
+| `GET` | `/universe/funds/{instrument_id}/audit-trail` | Audit trail de aprovacao de fund |
+
+#### Wealth — Fact Sheet Actions (2 endpoints)
+
+| Metodo | Endpoint | Impacto |
+|---|---|---|
+| `GET` | `/fact-sheets/dd-reports/{report_id}/download` | Download PDF do DD report fact sheet |
+| `GET` | `/fact-sheets/{fact_sheet_path}/download` | Download PDF de fact sheet |
+
+> **Nota:** Fact sheet download provavelmente e acessado via link direto no browser (window.open) — nao aparece como `.get()` call.
+
+#### Wealth — Portfolio Rebalancing (2 endpoints)
+
+| Metodo | Endpoint | Impacto |
+|---|---|---|
+| `GET` | `/portfolios/{profile}/rebalance` | Listar eventos de rebalancing |
+| `GET` | `/portfolios/{profile}/rebalance/{event_id}` | Detalhe de evento |
+
+> **Nota:** RebalancingTab.svelte consome POST (trigger/approve/execute) mas os GETs de listagem/detalhe podem usar pattern diferente.
+
+#### Wealth — Risk SSE (1 endpoint)
+
+| Metodo | Endpoint | Impacto |
+|---|---|---|
+| `GET` | `/risk/stream` | SSE stream de risk updates |
+
+> **Nota:** SSE streams usam `fetch()` + `ReadableStream` pattern — scanner pode nao detectar conexao via `risk-store.svelte.ts`.
 
 ---
 
-## Workers (20 endpoints — Infra/Cron)
+## Phantom Calls — Wealth Frontend (39)
 
-Todos os `POST /workers/run-*` sao triggers de workers. Invocados por cron, admin CLI ou admin frontend. Nao requerem UI no wealth frontend.
+### Falsos positivos (URL params parseados como paths)
 
-| Endpoint |
-|----------|
-| `POST /workers/run-ingestion` |
-| `POST /workers/run-risk-calc` |
-| `POST /workers/run-portfolio-eval` |
-| `POST /workers/run-macro-ingestion` |
-| `POST /workers/run-fact-sheet-gen` |
-| `POST /workers/run-watchlist-check` |
-| `POST /workers/run-screening-batch` |
-| `POST /workers/run-instrument-ingestion` |
-| `POST /workers/run-benchmark-ingest` |
-| `POST /workers/run-treasury-ingestion` |
-| `POST /workers/run-ofr-ingestion` |
-| `POST /workers/run-sec-refresh` |
-| `POST /workers/run-nport-ingestion` |
-| `POST /workers/run-bis-ingestion` |
-| `POST /workers/run-imf-ingestion` |
-| `POST /workers/run-brochure-download` |
-| `POST /workers/run-brochure-extract` |
-| `POST /workers/run-esma-ingestion` |
-| `POST /workers/run-sec-13f-ingestion` |
-| `POST /workers/run-sec-adv-ingestion` |
+Estas chamadas sao artefatos do scanner que extrai `searchParams.get('param')` como paths:
+
+| Path | Arquivo | Causa |
+|---|---|---|
+| `/aum_min` | `screener/+page.server.ts:40` | `url.searchParams.get('aum_min')` |
+| `/benchmark_id` | `entity-analytics/+page.server.ts:77` | `url.searchParams.get('benchmark_id')` |
+| `/domain` | `documents/+page.server.ts:11` | `url.searchParams.get('domain')` |
+| `/entity_id` | `entity-analytics/+page.server.ts:71` | `url.searchParams.get('entity_id')` |
+| `/exchange` | `screener/+page.server.ts:60` | `url.searchParams.get('exchange')` |
+| `/page` | `screener/+page.server.ts:25` | `url.searchParams.get('page')` |
+| `/page_size` | (multiplos) | `url.searchParams.get('page_size')` |
+| `/portfolio` | (multiplos) | `url.searchParams.get('portfolio')` |
+| `/portfolio_id` | `documents/+page.server.ts:10` | `url.searchParams.get('portfolio_id')` |
+| `/profile` | `analytics/+page.server.ts:10` | `url.searchParams.get('profile')` |
+| `/q` | `screener/+page.server.ts:30,56` | `url.searchParams.get('q')` |
+| `/search` | `esma/+page.server.ts:11` | `url.searchParams.get('search')` |
+| `/security_type` | `screener/+page.server.ts:58` | `url.searchParams.get('security_type')` |
+| `/sort` | `screener/+page.server.ts:42,62` | `url.searchParams.get('sort')` |
+| `/status` | `dd-reports/+page.server.ts:10` | `url.searchParams.get('status')` |
+| `/tab` | (multiplos) | `url.searchParams.get('tab')` |
+| `/type` | `esma/+page.server.ts:14` | `url.searchParams.get('type')` |
+| `/window` | `entity-analytics/+page.server.ts:76` | `url.searchParams.get('window')` |
+| `/country` | `esma/+page.server.ts:12` | `url.searchParams.get('country')` |
+| `/domicile` | `esma/+page.server.ts:13` | `url.searchParams.get('domicile')` |
+| `/__session` | `auth/callback/+page.server.ts:11` | Cookie read |
+
+### Calls reais a investigar
+
+| Metodo | Path | Arquivo | Diagnostico |
+|---|---|---|---|
+| `POST` | `/content/{param}{param}` | `(app)/content/+page.svelte:55` | Template literal com path dinâmico — provavelmente `/content/{id}/approve` ou `/reject` |
+| `GET` | `/wealth/exposure/matrix?dimension=geographic&...` | `ExposureView.svelte:45` | Query params — backend existe, scanner nao matchou |
+| `GET` | `/wealth/exposure/matrix?dimension=sector&...` | `ExposureView.svelte:46` | Query params — backend existe, scanner nao matchou |
+
+> **Nota (2026-03-27):** 8 phantom calls originadas de `_legacy_routes/` foram eliminadas com a remoção do diretório `frontends/wealth/src/_legacy_routes/` (66 arquivos, 0 referências externas). Routes legacy: content/reject, inv-dd-reports, esma/funds, esma/managers, manager-screener (3 calls), risk/drift-alerts.
 
 ---
 
-## Nota Arquitetural: Fluxo de Dados
+## Recomendacoes
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  DATA PROVIDERS (backend/data_providers/)                       │
-│  sec/ esma/ bis/ imf/                                          │
-│  Chamam APIs externas (EDGAR, ESMA Register, BIS SDMX, IMF)   │
-└──────────────┬──────────────────────────────────────────────────┘
-               │ Workers (cron, advisory locks)
-               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  TIMESCALE HYPERTABLES (global, sem RLS)                        │
-│  sec_managers, sec_13f_holdings, sec_13f_diffs,                │
-│  sec_nport_holdings, esma_managers, esma_funds,                │
-│  bis_statistics, imf_weo_forecasts, macro_data,                │
-│  treasury_data, ofr_hedge_fund_data, benchmark_nav             │
-└──────────────┬──────────────────────────────────────────────────┘
-               │ SELECT (DB-only reads)
-               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  ROUTES (backend/app/domains/wealth/routes/)                    │
-│  Screener: union_all(instruments + esma_funds)                 │
-│  Manager Screener: sec_managers + sec_13f + sec_nport          │
-│  Macro: macro_data + bis + imf + treasury + ofr                │
-│  Quant Engine: fund_risk_metrics (pre-computed by workers)     │
-│  DD Report: sec_managers + sec_13f + quant metrics             │
-└──────────────┬──────────────────────────────────────────────────┘
-               │ JSON API
-               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  FRONTEND (frontends/wealth/)                                   │
-│  Consome apenas JSON das routes — zero chamadas externas       │
-└─────────────────────────────────────────────────────────────────┘
-```
+### P1 — Critico (Funcionalidade Core Inacessivel)
 
-Confirmado via leitura de codigo:
-- `manager_screener.py`: SELECT em `SecManager`, `Sec13fHolding`, `Sec13fDiff`, `SecNportHolding`, `SecInstitutionalAllocation`
-- `screener.py`: `union_all` entre `Instrument` (interno) e `EsmaFund` (global)
-- `esma.py`: SELECT em `EsmaManager`, `EsmaFund` via `esma_sql` queries
-- `macro.py`: SELECT em `macro_data`, `bis_statistics`, `imf_weo_forecasts`, `treasury_data`, `ofr_hedge_fund_data`
+1. **Content Generation** — 3 endpoints POST (`/content/flash-reports`, `/outlooks`, `/spotlights`) sem botoes na UI. A pagina de content lista e aprova, mas nao dispara geracao. Adicionar botoes "Generate Flash Report", "Generate Outlook", "Generate Spotlight" na pagina `/content`.
 
-**Zero chamadas a APIs externas em qualquer rota user-facing.**
+2. **Black-Litterman Views CRUD** — 3 endpoints (`GET/POST/DELETE /model-portfolios/{id}/views`) sem UI. O quant upgrade adicionou portfolio_views mas o frontend usa apenas `/construct` implicitamente. Considerar painel de "IC Views" na pagina de model portfolio.
+
+3. **DD Report Trigger + Stream** — `POST /dd-reports/funds/{fund_id}` e `GET /dd-reports/{report_id}/stream` podem estar conectados via template literal dinâmica. Verificar antes de implementar — pode ser falso negativo do scanner.
+
+4. **Instruments PATCH** — Sem form de edicao de instrumento. Apenas criacao (POST) e import (Yahoo) estao conectados.
+
+5. **Allocation Simulate** — `POST /allocation/{profile}/simulate` sem botao. AllocationView tem strategic/tactical PUT mas nao simulate.
+
+### P2 — Importante (Funcionalidade de Valor)
+
+6. **Screener Catalog/Search** — 9 endpoints do catalog unificado (3 universos) nao detectados. Provavelmente conectados via template literals na pagina `/screener` — verificar antes de classificar como gap real.
+
+7. **ESMA Registry** — 5 endpoints diretos `/esma/*` redundantes com catalog unificado. Manter como API interna para workers/DD-report. Nao precisa de UI dedicada.
+
+8. **Macro Deep Dive** — 4 endpoints granulares (BIS, IMF, OFR, Treasury) sem UI. Considerar tab "Macro Sources" no risk dashboard para power users.
+
+9. **Analytics extras** — Backtest detail, entity analytics, Pareto SSE, rolling correlation, drift export/history. Alguns provavelmente conectados via patterns indiretos.
+
+### P3 — Nice-to-Have
+
+10. **Fact Sheet downloads** — Provavelmente acessados via `window.open()`. Baixo risco.
+
+11. **Rebalancing GETs** — Listagem/detalhe de eventos. RebalancingTab usa POSTs mas GETs podem ser carregados inline.
+
+12. **Risk SSE stream** — Consumido via `risk-store.svelte.ts` com `fetch()` + `ReadableStream`. Falso negativo do scanner.
+
+13. **Universe audit-trail** — Funcionalidade de compliance, baixa prioridade.
+
+### Cleanup recomendado
+
+14. ~~**Remover `_legacy_routes/`**~~ — **DONE (2026-03-27).** 66 arquivos removidos. Zero referências externas, zero impacto no build. 8 phantom calls eliminadas do relatório.
 
 ---
 
 ## Metodologia
 
-1. Extraidos todos os endpoints de 24 arquivos em `backend/app/domains/wealth/routes/*.py` (decorators `@router.get/post/put/patch/delete`)
-2. Mapeados prefixos via `main.py:331-352` (`include_router` calls)
-3. Grep exaustivo em `frontends/wealth/src/routes/` e `frontends/wealth/src/lib/` por cada path pattern
-4. Calls em `frontends/wealth/src/_legacy_routes/` classificados como **NAO conectados** (fora do router SvelteKit ativo)
-5. Verificacao de `data_providers/` para confirmar que rotas sao DB-only reads
-6. Leitura de `screener.py` e `manager_screener.py` para confirmar fluxo de dados
-7. Cada endpoint classificado como: conectado, browse/convenience, legacy-only, nenhuma chamada, deprecated, ou infra/worker
+### Ferramentas Utilizadas
+- Exploracao automatizada de routers FastAPI (AST parsing de `@router.*` + `include_router`)
+- Varredura de loaders, pages e componentes SvelteKit (`.get/.post/.put/.patch/.delete` + `fetch(...)`)
+- Script: `.claude/skills/endpoint-coverage-auditor/scripts/scan_endpoint_coverage.py`
 
 ### Limitacoes
-
-- Nao cobre chamadas indiretas via stores que importam de outros stores
-- Nao valida se o endpoint retorna dados uteis (apenas se ha call no frontend)
-- Nao testa runtime — apenas analise estatica de codigo
-- Exposure server load tem bug de path mas funciona via client-side hydration
+- A resolucao de rotas usa heuristicas AST/regex e pode subcontar construcoes altamente dinamicas
+- Template literals com interpolacao complexa (e.g. `` `.../funds/${fundId}` ``) podem gerar falsos negativos
+- `url.searchParams.get()` parseado como path gera alto volume de falsos positivos (39 phantom calls, ~21 sao params)
+- SSE streams via `fetch()` + `ReadableStream` nao detectados como conexao
+- Calls via `poller.svelte.ts` (job polling generico) nao associados ao endpoint de origem
+- Componentes que usam `window.open()` para downloads nao rastreados

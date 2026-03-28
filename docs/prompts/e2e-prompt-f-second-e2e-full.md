@@ -23,7 +23,7 @@ Verificar localmente:
 ```powershell
 cd D:\Projetos\netz-analysis-engine\backend
 
-# 1. Migrations 0058, 0059 e 0060 aplicadas em produção
+# 1. Migrations 0058–0061 aplicadas em produção
 $env:DATABASE_URL = (Get-Content .env | Select-String "^DIRECT_DATABASE_URL").ToString().Split("=",2)[1]
 python -c "
 import asyncio, asyncpg, os
@@ -33,20 +33,17 @@ async def check():
     conn = await asyncpg.connect(url)
     rows = await conn.fetch('SELECT version_num FROM alembic_version')
     print('migration head:', [r['version_num'] for r in rows])
-    # Esperado: ['0060_portfolio_views'] (chain linear, 1 head)
+    # Esperado: ['0061_macro_regime_history'] (chain linear, 1 head)
     tables = await conn.fetch(\"\"\"
         SELECT tablename FROM pg_tables
-        WHERE tablename IN ('wealth_vector_chunks','sec_fund_classes','portfolio_views')
+        WHERE tablename IN ('wealth_vector_chunks','sec_fund_classes','portfolio_views','macro_regime_history')
         AND schemaname='public'
     \"\"\")
     print('tabelas novas:', sorted([r['tablename'] for r in tables]))
-    # Esperado: as 3 tabelas presentes
+    # Esperado: as 4 tabelas presentes
     await conn.close()
 asyncio.run(check())
 "
-
-# Nota: após sessão regime-history-persistence, adicionar '0061_macro_regime_history'
-# ao check de tabelas acima e verificar macro_regime_history na lista.
 
 # 2. arch e aeon disponíveis (agora deps principais, não opcionais)
 .\.venv\Scripts\python.exe -c "
@@ -123,22 +120,22 @@ print(f"factor_exposures: {opt.get('factor_exposures')}")
 
 ```python
 print("\n=== Go/No-Go #29 — Migration 0058 (volatility_garch + cvar_95_conditional) ===")
-r = get(f"/api/v1/instruments/{instrument_id_sample}/risk-metrics")
+# Endpoint correto: /api/v1/funds/{id}/risk  (não /instruments/{id}/risk-metrics)
+r = get(f"/api/v1/funds/{instrument_id_sample}/risk")
 print(f"Status: {r.status_code}")
 if r.status_code == 200:
     m = r.json()
     print(f"volatility_garch:    {m.get('volatility_garch')}")
     print(f"cvar_95_conditional: {m.get('cvar_95_conditional')}")
-    # Nota: cvar_95_conditional usa macro_regime_history (RISK_OFF/CRISIS) como fonte
-    # de datas de stress. Se a tabela estiver vazia (regime_fit ainda não rodou ou
-    # sessão regime-history-persistence não foi executada), retorna None — correto.
-    # Para OAKMX com histórico desde ~2016, deve ser não-None após regime_fit rodar
-    # (períodos 2020 COVID e 2022 rate shock qualificam como stress).
+    # cvar_95_conditional usa macro_regime_history (RISK_OFF/CRISIS) como fonte de datas
+    # de stress. Para OAKMX com histórico desde ~2016, deve ser não-None após regime_fit
+    # rodar (períodos 2020 COVID e 2022 rate shock qualificam como stress).
     go_29 = m.get('volatility_garch') is not None or m.get('cvar_95_conditional') is not None
 else:
-    print("Endpoint não expõe — verificar via SQL direto:")
+    print("Fallback — verificar via SQL direto:")
     print("SELECT volatility_garch, cvar_95_conditional FROM fund_risk_metrics "
-          "WHERE instrument_id = '<instrument_id>' ORDER BY calc_date DESC LIMIT 1;")
+          "WHERE instrument_id = 'e9c02fd6-1ac2-46a0-965d-e360c72cca31' "
+          "ORDER BY calc_date DESC LIMIT 1;")
     go_29 = None
 print(f"GO: {go_29}")
 
