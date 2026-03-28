@@ -13,7 +13,7 @@
 	import { createClientApiClient } from "$lib/api/client";
 	import type {
 		ManagerProfile, HoldingsData, InstitutionalData, UniverseStatus, DetailTab,
-		ManagerBrochure,
+		ManagerBrochure, ManagerRegisteredFundsResponse,
 	} from "$lib/types/manager-screener";
 	import DriftTab from "./DriftTab.svelte";
 	import HoldingsTab from "./HoldingsTab.svelte";
@@ -35,6 +35,9 @@
 	let institutionalData = $state<InstitutionalData | null>(null);
 	let universeData = $state<UniverseStatus | null>(null);
 	let brochureData = $state<ManagerBrochure | null>(null);
+	let registeredData = $state<ManagerRegisteredFundsResponse | null>(null);
+	let importingCik = $state<string | null>(null);
+	let importError = $state<string | null>(null);
 
 	// Send to Review (add to universe + create DD report)
 	let reviewDialogOpen = $state(false);
@@ -52,6 +55,7 @@
 			institutionalData = null;
 			universeData = null;
 			brochureData = null;
+			registeredData = null;
 			activeTab = "profile";
 			void fetchTab("profile");
 		}
@@ -75,6 +79,9 @@
 					break;
 				case "universe":
 					if (!universeData) universeData = await api.get<UniverseStatus>(`/manager-screener/managers/${panelCrd}/universe-status`);
+					break;
+				case "registered":
+					if (!registeredData) registeredData = await api.get<ManagerRegisteredFundsResponse>(`/manager-screener/managers/${panelCrd}/registered-funds`);
 					break;
 				case "brochure":
 					if (!brochureData) brochureData = await api.get<ManagerBrochure>(`/manager-screener/managers/${panelCrd}/brochure/key-sections`);
@@ -117,6 +124,22 @@
 		}
 	}
 
+	async function importRegisteredFund(ticker: string, cik: string) {
+		if (!ticker) return;
+		importingCik = cik;
+		importError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post<{ instrument_id: string }>(`/screener/import-sec/${ticker}`, {});
+			// Refresh registered funds to update already_in_universe flags
+			registeredData = await api.get<ManagerRegisteredFundsResponse>(`/manager-screener/managers/${panelCrd}/registered-funds`);
+		} catch (e) {
+			importError = e instanceof Error ? e.message : "Failed to import fund";
+		} finally {
+			importingCik = null;
+		}
+	}
+
 	async function handleSendExistingToReview() {
 		if (!universeData?.instrument_id) return;
 		sendingToReview = true;
@@ -135,13 +158,13 @@
 
 <!-- Tab bar -->
 <div class="dt-tabs">
-	{#each (["profile", "holdings", "institutional", "universe", "drift", "nport", "docs", "brochure"] as DetailTab[]) as tab (tab)}
+	{#each (["profile", "holdings", "institutional", "universe", "registered", "drift", "nport", "docs", "brochure"] as DetailTab[]) as tab (tab)}
 		<button
 			class="dt-tab"
 			class:dt-tab--active={activeTab === tab}
 			onclick={() => tab === "drift" || tab === "nport" || tab === "docs" ? (activeTab = tab) : fetchTab(tab)}
 		>
-			{tab === "nport" ? "Holdings" : tab === "docs" ? "Docs" : tab === "brochure" ? "ADV 2A" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+			{tab === "registered" ? "Reg. Funds" : tab === "nport" ? "Holdings" : tab === "docs" ? "Docs" : tab === "brochure" ? "ADV 2A" : tab.charAt(0).toUpperCase() + tab.slice(1)}
 		</button>
 	{/each}
 </div>
@@ -298,6 +321,48 @@
 					{/if}
 				</div>
 			</div>
+		{/if}
+	{:else if activeTab === "registered"}
+		{#if registeredData}
+			{#if registeredData.funds.length === 0}
+				<div class="dt-empty">No registered funds with N-PORT filings found for this manager.</div>
+			{:else}
+				<div class="dt-section">
+					<h4 class="dt-section-title">Registered Funds ({registeredData.total_funds})</h4>
+					{#if importError}<p class="dt-add-error" style="margin-bottom: 0.5rem">{importError}</p>{/if}
+					{#each registeredData.funds as fund (fund.cik)}
+						<div class="dt-list-row" style="align-items: center">
+							<div style="flex: 1; min-width: 0">
+								<span class="dt-list-name">{fund.fund_name}</span>
+								<span class="dt-list-meta">
+									{fund.fund_type}
+									{#if fund.ticker} · {fund.ticker}{/if}
+									{#if fund.total_assets} · {formatAUM(fund.total_assets)}{/if}
+									{#if fund.last_nport_date} · N-PORT {fund.last_nport_date}{/if}
+								</span>
+							</div>
+							<div style="flex-shrink: 0; margin-left: 0.5rem">
+								{#if fund.already_in_universe}
+									<StatusBadge status="imported" />
+								{:else if fund.ticker}
+									<Button
+										size="sm"
+										variant="outline"
+										onclick={() => importRegisteredFund(fund.ticker!, fund.cik)}
+										disabled={importingCik === fund.cik}
+									>
+										{importingCik === fund.cik ? "Importing…" : "Import"}
+									</Button>
+								{:else}
+									<span class="dt-list-meta">No ticker</span>
+								{/if}
+							</div>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		{:else}
+			<div class="dt-empty">No registered funds data.</div>
 		{/if}
 	{:else if activeTab === "drift"}
 		<DriftTab crd={panelCrd} />

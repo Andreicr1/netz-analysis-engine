@@ -44,8 +44,64 @@
 	let loadingDetail = $state(false);
 	let instrumentDetail = $state<Record<string, unknown> | null>(null);
 
+	// Edit mode
+	let editing = $state(false);
+	let editSaving = $state(false);
+	let editError = $state<string | null>(null);
+	let editForm = $state({ name: "", block_id: "", asset_class: "", geography: "", currency: "", is_active: true });
+
+	function startEditing() {
+		if (!instrumentDetail) return;
+		editForm = {
+			name: (instrumentDetail.name as string) ?? "",
+			block_id: (instrumentDetail.block_id as string) ?? "",
+			asset_class: (instrumentDetail.asset_class as string) ?? "",
+			geography: (instrumentDetail.geography as string) ?? "",
+			currency: (instrumentDetail.currency as string) ?? "",
+			is_active: (instrumentDetail.is_active as boolean) ?? true,
+		};
+		editError = null;
+		editing = true;
+	}
+
+	function cancelEditing() {
+		editing = false;
+		editError = null;
+	}
+
+	async function saveEdit() {
+		if (!selectedInstrument || !instrumentDetail) return;
+		editSaving = true;
+		editError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			const body: Record<string, unknown> = {};
+			if (editForm.name !== (instrumentDetail.name ?? "")) body.name = editForm.name;
+			if (editForm.block_id !== (instrumentDetail.block_id ?? "")) body.block_id = editForm.block_id || null;
+			if (editForm.asset_class !== (instrumentDetail.asset_class ?? "")) body.asset_class = editForm.asset_class;
+			if (editForm.geography !== (instrumentDetail.geography ?? "")) body.geography = editForm.geography;
+			if (editForm.currency !== (instrumentDetail.currency ?? "")) body.currency = editForm.currency;
+			if (editForm.is_active !== (instrumentDetail.is_active ?? true)) body.is_active = editForm.is_active;
+			if (Object.keys(body).length === 0) {
+				editing = false;
+				return;
+			}
+			const id = (instrumentDetail.instrument_id as string) ?? selectedInstrument.id;
+			const updated = await api.patch<Record<string, unknown>>(`/instruments/${id}`, body);
+			instrumentDetail = updated;
+			editing = false;
+			toast = { message: "Instrument updated", type: "success" };
+			await fetchData();
+		} catch (e) {
+			editError = e instanceof Error ? e.message : "Failed to update instrument";
+		} finally {
+			editSaving = false;
+		}
+	}
+
 	async function openDetail(instrument: Instrument) {
 		selectedInstrument = instrument;
+		editing = false;
 		loadingDetail = true;
 		try {
 			const api = createClientApiClient(getToken);
@@ -245,16 +301,56 @@
 
 <!-- Detail Panel -->
 {#if selectedInstrument}
-	<ContextPanel open={panelOpen} title={selectedInstrument.ticker ?? "Instrument"} onClose={() => { selectedInstrument = null; instrumentDetail = null; }}>
+	<ContextPanel open={panelOpen} title={selectedInstrument.ticker ?? "Instrument"} onClose={() => { selectedInstrument = null; instrumentDetail = null; editing = false; }}>
 		<div class="space-y-4 p-4">
 			{#if loadingDetail}
 				<p class="text-sm text-(--netz-text-muted)">Loading...</p>
+			{:else if instrumentDetail && editing}
+				<form onsubmit={(e) => { e.preventDefault(); saveEdit(); }} class="space-y-3">
+					<FormField label="Name">
+						<Input type="text" bind:value={editForm.name} />
+					</FormField>
+					<FormField label="Asset Class">
+						<Select bind:value={editForm.asset_class} options={[
+							{ value: "equity", label: "Equity" },
+							{ value: "fixed_income", label: "Fixed Income" },
+							{ value: "commodity", label: "Commodity" },
+							{ value: "fx", label: "FX" },
+							{ value: "alternative", label: "Alternative" },
+							{ value: "fund", label: "Fund" },
+						]} />
+					</FormField>
+					<FormField label="Geography">
+						<Input type="text" bind:value={editForm.geography} placeholder="e.g. US, Global, EM" />
+					</FormField>
+					<FormField label="Currency">
+						<Input type="text" class="uppercase" bind:value={editForm.currency} placeholder="USD" />
+					</FormField>
+					<FormField label="Block ID">
+						<Input type="text" bind:value={editForm.block_id} placeholder="Allocation block" />
+					</FormField>
+					<div class="flex items-center gap-2">
+						<input type="checkbox" id="edit-is-active" bind:checked={editForm.is_active} class="h-4 w-4 rounded border-(--netz-border) accent-(--netz-brand)" />
+						<label for="edit-is-active" class="text-sm text-(--netz-text-primary)">Active</label>
+					</div>
+					{#if editError}<p class="text-sm text-(--netz-status-error)">{editError}</p>{/if}
+					<div class="flex justify-end gap-2 pt-2">
+						<Button variant="outline" onclick={cancelEditing}>Cancel</Button>
+						<ActionButton onclick={saveEdit} loading={editSaving} loadingText="Saving..." disabled={!editForm.name.trim()}>Save</ActionButton>
+					</div>
+				</form>
 			{:else if instrumentDetail}
+				<div class="flex justify-end">
+					<Button variant="outline" onclick={startEditing}>Edit</Button>
+				</div>
 				<div><p class="text-xs text-(--netz-text-muted)">Name</p><p class="text-sm font-medium">{instrumentDetail.name ?? "—"}</p></div>
 				<div><p class="text-xs text-(--netz-text-muted)">Asset Class</p><p class="text-sm">{instrumentDetail.asset_class ?? "—"}</p></div>
+				<div><p class="text-xs text-(--netz-text-muted)">Geography</p><p class="text-sm">{instrumentDetail.geography ?? "—"}</p></div>
 				<div><p class="text-xs text-(--netz-text-muted)">Currency</p><p class="text-sm">{instrumentDetail.currency ?? "—"}</p></div>
+				<div><p class="text-xs text-(--netz-text-muted)">Block ID</p><p class="text-sm">{instrumentDetail.block_id ?? "—"}</p></div>
 				<div><p class="text-xs text-(--netz-text-muted)">Last Price</p><p class="text-sm">{instrumentDetail.last_price ?? "—"}</p></div>
 				<div><p class="text-xs text-(--netz-text-muted)">Exchange</p><p class="text-sm">{instrumentDetail.exchange ?? "—"}</p></div>
+				<div><p class="text-xs text-(--netz-text-muted)">Status</p><p class="text-sm">{instrumentDetail.is_active ? "Active" : "Inactive"}</p></div>
 			{:else}
 				<p class="text-sm text-(--netz-text-muted)">Details unavailable.</p>
 			{/if}

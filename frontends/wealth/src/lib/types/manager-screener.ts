@@ -83,7 +83,29 @@ export interface CompareResult {
 	jaccard_overlap: number;
 }
 
-export type DetailTab = "profile" | "holdings" | "institutional" | "universe" | "drift" | "nport" | "docs" | "brochure";
+export type DetailTab = "profile" | "holdings" | "institutional" | "universe" | "registered" | "drift" | "nport" | "docs" | "brochure";
+
+// ── Registered Funds tab ──
+export interface ManagerRegisteredFundItem {
+	cik: string;
+	fund_name: string;
+	fund_type: string;
+	ticker: string | null;
+	isin: string | null;
+	total_assets: number | null;
+	inception_date: string | null;
+	last_nport_date: string | null;
+	aum_below_threshold: boolean;
+	already_in_universe: boolean;
+	universe_instrument_id: string | null;
+}
+
+export interface ManagerRegisteredFundsResponse {
+	crd_number: string;
+	firm_name: string;
+	funds: ManagerRegisteredFundItem[];
+	total_funds: number;
+}
 
 // ── Drift tab ──
 export interface DriftQuarter {
