@@ -63,11 +63,19 @@ async def run_wealth_embedding() -> dict:
             return {"status": "skipped", "reason": "lock_held"}
         try:
             stats: dict = {}
-            stats["brochure"] = await _embed_brochure_sections(db)
-            stats["esma_funds"] = await _embed_esma_funds(db)
-            stats["esma_managers"] = await _embed_esma_managers(db)
-            stats["dd_chapters"] = await _embed_dd_chapters(db)
-            stats["macro_reviews"] = await _embed_macro_reviews(db)
+            for source_name, coro_fn in [
+                ("brochure", _embed_brochure_sections),
+                ("esma_funds", _embed_esma_funds),
+                ("esma_managers", _embed_esma_managers),
+                ("dd_chapters", _embed_dd_chapters),
+                ("macro_reviews", _embed_macro_reviews),
+            ]:
+                try:
+                    stats[source_name] = await coro_fn(db)
+                except Exception:
+                    logger.exception("wealth_embedding.source_failed", source=source_name)
+                    stats[source_name] = {"error": True}
+                    await db.rollback()
             logger.info("wealth_embedding.complete", **stats)
             return {"status": "completed", **stats}
         finally:
@@ -108,7 +116,8 @@ async def _embed_brochure_sections(db: AsyncSession) -> dict:
     """Embed semantic sections of sec_manager_brochure_text → entity_type='firm'."""
     result = await db.execute(
         text("""
-            SELECT b.crd_number, b.section, b.content, b.filing_date
+            SELECT DISTINCT ON (b.crd_number, b.section)
+                   b.crd_number, b.section, b.content, b.filing_date
             FROM sec_manager_brochure_text b
             LEFT JOIN wealth_vector_chunks w
               ON w.id = 'brochure_' || b.crd_number || '_' || b.section
@@ -116,7 +125,7 @@ async def _embed_brochure_sections(db: AsyncSession) -> dict:
               AND (w.id IS NULL
                    OR (b.filing_date IS NOT NULL
                        AND b.filing_date > w.embedded_at::date))
-            ORDER BY b.crd_number
+            ORDER BY b.crd_number, b.section, b.filing_date DESC NULLS LAST
             LIMIT 10000
         """),
         {"sections": list(BROCHURE_EMBED_SECTIONS)},
