@@ -91,6 +91,7 @@
 	// ── Catalog detail panel ──
 	let panelOpen = $state(false);
 	let selectedFund = $state<UnifiedFundItem | null>(null);
+	let selectedSecurity = $state<SecurityItem | null>(null);
 	let panelTitle = $derived(selectedFund?.name ?? selectedSecurity?.name ?? "");
 
 	function openFundDetail(item: UnifiedFundItem) {
@@ -132,7 +133,6 @@
 	}
 
 	// ── Securities tab methods (global equities — no RLS) ──
-	let selectedSecurity = $state<SecurityItem | null>(null);
 
 	function openSecurityDetail(item: SecurityItem) {
 		selectedSecurity = item;
@@ -143,8 +143,8 @@
 		const params = new URLSearchParams();
 		params.set("tab", "equities");
 		if (secSearchQ) params.set("q", secSearchQ);
-		if (secSelectedTypes.length === 1) params.set("security_type", secSelectedTypes[0]);
-		if (secSelectedExchanges.length === 1) params.set("exchange", secSelectedExchanges[0]);
+		if (secSelectedTypes.length === 1) params.set("security_type", secSelectedTypes[0]!);
+		if (secSelectedExchanges.length === 1) params.set("exchange", secSelectedExchanges[0]!);
 		params.set("page", "1");
 		params.set("page_size", "50");
 		goto(`/screener?${params.toString()}`, { invalidateAll: true });
@@ -154,8 +154,8 @@
 		const params = new URLSearchParams();
 		params.set("tab", "equities");
 		if (secSearchQ) params.set("q", secSearchQ);
-		if (secSelectedTypes.length === 1) params.set("security_type", secSelectedTypes[0]);
-		if (secSelectedExchanges.length === 1) params.set("exchange", secSelectedExchanges[0]);
+		if (secSelectedTypes.length === 1) params.set("security_type", secSelectedTypes[0]!);
+		if (secSelectedExchanges.length === 1) params.set("exchange", secSelectedExchanges[0]!);
 		params.set("page", String(page));
 		params.set("page_size", "50");
 		goto(`/screener?${params.toString()}`, { invalidateAll: true });

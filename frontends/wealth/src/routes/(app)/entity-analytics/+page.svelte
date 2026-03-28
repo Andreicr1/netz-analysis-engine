@@ -204,7 +204,7 @@
 				confine: true,
 				formatter: (params: { seriesName: string; data: [string, number]; color: string }[]) => {
 					if (!params.length) return "";
-					let html = `<div style="font-size:12px"><b>${params[0].data[0]}</b>`;
+					let html = `<div style="font-size:12px"><b>${params[0]!.data[0]}</b>`;
 					for (const p of params) {
 						const val = (p.data[1] * 100).toFixed(2);
 						html += `<br/><span style="color:${p.color}">\u25CF</span> ${p.seriesName}: <b>${val}%</b>`;
@@ -238,13 +238,13 @@
 		// Bar centers from bin edges
 		const centers: number[] = [];
 		for (let i = 0; i < dist.bin_edges.length - 1; i++) {
-			centers.push((dist.bin_edges[i] + dist.bin_edges[i + 1]) / 2);
+			centers.push((dist.bin_edges[i]! + dist.bin_edges[i + 1]!) / 2);
 		}
 
 		// Normal curve overlay
 		const normalCurve: [number, number][] = [];
 		if (dist.mean != null && dist.std != null && dist.std > 0) {
-			const binWidth = centers.length > 1 ? Math.abs(centers[1] - centers[0]) : 0.001;
+			const binWidth = centers.length > 1 ? Math.abs(centers[1]! - centers[0]!) : 0.001;
 			const totalObs = dist.bin_counts.reduce((a, b) => a + b, 0);
 			for (const x of centers) {
 				const z = (x - dist.mean) / dist.std;
@@ -277,11 +277,11 @@
 			tooltip: {
 				trigger: "axis",
 				confine: true,
-				formatter: (params: { seriesName: string; data: number | [number, number]; color: string }[]) => {
+				formatter: (params: { seriesName: string; data: number | [number, number]; color: string; dataIndex: number }[]) => {
 					if (!params.length) return "";
-					const idx = (params[0] as { dataIndex: number }).dataIndex;
-					const lo = (dist.bin_edges[idx] * 100).toFixed(3);
-					const hi = (dist.bin_edges[idx + 1] * 100).toFixed(3);
+					const idx = params[0]!.dataIndex;
+					const lo = (dist.bin_edges[idx]! * 100).toFixed(3);
+					const hi = (dist.bin_edges[idx + 1]! * 100).toFixed(3);
 					let html = `<div style="font-size:12px"><b>${lo}% to ${hi}%</b>`;
 					for (const p of params) {
 						const val = typeof p.data === "number" ? p.data : (p.data as [number, number])[1]?.toFixed(1);
@@ -297,9 +297,9 @@
 					data: dist.bin_counts.map((count, i) => ({
 						value: count,
 						itemStyle: {
-							color: centers[i] < (varLine ?? -Infinity)
+							color: centers[i]! < (varLine ?? -Infinity)
 								? "rgba(239, 68, 68, 0.7)"
-								: centers[i] < 0
+								: centers[i]! < 0
 									? "rgba(251, 146, 60, 0.6)"
 									: "rgba(59, 130, 246, 0.6)",
 						},
@@ -310,7 +310,7 @@
 					? [{
 						name: "Normal",
 						type: "line",
-						data: normalCurve.map((_, i) => normalCurve[i][1]),
+						data: normalCurve.map((_, i) => normalCurve[i]![1]),
 						smooth: true,
 						symbol: "none",
 						lineStyle: { color: "#a855f7", width: 2, type: "dashed" as const },
