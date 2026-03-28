@@ -84,10 +84,18 @@ class ManagerSpotlight:
             quant_profile = gather_quant_metrics(db, instrument_id=instrument_id, organization_id=organization_id)
             risk_metrics = gather_risk_metrics(db, instrument_id=instrument_id, organization_id=organization_id)
 
+            # ── Vector search (firm context + org-scoped analysis) ────
+            documents = self._gather_vector_context(
+                fund_data=fund_data,
+                instrument_id=instrument_id,
+                organization_id=organization_id,
+            )
+
             content_md = self._generate_narrative(
                 fund_data=fund_data,
                 quant_profile=quant_profile,
                 risk_metrics=risk_metrics,
+                documents=documents,
                 language=language,
             )
 
@@ -124,31 +132,75 @@ class ManagerSpotlight:
         )
 
     def _gather_fund_data(self, db: Session, instrument_id: str, organization_id: str) -> dict[str, Any]:
-        """Gather fund identity and DD report data."""
-        from app.domains.wealth.models.fund import Fund
+        """Gather fund identity from instruments_universe."""
+        from app.domains.wealth.models.instrument import Instrument
 
-        fund = (
-            db.query(Fund)
-            .filter(Fund.fund_id == instrument_id, Fund.organization_id == organization_id)
+        instrument = (
+            db.query(Instrument)
+            .filter(
+                Instrument.instrument_id == instrument_id,
+                Instrument.organization_id == organization_id,
+            )
             .first()
         )
-        if not fund:
+        if not instrument:
             return {"instrument_id": instrument_id, "name": "Unknown Fund"}
 
+        attrs = instrument.attributes or {}
         return {
-            "instrument_id": str(fund.fund_id),
-            "name": fund.name,
-            "isin": fund.isin,
-            "ticker": fund.ticker,
-            "fund_type": fund.fund_type,
-            "geography": fund.geography,
-            "asset_class": fund.asset_class,
-            "manager_name": fund.manager_name,
-            "currency": fund.currency,
-            "domicile": fund.domicile,
-            "inception_date": str(fund.inception_date) if fund.inception_date else None,
-            "aum_usd": float(fund.aum_usd) if fund.aum_usd else None,
+            "instrument_id": str(instrument.instrument_id),
+            "name": instrument.name,
+            "isin": instrument.isin,
+            "ticker": instrument.ticker,
+            "fund_type": attrs.get("fund_type") or instrument.asset_class,
+            "geography": instrument.geography,
+            "asset_class": instrument.asset_class,
+            "manager_name": attrs.get("manager_name"),
+            "currency": instrument.currency,
+            "domicile": attrs.get("domicile"),
+            "inception_date": attrs.get("inception_date"),
+            "aum_usd": float(attrs["aum_usd"]) if attrs.get("aum_usd") else None,
+            "sec_crd": attrs.get("sec_crd"),
         }
+
+    def _gather_vector_context(
+        self,
+        *,
+        fund_data: dict[str, Any],
+        instrument_id: str,
+        organization_id: str,
+    ) -> list[dict[str, Any]]:
+        """Retrieve firm context + fund analysis chunks from pgvector."""
+        from ai_engine.extraction.embedding_service import generate_embeddings
+        from ai_engine.extraction.pgvector_search_service import (
+            search_fund_analysis_sync,
+            search_fund_firm_context_sync,
+        )
+
+        try:
+            query_text = "investment philosophy strategy risk management team"
+            embed_result = generate_embeddings([query_text])
+            if not embed_result.vectors:
+                return []
+
+            qvec = embed_result.vectors[0]
+            sec_crd = fund_data.get("sec_crd")
+
+            firm_chunks = search_fund_firm_context_sync(
+                query_vector=qvec,
+                sec_crd=sec_crd or None,
+                top=15,
+            )
+            analysis_chunks = search_fund_analysis_sync(
+                organization_id=organization_id,
+                query_vector=qvec,
+                instrument_id=instrument_id,
+                top=10,
+            )
+            return firm_chunks + analysis_chunks
+        except Exception:
+            logger.warning("vector_search_failed_for_spotlight", instrument_id=instrument_id)
+            return []
 
     def _generate_narrative(
         self,
@@ -156,6 +208,7 @@ class ManagerSpotlight:
         fund_data: dict[str, Any],
         quant_profile: dict[str, Any],
         risk_metrics: dict[str, Any],
+        documents: list[dict[str, Any]] | None = None,
         language: Language,
     ) -> str | None:
         """Generate LLM narrative for manager spotlight."""
@@ -180,7 +233,7 @@ class ManagerSpotlight:
                 "report on the specified fund manager."
             )
 
-        user_content = self._build_user_content(fund_data, quant_profile, risk_metrics)
+        user_content = self._build_user_content(fund_data, quant_profile, risk_metrics, documents or [])
 
         response = self._call_openai_fn(
             system_prompt, user_content, max_tokens=_MAX_TOKENS,
@@ -194,8 +247,9 @@ class ManagerSpotlight:
         fund_data: dict[str, Any],
         quant_profile: dict[str, Any],
         risk_metrics: dict[str, Any],
+        documents: list[dict[str, Any]] | None = None,
     ) -> str:
-        """Build user message from fund data + quant metrics."""
+        """Build user message from fund data + quant metrics + documents."""
         parts: list[str] = []
 
         parts.append("## Fund Identity")
@@ -224,5 +278,12 @@ class ManagerSpotlight:
             for key, val in risk_metrics.items():
                 if val is not None:
                     parts.append(f"- {key}: {val}")
+
+        if documents:
+            parts.append(f"\n## Document Evidence ({len(documents)} chunks)")
+            for i, doc in enumerate(documents[:20]):
+                text = doc.get("content", doc.get("text", ""))[:2000]
+                source = doc.get("source_type", doc.get("section", f"doc_{i}"))
+                parts.append(f"\n### [{source}]\n{text}")
 
         return "\n".join(parts)

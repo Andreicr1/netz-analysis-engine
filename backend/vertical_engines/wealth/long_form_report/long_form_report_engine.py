@@ -521,7 +521,7 @@ class LongFormReportEngine:
     async def _chapter_per_fund_highlights(
         self, context: dict[str, Any], db: AsyncSession,
     ) -> dict[str, Any]:
-        """Ch7: Per-Fund Highlights — top movers, newcomers, exits."""
+        """Ch7: Per-Fund Highlights — top movers, newcomers, exits + firm context."""
         funds_data = context.get("funds_data", [])
         current = context.get("current_snapshot")
         previous = context.get("previous_snapshot")
@@ -549,19 +549,89 @@ class LongFormReportEngine:
             for f in sorted_funds[:5]
         ]
 
+        # ── Vector search: firm context for top movers ────────────────
+        fund_highlights: list[dict[str, Any]] = []
+        try:
+            fund_highlights = await asyncio.to_thread(
+                self._search_fund_highlights,
+                sorted_funds[:5],
+            )
+        except Exception:
+            logger.warning("long_form_fund_highlights_vector_failed", exc_info=True)
+
         return {
             "total_funds": len(current_funds),
             "newcomers": len(newcomers),
             "exits": len(exits),
             "top_movers": top_movers,
+            "fund_highlights": fund_highlights,
         }
+
+    def _search_fund_highlights(
+        self, top_funds: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Sync helper: retrieve firm context chunks for top funds."""
+        from ai_engine.extraction.embedding_service import generate_embeddings
+        from ai_engine.extraction.pgvector_search_service import (
+            search_fund_firm_context_sync,
+        )
+
+        query_text = "investment philosophy strategy performance"
+        embed_result = generate_embeddings([query_text])
+        if not embed_result.vectors:
+            return []
+
+        qvec = embed_result.vectors[0]
+        highlights: list[dict[str, Any]] = []
+
+        for fund in top_funds:
+            attrs = fund.get("attributes", {})
+            sec_crd = attrs.get("sec_crd")
+            if not sec_crd:
+                continue
+            chunks = search_fund_firm_context_sync(
+                query_vector=qvec,
+                sec_crd=sec_crd,
+                top=3,
+            )
+            if chunks:
+                highlights.append({
+                    "fund_name": fund.get("fund_name", "Unknown"),
+                    "chunks": [
+                        {"source_type": c.get("source_type", ""), "content": c.get("content", "")[:1000]}
+                        for c in chunks[:3]
+                    ],
+                })
+
+        return highlights
+
+    def _search_macro_review_chunks(
+        self, organization_id: str,
+    ) -> list[dict[str, Any]]:
+        """Sync helper: retrieve macro review chunks from pgvector."""
+        from ai_engine.extraction.embedding_service import generate_embeddings
+        from ai_engine.extraction.pgvector_search_service import (
+            search_fund_analysis_sync,
+        )
+
+        query_text = "macro economic outlook forward expectations risks opportunities"
+        embed_result = generate_embeddings([query_text])
+        if not embed_result.vectors:
+            return []
+        return search_fund_analysis_sync(
+            organization_id=organization_id,
+            query_vector=embed_result.vectors[0],
+            source_type="macro_review",
+            top=10,
+        )
 
     async def _chapter_forward_outlook(
         self, context: dict[str, Any], db: AsyncSession,
     ) -> dict[str, Any]:
-        """Ch8: Forward Outlook — from latest InvestmentOutlook if available."""
+        """Ch8: Forward Outlook — from latest InvestmentOutlook + macro review chunks."""
         from app.domains.wealth.models.content import WealthContent
 
+        outlook_content: dict[str, Any] | None = None
         try:
             stmt = (
                 select(WealthContent.content_data, WealthContent.approved_at)
@@ -575,12 +645,35 @@ class LongFormReportEngine:
             result = await db.execute(stmt)
             row = result.one_or_none()
             if row and row[0]:
-                return {
+                outlook_content = {
                     "available": True,
                     "published_at": str(row[1]) if row[1] else None,
                     "content": row[0],
                 }
         except Exception:
             logger.warning("long_form_outlook_load_failed", exc_info=True)
+
+        # ── Vector search: macro review chunks for forward context ────
+        macro_chunks: list[dict[str, Any]] = []
+        try:
+            organization_id = context.get("organization_id", "")
+            if organization_id:
+                macro_chunks = await asyncio.to_thread(
+                    self._search_macro_review_chunks,
+                    organization_id,
+                )
+        except Exception:
+            logger.warning("long_form_outlook_vector_failed", exc_info=True)
+
+        if outlook_content:
+            outlook_content["macro_chunks"] = macro_chunks
+            return outlook_content
+
+        if macro_chunks:
+            return {
+                "available": True,
+                "source": "vector_search",
+                "macro_chunks": macro_chunks,
+            }
 
         return {"available": False, "reason": "no_approved_outlook"}

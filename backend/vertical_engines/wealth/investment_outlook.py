@@ -75,7 +75,11 @@ class InvestmentOutlook:
 
         try:
             macro_data = self._gather_macro_data(db, organization_id)
-            content_md = self._generate_narrative(macro_data, language=language)
+
+            # ── Vector search (macro review chunks for context depth) ─
+            documents = self._gather_vector_context(organization_id)
+
+            content_md = self._generate_narrative(macro_data, documents=documents, language=language)
 
             logger.info(
                 "investment_outlook_generated",
@@ -122,10 +126,33 @@ class InvestmentOutlook:
 
         return {"regions": {}, "global_indicators": {}, "note": "No macro data available"}
 
+    def _gather_vector_context(self, organization_id: str) -> list[dict[str, Any]]:
+        """Retrieve macro review chunks from pgvector for historical depth."""
+        from ai_engine.extraction.embedding_service import generate_embeddings
+        from ai_engine.extraction.pgvector_search_service import (
+            search_fund_analysis_sync,
+        )
+
+        try:
+            query_text = "macro economic outlook regional growth inflation monetary policy"
+            embed_result = generate_embeddings([query_text])
+            if not embed_result.vectors:
+                return []
+            return search_fund_analysis_sync(
+                organization_id=organization_id,
+                query_vector=embed_result.vectors[0],
+                source_type="macro_review",
+                top=10,
+            )
+        except Exception:
+            logger.warning("vector_search_failed_for_outlook")
+            return []
+
     def _generate_narrative(
         self,
         macro_data: dict[str, Any],
         *,
+        documents: list[dict[str, Any]] | None = None,
         language: Language,
     ) -> str | None:
         """Generate LLM narrative from macro data."""
@@ -151,7 +178,7 @@ class InvestmentOutlook:
                 "Investment Outlook report based on the macro data provided."
             )
 
-        user_content = self._build_user_content(macro_data)
+        user_content = self._build_user_content(macro_data, documents or [])
 
         response = self._call_openai_fn(
             system_prompt, user_content, max_tokens=_MAX_TOKENS,
@@ -160,8 +187,12 @@ class InvestmentOutlook:
         raw = response.get("content") or response.get("text") or ""
         return sanitize_llm_text(raw) if raw else None
 
-    def _build_user_content(self, macro_data: dict[str, Any]) -> str:
-        """Build user message from macro data."""
+    def _build_user_content(
+        self,
+        macro_data: dict[str, Any],
+        documents: list[dict[str, Any]] | None = None,
+    ) -> str:
+        """Build user message from macro data + document chunks."""
         parts: list[str] = ["## Macro Data Snapshot"]
 
         regions = macro_data.get("regions", {})
@@ -184,5 +215,12 @@ class InvestmentOutlook:
                         f"- {sd.get('region', '?')}: {sd.get('delta', 0):+.1f} "
                         f"({sd.get('previous_score', '?')} → {sd.get('current_score', '?')})",
                     )
+
+        if documents:
+            parts.append(f"\n## Historical Macro Analysis ({len(documents)} chunks)")
+            for i, doc in enumerate(documents[:15]):
+                text = doc.get("content", doc.get("text", ""))[:2000]
+                source = doc.get("source_type", doc.get("section", f"doc_{i}"))
+                parts.append(f"\n### [{source}]\n{text}")
 
         return "\n".join(parts)

@@ -97,6 +97,12 @@ class FlashReport:
             macro_data = self._gather_macro_context(db, organization_id)
             context["macro_snapshot"] = macro_data
 
+            # ── Vector search (event-relevant macro review chunks) ────
+            context["documents"] = self._gather_vector_context(
+                event_description=context.get("event_description", ""),
+                organization_id=organization_id,
+            )
+
             content_md = self._generate_narrative(context, language=language)
 
             logger.info(
@@ -159,6 +165,35 @@ class FlashReport:
 
         return {"note": "No macro context available"}
 
+    def _gather_vector_context(
+        self,
+        *,
+        event_description: str,
+        organization_id: str,
+    ) -> list[dict[str, Any]]:
+        """Retrieve semantically relevant macro review chunks for the event."""
+        if not event_description:
+            return []
+
+        from ai_engine.extraction.embedding_service import generate_embeddings
+        from ai_engine.extraction.pgvector_search_service import (
+            search_fund_analysis_sync,
+        )
+
+        try:
+            embed_result = generate_embeddings([event_description])
+            if not embed_result.vectors:
+                return []
+            return search_fund_analysis_sync(
+                organization_id=organization_id,
+                query_vector=embed_result.vectors[0],
+                source_type="macro_review",
+                top=10,
+            )
+        except Exception:
+            logger.warning("vector_search_failed_for_flash_report")
+            return []
+
     def _generate_narrative(
         self,
         context: dict[str, Any],
@@ -212,5 +247,13 @@ class FlashReport:
                 if isinstance(data, dict):
                     score = data.get("composite_score", "N/A")
                     parts.append(f"- {region}: composite_score={score}")
+
+        docs = context.get("documents", [])
+        if docs:
+            parts.append(f"\n## Historical Macro Analysis ({len(docs)} chunks)")
+            for i, doc in enumerate(docs[:15]):
+                text = doc.get("content", doc.get("text", ""))[:2000]
+                source = doc.get("source_type", doc.get("section", f"doc_{i}"))
+                parts.append(f"\n### [{source}]\n{text}")
 
         return "\n".join(parts)

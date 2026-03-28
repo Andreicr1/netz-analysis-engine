@@ -322,31 +322,94 @@ class DDReportEngine:
             "aum_usd": attrs.get("aum_usd"),
         }
 
-        quant_profile = gather_quant_metrics(db, instrument_id=fund_id, organization_id=organization_id)
-        risk_metrics = gather_risk_metrics(db, instrument_id=fund_id, organization_id=organization_id)
-
         # SEC linkage from JSONB attributes
         fund_cik = attrs.get("sec_cik")
         sec_universe = attrs.get("sec_universe")
         manager_name = attrs.get("manager_name")
 
-        # N-PORT: fund-level holdings for registered US funds
-        sec_nport: dict = {}
+        # ── Parallel evidence gathering ───────────────────────────────
+        def _run_quant() -> dict:
+            return gather_quant_metrics(db, instrument_id=fund_id, organization_id=organization_id)
+
+        def _run_risk() -> dict:
+            return gather_risk_metrics(db, instrument_id=fund_id, organization_id=organization_id)
+
+        def _run_nport() -> dict:
+            if sec_universe == "registered_us" and fund_cik:
+                return gather_sec_nport_data(db, fund_cik=fund_cik)
+            return {}
+
+        def _run_13f() -> dict:
+            return gather_sec_13f_data(db, manager_name=manager_name)
+
+        def _run_adv() -> dict:
+            return gather_sec_adv_data(db, manager_name=manager_name)
+
+        tasks = {
+            "quant": _run_quant,
+            "risk": _run_risk,
+            "nport": _run_nport,
+            "thirteenf": _run_13f,
+            "adv": _run_adv,
+        }
+
+        results: dict[str, Any] = {}
+        with ThreadPoolExecutor(max_workers=5) as pool:
+            futures = {pool.submit(fn): name for name, fn in tasks.items()}
+            for future in as_completed(futures):
+                name = futures[future]
+                try:
+                    results[name] = future.result()
+                except Exception:
+                    logger.warning("evidence_gather_partial_failure", task=name, fund_id=fund_id)
+                    results[name] = {}
+
+        quant_profile = results["quant"]
+        risk_metrics = results["risk"]
+        sec_nport = results["nport"]
+        sec_13f = results["thirteenf"]
+        sec_adv = results["adv"]
+
         holdings_source: str | None = None
-        if sec_universe == "registered_us" and fund_cik:
-            sec_nport = gather_sec_nport_data(db, fund_cik=fund_cik)
-            if sec_nport:
-                holdings_source = "nport"
+        if sec_nport:
+            holdings_source = "nport"
 
-        # 13F: always gather as OVERLAY (manager firm context), never as primary
-        sec_13f = gather_sec_13f_data(db, manager_name=manager_name)
-
-        # ADV: always gather (firm governance for ops/compliance chapters)
-        sec_adv = gather_sec_adv_data(db, manager_name=manager_name)
+        # ADV brochure depends on sec_adv result — must stay sequential
         adv_brochure = gather_sec_adv_brochure(db, sec_adv.get("crd_number"))
+
+        # ── Vector search (firm context + org-scoped analysis) ────────
+        from ai_engine.extraction.embedding_service import generate_embeddings
+        from ai_engine.extraction.pgvector_search_service import (
+            search_fund_analysis_sync,
+            search_fund_firm_context_sync,
+        )
+
+        documents: list[dict] = []
+        try:
+            query_text = "investment philosophy strategy risk management"
+            embed_result = generate_embeddings([query_text])
+            if embed_result.vectors:
+                qvec = embed_result.vectors[0]
+                sec_crd = attrs.get("sec_crd") or (sec_adv.get("crd_number") if sec_adv else None)
+                firm_chunks = search_fund_firm_context_sync(
+                    query_vector=qvec,
+                    sec_crd=sec_crd or None,
+                    top=15,
+                )
+                analysis_chunks = search_fund_analysis_sync(
+                    organization_id=organization_id,
+                    query_vector=qvec,
+                    instrument_id=fund_id,
+                    top=10,
+                )
+                documents = firm_chunks + analysis_chunks
+        except Exception:
+            logger.warning("vector_search_failed_for_dd_report", fund_id=fund_id)
+            documents = []
 
         return build_evidence_pack(
             fund_data=fund_data,
+            documents=documents,
             quant_profile=quant_profile,
             risk_metrics=risk_metrics,
             sec_13f_data=sec_13f,
