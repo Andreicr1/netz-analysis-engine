@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-03-28
 **Database:** Timescale Cloud (PostgreSQL 16 + TimescaleDB + pgvector)
-**Migration head:** `0063_add_strategy_label`
-**Total tables:** 124 | **Total data rows:** ~3.5M across key tables
+**Migration head:** `0066_fund_class_xbrl_fees`
+**Total tables:** ~131 | **Total data rows:** ~3.7M across key tables
 
 ---
 
@@ -13,9 +13,13 @@ The Netz Analysis Engine database aggregates financial data from 7 authoritative
 
 - **976,980 US investment managers** from SEC FOIA bulk data + IAPD XML enrichment, including 15,963 registered investment advisers managing $50+ trillion in combined AUM, with 99.5% Form ADV Part 1A coverage on fund managers (AUM, fees, client types, compliance)
 - **62,728 private funds** from ADV Part 1 PDFs with `fund_type` (7 SEC categories via checkbox image detection) and `strategy_label` (37 granular strategies via 3-layer keyword classifier)
-- **4,942 US registered funds** (3,652 mutual funds, 965 closed-end, 196 BDCs, 73 ETFs, 56 money market) with `strategy_label` across 24 categories — enriched from 6 EDGAR bulk datasets
-- **37,820 share classes** across 14,131 series in `sec_fund_classes` — bulk loaded from EDGAR series/class XML + N-PORT
+- **4,617 US mutual funds and closed-end funds** in `sec_registered_funds` — enriched from 16 quarters of N-CEN data (2,232/3,652 mutual funds, $11.97T AUM coverage) + OEF XBRL fees via N-CSR
+- **985 ETFs** in `sec_etfs` — N-CEN Q4 2025 with tracking difference, expense ratio, creation unit mechanics
+- **196 BDCs** in `sec_bdcs` — business development companies (all = Private Credit strategy)
+- **373 money market fund series** in `sec_money_market_funds` — N-MFP with WAM, WAL, 7-day yield, liquidity; **20,270 daily metric rows** in `sec_mmf_metrics` hypertable
+- **36,516 share classes** in `sec_fund_classes` — **8,278 with expense ratios** from OEF XBRL (N-CSR filings), covering $100.9T in AUM across 615 fund families (Vanguard, Capital Group, Fidelity, BlackRock, etc.)
 - **10,436 European UCITS funds** from 658 ESMA-registered managers across 25 countries, with `strategy_label` (31 categories, 69.7% coverage)
+- **pgvector index** with 12 embedding sources covering all fund universes (SEC managers/funds/13F/private + ETF/BDC/MMF + ESMA enriched)
 - **1.09M institutional holdings** (13F-HR) from 12 major institutional investors, with 25 years of quarterly history
 - **132,823 fund portfolio holdings** (N-PORT) from 69 US registered investment companies
 - **78 macroeconomic time series** from FRED covering rates, spreads, housing, employment, and commodities
@@ -270,7 +274,7 @@ Top strategy_labels: Private Equity (19,935), Hedge Fund (8,281), Real Estate (5
 | MT (Malta) | 33 | 0.3% | |
 | Others (8) | 34 | 0.3% | BG, CZ, ES, GR, IE, IT, LV, SE |
 
-All 10,436 funds are classified as **UCITS** (Undertakings for Collective Investment in Transferable Securities). `strategy_label` assigned via fund name keyword classifier — **31 categories, 69.7% coverage** (7,278 / 10,436). Top categories: Multi-Asset (811), Fixed Income (526), ESG/Sustainable (523), Equity (506), Target Date (491), Global Equity (435), Index/Passive (353), Global Fixed Income (334).
+All 10,436 funds are classified as **UCITS** (Undertakings for Collective Investment in Transferable Securities). `strategy_label` assigned via fund name keyword classifier (multilíngue EN/DE/FR/PT) — **31 categories, 69.7% coverage** (7,278 / 10,436). Top categories: Multi-Asset (811), Fixed Income (526), ESG/Sustainable (523), Equity (506), Target Date (491), Global Equity (435), Index/Passive (353), Global Fixed Income (334). `strategy_label` assigned via fund name keyword classifier — **31 categories, 69.7% coverage** (7,278 / 10,436). Top categories: Multi-Asset (811), Fixed Income (526), ESG/Sustainable (523), Equity (506), Target Date (491), Global Equity (435), Index/Passive (353), Global Fixed Income (334).
 
 #### Manager Country Distribution
 
@@ -588,45 +592,150 @@ All 16 allocation blocks have 500 daily NAV observations with computed log retur
 
 ### 1.11 SEC — Registered Fund Catalog (2026-03-28)
 
-| Attribute | Value |
-|---|---|
-| **Source** | EDGAR bulk XML datasets (investment company series/class, closed-end, BDC, MMF) + N-PORT FUND_REPORTED_INFO + RR1 XBRL |
-| **Tables** | `sec_registered_funds` (4,942 rows), `sec_fund_classes` (37,820 rows, 14,131 series) |
-| **fund_type constraint** | `mutual_fund`, `etf`, `closed_end`, `bdc`, `money_market`, `interval_fund` |
+**Migration history:** 0064 (ETF/BDC/MMF tables) → 0065 (N-CEN enrichment) → 0066 (XBRL fees)
 
-#### Fund Type Distribution
+ETF, BDC, and Money Market funds were extracted from `sec_registered_funds` into dedicated tables
+with schemas derived from their respective EDGAR datasets. `sec_registered_funds` now contains
+only mutual funds and closed-end funds.
 
-| fund_type | Count | Classified | % |
+#### Fund Tables Overview
+
+| Table | Rows | Source | PK | fund_type constraint |
+|---|---|---|---|---|
+| `sec_registered_funds` | 4,617 | EDGAR XML + N-CEN + OEF XBRL | `cik` | `mutual_fund`, `closed_end`, `interval_fund` |
+| `sec_etfs` | 985 | N-CEN Q4 2025 (ETF.tsv + FUND_REPORTED_INFO) | `series_id` | — |
+| `sec_bdcs` | 196 | BDC XML whitelist + N-CEN | `series_id` | — |
+| `sec_money_market_funds` | 373 | N-MFP (SUBMISSION + SERIESLEVELINFO) | `series_id` | — |
+| `sec_mmf_metrics` | 20,270 | N-MFP daily (hypertable, 1-month chunks) | `(metric_date, series_id, class_id)` | — |
+| `sec_fund_classes` | 36,516 | EDGAR series/class XML + N-PORT + OEF XBRL | `(cik, series_id, class_id)` | — |
+
+---
+
+#### `sec_registered_funds` — Mutual Funds + Closed-End (4,617 rows)
+
+**fund_type distribution:**
+
+| fund_type | Count | N-CEN enriched | % enriched |
 |---|---|---|---|
-| mutual_fund | 3,652 | 2,569 | 70% |
-| closed_end | 965 | 721 | 75% |
-| bdc | 196 | 196 | 100% |
-| etf | 73 | 73 | 100% |
-| money_market | 56 | 56 | 100% |
-| **Total** | **4,942** | **3,615** | **73.1%** |
+| mutual_fund | 3,652 | 2,232 | 61.1% ($11.97T AUM) |
+| closed_end | 965 | ~0% | N/A (CEFs report fees differently) |
+| **Total** | **4,617** | | |
+
+**N-CEN enrichment (migration 0065):** 27 new columns added, populated from 16 quarters of N-CEN filings (2021 Q3 – 2025 Q4):
+- Flags: `is_index`, `is_non_diversified`, `is_target_date`, `is_fund_of_fund`, `is_master_feeder`
+- Costs: `management_fee`, `net_operating_expenses`, `has_expense_limit`, `has_expense_waived`
+- Performance: `return_before_fees`, `return_after_fees`, `return_stdv_before_fees`, `return_stdv_after_fees`
+- AUM/NAV: `monthly_avg_net_assets`, `daily_avg_net_assets`, `nav_per_share`, `market_price_per_share`
+- Operational: `is_sec_lending_authorized`, `has_line_of_credit`, `has_swing_pricing`
+- Metadata: `ncen_accession_number`, `ncen_report_date`, `lei`
+
+**Key discovery:** `MANAGEMENT_FEE` in N-CEN is exclusive to closed-end/interval funds. Open-end mutual fund expense ratios come from OEF XBRL taxonomy via N-CSR filings (migration 0066).
 
 **strategy_label sources (layered):**
-1. Fund name keywords (trust-level) — baseline
-2. `sec_fund_classes.series_name` (more descriptive than trust name) — +13pp
-3. RR1 XBRL `ObjectivePrimaryTextBlock` + `StrategyNarrativeTextBlock` — 98.3% hit rate when available
+1. Fund name keywords — baseline
+2. `sec_fund_classes.series_name` — +13pp
+3. RR1 XBRL `ObjectivePrimaryTextBlock` — 98.3% hit rate
 4. N-PORT `FUND_REPORTED_INFO.SERIES_NAME` — 12,556 series with AUM
 
-Top strategy_labels: Index/Passive (411), Multi-Asset (381), Municipal Bond (309), Fixed Income (196), Equity (186), Size-Focused Equity (109), Global/International (112), Money Market (54), High Yield/Loans (49).
+Top strategy_labels: Index/Passive (411), Multi-Asset (381), Municipal Bond (309), Fixed Income (196), Equity (186), Size-Focused Equity (109), Global/International (112).
 
-**EDGAR bulk datasets used:**
+**Available fields:** `cik` (PK), `crd_number`, `fund_name`, `fund_type`, `strategy_label`, `ticker`, `isin`, `series_id`, `total_assets`, `inception_date`, `currency`, `domicile`, `last_nport_date` + 27 N-CEN columns
+
+---
+
+#### `sec_etfs` — ETF Catalog (985 rows)
+
+Source: N-CEN Q4 2025 `ETF.tsv` JOIN `FUND_REPORTED_INFO.tsv` JOIN `SHARES_OUTSTANDING.tsv`
+
+Key fields beyond base identifiers:
+- `tracking_difference_gross` / `tracking_difference_net` — `ANNUAL_DIFF_B4/AFTER_FEE_EXPENSE` (%)
+- `creation_unit_size`, `pct_in_kind_creation`, `pct_in_kind_redemption` — ETF mechanics
+- `management_fee`, `net_operating_expenses` — expense ratio
+- `nav_per_share`, `market_price_per_share` — premium/discount tracking
+- `monthly_avg_net_assets`, `return_after_fees`, `is_index`, `is_in_kind_etf`
+
+---
+
+#### `sec_bdcs` — Business Development Companies (196 rows)
+
+Source: BDC XML whitelist (CIK authority list) + N-CEN `FUND_REPORTED_INFO` enrichment
+
+All BDCs carry `strategy_label = 'Private Credit'`. Key fields: `management_fee`, `net_operating_expenses`, `nav_per_share`, `market_price_per_share` (discount to NAV typical), `has_line_of_credit`, `is_externally_managed`.
+
+---
+
+#### `sec_money_market_funds` — MMF Series Catalog (373 rows) + `sec_mmf_metrics` Hypertable (20,270 rows)
+
+**Catalog** (`sec_money_market_funds`): one row per series, sourced from N-MFP `SUBMISSION` JOIN `SERIESLEVELINFO`.
+
+| mmf_category | Series |
+|---|---|
+| Government | 234 |
+| Prime | 98 |
+| Other Tax Exempt | 25 |
+| Single State | 16 |
+
+Key fields: `weighted_avg_maturity` (WAM, days), `weighted_avg_life` (WAL, days), `seven_day_gross_yield` (%), `net_assets`, `pct_daily_liquid_latest`, `pct_weekly_liquid_latest`, `seeks_stable_nav`, `stable_nav_price` (1.0000).
+
+**Timeseries** (`sec_mmf_metrics`): daily by share class, hypertable with 1-month chunks + 3-month compression.
+- `seven_day_net_yield` — daily 7-day net yield per class (N-MFP `SEVENDAYNETYIELD`)
+- `daily_gross_subscriptions`, `daily_gross_redemptions` — shareholder flows (N-MFP `DLYSHAREHOLDERFLOWREPORT`)
+- `pct_daily_liquid`, `pct_weekly_liquid` — daily liquidity % (N-MFP `LIQUIDASSETSDETAILS`)
+
+---
+
+#### `sec_fund_classes` — Share Classes (36,516 rows)
+
+Source: EDGAR series/class XML + N-PORT + OEF XBRL (N-CSR inline XBRL, migration 0066).
+
+**OEF XBRL enrichment (11 new columns, migration 0066):** populated via `seed_fund_class_fees_playwright.py` — Playwright (Edge non-headless) browser pipeline fetching N-CSR XBRL per CIK. 1,259/1,779 CIKs downloaded, 12,372 class facts parsed, **8,278 classes with expense ratios** covering **$100.9T in AUM** across **615 fund families**.
+
+Columns added:
+- `expense_ratio_pct` — annual expense ratio (e.g. Vanguard 500 Index: 0.01% – 0.14%)
+- `advisory_fees_paid` — advisory fees paid in period ($)
+- `expenses_paid` — total expenses paid per $10k
+- `avg_annual_return_pct` — average annual return
+- `net_assets` — net assets at period end
+- `holdings_count` — number of portfolio holdings
+- `portfolio_turnover_pct` — portfolio turnover rate
+- `fund_name` — fund name from XBRL
+- `perf_inception_date` — performance inception date
+- `xbrl_accession` — source N-CSR filing accession number
+- `xbrl_period_end` — reporting period end date
+
+**Expense ratio by AUM tier:**
+
+| AUM Tier | Share Classes | Funds | Avg ER | Median ER |
+|---|---|---|---|---|
+| >$1T | 4 | 1 | 0.06% | 0.04% |
+| $100B–$1T | 330 | 22 | 0.61% | 0.51% |
+| $10B–$100B | 711 | 104 | 0.66% | 0.60% |
+| $1B–$10B | 2,477 | 298 | 0.84% | 0.79% |
+| $100M–$1B | 3,367 | 379 | 0.92% | 0.86% |
+| $10M–$100M | 1,113 | 190 | 1.02% | 0.91% |
+| <$10M | 276 | 53 | 1.21% | 1.03% |
+
+Expense ratio scales inversely with AUM as expected (economy of scale). Coverage spans all major families: Vanguard, Capital Group (Growth Fund of America $6.9T), Fidelity, BlackRock, JPMorgan, Federated Hermes, T. Rowe Price, PIMCO, etc.
+
+**Key discovery:** OEF XBRL taxonomy (oef-2026.xsd) via N-CSR is the authoritative source for open-end mutual fund expense ratios — not N-CEN (which only covers closed-end/interval fund fees). The EFM taxonomy study (`efm-77-260316/`) confirmed OEF as the correct namespace.
+
+**Available fields (base):** `cik`, `series_id`, `series_name`, `class_id`, `class_name`, `ticker` + 11 XBRL columns
+
+---
+
+#### EDGAR Bulk Datasets Used
 
 | File | Records | Purpose |
 |---|---|---|
 | `investment_company_series_class_2025-xml.xml` | 24,898 classes, 7,333 series | Share class/series names + CIK linkage |
-| `2025q4_nport/FUND_REPORTED_INFO.tsv` | 12,556 series | Series names + AUM (Vanguard Total Stock $2T at top) |
+| `2025q4_nport/FUND_REPORTED_INFO.tsv` | 12,556 series | Series AUM (Vanguard Total Stock $2T at top) |
 | `closed-end-investment-company-2025.xml` | 965 funds | Closed-end fund universe |
-| `business-development-company-2025.xml` | 196 funds | BDC universe (all = Private Credit) |
-| `mmf-2025-11_0.xml` | 312 series, 1,192 classes | Money market: Gov/Prime/Tax-Exempt categories |
-| `2025q4_rr1/txt.tsv` | 4,452 strategy narratives | N-1A XBRL: investment objective + strategy text |
-
-**Available fields (sec_registered_funds):** `cik` (PK), `crd_number`, `fund_name`, `fund_type`, `strategy_label`, `ticker`, `isin`, `series_id`, `class_id`, `total_assets`, `total_shareholder_accounts`, `inception_date`, `currency`, `domicile`, `last_nport_date`
-
-**Available fields (sec_fund_classes):** `cik`, `series_id`, `series_name`, `class_id`, `class_name`, `ticker` — PK: `(cik, series_id, class_id)`
+| `business-development-company-2025.xml` | 196 funds | BDC CIK authority list |
+| `mmf-2025-11_0.xml` | 312 series, 1,192 classes | MMF identification catalog |
+| `20260209-20260306_nmfp/` | 6 TSV files, ~45k rows | N-MFP daily metrics (yield, flows, liquidity) |
+| `2025q4_ncen (1)/` | 2,445 funds | N-CEN annual: fees, NAV, returns, ETF mechanics |
+| `2025q4_rr1/txt.tsv` | 4,452 strategy narratives | N-1A XBRL investment objective + strategy text |
+| SEC EDGAR N-CSR XBRL | ~1,794 CIKs | OEF expense ratios and returns per share class |
 
 ---
 
@@ -675,6 +784,33 @@ CVaR current, CVaR limit, CVaR utilized %, trigger status (ok/warning/breach), c
 
 ---
 
+### 3.4 Wealth Vector Embedding (pgvector)
+
+| Worker | Frequency | Table | Description |
+|---|---|---|---|
+| `wealth_embedding_worker` | On-demand | `wealth_vector_chunks` | 12-source incremental embedding pipeline |
+
+**12 embedding sources (2026-03-28):**
+
+| Source | Table | Description |
+|---|---|---|
+| F | `sec_managers` + `sec_manager_team` | SEC manager profiles — AUM, team, fees, compliance |
+| G | `sec_registered_funds` + `sec_fund_classes` | SEC fund profiles — strategy, fees (XBRL), share classes, N-PORT holdings |
+| H | `sec_13f_holdings` | 13F summaries — top 20 positions, sector concentration |
+| I | `sec_manager_funds` | Private fund portfolios — grouped by CRD, AUM ≥ $1B floor |
+| J | `esma_funds` | ESMA fund profiles — enriched with manager, domicile, strategy_label |
+| K | `esma_managers` | ESMA manager profiles — fund count, LEI, domicile cross-ref |
+| L | `sec_etfs` | ETF profiles — tracking difference, expense ratio, index info |
+| M | `sec_bdcs` | BDC profiles — NAV discount, Private Credit strategy |
+| N | `sec_money_market_funds` | MMF profiles — WAM, WAL, 7-day yield, liquidity buckets |
+
+Sources B (esma_fund name-only) and C (esma_manager name-only) were retired and replaced by enriched J and K.
+`_cleanup_legacy_source_types()` removes old `esma_fund`/`esma_manager` rows on next run.
+
+All sources use incremental embedding via LEFT JOIN anti-pattern (only rows without existing `wealth_vector_chunks` entry). Batch: 10,000 rows, cosine similarity index.
+
+---
+
 ## 4. Continuous Aggregates
 
 | Aggregate | Source | Rows | Refresh | Description |
@@ -718,6 +854,8 @@ CVaR current, CVaR limit, CVaR utilized %, trigger status (ok/warning/breach), c
 | `esma_ingestion` | — | global | Daily | ESMA Register | `esma_funds`, `esma_managers` |
 | `bis_ingestion` | 900_014 | global | Quarterly | BIS SDMX API | `bis_statistics` |
 | `imf_ingestion` | 900_015 | global | Quarterly | IMF DataMapper | `imf_weo_forecasts` |
+| `sec_bulk_ingestion` | 900_050 | global | Quarterly | SEC DERA bulk ZIPs | sec_etfs, sec_bdcs, sec_money_market_funds, sec_mmf_metrics, sec_registered_funds + strategy_label backfill |
+| `wealth_embedding` | 900_041 | global | Daily | Computed | `wealth_vector_chunks` (12 sources) |
 
 ---
 
@@ -730,27 +868,36 @@ CVaR current, CVaR limit, CVaR utilized %, trigger status (ok/warning/breach), c
 | **Coverage — US Fund Managers** | Fund managers with Form ADV Part 1A data | 5,629 / 5,657 (99.5%) |
 | **Coverage — Private Funds** | sec_manager_funds | 62,728 funds, 5,634 managers |
 | **Coverage — Private Funds** | fund_type classification | 97.8% (checkbox image detection from ADV PDFs) |
-| **Coverage — Private Funds** | strategy_label (specific) | 47.3% (37 strategies via 3-layer classifier) |
-| **Coverage — Registered Funds** | sec_registered_funds | 4,942 (3,652 MF + 965 CEF + 196 BDC + 73 ETF + 56 MMF) |
-| **Coverage — Registered Funds** | strategy_label | 73.1% classified (24 categories) |
-| **Coverage — Share Classes** | sec_fund_classes | 37,820 rows, 14,131 distinct series |
+| **Coverage — Private Funds** | strategy_label | 47.3% specific (37 strategies via 3-layer classifier) |
+| **Coverage — Registered Funds** | sec_registered_funds (MF + CEF) | 4,617 funds |
+| **Coverage — Registered Funds** | N-CEN enrichment (mutual funds) | 2,232 / 3,652 (61.1%, $11.97T AUM) |
+| **Coverage — Registered Funds** | OEF XBRL fees (sec_fund_classes) | 8,278 / 36,516 classes with expense ratios ($100.9T AUM) |
+| **Coverage — ETFs** | sec_etfs | 985 funds (N-CEN Q4 2025) |
+| **Coverage — BDCs** | sec_bdcs | 196 funds (all = Private Credit) |
+| **Coverage — MMFs** | sec_money_market_funds | 373 series; 20,270 daily metric rows |
+| **Coverage — Share Classes** | sec_fund_classes | 36,516 rows + 11 XBRL columns (8,278 enriched) |
 | **Coverage — US Institutional** | 13F filers tracked | 12 institutions |
 | **Coverage — US Institutional** | Combined latest-quarter AUM | $8.9+ trillion |
 | **Coverage — European Funds** | UCITS funds | 10,436 |
 | **Coverage — European Funds** | strategy_label | 69.7% classified (31 categories) |
 | **Coverage — European Managers** | ESMA-registered managers | 658 across 25 countries |
-| **Coverage — Total Fund Universe** | All 3 tables combined | 78,106 funds, 73,620 classified (94.3%) |
+| **Coverage — Total Fund Universe** | All fund tables combined | sec_registered_funds(4,617) + sec_etfs(985) + sec_bdcs(196) + sec_money_market_funds(373) + sec_manager_funds(62,728) + esma_funds(10,436) = **79,335 funds** |
 | **Coverage — Macro** | Economic time series | 78 FRED + 278 Treasury + 23 OFR |
 | **Coverage — Global** | Countries in BIS/IMF data | 43-44 countries |
+| **Coverage — Embeddings** | pgvector sources | 12 active sources across all fund universes |
 | **Freshness — Markets** | NAV/benchmark data | Updated to 2026-03-24 |
 | **Freshness — Macro** | FRED data | Updated to 2026-03-24 |
 | **Freshness — SEC** | 13F holdings | Through Q4 2025 |
 | **Freshness — SEC** | N-PORT filings | Through 2026-03-23 |
-| **Freshness — Fund Catalog** | strategy_label classification | 2026-03-28 |
+| **Freshness — Fund Catalog** | N-CEN enrichment | Q4 2025 (16 quarters processed) |
+| **Freshness — Fund Catalog** | OEF XBRL fees | Feb 2026 N-CSR filings (1,259 CIKs processed) |
 | **Linkage — ESMA** | Fund-to-manager linkage | 100% |
 | **Linkage — ESMA** | Ticker resolution | 28.1% (ongoing) |
 | **History — 13F** | Longest history | Northern Trust: 92 quarters (2002-2025) |
 | **History — Macro** | Longest daily series | FRED: 10 years (2016-2026) |
 | **History — IMF** | Forecast horizon | To 2030 |
+| **History — MMF** | Daily metrics | N-MFP Feb-Mar 2026 (20,270 rows) |
 | **Derived Data** | 13F quarter-over-quarter diffs | 1,071,320 position changes |
 | **Derived Data** | Continuous aggregates | 5 materialized views, auto-refreshed daily |
+| **Automation** | Quarterly SEC bulk ingestion | `sec_bulk_ingestion` worker (lock 900_050) — N-CEN, N-MFP, BDC, strategy_label |
+| **Automation** | Daily wealth embedding | `wealth_embedding` worker (lock 900_041) — 12 sources, incremental |
