@@ -99,6 +99,33 @@ export interface PortfolioView {
 	created_at: string;
 }
 
+/** Parametric stress test result from POST /stress-test */
+export interface ParametricStressResult {
+	portfolio_id: string;
+	scenario_name: string;
+	nav_impact_pct: number;
+	cvar_stressed: number | null;
+	block_impacts: Record<string, number>;
+	worst_block: string | null;
+	best_block: string | null;
+}
+
+/** Human-readable labels for allocation block IDs */
+export function blockLabel(blockId: string): string {
+	const labels: Record<string, string> = {
+		na_equity_large: "NA Equity Large",
+		na_equity_small: "NA Equity Small",
+		intl_equity_dm: "Intl Equity DM",
+		intl_equity_em: "Intl Equity EM",
+		fi_treasury: "Treasuries",
+		fi_credit_ig: "Credit IG",
+		fi_credit_hy: "Credit HY",
+		alt_gold: "Gold",
+		alt_reits: "REITs",
+	};
+	return labels[blockId] ?? blockId.replace(/_/g, " ");
+}
+
 export function profileColor(profile: string): string {
 	switch (profile) {
 		case "conservative": return "var(--netz-info)";

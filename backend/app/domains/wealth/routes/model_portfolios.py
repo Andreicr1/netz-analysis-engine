@@ -29,6 +29,8 @@ from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.schemas.model_portfolio import (
     ModelPortfolioCreate,
     ModelPortfolioRead,
+    StressTestRequest,
+    StressTestResponse,
 )
 from app.shared.enums import Role
 
@@ -320,20 +322,21 @@ async def trigger_stress(
 
 @router.post(
     "/{portfolio_id}/stress-test",
+    response_model=StressTestResponse,
     summary="Run parametric stress scenario on portfolio",
 )
 async def run_parametric_stress_test(
     portfolio_id: uuid.UUID,
-    body: dict[str, Any],
+    body: StressTestRequest,
     db: AsyncSession = Depends(get_db_with_rls),
-    user: CurrentUser = Depends(get_current_user),
-) -> dict[str, Any]:
+    actor: Actor = Depends(get_actor),
+) -> StressTestResponse:
     """Run parametric stress scenario against portfolio block weights.
 
-    Body:
-        scenario_name: "gfc_2008" | "covid_2020" | "taper_2013" | "rate_shock_200bps" | "custom"
-        shocks: {block_id: shock_return}  — required only if scenario_name="custom"
+    Requires INVESTMENT_TEAM or ADMIN role.
     """
+    _require_ic_role(actor)
+
     result = await db.execute(
         select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
     )
@@ -350,33 +353,31 @@ async def run_parametric_stress_test(
             detail="Portfolio has no fund selection. Run /construct first.",
         )
 
-    scenario_name = body.get("scenario_name", "custom")
-    custom_shocks = body.get("shocks")
-
     from vertical_engines.wealth.model_portfolio.stress_scenarios import (
         PRESET_SCENARIOS,
         run_stress_scenario,
     )
 
-    if scenario_name == "custom":
-        if not custom_shocks or not isinstance(custom_shocks, dict):
+    if body.scenario_name == "custom":
+        if not body.shocks:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Custom scenario requires 'shocks' dict in body",
             )
-        shocks = {k: float(v) for k, v in custom_shocks.items()}
+        shocks = body.shocks
     else:
-        shocks = PRESET_SCENARIOS.get(scenario_name)
-        if shocks is None:
+        preset = PRESET_SCENARIOS.get(body.scenario_name)
+        if preset is None:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unknown scenario: {scenario_name}. Available: {list(PRESET_SCENARIOS.keys())}",
+                detail=f"Unknown scenario: {body.scenario_name}. Available: {list(PRESET_SCENARIOS.keys())}",
             )
+        shocks = preset
 
     # Extract block weights from fund_selection
-    funds = portfolio.fund_selection_schema.get("funds", [])
+    fund_list = portfolio.fund_selection_schema.get("funds", [])
     block_weights: dict[str, float] = {}
-    for f in funds:
+    for f in fund_list:
         bid = f.get("block_id")
         if bid:
             block_weights[bid] = block_weights.get(bid, 0.0) + f.get("weight", 0.0)
@@ -385,18 +386,18 @@ async def run_parametric_stress_test(
         weights_by_block=block_weights,
         shocks=shocks,
         historical_returns=None,  # on-demand — no historical fetch
-        scenario_name=scenario_name,
+        scenario_name=body.scenario_name,
     )
 
-    return {
-        "portfolio_id": str(portfolio_id),
-        "scenario_name": stress_result.scenario_name,
-        "nav_impact_pct": stress_result.nav_impact_pct,
-        "cvar_stressed": stress_result.cvar_stressed,
-        "block_impacts": stress_result.block_impacts,
-        "worst_block": stress_result.worst_block,
-        "best_block": stress_result.best_block,
-    }
+    return StressTestResponse(
+        portfolio_id=str(portfolio_id),
+        scenario_name=stress_result.scenario_name,
+        nav_impact_pct=stress_result.nav_impact_pct,
+        cvar_stressed=stress_result.cvar_stressed,
+        block_impacts=stress_result.block_impacts,
+        worst_block=stress_result.worst_block,
+        best_block=stress_result.best_block,
+    )
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

@@ -12,11 +12,11 @@
 	} from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
-	import type { ModelPortfolio, TrackRecord, InstrumentWeight, BacktestFold, StressScenario, PortfolioView } from "$lib/types/model-portfolio";
+	import type { ModelPortfolio, TrackRecord, InstrumentWeight, BacktestFold, StressScenario, PortfolioView, ParametricStressResult } from "$lib/types/model-portfolio";
 	import type { UniverseAsset } from "$lib/types/universe";
 	import ICViewsPanel from "$lib/components/model-portfolio/ICViewsPanel.svelte";
 	import { instrumentTypeLabel, instrumentTypeColor } from "$lib/types/universe";
-	import { scenarioLabel, profileColor } from "$lib/types/model-portfolio";
+	import { scenarioLabel, profileColor, blockLabel } from "$lib/types/model-portfolio";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -144,6 +144,79 @@
 		const maxAbs = Math.max(...scenarios.map((x) => Math.abs(x.portfolio_return)), 0.01);
 		return (Math.abs(s.portfolio_return) / maxAbs) * 100;
 	}
+
+	// ── Custom Parametric Stress ──────────────────────────────────────────
+
+	/** Block IDs present in current portfolio fund selection */
+	let portfolioBlocks: string[] = $derived.by(() => {
+		const blocks = new Set<string>();
+		for (const f of funds) {
+			if (f.block_id) blocks.add(f.block_id);
+		}
+		return [...blocks].sort();
+	});
+
+	type ShockEntry = { block_id: string; shock_pct: string };
+
+	let customShocks = $state<ShockEntry[]>([]);
+	let customPreset = $state<string>("custom");
+	let customRunning = $state(false);
+	let customResult = $state<ParametricStressResult | null>(null);
+	let customError = $state<string | null>(null);
+
+	const PRESETS: { value: string; label: string }[] = [
+		{ value: "custom", label: "Custom" },
+		{ value: "gfc_2008", label: "GFC 2008" },
+		{ value: "covid_2020", label: "COVID 2020" },
+		{ value: "taper_2013", label: "Taper 2013" },
+		{ value: "rate_shock_200bps", label: "Rate Shock +200bp" },
+	];
+
+	function initCustomShocks() {
+		if (portfolioBlocks.length > 0 && customShocks.length === 0) {
+			customShocks = portfolioBlocks.map((b: string) => ({ block_id: b, shock_pct: "0" }));
+		}
+	}
+
+	// Initialize shocks when portfolio blocks become available
+	$effect(() => {
+		initCustomShocks();
+	});
+
+	async function runCustomStress() {
+		customRunning = true;
+		customError = null;
+		customResult = null;
+		try {
+			const api = createClientApiClient(getToken);
+			const payload: { scenario_name: string; shocks?: Record<string, number> } = {
+				scenario_name: customPreset,
+			};
+			if (customPreset === "custom") {
+				const shocks: Record<string, number> = {};
+				for (const entry of customShocks) {
+					const val = parseFloat(entry.shock_pct);
+					if (!isNaN(val) && val !== 0) {
+						shocks[entry.block_id] = val / 100; // convert % to decimal
+					}
+				}
+				if (Object.keys(shocks).length === 0) {
+					customError = "Enter at least one non-zero shock value.";
+					customRunning = false;
+					return;
+				}
+				payload.shocks = shocks;
+			}
+			customResult = await api.post<ParametricStressResult>(
+				`/model-portfolios/${portfolioId}/stress-test`,
+				payload,
+			);
+		} catch (e) {
+			customError = e instanceof Error ? e.message : "Stress test failed";
+		} finally {
+			customRunning = false;
+		}
+	}
 </script>
 
 <PageHeader
@@ -269,6 +342,102 @@
 			{/if}
 		</section>
 	</div>
+
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<!-- PARAMETRIC STRESS (custom shocks)                                  -->
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	{#if portfolio.fund_selection_schema && canEdit}
+		<section class="mp-section mp-section--full">
+			<h3 class="mp-section-title">Custom Stress Scenario</h3>
+			<div class="cs-content">
+				<div class="cs-controls">
+					<label class="cs-label">
+						Preset
+						<select class="cs-select" bind:value={customPreset}>
+							{#each PRESETS as p (p.value)}
+								<option value={p.value}>{p.label}</option>
+							{/each}
+						</select>
+					</label>
+					<Button size="sm" onclick={runCustomStress} disabled={customRunning || !portfolio.fund_selection_schema}>
+						{customRunning ? "Running…" : "Run Scenario"}
+					</Button>
+				</div>
+
+				{#if customPreset === "custom"}
+					<div class="cs-shocks-grid">
+						{#each customShocks as entry (entry.block_id)}
+							<label class="cs-shock-field">
+								<span class="cs-shock-label">{blockLabel(entry.block_id)}</span>
+								<div class="cs-shock-input-wrap">
+									<input
+										type="number"
+										step="1"
+										class="cs-shock-input"
+										bind:value={entry.shock_pct}
+										placeholder="0"
+									/>
+									<span class="cs-shock-unit">%</span>
+								</div>
+							</label>
+						{/each}
+					</div>
+					<p class="cs-hint">Negative = loss. E.g. -38 means -38% shock to that block.</p>
+				{/if}
+
+				{#if customError}
+					<div class="cs-error">{customError}</div>
+				{/if}
+
+				{#if customResult}
+					<div class="cs-result">
+						<div class="cs-result-header">
+							<span class="cs-result-scenario">{customResult.scenario_name.replace(/_/g, " ")}</span>
+							<span
+								class="cs-result-nav"
+								class:stress-negative={customResult.nav_impact_pct < 0}
+							>
+								NAV Impact: {formatPercent(customResult.nav_impact_pct)}
+							</span>
+							{#if customResult.cvar_stressed !== null}
+								<span class="cs-result-cvar">CVaR 95%: {formatPercent(customResult.cvar_stressed)}</span>
+							{/if}
+						</div>
+						<div class="cs-block-impacts">
+							{#each Object.entries(customResult.block_impacts) as [blockId, impact] (blockId)}
+								<div class="cs-block-row">
+									<span class="cs-block-name"
+										class:cs-block-worst={blockId === customResult.worst_block}
+										class:cs-block-best={blockId === customResult.best_block}
+									>{blockLabel(blockId)}</span>
+									<div class="stress-bar-track">
+										<div
+											class="stress-bar-fill"
+											class:stress-bar-negative={impact < 0}
+											style:width="{Math.min(Math.abs(impact) / Math.max(...Object.values(customResult.block_impacts).map(Math.abs), 0.001) * 100, 100)}%"
+										></div>
+									</div>
+									<span class="stress-value" class:stress-negative={impact < 0}>
+										{formatPercent(impact)}
+									</span>
+								</div>
+							{/each}
+						</div>
+						{#if customResult.worst_block || customResult.best_block}
+							<div class="cs-extremes">
+								{#if customResult.worst_block}
+									<span class="cs-extreme cs-extreme-worst">Worst: {blockLabel(customResult.worst_block)}</span>
+								{/if}
+								{#if customResult.best_block}
+									<span class="cs-extreme cs-extreme-best">Best: {blockLabel(customResult.best_block)}</span>
+								{/if}
+							</div>
+						{/if}
+					</div>
+				{/if}
+			</div>
+		</section>
+	{/if}
 
 	<!-- ═══════════════════════════════════════════════════════════════════ -->
 	<!-- BOTTOM: Fund Selection Schema                                      -->
@@ -590,6 +759,195 @@
 		color: var(--netz-text-muted);
 		margin-bottom: var(--netz-space-stack-xs, 8px);
 	}
+
+	/* ── Custom Stress Scenario ──────────────────────────────────────────── */
+	.cs-content {
+		padding: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-md, 16px);
+		display: flex;
+		flex-direction: column;
+		gap: var(--netz-space-stack-sm, 12px);
+	}
+
+	.cs-controls {
+		display: flex;
+		align-items: flex-end;
+		gap: var(--netz-space-inline-md, 16px);
+	}
+
+	.cs-label {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		font-size: var(--netz-text-label, 0.75rem);
+		font-weight: 600;
+		color: var(--netz-text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
+	}
+
+	.cs-select {
+		height: var(--netz-space-control-height-sm, 32px);
+		padding: 0 var(--netz-space-inline-sm, 10px);
+		border: 1px solid var(--netz-border);
+		border-radius: var(--netz-radius-sm, 6px);
+		background: var(--netz-surface);
+		color: var(--netz-text-primary);
+		font-size: var(--netz-text-small, 0.8125rem);
+		font-family: var(--netz-font-sans);
+	}
+
+	.cs-shocks-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+		gap: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-md, 16px);
+	}
+
+	.cs-shock-field {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+	}
+
+	.cs-shock-label {
+		font-size: var(--netz-text-label, 0.75rem);
+		color: var(--netz-text-muted);
+		font-weight: 500;
+	}
+
+	.cs-shock-input-wrap {
+		display: flex;
+		align-items: center;
+	}
+
+	.cs-shock-input {
+		width: 80px;
+		height: var(--netz-space-control-height-sm, 32px);
+		padding: 0 var(--netz-space-inline-xs, 8px);
+		border: 1px solid var(--netz-border);
+		border-radius: var(--netz-radius-sm, 6px) 0 0 var(--netz-radius-sm, 6px);
+		background: var(--netz-surface);
+		color: var(--netz-text-primary);
+		font-size: var(--netz-text-small, 0.8125rem);
+		font-variant-numeric: tabular-nums;
+		font-family: var(--netz-font-sans);
+		text-align: right;
+	}
+
+	.cs-shock-input:focus {
+		outline: none;
+		border-color: var(--netz-brand-primary);
+	}
+
+	.cs-shock-unit {
+		height: var(--netz-space-control-height-sm, 32px);
+		display: flex;
+		align-items: center;
+		padding: 0 6px;
+		border: 1px solid var(--netz-border);
+		border-left: none;
+		border-radius: 0 var(--netz-radius-sm, 6px) var(--netz-radius-sm, 6px) 0;
+		background: var(--netz-surface-alt);
+		color: var(--netz-text-muted);
+		font-size: var(--netz-text-label, 0.75rem);
+	}
+
+	.cs-hint {
+		font-size: var(--netz-text-label, 0.75rem);
+		color: var(--netz-text-muted);
+	}
+
+	.cs-error {
+		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-sm, 10px);
+		border-radius: var(--netz-radius-sm, 6px);
+		background: color-mix(in srgb, var(--netz-danger) 8%, transparent);
+		color: var(--netz-danger);
+		font-size: var(--netz-text-small, 0.8125rem);
+	}
+
+	.cs-result {
+		display: flex;
+		flex-direction: column;
+		gap: var(--netz-space-stack-xs, 8px);
+		padding: var(--netz-space-stack-sm, 12px);
+		border: 1px solid var(--netz-border-subtle);
+		border-radius: var(--netz-radius-md, 10px);
+		background: var(--netz-surface-alt);
+	}
+
+	.cs-result-header {
+		display: flex;
+		align-items: center;
+		gap: var(--netz-space-inline-md, 16px);
+		flex-wrap: wrap;
+	}
+
+	.cs-result-scenario {
+		font-weight: 600;
+		font-size: var(--netz-text-body, 0.9375rem);
+		color: var(--netz-text-primary);
+		text-transform: capitalize;
+	}
+
+	.cs-result-nav {
+		font-size: var(--netz-text-h4, 1.125rem);
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+		color: var(--netz-success);
+	}
+
+	.cs-result-nav.stress-negative {
+		color: var(--netz-danger);
+	}
+
+	.cs-result-cvar {
+		font-size: var(--netz-text-small, 0.8125rem);
+		color: var(--netz-text-muted);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.cs-block-impacts {
+		display: flex;
+		flex-direction: column;
+		gap: var(--netz-space-stack-2xs, 4px);
+	}
+
+	.cs-block-row {
+		display: flex;
+		align-items: center;
+		gap: var(--netz-space-inline-sm, 10px);
+	}
+
+	.cs-block-name {
+		width: 120px;
+		font-size: var(--netz-text-small, 0.8125rem);
+		color: var(--netz-text-secondary);
+		flex-shrink: 0;
+	}
+
+	.cs-block-worst {
+		color: var(--netz-danger);
+		font-weight: 600;
+	}
+
+	.cs-block-best {
+		color: var(--netz-success);
+		font-weight: 600;
+	}
+
+	.cs-extremes {
+		display: flex;
+		gap: var(--netz-space-inline-lg, 24px);
+		padding-top: var(--netz-space-stack-2xs, 4px);
+		border-top: 1px solid var(--netz-border-subtle);
+	}
+
+	.cs-extreme {
+		font-size: var(--netz-text-label, 0.75rem);
+		font-weight: 600;
+	}
+
+	.cs-extreme-worst { color: var(--netz-danger); }
+	.cs-extreme-best { color: var(--netz-success); }
 
 	/* ── Fund selection table ────────────────────────────────────────────── */
 	.fund-table-wrap {
