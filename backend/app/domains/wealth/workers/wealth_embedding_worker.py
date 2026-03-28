@@ -766,9 +766,6 @@ async def _embed_dd_chapters(db: AsyncSession) -> dict:
 
     entity_id = instrument_id from the parent dd_reports row (via dd_report_id FK).
     """
-    # RLS tables require app.current_organization_id. Worker reads all orgs,
-    # so disable RLS for this transaction (tsdbadmin is table owner).
-    await db.execute(text("SET LOCAL row_security = off"))
     result = await db.execute(text("""
         SELECT c.id AS chapter_id,
                r.instrument_id,
@@ -824,7 +821,6 @@ async def _embed_macro_reviews(db: AsyncSession) -> dict:
 
     Embeds decision_rationale as the primary semantic chunk.
     """
-    await db.execute(text("SET LOCAL row_security = off"))
     result = await db.execute(text("""
         SELECT id, organization_id, decision_rationale, created_at
         FROM macro_reviews
