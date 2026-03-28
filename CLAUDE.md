@@ -95,7 +95,7 @@ frontends/
   wealth/           ← SvelteKit "netz-wealth-os"
 ```
 
-**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0062_no_force_rls_embedding_tables`.
+**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0063_add_strategy_label`.
 
 **Auth:** Clerk JWT v2. `organization_id` from `o.id` claim. RLS via `SET LOCAL app.current_organization_id`. Dev bypass: `X-DEV-ACTOR` header. **Tenant and user management is 100% via Clerk Dashboard** — no custom admin UI. Organizations, user invites, and role assignment (`ADMIN`, `INVESTMENT_TEAM`, `investor`) are all managed in Clerk. `ConfigService` defaults mean new tenants work immediately without provisioning.
 
@@ -239,6 +239,11 @@ The engine is organized around **funds as the primary analytical entity**. Three
 
 **Identifier architecture:** Fund CIK ≠ Adviser CIK. `crd_number` links them. `instrument.attributes.sec_cik` and `instrument.attributes.sec_crd` bridge tenant-scoped instruments to global SEC tables.
 
+**Private fund classification (`sec_manager_funds`):** Two-column taxonomy:
+- `fund_type` — SEC Form ADV Q10 categories (7 values: Hedge Fund, Private Equity Fund, Venture Capital Fund, Real Estate Fund, Securitized Asset Fund, Liquidity Fund, Other Private Fund). Extracted via **checkbox image xref detection** in ADV Part 1 PDFs (checked checkbox uses a different JPEG xref than unchecked).
+- `strategy_label` — 37 granular strategy categories (Private Credit, Infrastructure, Multi-Strategy, Long/Short Equity, Growth Equity, Buyout, etc.). Derived by 3-layer keyword classifier: (1) fund name regex, (2) hedge sub-strategy refinement, (3) brochure content enrichment. Script: `backend/scripts/backfill_strategy_label.py` (idempotent).
+- **AUM floor:** Embedding worker (`_embed_sec_private_funds`) only processes managers with combined GAV ≥ $1B (2,087 managers, 45,942 funds).
+
 ## Quant Upgrade (Sprints 1-3, 2026-03-27)
 
 Portfolio construction is an 11-step pipeline with CLARABEL 4-phase cascade optimizer:
@@ -263,13 +268,14 @@ Portfolio construction is an 11-step pipeline with CLARABEL 4-phase cascade opti
 
 Separate vector table `wealth_vector_chunks` for fund-centric RAG (distinct from credit's deal-centric `vector_chunks`).
 
-**5 embedding sources:**
+**6 embedding sources:**
 
 | Source | entity_type | Scope | Volume |
 |--------|-------------|-------|--------|
 | ADV brochures (6 sections) | `"firm"` | global | ~7k chunks |
 | ESMA funds | `"fund"` | global | ~10k chunks |
 | ESMA managers | `"firm"` | global | ~660 chunks |
+| SEC private funds (GAV ≥ $1B) | `"firm"` | global | ~2k chunks (pending) |
 | DD chapters | `"fund"` | org-scoped | growing |
 | Macro reviews | `"macro"` | org-scoped | growing |
 
