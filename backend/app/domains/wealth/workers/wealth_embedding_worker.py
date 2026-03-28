@@ -127,6 +127,9 @@ async def _cleanup_legacy_source_types(db: AsyncSession) -> None:
               SELECT 1 FROM sec_managers m
               WHERE m.crd_number = w.entity_id
                 AND m.registration_status = 'Registered'
+                AND (m.private_fund_count > 0
+                     OR EXISTS (SELECT 1 FROM sec_registered_funds rf
+                                WHERE rf.crd_number = m.crd_number))
           )
     """))
     pruned = prune.rowcount
@@ -273,6 +276,9 @@ async def _embed_sec_manager_profiles(db: AsyncSession) -> dict:
           ON w.id = 'sec_manager_profile_' || m.crd_number
         WHERE m.firm_name IS NOT NULL
           AND m.registration_status = 'Registered'
+          AND (m.private_fund_count > 0
+               OR EXISTS (SELECT 1 FROM sec_registered_funds rf
+                          WHERE rf.crd_number = m.crd_number))
           AND (w.id IS NULL
                OR (m.last_adv_filed_at IS NOT NULL
                    AND m.last_adv_filed_at > w.embedded_at::date))
