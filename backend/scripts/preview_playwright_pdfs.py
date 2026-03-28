@@ -294,6 +294,9 @@ def _build_long_form_data():
 
 
 def _build_monthly_data():
+    # Generate 24-month NAV series
+    import math
+
     from vertical_engines.wealth.monthly_report.models import (
         AllocationBar,
         HoldingRow,
@@ -303,9 +306,6 @@ def _build_monthly_data():
         WatchItem,
     )
     from vertical_engines.wealth.pdf.svg_charts import DrawdownPoint, NavPoint
-
-    # Generate 24-month NAV series
-    import math
 
     nav_series = []
     dd_series = []
@@ -495,50 +495,547 @@ def _build_monthly_data():
     )
 
 
+def _build_fact_sheet_executive_data():
+    import uuid
+
+    from vertical_engines.wealth.fact_sheet.models import (
+        AllocationBlock,
+        FactSheetData,
+        HoldingRow,
+        NavPoint,
+        ReturnMetrics,
+        RiskMetrics,
+    )
+
+    # 24-month NAV series
+    nav_series = []
+    for i in range(24):
+        m = 4 + i
+        y = 2024 + (m - 1) // 12
+        m_adj = ((m - 1) % 12) + 1
+        t = i / 23
+        p_nav = 1.0 + 0.18 * t - 0.03 * __import__("math").sin(__import__("math").pi * t * 2)
+        b_nav = 1.0 + 0.14 * t - 0.02 * __import__("math").sin(__import__("math").pi * t * 1.5)
+        nav_series.append(NavPoint(
+            nav_date=date(y, m_adj, 1),
+            nav=round(p_nav, 4),
+            benchmark_nav=round(b_nav, 4),
+        ))
+
+    return FactSheetData(
+        portfolio_id=uuid.uuid4(),
+        portfolio_name="Netz Growth Portfolio",
+        profile="growth",
+        as_of=date(2026, 3, 28),
+        inception_date=date(2024, 4, 1),
+        returns=ReturnMetrics(
+            mtd=0.015, qtd=0.031, ytd=0.042,
+            one_year=0.118, three_year=None,
+            since_inception=0.245, is_backtest=True,
+        ),
+        benchmark_returns=ReturnMetrics(
+            mtd=0.012, qtd=0.025, ytd=0.035,
+            one_year=0.094, three_year=None,
+            since_inception=0.198,
+        ),
+        risk=RiskMetrics(annualized_vol=0.118, sharpe=0.92, max_drawdown=-0.064, cvar_95=-0.032),
+        holdings=[
+            HoldingRow(fund_name="Vanguard S&P 500 ETF", block_id="us_equity", weight=0.25),
+            HoldingRow(fund_name="T. Rowe Price Blue Chip Growth", block_id="us_equity", weight=0.15),
+            HoldingRow(fund_name="Vanguard Total Intl Stock ETF", block_id="intl_equity", weight=0.18),
+            HoldingRow(fund_name="PIMCO Income Fund", block_id="fixed_income", weight=0.12),
+            HoldingRow(fund_name="iShares Core US Aggregate Bond", block_id="fixed_income", weight=0.10),
+            HoldingRow(fund_name="Cliffwater Direct Lending Fund", block_id="private_credit", weight=0.12),
+            HoldingRow(fund_name="Vanguard Federal Money Market", block_id="cash", weight=0.05),
+            HoldingRow(fund_name="Fidelity Govt Money Market", block_id="cash", weight=0.03),
+        ],
+        allocations=[
+            AllocationBlock(block_id="us_equity", weight=0.40),
+            AllocationBlock(block_id="intl_equity", weight=0.18),
+            AllocationBlock(block_id="fixed_income", weight=0.22),
+            AllocationBlock(block_id="private_credit", weight=0.12),
+            AllocationBlock(block_id="cash", weight=0.08),
+        ],
+        nav_series=nav_series,
+        benchmark_label="60/40 Composite",
+        manager_commentary=(
+            "The Growth Portfolio delivered a solid +1.50% return in March, outpacing "
+            "the blended benchmark by 30 basis points. The primary driver of outperformance "
+            "was our overweight to U.S. large-cap equities. Looking ahead, we remain "
+            "constructive while monitoring credit spreads carefully."
+        ),
+    )
+
+
+def _build_fact_sheet_institutional_data():
+    from vertical_engines.wealth.fact_sheet.models import (
+        AttributionRow,
+        RegimePoint,
+        StressRow,
+    )
+
+    data = _build_fact_sheet_executive_data()
+    # Institutional adds attribution, stress, regimes, fee_drag
+    # Use object.__new__ + manual __init__ since FactSheetData is frozen
+    # Instead, rebuild with extra fields
+    from vertical_engines.wealth.fact_sheet.models import FactSheetData
+
+    return FactSheetData(
+        portfolio_id=data.portfolio_id,
+        portfolio_name=data.portfolio_name,
+        profile=data.profile,
+        as_of=data.as_of,
+        inception_date=data.inception_date,
+        returns=data.returns,
+        benchmark_returns=data.benchmark_returns,
+        risk=data.risk,
+        holdings=data.holdings,
+        allocations=data.allocations,
+        nav_series=data.nav_series,
+        benchmark_label=data.benchmark_label,
+        manager_commentary=data.manager_commentary,
+        attribution=[
+            AttributionRow("US Equity", 0.0012, 0.0032, 0.0005, 0.0049),
+            AttributionRow("Intl Equity", -0.0003, -0.0008, 0.0001, -0.0010),
+            AttributionRow("Fixed Income", 0.0002, -0.0001, 0.0000, 0.0001),
+            AttributionRow("Private Credit", 0.0018, -0.0005, 0.0002, 0.0015),
+            AttributionRow("Cash", -0.0002, 0.0000, 0.0000, -0.0002),
+        ],
+        stress=[
+            StressRow("GFC Replay", date(2008, 9, 1), date(2009, 3, 1), -0.284, -0.312),
+            StressRow("COVID Shock", date(2020, 2, 1), date(2020, 4, 1), -0.198, -0.223),
+            StressRow("Taper Tantrum", date(2013, 5, 1), date(2013, 9, 1), -0.072, -0.089),
+            StressRow("Rate Shock +200bp", date(2022, 1, 1), date(2022, 10, 1), -0.115, -0.142),
+        ],
+        regimes=[
+            RegimePoint(date(2024, 4, 1), "expansion"),
+            RegimePoint(date(2025, 8, 1), "contraction"),
+            RegimePoint(date(2025, 11, 1), "expansion"),
+        ],
+        fee_drag={
+            "total_instruments": 8,
+            "weighted_gross_return": 0.1280,
+            "weighted_net_return": 0.1242,
+            "weighted_fee_drag_pct": 0.0038,
+            "inefficient_count": 2,
+            "instruments": [
+                {"name": "Vanguard S&P 500 ETF", "fee_breakdown": {"management": 0.0003, "performance": 0.0, "other": 0.0, "total": 0.0003}, "fee_drag_pct": 0.0002, "fee_efficient": True},
+                {"name": "T. Rowe Price Blue Chip Growth", "fee_breakdown": {"management": 0.0069, "performance": 0.0, "other": 0.0, "total": 0.0069}, "fee_drag_pct": 0.0058, "fee_efficient": True},
+                {"name": "Vanguard Total Intl Stock ETF", "fee_breakdown": {"management": 0.0007, "performance": 0.0, "other": 0.0, "total": 0.0007}, "fee_drag_pct": 0.0005, "fee_efficient": True},
+                {"name": "PIMCO Income Fund", "fee_breakdown": {"management": 0.0055, "performance": 0.0017, "other": 0.0, "total": 0.0072}, "fee_drag_pct": 0.0065, "fee_efficient": False},
+                {"name": "iShares Core US Aggregate Bond", "fee_breakdown": {"management": 0.0003, "performance": 0.0, "other": 0.0, "total": 0.0003}, "fee_drag_pct": 0.0002, "fee_efficient": True},
+                {"name": "Cliffwater Direct Lending", "fee_breakdown": {"management": 0.0150, "performance": 0.0035, "other": 0.0, "total": 0.0185}, "fee_drag_pct": 0.0168, "fee_efficient": False},
+                {"name": "Vanguard Federal Money Mkt", "fee_breakdown": {"management": 0.0011, "performance": 0.0, "other": 0.0, "total": 0.0011}, "fee_drag_pct": 0.0008, "fee_efficient": True},
+                {"name": "Fidelity Govt Money Market", "fee_breakdown": {"management": 0.0042, "performance": 0.0, "other": 0.0, "total": 0.0042}, "fee_drag_pct": 0.0035, "fee_efficient": True},
+            ],
+        },
+    )
+
+
+def _build_dd_report_data():
+    from vertical_engines.wealth.pdf.templates.dd_report import DDReportPDFData
+
+    chapters = [
+        {
+            "chapter_tag": "executive_summary",
+            "chapter_order": 1,
+            "content_md": (
+                "## Executive Summary\n\n"
+                "The Vanguard S&P 500 ETF (VOO) is a passively managed index fund that "
+                "seeks to track the performance of the S&P 500 Index. With over $900 billion "
+                "in assets under management, it is one of the largest and most liquid equity "
+                "ETFs globally.\n\n"
+                "**Key Strengths:**\n\n"
+                "- Ultra-low expense ratio of 0.03%, among the lowest in the industry\n"
+                "- Exceptional tracking accuracy with minimal tracking error\n"
+                "- Deep liquidity with average daily volume exceeding $2 billion\n"
+                "- Transparent, rules-based methodology with quarterly rebalancing\n\n"
+                "**Areas of Concern:**\n\n"
+                "- Market-cap weighting creates concentration risk in mega-cap tech\n"
+                "- Top 10 holdings represent approximately 34% of total portfolio weight\n"
+                "- No active risk management or downside protection mechanisms"
+            ),
+            "evidence_refs": {"SEC Filing": "N-CSR 2025-Q4", "Fund Fact Sheet": "March 2026"},
+            "quant_data": {"expense_ratio": "0.03%", "aum": "$912B", "tracking_error": "0.02%"},
+            "critic_iterations": 2,
+            "critic_status": "accepted",
+        },
+        {
+            "chapter_tag": "investment_strategy",
+            "chapter_order": 2,
+            "content_md": (
+                "## Investment Strategy & Process\n\n"
+                "VOO employs a full replication strategy, holding all 503 constituents of the "
+                "S&P 500 Index in proportion to their market capitalization weights. The fund "
+                "does not engage in securities lending or use derivatives for return enhancement.\n\n"
+                "The rebalancing methodology follows S&P Dow Jones Indices' quarterly reconstitution "
+                "schedule. Additions and deletions are implemented on the effective date with "
+                "minimal market impact due to the fund's scale and Vanguard's sophisticated "
+                "transition management capabilities.\n\n"
+                "**Sampling approach:** Full replication — no optimization or sampling techniques are "
+                "employed, ensuring the highest possible tracking fidelity."
+            ),
+            "evidence_refs": {},
+            "quant_data": {},
+            "critic_iterations": 1,
+            "critic_status": "accepted",
+        },
+        {
+            "chapter_tag": "manager_assessment",
+            "chapter_order": 3,
+            "content_md": (
+                "## Fund Manager Assessment\n\n"
+                "Vanguard Group, founded by John C. Bogle in 1975, is the world's largest "
+                "provider of mutual funds and the second-largest provider of exchange-traded "
+                "funds. The firm's unique ownership structure — where the funds own the "
+                "management company — ensures alignment of interests with investors.\n\n"
+                "The Equity Index Group, led by a team of 40+ portfolio managers and analysts, "
+                "manages over $5 trillion in indexed equity assets. Key personnel include:\n\n"
+                "- **Gerard C. O'Reilly:** Chairman and former CEO of Vanguard\n"
+                "- **Michelle Louie:** Head of Equity Index Group\n"
+                "- **Walter Nejman:** Senior Portfolio Manager, VOO\n\n"
+                "Staff turnover in the indexing team has been minimal, with average tenure "
+                "exceeding 12 years."
+            ),
+            "evidence_refs": {"ADV Part 2": "March 2026", "Team Bio": "Vanguard.com"},
+            "quant_data": {},
+            "critic_iterations": 2,
+            "critic_status": "accepted",
+        },
+        {
+            "chapter_tag": "performance_analysis",
+            "chapter_order": 4,
+            "content_md": (
+                "## Performance Analysis\n\n"
+                "VOO has delivered consistent performance closely mirroring the S&P 500 Index "
+                "since its inception in September 2010. The annualized tracking difference "
+                "of -0.03% precisely matches the fund's expense ratio, indicating zero "
+                "slippage from securities lending revenue offsets.\n\n"
+                "- **1-Year Return:** +24.8% (benchmark: +24.8%)\n"
+                "- **3-Year Annualized:** +9.2% (benchmark: +9.2%)\n"
+                "- **5-Year Annualized:** +14.6% (benchmark: +14.6%)\n"
+                "- **Since Inception:** +14.1% (benchmark: +14.1%)\n\n"
+                "The maximum drawdown of -33.8% occurred during the COVID-19 sell-off "
+                "(February-March 2020), with full recovery achieved within 148 trading days."
+            ),
+            "evidence_refs": {"NAV Data": "Bloomberg Terminal"},
+            "quant_data": {"sharpe": "0.92", "max_dd": "-33.8%", "vol": "15.2%"},
+            "critic_iterations": 1,
+            "critic_status": "accepted",
+        },
+        {
+            "chapter_tag": "risk_framework",
+            "chapter_order": 5,
+            "content_md": (
+                "## Risk Management Framework\n\n"
+                "As a passive index fund, VOO's risk management is primarily focused on "
+                "tracking accuracy rather than active risk mitigation. The fund's risk profile "
+                "is inherently tied to the S&P 500 Index.\n\n"
+                "**Concentration Risk:** The top 10 holdings account for 34.2% of the portfolio, "
+                "with significant sector concentration in Information Technology (32.1%) and "
+                "Healthcare (12.4%). This mega-cap tilt has been both a tailwind (2023-2024) "
+                "and a potential vulnerability if sector rotation accelerates.\n\n"
+                "**Liquidity Risk:** Minimal. Average daily volume exceeds $2B, with bid-ask "
+                "spreads consistently at 1 cent. The creation/redemption mechanism ensures "
+                "market price stays within 5bps of NAV."
+            ),
+            "evidence_refs": {},
+            "quant_data": {"beta": "1.00", "r_squared": "0.9999"},
+            "critic_iterations": 2,
+            "critic_status": "accepted",
+        },
+        {
+            "chapter_tag": "fee_analysis",
+            "chapter_order": 6,
+            "content_md": (
+                "## Fee Analysis\n\n"
+                "VOO's expense ratio of 0.03% places it among the lowest-cost equity vehicles "
+                "globally. This represents exceptional value for broad U.S. equity exposure.\n\n"
+                "**Fee comparison with peers:**\n\n"
+                "- VOO (Vanguard): 0.03%\n"
+                "- IVV (iShares): 0.03%\n"
+                "- SPY (State Street): 0.09%\n"
+                "- Average U.S. equity ETF: 0.44%\n\n"
+                "The fee advantage compounds significantly over long holding periods. Over 20 years, "
+                "the fee drag differential between VOO and the average equity ETF amounts to "
+                "approximately 8.5% of total return."
+            ),
+            "evidence_refs": {},
+            "quant_data": {},
+            "critic_iterations": 1,
+            "critic_status": "accepted",
+        },
+        {
+            "chapter_tag": "operational_dd",
+            "chapter_order": 7,
+            "content_md": (
+                "## Operational Due Diligence\n\n"
+                "Vanguard's operational infrastructure is among the most robust in the industry. "
+                "The firm's mutual ownership structure eliminates many conflicts of interest "
+                "that affect competitor fund families.\n\n"
+                "**Custody:** Assets are held by Vanguard's internal transfer agent and custodian, "
+                "with Bank of New York Mellon serving as sub-custodian for certain securities.\n\n"
+                "**Audit:** PricewaterhouseCoopers serves as the independent auditor. Annual "
+                "audits have been unqualified since inception.\n\n"
+                "**Regulatory:** Vanguard is registered with the SEC as both an investment "
+                "adviser (Form ADV) and as a transfer agent. No material regulatory actions "
+                "in the past 10 years."
+            ),
+            "evidence_refs": {"ADV Part 1": "SEC IAPD"},
+            "quant_data": {},
+            "critic_iterations": 1,
+            "critic_status": "accepted",
+        },
+        {
+            "chapter_tag": "recommendation",
+            "chapter_order": 8,
+            "content_md": (
+                "## Recommendation\n\n"
+                "**Decision: APPROVE for inclusion in model portfolios.**\n\n"
+                "VOO meets all eliminatory screening criteria and scores favorably across "
+                "quantitative and qualitative dimensions. The fund offers:\n\n"
+                "- Best-in-class fee efficiency (0.03% ER)\n"
+                "- Superior tracking accuracy with negligible tracking error\n"
+                "- Deep liquidity suitable for institutional-size positions\n"
+                "- Strong operational infrastructure with Vanguard's mutual ownership model\n\n"
+                "**Risk considerations:**\n\n"
+                "- Concentration risk in mega-cap technology requires monitoring\n"
+                "- No active downside protection — complement with hedging strategies\n"
+                "- Market-cap weighting may underperform in factor rotation environments\n\n"
+                "We recommend a maximum allocation of 25% in growth-oriented portfolios and "
+                "20% in moderate profiles, with periodic review of sector concentration dynamics."
+            ),
+            "evidence_refs": {"Screening": "Layer 1-3 results", "Scoring": "Composite 84/100"},
+            "quant_data": {"composite_score": "84", "fee_efficiency": "98", "risk_score": "72"},
+            "critic_iterations": 3,
+            "critic_status": "accepted",
+        },
+    ]
+
+    return DDReportPDFData(
+        fund_name="Vanguard S&P 500 ETF (VOO)",
+        fund_id="demo-voo-001",
+        as_of=date(2026, 3, 28),
+        confidence_score=0.82,
+        decision_anchor="approve",
+        chapters=chapters,
+    )
+
+
+def _build_content_investment_outlook() -> str:
+    return (
+        "## Global Macro Summary\n\n"
+        "The global economy in Q1 2026 reflects a nuanced landscape of moderate expansion "
+        "amid residual inflationary pressures. U.S. GDP growth tracks near 2.3% annualized, "
+        "supported by resilient consumer spending and a gradual normalization of labor markets. "
+        "Core PCE has decelerated to 2.4% year-over-year, providing the Federal Reserve with "
+        "flexibility to maintain its current pause.\n\n"
+        "European growth has stabilized following a challenging 2025. The ECB's measured easing "
+        "cycle is supporting a recovery in credit conditions, though structural headwinds from "
+        "energy transition costs and demographic challenges persist.\n\n"
+        "## Regional Outlook\n\n"
+        "- **United States:** Moderate expansion continues with GDP at 2.3%. Labor markets "
+        "rebalancing gradually. Inflation on a clear disinflationary path.\n"
+        "- **Europe:** PMI data improving, ECB easing supportive. Watch for political risk "
+        "from upcoming elections.\n"
+        "- **China:** Property sector overhang weighs on sentiment. Industrial production "
+        "surprising to the upside. Policy easing expected to intensify.\n"
+        "- **Japan:** BOJ normalization trajectory uncertain. Yen appreciation creating "
+        "headwinds for exporters but supporting domestic purchasing power.\n"
+        "- **Emerging Markets:** India and Southeast Asia benefit from manufacturing "
+        "diversification. Latin America faces commodity price volatility.\n\n"
+        "## Asset Class Views\n\n"
+        "**Equities:** Constructive but selective. U.S. earnings growth tracking +9% YoY "
+        "supports continued equity exposure, but elevated valuations narrow the margin of "
+        "safety. Favor quality and profitability factors over pure growth.\n\n"
+        "**Fixed Income:** Shorter duration preferred. Yield curve steepening expected as "
+        "the Fed navigates its easing cycle. Investment-grade credit attractive on widening.\n\n"
+        "**Alternatives:** Private credit continues to offer compelling carry premiums. "
+        "Infrastructure benefits from secular trends in energy transition and AI compute.\n\n"
+        "## Portfolio Positioning\n\n"
+        "Our positioning balances continued equity risk premium exposure with enhanced "
+        "downside protection. Key tactical considerations for Q2:\n\n"
+        "- Consider adding investment-grade credit if spreads widen 15-20bps\n"
+        "- Evaluate protective put spreads on S&P 500 given elevated valuations\n"
+        "- Increase EM equity by 2-3% if USD weakens under our base case\n"
+        "- Maintain private credit allocation for carry and diversification\n\n"
+        "## Key Risks\n\n"
+        "- Geopolitical escalation in the Middle East impacting energy prices\n"
+        "- U.S. fiscal deficit sustainability given elevated Treasury issuance\n"
+        "- Chinese property sector contagion to broader financial system\n"
+        "- Unexpected inflation resurgence forcing central bank re-tightening"
+    )
+
+
+def _build_content_flash_report() -> str:
+    return (
+        "## Market Event\n\n"
+        "On March 27, 2026, the Federal Reserve unexpectedly signaled a potential rate "
+        "cut at the June FOMC meeting, with Chair Powell citing downside risks to the "
+        "labor market outlook. Markets reacted sharply, with the S&P 500 gaining +1.8% "
+        "and the 10-year Treasury yield falling 12bps to 3.92%.\n\n"
+        "## Market Impact\n\n"
+        "**Equities:** Broad-based rally with growth stocks leading. Nasdaq +2.3%, "
+        "Russell 2000 +2.8% as rate-sensitive sectors repriced aggressively. Financial "
+        "sector underperformed on net interest margin concerns.\n\n"
+        "**Fixed Income:** Duration rally across the curve. Investment-grade spreads "
+        "tightened 5bps while high-yield compressed 15bps. The 2y/10y spread steepened "
+        "8bps to +42bps.\n\n"
+        "**Currencies:** USD weakened 0.8% on the DXY index. EUR/USD broke above 1.10 "
+        "for the first time since January. EM currencies broadly firmer.\n\n"
+        "## Recommended Actions\n\n"
+        "- **Maintain current equity positioning** — the dovish pivot supports our "
+        "constructive view but avoid chasing the rally\n"
+        "- **Extend fixed income duration by 0.5 years** — steepening trade likely "
+        "to continue if June cut materializes\n"
+        "- **Monitor credit spreads closely** — current tights leave little room for "
+        "error; consider adding hedges if HY falls below 280bps\n"
+        "- **No immediate EM reallocation** — wait for confirmation of sustained USD "
+        "weakness before increasing exposure"
+    )
+
+
+def _build_content_manager_spotlight() -> str:
+    return (
+        "## Fund Overview\n\n"
+        "The Vanguard S&P 500 ETF (VOO) is Vanguard's flagship U.S. equity index fund, "
+        "launched in September 2010 as a lower-cost alternative to the State Street SPDR "
+        "S&P 500 ETF (SPY). With over $912 billion in assets under management, VOO is "
+        "the largest S&P 500 ETF by AUM.\n\n"
+        "The fund employs a full replication strategy, holding all 503 constituents of "
+        "the S&P 500 Index. Its expense ratio of 0.03% is among the lowest in the "
+        "industry, making it a cornerstone holding for institutional and retail portfolios "
+        "alike.\n\n"
+        "## Investment Strategy\n\n"
+        "VOO's strategy is elegantly simple: deliver the S&P 500 return minus the 0.03% "
+        "expense ratio. Vanguard achieves this through:\n\n"
+        "- **Full replication** — no sampling or optimization, holding all index constituents\n"
+        "- **Securities lending revenue** — offsets approximately 0.01% of expenses annually\n"
+        "- **Efficient tax management** — ETF structure enables in-kind creation/redemption, "
+        "minimizing capital gains distributions\n"
+        "- **Scale advantages** — $912B AUM enables sub-basis-point execution costs\n\n"
+        "## Performance Assessment\n\n"
+        "Trailing performance confirms VOO's exceptional tracking fidelity:\n\n"
+        "- 1-Year: +24.8% (tracking difference: -0.03%)\n"
+        "- 3-Year Annualized: +9.2% (tracking difference: -0.03%)\n"
+        "- 5-Year Annualized: +14.6% (tracking difference: -0.03%)\n"
+        "- Since Inception: +14.1% (tracking difference: -0.03%)\n\n"
+        "The fund's maximum drawdown of -33.8% during COVID-19 was in line with the "
+        "index, with full recovery in 148 trading days. Risk-adjusted metrics remain "
+        "strong: Sharpe ratio of 0.92, information ratio effectively zero (by design).\n\n"
+        "## Overall Assessment\n\n"
+        "VOO represents the gold standard in passive U.S. equity exposure. Its combination "
+        "of ultra-low fees, best-in-class tracking, deep liquidity, and Vanguard's unique "
+        "ownership structure make it a compelling core holding for any diversified portfolio. "
+        "The primary risk factor — mega-cap technology concentration — is a feature of the "
+        "S&P 500 methodology rather than a fund-specific concern."
+    )
+
+
+async def _render_and_save(
+    out_dir: Path,
+    name: str,
+    html_str: str,
+) -> None:
+    """Save HTML + render PDF for a single template."""
+    from vertical_engines.wealth.pdf.html_renderer import html_to_pdf
+
+    html_path = out_dir / f"preview_{name}.html"
+    html_path.write_text(html_str, encoding="utf-8")
+    print(f"  HTML saved: {html_path}")
+
+    pdf_bytes = await html_to_pdf(html_str, print_background=True)
+    pdf_path = out_dir / f"preview_{name}.pdf"
+    try:
+        pdf_path.write_bytes(pdf_bytes)
+    except PermissionError:
+        # File may be open in a PDF viewer — write to a timestamped copy
+        import time
+
+        ts = int(time.time())
+        pdf_path = out_dir / f"preview_{name}_{ts}.pdf"
+        pdf_path.write_bytes(pdf_bytes)
+    print(f"  PDF saved: {pdf_path} ({len(pdf_bytes):,} bytes)")
+
+
 async def main():
     out_dir = Path(__file__).resolve().parent.parent / ".data"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    from vertical_engines.wealth.pdf.html_renderer import html_to_pdf
     from vertical_engines.wealth.pdf.templates.long_form_dd import render_long_form_dd
     from vertical_engines.wealth.pdf.templates.monthly_client import render_monthly_client
 
-    # ── Long-Form DD ──────────────────────────────────────
-    print("Building Long-Form DD Report data...")
+    # ── 1. Long-Form DD ──────────────────────────────────
+    print("1. Long-Form DD Report...")
     lfr_data = _build_long_form_data()
-
-    print("Rendering Long-Form DD HTML...")
     lfr_html = render_long_form_dd(lfr_data, language="en")
+    await _render_and_save(out_dir, "long_form_dd", lfr_html)
 
-    # Save HTML for debugging
-    html_path = out_dir / "preview_long_form_dd.html"
-    html_path.write_text(lfr_html, encoding="utf-8")
-    print(f"  HTML saved: {html_path}")
-
-    print("Converting to PDF via Playwright...")
-    lfr_pdf = await html_to_pdf(lfr_html, print_background=True)
-    pdf_path = out_dir / "preview_long_form_dd.pdf"
-    pdf_path.write_bytes(lfr_pdf)
-    print(f"  PDF saved: {pdf_path} ({len(lfr_pdf):,} bytes)")
-
-    # ── Monthly Client Report ─────────────────────────────
-    print("\nBuilding Monthly Client Report data...")
+    # ── 2. Monthly Client Report ─────────────────────────
+    print("\n2. Monthly Client Report...")
     mcr_data = _build_monthly_data()
-
-    print("Rendering Monthly Client Report HTML...")
     mcr_html = render_monthly_client(mcr_data, language="en")
+    await _render_and_save(out_dir, "monthly_client", mcr_html)
 
-    html_path = out_dir / "preview_monthly_client.html"
-    html_path.write_text(mcr_html, encoding="utf-8")
-    print(f"  HTML saved: {html_path}")
+    # ── 3. Fact Sheet Executive ──────────────────────────
+    print("\n3. Fact Sheet Executive...")
+    from vertical_engines.wealth.pdf.templates.fact_sheet_executive import (
+        render_fact_sheet_executive,
+    )
 
-    print("Converting to PDF via Playwright...")
-    mcr_pdf = await html_to_pdf(mcr_html, print_background=True)
-    pdf_path = out_dir / "preview_monthly_client.pdf"
-    pdf_path.write_bytes(mcr_pdf)
-    print(f"  PDF saved: {pdf_path} ({len(mcr_pdf):,} bytes)")
+    fse_data = _build_fact_sheet_executive_data()
+    fse_html = render_fact_sheet_executive(fse_data, language="en")
+    await _render_and_save(out_dir, "fact_sheet_executive", fse_html)
 
-    print("\nDone. Open the PDFs to validate the visual layout.")
+    # ── 4. Fact Sheet Institutional ──────────────────────
+    print("\n4. Fact Sheet Institutional...")
+    from vertical_engines.wealth.pdf.templates.fact_sheet_institutional import (
+        render_fact_sheet_institutional,
+    )
+
+    fsi_data = _build_fact_sheet_institutional_data()
+    fsi_html = render_fact_sheet_institutional(fsi_data, language="en")
+    await _render_and_save(out_dir, "fact_sheet_institutional", fsi_html)
+
+    # ── 5. DD Report ─────────────────────────────────────
+    print("\n5. DD Report...")
+    from vertical_engines.wealth.pdf.templates.dd_report import render_dd_report
+
+    dd_data = _build_dd_report_data()
+    dd_html = render_dd_report(dd_data, language="en")
+    await _render_and_save(out_dir, "dd_report", dd_html)
+
+    # ── 6. Content Report — Investment Outlook ───────────
+    print("\n6. Content Report — Investment Outlook...")
+    from vertical_engines.wealth.pdf.templates.content_report import render_content_report
+
+    io_html = render_content_report(
+        _build_content_investment_outlook(),
+        title="Investment Outlook",
+        language="en",
+    )
+    await _render_and_save(out_dir, "content_investment_outlook", io_html)
+
+    # ── 7. Content Report — Flash Report ─────────────────
+    print("\n7. Content Report — Flash Report...")
+    fr_html = render_content_report(
+        _build_content_flash_report(),
+        title="Market Flash Report",
+        language="en",
+    )
+    await _render_and_save(out_dir, "content_flash_report", fr_html)
+
+    # ── 8. Content Report — Manager Spotlight ────────────
+    print("\n8. Content Report — Manager Spotlight...")
+    ms_html = render_content_report(
+        _build_content_manager_spotlight(),
+        title="Manager Spotlight",
+        subtitle="Vanguard S&P 500 ETF (VOO)",
+        language="en",
+    )
+    await _render_and_save(out_dir, "content_manager_spotlight", ms_html)
+
+    print("\nAll 8 demos generated. Open the PDFs to validate visual layout.")
 
 
 if __name__ == "__main__":

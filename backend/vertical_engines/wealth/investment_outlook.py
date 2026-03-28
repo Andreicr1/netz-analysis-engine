@@ -100,7 +100,7 @@ class InvestmentOutlook:
             )
 
     def render_pdf(self, content_md: str, *, language: Language = "pt") -> BytesIO:
-        """Render investment outlook content as PDF."""
+        """Render investment outlook content as PDF (ReportLab, sync)."""
         from vertical_engines.wealth.content_pdf import render_content_pdf
 
         labels = LABELS[language]
@@ -109,6 +109,19 @@ class InvestmentOutlook:
             title=labels["investment_outlook_title"],
             language=language,
         )
+
+    async def render_pdf_async(self, content_md: str, *, language: Language = "pt") -> bytes:
+        """Render investment outlook content as PDF via Playwright (async)."""
+        from vertical_engines.wealth.pdf.html_renderer import html_to_pdf
+        from vertical_engines.wealth.pdf.templates.content_report import render_content_report
+
+        labels = LABELS[language]
+        html_str = render_content_report(
+            content_md,
+            title=labels["investment_outlook_title"],
+            language=language,
+        )
+        return await html_to_pdf(html_str, print_background=True)
 
     def _gather_macro_data(self, db: Session, organization_id: str) -> dict[str, Any]:
         """Gather latest macro snapshot data for outlook generation."""

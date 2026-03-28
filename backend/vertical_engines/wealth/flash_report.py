@@ -124,7 +124,7 @@ class FlashReport:
             )
 
     def render_pdf(self, content_md: str, *, language: Language = "pt") -> BytesIO:
-        """Render flash report content as PDF."""
+        """Render flash report content as PDF (ReportLab, sync)."""
         from vertical_engines.wealth.content_pdf import render_content_pdf
 
         labels = LABELS[language]
@@ -133,6 +133,19 @@ class FlashReport:
             title=labels["flash_report_title"],
             language=language,
         )
+
+    async def render_pdf_async(self, content_md: str, *, language: Language = "pt") -> bytes:
+        """Render flash report content as PDF via Playwright (async)."""
+        from vertical_engines.wealth.pdf.html_renderer import html_to_pdf
+        from vertical_engines.wealth.pdf.templates.content_report import render_content_report
+
+        labels = LABELS[language]
+        html_str = render_content_report(
+            content_md,
+            title=labels["flash_report_title"],
+            language=language,
+        )
+        return await html_to_pdf(html_str, print_background=True)
 
     def _get_last_flash_report_time(self, db: Session, organization_id: str) -> Any:
         """Get timestamp of last flash report for cooldown check."""

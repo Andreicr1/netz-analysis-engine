@@ -120,7 +120,7 @@ class ManagerSpotlight:
             )
 
     def render_pdf(self, content_md: str, *, language: Language = "pt", fund_name: str = "") -> BytesIO:
-        """Render manager spotlight content as PDF."""
+        """Render manager spotlight content as PDF (ReportLab, sync)."""
         from vertical_engines.wealth.content_pdf import render_content_pdf
 
         labels = LABELS[language]
@@ -130,6 +130,22 @@ class ManagerSpotlight:
             subtitle=fund_name or "Fund Manager Analysis",
             language=language,
         )
+
+    async def render_pdf_async(
+        self, content_md: str, *, language: Language = "pt", fund_name: str = "",
+    ) -> bytes:
+        """Render manager spotlight content as PDF via Playwright (async)."""
+        from vertical_engines.wealth.pdf.html_renderer import html_to_pdf
+        from vertical_engines.wealth.pdf.templates.content_report import render_content_report
+
+        labels = LABELS[language]
+        html_str = render_content_report(
+            content_md,
+            title=labels["manager_spotlight_title"],
+            subtitle=fund_name or "Fund Manager Analysis",
+            language=language,
+        )
+        return await html_to_pdf(html_str, print_background=True)
 
     def _gather_fund_data(self, db: Session, instrument_id: str, organization_id: str) -> dict[str, Any]:
         """Gather fund identity from instruments_universe."""

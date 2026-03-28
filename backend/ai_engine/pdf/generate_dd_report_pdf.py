@@ -138,6 +138,41 @@ def generate_dd_report_pdf(
     return buf
 
 
+async def generate_dd_report_pdf_async(
+    *,
+    fund_name: str,
+    report_id: str,
+    chapters: list[dict[str, Any]],
+    confidence_score: float | None = None,
+    decision_anchor: str | None = None,
+    language: Language = "pt",
+) -> bytes:
+    """Render a DD Report as PDF via Playwright (async).
+
+    Replaces the ReportLab ``generate_dd_report_pdf`` for async callers.
+    Returns raw PDF bytes (not BytesIO).
+    """
+    from datetime import date
+
+    from vertical_engines.wealth.pdf.html_renderer import html_to_pdf
+    from vertical_engines.wealth.pdf.templates.dd_report import (
+        DDReportPDFData,
+        render_dd_report,
+    )
+
+    data = DDReportPDFData(
+        fund_name=fund_name,
+        fund_id=report_id,
+        as_of=date.today(),
+        confidence_score=(confidence_score or 0.0) / 100.0 if confidence_score is not None else 0.5,
+        decision_anchor=decision_anchor,
+        chapters=chapters,
+        language=language,
+    )
+    html_str = render_dd_report(data, language=language)
+    return await html_to_pdf(html_str, print_background=True)
+
+
 def _split_markdown(content: str) -> list[str]:
     """Split markdown content into paragraphs for ReportLab rendering.
 

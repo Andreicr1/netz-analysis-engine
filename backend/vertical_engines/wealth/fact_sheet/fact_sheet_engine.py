@@ -435,6 +435,56 @@ class FactSheetEngine:
             logger.warning("fact_sheet_fee_drag_failed", exc_info=True)
             return None
 
+    async def generate_async(
+        self,
+        db: Any,
+        *,
+        portfolio_id: str,
+        organization_id: str,
+        format: FactSheetFormat = "executive",
+        language: Language = "pt",
+        as_of: date | None = None,
+    ) -> bytes:
+        """Generate fact-sheet PDF via Playwright (async). Returns raw PDF bytes.
+
+        Builds FactSheetData in a sync thread (DB queries), then renders HTML
+        template and converts to PDF via Playwright Chromium.
+        """
+        import asyncio
+
+        as_of = as_of or date.today()
+
+        # Build data in sync thread
+        def _build() -> FactSheetData:
+            from app.core.db.session import sync_session_factory
+
+            with sync_session_factory() as sync_db, sync_db.begin():
+                sync_db.expire_on_commit = False
+                from sqlalchemy import text
+                safe_oid = str(organization_id).replace("'", "")
+                sync_db.execute(text(f"SET LOCAL app.current_organization_id = '{safe_oid}'"))
+                return self._build_fact_sheet_data(
+                    sync_db, portfolio_id, organization_id, as_of, format=format,
+                )
+
+        data = await asyncio.to_thread(_build)
+
+        # Render HTML template
+        if format == "executive":
+            from vertical_engines.wealth.pdf.templates.fact_sheet_executive import (
+                render_fact_sheet_executive,
+            )
+            html_str = render_fact_sheet_executive(data, language=language)
+        else:
+            from vertical_engines.wealth.pdf.templates.fact_sheet_institutional import (
+                render_fact_sheet_institutional,
+            )
+            html_str = render_fact_sheet_institutional(data, language=language)
+
+        # Convert to PDF
+        from vertical_engines.wealth.pdf.html_renderer import html_to_pdf
+        return await html_to_pdf(html_str, print_background=True)
+
     def _render_charts(
         self,
         data: FactSheetData,

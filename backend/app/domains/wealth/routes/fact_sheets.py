@@ -257,9 +257,7 @@ async def download_dd_report_pdf(
     fund_name_row = fund_result.scalar_one_or_none()
     fund_name = fund_name_row or "Unknown Fund"
 
-    # Generate PDF
-    from ai_engine.pdf.generate_dd_report_pdf import generate_dd_report_pdf
-
+    # Generate PDF (prefer Playwright async, fallback to ReportLab)
     chapters_data = [
         {
             "chapter_tag": ch.chapter_tag,
@@ -269,19 +267,37 @@ async def download_dd_report_pdf(
         for ch in sorted(report.chapters, key=lambda c: c.chapter_order)
     ]
 
-    pdf_buf = generate_dd_report_pdf(
-        fund_name=fund_name,
-        report_id=str(report_id),
-        chapters=chapters_data,
-        confidence_score=float(report.confidence_score) if report.confidence_score else None,
-        decision_anchor=report.decision_anchor,
-        language=language,
-    )
+    confidence = float(report.confidence_score) if report.confidence_score else None
+
+    try:
+        from ai_engine.pdf.generate_dd_report_pdf import generate_dd_report_pdf_async
+
+        pdf_bytes = await generate_dd_report_pdf_async(
+            fund_name=fund_name,
+            report_id=str(report_id),
+            chapters=chapters_data,
+            confidence_score=confidence,
+            decision_anchor=report.decision_anchor,
+            language=language,
+        )
+    except Exception:
+        logger.warning("playwright_dd_report_fallback_to_reportlab", exc_info=True)
+        from ai_engine.pdf.generate_dd_report_pdf import generate_dd_report_pdf
+
+        pdf_buf = generate_dd_report_pdf(
+            fund_name=fund_name,
+            report_id=str(report_id),
+            chapters=chapters_data,
+            confidence_score=confidence,
+            decision_anchor=report.decision_anchor,
+            language=language,
+        )
+        pdf_bytes = pdf_buf.read()
 
     safe_name = re.sub(r"[^a-zA-Z0-9_\-]", "_", fund_name)
     filename = f"dd_report_{safe_name}_{language}.pdf"
     return Response(
-        content=pdf_buf.read(),
+        content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

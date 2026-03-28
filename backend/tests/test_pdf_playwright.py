@@ -171,6 +171,233 @@ def test_monthly_client_template_renders():
     assert len(html) > 2000
 
 
+def test_fact_sheet_executive_template_renders():
+    """render_fact_sheet_executive returns valid HTML with correct structure."""
+    from vertical_engines.wealth.fact_sheet.models import (
+        AllocationBlock,
+        FactSheetData,
+        HoldingRow,
+        NavPoint,
+        ReturnMetrics,
+        RiskMetrics,
+    )
+    from vertical_engines.wealth.pdf.templates.fact_sheet_executive import (
+        render_fact_sheet_executive,
+    )
+
+    data = FactSheetData(
+        portfolio_id=__import__("uuid").uuid4(),
+        portfolio_name="Growth Portfolio",
+        profile="growth",
+        as_of=date(2026, 3, 28),
+        inception_date=date(2024, 1, 1),
+        returns=ReturnMetrics(mtd=0.015, ytd=0.042, one_year=0.118, since_inception=0.245),
+        risk=RiskMetrics(annualized_vol=0.118, sharpe=0.92, max_drawdown=-0.064, cvar_95=-0.032),
+        holdings=[
+            HoldingRow(fund_name="Vanguard S&P 500 ETF", block_id="us_equity", weight=0.25),
+            HoldingRow(fund_name="PIMCO Income Fund", block_id="fixed_income", weight=0.15),
+        ],
+        allocations=[
+            AllocationBlock(block_id="us_equity", weight=0.40),
+            AllocationBlock(block_id="fixed_income", weight=0.30),
+        ],
+        nav_series=[
+            NavPoint(nav_date=date(2025, 1, 1), nav=1.0, benchmark_nav=1.0),
+            NavPoint(nav_date=date(2026, 3, 1), nav=1.15, benchmark_nav=1.10),
+        ],
+        benchmark_label="60/40 Composite",
+    )
+
+    html = render_fact_sheet_executive(data, language="en")
+    assert "<!DOCTYPE html>" in html
+    assert "Growth Portfolio" in html
+    assert "Executive Summary" in html
+    assert "Vanguard S&amp;P 500 ETF" in html
+    assert len(html) > 2000
+
+
+def test_fact_sheet_executive_bilingual():
+    """render_fact_sheet_executive supports PT language."""
+    from vertical_engines.wealth.fact_sheet.models import FactSheetData
+    from vertical_engines.wealth.pdf.templates.fact_sheet_executive import (
+        render_fact_sheet_executive,
+    )
+
+    data = FactSheetData(
+        portfolio_id=__import__("uuid").uuid4(),
+        portfolio_name="Portfólio Moderado",
+        profile="moderate",
+        as_of=date(2026, 3, 28),
+    )
+
+    html = render_fact_sheet_executive(data, language="pt")
+    assert "Resumo Executivo" in html
+    assert 'lang="pt"' in html
+
+
+def test_fact_sheet_institutional_template_renders():
+    """render_fact_sheet_institutional returns valid HTML with attribution."""
+    from vertical_engines.wealth.fact_sheet.models import (
+        AllocationBlock,
+        AttributionRow,
+        FactSheetData,
+        HoldingRow,
+        ReturnMetrics,
+        RiskMetrics,
+        StressRow,
+    )
+    from vertical_engines.wealth.pdf.templates.fact_sheet_institutional import (
+        render_fact_sheet_institutional,
+    )
+
+    data = FactSheetData(
+        portfolio_id=__import__("uuid").uuid4(),
+        portfolio_name="Institutional Portfolio",
+        profile="growth",
+        as_of=date(2026, 3, 28),
+        returns=ReturnMetrics(mtd=0.015, ytd=0.042, one_year=0.118, since_inception=0.245),
+        risk=RiskMetrics(annualized_vol=0.118, sharpe=0.92, max_drawdown=-0.064, cvar_95=-0.032),
+        holdings=[
+            HoldingRow(fund_name="Vanguard S&P 500 ETF", block_id="us_equity", weight=0.25),
+        ],
+        allocations=[
+            AllocationBlock(block_id="us_equity", weight=0.40),
+            AllocationBlock(block_id="fixed_income", weight=0.30),
+        ],
+        attribution=[
+            AttributionRow(
+                block_name="US Equity",
+                allocation_effect=0.0012,
+                selection_effect=0.0032,
+                interaction_effect=0.0005,
+                total_effect=0.0049,
+            ),
+        ],
+        stress=[
+            StressRow(
+                name="GFC Replay",
+                start_date=date(2008, 9, 1),
+                end_date=date(2009, 3, 1),
+                portfolio_return=-0.284,
+                max_drawdown=-0.312,
+            ),
+        ],
+    )
+
+    html = render_fact_sheet_institutional(data, language="en")
+    assert "<!DOCTYPE html>" in html
+    assert "Institutional Portfolio" in html
+    assert "Institutional Report" in html
+    assert "US Equity" in html
+    assert "GFC Replay" in html
+    assert len(html) > 3000
+
+
+def test_dd_report_template_renders():
+    """render_dd_report returns valid HTML with 8 chapters."""
+    from vertical_engines.wealth.pdf.templates.dd_report import (
+        DDReportPDFData,
+        render_dd_report,
+    )
+
+    chapters = [
+        {
+            "chapter_tag": "executive_summary",
+            "chapter_order": i + 1,
+            "content_md": f"## Chapter {i + 1}\n\nThis is the content for chapter {i + 1}.\n\n"
+            f"**Key finding:** The fund demonstrates strong risk-adjusted returns.\n\n"
+            f"- Point A: Consistent alpha generation\n"
+            f"- Point B: Disciplined risk management",
+            "evidence_refs": {"source_1": "SEC Filing 2025-Q4"} if i == 0 else {},
+            "quant_data": {"sharpe": "0.92", "cvar_95": "-3.2%"} if i == 3 else {},
+            "critic_iterations": 2 if i < 4 else 1,
+            "critic_status": "accepted",
+        }
+        for i in range(8)
+    ]
+
+    data = DDReportPDFData(
+        fund_name="Vanguard S&P 500 ETF",
+        fund_id="test-fund-001",
+        as_of=date(2026, 3, 28),
+        confidence_score=0.82,
+        decision_anchor="approve",
+        chapters=chapters,
+    )
+
+    html = render_dd_report(data, language="en")
+    assert "<!DOCTYPE html>" in html
+    assert "Vanguard S&amp;P 500 ETF" in html
+    assert "Due Diligence Report" in html
+    assert "Chapter 1" in html
+    assert "Chapter 8" in html
+    assert "82%" in html  # confidence
+    assert "APPROVE" in html
+    assert len(html) > 5000
+
+
+def test_dd_report_bilingual():
+    """render_dd_report supports PT language."""
+    from vertical_engines.wealth.pdf.templates.dd_report import (
+        DDReportPDFData,
+        render_dd_report,
+    )
+
+    data = DDReportPDFData(
+        fund_name="Fundo Teste",
+        fund_id="test",
+        as_of=date(2026, 3, 28),
+        confidence_score=0.75,
+        decision_anchor="review",
+        chapters=[{"chapter_order": 1, "chapter_tag": "exec", "content_md": "Resumo."}],
+    )
+
+    html = render_dd_report(data, language="pt")
+    assert "Relat\u00f3rio de Due Diligence" in html
+
+
+def test_content_report_template_renders():
+    """render_content_report returns valid HTML for markdown content."""
+    from vertical_engines.wealth.pdf.templates.content_report import render_content_report
+
+    content = (
+        "## Global Macro Summary\n\n"
+        "The global economy continues to expand at a moderate pace, with GDP growth "
+        "tracking near 2.3% annualized.\n\n"
+        "## Regional Outlook\n\n"
+        "- **United States:** Moderate expansion continues\n"
+        "- **Europe:** Stabilizing after a challenging 2025\n"
+        "- **Asia:** Mixed signals from China and India\n\n"
+        "## Key Risks\n\n"
+        "Geopolitical tensions remain the primary concern."
+    )
+
+    html = render_content_report(
+        content,
+        title="Investment Outlook",
+        language="en",
+    )
+    assert "<!DOCTYPE html>" in html
+    assert "Investment Outlook" in html
+    assert "Global Macro Summary" in html
+    assert "<strong>United States:</strong>" in html
+    assert len(html) > 1000
+
+
+def test_content_report_with_subtitle():
+    """render_content_report includes subtitle when provided."""
+    from vertical_engines.wealth.pdf.templates.content_report import render_content_report
+
+    html = render_content_report(
+        "## Overview\n\nFund analysis.",
+        title="Manager Spotlight",
+        subtitle="Vanguard S&P 500 ETF",
+        language="en",
+    )
+    assert "Manager Spotlight" in html
+    assert "Vanguard S&amp;P 500 ETF" in html
+
+
 def test_long_form_report_data_is_frozen():
     """LongFormReportData is immutable (safe across async boundaries)."""
     from vertical_engines.wealth.long_form_report.models import LongFormReportData
