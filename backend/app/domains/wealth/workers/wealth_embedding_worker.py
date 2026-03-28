@@ -124,6 +124,14 @@ async def _cleanup_legacy_source_types(db: AsyncSession) -> None:
 
 async def _batch_upsert(db: AsyncSession, rows: list[dict]) -> None:
     """Upsert into wealth_vector_chunks with ON CONFLICT DO UPDATE."""
+    # Deduplicate by id within the batch (last wins) to prevent
+    # CardinalityViolationError from JOINs that multiply rows.
+    seen: dict[str, int] = {}
+    for idx, row in enumerate(rows):
+        seen[row["id"]] = idx
+    if len(seen) < len(rows):
+        rows = [rows[i] for i in sorted(seen.values())]
+
     for i in range(0, len(rows), UPSERT_BATCH_SIZE):
         chunk = rows[i : i + UPSERT_BATCH_SIZE]
         stmt = pg_insert(WealthVectorChunk.__table__).values(chunk)
