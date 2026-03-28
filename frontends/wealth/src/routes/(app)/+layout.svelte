@@ -16,6 +16,7 @@
 		LayoutDashboard, Settings,
 	} from "lucide-svelte";
 	import AiAgentDrawer from "$lib/components/AiAgentDrawer.svelte";
+	import GlobalSearch from "$lib/components/GlobalSearch.svelte";
 
 	interface SidebarItem {
 		label: string;
@@ -39,6 +40,9 @@
 
 	// ── AI Agent drawer state ──
 	let agentOpen = $state(false);
+
+	// ── Global search state ──
+	let searchOpen = $state(false);
 
 	// ── Risk store (SSE-primary, poll-fallback) ──
 	const riskStore = createRiskStore({
@@ -216,15 +220,12 @@
 		</div>
 		<div class="netz-topbar-divider"></div>
 
-			<div class="netz-topbar-search">
+			<!-- svelte-ignore a11y_click_events_have_key_events -->
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div class="netz-topbar-search" onclick={() => searchOpen = true}>
 				<SearchIcon size={15} strokeWidth={1.5} class="netz-topbar-search-icon" />
-				<input
-					type="text"
-					class="netz-topbar-search-input"
-					placeholder="Search…"
-					readonly
-				/>
-				<kbd class="netz-topbar-kbd">/</kbd>
+				<span class="netz-topbar-search-input">Search…</span>
+				<kbd class="netz-topbar-kbd">{typeof navigator !== "undefined" && navigator?.platform?.includes("Mac") ? "⌘K" : "Ctrl+K"}</kbd>
 			</div>
 
 			<div class="netz-topbar-actions">
@@ -243,6 +244,7 @@
 </div>
 
 <AiAgentDrawer open={agentOpen} onclose={() => agentOpen = false} />
+<GlobalSearch bind:open={searchOpen} />
 
 <style>
 	/* ── Shell grid — topbar spans full width, sidebar+content below ── */
