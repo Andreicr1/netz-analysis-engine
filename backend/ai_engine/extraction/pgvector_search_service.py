@@ -911,7 +911,7 @@ def search_esma_funds_sync(
     params: dict[str, Any] = {
         "embedding": str(query_vector),
         "top": top,
-        "source_type": "esma_fund",
+        "source_type": "esma_fund_profile",
     }
     extra = ""
     if domicile_filter:
