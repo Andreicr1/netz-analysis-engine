@@ -15,6 +15,7 @@
 		Search as SearchIcon, Bot, PieChart, ChevronDown,
 		LayoutDashboard, Settings,
 	} from "lucide-svelte";
+	import AiAgentDrawer from "$lib/components/AiAgentDrawer.svelte";
 
 	interface SidebarItem {
 		label: string;
@@ -35,6 +36,9 @@
 
 	// ── Sidebar state ──
 	let sidebarCollapsed = $state(false);
+
+	// ── AI Agent drawer state ──
+	let agentOpen = $state(false);
 
 	// ── Risk store (SSE-primary, poll-fallback) ──
 	const riskStore = createRiskStore({
@@ -224,7 +228,7 @@
 			</div>
 
 			<div class="netz-topbar-actions">
-				<button class="netz-topbar-btn netz-topbar-btn--ai" type="button" title="AI Assistant">
+				<button class="netz-topbar-btn netz-topbar-btn--ai" type="button" title="AI Assistant" onclick={() => agentOpen = !agentOpen}>
 					<Bot size={18} strokeWidth={1.5} />
 				</button>
 				<ThemeToggle />
@@ -237,6 +241,8 @@
 		</div>
 	</main>
 </div>
+
+<AiAgentDrawer open={agentOpen} onclose={() => agentOpen = false} />
 
 <style>
 	/* ── Shell grid — topbar spans full width, sidebar+content below ── */

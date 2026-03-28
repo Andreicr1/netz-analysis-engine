@@ -1,0 +1,13 @@
+## Question
+{{ question }}
+
+## Retrieved Evidence ({{ chunk_count }} chunks from {{ source_count }} sources)
+{{ chunks }}
+
+{% if runtime_context %}
+## Runtime Context
+{{ runtime_context }}
+{% endif %}
+
+Answer the question using ONLY the evidence above. Cite chunk IDs for every factual claim.
+Return your response as a JSON object with "answer" and "citations" keys.
