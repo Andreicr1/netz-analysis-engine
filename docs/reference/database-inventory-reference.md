@@ -1,8 +1,9 @@
 # Database Inventory Reference
 
-**Last updated:** 2026-03-27
+**Last updated:** 2026-03-28
 **Database:** Timescale Cloud (PostgreSQL 16 + TimescaleDB + pgvector)
-**Total tables:** 124 | **Total data rows:** ~3.4M across key tables
+**Migration head:** `0063_add_strategy_label`
+**Total tables:** 124 | **Total data rows:** ~3.5M across key tables
 
 ---
 
@@ -11,7 +12,10 @@
 The Netz Analysis Engine database aggregates financial data from 7 authoritative sources spanning US institutional asset management (SEC), European UCITS funds (ESMA), and global macroeconomic indicators (FRED, Treasury, BIS, IMF, OFR). The database provides:
 
 - **976,980 US investment managers** from SEC FOIA bulk data + IAPD XML enrichment, including 15,963 registered investment advisers managing $50+ trillion in combined AUM, with 99.5% Form ADV Part 1A coverage on fund managers (AUM, fees, client types, compliance)
-- **10,436 European UCITS funds** from 658 ESMA-registered managers across 25 countries
+- **62,728 private funds** from ADV Part 1 PDFs with `fund_type` (7 SEC categories via checkbox image detection) and `strategy_label` (37 granular strategies via 3-layer keyword classifier)
+- **4,942 US registered funds** (3,652 mutual funds, 965 closed-end, 196 BDCs, 73 ETFs, 56 money market) with `strategy_label` across 24 categories — enriched from 6 EDGAR bulk datasets
+- **37,820 share classes** across 14,131 series in `sec_fund_classes` — bulk loaded from EDGAR series/class XML + N-PORT
+- **10,436 European UCITS funds** from 658 ESMA-registered managers across 25 countries, with `strategy_label` (31 categories, 69.7% coverage)
 - **1.09M institutional holdings** (13F-HR) from 12 major institutional investors, with 25 years of quarterly history
 - **132,823 fund portfolio holdings** (N-PORT) from 69 US registered investment companies
 - **78 macroeconomic time series** from FRED covering rates, spreads, housing, employment, and commodities
@@ -100,6 +104,38 @@ The Netz Analysis Engine database aggregates financial data from 7 authoritative
 #### Available Fields per Manager
 
 `crd_number`, `cik`, `firm_name`, `sec_number`, `registration_status`, `aum_total`, `aum_discretionary`, `aum_non_discretionary`, `total_accounts`, `fee_types`, `client_types`, `state`, `country`, `website`, `compliance_disclosures`, `last_adv_filed_at`
+
+#### Private Funds — sec_manager_funds (2026-03-28)
+
+| Attribute | Value |
+|---|---|
+| **Source** | Form ADV Part 1 PDFs (IAPD), Section 7.B.(1) |
+| **Script** | `seed_private_funds.py` (Playwright download → PyMuPDF parse → asyncpg upsert) |
+| **Rows** | 62,728 funds across 5,634 managers |
+| **PDFs** | 5,659 locally stored at `.data/adv_part1/pdfs/` |
+
+**fund_type detection:** SEC Form ADV PDFs render Q10 checkboxes as small JPEG images (17×21 px). Checked vs unchecked use different image xrefs. Script `backfill_fund_type.py` (20-worker ProcessPoolExecutor) detects the minority xref = selected fund type. 97.8% detection rate.
+
+| fund_type | Count | % |
+|---|---|---|
+| Private Equity Fund | 28,683 | 46% |
+| Hedge Fund | 13,804 | 22% |
+| Other Private Fund | 6,675 | 11% |
+| Real Estate Fund | 5,636 | 9% |
+| Venture Capital Fund | 4,509 | 7% |
+| Securitized Asset Fund | 3,339 | 5% |
+| Liquidity Fund | 81 | 0.1% |
+
+**strategy_label:** 3-layer keyword classifier (`backfill_strategy_label.py`):
+1. Fund name regex (cascading, most specific first) — ~87%
+2. Hedge fund sub-strategy refinement (equity, CTA, volatility, macro) — +2%
+3. Brochure content enrichment (methods_of_analysis, investment_philosophy) — +127 funds
+
+Top strategy_labels: Private Equity (19,935), Hedge Fund (8,281), Real Estate (5,601), Venture Capital (3,978), Secondaries/Co-Invest (3,703), Structured Credit (2,789), Private Credit (2,761), Co-Investment (1,328), Energy (1,084), Credit Hedge (1,007), Infrastructure (936), Growth Equity (848), Long/Short Equity (701), Multi-Strategy (348), Quantitative (92), Global Macro (90). Total: **37 distinct strategies**.
+
+**AUM floor for embedding:** `_embed_sec_private_funds()` in wealth_embedding_worker filters to managers with combined GAV ≥ $1B → 2,087 managers (37%), 45,942 funds (73%).
+
+**Available fields:** `crd_number`, `fund_name`, `fund_id`, `gross_asset_value`, `fund_type`, `strategy_label`, `is_fund_of_funds`, `investor_count`
 
 #### Brochure & Team Extraction (ADV Part 2A/2B)
 
@@ -234,7 +270,7 @@ The Netz Analysis Engine database aggregates financial data from 7 authoritative
 | MT (Malta) | 33 | 0.3% | |
 | Others (8) | 34 | 0.3% | BG, CZ, ES, GR, IE, IT, LV, SE |
 
-All 10,436 funds are classified as **UCITS** (Undertakings for Collective Investment in Transferable Securities).
+All 10,436 funds are classified as **UCITS** (Undertakings for Collective Investment in Transferable Securities). `strategy_label` assigned via fund name keyword classifier — **31 categories, 69.7% coverage** (7,278 / 10,436). Top categories: Multi-Asset (811), Fixed Income (526), ESG/Sustainable (523), Equity (506), Target Date (491), Global Equity (435), Index/Passive (353), Global Fixed Income (334).
 
 #### Manager Country Distribution
 
@@ -279,7 +315,7 @@ All 10,436 funds are classified as **UCITS** (Undertakings for Collective Invest
 
 #### Available Fields
 
-**Funds:** `isin` (PK), `fund_name`, `esma_manager_id`, `domicile`, `fund_type`, `host_member_states[]`, `yahoo_ticker`, `ticker_resolved_at`
+**Funds:** `isin` (PK), `fund_name`, `esma_manager_id`, `domicile`, `fund_type`, `strategy_label`, `host_member_states[]`, `yahoo_ticker`, `ticker_resolved_at`
 
 **Managers:** `esma_id` (PK), `lei`, `company_name`, `country`, `authorization_status`, `fund_count`, `sec_crd_number`
 
@@ -550,6 +586,50 @@ All 16 allocation blocks have 500 daily NAV observations with computed log retur
 
 ---
 
+### 1.11 SEC — Registered Fund Catalog (2026-03-28)
+
+| Attribute | Value |
+|---|---|
+| **Source** | EDGAR bulk XML datasets (investment company series/class, closed-end, BDC, MMF) + N-PORT FUND_REPORTED_INFO + RR1 XBRL |
+| **Tables** | `sec_registered_funds` (4,942 rows), `sec_fund_classes` (37,820 rows, 14,131 series) |
+| **fund_type constraint** | `mutual_fund`, `etf`, `closed_end`, `bdc`, `money_market`, `interval_fund` |
+
+#### Fund Type Distribution
+
+| fund_type | Count | Classified | % |
+|---|---|---|---|
+| mutual_fund | 3,652 | 2,569 | 70% |
+| closed_end | 965 | 721 | 75% |
+| bdc | 196 | 196 | 100% |
+| etf | 73 | 73 | 100% |
+| money_market | 56 | 56 | 100% |
+| **Total** | **4,942** | **3,615** | **73.1%** |
+
+**strategy_label sources (layered):**
+1. Fund name keywords (trust-level) — baseline
+2. `sec_fund_classes.series_name` (more descriptive than trust name) — +13pp
+3. RR1 XBRL `ObjectivePrimaryTextBlock` + `StrategyNarrativeTextBlock` — 98.3% hit rate when available
+4. N-PORT `FUND_REPORTED_INFO.SERIES_NAME` — 12,556 series with AUM
+
+Top strategy_labels: Index/Passive (411), Multi-Asset (381), Municipal Bond (309), Fixed Income (196), Equity (186), Size-Focused Equity (109), Global/International (112), Money Market (54), High Yield/Loans (49).
+
+**EDGAR bulk datasets used:**
+
+| File | Records | Purpose |
+|---|---|---|
+| `investment_company_series_class_2025-xml.xml` | 24,898 classes, 7,333 series | Share class/series names + CIK linkage |
+| `2025q4_nport/FUND_REPORTED_INFO.tsv` | 12,556 series | Series names + AUM (Vanguard Total Stock $2T at top) |
+| `closed-end-investment-company-2025.xml` | 965 funds | Closed-end fund universe |
+| `business-development-company-2025.xml` | 196 funds | BDC universe (all = Private Credit) |
+| `mmf-2025-11_0.xml` | 312 series, 1,192 classes | Money market: Gov/Prime/Tax-Exempt categories |
+| `2025q4_rr1/txt.tsv` | 4,452 strategy narratives | N-1A XBRL: investment objective + strategy text |
+
+**Available fields (sec_registered_funds):** `cik` (PK), `crd_number`, `fund_name`, `fund_type`, `strategy_label`, `ticker`, `isin`, `series_id`, `class_id`, `total_assets`, `total_shareholder_accounts`, `inception_date`, `currency`, `domicile`, `last_nport_date`
+
+**Available fields (sec_fund_classes):** `cik`, `series_id`, `series_name`, `class_id`, `class_name`, `ticker` — PK: `(cik, series_id, class_id)`
+
+---
+
 ## 2. Instruments & Reference Data
 
 ### 2.1 Global Instruments
@@ -648,16 +728,25 @@ CVaR current, CVaR limit, CVaR utilized %, trigger status (ok/warning/breach), c
 | **Coverage — US Managers** | Registered investment advisers | 15,963 (16,712 with AUM data from IAPD XML) |
 | **Coverage — US Managers** | Combined RIA AUM | $50+ trillion (refreshed via IAPD XML 2026-03-24) |
 | **Coverage — US Fund Managers** | Fund managers with Form ADV Part 1A data | 5,629 / 5,657 (99.5%) |
+| **Coverage — Private Funds** | sec_manager_funds | 62,728 funds, 5,634 managers |
+| **Coverage — Private Funds** | fund_type classification | 97.8% (checkbox image detection from ADV PDFs) |
+| **Coverage — Private Funds** | strategy_label (specific) | 47.3% (37 strategies via 3-layer classifier) |
+| **Coverage — Registered Funds** | sec_registered_funds | 4,942 (3,652 MF + 965 CEF + 196 BDC + 73 ETF + 56 MMF) |
+| **Coverage — Registered Funds** | strategy_label | 73.1% classified (24 categories) |
+| **Coverage — Share Classes** | sec_fund_classes | 37,820 rows, 14,131 distinct series |
 | **Coverage — US Institutional** | 13F filers tracked | 12 institutions |
 | **Coverage — US Institutional** | Combined latest-quarter AUM | $8.9+ trillion |
 | **Coverage — European Funds** | UCITS funds | 10,436 |
+| **Coverage — European Funds** | strategy_label | 69.7% classified (31 categories) |
 | **Coverage — European Managers** | ESMA-registered managers | 658 across 25 countries |
+| **Coverage — Total Fund Universe** | All 3 tables combined | 78,106 funds, 73,620 classified (94.3%) |
 | **Coverage — Macro** | Economic time series | 78 FRED + 278 Treasury + 23 OFR |
 | **Coverage — Global** | Countries in BIS/IMF data | 43-44 countries |
-| **Freshness — Markets** | NAV/benchmark data | Updated to 2026-03-24 (today) |
-| **Freshness — Macro** | FRED data | Updated to 2026-03-24 (today) |
+| **Freshness — Markets** | NAV/benchmark data | Updated to 2026-03-24 |
+| **Freshness — Macro** | FRED data | Updated to 2026-03-24 |
 | **Freshness — SEC** | 13F holdings | Through Q4 2025 |
 | **Freshness — SEC** | N-PORT filings | Through 2026-03-23 |
+| **Freshness — Fund Catalog** | strategy_label classification | 2026-03-28 |
 | **Linkage — ESMA** | Fund-to-manager linkage | 100% |
 | **Linkage — ESMA** | Ticker resolution | 28.1% (ongoing) |
 | **History — 13F** | Longest history | Northern Trust: 92 quarters (2002-2025) |
