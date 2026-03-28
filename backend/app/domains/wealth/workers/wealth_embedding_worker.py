@@ -105,7 +105,11 @@ async def run_wealth_embedding() -> dict:
 
 
 async def _cleanup_legacy_source_types(db: AsyncSession) -> None:
-    """Remove old esma_fund / esma_manager chunks (replaced by enriched profiles)."""
+    """Remove old esma_fund / esma_manager chunks (replaced by enriched profiles).
+
+    Also prunes sec_manager_profile chunks for managers without active funds
+    (registered or private) — filters out pure RIAs, planners, etc.
+    """
     result = await db.execute(
         text("""
             DELETE FROM wealth_vector_chunks
@@ -114,9 +118,25 @@ async def _cleanup_legacy_source_types(db: AsyncSession) -> None:
         {"types": list(_LEGACY_SOURCE_TYPES)},
     )
     deleted = result.rowcount
+
+    # Prune manager profiles for irrelevant managers (no funds)
+    prune = await db.execute(text("""
+        DELETE FROM wealth_vector_chunks w
+        WHERE w.source_type = 'sec_manager_profile'
+          AND NOT EXISTS (
+              SELECT 1 FROM sec_managers m
+              WHERE m.crd_number = w.entity_id
+                AND (m.private_fund_count > 0
+                     OR EXISTS (SELECT 1 FROM sec_registered_funds rf
+                                WHERE rf.crd_number = m.crd_number))
+          )
+    """))
+    pruned = prune.rowcount
+    deleted += pruned
+
     if deleted:
         await db.commit()
-        logger.info("wealth_embedding.legacy_cleanup", deleted=deleted)
+        logger.info("wealth_embedding.legacy_cleanup", deleted_legacy=result.rowcount, pruned_profiles=pruned)
 
 
 # ── Batch upsert helper ─────────────────────────────────────────────
@@ -254,6 +274,9 @@ async def _embed_sec_manager_profiles(db: AsyncSession) -> dict:
         LEFT JOIN wealth_vector_chunks w
           ON w.id = 'sec_manager_profile_' || m.crd_number
         WHERE m.firm_name IS NOT NULL
+          AND (m.private_fund_count > 0
+               OR EXISTS (SELECT 1 FROM sec_registered_funds rf
+                          WHERE rf.crd_number = m.crd_number))
           AND (w.id IS NULL
                OR (m.last_adv_filed_at IS NOT NULL
                    AND m.last_adv_filed_at > w.embedded_at::date))
