@@ -747,6 +747,65 @@ async def trigger_run_portfolio_nav_synthesizer(
 
 
 @router.post(
+    "/run-wealth-embedding",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger wealth vector embedding worker",
+    description=(
+        "Schedules the wealth embedding worker as a background task. "
+        "Processes ADV brochures, ESMA funds/managers, DD chapters, and "
+        "macro reviews into wealth_vector_chunks with OpenAI embeddings. "
+        "Incremental — only processes pending rows. Uses advisory lock 900_041. "
+        "Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_wealth_embedding(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.wealth_embedding_worker import run_wealth_embedding
+
+    return await _dispatch_worker(
+        background_tasks, "run-wealth-embedding", "global",
+        run_wealth_embedding,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )
+
+
+@router.post(
+    "/run-regime-fit",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger HMM regime fit worker",
+    description=(
+        "Schedules the regime fit worker as a background task. "
+        "Fits a 2-state HMM on VIX history and persists the classified "
+        "regime series into macro_regime_history. Consumed by risk_calc "
+        "for regime-conditional CVaR. Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_regime_fit(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.regime_fit import run_regime_fit
+
+    return await _dispatch_worker(
+        background_tasks, "run-regime-fit", "global",
+        run_regime_fit,
+        timeout_seconds=_LIGHT_WORKER_TIMEOUT,
+    )
+
+
+@router.post(
     "/run-nport-fund-discovery",
     response_model=WorkerScheduledResponse,
     status_code=status.HTTP_202_ACCEPTED,
