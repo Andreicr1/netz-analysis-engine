@@ -363,7 +363,7 @@ def _compute_momentum_from_nav(
         }
 
     signals = compute_momentum_signals_talib(close)
-    nav_score = signals.get("momentum_score", 50.0)
+    nav_score = signals.get("momentum_score") or None
 
     rsi_val = signals.get("rsi_norm")
     bb_val = signals.get("bb_pos")
@@ -371,17 +371,20 @@ def _compute_momentum_from_nav(
     result: dict[str, float | None] = {
         "rsi_14": round(rsi_val * 100, 2) if rsi_val is not None else None,
         "bb_position": round(bb_val * 100, 2) if bb_val is not None else None,
-        "nav_momentum_score": round(nav_score, 2),
+        "nav_momentum_score": round(nav_score, 2) if nav_score is not None else None,
     }
 
     if aum.any():
         slope = compute_flow_momentum(close, aum)
         flow_score = normalize_flow_momentum(slope)
         result["flow_momentum_score"] = round(flow_score, 2)
-        result["blended_momentum_score"] = round(0.5 * nav_score + 0.5 * flow_score, 2)
+        if nav_score is not None:
+            result["blended_momentum_score"] = round(0.5 * nav_score + 0.5 * flow_score, 2)
+        else:
+            result["blended_momentum_score"] = round(flow_score, 2)
     else:
         result["flow_momentum_score"] = None
-        result["blended_momentum_score"] = round(nav_score, 2)
+        result["blended_momentum_score"] = round(nav_score, 2) if nav_score is not None else None
 
     return result
 

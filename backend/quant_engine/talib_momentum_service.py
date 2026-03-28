@@ -3,13 +3,12 @@
 Replaces the hardcoded flows_momentum=50.0 stub in scoring_service.py.
 No external API required — all signals derived from NAV data already in DB.
 
-Optional dependency: ta-lib>=0.4 (timeseries group).
-Install: pip install netz-wealth-os[timeseries]
-
-Note: TA-Lib requires the C library. See https://ta-lib.github.io/ta-lib-python/
+Priority: ta-lib (C wrapper, fastest) → pandas-ta (pure Python fallback).
+If neither is available, returns None values (honest degradation).
 """
 
 import numpy as np
+import pandas as pd
 import structlog
 
 logger = structlog.get_logger()
@@ -18,54 +17,122 @@ logger = structlog.get_logger()
 # BBANDS(20) needs 20 + warm-up; RSI(14) needs 14 + warm-up.
 MIN_NAV_OBSERVATIONS = 30
 
+# ── Backend detection ──────────────────────────────────────────────────────
 
-def compute_momentum_signals_talib(close: np.ndarray) -> dict[str, float]:
+try:
+    import talib as _talib  # type: ignore[import]
+
+    _BACKEND = "talib"
+except ImportError:
+    _talib = None  # type: ignore[assignment]
+    try:
+        import pandas_ta as _pta  # type: ignore[import]
+
+        _BACKEND = "pandas_ta"
+    except ImportError:
+        _pta = None  # type: ignore[assignment]
+        _BACKEND = "none"
+
+_NEUTRAL = {"rsi_norm": None, "bb_pos": None, "momentum_score": None}
+
+
+def _compute_talib(close_f: np.ndarray) -> dict[str, float | None]:
+    """Compute momentum signals using TA-Lib C wrapper."""
+    assert _talib is not None
+
+    rsi = _talib.RSI(close_f, timeperiod=14)
+    last_rsi = next((v for v in reversed(rsi) if not np.isnan(v)), None)
+    rsi_norm = float(last_rsi) / 100.0 if last_rsi is not None else None
+
+    upper, _, lower = _talib.BBANDS(close_f, timeperiod=20, nbdevup=2, nbdevdn=2)
+    last_upper = next((v for v in reversed(upper) if not np.isnan(v)), None)
+    last_lower = next((v for v in reversed(lower) if not np.isnan(v)), None)
+
+    return _assemble(rsi_norm, last_upper, last_lower, float(close_f[-1]))
+
+
+def _compute_pandas_ta(close_f: np.ndarray) -> dict[str, float | None]:
+    """Compute momentum signals using pandas-ta (pure Python)."""
+    assert _pta is not None
+
+    s = pd.Series(close_f)
+
+    rsi_series = _pta.rsi(s, length=14)
+    last_rsi = None
+    if rsi_series is not None and len(rsi_series) > 0:
+        last_rsi = rsi_series.dropna().iloc[-1] if not rsi_series.dropna().empty else None
+    rsi_norm = float(last_rsi) / 100.0 if last_rsi is not None else None
+
+    bb = _pta.bbands(s, length=20, std=2)
+    last_upper = None
+    last_lower = None
+    if bb is not None and not bb.empty:
+        upper_col = [c for c in bb.columns if c.startswith("BBU_")]
+        lower_col = [c for c in bb.columns if c.startswith("BBL_")]
+        if upper_col:
+            vals = bb[upper_col[0]].dropna()
+            last_upper = float(vals.iloc[-1]) if not vals.empty else None
+        if lower_col:
+            vals = bb[lower_col[0]].dropna()
+            last_lower = float(vals.iloc[-1]) if not vals.empty else None
+
+    return _assemble(rsi_norm, last_upper, last_lower, float(close_f[-1]))
+
+
+def _assemble(
+    rsi_norm: float | None,
+    last_upper: float | None,
+    last_lower: float | None,
+    last_close: float,
+) -> dict[str, float | None]:
+    """Assemble final signal dict from indicator values."""
+    bb_pos: float | None = None
+    if last_upper is not None and last_lower is not None:
+        bb_range = last_upper - last_lower
+        if bb_range > 0:
+            bb_pos = max(0.0, min(1.0, (last_close - last_lower) / (bb_range + 1e-8)))
+
+    if rsi_norm is not None and bb_pos is not None:
+        momentum_score = round((0.5 * rsi_norm + 0.5 * bb_pos) * 100.0, 2)
+    elif rsi_norm is not None:
+        momentum_score = round(rsi_norm * 100.0, 2)
+    elif bb_pos is not None:
+        momentum_score = round(bb_pos * 100.0, 2)
+    else:
+        momentum_score = None
+
+    return {
+        "rsi_norm": round(rsi_norm, 4) if rsi_norm is not None else None,
+        "bb_pos": round(bb_pos, 4) if bb_pos is not None else None,
+        "momentum_score": momentum_score,
+    }
+
+
+def compute_momentum_signals_talib(close: np.ndarray) -> dict[str, float | None]:
     """Compute RSI and Bollinger Band position from a NAV price series.
 
     Uses existing nav_timeseries data — no external API call required.
-    All indicators are computed in-process via TA-Lib.
+    Priority: ta-lib (C) → pandas-ta (pure Python) → None (honest degradation).
 
     Returns dict with:
         rsi_norm: RSI(14) normalised to [0, 1]  (0=oversold, 1=overbought)
         bb_pos:   position within BB(20, 2σ)    (0=lower band, 1=upper band)
         momentum_score: weighted composite      (0–100, 50=neutral)
+
+    All values are None when no backend is available (not fake neutrals).
     """
-    try:
-        import talib  # type: ignore[import]
-    except ImportError:
-        logger.debug("ta-lib not installed; returning neutral momentum score")
-        return {"rsi_norm": 0.5, "bb_pos": 0.5, "momentum_score": 50.0}
+    if _BACKEND == "none":
+        logger.warning("no momentum backend available (ta-lib or pandas-ta); returning None")
+        return _NEUTRAL.copy()
 
     if len(close) < MIN_NAV_OBSERVATIONS:
-        return {"rsi_norm": 0.5, "bb_pos": 0.5, "momentum_score": 50.0}
+        return _NEUTRAL.copy()
 
     close_f = close.astype(float)
 
-    # RSI(14) — last valid value
-    rsi = talib.RSI(close_f, timeperiod=14)
-    last_rsi = next((v for v in reversed(rsi) if not np.isnan(v)), None)
-    rsi_norm = float(last_rsi) / 100.0 if last_rsi is not None else 0.5
-
-    # Bollinger Bands (20, 2σ) — last valid values
-    upper, _, lower = talib.BBANDS(close_f, timeperiod=20, nbdevup=2, nbdevdn=2)
-    last_upper = next((v for v in reversed(upper) if not np.isnan(v)), None)
-    last_lower = next((v for v in reversed(lower) if not np.isnan(v)), None)
-    last_close = float(close_f[-1])
-
-    if last_upper is not None and last_lower is not None:
-        bb_range = float(last_upper - last_lower)
-        bb_pos = float((last_close - last_lower) / (bb_range + 1e-8)) if bb_range > 0 else 0.5
-        bb_pos = max(0.0, min(1.0, bb_pos))
-    else:
-        bb_pos = 0.5
-
-    momentum_score = round((0.5 * rsi_norm + 0.5 * bb_pos) * 100.0, 2)
-
-    return {
-        "rsi_norm": round(rsi_norm, 4),
-        "bb_pos": round(bb_pos, 4),
-        "momentum_score": momentum_score,
-    }
+    if _BACKEND == "talib":
+        return _compute_talib(close_f)
+    return _compute_pandas_ta(close_f)
 
 
 def compute_flow_momentum(

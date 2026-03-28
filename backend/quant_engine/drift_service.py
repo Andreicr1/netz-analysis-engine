@@ -265,7 +265,7 @@ def compute_dtw_drift_batch(
         bench_slice = benchmark_returns[-window:].reshape(1, -1)
 
         all_series = np.vstack([fund_slice, bench_slice])
-        dist_matrix = pairwise_distance(all_series, metric="ddtw")
+        dist_matrix = pairwise_distance(all_series, method="ddtw")
         benchmark_distances = dist_matrix[-1, :-1]
 
         actual_window = fund_slice.shape[1]
