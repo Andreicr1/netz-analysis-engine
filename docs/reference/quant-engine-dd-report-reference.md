@@ -283,6 +283,12 @@ $$\text{score} = \sum_{k} w_k \times C_k$$
 | `information_ratio` | 0.15 | info\_ratio\_1y in $[-1.0, 2.0]$ | `scoring_service.py:91` |
 | `flows_momentum` | 0.10 | passed through (0-100) | `scoring_service.py:93` |
 | `lipper_rating` | 0.10 | passed through (0-100) | `scoring_service.py:94` |
+| `fee_drag` | opt-in | $100 - \text{ER}\% \times 50$ (2% ER → 0) | `scoring_service.py:101` |
+| `insider_sentiment` | opt-in | passed through (0-100), from Form 345 | `scoring_service.py:106` |
+
+**Optional components:** `fee_drag` and `insider_sentiment` are activated only when the config dict includes their weight key with value > 0. When absent (default), behavior is unchanged.
+
+**Insider sentiment score:** Computed from `sec_insider_sentiment` materialized view. Score = `buy_value / (buy_value + sell_value) * 100`. Excludes sole 10% Owners (`TenPercentOwner`). Uses only informative codes P (purchase) and S (sale). Default 4-quarter lookback. Score of 50.0 = neutral/no data. Reference: `insider_queries.py`.
 
 **Normalization formula:**
 
@@ -290,7 +296,7 @@ $$\text{normalize}(v, \text{min}, \text{max}) = \max\left(0, \min\left(100, \fra
 
 Returns 50.0 for `None` values or zero-range.
 
-**Reference:** `scoring_service.py:56-100`
+**Reference:** `scoring_service.py:56-114`
 
 ### 2.12 DTW Drift Score (Per-Block)
 
@@ -1324,6 +1330,8 @@ A frozen dataclass containing all evidence for the report:
 | SEC 13F | thirteenf_available, sector_weights, drift_detected, drift_quarters | `sec_13f_holdings` |
 | SEC ADV | compliance_disclosures, aum_history, fee_structure, funds, team | `sec_managers`, `sec_manager_funds`, `sec_manager_team` |
 | SEC ADV Brochure | adv_brochure_sections (item_5, item_8, item_9, item_10) | `sec_manager_brochure_text` |
+| SEC Fund Enrichment | insider_sentiment_score, insider_summary (buy/sell counts + values) | `sec_insider_sentiment` MV |
+| SEC N-PORT Insider | portfolio_insider_sentiment (weighted avg from top 20 holdings) | `sec_insider_sentiment` via N-PORT holdings |
 
 **Chapter-specific filtering:** Each chapter receives only relevant evidence fields. Recommendation chapter gets no documents. Fee analysis gets no quant/risk metrics.
 
@@ -1368,6 +1376,25 @@ Resolves manager name to CRD number. Returns:
 **Template:** `manager_assessment.j2` renders brochure sections when present, silent when absent. LLM instruction cites items by number (e.g., "Per Item 8 of the ADV Part 2A…").
 
 **Reference:** `dd_report/sec_injection.py:214-265`
+
+#### Form 345 Insider Sentiment
+
+Two integration points inject insider sentiment into DD reports:
+
+**1. Fund-level (via `gather_fund_enrichment`):** For registered US funds, queries `sec_insider_sentiment` materialized view using the fund's `issuer_cik`. Returns `insider_sentiment_score` (0-100) and `insider_summary` (buy_count, sell_count, buy_value, sell_value, unique_buyers, unique_sellers). Neutral score (50.0) is not included.
+
+**2. Portfolio-level (via `gather_sec_nport_data`):** For funds with N-PORT holdings, computes a weighted portfolio-level insider sentiment from the top 20 holdings by `pct_of_nav`. Each holding is matched via CUSIP prefix to `sec_insider_sentiment`. Holdings with neutral scores (50.0) are excluded. Result is NAV-weighted average stored as `portfolio_insider_sentiment`.
+
+**Score formula:** `score = buy_value / (buy_value + sell_value) * 100`
+- Excludes sole 10% Owners (portfolio trading, not conviction signals)
+- Uses only P (purchase) and S (sale) codes — excludes awards, exercises, gifts, etc.
+- Default lookback: 4 quarters
+
+**Data source:** `sec_insider_transactions` table (59,677 rows Q4 2025), aggregated in `sec_insider_sentiment` materialized view (2,956 issuer-quarters). Worker: `form345_ingestion` (lock 900_051, quarterly).
+
+**Query service:** `insider_queries.py` provides `get_insider_sentiment_score()` and `get_insider_summary()` — sync functions matching DD report `asyncio.to_thread()` context.
+
+**Reference:** `dd_report/sec_injection.py:392-415` (fund-level), `dd_report/sec_injection.py:230-270` (portfolio-level), `domains/wealth/services/insider_queries.py`
 
 ### 13.8 Confidence Scoring
 
@@ -1442,6 +1469,7 @@ Three services covering different SEC filing types:
 | `ThirteenFService` | 13F-HR | `sec_13f_holdings`, `sec_13f_diffs` | `data_providers/sec/thirteenf_service.py` |
 | `AdvService` | Form ADV | `sec_managers`, `sec_manager_funds`, `sec_manager_team`, `sec_manager_brochure_text` (`crd_number`, `section`, `filing_date`, `content`) | `data_providers/sec/adv_service.py` |
 | `InstitutionalService` | 13F-HR (reverse) | `sec_institutional_allocations` | `data_providers/sec/institutional_service.py` |
+| `insider_queries` | Form 3/4/5 | `sec_insider_transactions`, `sec_insider_sentiment` (MV) | `domains/wealth/services/insider_queries.py` |
 
 **Critical rule:** Routes and DD reports use ONLY DB-reading methods. EDGAR API calls are restricted to background workers.
 
@@ -1687,6 +1715,7 @@ Implements `BaseAnalyzer` ABC for the `liquid_funds` profile:
 | `bis_ingestion` | 900_014 | global | `bis_statistics` (1yr chunks) | BIS SDMX API | Quarterly |
 | `imf_ingestion` | 900_015 | global | `imf_weo_forecasts` (1yr chunks) | IMF DataMapper API | Quarterly |
 | `drift_check` | 42 | org | `strategy_drift_alerts` | Computed | Daily |
+| `form345_ingestion` | 900_051 | global | `sec_insider_transactions`, `sec_insider_sentiment` (MV) | SEC EDGAR Form 345 bulk TSV | Quarterly |
 
 ### 16.2 Worker Patterns
 

@@ -2,8 +2,8 @@
 
 **Last updated:** 2026-03-28
 **Database:** Timescale Cloud (PostgreSQL 16 + TimescaleDB + pgvector)
-**Migration head:** `0066_fund_class_xbrl_fees`
-**Total tables:** ~131 | **Total data rows:** ~3.7M across key tables
+**Migration head:** `0067_insider_transactions`
+**Total tables:** ~132 | **Total data rows:** ~3.8M across key tables
 
 ---
 
@@ -21,7 +21,8 @@ The Netz Analysis Engine database aggregates financial data from 7 authoritative
 - **10,436 European UCITS funds** from 658 ESMA-registered managers across 25 countries, with `strategy_label` (31 categories, 69.7% coverage)
 - **pgvector index** with 12 embedding sources covering all fund universes (SEC managers/funds/13F/private + ETF/BDC/MMF + ESMA enriched)
 - **1.09M institutional holdings** (13F-HR) from 12 major institutional investors, with 25 years of quarterly history
-- **132,823 fund portfolio holdings** (N-PORT) from 69 US registered investment companies
+- **132,823 fund portfolio holdings** (N-PORT) from 69 US registered investment companies, with **12,609 CUSIP→ticker mappings** (95% resolved via OpenFIGI) enabling insider flow signals for corporate bond holdings
+- **59,677 insider transactions** (Form 3/4/5) from SEC EDGAR in `sec_insider_transactions`, with `sec_insider_sentiment` materialized view aggregating buy/sell signals per issuer per quarter (2,956 issuer-quarters with P/S activity)
 - **78 macroeconomic time series** from FRED covering rates, spreads, housing, employment, and commodities
 - **278 US Treasury series** covering debt, auction results, interest rates, and foreign exchange
 - **Global financial stability data** from BIS (43 countries), IMF (44 countries, forecasts to 2030), and OFR (hedge fund industry metrics)
@@ -247,6 +248,77 @@ Top strategy_labels: Private Equity (19,935), Hedge Fund (8,281), Real Estate (5
 #### Available Fields per Holding
 
 `report_date`, `cik`, `cusip`, `isin`, `issuer_name`, `asset_class`, `sector`, `market_value`, `quantity`, `currency`, `pct_of_nav`, `is_restricted`, `fair_value_level`
+
+---
+
+### 1.3b SEC EDGAR — Form 345 Insider Transactions
+
+| Attribute | Value |
+|---|---|
+| **Source** | SEC EDGAR Form 3/4/5 bulk quarterly TSV files |
+| **Worker** | `form345_ingestion` (lock ID 900_051) |
+| **Seed script** | `scripts/seed_insider_transactions.py --form345-dir <path>` |
+| **Frequency** | Quarterly |
+| **Table** | `sec_insider_transactions` (regular table, not hypertable) |
+| **Rows** | 59,677 (Q4 2025) |
+| **Materialized view** | `sec_insider_sentiment` (2,956 issuer-quarter rows) |
+
+**Data sources (3 TSV files per quarter):**
+- `SUBMISSION.tsv` (36,421 rows) — issuer CIK, ticker, document type, period of report
+- `REPORTINGOWNER.tsv` (36,421 rows) — owner CIK, name, relationship (compound: `Officer`, `Director,Officer`, `TenPercentOwner`, etc.), title
+- `NONDERIV_TRANS.tsv` (59,677 rows) — transaction code, shares, price per share, date, acquired/disposed
+
+#### Transaction Code Distribution (Q4 2025)
+
+| Code | Count | Description | Used in Score |
+|---|---|---|---|
+| S | 22,489 | Open market sale | Yes (bearish) |
+| A | 8,994 | Award/grant | No |
+| F | 8,096 | Tax withholding | No |
+| M | 8,141 | Option exercise | No |
+| P | 5,447 | Open market purchase | Yes (bullish) |
+| G | 2,342 | Gift | No |
+| J | 1,542 | Other | No |
+| D | 1,374 | Disposition to issuer | No |
+| C | 756 | Conversion | No |
+| L | 293 | Small acquisition | No |
+| X | 94 | Expiration | No |
+| U | 67 | Tender | No |
+| I | 22 | Discretionary transaction | No |
+| W | 18 | Acquisition/disposition by will | No |
+| E | 2 | Expiration of short derivative | No |
+
+#### Insider Sentiment Score
+
+The `sec_insider_sentiment` materialized view aggregates buy/sell activity per issuer per quarter, **excluding sole 10% Owners** (`TenPercentOwner`, `TenPercentOwner,Other` — they trade for portfolio reasons, not conviction). Mixed relationships like `Director,TenPercentOwner` are **included** (they have fiduciary insight).
+
+**Score formula:** `insider_sentiment_score = buy_value / (buy_value + sell_value) * 100`
+- Score > 50 → net buying pressure (bullish)
+- Score = 50 → neutral (no data or balanced)
+- Score < 50 → net selling pressure (bearish)
+
+**Top insider buying signals (Q4 2025):**
+
+| Ticker | Buy Count | Sell Count | Buy Value ($M) | Sell Value ($M) | Score |
+|---|---|---|---|---|---|
+| BGC | 6 | 4 | 247.9 | 82.6 | 75.0 |
+| BETA | 7 | 0 | 99.0 | — | 100.0 |
+| KMI | 3 | 3 | 26.1 | 0.5 | 98.1 |
+| AMR | 62 | 5 | 24.7 | 1.5 | 94.2 |
+| BLND | 13 | 5 | 21.8 | 0.3 | 98.8 |
+
+**Literature:** Insider purchases have greater predictive power in 6-12 month windows (Seyhun 1986, Jeng et al. 2003). Purchases are more informative than sales (sales may reflect diversification/personal liquidity).
+
+#### Integration Points
+
+1. **Scoring service** — `compute_fund_score()` accepts optional `insider_sentiment_score` parameter (activated when config includes `"insider_sentiment"` weight)
+2. **DD Report — fund enrichment** — `gather_fund_enrichment()` queries insider sentiment for fund's issuer CIK
+3. **DD Report — N-PORT portfolio** — `gather_sec_nport_data()` computes weighted portfolio-level insider sentiment from top 20 holdings
+4. **Query service** — `insider_queries.py` provides `get_insider_sentiment_score()` and `get_insider_summary()` (sync, for DD report context)
+
+#### Available Fields per Transaction
+
+`accession_number` (PK), `trans_sk` (PK), `issuer_cik`, `issuer_ticker`, `owner_cik`, `owner_name`, `owner_relationship`, `owner_title`, `trans_date`, `period_of_report`, `document_type`, `trans_code`, `trans_acquired_disp`, `trans_shares`, `trans_price_per_share`, `trans_value` (generated), `shares_owned_after`
 
 ---
 
@@ -751,8 +823,18 @@ Expense ratio scales inversely with AUM as expected (economy of scale). Coverage
 
 | Table | Rows | Description |
 |---|---|---|
-| `sec_cusip_ticker_map` | 0 | CUSIP-to-ticker (pending population) |
+| `sec_cusip_ticker_map` | 12,609 | CUSIP-to-ticker via OpenFIGI (N-PORT CORP bonds + 13F equity) |
 | `esma_isin_ticker_map` | 6,227 | ISIN-to-Yahoo ticker for ESMA funds |
+
+**CUSIP Ticker Map breakdown:**
+- **Source:** 12,609 unique 9-char CUSIPs from `sec_nport_holdings` (sector = CORP)
+- **Resolved:** 11,977 (95.0% coverage via OpenFIGI batch API)
+- **Tradeable:** 438 (equity instruments with YFinance-compatible tickers)
+- **Issuer CIK:** 5,160 backfilled via `sec_managers` firm_name match
+- **Unresolved:** 632 (private placements, delisted bonds)
+- **Columns:** cusip (PK), ticker, issuer_name, exchange, security_type, figi, composite_figi, issuer_cik, resolved_via, is_tradeable, last_verified_at
+- **Seed script:** `scripts/seed_cusip_ticker_map.py` (asyncpg + httpx, 250 req/min with API key)
+- **Use case:** Bond CUSIP → issuer equity ticker → Form 345 insider flow for FI/HY funds
 
 ---
 
@@ -855,6 +937,7 @@ All sources use incremental embedding via LEFT JOIN anti-pattern (only rows with
 | `bis_ingestion` | 900_014 | global | Quarterly | BIS SDMX API | `bis_statistics` |
 | `imf_ingestion` | 900_015 | global | Quarterly | IMF DataMapper | `imf_weo_forecasts` |
 | `sec_bulk_ingestion` | 900_050 | global | Quarterly | SEC DERA bulk ZIPs | sec_etfs, sec_bdcs, sec_money_market_funds, sec_mmf_metrics, sec_registered_funds + strategy_label backfill |
+| `form345_ingestion` | 900_051 | global | Quarterly | SEC EDGAR Form 345 bulk TSV | `sec_insider_transactions`, `sec_insider_sentiment` (MV) |
 | `wealth_embedding` | 900_041 | global | Daily | Computed | `wealth_vector_chunks` (12 sources) |
 
 ---
@@ -884,6 +967,8 @@ All sources use incremental embedding via LEFT JOIN anti-pattern (only rows with
 | **Coverage — Total Fund Universe** | All fund tables combined | sec_registered_funds(4,617) + sec_etfs(985) + sec_bdcs(196) + sec_money_market_funds(373) + sec_manager_funds(62,728) + esma_funds(10,436) = **79,335 funds** |
 | **Coverage — Macro** | Economic time series | 78 FRED + 278 Treasury + 23 OFR |
 | **Coverage — Global** | Countries in BIS/IMF data | 43-44 countries |
+| **Coverage — CUSIP Mapping** | sec_cusip_ticker_map | 12,609 CUSIPs, 95.0% resolved, 5,160 with issuer_cik |
+| **Coverage — Insider Transactions** | sec_insider_transactions (Q4 2025) | 59,677 transactions (5,447 P + 22,489 S); 2,956 issuer-quarters in sentiment MV |
 | **Coverage — Embeddings** | pgvector sources | 12 active sources across all fund universes |
 | **Freshness — Markets** | NAV/benchmark data | Updated to 2026-03-24 |
 | **Freshness — Macro** | FRED data | Updated to 2026-03-24 |
