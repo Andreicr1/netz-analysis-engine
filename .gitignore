@@ -53,6 +53,7 @@ pgdata/
 # Project-local data
 Deals/
 scripts/
+!backend/scripts/
 dev.ps1
 backend/.sec_seed_checkpoint.json
 backend/.esma_seed_checkpoint.json
