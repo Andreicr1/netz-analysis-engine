@@ -348,6 +348,7 @@ class SecCusipTickerMap(Base):
     security_type: Mapped[str | None] = mapped_column(Text)
     figi: Mapped[str | None] = mapped_column(Text)
     composite_figi: Mapped[str | None] = mapped_column(Text)
+    issuer_cik: Mapped[str | None] = mapped_column(Text)
     resolved_via: Mapped[str] = mapped_column(Text, nullable=False)
     is_tradeable: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     last_verified_at: Mapped[dt.datetime] = mapped_column(
