@@ -57,6 +57,13 @@ export const EMPTY_FILTERS: ScreenerFilterConfig = {
 	search: "",
 };
 
+// ── Source display labels (never expose data-provider names to users) ───
+export const SOURCE_LABELS: Record<string, string> = {
+	internal: "Universe",
+	esma: "UCITS",
+	sec: "US Registered",
+};
+
 // ── Global Instrument Search types ──────────────────────────────────────
 
 export interface InstrumentSearchItem {

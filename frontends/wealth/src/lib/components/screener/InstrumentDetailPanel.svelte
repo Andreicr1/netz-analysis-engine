@@ -9,6 +9,7 @@
 	import type { ConsequenceDialogPayload } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { InstrumentSearchItem } from "$lib/types/screening";
+	import { SOURCE_LABELS } from "$lib/types/screening";
 
 	interface Props {
 		selectedInstrument: InstrumentSearchItem;
@@ -58,8 +59,8 @@
 	function sourceBadgeClass(source: string): string {
 		switch (source) {
 			case "internal": return "source-badge--internal";
-			case "esma": return "source-badge--esma";
-			case "sec": return "source-badge--sec";
+			case "esma": return "source-badge--european";
+			case "sec": return "source-badge--us-registered";
 			default: return "";
 		}
 	}
@@ -81,7 +82,7 @@
 		{#if selectedInstrument.screening_status}
 			<StatusBadge status={selectedInstrument.screening_status} />
 		{/if}
-		<span class="source-badge {sourceBadgeClass(selectedInstrument.source)}">{selectedInstrument.source}</span>
+		<span class="source-badge {sourceBadgeClass(selectedInstrument.source)}">{SOURCE_LABELS[selectedInstrument.source] ?? selectedInstrument.source}</span>
 		<span class="type-badge {typeBadgeClass(selectedInstrument.instrument_type)}">{selectedInstrument.instrument_type}</span>
 	</div>
 	<div class="dt-fund-meta">
@@ -106,7 +107,7 @@
 {/if}
 <div class="dt-section">
 	{#if !selectedInstrument.instrument_id && (selectedInstrument.source === "esma" || selectedInstrument.source === "sec")}
-		<p class="dt-empty-text">This {selectedInstrument.source === "esma" ? "ESMA fund" : "US security"} is not yet in your universe.</p>
+		<p class="dt-empty-text">This {selectedInstrument.source === "esma" ? "European fund" : "US fund"} is not yet in your universe.</p>
 	{/if}
 	<Button size="sm" onclick={() => reviewDialogOpen = true} disabled={sendingToReview}>
 		{sendingToReview ? "Sending…" : "Send to Review"}
@@ -132,7 +133,6 @@
 		{ label: "Instrument", value: selectedInstrument?.name ?? "" },
 		{ label: "Ticker", value: selectedInstrument?.ticker ?? "—" },
 		{ label: "ISIN", value: selectedInstrument?.isin ?? "—" },
-		{ label: "Source", value: selectedInstrument?.source ?? "" },
 	]}
 	onConfirm={handleSendToReview}
 />

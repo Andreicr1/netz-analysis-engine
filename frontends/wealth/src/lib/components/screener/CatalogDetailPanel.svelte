@@ -126,13 +126,13 @@
 				<div class="cdp-matrix-row">
 					<span class="cdp-matrix-label">Holdings</span>
 					<span class="cdp-matrix-value" class:cdp-avail={fund.disclosure.has_holdings} class:cdp-unavail={!fund.disclosure.has_holdings}>
-						{fund.disclosure.has_holdings ? (fund.disclosure.holdings_source === "nport" ? "N-PORT" : "13F") : "N/A"}
+						{fund.disclosure.has_holdings ? (fund.disclosure.holdings_source === "nport" ? "Holdings Data" : "Portfolio Holdings") : "N/A"}
 					</span>
 				</div>
 				<div class="cdp-matrix-row">
 					<span class="cdp-matrix-label">NAV History</span>
 					<span class="cdp-matrix-value" class:cdp-avail={fund.disclosure.has_nav_history} class:cdp-unavail={!fund.disclosure.has_nav_history}>
-						{fund.disclosure.has_nav_history ? "YFinance" : "N/A"}
+						{fund.disclosure.has_nav_history ? "Available" : "N/A"}
 					</span>
 				</div>
 				<div class="cdp-matrix-row">
@@ -148,13 +148,13 @@
 					</span>
 				</div>
 				<div class="cdp-matrix-row">
-					<span class="cdp-matrix-label">Private Fund Data</span>
+					<span class="cdp-matrix-label">Fund Details</span>
 					<span class="cdp-matrix-value" class:cdp-avail={fund.disclosure.has_private_fund_data} class:cdp-unavail={!fund.disclosure.has_private_fund_data}>
-						{fund.disclosure.has_private_fund_data ? "Schedule D" : "N/A"}
+						{fund.disclosure.has_private_fund_data ? "Available" : "N/A"}
 					</span>
 				</div>
 				<div class="cdp-matrix-row">
-					<span class="cdp-matrix-label">13F Overlay</span>
+					<span class="cdp-matrix-label">Institutional Holdings</span>
 					<span class="cdp-matrix-value" class:cdp-avail={fund.disclosure.has_13f_overlay} class:cdp-unavail={!fund.disclosure.has_13f_overlay}>
 						{fund.disclosure.has_13f_overlay ? "Linked" : "N/A"}
 					</span>
@@ -203,7 +203,7 @@
 			{:else}
 				<div class="cdp-na-section">
 					<span class="cdp-na-badge">Style Analysis N/A</span>
-					<p class="cdp-na-text">Style snapshots require N-PORT filings (US Registered funds only).</p>
+					<p class="cdp-na-text">Style snapshots are available for US Registered funds with holdings disclosure.</p>
 				</div>
 			{/if}
 		</div>
@@ -222,7 +222,7 @@
 			{:else}
 				<div class="cdp-na-section">
 					<span class="cdp-na-badge">Quant Metrics N/A</span>
-					<p class="cdp-na-text">Requires NAV history (YFinance ticker). This fund has no tradeable ticker.</p>
+					<p class="cdp-na-text">Requires NAV history. This fund has no tradeable ticker.</p>
 				</div>
 			{/if}
 		</div>

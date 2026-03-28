@@ -140,7 +140,7 @@
 						<td>{item.currency}</td>
 						<td>{item.geography}</td>
 						<td onclick={(e) => e.stopPropagation()}>
-							{#if (item.source === "esma" || item.source === "sec") && !item.instrument_id}
+							{#if item.source !== "internal" && !item.instrument_id}
 								<Button size="sm" variant="outline" onclick={() => onOpenInstrumentDetail?.(item)}>
 									Add to Review
 								</Button>
