@@ -72,7 +72,7 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
         "sec_adv_ingestion": (run_sec_adv_ingestion, "global", _HEAVY),
         "brochure_download": (run_brochure_download, "global", _BULK),
         "brochure_extract": (run_brochure_extract, "global", _BULK),
-        "wealth_embedding": (run_wealth_embedding, "global", _HEAVY),
+        "wealth_embedding": (run_wealth_embedding, "global", _BULK),
         "drift_check": (run_drift_check, "global", _LIGHT),
         "regime_fit": (run_regime_fit, "global", _LIGHT),
         # ── Org-scoped workers (dispatched per active org) ────
