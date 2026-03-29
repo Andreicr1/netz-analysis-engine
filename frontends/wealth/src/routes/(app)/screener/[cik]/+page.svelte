@@ -27,8 +27,13 @@
 		const series: Record<string, (number | null)[]> = holdingsHistory.sector_series;
 		return {
 			tooltip: { trigger: "axis", axisPointer: { type: "cross" } },
-			legend: { type: "scroll", bottom: 0 },
-			grid: { left: 60, right: 20, top: 20, bottom: 60 },
+			legend: {
+				type: "scroll",
+				bottom: 0,
+				formatter: (name: string) => name.length > 18 ? name.slice(0, 16) + "…" : name,
+				tooltip: { show: true },
+			},
+			grid: { left: 60, right: 20, top: 20, bottom: 80 },
 			xAxis: { type: "category", data: quarters.map((q: string) => q.slice(0, 7)) },
 			yAxis: { type: "value", axisLabel: { formatter: "{value}%" } },
 			series: Object.entries(series)
@@ -49,7 +54,10 @@
 		if (!peers?.peers?.length) return null;
 		const peerData = peers.peers
 			.filter((p: any) => p.expense_ratio_pct != null && p.avg_annual_return_1y != null)
-			.map((p: any) => [p.expense_ratio_pct, p.avg_annual_return_1y]);
+			.map((p: any) => ({
+				value: [p.expense_ratio_pct, p.avg_annual_return_1y],
+				name: p.fund_name ?? p.ticker ?? p.cik,
+			}));
 		const targetPoint =
 			peers.target.expense_ratio_pct != null && peers.target.avg_annual_return_1y != null
 				? [[peers.target.expense_ratio_pct, peers.target.avg_annual_return_1y]]
@@ -57,7 +65,13 @@
 		return {
 			tooltip: {
 				trigger: "item",
-				formatter: (p: any) => `ER: ${p.value[0]}% | 1Y: ${p.value[1]}%`,
+				formatter: (p: any) => {
+					const name = p.data?.name ?? "";
+					const er = p.value[0];
+					const ret = p.value[1];
+					const nameLine = name ? `<div style="font-weight:600;max-width:200px;white-space:normal">${name}</div>` : "";
+					return `${nameLine}<div>ER: ${er}% | 1Y: ${ret}%</div>`;
+				},
 			},
 			grid: { left: 60, right: 20, top: 20, bottom: 40 },
 			xAxis: { name: "Expense Ratio (%)", type: "value", nameLocation: "middle", nameGap: 28 },
@@ -74,7 +88,7 @@
 					? [
 							{
 								type: "scatter",
-								data: targetPoint,
+								data: [{ value: targetPoint[0], name: peers.target.fund_name ?? "This Fund" }],
 								symbolSize: 14,
 								itemStyle: { color: "#155dfc" },
 								label: { show: true, formatter: "This Fund", position: "right", fontSize: 11 },
