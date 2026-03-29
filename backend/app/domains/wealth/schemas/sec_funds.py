@@ -168,3 +168,127 @@ class StyleHistoryResponse(BaseModel):
     snapshots: list[StyleSnapshotItem] = Field(default_factory=list)
     drift_detected: bool = False
     quarters_analyzed: int = 0
+
+
+# ── Holdings History (sector evolution) ─────────────────────────────────
+
+
+class TopHoldingItem(BaseModel):
+    issuer_name: str | None = None
+    sector: str | None = None
+    pct_of_nav: float | None = None
+    cusip: str | None = None
+    market_value: int | None = None
+
+
+class HoldingsHistoryResponse(BaseModel):
+    """Sector weight evolution across all available N-PORT quarters."""
+
+    quarters: list[str] = Field(default_factory=list)
+    sector_series: dict[str, list[float | None]] = Field(default_factory=dict)
+    top_holdings_latest: list[TopHoldingItem] = Field(default_factory=list)
+    quarters_available: int = 0
+
+
+# ── Peer Analysis ──────────────────────────────────────────────────────
+
+
+class PeerFundItem(BaseModel):
+    cik: str
+    fund_name: str | None = None
+    ticker: str | None = None
+    expense_ratio_pct: float | None = None
+    avg_annual_return_1y: float | None = None
+    avg_annual_return_5y: float | None = None
+    avg_annual_return_10y: float | None = None
+
+
+class PeerAnalysisTarget(BaseModel):
+    cik: str
+    fund_name: str | None = None
+    style_label: str | None = None
+    expense_ratio_pct: float | None = None
+    net_expense_ratio_pct: float | None = None
+    avg_annual_return_1y: float | None = None
+    avg_annual_return_5y: float | None = None
+    avg_annual_return_10y: float | None = None
+    portfolio_turnover_pct: float | None = None
+
+
+class PeerAnalysisResponse(BaseModel):
+    """Peer comparison using prospectus stats + style classification."""
+
+    target: PeerAnalysisTarget
+    peers: list[PeerFundItem] = Field(default_factory=list)
+    peer_count: int = 0
+    peer_group: str | None = None
+    percentiles: dict[str, int | None] = Field(default_factory=dict)
+
+
+# ── Reverse Holdings (institutional holders) ───────────────────────────
+
+
+class InstitutionalHolderItem(BaseModel):
+    filer_cik: str
+    filer_name: str | None = None
+    filer_type: str | None = None
+    market_value: int | None = None
+    shares: int | None = None
+    report_date: str | None = None
+
+
+class ReverseHoldingsResponse(BaseModel):
+    """Institutional holders of a fund via 13F reverse lookup."""
+
+    fund_cusip: str | None = None
+    fund_ticker: str | None = None
+    holders: list[InstitutionalHolderItem] = Field(default_factory=list)
+    total_holders: int = 0
+    total_market_value: int = 0
+    note: str | None = None
+
+
+# ── Prospectus Data (SEC RR1) ──────────────────────────────────────────
+
+
+class ProspectusExpenseExamples(BaseModel):
+    y1: int | None = Field(None, alias="1y")
+    y3: int | None = Field(None, alias="3y")
+    y5: int | None = Field(None, alias="5y")
+    y10: int | None = Field(None, alias="10y")
+
+    model_config = {"populate_by_name": True}
+
+
+class ProspectusFees(BaseModel):
+    expense_ratio_pct: float | None = None
+    net_expense_ratio_pct: float | None = None
+    management_fee_pct: float | None = None
+    fee_waiver_pct: float | None = None
+    distribution_12b1_pct: float | None = None
+    portfolio_turnover_pct: float | None = None
+    expense_examples: ProspectusExpenseExamples | None = None
+
+
+class AnnualReturnItem(BaseModel):
+    year: int
+    annual_return_pct: float | None = None
+
+
+class AvgAnnualReturns(BaseModel):
+    y1: float | None = Field(None, alias="1y")
+    y5: float | None = Field(None, alias="5y")
+    y10: float | None = Field(None, alias="10y")
+
+    model_config = {"populate_by_name": True}
+
+
+class ProspectusDataResponse(BaseModel):
+    """SEC prospectus data: fee table + annual return history."""
+
+    series_id: str | None = None
+    filing_date: str | None = None
+    data_source: str = "SEC DERA RR1 Prospectus"
+    fees: ProspectusFees
+    annual_returns: list[AnnualReturnItem] = Field(default_factory=list)
+    avg_annual_returns: AvgAnnualReturns

@@ -62,6 +62,9 @@
 	let selectedDomiciles = $state<string[]>(initParams.domicile ? initParams.domicile.split(",") : []);
 	let catalogSearchQ = $state(initParams.q ?? "");
 	let catalogAumMin = $state(initParams.aum_min ?? "");
+	let catalogMaxER = $state(initParams.max_expense_ratio ?? "");
+	let catalogMinReturn1y = $state(initParams.min_return_1y ?? "");
+	let catalogMinReturn10y = $state(initParams.min_return_10y ?? "");
 
 	function buildCatalogParams(): URLSearchParams {
 		const params = new URLSearchParams();
@@ -72,6 +75,9 @@
 		if (selectedStrategyLabels.length) params.set("strategy_label", selectedStrategyLabels.join(","));
 		for (const d of selectedDomiciles) params.append("domicile", d);
 		if (catalogAumMin) params.set("aum_min", catalogAumMin);
+		if (catalogMaxER) params.set("max_expense_ratio", catalogMaxER);
+		if (catalogMinReturn1y) params.set("min_return_1y", catalogMinReturn1y);
+		if (catalogMinReturn10y) params.set("min_return_10y", catalogMinReturn10y);
 		return params;
 	}
 
@@ -316,6 +322,9 @@
 			bind:selectedDomiciles
 			bind:searchQ={catalogSearchQ}
 			bind:aumMin={catalogAumMin}
+			bind:maxExpenseRatio={catalogMaxER}
+			bind:minReturn1y={catalogMinReturn1y}
+			bind:minReturn10y={catalogMinReturn10y}
 			onFilterChange={applyCatalogFilters}
 		/>
 

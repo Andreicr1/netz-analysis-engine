@@ -5,6 +5,7 @@
 -->
 <script lang="ts">
 	import "./screener.css";
+	import { goto } from "$app/navigation";
 	import { formatAUM } from "@investintell/ui";
 	import type { UnifiedFundItem, UnifiedCatalogPage } from "$lib/types/catalog";
 	import { EMPTY_CATALOG_PAGE, UNIVERSE_LABELS } from "$lib/types/catalog";
@@ -183,6 +184,13 @@
 								<span class="ct-dot" class:ct-dot--on={group.representative.disclosure.has_nav_history} title="NAV"></span>
 								<span class="ct-dot" class:ct-dot--on={group.representative.disclosure.has_quant_metrics} title="Quant"></span>
 								<span class="ct-dot" class:ct-dot--on={group.representative.disclosure.has_style_analysis} title="Style"></span>
+								{#if group.representative.universe === "registered_us"}
+									<button
+										class="ct-full-detail-link"
+										title="Full Detail Page"
+										onclick={(e) => { e.stopPropagation(); goto(`/screener/${group.representative.external_id}`); }}
+									>&#x2197;</button>
+								{/if}
 							</div>
 						</td>
 					</tr>
@@ -434,4 +442,17 @@
 		font-family: var(--ii-font-sans);
 	}
 	.ct-detail-link:hover { color: #0f3ccc; }
+
+	.ct-full-detail-link {
+		background: none;
+		border: none;
+		padding: 2px 4px;
+		font-size: 14px;
+		color: #1447e6;
+		cursor: pointer;
+		line-height: 1;
+		opacity: 0.6;
+		transition: opacity 120ms;
+	}
+	.ct-full-detail-link:hover { opacity: 1; }
 </style>

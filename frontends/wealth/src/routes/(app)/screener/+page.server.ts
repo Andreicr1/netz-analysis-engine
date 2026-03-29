@@ -42,6 +42,12 @@ export const load: PageServerLoad = async ({ parent, url }) => {
 		if (aumMin) catalogParams.aum_min = aumMin;
 		const sort = url.searchParams.get("sort");
 		if (sort) catalogParams.sort = sort;
+		const maxER = url.searchParams.get("max_expense_ratio");
+		if (maxER) catalogParams.max_expense_ratio = maxER;
+		const minReturn1y = url.searchParams.get("min_return_1y");
+		if (minReturn1y) catalogParams.min_return_1y = minReturn1y;
+		const minReturn10y = url.searchParams.get("min_return_10y");
+		if (minReturn10y) catalogParams.min_return_10y = minReturn10y;
 
 		const [catalog, facets] = await Promise.all([
 			api.get<UnifiedCatalogPage>("/screener/catalog", catalogParams).catch(() => EMPTY_CATALOG_PAGE),

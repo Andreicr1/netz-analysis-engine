@@ -16,6 +16,9 @@
 		selectedDomiciles: string[];
 		searchQ: string;
 		aumMin: string;
+		maxExpenseRatio: string;
+		minReturn1y: string;
+		minReturn10y: string;
 		onFilterChange: () => void;
 	}
 
@@ -27,6 +30,9 @@
 		selectedDomiciles = $bindable([]),
 		searchQ = $bindable(""),
 		aumMin = $bindable(""),
+		maxExpenseRatio = $bindable(""),
+		minReturn1y = $bindable(""),
+		minReturn10y = $bindable(""),
 		onFilterChange,
 	}: Props = $props();
 
@@ -65,6 +71,9 @@
 		selectedDomiciles = [];
 		searchQ = "";
 		aumMin = "";
+		maxExpenseRatio = "";
+		minReturn1y = "";
+		minReturn10y = "";
 		onFilterChange();
 	}
 
@@ -74,7 +83,10 @@
 		selectedStrategyLabels.length > 0 ||
 		selectedDomiciles.length > 0 ||
 		searchQ.length > 0 ||
-		aumMin.length > 0
+		aumMin.length > 0 ||
+		maxExpenseRatio.length > 0 ||
+		minReturn1y.length > 0 ||
+		minReturn10y.length > 0
 	);
 
 	// Debounce for text inputs
@@ -228,6 +240,47 @@
 		</select>
 	</div>
 
+	<!-- Cost & Performance -->
+	<div class="cfs-section">
+		<h4 class="cfs-group-title">Cost & Performance</h4>
+		<div class="cfs-field">
+			<label class="cfs-field-label" for="max-er">Max Expense Ratio</label>
+			<select id="max-er" class="cfs-select" bind:value={maxExpenseRatio} onchange={() => onFilterChange()}>
+				<option value="">Any</option>
+				<option value="0.10">≤ 0.10%</option>
+				<option value="0.25">≤ 0.25%</option>
+				<option value="0.50">≤ 0.50%</option>
+				<option value="0.75">≤ 0.75%</option>
+				<option value="1.00">≤ 1.00%</option>
+				<option value="1.50">≤ 1.50%</option>
+			</select>
+		</div>
+		<div class="cfs-field">
+			<label class="cfs-field-label" for="min-1y">Min 1Y Return</label>
+			<input
+				id="min-1y"
+				class="cfs-input"
+				type="number"
+				step="0.5"
+				placeholder="e.g. 5"
+				bind:value={minReturn1y}
+				oninput={debouncedChange}
+			/>
+		</div>
+		<div class="cfs-field">
+			<label class="cfs-field-label" for="min-10y">Min 10Y Return</label>
+			<input
+				id="min-10y"
+				class="cfs-input"
+				type="number"
+				step="0.5"
+				placeholder="e.g. 8"
+				bind:value={minReturn10y}
+				oninput={debouncedChange}
+			/>
+		</div>
+	</div>
+
 	<!-- Active filter chips -->
 	{#if selectedFundTypes.length > 0 || selectedStrategyLabels.length > 0}
 		<div class="cfs-section cfs-chips-section">
@@ -354,6 +407,32 @@
 	}
 
 	.cfs-select:focus { outline: none; border-color: #155dfc; }
+
+	.cfs-field {
+		margin-bottom: 10px;
+	}
+
+	.cfs-field-label {
+		display: block;
+		font-size: 12px;
+		font-weight: 500;
+		color: #62748e;
+		margin-bottom: 4px;
+	}
+
+	.cfs-input {
+		width: 100%;
+		height: 36px;
+		padding: 0 10px;
+		border: 1px solid #e2e8f0;
+		border-radius: 10px;
+		background: #f8fafc;
+		font-size: 13px;
+		color: var(--ii-text-primary);
+		font-family: var(--ii-font-sans);
+	}
+
+	.cfs-input:focus { outline: none; border-color: #155dfc; box-shadow: 0 0 0 3px rgba(21,93,252,0.1); }
 
 	.cfs-section--actions { border-bottom: none; }
 

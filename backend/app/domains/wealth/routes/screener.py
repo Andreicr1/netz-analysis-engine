@@ -1360,6 +1360,9 @@ async def get_catalog(
     sort: str = Query("name_asc", description="name_asc | name_desc | aum_desc | aum_asc"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
+    max_expense_ratio: float | None = Query(None, ge=0, le=10, description="Max expense ratio %"),
+    min_return_1y: float | None = Query(None, description="Min avg annual return 1Y %"),
+    min_return_10y: float | None = Query(None, description="Min avg annual return 10Y %"),
     db: AsyncSession = Depends(get_db_with_rls),
 ) -> UnifiedCatalogPage:
     filters = CatalogFilters(
@@ -1375,6 +1378,9 @@ async def get_catalog(
         sort=sort,
         page=page,
         page_size=page_size,
+        max_expense_ratio=max_expense_ratio,
+        min_return_1y=min_return_1y,
+        min_return_10y=min_return_10y,
     )
 
     stmt = build_catalog_query(filters)

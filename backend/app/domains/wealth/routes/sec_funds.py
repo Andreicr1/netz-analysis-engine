@@ -24,19 +24,31 @@ from app.core.cache import route_cache
 from app.core.security.clerk_auth import Actor, get_actor
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.schemas.sec_funds import (
+    AnnualReturnItem,
+    AvgAnnualReturns,
     FundDataAvailabilitySchema,
     FundDetailResponse,
     FundFirmInfo,
     FundStyleInfo,
     FundTeamMember,
+    HoldingsHistoryResponse,
+    InstitutionalHolderItem,
     NportHoldingItem,
     NportHoldingsPage,
+    PeerAnalysisResponse,
+    PeerAnalysisTarget,
+    PeerFundItem,
     PrivateFundListResponse,
     PrivateFundSummary,
+    ProspectusDataResponse,
+    ProspectusExpenseExamples,
+    ProspectusFees,
     RegisteredFundListResponse,
     RegisteredFundSummary,
+    ReverseHoldingsResponse,
     StyleHistoryResponse,
     StyleSnapshotItem,
+    TopHoldingItem,
 )
 from app.shared.enums import Role
 from app.shared.models import (
@@ -473,4 +485,428 @@ async def get_style_history(
         snapshots=snapshots,
         drift_detected=drift_detected,
         quarters_analyzed=len(snapshots),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  GET /sec/funds/{cik}/holdings-history
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@router.get(
+    "/funds/{cik}/holdings-history",
+    response_model=HoldingsHistoryResponse,
+    summary="Holdings sector evolution over time (all available quarters)",
+)
+@route_cache(ttl=600, global_key=True, key_prefix="sec:holdings_hist")
+async def get_holdings_history(
+    cik: str = Path(...),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> HoldingsHistoryResponse:
+    _require_investment_role(actor)
+    if not _CIK_RE.match(cik):
+        raise HTTPException(status_code=400, detail="Invalid CIK number")
+
+    result = await db.execute(
+        text("""
+            SELECT
+                report_date,
+                sector,
+                SUM(pct_of_nav) AS sector_pct_nav
+            FROM sec_nport_holdings
+            WHERE cik = :cik
+              AND sector IS NOT NULL
+              AND pct_of_nav IS NOT NULL
+            GROUP BY report_date, sector
+            ORDER BY report_date ASC, sector_pct_nav DESC
+        """),
+        {"cik": cik},
+    )
+    rows = result.fetchall()
+
+    from collections import defaultdict
+
+    quarter_sector: dict[str, dict[str, float]] = defaultdict(dict)
+    for report_date, sector, sector_pct in rows:
+        q = str(report_date)
+        quarter_sector[q][sector] = round(float(sector_pct), 4)
+
+    quarters = sorted(quarter_sector.keys())
+
+    all_sectors: set[str] = set()
+    for s in quarter_sector.values():
+        all_sectors.update(s.keys())
+
+    sector_series: dict[str, list[float | None]] = {}
+    for sector in sorted(all_sectors):
+        sector_series[sector] = [
+            quarter_sector[q].get(sector)
+            for q in quarters
+        ]
+
+    # Top 20 holdings in latest quarter
+    top_result = await db.execute(
+        text("""
+            SELECT issuer_name, sector, pct_of_nav, cusip, market_value
+            FROM sec_nport_holdings
+            WHERE cik = :cik
+              AND report_date = (
+                  SELECT MAX(report_date) FROM sec_nport_holdings WHERE cik = :cik
+              )
+            ORDER BY market_value DESC NULLS LAST
+            LIMIT 20
+        """),
+        {"cik": cik},
+    )
+    top = top_result.fetchall()
+
+    return HoldingsHistoryResponse(
+        quarters=quarters,
+        sector_series=sector_series,
+        top_holdings_latest=[
+            TopHoldingItem(
+                issuer_name=r[0],
+                sector=r[1],
+                pct_of_nav=round(float(r[2]), 4) if r[2] else None,
+                cusip=r[3],
+                market_value=r[4],
+            )
+            for r in top
+        ],
+        quarters_available=len(quarters),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  GET /sec/funds/{cik}/peer-analysis
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@router.get(
+    "/funds/{cik}/peer-analysis",
+    response_model=PeerAnalysisResponse,
+    summary="Peer comparison using prospectus stats + style classification",
+)
+@route_cache(ttl=600, global_key=True, key_prefix="sec:peer_analysis")
+async def get_peer_analysis(
+    cik: str = Path(...),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> PeerAnalysisResponse:
+    _require_investment_role(actor)
+    if not _CIK_RE.match(cik):
+        raise HTTPException(status_code=400, detail="Invalid CIK number")
+
+    # 1. Get fund's style label + fund_type
+    fund_result = await db.execute(
+        text("""
+            SELECT
+                rf.fund_name, rf.fund_type, rf.cik,
+                sfs.style_label
+            FROM sec_registered_funds rf
+            LEFT JOIN LATERAL (
+                SELECT style_label
+                FROM sec_fund_style_snapshots
+                WHERE cik = rf.cik
+                ORDER BY report_date DESC LIMIT 1
+            ) sfs ON true
+            WHERE rf.cik = :cik
+        """),
+        {"cik": cik},
+    )
+    fund_row = fund_result.fetchone()
+    if not fund_row:
+        raise HTTPException(status_code=404, detail="Fund not found")
+
+    fund_name, fund_type, _, style_label = fund_row
+    peer_group = style_label or fund_type
+
+    # 2. Get target fund's prospectus stats
+    target_stats = await db.execute(
+        text("""
+            SELECT
+                ps.expense_ratio_pct, ps.net_expense_ratio_pct,
+                ps.avg_annual_return_1y, ps.avg_annual_return_5y,
+                ps.avg_annual_return_10y, ps.portfolio_turnover_pct
+            FROM sec_fund_classes fc
+            JOIN sec_fund_prospectus_stats ps
+              ON ps.series_id = fc.series_id
+            WHERE fc.cik = :cik
+            ORDER BY ps.expense_ratio_pct ASC NULLS LAST
+            LIMIT 1
+        """),
+        {"cik": cik},
+    )
+    target_row = target_stats.fetchone()
+
+    # 3. Get peers: same style_label, same fund_type
+    peers_result = await db.execute(
+        text("""
+            WITH peer_ciks AS (
+                SELECT DISTINCT rf.cik, rf.fund_name, rf.ticker
+                FROM sec_registered_funds rf
+                JOIN LATERAL (
+                    SELECT style_label
+                    FROM sec_fund_style_snapshots
+                    WHERE cik = rf.cik
+                    ORDER BY report_date DESC LIMIT 1
+                ) sfs ON sfs.style_label = :style_label
+                WHERE rf.fund_type = :fund_type
+                  AND rf.aum_below_threshold = FALSE
+                  AND rf.cik != :cik
+                LIMIT 200
+            )
+            SELECT
+                pc.cik, pc.fund_name, pc.ticker,
+                ps.expense_ratio_pct,
+                ps.avg_annual_return_1y,
+                ps.avg_annual_return_5y,
+                ps.avg_annual_return_10y
+            FROM peer_ciks pc
+            JOIN sec_fund_classes fc ON fc.cik = pc.cik
+            JOIN sec_fund_prospectus_stats ps ON ps.series_id = fc.series_id
+            ORDER BY ps.expense_ratio_pct ASC NULLS LAST
+        """),
+        {"cik": cik, "style_label": style_label, "fund_type": fund_type},
+    )
+    peer_rows = peers_result.fetchall()
+
+    def _percentile_rank(
+        value: float | None,
+        all_vals: list[float],
+        higher_is_better: bool,
+    ) -> int | None:
+        if value is None or not all_vals:
+            return None
+        n = len(all_vals)
+        rank = sum(1 for v in all_vals if v < value) / n
+        return int((1 - rank if not higher_is_better else rank) * 100)
+
+    peer_er = [float(r[3]) for r in peer_rows if r[3] is not None]
+    peer_1y = [float(r[4]) for r in peer_rows if r[4] is not None]
+    peer_5y = [float(r[5]) for r in peer_rows if r[5] is not None]
+    peer_10y = [float(r[6]) for r in peer_rows if r[6] is not None]
+
+    target_er = float(target_row[0]) if target_row and target_row[0] else None
+    target_1y = float(target_row[2]) if target_row and target_row[2] else None
+    target_5y = float(target_row[3]) if target_row and target_row[3] else None
+    target_10y = float(target_row[4]) if target_row and target_row[4] else None
+
+    return PeerAnalysisResponse(
+        target=PeerAnalysisTarget(
+            cik=cik,
+            fund_name=fund_name,
+            style_label=style_label,
+            expense_ratio_pct=target_er,
+            net_expense_ratio_pct=float(target_row[1]) if target_row and target_row[1] else None,
+            avg_annual_return_1y=target_1y,
+            avg_annual_return_5y=target_5y,
+            avg_annual_return_10y=target_10y,
+            portfolio_turnover_pct=float(target_row[5]) if target_row and target_row[5] else None,
+        ),
+        peers=[
+            PeerFundItem(
+                cik=r[0],
+                fund_name=r[1],
+                ticker=r[2],
+                expense_ratio_pct=float(r[3]) if r[3] else None,
+                avg_annual_return_1y=float(r[4]) if r[4] else None,
+                avg_annual_return_5y=float(r[5]) if r[5] else None,
+                avg_annual_return_10y=float(r[6]) if r[6] else None,
+            )
+            for r in peer_rows[:50]
+        ],
+        peer_count=len(peer_rows),
+        peer_group=peer_group,
+        percentiles={
+            "expense_ratio_pct": _percentile_rank(target_er, peer_er, higher_is_better=False),
+            "avg_annual_return_1y": _percentile_rank(target_1y, peer_1y, higher_is_better=True),
+            "avg_annual_return_5y": _percentile_rank(target_5y, peer_5y, higher_is_better=True),
+            "avg_annual_return_10y": _percentile_rank(target_10y, peer_10y, higher_is_better=True),
+        },
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  GET /sec/funds/{cik}/reverse-holdings
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@router.get(
+    "/funds/{cik}/reverse-holdings",
+    response_model=ReverseHoldingsResponse,
+    summary="Institutional holders of this fund (reverse 13F lookup)",
+)
+@route_cache(ttl=600, global_key=True, key_prefix="sec:reverse_hold")
+async def get_reverse_holdings(
+    cik: str = Path(...),
+    limit: int = Query(25, ge=5, le=100),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> ReverseHoldingsResponse:
+    _require_investment_role(actor)
+    if not _CIK_RE.match(cik):
+        raise HTTPException(status_code=400, detail="Invalid CIK number")
+
+    # Resolve CUSIP via fund_classes → cusip_ticker_map
+    cusip_result = await db.execute(
+        text("""
+            SELECT ctm.cusip, ctm.ticker
+            FROM sec_fund_classes fc
+            JOIN sec_cusip_ticker_map ctm ON ctm.ticker = fc.ticker
+            WHERE fc.cik = :cik AND ctm.cusip IS NOT NULL
+            LIMIT 1
+        """),
+        {"cik": cik},
+    )
+    cusip_row = cusip_result.fetchone()
+
+    if not cusip_row:
+        # Fallback: registered fund ticker → cusip map
+        cusip_result2 = await db.execute(
+            text("""
+                SELECT ctm.cusip, rf.ticker
+                FROM sec_registered_funds rf
+                JOIN sec_cusip_ticker_map ctm ON ctm.ticker = rf.ticker
+                WHERE rf.cik = :cik AND ctm.cusip IS NOT NULL
+                LIMIT 1
+            """),
+            {"cik": cik},
+        )
+        cusip_row = cusip_result2.fetchone()
+
+    if not cusip_row:
+        return ReverseHoldingsResponse(
+            note="CUSIP could not be resolved for this fund",
+        )
+
+    fund_cusip, fund_ticker = cusip_row[0], cusip_row[1]
+
+    # Query institutional allocations (latest quarter)
+    holders_result = await db.execute(
+        text("""
+            SELECT
+                filer_cik, filer_name, filer_type,
+                market_value, shares, report_date
+            FROM sec_institutional_allocations
+            WHERE target_cusip = :cusip
+              AND report_date = (
+                  SELECT MAX(report_date)
+                  FROM sec_institutional_allocations
+                  WHERE target_cusip = :cusip
+              )
+            ORDER BY market_value DESC NULLS LAST
+            LIMIT :lim
+        """),
+        {"cusip": fund_cusip, "lim": limit},
+    )
+    holders = holders_result.fetchall()
+
+    # Aggregate totals
+    agg_result = await db.execute(
+        text("""
+            SELECT COUNT(DISTINCT filer_cik), COALESCE(SUM(market_value), 0)
+            FROM sec_institutional_allocations
+            WHERE target_cusip = :cusip
+              AND report_date = (
+                  SELECT MAX(report_date)
+                  FROM sec_institutional_allocations
+                  WHERE target_cusip = :cusip
+              )
+        """),
+        {"cusip": fund_cusip},
+    )
+    agg = agg_result.fetchone()
+
+    return ReverseHoldingsResponse(
+        fund_cusip=fund_cusip,
+        fund_ticker=fund_ticker,
+        holders=[
+            InstitutionalHolderItem(
+                filer_cik=r[0],
+                filer_name=r[1],
+                filer_type=r[2],
+                market_value=r[3],
+                shares=r[4],
+                report_date=str(r[5]),
+            )
+            for r in holders
+        ],
+        total_holders=agg[0] if agg else 0,
+        total_market_value=int(agg[1]) if agg else 0,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  GET /sec/funds/{cik}/prospectus
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@router.get(
+    "/funds/{cik}/prospectus",
+    response_model=ProspectusDataResponse,
+    summary="Prospectus fee table + annual return history (SEC RR1)",
+)
+@route_cache(ttl=3600, global_key=True, key_prefix="sec:prospectus")
+async def get_fund_prospectus(
+    cik: str = Path(...),
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> ProspectusDataResponse:
+    _require_investment_role(actor)
+    if not _CIK_RE.match(cik):
+        raise HTTPException(status_code=400, detail="Invalid CIK number")
+
+    from app.core.db.session import sync_session_factory
+    from vertical_engines.wealth.dd_report.sec_injection import (
+        gather_prospectus_returns,
+        gather_prospectus_stats,
+    )
+
+    loop = asyncio.get_running_loop()
+
+    def _gather():
+        with sync_session_factory() as sync_db:
+            stats = gather_prospectus_stats(sync_db, fund_cik=cik)
+            returns = gather_prospectus_returns(sync_db, fund_cik=cik, years_back=15)
+            return stats, returns
+
+    stats, annual_returns = await loop.run_in_executor(None, _gather)
+
+    if not stats.get("prospectus_stats_available"):
+        raise HTTPException(
+            status_code=404,
+            detail="Prospectus data not available for this fund",
+        )
+
+    return ProspectusDataResponse(
+        series_id=stats.get("series_id"),
+        filing_date=stats.get("filing_date"),
+        fees=ProspectusFees(
+            expense_ratio_pct=stats.get("expense_ratio_pct"),
+            net_expense_ratio_pct=stats.get("net_expense_ratio_pct"),
+            management_fee_pct=stats.get("management_fee_pct"),
+            fee_waiver_pct=stats.get("fee_waiver_pct"),
+            distribution_12b1_pct=stats.get("distribution_12b1_pct"),
+            portfolio_turnover_pct=stats.get("portfolio_turnover_pct"),
+            expense_examples=ProspectusExpenseExamples(**{
+                "1y": stats.get("expense_example_1y"),
+                "3y": stats.get("expense_example_3y"),
+                "5y": stats.get("expense_example_5y"),
+                "10y": stats.get("expense_example_10y"),
+            }),
+        ),
+        annual_returns=[
+            AnnualReturnItem(
+                year=r.get("year", 0),
+                annual_return_pct=r.get("annual_return_pct"),
+            )
+            for r in annual_returns
+        ],
+        avg_annual_returns=AvgAnnualReturns(**{
+            "1y": stats.get("avg_annual_return_1y"),
+            "5y": stats.get("avg_annual_return_5y"),
+            "10y": stats.get("avg_annual_return_10y"),
+        }),
     )

@@ -170,6 +170,16 @@ esma_managers = Table(
     extend_existing=True,
 )
 
+sec_fund_prospectus_stats = Table(
+    "sec_fund_prospectus_stats",
+    _meta,
+    Column("series_id", Text, primary_key=True),
+    Column("expense_ratio_pct", Numeric),
+    Column("avg_annual_return_1y", Numeric),
+    Column("avg_annual_return_10y", Numeric),
+    extend_existing=True,
+)
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  Text search escaping
 # ═══════════════════════════════════════════════════════════════════════════
@@ -200,6 +210,11 @@ class CatalogFilters:
     sort: str = "name_asc"               # name_asc | name_desc | aum_desc | aum_asc
     page: int = 1
     page_size: int = 50
+
+    # Prospectus-based filters (applied to registered_us + etf branches)
+    max_expense_ratio: float | None = None      # e.g. 0.50 → ER ≤ 0.50%
+    min_return_1y: float | None = None          # e.g. 5.0 → avg_annual_return_1y ≥ 5%
+    min_return_10y: float | None = None         # e.g. 8.0 → avg_annual_return_10y ≥ 8%
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -318,6 +333,18 @@ def _registered_us_branch(f: CatalogFilters) -> Select | None:
         )
     )
 
+    # Prospectus-based filters: join sec_fund_prospectus_stats when needed
+    _has_prospectus_filters = (
+        f.max_expense_ratio is not None
+        or f.min_return_1y is not None
+        or f.min_return_10y is not None
+    )
+    if _has_prospectus_filters:
+        stmt = stmt.join(
+            sec_fund_prospectus_stats,
+            sec_fund_classes.c.series_id == sec_fund_prospectus_stats.c.series_id,
+        )
+
     conditions = _common_conditions_registered(f)
     # Category-based fund_type restriction
     if active is not None and active != reg_cats:
@@ -328,6 +355,21 @@ def _registered_us_branch(f: CatalogFilters) -> Select | None:
         if "closed_end" in active:
             allowed_types.append("closed_end")
         conditions.append(sec_registered_funds.c.fund_type.in_(allowed_types))
+
+    # Prospectus filter conditions
+    if f.max_expense_ratio is not None:
+        conditions.append(
+            sec_fund_prospectus_stats.c.expense_ratio_pct <= f.max_expense_ratio,
+        )
+    if f.min_return_1y is not None:
+        conditions.append(
+            sec_fund_prospectus_stats.c.avg_annual_return_1y >= f.min_return_1y,
+        )
+    if f.min_return_10y is not None:
+        conditions.append(
+            sec_fund_prospectus_stats.c.avg_annual_return_10y >= f.min_return_10y,
+        )
+
     if conditions:
         stmt = stmt.where(and_(*conditions))
     return stmt
