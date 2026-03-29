@@ -3,7 +3,7 @@
 **Last updated:** 2026-03-29
 **Database:** Timescale Cloud (PostgreSQL 16 + TimescaleDB + pgvector)
 **Migration head:** `0069_globalize_instruments_nav`
-**Total tables:** ~133 | **Total data rows:** ~3.8M across key tables
+**Total tables:** ~135 | **Total data rows:** ~24.6M across key tables
 
 ---
 
@@ -21,7 +21,10 @@ The Netz Analysis Engine database aggregates financial data from 7 authoritative
 - **10,436 European UCITS funds** from 658 ESMA-registered managers across 25 countries, with `strategy_label` (31 categories, 69.7% coverage)
 - **pgvector index** with 12 embedding sources covering all fund universes (SEC managers/funds/13F/private + ETF/BDC/MMF + ESMA enriched)
 - **1.09M institutional holdings** (13F-HR) from 12 major institutional investors, with 25 years of quarterly history
-- **132,823 fund portfolio holdings** (N-PORT) from 69 US registered investment companies, with **12,609 CUSIP→ticker mappings** (95% resolved via OpenFIGI) enabling insider flow signals for corporate bond holdings
+- **8,950 instruments in global catalog** (`instruments_universe`) with **5,339+ having 10Y NAV history** (~10.4M+ rows in `nav_timeseries`). Org-scoped selection via `instruments_org` (RLS). Sources: SEC ETFs (925), mutual fund series (4,700), registered funds (358), BDCs (48), ESMA UCITS (2,929)
+- **2.03M fund portfolio holdings** (N-PORT) from 1,215 CIKs across 24 quarters (2020 Q1 — 2025 Q4), top 50 holdings per fund/quarter, with 7,759 series and ISIN enrichment
+- **17,502 annual prospectus returns** (`sec_fund_prospectus_returns`) for 2,086 series (2012-2025) — bar chart data from RR1 filings
+- **72,157 fee/risk stats** (`sec_fund_prospectus_stats`) for 20,390 series — management fees, expense ratios, turnover, best/worst quarter, average annual returns
 - **59,677 insider transactions** (Form 3/4/5) from SEC EDGAR in `sec_insider_transactions`, with `sec_insider_sentiment` materialized view aggregating buy/sell signals per issuer per quarter (2,956 issuer-quarters with P/S activity)
 - **78 macroeconomic time series** from FRED covering rates, spreads, housing, employment, and commodities
 - **278 US Treasury series** covering debt, auction results, interest rates, and foreign exchange
@@ -939,6 +942,7 @@ All sources use incremental embedding via LEFT JOIN anti-pattern (only rows with
 | `sec_bulk_ingestion` | 900_050 | global | Quarterly | SEC DERA bulk ZIPs | sec_etfs, sec_bdcs, sec_money_market_funds, sec_mmf_metrics, sec_registered_funds + strategy_label backfill |
 | `form345_ingestion` | 900_051 | global | Quarterly | SEC EDGAR Form 345 bulk TSV | `sec_insider_transactions`, `sec_insider_sentiment` (MV) |
 | `wealth_embedding` | 900_041 | global | Daily | Computed | `wealth_vector_chunks` (12 sources) |
+| `universe_sync` | 900_070 | global | Weekly | SEC/ESMA catalog | `instruments_universe` (8,950 instruments) |
 
 ---
 
@@ -1014,7 +1018,12 @@ SELECT * FROM nav_timeseries WHERE instrument_id = :id;
 | **Coverage — ETFs** | sec_etfs | 985 funds (N-CEN Q4 2025) |
 | **Coverage — BDCs** | sec_bdcs | 196 funds (all = Private Credit) |
 | **Coverage — MMFs** | sec_money_market_funds | 373 series; 20,270 daily metric rows |
-| **Coverage — Share Classes** | sec_fund_classes | 36,516 rows + 11 XBRL columns (8,278 enriched) |
+| **Coverage — Share Classes** | sec_fund_classes | 36,516 rows + 11 XBRL columns (8,278 enriched), **17,233 with ticker** (5,002 series) via SEC series/class XML + company_tickers_mf.json |
+| **Coverage — Global Catalog** | instruments_universe | **8,950 instruments** (ETFs 925, MF series 4,700, registered 358, BDCs 48, ESMA 2,929). **5,339+ with 10Y NAV** (~10.4M+ nav_timeseries rows) |
+| **Coverage — NAV History** | nav_timeseries (global, no RLS) | 10.4M+ rows, 2016-2026, ~1,877 days/instrument avg |
+| **Coverage — N-PORT Holdings** | sec_nport_holdings | **2.03M rows**, 1,215 CIKs, 7,759 series, 24 quarters (2020 Q1 — 2025 Q4), top 50 holdings/fund |
+| **Coverage — Prospectus Returns** | sec_fund_prospectus_returns | **17,502 annual returns**, 2,086 series, 2012-2025 (RR1 bar chart data) |
+| **Coverage — Prospectus Stats** | sec_fund_prospectus_stats | **72,157 rows**, 20,390 series — fees, expense ratios, turnover, risk |
 | **Coverage — US Institutional** | 13F filers tracked | 12 institutions |
 | **Coverage — US Institutional** | Combined latest-quarter AUM | $8.9+ trillion |
 | **Coverage — European Funds** | UCITS funds | 10,436 |
@@ -1026,14 +1035,15 @@ SELECT * FROM nav_timeseries WHERE instrument_id = :id;
 | **Coverage — CUSIP Mapping** | sec_cusip_ticker_map | 12,609 CUSIPs, 95.0% resolved, 5,160 with issuer_cik |
 | **Coverage — Insider Transactions** | sec_insider_transactions (Q4 2025) | 59,677 transactions (5,447 P + 22,489 S); 2,956 issuer-quarters in sentiment MV |
 | **Coverage — Embeddings** | pgvector sources | 12 active sources across all fund universes |
-| **Freshness — Markets** | NAV/benchmark data | Updated to 2026-03-26 (gap 27-29 Mar pending backfill) |
+| **Freshness — Markets** | NAV data | 10Y backfill in progress (5,339+ instruments, through 2026-03-27) |
+| **Freshness — Markets** | Benchmark NAV | Updated to 2026-03-25 |
 | **Freshness — Macro** | FRED data | Updated to 2026-03-24 |
 | **Freshness — SEC** | 13F holdings | Through Q4 2025 |
 | **Freshness — SEC** | N-PORT filings | Through 2026-03-23 |
 | **Freshness — Fund Catalog** | N-CEN enrichment | Q4 2025 (16 quarters processed) |
 | **Freshness — Fund Catalog** | OEF XBRL fees | Feb 2026 N-CSR filings (1,259 CIKs processed) |
 | **Linkage — ESMA** | Fund-to-manager linkage | 100% |
-| **Linkage — ESMA** | Ticker resolution | 28.1% (ongoing) |
+| **Linkage — ESMA** | Ticker resolution | 28.1% (1,942 fixed .LU→.LX, many still fail on Yahoo) |
 | **History — 13F** | Longest history | Northern Trust: 92 quarters (2002-2025) |
 | **History — Macro** | Longest daily series | FRED: 10 years (2016-2026) |
 | **History — IMF** | Forecast horizon | To 2030 |
@@ -1041,4 +1051,6 @@ SELECT * FROM nav_timeseries WHERE instrument_id = :id;
 | **Derived Data** | 13F quarter-over-quarter diffs | 1,071,320 position changes |
 | **Derived Data** | Continuous aggregates | 5 materialized views, auto-refreshed daily (nav_monthly_returns_agg rebuilt without org_id) |
 | **Automation** | Quarterly SEC bulk ingestion | `sec_bulk_ingestion` worker (lock 900_050) — N-CEN, N-MFP, BDC, strategy_label |
-| **Automation** | Daily wealth embedding | `wealth_embedding` worker (lock 900_041) — 12 sources, incremental |
+| **Automation** | Weekly universe sync | `universe_sync` worker (lock 900_070) — auto-fetches SEC company_tickers_mf.json, syncs SEC/ESMA → instruments_universe, deactivates funds without NAV |
+| **Automation** | Daily NAV ingestion | `instrument_ingestion` worker (lock 900_010, **global**) — Yahoo Finance for all active instruments |
+| **Automation** | Daily wealth embedding | `wealth_embedding` worker (lock 900_041) — 12 sources + 4 new brochure sections, incremental |

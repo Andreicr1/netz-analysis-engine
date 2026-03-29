@@ -95,7 +95,7 @@ frontends/
   wealth/           ← SvelteKit "netz-wealth-os"
 ```
 
-**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0067_insider_transactions`.
+**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0069_globalize_instruments_nav`.
 
 **Auth:** Clerk JWT v2. `organization_id` from `o.id` claim. RLS via `SET LOCAL app.current_organization_id`. Dev bypass: `X-DEV-ACTOR` header. **Tenant and user management is 100% via Clerk Dashboard** — no custom admin UI. Organizations, user invites, and role assignment (`ADMIN`, `INVESTMENT_TEAM`, `investor`) are all managed in Clerk. `ConfigService` defaults mean new tenants work immediately without provisioning.
 
@@ -137,7 +137,9 @@ The engine contains only analytical domains. Operational modules were intentiona
 - **expire_on_commit=False:** Always. Prevents implicit I/O in async context.
 - **lazy="raise":** Set on ALL relationships. Forces explicit `selectinload()`/`joinedload()`.
 - **RLS subselect:** All RLS policies must use `(SELECT current_setting(...))` not bare `current_setting()`. Without subselect, per-row evaluation causes 1000x slowdown.
-- **Global tables:** `macro_data`, `allocation_blocks`, `vertical_config_defaults`, `benchmark_nav`, `macro_regional_snapshots`, `treasury_data`, `ofr_hedge_fund_data`, `bis_statistics`, `imf_weo_forecasts`, `sec_*` tables, `sec_insider_transactions`, `esma_funds`, `esma_managers` have NO `organization_id`, NO RLS. They are shared across all tenants.
+- **Global tables:** `macro_data`, `allocation_blocks`, `vertical_config_defaults`, `benchmark_nav`, `macro_regional_snapshots`, `treasury_data`, `ofr_hedge_fund_data`, `bis_statistics`, `imf_weo_forecasts`, `sec_*` tables, `sec_insider_transactions`, `esma_funds`, `esma_managers`, `instruments_universe`, `nav_timeseries`, `sec_fund_prospectus_returns`, `sec_fund_prospectus_stats` have NO `organization_id`, NO RLS. They are shared across all tenants.
+- **`instruments_universe`** is a GLOBAL catalog (no RLS). Org-scoped instrument selection is via `instruments_org` (has RLS, `organization_id`, `block_id`, `approval_status`). The `Instrument` model has NO `organization_id`, `block_id`, or `approval_status` — those live on `InstrumentOrg`. All queries needing org-scoped instruments must JOIN `instruments_org`.
+- **`nav_timeseries`** is GLOBAL (no RLS, no `organization_id`). Prices are market data shared across all tenants. Org-scoping for NAV queries is via JOIN `instruments_org`.
 - **No module-level asyncio primitives:** Create `Semaphore`, `Lock`, `Event` lazily inside async functions. Module-level causes "attached to different event loop" errors.
 - **ORM thread safety:** Extract scalar attributes into frozen dataclasses before crossing any async/thread boundary.
 - **SET LOCAL not SET:** RLS context must use `SET LOCAL` (transaction-scoped). `SET` leaks across pooled connections.
@@ -199,7 +201,7 @@ Background workers ingest all external time-series data into hypertables. Routes
 | `treasury_ingestion` | 900_011 | global | `treasury_data` (1mo chunks) | US Treasury API (rates, debt, auctions, FX, interest) | Daily |
 | `ofr_ingestion` | 900_012 | global | `ofr_hedge_fund_data` (3mo chunks) | OFR API (leverage, AUM, strategy, repo, stress) | Weekly |
 | `benchmark_ingest` | 900_004 | global | `benchmark_nav` (1mo chunks) | Yahoo Finance | Daily |
-| `instrument_ingestion` | 900_010 | org | `nav_timeseries` | Yahoo Finance (or pluggable provider) | Daily |
+| `instrument_ingestion` | 900_010 | global | `nav_timeseries` | Yahoo Finance (or pluggable provider) | Daily |
 | `risk_calc` | 900_007 | org | `fund_risk_metrics` | Computed (CVaR, Sharpe, volatility, momentum: RSI, Bollinger, OBV) | Daily |
 | `portfolio_eval` | 900_008 | org | `portfolio_snapshots` | Computed (breach status, regime, cascade) | Daily |
 | `nport_ingestion` | 900_018 | global | `sec_nport_holdings` (3mo chunks) | SEC EDGAR N-PORT XML | Weekly |
@@ -214,6 +216,7 @@ Background workers ingest all external time-series data into hypertables. Routes
 | `wealth_embedding` | 900_041 | global | `wealth_vector_chunks` | OpenAI text-embedding-3-large (12 sources) | Daily |
 | `sec_bulk_ingestion` | 900_050 | global | sec_etfs, sec_bdcs, sec_money_market_funds, sec_mmf_metrics, sec_registered_funds, strategy_label | SEC DERA bulk ZIPs (N-CEN, N-MFP, N-PORT, BDC) | Quarterly |
 | `form345_ingestion` | 900_051 | global | `sec_insider_transactions`, `sec_insider_sentiment` (MV) | SEC EDGAR Form 345 bulk TSV (insider buys/sells) | Quarterly |
+| `universe_sync` | 900_070 | global | `instruments_universe` | SEC/ESMA catalog (auto-fetches company_tickers_mf.json) | Weekly |
 
 **Credit market_data** reads all macro data from `macro_data` hypertable (zero FRED API calls at runtime, `fred_client.py` eliminated). Regional Case-Shiller (20 metros) also from `macro_data`.
 
@@ -240,7 +243,7 @@ The engine is organized around **funds as the primary analytical entity**. Three
 
 **DisclosureMatrix:** Computed at SQL level per-universe branch. Frontend checks `disclosure.has_holdings` (not `universe === "registered_us"`). Drives all conditional rendering.
 
-**Fund lifecycle:** Discovery (workers) → Catalog browsing → Import to universe → 3-layer screening → DD Report (8 chapters) → Universe approval → Portfolio construction.
+**Fund lifecycle:** Discovery (workers) → Catalog browsing (`instruments_universe`, global) → Import to org (`instruments_org`, org-scoped) → 3-layer screening → DD Report (8 chapters) → Universe approval → Portfolio construction.
 
 **Identifier architecture:** Fund CIK ≠ Adviser CIK. `crd_number` links them. `instrument.attributes.sec_cik` and `instrument.attributes.sec_crd` bridge tenant-scoped instruments to global SEC tables.
 
@@ -293,7 +296,7 @@ Separate vector table `wealth_vector_chunks` for fund-centric RAG (distinct from
 
 | Source | entity_type | Scope | Volume |
 |--------|-------------|-------|--------|
-| ADV brochures (6 sections) | `"firm"` | global | ~7k chunks |
+| ADV brochures (10 sections) | `"firm"` | global | ~13k chunks |
 | SEC manager profiles | `"firm"` | global | ~2k chunks |
 | SEC fund profiles (N-CEN + XBRL) | `"fund"` | global | ~4.6k chunks |
 | SEC 13F summaries | `"firm"` | global | ~1k chunks |
