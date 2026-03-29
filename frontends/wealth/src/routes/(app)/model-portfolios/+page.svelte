@@ -6,7 +6,8 @@
 <script lang="ts">
 	import { goto } from "$app/navigation";
 	import { getContext } from "svelte";
-	import { PageHeader, Button, StatusBadge, EmptyState, formatDateTime, formatNumber } from "@netz/ui";
+	import { PageHeader, StatusBadge, EmptyState, formatDateTime, formatNumber } from "@investintell/ui";
+	import { Button } from "@investintell/ui/components/ui/button";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
 	import type { ModelPortfolio } from "$lib/types/model-portfolio";
@@ -291,60 +292,60 @@
 
 <style>
 	.mp-page {
-		padding: var(--netz-space-stack-md, 16px) var(--netz-space-inline-lg, 24px);
+		padding: var(--ii-space-stack-md, 16px) var(--ii-space-inline-lg, 24px);
 	}
 
 	.mp-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-		gap: var(--netz-space-stack-md, 16px);
+		gap: var(--ii-space-stack-md, 16px);
 	}
 
 	.mp-card {
 		display: flex;
 		flex-direction: column;
-		border: 1px solid var(--netz-border-subtle);
-		border-radius: var(--netz-radius-md, 12px);
-		background: var(--netz-surface-elevated);
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-md, 12px);
+		background: var(--ii-surface-elevated);
 		text-align: left;
 		cursor: pointer;
-		font-family: var(--netz-font-sans);
+		font-family: var(--ii-font-sans);
 		transition: border-color 120ms ease, box-shadow 120ms ease;
 		overflow: hidden;
 	}
 
 	.mp-card:hover {
-		border-color: var(--netz-border-accent);
-		box-shadow: var(--netz-shadow-2);
+		border-color: var(--ii-border-accent);
+		box-shadow: var(--ii-shadow-2);
 	}
 
 	.mp-card-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-md, 16px);
-		border-bottom: 1px solid var(--netz-border-subtle);
-		background: var(--netz-surface-alt);
+		padding: var(--ii-space-stack-sm, 12px) var(--ii-space-inline-md, 16px);
+		border-bottom: 1px solid var(--ii-border-subtle);
+		background: var(--ii-surface-alt);
 	}
 
 	.mp-profile {
-		font-size: var(--netz-text-label, 0.75rem);
+		font-size: var(--ii-text-label, 0.75rem);
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 	}
 
 	.mp-name {
-		padding: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-md, 16px) 0;
-		font-size: var(--netz-text-h4, 1.125rem);
+		padding: var(--ii-space-stack-sm, 12px) var(--ii-space-inline-md, 16px) 0;
+		font-size: var(--ii-text-h4, 1.125rem);
 		font-weight: 700;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 	}
 
 	.mp-desc {
-		padding: var(--netz-space-stack-2xs, 4px) var(--netz-space-inline-md, 16px) 0;
-		font-size: var(--netz-text-small, 0.8125rem);
-		color: var(--netz-text-muted);
+		padding: var(--ii-space-stack-2xs, 4px) var(--ii-space-inline-md, 16px) 0;
+		font-size: var(--ii-text-small, 0.8125rem);
+		color: var(--ii-text-muted);
 		line-height: 1.5;
 	}
 
@@ -352,41 +353,41 @@
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 1px;
-		margin: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-md, 16px) 0;
-		border: 1px solid var(--netz-border-subtle);
-		border-radius: var(--netz-radius-sm, 8px);
+		margin: var(--ii-space-stack-sm, 12px) var(--ii-space-inline-md, 16px) 0;
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-sm, 8px);
 		overflow: hidden;
-		background: var(--netz-border-subtle);
+		background: var(--ii-border-subtle);
 	}
 
 	.mp-kpi {
 		display: flex;
 		flex-direction: column;
 		gap: 1px;
-		padding: var(--netz-space-stack-2xs, 6px) var(--netz-space-inline-sm, 10px);
-		background: var(--netz-surface-elevated);
+		padding: var(--ii-space-stack-2xs, 6px) var(--ii-space-inline-sm, 10px);
+		background: var(--ii-surface-elevated);
 	}
 
 	.mp-kpi-label {
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
 	}
 
 	.mp-kpi-value {
-		font-size: var(--netz-text-body, 0.9375rem);
+		font-size: var(--ii-text-body, 0.9375rem);
 		font-weight: 600;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 		font-variant-numeric: tabular-nums;
 	}
 
 	.mp-card-footer {
-		padding: var(--netz-space-stack-xs, 10px) var(--netz-space-inline-md, 16px);
+		padding: var(--ii-space-stack-xs, 10px) var(--ii-space-inline-md, 16px);
 		margin-top: auto;
 	}
 
 	.mp-created {
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
 	}
 
 	/* ── Dialog ───────────────────────────────────────────────────────────── */
@@ -403,33 +404,33 @@
 	.dialog-panel {
 		width: 100%;
 		max-width: 520px;
-		margin: var(--netz-space-inline-md, 16px);
-		background: var(--netz-surface-elevated);
-		border: 1px solid var(--netz-border-subtle);
-		border-radius: var(--netz-radius-lg, 16px);
-		box-shadow: var(--netz-shadow-3);
+		margin: var(--ii-space-inline-md, 16px);
+		background: var(--ii-surface-elevated);
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-lg, 16px);
+		box-shadow: var(--ii-shadow-3);
 		overflow: hidden;
 	}
 
 	.dialog-title {
-		padding: var(--netz-space-stack-md, 16px) var(--netz-space-inline-lg, 24px);
-		font-size: var(--netz-text-h4, 1.125rem);
+		padding: var(--ii-space-stack-md, 16px) var(--ii-space-inline-lg, 24px);
+		font-size: var(--ii-text-h4, 1.125rem);
 		font-weight: 700;
-		color: var(--netz-text-primary);
-		border-bottom: 1px solid var(--netz-border-subtle);
+		color: var(--ii-text-primary);
+		border-bottom: 1px solid var(--ii-border-subtle);
 	}
 
 	.dialog-error {
-		margin: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-lg, 24px) 0;
-		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-md, 12px);
-		border-radius: var(--netz-radius-sm, 8px);
-		background: color-mix(in srgb, var(--netz-danger) 8%, transparent);
-		color: var(--netz-danger);
-		font-size: var(--netz-text-small, 0.8125rem);
+		margin: var(--ii-space-stack-sm, 12px) var(--ii-space-inline-lg, 24px) 0;
+		padding: var(--ii-space-stack-xs, 8px) var(--ii-space-inline-md, 12px);
+		border-radius: var(--ii-radius-sm, 8px);
+		background: color-mix(in srgb, var(--ii-danger) 8%, transparent);
+		color: var(--ii-danger);
+		font-size: var(--ii-text-small, 0.8125rem);
 	}
 
 	.dialog-error-dismiss {
-		margin-left: var(--netz-space-inline-sm, 8px);
+		margin-left: var(--ii-space-inline-sm, 8px);
 		text-decoration: underline;
 		cursor: pointer;
 		background: none;
@@ -439,49 +440,49 @@
 	}
 
 	.dialog-form {
-		padding: var(--netz-space-stack-md, 16px) var(--netz-space-inline-lg, 24px);
+		padding: var(--ii-space-stack-md, 16px) var(--ii-space-inline-lg, 24px);
 		display: flex;
 		flex-direction: column;
-		gap: var(--netz-space-stack-sm, 12px);
+		gap: var(--ii-space-stack-sm, 12px);
 	}
 
 	.dialog-field {
 		display: flex;
 		flex-direction: column;
-		gap: var(--netz-space-stack-2xs, 4px);
+		gap: var(--ii-space-stack-2xs, 4px);
 		flex: 1;
 	}
 
 	.dialog-label {
-		font-size: var(--netz-text-label, 0.75rem);
+		font-size: var(--ii-text-label, 0.75rem);
 		font-weight: 600;
-		color: var(--netz-text-secondary);
+		color: var(--ii-text-secondary);
 	}
 
 	.dialog-required {
-		color: var(--netz-danger);
+		color: var(--ii-danger);
 	}
 
 	.dialog-input {
-		height: var(--netz-space-control-height-sm, 36px);
-		padding: 0 var(--netz-space-inline-sm, 10px);
-		border: 1px solid var(--netz-border);
-		border-radius: var(--netz-radius-sm, 8px);
-		background: var(--netz-surface);
-		color: var(--netz-text-primary);
-		font-size: var(--netz-text-small, 0.8125rem);
-		font-family: var(--netz-font-sans);
+		height: var(--ii-space-control-height-sm, 36px);
+		padding: 0 var(--ii-space-inline-sm, 10px);
+		border: 1px solid var(--ii-border);
+		border-radius: var(--ii-radius-sm, 8px);
+		background: var(--ii-surface);
+		color: var(--ii-text-primary);
+		font-size: var(--ii-text-small, 0.8125rem);
+		font-family: var(--ii-font-sans);
 	}
 
 	.dialog-input:focus {
 		outline: none;
-		border-color: var(--netz-border-focus);
-		box-shadow: 0 0 0 2px color-mix(in srgb, var(--netz-brand-secondary) 20%, transparent);
+		border-color: var(--ii-border-focus);
+		box-shadow: 0 0 0 2px color-mix(in srgb, var(--ii-brand-secondary) 20%, transparent);
 	}
 
 	.dialog-textarea {
 		height: auto;
-		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-sm, 10px);
+		padding: var(--ii-space-stack-xs, 8px) var(--ii-space-inline-sm, 10px);
 		resize: vertical;
 	}
 
@@ -502,11 +503,11 @@
 		z-index: 10;
 		max-height: 220px;
 		overflow-y: auto;
-		border: 1px solid var(--netz-border);
+		border: 1px solid var(--ii-border);
 		border-top: none;
-		border-radius: 0 0 var(--netz-radius-sm, 8px) var(--netz-radius-sm, 8px);
-		background: var(--netz-surface-elevated);
-		box-shadow: var(--netz-shadow-2);
+		border-radius: 0 0 var(--ii-radius-sm, 8px) var(--ii-radius-sm, 8px);
+		background: var(--ii-surface-elevated);
+		box-shadow: var(--ii-shadow-2);
 	}
 
 	.benchmark-option {
@@ -514,41 +515,41 @@
 		flex-direction: column;
 		gap: 1px;
 		width: 100%;
-		padding: var(--netz-space-stack-2xs, 6px) var(--netz-space-inline-sm, 10px);
+		padding: var(--ii-space-stack-2xs, 6px) var(--ii-space-inline-sm, 10px);
 		border: none;
 		background: transparent;
 		text-align: left;
 		cursor: pointer;
-		font-family: var(--netz-font-sans);
+		font-family: var(--ii-font-sans);
 		transition: background 80ms ease;
 	}
 
 	.benchmark-option:hover {
-		background: var(--netz-surface-alt);
+		background: var(--ii-surface-alt);
 	}
 
 	.benchmark-option-name {
-		font-size: var(--netz-text-small, 0.8125rem);
+		font-size: var(--ii-text-small, 0.8125rem);
 		font-weight: 500;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 	}
 
 	.benchmark-option-meta {
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
 	}
 
 	.dialog-row {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: var(--netz-space-inline-md, 16px);
+		gap: var(--ii-space-inline-md, 16px);
 	}
 
 	.dialog-actions {
 		display: flex;
 		justify-content: flex-end;
-		gap: var(--netz-space-inline-sm, 8px);
-		padding: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-lg, 24px);
-		border-top: 1px solid var(--netz-border-subtle);
+		gap: var(--ii-space-inline-sm, 8px);
+		padding: var(--ii-space-stack-sm, 12px) var(--ii-space-inline-lg, 24px);
+		border-top: 1px solid var(--ii-border-subtle);
 	}
 </style>
