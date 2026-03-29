@@ -3,6 +3,9 @@
 Receives a ``FactSheetData`` dataclass and returns a self-contained HTML
 string ready for ``page.set_content()`` + ``page.pdf()``.
 
+Design: Netz Premium Institutional — Playfair Display headings, Inter body,
+navy/slate palette, Tufte tables, area-chart SVG with risk metrics sidebar.
+
 All user-supplied text is escaped via ``html.escape()``.
 Bilingual PT/EN via ``i18n.LABELS[language]``.
 """
@@ -13,7 +16,12 @@ import html
 from datetime import date
 from typing import Any
 
-from vertical_engines.wealth.fact_sheet.i18n import LABELS, Language, format_date
+from vertical_engines.wealth.fact_sheet.i18n import (
+    LABELS,
+    Language,
+    fmt_strategy,
+    format_date,
+)
 from vertical_engines.wealth.fact_sheet.models import FactSheetData
 from vertical_engines.wealth.pdf.svg_charts import NavPoint as SvgNavPoint
 from vertical_engines.wealth.pdf.svg_charts import (
@@ -24,8 +32,6 @@ from vertical_engines.wealth.pdf.svg_charts import (
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-_FONT_STACK = "-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
 
 
 def _e(text: Any) -> str:
@@ -41,9 +47,20 @@ def _pct(value: float | None, *, decimals: int = 2) -> str:
 
 
 def _pct_color(value: float | None) -> str:
+    """Institutional palette: dark for positive, burgundy for negative."""
     if value is None:
-        return "#9ca3af"
-    return "#059669" if value >= 0 else "#DC2626"
+        return "#94A3B8"
+    return "#0F172A" if value >= 0 else "#8B0000"
+
+
+def _pct_display(value: float | None, *, decimals: int = 2) -> str:
+    """Accounting convention: negatives in parentheses."""
+    if value is None:
+        return "&mdash;"
+    pct = value * 100
+    if pct < 0:
+        return f"({abs(pct):.{decimals}f}%)"
+    return f"{pct:+.{decimals}f}%"
 
 
 def _fmt_number(value: float | None, decimals: int = 2) -> str:
@@ -53,35 +70,190 @@ def _fmt_number(value: float | None, decimals: int = 2) -> str:
 
 
 # ---------------------------------------------------------------------------
-# CSS
+# CSS — Premium Institutional Design System
 # ---------------------------------------------------------------------------
 
-_CSS = f"""\
-@page {{ size: A4; margin: 0; }}
-* {{ margin: 0; padding: 0; box-sizing: border-box; }}
-html, body {{
-    font-family: {_FONT_STACK};
-    font-size: 10px; color: #374151;
+_CSS = """\
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@page { size: A4; margin: 0; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+    --navy: #0A192F;
+    --navy-light: #0F172A;
+    --slate-900: #1E293B;
+    --slate-700: #334155;
+    --slate-500: #64748B;
+    --slate-400: #94A3B8;
+    --slate-200: #E2E8F0;
+    --slate-100: #F1F5F9;
+    --slate-50: #F8FAFC;
+    --copper: #B48608;
+    --burgundy: #8B0000;
+    --white: #FFFFFF;
+    --text-primary: #0F172A;
+    --text-secondary: #334155;
+    --text-muted: #64748B;
+}
+
+html, body {
+    font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+    font-size: 10.5px;
+    color: var(--text-primary);
+    line-height: 1.45;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
-}}
-.page {{
+    font-variant-numeric: tabular-nums;
+}
+
+.page {
     width: 210mm; height: 297mm;
     position: relative; overflow: hidden;
     page-break-after: always;
-}}
-.page:last-child {{ page-break-after: auto; }}
-table {{ border-collapse: collapse; width: 100%; }}
-th {{
-    font-size: 8px; font-weight: 600;
-    text-transform: uppercase; letter-spacing: .06em;
-    color: #6b7280; text-align: left;
-    padding: 5px 6px; border-bottom: 1px solid #d1d5db;
-}}
-td {{
-    font-size: 9px; padding: 4px 6px;
-    border-bottom: 1px solid #f3f4f6; color: #374151;
-}}
+    background: var(--white);
+}
+.page:last-child { page-break-after: auto; }
+
+/* --- Tufte Tables --- */
+table {
+    border-collapse: collapse; width: 100%;
+    font-variant-numeric: tabular-nums;
+}
+table.fixed-cols {
+    table-layout: fixed;
+}
+thead th {
+    font-family: 'Inter', sans-serif;
+    font-size: 7.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--slate-500);
+    text-align: left;
+    padding: 7px 8px 5px;
+    border-bottom: 1.5px solid var(--navy);
+    border-top: none;
+}
+tbody td {
+    font-size: 9px; padding: 5px 8px;
+    border-bottom: none;
+    color: var(--text-secondary);
+}
+tbody tr:nth-child(even) td {
+    background: var(--slate-50);
+}
+tfoot td {
+    font-size: 9px; padding: 6px 8px;
+    border-top: 1.5px solid var(--navy);
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+/* --- Section headers --- */
+.sec-title {
+    font-family: 'Inter', sans-serif;
+    font-size: 9px; font-weight: 700;
+    color: var(--slate-900);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--slate-200);
+}
+
+/* --- Masthead --- */
+.masthead {
+    background: var(--navy);
+    padding: 26px 28px 22px;
+    border-bottom: 2px solid var(--copper);
+}
+.masthead-label {
+    font-family: 'Inter', sans-serif;
+    font-size: 8px; letter-spacing: 0.16em;
+    color: var(--slate-500);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+.masthead-name {
+    font-family: 'Playfair Display', 'Georgia', serif;
+    font-size: 22px; font-weight: 700;
+    color: var(--white);
+    margin-bottom: 4px;
+    letter-spacing: -0.01em;
+}
+.masthead-meta {
+    font-family: 'Inter', sans-serif;
+    font-size: 10px; color: var(--slate-400);
+    letter-spacing: 0.02em;
+}
+
+/* --- KPI strip --- */
+.kpi-strip {
+    display: flex;
+    border-bottom: 1px solid var(--slate-200);
+    background: var(--slate-50);
+}
+.kpi-card {
+    flex: 1; text-align: center;
+    padding: 12px 6px 10px;
+    border-right: 1px solid var(--slate-200);
+}
+.kpi-card:last-child { border-right: none; }
+.kpi-label {
+    font-size: 7.5px; color: var(--slate-500);
+    text-transform: uppercase; letter-spacing: 0.07em;
+    margin-bottom: 3px; font-weight: 500;
+}
+.kpi-value {
+    font-size: 17px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+/* --- Chart + Risk grid --- */
+.chart-risk-grid {
+    display: grid;
+    grid-template-columns: 3fr 1fr;
+    gap: 12px;
+    margin: 10px 0 8px;
+    height: 210px;
+}
+.risk-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    height: 210px;
+}
+.risk-stack-card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: var(--slate-50);
+    border-bottom: 1px solid var(--slate-200);
+    text-align: center;
+}
+.risk-stack-card:last-child { border-bottom: none; }
+.risk-stack-label {
+    font-size: 7px; color: var(--slate-500);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 2px; font-weight: 500;
+}
+.risk-stack-value {
+    font-size: 15px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+/* --- Footer --- */
+.page-footer {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    padding: 10px 28px;
+    font-size: 7px; color: var(--slate-400);
+    border-top: 1px solid var(--slate-200);
+    display: flex; justify-content: space-between;
+    align-items: flex-end;
+    line-height: 1.4;
+}
+.page-footer .backtest-note { color: var(--copper); font-weight: 500; }
 """
 
 
@@ -99,16 +271,14 @@ def _page_footer(
     backtest: bool = False,
 ) -> str:
     bt = (
-        f' <span style="color:#D97706">*{_e(labels["backtest_note"])}</span>'
+        f' <span class="backtest-note">*{_e(labels["backtest_note"])}</span>'
         if backtest
         else ""
     )
     return (
-        f'<div style="position:absolute;bottom:0;left:0;right:0;padding:10px 24px;'
-        f"font-size:8px;color:#9ca3af;border-top:1px solid #e5e7eb;"
-        f'display:flex;justify-content:space-between;align-items:center">'
+        f'<div class="page-footer">'
         f"<span>{_e(labels['disclaimer'])}{bt}</span>"
-        f"<span>p.&nbsp;{page} of {total}</span>"
+        f"<span>p.&nbsp;{page}/{total}</span>"
         f"</div>"
     )
 
@@ -120,18 +290,84 @@ def _page_footer(
 
 def _kpi_card(label: str, value: float | None) -> str:
     color = _pct_color(value)
-    display = _pct(value) if value is not None else "&mdash;"
+    display = _pct_display(value) if value is not None else "&mdash;"
     return (
-        f'<div style="flex:1;text-align:center;padding:8px 4px">'
-        f'<div style="font-size:8px;color:#6b7280;text-transform:uppercase;'
-        f'letter-spacing:.06em;margin-bottom:3px">{_e(label)}</div>'
-        f'<div style="font-size:16px;font-weight:600;color:{color}">{display}</div>'
+        f'<div class="kpi-card">'
+        f'<div class="kpi-label">{_e(label)}</div>'
+        f'<div class="kpi-value" style="color:{color}">{display}</div>'
         f"</div>"
     )
 
 
 # ---------------------------------------------------------------------------
-# Returns table
+# Chart + Risk metrics (75/25 architectural block)
+# ---------------------------------------------------------------------------
+
+
+def _annualized_return(data: FactSheetData) -> float | None:
+    """Compute annualized return from total since-inception return."""
+    si = data.returns.since_inception
+    if si is None or data.inception_date is None:
+        return si
+    days = (data.as_of - data.inception_date).days
+    if days <= 0:
+        return si
+    years = days / 365.25
+    if years < 1:
+        return si  # < 1 year: show total return as-is
+    return (1 + si) ** (1 / years) - 1
+
+
+def _chart_risk_block(data: FactSheetData, labels: dict[str, str]) -> str:
+    """Render chart (75%) + stacked risk metrics (25%) side by side."""
+    svg_points = _to_svg_nav(data)
+    chart_svg = performance_line_chart(svg_points, width=500, height=210)
+
+    legend = (
+        '<div style="display:flex;gap:16px;margin:5px 0 0;font-size:8px;'
+        'color:var(--slate-500);font-weight:500">'
+        '<span><svg width="18" height="2" style="vertical-align:middle">'
+        '<line x1="0" y1="1" x2="18" y2="1" stroke="#0A192F" stroke-width="1.8"/></svg>'
+        " Portfolio</span>"
+        '<span><svg width="18" height="2" style="vertical-align:middle">'
+        '<line x1="0" y1="1" x2="18" y2="1" stroke="#B48608" stroke-width="1" '
+        'stroke-dasharray="5 3"/></svg>'
+        " Benchmark</span>"
+        "</div>"
+    )
+
+    # Risk metrics: Annualized Return, Sharpe, Annualized Vol, Max Drawdown
+    ann_ret = _annualized_return(data)
+    risk_items = [
+        (labels["annualized_return"], ann_ret, lambda v: _pct_display(v), False),
+        (labels["sharpe"], data.risk.sharpe, lambda v: f"{v:.2f}", False),
+        (labels["annualized_vol"], data.risk.annualized_vol, lambda v: f"{v * 100:.1f}%", False),
+        (labels["max_drawdown"], data.risk.max_drawdown, lambda v: f"({abs(v) * 100:.2f}%)", True),
+    ]
+    risk_cards = ""
+    for label, val, fmt, is_neg in risk_items:
+        display = fmt(val) if val is not None else "&mdash;"
+        color = "var(--burgundy)" if is_neg and val is not None else "var(--text-primary)"
+        risk_cards += (
+            f'<div class="risk-stack-card">'
+            f'<div class="risk-stack-label">{_e(label)}</div>'
+            f'<div class="risk-stack-value" style="color:{color}">{display}</div>'
+            f"</div>"
+        )
+
+    if not svg_points:
+        return ""
+
+    return (
+        f'<div class="chart-risk-grid">'
+        f"<div>{chart_svg}{legend}</div>"
+        f'<div class="risk-stack">{risk_cards}</div>'
+        f"</div>"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Returns table (Tufte, fixed columns)
 # ---------------------------------------------------------------------------
 
 
@@ -155,70 +391,57 @@ def _returns_table(data: FactSheetData, labels: dict[str, str]) -> str:
         bm.since_inception if bm else None,
     ]
 
+    # Fixed-width header: first col wider, rest equal
+    col_w = "13%"
     headers = "".join(
-        f'<th style="text-align:right">{_e(lbl)}</th>' for lbl, _ in periods
+        f'<th style="text-align:right;width:{col_w}">{_e(lbl)}</th>'
+        for lbl, _ in periods
     )
 
     def _row(name: str, vals: list[float | None]) -> str:
         cells = ""
         for v in vals:
             color = _pct_color(v)
-            cells += f'<td style="text-align:right;color:{color}">{_pct(v)}</td>'
-        return f"<tr><td style='font-weight:600'>{_e(name)}</td>{cells}</tr>"
+            cells += (
+                f'<td style="text-align:right;color:{color};'
+                f'font-variant-numeric:tabular-nums">{_pct_display(v)}</td>'
+            )
+        return f"<tr><td style='font-weight:600;color:var(--text-primary)'>{_e(name)}</td>{cells}</tr>"
 
     port_row = _row(labels["portfolio"], [v for _, v in periods])
     bm_row = _row("Benchmark", bm_vals)
 
-    # Active row
     active_vals = []
     for (_, pv), bv in zip(periods, bm_vals, strict=True):
         if pv is not None and bv is not None:
             active_vals.append(pv - bv)
         else:
             active_vals.append(None)
-    active_row = _row("Active", active_vals)
 
-    return (
-        f"<table><thead><tr>"
-        f'<th style="width:70px">{_e(labels["returns"])}</th>'
-        f"{headers}</tr></thead>"
-        f"<tbody>{port_row}{bm_row}"
-        f'<tr style="border-top:1px solid #d1d5db">'
-        f"{active_row[4:]}"  # strip leading <tr>
-        f"</tbody></table>"
-    )
-
-
-# ---------------------------------------------------------------------------
-# Risk cards
-# ---------------------------------------------------------------------------
-
-
-def _risk_cards(data: FactSheetData, labels: dict[str, str]) -> str:
-    cards = [
-        (labels["annualized_vol"], data.risk.annualized_vol, lambda v: f"{v * 100:.1f}%"),
-        (labels["sharpe"], data.risk.sharpe, lambda v: f"{v:.2f}"),
-        (labels["max_drawdown"], data.risk.max_drawdown, lambda v: f"{v * 100:.2f}%"),
-        (labels["cvar_95"], data.risk.cvar_95, lambda v: f"{v * 100:.2f}%"),
-    ]
-    html_parts = ""
-    for label, val, fmt in cards:
-        display = fmt(val) if val is not None else "&mdash;"
-        html_parts += (
-            f'<div style="background:#f9fafb;border-radius:6px;padding:10px;text-align:center">'
-            f'<div style="font-size:8px;color:#6b7280;text-transform:uppercase;'
-            f'letter-spacing:.06em;margin-bottom:4px">{_e(label)}</div>'
-            f'<div style="font-size:14px;font-weight:700;color:#111827">{display}</div>'
-            f"</div>"
+    active_cells = ""
+    for v in active_vals:
+        color = _pct_color(v)
+        active_cells += (
+            f'<td style="text-align:right;color:{color};font-weight:600;'
+            f'font-variant-numeric:tabular-nums">{_pct_display(v)}</td>'
         )
+    active_row = (
+        f"<td style='font-weight:700;color:var(--text-primary)'>Active</td>"
+        f"{active_cells}"
+    )
+
     return (
-        f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin:8px 0">'
-        f"{html_parts}</div>"
+        f'<table class="fixed-cols"><thead><tr>'
+        f'<th style="width:22%">{_e(labels["returns"])}</th>'
+        f"{headers}</tr></thead>"
+        f"<tbody>{port_row}{bm_row}</tbody>"
+        f"<tfoot><tr>{active_row}</tr></tfoot>"
+        f"</table>"
     )
 
 
 # ---------------------------------------------------------------------------
-# Holdings table
+# Holdings table (strategy, not block)
 # ---------------------------------------------------------------------------
 
 
@@ -233,16 +456,17 @@ def _holdings_table(
     for h in items:
         rows += (
             f"<tr>"
-            f"<td>{_e(h.fund_name)}</td>"
-            f"<td>{_e(h.block_id)}</td>"
-            f'<td style="text-align:right;font-weight:600">{h.weight * 100:.1f}%</td>'
+            f'<td style="color:var(--text-primary);font-weight:500">{_e(h.fund_name)}</td>'
+            f'<td style="color:var(--slate-500)">{_e(fmt_strategy(h.block_id))}</td>'
+            f'<td style="text-align:right;font-weight:600;color:var(--text-primary);'
+            f'font-variant-numeric:tabular-nums">{h.weight * 100:.1f}%</td>'
             f"</tr>"
         )
     return (
-        f"<table><thead><tr>"
-        f"<th>{_e(labels['fund_name'])}</th>"
-        f"<th>{_e(labels['block'])}</th>"
-        f'<th style="text-align:right">{_e(labels["weight"])}</th>'
+        f'<table class="fixed-cols"><thead><tr>'
+        f'<th style="width:50%">{_e(labels["fund_name"])}</th>'
+        f'<th style="width:30%">{_e(labels["strategy"])}</th>'
+        f'<th style="text-align:right;width:20%">{_e(labels["weight"])}</th>'
         f"</tr></thead><tbody>{rows}</tbody></table>"
     )
 
@@ -264,19 +488,19 @@ def _to_svg_nav(data: FactSheetData) -> list[SvgNavPoint]:
 
 
 # ---------------------------------------------------------------------------
-# Allocation colors
+# Allocation colors — institutional palette
 # ---------------------------------------------------------------------------
 
 _ALLOC_COLORS = [
-    "#185FA5", "#1D9E75", "#639922", "#BA7517",
-    "#888780", "#D44C47", "#6366F1", "#EC4899",
+    "#0A192F", "#1E3A5F", "#2D5F8A", "#3D7CB5",
+    "#64748B", "#8B7355", "#4A6741", "#6B5B73",
 ]
 
 
 def _alloc_blocks(data: FactSheetData) -> list[dict[str, Any]]:
     return [
         {
-            "label": a.block_id.replace("_", " ").title(),
+            "label": fmt_strategy(a.block_id),
             "weight": a.weight,
             "color": _ALLOC_COLORS[i % len(_ALLOC_COLORS)],
         }
@@ -290,97 +514,59 @@ def _alloc_blocks(data: FactSheetData) -> list[dict[str, Any]]:
 
 
 def _page1(data: FactSheetData, labels: dict[str, str], language: Language) -> str:
-    # Header
+    # Masthead
     header = (
-        f'<div style="background:#111827;padding:22px 24px">'
-        f'<div style="font-size:9px;letter-spacing:.14em;color:#6B7FA8;'
-        f'text-transform:uppercase;margin-bottom:4px">'
+        f'<div class="masthead">'
+        f'<div class="masthead-label">'
         f'{_e(labels["report_title_executive"])} &middot; FACT SHEET</div>'
-        f'<div style="font-size:20px;font-weight:500;color:#F9FAFB;margin-bottom:2px">'
-        f"{_e(data.portfolio_name)}</div>"
-        f'<div style="font-size:11px;color:#6B7FA8">'
-        f'{_e(labels["as_of"])} {format_date(data.as_of, language)} &middot; '
-        f'{_e(labels["profile"])}: {_e(data.profile.title())}</div>'
-        f"</div>"
+        f'<div class="masthead-name">{_e(data.portfolio_name)}</div>'
+        f'<div class="masthead-meta">'
+        f'{_e(labels["as_of"])} {format_date(data.as_of, language)}'
+        f' &nbsp;&bull;&nbsp; {_e(labels["profile"])}: {_e(data.profile.title())}'
+        f"</div></div>"
     )
 
-    # KPI strip
-    kpi = (
-        f'<div style="display:flex;border-bottom:1px solid #e5e7eb">'
-        f'{_kpi_card(labels["mtd"], data.returns.mtd)}'
-        f'{_kpi_card(labels["ytd"], data.returns.ytd)}'
-        f'{_kpi_card(labels["1y"], data.returns.one_year)}'
-        f'{_kpi_card(labels["since_inception"], data.returns.since_inception)}'
-        f"</div>"
-    )
-
-    # Performance chart
-    svg_points = _to_svg_nav(data)
-    chart = performance_line_chart(svg_points, width=540, height=160)
-    legend = (
-        '<div style="display:flex;gap:14px;margin:4px 0 8px;font-size:9px;color:#6b7280">'
-        '<span><svg width="16" height="2" style="vertical-align:middle">'
-        '<line x1="0" y1="1" x2="16" y2="1" stroke="#185FA5" stroke-width="1.8"/></svg>'
-        " Portfolio</span>"
-        '<span><svg width="16" height="2" style="vertical-align:middle">'
-        '<line x1="0" y1="1" x2="16" y2="1" stroke="#9ca3af" stroke-width="1" '
-        'stroke-dasharray="4 3"/></svg>'
-        f" {_e(data.benchmark_label or 'Benchmark')}</span>"
-        "</div>"
-    )
-
-    chart_section = (
-        f'<div style="margin:8px 0">{chart}</div>{legend}'
-        if svg_points
-        else ""
-    )
+    # Chart (75%) + Risk metrics (25%) — architectural block
+    chart_risk = _chart_risk_block(data, labels)
 
     # Returns table
     returns_html = _returns_table(data, labels)
 
-    # 2-column: allocation + holdings
-    alloc_html = allocation_bars(_alloc_blocks(data), width=200)
-    top_8 = _holdings_table(data.holdings, labels, limit=8)
-
-    grid = (
-        f'<div style="display:grid;grid-template-columns:220px 1fr;gap:16px;margin:10px 0">'
-        f"<div>"
-        f'<div style="font-size:10px;font-weight:700;text-transform:uppercase;'
-        f'letter-spacing:.03em;margin-bottom:6px">{_e(labels["allocation"])}</div>'
-        f"{alloc_html}</div>"
-        f"<div>"
-        f'<div style="font-size:10px;font-weight:700;text-transform:uppercase;'
-        f'letter-spacing:.03em;margin-bottom:6px">{_e(labels["top_holdings"])}</div>'
-        f"{top_8}</div>"
-        f"</div>"
-    )
-
-    # Risk cards
-    risk = _risk_cards(data, labels)
-
-    # Manager commentary
+    # Manager commentary — first page, right after returns
     commentary = ""
     if data.manager_commentary:
         commentary = (
-            f'<div style="margin-top:8px">'
-            f'<div style="font-size:10px;font-weight:700;text-transform:uppercase;'
-            f'letter-spacing:.03em;margin-bottom:4px">{_e(labels["manager_commentary"])}</div>'
-            f'<p style="font-size:9px;line-height:1.5;color:#374151">'
-            f"{_e(data.manager_commentary)}</p></div>"
+            f'<div style="margin:10px 0 12px">'
+            f'<div class="sec-title">{_e(labels["manager_commentary"])}</div>'
+            f'<p style="font-size:9.5px;line-height:1.6;color:var(--text-secondary);'
+            f'font-style:italic">{_e(data.manager_commentary)}</p></div>'
         )
+
+    # 2-column: allocation + top holdings
+    alloc_html = allocation_bars(_alloc_blocks(data), width=195)
+    top_8 = _holdings_table(data.holdings, labels, limit=8)
+
+    grid = (
+        f'<div style="display:grid;grid-template-columns:210px 1fr;gap:20px;margin:10px 0">'
+        f"<div>"
+        f'<div class="sec-title">{_e(labels["allocation"])}</div>'
+        f"{alloc_html}</div>"
+        f"<div>"
+        f'<div class="sec-title">{_e(labels["top_holdings"])}</div>'
+        f"{top_8}</div>"
+        f"</div>"
+    )
 
     total_pages = 2 if len(data.holdings) > 8 else 1
 
     return (
         f'<div class="page">'
         f"{header}"
-        f'<div style="padding:0 24px">'
-        f"{kpi}"
-        f"{chart_section}"
+        f'<div style="padding:0 28px">'
+        f"{chart_risk}"
         f'<div style="margin:8px 0">{returns_html}</div>'
-        f"{grid}"
-        f"{risk}"
         f"{commentary}"
+        f"{grid}"
         f"</div>"
         f"{_page_footer(data.as_of, 1, total_pages, labels, backtest=data.returns.is_backtest)}"
         f"</div>"
@@ -398,24 +584,22 @@ def _page2(data: FactSheetData, labels: dict[str, str], language: Language) -> s
     backtest_note = ""
     if data.returns.is_backtest:
         backtest_note = (
-            f'<div style="margin-top:12px;padding:10px;background:#FFFBEB;'
-            f'border-left:3px solid #D97706;border-radius:0 4px 4px 0;'
-            f'font-size:9px;color:#92400E">'
+            f'<div style="margin-top:14px;padding:10px 14px;background:var(--slate-50);'
+            f"border-left:2px solid var(--copper);"
+            f'font-size:9px;color:var(--slate-700);line-height:1.5">'
             f"{_e(labels['backtest_note'])}</div>"
         )
 
     return (
         f'<div class="page">'
         f'<div style="display:flex;justify-content:space-between;align-items:center;'
-        f'padding:14px 24px 10px;border-bottom:1px solid #e5e7eb;margin-bottom:12px">'
-        f'<span style="font-size:11px;font-weight:600;color:#111827">'
-        f"{_e(data.portfolio_name)}</span>"
-        f'<span style="font-size:9px;color:#9ca3af">p.&nbsp;2 of 2</span>'
+        f'padding:16px 28px 12px;border-bottom:1px solid var(--slate-200);margin-bottom:14px">'
+        f'<span style="font-family:\'Playfair Display\',serif;font-size:13px;'
+        f'font-weight:600;color:var(--text-primary)">{_e(data.portfolio_name)}</span>'
+        f'<span style="font-size:8px;color:var(--slate-400)">p.&nbsp;2/2</span>'
         f"</div>"
-        f'<div style="padding:0 24px">'
-        f'<div style="font-size:10px;font-weight:700;text-transform:uppercase;'
-        f'letter-spacing:.03em;margin-bottom:6px">'
-        f'{_e(labels["top_holdings"])} ({_e(labels["weight"])})</div>'
+        f'<div style="padding:0 28px">'
+        f'<div class="sec-title">{_e(labels["top_holdings"])} ({_e(labels["weight"])})</div>'
         f"{table}"
         f"{backtest_note}"
         f"</div>"

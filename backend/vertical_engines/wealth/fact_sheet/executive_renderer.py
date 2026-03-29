@@ -122,7 +122,7 @@ def render_executive(
     # ── Top holdings ───────────────────────────────────────────────
     if data.holdings:
         story.append(Paragraph(labels["top_holdings"], styles["section_heading"]))
-        holdings_header = [labels["fund_name"], labels["block"], labels["weight"]]
+        holdings_header = [labels["fund_name"], labels["strategy"], labels["weight"]]
         holdings_rows: list[list[str]] = [holdings_header]
         for h in data.holdings[:10]:
             holdings_rows.append([

@@ -34,14 +34,15 @@ LABELS: dict[str, dict[str, str]] = {
         "since_inception": "Desde Início",
         "backtest_note": "* Período de backtest (simulado)",
         # Allocation
-        "allocation": "Alocação por Bloco",
+        "allocation": "Alocação Estratégica",
         # Holdings
         "top_holdings": "Maiores Posições",
         "fund_name": "Fundo",
-        "block": "Bloco",
+        "strategy": "Estratégia",
         "weight": "Peso",
         # Risk metrics
         "risk_metrics": "Métricas de Risco",
+        "annualized_return": "Retorno Anualizado",
         "annualized_vol": "Volatilidade Anualizada",
         "sharpe": "Índice de Sharpe",
         "max_drawdown": "Drawdown Máximo",
@@ -52,7 +53,7 @@ LABELS: dict[str, dict[str, str]] = {
         "regime_chart_title": "Regimes Econômicos",
         # Attribution
         "attribution": "Análise de Atribuição (Brinson)",
-        "block_name": "Bloco",
+        "asset_class": "Classe de Ativos",
         "allocation_effect": "Efeito Alocação",
         "selection_effect": "Efeito Seleção",
         "interaction_effect": "Efeito Interação",
@@ -66,24 +67,27 @@ LABELS: dict[str, dict[str, str]] = {
         "rebalance_history": "Histórico de Rebalanceamento",
         "rebalance_date": "Data",
         "rebalance_reason": "Motivo",
-        # Fee Drag
-        "fee_drag_analysis": "Análise de Arrasto de Taxas",
+        # Fee Analysis
+        "fee_drag_analysis": "Análise de Custos",
         "fd_instruments": "Instrumentos",
         "fd_gross_return": "Retorno Bruto",
         "fd_net_return": "Retorno Líquido",
-        "fd_drag_ratio": "Arrasto (%)",
-        "fd_inefficient": "Ineficientes",
-        # Fee comparison (per-fund)
-        "fee_comparison": "Comparação de Taxas por Fundo",
+        # Fee comparison (per-fund) — client-facing columns only
+        "fee_comparison": "Estrutura de Taxas por Fundo",
         "fc_fund": "Fundo",
         "fc_mgmt_fee": "Taxa Gestão",
         "fc_perf_fee": "Taxa Perf.",
         "fc_other_fee": "Outras",
         "fc_total_fee": "Total",
+        # Deprecated (kept for ReportLab backward compat)
+        "fd_drag_ratio": "Arrasto (%)",
+        "fd_inefficient": "Ineficientes",
         "fc_drag": "Arrasto",
         "fc_status": "Status",
         "fc_efficient": "Eficiente",
         "fc_inefficient": "Ineficiente",
+        # Monthly returns
+        "monthly_returns": "Retornos Mensais Desde o Início",
         # ESG
         "esg_section": "ESG",
         "esg_placeholder": "Dados ESG serão incorporados quando disponíveis.",
@@ -148,14 +152,15 @@ LABELS: dict[str, dict[str, str]] = {
         "since_inception": "Since Inception",
         "backtest_note": "* Backtest period (simulated)",
         # Allocation
-        "allocation": "Allocation by Block",
+        "allocation": "Strategic Allocation",
         # Holdings
         "top_holdings": "Top Holdings",
         "fund_name": "Fund",
-        "block": "Block",
+        "strategy": "Strategy",
         "weight": "Weight",
         # Risk metrics
         "risk_metrics": "Risk Metrics",
+        "annualized_return": "Annualized Return",
         "annualized_vol": "Annualized Volatility",
         "sharpe": "Sharpe Ratio",
         "max_drawdown": "Maximum Drawdown",
@@ -166,7 +171,7 @@ LABELS: dict[str, dict[str, str]] = {
         "regime_chart_title": "Economic Regimes",
         # Attribution
         "attribution": "Attribution Analysis (Brinson)",
-        "block_name": "Block",
+        "asset_class": "Asset Class",
         "allocation_effect": "Allocation Effect",
         "selection_effect": "Selection Effect",
         "interaction_effect": "Interaction Effect",
@@ -180,24 +185,27 @@ LABELS: dict[str, dict[str, str]] = {
         "rebalance_history": "Rebalance History",
         "rebalance_date": "Date",
         "rebalance_reason": "Reason",
-        # Fee Drag
-        "fee_drag_analysis": "Fee Drag Analysis",
+        # Fee Analysis
+        "fee_drag_analysis": "Cost Analysis",
         "fd_instruments": "Instruments",
         "fd_gross_return": "Gross Return",
         "fd_net_return": "Net Return",
-        "fd_drag_ratio": "Drag (%)",
-        "fd_inefficient": "Inefficient",
-        # Fee comparison (per-fund)
-        "fee_comparison": "Fee Comparison by Fund",
+        # Fee comparison (per-fund) — client-facing columns only
+        "fee_comparison": "Fee Structure by Fund",
         "fc_fund": "Fund",
         "fc_mgmt_fee": "Mgmt Fee",
         "fc_perf_fee": "Perf Fee",
         "fc_other_fee": "Other",
         "fc_total_fee": "Total",
+        # Deprecated (kept for ReportLab backward compat)
+        "fd_drag_ratio": "Drag (%)",
+        "fd_inefficient": "Inefficient",
         "fc_drag": "Drag",
         "fc_status": "Status",
         "fc_efficient": "Efficient",
         "fc_inefficient": "Inefficient",
+        # Monthly returns
+        "monthly_returns": "Monthly Returns Since Inception",
         # ESG
         "esg_section": "ESG",
         "esg_placeholder": "ESG data will be incorporated when available.",
@@ -281,3 +289,32 @@ def format_pct(value: float, decimals: int = 2, language: Language = "pt") -> st
 def format_bps(value: float, language: Language = "pt") -> str:
     """Format basis points."""
     return f"{format_number(value, 0, language)} bps"
+
+
+# ── Strategy / block ID formatting ────────────────────────────────────────
+
+_UPPER_WORDS = frozenset({"us", "em", "uk", "eu", "esg", "etf", "reit", "bdc"})
+
+
+def fmt_strategy(raw: str) -> str:
+    """Format a snake_case block_id into institutional Title Case.
+
+    ``"us_equity"`` → ``"US Equity"``
+    ``"private_credit"`` → ``"Private Credit"``
+    ``"fixed_income_em"`` → ``"Fixed Income EM"``
+    """
+    parts = raw.split("_")
+    return " ".join(
+        p.upper() if p.lower() in _UPPER_WORDS else p.capitalize()
+        for p in parts
+    )
+
+
+# ── Month abbreviations for returns matrix ────────────────────────────────
+
+MONTHS_SHORT: dict[str, list[str]] = {
+    "en": ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    "pt": ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+           "Jul", "Ago", "Set", "Out", "Nov", "Dez"],
+}

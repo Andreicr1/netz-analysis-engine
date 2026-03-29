@@ -128,7 +128,7 @@ def render_institutional(
     # ── Top holdings ───────────────────────────────────────────────
     if data.holdings:
         story.append(Paragraph(labels["top_holdings"], styles["section_heading"]))
-        holdings_header = [labels["fund_name"], labels["block"], labels["weight"]]
+        holdings_header = [labels["fund_name"], labels["strategy"], labels["weight"]]
         holdings_rows: list[list[str]] = [holdings_header]
         for h in data.holdings[:10]:
             holdings_rows.append([
@@ -169,7 +169,7 @@ def render_institutional(
     if data.attribution:
         story.append(Paragraph(labels["attribution"], styles["section_heading"]))
         attr_header = [
-            labels["block_name"],
+            labels["asset_class"],
             labels["allocation_effect"],
             labels["selection_effect"],
             labels["interaction_effect"],
