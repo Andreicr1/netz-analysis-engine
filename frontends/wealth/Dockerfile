@@ -23,8 +23,8 @@ ARG VITE_API_BASE_URL
 ENV PUBLIC_CLERK_PUBLISHABLE_KEY=$PUBLIC_CLERK_PUBLISHABLE_KEY
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
-# Build UI package then wealth frontend
-RUN pnpm --filter @netz/ui build && pnpm --filter netz-wealth-os build
+# Build UI packages then wealth frontend
+RUN pnpm --filter @netz/ui build && pnpm --filter @investintell/ui build && pnpm --filter netz-wealth-os build
 
 WORKDIR /app/frontends/wealth
 EXPOSE 3000
