@@ -1,7 +1,7 @@
 /**
  * SvelteKit server hook — Clerk JWT + theme injection + CSP header.
  */
-import { createClerkHook, createThemeHook } from "@netz/ui/utils";
+import { createClerkHook, createThemeHook } from "@investintell/ui/utils";
 import type { Handle } from "@sveltejs/kit";
 import { sequence } from "@sveltejs/kit/hooks";
 import { env } from "$env/dynamic/private";

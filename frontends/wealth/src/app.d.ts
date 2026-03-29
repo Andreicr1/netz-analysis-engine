@@ -1,6 +1,6 @@
 /// <reference types="@sveltejs/kit" />
 
-import type { Actor } from "@netz/ui/utils";
+import type { Actor } from "@investintell/ui/utils";
 
 declare global {
 	namespace App {
