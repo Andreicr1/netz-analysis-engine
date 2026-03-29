@@ -28,6 +28,8 @@ from app.core.db.engine import async_session_factory as async_session
 logger = structlog.get_logger()
 
 UNIVERSE_SYNC_LOCK_ID = 900_070
+SEC_MF_TICKERS_URL = "https://www.sec.gov/files/company_tickers_mf.json"
+SEC_USER_AGENT = "Netz/1.0 (andrei@investintell.com)"
 
 
 async def run_universe_sync() -> dict:
@@ -44,6 +46,7 @@ async def run_universe_sync() -> dict:
 
         try:
             stats: dict = {}
+            stats["ticker_refresh"] = await _refresh_mf_tickers(db)
             stats["sec_etfs"] = await _sync_sec_etfs(db)
             stats["sec_mf_series"] = await _sync_sec_mf_series(db)
             stats["sec_registered"] = await _sync_sec_registered(db)
@@ -61,6 +64,70 @@ async def run_universe_sync() -> dict:
             await db.execute(
                 text(f"SELECT pg_advisory_unlock({UNIVERSE_SYNC_LOCK_ID})"),
             )
+
+
+# ── Pre-sync: refresh mutual fund tickers from SEC ───────────────────
+
+
+async def _refresh_mf_tickers(db: AsyncSession) -> dict:
+    """Fetch SEC company_tickers_mf.json and update sec_fund_classes tickers.
+
+    Single GET (~1MB), no rate limit. Maps class_id → ticker for all
+    mutual fund share classes. Runs before catalog sync so Phase 2
+    has maximum ticker coverage.
+    """
+    import asyncio
+    import concurrent.futures
+    import json
+    from urllib.request import Request, urlopen
+
+    def _download() -> dict:
+        req = Request(SEC_MF_TICKERS_URL, headers={"User-Agent": SEC_USER_AGENT})
+        with urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read())
+
+    try:
+        loop = asyncio.get_event_loop()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            data = await loop.run_in_executor(pool, _download)
+    except Exception as e:
+        logger.warning("universe_sync.mf_ticker_fetch_failed", error=str(e)[:200])
+        return {"updated": 0, "error": str(e)[:100]}
+
+    rows = data.get("data", [])
+    if not rows:
+        return {"updated": 0}
+
+    # Build class_id → ticker map
+    class_ticker = {class_id: symbol for _cik, _sid, class_id, symbol in rows if symbol}
+    logger.info("universe_sync.mf_tickers_fetched", classes=len(class_ticker))
+
+    # Batch update via temp table
+    await db.execute(text(
+        "CREATE TEMP TABLE IF NOT EXISTS _tmp_mf_ticker "
+        "(class_id TEXT PRIMARY KEY, ticker TEXT NOT NULL) ON COMMIT DROP"
+    ))
+    items = list(class_ticker.items())
+    for i in range(0, len(items), 1000):
+        chunk = items[i:i + 1000]
+        # Escape single quotes in tickers
+        vals = ",".join(
+            f"('{cid}','{t.replace(chr(39), chr(39)+chr(39))}')"
+            for cid, t in chunk
+        )
+        await db.execute(text(f"INSERT INTO _tmp_mf_ticker VALUES {vals} ON CONFLICT DO NOTHING"))
+
+    result = await db.execute(text("""
+        UPDATE sec_fund_classes fc
+        SET ticker = t.ticker
+        FROM _tmp_mf_ticker t
+        WHERE fc.class_id = t.class_id
+          AND (fc.ticker IS NULL OR fc.ticker != t.ticker)
+    """))
+    updated = result.rowcount
+    await db.commit()
+    logger.info("universe_sync.mf_tickers_updated", updated=updated)
+    return {"updated": updated}
 
 
 # ── Phase 1: SEC ETFs ────────────────────────────────────────────────
