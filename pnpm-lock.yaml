@@ -120,6 +120,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.40.0
         version: 6.40.0
+      '@investintell/ui':
+        specifier: workspace:*
+        version: link:../../packages/investintell-ui
       '@netz/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -184,6 +187,24 @@ importers:
 
   packages/investintell-ui:
     dependencies:
+      '@codemirror/commands':
+        specifier: ^6.0.0
+        version: 6.10.3
+      '@codemirror/lang-json':
+        specifier: ^6.0.0
+        version: 6.0.2
+      '@codemirror/lint':
+        specifier: ^6.0.0
+        version: 6.9.5
+      '@codemirror/merge':
+        specifier: ^6.0.0
+        version: 6.12.1
+      '@codemirror/state':
+        specifier: ^6.0.0
+        version: 6.6.0
+      '@codemirror/view':
+        specifier: ^6.0.0
+        version: 6.40.0
       '@fontsource/geist':
         specifier: ^5.2.8
         version: 5.2.8
@@ -205,6 +226,9 @@ importers:
       clsx:
         specifier: ^2.1.0
         version: 2.1.1
+      codemirror-json-schema:
+        specifier: ^0.8.0
+        version: 0.8.1(@codemirror/language@6.12.2)(@codemirror/lint@6.9.5)(@codemirror/state@6.6.0)(@codemirror/view@6.40.0)(@lezer/common@1.5.1)
       echarts:
         specifier: ^5.6.0
         version: 5.6.0
