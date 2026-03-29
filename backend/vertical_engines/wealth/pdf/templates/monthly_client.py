@@ -165,7 +165,7 @@ def _activity_card(ticker: str, action: str, narrative: str) -> str:
     }
     bg, fg = action_colors.get(action, ("#f3f4f6", "#374151"))
     return (
-        f'<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px">'
+        f'<div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:10px">'
         f'<span style="display:inline-block;padding:2px 8px;border-radius:8px;'
         f"font-size:9px;font-weight:600;white-space:nowrap;"
         f'background:{bg};color:{fg}">{_e(action)}</span>'
@@ -676,20 +676,6 @@ def _page_holdings_outlook(data: MonthlyReportData) -> str:
         f"</div>"
     )
 
-    # Disclosure footer
-    disclosure = (
-        '<div style="margin-top:14px;padding:10px;background:#f9fafb;'
-        'border-radius:4px;font-size:8px;color:#9ca3af;line-height:1.5">'
-        "This report is generated for institutional investors and qualified "
-        "purchasers only. Past performance does not guarantee future results. "
-        "All returns are net of management fees unless otherwise stated. "
-        "Risk metrics are based on historical data and may not reflect future "
-        "conditions. Simulated stress scenarios are hypothetical and do not "
-        "represent actual losses. Portfolio allocations are subject to change "
-        "without notice."
-        "</div>"
-    )
-
     return (
         f'<div class="page">'
         f"{_page_header(data.portfolio_name, data.as_of, 4)}"
@@ -697,7 +683,6 @@ def _page_holdings_outlook(data: MonthlyReportData) -> str:
         f'{_section_title("Holdings")}'
         f'<div style="margin:4px 0 8px">{holdings_table}</div>'
         f"{bottom_grid}"
-        f"{disclosure}"
         f"</div>"
         f"{_page_footer(data.as_of, 4, backtest=data.is_backtest)}"
         f"</div>"

@@ -50,7 +50,7 @@ def _md_to_html(content_md: str) -> str:
             if in_list:
                 result.append("</ul>")
                 in_list = False
-            result.append('<div style="height:6px"></div>')
+            result.append('<div style="height:10px"></div>')
             continue
 
         if stripped.startswith("## "):
@@ -60,7 +60,7 @@ def _md_to_html(content_md: str) -> str:
             text = _apply_bold(_e(stripped[3:]))
             result.append(
                 f'<h3 style="font-size:12px;font-weight:600;color:#111827;'
-                f'margin:10px 0 4px;border-bottom:1px solid #e5e7eb;'
+                f'margin:16px 0 6px;border-bottom:1px solid #e5e7eb;'
                 f'padding-bottom:4px">{text}</h3>'
             )
         elif stripped.startswith("# "):
@@ -184,15 +184,6 @@ def render_content_report(
     # Content
     content_html = _md_to_html(content_md)
 
-    # Disclaimer
-    disclaimer = (
-        f'<div style="margin-top:16px;padding:10px 14px;background:#f9fafb;'
-        f'border:0.5px solid #e5e7eb;border-radius:4px;'
-        f'font-size:8px;line-height:1.6;color:#6B7280">'
-        f"{_e(labels['content_disclaimer'])}"
-        f"</div>"
-    )
-
     # Footer
     footer = (
         f'<div style="position:absolute;bottom:0;left:0;right:0;padding:10px 24px;'
@@ -206,9 +197,8 @@ def render_content_report(
     body = (
         f'<div class="page">'
         f"{header}"
-        f'<div style="padding:16px 36px">'
+        f'<div style="padding:20px 36px 64px">'
         f"{content_html}"
-        f"{disclaimer}"
         f"</div>"
         f"{footer}"
         f"</div>"
