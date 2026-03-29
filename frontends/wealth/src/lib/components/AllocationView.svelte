@@ -5,14 +5,14 @@
 -->
 <script lang="ts">
 	import {
-		Button,
 		formatNumber,
 		formatPercent,
 		formatBps,
 		MetricCard,
 		ConsequenceDialog,
 		ActionButton,
-	} from "@netz/ui";
+	} from "@investintell/ui";
+	import { Button } from "@investintell/ui/components/ui/button";
 	import { createClientApiClient } from "$lib/api/client";
 	import { getContext } from "svelte";
 	import { BLOCK_INSTRUMENTS } from "./allocation/BLOCK_INSTRUMENTS";
@@ -595,15 +595,15 @@
 	{#snippet consequenceList()}
 		<ul class="space-y-1.5">
 			<li class="flex items-start gap-2">
-				<span class="mt-0.5 text-(--netz-warning)">&#9679;</span>
-				<span>This will update the strategic allocation for <strong class="text-(--netz-text-primary)">{activeProfile}</strong></span>
+				<span class="mt-0.5 text-(--ii-warning)">&#9679;</span>
+				<span>This will update the strategic allocation for <strong class="text-(--ii-text-primary)">{activeProfile}</strong></span>
 			</li>
 			<li class="flex items-start gap-2">
-				<span class="mt-0.5 text-(--netz-warning)">&#9679;</span>
+				<span class="mt-0.5 text-(--ii-warning)">&#9679;</span>
 				<span>Affects all portfolios using this profile</span>
 			</li>
 			<li class="flex items-start gap-2">
-				<span class="mt-0.5 text-(--netz-warning)">&#9679;</span>
+				<span class="mt-0.5 text-(--ii-warning)">&#9679;</span>
 				<span>CVaR recalculation will be triggered</span>
 			</li>
 		</ul>
@@ -627,15 +627,15 @@
 	{#snippet consequenceList()}
 		<ul class="space-y-1.5">
 			<li class="flex items-start gap-2">
-				<span class="mt-0.5 text-(--netz-warning)">&#9679;</span>
-				<span>This will update tactical tilts for <strong class="text-(--netz-text-primary)">{activeProfile}</strong></span>
+				<span class="mt-0.5 text-(--ii-warning)">&#9679;</span>
+				<span>This will update tactical tilts for <strong class="text-(--ii-text-primary)">{activeProfile}</strong></span>
 			</li>
 			<li class="flex items-start gap-2">
-				<span class="mt-0.5 text-(--netz-warning)">&#9679;</span>
+				<span class="mt-0.5 text-(--ii-warning)">&#9679;</span>
 				<span>Affects all portfolios using this profile</span>
 			</li>
 			<li class="flex items-start gap-2">
-				<span class="mt-0.5 text-(--netz-warning)">&#9679;</span>
+				<span class="mt-0.5 text-(--ii-warning)">&#9679;</span>
 				<span>Effective allocation will be recalculated immediately</span>
 			</li>
 		</ul>
@@ -671,13 +671,13 @@
 		font-weight: 700;
 		color: #62748e;
 		cursor: pointer;
-		font-family: var(--netz-font-sans);
+		font-family: var(--ii-font-sans);
 		transition: color 120ms, background 120ms;
 		margin-bottom: -1px;
 	}
 
 	.alloc-profile-tab:hover {
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 	}
 
 	.alloc-profile-tab--active {
@@ -785,12 +785,12 @@
 		font-weight: 700;
 		color: #62748e;
 		cursor: pointer;
-		font-family: var(--netz-font-sans);
+		font-family: var(--ii-font-sans);
 		transition: color 120ms, background 120ms, box-shadow 120ms;
 	}
 
 	.alloc-view-tab:hover {
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 	}
 
 	.alloc-view-tab--active {
@@ -814,7 +814,7 @@
 	.alloc-edit-total {
 		font-size: 13px;
 		font-weight: 600;
-		color: var(--netz-danger, #ef4444);
+		color: var(--ii-danger, #ef4444);
 	}
 
 	.alloc-edit-total--ok {
@@ -875,7 +875,7 @@
 
 	/* Block row */
 	.alloc-row-block {
-		border-bottom: 1px solid var(--netz-border-subtle);
+		border-bottom: 1px solid var(--ii-border-subtle);
 	}
 
 	.alloc-row-block:last-child {
@@ -886,12 +886,12 @@
 		padding: 14px 24px;
 		font-size: 14px;
 		font-weight: 700;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 	}
 
 	/* Instrument row */
 	.alloc-row-instrument {
-		border-bottom: 1px solid color-mix(in srgb, var(--netz-border-subtle) 50%, transparent);
+		border-bottom: 1px solid color-mix(in srgb, var(--ii-border-subtle) 50%, transparent);
 	}
 
 	.alloc-td--instrument {
@@ -952,20 +952,20 @@
 	}
 
 	.alloc-negative {
-		color: var(--netz-danger, #ef4444);
+		color: var(--ii-danger, #ef4444);
 		font-weight: 600;
 	}
 
 	.alloc-loading {
 		padding: 48px;
 		text-align: center;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 	}
 
 	.alloc-error {
 		padding: 12px 24px;
-		background: color-mix(in srgb, var(--netz-danger, #ef4444) 8%, transparent);
-		color: var(--netz-danger, #ef4444);
+		background: color-mix(in srgb, var(--ii-danger, #ef4444) 8%, transparent);
+		color: var(--ii-danger, #ef4444);
 		font-size: 13px;
 	}
 
@@ -982,18 +982,18 @@
 		padding: 4px 8px;
 		text-align: right;
 		font-size: 13px;
-		border: 1px solid var(--netz-border);
+		border: 1px solid var(--ii-border);
 		border-radius: 6px;
-		background: var(--netz-surface-alt);
-		color: var(--netz-text-primary);
-		font-family: var(--netz-font-mono);
+		background: var(--ii-surface-alt);
+		color: var(--ii-text-primary);
+		font-family: var(--ii-font-mono);
 	}
 
 	/* Simulation preview (breach) */
 	.alloc-sim-preview {
 		padding: 20px 24px;
-		border-bottom: 1px solid var(--netz-border-subtle);
-		background: color-mix(in srgb, var(--netz-danger, #ef4444) 4%, var(--netz-surface-elevated));
+		border-bottom: 1px solid var(--ii-border-subtle);
+		background: color-mix(in srgb, var(--ii-danger, #ef4444) 4%, var(--ii-surface-elevated));
 	}
 
 	.alloc-sim-header {
@@ -1006,15 +1006,15 @@
 	.alloc-sim-title {
 		font-size: 14px;
 		font-weight: 600;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 		margin: 0;
 	}
 
 	.alloc-sim-badge--breach {
 		font-size: 12px;
 		font-weight: 600;
-		color: var(--netz-danger, #ef4444);
-		background: color-mix(in srgb, var(--netz-danger, #ef4444) 12%, transparent);
+		color: var(--ii-danger, #ef4444);
+		background: color-mix(in srgb, var(--ii-danger, #ef4444) 12%, transparent);
 		padding: 2px 10px;
 		border-radius: 12px;
 	}
@@ -1029,6 +1029,6 @@
 		margin: 12px 0 0;
 		font-size: 13px;
 		font-weight: 500;
-		color: var(--netz-danger, #ef4444);
+		color: var(--ii-danger, #ef4444);
 	}
 </style>

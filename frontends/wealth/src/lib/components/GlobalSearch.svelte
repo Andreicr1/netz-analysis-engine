@@ -262,9 +262,9 @@
 	.gs-dialog {
 		width: 100%;
 		max-width: 560px;
-		background: var(--netz-surface-elevated, #fff);
-		border: 1px solid var(--netz-border, #e2e8f0);
-		border-radius: var(--netz-radius-lg, 12px);
+		background: var(--ii-surface-elevated, #fff);
+		border: 1px solid var(--ii-border, #e2e8f0);
+		border-radius: var(--ii-radius-lg, 12px);
 		box-shadow:
 			0 20px 60px rgba(0, 0, 0, 0.15),
 			0 4px 16px rgba(0, 0, 0, 0.1);
@@ -277,11 +277,11 @@
 		align-items: center;
 		gap: 8px;
 		padding: 12px 16px;
-		border-bottom: 1px solid var(--netz-border-subtle, #edf2f7);
+		border-bottom: 1px solid var(--ii-border-subtle, #edf2f7);
 	}
 
 	.gs-input-row :global(.gs-input-icon) {
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		flex-shrink: 0;
 	}
 
@@ -290,17 +290,17 @@
 		border: none;
 		background: transparent;
 		font-size: 0.9375rem;
-		font-family: var(--netz-font-sans);
-		color: var(--netz-text-primary);
+		font-family: var(--ii-font-sans);
+		color: var(--ii-text-primary);
 		outline: none;
 	}
 
 	.gs-input::placeholder {
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 	}
 
 	.gs-input-row :global(.gs-spinner) {
-		color: var(--netz-brand-primary, #3b82f6);
+		color: var(--ii-brand-primary, #3b82f6);
 		animation: spin 0.8s linear infinite;
 		flex-shrink: 0;
 	}
@@ -311,16 +311,16 @@
 		justify-content: center;
 		width: 24px;
 		height: 24px;
-		border: 1px solid var(--netz-border, #e2e8f0);
-		border-radius: var(--netz-radius-xs, 4px);
-		background: var(--netz-surface-alt, #f7fafc);
-		color: var(--netz-text-muted);
+		border: 1px solid var(--ii-border, #e2e8f0);
+		border-radius: var(--ii-radius-xs, 4px);
+		background: var(--ii-surface-alt, #f7fafc);
+		color: var(--ii-text-muted);
 		cursor: pointer;
 		flex-shrink: 0;
 	}
 
 	.gs-close-btn:hover {
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 	}
 
 	/* ── Results area ─��� */
@@ -337,11 +337,11 @@
 		align-items: center;
 		gap: 8px;
 		padding: 32px 16px;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 	}
 
 	.gs-empty :global(.gs-spinner) {
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		animation: spin 0.8s linear infinite;
 	}
 
@@ -353,17 +353,17 @@
 		display: flex;
 		gap: 12px;
 		font-size: 0.6875rem;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 	}
 
 	.gs-shortcuts kbd {
 		display: inline-flex;
 		align-items: center;
 		padding: 1px 4px;
-		border: 1px solid var(--netz-border);
+		border: 1px solid var(--ii-border);
 		border-radius: 3px;
-		background: var(--netz-surface-alt);
-		font-family: var(--netz-font-mono);
+		background: var(--ii-surface-alt);
+		font-family: var(--ii-font-mono);
 		font-size: 0.625rem;
 	}
 
@@ -381,14 +381,14 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 	}
 
 	.gs-group-count {
 		margin-left: auto;
 		font-weight: 500;
 		font-size: 0.625rem;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		opacity: 0.7;
 	}
 
@@ -403,19 +403,19 @@
 		background: transparent;
 		cursor: pointer;
 		text-align: left;
-		font-family: var(--netz-font-sans);
+		font-family: var(--ii-font-sans);
 		transition: background 60ms ease;
 	}
 
 	.gs-item:hover,
 	.gs-item.selected {
-		background: var(--netz-surface-alt, #f7fafc);
+		background: var(--ii-surface-alt, #f7fafc);
 	}
 
 	.gs-item-title {
 		font-size: 0.8125rem;
 		font-weight: 500;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -424,7 +424,7 @@
 
 	.gs-item-subtitle {
 		font-size: 0.75rem;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;

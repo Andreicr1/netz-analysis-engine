@@ -3,7 +3,7 @@
 -->
 <script lang="ts">
 	import { goto } from "$app/navigation";
-	import { PageHeader, StatusBadge, EmptyState, formatDateTime } from "@netz/ui";
+	import { PageHeader, StatusBadge, EmptyState, formatDateTime } from "@investintell/ui";
 	import type { PageData } from "./$types";
 	import type { DDReportListItem } from "$lib/types/dd-report";
 	import { anchorLabel, anchorColor, confidenceColor } from "$lib/types/dd-report";
@@ -151,95 +151,95 @@
 
 <style>
 	.dd-page {
-		padding: var(--netz-space-stack-md, 16px) var(--netz-space-inline-lg, 24px);
+		padding: var(--ii-space-stack-md, 16px) var(--ii-space-inline-lg, 24px);
 	}
 
 	.dd-toolbar {
 		display: flex;
 		align-items: center;
-		gap: var(--netz-space-inline-md, 16px);
-		margin-bottom: var(--netz-space-stack-md, 16px);
+		gap: var(--ii-space-inline-md, 16px);
+		margin-bottom: var(--ii-space-stack-md, 16px);
 		flex-wrap: wrap;
 	}
 
 	.dd-search {
 		width: 100%;
 		max-width: 320px;
-		height: var(--netz-space-control-height-md, 40px);
-		padding: 0 var(--netz-space-inline-sm, 12px);
-		border: 1px solid var(--netz-border);
-		border-radius: var(--netz-radius-sm, 8px);
-		background: var(--netz-surface-elevated);
-		color: var(--netz-text-primary);
-		font-size: var(--netz-text-body, 0.9375rem);
-		font-family: var(--netz-font-sans);
+		height: var(--ii-space-control-height-md, 40px);
+		padding: 0 var(--ii-space-inline-sm, 12px);
+		border: 1px solid var(--ii-border);
+		border-radius: var(--ii-radius-sm, 8px);
+		background: var(--ii-surface-elevated);
+		color: var(--ii-text-primary);
+		font-size: var(--ii-text-body, 0.9375rem);
+		font-family: var(--ii-font-sans);
 	}
 
 	.dd-search:focus {
 		outline: none;
-		border-color: var(--netz-border-focus);
-		box-shadow: 0 0 0 2px color-mix(in srgb, var(--netz-brand-secondary) 20%, transparent);
+		border-color: var(--ii-border-focus);
+		box-shadow: 0 0 0 2px color-mix(in srgb, var(--ii-brand-secondary) 20%, transparent);
 	}
 
 	.dd-search::placeholder {
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 	}
 
 	.dd-status-chips {
 		display: flex;
-		gap: var(--netz-space-inline-xs, 6px);
+		gap: var(--ii-space-inline-xs, 6px);
 		flex-wrap: wrap;
 	}
 
 	.dd-chip {
-		padding: var(--netz-space-stack-2xs, 4px) var(--netz-space-inline-sm, 12px);
-		border: 1px solid var(--netz-border);
-		border-radius: var(--netz-radius-pill, 999px);
+		padding: var(--ii-space-stack-2xs, 4px) var(--ii-space-inline-sm, 12px);
+		border: 1px solid var(--ii-border);
+		border-radius: var(--ii-radius-pill, 999px);
 		background: transparent;
-		color: var(--netz-text-secondary);
-		font-size: var(--netz-text-label, 0.75rem);
-		font-family: var(--netz-font-sans);
+		color: var(--ii-text-secondary);
+		font-size: var(--ii-text-label, 0.75rem);
+		font-family: var(--ii-font-sans);
 		font-weight: 500;
 		cursor: pointer;
 		transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 	}
 
 	.dd-chip:hover {
-		background: var(--netz-surface-alt);
+		background: var(--ii-surface-alt);
 	}
 
 	.dd-chip--active {
-		background: color-mix(in srgb, var(--netz-brand-primary) 12%, transparent);
-		color: var(--netz-brand-primary);
-		border-color: var(--netz-brand-primary);
+		background: color-mix(in srgb, var(--ii-brand-primary) 12%, transparent);
+		color: var(--ii-brand-primary);
+		border-color: var(--ii-brand-primary);
 		font-weight: 600;
 	}
 
 	/* ── Table ── */
 	.dd-table-wrap {
 		overflow-x: auto;
-		border: 1px solid var(--netz-border-subtle);
-		border-radius: var(--netz-radius-md, 12px);
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-md, 12px);
 	}
 
 	.dd-table {
 		width: 100%;
 		border-collapse: collapse;
-		font-family: var(--netz-font-sans);
-		font-size: var(--netz-text-small, 0.8125rem);
+		font-family: var(--ii-font-sans);
+		font-size: var(--ii-text-small, 0.8125rem);
 	}
 
 	.dd-table th {
-		padding: var(--netz-space-stack-xs, 10px) var(--netz-space-inline-sm, 12px);
-		background: var(--netz-surface-alt);
-		color: var(--netz-text-muted);
-		font-size: var(--netz-text-label, 0.75rem);
+		padding: var(--ii-space-stack-xs, 10px) var(--ii-space-inline-sm, 12px);
+		background: var(--ii-surface-alt);
+		color: var(--ii-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
 		text-align: left;
 		white-space: nowrap;
-		border-bottom: 1px solid var(--netz-border-subtle);
+		border-bottom: 1px solid var(--ii-border-subtle);
 	}
 
 	.dd-row {
@@ -248,12 +248,12 @@
 	}
 
 	.dd-row:hover {
-		background: var(--netz-surface-alt);
+		background: var(--ii-surface-alt);
 	}
 
 	.dd-table td {
-		padding: var(--netz-space-stack-xs, 10px) var(--netz-space-inline-sm, 12px);
-		border-bottom: 1px solid var(--netz-border-subtle);
+		padding: var(--ii-space-stack-xs, 10px) var(--ii-space-inline-sm, 12px);
+		border-bottom: 1px solid var(--ii-border-subtle);
 		vertical-align: middle;
 	}
 
@@ -266,18 +266,18 @@
 
 	.dd-name {
 		font-weight: 600;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 	}
 
 	.dd-ticker {
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
 	}
 
 	.dd-cell-version {
 		font-weight: 600;
 		font-variant-numeric: tabular-nums;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 	}
 
 	.dd-cell-num {
@@ -287,29 +287,29 @@
 
 	.dd-cell-date {
 		white-space: nowrap;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		font-variant-numeric: tabular-nums;
 	}
 
 	.dd-muted {
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 	}
 
 	.dd-anchor {
 		font-weight: 600;
 		padding: 2px 8px;
-		border-radius: var(--netz-radius-pill, 999px);
+		border-radius: var(--ii-radius-pill, 999px);
 		background: color-mix(in srgb, currentColor 10%, transparent);
 	}
 
 	.dd-action-btn {
-		padding: var(--netz-space-stack-2xs, 4px) var(--netz-space-inline-sm, 12px);
-		border: 1px solid var(--netz-border-accent);
-		border-radius: var(--netz-radius-sm, 8px);
+		padding: var(--ii-space-stack-2xs, 4px) var(--ii-space-inline-sm, 12px);
+		border: 1px solid var(--ii-border-accent);
+		border-radius: var(--ii-radius-sm, 8px);
 		background: transparent;
-		color: var(--netz-brand-primary);
-		font-size: var(--netz-text-label, 0.75rem);
-		font-family: var(--netz-font-sans);
+		color: var(--ii-brand-primary);
+		font-size: var(--ii-text-label, 0.75rem);
+		font-family: var(--ii-font-sans);
 		font-weight: 600;
 		cursor: pointer;
 		white-space: nowrap;
@@ -317,7 +317,7 @@
 	}
 
 	.dd-action-btn:hover {
-		background: color-mix(in srgb, var(--netz-brand-primary) 8%, transparent);
+		background: color-mix(in srgb, var(--ii-brand-primary) 8%, transparent);
 	}
 
 	@media (max-width: 768px) {

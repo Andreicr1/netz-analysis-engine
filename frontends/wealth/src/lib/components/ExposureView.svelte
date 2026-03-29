@@ -3,7 +3,8 @@
   Self-loading component for embedding in Analytics tabs.
 -->
 <script lang="ts">
-	import { SectionCard, HeatmapTable, EmptyState, Skeleton, formatPercent, formatShortDate } from "@netz/ui";
+	import { SectionCard, HeatmapTable, EmptyState, formatPercent, formatShortDate } from "@investintell/ui";
+	import { Skeleton } from "@investintell/ui/components/ui/skeleton";
 	import { createClientApiClient } from "$lib/api/client";
 	import { getContext } from "svelte";
 
@@ -70,34 +71,34 @@
 <div class="space-y-6">
 	<!-- Aggregation toggle -->
 	<div class="flex items-center justify-between">
-		<h3 class="text-sm font-semibold text-(--netz-text-primary)">Exposure Monitor</h3>
+		<h3 class="text-sm font-semibold text-(--ii-text-primary)">Exposure Monitor</h3>
 		<div class="flex items-center gap-3">
 			{#if metadata?.as_of}
-				<span class="text-xs text-(--netz-text-muted)">
+				<span class="text-xs text-(--ii-text-muted)">
 					as of {formatShortDate(metadata.as_of)}
 				</span>
 			{/if}
 			<div
-				class="flex items-center rounded-lg border border-(--netz-border) bg-(--netz-surface-inset) p-1"
+				class="flex items-center rounded-lg border border-(--ii-border) bg-(--ii-surface-inset) p-1"
 				role="group"
 				aria-label="Aggregation"
 			>
 				<button
 					class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
-					class:bg-(--netz-surface-elevated)={aggregation === "portfolio"}
-					class:text-(--netz-text-primary)={aggregation === "portfolio"}
-					class:shadow-(--netz-shadow-1)={aggregation === "portfolio"}
-					class:text-(--netz-text-muted)={aggregation !== "portfolio"}
+					class:bg-(--ii-surface-elevated)={aggregation === "portfolio"}
+					class:text-(--ii-text-primary)={aggregation === "portfolio"}
+					class:shadow-(--ii-shadow-1)={aggregation === "portfolio"}
+					class:text-(--ii-text-muted)={aggregation !== "portfolio"}
 					onclick={() => setAggregation("portfolio")}
 				>
 					Portfolios
 				</button>
 				<button
 					class="rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
-					class:bg-(--netz-surface-elevated)={aggregation === "manager"}
-					class:text-(--netz-text-primary)={aggregation === "manager"}
-					class:shadow-(--netz-shadow-1)={aggregation === "manager"}
-					class:text-(--netz-text-muted)={aggregation !== "manager"}
+					class:bg-(--ii-surface-elevated)={aggregation === "manager"}
+					class:text-(--ii-text-primary)={aggregation === "manager"}
+					class:shadow-(--ii-shadow-1)={aggregation === "manager"}
+					class:text-(--ii-text-muted)={aggregation !== "manager"}
 					onclick={() => setAggregation("manager")}
 				>
 					By Manager
@@ -114,19 +115,19 @@
 	{:else if bothEmpty}
 		<SectionCard title="Exposure Monitor">
 			<div class="flex flex-col items-center justify-center py-20 text-center">
-				<p class="text-lg font-medium text-(--netz-text-primary)">Sem posições para exibir</p>
+				<p class="text-lg font-medium text-(--ii-text-primary)">Sem posições para exibir</p>
 				{#if metadata && metadata.profile_count === 0}
-					<p class="mt-2 text-sm text-(--netz-text-muted)">
+					<p class="mt-2 text-sm text-(--ii-text-muted)">
 						Configure um Model Portfolio antes de visualizar a exposição.
 					</p>
 					<a
 						href="/model-portfolios"
-						class="mt-4 inline-flex items-center rounded-lg bg-(--netz-accent) px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+						class="mt-4 inline-flex items-center rounded-lg bg-(--ii-accent) px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-opacity"
 					>
 						Ir para Model Portfolios
 					</a>
 				{:else}
-					<p class="mt-2 text-sm text-(--netz-text-muted)">
+					<p class="mt-2 text-sm text-(--ii-text-muted)">
 						Os portfolios existem mas ainda não têm posições calculadas.
 						Aguarde o próximo ciclo do engine ou acione a construção manual.
 					</p>

@@ -4,7 +4,7 @@
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { ConsequenceDialog, StatusBadge, formatDate, formatDateTime } from "@netz/ui";
+	import { ConsequenceDialog, StatusBadge, formatDate, formatDateTime } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 
 	interface MacroReview {
@@ -254,9 +254,9 @@
 
 <style>
 	.reviews-section {
-		border: 1px solid var(--netz-border-subtle);
-		border-radius: var(--netz-radius-md, 12px);
-		background: var(--netz-surface-elevated);
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-md, 12px);
+		background: var(--ii-surface-elevated);
 		overflow: hidden;
 	}
 
@@ -265,26 +265,26 @@
 		justify-content: space-between;
 		align-items: center;
 		padding: 8px 16px;
-		border-bottom: 1px solid var(--netz-border-subtle);
-		background: var(--netz-surface-alt);
+		border-bottom: 1px solid var(--ii-border-subtle);
+		background: var(--ii-surface-alt);
 	}
 
 	.reviews-title {
-		font-size: var(--netz-text-label, 0.75rem);
+		font-size: var(--ii-text-label, 0.75rem);
 		font-weight: 600;
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		margin: 0;
 	}
 
 	.reviews-generate-btn {
 		padding: 4px 12px;
-		font-size: var(--netz-text-label, 0.75rem);
+		font-size: var(--ii-text-label, 0.75rem);
 		font-weight: 600;
-		border: 1px solid var(--netz-brand-primary);
-		border-radius: var(--netz-radius-sm, 6px);
-		background: var(--netz-brand-primary);
+		border: 1px solid var(--ii-brand-primary);
+		border-radius: var(--ii-radius-sm, 6px);
+		background: var(--ii-brand-primary);
 		color: white;
 		cursor: pointer;
 		transition: opacity 150ms ease;
@@ -301,17 +301,17 @@
 
 	.reviews-error {
 		padding: 8px 16px;
-		font-size: var(--netz-text-small, 0.8125rem);
-		color: var(--netz-danger);
-		background: color-mix(in srgb, var(--netz-danger) 8%, transparent);
+		font-size: var(--ii-text-small, 0.8125rem);
+		color: var(--ii-danger);
+		background: color-mix(in srgb, var(--ii-danger) 8%, transparent);
 	}
 
 	.reviews-loading,
 	.reviews-empty {
 		padding: 24px;
 		text-align: center;
-		color: var(--netz-text-muted);
-		font-size: var(--netz-text-small, 0.8125rem);
+		color: var(--ii-text-muted);
+		font-size: var(--ii-text-small, 0.8125rem);
 	}
 
 	.reviews-list {
@@ -321,7 +321,7 @@
 
 	.review-card {
 		padding: 12px 16px;
-		border-bottom: 1px solid var(--netz-border-subtle);
+		border-bottom: 1px solid var(--ii-border-subtle);
 	}
 
 	.review-card:last-child {
@@ -336,21 +336,21 @@
 	}
 
 	.review-date {
-		font-size: var(--netz-text-small, 0.8125rem);
+		font-size: var(--ii-text-small, 0.8125rem);
 		font-weight: 600;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 	}
 
 	.review-emergency {
 		font-size: 10px;
 		font-weight: 700;
-		color: var(--netz-danger);
+		color: var(--ii-danger);
 		letter-spacing: 0.06em;
 	}
 
 	.review-summary {
-		font-size: var(--netz-text-small, 0.8125rem);
-		color: var(--netz-text-secondary);
+		font-size: var(--ii-text-small, 0.8125rem);
+		color: var(--ii-text-secondary);
 		margin: 4px 0;
 		line-height: 1.4;
 	}
@@ -359,7 +359,7 @@
 		display: flex;
 		gap: 12px;
 		font-size: 11px;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		flex-wrap: wrap;
 	}
 
@@ -379,9 +379,9 @@
 
 	.action-btn {
 		padding: 4px 12px;
-		font-size: var(--netz-text-label, 0.75rem);
+		font-size: var(--ii-text-label, 0.75rem);
 		font-weight: 600;
-		border-radius: var(--netz-radius-sm, 6px);
+		border-radius: var(--ii-radius-sm, 6px);
 		cursor: pointer;
 		border: 1px solid;
 		transition: opacity 150ms ease;
@@ -393,18 +393,18 @@
 	}
 
 	.action-btn--approve {
-		background: var(--netz-success);
-		border-color: var(--netz-success);
+		background: var(--ii-success);
+		border-color: var(--ii-success);
 		color: white;
 	}
 
 	.action-btn--reject {
 		background: transparent;
-		border-color: var(--netz-danger);
-		color: var(--netz-danger);
+		border-color: var(--ii-danger);
+		color: var(--ii-danger);
 	}
 
 	.action-btn--reject:hover:not(:disabled) {
-		background: color-mix(in srgb, var(--netz-danger) 10%, transparent);
+		background: color-mix(in srgb, var(--ii-danger) 10%, transparent);
 	}
 </style>

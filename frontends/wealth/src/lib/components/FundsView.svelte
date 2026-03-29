@@ -3,7 +3,10 @@
   Self-loading component for embedding in Screener tabs.
 -->
 <script lang="ts">
-	import { Badge, Button, EmptyState, Skeleton, formatAUM as formatSharedAUM, formatDate as formatSharedDate, formatNumber } from "@netz/ui";
+	import { EmptyState, formatAUM as formatSharedAUM, formatDate as formatSharedDate, formatNumber } from "@investintell/ui";
+	import { Badge } from "@investintell/ui/components/ui/badge";
+	import { Button } from "@investintell/ui/components/ui/button";
+	import { Skeleton } from "@investintell/ui/components/ui/skeleton";
 	import FundDetailPanel from "$lib/components/FundDetailPanel.svelte";
 	import { createClientApiClient } from "$lib/api/client";
 	import { getContext } from "svelte";
@@ -96,25 +99,25 @@
 
 	// Strategy badge colors
 	const strategyColors: Record<string, { bg: string; text: string }> = {
-		"Senior Secured": { bg: "color-mix(in srgb, var(--netz-teal, #14b8a6) 15%, transparent)", text: "var(--netz-teal, #14b8a6)" },
-		"Long Only": { bg: "color-mix(in srgb, var(--netz-brand-primary) 15%, transparent)", text: "var(--netz-brand-primary)" },
+		"Senior Secured": { bg: "color-mix(in srgb, var(--ii-teal, #14b8a6) 15%, transparent)", text: "var(--ii-teal, #14b8a6)" },
+		"Long Only": { bg: "color-mix(in srgb, var(--ii-brand-primary) 15%, transparent)", text: "var(--ii-brand-primary)" },
 		"Fixed Income": { bg: "color-mix(in srgb, #8b5cf6 15%, transparent)", text: "#8b5cf6" },
-		"Risk Parity": { bg: "color-mix(in srgb, var(--netz-warning) 15%, transparent)", text: "var(--netz-warning)" },
-		"EM Bonds": { bg: "color-mix(in srgb, var(--netz-success) 15%, transparent)", text: "var(--netz-success)" },
+		"Risk Parity": { bg: "color-mix(in srgb, var(--ii-warning) 15%, transparent)", text: "var(--ii-warning)" },
+		"EM Bonds": { bg: "color-mix(in srgb, var(--ii-success) 15%, transparent)", text: "var(--ii-success)" },
 	};
 
 	function getStrategyStyle(strategy: string | null): string {
 		if (!strategy) return "";
 		const colors = strategyColors[strategy];
-		if (!colors) return `background: color-mix(in srgb, var(--netz-text-muted) 15%, transparent); color: var(--netz-text-muted);`;
+		if (!colors) return `background: color-mix(in srgb, var(--ii-text-muted) 15%, transparent); color: var(--ii-text-muted);`;
 		return `background: ${colors.bg}; color: ${colors.text};`;
 	}
 
 	function getStatusStyle(status: string | null): string {
 		switch (status) {
-			case "aprovado": return "background: color-mix(in srgb, var(--netz-success) 15%, transparent); color: var(--netz-success);";
-			case "watchlist": return "background: color-mix(in srgb, var(--netz-warning) 15%, transparent); color: var(--netz-warning);";
-			default: return "background: color-mix(in srgb, var(--netz-text-muted) 15%, transparent); color: var(--netz-text-muted);";
+			case "aprovado": return "background: color-mix(in srgb, var(--ii-success) 15%, transparent); color: var(--ii-success);";
+			case "watchlist": return "background: color-mix(in srgb, var(--ii-warning) 15%, transparent); color: var(--ii-warning);";
+			default: return "background: color-mix(in srgb, var(--ii-text-muted) 15%, transparent); color: var(--ii-text-muted);";
 		}
 	}
 
@@ -129,9 +132,9 @@
 
 	function getDDReportStyle(ddStatus: string | null): string {
 		switch (ddStatus) {
-			case "complete": return "background: color-mix(in srgb, var(--netz-success) 15%, transparent); color: var(--netz-success);";
-			case "generating": return "background: color-mix(in srgb, var(--netz-brand-primary) 15%, transparent); color: var(--netz-brand-primary);";
-			default: return "background: color-mix(in srgb, var(--netz-text-muted) 15%, transparent); color: var(--netz-text-muted);";
+			case "complete": return "background: color-mix(in srgb, var(--ii-success) 15%, transparent); color: var(--ii-success);";
+			case "generating": return "background: color-mix(in srgb, var(--ii-brand-primary) 15%, transparent); color: var(--ii-brand-primary);";
+			default: return "background: color-mix(in srgb, var(--ii-text-muted) 15%, transparent); color: var(--ii-text-muted);";
 		}
 	}
 
@@ -160,7 +163,7 @@
 		</div>
 	{:else}
 		<div class="flex items-center justify-between">
-			<h3 class="text-sm font-semibold text-(--netz-text-primary)">Fund Universe ({funds.length})</h3>
+			<h3 class="text-sm font-semibold text-(--ii-text-primary)">Fund Universe ({funds.length})</h3>
 			<Button class="gap-1.5">
 				<svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
 					<path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
@@ -169,22 +172,22 @@
 			</Button>
 		</div>
 
-		<div class="overflow-hidden rounded-(--netz-radius-xl) border border-(--netz-border-subtle) bg-(--netz-surface-panel) shadow-(--netz-shadow-card)">
+		<div class="overflow-hidden rounded-(--ii-radius-xl) border border-(--ii-border-subtle) bg-(--ii-surface-panel) shadow-(--ii-shadow-card)">
 			<!-- Status Tabs -->
-			<div class="border-b border-(--netz-border-subtle) bg-(--netz-surface-highlight) px-3 py-3">
+			<div class="border-b border-(--ii-border-subtle) bg-(--ii-surface-highlight) px-3 py-3">
 				<div class="flex flex-wrap items-center gap-2">
 					{#each statusTabs as tab (tab.value)}
 						<button
-							class="inline-flex min-h-(--netz-space-control-height-md) items-center gap-2 rounded-(--netz-radius-md) border px-3.5 py-2 text-sm font-medium tracking-[-0.01em] transition-[color,background-color,border-color,box-shadow] duration-(--netz-duration-fast)"
-							class:border-(--netz-border)={activeStatusTab === tab.value}
-							class:bg-(--netz-surface-elevated)={activeStatusTab === tab.value}
-							class:text-(--netz-text-primary)={activeStatusTab === tab.value}
-							class:shadow-(--netz-shadow-1)={activeStatusTab === tab.value}
+							class="inline-flex min-h-(--ii-space-control-height-md) items-center gap-2 rounded-(--ii-radius-md) border px-3.5 py-2 text-sm font-medium tracking-[-0.01em] transition-[color,background-color,border-color,box-shadow] duration-(--ii-duration-fast)"
+							class:border-(--ii-border)={activeStatusTab === tab.value}
+							class:bg-(--ii-surface-elevated)={activeStatusTab === tab.value}
+							class:text-(--ii-text-primary)={activeStatusTab === tab.value}
+							class:shadow-(--ii-shadow-1)={activeStatusTab === tab.value}
 							class:border-transparent={activeStatusTab !== tab.value}
 							class:bg-transparent={activeStatusTab !== tab.value}
-							class:text-(--netz-text-muted)={activeStatusTab !== tab.value}
-							class:hover:bg-(--netz-accent-soft)={activeStatusTab !== tab.value}
-							class:hover:text-(--netz-text-secondary)={activeStatusTab !== tab.value}
+							class:text-(--ii-text-muted)={activeStatusTab !== tab.value}
+							class:hover:bg-(--ii-accent-soft)={activeStatusTab !== tab.value}
+							class:hover:text-(--ii-text-secondary)={activeStatusTab !== tab.value}
 							onclick={() => (activeStatusTab = tab.value)}
 						>
 							{tab.label}
@@ -202,49 +205,49 @@
 				<div class="overflow-x-auto">
 					<table class="w-full min-w-200 text-sm">
 						<thead>
-							<tr class="border-b border-(--netz-border-subtle) bg-(--netz-surface-highlight)">
-								<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">Fund</th>
-								<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">Manager</th>
-								<th class="px-4 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">AUM</th>
-								<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">Strategy</th>
-								<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">Status</th>
-								<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">DD Report</th>
-								<th class="px-4 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">Score</th>
-								<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--netz-text-muted)">Updated</th>
+							<tr class="border-b border-(--ii-border-subtle) bg-(--ii-surface-highlight)">
+								<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--ii-text-muted)">Fund</th>
+								<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--ii-text-muted)">Manager</th>
+								<th class="px-4 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-(--ii-text-muted)">AUM</th>
+								<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--ii-text-muted)">Strategy</th>
+								<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--ii-text-muted)">Status</th>
+								<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--ii-text-muted)">DD Report</th>
+								<th class="px-4 py-3.5 text-right text-[11px] font-semibold uppercase tracking-[0.08em] text-(--ii-text-muted)">Score</th>
+								<th class="px-4 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-(--ii-text-muted)">Updated</th>
 							</tr>
 						</thead>
 						<tbody>
 							{#each filteredFunds as fund (fund.id)}
 								<tr
-									class="cursor-pointer border-b border-(--netz-border-subtle) bg-(--netz-surface-elevated) transition-colors last:border-b-0 hover:bg-(--netz-accent-soft)"
-									class:bg-(--netz-accent-soft)={selectedFund?.id === fund.id && panelOpen}
+									class="cursor-pointer border-b border-(--ii-border-subtle) bg-(--ii-surface-elevated) transition-colors last:border-b-0 hover:bg-(--ii-accent-soft)"
+									class:bg-(--ii-accent-soft)={selectedFund?.id === fund.id && panelOpen}
 									onclick={() => openPanel(fund)}
 								>
 									<td class="px-4 py-3">
 										<div>
-											<p class="font-medium text-(--netz-text-primary)">{fund.name}</p>
+											<p class="font-medium text-(--ii-text-primary)">{fund.name}</p>
 											{#if fund.subcategory}
-												<p class="mt-0.5 text-xs text-(--netz-text-muted)">{fund.subcategory}</p>
+												<p class="mt-0.5 text-xs text-(--ii-text-muted)">{fund.subcategory}</p>
 											{/if}
 										</div>
 									</td>
-									<td class="px-4 py-3 text-(--netz-text-secondary)">{fund.manager ?? "—"}</td>
-									<td class="px-4 py-3 text-right font-mono text-(--netz-text-primary)">{formatAum(fund.aum)}</td>
+									<td class="px-4 py-3 text-(--ii-text-secondary)">{fund.manager ?? "—"}</td>
+									<td class="px-4 py-3 text-right font-mono text-(--ii-text-primary)">{formatAum(fund.aum)}</td>
 									<td class="px-4 py-3">
 										{#if fund.strategy}
-											<span class="inline-flex items-center rounded-(--netz-radius-pill) px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={getStrategyStyle(fund.strategy)}>{fund.strategy}</span>
+											<span class="inline-flex items-center rounded-(--ii-radius-pill) px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={getStrategyStyle(fund.strategy)}>{fund.strategy}</span>
 										{:else}
-											<span class="text-(--netz-text-muted)">—</span>
+											<span class="text-(--ii-text-muted)">—</span>
 										{/if}
 									</td>
 									<td class="px-4 py-3">
-										<span class="inline-flex items-center gap-1.5 rounded-(--netz-radius-pill) px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={getStatusStyle(fund.status)}>
+										<span class="inline-flex items-center gap-1.5 rounded-(--ii-radius-pill) px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={getStatusStyle(fund.status)}>
 											<span class="h-1.5 w-1.5 rounded-full" style="background-color: currentColor;"></span>
 											{getStatusLabel(fund.status)}
 										</span>
 									</td>
 									<td class="px-4 py-3">
-										<span class="inline-flex items-center gap-1.5 rounded-(--netz-radius-pill) px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={getDDReportStyle(fund.dd_report_status)}>
+										<span class="inline-flex items-center gap-1.5 rounded-(--ii-radius-pill) px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={getDDReportStyle(fund.dd_report_status)}>
 											{#if fund.dd_report_status === "generating"}
 												<span class="h-1.5 w-1.5 animate-spin rounded-full border border-current border-t-transparent"></span>
 											{:else}
@@ -255,14 +258,14 @@
 									</td>
 									<td class="px-4 py-3 text-right">
 										{#if fund.score !== null}
-											<span class="font-mono text-sm font-semibold" style="color: {fund.score >= 7 ? 'var(--netz-success)' : fund.score >= 5 ? 'var(--netz-warning)' : 'var(--netz-danger)'};">
+											<span class="font-mono text-sm font-semibold" style="color: {fund.score >= 7 ? 'var(--ii-success)' : fund.score >= 5 ? 'var(--ii-warning)' : 'var(--ii-danger)'};">
 												{formatNumber(fund.score, 1, "en-US")}
 											</span>
 										{:else}
-											<span class="text-(--netz-text-muted)">—</span>
+											<span class="text-(--ii-text-muted)">—</span>
 										{/if}
 									</td>
-									<td class="px-4 py-3 text-(--netz-text-muted)">{formatDate(fund.updated_at)}</td>
+									<td class="px-4 py-3 text-(--ii-text-muted)">{formatDate(fund.updated_at)}</td>
 								</tr>
 							{/each}
 						</tbody>

@@ -3,8 +3,10 @@
   Self-loading component for embedding in Screener tabs.
 -->
 <script lang="ts">
-	import { DataTable, EmptyState, Badge, Button, Skeleton, formatDate } from "@netz/ui";
-	import { ActionButton, ConsequenceDialog } from "@netz/ui";
+	import { DataTable, EmptyState, formatDate, ActionButton, ConsequenceDialog } from "@investintell/ui";
+	import { Badge } from "@investintell/ui/components/ui/badge";
+	import { Button } from "@investintell/ui/components/ui/button";
+	import { Skeleton } from "@investintell/ui/components/ui/skeleton";
 	import { createClientApiClient } from "$lib/api/client";
 	import { getContext } from "svelte";
 
@@ -167,20 +169,20 @@
 		</div>
 
 		{#if actionError}
-			<div class="rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
+			<div class="rounded-md border border-(--ii-status-error) bg-(--ii-status-error)/10 p-3 text-sm text-(--ii-status-error)">
 				{actionError}
 				<button class="ml-2 underline" onclick={() => actionError = null}>dismiss</button>
 			</div>
 		{/if}
 
 		<!-- Tab navigation -->
-		<div class="flex gap-1 border-b border-(--netz-border)">
+		<div class="flex gap-1 border-b border-(--ii-border)">
 			<button
 				class="px-4 py-2 text-sm font-medium transition-colors"
 				class:border-b-2={activeTab === "approved"}
-				class:border-(--netz-brand-primary)={activeTab === "approved"}
-				class:text-(--netz-brand-primary)={activeTab === "approved"}
-				class:text-(--netz-text-muted)={activeTab !== "approved"}
+				class:border-(--ii-brand-primary)={activeTab === "approved"}
+				class:text-(--ii-brand-primary)={activeTab === "approved"}
+				class:text-(--ii-text-muted)={activeTab !== "approved"}
 				onclick={() => activeTab = "approved"}
 			>
 				Approved ({universe.length})
@@ -188,9 +190,9 @@
 			<button
 				class="px-4 py-2 text-sm font-medium transition-colors"
 				class:border-b-2={activeTab === "pending"}
-				class:border-(--netz-brand-primary)={activeTab === "pending"}
-				class:text-(--netz-brand-primary)={activeTab === "pending"}
-				class:text-(--netz-text-muted)={activeTab !== "pending"}
+				class:border-(--ii-brand-primary)={activeTab === "pending"}
+				class:text-(--ii-brand-primary)={activeTab === "pending"}
+				class:text-(--ii-text-muted)={activeTab !== "pending"}
 				onclick={() => activeTab = "pending"}
 			>
 				Pending Approval ({pending.length})
@@ -205,11 +207,11 @@
 
 				<!-- Audit trail toggle per fund -->
 				<div class="mt-4 space-y-2">
-					<p class="text-xs font-medium uppercase tracking-wider text-(--netz-text-muted)">Audit Trail</p>
+					<p class="text-xs font-medium uppercase tracking-wider text-(--ii-text-muted)">Audit Trail</p>
 					<div class="flex flex-wrap gap-2">
 						{#each universe as asset (asset.id)}
 							<button
-								class="rounded border px-2 py-1 text-xs transition-colors {auditFundId === asset.instrument_id ? 'border-(--netz-brand-primary) bg-(--netz-brand-primary)/10 text-(--netz-brand-primary)' : 'border-(--netz-border) text-(--netz-text-muted) hover:bg-(--netz-surface-alt)'}"
+								class="rounded border px-2 py-1 text-xs transition-colors {auditFundId === asset.instrument_id ? 'border-(--ii-brand-primary) bg-(--ii-brand-primary)/10 text-(--ii-brand-primary)' : 'border-(--ii-border) text-(--ii-text-muted) hover:bg-(--ii-surface-alt)'}"
 								onclick={() => toggleAudit(asset.instrument_id)}
 							>
 								{asset.instrument_name}
@@ -218,21 +220,21 @@
 					</div>
 
 					{#if auditFundId}
-						<div class="rounded-lg border border-(--netz-border) bg-(--netz-surface-elevated) p-3">
+						<div class="rounded-lg border border-(--ii-border) bg-(--ii-surface-elevated) p-3">
 							{#if auditLoading}
-								<p class="text-sm text-(--netz-text-muted)">Loading audit trail…</p>
+								<p class="text-sm text-(--ii-text-muted)">Loading audit trail…</p>
 							{:else if auditError}
-								<p class="text-sm text-(--netz-danger)">{auditError}</p>
+								<p class="text-sm text-(--ii-danger)">{auditError}</p>
 							{:else if auditEntries.length === 0}
-								<p class="text-sm text-(--netz-text-muted)">No audit events recorded.</p>
+								<p class="text-sm text-(--ii-text-muted)">No audit events recorded.</p>
 							{:else}
 								<div class="space-y-2">
 									{#each auditEntries as entry, idx (idx)}
-										<div class="flex items-start gap-3 border-b border-(--netz-border)/50 pb-2 text-sm last:border-0">
+										<div class="flex items-start gap-3 border-b border-(--ii-border)/50 pb-2 text-sm last:border-0">
 											<Badge variant="secondary">{entry.event_type}</Badge>
 											<div class="flex-1">
-												<span class="text-(--netz-text-primary)">{entry.actor ?? "system"}</span>
-												<span class="ml-2 text-xs text-(--netz-text-muted)">{formatDate(entry.created_at)}</span>
+												<span class="text-(--ii-text-primary)">{entry.actor ?? "system"}</span>
+												<span class="ml-2 text-xs text-(--ii-text-muted)">{formatDate(entry.created_at)}</span>
 											</div>
 										</div>
 									{/each}
@@ -250,15 +252,15 @@
 			{:else}
 				<div class="space-y-2">
 					{#each pending as item (item.instrument_id)}
-						<div class="flex items-center justify-between rounded-lg border border-(--netz-border) bg-(--netz-surface-elevated) p-4">
+						<div class="flex items-center justify-between rounded-lg border border-(--ii-border) bg-(--ii-surface-elevated) p-4">
 							<div>
-								<p class="text-sm font-medium text-(--netz-text-primary)">
+								<p class="text-sm font-medium text-(--ii-text-primary)">
 									{item.instrument_name}
 									{#if item.ticker}
-										<span class="ml-1 font-mono text-xs text-(--netz-text-muted)">{item.ticker}</span>
+										<span class="ml-1 font-mono text-xs text-(--ii-text-muted)">{item.ticker}</span>
 									{/if}
 								</p>
-								<div class="mt-1 flex items-center gap-3 text-xs text-(--netz-text-muted)">
+								<div class="mt-1 flex items-center gap-3 text-xs text-(--ii-text-muted)">
 									{#if item.asset_class}<span>{item.asset_class}</span>{/if}
 									{#if item.screener_status}<Badge variant="secondary">{item.screener_status}</Badge>{/if}
 								</div>
@@ -287,7 +289,7 @@
 	onCancel={() => { showApproveDialog = false; actionTarget = null; }}
 >
 	{#snippet consequenceList()}
-		<ul class="list-disc space-y-1 pl-4 text-sm text-(--netz-text-secondary)">
+		<ul class="list-disc space-y-1 pl-4 text-sm text-(--ii-text-secondary)">
 			<li>Instrument becomes eligible for portfolio allocation</li>
 			<li>Decision is recorded in audit trail</li>
 		</ul>
@@ -307,7 +309,7 @@
 	onCancel={() => { showRejectDialog = false; actionTarget = null; }}
 >
 	{#snippet consequenceList()}
-		<ul class="list-disc space-y-1 pl-4 text-sm text-(--netz-text-secondary)">
+		<ul class="list-disc space-y-1 pl-4 text-sm text-(--ii-text-secondary)">
 			<li>Instrument is excluded from the investable universe</li>
 			<li>Rejection rationale is recorded for compliance</li>
 		</ul>

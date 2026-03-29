@@ -349,8 +349,8 @@
 		height: 100vh;
 		display: flex;
 		flex-direction: column;
-		background: var(--netz-surface-elevated, #fff);
-		border-left: 1px solid var(--netz-border-subtle);
+		background: var(--ii-surface-elevated, #fff);
+		border-left: 1px solid var(--ii-border-subtle);
 		box-shadow: -8px 0 24px rgba(0, 0, 0, 0.08);
 		z-index: 950;
 		animation: slideIn 200ms cubic-bezier(0, 0, 0.2, 1);
@@ -367,7 +367,7 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 14px 16px;
-		border-bottom: 1px solid var(--netz-border-subtle);
+		border-bottom: 1px solid var(--ii-border-subtle);
 		flex-shrink: 0;
 	}
 
@@ -377,7 +377,7 @@
 		gap: 8px;
 		font-size: 14px;
 		font-weight: 600;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 	}
 
 	.agent-header-actions {
@@ -395,14 +395,14 @@
 		border: none;
 		border-radius: 6px;
 		background: transparent;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		cursor: pointer;
 		transition: background 120ms ease, color 120ms ease;
 	}
 
 	.agent-icon-btn:hover {
-		background: var(--netz-surface-alt);
-		color: var(--netz-text-primary);
+		background: var(--ii-surface-alt);
+		color: var(--ii-text-primary);
 	}
 
 	/* Messages area */
@@ -422,13 +422,13 @@
 		align-items: center;
 		justify-content: center;
 		gap: 8px;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		text-align: center;
 		padding: 48px 24px;
 	}
 
 	.agent-empty :global(.agent-empty-icon) { opacity: 0.3; }
-	.agent-empty-title { font-size: 15px; font-weight: 600; color: var(--netz-text-secondary); margin: 0; }
+	.agent-empty-title { font-size: 15px; font-weight: 600; color: var(--ii-text-secondary); margin: 0; }
 	.agent-empty-desc { font-size: 13px; margin: 0; line-height: 1.5; }
 
 	/* Messages */
@@ -440,7 +440,7 @@
 	}
 
 	.agent-msg--user .agent-msg-text {
-		background: var(--netz-brand-primary, #1447e6);
+		background: var(--ii-brand-primary, #1447e6);
 		color: #fff;
 		border-radius: 12px 12px 4px 12px;
 		padding: 10px 14px;
@@ -451,8 +451,8 @@
 	}
 
 	.agent-msg--assistant .agent-msg-text {
-		background: var(--netz-surface-alt, #f5f8fd);
-		color: var(--netz-text-primary);
+		background: var(--ii-surface-alt, #f5f8fd);
+		color: var(--ii-text-primary);
 		border-radius: 12px 12px 12px 4px;
 		padding: 10px 14px;
 		font-size: 13px;
@@ -465,7 +465,7 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		font-style: italic;
 	}
 
@@ -482,14 +482,14 @@
 		align-items: center;
 		gap: 6px;
 		font-size: 11px;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		padding: 4px 8px;
 		border-radius: 6px;
-		background: color-mix(in srgb, var(--netz-brand-highlight, #3b82f6) 6%, transparent);
+		background: color-mix(in srgb, var(--ii-brand-highlight, #3b82f6) 6%, transparent);
 	}
 
-	.agent-tool.complete { color: var(--netz-success, #22c55e); }
-	.agent-tool.running { color: var(--netz-brand-highlight, #3b82f6); }
+	.agent-tool.complete { color: var(--ii-success, #22c55e); }
+	.agent-tool.running { color: var(--ii-brand-highlight, #3b82f6); }
 
 	.agent-tool :global(.agent-tool-spin) {
 		animation: spin 1s linear infinite;
@@ -518,7 +518,7 @@
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		margin-right: 4px;
 	}
 
@@ -528,17 +528,17 @@
 		gap: 4px;
 		padding: 2px 8px;
 		border-radius: 4px;
-		background: var(--netz-surface-alt);
-		border: 1px solid var(--netz-border-subtle);
+		background: var(--ii-surface-alt);
+		border: 1px solid var(--ii-border-subtle);
 		font-size: 10px;
-		color: var(--netz-text-secondary);
+		color: var(--ii-text-secondary);
 		cursor: default;
 	}
 
 	/* Input area */
 	.agent-input-area {
 		padding: 12px 16px;
-		border-top: 1px solid var(--netz-border-subtle);
+		border-top: 1px solid var(--ii-border-subtle);
 		flex-shrink: 0;
 	}
 
@@ -546,24 +546,24 @@
 		display: flex;
 		align-items: flex-end;
 		gap: 8px;
-		background: var(--netz-bg, #f5f8fd);
-		border: 1px solid var(--netz-border);
+		background: var(--ii-bg, #f5f8fd);
+		border: 1px solid var(--ii-border);
 		border-radius: 10px;
 		padding: 8px 12px;
 		transition: border-color 120ms ease;
 	}
 
 	.agent-input-row:focus-within {
-		border-color: var(--netz-brand-highlight, #3b82f6);
+		border-color: var(--ii-brand-highlight, #3b82f6);
 	}
 
 	.agent-input {
 		flex: 1;
 		border: none;
 		background: transparent;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 		font-size: 13px;
-		font-family: var(--netz-font-sans);
+		font-family: var(--ii-font-sans);
 		resize: none;
 		outline: none;
 		line-height: 1.5;
@@ -571,7 +571,7 @@
 	}
 
 	.agent-input::placeholder {
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 	}
 
 	.agent-send-btn {
@@ -582,7 +582,7 @@
 		height: 32px;
 		border: none;
 		border-radius: 8px;
-		background: var(--netz-brand-primary, #1447e6);
+		background: var(--ii-brand-primary, #1447e6);
 		color: #fff;
 		cursor: pointer;
 		flex-shrink: 0;
@@ -603,16 +603,16 @@
 		width: 100%;
 		padding: 6px;
 		margin-bottom: 8px;
-		border: 1px solid var(--netz-border);
+		border: 1px solid var(--ii-border);
 		border-radius: 6px;
 		background: transparent;
-		color: var(--netz-text-secondary);
+		color: var(--ii-text-secondary);
 		font-size: 12px;
 		cursor: pointer;
 		transition: background 120ms ease;
 	}
 
 	.agent-cancel-btn:hover {
-		background: var(--netz-surface-alt);
+		background: var(--ii-surface-alt);
 	}
 </style>

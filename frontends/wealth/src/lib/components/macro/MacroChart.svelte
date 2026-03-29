@@ -4,9 +4,9 @@
   Spec: WM-S1-01
 -->
 <script lang="ts">
-	import { ChartContainer } from "@netz/ui/charts";
-	import { formatNumber } from "@netz/ui";
-	import type { BaseChartProps } from "@netz/ui/charts";
+	import { ChartContainer } from "@investintell/ui/charts";
+	import { formatNumber } from "@investintell/ui";
+	import type { BaseChartProps } from "@investintell/ui/charts";
 
 	export interface MacroSeries {
 		id: string;
@@ -226,24 +226,24 @@
 
 	.range-btn {
 		padding: 4px 10px;
-		font-size: var(--netz-text-label, 0.75rem);
+		font-size: var(--ii-text-label, 0.75rem);
 		font-weight: 600;
-		border: 1px solid var(--netz-border);
-		border-radius: var(--netz-radius-sm, 6px);
-		background: var(--netz-surface-elevated);
-		color: var(--netz-text-secondary);
+		border: 1px solid var(--ii-border);
+		border-radius: var(--ii-radius-sm, 6px);
+		background: var(--ii-surface-elevated);
+		color: var(--ii-text-secondary);
 		cursor: pointer;
 		transition: all 150ms ease;
 	}
 
 	.range-btn:hover {
-		background: var(--netz-surface-alt);
+		background: var(--ii-surface-alt);
 	}
 
 	.range-btn--active {
-		background: var(--netz-brand-primary);
+		background: var(--ii-brand-primary);
 		color: white;
-		border-color: var(--netz-brand-primary);
+		border-color: var(--ii-brand-primary);
 	}
 
 	.mixed-freq-banner {
@@ -252,16 +252,16 @@
 		justify-content: space-between;
 		gap: 8px;
 		padding: 6px 16px;
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-secondary);
-		background: var(--netz-surface-alt);
-		border-bottom: 1px solid var(--netz-border-subtle);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-secondary);
+		background: var(--ii-surface-alt);
+		border-bottom: 1px solid var(--ii-border-subtle);
 	}
 
 	.banner-dismiss {
 		border: none;
 		background: none;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		cursor: pointer;
 		font-size: 16px;
 		line-height: 1;

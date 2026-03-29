@@ -9,15 +9,17 @@
 		SectionCard,
 		EmptyState,
 		StatusBadge,
-		Card,
-		Button,
 		MetricCard,
 		ActionButton,
 		ConsequenceDialog,
-	} from "@netz/ui";
-	import type { ConsequenceDialogPayload } from "@netz/ui";
-	import { ChartContainer } from "@netz/ui/charts";
-	import { formatPercent, formatNumber, formatDateTime } from "@netz/ui";
+		formatPercent,
+		formatNumber,
+		formatDateTime,
+	} from "@investintell/ui";
+	import type { ConsequenceDialogPayload } from "@investintell/ui";
+	import { Button } from "@investintell/ui/components/ui/button";
+	import { Card } from "@investintell/ui/components/ui/card";
+	import { ChartContainer } from "@investintell/ui/charts";
 	import { createClientApiClient } from "$lib/api/client";
 	import { invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
@@ -139,7 +141,7 @@
 					data: deltas.map((d) => ({
 						value: d,
 						itemStyle: {
-							color: d >= 0 ? "var(--netz-success)" : "var(--netz-danger)",
+							color: d >= 0 ? "var(--ii-success)" : "var(--ii-danger)",
 						},
 					})),
 					label: {
@@ -268,10 +270,10 @@
 	}
 </script>
 
-<div class="space-y-(--netz-space-section-gap)">
+<div class="space-y-(--ii-space-section-gap)">
 	{#if actionError}
 		<div
-			class="rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)"
+			class="rounded-md border border-(--ii-status-error) bg-(--ii-status-error)/10 p-3 text-sm text-(--ii-status-error)"
 			role="alert"
 		>
 			{actionError}
@@ -338,7 +340,7 @@
 			<div class="overflow-x-auto">
 				<table class="w-full text-sm">
 					<thead>
-						<tr class="border-b border-(--netz-border) text-left text-xs font-medium uppercase tracking-wider text-(--netz-text-secondary)">
+						<tr class="border-b border-(--ii-border) text-left text-xs font-medium uppercase tracking-wider text-(--ii-text-secondary)">
 							<th class="pb-2 pr-4">Fund</th>
 							<th class="pb-2 pr-4 text-right">Before</th>
 							<th class="pb-2 pr-4 text-right">After</th>
@@ -350,11 +352,11 @@
 							{@const before = beforeWeights[fund] ?? 0}
 							{@const after = afterWeights[fund] ?? 0}
 							{@const delta = after - before}
-							<tr class="border-b border-(--netz-border)/50">
-								<td class="py-2 pr-4 text-(--netz-text-primary)">{fund}</td>
-								<td class="py-2 pr-4 text-right font-mono text-(--netz-text-secondary)">{formatPercent(before, 2, "en-US")}</td>
-								<td class="py-2 pr-4 text-right font-mono font-semibold text-(--netz-text-primary)">{formatPercent(after, 2, "en-US")}</td>
-								<td class="py-2 text-right font-mono" class:text-(--netz-success)={delta > 0.0001} class:text-(--netz-danger)={delta < -0.0001}>
+							<tr class="border-b border-(--ii-border)/50">
+								<td class="py-2 pr-4 text-(--ii-text-primary)">{fund}</td>
+								<td class="py-2 pr-4 text-right font-mono text-(--ii-text-secondary)">{formatPercent(before, 2, "en-US")}</td>
+								<td class="py-2 pr-4 text-right font-mono font-semibold text-(--ii-text-primary)">{formatPercent(after, 2, "en-US")}</td>
+								<td class="py-2 text-right font-mono" class:text-(--ii-success)={delta > 0.0001} class:text-(--ii-danger)={delta < -0.0001}>
 									{#if Math.abs(delta) > 0.00005}
 										{delta > 0 ? "+" : ""}{formatNumber(delta * 100, 2, "en-US")}pp
 									{:else}
@@ -372,7 +374,7 @@
 	<!-- Rebalance Events List with State Machine -->
 	<SectionCard title="Rebalance Events" subtitle="Proposals, approvals, and execution history">
 		{#if loadingEvents}
-			<p class="text-sm text-(--netz-text-muted)">Loading events...</p>
+			<p class="text-sm text-(--ii-text-muted)">Loading events...</p>
 		{:else if rebalanceEvents.length === 0}
 			<EmptyState title="No Rebalance Events" message="Click 'Propose Rebalance' to generate a proposal based on current allocation drift." />
 		{:else}
@@ -385,16 +387,16 @@
 						<div class="flex items-start justify-between gap-4">
 							<button class="flex-1 text-left" onclick={() => toggleEventDetail(event)}>
 								<div class="flex items-center gap-2">
-									<span class="text-xs text-(--netz-text-muted)">{isExpanded ? "▾" : "▸"}</span>
+									<span class="text-xs text-(--ii-text-muted)">{isExpanded ? "▾" : "▸"}</span>
 									<StatusBadge status={eventStatus} resolve={resolveWealthStatus} />
-									<span class="text-sm font-medium text-(--netz-text-primary)">
+									<span class="text-sm font-medium text-(--ii-text-primary)">
 										{eventId.slice(0, 8)}
 									</span>
-									<span class="text-xs text-(--netz-text-muted)">
+									<span class="text-xs text-(--ii-text-muted)">
 										{event.event_type ?? "rebalance"}
 									</span>
 								</div>
-								<div class="mt-1 flex items-center gap-3 text-xs text-(--netz-text-muted)">
+								<div class="mt-1 flex items-center gap-3 text-xs text-(--ii-text-muted)">
 									{#if event.created_at}
 										<span>{formatDateTime(String(event.created_at))}</span>
 									{/if}
@@ -406,7 +408,7 @@
 									{/if}
 								</div>
 								{#if event.notes}
-									<p class="mt-2 rounded-md bg-(--netz-surface-alt) p-2 text-xs text-(--netz-text-secondary)">
+									<p class="mt-2 rounded-md bg-(--ii-surface-alt) p-2 text-xs text-(--ii-text-secondary)">
 										{event.notes}
 									</p>
 								{/if}
@@ -434,19 +436,19 @@
 
 						<!-- Expanded event detail -->
 						{#if isExpanded}
-							<div class="mt-4 border-t border-(--netz-border)/50 pt-4">
+							<div class="mt-4 border-t border-(--ii-border)/50 pt-4">
 								{#if loadingDetail}
-									<p class="text-xs text-(--netz-text-muted)">Loading detail…</p>
+									<p class="text-xs text-(--ii-text-muted)">Loading detail…</p>
 								{:else if expandedEventDetail}
 									{#if expandedEventDetail.cvar_before !== null || expandedEventDetail.cvar_after !== null}
 										<div class="mb-3 grid gap-3 sm:grid-cols-2">
-											<div class="rounded-md bg-(--netz-surface-alt) p-2">
-												<span class="text-xs text-(--netz-text-muted)">CVaR Before</span>
-												<p class="font-mono text-sm font-semibold text-(--netz-text-primary)">{fmtPct(expandedEventDetail.cvar_before as number | null)}</p>
+											<div class="rounded-md bg-(--ii-surface-alt) p-2">
+												<span class="text-xs text-(--ii-text-muted)">CVaR Before</span>
+												<p class="font-mono text-sm font-semibold text-(--ii-text-primary)">{fmtPct(expandedEventDetail.cvar_before as number | null)}</p>
 											</div>
-											<div class="rounded-md bg-(--netz-surface-alt) p-2">
-												<span class="text-xs text-(--netz-text-muted)">CVaR After</span>
-												<p class="font-mono text-sm font-semibold text-(--netz-text-primary)">{fmtPct(expandedEventDetail.cvar_after as number | null)}</p>
+											<div class="rounded-md bg-(--ii-surface-alt) p-2">
+												<span class="text-xs text-(--ii-text-muted)">CVaR After</span>
+												<p class="font-mono text-sm font-semibold text-(--ii-text-primary)">{fmtPct(expandedEventDetail.cvar_after as number | null)}</p>
 											</div>
 										</div>
 									{/if}
@@ -458,7 +460,7 @@
 										<div class="overflow-x-auto">
 											<table class="w-full text-xs">
 												<thead>
-													<tr class="border-b border-(--netz-border) text-left font-medium uppercase tracking-wider text-(--netz-text-secondary)">
+													<tr class="border-b border-(--ii-border) text-left font-medium uppercase tracking-wider text-(--ii-text-secondary)">
 														<th class="pb-1 pr-3">Fund</th>
 														<th class="pb-1 pr-3 text-right">Before</th>
 														<th class="pb-1 pr-3 text-right">After</th>
@@ -470,11 +472,11 @@
 														{@const before = wBefore[fund] ?? 0}
 														{@const after = wAfter[fund] ?? 0}
 														{@const delta = after - before}
-														<tr class="border-b border-(--netz-border)/30">
-															<td class="py-1 pr-3 text-(--netz-text-primary)">{fund}</td>
-															<td class="py-1 pr-3 text-right font-mono text-(--netz-text-secondary)">{formatPercent(before, 2, "en-US")}</td>
-															<td class="py-1 pr-3 text-right font-mono font-semibold text-(--netz-text-primary)">{formatPercent(after, 2, "en-US")}</td>
-															<td class="py-1 text-right font-mono" class:text-(--netz-success)={delta > 0.0001} class:text-(--netz-danger)={delta < -0.0001}>
+														<tr class="border-b border-(--ii-border)/30">
+															<td class="py-1 pr-3 text-(--ii-text-primary)">{fund}</td>
+															<td class="py-1 pr-3 text-right font-mono text-(--ii-text-secondary)">{formatPercent(before, 2, "en-US")}</td>
+															<td class="py-1 pr-3 text-right font-mono font-semibold text-(--ii-text-primary)">{formatPercent(after, 2, "en-US")}</td>
+															<td class="py-1 text-right font-mono" class:text-(--ii-success)={delta > 0.0001} class:text-(--ii-danger)={delta < -0.0001}>
 																{#if Math.abs(delta) > 0.00005}
 																	{delta > 0 ? "+" : ""}{formatNumber(delta * 100, 2, "en-US")}pp
 																{:else}
@@ -487,10 +489,10 @@
 											</table>
 										</div>
 									{:else}
-										<p class="text-xs text-(--netz-text-muted)">No weight data available.</p>
+										<p class="text-xs text-(--ii-text-muted)">No weight data available.</p>
 									{/if}
 								{:else}
-									<p class="text-xs text-(--netz-text-muted)">Failed to load detail.</p>
+									<p class="text-xs text-(--ii-text-muted)">Failed to load detail.</p>
 								{/if}
 							</div>
 						{/if}

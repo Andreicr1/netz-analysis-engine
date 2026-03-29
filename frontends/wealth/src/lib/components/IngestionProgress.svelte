@@ -3,8 +3,9 @@
   SSE stream showing pipeline stages: OCR → classify → chunk → embed → index.
 -->
 <script lang="ts">
-	import { Card, StatusBadge } from "@netz/ui";
-	import { createSSEStream } from "@netz/ui/utils";
+	import { StatusBadge } from "@investintell/ui";
+	import { Card } from "@investintell/ui/components/ui/card";
+	import { createSSEStream } from "@investintell/ui/utils";
 	import { onMount, getContext } from "svelte";
 	import { resolveWealthStatus } from "$lib/utils/status-maps";
 
@@ -51,18 +52,18 @@
 </script>
 
 <Card class="p-6">
-	<h3 class="mb-4 text-lg font-semibold text-(--netz-text-primary)">Ingestion Progress</h3>
+	<h3 class="mb-4 text-lg font-semibold text-(--ii-text-primary)">Ingestion Progress</h3>
 	<div class="space-y-3">
 		{#each STAGES as stage (stage)}
 			<div class="flex items-center justify-between">
-				<span class="text-sm capitalize text-(--netz-text-secondary)">{stage}</span>
+				<span class="text-sm capitalize text-(--ii-text-secondary)">{stage}</span>
 				<StatusBadge status={stageStatus(stage)} resolve={resolveWealthStatus} />
 			</div>
 		{/each}
 	</div>
 	{#if status === "done"}
-		<p class="mt-4 text-sm font-medium text-(--netz-success)">Document processed successfully.</p>
+		<p class="mt-4 text-sm font-medium text-(--ii-success)">Document processed successfully.</p>
 	{:else if status === "error"}
-		<p class="mt-4 text-sm font-medium text-(--netz-danger)">Processing failed. Please retry.</p>
+		<p class="mt-4 text-sm font-medium text-(--ii-danger)">Processing failed. Please retry.</p>
 	{/if}
 </Card>

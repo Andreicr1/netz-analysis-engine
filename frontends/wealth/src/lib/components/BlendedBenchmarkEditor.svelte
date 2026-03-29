@@ -5,12 +5,14 @@
 -->
 <script lang="ts">
 	import {
-		Input, Button, ActionButton, ConsequenceDialog, EmptyState,
+		ActionButton, ConsequenceDialog, EmptyState,
 		MetricCard, SectionCard,
 		formatPercent, formatNumber,
-	} from "@netz/ui";
-	import type { ConsequenceDialogPayload } from "@netz/ui";
-	import { ChartContainer } from "@netz/ui/charts";
+	} from "@investintell/ui";
+	import type { ConsequenceDialogPayload } from "@investintell/ui";
+	import { Button } from "@investintell/ui/components/ui/button";
+	import { Input } from "@investintell/ui/components/ui/input";
+	import { ChartContainer } from "@investintell/ui/charts";
 	import { createClientApiClient } from "$lib/api/client";
 	import { getContext } from "svelte";
 
@@ -265,10 +267,10 @@
 
 <div class="space-y-4">
 	{#if loading}
-		<p class="text-sm text-(--netz-text-muted)">Loading benchmark data...</p>
+		<p class="text-sm text-(--ii-text-muted)">Loading benchmark data...</p>
 	{:else}
 		{#if error}
-			<div class="rounded-md border border-(--netz-status-error) bg-(--netz-status-error)/10 p-3 text-sm text-(--netz-status-error)">
+			<div class="rounded-md border border-(--ii-status-error) bg-(--ii-status-error)/10 p-3 text-sm text-(--ii-status-error)">
 				{error}
 				<button class="ml-2 underline" onclick={() => error = null}>dismiss</button>
 			</div>
@@ -277,7 +279,7 @@
 		<!-- Benchmark Name -->
 		<div class="flex items-end gap-3">
 			<div class="flex-1">
-				<label class="mb-1 block text-xs font-medium text-(--netz-text-muted)">Benchmark Name</label>
+				<label class="mb-1 block text-xs font-medium text-(--ii-text-muted)">Benchmark Name</label>
 				<Input
 					bind:value={benchmarkName}
 					placeholder="e.g. 60/40 Blend, Moderate Custom"
@@ -291,7 +293,7 @@
 				<div class="overflow-x-auto">
 					<table class="w-full text-sm">
 						<thead>
-							<tr class="border-b border-(--netz-border) text-left text-xs font-medium uppercase tracking-wider text-(--netz-text-secondary)">
+							<tr class="border-b border-(--ii-border) text-left text-xs font-medium uppercase tracking-wider text-(--ii-text-secondary)">
 								<th class="pb-2 pr-4">Block</th>
 								<th class="pb-2 pr-4">Ticker</th>
 								<th class="pb-2 pr-4 text-right">Weight</th>
@@ -301,13 +303,13 @@
 						</thead>
 						<tbody>
 							{#each components as comp, i (comp.block_id)}
-								<tr class="border-b border-(--netz-border)/50">
-									<td class="py-2 pr-4 text-(--netz-text-primary)">{comp.display_name}</td>
-									<td class="py-2 pr-4 font-mono text-xs text-(--netz-text-muted)">{comp.benchmark_ticker ?? "—"}</td>
+								<tr class="border-b border-(--ii-border)/50">
+									<td class="py-2 pr-4 text-(--ii-text-primary)">{comp.display_name}</td>
+									<td class="py-2 pr-4 font-mono text-xs text-(--ii-text-muted)">{comp.benchmark_ticker ?? "—"}</td>
 									<td class="py-2 pr-4 text-right">
 										<input
 											type="number"
-											class="w-20 rounded border border-(--netz-border) bg-(--netz-surface-elevated) px-2 py-1 text-right font-mono text-sm text-(--netz-text-primary)"
+											class="w-20 rounded border border-(--ii-border) bg-(--ii-surface-elevated) px-2 py-1 text-right font-mono text-sm text-(--ii-text-primary)"
 											min="0.01"
 											max="1"
 											step="0.01"
@@ -321,12 +323,12 @@
 											}}
 										/>
 									</td>
-									<td class="py-2 pr-4 text-right font-mono text-xs text-(--netz-text-secondary)">
+									<td class="py-2 pr-4 text-right font-mono text-xs text-(--ii-text-secondary)">
 										{formatPercent(comp.weight, 1, "en-US")}
 									</td>
 									<td class="py-2 text-right">
 										<button
-											class="text-xs text-(--netz-danger) hover:underline"
+											class="text-xs text-(--ii-danger) hover:underline"
 											onclick={() => removeBlock(comp.block_id)}
 										>
 											Remove
@@ -341,7 +343,7 @@
 				<!-- Weight Total Bar -->
 				<div class="mt-3 flex items-center justify-between">
 					<div class="flex items-center gap-3">
-						<span class="text-sm font-semibold {isValidWeight ? 'text-(--netz-success)' : 'text-(--netz-danger)'}">
+						<span class="text-sm font-semibold {isValidWeight ? 'text-(--ii-success)' : 'text-(--ii-danger)'}">
 							Total: {formatPercent(totalWeight, 2, "en-US")}
 							{#if isValidWeight}
 								&#10003;
@@ -383,27 +385,27 @@
 				<div class="max-h-60 space-y-1 overflow-y-auto">
 					{#each selectableBlocks as block (block.block_id)}
 						<button
-							class="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-(--netz-surface-alt)"
+							class="flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-(--ii-surface-alt)"
 							onclick={() => addBlock(block)}
 						>
 							<div>
-								<span class="font-medium text-(--netz-text-primary)">{block.display_name}</span>
-								<span class="ml-2 text-xs text-(--netz-text-muted)">
+								<span class="font-medium text-(--ii-text-primary)">{block.display_name}</span>
+								<span class="ml-2 text-xs text-(--ii-text-muted)">
 									{block.geography} / {block.asset_class}
 								</span>
 							</div>
-							<span class="font-mono text-xs text-(--netz-text-muted)">
+							<span class="font-mono text-xs text-(--ii-text-muted)">
 								{block.benchmark_ticker ?? "—"}
 							</span>
 						</button>
 					{/each}
 				</div>
 			{:else if searchQuery.trim()}
-				<p class="text-sm text-(--netz-text-muted)">No matching blocks found.</p>
+				<p class="text-sm text-(--ii-text-muted)">No matching blocks found.</p>
 			{:else if availableBlocks.length === 0}
 				<EmptyState title="No Blocks Available" message="No allocation blocks with benchmark tickers are configured." />
 			{:else}
-				<p class="text-sm text-(--netz-text-muted)">All available blocks already added.</p>
+				<p class="text-sm text-(--ii-text-muted)">All available blocks already added.</p>
 			{/if}
 		</SectionCard>
 
@@ -436,7 +438,7 @@
 				{/if}
 			</SectionCard>
 		{:else if loadingNav}
-			<p class="text-sm text-(--netz-text-muted)">Loading NAV series...</p>
+			<p class="text-sm text-(--ii-text-muted)">Loading NAV series...</p>
 		{/if}
 	{/if}
 </div>

@@ -3,8 +3,10 @@
   Self-loading component for embedding in Screener tabs.
 -->
 <script lang="ts">
-	import { DataTable, EmptyState, Button, Card, Dialog, ContextPanel, Input, Select, Textarea, Skeleton } from "@netz/ui";
-	import { ActionButton, ConfirmDialog, FormField, Toast } from "@netz/ui";
+	import { DataTable, EmptyState, ContextPanel, ActionButton, ConfirmDialog, FormField, Toast } from "@investintell/ui";
+	import { Button } from "@investintell/ui/components/ui/button";
+	import { Skeleton } from "@investintell/ui/components/ui/skeleton";
+	import { Dialog, Input, Select, Textarea } from "@netz/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import { getContext } from "svelte";
 	import type { Instrument } from "$lib/types/api";
@@ -278,7 +280,7 @@
 		<Skeleton class="h-64 rounded-xl" />
 	{:else}
 		<div class="flex items-center justify-between">
-			<h3 class="text-sm font-semibold text-(--netz-text-primary)">Instruments ({instruments.length})</h3>
+			<h3 class="text-sm font-semibold text-(--ii-text-primary)">Instruments ({instruments.length})</h3>
 			<div class="flex gap-2">
 				<Button onclick={() => { resetCreateForm(); showCreate = true; }}>Add Manual</Button>
 				<Button variant="outline" onclick={() => { importTickers = ""; importError = null; showImportYahoo = true; }}>Import from Yahoo</Button>
@@ -304,7 +306,7 @@
 	<ContextPanel open={panelOpen} title={selectedInstrument.ticker ?? "Instrument"} onClose={() => { selectedInstrument = null; instrumentDetail = null; editing = false; }}>
 		<div class="space-y-4 p-4">
 			{#if loadingDetail}
-				<p class="text-sm text-(--netz-text-muted)">Loading...</p>
+				<p class="text-sm text-(--ii-text-muted)">Loading...</p>
 			{:else if instrumentDetail && editing}
 				<form onsubmit={(e) => { e.preventDefault(); saveEdit(); }} class="space-y-3">
 					<FormField label="Name">
@@ -330,10 +332,10 @@
 						<Input type="text" bind:value={editForm.block_id} placeholder="Allocation block" />
 					</FormField>
 					<div class="flex items-center gap-2">
-						<input type="checkbox" id="edit-is-active" bind:checked={editForm.is_active} class="h-4 w-4 rounded border-(--netz-border) accent-(--netz-brand)" />
-						<label for="edit-is-active" class="text-sm text-(--netz-text-primary)">Active</label>
+						<input type="checkbox" id="edit-is-active" bind:checked={editForm.is_active} class="h-4 w-4 rounded border-(--ii-border) accent-(--ii-brand)" />
+						<label for="edit-is-active" class="text-sm text-(--ii-text-primary)">Active</label>
 					</div>
-					{#if editError}<p class="text-sm text-(--netz-status-error)">{editError}</p>{/if}
+					{#if editError}<p class="text-sm text-(--ii-status-error)">{editError}</p>{/if}
 					<div class="flex justify-end gap-2 pt-2">
 						<Button variant="outline" onclick={cancelEditing}>Cancel</Button>
 						<ActionButton onclick={saveEdit} loading={editSaving} loadingText="Saving..." disabled={!editForm.name.trim()}>Save</ActionButton>
@@ -343,16 +345,16 @@
 				<div class="flex justify-end">
 					<Button variant="outline" onclick={startEditing}>Edit</Button>
 				</div>
-				<div><p class="text-xs text-(--netz-text-muted)">Name</p><p class="text-sm font-medium">{instrumentDetail.name ?? "—"}</p></div>
-				<div><p class="text-xs text-(--netz-text-muted)">Asset Class</p><p class="text-sm">{instrumentDetail.asset_class ?? "—"}</p></div>
-				<div><p class="text-xs text-(--netz-text-muted)">Geography</p><p class="text-sm">{instrumentDetail.geography ?? "—"}</p></div>
-				<div><p class="text-xs text-(--netz-text-muted)">Currency</p><p class="text-sm">{instrumentDetail.currency ?? "—"}</p></div>
-				<div><p class="text-xs text-(--netz-text-muted)">Block ID</p><p class="text-sm">{instrumentDetail.block_id ?? "—"}</p></div>
-				<div><p class="text-xs text-(--netz-text-muted)">Last Price</p><p class="text-sm">{instrumentDetail.last_price ?? "—"}</p></div>
-				<div><p class="text-xs text-(--netz-text-muted)">Exchange</p><p class="text-sm">{instrumentDetail.exchange ?? "—"}</p></div>
-				<div><p class="text-xs text-(--netz-text-muted)">Status</p><p class="text-sm">{instrumentDetail.is_active ? "Active" : "Inactive"}</p></div>
+				<div><p class="text-xs text-(--ii-text-muted)">Name</p><p class="text-sm font-medium">{instrumentDetail.name ?? "—"}</p></div>
+				<div><p class="text-xs text-(--ii-text-muted)">Asset Class</p><p class="text-sm">{instrumentDetail.asset_class ?? "—"}</p></div>
+				<div><p class="text-xs text-(--ii-text-muted)">Geography</p><p class="text-sm">{instrumentDetail.geography ?? "—"}</p></div>
+				<div><p class="text-xs text-(--ii-text-muted)">Currency</p><p class="text-sm">{instrumentDetail.currency ?? "—"}</p></div>
+				<div><p class="text-xs text-(--ii-text-muted)">Block ID</p><p class="text-sm">{instrumentDetail.block_id ?? "—"}</p></div>
+				<div><p class="text-xs text-(--ii-text-muted)">Last Price</p><p class="text-sm">{instrumentDetail.last_price ?? "—"}</p></div>
+				<div><p class="text-xs text-(--ii-text-muted)">Exchange</p><p class="text-sm">{instrumentDetail.exchange ?? "—"}</p></div>
+				<div><p class="text-xs text-(--ii-text-muted)">Status</p><p class="text-sm">{instrumentDetail.is_active ? "Active" : "Inactive"}</p></div>
 			{:else}
-				<p class="text-sm text-(--netz-text-muted)">Details unavailable.</p>
+				<p class="text-sm text-(--ii-text-muted)">Details unavailable.</p>
 			{/if}
 		</div>
 	</ContextPanel>
@@ -373,7 +375,7 @@
 			]} />
 		</FormField>
 		<FormField label="Currency"><Input type="text" class="uppercase" bind:value={createForm.currency} placeholder="USD" /></FormField>
-		{#if createError}<p class="text-sm text-(--netz-status-error)">{createError}</p>{/if}
+		{#if createError}<p class="text-sm text-(--ii-status-error)">{createError}</p>{/if}
 		<div class="flex justify-end gap-2 pt-2">
 			<Button variant="outline" onclick={() => showCreate = false}>Cancel</Button>
 			<ActionButton onclick={createInstrument} loading={saving} loadingText="Creating..." disabled={!createForm.ticker.trim() || !createForm.name.trim()}>Create</ActionButton>
@@ -389,13 +391,13 @@
 		<FormField label="Tickers" required>
 			<Textarea bind:value={importTickers} placeholder="SPY, AGG, GLD, VWO, ARKK" rows={4} />
 		</FormField>
-		<p class="text-xs text-(--netz-text-muted)">
+		<p class="text-xs text-(--ii-text-muted)">
 			Enter up to 50 tickers, separated by commas, spaces, or newlines.
 			{#if parsedTickers.length > 0}
-				<span class="font-medium text-(--netz-text-primary)">{parsedTickers.length} ticker{parsedTickers.length !== 1 ? "s" : ""} detected</span>
+				<span class="font-medium text-(--ii-text-primary)">{parsedTickers.length} ticker{parsedTickers.length !== 1 ? "s" : ""} detected</span>
 			{/if}
 		</p>
-		{#if importError}<p class="text-sm text-(--netz-status-error)">{importError}</p>{/if}
+		{#if importError}<p class="text-sm text-(--ii-status-error)">{importError}</p>{/if}
 		<div class="flex justify-end gap-2">
 			<Button variant="outline" onclick={() => showImportYahoo = false}>Cancel</Button>
 			<ActionButton onclick={importFromYahoo} loading={importing} loadingText="Importing..." disabled={parsedTickers.length === 0 || parsedTickers.length > 50}>Import</ActionButton>
@@ -410,18 +412,18 @@
 			<Select bind:value={csvInstrumentType} options={[{ value: "fund", label: "Fund" }, { value: "bond", label: "Bond" }, { value: "equity", label: "Equity" }]} />
 		</FormField>
 		<FormField label="CSV File" required>
-			<input type="file" accept=".csv" onchange={handleCsvSelect} class="block w-full text-sm text-(--netz-text-primary) file:mr-4 file:rounded-md file:border-0 file:bg-(--netz-surface-highlight) file:px-4 file:py-2 file:text-sm file:font-medium file:text-(--netz-text-primary) hover:file:bg-(--netz-surface-hover)" />
+			<input type="file" accept=".csv" onchange={handleCsvSelect} class="block w-full text-sm text-(--ii-text-primary) file:mr-4 file:rounded-md file:border-0 file:bg-(--ii-surface-highlight) file:px-4 file:py-2 file:text-sm file:font-medium file:text-(--ii-text-primary) hover:file:bg-(--ii-surface-hover)" />
 		</FormField>
-		<p class="text-xs text-(--netz-text-muted)">CSV must have columns: <code class="font-mono">ticker, name, asset_class, currency</code>. Optional: <code class="font-mono">isin, geography, block_id</code>. Max 5 MB.</p>
+		<p class="text-xs text-(--ii-text-muted)">CSV must have columns: <code class="font-mono">ticker, name, asset_class, currency</code>. Optional: <code class="font-mono">isin, geography, block_id</code>. Max 5 MB.</p>
 		{#if csvPreview && csvPreview.length > 0}
-			<div class="overflow-x-auto rounded-md border border-(--netz-border)">
+			<div class="overflow-x-auto rounded-md border border-(--ii-border)">
 				<table class="w-full text-xs">
-					<thead><tr class="bg-(--netz-surface-highlight)">{#each csvPreview[0] as header (header)}<th class="px-3 py-1.5 text-left font-medium text-(--netz-text-secondary)">{header}</th>{/each}</tr></thead>
-					<tbody>{#each csvPreview.slice(1, 6) as row, i (i)}<tr class="{i % 2 === 0 ? '' : 'bg-(--netz-surface-highlight/50)'}">{#each row as cell (cell)}<td class="px-3 py-1 text-(--netz-text-primary)">{cell}</td>{/each}</tr>{/each}</tbody>
+					<thead><tr class="bg-(--ii-surface-highlight)">{#each csvPreview[0] as header (header)}<th class="px-3 py-1.5 text-left font-medium text-(--ii-text-secondary)">{header}</th>{/each}</tr></thead>
+					<tbody>{#each csvPreview.slice(1, 6) as row, i (i)}<tr class="{i % 2 === 0 ? '' : 'bg-(--ii-surface-highlight/50)'}">{#each row as cell (cell)}<td class="px-3 py-1 text-(--ii-text-primary)">{cell}</td>{/each}</tr>{/each}</tbody>
 				</table>
 			</div>
 		{/if}
-		{#if csvError}<p class="text-sm text-(--netz-status-error)">{csvError}</p>{/if}
+		{#if csvError}<p class="text-sm text-(--ii-status-error)">{csvError}</p>{/if}
 		<div class="flex justify-end gap-2">
 			<Button variant="outline" onclick={() => showImportCsv = false}>Cancel</Button>
 			<ActionButton onclick={importFromCsv} loading={importingCsv} loadingText="Importing..." disabled={!csvFile}>Import</ActionButton>

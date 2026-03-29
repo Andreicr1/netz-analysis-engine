@@ -152,10 +152,10 @@
 	}
 
 	const FREQ_COLORS: Record<string, string> = {
-		D: "var(--netz-chart-1)",
-		M: "var(--netz-chart-2)",
-		Q: "var(--netz-chart-3)",
-		A: "var(--netz-chart-4)",
+		D: "var(--ii-chart-1)",
+		M: "var(--ii-chart-2)",
+		Q: "var(--ii-chart-3)",
+		A: "var(--ii-chart-4)",
 	};
 </script>
 
@@ -248,9 +248,9 @@
 		gap: 8px;
 		min-width: 280px;
 		max-width: 320px;
-		border: 1px solid var(--netz-border-subtle);
-		border-radius: var(--netz-radius-md, 12px);
-		background: var(--netz-surface-elevated);
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-md, 12px);
+		background: var(--ii-surface-elevated);
 		padding: 12px;
 		overflow-y: auto;
 		max-height: 600px;
@@ -258,18 +258,18 @@
 
 	.picker-search {
 		width: 100%;
-		height: var(--netz-space-control-height-sm, 28px);
+		height: var(--ii-space-control-height-sm, 28px);
 		padding: 0 8px;
-		border: 1px solid var(--netz-border);
-		border-radius: var(--netz-radius-sm, 6px);
-		background: var(--netz-surface);
-		color: var(--netz-text-primary);
-		font-size: var(--netz-text-label, 0.75rem);
-		font-family: var(--netz-font-sans);
+		border: 1px solid var(--ii-border);
+		border-radius: var(--ii-radius-sm, 6px);
+		background: var(--ii-surface);
+		color: var(--ii-text-primary);
+		font-size: var(--ii-text-label, 0.75rem);
+		font-family: var(--ii-font-sans);
 	}
 
 	.picker-search::placeholder {
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 	}
 
 	.chip-row {
@@ -282,31 +282,31 @@
 		padding: 2px 8px;
 		font-size: 11px;
 		font-weight: 500;
-		border: 1px solid var(--netz-border);
+		border: 1px solid var(--ii-border);
 		border-radius: 12px;
-		background: var(--netz-surface);
-		color: var(--netz-text-secondary);
+		background: var(--ii-surface);
+		color: var(--ii-text-secondary);
 		cursor: pointer;
 		transition: all 100ms ease;
 	}
 
 	.chip:hover {
-		background: var(--netz-surface-alt);
+		background: var(--ii-surface-alt);
 	}
 
 	.chip--active {
-		background: var(--netz-brand-primary);
+		background: var(--ii-brand-primary);
 		color: white;
-		border-color: var(--netz-brand-primary);
+		border-color: var(--ii-brand-primary);
 	}
 
 	.picker-warning {
 		padding: 4px 8px;
 		font-size: 11px;
 		font-weight: 500;
-		color: var(--netz-warning);
-		background: color-mix(in srgb, var(--netz-warning) 10%, transparent);
-		border-radius: var(--netz-radius-sm, 6px);
+		color: var(--ii-warning);
+		background: color-mix(in srgb, var(--ii-warning) 10%, transparent);
+		border-radius: var(--ii-radius-sm, 6px);
 		text-align: center;
 	}
 
@@ -324,15 +324,15 @@
 		border: none;
 		background: none;
 		cursor: pointer;
-		color: var(--netz-text-secondary);
-		font-size: var(--netz-text-label, 0.75rem);
+		color: var(--ii-text-secondary);
+		font-size: var(--ii-text-label, 0.75rem);
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
 	}
 
 	.group-header:hover {
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 	}
 
 	.group-chevron {
@@ -351,7 +351,7 @@
 
 	.group-count {
 		font-size: 10px;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		font-weight: 400;
 	}
 
@@ -362,7 +362,7 @@
 	}
 
 	.indicator-row--selected {
-		background: color-mix(in srgb, var(--netz-brand-primary) 8%, transparent);
+		background: color-mix(in srgb, var(--ii-brand-primary) 8%, transparent);
 	}
 
 	.indicator-btn {
@@ -374,8 +374,8 @@
 		border: none;
 		background: none;
 		cursor: pointer;
-		color: var(--netz-text-primary);
-		font-size: var(--netz-text-small, 0.8125rem);
+		color: var(--ii-text-primary);
+		font-size: var(--ii-text-small, 0.8125rem);
 		text-align: left;
 	}
 
@@ -385,14 +385,14 @@
 	}
 
 	.indicator-btn:hover:not(:disabled) {
-		background: var(--netz-surface-alt);
+		background: var(--ii-surface-alt);
 		border-radius: 4px;
 	}
 
 	.indicator-check {
 		width: 14px;
 		font-size: 11px;
-		color: var(--netz-brand-primary);
+		color: var(--ii-brand-primary);
 		font-weight: 700;
 	}
 
@@ -416,19 +416,19 @@
 		border: none;
 		background: none;
 		cursor: pointer;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		font-size: 14px;
 		padding: 4px;
 	}
 
 	.fav-btn--active {
-		color: var(--netz-warning);
+		color: var(--ii-warning);
 	}
 
 	.picker-empty {
 		padding: 16px;
 		text-align: center;
-		color: var(--netz-text-muted);
-		font-size: var(--netz-text-small, 0.8125rem);
+		color: var(--ii-text-muted);
+		font-size: var(--ii-text-small, 0.8125rem);
 	}
 </style>

@@ -4,7 +4,8 @@
 <script lang="ts">
 	import { goto, invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
-	import { PageHeader, Button, StatusBadge, EmptyState, ActionButton, formatDateTime } from "@netz/ui";
+	import { PageHeader, StatusBadge, EmptyState, ActionButton, formatDateTime } from "@investintell/ui";
+	import { Button } from "@investintell/ui/components/ui/button";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
 	import type { DDReportSummary } from "$lib/types/dd-report";
@@ -110,83 +111,83 @@
 
 <style>
 	.reports-page {
-		padding: var(--netz-space-stack-md, 16px) var(--netz-space-inline-lg, 24px);
+		padding: var(--ii-space-stack-md, 16px) var(--ii-space-inline-lg, 24px);
 	}
 
 	.reports-error {
-		padding: var(--netz-space-stack-xs, 10px) var(--netz-space-inline-md, 16px);
-		margin-bottom: var(--netz-space-stack-md, 16px);
-		border-radius: var(--netz-radius-sm, 8px);
-		background: color-mix(in srgb, var(--netz-danger) 8%, transparent);
-		color: var(--netz-danger);
-		font-size: var(--netz-text-small, 0.8125rem);
+		padding: var(--ii-space-stack-xs, 10px) var(--ii-space-inline-md, 16px);
+		margin-bottom: var(--ii-space-stack-md, 16px);
+		border-radius: var(--ii-radius-sm, 8px);
+		background: color-mix(in srgb, var(--ii-danger) 8%, transparent);
+		color: var(--ii-danger);
+		font-size: var(--ii-text-small, 0.8125rem);
 	}
 
 	.reports-list {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-		gap: var(--netz-space-stack-sm, 12px);
+		gap: var(--ii-space-stack-sm, 12px);
 	}
 
 	.report-card {
 		display: flex;
 		flex-direction: column;
-		border: 1px solid var(--netz-border-subtle);
-		border-radius: var(--netz-radius-md, 12px);
-		background: var(--netz-surface-elevated);
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-md, 12px);
+		background: var(--ii-surface-elevated);
 		cursor: pointer;
 		text-align: left;
-		font-family: var(--netz-font-sans);
+		font-family: var(--ii-font-sans);
 		transition: border-color 120ms ease, box-shadow 120ms ease;
 		overflow: hidden;
 	}
 
 	.report-card:hover {
-		border-color: var(--netz-border-accent);
-		box-shadow: var(--netz-shadow-1);
+		border-color: var(--ii-border-accent);
+		box-shadow: var(--ii-shadow-1);
 	}
 
 	.report-card-header {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: var(--netz-space-stack-xs, 10px) var(--netz-space-inline-md, 16px);
-		border-bottom: 1px solid var(--netz-border-subtle);
-		background: var(--netz-surface-alt);
+		padding: var(--ii-space-stack-xs, 10px) var(--ii-space-inline-md, 16px);
+		border-bottom: 1px solid var(--ii-border-subtle);
+		background: var(--ii-surface-alt);
 	}
 
 	.report-version {
-		font-size: var(--netz-text-body, 0.9375rem);
+		font-size: var(--ii-text-body, 0.9375rem);
 		font-weight: 700;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 		font-variant-numeric: tabular-nums;
 	}
 
 	.report-card-body {
-		padding: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-md, 16px);
+		padding: var(--ii-space-stack-sm, 12px) var(--ii-space-inline-md, 16px);
 		display: flex;
 		flex-direction: column;
-		gap: var(--netz-space-stack-2xs, 4px);
+		gap: var(--ii-space-stack-2xs, 4px);
 	}
 
 	.report-meta-row {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		font-size: var(--netz-text-small, 0.8125rem);
+		font-size: var(--ii-text-small, 0.8125rem);
 	}
 
 	.report-meta-label {
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 	}
 
 	.report-meta-value {
 		font-weight: 500;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 		font-variant-numeric: tabular-nums;
 	}
 
 	.report-meta-danger {
-		color: var(--netz-danger);
+		color: var(--ii-danger);
 	}
 </style>

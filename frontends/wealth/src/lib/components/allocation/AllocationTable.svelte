@@ -3,7 +3,7 @@
   with columns per risk profile. Used in strategic, tactical, and effective tabs.
 -->
 <script lang="ts">
-	import { formatPercent } from "@netz/ui";
+	import { formatPercent } from "@investintell/ui";
 	import type { BlockMeta, AllocationRow } from "./types";
 
 	type ProfileKey = string;
@@ -154,34 +154,34 @@
 
 <style>
 	.at-empty {
-		padding: var(--netz-space-stack-xl, 48px);
+		padding: var(--ii-space-stack-xl, 48px);
 		text-align: center;
-		color: var(--netz-text-muted);
-		font-size: var(--netz-text-small, 0.8125rem);
+		color: var(--ii-text-muted);
+		font-size: var(--ii-text-small, 0.8125rem);
 	}
 
 	.at-wrapper {
-		border: 1px solid var(--netz-border-subtle);
-		border-radius: var(--netz-radius-md, 12px);
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-md, 12px);
 		overflow: hidden;
 	}
 
 	.at-table {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: var(--netz-text-small, 0.8125rem);
+		font-size: var(--ii-text-small, 0.8125rem);
 	}
 
 	.at-th {
-		padding: var(--netz-space-stack-2xs, 6px) var(--netz-space-inline-sm, 12px);
+		padding: var(--ii-space-stack-2xs, 6px) var(--ii-space-inline-sm, 12px);
 		text-align: left;
-		font-size: var(--netz-text-label, 0.75rem);
+		font-size: var(--ii-text-label, 0.75rem);
 		font-weight: 600;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		text-transform: uppercase;
 		letter-spacing: 0.02em;
-		background: var(--netz-surface-alt);
-		border-bottom: 1px solid var(--netz-border-subtle);
+		background: var(--ii-surface-alt);
+		border-bottom: 1px solid var(--ii-border-subtle);
 	}
 
 	.at-th--value {
@@ -195,23 +195,23 @@
 
 	/* L1 Geography group header */
 	.at-group-row {
-		background: var(--netz-surface-alt);
+		background: var(--ii-surface-alt);
 	}
 
 	.at-group-label {
-		padding: var(--netz-space-stack-2xs, 6px) var(--netz-space-inline-sm, 12px);
-		font-size: var(--netz-text-label, 0.75rem);
+		padding: var(--ii-space-stack-2xs, 6px) var(--ii-space-inline-sm, 12px);
+		font-size: var(--ii-text-label, 0.75rem);
 		font-weight: 700;
-		color: var(--netz-text-secondary);
+		color: var(--ii-text-secondary);
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
-		border-bottom: 1px solid var(--netz-border-subtle);
-		border-top: 1px solid var(--netz-border-subtle);
+		border-bottom: 1px solid var(--ii-border-subtle);
+		border-top: 1px solid var(--ii-border-subtle);
 	}
 
 	/* L2 data rows */
 	.at-data-row {
-		border-bottom: 1px solid var(--netz-border-subtle);
+		border-bottom: 1px solid var(--ii-border-subtle);
 	}
 
 	.at-data-row:last-child {
@@ -219,7 +219,7 @@
 	}
 
 	.at-cell {
-		padding: var(--netz-space-stack-2xs, 6px) var(--netz-space-inline-sm, 12px);
+		padding: var(--ii-space-stack-2xs, 6px) var(--ii-space-inline-sm, 12px);
 		vertical-align: middle;
 	}
 
@@ -231,28 +231,28 @@
 
 	.at-block-name {
 		font-weight: 500;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 	}
 
 	.at-block-class {
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
 	}
 
 	.at-cell--value {
 		text-align: right;
 		font-variant-numeric: tabular-nums;
 		font-weight: 600;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 	}
 
 	/* Tactical colors */
 	.at-val--positive {
-		color: var(--netz-success);
+		color: var(--ii-success);
 	}
 
 	.at-val--negative {
-		color: var(--netz-danger);
+		color: var(--ii-danger);
 	}
 
 	@media (max-width: 640px) {
