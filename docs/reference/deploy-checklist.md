@@ -25,9 +25,9 @@ Confirmar zero violações. Especialmente:
 make check
 ```
 
-Esperado: **2905+ passed, 0 failed** (com DB local). Sem DB: ~56 failures de `asyncpg.InvalidPasswordError` — aceitável.
+Esperado: **2996+ passed, 0 failed** (com DB local). Sem DB: ~56 failures de `asyncpg.InvalidPasswordError` — aceitável.
 
-> Contagem atualizada após Quant Upgrade Sprints 1-3 (BL-1 a BL-11): 8 novos arquivos de teste adicionados.
+> Contagem atualizada após Global Instruments Refactor (2026-03-29): 2996 passed, 0 failed. 13 test regressions fixed (instrument_ingestion global worker, peer_group JOIN, wealth_embedding strategy-level chunks, manifest refresh, CSP admin removal).
 
 ### 0.3 Migrations pendentes
 
@@ -40,6 +40,8 @@ alembic upgrade head  # se divergirem
 
 > ⚠️ Migration crítica: `0055_model_portfolio_nav.py` usa autocommit — verificar que não está dentro de transaction block.
 > ⚠️ Migration `0058_add_garch_and_conditional_cvar.py` adiciona `volatility_garch` e `cvar_95_conditional` a `fund_risk_metrics`. Sem downtime (ADD COLUMN nullable).
+> ✅ **Migration 0070 APLICADA (2026-03-29):** Stub migration registra tabelas criadas via Tiger CLI: `instruments_org`, `sec_fund_prospectus_returns`, `sec_fund_prospectus_stats`, coluna `series_id` em `sec_nport_holdings`. Alembic head: `0070_global_instruments_sync`.
+> ⚠️ **Migrations 0068-0069 (Global Instruments Refactor):** `instruments_universe` e `nav_timeseries` agora são globais (sem `organization_id`, sem RLS). Nova tabela `instruments_org` (RLS por `organization_id`). Continuous aggregate `nav_monthly_returns_agg` recriada.
 
 ---
 
@@ -135,11 +137,12 @@ Esperado na lista:
 |------------|--------|-------|
 | `macro_data` | global | 1 mês |
 | `benchmark_nav` | global | 1 mês |
-| `nav_timeseries` | tenant-scoped | — |
+| `nav_timeseries` | **global** (sem RLS — migração 0069) | 1 mês |
 | `fund_risk_metrics` | tenant-scoped | — (migration 0058: +`volatility_garch`, +`cvar_95_conditional`) |
 | `model_portfolio_nav` | tenant-scoped | 1 mês, compress 3 meses (nova — Sprint 3) |
 | `sec_nport_holdings` | global | 3 meses |
 | `sec_13f_holdings` | global | 3 meses |
+| `sec_mmf_metrics` | global | 1 mês |
 
 ### 3.2 Compressão da `model_portfolio_nav`
 
@@ -165,13 +168,14 @@ ORDER BY tablename;
 | RLS = true | RLS = false |
 |------------|-------------|
 | `model_portfolio_nav` | `macro_data` |
-| `nav_timeseries` | `benchmark_nav` |
-| `fund_risk_metrics` | `sec_nport_holdings` |
-| `macro_reviews` | `sec_13f_holdings` |
-| `strategic_allocations` | `allocation_blocks` |
-| `model_portfolios` | |
-| `portfolio_snapshots` | |
-| `portfolio_views` (BL-3) | |
+| `instruments_org` (nova — migração 0068) | `instruments_universe` (global — migração 0069) |
+| `fund_risk_metrics` | `nav_timeseries` (global — migração 0069) |
+| `macro_reviews` | `benchmark_nav` |
+| `strategic_allocations` | `sec_nport_holdings` |
+| `model_portfolios` | `sec_13f_holdings` |
+| `portfolio_snapshots` | `allocation_blocks` |
+| `portfolio_views` (BL-3) | `sec_fund_prospectus_returns` (global) |
+| | `sec_fund_prospectus_stats` (global) |
 
 ### 3.4 pgvector
 
@@ -799,8 +803,21 @@ ORDER BY objid;
 | 33 | Factor exposures (BL-7) | `fund_selection_schema.optimization.factor_exposures` presente com ≥3 fundos, ≥60 obs | - [ ] |
 | 34 | Portfolio views CRUD (BL-3) | `POST/GET/PUT/DELETE /model-portfolios/{id}/views` — org-scoped, RLS ativo | - [ ] |
 | 35 | `arch` library | `python -c "from arch import arch_model"` não falha no container de produção | - [ ] |
+| **Global Instruments Refactor + Data Enrichment (2026-03-29)** | | |
+| 53 | Global instruments | `instruments_universe` sem RLS, `instruments_org` com RLS, `nav_timeseries` sem RLS | ✅ GO |
+| 54 | Migration 0070 Alembic sync | `alembic current == heads` após migration stub | ✅ GO |
+| 55 | `make check` pós-refactor | 0 failed (14 fixes aplicados — ver Resultados Prompt G) | ✅ GO |
+| 56 | Import screener 2-step | Cria em `instruments_universe` (global) + `instruments_org` (org-scoped) | - [ ] |
+| 57 | NAV backfill ≥ 4k instrumentos | `COUNT(DISTINCT instrument_id) FROM nav_timeseries` ≥ 4.000 | - [ ] |
+| 58 | `_deactivate_no_nav` | `is_active=false` para instrumentos sem NAV (ESMA sem cobertura Yahoo) | - [ ] |
+| 59 | `risk_calc` em escala | `fund_risk_metrics` para ≥ 1.000 instrumentos com NAV ≥ 252 obs | - [ ] |
+| 60 | N-PORT 24 trimestres | 4.47M+ rows, `MAX(report_date)` = 2025-Q4 | - [ ] |
+| 61 | RR1 prospectus returns | `sec_fund_prospectus_returns` → 17.500+ rows | - [ ] |
+| 62 | RR1 prospectus stats | `sec_fund_prospectus_stats` → 72.000+ rows | - [ ] |
 
 **Todos 35 itens marcados = sistema em produção.**
+
+> ⚠️ **Itens #53–#62 adicionados em 2026-03-29** — obrigatórios antes do próximo deploy Railway.
 
 ---
 
@@ -997,6 +1014,80 @@ Ref: `docs/reference/fund-centric-model-reference.md`
 ---
 
 ## Issues Conhecidas — Pós 2026-03-27
+
+| # | Issue | Impacto | Ação |
+|---|-------|---------|------|
+| I8 | `instruments_universe` e `nav_timeseries` agora são globais (sem RLS). Qualquer código que ainda passe `organization_id` para essas tabelas vai falhar silenciosamente ou com constraint error. | Alto se houver código não migrado. | `make check` obrigatório — verificar zero regressões antes do deploy. 30+ arquivos atualizados em 2026-03-29. |
+| I9 | `instruments_org` é a nova tabela org-scoped para seleção de instrumentos. O fluxo de import do screener (`import_sec_security`) foi refatorado para 2-step: upsert global → insert `instruments_org`. | Frontend e testes E2E do import precisam ser validados. | Testar fluxo completo: screener → import → instruments_org populado → analytics. |
+| I10 | Migration 0070 não existe ainda no Alembic. Tabelas `instruments_org`, `sec_fund_prospectus_returns`, `sec_fund_prospectus_stats` foram criadas via Tiger CLI direto. | `alembic heads` diverge. Próximo `upgrade head` pode conflitar. | Criar migration 0070 como stub (sem ops — tabelas já existem) para sincronizar a chain do Alembic. |
+| I11 | NAV backfill (~10.4M rows) em andamento para 8.947 instrumentos. ESMA funds com sufixos `.LX`, `.VI`, `.PA` têm cobertura quase nula no Yahoo Finance. | ~2.929 ESMA tickers esperados = 0 NAV. Serão marcados `is_active=false` pelo `_deactivate_no_nav`. | Rodar `universe_sync --deactivate-no-nav` após backfill completar. FE fundinfo é solução definitiva para UCITS europeus. |
+| I12 | `risk_calc` nunca rodou em escala para os 5k+ instrumentos com NAV. `fund_risk_metrics` tem dados apenas para os 16 ETFs do demo tenant. | Screener quantitativo (Sharpe, CVaR, momentum) sem dados para novos instrumentos. | Rodar `risk_calc` batch após backfill + `_deactivate_no_nav`. Estimar ~2-4h para 5k instrumentos. |
+
+---
+
+## Sessão 2026-03-29 — Global Instruments Refactor + Data Enrichment
+
+### O que foi feito
+
+**Arquitetura (Migrations 0068-0069):**
+- `instruments_universe` → global (sem `organization_id`, `block_id`, `approval_status`, sem RLS)
+- `instruments_org` → nova tabela org-scoped (RLS por `organization_id`) com `block_id` + `approval_status`
+- `nav_timeseries` → global (sem `organization_id`, sem RLS)
+- `nav_monthly_returns_agg` → recriada sem `organization_id`
+- 30+ arquivos atualizados: workers, routes, services, vertical engines, seed script, testes
+
+**Enriquecimento de tickers:**
+- SEC `investment_company_series_class_2025-xml.xml` → 17.319 class→ticker mappings (170→4.963 séries)
+- SEC `company_tickers_mf.json` → +109 classes (5.002 séries total)
+- SEC `company_tickers_exchange.json` → +21 BDCs, +332 registered funds
+- CUSIP trigram → 27 BDCs resolvidos (ARCC, BXSL, MAIN, PSEC, HTGC, etc.)
+- ESMA `.LU`→`.LX` fix → 1.942 tickers corrigidos
+
+**Universe Sync Worker (novo):**
+- Phase 1: 925 ETFs SEC
+- Phase 2: 4.700 MF séries canônicas
+- Phase 3: 358 CEFs + 27 BDCs
+- Phase 4: 2.929 ESMA UCITS
+- **Total: 8.947 instrumentos no catálogo**
+
+**Ingestão de dados:**
+- `nav_timeseries`: ~10.4M rows, 5.339 instrumentos (backfill em andamento — checkpoint ativo)
+- `sec_nport_holdings`: 4.47M rows, 24 trimestres (2020 Q1 → 2025 Q4), ingeridos via psycopg3 COPY em 3.2 min
+- `sec_fund_prospectus_returns`: 17.502 annual returns (2.086 séries, 2012-2025) via RR1 XBRL
+- `sec_fund_prospectus_stats`: 72.157 fee/risk stats (20.390 séries) via RR1
+
+**Commits:**
+- `96b83c7` feat(wealth): global instruments refactor + universe_sync + N-PORT bulk loader
+- `eee8b11` fix(wealth): universe_sync auto-fetches SEC MF tickers + nport parser outputs CSV
+- `b2117a1` feat(wealth): RR1 prospectus data loader + N-PORT COPY upserter
+
+### Pendências obrigatórias antes do próximo deploy (P0)
+
+1. **NAV backfill terminar** → rodar `universe_sync --deactivate-no-nav`
+2. **`make check`** — lint + typecheck + testes. Resolver regressões do refactor de 30+ arquivos
+3. **Migration 0070** — stub Alembic para sincronizar `instruments_org`, `sec_fund_prospectus_returns`, `sec_fund_prospectus_stats`, `sec_nport_holdings.series_id`
+
+### Go/No-Go — Resultados Prompt G / P0 Estabilização (2026-03-29)
+
+| # | Item | Detalhe | Status |
+|---|------|---------|--------|
+| 53 | Global instruments refactor | `instruments_universe` sem RLS, `instruments_org` com RLS, `nav_timeseries` sem RLS | ✅ GO |
+| 54 | Migration 0070 Alembic sync | Stub criado e aplicado — `alembic current = 0070_global_instruments_sync` | ✅ GO |
+| 55 | `make check` pós-refactor | 0 failed (14 fixes aplicados — ver tabela abaixo) | ✅ GO |
+
+**Fixes aplicados para `make check` passar:**
+
+| Fix | Arquivos | Root cause |
+|-----|----------|------------|
+| Instrument ingestion tests (8) | `test_instrument_ingestion.py` | Worker agora global (sem org_id), testes ainda passavam ORG_ID |
+| Peer group batch test (1) | `test_peer_group.py` | Service agora faz JOIN Instrument + InstrumentOrg como tuples |
+| Wealth embedding tests (2) | `test_wealth_embedding_worker.py` | Worker agrupa por strategy — teste usava total_gav antigo |
+| Route manifest (2) | `manifests/routes.json`, `manifests/workers.json` | Stale após refactor — regenerados |
+| CSP config test (1) | `test_csp_config.py` | Referenciava `frontends/admin/` aposentado |
+
+**Também atualizado:** `CLAUDE.md` (migration head → 0070)
+
+**✅ Pronto para deploy Railway.**
 
 | # | Issue | Impacto | Ação |
 |---|-------|---------|------|

@@ -931,6 +931,21 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/reporting/model-portfolios/{portfolio_id}/long-form-report/{job_id}/pdf",
+    "name": "download_long_form_pdf"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/reporting/model-portfolios/{portfolio_id}/monthly-report/stream/{job_id}",
+    "name": "stream_monthly_report"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/reporting/model-portfolios/{portfolio_id}/monthly-report/{job_id}/pdf",
+    "name": "download_monthly_report_pdf"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/risk/macro",
     "name": "get_macro"
   },
@@ -1016,6 +1031,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/search",
+    "name": "global_search"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/sec/funds/{cik}",
     "name": "get_fund_detail"
   },
@@ -1023,6 +1043,26 @@
     "method": "GET",
     "path": "/api/v1/sec/funds/{cik}/holdings",
     "name": "get_fund_holdings"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/sec/funds/{cik}/holdings-history",
+    "name": "get_holdings_history"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/sec/funds/{cik}/peer-analysis",
+    "name": "get_peer_analysis"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/sec/funds/{cik}/prospectus",
+    "name": "get_fund_prospectus"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/sec/funds/{cik}/reverse-holdings",
+    "name": "get_reverse_holdings"
   },
   {
     "method": "GET",
@@ -1756,6 +1796,11 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/reporting/model-portfolios/{portfolio_id}/monthly-report",
+    "name": "generate_monthly_report"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/screener/import-esma/{isin}",
     "name": "import_esma_fund"
   },
@@ -1763,6 +1808,11 @@
     "method": "POST",
     "path": "/api/v1/screener/import-sec/{ticker}",
     "name": "import_sec_security"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/screener/import/{identifier}",
+    "name": "import_fund"
   },
   {
     "method": "POST",
@@ -1783,6 +1833,11 @@
     "method": "POST",
     "path": "/api/v1/universe/funds/{instrument_id}/reject",
     "name": "reject_fund"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/wealth/agent/chat",
+    "name": "agent_chat"
   },
   {
     "method": "POST",

@@ -12,8 +12,6 @@ from app.domains.wealth.workers.instrument_ingestion import (
     run_instrument_ingestion,
 )
 
-ORG_ID = uuid.uuid4()
-
 
 def _make_instrument(
     ticker: str = "SPY",
@@ -129,11 +127,8 @@ class TestRunInstrumentIngestion:
         ), patch(
             "app.domains.wealth.workers.instrument_ingestion.get_instrument_provider",
             return_value=mock_provider,
-        ), patch(
-            "app.domains.wealth.workers.instrument_ingestion.set_rls_context",
-            new_callable=AsyncMock,
         ):
-            result = await run_instrument_ingestion(ORG_ID, lookback_days=30)
+            result = await run_instrument_ingestion(lookback_days=30)
 
         assert result["instruments_processed"] >= 0  # At least ran successfully
 
@@ -164,11 +159,8 @@ class TestRunInstrumentIngestion:
             return_value=mock_db,
         ), patch(
             "app.domains.wealth.workers.instrument_ingestion.get_instrument_provider",
-        ) as mock_factory, patch(
-            "app.domains.wealth.workers.instrument_ingestion.set_rls_context",
-            new_callable=AsyncMock,
-        ):
-            await run_instrument_ingestion(ORG_ID, lookback_days=30)
+        ) as mock_factory:
+            await run_instrument_ingestion(lookback_days=30)
             # Factory is NOT called when no instruments found
             # (provider only instantiated after query)
 
@@ -214,11 +206,8 @@ class TestRunInstrumentIngestion:
         ), patch(
             "app.domains.wealth.workers.instrument_ingestion.get_instrument_provider",
             return_value=mock_provider,
-        ), patch(
-            "app.domains.wealth.workers.instrument_ingestion.set_rls_context",
-            new_callable=AsyncMock,
         ):
-            result = await run_instrument_ingestion(ORG_ID, lookback_days=30)
+            result = await run_instrument_ingestion(lookback_days=30)
 
         assert result["instruments_processed"] == 1
         assert result["rows_upserted"] == 2
@@ -258,11 +247,8 @@ class TestRunInstrumentIngestion:
         ), patch(
             "app.domains.wealth.workers.instrument_ingestion.get_instrument_provider",
             return_value=mock_provider,
-        ), patch(
-            "app.domains.wealth.workers.instrument_ingestion.set_rls_context",
-            new_callable=AsyncMock,
         ):
-            result = await run_instrument_ingestion(ORG_ID, lookback_days=30)
+            result = await run_instrument_ingestion(lookback_days=30)
 
         # 3 prices = 3 rows (first has None return_1d)
         assert result["rows_upserted"] == 3
@@ -293,11 +279,8 @@ class TestRunInstrumentIngestion:
         ), patch(
             "app.domains.wealth.workers.instrument_ingestion.get_instrument_provider",
             return_value=mock_provider,
-        ), patch(
-            "app.domains.wealth.workers.instrument_ingestion.set_rls_context",
-            new_callable=AsyncMock,
         ):
-            result = await run_instrument_ingestion(ORG_ID, lookback_days=30)
+            result = await run_instrument_ingestion(lookback_days=30)
 
         assert result["instruments_processed"] == 0
 
@@ -330,13 +313,10 @@ class TestRunInstrumentIngestion:
             "app.domains.wealth.workers.instrument_ingestion.get_instrument_provider",
             return_value=failing_provider,
         ), patch(
-            "app.domains.wealth.workers.instrument_ingestion.set_rls_context",
-            new_callable=AsyncMock,
-        ), patch(
             "asyncio.sleep",
             new_callable=AsyncMock,
         ):
-            result = await run_instrument_ingestion(ORG_ID, lookback_days=30)
+            result = await run_instrument_ingestion(lookback_days=30)
 
         assert result["rows_upserted"] == 0
         assert len(result["skipped_tickers"]) > 0 or len(result["errors"]) > 0
@@ -377,12 +357,9 @@ class TestRunInstrumentIngestion:
         ), patch(
             "app.domains.wealth.workers.instrument_ingestion.get_instrument_provider",
             return_value=mock_provider,
-        ), patch(
-            "app.domains.wealth.workers.instrument_ingestion.set_rls_context",
-            new_callable=AsyncMock,
         ):
-            r1 = await run_instrument_ingestion(ORG_ID, lookback_days=30)
-            r2 = await run_instrument_ingestion(ORG_ID, lookback_days=30)
+            r1 = await run_instrument_ingestion(lookback_days=30)
+            r2 = await run_instrument_ingestion(lookback_days=30)
 
         # Both runs produce same row count — upsert is idempotent
         assert r1["rows_upserted"] == r2["rows_upserted"]
@@ -422,11 +399,8 @@ class TestRunInstrumentIngestion:
         ), patch(
             "app.domains.wealth.workers.instrument_ingestion.get_instrument_provider",
             return_value=mock_provider,
-        ), patch(
-            "app.domains.wealth.workers.instrument_ingestion.set_rls_context",
-            new_callable=AsyncMock,
         ):
-            result = await run_instrument_ingestion(ORG_ID, lookback_days=30)
+            result = await run_instrument_ingestion(lookback_days=30)
 
         assert "BAD" in result["skipped_tickers"]
         assert result["rows_upserted"] == 0

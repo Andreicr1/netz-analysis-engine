@@ -329,8 +329,9 @@ class TestEmbedSecPrivateFunds:
         rows = [
             _make_row(
                 crd_number="55555",
+                strategy="Hedge Fund",
                 fund_count=3,
-                total_gav=2_000_000_000,
+                strategy_gav=2_000_000_000,
                 fof_count=1,
                 type_breakdown="Hedge Fund, PE Fund",
                 fund_list="Alpha Fund (Hedge Fund): GAV $1,000,000,000, 50 investors; Beta Fund (PE Fund): GAV $800,000,000, 20 investors",
@@ -354,7 +355,7 @@ class TestEmbedSecPrivateFunds:
         row = mock_upsert.call_args[0][1][0]
         assert row["entity_type"] == "firm"
         assert row["source_type"] == "sec_private_funds"
-        assert row["id"] == "sec_private_funds_55555"
+        assert row["id"] == "sec_private_funds_55555_hedge_fund"
         assert "Alpha Fund" in row["content"]
         assert "Fund-of-funds: 1" in row["content"]
 
@@ -411,14 +412,21 @@ class TestEmbedEsmaManagerProfiles:
 
         rows = [
             _make_row(
-                esma_id="ESM_001",
+                esma_manager_id="ESM_001",
+                strategy="UCITS",
                 company_name="BlackRock Fund Managers",
                 country="IE",
                 authorization_status="Authorised",
                 lei="549300ABCDEF123456",
-                sec_crd_number="99999",
-                actual_fund_count=42,
+                resolved_crd="99999",
+                sec_name=None,
+                sec_aum=None,
+                sec_pf_count=None,
+                fund_count=42,
                 domicile_count=5,
+                domiciles="IE, LU, DE, FR, NL",
+                with_ticker=10,
+                fund_list="Fund A (IE); Fund B (LU)",
             ),
         ]
         select_result = MagicMock()
@@ -439,10 +447,9 @@ class TestEmbedEsmaManagerProfiles:
         assert row["entity_type"] == "firm"
         assert row["source_type"] == "esma_manager_profile"
         assert row["firm_crd"] == "99999"
-        assert row["id"] == "esma_manager_profile_ESM_001"
-        assert "42 UCITS funds" in row["content"]
+        assert row["id"] == "esma_manager_ESM_001_ucits"
+        assert "42 UCITS sub-funds" in row["content"]
         assert "5 domiciles" in row["content"]
-        assert "CRD 99999" in row["content"]
 
 
 class TestEmbedDdChapters:

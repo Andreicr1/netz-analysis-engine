@@ -522,33 +522,37 @@ class TestPeerGroupService:
         id1 = uuid.uuid4()
         id2 = uuid.uuid4()
 
-        # Build a universe of 25 instruments (all funds in same block)
-        # id1 is in the group, id2 has no block
-        universe_instruments = []
+        # Build universe as (Instrument, InstrumentOrg) tuples
+        universe_rows = []
         for i in range(25):
+            iid = id1 if i == 0 else uuid.uuid4()
             inst = MagicMock()
-            inst.instrument_id = id1 if i == 0 else uuid.uuid4()
+            inst.instrument_id = iid
             inst.instrument_type = "fund"
-            inst.block_id = "BLK"
             inst.attributes = {"strategy": "long_only", "aum_usd": 1_000_000_000}
             inst.is_active = True
-            inst.organization_id = "org-1"
-            universe_instruments.append(inst)
+            inst_org = MagicMock()
+            inst_org.instrument_id = iid
+            inst_org.block_id = "BLK"
+            inst_org.organization_id = "org-1"
+            universe_rows.append((inst, inst_org))
 
         # id2: fund with no block
         inst2 = MagicMock()
         inst2.instrument_id = id2
         inst2.instrument_type = "fund"
-        inst2.block_id = None
         inst2.attributes = {"strategy": "long_only"}
         inst2.is_active = True
-        inst2.organization_id = "org-1"
-        universe_instruments.append(inst2)
+        inst2_org = MagicMock()
+        inst2_org.instrument_id = id2
+        inst2_org.block_id = None
+        inst2_org.organization_id = "org-1"
+        universe_rows.append((inst2, inst2_org))
 
         # Metrics for all instruments with blocks
         metrics_by_id = {}
-        for inst in universe_instruments:
-            if inst.block_id:
+        for inst, inst_org in universe_rows:
+            if inst_org.block_id:
                 metrics_by_id[inst.instrument_id] = {
                     "sharpe_ratio": 1.0,
                     "max_drawdown_pct": -10.0,
@@ -558,7 +562,7 @@ class TestPeerGroupService:
                 }
 
         db = MagicMock()
-        db.execute.return_value.scalars.return_value.all.return_value = universe_instruments
+        db.execute.return_value.all.return_value = universe_rows
 
         svc = PeerGroupService()
         with patch.object(svc, "_load_peer_metrics", return_value=metrics_by_id):
