@@ -14,9 +14,9 @@
 		formatBps,
 		formatDate,
 		plColor,
-	} from "@netz/ui";
-	import { ChartContainer } from "@netz/ui/charts";
-	import { globalChartOptions, statusColors } from "@netz/ui/charts/echarts-setup";
+	} from "@investintell/ui";
+	import { ChartContainer } from "@investintell/ui/charts";
+	import { globalChartOptions, statusColors } from "@investintell/ui/charts/echarts-setup";
 	import type { PageData } from "./$types";
 	import type { EntityAnalyticsData } from "./+page.server";
 
@@ -50,9 +50,9 @@
 	}
 
 	function captureColor(v: number | null, isDown = false): string {
-		if (v == null) return "var(--netz-text-muted)";
-		if (isDown) return v < 100 ? "var(--netz-success)" : "var(--netz-danger)";
-		return v > 100 ? "var(--netz-success)" : "var(--netz-danger)";
+		if (v == null) return "var(--ii-text-muted)";
+		if (isDown) return v < 100 ? "var(--ii-success)" : "var(--ii-danger)";
+		return v > 100 ? "var(--ii-success)" : "var(--ii-danger)";
 	}
 
 	// ── 1. Drawdown Chart Option ───────────────────────────────────────
@@ -161,7 +161,7 @@
 					},
 					markLine: {
 						silent: true,
-						data: [{ yAxis: 100, lineStyle: { color: "var(--netz-text-muted)", type: "dashed", width: 1 }, label: { formatter: "100%", position: "end", fontSize: 10 } }],
+						data: [{ yAxis: 100, lineStyle: { color: "var(--ii-text-muted)", type: "dashed", width: 1 }, label: { formatter: "100%", position: "end", fontSize: 10 } }],
 					},
 				},
 			],
@@ -379,7 +379,7 @@
 			</div>
 			<div class="ea-stat">
 				<span class="ea-stat-label">Max Drawdown</span>
-				<span class="ea-stat-value" style:color="var(--netz-danger)">
+				<span class="ea-stat-value" style:color="var(--ii-danger)">
 					{fmtPct(analytics.risk_statistics.max_drawdown)}
 				</span>
 			</div>
@@ -412,13 +412,13 @@
 		<div class="ea-dd-kpis">
 			<div class="ea-dd-kpi">
 				<span class="ea-stat-label">Max Drawdown</span>
-				<span class="ea-stat-value" style:color="var(--netz-danger)">
+				<span class="ea-stat-value" style:color="var(--ii-danger)">
 					{fmtPct(analytics.drawdown.max_drawdown)}
 				</span>
 			</div>
 			<div class="ea-dd-kpi">
 				<span class="ea-stat-label">Current DD</span>
-				<span class="ea-stat-value" style:color={analytics.drawdown.current_drawdown && analytics.drawdown.current_drawdown < -0.01 ? "var(--netz-danger)" : "var(--netz-text-secondary)"}>
+				<span class="ea-stat-value" style:color={analytics.drawdown.current_drawdown && analytics.drawdown.current_drawdown < -0.01 ? "var(--ii-danger)" : "var(--ii-text-secondary)"}>
 					{fmtPct(analytics.drawdown.current_drawdown)}
 				</span>
 			</div>
@@ -456,7 +456,7 @@
 								<td>{p.start_date}</td>
 								<td>{p.trough_date}</td>
 								<td>{p.end_date ?? "open"}</td>
-								<td style:color="var(--netz-danger)">{fmtPct(p.depth)}</td>
+								<td style:color="var(--ii-danger)">{fmtPct(p.depth)}</td>
 								<td>{p.duration_days}d</td>
 							</tr>
 						{/each}
@@ -537,23 +537,23 @@
 			</div>
 			<div class="ea-stat">
 				<span class="ea-stat-label">Skewness</span>
-				<span class="ea-stat-value" style:color={analytics.distribution.skewness != null && analytics.distribution.skewness < -0.5 ? "var(--netz-warning)" : "var(--netz-text-primary)"}>
+				<span class="ea-stat-value" style:color={analytics.distribution.skewness != null && analytics.distribution.skewness < -0.5 ? "var(--ii-warning)" : "var(--ii-text-primary)"}>
 					{fmtNum(analytics.distribution.skewness)}
 				</span>
 			</div>
 			<div class="ea-stat">
 				<span class="ea-stat-label">Excess Kurtosis</span>
-				<span class="ea-stat-value" style:color={analytics.distribution.kurtosis != null && analytics.distribution.kurtosis > 3 ? "var(--netz-warning)" : "var(--netz-text-primary)"}>
+				<span class="ea-stat-value" style:color={analytics.distribution.kurtosis != null && analytics.distribution.kurtosis > 3 ? "var(--ii-warning)" : "var(--ii-text-primary)"}>
 					{fmtNum(analytics.distribution.kurtosis)}
 				</span>
 			</div>
 			<div class="ea-stat">
 				<span class="ea-stat-label">VaR (95%)</span>
-				<span class="ea-stat-value" style:color="var(--netz-danger)">{fmtPct(analytics.distribution.var_95)}</span>
+				<span class="ea-stat-value" style:color="var(--ii-danger)">{fmtPct(analytics.distribution.var_95)}</span>
 			</div>
 			<div class="ea-stat">
 				<span class="ea-stat-label">CVaR (95%)</span>
-				<span class="ea-stat-value" style:color="var(--netz-danger)">{fmtPct(analytics.distribution.cvar_95)}</span>
+				<span class="ea-stat-value" style:color="var(--ii-danger)">{fmtPct(analytics.distribution.cvar_95)}</span>
 			</div>
 		</div>
 		<ChartContainer
@@ -574,7 +574,7 @@
 		align-items: center;
 		justify-content: center;
 		min-height: 300px;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		font-size: 0.875rem;
 	}
 
@@ -589,8 +589,8 @@
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: var(--netz-brand-primary);
-		background: color-mix(in srgb, var(--netz-brand-primary) 12%, transparent);
+		color: var(--ii-brand-primary);
+		background: color-mix(in srgb, var(--ii-brand-primary) 12%, transparent);
 		padding: 3px 10px;
 		border-radius: 6px;
 	}
@@ -598,7 +598,7 @@
 	.ea-window-toggle {
 		display: flex;
 		gap: 2px;
-		background: var(--netz-surface-alt);
+		background: var(--ii-surface-alt);
 		border-radius: 8px;
 		padding: 2px;
 	}
@@ -610,25 +610,25 @@
 		border: none;
 		border-radius: 6px;
 		background: transparent;
-		color: var(--netz-text-secondary);
+		color: var(--ii-text-secondary);
 		cursor: pointer;
 		transition: all 0.15s ease;
 	}
 
 	.ea-win-btn:hover {
-		color: var(--netz-text-primary);
-		background: color-mix(in srgb, var(--netz-border) 40%, transparent);
+		color: var(--ii-text-primary);
+		background: color-mix(in srgb, var(--ii-border) 40%, transparent);
 	}
 
 	.ea-win-btn--active {
-		background: var(--netz-surface-elevated);
-		color: var(--netz-brand-primary);
+		background: var(--ii-surface-elevated);
+		color: var(--ii-brand-primary);
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 	}
 
 	.ea-panel {
-		background: var(--netz-surface-elevated);
-		border: 1px solid var(--netz-border);
+		background: var(--ii-surface-elevated);
+		border: 1px solid var(--ii-border);
 		border-radius: 12px;
 		padding: clamp(16px, 1rem + 0.5vw, 28px);
 		margin-bottom: 16px;
@@ -637,7 +637,7 @@
 	.ea-panel-title {
 		font-size: 0.9rem;
 		font-weight: 700;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 		margin: 0 0 4px;
 		display: flex;
 		align-items: center;
@@ -646,7 +646,7 @@
 
 	.ea-panel-sub {
 		font-size: 0.75rem;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		margin: 0 0 16px;
 	}
 
@@ -670,13 +670,13 @@
 		font-weight: 500;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 	}
 
 	.ea-stat-value {
 		font-size: 1.1rem;
 		font-weight: 700;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -717,15 +717,15 @@
 		font-size: 0.7rem;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		padding: 6px 8px;
-		border-bottom: 1px solid var(--netz-border);
+		border-bottom: 1px solid var(--ii-border);
 	}
 
 	.ea-dd-table td {
 		padding: 5px 8px;
-		color: var(--netz-text-secondary);
-		border-bottom: 1px solid color-mix(in srgb, var(--netz-border) 50%, transparent);
+		color: var(--ii-text-secondary);
+		border-bottom: 1px solid color-mix(in srgb, var(--ii-border) 50%, transparent);
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -734,14 +734,14 @@
 	.ea-bm-badge {
 		font-size: 0.7rem;
 		font-weight: 500;
-		color: var(--netz-text-secondary);
-		background: var(--netz-surface-alt);
+		color: var(--ii-text-secondary);
+		background: var(--ii-surface-alt);
 		padding: 2px 8px;
 		border-radius: 4px;
 	}
 
 	.ea-bm-src {
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		font-style: italic;
 	}
 </style>

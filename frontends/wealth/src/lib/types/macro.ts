@@ -74,21 +74,21 @@ export interface ImfPoint {
 
 export function regimeColor(regime: string | null | undefined): string {
 	switch (regime) {
-		case "crisis":      return "var(--netz-danger)";
-		case "stress":      return "var(--netz-warning)";
-		case "recovery":    return "var(--netz-info)";
-		case "expansion":   return "var(--netz-success)";
-		case "normal":      return "var(--netz-success)";
-		default:            return "var(--netz-text-muted)";
+		case "crisis":      return "var(--ii-danger)";
+		case "stress":      return "var(--ii-warning)";
+		case "recovery":    return "var(--ii-info)";
+		case "expansion":   return "var(--ii-success)";
+		case "normal":      return "var(--ii-success)";
+		default:            return "var(--ii-text-muted)";
 	}
 }
 
 export function freshnessColor(status: string): string {
 	switch (status) {
-		case "fresh":    return "var(--netz-success)";
-		case "decaying": return "var(--netz-warning)";
-		case "stale":    return "var(--netz-danger)";
-		default:         return "var(--netz-text-muted)";
+		case "fresh":    return "var(--ii-success)";
+		case "decaying": return "var(--ii-warning)";
+		case "stale":    return "var(--ii-danger)";
+		default:         return "var(--ii-text-muted)";
 	}
 }
 

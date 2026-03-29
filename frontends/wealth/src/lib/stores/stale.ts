@@ -13,7 +13,7 @@ const SAO_PAULO_TZ = "America/Sao_Paulo";
 /**
  * Cached DateTimeFormat for São Paulo timezone.
  * eslint-disable-next-line: this is an internal timezone parser for business-day
- * staleness logic, not a display formatter. @netz/ui formatters do not expose
+ * staleness logic, not a display formatter. @investintell/ui formatters do not expose
  * timezone-aware current-time parsing, so direct Intl usage is required here.
  */
 // eslint-disable-next-line no-restricted-syntax

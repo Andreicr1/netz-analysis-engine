@@ -7,7 +7,7 @@
  */
 
 import { createClientApiClient } from "$lib/api/client";
-import { createSSEStream, type SSEStatus } from "@netz/ui";
+import { createSSEStream, type SSEStatus } from "@investintell/ui";
 import { isStale } from "./stale.js";
 
 // ── Types ───────────────────────────────────────────────────

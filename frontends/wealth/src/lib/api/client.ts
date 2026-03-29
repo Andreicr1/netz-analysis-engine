@@ -1,6 +1,6 @@
 /**
  * Wealth-specific API client wrappers.
- * Re-exports @netz/ui factories with wealth backend base URL.
+ * Re-exports @investintell/ui factories with wealth backend base URL.
  */
 
 import {
@@ -8,7 +8,7 @@ import {
 	createClientApiClient as createClient,
 	setAuthRedirectHandler,
 	setConflictHandler,
-} from "@netz/ui/utils";
+} from "@investintell/ui/utils";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
 

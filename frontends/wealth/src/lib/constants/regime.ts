@@ -8,8 +8,8 @@ export const regimeLabels: Record<string, string> = {
 };
 
 export const regimeColors: Record<string, string> = {
-	RISK_ON: "var(--netz-success)",
-	RISK_OFF: "var(--netz-warning)",
-	INFLATION: "var(--netz-brand-highlight)",
-	CRISIS: "var(--netz-danger)",
+	RISK_ON: "var(--ii-success)",
+	RISK_OFF: "var(--ii-warning)",
+	INFLATION: "var(--ii-brand-highlight)",
+	CRISIS: "var(--ii-danger)",
 };

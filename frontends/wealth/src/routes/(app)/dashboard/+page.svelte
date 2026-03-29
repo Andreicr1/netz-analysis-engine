@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
 	import { getContext, onMount } from "svelte";
-	import { PageHeader, StatusBadge, formatPercent, formatNumber } from "@netz/ui";
+	import { PageHeader, StatusBadge, formatPercent, formatNumber } from "@investintell/ui";
 	import type { RiskStore, CVaRStatus } from "$lib/stores/risk-store.svelte";
 
 	let { data } = $props();
@@ -59,17 +59,17 @@
 	}
 
 	function utilizationColor(pct: number | null): string {
-		if (pct == null) return "var(--netz-text-muted)";
-		if (pct >= 100)  return "var(--netz-danger)";
-		if (pct >= 80)   return "var(--netz-warning)";
-		return "var(--netz-success)";
+		if (pct == null) return "var(--ii-text-muted)";
+		if (pct >= 100)  return "var(--ii-danger)";
+		if (pct >= 80)   return "var(--ii-warning)";
+		return "var(--ii-success)";
 	}
 
 	function utilizationBarColor(pct: number | null): string {
-		if (pct == null) return "var(--netz-border)";
-		if (pct >= 100)  return "var(--netz-danger)";
-		if (pct >= 80)   return "var(--netz-warning)";
-		return "var(--netz-success)";
+		if (pct == null) return "var(--ii-border)";
+		if (pct >= 100)  return "var(--ii-danger)";
+		if (pct >= 80)   return "var(--ii-warning)";
+		return "var(--ii-success)";
 	}
 
 	// ── NAV from snapshot SSR data ───────────────────────────────────────
@@ -197,49 +197,49 @@
 /* Header */
 .dashboard-header { display: flex; align-items: flex-start; justify-content: space-between; }
 .dashboard-header-meta { display: flex; align-items: center; gap: 12px; padding-top: 6px; }
-.org-label { font-size: 13px; font-weight: 500; color: var(--netz-text-muted); }
+.org-label { font-size: 13px; font-weight: 500; color: var(--ii-text-muted); }
 
 /* Portfolio cards grid */
 .portfolio-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 
 .portfolio-card {
-	background: var(--netz-surface-elevated);
-	border: 1px solid var(--netz-border-subtle);
-	border-radius: var(--netz-radius-lg, 12px);
+	background: var(--ii-surface-elevated);
+	border: 1px solid var(--ii-border-subtle);
+	border-radius: var(--ii-radius-lg, 12px);
 	padding: 20px 20px 16px;
 	display: flex; flex-direction: column; gap: 6px;
 }
-.portfolio-card[data-status="breach"] { border-color: var(--netz-danger); }
-.portfolio-card[data-status="warning"] { border-color: var(--netz-warning); }
+.portfolio-card[data-status="breach"] { border-color: var(--ii-danger); }
+.portfolio-card[data-status="warning"] { border-color: var(--ii-warning); }
 
 .card-header { display: flex; align-items: baseline; justify-content: space-between; }
-.card-title { font-size: 15px; font-weight: 700; color: var(--netz-text-primary); }
-.card-sublabel { font-size: 11px; color: var(--netz-text-muted); background: var(--netz-surface-alt); padding: 2px 8px; border-radius: 99px; }
-.card-nav { font-size: 28px; font-weight: 700; color: var(--netz-text-primary); font-variant-numeric: tabular-nums; margin-top: 4px; }
-.card-ytd { font-size: 12px; color: var(--netz-text-secondary); }
+.card-title { font-size: 15px; font-weight: 700; color: var(--ii-text-primary); }
+.card-sublabel { font-size: 11px; color: var(--ii-text-muted); background: var(--ii-surface-alt); padding: 2px 8px; border-radius: 99px; }
+.card-nav { font-size: 28px; font-weight: 700; color: var(--ii-text-primary); font-variant-numeric: tabular-nums; margin-top: 4px; }
+.card-ytd { font-size: 12px; color: var(--ii-text-secondary); }
 
 .card-metrics { display: flex; gap: 24px; margin-top: 8px; }
 .metric { display: flex; flex-direction: column; gap: 2px; }
-.metric-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--netz-text-muted); }
+.metric-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ii-text-muted); }
 .metric-value { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.metric-limit { font-size: 11px; color: var(--netz-text-muted); }
+.metric-limit { font-size: 11px; color: var(--ii-text-muted); }
 
-.util-bar-track { height: 4px; background: var(--netz-border); border-radius: 99px; margin-top: 12px; overflow: hidden; }
+.util-bar-track { height: 4px; background: var(--ii-border); border-radius: 99px; margin-top: 12px; overflow: hidden; }
 .util-bar-fill { height: 100%; border-radius: 99px; transition: width 600ms ease, background 300ms ease; }
 
 /* Alerts */
 .bottom-row { display: grid; grid-template-columns: 1fr; gap: 16px; }
-.alerts-panel { background: var(--netz-surface-elevated); border: 1px solid var(--netz-border-subtle); border-radius: var(--netz-radius-lg, 12px); padding: 20px; display: flex; flex-direction: column; gap: 12px; }
-.panel-title { font-size: 13px; font-weight: 700; color: var(--netz-text-primary); margin: 0; }
-.alerts-empty { font-size: 13px; color: var(--netz-text-muted); }
+.alerts-panel { background: var(--ii-surface-elevated); border: 1px solid var(--ii-border-subtle); border-radius: var(--ii-radius-lg, 12px); padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+.panel-title { font-size: 13px; font-weight: 700; color: var(--ii-text-primary); margin: 0; }
+.alerts-empty { font-size: 13px; color: var(--ii-text-muted); }
 
-.alert-card { display: flex; align-items: flex-start; gap: 10px; background: var(--netz-surface-alt); border-radius: var(--netz-radius-md, 8px); padding: 12px 14px; }
-.alert-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; background: var(--netz-border); }
-.alert-dot--red { background: var(--netz-danger); }
-.alert-dot--yellow { background: var(--netz-warning); }
+.alert-card { display: flex; align-items: flex-start; gap: 10px; background: var(--ii-surface-alt); border-radius: var(--ii-radius-md, 8px); padding: 12px 14px; }
+.alert-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; background: var(--ii-border); }
+.alert-dot--red { background: var(--ii-danger); }
+.alert-dot--yellow { background: var(--ii-warning); }
 .alert-body { display: flex; flex-direction: column; gap: 2px; }
-.alert-name { font-size: 13px; font-weight: 600; color: var(--netz-text-primary); }
-.alert-meta { font-size: 11px; color: var(--netz-text-muted); }
+.alert-name { font-size: 13px; font-weight: 600; color: var(--ii-text-primary); }
+.alert-meta { font-size: 11px; color: var(--ii-text-muted); }
 
 @media (max-width: 900px) {
 	.portfolio-cards { grid-template-columns: 1fr; }

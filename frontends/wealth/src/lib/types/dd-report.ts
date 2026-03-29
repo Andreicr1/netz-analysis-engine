@@ -84,17 +84,17 @@ export function anchorLabel(anchor: DecisionAnchor | null): string {
 }
 
 export function confidenceColor(score: number | null): string {
-	if (score === null) return "var(--netz-text-muted)";
-	if (score >= 80) return "var(--netz-success)";
-	if (score >= 60) return "var(--netz-info)";
-	return "var(--netz-warning)";
+	if (score === null) return "var(--ii-text-muted)";
+	if (score >= 80) return "var(--ii-success)";
+	if (score >= 60) return "var(--ii-info)";
+	return "var(--ii-warning)";
 }
 
 export function anchorColor(anchor: DecisionAnchor | null): string {
 	switch (anchor) {
-		case "APPROVE": return "var(--netz-success)";
-		case "CONDITIONAL": return "var(--netz-warning)";
-		case "REJECT": return "var(--netz-danger)";
-		default: return "var(--netz-text-muted)";
+		case "APPROVE": return "var(--ii-success)";
+		case "CONDITIONAL": return "var(--ii-warning)";
+		case "REJECT": return "var(--ii-danger)";
+		default: return "var(--ii-text-muted)";
 	}
 }

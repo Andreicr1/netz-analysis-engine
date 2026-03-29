@@ -1,5 +1,5 @@
 import { getContext, setContext } from "svelte";
-import type { ContextNav } from "@netz/ui/utils";
+import type { ContextNav } from "@investintell/ui/utils";
 
 const KEY = Symbol("netz:contextNav");
 

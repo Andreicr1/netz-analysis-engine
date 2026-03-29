@@ -102,15 +102,15 @@ export interface BacktestResult {
 export type Timeframe = "ytd" | "1y" | "3y" | "custom";
 
 export function effectColor(value: number): string {
-	if (value > 0.001) return "var(--netz-success)";
-	if (value < -0.001) return "var(--netz-danger)";
-	return "var(--netz-text-muted)";
+	if (value > 0.001) return "var(--ii-success)";
+	if (value < -0.001) return "var(--ii-danger)";
+	return "var(--ii-text-muted)";
 }
 
 export function severityColor(severity: string): string {
 	switch (severity) {
-		case "severe":   return "var(--netz-danger)";
-		case "moderate": return "var(--netz-warning)";
-		default:         return "var(--netz-success)";
+		case "severe":   return "var(--ii-danger)";
+		case "moderate": return "var(--ii-warning)";
+		default:         return "var(--ii-success)";
 	}
 }

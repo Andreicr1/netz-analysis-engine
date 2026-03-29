@@ -8,7 +8,7 @@
 	import {
 		PageHeader, StatusBadge,
 		formatPercent, formatDateTime, formatNumber,
-	} from "@netz/ui";
+	} from "@investintell/ui";
 	import type { RiskStore, CVaRStatus, CVaRPoint, DriftAlert, BehaviorAlert, RegimeData } from "$lib/stores/risk-store.svelte";
 
 	const riskStore = getContext<RiskStore>("netz:riskStore");
@@ -32,21 +32,21 @@
 
 	function regimeColor(r: string | null | undefined): string {
 		switch (r) {
-			case "crisis":   return "var(--netz-danger)";
-			case "stress":   return "var(--netz-warning)";
-			case "low_vol":  return "var(--netz-info)";
-			case "normal":   return "var(--netz-success)";
-			default:         return "var(--netz-text-muted)";
+			case "crisis":   return "var(--ii-danger)";
+			case "stress":   return "var(--ii-warning)";
+			case "low_vol":  return "var(--ii-info)";
+			case "normal":   return "var(--ii-success)";
+			default:         return "var(--ii-text-muted)";
 		}
 	}
 
 	function triggerColor(t: string | null | undefined): string {
 		switch (t) {
-			case "hard_stop": return "var(--netz-danger)";
-			case "breach":    return "var(--netz-danger)";
-			case "warning":   return "var(--netz-warning)";
-			case "ok":        return "var(--netz-success)";
-			default:          return "var(--netz-text-muted)";
+			case "hard_stop": return "var(--ii-danger)";
+			case "breach":    return "var(--ii-danger)";
+			case "warning":   return "var(--ii-warning)";
+			case "ok":        return "var(--ii-success)";
+			default:          return "var(--ii-text-muted)";
 		}
 	}
 
@@ -97,10 +97,10 @@
 
 	function connectionColor(q: string): string {
 		switch (q) {
-			case "live":     return "var(--netz-success)";
-			case "degraded": return "var(--netz-warning)";
-			case "offline":  return "var(--netz-danger)";
-			default:         return "var(--netz-text-muted)";
+			case "live":     return "var(--ii-success)";
+			case "degraded": return "var(--ii-warning)";
+			case "offline":  return "var(--ii-danger)";
+			default:         return "var(--ii-text-muted)";
 		}
 	}
 </script>
@@ -135,21 +135,21 @@
 				</div>
 				<div class="summary-card">
 					<span class="summary-label">Worst Utilization</span>
-					<span class="summary-value" style:color={worstUtil > 90 ? "var(--netz-danger)" : worstUtil > 70 ? "var(--netz-warning)" : "var(--netz-text-primary)"}>
+					<span class="summary-value" style:color={worstUtil > 90 ? "var(--ii-danger)" : worstUtil > 70 ? "var(--ii-warning)" : "var(--ii-text-primary)"}>
 						{formatPercent(worstUtil / 100)}
 					</span>
 				</div>
 				<div class="summary-card">
 					<span class="summary-label">Breached</span>
-					<span class="summary-value" style:color={breachedCount > 0 ? "var(--netz-danger)" : "var(--netz-success)"}>{breachedCount}</span>
+					<span class="summary-value" style:color={breachedCount > 0 ? "var(--ii-danger)" : "var(--ii-success)"}>{breachedCount}</span>
 				</div>
 				<div class="summary-card">
 					<span class="summary-label">Warnings</span>
-					<span class="summary-value" style:color={warningCount > 0 ? "var(--netz-warning)" : "var(--netz-success)"}>{warningCount}</span>
+					<span class="summary-value" style:color={warningCount > 0 ? "var(--ii-warning)" : "var(--ii-success)"}>{warningCount}</span>
 				</div>
 				<div class="summary-card">
 					<span class="summary-label">Drift Alerts</span>
-					<span class="summary-value" style:color={totalAlerts > 0 ? "var(--netz-warning)" : "var(--netz-text-muted)"}>{totalAlerts}</span>
+					<span class="summary-value" style:color={totalAlerts > 0 ? "var(--ii-warning)" : "var(--ii-text-muted)"}>{totalAlerts}</span>
 				</div>
 			</div>
 		</section>
@@ -261,7 +261,7 @@
 				</div>
 				<div class="cvar-kv">
 					<span class="cvar-k">Breach Days</span>
-					<span class="cvar-v" style:color={cvar.consecutive_breach_days > 0 ? "var(--netz-danger)" : "var(--netz-text-primary)"}>
+					<span class="cvar-v" style:color={cvar.consecutive_breach_days > 0 ? "var(--ii-danger)" : "var(--ii-text-primary)"}>
 						{cvar.consecutive_breach_days}
 					</span>
 				</div>
@@ -302,8 +302,8 @@
 	.rw-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-		gap: var(--netz-space-stack-sm, 12px);
-		padding: var(--netz-space-stack-md, 16px) var(--netz-space-inline-lg, 24px);
+		gap: var(--ii-space-stack-sm, 12px);
+		padding: var(--ii-space-stack-md, 16px) var(--ii-space-inline-lg, 24px);
 		align-content: start;
 	}
 
@@ -311,7 +311,7 @@
 	.rw-status-bar {
 		display: flex;
 		align-items: center;
-		gap: var(--netz-space-inline-sm, 8px);
+		gap: var(--ii-space-inline-sm, 8px);
 	}
 
 	.rw-conn-dot {
@@ -328,36 +328,36 @@
 	}
 
 	.rw-conn-label {
-		font-size: var(--netz-text-small, 0.8125rem);
+		font-size: var(--ii-text-small, 0.8125rem);
 		font-weight: 600;
 	}
 
 	.rw-computed-at {
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
 	}
 
 	.rw-refresh {
 		padding: 3px 10px;
-		border: 1px solid var(--netz-border);
-		border-radius: var(--netz-radius-sm, 6px);
+		border: 1px solid var(--ii-border);
+		border-radius: var(--ii-radius-sm, 6px);
 		background: transparent;
-		color: var(--netz-text-secondary);
-		font-size: var(--netz-text-label, 0.75rem);
-		font-family: var(--netz-font-sans);
+		color: var(--ii-text-secondary);
+		font-size: var(--ii-text-label, 0.75rem);
+		font-family: var(--ii-font-sans);
 		cursor: pointer;
 		transition: background-color 120ms ease;
 	}
 
 	.rw-refresh:hover {
-		background: var(--netz-surface-alt);
+		background: var(--ii-surface-alt);
 	}
 
 	/* ── Panel base ──────────────────────────────────────────────────────── */
 	.rw-panel {
-		border: 1px solid var(--netz-border-subtle);
-		border-radius: var(--netz-radius-md, 12px);
-		background: var(--netz-surface-elevated);
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-md, 12px);
+		background: var(--ii-surface-elevated);
 		overflow: hidden;
 		transition: border-color 300ms ease, box-shadow 300ms ease;
 	}
@@ -366,19 +366,19 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: var(--netz-space-stack-xs, 10px) var(--netz-space-inline-md, 16px);
-		font-size: var(--netz-text-small, 0.8125rem);
+		padding: var(--ii-space-stack-xs, 10px) var(--ii-space-inline-md, 16px);
+		font-size: var(--ii-text-small, 0.8125rem);
 		font-weight: 600;
-		color: var(--netz-text-primary);
-		border-bottom: 1px solid var(--netz-border-subtle);
-		background: var(--netz-surface-alt);
+		color: var(--ii-text-primary);
+		border-bottom: 1px solid var(--ii-border-subtle);
+		background: var(--ii-surface-alt);
 	}
 
 	.rw-empty {
-		padding: var(--netz-space-stack-md, 20px);
+		padding: var(--ii-space-stack-md, 20px);
 		text-align: center;
-		color: var(--netz-text-muted);
-		font-size: var(--netz-text-small, 0.8125rem);
+		color: var(--ii-text-muted);
+		font-size: var(--ii-text-small, 0.8125rem);
 	}
 
 	/* ── Summary banner ─────────────────────────────────────────────────── */
@@ -390,7 +390,7 @@
 		display: grid;
 		grid-template-columns: repeat(5, 1fr);
 		gap: 1px;
-		background: var(--netz-border-subtle);
+		background: var(--ii-border-subtle);
 	}
 
 	.summary-card {
@@ -398,36 +398,36 @@
 		flex-direction: column;
 		align-items: center;
 		gap: 2px;
-		padding: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-sm, 12px);
-		background: var(--netz-surface-elevated);
+		padding: var(--ii-space-stack-sm, 12px) var(--ii-space-inline-sm, 12px);
+		background: var(--ii-surface-elevated);
 	}
 
 	.summary-label {
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
 		font-weight: 600;
 	}
 
 	.summary-value {
-		font-size: var(--netz-text-h3, 1.375rem);
+		font-size: var(--ii-text-h3, 1.375rem);
 		font-weight: 800;
 		font-variant-numeric: tabular-nums;
 	}
 
 	/* ── Flash animation on trigger state change ─────────────────────────── */
 	.rw-panel--flash-danger {
-		border-color: var(--netz-danger);
-		box-shadow: 0 0 0 1px var(--netz-danger),
-			0 0 12px color-mix(in srgb, var(--netz-danger) 20%, transparent);
+		border-color: var(--ii-danger);
+		box-shadow: 0 0 0 1px var(--ii-danger),
+			0 0 12px color-mix(in srgb, var(--ii-danger) 20%, transparent);
 		animation: flash-border 1.5s ease 1;
 	}
 
 	.rw-panel--flash-warning {
-		border-color: var(--netz-warning);
-		box-shadow: 0 0 0 1px var(--netz-warning),
-			0 0 8px color-mix(in srgb, var(--netz-warning) 15%, transparent);
+		border-color: var(--ii-warning);
+		box-shadow: 0 0 0 1px var(--ii-warning),
+			0 0 8px color-mix(in srgb, var(--ii-warning) 15%, transparent);
 		animation: flash-border 1.5s ease 1;
 	}
 
@@ -447,33 +447,33 @@
 	.regime-hero {
 		display: flex;
 		align-items: baseline;
-		gap: var(--netz-space-inline-sm, 8px);
-		padding: var(--netz-space-stack-sm, 14px) var(--netz-space-inline-md, 16px);
+		gap: var(--ii-space-inline-sm, 8px);
+		padding: var(--ii-space-stack-sm, 14px) var(--ii-space-inline-md, 16px);
 	}
 
 	.regime-name {
-		font-size: var(--netz-text-h2, 1.75rem);
+		font-size: var(--ii-text-h2, 1.75rem);
 		font-weight: 800;
 		letter-spacing: 0.04em;
 	}
 
 	.regime-confidence {
-		font-size: var(--netz-text-body, 0.9375rem);
+		font-size: var(--ii-text-body, 0.9375rem);
 		font-weight: 500;
 		opacity: 0.7;
 	}
 
 	.regime-ts {
 		display: block;
-		padding: 0 var(--netz-space-inline-md, 16px);
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		padding: 0 var(--ii-space-inline-md, 16px);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
 	}
 
 	.regime-timeline {
 		display: flex;
 		gap: 3px;
-		padding: var(--netz-space-stack-sm, 12px) var(--netz-space-inline-md, 16px);
+		padding: var(--ii-space-stack-sm, 12px) var(--ii-space-inline-md, 16px);
 		align-items: center;
 	}
 
@@ -494,7 +494,7 @@
 		height: 20px;
 		padding: 0 6px;
 		border-radius: 10px;
-		background: var(--netz-danger);
+		background: var(--ii-danger);
 		color: #fff;
 		font-size: 11px;
 		font-weight: 700;
@@ -510,15 +510,15 @@
 	.alert-row {
 		display: flex;
 		align-items: center;
-		gap: var(--netz-space-inline-xs, 6px);
-		padding: var(--netz-space-stack-2xs, 5px) var(--netz-space-inline-md, 16px);
-		border-bottom: 1px solid var(--netz-border-subtle);
-		font-size: var(--netz-text-small, 0.8125rem);
+		gap: var(--ii-space-inline-xs, 6px);
+		padding: var(--ii-space-stack-2xs, 5px) var(--ii-space-inline-md, 16px);
+		border-bottom: 1px solid var(--ii-border-subtle);
+		font-size: var(--ii-text-small, 0.8125rem);
 	}
 
 	.alert-name {
 		flex: 1;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 		font-weight: 500;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -526,25 +526,25 @@
 	}
 
 	.alert-tag {
-		font-size: var(--netz-text-label, 0.75rem);
+		font-size: var(--ii-text-label, 0.75rem);
 		font-weight: 600;
 		padding: 1px 6px;
-		border-radius: var(--netz-radius-pill, 999px);
+		border-radius: var(--ii-radius-pill, 999px);
 	}
 
 	.alert-tag--dtw {
-		background: color-mix(in srgb, var(--netz-warning) 12%, transparent);
-		color: var(--netz-warning);
+		background: color-mix(in srgb, var(--ii-warning) 12%, transparent);
+		color: var(--ii-warning);
 	}
 
 	.alert-tag--behavior {
-		background: color-mix(in srgb, var(--netz-danger) 12%, transparent);
-		color: var(--netz-danger);
+		background: color-mix(in srgb, var(--ii-danger) 12%, transparent);
+		color: var(--ii-danger);
 	}
 
 	.alert-meta {
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -553,15 +553,15 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: var(--netz-space-stack-xs, 10px) var(--netz-space-inline-md, 16px);
-		border-bottom: 1px solid var(--netz-border-subtle);
-		background: var(--netz-surface-alt);
+		padding: var(--ii-space-stack-xs, 10px) var(--ii-space-inline-md, 16px);
+		border-bottom: 1px solid var(--ii-border-subtle);
+		background: var(--ii-surface-alt);
 	}
 
 	.cvar-profile {
-		font-size: var(--netz-text-body, 0.9375rem);
+		font-size: var(--ii-text-body, 0.9375rem);
 		font-weight: 700;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 		text-transform: capitalize;
 	}
 
@@ -569,19 +569,19 @@
 		display: flex;
 		align-items: baseline;
 		justify-content: space-between;
-		padding: var(--netz-space-stack-sm, 14px) var(--netz-space-inline-md, 16px) var(--netz-space-stack-2xs, 4px);
+		padding: var(--ii-space-stack-sm, 14px) var(--ii-space-inline-md, 16px) var(--ii-space-stack-2xs, 4px);
 	}
 
 	.cvar-value {
-		font-size: var(--netz-text-h2, 1.75rem);
+		font-size: var(--ii-text-h2, 1.75rem);
 		font-weight: 800;
 		font-variant-numeric: tabular-nums;
 		transition: color 300ms ease;
 	}
 
 	.cvar-limit-label {
-		font-size: var(--netz-text-small, 0.8125rem);
-		color: var(--netz-text-muted);
+		font-size: var(--ii-text-small, 0.8125rem);
+		color: var(--ii-text-muted);
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -589,8 +589,8 @@
 	.cvar-util-track {
 		position: relative;
 		height: 8px;
-		margin: var(--netz-space-stack-2xs, 4px) var(--netz-space-inline-md, 16px);
-		background: var(--netz-surface-alt);
+		margin: var(--ii-space-stack-2xs, 4px) var(--ii-space-inline-md, 16px);
+		background: var(--ii-surface-alt);
 		border-radius: 4px;
 		overflow: visible;
 	}
@@ -605,9 +605,9 @@
 		position: absolute;
 		right: 0;
 		top: -16px;
-		font-size: var(--netz-text-label, 0.75rem);
+		font-size: var(--ii-text-label, 0.75rem);
 		font-weight: 600;
-		color: var(--netz-text-secondary);
+		color: var(--ii-text-secondary);
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -615,8 +615,8 @@
 	.cvar-meta {
 		display: flex;
 		gap: 0;
-		border-top: 1px solid var(--netz-border-subtle);
-		margin-top: var(--netz-space-stack-sm, 12px);
+		border-top: 1px solid var(--ii-border-subtle);
+		margin-top: var(--ii-space-stack-sm, 12px);
 	}
 
 	.cvar-kv {
@@ -624,8 +624,8 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1px;
-		padding: var(--netz-space-stack-2xs, 6px) var(--netz-space-inline-md, 16px);
-		border-right: 1px solid var(--netz-border-subtle);
+		padding: var(--ii-space-stack-2xs, 6px) var(--ii-space-inline-md, 16px);
+		border-right: 1px solid var(--ii-border-subtle);
 	}
 
 	.cvar-kv:last-child {
@@ -633,12 +633,12 @@
 	}
 
 	.cvar-k {
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
 	}
 
 	.cvar-v {
-		font-size: var(--netz-text-body, 0.9375rem);
+		font-size: var(--ii-text-body, 0.9375rem);
 		font-weight: 600;
 		font-variant-numeric: tabular-nums;
 		transition: color 300ms ease;
@@ -650,14 +650,14 @@
 		align-items: flex-end;
 		gap: 2px;
 		height: 40px;
-		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-md, 16px);
-		border-top: 1px solid var(--netz-border-subtle);
+		padding: var(--ii-space-stack-xs, 8px) var(--ii-space-inline-md, 16px);
+		border-top: 1px solid var(--ii-border-subtle);
 	}
 
 	.spark-bar {
 		flex: 1;
 		min-width: 4px;
-		background: var(--netz-brand-primary);
+		background: var(--ii-brand-primary);
 		border-radius: 2px 2px 0 0;
 		opacity: 0.6;
 		transition: height 300ms ease;
@@ -676,26 +676,26 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
 		gap: 1px;
-		background: var(--netz-border-subtle);
+		background: var(--ii-border-subtle);
 	}
 
 	.macro-kv {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-sm, 12px);
-		background: var(--netz-surface-elevated);
+		padding: var(--ii-space-stack-xs, 8px) var(--ii-space-inline-sm, 12px);
+		background: var(--ii-surface-elevated);
 	}
 
 	.macro-k {
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
 	}
 
 	.macro-v {
-		font-size: var(--netz-text-body, 0.9375rem);
+		font-size: var(--ii-text-body, 0.9375rem);
 		font-weight: 600;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 		font-variant-numeric: tabular-nums;
 	}
 

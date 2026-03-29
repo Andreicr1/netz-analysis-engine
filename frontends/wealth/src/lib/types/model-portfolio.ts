@@ -128,9 +128,9 @@ export function blockLabel(blockId: string): string {
 
 export function profileColor(profile: string): string {
 	switch (profile) {
-		case "conservative": return "var(--netz-info)";
-		case "moderate": return "var(--netz-warning)";
-		case "growth": return "var(--netz-success)";
-		default: return "var(--netz-text-secondary)";
+		case "conservative": return "var(--ii-info)";
+		case "moderate": return "var(--ii-warning)";
+		case "growth": return "var(--ii-success)";
+		default: return "var(--ii-text-secondary)";
 	}
 }

@@ -4,7 +4,7 @@
 <script lang="ts">
 	import { goto } from "$app/navigation";
 	import { getContext } from "svelte";
-	import { PageHeader, StatusBadge, EmptyState, formatPercent } from "@netz/ui";
+	import { PageHeader, StatusBadge, EmptyState, formatPercent } from "@investintell/ui";
 	import type { RiskStore } from "$lib/stores/risk-store.svelte";
 	import type { PageData } from "./$types";
 	import type { PortfolioSummary } from "$lib/types/portfolio";
@@ -79,45 +79,45 @@
 
 <style>
 	.port-page {
-		padding: var(--netz-space-stack-md, 16px) var(--netz-space-inline-lg, 24px);
+		padding: var(--ii-space-stack-md, 16px) var(--ii-space-inline-lg, 24px);
 	}
 
 	.port-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-		gap: var(--netz-space-stack-md, 16px);
+		gap: var(--ii-space-stack-md, 16px);
 	}
 
 	.port-card {
 		display: flex;
 		flex-direction: column;
-		border: 1px solid var(--netz-border-subtle);
-		border-radius: var(--netz-radius-md, 12px);
-		background: var(--netz-surface-elevated);
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-md, 12px);
+		background: var(--ii-surface-elevated);
 		text-align: left;
 		cursor: pointer;
-		font-family: var(--netz-font-sans);
+		font-family: var(--ii-font-sans);
 		transition: border-color 120ms ease, box-shadow 120ms ease;
 		overflow: hidden;
 	}
 
 	.port-card:hover {
-		border-color: var(--netz-border-accent);
-		box-shadow: var(--netz-shadow-2);
+		border-color: var(--ii-border-accent);
+		box-shadow: var(--ii-shadow-2);
 	}
 
 	.port-card-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: var(--netz-space-stack-sm, 14px) var(--netz-space-inline-md, 16px);
-		border-bottom: 1px solid var(--netz-border-subtle);
+		padding: var(--ii-space-stack-sm, 14px) var(--ii-space-inline-md, 16px);
+		border-bottom: 1px solid var(--ii-border-subtle);
 	}
 
 	.port-profile {
-		font-size: var(--netz-text-h4, 1.125rem);
+		font-size: var(--ii-text-h4, 1.125rem);
 		font-weight: 700;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 		text-transform: capitalize;
 	}
 
@@ -125,31 +125,31 @@
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 1px;
-		background: var(--netz-border-subtle);
+		background: var(--ii-border-subtle);
 	}
 
 	.port-kpi {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		padding: var(--netz-space-stack-xs, 10px) var(--netz-space-inline-sm, 12px);
-		background: var(--netz-surface-elevated);
+		padding: var(--ii-space-stack-xs, 10px) var(--ii-space-inline-sm, 12px);
+		background: var(--ii-surface-elevated);
 	}
 
 	.port-kpi-label {
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
 	}
 
 	.port-kpi-value {
-		font-size: var(--netz-text-body, 0.9375rem);
+		font-size: var(--ii-text-body, 0.9375rem);
 		font-weight: 600;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 		font-variant-numeric: tabular-nums;
 	}
 
 	.port-trigger {
-		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-md, 16px);
-		border-top: 1px solid var(--netz-border-subtle);
+		padding: var(--ii-space-stack-xs, 8px) var(--ii-space-inline-md, 16px);
+		border-top: 1px solid var(--ii-border-subtle);
 	}
 </style>

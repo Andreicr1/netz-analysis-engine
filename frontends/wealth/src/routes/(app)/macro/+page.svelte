@@ -8,7 +8,7 @@
 	import {
 		PageHeader, StatusBadge,
 		formatNumber, formatPercent, formatDate,
-	} from "@netz/ui";
+	} from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
 	import type {

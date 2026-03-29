@@ -4,7 +4,7 @@
 <script lang="ts">
 	import { getContext } from "svelte";
 	import { invalidateAll } from "$app/navigation";
-	import { PageHeader, Button, StatusBadge, EmptyState, formatDateTime } from "@netz/ui";
+	import { PageHeader, Button, StatusBadge, EmptyState, formatDateTime } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
 	import type { WealthDocument, ProcessPendingResponse } from "$lib/types/document";
@@ -72,22 +72,22 @@
 
 <style>
 	.dd-page {
-		padding: var(--netz-space-stack-md, 16px) var(--netz-space-inline-lg, 24px);
+		padding: var(--ii-space-stack-md, 16px) var(--ii-space-inline-lg, 24px);
 		max-width: 600px;
 	}
 
 	.dd-error {
-		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-sm, 12px);
-		border-radius: var(--netz-radius-sm, 8px);
-		background: color-mix(in srgb, var(--netz-danger) 8%, transparent);
-		color: var(--netz-danger);
-		font-size: var(--netz-text-small, 0.8125rem);
-		margin-bottom: var(--netz-space-stack-md, 16px);
+		padding: var(--ii-space-stack-xs, 8px) var(--ii-space-inline-sm, 12px);
+		border-radius: var(--ii-radius-sm, 8px);
+		background: color-mix(in srgb, var(--ii-danger) 8%, transparent);
+		color: var(--ii-danger);
+		font-size: var(--ii-text-small, 0.8125rem);
+		margin-bottom: var(--ii-space-stack-md, 16px);
 	}
 
 	.dd-meta-grid {
-		border: 1px solid var(--netz-border-subtle);
-		border-radius: var(--netz-radius-md, 12px);
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-md, 12px);
 		overflow: hidden;
 	}
 
@@ -95,14 +95,14 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: var(--netz-space-stack-xs, 10px) var(--netz-space-inline-md, 16px);
-		border-bottom: 1px solid var(--netz-border-subtle);
-		font-size: var(--netz-text-small, 0.8125rem);
+		padding: var(--ii-space-stack-xs, 10px) var(--ii-space-inline-md, 16px);
+		border-bottom: 1px solid var(--ii-border-subtle);
+		font-size: var(--ii-text-small, 0.8125rem);
 	}
 
 	.dd-kv:last-child { border-bottom: none; }
 
-	.dd-k { color: var(--netz-text-muted); }
-	.dd-v { color: var(--netz-text-primary); font-weight: 500; }
-	.dd-v--mono { font-family: var(--netz-font-mono); font-size: var(--netz-text-label, 0.75rem); }
+	.dd-k { color: var(--ii-text-muted); }
+	.dd-v { color: var(--ii-text-primary); font-weight: 500; }
+	.dd-v--mono { font-family: var(--ii-font-mono); font-size: var(--ii-text-label, 0.75rem); }
 </style>

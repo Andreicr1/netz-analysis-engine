@@ -6,7 +6,7 @@
 	import { DataTable, EmptyState, ContextPanel, ActionButton, ConfirmDialog, FormField, Toast } from "@investintell/ui";
 	import { Button } from "@investintell/ui/components/ui/button";
 	import { Skeleton } from "@investintell/ui/components/ui/skeleton";
-	import { Dialog, Input, Select, Textarea } from "@netz/ui";
+	import { Dialog, Input, Select, Textarea } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import { getContext } from "svelte";
 	import type { Instrument } from "$lib/types/api";

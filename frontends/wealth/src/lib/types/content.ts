@@ -27,9 +27,9 @@ export function contentTypeLabel(type: string): string {
 
 export function contentTypeColor(type: string): string {
 	switch (type) {
-		case "investment_outlook": return "var(--netz-info)";
-		case "flash_report":      return "var(--netz-warning)";
-		case "manager_spotlight": return "var(--netz-success)";
-		default:                  return "var(--netz-text-muted)";
+		case "investment_outlook": return "var(--ii-info)";
+		case "flash_report":      return "var(--ii-warning)";
+		case "manager_spotlight": return "var(--ii-success)";
+		default:                  return "var(--ii-text-muted)";
 	}
 }

@@ -3,7 +3,7 @@
   Adapted from admin config page, hardcoded to liquid_funds.
 -->
 <script lang="ts">
-	import { SectionCard, StatusBadge, EmptyState, ConfigEditor, resolveAdminStatus } from "@netz/ui";
+	import { SectionCard, StatusBadge, EmptyState, ConfigEditor, resolveAdminStatus } from "@investintell/ui";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
@@ -21,15 +21,15 @@
 					onclick={() => {
 						selectedConfig = invalid.config_type;
 					}}
-					class="flex w-full items-center gap-3 rounded-md border border-(--netz-danger)/30 bg-(--netz-danger)/5 px-4 py-2 text-left hover:bg-(--netz-danger)/10"
+					class="flex w-full items-center gap-3 rounded-md border border-(--ii-danger)/30 bg-(--ii-danger)/5 px-4 py-2 text-left hover:bg-(--ii-danger)/10"
 				>
 					<StatusBadge status="error" label="Invalid" resolve={resolveAdminStatus} />
 					<div>
-						<span class="text-sm font-medium text-(--netz-text-primary)">
+						<span class="text-sm font-medium text-(--ii-text-primary)">
 							{invalid.vertical}/{invalid.config_type}
 						</span>
 						{#if invalid.reason}
-							<p class="text-xs text-(--netz-text-muted)">{invalid.reason}</p>
+							<p class="text-xs text-(--ii-text-muted)">{invalid.reason}</p>
 						{/if}
 					</div>
 				</button>
@@ -41,20 +41,20 @@
 <!-- Config List -->
 {#if data.configs.length > 0}
 	<SectionCard title="Config Types">
-		<div class="divide-y divide-(--netz-border)">
+		<div class="divide-y divide-(--ii-border)">
 			{#each data.configs as config (config.config_type)}
 				<button
 					onclick={() => {
 						selectedConfig = config.config_type;
 					}}
-					class="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-(--netz-surface-alt) {selectedConfig === config.config_type ? 'bg-(--netz-surface-alt)' : ''}"
+					class="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-(--ii-surface-alt) {selectedConfig === config.config_type ? 'bg-(--ii-surface-alt)' : ''}"
 				>
 					<div>
-						<span class="text-sm font-medium text-(--netz-text-primary)">
+						<span class="text-sm font-medium text-(--ii-text-primary)">
 							{config.config_type}
 						</span>
 						{#if config.description}
-							<p class="text-xs text-(--netz-text-muted)">{config.description}</p>
+							<p class="text-xs text-(--ii-text-muted)">{config.description}</p>
 						{/if}
 					</div>
 					<div class="flex items-center gap-2">

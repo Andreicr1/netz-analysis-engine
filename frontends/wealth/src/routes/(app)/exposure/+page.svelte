@@ -3,7 +3,7 @@
   Pure CSS grid heatmap, no chart library.
 -->
 <script lang="ts">
-	import { PageHeader, EmptyState, formatPercent } from "@netz/ui";
+	import { PageHeader, EmptyState, formatPercent } from "@investintell/ui";
 	import { goto } from "$app/navigation";
 	import type { PageData } from "./$types";
 	import type { ExposureMatrix } from "$lib/types/exposure";
@@ -40,7 +40,7 @@
 
 	function cellColor(value: number): string {
 		const alpha = cellOpacity(value);
-		return `color-mix(in srgb, var(--netz-brand-primary) ${(alpha * 100).toFixed(0)}%, transparent)`;
+		return `color-mix(in srgb, var(--ii-brand-primary) ${(alpha * 100).toFixed(0)}%, transparent)`;
 	}
 </script>
 
@@ -119,35 +119,35 @@
 
 <style>
 	.exp-page {
-		padding: var(--netz-space-stack-md, 16px) var(--netz-space-inline-lg, 24px);
+		padding: var(--ii-space-stack-md, 16px) var(--ii-space-inline-lg, 24px);
 	}
 
 	.exp-toggle {
 		display: flex;
-		border: 1px solid var(--netz-border);
-		border-radius: var(--netz-radius-sm, 8px);
+		border: 1px solid var(--ii-border);
+		border-radius: var(--ii-radius-sm, 8px);
 		overflow: hidden;
 	}
 
 	.exp-toggle-btn {
 		padding: 4px 14px;
 		border: none;
-		border-right: 1px solid var(--netz-border);
+		border-right: 1px solid var(--ii-border);
 		background: transparent;
-		color: var(--netz-text-secondary);
-		font-size: var(--netz-text-small, 0.8125rem);
+		color: var(--ii-text-secondary);
+		font-size: var(--ii-text-small, 0.8125rem);
 		font-weight: 600;
-		font-family: var(--netz-font-sans);
+		font-family: var(--ii-font-sans);
 		cursor: pointer;
 		transition: background-color 120ms ease, color 120ms ease;
 	}
 
 	.exp-toggle-btn:last-child { border-right: none; }
-	.exp-toggle-btn:hover { background: var(--netz-surface-alt); }
+	.exp-toggle-btn:hover { background: var(--ii-surface-alt); }
 
 	.exp-toggle-btn--active {
-		background: color-mix(in srgb, var(--netz-brand-primary) 12%, transparent);
-		color: var(--netz-brand-primary);
+		background: color-mix(in srgb, var(--ii-brand-primary) 12%, transparent);
+		color: var(--ii-brand-primary);
 	}
 
 	/* ── Heatmap grid ────────────────────────────────────────────────────── */
@@ -155,23 +155,23 @@
 		display: grid;
 		grid-template-columns: 140px repeat(var(--cols, 5), 1fr);
 		gap: 2px;
-		border: 1px solid var(--netz-border-subtle);
-		border-radius: var(--netz-radius-md, 12px);
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-md, 12px);
 		overflow: hidden;
-		background: var(--netz-border-subtle);
+		background: var(--ii-border-subtle);
 	}
 
 	.hm-corner {
-		background: var(--netz-surface-alt);
-		padding: var(--netz-space-stack-2xs, 8px);
+		background: var(--ii-surface-alt);
+		padding: var(--ii-space-stack-2xs, 8px);
 	}
 
 	.hm-col-label {
-		background: var(--netz-surface-alt);
-		padding: var(--netz-space-stack-2xs, 8px) var(--netz-space-inline-xs, 6px);
-		font-size: var(--netz-text-label, 0.75rem);
+		background: var(--ii-surface-alt);
+		padding: var(--ii-space-stack-2xs, 8px) var(--ii-space-inline-xs, 6px);
+		font-size: var(--ii-text-label, 0.75rem);
 		font-weight: 600;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		text-align: center;
 		text-transform: uppercase;
 		letter-spacing: 0.02em;
@@ -181,11 +181,11 @@
 	}
 
 	.hm-row-label {
-		background: var(--netz-surface-alt);
-		padding: var(--netz-space-stack-2xs, 8px) var(--netz-space-inline-sm, 12px);
-		font-size: var(--netz-text-small, 0.8125rem);
+		background: var(--ii-surface-alt);
+		padding: var(--ii-space-stack-2xs, 8px) var(--ii-space-inline-sm, 12px);
+		font-size: var(--ii-text-small, 0.8125rem);
 		font-weight: 500;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 		display: flex;
 		align-items: center;
 		white-space: nowrap;
@@ -198,14 +198,14 @@
 		align-items: center;
 		justify-content: center;
 		min-height: 44px;
-		background: var(--netz-surface-elevated);
+		background: var(--ii-surface-elevated);
 		transition: background-color 200ms ease;
 	}
 
 	.hm-cell-value {
-		font-size: var(--netz-text-label, 0.75rem);
+		font-size: var(--ii-text-label, 0.75rem);
 		font-weight: 600;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -213,14 +213,14 @@
 	.hm-legend {
 		display: flex;
 		align-items: center;
-		gap: var(--netz-space-inline-sm, 8px);
-		margin-top: var(--netz-space-stack-md, 16px);
+		gap: var(--ii-space-inline-sm, 8px);
+		margin-top: var(--ii-space-stack-md, 16px);
 		justify-content: center;
 	}
 
 	.hm-legend-label {
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
 	}
 
 	.hm-legend-bar {
@@ -233,14 +233,14 @@
 	.hm-legend-step {
 		width: 20px;
 		height: 12px;
-		background: var(--netz-brand-primary);
+		background: var(--ii-brand-primary);
 	}
 
 	.exp-empty {
-		padding: var(--netz-space-stack-xl, 48px);
+		padding: var(--ii-space-stack-xl, 48px);
 		text-align: center;
-		color: var(--netz-text-muted);
-		font-size: var(--netz-text-body, 0.9375rem);
+		color: var(--ii-text-muted);
+		font-size: var(--ii-text-body, 0.9375rem);
 	}
 
 	@media (max-width: 768px) {

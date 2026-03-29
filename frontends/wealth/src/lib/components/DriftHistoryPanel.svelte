@@ -14,7 +14,7 @@
 		formatDateTime,
 		formatNumber,
 	} from "@investintell/ui";
-	import { Select } from "@netz/ui";
+	import { Select } from "@investintell/ui";
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { createClientApiClient } from "$lib/api/client";
 	import { resolveWealthStatus } from "$lib/utils/status-maps";

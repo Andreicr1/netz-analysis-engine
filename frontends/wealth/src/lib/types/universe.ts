@@ -25,10 +25,10 @@ export function instrumentTypeLabel(type: InstrumentType | string | null | undef
 
 export function instrumentTypeColor(type: InstrumentType | string | null | undefined): string {
 	switch (type) {
-		case "fund":   return "var(--netz-brand-primary)";
-		case "bond":   return "var(--netz-brand-highlight)";
-		case "equity": return "var(--netz-success)";
-		default:       return "var(--netz-text-muted)";
+		case "fund":   return "var(--ii-brand-primary)";
+		case "bond":   return "var(--ii-brand-highlight)";
+		case "equity": return "var(--ii-success)";
+		default:       return "var(--ii-text-muted)";
 	}
 }
 

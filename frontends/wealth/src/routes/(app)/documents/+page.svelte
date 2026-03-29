@@ -7,7 +7,7 @@
 	import {
 		PageHeader, Button, StatusBadge, EmptyState,
 		formatDateTime,
-	} from "@netz/ui";
+	} from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
 	import type { WealthDocument, DocumentPage, ProcessPendingResponse } from "$lib/types/document";
@@ -131,47 +131,47 @@
 
 	.doc-actions {
 		display: flex;
-		gap: var(--netz-space-inline-xs, 6px);
+		gap: var(--ii-space-inline-xs, 6px);
 	}
 
 	.doc-result {
-		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-md, 16px);
-		background: color-mix(in srgb, var(--netz-success) 8%, transparent);
-		color: var(--netz-success);
-		font-size: var(--netz-text-small, 0.8125rem);
+		padding: var(--ii-space-stack-xs, 8px) var(--ii-space-inline-md, 16px);
+		background: color-mix(in srgb, var(--ii-success) 8%, transparent);
+		color: var(--ii-success);
+		font-size: var(--ii-text-small, 0.8125rem);
 		font-variant-numeric: tabular-nums;
 	}
 
 	.doc-error {
-		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-md, 16px);
-		background: color-mix(in srgb, var(--netz-danger) 8%, transparent);
-		color: var(--netz-danger);
-		font-size: var(--netz-text-small, 0.8125rem);
+		padding: var(--ii-space-stack-xs, 8px) var(--ii-space-inline-md, 16px);
+		background: color-mix(in srgb, var(--ii-danger) 8%, transparent);
+		color: var(--ii-danger);
+		font-size: var(--ii-text-small, 0.8125rem);
 	}
 
 	.doc-toolbar {
 		display: flex;
 		align-items: center;
-		gap: var(--netz-space-inline-sm, 10px);
-		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-md, 16px);
-		border-bottom: 1px solid var(--netz-border-subtle);
+		gap: var(--ii-space-inline-sm, 10px);
+		padding: var(--ii-space-stack-xs, 8px) var(--ii-space-inline-md, 16px);
+		border-bottom: 1px solid var(--ii-border-subtle);
 		flex-shrink: 0;
 	}
 
 	.doc-filter {
-		height: var(--netz-space-control-height-sm, 30px);
-		padding: 0 var(--netz-space-inline-xs, 8px);
-		border: 1px solid var(--netz-border);
-		border-radius: var(--netz-radius-sm, 6px);
-		background: var(--netz-surface-elevated);
-		color: var(--netz-text-primary);
-		font-size: var(--netz-text-small, 0.8125rem);
-		font-family: var(--netz-font-sans);
+		height: var(--ii-space-control-height-sm, 30px);
+		padding: 0 var(--ii-space-inline-xs, 8px);
+		border: 1px solid var(--ii-border);
+		border-radius: var(--ii-radius-sm, 6px);
+		background: var(--ii-surface-elevated);
+		color: var(--ii-text-primary);
+		font-size: var(--ii-text-small, 0.8125rem);
+		font-family: var(--ii-font-sans);
 	}
 
 	.doc-count {
-		font-size: var(--netz-text-small, 0.8125rem);
-		color: var(--netz-text-muted);
+		font-size: var(--ii-text-small, 0.8125rem);
+		color: var(--ii-text-muted);
 		margin-left: auto;
 	}
 
@@ -180,30 +180,30 @@
 	.doc-table {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: var(--netz-text-small, 0.8125rem);
+		font-size: var(--ii-text-small, 0.8125rem);
 	}
 
 	.doc-table thead { position: sticky; top: 0; z-index: 1; }
 
 	.doc-table th {
-		padding: var(--netz-space-stack-2xs, 5px) var(--netz-space-inline-sm, 12px);
+		padding: var(--ii-space-stack-2xs, 5px) var(--ii-space-inline-sm, 12px);
 		text-align: left;
-		font-size: var(--netz-text-label, 0.75rem);
+		font-size: var(--ii-text-label, 0.75rem);
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.02em;
-		color: var(--netz-text-muted);
-		background: var(--netz-surface-alt);
-		border-bottom: 1px solid var(--netz-border-subtle);
+		color: var(--ii-text-muted);
+		background: var(--ii-surface-alt);
+		border-bottom: 1px solid var(--ii-border-subtle);
 	}
 
 	.doc-table td {
-		padding: var(--netz-space-stack-2xs, 6px) var(--netz-space-inline-sm, 12px);
-		border-bottom: 1px solid var(--netz-border-subtle);
+		padding: var(--ii-space-stack-2xs, 6px) var(--ii-space-inline-sm, 12px);
+		border-bottom: 1px solid var(--ii-border-subtle);
 	}
 
 	.doc-row { cursor: pointer; transition: background-color 80ms ease; }
-	.doc-row:hover { background: var(--netz-surface-highlight, color-mix(in srgb, var(--netz-brand-primary) 4%, transparent)); }
+	.doc-row:hover { background: var(--ii-surface-highlight, color-mix(in srgb, var(--ii-brand-primary) 4%, transparent)); }
 
 	.dth-title { min-width: 200px; }
 	.dth-file { min-width: 160px; }
@@ -211,17 +211,17 @@
 	.dth-ver { width: 60px; }
 	.dth-date { width: 140px; }
 
-	.dtd-title { font-weight: 500; color: var(--netz-text-primary); }
-	.dtd-file { color: var(--netz-text-secondary); font-family: var(--netz-font-mono); font-size: var(--netz-text-label, 0.75rem); }
-	.dtd-ver { font-variant-numeric: tabular-nums; color: var(--netz-text-secondary); }
-	.dtd-date { color: var(--netz-text-muted); font-variant-numeric: tabular-nums; }
+	.dtd-title { font-weight: 500; color: var(--ii-text-primary); }
+	.dtd-file { color: var(--ii-text-secondary); font-family: var(--ii-font-mono); font-size: var(--ii-text-label, 0.75rem); }
+	.dtd-ver { font-variant-numeric: tabular-nums; color: var(--ii-text-secondary); }
+	.dtd-date { color: var(--ii-text-muted); font-variant-numeric: tabular-nums; }
 
 	.domain-badge {
-		font-size: var(--netz-text-label, 0.75rem);
+		font-size: var(--ii-text-label, 0.75rem);
 		padding: 1px 8px;
-		border-radius: var(--netz-radius-pill, 999px);
-		background: var(--netz-surface-alt);
-		color: var(--netz-text-secondary);
+		border-radius: var(--ii-radius-pill, 999px);
+		background: var(--ii-surface-alt);
+		color: var(--ii-text-secondary);
 		white-space: nowrap;
 	}
 </style>

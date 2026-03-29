@@ -5,7 +5,7 @@
 <script lang="ts">
 	import { goto } from "$app/navigation";
 	import { getContext, onDestroy } from "svelte";
-	import { PageHeader, Button } from "@netz/ui";
+	import { PageHeader, Button } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { UploadUrlResponse, UploadCompleteResponse, ProcessPendingResponse } from "$lib/types/document";
 	import { PIPELINE_STAGES, stageLabel } from "$lib/types/document";
@@ -216,46 +216,46 @@
 
 <style>
 	.upload-page {
-		padding: var(--netz-space-stack-lg, 32px) var(--netz-space-inline-lg, 24px);
+		padding: var(--ii-space-stack-lg, 32px) var(--ii-space-inline-lg, 24px);
 		max-width: 600px;
 		display: flex;
 		flex-direction: column;
-		gap: var(--netz-space-stack-md, 16px);
+		gap: var(--ii-space-stack-md, 16px);
 	}
 
 	/* ── Dropzone ────────────────────────────────────────────────────────── */
 	.dropzone {
 		position: relative;
-		border: 2px dashed var(--netz-border);
-		border-radius: var(--netz-radius-md, 12px);
-		padding: var(--netz-space-stack-xl, 48px) var(--netz-space-inline-lg, 24px);
+		border: 2px dashed var(--ii-border);
+		border-radius: var(--ii-radius-md, 12px);
+		padding: var(--ii-space-stack-xl, 48px) var(--ii-space-inline-lg, 24px);
 		text-align: center;
 		transition: border-color 120ms ease, background-color 120ms ease;
 		cursor: pointer;
 	}
 
 	.dropzone--active {
-		border-color: var(--netz-brand-primary);
-		background: color-mix(in srgb, var(--netz-brand-primary) 4%, transparent);
+		border-color: var(--ii-brand-primary);
+		background: color-mix(in srgb, var(--ii-brand-primary) 4%, transparent);
 	}
 
 	.dropzone-prompt {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: var(--netz-space-stack-xs, 8px);
+		gap: var(--ii-space-stack-xs, 8px);
 	}
 
 	.dropzone-icon { font-size: 32px; }
 
 	.dropzone-text {
-		font-size: var(--netz-text-body, 0.9375rem);
-		color: var(--netz-text-secondary);
+		font-size: var(--ii-text-body, 0.9375rem);
+		color: var(--ii-text-secondary);
 	}
 
 	.dropzone-hint {
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
 	}
 
 	.dropzone-input {
@@ -268,30 +268,30 @@
 	.dropzone-file {
 		display: flex;
 		align-items: center;
-		gap: var(--netz-space-inline-sm, 10px);
+		gap: var(--ii-space-inline-sm, 10px);
 		justify-content: center;
 	}
 
 	.dropzone-filename {
 		font-weight: 600;
-		color: var(--netz-text-primary);
-		font-family: var(--netz-font-mono);
-		font-size: var(--netz-text-small, 0.8125rem);
+		color: var(--ii-text-primary);
+		font-family: var(--ii-font-mono);
+		font-size: var(--ii-text-small, 0.8125rem);
 	}
 
 	.dropzone-size {
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
 	}
 
 	.dropzone-clear {
 		border: none;
 		background: transparent;
-		color: var(--netz-danger);
-		font-size: var(--netz-text-small, 0.8125rem);
+		color: var(--ii-danger);
+		font-size: var(--ii-text-small, 0.8125rem);
 		cursor: pointer;
 		text-decoration: underline;
-		font-family: var(--netz-font-sans);
+		font-family: var(--ii-font-sans);
 	}
 
 	/* ── Form fields ─────────────────────────────────────────────────────── */
@@ -302,56 +302,56 @@
 	}
 
 	.upload-label {
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
 		font-weight: 500;
 	}
 
 	.upload-select {
-		height: var(--netz-space-control-height-sm, 32px);
-		padding: 0 var(--netz-space-inline-sm, 10px);
-		border: 1px solid var(--netz-border);
-		border-radius: var(--netz-radius-sm, 8px);
-		background: var(--netz-surface-elevated);
-		color: var(--netz-text-primary);
-		font-size: var(--netz-text-small, 0.8125rem);
-		font-family: var(--netz-font-sans);
+		height: var(--ii-space-control-height-sm, 32px);
+		padding: 0 var(--ii-space-inline-sm, 10px);
+		border: 1px solid var(--ii-border);
+		border-radius: var(--ii-radius-sm, 8px);
+		background: var(--ii-surface-elevated);
+		color: var(--ii-text-primary);
+		font-size: var(--ii-text-small, 0.8125rem);
+		font-family: var(--ii-font-sans);
 	}
 
 	.upload-error {
-		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-sm, 12px);
-		border-radius: var(--netz-radius-sm, 8px);
-		background: color-mix(in srgb, var(--netz-danger) 8%, transparent);
-		color: var(--netz-danger);
-		font-size: var(--netz-text-small, 0.8125rem);
+		padding: var(--ii-space-stack-xs, 8px) var(--ii-space-inline-sm, 12px);
+		border-radius: var(--ii-radius-sm, 8px);
+		background: color-mix(in srgb, var(--ii-danger) 8%, transparent);
+		color: var(--ii-danger);
+		font-size: var(--ii-text-small, 0.8125rem);
 	}
 
 	/* ── Pipeline progress ────────────────────────────────────────────────── */
 	.pipeline {
-		border: 1px solid var(--netz-border-subtle);
-		border-radius: var(--netz-radius-md, 12px);
-		padding: var(--netz-space-stack-lg, 24px) var(--netz-space-inline-lg, 24px);
-		background: var(--netz-surface-elevated);
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-md, 12px);
+		padding: var(--ii-space-stack-lg, 24px) var(--ii-space-inline-lg, 24px);
+		background: var(--ii-surface-elevated);
 	}
 
 	.pipeline-title {
-		font-size: var(--netz-text-h4, 1.125rem);
+		font-size: var(--ii-text-h4, 1.125rem);
 		font-weight: 600;
-		color: var(--netz-text-primary);
-		margin-bottom: var(--netz-space-stack-md, 16px);
+		color: var(--ii-text-primary);
+		margin-bottom: var(--ii-space-stack-md, 16px);
 	}
 
 	.pipeline-bar-track {
 		height: 6px;
-		background: var(--netz-surface-alt);
+		background: var(--ii-surface-alt);
 		border-radius: 3px;
 		overflow: hidden;
-		margin-bottom: var(--netz-space-stack-md, 16px);
+		margin-bottom: var(--ii-space-stack-md, 16px);
 	}
 
 	.pipeline-bar-fill {
 		height: 100%;
-		background: var(--netz-brand-primary);
+		background: var(--ii-brand-primary);
 		border-radius: 3px;
 		transition: width 400ms ease;
 	}
@@ -359,7 +359,7 @@
 	.pipeline-stages {
 		display: grid;
 		grid-template-columns: repeat(5, 1fr);
-		gap: var(--netz-space-stack-xs, 8px);
+		gap: var(--ii-space-stack-xs, 8px);
 	}
 
 	.pipeline-stage {
@@ -373,13 +373,13 @@
 		width: 10px;
 		height: 10px;
 		border-radius: 50%;
-		background: var(--netz-border-subtle);
+		background: var(--ii-border-subtle);
 		transition: background-color 300ms ease;
 	}
 
-	.pipeline-stage--done .pipeline-stage-dot { background: var(--netz-success); }
+	.pipeline-stage--done .pipeline-stage-dot { background: var(--ii-success); }
 	.pipeline-stage--active .pipeline-stage-dot {
-		background: var(--netz-brand-primary);
+		background: var(--ii-brand-primary);
 		animation: pulse-stage 1s ease infinite;
 	}
 
@@ -390,22 +390,22 @@
 
 	.pipeline-stage-label {
 		font-size: 10px;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		text-align: center;
 		white-space: nowrap;
 	}
 
-	.pipeline-stage--done .pipeline-stage-label { color: var(--netz-success); }
-	.pipeline-stage--active .pipeline-stage-label { color: var(--netz-brand-primary); font-weight: 600; }
+	.pipeline-stage--done .pipeline-stage-label { color: var(--ii-success); }
+	.pipeline-stage--active .pipeline-stage-label { color: var(--ii-brand-primary); font-weight: 600; }
 
 	.pipeline-result {
-		margin-top: var(--netz-space-stack-md, 16px);
-		padding-top: var(--netz-space-stack-sm, 12px);
-		border-top: 1px solid var(--netz-border-subtle);
+		margin-top: var(--ii-space-stack-md, 16px);
+		padding-top: var(--ii-space-stack-sm, 12px);
+		border-top: 1px solid var(--ii-border-subtle);
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		font-size: var(--netz-text-small, 0.8125rem);
-		color: var(--netz-text-secondary);
+		font-size: var(--ii-text-small, 0.8125rem);
+		color: var(--ii-text-secondary);
 	}
 </style>

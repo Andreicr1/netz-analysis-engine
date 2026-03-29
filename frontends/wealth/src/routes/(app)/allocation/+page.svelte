@@ -3,7 +3,7 @@
   Delegates to AllocationView (self-loading component with profile selector).
 -->
 <script lang="ts">
-	import { PageHeader } from "@netz/ui";
+	import { PageHeader } from "@investintell/ui";
 	import AllocationView from "$lib/components/AllocationView.svelte";
 </script>
 
@@ -15,6 +15,6 @@
 
 <style>
 	.alloc-page {
-		padding-bottom: var(--netz-space-stack-xl, 48px);
+		padding-bottom: var(--ii-space-stack-xl, 48px);
 	}
 </style>
