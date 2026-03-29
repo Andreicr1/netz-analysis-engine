@@ -1,0 +1,107 @@
+/* ============================================================
+ * InvestIntell Design Tokens - Animations & Transitions
+ * Subtle, professional motion tuned for dense product UI.
+ * ============================================================ */
+
+:root {
+	/* Durations */
+	--ii-duration-instant: 0ms;
+	--ii-duration-fast: 140ms;
+	--ii-duration-normal: 220ms;
+	--ii-duration-slow: 320ms;
+	--ii-duration-slower: 420ms;
+
+	/* Easing */
+	--ii-ease-default: cubic-bezier(0.2, 0, 0, 1);
+	--ii-ease-in: cubic-bezier(0.4, 0, 1, 1);
+	--ii-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+	--ii-ease-in-out: cubic-bezier(0.32, 0.72, 0, 1);
+	--ii-ease-emphasized: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+	/* Transition presets */
+	--ii-transition-color: color var(--ii-duration-fast) var(--ii-ease-default),
+		background-color var(--ii-duration-fast) var(--ii-ease-default),
+		border-color var(--ii-duration-fast) var(--ii-ease-default),
+		fill var(--ii-duration-fast) var(--ii-ease-default),
+		stroke var(--ii-duration-fast) var(--ii-ease-default);
+	--ii-transition-opacity: opacity var(--ii-duration-fast) var(--ii-ease-default);
+	--ii-transition-transform: transform var(--ii-duration-normal) var(--ii-ease-out);
+	--ii-transition-surface: var(--ii-transition-color),
+		box-shadow var(--ii-duration-normal) var(--ii-ease-out),
+		transform var(--ii-duration-normal) var(--ii-ease-out),
+		opacity var(--ii-duration-fast) var(--ii-ease-default);
+}
+
+@keyframes ii-slide-in {
+	from { opacity: 0; transform: translate3d(20px, 0, 0); }
+	to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+@keyframes ii-slide-out {
+	from { opacity: 1; transform: translate3d(0, 0, 0); }
+	to { opacity: 0; transform: translate3d(20px, 0, 0); }
+}
+
+@keyframes ii-fade-in {
+	from { opacity: 0; }
+	to { opacity: 1; }
+}
+
+@keyframes ii-fade-out {
+	from { opacity: 1; }
+	to { opacity: 0; }
+}
+
+@keyframes ii-scale-in {
+	from { opacity: 0; transform: translate3d(0, 10px, 0) scale(0.985); }
+	to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+
+@keyframes ii-scale-out {
+	from { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+	to { opacity: 0; transform: translate3d(0, 6px, 0) scale(0.985); }
+}
+
+@keyframes ii-rise-in {
+	from { opacity: 0; transform: translate3d(0, 12px, 0); }
+	to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+.ii-animate-slide-in {
+	animation: ii-slide-in var(--ii-duration-normal) var(--ii-ease-out) both;
+}
+
+.ii-animate-slide-out {
+	animation: ii-slide-out var(--ii-duration-fast) var(--ii-ease-in) both;
+}
+
+.ii-animate-fade-in {
+	animation: ii-fade-in var(--ii-duration-fast) var(--ii-ease-out) both;
+}
+
+.ii-animate-fade-out {
+	animation: ii-fade-out var(--ii-duration-fast) var(--ii-ease-in) both;
+}
+
+.ii-animate-scale-in {
+	animation: ii-scale-in var(--ii-duration-normal) var(--ii-ease-out) both;
+}
+
+.ii-animate-scale-out {
+	animation: ii-scale-out var(--ii-duration-fast) var(--ii-ease-in) both;
+}
+
+.ii-animate-rise-in {
+	animation: ii-rise-in var(--ii-duration-normal) var(--ii-ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 1ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 1ms !important;
+		scroll-behavior: auto !important;
+	}
+}

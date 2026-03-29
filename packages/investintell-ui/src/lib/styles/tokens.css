@@ -1,0 +1,244 @@
+/* ============================================================
+ * InvestIntell Design Tokens v1.0
+ * Font: Geist (interface) + Geist Mono (data)
+ * Mode: Light default + .dark override
+ * ============================================================ */
+
+:root {
+	color-scheme: light;
+
+	/* ── Brand ── */
+	--ii-brand-primary:    #2563EB;
+	--ii-brand-secondary:  #0D9488;
+	--ii-brand-navy:       #0A1628;
+	--ii-brand-accent:     #1D4ED8;
+
+	/* ── Typography ── */
+	--ii-font-sans:  "Geist", ui-sans-serif, system-ui, sans-serif;
+	--ii-font-mono:  "Geist Mono", ui-monospace, monospace;
+
+	/* ── Text (dark slate — institutional report style) ── */
+	--ii-text-primary:   #1E2A3B;
+	--ii-text-secondary: #374151;
+	--ii-text-muted:     #6B7280;
+	--ii-text-tertiary:  #9CA3AF;
+	--ii-text-inverse:   #F9FAFB;
+	--ii-text-accent:    #2563EB;
+
+	/* ── Surface ── */
+	--ii-bg:               #F8FAFC;
+	--ii-surface:          #FFFFFF;
+	--ii-surface-alt:      #F1F5F9;
+	--ii-surface-elevated: #FFFFFF;
+	--ii-surface-inset:    #EFF3F8;
+	--ii-surface-overlay:  rgba(10, 22, 40, 0.48);
+	--ii-surface-raised:   #F9FAFB;
+	--ii-surface-panel:    #FFFFFF;
+	--ii-surface-highlight: #E0EFFF;
+	--ii-surface-accent:   color-mix(in srgb, #2563EB 5%, #FFFFFF);
+
+	/* ── Border ── */
+	--ii-border-subtle: #E2E8F0;
+	--ii-border:        #CBD5E1;
+	--ii-border-strong: #94A3B8;
+	--ii-border-focus:  #2563EB;
+	--ii-border-accent: #BFDBFE;
+	--ii-border-inverse: rgba(255, 255, 255, 0.2);
+
+	/* ── Semantic ── */
+	--ii-success: #059669;
+	--ii-warning: #D97706;
+	--ii-danger:  #DC2626;
+	--ii-info:    #2563EB;
+
+	/* ── Semantic subtle ── */
+	--ii-success-subtle: color-mix(in srgb, #059669 10%, white);
+	--ii-warning-subtle: color-mix(in srgb, #D97706 12%, white);
+	--ii-danger-subtle:  color-mix(in srgb, #DC2626 10%, white);
+	--ii-info-subtle:    color-mix(in srgb, #2563EB 10%, white);
+
+	/* ── Regime ── */
+	--ii-regime-risk-on:    #059669;
+	--ii-regime-risk-off:   #D97706;
+	--ii-regime-inflation:  #EA580C;
+	--ii-regime-crisis:     #DC2626;
+
+	/* ── Chart palette ── */
+	--ii-chart-1: #2563EB;
+	--ii-chart-2: #0D9488;
+	--ii-chart-3: #D97706;
+	--ii-chart-4: #7C3AED;
+	--ii-chart-5: #94A3B8;
+
+	/* ── Radius ── */
+	--ii-radius-xs:   2px;
+	--ii-radius-sm:   4px;
+	--ii-radius-md:   6px;
+	--ii-radius-lg:   8px;
+	--ii-radius-xl:   12px;
+	--ii-radius-pill: 999px;
+
+	/* ── Control heights ── */
+	--ii-control-sm: 28px;
+	--ii-control-md: 36px;
+	--ii-control-lg: 44px;
+
+	/* ── Extended tokens ── */
+	--ii-accent-soft: color-mix(in srgb, #2563EB 8%, #FFFFFF);
+	--ii-accent-muted: color-mix(in srgb, #2563EB 10%, #F8FAFC);
+	--ii-focus-ring: color-mix(in srgb, #2563EB 32%, transparent);
+	--ii-bg-hover: #F3F4F6;
+	--ii-bg-secondary: #F1F5F9;
+	--ii-selection-bg: color-mix(in srgb, #2563EB 14%, white 86%);
+	--ii-selection-color: var(--ii-text-primary);
+
+	/* ── Density variation ── */
+	--ii-space-card-padding-sm: clamp(12px, 0.5rem + 0.5vw, 16px);
+	--ii-space-card-padding-lg: clamp(24px, 1rem + 1vw, 40px);
+
+	/* ── Domain-semantic aliases ── */
+	--desk-surface: var(--ii-surface);
+	--desk-elevated: var(--ii-surface-elevated);
+	--ink-primary: var(--ii-text-primary);
+	--ink-secondary: var(--ii-text-secondary);
+	--ticker-mono: var(--ii-font-mono);
+	--regime-ok: var(--ii-success);
+	--regime-caution: var(--ii-warning);
+	--regime-stress: var(--ii-danger);
+
+	/* ── shadcn-svelte token bridge ──
+	   shadcn components use --background, --foreground, --primary etc.
+	   These aliases map --ii-* tokens to the shadcn system ── */
+	--background:         var(--ii-bg);
+	--foreground:         var(--ii-text-primary);
+	--card:               var(--ii-surface);
+	--card-foreground:    var(--ii-text-primary);
+	--popover:            var(--ii-surface-elevated);
+	--popover-foreground: var(--ii-text-primary);
+	--primary:            var(--ii-brand-primary);
+	--primary-foreground: var(--ii-text-inverse);
+	--secondary:          var(--ii-surface-alt);
+	--secondary-foreground: var(--ii-text-primary);
+	--muted:              var(--ii-surface-alt);
+	--muted-foreground:   var(--ii-text-muted);
+	--accent:             var(--ii-surface-inset);
+	--accent-foreground:  var(--ii-text-primary);
+	--destructive:        var(--ii-danger);
+	--destructive-foreground: var(--ii-text-inverse);
+	--border:             var(--ii-border);
+	--input:              var(--ii-border);
+	--ring:               var(--ii-border-focus);
+	--radius:             var(--ii-radius-md);
+
+	/* ── Sidebar tokens (shadcn Sidebar component) ── */
+	--sidebar-background:          var(--ii-bg);
+	--sidebar-foreground:          var(--ii-text-primary);
+	--sidebar-primary:             var(--ii-brand-primary);
+	--sidebar-primary-foreground:  var(--ii-text-inverse);
+	--sidebar-accent:              var(--ii-surface-alt);
+	--sidebar-accent-foreground:   var(--ii-text-primary);
+	--sidebar-border:              var(--ii-border-subtle);
+	--sidebar-ring:                var(--ii-border-focus);
+}
+
+.dark {
+	color-scheme: dark;
+
+	--ii-brand-primary:    #3B82F6;
+	--ii-brand-secondary:  #14B8A6;
+	--ii-brand-navy:       #0A1628;
+	--ii-brand-accent:     #60A5FA;
+
+	--ii-text-primary:   #F1F5F9;
+	--ii-text-secondary: #CBD5E1;
+	--ii-text-muted:     #64748B;
+	--ii-text-tertiary:  #475569;
+	--ii-text-inverse:   #1E2A3B;
+	--ii-text-accent:    #60A5FA;
+
+	--ii-bg:               #0A1628;
+	--ii-surface:          #0F1E35;
+	--ii-surface-alt:      #0D1A2E;
+	--ii-surface-elevated: #152440;
+	--ii-surface-inset:    #081220;
+	--ii-surface-overlay:  rgba(0, 0, 0, 0.64);
+	--ii-surface-raised:   #132034;
+	--ii-surface-panel:    #0F1E35;
+	--ii-surface-highlight: rgba(59, 130, 246, 0.1);
+	--ii-surface-accent:   color-mix(in srgb, #3B82F6 10%, #0F1E35);
+
+	--ii-border-subtle: #1E3A5F;
+	--ii-border:        #243B55;
+	--ii-border-strong: #2D4E6E;
+	--ii-border-focus:  #3B82F6;
+	--ii-border-accent: #1E3A5F;
+	--ii-border-inverse: rgba(255, 255, 255, 0.12);
+
+	--ii-success: #10B981;
+	--ii-warning: #F59E0B;
+	--ii-danger:  #EF4444;
+	--ii-info:    #3B82F6;
+
+	--ii-success-subtle: color-mix(in srgb, #10B981 14%, #0F1E35);
+	--ii-warning-subtle: color-mix(in srgb, #F59E0B 16%, #0F1E35);
+	--ii-danger-subtle:  color-mix(in srgb, #EF4444 14%, #0F1E35);
+	--ii-info-subtle:    color-mix(in srgb, #3B82F6 14%, #0F1E35);
+
+	--ii-regime-risk-on:    #10B981;
+	--ii-regime-risk-off:   #F59E0B;
+	--ii-regime-inflation:  #F97316;
+	--ii-regime-crisis:     #EF4444;
+
+	--ii-chart-1: #3B82F6;
+	--ii-chart-2: #14B8A6;
+	--ii-chart-3: #F59E0B;
+	--ii-chart-4: #A78BFA;
+	--ii-chart-5: #64748B;
+
+	--ii-accent-soft: color-mix(in srgb, #3B82F6 12%, #0F1E35);
+	--ii-accent-muted: color-mix(in srgb, #3B82F6 14%, #0A1628);
+	--ii-focus-ring: color-mix(in srgb, #3B82F6 26%, transparent);
+	--ii-bg-hover: color-mix(in srgb, #3B82F6 7%, #0A1628);
+	--ii-bg-secondary: #0D1A2E;
+	--ii-selection-bg: color-mix(in srgb, #3B82F6 28%, black 72%);
+	--ii-selection-color: var(--ii-text-primary);
+
+	--desk-surface: var(--ii-surface);
+	--desk-elevated: var(--ii-surface-elevated);
+	--ink-primary: var(--ii-text-primary);
+	--ink-secondary: var(--ii-text-secondary);
+	--ticker-mono: var(--ii-font-mono);
+	--regime-ok: var(--ii-success);
+	--regime-caution: var(--ii-warning);
+	--regime-stress: var(--ii-danger);
+
+	/* shadcn bridge — dark mode */
+	--background:         var(--ii-bg);
+	--foreground:         var(--ii-text-primary);
+	--card:               var(--ii-surface);
+	--card-foreground:    var(--ii-text-primary);
+	--popover:            var(--ii-surface-elevated);
+	--popover-foreground: var(--ii-text-primary);
+	--primary:            var(--ii-brand-primary);
+	--primary-foreground: var(--ii-text-inverse);
+	--secondary:          var(--ii-surface-alt);
+	--secondary-foreground: var(--ii-text-primary);
+	--muted:              var(--ii-surface-alt);
+	--muted-foreground:   var(--ii-text-muted);
+	--accent:             var(--ii-surface-inset);
+	--accent-foreground:  var(--ii-text-primary);
+	--destructive:        var(--ii-danger);
+	--destructive-foreground: var(--ii-text-inverse);
+	--border:             var(--ii-border);
+	--input:              var(--ii-border);
+	--ring:               var(--ii-border-focus);
+
+	--sidebar-background:          var(--ii-surface);
+	--sidebar-foreground:          var(--ii-text-primary);
+	--sidebar-primary:             var(--ii-brand-primary);
+	--sidebar-primary-foreground:  var(--ii-text-inverse);
+	--sidebar-accent:              var(--ii-surface-alt);
+	--sidebar-accent-foreground:   var(--ii-text-primary);
+	--sidebar-border:              var(--ii-border-subtle);
+	--sidebar-ring:                var(--ii-border-focus);
+}

@@ -1,0 +1,361 @@
+/* ============================================================
+ * @investintell/ui - Design System Entry Point
+ * Import this file to get all tokens, resets, and base styles.
+ * InvestIntell institutional typography & component alignment.
+ * ============================================================ */
+
+@import "./tokens.css";
+@import "./typography.css";
+@import "./spacing.css";
+@import "./shadows.css";
+@import "./animations.css";
+
+/* ── Global reset ── */
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+html {
+	background-color: var(--ii-surface);
+	text-rendering: optimizeLegibility;
+	font-feature-settings: var(--ii-font-features, "rlig" 1, "calt" 1, "ss01" 1);
+}
+
+body {
+	min-height: 100vh;
+	margin: 0;
+	font-family: var(--ii-font-sans);
+	font-size: var(--ii-text-body);
+	line-height: var(--ii-leading-body);
+	letter-spacing: var(--ii-tracking-body);
+	color: var(--ii-text-primary);
+	background-color: var(--ii-surface);
+	font-feature-settings: var(--ii-font-features);
+}
+
+::selection {
+	color: var(--ii-selection-color);
+	background: var(--ii-selection-bg);
+}
+
+img,
+picture,
+svg,
+canvas {
+	display: block;
+	max-width: 100%;
+}
+
+button,
+input,
+textarea,
+select {
+	font: inherit;
+	color: inherit;
+}
+
+button {
+	cursor: pointer;
+}
+
+/* ── Inline code ── */
+
+code,
+kbd,
+pre,
+samp {
+	font-family: var(--ii-font-mono);
+	font-size: var(--ii-text-mono);
+	line-height: var(--ii-leading-mono);
+	letter-spacing: var(--ii-tracking-mono);
+}
+
+code:not(pre code) {
+	font-size: 0.9em;
+	background: var(--ii-code-bg, rgba(99, 102, 241, 0.12));
+	border: 0.67px solid var(--ii-code-border, rgba(0, 0, 0, 0.04));
+	border-radius: 5.4px;
+	padding: 0.1em 0.3em;
+	color: var(--ii-text-primary);
+}
+
+kbd {
+	font-family: var(--ii-font-mono);
+	font-size: var(--ii-text-xs, 11px);
+	font-weight: var(--ii-weight-medium, 500);
+	line-height: 20px;
+	padding: 0 6px;
+	background: var(--ii-kbd-bg, #fafafa);
+	border: 0.67px solid var(--ii-kbd-border, #e5e7eb);
+	border-radius: var(--ii-radius-sm, 4px);
+	color: var(--ii-text-primary);
+}
+
+pre {
+	overflow-x: auto;
+	padding: var(--ii-space-4);
+	border: 1px solid var(--ii-border-subtle);
+	border-radius: var(--ii-radius-md);
+	background: var(--ii-surface-panel);
+	box-shadow: var(--ii-shadow-1);
+}
+
+/* ── Headings ── */
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	margin: 0;
+	color: var(--ii-text-secondary);
+	text-wrap: balance;
+	font-feature-settings: var(--ii-font-features);
+}
+
+h1,
+h2 {
+	font-weight: var(--ii-weight-semibold);
+}
+
+h3,
+h4,
+h5,
+h6 {
+	font-weight: var(--ii-weight-semibold);
+}
+
+h1 {
+	font-size: var(--ii-text-h1);
+	line-height: var(--ii-leading-h1);
+	letter-spacing: var(--ii-tracking-h1);
+	margin-top: var(--ii-heading-h1-mt);
+}
+
+h2 {
+	font-size: var(--ii-text-h2);
+	line-height: var(--ii-leading-h2);
+	letter-spacing: var(--ii-tracking-h2);
+	margin-top: var(--ii-heading-h2-mt);
+	padding-bottom: 4px;
+	border-bottom: 1px solid var(--ii-border-subtle);
+}
+
+h3 {
+	font-size: var(--ii-text-h3);
+	line-height: var(--ii-leading-h3);
+	letter-spacing: var(--ii-tracking-h3);
+	margin-top: var(--ii-heading-h3-mt);
+}
+
+h4 {
+	font-size: var(--ii-text-h4);
+	line-height: var(--ii-leading-h4);
+	letter-spacing: var(--ii-tracking-h4);
+}
+
+h5 {
+	font-size: var(--ii-text-h5);
+	line-height: var(--ii-leading-h5);
+	letter-spacing: var(--ii-tracking-h5);
+}
+
+h6 {
+	font-size: var(--ii-text-h6);
+	line-height: var(--ii-leading-h6);
+	letter-spacing: var(--ii-tracking-h6);
+}
+
+/* ── Body text ── */
+
+p {
+	margin: 0;
+	line-height: var(--ii-leading-relaxed);
+	margin-top: var(--ii-paragraph-mt);
+}
+
+p:first-child {
+	margin-top: 0;
+}
+
+ul,
+ol,
+dl,
+blockquote,
+figure {
+	margin: 0;
+}
+
+small {
+	font-size: var(--ii-text-small);
+	line-height: var(--ii-leading-small);
+}
+
+strong,
+b {
+	color: var(--ii-text-primary);
+	font-weight: var(--ii-weight-bold);
+}
+
+/* ── Links ── */
+
+a {
+	color: var(--ii-link-color, var(--ii-brand-primary));
+	text-decoration: underline;
+	text-decoration-color: color-mix(in srgb, currentColor 28%, transparent);
+	text-decoration-thickness: 0.08em;
+	text-underline-offset: 0.18em;
+	transition: color 120ms ease;
+}
+
+a:hover {
+	color: var(--ii-link-hover-color, var(--ii-brand-accent));
+	text-decoration: none;
+}
+
+hr {
+	height: 1px;
+	margin: 0;
+	border: 0;
+	background: var(--ii-border-subtle);
+}
+
+/* ── Form inputs ── */
+
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea) {
+	border: 1px solid var(--ii-border-subtle);
+	border-radius: var(--ii-radius-md);
+	background: var(--ii-surface-raised);
+	box-shadow: var(--ii-shadow-inset);
+	transition: var(--ii-transition-surface);
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea):hover {
+	border-color: var(--ii-border);
+}
+
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), textarea)::placeholder {
+	color: var(--ii-text-muted);
+}
+
+textarea {
+	resize: vertical;
+}
+
+:where(button, input, select, textarea, summary, [role="button"]):focus-visible {
+	outline: none;
+	border-color: var(--ii-border-focus);
+	box-shadow: var(--ii-shadow-focus);
+}
+
+a:focus-visible {
+	outline: 2px solid var(--ii-border-focus);
+	outline-offset: 3px;
+	border-radius: 6px;
+}
+
+/* ── Utility classes ── */
+
+.ii-ui-surface {
+	background: var(--ii-surface-elevated);
+	border: 1px solid var(--ii-border-subtle);
+	border-radius: var(--ii-radius-lg);
+	box-shadow: var(--ii-shadow-card);
+}
+
+.ii-ui-panel {
+	background: var(--ii-surface-panel);
+	border: 1px solid var(--ii-border-subtle);
+	border-radius: var(--ii-radius-lg);
+	box-shadow: var(--ii-shadow-1);
+}
+
+.ii-ui-kicker {
+	font-size: var(--ii-text-label);
+	font-weight: var(--ii-weight-semibold);
+	line-height: var(--ii-leading-label);
+	letter-spacing: var(--ii-tracking-label);
+	text-transform: uppercase;
+	color: var(--ii-text-muted);
+}
+
+.ii-ui-field {
+	border: 1px solid var(--ii-border-subtle);
+	border-radius: var(--ii-radius-md);
+	background: var(--ii-surface-raised);
+	box-shadow: var(--ii-shadow-inset);
+	transition: var(--ii-transition-surface);
+}
+
+.dark .ii-ui-field {
+	border-color: var(--ii-border);
+	background: var(--ii-surface-inset);
+}
+
+@custom-variant data-open {
+	&:where([data-state="open"]), &:where([data-open]:not([data-open="false"])) {
+		@slot;
+	}
+}
+
+@custom-variant data-closed {
+	&:where([data-state="closed"]), &:where([data-closed]:not([data-closed="false"])) {
+		@slot;
+	}
+}
+
+@custom-variant data-checked {
+	&:where([data-state="checked"]), &:where([data-checked]:not([data-checked="false"])) {
+		@slot;
+	}
+}
+
+@custom-variant data-unchecked {
+	&:where([data-state="unchecked"]), &:where([data-unchecked]:not([data-unchecked="false"])) {
+		@slot;
+	}
+}
+
+@custom-variant data-selected {
+	&:where([data-selected]) {
+		@slot;
+	}
+}
+
+@custom-variant data-disabled {
+	&:where([data-disabled="true"]), &:where([data-disabled]:not([data-disabled="false"])) {
+		@slot;
+	}
+}
+
+@custom-variant data-active {
+	&:where([data-state="active"]), &:where([data-active]:not([data-active="false"])) {
+		@slot;
+	}
+}
+
+@custom-variant data-horizontal {
+	&:where([data-orientation="horizontal"]) {
+		@slot;
+	}
+}
+
+@custom-variant data-vertical {
+	&:where([data-orientation="vertical"]) {
+		@slot;
+	}
+}
+
+@utility no-scrollbar {
+	-ms-overflow-style: none;
+	scrollbar-width: none;
+	&::-webkit-scrollbar {
+		display: none;
+	}
+}

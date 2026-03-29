@@ -1,0 +1,117 @@
+<script lang="ts">
+	import { cn } from "../../utils/cn.js";
+
+	interface Props {
+		url: string;
+		filename?: string;
+		languages?: string[];
+		class?: string;
+		getToken?: () => Promise<string | null>;
+	}
+
+	let {
+		url,
+		filename = "document.pdf",
+		languages = ["en"],
+		class: className,
+		getToken,
+	}: Props = $props();
+
+	let loading = $state(false);
+	// svelte-ignore state_referenced_locally
+	let selectedLang = $state(languages[0] ?? "en");
+
+	async function download() {
+		loading = true;
+		try {
+			const separator = url.includes("?") ? "&" : "?";
+			const fetchUrl =
+				languages.length > 1 ? `${url}${separator}lang=${selectedLang}` : url;
+
+			const headers: Record<string, string> = {};
+			if (getToken) {
+				const token = await getToken();
+				if (token) headers['Authorization'] = `Bearer ${token}`;
+			}
+			const response = await fetch(fetchUrl, { headers });
+			if (!response.ok) throw new Error("Download failed");
+
+			const blob = await response.blob();
+			const blobUrl = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = blobUrl;
+			a.download = filename;
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			URL.revokeObjectURL(blobUrl);
+		} catch (err) {
+			console.error("PDF download failed:", err);
+		} finally {
+			loading = false;
+		}
+	}
+</script>
+
+<div class={cn("inline-flex items-center gap-2", className)}>
+	{#if languages.length > 1}
+		<div class="inline-flex rounded-md border border-(--ii-border)">
+			{#each languages as lang (lang)}
+				<button
+					class={cn(
+						"px-2 py-1 text-xs font-medium transition-colors first:rounded-l-md last:rounded-r-md",
+						selectedLang === lang
+							? "bg-(--ii-brand-primary) text-white"
+							: "bg-(--ii-surface) text-(--ii-text-secondary) hover:bg-(--ii-surface-alt)",
+					)}
+					onclick={() => (selectedLang = lang)}
+				>
+					{lang.toUpperCase()}
+				</button>
+			{/each}
+		</div>
+	{/if}
+	<button
+		class="inline-flex h-9 items-center gap-2 rounded-md bg-(--ii-brand-primary) px-4 text-sm font-medium text-white transition-colors hover:bg-(--ii-brand-primary)/90 disabled:opacity-50"
+		onclick={download}
+		disabled={loading}
+	>
+		{#if loading}
+			<svg
+				class="h-4 w-4 animate-spin"
+				xmlns="http://www.w3.org/2000/svg"
+				fill="none"
+				viewBox="0 0 24 24"
+			>
+				<circle
+					class="opacity-25"
+					cx="12"
+					cy="12"
+					r="10"
+					stroke="currentColor"
+					stroke-width="4"
+				></circle>
+				<path
+					class="opacity-75"
+					fill="currentColor"
+					d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+				></path>
+			</svg>
+		{:else}
+			<svg
+				xmlns="http://www.w3.org/2000/svg"
+				width="16"
+				height="16"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2"
+			>
+				<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+				<polyline points="7 10 12 15 17 10" />
+				<line x1="12" y1="15" x2="12" y2="3" />
+			</svg>
+		{/if}
+		Download PDF
+	</button>
+</div>

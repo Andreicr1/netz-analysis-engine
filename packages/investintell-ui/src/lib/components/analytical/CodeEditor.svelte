@@ -1,0 +1,177 @@
+<!--
+  CodeEditor — CodeMirror 6 JSON editor with schema linting.
+  Migrated from frontends/admin to @investintell/ui for reuse across verticals.
+-->
+<script lang="ts">
+	import { onMount } from "svelte";
+	import type { EditorView } from "@codemirror/view";
+
+	interface Props {
+		value?: string;
+		schema: Record<string, unknown>;
+		ariaLabel: string;
+		class?: string;
+	}
+
+	let {
+		value = $bindable(""),
+		schema,
+		ariaLabel,
+		class: className,
+	}: Props = $props();
+
+	let editorHost: HTMLDivElement | undefined;
+	let view: EditorView | undefined;
+	let applySchema:
+		| ((target: EditorView, nextSchema?: Record<string, unknown>) => void)
+		| undefined;
+	let isInternalUpdate = false;
+	let editorReady = $state(false);
+
+	const instructionsId = "code-editor-instructions";
+
+	function syncExternalValue(nextValue: string) {
+		if (!view) {
+			return;
+		}
+
+		const currentValue = view.state.doc.toString();
+		if (nextValue === currentValue) {
+			return;
+		}
+
+		isInternalUpdate = true;
+		try {
+			view.dispatch({
+				changes: {
+					from: 0,
+					to: currentValue.length,
+					insert: nextValue,
+				},
+			});
+		} finally {
+			isInternalUpdate = false;
+		}
+	}
+
+	$effect(() => {
+		syncExternalValue(value ?? "");
+	});
+
+	$effect(() => {
+		if (view && applySchema) {
+			applySchema(view, schema);
+		}
+	});
+
+	onMount(() => {
+		let disposed = false;
+		let cleanup = () => {};
+		void (async () => {
+			const [
+				{ EditorState },
+				{ EditorView, keymap },
+				{ json, jsonParseLinter },
+				{ linter },
+				{ indentWithTab },
+				{ jsonSchemaLinter, handleRefresh, stateExtensions, updateSchema: setSchema },
+			] = await Promise.all([
+				import("@codemirror/state"),
+				import("@codemirror/view"),
+				import("@codemirror/lang-json"),
+				import("@codemirror/lint"),
+				import("@codemirror/commands"),
+				import("codemirror-json-schema"),
+			]);
+
+			if (disposed || !editorHost) {
+				return;
+			}
+
+			const extensions = [
+				EditorView.lineWrapping,
+				EditorView.theme({
+					"&": {
+						backgroundColor: "var(--ii-surface)",
+						color: "var(--ii-text-primary)",
+					},
+					"&.cm-focused": {
+						outline: "2px solid var(--ii-brand-secondary)",
+						outlineOffset: "2px",
+					},
+					".cm-content": {
+						caretColor: "var(--ii-brand-primary)",
+						fontFamily:
+							"ui-monospace, SFMono-Regular, SF Mono, Consolas, Liberation Mono, monospace",
+					},
+					".cm-gutters": {
+						backgroundColor: "var(--ii-surface-alt)",
+						color: "var(--ii-text-secondary)",
+						borderRight: "1px solid var(--ii-border)",
+					},
+				}),
+				EditorView.contentAttributes.of({
+					role: "textbox",
+					"aria-multiline": "true",
+					"aria-label": ariaLabel,
+					"aria-describedby": instructionsId,
+					spellcheck: "false",
+					autocapitalize: "off",
+					autocorrect: "off",
+				}),
+				json(),
+				linter(jsonParseLinter(), { delay: 300 }),
+				linter(jsonSchemaLinter(), { delay: 750, needsRefresh: handleRefresh }),
+				keymap.of([indentWithTab]),
+				stateExtensions(schema as never),
+				EditorView.updateListener.of((update) => {
+					if (!update.docChanged || isInternalUpdate) {
+						return;
+					}
+
+					value = update.state.doc.toString();
+				}),
+			];
+
+			view = new EditorView({
+				state: EditorState.create({
+					doc: value ?? "",
+					extensions,
+				}),
+				parent: editorHost,
+			});
+			applySchema = setSchema;
+			editorReady = true;
+			applySchema(view, schema);
+
+			cleanup = () => {
+				view?.destroy();
+				view = undefined;
+				applySchema = undefined;
+			};
+
+			if (disposed) {
+				cleanup();
+			}
+		})();
+
+		return () => {
+			disposed = true;
+			cleanup();
+		};
+	});
+</script>
+
+<div class={className}>
+	<div
+		bind:this={editorHost}
+		class="min-h-72 overflow-hidden rounded-xl border border-(--ii-border) bg-(--ii-surface)"
+		aria-busy={editorReady ? "false" : "true"}
+	></div>
+	<p
+		id={instructionsId}
+		class="mt-3 text-sm leading-6 text-(--ii-text-secondary)"
+	>
+		Press Escape to leave the editor, Tab to indent.
+	</p>
+</div>

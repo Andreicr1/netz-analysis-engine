@@ -1,0 +1,53 @@
+/* ============================================================
+ * InvestIntell Design Tokens - Spacing
+ * Base scale plus semantic rhythm tokens for layout composition.
+ * ============================================================ */
+
+:root {
+	/* Raw scale */
+	--ii-space-px: 1px;
+	--ii-space-0\.5: 2px;
+	--ii-space-1: 4px;
+	--ii-space-2: 8px;
+	--ii-space-3: 12px;
+	--ii-space-4: 16px;
+	--ii-space-5: 20px;
+	--ii-space-6: 24px;
+	--ii-space-7: 28px;
+	--ii-space-8: 32px;
+	--ii-space-9: 36px;
+	--ii-space-10: 40px;
+	--ii-space-11: 44px;
+	--ii-space-12: 48px;
+	--ii-space-13: 52px;
+	--ii-space-14: 56px;
+	--ii-space-15: 60px;
+	--ii-space-16: 64px;
+
+	/* Semantic rhythm */
+	--ii-space-inline-2xs: 6px;
+	--ii-space-inline-xs: 10px;
+	--ii-space-inline-sm: 12px;
+	--ii-space-inline-md: 16px;
+	--ii-space-inline-lg: 20px;
+	--ii-space-inline-xl: 24px;
+	--ii-space-inline-2xl: 32px;
+
+	--ii-space-stack-2xs: 6px;
+	--ii-space-stack-xs: 10px;
+	--ii-space-stack-sm: 14px;
+	--ii-space-stack-md: 20px;
+	--ii-space-stack-lg: 28px;
+	--ii-space-stack-xl: 40px;
+	--ii-space-stack-2xl: 56px;
+
+	--ii-space-card-padding: 20px;
+	--ii-space-card-padding-lg: 24px;
+	--ii-space-panel-padding: 28px;
+	--ii-space-control-height-sm: 32px;
+	--ii-space-control-height-md: 40px;
+	--ii-space-control-height-lg: 48px;
+	--ii-space-page-gutter: clamp(20px, 1rem + 1vw, 32px);
+	--ii-space-page-block: clamp(24px, 1rem + 2vw, 40px);
+	--ii-space-section-gap: clamp(28px, 1rem + 2vw, 48px);
+}
