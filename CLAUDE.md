@@ -292,7 +292,7 @@ Portfolio construction is an 11-step pipeline with CLARABEL 4-phase cascade opti
 
 Separate vector table `wealth_vector_chunks` for fund-centric RAG (distinct from credit's deal-centric `vector_chunks`).
 
-**12 embedding sources:**
+**16 embedding sources:**
 
 | Source | entity_type | Scope | Volume |
 |--------|-------------|-------|--------|
@@ -306,6 +306,10 @@ Separate vector table `wealth_vector_chunks` for fund-centric RAG (distinct from
 | SEC ETFs (N-CEN) | `"fund"` | global | ~985 chunks |
 | SEC BDCs | `"fund"` | global | ~196 chunks |
 | SEC MMFs (N-MFP) | `"fund"` | global | ~373 chunks |
+| Prospectus stats (RR1 fees/risk) | `"fund"` | global | ~20k chunks |
+| Prospectus returns (RR1 bar chart) | `"fund"` | global | ~2k chunks |
+| N-PORT top holdings (latest quarter) | `"fund"` | global | ~7.7k chunks |
+| Fund share classes | `"fund"` | global | ~5k chunks |
 | DD chapters | `"fund"` | org-scoped | growing |
 | Macro reviews | `"macro"` | org-scoped | growing |
 

@@ -1,7 +1,7 @@
 """Wealth embedding worker — vectorises Wealth sources into wealth_vector_chunks.
 
-Sources:
-  A. sec_manager_brochure_text → entity_type="firm", source_type="brochure"
+Sources (16 total):
+  A. sec_manager_brochure_text → entity_type="firm", source_type="brochure" (10 sections)
   F. sec_managers + team/funds  → entity_type="firm", source_type="sec_manager_profile"
   G. sec_registered_funds + N-CEN + XBRL → entity_type="fund", source_type="sec_fund_profile"
   O. sec_fund_classes per-series XBRL   → entity_type="fund", source_type="sec_fund_series_profile"
@@ -12,6 +12,10 @@ Sources:
   L. sec_etfs + N-CEN          → entity_type="fund", source_type="sec_etf_profile"
   M. sec_bdcs                  → entity_type="fund", source_type="sec_bdc_profile"
   N. sec_money_market_funds    → entity_type="fund", source_type="sec_mmf_profile"
+  P. sec_fund_prospectus_stats → entity_type="fund", source_type="prospectus_stats"
+  Q. sec_fund_prospectus_returns → entity_type="fund", source_type="prospectus_returns"
+  R. sec_nport_holdings (top 20) → entity_type="fund", source_type="nport_holdings"
+  S. sec_fund_classes (grouped)  → entity_type="fund", source_type="fund_classes"
   D. dd_chapters               → entity_type="fund", source_type="dd_chapter"
   E. macro_reviews             → entity_type="macro", source_type="macro_review"
 
@@ -98,6 +102,10 @@ async def run_wealth_embedding() -> dict:
                 ("sec_etf_profile", _embed_sec_etf_profiles),
                 ("sec_bdc_profile", _embed_sec_bdc_profiles),
                 ("sec_mmf_profile", _embed_sec_mmf_profiles),
+                ("prospectus_stats", _embed_prospectus_stats),
+                ("prospectus_returns", _embed_prospectus_returns),
+                ("nport_holdings", _embed_nport_holdings),
+                ("fund_classes", _embed_fund_classes),
                 ("dd_chapters", _embed_dd_chapters),
                 ("macro_reviews", _embed_macro_reviews),
             ]:
@@ -1395,6 +1403,311 @@ async def _embed_sec_mmf_profiles(db: AsyncSession) -> dict:
     ]
     await _batch_upsert(db, upsert_rows)
     logger.info("wealth_embedding.sec_mmf_profiles_done", embedded=len(rows))
+    return {"embedded": len(rows)}
+
+
+# ── Source P: Prospectus Stats (RR1 fees + risk) ─────────────────────
+
+
+async def _embed_prospectus_stats(db: AsyncSession) -> dict:
+    """Embed sec_fund_prospectus_stats → entity_type='fund', source_type='prospectus_stats'."""
+    result = await db.execute(
+        text("""
+            SELECT s.series_id, s.class_id, s.filing_date,
+                   s.management_fee_pct, s.expense_ratio_pct, s.net_expense_ratio_pct,
+                   s.portfolio_turnover_pct,
+                   s.bar_chart_best_qtr_pct, s.bar_chart_worst_qtr_pct, s.bar_chart_ytd_pct,
+                   s.avg_annual_return_1y, s.avg_annual_return_5y, s.avg_annual_return_10y,
+                   fc.series_name
+            FROM sec_fund_prospectus_stats s
+            LEFT JOIN (
+                SELECT DISTINCT ON (series_id) series_id, series_name
+                FROM sec_fund_classes ORDER BY series_id
+            ) fc ON fc.series_id = s.series_id
+            LEFT JOIN wealth_vector_chunks w
+              ON w.id = 'prospectus_stats_' || s.series_id || '_' || s.class_id
+            WHERE s.series_id IS NOT NULL
+              AND (w.id IS NULL OR s.filing_date > w.embedded_at::date)
+            LIMIT 10000
+        """),
+    )
+    rows = result.fetchall()
+    if not rows:
+        return {"embedded": 0}
+
+    now = datetime.now(tz=timezone.utc)
+
+    def _pct(val) -> str:
+        return f"{float(val) * 100:.2f}%" if val is not None else "N/A"
+
+    texts = []
+    for r in rows:
+        name = r.series_name or r.series_id
+        parts = [f"[Fund Prospectus Stats] {name} (Series {r.series_id})"]
+        if r.management_fee_pct is not None:
+            parts.append(f"Management Fee: {_pct(r.management_fee_pct)}")
+        if r.expense_ratio_pct is not None:
+            parts.append(f"Expense Ratio: {_pct(r.expense_ratio_pct)}")
+        if r.net_expense_ratio_pct is not None:
+            parts.append(f"Net Expense Ratio: {_pct(r.net_expense_ratio_pct)}")
+        if r.portfolio_turnover_pct is not None:
+            parts.append(f"Portfolio Turnover: {_pct(r.portfolio_turnover_pct)}")
+        if r.bar_chart_best_qtr_pct is not None:
+            parts.append(f"Best Quarter: {_pct(r.bar_chart_best_qtr_pct)}")
+        if r.bar_chart_worst_qtr_pct is not None:
+            parts.append(f"Worst Quarter: {_pct(r.bar_chart_worst_qtr_pct)}")
+        if r.avg_annual_return_1y is not None:
+            parts.append(f"Avg Annual Return 1Y: {_pct(r.avg_annual_return_1y)}")
+        if r.avg_annual_return_5y is not None:
+            parts.append(f"Avg Annual Return 5Y: {_pct(r.avg_annual_return_5y)}")
+        if r.avg_annual_return_10y is not None:
+            parts.append(f"Avg Annual Return 10Y: {_pct(r.avg_annual_return_10y)}")
+        texts.append(". ".join(parts)[:4000])
+
+    batch = await async_generate_embeddings(texts, batch_size=EMBED_BATCH_SIZE)
+    upsert_rows = [
+        {
+            "id": f"prospectus_stats_{r.series_id}_{r.class_id}",
+            "organization_id": None,
+            "entity_id": r.series_id,
+            "entity_type": "fund",
+            "source_type": "prospectus_stats",
+            "section": "fees_risk",
+            "content": texts[i],
+            "language": "en",
+            "source_row_id": r.series_id,
+            "firm_crd": None,
+            "filing_date": r.filing_date,
+            "embedding": batch.vectors[i],
+            "embedding_model": batch.model,
+            "embedded_at": now,
+        }
+        for i, r in enumerate(rows)
+    ]
+    await _batch_upsert(db, upsert_rows)
+    logger.info("wealth_embedding.prospectus_stats_done", embedded=len(rows))
+    return {"embedded": len(rows)}
+
+
+# ── Source Q: Prospectus Annual Returns (RR1 bar chart) ──────────────
+
+
+async def _embed_prospectus_returns(db: AsyncSession) -> dict:
+    """Embed sec_fund_prospectus_returns (aggregated per series) → source_type='prospectus_returns'."""
+    result = await db.execute(
+        text("""
+            SELECT r.series_id,
+                   fc.series_name,
+                   array_agg(r.year ORDER BY r.year) AS years,
+                   array_agg(r.annual_return_pct ORDER BY r.year) AS returns,
+                   MAX(r.filing_date) AS filing_date
+            FROM sec_fund_prospectus_returns r
+            LEFT JOIN (
+                SELECT DISTINCT ON (series_id) series_id, series_name
+                FROM sec_fund_classes ORDER BY series_id
+            ) fc ON fc.series_id = r.series_id
+            LEFT JOIN wealth_vector_chunks w
+              ON w.id = 'prospectus_returns_' || r.series_id
+            WHERE w.id IS NULL
+               OR r.filing_date > w.embedded_at::date
+            GROUP BY r.series_id, fc.series_name
+            LIMIT 10000
+        """),
+    )
+    rows = result.fetchall()
+    if not rows:
+        return {"embedded": 0}
+
+    now = datetime.now(tz=timezone.utc)
+    texts = []
+    for r in rows:
+        name = r.series_name or r.series_id
+        year_returns = [
+            f"{int(y)}: {float(ret) * 100:+.2f}%"
+            for y, ret in zip(r.years, r.returns)
+        ]
+        text_val = f"[Annual Returns] {name} (Series {r.series_id}). " + ", ".join(year_returns)
+        texts.append(text_val[:4000])
+
+    batch = await async_generate_embeddings(texts, batch_size=EMBED_BATCH_SIZE)
+    upsert_rows = [
+        {
+            "id": f"prospectus_returns_{r.series_id}",
+            "organization_id": None,
+            "entity_id": r.series_id,
+            "entity_type": "fund",
+            "source_type": "prospectus_returns",
+            "section": "annual_returns",
+            "content": texts[i],
+            "language": "en",
+            "source_row_id": r.series_id,
+            "firm_crd": None,
+            "filing_date": r.filing_date,
+            "embedding": batch.vectors[i],
+            "embedding_model": batch.model,
+            "embedded_at": now,
+        }
+        for i, r in enumerate(rows)
+    ]
+    await _batch_upsert(db, upsert_rows)
+    logger.info("wealth_embedding.prospectus_returns_done", embedded=len(rows))
+    return {"embedded": len(rows)}
+
+
+# ── Source R: N-PORT Top Holdings (latest quarter) ───────────────────
+
+
+async def _embed_nport_holdings(db: AsyncSession) -> dict:
+    """Embed N-PORT top holdings per series (latest quarter) → source_type='nport_holdings'."""
+    result = await db.execute(
+        text("""
+            WITH latest AS (
+                SELECT series_id, MAX(report_date) AS report_date
+                FROM sec_nport_holdings
+                WHERE series_id IS NOT NULL AND series_id != ''
+                GROUP BY series_id
+            ),
+            top_holdings AS (
+                SELECT h.series_id, h.report_date, h.issuer_name, h.cusip,
+                       h.asset_class, h.sector, h.pct_of_nav, h.market_value,
+                       ROW_NUMBER() OVER (PARTITION BY h.series_id ORDER BY ABS(h.pct_of_nav) DESC NULLS LAST) AS rn
+                FROM sec_nport_holdings h
+                JOIN latest l ON l.series_id = h.series_id AND l.report_date = h.report_date
+            )
+            SELECT th.series_id, th.report_date,
+                   fc.series_name,
+                   array_agg(th.issuer_name ORDER BY th.rn) AS holdings,
+                   array_agg(th.pct_of_nav ORDER BY th.rn) AS pcts,
+                   array_agg(COALESCE(th.asset_class, '') ORDER BY th.rn) AS asset_classes,
+                   array_agg(COALESCE(th.sector, '') ORDER BY th.rn) AS sectors
+            FROM top_holdings th
+            LEFT JOIN (
+                SELECT DISTINCT ON (series_id) series_id, series_name
+                FROM sec_fund_classes ORDER BY series_id
+            ) fc ON fc.series_id = th.series_id
+            LEFT JOIN wealth_vector_chunks w
+              ON w.id = 'nport_holdings_' || th.series_id
+            WHERE th.rn <= 20
+              AND (w.id IS NULL OR th.report_date > w.embedded_at::date)
+            GROUP BY th.series_id, th.report_date, fc.series_name
+            LIMIT 10000
+        """),
+    )
+    rows = result.fetchall()
+    if not rows:
+        return {"embedded": 0}
+
+    now = datetime.now(tz=timezone.utc)
+    texts = []
+    for r in rows:
+        name = r.series_name or r.series_id
+        holdings_text = []
+        for h_name, pct, ac, sec in zip(r.holdings, r.pcts, r.asset_classes, r.sectors):
+            pct_str = f"{float(pct):.2f}%" if pct else "N/A"
+            parts = [h_name, pct_str]
+            if ac:
+                parts.append(ac)
+            if sec:
+                parts.append(sec)
+            holdings_text.append(" | ".join(parts))
+        text_val = (
+            f"[Portfolio Holdings {r.report_date}] {name} (Series {r.series_id}). "
+            f"Top {len(r.holdings)} positions: " + "; ".join(holdings_text)
+        )
+        texts.append(text_val[:4000])
+
+    batch = await async_generate_embeddings(texts, batch_size=EMBED_BATCH_SIZE)
+    upsert_rows = [
+        {
+            "id": f"nport_holdings_{r.series_id}",
+            "organization_id": None,
+            "entity_id": r.series_id,
+            "entity_type": "fund",
+            "source_type": "nport_holdings",
+            "section": "top_holdings",
+            "content": texts[i],
+            "language": "en",
+            "source_row_id": r.series_id,
+            "firm_crd": None,
+            "filing_date": r.report_date,
+            "embedding": batch.vectors[i],
+            "embedding_model": batch.model,
+            "embedded_at": now,
+        }
+        for i, r in enumerate(rows)
+    ]
+    await _batch_upsert(db, upsert_rows)
+    logger.info("wealth_embedding.nport_holdings_done", embedded=len(rows))
+    return {"embedded": len(rows)}
+
+
+# ── Source S: Fund Share Classes ──────────────────────────────────────
+
+
+async def _embed_fund_classes(db: AsyncSession) -> dict:
+    """Embed sec_fund_classes (grouped per series) → source_type='fund_classes'."""
+    result = await db.execute(
+        text("""
+            SELECT fc.series_id,
+                   fc.series_name,
+                   array_agg(fc.class_name ORDER BY fc.expense_ratio_pct ASC NULLS LAST) AS class_names,
+                   array_agg(COALESCE(fc.ticker, '') ORDER BY fc.expense_ratio_pct ASC NULLS LAST) AS tickers,
+                   array_agg(fc.expense_ratio_pct ORDER BY fc.expense_ratio_pct ASC NULLS LAST) AS expense_ratios,
+                   array_agg(fc.net_assets ORDER BY fc.expense_ratio_pct ASC NULLS LAST) AS net_assets_arr
+            FROM sec_fund_classes fc
+            LEFT JOIN wealth_vector_chunks w
+              ON w.id = 'fund_classes_' || fc.series_id
+            WHERE fc.series_id IS NOT NULL
+              AND (w.id IS NULL OR fc.data_fetched_at > w.embedded_at)
+            GROUP BY fc.series_id, fc.series_name
+            LIMIT 10000
+        """),
+    )
+    rows = result.fetchall()
+    if not rows:
+        return {"embedded": 0}
+
+    now = datetime.now(tz=timezone.utc)
+    texts = []
+    for r in rows:
+        classes_text = []
+        for cname, ticker, er, na in zip(r.class_names, r.tickers, r.expense_ratios, r.net_assets_arr):
+            parts = [cname or "Unknown"]
+            if ticker:
+                parts.append(f"ticker {ticker}")
+            if er is not None:
+                parts.append(f"ER {float(er) * 100:.2f}%")
+            if na is not None:
+                parts.append(f"AUM ${float(na) / 1e6:.0f}M")
+            classes_text.append(", ".join(parts))
+        text_val = (
+            f"[Share Classes] {r.series_name or r.series_id} (Series {r.series_id}). "
+            f"{len(r.class_names)} classes: " + "; ".join(classes_text)
+        )
+        texts.append(text_val[:4000])
+
+    batch = await async_generate_embeddings(texts, batch_size=EMBED_BATCH_SIZE)
+    upsert_rows = [
+        {
+            "id": f"fund_classes_{r.series_id}",
+            "organization_id": None,
+            "entity_id": r.series_id,
+            "entity_type": "fund",
+            "source_type": "fund_classes",
+            "section": "share_classes",
+            "content": texts[i],
+            "language": "en",
+            "source_row_id": r.series_id,
+            "firm_crd": None,
+            "filing_date": None,
+            "embedding": batch.vectors[i],
+            "embedding_model": batch.model,
+            "embedded_at": now,
+        }
+        for i, r in enumerate(rows)
+    ]
+    await _batch_upsert(db, upsert_rows)
+    logger.info("wealth_embedding.fund_classes_done", embedded=len(rows))
     return {"embedded": len(rows)}
 
 
