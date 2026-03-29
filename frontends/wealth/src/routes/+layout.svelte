@@ -6,8 +6,8 @@
 	import "../app.css";
 	import { invalidateAll } from "$app/navigation";
 	import { setContext } from "svelte";
-	import { ErrorBoundary, Toast } from "@netz/ui";
-	import { injectBranding, setConflictHandler, setAuthRedirectHandler } from "@netz/ui/utils";
+	import { ErrorBoundary, Toast } from "@investintell/ui";
+	import { injectBranding, setConflictHandler, setAuthRedirectHandler } from "@investintell/ui/utils";
 	import type { LayoutData } from "./$types";
 
 	let { data, children }: { data: LayoutData; children: import("svelte").Snippet } = $props();

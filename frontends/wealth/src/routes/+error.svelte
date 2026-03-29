@@ -3,7 +3,7 @@
 -->
 <script lang="ts">
 	import { page } from "$app/state";
-	import { BackendUnavailable } from "@netz/ui";
+	import { BackendUnavailable } from "@investintell/ui";
 </script>
 
 {#if page.status >= 500}
@@ -11,11 +11,11 @@
 {:else if page.status === 403}
 	<div class="flex h-full items-center justify-center">
 		<div class="text-center">
-			<h1 class="mb-2 text-4xl font-bold text-(--netz-text-primary)">403</h1>
-			<p class="text-(--netz-text-secondary)">You don't have permission to access this page.</p>
+			<h1 class="mb-2 text-4xl font-bold text-(--ii-text-primary)">403</h1>
+			<p class="text-(--ii-text-secondary)">You don't have permission to access this page.</p>
 			<a
 				href="/"
-				class="mt-4 inline-block rounded-md bg-(--netz-brand-primary) px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+				class="mt-4 inline-block rounded-md bg-(--ii-brand-primary) px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
 			>
 				Go to Dashboard
 			</a>

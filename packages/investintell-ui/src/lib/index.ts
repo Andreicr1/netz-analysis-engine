@@ -44,6 +44,13 @@ export { default as AlertBanner } from "./components/analytical/AlertBanner.svel
 export { default as DataTable } from "./components/analytical/DataTable.svelte";
 export { default as DataTableToolbar } from "./components/analytical/DataTableToolbar.svelte";
 
+// ── Legacy Wrapper Components (ported from @netz/ui) ────────────
+export { default as Button } from "./components/analytical/Button.svelte";
+export { default as Dialog } from "./components/analytical/Dialog.svelte";
+export { default as Input } from "./components/analytical/Input.svelte";
+export { default as Select } from "./components/analytical/Select.svelte";
+export { default as Textarea } from "./components/analytical/Textarea.svelte";
+
 // ── Admin Components ─────────────────────────────────────────
 export { default as ConfigEditor } from "./components/analytical/ConfigEditor.svelte";
 export { default as ConfigDiffView } from "./components/analytical/ConfigDiffView.svelte";

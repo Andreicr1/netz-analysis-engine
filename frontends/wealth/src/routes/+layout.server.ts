@@ -4,8 +4,8 @@
  */
 import type { LayoutServerLoad } from "./$types";
 import { createServerApiClient } from "$lib/api/client";
-import { defaultDarkBranding } from "@netz/ui/utils";
-import type { BrandingConfig } from "@netz/ui/utils";
+import { defaultDarkBranding } from "@investintell/ui/utils";
+import type { BrandingConfig } from "@investintell/ui/utils";
 export const load: LayoutServerLoad = async ({ locals }) => {
 	const { actor, token } = locals;
 
