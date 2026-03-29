@@ -1,9 +1,9 @@
 # Database Inventory Reference
 
-**Last updated:** 2026-03-28
+**Last updated:** 2026-03-29
 **Database:** Timescale Cloud (PostgreSQL 16 + TimescaleDB + pgvector)
-**Migration head:** `0067_insider_transactions`
-**Total tables:** ~132 | **Total data rows:** ~3.8M across key tables
+**Migration head:** `0069_globalize_instruments_nav`
+**Total tables:** ~133 | **Total data rows:** ~3.8M across key tables
 
 ---
 
@@ -897,7 +897,7 @@ All sources use incremental embedding via LEFT JOIN anti-pattern (only rows with
 
 | Aggregate | Source | Rows | Refresh | Description |
 |---|---|---|---|---|
-| `nav_monthly_returns_agg` | `nav_timeseries` | 384 | Daily | Monthly compound returns per instrument (log + arithmetic) |
+| `nav_monthly_returns_agg` | `nav_timeseries` | 384 | Daily | Monthly compound returns per instrument (no org_id — global) |
 | `benchmark_monthly_agg` | `benchmark_nav` | 400 | Daily | Monthly benchmark returns per allocation block |
 | `sec_13f_holdings_agg` | `sec_13f_holdings` | 1,964 | Daily | Quarterly sector allocation per CIK |
 | `sec_13f_drift_agg` | `sec_13f_diffs` | 529 | Daily | Quarterly position churn per CIK |
@@ -910,9 +910,9 @@ All sources use incremental embedding via LEFT JOIN anti-pattern (only rows with
 | Attribute | Value |
 |---|---|
 | **org_id** | `e28fc30c-9d6d-4b21-8e91-cad8696b44fa` |
-| **Instruments** | 16 ETF proxies (one per allocation block) |
-| **NAV history** | 8,016 daily observations (2024-03-25 to 2026-03-24) |
-| **Risk metrics** | 16 instruments computed |
+| **Instruments** | 17 in global `instruments_universe` (post-dedup), 17 linked via `instruments_org` |
+| **NAV history** | 5,511 daily observations in global `nav_timeseries` (2024-03-27 to 2026-03-26) |
+| **Risk metrics** | 15 instruments computed |
 | **Portfolios** | 3 live model portfolios (Conservative Income, Balanced Growth, Aggressive Growth) |
 | **Regime** | All profiles: RISK_ON, trigger status OK |
 
@@ -925,7 +925,7 @@ All sources use incremental embedding via LEFT JOIN anti-pattern (only rows with
 | `macro_ingestion` | 43 | global | Daily | FRED API | `macro_data` |
 | `treasury_ingestion` | 900_011 | global | Daily | US Treasury API | `treasury_data` |
 | `benchmark_ingest` | 900_004 | global | Daily | Yahoo Finance | `benchmark_nav` |
-| `instrument_ingestion` | 900_010 | org | Daily | Yahoo Finance | `nav_timeseries` |
+| `instrument_ingestion` | 900_010 | global | Daily | Yahoo Finance | `nav_timeseries` |
 | `risk_calc` | 900_007 | org | Daily | Computed | `fund_risk_metrics` |
 | `portfolio_eval` | 900_008 | org | Daily | Computed | `portfolio_snapshots` |
 | `drift_check` | 42 | org | Daily | Computed | `strategy_drift_alerts` |
@@ -939,6 +939,62 @@ All sources use incremental embedding via LEFT JOIN anti-pattern (only rows with
 | `sec_bulk_ingestion` | 900_050 | global | Quarterly | SEC DERA bulk ZIPs | sec_etfs, sec_bdcs, sec_money_market_funds, sec_mmf_metrics, sec_registered_funds + strategy_label backfill |
 | `form345_ingestion` | 900_051 | global | Quarterly | SEC EDGAR Form 345 bulk TSV | `sec_insider_transactions`, `sec_insider_sentiment` (MV) |
 | `wealth_embedding` | 900_041 | global | Daily | Computed | `wealth_vector_chunks` (12 sources) |
+
+---
+
+## 6.1 Global Instruments Refactor (Migration 0068-0069, 2026-03-29)
+
+`instruments_universe` and `nav_timeseries` are now **global tables** (no `organization_id`, no RLS). Org-scoped instrument selection moved to `instruments_org`.
+
+### Rationale
+
+Market data (prices, fund metadata) is the same regardless of which tenant views it. The previous design duplicated instruments per org and ran the NAV ingestion worker once per tenant for the same tickers.
+
+### Schema Changes
+
+| Table | Before | After |
+|---|---|---|
+| `instruments_universe` | org-scoped (RLS, `organization_id`, `block_id`, `approval_status`) | **global** — no org_id, no block_id, no approval_status, no RLS |
+| `nav_timeseries` | org-scoped (RLS, `organization_id`) | **global** — no org_id, no RLS. Compression segmentby = `instrument_id` |
+| `instruments_org` | did not exist | **new** — org-scoped (RLS), links orgs to instruments with `block_id` + `approval_status` |
+| `nav_monthly_returns_agg` | grouped by `(organization_id, instrument_id, month)` | grouped by `(instrument_id, month)` — recreated without org_id |
+
+### `instruments_org` Schema
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | UUID PK | gen_random_uuid() |
+| `organization_id` | UUID NOT NULL | RLS-scoped |
+| `instrument_id` | UUID NOT NULL FK | → `instruments_universe.instrument_id` ON DELETE CASCADE |
+| `block_id` | VARCHAR(80) FK | → `allocation_blocks.block_id` (org-specific assignment) |
+| `approval_status` | VARCHAR(20) | `pending` / `approved` / `rejected` |
+| `selected_at` | TIMESTAMPTZ | Default now() |
+| | UNIQUE | `(organization_id, instrument_id)` |
+
+### Worker Impact
+
+| Worker | Before | After |
+|---|---|---|
+| `instrument_ingestion` | scope: `org` (ran 1x per tenant, received `org_id`) | scope: `global` (runs once, deduplicates tickers) |
+| `risk_calc` | queried `Instrument` via RLS | JOINs `instruments_org` for org scoping + `block_id` lookup |
+| `portfolio_eval` | uses `Fund` (legacy) — unaffected | no change |
+| `benchmark_ingest` | already global | no change |
+
+### Query Pattern Change
+
+```sql
+-- Before: RLS on instruments_universe filtered by org
+SELECT * FROM instruments_universe WHERE is_active = true;
+
+-- After: explicit JOIN instruments_org for org-scoped queries
+SELECT iu.*
+FROM instruments_universe iu
+JOIN instruments_org io ON io.instrument_id = iu.instrument_id
+WHERE io.organization_id = :org_id AND iu.is_active = true;
+
+-- NAV queries: no org filter needed (global table)
+SELECT * FROM nav_timeseries WHERE instrument_id = :id;
+```
 
 ---
 
@@ -970,7 +1026,7 @@ All sources use incremental embedding via LEFT JOIN anti-pattern (only rows with
 | **Coverage — CUSIP Mapping** | sec_cusip_ticker_map | 12,609 CUSIPs, 95.0% resolved, 5,160 with issuer_cik |
 | **Coverage — Insider Transactions** | sec_insider_transactions (Q4 2025) | 59,677 transactions (5,447 P + 22,489 S); 2,956 issuer-quarters in sentiment MV |
 | **Coverage — Embeddings** | pgvector sources | 12 active sources across all fund universes |
-| **Freshness — Markets** | NAV/benchmark data | Updated to 2026-03-24 |
+| **Freshness — Markets** | NAV/benchmark data | Updated to 2026-03-26 (gap 27-29 Mar pending backfill) |
 | **Freshness — Macro** | FRED data | Updated to 2026-03-24 |
 | **Freshness — SEC** | 13F holdings | Through Q4 2025 |
 | **Freshness — SEC** | N-PORT filings | Through 2026-03-23 |
@@ -983,6 +1039,6 @@ All sources use incremental embedding via LEFT JOIN anti-pattern (only rows with
 | **History — IMF** | Forecast horizon | To 2030 |
 | **History — MMF** | Daily metrics | N-MFP Feb-Mar 2026 (20,270 rows) |
 | **Derived Data** | 13F quarter-over-quarter diffs | 1,071,320 position changes |
-| **Derived Data** | Continuous aggregates | 5 materialized views, auto-refreshed daily |
+| **Derived Data** | Continuous aggregates | 5 materialized views, auto-refreshed daily (nav_monthly_returns_agg rebuilt without org_id) |
 | **Automation** | Quarterly SEC bulk ingestion | `sec_bulk_ingestion` worker (lock 900_050) — N-CEN, N-MFP, BDC, strategy_label |
 | **Automation** | Daily wealth embedding | `wealth_embedding` worker (lock 900_041) — 12 sources, incremental |

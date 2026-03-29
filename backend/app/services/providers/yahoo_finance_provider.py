@@ -33,8 +33,8 @@ _BOND_QUOTE_TYPES = frozenset({"BOND"})
 _MAX_CONCURRENT = 30
 _HOURLY_BUDGET = 2000
 _INFO_SLEEP_SECONDS = 0.5  # Serialize .info calls (not thread-safe)
-_BATCH_CHUNK_SIZE = 500
-_BATCH_CHUNK_SLEEP = 2.0
+_BATCH_CHUNK_SIZE = 50
+_BATCH_CHUNK_SLEEP = 10.0
 
 
 class YahooFinanceProvider:

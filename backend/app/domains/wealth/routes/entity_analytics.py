@@ -24,6 +24,7 @@ from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.benchmark_nav import BenchmarkNav
 from app.domains.wealth.models.block import AllocationBlock
 from app.domains.wealth.models.instrument import Instrument
+from app.domains.wealth.models.instrument_org import InstrumentOrg
 from app.domains.wealth.models.model_portfolio import ModelPortfolio
 from app.domains.wealth.schemas.entity_analytics import (
     CaptureRatios,
@@ -69,9 +70,9 @@ async def _resolve_entity_meta(
         return "model_portfolio", name, None
 
     row = await db.execute(
-        select(Instrument.name, Instrument.block_id).where(
-            Instrument.instrument_id == entity_id,
-        ),
+        select(Instrument.name, InstrumentOrg.block_id)
+        .outerjoin(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
+        .where(Instrument.instrument_id == entity_id),
     )
     inst = row.one_or_none()
     if inst is None:

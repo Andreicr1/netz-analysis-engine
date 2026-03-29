@@ -437,16 +437,16 @@ async def approve_dd_report(
         after={"status": "approved", "rationale": body.rationale},
     )
 
-    # Update instrument approval_status in instruments_universe
-    from app.domains.wealth.models.instrument import Instrument
+    # Update instrument approval_status in instruments_org (org-scoped)
+    from app.domains.wealth.models.instrument_org import InstrumentOrg
     from app.domains.wealth.models.universe_approval import UniverseApproval
 
-    inst_result = await db.execute(
-        select(Instrument).where(Instrument.instrument_id == report.instrument_id),
+    io_result = await db.execute(
+        select(InstrumentOrg).where(InstrumentOrg.instrument_id == report.instrument_id),
     )
-    instrument = inst_result.scalar_one_or_none()
-    if instrument:
-        instrument.approval_status = "approved"
+    instrument_org = io_result.scalar_one_or_none()
+    if instrument_org:
+        instrument_org.approval_status = "approved"
 
     # Create UniverseApproval record for audit trail
     approval = UniverseApproval(
@@ -515,15 +515,15 @@ async def reject_dd_report(
         after={"status": "draft", "rejection_reason": body.reason},
     )
 
-    # Revert instrument approval_status to pending
-    from app.domains.wealth.models.instrument import Instrument
+    # Revert instrument approval_status to pending in instruments_org (org-scoped)
+    from app.domains.wealth.models.instrument_org import InstrumentOrg
 
-    inst_result = await db.execute(
-        select(Instrument).where(Instrument.instrument_id == report.instrument_id),
+    io_result = await db.execute(
+        select(InstrumentOrg).where(InstrumentOrg.instrument_id == report.instrument_id),
     )
-    instrument = inst_result.scalar_one_or_none()
-    if instrument and instrument.approval_status == "approved":
-        instrument.approval_status = "pending"
+    instrument_org = io_result.scalar_one_or_none()
+    if instrument_org and instrument_org.approval_status == "approved":
+        instrument_org.approval_status = "pending"
 
     await db.commit()
 

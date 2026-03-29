@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domains.wealth.models.fund import Fund
+from app.domains.wealth.models.instrument_org import InstrumentOrg
 from app.domains.wealth.models.nav import NavTimeseries
 from app.domains.wealth.models.risk import FundRiskMetrics
 
@@ -133,16 +134,25 @@ class QuantAnalyzer:
         self, db: Session, fund_id: uuid.UUID,
     ) -> dict[str, Any] | None:
         """Rank fund against peers in same block."""
-        fund = db.execute(
-            select(Fund).where(Fund.fund_id == fund_id),
+        # Try InstrumentOrg first for block_id, fallback to legacy Fund
+        inst_org = db.execute(
+            select(InstrumentOrg).where(InstrumentOrg.instrument_id == fund_id),
         ).scalar_one_or_none()
 
-        if fund is None or not fund.block_id:
+        if inst_org is not None:
+            block_id = inst_org.block_id
+        else:
+            fund = db.execute(
+                select(Fund).where(Fund.fund_id == fund_id),
+            ).scalar_one_or_none()
+            block_id = fund.block_id if fund else None
+
+        if not block_id:
             return None
 
         from app.domains.wealth.services.quant_queries import compare
 
-        result = compare(db, fund_id=fund_id, block_id=fund.block_id)
+        result = compare(db, fund_id=fund_id, block_id=block_id)
         return {
             "rank": result.target_rank,
             "peer_count": result.peer_count,

@@ -1,10 +1,9 @@
-"""Instrument Universe ORM model.
+"""Instrument Universe ORM model — GLOBAL catalog (no RLS).
 
-Polymorphic replacement for funds_universe. Supports fund, bond, and equity
-instrument types via a shared table with type-specific JSONB attributes.
+Polymorphic instrument catalog shared across all tenants.
+Org-specific data (block_id, approval_status) lives in instruments_org.
 
-IMPORTANT: This replaces Fund (fund.py). fund.py is DEPRECATED and will be
-removed alongside migration 0012 (DROP funds_universe) in a separate PR.
+See instrument_org.py for tenant-scoped selection/assignment.
 """
 
 from __future__ import annotations
@@ -12,14 +11,14 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Uuid, func
+from sqlalchemy import Boolean, DateTime, String, Uuid, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db.base import Base, OrganizationScopedMixin
+from app.core.db.base import Base
 
 
-class Instrument(OrganizationScopedMixin, Base):
+class Instrument(Base):
     __tablename__ = "instruments_universe"
 
     instrument_id: Mapped[uuid.UUID] = mapped_column(
@@ -37,13 +36,7 @@ class Instrument(OrganizationScopedMixin, Base):
     currency: Mapped[str] = mapped_column(
         String(3), nullable=False, server_default="USD",
     )
-    block_id: Mapped[str | None] = mapped_column(
-        String(80), ForeignKey("allocation_blocks.block_id"), index=True,
-    )
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
-    approval_status: Mapped[str] = mapped_column(
-        String(20), server_default="pending",
-    )
     attributes: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),

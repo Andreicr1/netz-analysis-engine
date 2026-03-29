@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.wealth.models.instrument import Instrument
+from app.domains.wealth.models.instrument_org import InstrumentOrg
 from app.shared.models import EsmaFund, EsmaIsinTickerMap, EsmaManager
 
 # Map ESMA domicile (ISO-2) → geography + currency
@@ -54,17 +55,32 @@ async def import_esma_fund_to_universe(
     Determines currency and geography from domicile.
     Populates attributes JSONB with structure, domicile, fund_type, host_member_states.
     """
-    # Check not already imported
-    existing_stmt = select(Instrument).where(
-        Instrument.isin == isin,
-        Instrument.organization_id == org_id,
-    )
+    # Check if instrument already exists globally by ISIN
+    existing_stmt = select(Instrument).where(Instrument.isin == isin)
     existing = (await db.execute(existing_stmt)).scalar_one_or_none()
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Instrument with ISIN {isin} already exists in universe",
+        # Check if already linked to this org
+        existing_link = (await db.execute(
+            select(InstrumentOrg).where(
+                InstrumentOrg.instrument_id == existing.instrument_id,
+                InstrumentOrg.organization_id == org_id,
+            ),
+        )).scalar_one_or_none()
+        if existing_link:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Instrument with ISIN {isin} already exists in your universe",
+            )
+        # Link existing global instrument to this org
+        org_link = InstrumentOrg(
+            organization_id=org_id,
+            instrument_id=existing.instrument_id,
+            block_id=block_id,
+            approval_status="pending",
         )
+        db.add(org_link)
+        await db.flush()
+        return existing
 
     # Fetch ESMA fund
     fund_stmt = select(EsmaFund).where(EsmaFund.isin == isin)
@@ -109,7 +125,6 @@ async def import_esma_fund_to_universe(
         attributes["strategy_label"] = fund.strategy_label
 
     instrument = Instrument(
-        organization_id=org_id,
         instrument_type="fund",
         name=fund.fund_name,
         isin=isin,
@@ -117,11 +132,19 @@ async def import_esma_fund_to_universe(
         asset_class="alternatives",
         geography=geography,
         currency=currency,
-        block_id=block_id,
-        approval_status="pending",
         attributes=attributes,
     )
     db.add(instrument)
+    await db.flush()
+
+    # Create org-scoped link
+    org_link = InstrumentOrg(
+        organization_id=org_id,
+        instrument_id=instrument.instrument_id,
+        block_id=block_id,
+        approval_status="pending",
+    )
+    db.add(org_link)
     await db.flush()
     await db.refresh(instrument)
     return instrument

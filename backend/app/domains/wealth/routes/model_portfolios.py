@@ -819,23 +819,25 @@ async def _load_universe_funds(
 ) -> list[dict[str, Any]]:
     """Load approved universe instruments with manager_score from risk metrics."""
     from app.domains.wealth.models.instrument import Instrument
+    from app.domains.wealth.models.instrument_org import InstrumentOrg
     from app.domains.wealth.models.risk import FundRiskMetrics
     from app.domains.wealth.models.universe_approval import UniverseApproval
 
-    # Approved universe assets
+    # Approved universe assets — block_id comes from InstrumentOrg (org-scoped)
     stmt = (
         select(
             Instrument.instrument_id,
             Instrument.name,
-            Instrument.block_id,
+            InstrumentOrg.block_id,
         )
+        .join(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
         .join(
             UniverseApproval,
             (UniverseApproval.instrument_id == Instrument.instrument_id)
             & (UniverseApproval.is_current == True)
             & (UniverseApproval.decision == "approved"),
         )
-        .where(Instrument.is_active == True, Instrument.block_id.isnot(None))
+        .where(Instrument.is_active == True, InstrumentOrg.block_id.isnot(None))
     )
     funds_result = await db.execute(stmt)
     funds_rows = funds_result.all()

@@ -293,12 +293,14 @@ class DDReportEngine:
         (fund-level) vs 13F (firm-level overlay) holdings.
         """
         from app.domains.wealth.models.instrument import Instrument
+        from app.domains.wealth.models.instrument_org import InstrumentOrg
 
         instrument = (
             db.query(Instrument)
+            .join(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
             .filter(
                 Instrument.instrument_id == fund_id,
-                Instrument.organization_id == organization_id,
+                InstrumentOrg.organization_id == organization_id,
             )
             .first()
         )

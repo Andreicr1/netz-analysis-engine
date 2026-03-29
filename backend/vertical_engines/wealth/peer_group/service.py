@@ -85,23 +85,28 @@ class PeerGroupService:
         with >= 20 members.
         """
         from app.domains.wealth.models.instrument import Instrument
+        from app.domains.wealth.models.instrument_org import InstrumentOrg
 
-        # Get target instrument
-        target = db.execute(
-            select(Instrument).where(
+        # Get target instrument + org-scoped data
+        target_row = db.execute(
+            select(Instrument, InstrumentOrg)
+            .join(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
+            .where(
                 Instrument.instrument_id == instrument_id,
-                Instrument.organization_id == organization_id,
+                InstrumentOrg.organization_id == organization_id,
                 Instrument.is_active.is_(True),
             ),
-        ).scalar_one_or_none()
+        ).first()
 
-        if target is None:
+        if target_row is None:
             return PeerGroupNotFound(
                 instrument_id=instrument_id,
                 reason="instrument_not_found",
             )
 
-        if not target.block_id:
+        target, target_org = target_row
+
+        if not target_org.block_id:
             return PeerGroupNotFound(
                 instrument_id=instrument_id,
                 reason="no_block_assigned",
@@ -109,27 +114,29 @@ class PeerGroupService:
 
         # Get all active instruments of the same type in this org
         rows = db.execute(
-            select(Instrument).where(
-                Instrument.organization_id == organization_id,
+            select(Instrument, InstrumentOrg)
+            .join(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
+            .where(
+                InstrumentOrg.organization_id == organization_id,
                 Instrument.instrument_type == target.instrument_type,
                 Instrument.is_active.is_(True),
             ),
-        ).scalars().all()
+        ).all()
 
         universe = [
             {
-                "instrument_id": r.instrument_id,
-                "instrument_type": r.instrument_type,
-                "block_id": r.block_id,
-                "attributes": r.attributes or {},
+                "instrument_id": r_inst.instrument_id,
+                "instrument_type": r_inst.instrument_type,
+                "block_id": r_org.block_id,
+                "attributes": r_inst.attributes or {},
             }
-            for r in rows
+            for r_inst, r_org in rows
         ]
 
         return match_peers(
             target_instrument_id=instrument_id,
             target_type=target.instrument_type,
-            target_block_id=target.block_id,
+            target_block_id=target_org.block_id,
             target_attributes=target.attributes or {},
             universe=universe,
         )
@@ -165,27 +172,32 @@ class PeerGroupService:
         instruments instead of re-querying per instrument.
         """
         from app.domains.wealth.models.instrument import Instrument
+        from app.domains.wealth.models.instrument_org import InstrumentOrg
 
         if not instrument_ids:
             return []
 
         # 1. Load all active instruments for this org — single query
         rows = db.execute(
-            select(Instrument).where(
-                Instrument.organization_id == organization_id,
+            select(Instrument, InstrumentOrg)
+            .join(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
+            .where(
+                InstrumentOrg.organization_id == organization_id,
                 Instrument.is_active.is_(True),
             ),
-        ).scalars().all()
+        ).all()
 
         instruments_by_id: dict[uuid.UUID, Any] = {}
+        org_by_id: dict[uuid.UUID, Any] = {}
         universe: list[dict[str, Any]] = []
-        for r in rows:
-            instruments_by_id[r.instrument_id] = r
+        for r_inst, r_org in rows:
+            instruments_by_id[r_inst.instrument_id] = r_inst
+            org_by_id[r_inst.instrument_id] = r_org
             universe.append({
-                "instrument_id": r.instrument_id,
-                "instrument_type": r.instrument_type,
-                "block_id": r.block_id,
-                "attributes": r.attributes or {},
+                "instrument_id": r_inst.instrument_id,
+                "instrument_type": r_inst.instrument_type,
+                "block_id": r_org.block_id,
+                "attributes": r_inst.attributes or {},
             })
 
         # 2. Find peer groups for all targets using shared universe
@@ -194,12 +206,13 @@ class PeerGroupService:
 
         for iid in instrument_ids:
             target = instruments_by_id.get(iid)
-            if target is None:
+            target_org = org_by_id.get(iid)
+            if target is None or target_org is None:
                 peer_groups[iid] = PeerGroupNotFound(
                     instrument_id=iid, reason="instrument_not_found",
                 )
                 continue
-            if not target.block_id:
+            if not target_org.block_id:
                 peer_groups[iid] = PeerGroupNotFound(
                     instrument_id=iid, reason="no_block_assigned",
                 )
@@ -208,7 +221,7 @@ class PeerGroupService:
             pg = match_peers(
                 target_instrument_id=iid,
                 target_type=target.instrument_type,
-                target_block_id=target.block_id,
+                target_block_id=target_org.block_id,
                 target_attributes=target.attributes or {},
                 universe=universe,
             )

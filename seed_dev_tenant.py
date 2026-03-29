@@ -35,6 +35,7 @@ from app.core.security.clerk_auth import clerk_org_to_uuid
 from app.core.tenancy.middleware import set_rls_context
 from app.domains.wealth.models.allocation import StrategicAllocation
 from app.domains.wealth.models.instrument import Instrument
+from app.domains.wealth.models.instrument_org import InstrumentOrg
 
 DEV_ORG_ID = uuid.UUID("e28fc30c-9d6d-4b21-8e91-cad8696b44fa")
 ORG_ID: uuid.UUID = DEV_ORG_ID  # overridden by --clerk-org
@@ -145,10 +146,7 @@ async def seed():
                 "geography":       geo,
                 "asset_class":     asset_class,
                 "currency":        currency,
-                "block_id":        block_id,
                 "is_active":       True,
-                "approval_status": "approved",
-                "organization_id": ORG_ID,
                 "attributes": {
                     "aum_usd": 1_000_000_000,
                     "manager_name": name.split(" ")[0],
@@ -163,11 +161,31 @@ async def seed():
                 "ticker": stmt.excluded.ticker,
                 "is_active": True,
                 "name": stmt.excluded.name,
-                "block_id": stmt.excluded.block_id,
             },
         )
         await db.execute(stmt)
         print(f"[instruments_universe] Upserted {len(inst_rows)} instruments")
+
+        # ── 1b. Upsert instruments_org (org-scoped links) ───────────────
+        org_link_rows = []
+        for block_id, itype, name, isin, ticker, geo, asset_class, currency in INSTRUMENTS:
+            org_link_rows.append({
+                "id": uuid.uuid5(_NS, f"org-link-{isin}"),
+                "organization_id": ORG_ID,
+                "instrument_id": _det_id(isin),
+                "block_id": block_id,
+                "approval_status": "approved",
+            })
+        stmt_org = pg_insert(InstrumentOrg).values(org_link_rows)
+        stmt_org = stmt_org.on_conflict_do_update(
+            constraint="instruments_org_organization_id_instrument_id_key",
+            set_={
+                "block_id": stmt_org.excluded.block_id,
+                "approval_status": stmt_org.excluded.approval_status,
+            },
+        )
+        await db.execute(stmt_org)
+        print(f"[instruments_org] Upserted {len(org_link_rows)} org links")
 
         # ── 2. Upsert funds_universe (legacy table for risk_calc/portfolio_eval) ──
         # Uses the SAME deterministic UUIDs so nav_timeseries FK works for both
@@ -259,19 +277,17 @@ async def run_workers(lookback_days: int = 730):
     print(f"Running workers (lookback={lookback_days} days)...")
     print(f"{'='*60}")
 
-    # ── Step 1: Instrument ingestion (needs db session) ──
+    # ── Step 1: Instrument ingestion (global — no org context needed) ──
     print("\n[1/3] Running instrument_ingestion...")
     from app.domains.wealth.workers.instrument_ingestion import run_instrument_ingestion
 
-    async with async_session_factory() as db:
-        await set_rls_context(db, ORG_ID)
-        result = await run_instrument_ingestion(db, ORG_ID, lookback_days=lookback_days)
-        print(f"  instruments_processed: {result['instruments_processed']}")
-        print(f"  rows_upserted: {result['rows_upserted']}")
-        if result["skipped_tickers"]:
-            print(f"  skipped: {result['skipped_tickers']}")
-        if result["errors"]:
-            print(f"  errors: {result['errors']}")
+    result = await run_instrument_ingestion(lookback_days=lookback_days)
+    print(f"  instruments_processed: {result['instruments_processed']}")
+    print(f"  rows_upserted: {result['rows_upserted']}")
+    if result["skipped_tickers"]:
+        print(f"  skipped: {result['skipped_tickers']}")
+    if result["errors"]:
+        print(f"  errors: {result['errors']}")
 
     if result["rows_upserted"] == 0:
         print("\nERROR: No NAV data ingested. Cannot proceed with risk_calc.")

@@ -1,3 +1,9 @@
+"""NAV timeseries — GLOBAL table (no RLS, no organization_id).
+
+Prices are market data, shared across all tenants.
+Org-scoping is via instruments_org JOIN.
+"""
+
 import uuid
 from datetime import date
 from decimal import Decimal
@@ -5,10 +11,10 @@ from decimal import Decimal
 from sqlalchemy import Date, ForeignKey, Numeric, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db.base import Base, OrganizationScopedMixin
+from app.core.db.base import Base
 
 
-class NavTimeseries(OrganizationScopedMixin, Base):
+class NavTimeseries(Base):
     __tablename__ = "nav_timeseries"
 
     instrument_id: Mapped[uuid.UUID] = mapped_column(

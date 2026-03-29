@@ -24,6 +24,7 @@ from app.core.db.engine import async_session_factory as async_session
 from app.core.jobs.tracker import get_redis_pool
 from app.core.tenancy.middleware import set_rls_context
 from app.domains.wealth.models.instrument import Instrument
+from app.domains.wealth.models.instrument_org import InstrumentOrg
 from app.domains.wealth.models.macro import MacroData
 from app.domains.wealth.models.nav import NavTimeseries
 from app.domains.wealth.models.risk import FundRiskMetrics
@@ -538,18 +539,25 @@ async def _compute_block_dtw_scores(
     funds_with_metrics: list[tuple["Instrument", dict]],
     as_of_date: date,
     dtw_window: int = 63,
+    block_id_map: dict[str, str | None] | None = None,
 ) -> dict[str, DtwDriftResult]:
     """Compute DTW drift scores for all funds, grouped by block.
 
     Each fund is compared against the equal-weight average of all fund returns
     in the same block. If a block has fewer than 2 funds, returns a degraded result.
 
+    block_id_map: maps instrument_id (str) → block_id from instruments_org.
+
     Returns a dict mapping fund_id (str) → DtwDriftResult.
     """
-    # Group funds by block_id
+    if block_id_map is None:
+        block_id_map = {}
+
+    # Group funds by block_id (looked up from instruments_org via block_id_map)
     block_funds: dict[str | None, list[tuple[Instrument, dict]]] = defaultdict(list)
     for fund, metrics in funds_with_metrics:
-        block_funds[fund.block_id].append((fund, metrics))
+        bid = block_id_map.get(str(fund.instrument_id))
+        block_funds[bid].append((fund, metrics))
 
     dtw_scores: dict[str, DtwDriftResult] = {}
 
@@ -680,13 +688,28 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
             rfr = await get_risk_free_rate(db)
             logger.info("Risk-free rate for this run", rate=rfr)
 
-            stmt = select(Instrument).where(
-                Instrument.is_active == True,
-                Instrument.ticker.is_not(None),
-                Instrument.instrument_type == "fund",
+            stmt = (
+                select(Instrument)
+                .join(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
+                .where(
+                    InstrumentOrg.organization_id == org_id,
+                    Instrument.is_active == True,
+                    Instrument.ticker.is_not(None),
+                    Instrument.instrument_type == "fund",
+                )
             )
             result = await db.execute(stmt)
             funds = result.scalars().all()
+
+            # Fetch block_id mapping from instruments_org
+            block_id_stmt = (
+                select(InstrumentOrg.instrument_id, InstrumentOrg.block_id)
+                .where(InstrumentOrg.organization_id == org_id)
+            )
+            block_id_result = await db.execute(block_id_stmt)
+            block_id_map: dict[str, str | None] = {
+                str(iid): bid for iid, bid in block_id_result.all()
+            }
 
             logger.info("Funds to process", count=len(funds))
 
@@ -766,7 +789,7 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
 
             # Pass 2: compute DTW drift scores per block (reuses DB session, no extra query per fund)
             logger.info("Computing DTW drift scores", n_funds=len(computed))
-            dtw_scores = await _compute_block_dtw_scores(db, computed, eval_date)
+            dtw_scores = await _compute_block_dtw_scores(db, computed, as_of_date=eval_date, block_id_map=block_id_map)
             logger.info("DTW drift scores computed", n_scores=len(dtw_scores))
 
             # Pass 3: upsert metrics + dtw_drift_score (all in one transaction)

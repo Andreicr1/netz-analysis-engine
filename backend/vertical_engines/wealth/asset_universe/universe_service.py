@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.domains.wealth.models.fund import Fund
 from app.domains.wealth.models.instrument import Instrument
+from app.domains.wealth.models.instrument_org import InstrumentOrg
 from app.domains.wealth.models.universe_approval import UniverseApproval
 from vertical_engines.wealth.asset_universe.fund_approval import (
     create_pending_approval,
@@ -60,7 +61,15 @@ class UniverseService:
                 raise ValueError(f"Fund {instrument_id} not found")
             fund.approval_status = "dd_complete"
         else:
-            inst.approval_status = "dd_complete"
+            # Update approval_status on InstrumentOrg (org-scoped)
+            inst_org = db.execute(
+                select(InstrumentOrg).where(
+                    InstrumentOrg.instrument_id == instrument_id,
+                    InstrumentOrg.organization_id == organization_id,
+                ),
+            ).scalar_one_or_none()
+            if inst_org:
+                inst_org.approval_status = "dd_complete"
 
         # Verify DD report is valid
         validate_dd_report(db, analysis_report_id, instrument_id)
@@ -122,7 +131,11 @@ class UniverseService:
     ) -> list[UniverseAsset]:
         """List approved funds in the universe with optional filters."""
         stmt = (
-            select(Instrument, UniverseApproval)
+            select(Instrument, InstrumentOrg, UniverseApproval)
+            .join(
+                InstrumentOrg,
+                InstrumentOrg.instrument_id == Instrument.instrument_id,
+            )
             .join(
                 UniverseApproval,
                 (UniverseApproval.instrument_id == Instrument.instrument_id)
@@ -131,12 +144,12 @@ class UniverseService:
             )
             .where(
                 Instrument.is_active.is_(True),
-                Instrument.organization_id == organization_id,
+                InstrumentOrg.organization_id == organization_id,
             )
         )
 
         if block_id is not None:
-            stmt = stmt.where(Instrument.block_id == block_id)
+            stmt = stmt.where(InstrumentOrg.block_id == block_id)
         if geography is not None:
             stmt = stmt.where(Instrument.geography == geography)
         if asset_class is not None:
@@ -149,14 +162,14 @@ class UniverseService:
             UniverseAsset(
                 instrument_id=inst.instrument_id,
                 fund_name=inst.name,
-                block_id=inst.block_id,
+                block_id=inst_org.block_id,
                 geography=inst.geography,
                 asset_class=inst.asset_class,
-                approval_status=inst.approval_status,
+                approval_status=inst_org.approval_status,
                 approval_decision=approval.decision,
                 approved_at=approval.decided_at,
             )
-            for inst, approval in rows
+            for inst, inst_org, approval in rows
         ]
 
     def list_pending(
@@ -189,9 +202,11 @@ class UniverseService:
         is computed when the fund was previously approved.
         """
         inst = db.execute(
-            select(Instrument).where(
+            select(Instrument)
+            .join(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
+            .where(
                 Instrument.instrument_id == instrument_id,
-                Instrument.organization_id == organization_id,
+                InstrumentOrg.organization_id == organization_id,
             ).with_for_update(),
         ).scalar_one_or_none()
 

@@ -4,6 +4,7 @@ Sources:
   A. sec_manager_brochure_text → entity_type="firm", source_type="brochure"
   F. sec_managers + team/funds  → entity_type="firm", source_type="sec_manager_profile"
   G. sec_registered_funds + N-CEN + XBRL → entity_type="fund", source_type="sec_fund_profile"
+  O. sec_fund_classes per-series XBRL   → entity_type="fund", source_type="sec_fund_series_profile"
   H. sec_13f_holdings summary  → entity_type="firm", source_type="sec_13f_summary"
   I. sec_manager_funds grouped → entity_type="firm", source_type="sec_private_funds"
   J. esma_funds enriched       → entity_type="fund", source_type="esma_fund_profile"
@@ -43,6 +44,10 @@ BROCHURE_EMBED_SECTIONS = frozenset({
     "advisory_business",
     "risk_management",
     "performance_fees",
+    "fees_compensation",
+    "client_types",
+    "disciplinary",
+    "brokerage_practices",
     "full_brochure",
 })
 
@@ -52,6 +57,10 @@ BROCHURE_SECTION_LABELS = {
     "advisory_business": "Advisory Business",
     "risk_management": "Risk Management",
     "performance_fees": "Performance Fees",
+    "fees_compensation": "Fees & Compensation",
+    "client_types": "Types of Clients",
+    "disciplinary": "Disciplinary Information",
+    "brokerage_practices": "Brokerage Practices",
     "full_brochure": "ADV Part 2A Brochure",
 }
 
@@ -81,6 +90,7 @@ async def run_wealth_embedding() -> dict:
                 ("brochure", _embed_brochure_sections),
                 ("sec_manager_profile", _embed_sec_manager_profiles),
                 ("sec_fund_profile", _embed_sec_fund_profiles),
+                ("sec_fund_series_profile", _embed_sec_fund_series_profiles),
                 ("sec_13f_summary", _embed_sec_13f_summaries),
                 ("sec_private_funds", _embed_sec_private_funds),
                 ("esma_fund_profile", _embed_esma_fund_profiles),
@@ -503,6 +513,137 @@ async def _embed_sec_fund_profiles(db: AsyncSession) -> dict:
     return {"embedded": len(rows)}
 
 
+# ── Source O: SEC Fund Series Profiles (per-series XBRL) ─────────────
+
+
+async def _embed_sec_fund_series_profiles(db: AsyncSession) -> dict:
+    """Embed per-series fund profiles from sec_fund_classes XBRL data.
+
+    Source G embeds 1 chunk per CIK (Trust-level), which loses granularity
+    for large trusts like Goldman Sachs Trust (660 share classes, 1 chunk).
+    This source creates 1 chunk per series_id — the actual fund unit — with
+    aggregated share class data (expense ratios, AUM, returns, tickers).
+    """
+    result = await db.execute(text("""
+        WITH series_agg AS (
+            SELECT fc.series_id,
+                   fc.cik,
+                   MAX(fc.series_name) AS series_name,
+                   COUNT(*) AS class_count,
+                   string_agg(
+                       COALESCE(fc.class_name, 'Class') ||
+                       COALESCE(' (' || fc.ticker || ')', '') ||
+                       CASE WHEN fc.expense_ratio_pct IS NOT NULL
+                            THEN ' ER:' || ROUND(fc.expense_ratio_pct * 100, 2) || '%%'
+                            ELSE '' END ||
+                       CASE WHEN fc.net_assets IS NOT NULL
+                            THEN ' AUM:$' || TRIM(TO_CHAR(fc.net_assets / 1e6, '999,999,999')) || 'M'
+                            ELSE '' END ||
+                       CASE WHEN fc.avg_annual_return_pct IS NOT NULL
+                            THEN ' Ret:' || ROUND(fc.avg_annual_return_pct * 100, 2) || '%%'
+                            ELSE '' END,
+                       '; ' ORDER BY fc.net_assets DESC NULLS LAST
+                   ) AS class_details,
+                   MIN(fc.expense_ratio_pct) FILTER (WHERE fc.expense_ratio_pct IS NOT NULL) AS min_er,
+                   MAX(fc.expense_ratio_pct) FILTER (WHERE fc.expense_ratio_pct IS NOT NULL) AS max_er,
+                   SUM(fc.net_assets) AS total_aum,
+                   MAX(fc.holdings_count) AS holdings_count,
+                   MAX(fc.portfolio_turnover_pct) AS turnover_pct,
+                   MAX(fc.perf_inception_date) AS inception_date,
+                   MAX(fc.advisory_fees_paid) AS advisory_fees
+            FROM sec_fund_classes fc
+            WHERE fc.series_id IS NOT NULL
+            GROUP BY fc.series_id, fc.cik
+        )
+        SELECT sa.series_id, sa.cik, sa.series_name, sa.class_count,
+               sa.class_details, sa.min_er, sa.max_er, sa.total_aum,
+               sa.holdings_count, sa.turnover_pct, sa.inception_date,
+               sa.advisory_fees,
+               f.fund_type, f.strategy_label, f.crd_number,
+               f.is_index, f.is_target_date, f.is_fund_of_fund,
+               m.firm_name AS adviser_name
+        FROM series_agg sa
+        JOIN sec_registered_funds f ON f.cik = sa.cik
+        LEFT JOIN sec_managers m ON m.crd_number = f.crd_number
+        LEFT JOIN wealth_vector_chunks w
+          ON w.id = 'sec_fund_series_' || sa.series_id
+        WHERE sa.series_name IS NOT NULL
+          AND w.id IS NULL
+        ORDER BY sa.series_id
+        LIMIT 10000
+    """))
+    rows = result.fetchall()
+    if not rows:
+        return {"embedded": 0}
+
+    now = datetime.now(tz=timezone.utc)
+    texts = []
+    for r in rows:
+        adviser_part = f" managed by {r.adviser_name}" if r.adviser_name else ""
+        strategy_part = f" Strategy: {r.strategy_label}." if r.strategy_label else ""
+
+        flags = []
+        if r.is_index:
+            flags.append("index fund")
+        if r.is_target_date:
+            flags.append("target-date")
+        if r.is_fund_of_fund:
+            flags.append("fund-of-funds")
+        flags_part = f" ({', '.join(flags)})" if flags else ""
+
+        # Expense ratio range
+        er_part = ""
+        if r.min_er is not None:
+            if r.min_er == r.max_er:
+                er_part = f" Expense ratio: {float(r.min_er) * 100:.2f}%."
+            else:
+                er_part = f" Expense ratio range: {float(r.min_er) * 100:.2f}%-{float(r.max_er) * 100:.2f}%."
+
+        aum_str = _format_aum(r.total_aum)
+        holdings_part = f" Holdings: {r.holdings_count}." if r.holdings_count else ""
+        turnover_part = f" Turnover: {float(r.turnover_pct) * 100:.1f}%." if r.turnover_pct else ""
+        fees_part = f" Advisory fees paid: ${r.advisory_fees:,.0f}." if r.advisory_fees else ""
+
+        # Truncate class details for large series
+        class_details = r.class_details or "N/A"
+        if len(class_details) > 4000:
+            class_details = class_details[:4000] + "..."
+
+        text_content = (
+            f"{r.series_name} (Series {r.series_id}, CIK {r.cik}) is a "
+            f"{r.fund_type or 'registered fund'}{flags_part}{adviser_part}."
+            f"{strategy_part} AUM: {aum_str}."
+            f"{er_part}{holdings_part}{turnover_part}{fees_part}"
+            f"\n\nShare classes ({r.class_count}): {class_details}."
+        )
+        texts.append(text_content)
+
+    batch = await async_generate_embeddings(texts, batch_size=EMBED_BATCH_SIZE)
+
+    upsert_rows = [
+        {
+            "id": f"sec_fund_series_{r.series_id}",
+            "organization_id": None,
+            "entity_id": r.series_id,
+            "entity_type": "fund",
+            "source_type": "sec_fund_series_profile",
+            "section": None,
+            "content": texts[i],
+            "language": "en",
+            "source_row_id": r.series_id,
+            "firm_crd": r.crd_number,
+            "filing_date": None,
+            "embedding": batch.vectors[i],
+            "embedding_model": batch.model,
+            "embedded_at": now,
+        }
+        for i, r in enumerate(rows)
+    ]
+    await _batch_upsert(db, upsert_rows)
+    logger.info("wealth_embedding.sec_fund_series_profiles_done", embedded=len(rows))
+    return {"embedded": len(rows)}
+
+
 # ── Source H: SEC 13F Holdings Summaries ─────────────────────────────
 
 
@@ -610,37 +751,44 @@ async def _embed_sec_private_funds(db: AsyncSession) -> dict:
     """Embed private fund portfolios → entity_type='firm', source_type='sec_private_funds'.
 
     AUM floor: only managers with combined GAV ≥ $1B are embedded.
+    One chunk per (crd_number, strategy_label) to preserve vintage-level detail
+    for large managers (e.g. Apollo 669 funds, Blackstone 400+).
     """
     result = await db.execute(text("""
-        WITH fund_agg AS (
+        WITH eligible_managers AS (
+            SELECT crd_number
+            FROM sec_manager_funds
+            GROUP BY crd_number
+            HAVING SUM(gross_asset_value) >= 1000000000
+        ),
+        strategy_agg AS (
             SELECT f.crd_number,
+                   COALESCE(f.strategy_label, 'Unclassified') AS strategy,
                    COUNT(*) AS fund_count,
-                   SUM(f.gross_asset_value) AS total_gav,
+                   SUM(f.gross_asset_value) AS strategy_gav,
                    COUNT(*) FILTER (WHERE f.is_fund_of_funds) AS fof_count,
-                   string_agg(DISTINCT f.strategy_label, ', ' ORDER BY f.strategy_label)
-                       FILTER (WHERE f.strategy_label IS NOT NULL) AS strategy_breakdown,
                    string_agg(DISTINCT f.fund_type, ', ' ORDER BY f.fund_type)
                        FILTER (WHERE f.fund_type IS NOT NULL) AS type_breakdown,
                    string_agg(
                        f.fund_name ||
-                       COALESCE(' [' || f.strategy_label || ']', '') ||
                        ': GAV ' || COALESCE('$' || TRIM(TO_CHAR(f.gross_asset_value, '999,999,999,999')), 'N/A') ||
                        ', ' || COALESCE(f.investor_count::text, '?') || ' investors',
                        '; ' ORDER BY f.gross_asset_value DESC NULLS LAST
                    ) AS fund_list
             FROM sec_manager_funds f
-            GROUP BY f.crd_number
-            HAVING SUM(f.gross_asset_value) >= 1000000000
+            JOIN eligible_managers em ON em.crd_number = f.crd_number
+            GROUP BY f.crd_number, COALESCE(f.strategy_label, 'Unclassified')
         )
-        SELECT fa.crd_number, fa.fund_count, fa.total_gav, fa.fof_count,
-               fa.strategy_breakdown, fa.type_breakdown, fa.fund_list,
+        SELECT sa.crd_number, sa.strategy, sa.fund_count, sa.strategy_gav,
+               sa.fof_count, sa.type_breakdown, sa.fund_list,
                m.firm_name
-        FROM fund_agg fa
-        JOIN sec_managers m ON m.crd_number = fa.crd_number
+        FROM strategy_agg sa
+        JOIN sec_managers m ON m.crd_number = sa.crd_number
         LEFT JOIN wealth_vector_chunks w
-          ON w.id = 'sec_private_funds_' || fa.crd_number
+          ON w.id = 'sec_private_funds_' || sa.crd_number || '_' ||
+             replace(lower(sa.strategy), ' ', '_')
         WHERE w.id IS NULL
-        ORDER BY fa.crd_number
+        ORDER BY sa.crd_number, sa.strategy
         LIMIT 10000
     """))
     rows = result.fetchall()
@@ -650,26 +798,30 @@ async def _embed_sec_private_funds(db: AsyncSession) -> dict:
     now = datetime.now(tz=timezone.utc)
     texts = []
     for r in rows:
+        # Truncate fund list to ~6000 chars to stay within embedding token limit
+        fund_list = r.fund_list or "N/A"
+        if len(fund_list) > 6000:
+            fund_list = fund_list[:6000] + "..."
         text_content = (
-            f"Private fund portfolio of {r.firm_name} (CRD {r.crd_number}): "
-            f"{r.fund_count} private funds, total GAV: {_format_aum(r.total_gav)}.\n\n"
-            f"Funds:\n{r.fund_list or 'N/A'}.\n\n"
+            f"{r.strategy} funds of {r.firm_name} (CRD {r.crd_number}): "
+            f"{r.fund_count} funds, GAV: {_format_aum(r.strategy_gav)}.\n\n"
+            f"Funds:\n{fund_list}.\n\n"
             f"Fund-of-funds: {r.fof_count}. "
-            f"Strategies: {r.strategy_breakdown or 'N/A'}. "
             f"SEC types: {r.type_breakdown or 'N/A'}."
         )
         texts.append(text_content)
 
     batch = await async_generate_embeddings(texts, batch_size=EMBED_BATCH_SIZE)
 
+    strategy_slug = lambda s: s.lower().replace(" ", "_").replace("/", "_")
     upsert_rows = [
         {
-            "id": f"sec_private_funds_{r.crd_number}",
+            "id": f"sec_private_funds_{r.crd_number}_{strategy_slug(r.strategy)}",
             "organization_id": None,
             "entity_id": r.crd_number,
             "entity_type": "firm",
             "source_type": "sec_private_funds",
-            "section": None,
+            "section": r.strategy,
             "content": texts[i],
             "language": "en",
             "source_row_id": r.crd_number,
@@ -701,7 +853,7 @@ async def _embed_esma_fund_profiles(db: AsyncSession) -> dict:
         WHERE e.fund_name IS NOT NULL
           AND w.id IS NULL
         ORDER BY e.isin
-        LIMIT 10000
+        LIMIT 15000
     """))
     rows = result.fetchall()
     if not rows:
@@ -759,17 +911,69 @@ async def _embed_esma_fund_profiles(db: AsyncSession) -> dict:
 
 
 async def _embed_esma_manager_profiles(db: AsyncSession) -> dict:
-    """Embed enriched ESMA manager profiles → entity_type='firm', source_type='esma_manager_profile'."""
+    """Embed ESMA manager profiles per-strategy → entity_type='firm', source_type='esma_manager_profile'.
+
+    One chunk per (esma_id, strategy_label) to capture umbrella structure.
+    Large ManCos like Amundi LU (427 funds, 29 strategies) get one chunk per
+    strategy sleeve with sub-fund list, instead of a single generic chunk.
+
+    Cross-registration with SEC resolved via name matching when sec_crd_number
+    is not populated (CRD enrichment pending).
+    """
     result = await db.execute(text("""
-        SELECT e.esma_id, e.company_name, e.country,
-               e.authorization_status, e.lei, e.sec_crd_number,
-               (SELECT COUNT(*) FROM esma_funds f WHERE f.esma_manager_id = e.esma_id) AS actual_fund_count,
-               (SELECT COUNT(DISTINCT f.domicile) FROM esma_funds f WHERE f.esma_manager_id = e.esma_id) AS domicile_count
-        FROM esma_managers e
-        LEFT JOIN wealth_vector_chunks w ON w.id = 'esma_manager_profile_' || e.esma_id
-        WHERE e.company_name IS NOT NULL
-          AND w.id IS NULL
-        ORDER BY e.esma_id
+        WITH strategy_agg AS (
+            SELECT f.esma_manager_id,
+                   COALESCE(f.strategy_label, 'Unclassified') AS strategy,
+                   COUNT(*) AS fund_count,
+                   COUNT(DISTINCT f.domicile) AS domicile_count,
+                   string_agg(DISTINCT f.domicile, ', ' ORDER BY f.domicile)
+                       FILTER (WHERE f.domicile IS NOT NULL) AS domiciles,
+                   COUNT(*) FILTER (WHERE f.yahoo_ticker IS NOT NULL) AS with_ticker,
+                   string_agg(
+                       f.fund_name ||
+                       COALESCE(' (' || f.yahoo_ticker || ')', '') ||
+                       COALESCE(' [' || f.domicile || ']', ''),
+                       '; ' ORDER BY f.fund_name
+                   ) AS fund_list
+            FROM esma_funds f
+            GROUP BY f.esma_manager_id, COALESCE(f.strategy_label, 'Unclassified')
+        ),
+        sec_crossref AS (
+            SELECT DISTINCT ON (e2.esma_id)
+                   e2.esma_id, s2.crd_number, s2.firm_name AS sec_name,
+                   s2.aum_total, s2.private_fund_count
+            FROM (
+                SELECT esma_id,
+                       lower(split_part(company_name, ' ', 1)) AS w1,
+                       lower(split_part(company_name, ' ', 2)) AS w2
+                FROM esma_managers
+                WHERE sec_crd_number IS NULL
+                  AND length(split_part(company_name, ' ', 1)) >= 4
+                  AND split_part(company_name, ' ', 2) != ''
+            ) e2
+            JOIN (
+                SELECT crd_number, firm_name, aum_total, private_fund_count,
+                       lower(split_part(firm_name, ' ', 1)) AS w1,
+                       lower(split_part(firm_name, ' ', 2)) AS w2
+                FROM sec_managers
+                WHERE registration_status = 'Registered'
+                  AND aum_total > 1000000000
+            ) s2 ON s2.w1 = e2.w1 AND s2.w2 = e2.w2
+            ORDER BY e2.esma_id, s2.aum_total DESC NULLS LAST
+        )
+        SELECT sa.esma_manager_id, sa.strategy, sa.fund_count,
+               sa.domicile_count, sa.domiciles, sa.with_ticker, sa.fund_list,
+               m.company_name, m.country, m.authorization_status, m.lei,
+               COALESCE(m.sec_crd_number, sc.crd_number) AS resolved_crd,
+               sc.sec_name, sc.aum_total AS sec_aum, sc.private_fund_count AS sec_pf_count
+        FROM strategy_agg sa
+        JOIN esma_managers m ON m.esma_id = sa.esma_manager_id
+        LEFT JOIN sec_crossref sc ON sc.esma_id = sa.esma_manager_id
+        LEFT JOIN wealth_vector_chunks w
+          ON w.id = 'esma_manager_' || sa.esma_manager_id || '_' ||
+             replace(lower(sa.strategy), ' ', '_')
+        WHERE m.company_name IS NOT NULL AND w.id IS NULL
+        ORDER BY sa.esma_manager_id, sa.strategy
         LIMIT 10000
     """))
     rows = result.fetchall()
@@ -779,32 +983,50 @@ async def _embed_esma_manager_profiles(db: AsyncSession) -> dict:
     now = datetime.now(tz=timezone.utc)
     texts = []
     for r in rows:
-        lei_part = r.lei or "not available"
-        crd_part = f" Cross-registered with US SEC as CRD {r.sec_crd_number}." if r.sec_crd_number else ""
+        lei_part = f" LEI: {r.lei}." if r.lei else ""
+
+        # SEC cross-registration
+        sec_part = ""
+        if r.resolved_crd:
+            sec_part = f" Cross-registered with US SEC (CRD {r.resolved_crd}"
+            if r.sec_name:
+                sec_part += f", {r.sec_name}"
+            if r.sec_aum:
+                sec_part += f", AUM {_format_aum(r.sec_aum)}"
+            if r.sec_pf_count:
+                sec_part += f", {r.sec_pf_count} private funds"
+            sec_part += ")."
+
+        # Truncate fund list
+        fund_list = r.fund_list or "N/A"
+        if len(fund_list) > 5000:
+            fund_list = fund_list[:5000] + "..."
 
         text_content = (
-            f"{r.company_name} (ESMA ID {r.esma_id}) is a "
-            f"{r.authorization_status or 'registered'} UCITS management company "
-            f"based in {r.country or 'unknown'}. LEI: {lei_part}. "
-            f"Manages {r.actual_fund_count} UCITS funds across {r.domicile_count} domiciles."
-            f"{crd_part}"
+            f"{r.strategy} funds of {r.company_name} (ESMA {r.esma_manager_id}, "
+            f"{r.country or 'unknown'}): "
+            f"{r.fund_count} UCITS sub-funds across {r.domicile_count} domiciles "
+            f"({r.domiciles or 'N/A'}). "
+            f"{r.with_ticker} with market ticker.{lei_part}{sec_part}\n\n"
+            f"Sub-funds:\n{fund_list}."
         )
         texts.append(text_content)
 
     batch = await async_generate_embeddings(texts, batch_size=EMBED_BATCH_SIZE)
 
+    strategy_slug = lambda s: s.lower().replace(" ", "_").replace("/", "_")
     upsert_rows = [
         {
-            "id": f"esma_manager_profile_{r.esma_id}",
+            "id": f"esma_manager_{r.esma_manager_id}_{strategy_slug(r.strategy)}",
             "organization_id": None,
-            "entity_id": r.esma_id,
+            "entity_id": r.esma_manager_id,
             "entity_type": "firm",
             "source_type": "esma_manager_profile",
-            "section": None,
+            "section": r.strategy,
             "content": texts[i],
             "language": "en",
-            "source_row_id": r.esma_id,
-            "firm_crd": r.sec_crd_number,
+            "source_row_id": r.esma_manager_id,
+            "firm_crd": r.resolved_crd,
             "filing_date": None,
             "embedding": batch.vectors[i],
             "embedding_model": batch.model,
@@ -821,15 +1043,48 @@ async def _embed_esma_manager_profiles(db: AsyncSession) -> dict:
 
 
 async def _embed_sec_etf_profiles(db: AsyncSession) -> dict:
-    """Embed SEC ETFs → entity_type='fund', source_type='sec_etf_profile'."""
+    """Embed SEC ETFs → entity_type='fund', source_type='sec_etf_profile'.
+
+    Enriched with N-CEN operational flags + XBRL fees from sec_fund_classes.
+    """
     result = await db.execute(text("""
+        WITH etf_xbrl AS (
+            SELECT fc.series_id,
+                   MIN(fc.expense_ratio_pct) AS min_er,
+                   MAX(fc.expense_ratio_pct) AS max_er,
+                   MAX(fc.net_assets) AS xbrl_aum,
+                   MAX(fc.holdings_count) AS holdings_count,
+                   MAX(fc.portfolio_turnover_pct) AS turnover_pct,
+                   MAX(fc.avg_annual_return_pct) AS xbrl_return,
+                   string_agg(
+                       COALESCE(fc.class_name, 'Share') ||
+                       COALESCE(' (' || fc.ticker || ')', '') ||
+                       CASE WHEN fc.expense_ratio_pct IS NOT NULL
+                            THEN ' ER:' || ROUND(fc.expense_ratio_pct * 100, 2) || '%%'
+                            ELSE '' END ||
+                       CASE WHEN fc.net_assets IS NOT NULL
+                            THEN ' AUM:$' || TRIM(TO_CHAR(fc.net_assets / 1e6, '999,999,999')) || 'M'
+                            ELSE '' END,
+                       '; ' ORDER BY fc.net_assets DESC NULLS LAST
+                   ) AS class_details
+            FROM sec_fund_classes fc
+            WHERE fc.series_id IN (SELECT series_id FROM sec_etfs)
+            GROUP BY fc.series_id
+        )
         SELECT e.series_id, e.fund_name, e.cik, e.ticker, e.strategy_label,
-               e.asset_class, e.index_tracked, e.is_index,
+               e.asset_class, e.index_tracked, e.is_index, e.is_in_kind_etf,
+               e.creation_unit_size, e.pct_in_kind_creation, e.pct_in_kind_redemption,
                e.management_fee, e.net_operating_expenses,
-               e.tracking_difference_net, e.monthly_avg_net_assets,
+               e.tracking_difference_gross, e.tracking_difference_net,
+               e.monthly_avg_net_assets, e.daily_avg_net_assets,
                e.nav_per_share, e.market_price_per_share,
-               e.return_after_fees, e.creation_unit_size, e.is_in_kind_etf
+               e.return_before_fees, e.return_after_fees,
+               e.is_sec_lending_authorized, e.did_lend_securities,
+               e.has_expense_limit, e.domicile, e.ncen_report_date,
+               x.min_er, x.max_er, x.xbrl_aum, x.holdings_count,
+               x.turnover_pct, x.xbrl_return, x.class_details
         FROM sec_etfs e
+        LEFT JOIN etf_xbrl x ON x.series_id = e.series_id
         LEFT JOIN wealth_vector_chunks w ON w.id = 'sec_etf_profile_' || e.series_id
         WHERE e.fund_name IS NOT NULL AND w.id IS NULL
         ORDER BY e.series_id LIMIT 10000
@@ -841,27 +1096,86 @@ async def _embed_sec_etf_profiles(db: AsyncSession) -> dict:
     now = datetime.now(tz=timezone.utc)
     texts = []
     for r in rows:
+        ticker_part = f" ({r.ticker})" if r.ticker else ""
         strategy = f" Strategy: {r.strategy_label}." if r.strategy_label else ""
-        index_part = f" Tracks {r.index_tracked}." if r.index_tracked else (" Index fund." if r.is_index else "")
-        aum_str = _format_aum(r.monthly_avg_net_assets)
+        index_part = f" Tracks: {r.index_tracked}." if r.index_tracked else (" Index fund." if r.is_index else "")
+
+        # AUM: prefer XBRL, fallback to N-CEN monthly avg
+        aum = r.xbrl_aum or r.monthly_avg_net_assets
+        aum_str = _format_aum(aum)
+
+        # Fees: combine N-CEN + XBRL
         fee_parts = []
         if r.management_fee:
-            fee_parts.append(f"mgmt {float(r.management_fee):.2f}%")
+            fee_parts.append(f"mgmt fee {float(r.management_fee):.2f}%")
         if r.net_operating_expenses:
-            fee_parts.append(f"ER {float(r.net_operating_expenses):.2f}%")
-        if r.tracking_difference_net is not None:
-            fee_parts.append(f"tracking diff {float(r.tracking_difference_net):.2f}%")
+            fee_parts.append(f"net ER {float(r.net_operating_expenses):.2f}%")
+        elif r.min_er is not None:
+            if r.min_er == r.max_er:
+                fee_parts.append(f"ER {float(r.min_er) * 100:.2f}%")
+            else:
+                fee_parts.append(f"ER {float(r.min_er) * 100:.2f}%-{float(r.max_er) * 100:.2f}%")
+        if r.has_expense_limit:
+            fee_parts.append("expense cap in place")
         fee_str = f" Fees: {', '.join(fee_parts)}." if fee_parts else ""
-        perf_str = f" Return (after fees): {float(r.return_after_fees):.2f}%." if r.return_after_fees is not None else ""
-        ticker_part = f" ({r.ticker})" if r.ticker else ""
+
+        # Tracking
+        td_parts = []
+        if r.tracking_difference_net is not None:
+            td_parts.append(f"net {float(r.tracking_difference_net):.2f}%")
+        if r.tracking_difference_gross is not None:
+            td_parts.append(f"gross {float(r.tracking_difference_gross):.2f}%")
+        td_str = f" Tracking difference: {', '.join(td_parts)}." if td_parts else ""
+
+        # NAV & market price
+        nav_parts = []
+        if r.nav_per_share is not None:
+            nav_parts.append(f"NAV ${float(r.nav_per_share):.2f}")
+        if r.market_price_per_share is not None:
+            nav_parts.append(f"market ${float(r.market_price_per_share):.2f}")
+            if r.nav_per_share is not None and r.nav_per_share > 0:
+                premium = (float(r.market_price_per_share) / float(r.nav_per_share) - 1) * 100
+                nav_parts.append(f"{'premium' if premium > 0 else 'discount'} {abs(premium):.2f}%")
+        nav_str = f" Price: {', '.join(nav_parts)}." if nav_parts else ""
+
+        # Performance
+        perf_parts = []
+        ret = r.return_after_fees if r.return_after_fees is not None else r.xbrl_return
+        if ret is not None:
+            perf_parts.append(f"after fees {float(ret):.2f}%")
+        if r.return_before_fees is not None:
+            perf_parts.append(f"before fees {float(r.return_before_fees):.2f}%")
+        perf_str = f" Return: {', '.join(perf_parts)}." if perf_parts else ""
+
+        # ETF mechanics
+        mech_parts = []
+        if r.is_in_kind_etf:
+            mech_parts.append("in-kind ETF")
+        if r.creation_unit_size:
+            mech_parts.append(f"creation unit {r.creation_unit_size:,} shares")
+        if r.is_sec_lending_authorized:
+            lend = "lent securities" if r.did_lend_securities else "authorized (not lent)"
+            mech_parts.append(f"sec lending {lend}")
+        mech_str = f" Mechanics: {', '.join(mech_parts)}." if mech_parts else ""
+
+        # Holdings & turnover from XBRL
+        hold_str = f" Holdings: {r.holdings_count}." if r.holdings_count else ""
+        turn_str = f" Turnover: {float(r.turnover_pct) * 100:.1f}%." if r.turnover_pct else ""
+
+        # Share classes from XBRL
+        class_str = ""
+        if r.class_details:
+            cd = r.class_details
+            if len(cd) > 2000:
+                cd = cd[:2000] + "..."
+            class_str = f"\nShare classes: {cd}."
 
         text_content = (
             f"{r.fund_name}{ticker_part} (Series {r.series_id}) is a US-listed ETF."
-            f"{strategy}{index_part} "
-            f"AUM: {aum_str}. NAV: ${float(r.nav_per_share):.2f}." if r.nav_per_share else
-            f"{r.fund_name}{ticker_part} (Series {r.series_id}) is a US-listed ETF."
             f"{strategy}{index_part} AUM: {aum_str}."
-        ) + f"{fee_str}{perf_str}"
+            f"{fee_str}{td_str}{nav_str}{perf_str}{mech_str}{hold_str}{turn_str}"
+            f"{class_str}"
+        )
         texts.append(text_content)
 
     batch = await async_generate_embeddings(texts, batch_size=EMBED_BATCH_SIZE)
@@ -877,7 +1191,7 @@ async def _embed_sec_etf_profiles(db: AsyncSession) -> dict:
             "language": "en",
             "source_row_id": r.series_id,
             "firm_crd": None,
-            "filing_date": None,
+            "filing_date": r.ncen_report_date,
             "embedding": batch.vectors[i],
             "embedding_model": batch.model,
             "embedded_at": now,
@@ -893,13 +1207,35 @@ async def _embed_sec_etf_profiles(db: AsyncSession) -> dict:
 
 
 async def _embed_sec_bdc_profiles(db: AsyncSession) -> dict:
-    """Embed SEC BDCs → entity_type='fund', source_type='sec_bdc_profile'."""
+    """Embed SEC BDCs → entity_type='fund', source_type='sec_bdc_profile'.
+
+    Enriched with full N-CEN operational data + XBRL fees from sec_fund_classes.
+    """
     result = await db.execute(text("""
+        WITH bdc_xbrl AS (
+            SELECT fc.series_id,
+                   MIN(fc.expense_ratio_pct) AS min_er,
+                   MAX(fc.expense_ratio_pct) AS max_er,
+                   MAX(fc.net_assets) AS xbrl_aum,
+                   MAX(fc.holdings_count) AS holdings_count,
+                   MAX(fc.portfolio_turnover_pct) AS turnover_pct,
+                   MAX(fc.avg_annual_return_pct) AS xbrl_return
+            FROM sec_fund_classes fc
+            WHERE fc.series_id IN (SELECT series_id FROM sec_bdcs)
+            GROUP BY fc.series_id
+        )
         SELECT b.series_id, b.fund_name, b.cik, b.ticker, b.strategy_label,
                b.investment_focus, b.management_fee, b.net_operating_expenses,
-               b.monthly_avg_net_assets, b.nav_per_share, b.market_price_per_share,
-               b.return_after_fees, b.is_externally_managed
+               b.return_before_fees, b.return_after_fees,
+               b.monthly_avg_net_assets, b.daily_avg_net_assets,
+               b.nav_per_share, b.market_price_per_share,
+               b.is_externally_managed, b.is_sec_lending_authorized,
+               b.has_line_of_credit, b.has_interfund_borrowing,
+               b.ncen_report_date, b.inception_date,
+               x.min_er, x.max_er, x.xbrl_aum, x.holdings_count,
+               x.turnover_pct, x.xbrl_return
         FROM sec_bdcs b
+        LEFT JOIN bdc_xbrl x ON x.series_id = b.series_id
         LEFT JOIN wealth_vector_chunks w ON w.id = 'sec_bdc_profile_' || b.series_id
         WHERE b.fund_name IS NOT NULL AND w.id IS NULL
         ORDER BY b.series_id LIMIT 10000
@@ -913,18 +1249,62 @@ async def _embed_sec_bdc_profiles(db: AsyncSession) -> dict:
     for r in rows:
         strategy = r.strategy_label or "Private Credit"
         focus = f" Focus: {r.investment_focus}." if r.investment_focus else ""
-        aum_str = _format_aum(r.monthly_avg_net_assets)
-        mgmt = f" Mgmt fee: {float(r.management_fee):.2f}%." if r.management_fee else ""
-        ext = " Externally managed." if r.is_externally_managed else ""
+        ticker_part = f" ({r.ticker})" if r.ticker else ""
+        aum = r.xbrl_aum or r.monthly_avg_net_assets
+        aum_str = _format_aum(aum)
+
+        # Fees
+        fee_parts = []
+        if r.management_fee:
+            fee_parts.append(f"mgmt fee {float(r.management_fee):.2f}%")
+        if r.net_operating_expenses:
+            fee_parts.append(f"net ER {float(r.net_operating_expenses):.2f}%")
+        elif r.min_er is not None:
+            fee_parts.append(f"XBRL ER {float(r.min_er) * 100:.2f}%")
+        fee_str = f" Fees: {', '.join(fee_parts)}." if fee_parts else ""
+
+        # NAV discount/premium
         discount = ""
         if r.nav_per_share and r.market_price_per_share:
             disc_pct = (float(r.market_price_per_share) / float(r.nav_per_share) - 1) * 100
-            discount = f" Market price discount: {disc_pct:+.1f}%."
-        ticker_part = f" ({r.ticker})" if r.ticker else ""
+            label = "premium" if disc_pct > 0 else "discount"
+            discount = (
+                f" NAV ${float(r.nav_per_share):.2f}, "
+                f"market ${float(r.market_price_per_share):.2f} "
+                f"({label} {abs(disc_pct):.1f}%)."
+            )
+
+        # Performance
+        perf_parts = []
+        ret = r.return_after_fees if r.return_after_fees is not None else r.xbrl_return
+        if ret is not None:
+            perf_parts.append(f"after fees {float(ret):.2f}%")
+        if r.return_before_fees is not None:
+            perf_parts.append(f"before fees {float(r.return_before_fees):.2f}%")
+        perf_str = f" Return: {', '.join(perf_parts)}." if perf_parts else ""
+
+        # Operational flags
+        ops = []
+        if r.is_externally_managed:
+            ops.append("externally managed")
+        if r.is_sec_lending_authorized:
+            ops.append("sec lending authorized")
+        if r.has_line_of_credit:
+            ops.append("has line of credit")
+        if r.has_interfund_borrowing:
+            ops.append("interfund borrowing")
+        ops_str = f" Operations: {', '.join(ops)}." if ops else ""
+
+        # Holdings & turnover
+        hold_str = f" Holdings: {r.holdings_count}." if r.holdings_count else ""
+        turn_str = f" Turnover: {float(r.turnover_pct) * 100:.1f}%." if r.turnover_pct else ""
+        incept = f" Inception: {r.inception_date}." if r.inception_date else ""
 
         text_content = (
-            f"{r.fund_name}{ticker_part} (CIK {r.cik}) is a Business Development Company (BDC). "
-            f"Strategy: {strategy}.{focus} AUM: {aum_str}.{mgmt}{ext}{discount}"
+            f"{r.fund_name}{ticker_part} (Series {r.series_id}, CIK {r.cik}) "
+            f"is a Business Development Company (BDC). "
+            f"Strategy: {strategy}.{focus} AUM: {aum_str}.{incept}"
+            f"{fee_str}{discount}{perf_str}{ops_str}{hold_str}{turn_str}"
         )
         texts.append(text_content)
 
@@ -941,7 +1321,7 @@ async def _embed_sec_bdc_profiles(db: AsyncSession) -> dict:
             "language": "en",
             "source_row_id": r.series_id,
             "firm_crd": None,
-            "filing_date": None,
+            "filing_date": r.ncen_report_date,
             "embedding": batch.vectors[i],
             "embedding_model": batch.model,
             "embedded_at": now,

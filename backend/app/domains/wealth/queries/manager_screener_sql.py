@@ -90,11 +90,20 @@ instruments_universe = Table(
     "instruments_universe",
     _meta,
     Column("instrument_id", Text, primary_key=True),
-    Column("organization_id", Text),
     Column("name", Text),
-    Column("approval_status", String(20)),
     Column("attributes", JSONB),
     Column("is_active", Text),
+    extend_existing=True,
+)
+
+instruments_org = Table(
+    "instruments_org",
+    _meta,
+    Column("id", Text, primary_key=True),
+    Column("instrument_id", Text),
+    Column("organization_id", Text),
+    Column("block_id", Text),
+    Column("approval_status", String(20)),
     extend_existing=True,
 )
 
@@ -290,10 +299,16 @@ def build_screener_queries(
     universe_sub = (
         select(
             instruments_universe.c.attributes["sec_crd_number"].astext.label("crd_number"),
-            instruments_universe.c.approval_status,
+            instruments_org.c.approval_status,
+        )
+        .select_from(
+            instruments_universe.join(
+                instruments_org,
+                instruments_universe.c.instrument_id == instruments_org.c.instrument_id,
+            )
         )
         .where(
-            instruments_universe.c.organization_id == cast(literal_column("'" + str(org_id).replace("'", "''") + "'"), PG_UUID),
+            instruments_org.c.organization_id == cast(literal_column("'" + str(org_id).replace("'", "''") + "'"), PG_UUID),
         )
         .where(instruments_universe.c.attributes["source"].astext == "sec_manager")
         .subquery("universe_status")

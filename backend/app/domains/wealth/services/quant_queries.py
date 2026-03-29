@@ -336,6 +336,7 @@ async def fetch_strategic_weights_for_funds(
     Returns (N,) array aligned with fund_ids.
     """
     from app.domains.wealth.models.instrument import Instrument
+    from app.domains.wealth.models.instrument_org import InstrumentOrg
 
     today = date.today()
     alloc_stmt = (
@@ -352,11 +353,11 @@ async def fetch_strategic_weights_for_funds(
     alloc_result = await db.execute(alloc_stmt)
     block_targets = {a.block_id: float(a.target_weight) for a in alloc_result.scalars().all()}
 
-    # Map fund_ids to blocks
+    # Map fund_ids to blocks via InstrumentOrg
     fund_uuids = [uuid.UUID(fid) for fid in fund_ids]
     inst_stmt = (
-        select(Instrument.instrument_id, Instrument.block_id)
-        .where(Instrument.instrument_id.in_(fund_uuids))
+        select(InstrumentOrg.instrument_id, InstrumentOrg.block_id)
+        .where(InstrumentOrg.instrument_id.in_(fund_uuids))
     )
     inst_result = await db.execute(inst_stmt)
     fund_block_map = {str(r.instrument_id): r.block_id for r in inst_result.all()}

@@ -35,6 +35,7 @@ from app.core.config.config_service import ConfigService
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.instrument import Instrument
+from app.domains.wealth.models.instrument_org import InstrumentOrg
 from app.domains.wealth.models.screening_result import ScreeningResult, ScreeningRun
 from app.domains.wealth.queries.catalog_sql import (
     CatalogFilters,
@@ -91,20 +92,26 @@ async def trigger_screening(
 ) -> ScreeningRunResponse:
     _require_investment_role(actor)
 
-    # Load instruments to screen
-    stmt = select(Instrument).where(Instrument.is_active.is_(True))
+    # Load instruments to screen (join InstrumentOrg for org-scoped block_id)
+    stmt = (
+        select(Instrument, InstrumentOrg.block_id.label("org_block_id"))
+        .join(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
+        .where(Instrument.is_active.is_(True))
+    )
     if body.instrument_type:
         stmt = stmt.where(Instrument.instrument_type == body.instrument_type)
     if body.block_id:
-        stmt = stmt.where(Instrument.block_id == body.block_id)
+        stmt = stmt.where(InstrumentOrg.block_id == body.block_id)
     if body.instrument_ids:
         stmt = stmt.where(Instrument.instrument_id.in_(body.instrument_ids))
 
     result = await db.execute(stmt)
-    instruments = result.scalars().all()
+    rows = result.all()
 
-    if not instruments:
+    if not rows:
         raise HTTPException(status_code=404, detail="No instruments found matching criteria")
+
+    instruments = [row[0] for row in rows]
 
     # Load screening config
     config_svc = ConfigService(db)
@@ -129,12 +136,12 @@ async def trigger_screening(
     # Extract instrument data for screening (cross async boundary safely)
     instrument_dicts = [
         {
-            "instrument_id": i.instrument_id,
-            "instrument_type": i.instrument_type,
-            "attributes": dict(i.attributes) if i.attributes else {},
-            "block_id": i.block_id,
+            "instrument_id": row[0].instrument_id,
+            "instrument_type": row[0].instrument_type,
+            "attributes": dict(row[0].attributes) if row[0].attributes else {},
+            "block_id": row.org_block_id,
         }
-        for i in instruments
+        for row in rows
     ]
 
     # Run screening in thread (pure CPU logic)
@@ -244,7 +251,7 @@ async def list_results(
             Instrument.isin.label("inst_isin"),
             Instrument.ticker.label("inst_ticker"),
             Instrument.instrument_type.label("inst_type"),
-            Instrument.block_id.label("inst_block_id"),
+            InstrumentOrg.block_id.label("inst_block_id"),
             Instrument.geography.label("inst_geography"),
             Instrument.currency.label("inst_currency"),
             Instrument.attributes["sec_crd_number"].astext.label("inst_manager_crd"),
@@ -255,6 +262,10 @@ async def list_results(
             Instrument,
             ScreeningResult.instrument_id == Instrument.instrument_id,
         )
+        .join(
+            InstrumentOrg,
+            InstrumentOrg.instrument_id == Instrument.instrument_id,
+        )
         .where(ScreeningResult.is_current.is_(True))
     )
     if overall_status:
@@ -262,7 +273,7 @@ async def list_results(
     if instrument_type:
         stmt = stmt.where(Instrument.instrument_type == instrument_type)
     if block_id:
-        stmt = stmt.where(Instrument.block_id == block_id)
+        stmt = stmt.where(InstrumentOrg.block_id == block_id)
 
     stmt = stmt.order_by(ScreeningResult.score.desc().nulls_last()).limit(limit)
     result = await db.execute(stmt)
@@ -327,7 +338,7 @@ def _build_internal_query(
     block_id: str | None,
     approval_status: str | None,
 ):
-    """Build a select for instruments_universe rows."""
+    """Build a select for instruments_universe rows (joined with instruments_org)."""
     _internal_geo_case = case(
         (Instrument.geography == "north_america", literal("US")),
         (Instrument.geography == "dm_europe", literal("Europe")),
@@ -353,10 +364,11 @@ def _build_internal_query(
             Instrument.attributes["manager_name"].astext.label("manager_name"),
             Instrument.attributes["sec_crd_number"].astext.label("manager_crd"),
             literal(None).label("esma_manager_id"),
-            Instrument.approval_status.label("approval_status"),
-            Instrument.block_id.label("block_id"),
+            InstrumentOrg.approval_status.label("approval_status"),
+            InstrumentOrg.block_id.label("block_id"),
             Instrument.attributes["structure"].astext.label("structure"),
         )
+        .join(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
         .where(Instrument.is_active.is_(True))
     )
     if q:
@@ -384,9 +396,9 @@ def _build_internal_query(
     if aum_max is not None:
         stmt = stmt.where(Instrument.attributes["aum"].astext.cast(Float) <= aum_max)
     if block_id:
-        stmt = stmt.where(Instrument.block_id == block_id)
+        stmt = stmt.where(InstrumentOrg.block_id == block_id)
     if approval_status:
-        stmt = stmt.where(Instrument.approval_status == approval_status)
+        stmt = stmt.where(InstrumentOrg.approval_status == approval_status)
     return stmt
 
 
@@ -687,8 +699,12 @@ async def get_screener_facets(
     Returns counts by instrument_type, geography, asset_class, domicile,
     currency, strategy, source, and screening status.
     """
-    # Internal facets
-    base = select(Instrument).where(Instrument.is_active.is_(True))
+    # Internal facets (join InstrumentOrg for org-scoped approval_status)
+    base = (
+        select(Instrument, InstrumentOrg.approval_status.label("org_approval_status"))
+        .join(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
+        .where(Instrument.is_active.is_(True))
+    )
     if q:
         pattern = f"%{q}%"
         base = base.where(
@@ -702,7 +718,7 @@ async def get_screener_facets(
         base = base.where(Instrument.geography == geography)
 
     result = await db.execute(base)
-    instruments = result.scalars().all()
+    rows = result.all()
 
     _GEO_DISPLAY_MAP = {
         "north_america": "US",
@@ -721,14 +737,15 @@ async def get_screener_facets(
     source_counts: dict[str, int] = {"internal": 0, "esma": 0, "sec": 0}
     total_approved = 0
 
-    for inst in instruments:
+    for row in rows:
+        inst = row[0]
         type_counts[inst.instrument_type] = type_counts.get(inst.instrument_type, 0) + 1
         geo_display = _GEO_DISPLAY_MAP.get(inst.geography, inst.geography)
         geo_counts[geo_display] = geo_counts.get(geo_display, 0) + 1
         ac_counts[inst.asset_class] = ac_counts.get(inst.asset_class, 0) + 1
         cur_counts[inst.currency] = cur_counts.get(inst.currency, 0) + 1
         source_counts["internal"] += 1
-        if inst.approval_status == "approved":
+        if row.org_approval_status == "approved":
             total_approved += 1
         attrs = inst.attributes or {}
         dom = attrs.get("domicile")
@@ -885,18 +902,40 @@ async def import_sec_security(
 ) -> dict:
     _require_investment_role(actor)
 
-    # Check not already imported
+    # Check if instrument already exists globally by ticker
     existing = (await db.execute(
         select(Instrument).where(
             Instrument.ticker == ticker.upper(),
-            Instrument.organization_id == org_id,
         ),
     )).scalar_one_or_none()
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Instrument with ticker {ticker} already exists",
+        # Check if already linked to this org
+        existing_link = (await db.execute(
+            select(InstrumentOrg).where(
+                InstrumentOrg.instrument_id == existing.instrument_id,
+                InstrumentOrg.organization_id == org_id,
+            ),
+        )).scalar_one_or_none()
+        if existing_link:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Instrument with ticker {ticker} already exists in your universe",
+            )
+        # Link existing global instrument to this org
+        org_link = InstrumentOrg(
+            organization_id=org_id,
+            instrument_id=existing.instrument_id,
+            block_id=body.block_id,
+            approval_status="pending",
         )
+        db.add(org_link)
+        await db.commit()
+        return {
+            "instrument_id": str(existing.instrument_id),
+            "name": existing.name,
+            "ticker": existing.ticker,
+            "status": "imported",
+        }
 
     # Lookup from sec_cusip_ticker_map
     sec_row = (await db.execute(
@@ -1030,7 +1069,6 @@ async def import_sec_security(
                     fund_manager_name = mgr
 
     instrument = Instrument(
-        organization_id=org_id,
         instrument_type=inst_type,
         name=sec_row.issuer_name,
         isin=None,
@@ -1038,8 +1076,6 @@ async def import_sec_security(
         asset_class=asset_class,
         geography="north_america",
         currency="USD",
-        block_id=body.block_id,
-        approval_status="pending",
         attributes={
             "cusip": sec_row.cusip,
             "security_type": sec_row.security_type,
@@ -1061,6 +1097,16 @@ async def import_sec_security(
         },
     )
     db.add(instrument)
+    await db.flush()
+
+    # Create org-scoped link
+    org_link = InstrumentOrg(
+        organization_id=org_id,
+        instrument_id=instrument.instrument_id,
+        block_id=body.block_id,
+        approval_status="pending",
+    )
+    db.add(org_link)
     await db.commit()
     await db.refresh(instrument)
 

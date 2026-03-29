@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.instrument import Instrument
+from app.domains.wealth.models.instrument_org import InstrumentOrg
 from app.domains.wealth.schemas.instrument import (
     InstrumentCreate,
     InstrumentImportCsvResponse,
@@ -54,15 +55,17 @@ async def list_instruments(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[InstrumentRead]:
-    stmt = select(Instrument)
+    stmt = select(Instrument).join(
+        InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id,
+    )
     if instrument_type:
         stmt = stmt.where(Instrument.instrument_type == instrument_type)
     if block_id:
-        stmt = stmt.where(Instrument.block_id == block_id)
+        stmt = stmt.where(InstrumentOrg.block_id == block_id)
     if is_active is not None:
         stmt = stmt.where(Instrument.is_active == is_active)
     if approval_status:
-        stmt = stmt.where(Instrument.approval_status == approval_status)
+        stmt = stmt.where(InstrumentOrg.approval_status == approval_status)
     stmt = stmt.order_by(Instrument.name)
     result = await db.execute(stmt)
     instruments = result.scalars().all()
@@ -131,7 +134,6 @@ async def create_instrument(
 ) -> InstrumentRead:
     _require_investment_role(actor)
     instrument = Instrument(
-        organization_id=org_id,
         instrument_type=body.instrument_type,
         name=body.name,
         isin=body.isin,
@@ -140,10 +142,18 @@ async def create_instrument(
         asset_class=body.asset_class,
         geography=body.geography,
         currency=body.currency,
-        block_id=body.block_id,
         attributes=body.attributes,
     )
     db.add(instrument)
+    await db.flush()
+
+    # Create org-scoped link with block assignment
+    instrument_org = InstrumentOrg(
+        instrument_id=instrument.instrument_id,
+        organization_id=org_id,
+        block_id=body.block_id,
+    )
+    db.add(instrument_org)
     await db.flush()
     await db.refresh(instrument)
     await db.commit()
@@ -174,7 +184,6 @@ async def import_from_yahoo(
     created: list[Instrument] = []
     for data in raw_data:
         instrument = Instrument(
-            organization_id=org_id,
             instrument_type=data.instrument_type,
             name=data.name,
             isin=data.isin,
@@ -188,6 +197,14 @@ async def import_from_yahoo(
         created.append(instrument)
 
     if created:
+        await db.flush()
+        # Create org-scoped links for each imported instrument
+        for inst in created:
+            instrument_org = InstrumentOrg(
+                instrument_id=inst.instrument_id,
+                organization_id=org_id,
+            )
+            db.add(instrument_org)
         await db.flush()
         for inst in created:
             await db.refresh(inst)
@@ -223,10 +240,9 @@ async def import_from_csv(
     adapter = CsvImportAdapter()
     result = adapter.parse(io.BytesIO(content), instrument_type)
 
-    created_count = 0
+    created_instruments: list[Instrument] = []
     for data in result.instruments:
         instrument = Instrument(
-            organization_id=org_id,
             instrument_type=data.instrument_type,
             name=data.name,
             isin=data.isin,
@@ -237,9 +253,17 @@ async def import_from_csv(
             attributes=data.raw_attributes,
         )
         db.add(instrument)
-        created_count += 1
+        created_instruments.append(instrument)
 
-    if created_count:
+    if created_instruments:
+        await db.flush()
+        # Create org-scoped links for each imported instrument
+        for inst in created_instruments:
+            instrument_org = InstrumentOrg(
+                instrument_id=inst.instrument_id,
+                organization_id=org_id,
+            )
+            db.add(instrument_org)
         await db.commit()
 
     return InstrumentImportCsvResponse(

@@ -272,14 +272,15 @@ async def simulate_allocation(
         import numpy as np
 
         from app.domains.wealth.models.instrument import Instrument
+        from app.domains.wealth.models.instrument_org import InstrumentOrg
         from app.domains.wealth.services.quant_queries import fetch_returns_matrix
         from quant_engine.cvar_service import compute_cvar_from_returns
 
-        # --- map instrument_ids → block_ids via Instrument table ---
+        # --- map instrument_ids → block_ids via InstrumentOrg table ---
         instrument_ids = list(body.weights.keys())
         inst_stmt = (
-            select(Instrument.instrument_id, Instrument.block_id)
-            .where(Instrument.instrument_id.in_([uuid.UUID(iid) for iid in instrument_ids]))
+            select(InstrumentOrg.instrument_id, InstrumentOrg.block_id)
+            .where(InstrumentOrg.instrument_id.in_([uuid.UUID(iid) for iid in instrument_ids]))
         )
         inst_result = await db.execute(inst_stmt)
         inst_to_block: dict[str, str | None] = {

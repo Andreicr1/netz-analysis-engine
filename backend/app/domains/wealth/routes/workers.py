@@ -354,11 +354,10 @@ async def trigger_run_instrument_ingestion(
 
     from app.domains.wealth.workers.instrument_ingestion import run_instrument_ingestion
 
-    org_id = user.organization_id
     return await _dispatch_worker(
-        background_tasks, "run-instrument-ingestion", str(org_id),
-        run_instrument_ingestion, org_id, lookback_days,
-        timeout_seconds=_HEAVY_WORKER_TIMEOUT, org_id=org_id,
+        background_tasks, "run-instrument-ingestion", "global",
+        run_instrument_ingestion, lookback_days,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
     )
 
 

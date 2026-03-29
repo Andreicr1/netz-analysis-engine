@@ -51,10 +51,12 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
     from app.domains.wealth.workers.sec_refresh import run_sec_refresh
     from app.domains.wealth.workers.treasury_ingestion import run_treasury_ingestion
     from app.domains.wealth.workers.watchlist_batch import run_watchlist_check
+    from app.domains.wealth.workers.universe_sync import run_universe_sync
     from app.domains.wealth.workers.wealth_embedding_worker import run_wealth_embedding
 
     return {
         # ── Global workers (no org_id) ────────────────────────
+        "universe_sync": (run_universe_sync, "global", _HEAVY),
         "macro_ingestion": (run_macro_ingestion, "global", _HEAVY),
         "benchmark_ingest": (run_benchmark_ingest, "global", _HEAVY),
         "treasury_ingestion": (run_treasury_ingestion, "global", _HEAVY),
@@ -75,7 +77,7 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
         "regime_fit": (run_regime_fit, "global", _LIGHT),
         # ── Org-scoped workers (dispatched per active org) ────
         "ingestion": (run_ingestion, "org", _HEAVY),
-        "instrument_ingestion": (run_instrument_ingestion, "org", _HEAVY),
+        "instrument_ingestion": (run_instrument_ingestion, "global", _HEAVY),
         "risk_calc": (run_risk_calc, "org", _HEAVY),
         "portfolio_eval": (run_portfolio_eval, "org", _LIGHT),
         "portfolio_nav_synthesizer": (run_portfolio_nav_synthesizer, "org", _LIGHT),

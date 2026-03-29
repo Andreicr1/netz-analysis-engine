@@ -150,12 +150,14 @@ class ManagerSpotlight:
     def _gather_fund_data(self, db: Session, instrument_id: str, organization_id: str) -> dict[str, Any]:
         """Gather fund identity from instruments_universe."""
         from app.domains.wealth.models.instrument import Instrument
+        from app.domains.wealth.models.instrument_org import InstrumentOrg
 
         instrument = (
             db.query(Instrument)
+            .join(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
             .filter(
                 Instrument.instrument_id == instrument_id,
-                Instrument.organization_id == organization_id,
+                InstrumentOrg.organization_id == organization_id,
             )
             .first()
         )

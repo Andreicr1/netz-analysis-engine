@@ -17,6 +17,7 @@ from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_curr
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.allocation import StrategicAllocation
 from app.domains.wealth.models.instrument import Instrument
+from app.domains.wealth.models.instrument_org import InstrumentOrg
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.models.risk import FundRiskMetrics
 from app.domains.wealth.routes.common import VALID_PROFILES, get_latest_snapshot
@@ -133,7 +134,8 @@ async def get_risk_summary_batch(
                 sa_func.avg(FundRiskMetrics.flow_momentum_score).label("flow_momentum_score"),
                 sa_func.avg(FundRiskMetrics.blended_momentum_score).label("blended_momentum_score"),
             )
-            .join(Instrument, Instrument.block_id == StrategicAllocation.block_id)
+            .join(InstrumentOrg, InstrumentOrg.block_id == StrategicAllocation.block_id)
+            .join(Instrument, Instrument.instrument_id == InstrumentOrg.instrument_id)
             .join(FundRiskMetrics, FundRiskMetrics.instrument_id == Instrument.instrument_id)
             .where(
                 StrategicAllocation.profile.in_(valid_names),
@@ -207,7 +209,8 @@ async def get_cvar(
             sa_func.avg(FundRiskMetrics.blended_momentum_score).label("blended_momentum_score"),
         )
         .select_from(StrategicAllocation)
-        .join(Instrument, Instrument.block_id == StrategicAllocation.block_id)
+        .join(InstrumentOrg, InstrumentOrg.block_id == StrategicAllocation.block_id)
+        .join(Instrument, Instrument.instrument_id == InstrumentOrg.instrument_id)
         .join(FundRiskMetrics, FundRiskMetrics.instrument_id == Instrument.instrument_id)
         .where(
             StrategicAllocation.profile == profile,

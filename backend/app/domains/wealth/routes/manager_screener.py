@@ -29,6 +29,7 @@ from app.core.cache import route_cache
 from app.core.security.clerk_auth import Actor, get_actor
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.instrument import Instrument
+from app.domains.wealth.models.instrument_org import InstrumentOrg
 from app.domains.wealth.queries.manager_screener_sql import (
     ScreenerFilters,
     build_screener_queries,
@@ -967,11 +968,11 @@ async def add_to_universe(
             detail=f"Fund with CIK {body.fund_cik} not found for manager {crd}",
         )
 
-    # Check if already imported (idempotency via sec_cik)
+    # Check if already imported (idempotency via sec_cik + org)
     existing_result = await db.execute(
         select(Instrument)
+        .join(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
         .where(Instrument.attributes["sec_cik"].astext == body.fund_cik)
-        .where(Instrument.organization_id == org_id)
     )
     if existing_result.scalar_one_or_none():
         raise HTTPException(
@@ -980,7 +981,6 @@ async def add_to_universe(
         )
 
     instrument = Instrument(
-        organization_id=org_id,
         instrument_type="fund",
         name=fund.fund_name,
         ticker=fund.ticker,
@@ -988,8 +988,6 @@ async def add_to_universe(
         asset_class=body.asset_class,
         geography=body.geography,
         currency=fund.currency or body.currency,
-        block_id=body.block_id,
-        approval_status="pending",
         attributes={
             "sec_cik": body.fund_cik,
             "sec_crd": crd,
@@ -1002,17 +1000,27 @@ async def add_to_universe(
         },
     )
     db.add(instrument)
+    await db.flush()
+
+    inst_org = InstrumentOrg(
+        instrument_id=instrument.instrument_id,
+        organization_id=org_id,
+        block_id=body.block_id,
+        approval_status="pending",
+    )
+    db.add(inst_org)
     await db.commit()
     await db.refresh(instrument)
+    await db.refresh(inst_org)
 
     return ManagerUniverseRead(
         instrument_id=instrument.instrument_id,
-        approval_status=instrument.approval_status,
+        approval_status=inst_org.approval_status,
         asset_class=instrument.asset_class,
         geography=instrument.geography,
         currency=instrument.currency,
-        block_id=instrument.block_id,
-        added_at=instrument.created_at,
+        block_id=inst_org.block_id,
+        added_at=inst_org.selected_at,
     )
 
 

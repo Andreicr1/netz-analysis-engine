@@ -1,24 +1,22 @@
-"""Instrument universe NAV ingestion worker.
+"""Instrument universe NAV ingestion worker — GLOBAL.
 
-Fetches NAV history for all active instruments in instruments_universe
+Fetches NAV history for ALL active instruments across all tenants
 using the provider factory (get_instrument_provider), computes log returns,
-and upserts into nav_timeseries.
+and upserts into nav_timeseries (global table, no RLS).
 
-Replaces the legacy run_ingestion() which uses the deprecated Fund model
-and calls yfinance directly.
+Deduplicates by ticker — one Yahoo call per unique ticker regardless of
+how many tenants have selected the instrument.
 """
 
 import asyncio
 import concurrent.futures
 import math
-import uuid
 
 import structlog
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.engine import async_session_factory
-from app.core.tenancy.middleware import set_rls_context
 from app.domains.wealth.models.instrument import Instrument
 from app.services.providers import get_instrument_provider
 
@@ -59,26 +57,17 @@ def _resolve_period(lookback_days: int) -> str:
 
 
 async def run_instrument_ingestion(
-    org_id: uuid.UUID,
     lookback_days: int = 3650,
 ) -> dict[str, int | list[str]]:
-    """Fetch NAV history for all active instruments in the universe.
+    """Fetch NAV history for all active instruments in the global catalog.
 
-    1. Query instruments_universe for active instruments with ticker
-    2. Batch fetch history via get_instrument_provider().fetch_batch_history()
-    3. Compute 1d log returns
-    4. Upsert to nav_timeseries with org_id scoping
-    5. Return counts: instruments_processed, rows_upserted, skipped, errors
+    Global worker — no org_id needed. instruments_universe and nav_timeseries
+    are both global tables. Deduplicates tickers across all tenants.
     """
-    logger.info(
-        "Starting instrument NAV ingestion",
-        org_id=str(org_id),
-        lookback_days=lookback_days,
-    )
+    logger.info("Starting instrument NAV ingestion (global)", lookback_days=lookback_days)
 
     async with async_session_factory() as db:
         db.expire_on_commit = False
-        await set_rls_context(db, org_id)
 
         # Advisory lock — skip if already running
         lock_result = await db.execute(
@@ -94,7 +83,7 @@ async def run_instrument_ingestion(
             }
 
         try:
-            return await _do_ingest(db, org_id, lookback_days)
+            return await _do_ingest(db, lookback_days)
         finally:
             await db.execute(
                 text(f"SELECT pg_advisory_unlock({INSTRUMENT_INGESTION_LOCK_ID})"),
@@ -103,11 +92,10 @@ async def run_instrument_ingestion(
 
 async def _do_ingest(
     db: AsyncSession,
-    org_id: uuid.UUID,
     lookback_days: int,
 ) -> dict[str, int | list[str]]:
     """Core ingestion logic — separated for advisory lock cleanup."""
-    # 1. Query active instruments with tickers
+    # 1. Query ALL active instruments with tickers (global — no RLS)
     stmt = (
         select(Instrument)
         .where(Instrument.is_active == True)  # noqa: E712
@@ -127,7 +115,8 @@ async def _do_ingest(
         }
 
     # Build ticker -> instrument mapping (extract scalars for thread safety)
-    ticker_map: dict[str, list[tuple[uuid.UUID, str]]] = {}
+    # Deduplicates: one Yahoo call per unique ticker
+    ticker_map: dict[str, list[tuple]] = {}
     for inst in instruments:
         ticker = inst.ticker.strip().upper()
         ticker_map.setdefault(ticker, []).append(
@@ -239,7 +228,7 @@ async def _do_ingest(
                 skipped_tickers.append(ticker)
                 continue
 
-            # Build rows with log returns
+            # Build rows with log returns — no organization_id (global table)
             prev_close = None
             for idx, row in ticker_data.iterrows():
                 nav_date = idx.date() if hasattr(idx, "date") else idx
@@ -266,7 +255,6 @@ async def _do_ingest(
                 for instrument_id, currency in instrument_entries:
                     all_rows.append(
                         {
-                            "organization_id": org_id,
                             "instrument_id": instrument_id,
                             "nav_date": nav_date,
                             "nav": round(close_price, 6),
@@ -291,14 +279,14 @@ async def _do_ingest(
             errors.append(f"{ticker}: {e}")
             continue
 
-    # 4. Chunked batch upsert — raw SQL to avoid SQLAlchemy RETURNING on hypertables
+    # 4. Chunked batch upsert — raw SQL (no organization_id)
     total_upserted = 0
     if all_rows:
         upsert_sql = text("""
             INSERT INTO nav_timeseries
-                (organization_id, instrument_id, nav_date, nav, return_1d, return_type, currency, source)
+                (instrument_id, nav_date, nav, return_1d, return_type, currency, source)
             VALUES
-                (:organization_id, :instrument_id, :nav_date, :nav, :return_1d, :return_type, :currency, :source)
+                (:instrument_id, :nav_date, :nav, :return_1d, :return_type, :currency, :source)
             ON CONFLICT (instrument_id, nav_date)
             DO UPDATE SET
                 nav = EXCLUDED.nav,
@@ -312,7 +300,6 @@ async def _do_ingest(
             try:
                 await db.execute(upsert_sql, chunk)
                 await db.commit()
-                await set_rls_context(db, org_id)
                 total_upserted += len(chunk)
             except Exception as chunk_err:
                 logger.warning(
@@ -322,7 +309,6 @@ async def _do_ingest(
                     error=str(chunk_err)[:200],
                 )
                 await db.rollback()
-                await set_rls_context(db, org_id)
                 errors.append(f"chunk {i}: {str(chunk_err)[:100]}")
 
     logger.info(
