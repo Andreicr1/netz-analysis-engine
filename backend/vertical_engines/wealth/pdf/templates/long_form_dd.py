@@ -112,221 +112,275 @@ def _chapter_key_indicators(content: dict[str, Any]) -> list[tuple[str, str]]:
 # ---------------------------------------------------------------------------
 
 _CSS = """\
-* { margin: 0; padding: 0; box-sizing: border-box; }
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Inter:wght@300;400;500;600;700&display=swap');
+
 @page { size: A4; margin: 0; }
-html, body {
-    width: 210mm; min-height: 297mm;
-    font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
-    font-size: 12px; color: #1F2937; line-height: 1.5;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+    --navy: #0A192F;
+    --navy-light: #0F172A;
+    --slate-900: #1E293B;
+    --slate-700: #334155;
+    --slate-500: #64748B;
+    --slate-400: #94A3B8;
+    --slate-300: #CBD5E1;
+    --slate-200: #E2E8F0;
+    --slate-100: #F1F5F9;
+    --slate-50:  #F8FAFC;
+    --copper: #B48608;
+    --copper-light: #D4A017;
+    --burgundy: #8B0000;
+    --white: #FFFFFF;
+    --text-primary: #0F172A;
+    --text-secondary: #334155;
+    --text-muted: #64748B;
 }
 
+html, body {
+    font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+    font-size: 10px; color: var(--text-primary); line-height: 1.5;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Page shell ── */
 .page {
     width: 210mm; min-height: 297mm;
-    position: relative;
-    page-break-after: always;
-    overflow: hidden;
+    position: relative; overflow: hidden;
+    page-break-after: always; background: var(--white);
 }
 .page:last-child { page-break-after: auto; }
 
-/* ---------- Cover header ---------- */
-.cover-header {
-    background: #111827;
-    padding: 20px 24px;
-    display: flex; justify-content: space-between; align-items: flex-start;
+/* ══════════════════════  COVER  ══════════════════════ */
+.cover {
+    background: var(--navy); min-height: 297mm;
+    padding: 52px 48px; display: flex; flex-direction: column;
 }
-.cover-header-left { flex: 1; }
-.cover-label {
-    font-size: 9px; letter-spacing: .12em;
-    color: #6B7FA8; text-transform: uppercase;
-    margin-bottom: 6px;
+.cv-label {
+    font-size: 7.5px; letter-spacing: 0.18em;
+    color: var(--slate-500); text-transform: uppercase;
+    margin-bottom: 32px;
 }
-.cover-title {
-    font-size: 22px; font-weight: 600;
-    color: #F9FAFB; margin-bottom: 4px;
+.cv-fund {
+    font-family: 'Playfair Display', serif;
+    font-size: 28px; font-weight: 700;
+    color: var(--white); line-height: 1.15;
+    margin-bottom: 10px;
 }
-.cover-subtitle {
-    font-size: 11px; color: #6B7FA8;
+.cv-sub {
+    font-size: 11px; color: var(--slate-400);
+    margin-bottom: 28px; letter-spacing: 0.02em;
 }
-.regime-box {
-    border: 0.5px solid #2D3F5E;
-    border-radius: 6px;
-    padding: 8px 14px;
-    text-align: center;
-    flex-shrink: 0;
-    margin-left: 16px;
-}
-.regime-label {
-    font-size: 8px; letter-spacing: .1em;
-    color: #6B7FA8; text-transform: uppercase;
-    margin-bottom: 2px;
-}
-.regime-value {
-    font-size: 14px; font-weight: 600;
+.cv-rule {
+    width: 56px; height: 1.5px;
+    background: var(--copper); margin-bottom: 32px;
 }
 
-/* ---------- Cover body grid ---------- */
-.cover-body {
-    display: grid;
-    grid-template-columns: 180px 1fr;
-    min-height: calc(297mm - 88px);
+/* Cover — regime badge */
+.cv-regime-wrap {
+    display: flex; align-items: center; gap: 16px;
+    margin-bottom: 36px;
 }
-.sidebar {
-    background: #f9fafb;
-    border-right: 0.5px solid #e5e7eb;
-    padding: 16px 12px;
-    font-size: 10px;
+.cv-regime-label {
+    font-size: 7px; letter-spacing: 0.12em;
+    color: var(--slate-500); text-transform: uppercase;
+    margin-bottom: 4px;
 }
-.sidebar-heading {
-    font-size: 8px; font-weight: 700;
-    letter-spacing: .1em; color: #6B7280;
-    text-transform: uppercase;
-    margin-bottom: 8px; margin-top: 20px;
+.cv-regime-value {
+    font-size: 15px; font-weight: 600;
 }
-.sidebar-heading:first-child { margin-top: 0; }
-.toc-item {
-    padding: 4px 8px;
-    border-radius: 4px;
-    margin-bottom: 2px;
-    color: #374151;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.toc-item.active {
-    background: #EFF6FF;
-    color: #1D4ED8;
-    font-weight: 500;
-}
-.stat-row {
-    display: flex; justify-content: space-between;
-    padding: 6px 0;
-    border-bottom: 0.5px solid #e5e7eb;
-}
-.stat-label { color: #6B7280; font-size: 9px; }
-.stat-value { font-weight: 600; font-size: 10px; color: #111827; }
-
-.main-content {
-    padding: 20px;
-    display: flex; flex-direction: column;
+.cv-badge {
+    font-size: 8.5px; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    padding: 5px 14px; border: 1px solid; border-radius: 2px;
 }
 
-/* ---------- Chapter header ---------- */
-.chapter-header {
-    border-left: 3px solid #185FA5;
-    padding-left: 12px;
-    margin-bottom: 18px;
+/* Cover — TOC */
+.toc-label {
+    font-size: 7px; letter-spacing: 0.14em;
+    color: var(--slate-500); text-transform: uppercase;
+    margin-bottom: 14px;
 }
-.chapter-number {
-    font-size: 9px; text-transform: uppercase;
-    letter-spacing: .1em; color: #6B7280;
-    margin-bottom: 2px;
+.toc-row {
+    display: flex; align-items: baseline; padding: 6px 0;
 }
-.chapter-title {
-    font-size: 16px; font-weight: 500;
-    color: #111827;
+.toc-num {
+    font-size: 9px; color: var(--copper);
+    font-weight: 600; width: 22px; flex-shrink: 0;
 }
-
-/* ---------- Chapter body ---------- */
-.chapter-body {
-    font-size: 12px; line-height: 1.7;
-    color: #374151; flex: 1;
-    margin-bottom: 16px;
+.toc-title { font-size: 10px; color: var(--slate-300); }
+.toc-dots {
+    flex: 1; border-bottom: 0.5px dotted rgba(255,255,255,0.15);
+    margin: 0 8px; min-width: 20px;
+    position: relative; top: -3px;
 }
-
-/* ---------- Key indicators callout ---------- */
-.key-indicators {
-    background: #EFF6FF;
-    border-left: 3px solid #185FA5;
-    padding: 10px 14px;
-    margin: 16px 0;
-    display: flex; flex-wrap: wrap; gap: 16px;
-}
-.ki-item {}
-.ki-label {
-    font-size: 9px; color: #6B7280;
-    text-transform: uppercase; letter-spacing: .05em;
-}
-.ki-value {
-    font-size: 13px; font-weight: 600; color: #111827;
+.toc-page {
+    font-size: 8.5px; color: var(--slate-500);
+    font-variant-numeric: tabular-nums;
 }
 
-/* ---------- Tables ---------- */
+/* Cover — KPI strip */
+.cv-kpis {
+    display: flex; gap: 0;
+    border: 0.5px solid rgba(255,255,255,0.08);
+    border-radius: 2px;
+    margin-top: 32px;
+}
+.cv-kpi {
+    flex: 1; padding: 12px 16px;
+    border-right: 0.5px solid rgba(255,255,255,0.08);
+}
+.cv-kpi:last-child { border-right: none; }
+.cv-kpi-label {
+    font-size: 6.5px; letter-spacing: 0.1em;
+    color: var(--slate-500); text-transform: uppercase;
+    margin-bottom: 4px;
+}
+.cv-kpi-val {
+    font-size: 16px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.cv-footer {
+    margin-top: auto;
+    font-size: 7.5px; color: rgba(255,255,255,0.25);
+}
+
+/* ══════════════════════  CHAPTER PAGES  ══════════════════════ */
+
+/* Page header bar */
+.ph {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 18px 40px 14px;
+    border-bottom: 0.75px solid var(--slate-200);
+}
+.ph-fund {
+    font-size: 10px; font-weight: 600;
+    color: var(--navy); letter-spacing: 0.01em;
+}
+.ph-page { font-size: 7.5px; color: var(--slate-400); }
+
+/* Chapter header */
+.ch-header {
+    margin: 18px 40px 0; padding-bottom: 10px;
+    border-bottom: 0.75px solid var(--slate-200);
+}
+.ch-ord {
+    font-size: 7px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--copper);
+    margin-bottom: 3px;
+}
+.ch-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 16px; font-weight: 700;
+    color: var(--navy); line-height: 1.25;
+}
+
+/* Chapter content — full width (no 70/30 split for long-form) */
+.ch-wrap {
+    padding: 18px 40px 72px;
+}
+
+/* Body typography */
+.bt {
+    font-size: 9.5px; line-height: 1.7;
+    color: var(--text-secondary); margin: 0 0 8px;
+}
+.mh {
+    font-family: 'Playfair Display', serif;
+    font-size: 13px; font-weight: 700;
+    color: var(--navy); margin: 20px 0 8px;
+}
+.sh {
+    font-family: 'Playfair Display', serif;
+    font-size: 11.5px; font-weight: 600;
+    color: var(--slate-900); margin: 16px 0 6px;
+    padding-bottom: 3px;
+    border-bottom: 0.5px solid var(--slate-200);
+}
+.v-space { height: 8px; }
+
+/* ── Key metrics strip (inline, 4 cells) ── */
+.kpi-strip {
+    display: flex; gap: 0;
+    border: 0.5px solid var(--slate-200);
+    border-radius: 2px; margin: 16px 0;
+}
+.kpi-cell {
+    flex: 1; padding: 10px 14px;
+    border-right: 0.5px solid var(--slate-200);
+}
+.kpi-cell:last-child { border-right: none; }
+.kpi-label {
+    font-size: 6.5px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--slate-500);
+    margin-bottom: 3px;
+}
+.kpi-val {
+    font-size: 14px; font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+.kpi-val.positive { color: #059669; }
+.kpi-val.negative { color: var(--burgundy); }
+
+/* ── Tufte-style tables ── */
 .data-table {
     width: 100%; border-collapse: collapse;
-    font-size: 10px; margin: 10px 0;
+    font-size: 9px; margin: 12px 0;
+    font-variant-numeric: tabular-nums;
 }
-.data-table th {
-    text-align: left; font-weight: 600;
-    padding: 8px 10px; font-size: 9px;
-    text-transform: uppercase; letter-spacing: .05em;
-    color: #6B7280;
-    border-bottom: 1px solid #D1D5DB;
+.data-table thead th {
+    font-size: 7.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--slate-500); text-align: left;
+    padding: 6px 8px 4px;
+    border-bottom: 1.5px solid var(--navy);
+    border-top: none;
 }
-.data-table td {
-    padding: 7px 10px;
-    border-bottom: 0.5px solid #e5e7eb;
-    color: #374151;
+.data-table tbody td {
+    font-size: 9px; padding: 5px 8px;
+    border-bottom: none; color: var(--text-secondary);
 }
-.data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.data-table tbody tr:nth-child(even) td {
+    background: var(--slate-50);
+}
+.data-table .num { text-align: right; }
 .positive { color: #059669; }
-.negative { color: #DC2626; }
+.negative { color: var(--burgundy); }
 
-/* ---------- Footer nav (cover) ---------- */
-.footer-nav {
-    border-top: 0.5px solid #e5e7eb;
-    padding: 10px 0;
-    display: flex; justify-content: space-between;
-    font-size: 10px; color: #2563EB;
-    margin-top: auto;
-}
-.footer-nav a { color: #2563EB; text-decoration: none; }
-
-/* ---------- Page header (pages 2-4) ---------- */
-.page-header {
-    display: flex; justify-content: space-between;
-    padding: 12px 24px;
-    font-size: 11px; color: #6b7280;
-    border-bottom: 0.5px solid #e5e7eb;
-}
-
-/* ---------- Page content (pages 2-4) ---------- */
-.page-content {
-    padding: 24px 28px;
-}
-
-/* ---------- Page footer ---------- */
-.page-footer {
+/* ── Page footer ── */
+.pf {
     position: absolute; bottom: 0; left: 0; right: 0;
-    border-top: 0.5px solid #e5e7eb;
-    padding: 8px 24px;
+    padding: 10px 40px;
+    font-size: 7px; color: var(--slate-400);
+    border-top: 0.5px solid var(--slate-200);
     display: flex; justify-content: space-between;
-    font-size: 8px; color: #9CA3AF;
+    letter-spacing: 0.02em;
 }
 
-/* ---------- Disclaimer ---------- */
-.disclaimer {
-    background: #f9fafb;
-    border: 0.5px solid #e5e7eb;
-    border-radius: 4px;
-    padding: 18px 20px;
-    margin-top: 24px;
-    font-size: 8px; line-height: 1.6;
-    color: #6B7280;
+/* ── Disclaimer ── */
+.disc {
+    margin-top: 20px; padding: 18px 0 0;
+    border-top: 0.75px solid var(--slate-200);
+    font-size: 7.5px; line-height: 1.7;
+    color: var(--slate-500);
 }
-.disclaimer-title {
-    font-weight: 700; font-size: 9px;
-    color: #374151; margin-bottom: 6px;
-    text-transform: uppercase; letter-spacing: .05em;
+.disc-title {
+    font-weight: 700; font-size: 7.5px;
+    color: var(--slate-700); text-transform: uppercase;
+    letter-spacing: 0.08em; margin-bottom: 8px;
 }
+.disc p { margin-top: 5px; }
+
+/* ── Chapter block spacing ── */
 .chapter-block + .chapter-block {
     margin-top: 28px;
     padding-top: 24px;
-    border-top: 0.5px solid #f3f4f6;
+    border-top: 0.5px solid var(--slate-200);
 }
-.stat-row:last-child { border-bottom: none; }
-.chapter-body p { line-height: 1.75; }
 """
 
 
@@ -472,26 +526,33 @@ def _render_chapter_block(
 
     # Chapter header
     parts.append(
-        f'<div class="chapter-header">'
-        f'<div class="chapter-number">Chapter {order} of {total}</div>'
-        f'<div class="chapter-title">{_esc(title)}</div>'
+        f'<div class="ch-header">'
+        f'<div class="ch-ord">Chapter {order}</div>'
+        f'<div class="ch-title">{_esc(title)}</div>'
         f"</div>"
     )
 
-    # Body prose
+    # Body prose — each paragraph separated
     prose = _chapter_content_text(content)
     if prose:
-        parts.append(f'<div class="chapter-body"><p>{prose}</p></div>')
+        paras = [p.strip() for p in prose.split("\n\n") if p.strip()]
+        if paras:
+            prose_html = "".join(
+                f'<p class="bt">{p}</p><div class="v-space"></div>' for p in paras
+            )
+        else:
+            prose_html = f'<p class="bt">{prose}</p>'
+        parts.append(prose_html)
 
-    # Key indicators callout
+    # Key indicators strip
     indicators = _chapter_key_indicators(content)
     if indicators:
         items_html = "".join(
-            f'<div class="ki-item"><div class="ki-label">{label}</div>'
-            f'<div class="ki-value">{val}</div></div>'
+            f'<div class="kpi-cell"><div class="kpi-label">{label}</div>'
+            f'<div class="kpi-val">{val}</div></div>'
             for label, val in indicators
         )
-        parts.append(f'<div class="key-indicators">{items_html}</div>')
+        parts.append(f'<div class="kpi-strip">{items_html}</div>')
 
     if not include_tables:
         return '<div class="chapter-block">' + "\n".join(parts) + "</div>"
@@ -510,7 +571,7 @@ def _render_chapter_block(
     if confidence < 1.0:
         pct = int(confidence * 100)
         parts.append(
-            f'<div style="font-size:9px;color:#6B7280;margin-top:8px;">'
+            f'<div style="font-size:9px;color:var(--slate-500);margin-top:8px;">'
             f"Confidence: {pct}%</div>"
         )
 
@@ -523,101 +584,80 @@ def _render_chapter_block(
 
 
 def _render_page1(data: "LongFormReportData", chapters: list[Any]) -> str:
-    """Render page 1 — cover with sidebar + first chapter."""
-    regime_color = _REGIME_COLORS.get(data.regime, "#9CA3AF")
-    regime_label = _REGIME_LABELS.get(data.regime, _esc(data.regime))
+    """Render cover page in DD Report design language."""
     total = len(chapters) or 8
+    total_pages = 4
 
-    # Sidebar: table of contents
-    toc_items: list[str] = []
-    for i, ch in enumerate(chapters):
-        title = _esc(getattr(ch, "title", f"Chapter {i + 1}"))
-        active = "active" if i == 0 else ""
-        toc_items.append(
-            f'<div class="toc-item {active}">'
-            f"{i + 1}. {title}</div>"
+    portfolio_name = _esc(data.portfolio_name)
+    profile = _esc(data.profile.title() if data.profile else "")
+    as_of_str = _esc(data.as_of.strftime("%B %d, %Y") if data.as_of else "")
+
+    regime_raw = (data.regime or "expansion").lower()
+    regime_label = _REGIME_LABELS.get(regime_raw, regime_raw.title())
+    regime_color = _REGIME_COLORS.get(regime_raw, "#6EE7B7")
+
+    # KPI strip values
+    cvar_str = _fmt_pct(data.cvar_95) if data.cvar_95 is not None else "&mdash;"
+    vol_str = _fmt_pct(data.volatility) if data.volatility is not None else "&mdash;"
+    sharpe_str = _fmt_number(data.sharpe) if data.sharpe is not None else "&mdash;"
+    er_str = (
+        _fmt_pct(data.avg_expense_ratio, 2)
+        if data.avg_expense_ratio is not None
+        else "&mdash;"
+    )
+
+    # TOC from chapters
+    toc_rows = ""
+    for i, ch in enumerate(chapters[:8], 1):
+        title = _esc(getattr(ch, "title", f"Chapter {i}"))
+        toc_rows += (
+            f'<div class="toc-row">'
+            f'<span class="toc-num">{i}.</span>'
+            f'<span class="toc-title">{title}</span>'
+            f'<span class="toc-dots"></span>'
+            f'<span class="toc-page">{i + 1}</span>'
+            f"</div>"
         )
-    # Pad to 8 if fewer chapters provided
-    for i in range(len(chapters), 8):
-        toc_items.append(
-            f'<div class="toc-item">{i + 1}. &mdash;</div>'
-        )
-
-    # Sidebar: key stats
-    stats = [
-        ("Active Return", _fmt_bps(data.active_return_bps)),
-        ("CVaR 95%", _fmt_pct(data.cvar_95)),
-        ("Avg ER", _fmt_pct(data.avg_expense_ratio)),
-        ("Instruments", str(data.instrument_count)),
-    ]
-    stats_html = "".join(
-        f'<div class="stat-row">'
-        f'<span class="stat-label">{label}</span>'
-        f'<span class="stat-value">{val}</span></div>'
-        for label, val in stats
-    )
-
-    # First chapter
-    ch1 = chapters[0] if chapters else None
-    ch1_html = ""
-    if ch1:
-        ch1_html = _render_chapter_block(ch1, total, data)
-
-    # First chapter key indicators from top-level data (always show)
-    cover_indicators = (
-        f'<div class="key-indicators">'
-        f'<div class="ki-item"><div class="ki-label">Active Return</div>'
-        f'<div class="ki-value">{_fmt_bps(data.active_return_bps)}</div></div>'
-        f'<div class="ki-item"><div class="ki-label">CVaR 95%</div>'
-        f'<div class="ki-value">{_fmt_pct(data.cvar_95)}</div></div>'
-        f'<div class="ki-item"><div class="ki-label">Volatility</div>'
-        f'<div class="ki-value">{_fmt_pct(data.volatility)}</div></div>'
-        f'<div class="ki-item"><div class="ki-label">Sharpe</div>'
-        f'<div class="ki-value">{_fmt_number(data.sharpe)}</div></div>'
-        f"</div>"
-    )
-
-    # Footer nav
-    next_title = _esc(getattr(chapters[1], "title", "")) if len(chapters) > 1 else ""
-    footer_nav = (
-        f'<div class="footer-nav">'
-        f"<span></span>"
-        f"<span>2. {next_title} &rarr;</span>"
-        f"</div>"
-    )
 
     return (
-        f'<div class="page">'
-        # Cover header
-        f'<div class="cover-header">'
-        f'<div class="cover-header-left">'
-        f'<div class="cover-label">Long-Form Due Diligence Report &middot; Confidential</div>'
-        f'<div class="cover-title">{_esc(data.portfolio_name)}</div>'
-        f'<div class="cover-subtitle">Prepared {_fmt_date(data.as_of)} &middot; '
-        f"Pending Investment Committee Review</div>"
+        f'<div class="page"><div class="cover">'
+        f'<div class="cv-label">Long-Form Due Diligence Report &middot; Confidential</div>'
+        f'<div class="cv-fund">{portfolio_name}</div>'
+        f'<div class="cv-sub">Profile: {profile} &middot; As of {as_of_str}</div>'
+        f'<div class="cv-rule"></div>'
+        f'<div class="cv-regime-wrap">'
+        f"<div>"
+        f'<div class="cv-regime-label">Market Regime</div>'
+        f'<div class="cv-regime-value" style="color:{regime_color}">'
+        f"{_esc(regime_label)}</div>"
         f"</div>"
-        f'<div class="regime-box">'
-        f'<div class="regime-label">Regime</div>'
-        f'<div class="regime-value" style="color:{regime_color}">{regime_label}</div>'
+        f'<div class="cv-badge" style="border-color:{regime_color};color:{regime_color}">'
+        f"{_esc(regime_label.upper())}</div>"
+        f"</div>"
+        f'<div class="toc-label">Table of Contents</div>'
+        f"{toc_rows}"
+        f'<div class="cv-kpis">'
+        f'<div class="cv-kpi">'
+        f'<div class="cv-kpi-label">CVaR 95%</div>'
+        f'<div class="cv-kpi-val" style="color:var(--burgundy)">{cvar_str}</div>'
+        f"</div>"
+        f'<div class="cv-kpi">'
+        f'<div class="cv-kpi-label">Volatility</div>'
+        f'<div class="cv-kpi-val">{vol_str}</div>'
+        f"</div>"
+        f'<div class="cv-kpi">'
+        f'<div class="cv-kpi-label">Sharpe Ratio</div>'
+        f'<div class="cv-kpi-val">{sharpe_str}</div>'
+        f"</div>"
+        f'<div class="cv-kpi">'
+        f'<div class="cv-kpi-label">Avg Expense Ratio</div>'
+        f'<div class="cv-kpi-val">{er_str}</div>'
         f"</div>"
         f"</div>"
-        # Body grid
-        f'<div class="cover-body">'
-        # Sidebar
-        f'<div class="sidebar">'
-        f'<div class="sidebar-heading">Contents</div>'
-        + "".join(toc_items)
-        + '<div class="sidebar-heading">Key Stats</div>'
-        + stats_html
-        + "</div>"
-        # Main content
-        '<div class="main-content">'
-        + ch1_html
-        + cover_indicators
-        + footer_nav
-        + "</div>"
-        "</div>"
-        "</div>"
+        f'<div style="flex:1"></div>'
+        f'<div class="cv-footer">CONFIDENTIAL — INTERNAL USE ONLY &middot; '
+        f"p.&thinsp;1 of {total_pages}</div>"
+        f"</div></div>"
     )
 
 
@@ -635,13 +675,13 @@ def _render_inner_page(
 
     # Page header
     parts.append(
-        f'<div class="page-header">'
-        f"<span>{_esc(data.portfolio_name)}</span>"
-        f"<span>Page {page_num} of {total_pages}</span>"
+        f'<div class="ph">'
+        f'<span class="ph-fund">{_esc(data.portfolio_name)}</span>'
+        f'<span class="ph-page">p.&thinsp;{page_num} of {total_pages}</span>'
         f"</div>"
     )
 
-    parts.append('<div class="page-content">')
+    parts.append('<div class="ch-wrap">')
 
     for ch in chapters_on_page:
         parts.append(_render_chapter_block(ch, total_chapters, data))
@@ -649,22 +689,15 @@ def _render_inner_page(
     # Legal disclaimer on final page
     if is_final:
         parts.append(
-            '<div class="disclaimer">'
-            '<div class="disclaimer-title">Important Disclosures &amp; Disclaimer</div>'
-            "<p>This report is produced by the InvestIntell quantitative research platform. "
-            "Analytics, risk metrics, performance attribution, and portfolio exposures are "
-            "computed from official regulatory filings (SEC EDGAR), macroeconomic data "
-            "(FRED), market data, and OFR systemic risk indicators, processed through "
-            "institutional-grade statistical and quantitative models.</p>"
-            "<p style='margin-top:8px'>Narrative sections reflect the analytical output of "
-            "the research platform and have been reviewed by the portfolio management team "
-            "prior to distribution. This report does not constitute investment advice.</p>"
-            "<p style='margin-top:8px'>Past performance is not indicative of future results. "
-            "Simulated stress scenarios are hypothetical and do not represent actual losses. "
-            "*Returns prior to inception date use backtested model data.</p>"
-            "<p style='margin-top:8px'><strong>Confidentiality:</strong> Proprietary and "
-            "confidential. Unauthorized distribution strictly prohibited.</p>"
-            "<p style='margin-top:8px'>&copy; InvestIntell. All rights reserved.</p>"
+            '<div class="disc">'
+            '<div class="disc-title">Important Disclosures &amp; Disclaimer</div>'
+            "<p>This Long-Form Due Diligence Report is produced by the InvestIntell "
+            "quantitative research platform. All analytics, attribution, risk metrics, "
+            "and portfolio assessments are derived from official regulatory filings, "
+            "macroeconomic data sources, and proprietary quantitative models.</p>"
+            "<p>This report does not constitute investment advice. Past performance is "
+            "not indicative of future results. For authorized recipients only.</p>"
+            "<p>&copy; InvestIntell. All rights reserved.</p>"
             "</div>"
         )
 
@@ -672,9 +705,9 @@ def _render_inner_page(
 
     # Page footer
     parts.append(
-        f'<div class="page-footer">'
+        f'<div class="pf">'
         f"<span>Confidential &mdash; For authorized recipients only</span>"
-        f"<span>Page {page_num} of {total_pages}</span>"
+        f"<span>p.&thinsp;{page_num} of {total_pages}</span>"
         f"</div>"
     )
 
