@@ -248,96 +248,79 @@ def _sample_data() -> object:
 
 
 class TestExecutiveRenderer:
-    """Smoke tests for executive PDF renderer."""
+    """Smoke tests for executive HTML template renderer (Playwright stack)."""
 
-    def test_render_pt_valid_pdf(self):
-        from vertical_engines.wealth.fact_sheet.executive_renderer import (
-            render_executive,
+    def test_render_pt_produces_html(self):
+        from vertical_engines.wealth.pdf.templates.fact_sheet_executive import (
+            render_fact_sheet_executive,
         )
 
         data = _sample_data()
-        buf = render_executive(data, language="pt")  # type: ignore[arg-type]
-        assert isinstance(buf, BytesIO)
-        header = buf.read(5)
-        assert header == b"%PDF-"
+        html_str = render_fact_sheet_executive(data, language="pt")  # type: ignore[arg-type]
+        assert isinstance(html_str, str)
+        assert "<!DOCTYPE html>" in html_str or "<html" in html_str
 
-    def test_render_en_valid_pdf(self):
-        from vertical_engines.wealth.fact_sheet.executive_renderer import (
-            render_executive,
+    def test_render_en_produces_html(self):
+        from vertical_engines.wealth.pdf.templates.fact_sheet_executive import (
+            render_fact_sheet_executive,
         )
 
         data = _sample_data()
-        buf = render_executive(data, language="en")  # type: ignore[arg-type]
-        header = buf.read(5)
-        assert header == b"%PDF-"
+        html_str = render_fact_sheet_executive(data, language="en")  # type: ignore[arg-type]
+        assert isinstance(html_str, str)
+        assert "Conservative Portfolio" in html_str
 
-    def test_render_with_charts(self):
-        from vertical_engines.wealth.fact_sheet.chart_builder import (
-            render_allocation_pie,
-            render_nav_chart,
+    def test_holdings_table_present(self):
+        from vertical_engines.wealth.pdf.templates.fact_sheet_executive import (
+            render_fact_sheet_executive,
         )
-        from vertical_engines.wealth.fact_sheet.executive_renderer import (
-            render_executive,
-        )
-        from vertical_engines.wealth.fact_sheet.models import NavPoint
 
         data = _sample_data()
-        nav_series = [NavPoint(nav_date=date(2025, 1, i + 1), nav=1000 + i * 10) for i in range(30)]
-        nav_chart = render_nav_chart(nav_series)
-        alloc_chart = render_allocation_pie(data.allocations)  # type: ignore[attr-defined]
-
-        buf = render_executive(
-            data,  # type: ignore[arg-type]
-            language="pt",
-            nav_chart=nav_chart,
-            allocation_chart=alloc_chart,
-        )
-        header = buf.read(5)
-        assert header == b"%PDF-"
-        # PDF should be larger with charts
-        buf.seek(0, 2)
-        assert buf.tell() > 1000
+        html_str = render_fact_sheet_executive(data, language="en")  # type: ignore[arg-type]
+        assert "Global Equity Fund" in html_str
+        assert "25.0%" in html_str
 
 
 class TestInstitutionalRenderer:
-    """Smoke tests for institutional PDF renderer."""
+    """Smoke tests for institutional HTML template renderer (Playwright stack)."""
 
-    def test_render_pt_valid_pdf(self):
-        from vertical_engines.wealth.fact_sheet.institutional_renderer import (
-            render_institutional,
+    def test_render_pt_produces_html(self):
+        from vertical_engines.wealth.pdf.templates.fact_sheet_institutional import (
+            render_fact_sheet_institutional,
         )
 
         data = _sample_data()
-        buf = render_institutional(data, language="pt")  # type: ignore[arg-type]
-        header = buf.read(5)
-        assert header == b"%PDF-"
+        html_str = render_fact_sheet_institutional(data, language="pt")  # type: ignore[arg-type]
+        assert isinstance(html_str, str)
+        assert "<!DOCTYPE html>" in html_str or "<html" in html_str
 
-    def test_render_en_valid_pdf(self):
-        from vertical_engines.wealth.fact_sheet.institutional_renderer import (
-            render_institutional,
+    def test_render_en_produces_html(self):
+        from vertical_engines.wealth.pdf.templates.fact_sheet_institutional import (
+            render_fact_sheet_institutional,
         )
 
         data = _sample_data()
-        buf = render_institutional(data, language="en")  # type: ignore[arg-type]
-        header = buf.read(5)
-        assert header == b"%PDF-"
+        html_str = render_fact_sheet_institutional(data, language="en")  # type: ignore[arg-type]
+        assert isinstance(html_str, str)
+        assert "Conservative Portfolio" in html_str
 
-    def test_institutional_larger_than_executive(self):
-        from vertical_engines.wealth.fact_sheet.executive_renderer import (
-            render_executive,
-        )
-        from vertical_engines.wealth.fact_sheet.institutional_renderer import (
-            render_institutional,
+    def test_institutional_has_attribution(self):
+        from vertical_engines.wealth.pdf.templates.fact_sheet_institutional import (
+            render_fact_sheet_institutional,
         )
 
         data = _sample_data()
-        exec_buf = render_executive(data, language="en")  # type: ignore[arg-type]
-        inst_buf = render_institutional(data, language="en")  # type: ignore[arg-type]
+        html_str = render_fact_sheet_institutional(data, language="en")  # type: ignore[arg-type]
+        assert "Equity Global" in html_str
 
-        exec_buf.seek(0, 2)
-        inst_buf.seek(0, 2)
-        # Institutional should be larger (more sections)
-        assert inst_buf.tell() >= exec_buf.tell()
+    def test_institutional_has_stress(self):
+        from vertical_engines.wealth.pdf.templates.fact_sheet_institutional import (
+            render_fact_sheet_institutional,
+        )
+
+        data = _sample_data()
+        html_str = render_fact_sheet_institutional(data, language="en")  # type: ignore[arg-type]
+        assert "2008" in html_str or "gfc" in html_str.lower()
 
 
 # ── DD Report PDF tests ─────────────────────────────────────────────────────

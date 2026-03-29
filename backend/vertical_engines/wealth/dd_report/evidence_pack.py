@@ -23,10 +23,11 @@ _CHAPTER_FIELD_EXPECTATIONS: dict[str, dict[str, Any]] = {
     "fee_analysis": {
         "fields": [
             "fund_name", "fund_type", "currency",
+            "prospectus_stats",
             "fund_enrichment",
         ],
-        "providers": ["YFinance", "SEC N-CSR XBRL", "SEC N-CEN"],
-        "primary_provider": "SEC N-CSR XBRL",
+        "providers": ["SEC DERA RR1 Prospectus", "SEC N-CSR XBRL", "SEC N-CEN"],
+        "primary_provider": "SEC DERA RR1 Prospectus",
     },
     "investment_strategy": {
         "fields": [
@@ -63,12 +64,13 @@ _CHAPTER_FIELD_EXPECTATIONS: dict[str, dict[str, Any]] = {
     },
     "performance_analysis": {
         "fields": [
+            "prospectus_returns",
+            "prospectus_stats",
             "quant_profile.sharpe_1y", "quant_profile.return_1y",
-            "quant_profile.return_3m", "quant_profile.return_1m",
             "quant_profile.cvar_95_3m", "quant_profile.max_drawdown_1y",
         ],
-        "providers": ["YFinance"],
-        "primary_provider": "YFinance",
+        "providers": ["SEC DERA RR1 Prospectus", "YFinance"],
+        "primary_provider": "SEC DERA RR1 Prospectus",
     },
     "risk_framework": {
         "fields": [
@@ -190,6 +192,12 @@ class EvidencePack:
     # Fund enrichment (N-CEN classification + XBRL fees + vehicle-specific)
     fund_enrichment: dict[str, Any] = field(default_factory=dict)
 
+    # SEC Prospectus data (RR1) — authoritative fee and return data
+    prospectus_stats: dict[str, Any] = field(default_factory=dict)
+
+    # Annual returns from prospectus bar chart: [{"year": int, "annual_return_pct": float}]
+    prospectus_returns: list[dict[str, Any]] = field(default_factory=list)
+
     def to_context(self) -> dict[str, Any]:
         """Convert to template context dict for Jinja2 rendering."""
         return {
@@ -230,6 +238,11 @@ class EvidencePack:
             "adv_team": self.adv_team,
             "adv_brochure_sections": self.adv_brochure_sections,
             "fund_enrichment": self.fund_enrichment,
+            "prospectus_stats": self.prospectus_stats,
+            "prospectus_returns": self.prospectus_returns,
+            "prospectus_data_available": bool(
+                self.prospectus_stats.get("prospectus_stats_available")
+            ),
         }
 
     def filter_for_chapter(self, chapter_tag: str) -> dict[str, Any]:
@@ -315,6 +328,8 @@ def build_evidence_pack(
     adv_brochure_sections: dict[str, str] | None = None,
     holdings_source: str | None = None,
     fund_enrichment: dict[str, Any] | None = None,
+    prospectus_stats: dict[str, Any] | None = None,
+    prospectus_returns: list[dict[str, Any]] | None = None,
 ) -> EvidencePack:
     """Build a frozen evidence pack from gathered data.
 
@@ -397,4 +412,6 @@ def build_evidence_pack(
         adv_team=_adv.get("adv_team", []),
         adv_brochure_sections=adv_brochure_sections or {},
         fund_enrichment=fund_enrichment or {},
+        prospectus_stats=prospectus_stats or {},
+        prospectus_returns=prospectus_returns or [],
     )

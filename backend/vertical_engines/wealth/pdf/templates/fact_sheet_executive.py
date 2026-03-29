@@ -473,22 +473,47 @@ def _holdings_table(
     limit: int | None = None,
 ) -> str:
     items = holdings[:limit] if limit else holdings
+
+    # Detect if any holding has 1Y return from prospectus
+    has_returns = any(
+        getattr(h, "one_year_return", None) is not None for h in items
+    )
+
     rows = ""
     for h in items:
-        rows += (
-            f"<tr>"
+        one_yr = getattr(h, "one_year_return", None)
+        ret_color = "var(--text-primary)" if one_yr is None or one_yr >= 0 else "var(--burgundy, #8B0000)"
+
+        cells = (
             f'<td style="color:var(--text-primary);font-weight:500">{_e(h.fund_name)}</td>'
             f'<td style="color:var(--slate-500)">{_e(fmt_strategy(h.block_id))}</td>'
             f'<td style="text-align:right;font-weight:600;color:var(--text-primary);'
             f'font-variant-numeric:tabular-nums">{h.weight * 100:.1f}%</td>'
-            f"</tr>"
         )
+        if has_returns:
+            cells += (
+                f'<td style="text-align:right;color:{ret_color};font-variant-numeric:tabular-nums">'
+                f'{"&mdash;" if one_yr is None else f"{one_yr:+.1f}%"}</td>'
+            )
+        rows += f"<tr>{cells}</tr>"
+
+    if has_returns:
+        header = (
+            f'<th style="width:42%">{_e(labels["fund_name"])}</th>'
+            f'<th style="width:26%">{_e(labels["strategy"])}</th>'
+            f'<th style="text-align:right;width:16%">{_e(labels["weight"])}</th>'
+            f'<th style="text-align:right;width:16%">1Y Ret.</th>'
+        )
+    else:
+        header = (
+            f'<th style="width:50%">{_e(labels["fund_name"])}</th>'
+            f'<th style="width:30%">{_e(labels["strategy"])}</th>'
+            f'<th style="text-align:right;width:20%">{_e(labels["weight"])}</th>'
+        )
+
     return (
-        f'<table class="fixed-cols"><thead><tr>'
-        f'<th style="width:50%">{_e(labels["fund_name"])}</th>'
-        f'<th style="width:30%">{_e(labels["strategy"])}</th>'
-        f'<th style="text-align:right;width:20%">{_e(labels["weight"])}</th>'
-        f"</tr></thead><tbody>{rows}</tbody></table>"
+        f'<table class="fixed-cols"><thead><tr>{header}</tr></thead>'
+        f"<tbody>{rows}</tbody></table>"
     )
 
 

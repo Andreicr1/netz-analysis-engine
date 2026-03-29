@@ -155,6 +155,36 @@ def _build_user_content(
             if val is not None and key != "score_components":
                 parts.append(f"- {key}: {val}")
 
+    # Prospectus data for performance and fee chapters
+    prospectus_stats = evidence_context.get("prospectus_stats", {})
+    if prospectus_stats.get("prospectus_stats_available"):
+        if chapter_tag == "performance_analysis":
+            prospectus_returns = evidence_context.get("prospectus_returns", [])
+            if prospectus_returns:
+                parts.append("\n## Prospectus Annual Returns (SEC RR1)")
+                for r in prospectus_returns:
+                    parts.append(f"- {r['year']}: {r['annual_return_pct']:.2f}%")
+            if prospectus_stats.get("avg_annual_return_1y") is not None:
+                parts.append("\n## Prospectus Average Annual Returns")
+                parts.append(f"- 1 Year: {prospectus_stats['avg_annual_return_1y']:.2f}%")
+                if prospectus_stats.get("avg_annual_return_5y") is not None:
+                    parts.append(f"- 5 Years: {prospectus_stats['avg_annual_return_5y']:.2f}%")
+                if prospectus_stats.get("avg_annual_return_10y") is not None:
+                    parts.append(f"- 10 Years: {prospectus_stats['avg_annual_return_10y']:.2f}%")
+
+        if chapter_tag == "fee_analysis":
+            parts.append("\n## Prospectus Fee Table (SEC RR1)")
+            if prospectus_stats.get("expense_ratio_pct") is not None:
+                parts.append(f"- Total Expenses: {prospectus_stats['expense_ratio_pct']:.4f}%")
+            if prospectus_stats.get("net_expense_ratio_pct") is not None:
+                parts.append(f"- Net Expenses: {prospectus_stats['net_expense_ratio_pct']:.4f}%")
+            if prospectus_stats.get("management_fee_pct") is not None:
+                parts.append(f"- Management Fee: {prospectus_stats['management_fee_pct']:.4f}%")
+            if prospectus_stats.get("fee_waiver_pct") is not None:
+                parts.append(f"- Fee Waiver: {prospectus_stats['fee_waiver_pct']:.4f}%")
+            if prospectus_stats.get("expense_example_1y") is not None:
+                parts.append(f"- Expense Example 1Y: ${prospectus_stats['expense_example_1y']:.0f}")
+
     # Risk metrics for risk chapter
     risk = evidence_context.get("risk_metrics", {})
     if risk and chapter_tag == "risk_framework":

@@ -1,0 +1,53 @@
+{#- metadata
+name: fee_analysis
+vertical: wealth
+description: DD Report Chapter — Fee Analysis
+-#}
+You are a senior investment analyst writing the "Fee Analysis" chapter
+of an institutional fund due diligence report. Write thorough analysis
+in markdown. Present exact fee figures from regulatory filings.
+
+{% if prospectus_stats.prospectus_stats_available %}
+## Data Source: SEC DERA RR1 Prospectus (Authoritative Fee Table)
+
+The following fees are from the fund's official SEC Form N-1A Item 3
+Shareholder Fee Table. These are regulatory disclosures, not estimates.
+Present them as exact figures from the prospectus.
+Filing date: {{ prospectus_stats.filing_date or "most recent available" }}.
+
+Fee Table:
+{% if prospectus_stats.expense_ratio_pct is not none %}
+- Total Annual Fund Operating Expenses: {{ "%.4f"|format(prospectus_stats.expense_ratio_pct) }}%
+{% endif %}
+{% if prospectus_stats.net_expense_ratio_pct is not none %}
+- Net Expenses (after fee waivers): {{ "%.4f"|format(prospectus_stats.net_expense_ratio_pct) }}%
+{% endif %}
+{% if prospectus_stats.management_fee_pct is not none %}
+- Management Fees: {{ "%.4f"|format(prospectus_stats.management_fee_pct) }}%
+{% endif %}
+{% if prospectus_stats.fee_waiver_pct is not none %}
+- Fee Waiver / Reimbursement: {{ "%.4f"|format(prospectus_stats.fee_waiver_pct) }}%
+{% endif %}
+{% if prospectus_stats.distribution_12b1_pct is not none %}
+- Distribution and Service (12b-1) Fees: {{ "%.4f"|format(prospectus_stats.distribution_12b1_pct) }}%
+{% endif %}
+{% if prospectus_stats.portfolio_turnover_pct is not none %}
+- Portfolio Turnover Rate: {{ "%.2f"|format(prospectus_stats.portfolio_turnover_pct) }}%
+{% endif %}
+{% if prospectus_stats.expense_example_1y is not none %}
+Expense Example (per $10,000 invested):
+- 1 Year: ${{ "%.0f"|format(prospectus_stats.expense_example_1y) }}{% if prospectus_stats.expense_example_3y is not none %} / 3 Years: ${{ "%.0f"|format(prospectus_stats.expense_example_3y) }}{% endif %}{% if prospectus_stats.expense_example_5y is not none %} / 5 Years: ${{ "%.0f"|format(prospectus_stats.expense_example_5y) }}{% endif %}{% if prospectus_stats.expense_example_10y is not none %} / 10 Years: ${{ "%.0f"|format(prospectus_stats.expense_example_10y) }}{% endif %}
+{% endif %}
+
+{% else %}
+## Data Source: N-CEN / YFinance (regulatory fee table not available)
+Use fund_enrichment expense ratio and N-CEN fee data where present.
+Qualify that data is from operational filings, not the investor prospectus.
+{% endif %}
+
+Produce the chapter as institutional-quality markdown with sections covering:
+1. Fee structure breakdown (management, distribution, other)
+2. Expense ratio analysis and peer comparison context
+3. Fee waivers and their sustainability
+4. Total cost of ownership (expense examples)
+5. Key takeaways for the investment committee

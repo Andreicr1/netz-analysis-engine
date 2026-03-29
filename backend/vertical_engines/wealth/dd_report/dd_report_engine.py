@@ -54,6 +54,8 @@ from vertical_engines.wealth.dd_report.quant_injection import (
 )
 from vertical_engines.wealth.dd_report.sec_injection import (
     gather_fund_enrichment,
+    gather_prospectus_returns,
+    gather_prospectus_stats,
     gather_sec_13f_data,
     gather_sec_adv_brochure,
     gather_sec_adv_data,
@@ -351,6 +353,12 @@ class DDReportEngine:
         def _run_enrichment() -> dict:
             return gather_fund_enrichment(db, fund_cik=fund_cik, sec_universe=sec_universe)
 
+        def _run_prospectus_stats() -> dict:
+            return gather_prospectus_stats(db, fund_cik=fund_cik)
+
+        def _run_prospectus_returns() -> list:
+            return gather_prospectus_returns(db, fund_cik=fund_cik)
+
         tasks = {
             "quant": _run_quant,
             "risk": _run_risk,
@@ -358,10 +366,12 @@ class DDReportEngine:
             "thirteenf": _run_13f,
             "adv": _run_adv,
             "enrichment": _run_enrichment,
+            "prospectus_stats": _run_prospectus_stats,
+            "prospectus_returns": _run_prospectus_returns,
         }
 
         results: dict[str, Any] = {}
-        with ThreadPoolExecutor(max_workers=6) as pool:
+        with ThreadPoolExecutor(max_workers=8) as pool:
             futures = {pool.submit(fn): name for name, fn in tasks.items()}
             for future in as_completed(futures):
                 name = futures[future]
@@ -377,6 +387,8 @@ class DDReportEngine:
         sec_13f = results["thirteenf"]
         sec_adv = results["adv"]
         enrichment = results.get("enrichment", {})
+        prospectus_stats = results.get("prospectus_stats", {})
+        prospectus_returns = results.get("prospectus_returns", [])
 
         holdings_source: str | None = None
         if sec_nport:
@@ -426,6 +438,8 @@ class DDReportEngine:
             adv_brochure_sections=adv_brochure,
             holdings_source=holdings_source,
             fund_enrichment=enrichment,
+            prospectus_stats=prospectus_stats,
+            prospectus_returns=prospectus_returns,
         )
 
     def _generate_all_chapters(

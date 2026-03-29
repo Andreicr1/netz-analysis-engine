@@ -1,9 +1,12 @@
-"""FactSheetEngine — orchestrates data loading, chart rendering, and PDF generation.
+"""FactSheetEngine — orchestrates data loading and PDF generation.
+
+Renders fact-sheet PDFs via Playwright Chromium (HTML→PDF).
+Charts are inline SVG (no matplotlib dependency for rendering).
 
 Usage::
 
     engine = FactSheetEngine(config=config)
-    pdf_bytes = engine.generate(
+    pdf_buf = engine.generate(
         db,
         portfolio_id=portfolio_id,
         organization_id=org_id,
@@ -15,7 +18,6 @@ Usage::
 from __future__ import annotations
 
 import uuid
-from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from io import BytesIO
 from typing import Any, Literal
@@ -23,7 +25,7 @@ from typing import Any, Literal
 import structlog
 from sqlalchemy.orm import Session
 
-from vertical_engines.wealth.fact_sheet.i18n import LABELS, Language
+from vertical_engines.wealth.fact_sheet.i18n import Language
 from vertical_engines.wealth.fact_sheet.models import (
     AllocationBlock,
     AttributionRow,
@@ -55,50 +57,44 @@ class FactSheetEngine:
         language: Language = "pt",
         as_of: date | None = None,
     ) -> BytesIO:
-        """Generate a fact-sheet PDF.
+        """Generate a fact-sheet PDF via Playwright (sync).
 
         1. Load portfolio data from DB
         2. Build FactSheetData frozen dataclass
-        3. Render charts in parallel (ThreadPoolExecutor)
-        4. Call appropriate renderer
+        3. Render HTML template (charts are inline SVG)
+        4. Convert HTML→PDF via Playwright sync API
         5. Return BytesIO with PDF content
+
+        Safe to call from ``asyncio.to_thread()`` or pure sync code.
 
         Returns:
             BytesIO seeked to 0 containing the PDF.
 
         """
         as_of = as_of or date.today()
-        labels = LABELS[language]
 
         # ── Load data ──────────────────────────────────────────────
         data = self._build_fact_sheet_data(db, portfolio_id, organization_id, as_of, format=format)
 
-        # ── Render charts in parallel ──────────────────────────────
-        charts = self._render_charts(data, language=language, format=format)
-
-        # ── Render PDF ─────────────────────────────────────────────
+        # ── Render HTML ──────────────────────────────────────────
         if format == "executive":
-            from vertical_engines.wealth.fact_sheet.executive_renderer import (
-                render_executive,
+            from vertical_engines.wealth.pdf.templates.fact_sheet_executive import (
+                render_fact_sheet_executive,
             )
-
-            return render_executive(
-                data,
-                language=language,
-                nav_chart=charts.get("nav"),
-                allocation_chart=charts.get("allocation"),
+            html_str = render_fact_sheet_executive(data, language=language)
+        else:
+            from vertical_engines.wealth.pdf.templates.fact_sheet_institutional import (
+                render_fact_sheet_institutional,
             )
-        from vertical_engines.wealth.fact_sheet.institutional_renderer import (
-            render_institutional,
-        )
+            html_str = render_fact_sheet_institutional(data, language=language)
 
-        return render_institutional(
-            data,
-            language=language,
-            nav_chart=charts.get("nav"),
-            allocation_chart=charts.get("allocation"),
-            regime_chart=charts.get("regime"),
-        )
+        # ── HTML → PDF via Playwright sync ───────────────────────
+        from vertical_engines.wealth.pdf.html_renderer import html_to_pdf_sync
+
+        pdf_bytes = html_to_pdf_sync(html_str, print_background=True)
+        buf = BytesIO(pdf_bytes)
+        buf.seek(0)
+        return buf
 
     def _build_fact_sheet_data(
         self,
@@ -136,6 +132,9 @@ class FactSheetEngine:
         ]
         # Sort by weight desc
         holdings = sorted(holdings, key=lambda h: h.weight, reverse=True)
+
+        # Enrich each holding with prospectus stats (1Y return, expense ratio)
+        holdings = self._enrich_holdings_with_prospectus(db, funds_data, holdings)
 
         # Build allocations (aggregate by block)
         block_weights: dict[str, float] = {}
@@ -179,6 +178,94 @@ class FactSheetEngine:
             fee_drag=fee_drag_data,
             benchmark_label=portfolio.benchmark_composite or "",
         )
+
+    def _enrich_holdings_with_prospectus(
+        self,
+        db: Session,
+        funds_data: list[dict[str, Any]],
+        holdings: list[HoldingRow],
+    ) -> list[HoldingRow]:
+        """Enrich HoldingRow list with prospectus data (1Y return, expense ratio).
+
+        Fetches prospectus stats for each fund that has a sec_cik attribute.
+        Never raises — returns original holdings on any failure.
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        from app.domains.wealth.models.instrument import Instrument
+        from vertical_engines.wealth.dd_report.sec_injection import gather_prospectus_stats
+
+        # Build instrument_id → sec_cik map
+        instrument_ids = [
+            f["instrument_id"] for f in funds_data if f.get("instrument_id")
+        ]
+        if not instrument_ids:
+            return holdings
+
+        try:
+            instruments = (
+                db.query(Instrument)
+                .filter(Instrument.instrument_id.in_(instrument_ids))
+                .all()
+            )
+            cik_map: dict[str, str | None] = {
+                str(inst.instrument_id): (inst.attributes or {}).get("sec_cik")
+                for inst in instruments
+            }
+        except Exception:
+            logger.warning("fact_sheet_cik_map_failed", exc_info=True)
+            return holdings
+
+        # Build fund_name → instrument_id lookup
+        name_to_iid: dict[str, str] = {
+            f.get("fund_name", ""): f.get("instrument_id", "")
+            for f in funds_data
+        }
+
+        # Gather prospectus stats for funds with CIKs
+        fund_name_to_stats: dict[str, dict[str, Any]] = {}
+
+        def _fetch(fund_name: str, cik: str) -> tuple[str, dict[str, Any]]:
+            return fund_name, gather_prospectus_stats(db, fund_cik=cik)
+
+        tasks_to_run: dict[str, str] = {}
+        for f in funds_data:
+            fname = f.get("fund_name", "")
+            iid = f.get("instrument_id", "")
+            cik = cik_map.get(iid)
+            if cik:
+                tasks_to_run[fname] = cik
+
+        if tasks_to_run:
+            with ThreadPoolExecutor(max_workers=min(8, len(tasks_to_run))) as pool:
+                futures = {
+                    pool.submit(_fetch, name, cik): name
+                    for name, cik in tasks_to_run.items()
+                }
+                for future in as_completed(futures):
+                    try:
+                        name, stats = future.result()
+                        if stats.get("prospectus_stats_available"):
+                            fund_name_to_stats[name] = stats
+                    except Exception:
+                        pass
+
+        if not fund_name_to_stats:
+            return holdings
+
+        # Rebuild enriched HoldingRow list
+        enriched: list[HoldingRow] = []
+        for h in holdings:
+            stats = fund_name_to_stats.get(h.fund_name, {})
+            enriched.append(HoldingRow(
+                fund_name=h.fund_name,
+                block_id=h.block_id,
+                weight=h.weight,
+                one_year_return=stats.get("avg_annual_return_1y"),
+                expense_ratio=stats.get("expense_ratio_pct"),
+                holding_status=h.holding_status,
+            ))
+        return enriched
 
     def _run_backtest(
         self,
@@ -448,7 +535,7 @@ class FactSheetEngine:
         """Generate fact-sheet PDF via Playwright (async). Returns raw PDF bytes.
 
         Builds FactSheetData in a sync thread (DB queries), then renders HTML
-        template and converts to PDF via Playwright Chromium.
+        template and converts to PDF via Playwright async API.
         """
         import asyncio
 
@@ -484,58 +571,3 @@ class FactSheetEngine:
         # Convert to PDF
         from vertical_engines.wealth.pdf.html_renderer import html_to_pdf
         return await html_to_pdf(html_str, print_background=True)
-
-    def _render_charts(
-        self,
-        data: FactSheetData,
-        *,
-        language: Language,
-        format: FactSheetFormat,
-    ) -> dict[str, BytesIO]:
-        """Render charts in parallel using ThreadPoolExecutor."""
-        from vertical_engines.wealth.fact_sheet.chart_builder import (
-            render_allocation_pie,
-            render_nav_chart,
-            render_regime_overlay,
-        )
-
-        labels = LABELS[language]
-        charts: dict[str, BytesIO] = {}
-
-        # Define chart tasks
-        tasks: dict[str, Any] = {}
-
-        if data.nav_series:
-            tasks["nav"] = lambda: render_nav_chart(
-                data.nav_series,
-                title=labels["nav_chart_title"],
-                benchmark_label=data.benchmark_label or "Benchmark",
-                language=language,
-            )
-
-        if data.allocations:
-            tasks["allocation"] = lambda: render_allocation_pie(
-                data.allocations,
-                title=labels["allocation_chart_title"],
-            )
-
-        if format == "institutional" and data.nav_series and data.regimes:
-            tasks["regime"] = lambda: render_regime_overlay(
-                data.nav_series,
-                data.regimes,
-                title=labels["regime_chart_title"],
-            )
-
-        if not tasks:
-            return charts
-
-        # Render in parallel
-        with ThreadPoolExecutor(max_workers=min(4, len(tasks))) as pool:
-            futures = {name: pool.submit(fn) for name, fn in tasks.items()}
-            for name, future in futures.items():
-                try:
-                    charts[name] = future.result()
-                except Exception:
-                    logger.warning("chart_render_failed", chart=name, exc_info=True)
-
-        return charts

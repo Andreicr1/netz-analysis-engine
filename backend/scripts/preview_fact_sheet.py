@@ -1,9 +1,11 @@
 """Generate a preview institutional fact sheet PDF with mock data.
 
-Usage:
-    python -m scripts.preview_fact_sheet [--language en]
+Uses the Playwright HTML→PDF pipeline (same as production).
 
-Outputs: .data/preview_fact_sheet_institutional.pdf
+Usage:
+    python -m scripts.preview_fact_sheet [--language en] [--format institutional]
+
+Outputs: .data/preview_fact_sheet_{format}_{language}.pdf
 """
 
 from __future__ import annotations
@@ -17,14 +19,6 @@ from pathlib import Path
 # Ensure backend is importable
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from vertical_engines.wealth.fact_sheet.chart_builder import (
-    render_allocation_pie,
-    render_nav_chart,
-    render_regime_overlay,
-)
-from vertical_engines.wealth.fact_sheet.institutional_renderer import (
-    render_institutional,
-)
 from vertical_engines.wealth.fact_sheet.models import (
     AllocationBlock,
     AttributionRow,
@@ -55,14 +49,20 @@ def _build_mock_data() -> FactSheetData:
         d += timedelta(days=7)
 
     holdings = [
-        HoldingRow(fund_name="Vanguard S&P 500 ETF (VOO)", block_id="us_equity", weight=0.25),
-        HoldingRow(fund_name="iShares Core MSCI EAFE (IEFA)", block_id="intl_equity", weight=0.15),
-        HoldingRow(fund_name="PIMCO Total Return Fund (PTTRX)", block_id="fixed_income", weight=0.20),
+        HoldingRow(fund_name="Vanguard S&P 500 ETF (VOO)", block_id="us_equity", weight=0.25,
+                   one_year_return=24.5, expense_ratio=0.03),
+        HoldingRow(fund_name="iShares Core MSCI EAFE (IEFA)", block_id="intl_equity", weight=0.15,
+                   one_year_return=8.2, expense_ratio=0.07),
+        HoldingRow(fund_name="PIMCO Total Return Fund (PTTRX)", block_id="fixed_income", weight=0.20,
+                   one_year_return=4.1, expense_ratio=0.71),
         HoldingRow(fund_name="Ares Capital Corp (ARCC)", block_id="private_credit", weight=0.10),
         HoldingRow(fund_name="JPMorgan Prime Money Market (JPMXX)", block_id="cash", weight=0.05),
-        HoldingRow(fund_name="BlackRock Strategic Income (BASIX)", block_id="fixed_income", weight=0.10),
-        HoldingRow(fund_name="T. Rowe Price Growth Stock (PRGFX)", block_id="us_equity", weight=0.08),
-        HoldingRow(fund_name="Fidelity Contrafund (FCNTX)", block_id="us_equity", weight=0.07),
+        HoldingRow(fund_name="BlackRock Strategic Income (BASIX)", block_id="fixed_income", weight=0.10,
+                   one_year_return=5.3, expense_ratio=0.92),
+        HoldingRow(fund_name="T. Rowe Price Growth Stock (PRGFX)", block_id="us_equity", weight=0.08,
+                   one_year_return=18.7, expense_ratio=0.65),
+        HoldingRow(fund_name="Fidelity Contrafund (FCNTX)", block_id="us_equity", weight=0.07,
+                   one_year_return=21.2, expense_ratio=0.86),
     ]
 
     allocations = [
@@ -161,28 +161,32 @@ def _build_mock_data() -> FactSheetData:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Preview fact sheet PDF")
     parser.add_argument("--language", choices=["pt", "en"], default="pt")
+    parser.add_argument("--format", choices=["executive", "institutional"], default="institutional")
     args = parser.parse_args()
 
     data = _build_mock_data()
 
-    # Render charts
-    nav_chart = render_nav_chart(data.nav_series, benchmark_label=data.benchmark_label)
-    allocation_chart = render_allocation_pie(data.allocations)
-    regime_chart = render_regime_overlay(data.nav_series, data.regimes)
+    # Render HTML template
+    if args.format == "executive":
+        from vertical_engines.wealth.pdf.templates.fact_sheet_executive import (
+            render_fact_sheet_executive,
+        )
+        html_str = render_fact_sheet_executive(data, language=args.language)
+    else:
+        from vertical_engines.wealth.pdf.templates.fact_sheet_institutional import (
+            render_fact_sheet_institutional,
+        )
+        html_str = render_fact_sheet_institutional(data, language=args.language)
 
-    # Render PDF
-    pdf_buf = render_institutional(
-        data,
-        language=args.language,
-        nav_chart=nav_chart,
-        allocation_chart=allocation_chart,
-        regime_chart=regime_chart,
-    )
+    # Convert to PDF via Playwright sync
+    from vertical_engines.wealth.pdf.html_renderer import html_to_pdf_sync
+
+    pdf_bytes = html_to_pdf_sync(html_str, print_background=True)
 
     out_dir = Path(__file__).resolve().parent.parent / ".data"
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / f"preview_fact_sheet_institutional_{args.language}.pdf"
-    out_path.write_bytes(pdf_buf.read())
+    out_path = out_dir / f"preview_fact_sheet_{args.format}_{args.language}.pdf"
+    out_path.write_bytes(pdf_bytes)
     print(f"PDF saved to: {out_path}")
 
 

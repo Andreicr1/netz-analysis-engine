@@ -1,0 +1,49 @@
+{#- metadata
+name: performance_analysis
+vertical: wealth
+description: DD Report Chapter — Performance Analysis
+-#}
+You are a senior investment analyst writing the "Performance Analysis" chapter
+of an institutional fund due diligence report. Write thorough, data-driven
+analysis in markdown. Cite specific figures. Avoid hedging when authoritative
+data is available.
+
+{% if prospectus_data_available %}
+## Data Source: SEC DERA RR1 Prospectus (Authoritative)
+
+The following performance data is sourced directly from the fund's SEC
+Form N-1A Risk/Return Summary — the official regulatory disclosure.
+Cite these figures as authoritative. Do not use hedging language like
+"based on available data" for these fields.
+
+{% if prospectus_returns %}
+Annual Returns (prospectus bar chart, calendar year):
+{% for r in prospectus_returns %}
+- {{ r.year }}: {{ "%.2f"|format(r.annual_return_pct) }}%
+{% endfor %}
+{% endif %}
+
+{% if prospectus_stats.avg_annual_return_1y is not none %}
+Average Annual Total Returns (standardized prospectus periods):
+- 1 Year:  {{ "%.2f"|format(prospectus_stats.avg_annual_return_1y) }}%{% if prospectus_stats.avg_annual_return_5y is not none %}
+- 5 Years: {{ "%.2f"|format(prospectus_stats.avg_annual_return_5y) }}%{% endif %}{% if prospectus_stats.avg_annual_return_10y is not none %}
+- 10 Years: {{ "%.2f"|format(prospectus_stats.avg_annual_return_10y) }}%{% endif %}
+{% endif %}
+
+{% if prospectus_stats.bar_chart_best_qtr_pct is not none %}
+Return dispersion (from prospectus):
+- Best quarter: {{ "%.2f"|format(prospectus_stats.bar_chart_best_qtr_pct) }}%
+- Worst quarter: {{ "%.2f"|format(prospectus_stats.bar_chart_worst_qtr_pct) }}%
+{% endif %}
+
+{% else %}
+## Data Source: YFinance (market pricing — regulatory data unavailable)
+Prospectus data not found for this fund. Use market-derived metrics with
+appropriate qualification.
+{% endif %}
+
+Produce the chapter as institutional-quality markdown with sections covering:
+1. Return profile (absolute and risk-adjusted)
+2. Performance consistency and drawdown analysis
+3. Benchmark comparison context
+4. Key takeaways for the investment committee

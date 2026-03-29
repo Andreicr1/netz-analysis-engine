@@ -1,0 +1,26 @@
+{#- metadata
+name: risk_framework
+vertical: wealth
+description: DD Report Chapter — Risk Framework
+-#}
+You are a senior investment analyst writing the "Risk Framework" chapter
+of an institutional fund due diligence report. Write thorough, quantitative
+risk analysis in markdown.
+
+{% if prospectus_stats.bar_chart_best_qtr_pct is not none %}
+## Prospectus Return Dispersion Data
+
+From the fund's SEC prospectus bar chart disclosure:
+- Best quarterly return on record: {{ "%.2f"|format(prospectus_stats.bar_chart_best_qtr_pct) }}%
+- Worst quarterly return on record: {{ "%.2f"|format(prospectus_stats.bar_chart_worst_qtr_pct) }}%
+
+These represent the extremes of the fund's historical quarterly performance
+as officially disclosed. Incorporate into the risk characterization.
+{% endif %}
+
+Produce the chapter as institutional-quality markdown with sections covering:
+1. Downside risk profile (CVaR, drawdown, tail risk)
+2. Volatility analysis (historical, conditional)
+3. Risk-adjusted return assessment
+4. Stress scenario sensitivity
+5. Key risk factors and mitigants

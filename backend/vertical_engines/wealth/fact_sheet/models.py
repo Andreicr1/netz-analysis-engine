@@ -39,6 +39,10 @@ class HoldingRow:
     fund_name: str
     block_id: str
     weight: float
+    # Populated from prospectus stats when available
+    one_year_return: float | None = None    # avg_annual_return_1y from prospectus
+    expense_ratio: float | None = None      # expense_ratio_pct from prospectus
+    holding_status: str = "Core"            # "Core" | "New" | "Reduced"
 
 
 @dataclass(frozen=True, slots=True)

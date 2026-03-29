@@ -625,7 +625,180 @@ def gather_sec_adv_brochure(
         return {}
 
 
+# ── Prospectus data (RR1) ──────────────────────────────────────────
+
+
+def gather_prospectus_stats(
+    db: Session,
+    *,
+    fund_cik: str | None,
+    series_id: str | None = None,
+) -> dict[str, Any]:
+    """Gather fee and expense stats from sec_fund_prospectus_stats.
+
+    Resolves series_id from CIK if not provided. Returns the canonical
+    share class row — the one with the lowest expense_ratio_pct among
+    all classes for the series (avoids institutional share class skew).
+
+    Returns empty dict if no data or on error. Never raises.
+    """
+    if not fund_cik and not series_id:
+        return {}
+    try:
+        from app.domains.wealth.models.prospectus import SecFundProspectusStats
+
+        resolved = series_id or _resolve_series_id(db, fund_cik)
+        if not resolved:
+            return {}
+
+        row = (
+            db.query(SecFundProspectusStats)
+            .filter(SecFundProspectusStats.series_id == resolved)
+            .order_by(
+                # Lowest-cost class first (canonical retail share class)
+                SecFundProspectusStats.expense_ratio_pct.asc().nulls_last(),
+                SecFundProspectusStats.filing_date.desc().nulls_last(),
+            )
+            .first()
+        )
+
+        if not row:
+            return {}
+
+        def _f(v: Any) -> float | None:
+            return float(v) if v is not None else None
+
+        result: dict[str, Any] = {
+            "prospectus_stats_available": True,
+            "series_id": row.series_id,
+            "class_id": row.class_id,
+            "filing_date": str(row.filing_date) if row.filing_date else None,
+            "data_source": "SEC DERA RR1 Prospectus",
+            # Fee structure
+            "management_fee_pct":       _f(row.management_fee_pct),
+            "expense_ratio_pct":        _f(row.expense_ratio_pct),
+            "net_expense_ratio_pct":    _f(row.net_expense_ratio_pct),
+            "fee_waiver_pct":           _f(row.fee_waiver_pct),
+            "distribution_12b1_pct":    _f(row.distribution_12b1_pct),
+            "acquired_fund_fees_pct":   _f(row.acquired_fund_fees_pct),
+            "other_expenses_pct":       _f(row.other_expenses_pct),
+            "portfolio_turnover_pct":   _f(row.portfolio_turnover_pct),
+            # Expense examples (per $10k)
+            "expense_example_1y":  _f(row.expense_example_1y),
+            "expense_example_3y":  _f(row.expense_example_3y),
+            "expense_example_5y":  _f(row.expense_example_5y),
+            "expense_example_10y": _f(row.expense_example_10y),
+            # Average annual returns (standardized prospectus periods)
+            "avg_annual_return_1y":  _f(row.avg_annual_return_1y),
+            "avg_annual_return_5y":  _f(row.avg_annual_return_5y),
+            "avg_annual_return_10y": _f(row.avg_annual_return_10y),
+            # Bar chart extremes
+            "bar_chart_best_qtr_pct":  _f(row.bar_chart_best_qtr_pct),
+            "bar_chart_worst_qtr_pct": _f(row.bar_chart_worst_qtr_pct),
+            "bar_chart_ytd_pct":       _f(row.bar_chart_ytd_pct),
+        }
+
+        logger.info(
+            "prospectus_stats_gathered",
+            series_id=resolved,
+            expense_ratio=result.get("expense_ratio_pct"),
+            has_avg_returns=result.get("avg_annual_return_10y") is not None,
+        )
+        return result
+
+    except Exception:
+        logger.exception("prospectus_stats_gather_failed", fund_cik=fund_cik)
+        return {}
+
+
+def gather_prospectus_returns(
+    db: Session,
+    *,
+    fund_cik: str | None,
+    series_id: str | None = None,
+    years_back: int = 12,
+) -> list[dict[str, Any]]:
+    """Gather annual return history from sec_fund_prospectus_returns.
+
+    Returns list of {year, annual_return_pct} dicts sorted ascending by year.
+    Capped at years_back years from today (default 12).
+
+    Returns empty list if no data or on error. Never raises.
+    """
+    if not fund_cik and not series_id:
+        return []
+    try:
+        from datetime import date as _date
+
+        from app.domains.wealth.models.prospectus import SecFundProspectusReturn
+
+        resolved = series_id or _resolve_series_id(db, fund_cik)
+        if not resolved:
+            return []
+
+        cutoff_year = _date.today().year - years_back
+
+        rows = (
+            db.query(SecFundProspectusReturn)
+            .filter(
+                SecFundProspectusReturn.series_id == resolved,
+                SecFundProspectusReturn.year >= cutoff_year,
+            )
+            .order_by(SecFundProspectusReturn.year.asc())
+            .all()
+        )
+
+        if not rows:
+            return []
+
+        result = [
+            {"year": r.year, "annual_return_pct": float(r.annual_return_pct)}
+            for r in rows
+        ]
+
+        logger.info(
+            "prospectus_returns_gathered",
+            series_id=resolved,
+            years=len(result),
+            first_year=result[0]["year"],
+            last_year=result[-1]["year"],
+        )
+        return result
+
+    except Exception:
+        logger.exception("prospectus_returns_gather_failed", fund_cik=fund_cik)
+        return []
+
+
 # ── Internal helpers ────────────────────────────────────────────────
+
+
+def _resolve_series_id(db: Session, cik: str | None) -> str | None:
+    """Resolve primary series_id from fund CIK via sec_fund_classes.
+
+    Returns the series_id with the most share classes (most data-rich series)
+    when a CIK has multiple series. Returns None if not found.
+    """
+    if not cik:
+        return None
+    try:
+        from app.shared.models import SecFundClass
+
+        row = (
+            db.query(SecFundClass.series_id, func.count().label("cnt"))
+            .filter(
+                SecFundClass.cik == cik,
+                SecFundClass.series_id.isnot(None),
+                SecFundClass.series_id != "",
+            )
+            .group_by(SecFundClass.series_id)
+            .order_by(func.count().desc())
+            .first()
+        )
+        return row.series_id if row else None
+    except Exception:
+        logger.debug("series_id_resolution_failed", cik=cik)
+        return None
 
 
 def _resolve_cik(db: Session, manager_name: str | None) -> str | None:

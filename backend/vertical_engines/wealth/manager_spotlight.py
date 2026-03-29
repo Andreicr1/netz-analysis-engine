@@ -184,7 +184,11 @@ class ManagerSpotlight:
         # Enrich with SEC fund data if available
         fund_cik = attrs.get("sec_cik")
         if fund_cik:
-            from vertical_engines.wealth.dd_report.sec_injection import gather_fund_enrichment
+            from vertical_engines.wealth.dd_report.sec_injection import (
+                gather_fund_enrichment,
+                gather_prospectus_returns,
+                gather_prospectus_stats,
+            )
 
             enrichment = gather_fund_enrichment(
                 db, fund_cik=fund_cik, sec_universe=attrs.get("sec_universe"),
@@ -195,6 +199,29 @@ class ManagerSpotlight:
                 if share_classes:
                     fund_data["expense_ratio_pct"] = share_classes[0].get("expense_ratio_pct")
                 fund_data["classification"] = enrichment.get("classification", {})
+
+            # Prospectus data (authoritative fee + return history)
+            prospectus_stats = gather_prospectus_stats(db, fund_cik=fund_cik)
+            prospectus_returns = gather_prospectus_returns(db, fund_cik=fund_cik)
+
+            if prospectus_stats.get("prospectus_stats_available"):
+                # Upgrade expense_ratio_pct: prospecto > N-CSR XBRL
+                fund_data["expense_ratio_pct"] = prospectus_stats.get("expense_ratio_pct")
+                fund_data["net_expense_ratio_pct"] = prospectus_stats.get("net_expense_ratio_pct")
+                fund_data["management_fee_pct"] = prospectus_stats.get("management_fee_pct")
+                fund_data["portfolio_turnover_pct"] = prospectus_stats.get("portfolio_turnover_pct")
+                # Standardized avg returns (prospectus periods)
+                fund_data["avg_annual_return_1y"] = prospectus_stats.get("avg_annual_return_1y")
+                fund_data["avg_annual_return_5y"] = prospectus_stats.get("avg_annual_return_5y")
+                fund_data["avg_annual_return_10y"] = prospectus_stats.get("avg_annual_return_10y")
+                fund_data["prospectus_fee_filing_date"] = prospectus_stats.get("filing_date")
+                fund_data["prospectus_data_source"] = "SEC DERA RR1 Prospectus"
+
+            if prospectus_returns:
+                fund_data["annual_return_history"] = prospectus_returns
+                # Convenience: last available annual return from bar chart
+                fund_data["last_annual_return_pct"] = prospectus_returns[-1]["annual_return_pct"]
+                fund_data["last_annual_return_year"] = prospectus_returns[-1]["year"]
 
         return fund_data
 
@@ -309,6 +336,34 @@ class ManagerSpotlight:
         flags = [k for k, v in classification.items() if v]
         if flags:
             parts.append(f"- Fund Flags: {', '.join(flags)}")
+
+        # Prospectus fee + return data (authoritative when available)
+        prospectus_data_source = fund_data.get("prospectus_data_source")
+        if prospectus_data_source:
+            parts.append(f"\n## Fee Structure ({prospectus_data_source})")
+            parts.append(f"Filing Date: {fund_data.get('prospectus_fee_filing_date', 'N/A')}")
+            if fund_data.get("expense_ratio_pct") is not None:
+                parts.append(f"- Total Expense Ratio: {fund_data['expense_ratio_pct']:.4f}%")
+            if fund_data.get("net_expense_ratio_pct") is not None:
+                parts.append(f"- Net Expense Ratio: {fund_data['net_expense_ratio_pct']:.4f}%")
+            if fund_data.get("management_fee_pct") is not None:
+                parts.append(f"- Management Fee: {fund_data['management_fee_pct']:.4f}%")
+            if fund_data.get("portfolio_turnover_pct") is not None:
+                parts.append(f"- Portfolio Turnover: {fund_data['portfolio_turnover_pct']:.2f}%")
+
+            if fund_data.get("avg_annual_return_1y") is not None:
+                parts.append("\n## Average Annual Returns (Prospectus Standardized)")
+                parts.append(f"- 1-Year:  {fund_data['avg_annual_return_1y']:.2f}%")
+                if fund_data.get("avg_annual_return_5y") is not None:
+                    parts.append(f"- 5-Year:  {fund_data['avg_annual_return_5y']:.2f}%")
+                if fund_data.get("avg_annual_return_10y") is not None:
+                    parts.append(f"- 10-Year: {fund_data['avg_annual_return_10y']:.2f}%")
+
+            annual_history = fund_data.get("annual_return_history", [])
+            if annual_history:
+                parts.append("\n## Annual Return History (Bar Chart \u2014 Prospectus)")
+                for row in annual_history:
+                    parts.append(f"- {row['year']}: {row['annual_return_pct']:+.2f}%")
 
         if quant_profile:
             parts.append("\n## Quantitative Metrics")

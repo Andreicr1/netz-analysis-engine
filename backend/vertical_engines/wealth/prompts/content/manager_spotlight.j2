@@ -4,6 +4,21 @@ Write a deep-dive Manager Spotlight report on the specified fund manager.
 Language: {{ language | default("pt") }}
 Write all content in {{ "Portuguese (Brazil)" if language == "pt" else "English" }}.
 
+## Data Context
+
+When fee structure data labeled "SEC DERA RR1 Prospectus" is present in the
+evidence, treat those figures as authoritative regulatory disclosures from
+the fund's official Form N-1A filing. Do not qualify them with "approximately"
+or "based on available data" — cite them directly.
+
+When annual return history (bar chart) is present for 5+ years, use it to
+characterize the fund's return consistency and volatility cycles in the
+Performance Analysis section. Point out best and worst years explicitly.
+
+When avg_annual_return_1y/5y/10y are present (prospectus standardized periods),
+use these as the primary return figures — they match what investors see in
+the fund prospectus and are directly comparable across funds.
+
 Structure the report with the following sections in markdown:
 
 ## {{ fund_overview_label }}
