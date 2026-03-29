@@ -8,6 +8,7 @@ translucent gradient fills, and Tufte-inspired minimal gridlines.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from datetime import date
 from typing import Sequence
@@ -309,9 +310,182 @@ def allocation_bars(
             f'margin-bottom:2px;font-size:9px;font-family:Inter,sans-serif">'
             f'<span style="color:#64748B;letter-spacing:0.01em">{b["label"]}</span>'
             f'<span style="font-weight:600;color:#0F172A;'
-            f'font-variant-numeric:tabular-nums">{pct:.1f}%</span></div>'
+            f'font-variant-numeric:tabular-nums">{pct:g}%</span></div>'
             f'<div style="height:3px;background:#F1F5F9;border-radius:1.5px">'
             f'<div style="height:3px;width:{bar_w}px;background:{b["color"]};'
             f'border-radius:1.5px"></div></div></div>'
         )
     return rows
+
+
+# ---------------------------------------------------------------------------
+# Radar / Spider chart
+# ---------------------------------------------------------------------------
+
+
+def radar_chart(
+    components: dict[str, float],
+    *,
+    width: int = 220,
+    height: int = 220,
+    max_value: float = 100.0,
+    fill_color: str = _PORTFOLIO_COLOR,
+    fill_opacity: float = 0.15,
+    stroke_color: str = _PORTFOLIO_COLOR,
+) -> str:
+    """Institutional radar/spider chart for scoring-component visualization.
+
+    Renders an n-gonal web chart with concentric rings at 25/50/75/100%,
+    axis spokes, a translucent data polygon, vertex dots, and labels.
+    Aesthetic follows the Netz Premium Institutional Doctrine: ivory-white
+    gridlines, deep-navy data fill, Inter labels.
+
+    Parameters
+    ----------
+    components:
+        Mapping of component name → score (0 to *max_value*).
+    width, height:
+        SVG dimensions in pixels.
+    max_value:
+        Ceiling of the scale (default 100).
+    fill_color / fill_opacity / stroke_color:
+        Visual treatment for the data polygon.
+
+    Returns
+    -------
+    str
+        Inline SVG string.  Empty string if fewer than 3 components.
+    """
+    n = len(components)
+    if n < 3:
+        return ""
+
+    cx, cy = width / 2, height / 2
+    r = min(cx, cy) - 28  # room for labels
+
+    labels = list(components.keys())
+    values = [min(max(components[k], 0) / max_value, 1.0) for k in labels]
+
+    parts: list[str] = []
+
+    # Concentric rings (25 / 50 / 75 / 100 %)
+    for ring_frac in (0.25, 0.50, 0.75, 1.0):
+        rr = r * ring_frac
+        pts = " ".join(
+            f"{cx + rr * math.cos(2 * math.pi * i / n - math.pi / 2):.1f},"
+            f"{cy + rr * math.sin(2 * math.pi * i / n - math.pi / 2):.1f}"
+            for i in range(n)
+        )
+        parts.append(
+            f'<polygon points="{pts}" fill="none" '
+            f'stroke="{_GRID_COLOR}" stroke-width="0.5"/>'
+        )
+
+    # Axis spokes
+    for i in range(n):
+        angle = 2 * math.pi * i / n - math.pi / 2
+        ex = cx + r * math.cos(angle)
+        ey = cy + r * math.sin(angle)
+        parts.append(
+            f'<line x1="{cx:.1f}" y1="{cy:.1f}" x2="{ex:.1f}" y2="{ey:.1f}" '
+            f'stroke="{_GRID_COLOR}" stroke-width="0.5"/>'
+        )
+
+    # Data polygon
+    data_pts = " ".join(
+        f"{cx + r * values[i] * math.cos(2 * math.pi * i / n - math.pi / 2):.1f},"
+        f"{cy + r * values[i] * math.sin(2 * math.pi * i / n - math.pi / 2):.1f}"
+        for i in range(n)
+    )
+    parts.append(
+        f'<polygon points="{data_pts}" '
+        f'fill="{fill_color}" fill-opacity="{fill_opacity}" '
+        f'stroke="{stroke_color}" stroke-width="1.5" stroke-linejoin="round"/>'
+    )
+
+    # Data-point dots
+    for i in range(n):
+        angle = 2 * math.pi * i / n - math.pi / 2
+        vr = r * values[i]
+        dx = cx + vr * math.cos(angle)
+        dy = cy + vr * math.sin(angle)
+        parts.append(
+            f'<circle cx="{dx:.1f}" cy="{dy:.1f}" r="2.5" fill="{stroke_color}"/>'
+        )
+
+    # Vertex labels
+    for i in range(n):
+        angle = 2 * math.pi * i / n - math.pi / 2
+        lx = cx + (r + 16) * math.cos(angle)
+        ly = cy + (r + 16) * math.sin(angle)
+        cos_a = math.cos(angle)
+        anchor = "end" if cos_a < -0.15 else ("start" if cos_a > 0.15 else "middle")
+        parts.append(
+            f'<text x="{lx:.1f}" y="{ly + 3:.1f}" text-anchor="{anchor}" '
+            f'font-family="Inter, sans-serif" font-size="7.5" fill="{_LABEL_COLOR}">'
+            f"{labels[i]}</text>"
+        )
+
+    return (
+        f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg" '
+        f'style="font-family:Inter,sans-serif">'
+        f"{''.join(parts)}"
+        f"</svg>"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Sparkline (Tufte inline mini-chart)
+# ---------------------------------------------------------------------------
+
+
+def sparkline_svg(
+    values: Sequence[float],
+    *,
+    width: int = 60,
+    height: int = 15,
+    color: str = _PORTFOLIO_COLOR,
+) -> str:
+    """Tufte sparkline — minimal trend line with no axes or gridlines.
+
+    Designed for inline embedding next to numeric values in data tables
+    and margin metric cards (Edward Tufte *word-sized graphics* principle).
+
+    Parameters
+    ----------
+    values:
+        Sequence of numeric values (minimum 2 required).
+    width, height:
+        SVG dimensions in pixels.
+    color:
+        Stroke (and end-dot) color.
+
+    Returns
+    -------
+    str
+        Inline SVG string.  Empty string if fewer than 2 values.
+    """
+    if not values or len(values) < 2:
+        return ""
+
+    min_v = min(values)
+    max_v = max(values)
+    rng = max_v - min_v or 0.01
+
+    n = len(values)
+    pts = " ".join(
+        f"{(i / (n - 1)) * width:.1f},"
+        f"{height - ((v - min_v) / rng) * (height - 2) - 1:.1f}"
+        for i, v in enumerate(values)
+    )
+
+    # End-point dot (marks the current value)
+    last_y = height - ((values[-1] - min_v) / rng) * (height - 2) - 1
+
+    return (
+        f'<svg width="{width}" height="{height}" xmlns="http://www.w3.org/2000/svg">'
+        f'<polyline fill="none" stroke="{color}" stroke-width="1" '
+        f'stroke-linejoin="round" stroke-linecap="round" points="{pts}"/>'
+        f'<circle cx="{width:.1f}" cy="{last_y:.1f}" r="1.5" fill="{color}"/>'
+        f"</svg>"
+    )

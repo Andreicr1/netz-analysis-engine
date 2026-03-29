@@ -653,7 +653,10 @@ def _build_dd_report_data():
                 "**Areas of Concern:**\n\n"
                 "- Market-cap weighting creates concentration risk in mega-cap tech\n"
                 "- Top 10 holdings represent approximately 34% of total portfolio weight\n"
-                "- No active risk management or downside protection mechanisms"
+                "- No active risk management or downside protection mechanisms\n\n"
+                "> The fund's ultra-low expense ratio of 0.03% and exceptional tracking "
+                "accuracy position it as the definitive core U.S. equity holding for "
+                "institutional portfolios."
             ),
             "evidence_refs": {"SEC Filing": "N-CSR 2025-Q4", "Fund Fact Sheet": "March 2026"},
             "quant_data": {"expense_ratio": "0.03%", "aum": "$912B", "tracking_error": "0.02%"},
@@ -819,6 +822,19 @@ def _build_dd_report_data():
         confidence_score=0.82,
         decision_anchor="approve",
         chapters=chapters,
+        scoring_components={
+            "Return Consistency": 88,
+            "Risk-Adjusted": 72,
+            "Drawdown Control": 65,
+            "Information Ratio": 92,
+            "Flow Momentum": 78,
+        },
+        sparkline_data={
+            "sharpe": [0.78, 0.82, 0.88, 0.91, 0.85, 0.90, 0.92],
+            "max_dd": [-38.0, -25.1, -18.4, -33.8, -12.5, -8.2, -6.4],
+            "vol": [18.5, 16.2, 14.8, 22.1, 15.8, 14.2, 15.2],
+            "composite_score": [72, 76, 78, 80, 82, 83, 84],
+        },
     )
 
 
@@ -924,11 +940,14 @@ def _build_content_manager_spotlight() -> str:
         "index, with full recovery in 148 trading days. Risk-adjusted metrics remain "
         "strong: Sharpe ratio of 0.92, information ratio effectively zero (by design).\n\n"
         "## Overall Assessment\n\n"
-        "VOO represents the gold standard in passive U.S. equity exposure. Its combination "
-        "of ultra-low fees, best-in-class tracking, deep liquidity, and Vanguard's unique "
-        "ownership structure make it a compelling core holding for any diversified portfolio. "
+        "> VOO represents the gold standard in passive U.S. equity exposure — its combination "
+        "of ultra-low fees, best-in-class tracking, and deep liquidity make it the definitive "
+        "core holding for institutional portfolios.\n\n"
+        "The fund's unique ownership structure ensures alignment of interests with investors. "
         "The primary risk factor — mega-cap technology concentration — is a feature of the "
-        "S&P 500 methodology rather than a fund-specific concern."
+        "S&P 500 methodology rather than a fund-specific concern.\n\n"
+        "**Recommendation: APPROVE** for inclusion in all model portfolio profiles with a "
+        "maximum allocation of 25% for growth-oriented and 20% for moderate profiles."
     )
 
 
@@ -1032,6 +1051,14 @@ async def main():
         title="Manager Spotlight",
         subtitle="Vanguard S&P 500 ETF (VOO)",
         language="en",
+        scoring_components={
+            "Return Consistency": 88,
+            "Risk-Adjusted": 72,
+            "Drawdown Control": 65,
+            "Information Ratio": 92,
+            "Flow Momentum": 78,
+            "Fee Efficiency": 98,
+        },
     )
     await _render_and_save(out_dir, "content_manager_spotlight", ms_html)
 

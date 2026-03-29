@@ -1,10 +1,21 @@
-"""DD Report HTML template (multi-page A4, 8 chapters, rendered via Playwright).
+"""DD Report HTML template — Netz Premium Institutional System Design Doctrine.
 
-Receives chapter data from ``dd_report/models.py`` and renders a professional
-due diligence report with cover, table of contents, and markdown chapters.
+Multi-page A4 Due Diligence report (8 chapters) with:
 
-All user-supplied text is escaped via ``html.escape()``.
-Bilingual PT/EN via ``i18n.LABELS[language]``.
+- **Cover page**: Rich Navy (#0A192F), Playfair Display fund name, copper accent
+  rule, confidence gauge, decision badge, leader-dot TOC with page references.
+- **Chapter pages**: 70 / 30 manuscript sidenote layout — main prose left,
+  evidence sources and quant sparklines in the right margin.
+- **Radar chart**: optional scoring-component spider web (executive summary).
+- **Sparklines**: optional Tufte word-sized trend lines alongside margin metrics.
+- **Pull quotes**: markdown ``> blockquotes`` rendered as Playfair Display Italic
+  callouts with oversized directional quotation mark.
+- **Hairline-separated data cards**: no SaaS-widget backgrounds.
+- **Typography**: Playfair Display (headings/quotes), Inter (body/metrics).
+
+Rendered via Playwright Chromium ``page.pdf()``.
+All user-supplied text escaped via ``html.escape()``.
+Bilingual PT / EN via ``i18n.LABELS[language]``.
 """
 
 from __future__ import annotations
@@ -16,6 +27,7 @@ from datetime import date
 from typing import Any
 
 from vertical_engines.wealth.fact_sheet.i18n import LABELS, Language, format_date
+from vertical_engines.wealth.pdf.svg_charts import radar_chart, sparkline_svg
 
 # ---------------------------------------------------------------------------
 # Data model (inline to avoid circular imports with dd_report.models)
@@ -33,13 +45,14 @@ class DDReportPDFData:
     decision_anchor: str | None  # "approve" | "reject" | "review"
     chapters: list[Any]  # list[ChapterResult] or list[dict]
     language: str = "en"
+    # Optional visual-breather data
+    scoring_components: dict[str, float] | None = None  # radar chart data
+    sparkline_data: dict[str, list[float]] | None = None  # metric → trend
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-_FONT_STACK = "-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
 
 
 def _e(text: Any) -> str:
@@ -48,332 +61,385 @@ def _e(text: Any) -> str:
     return html.escape(str(text))
 
 
-def _md_to_html(content_md: str | None) -> str:
-    """Convert simplified markdown to HTML paragraphs.
+def _apply_bold(text: str) -> str:
+    """Replace **text** with <strong>text</strong> in already-escaped HTML."""
+    return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
 
-    Handles: ## headings, **bold**, - list items, and paragraph breaks.
+
+def _md_to_html(content_md: str | None) -> str:
+    """Convert simplified markdown to HTML with pull-quote detection.
+
+    Handles: ``# / ## headings``, ``> blockquotes`` (→ pull quotes),
+    ``- / * / 1.`` lists, ``**bold**``, paragraphs, empty-line spacers.
+    Headings use Playfair Display; body uses Inter.
     """
     if not content_md:
-        return '<p style="color:#9ca3af;font-style:italic">No content available.</p>'
+        return '<p class="no-content">No content available.</p>'
 
     lines = content_md.strip().split("\n")
     result: list[str] = []
-    in_list = False
+    in_ul = False
+    in_ol = False
+    in_bq = False
 
-    for line in lines:
-        stripped = line.strip()
+    def _close_lists() -> None:
+        nonlocal in_ul, in_ol
+        if in_ul:
+            result.append("</ul>")
+            in_ul = False
+        if in_ol:
+            result.append("</ol>")
+            in_ol = False
+
+    for raw_line in lines:
+        stripped = raw_line.strip()
+
+        # ── Empty line ──
         if not stripped:
-            if in_list:
-                result.append("</ul>")
-                in_list = False
-            result.append('<div style="height:6px"></div>')
+            _close_lists()
+            if in_bq:
+                result.append("</blockquote>")
+                in_bq = False
+            result.append('<div class="v-space"></div>')
             continue
 
+        # ── Blockquote → Pull quote ──
+        if stripped.startswith("> "):
+            _close_lists()
+            if not in_bq:
+                result.append('<blockquote class="pull-quote">')
+                result.append('<span class="q-mark">\u201C</span>')
+                in_bq = True
+            text = _apply_bold(_e(stripped[2:]))
+            result.append(f'<p class="q-text">{text}</p>')
+            continue
+
+        if in_bq:
+            result.append("</blockquote>")
+            in_bq = False
+
+        # ── Headings ──
         if stripped.startswith("## "):
-            if in_list:
-                result.append("</ul>")
-                in_list = False
-            text = _e(stripped[3:])
-            result.append(
-                f'<h3 style="font-size:11px;font-weight:600;color:#111827;'
-                f'margin:8px 0 4px">{text}</h3>'
-            )
+            _close_lists()
+            text = _apply_bold(_e(stripped[3:]))
+            result.append(f'<h3 class="sh">{text}</h3>')
         elif stripped.startswith("# "):
-            if in_list:
-                result.append("</ul>")
-                in_list = False
-            text = _e(stripped[2:])
-            result.append(
-                f'<h2 style="font-size:12px;font-weight:700;color:#111827;'
-                f'margin:10px 0 4px">{text}</h2>'
-            )
+            _close_lists()
+            text = _apply_bold(_e(stripped[2:]))
+            result.append(f'<h2 class="mh">{text}</h2>')
+
+        # ── Unordered list ──
         elif stripped.startswith("- ") or stripped.startswith("* "):
-            if not in_list:
-                result.append(
-                    '<ul style="margin:4px 0;padding-left:16px;font-size:10px;'
-                    'line-height:1.55;color:#374151">'
-                )
-                in_list = True
+            if in_ol:
+                result.append("</ol>")
+                in_ol = False
+            if not in_ul:
+                result.append('<ul class="bl">')
+                in_ul = True
             text = _apply_bold(_e(stripped[2:]))
             result.append(f"<li>{text}</li>")
-        else:
-            if in_list:
-                result.append("</ul>")
-                in_list = False
-            text = _apply_bold(_e(stripped))
-            result.append(
-                f'<p style="font-size:10px;line-height:1.55;color:#374151;'
-                f'margin:0 0 4px">{text}</p>'
-            )
 
-    if in_list:
-        result.append("</ul>")
+        # ── Ordered list ──
+        elif len(stripped) > 2 and stripped[0].isdigit() and ". " in stripped[:5]:
+            if in_ul:
+                result.append("</ul>")
+                in_ul = False
+            if not in_ol:
+                result.append('<ol class="bl">')
+                in_ol = True
+            idx = stripped.index(". ")
+            text = _apply_bold(_e(stripped[idx + 2 :]))
+            result.append(f"<li>{text}</li>")
+
+        # ── Paragraph ──
+        else:
+            _close_lists()
+            text = _apply_bold(_e(stripped))
+            result.append(f'<p class="bt">{text}</p>')
+
+    _close_lists()
+    if in_bq:
+        result.append("</blockquote>")
 
     return "\n".join(result)
 
 
-def _apply_bold(text: str) -> str:
-    """Replace **text** with <strong>text</strong> in already-escaped HTML."""
-    return re.sub(
-        r"\*\*(.+?)\*\*",
-        r"<strong>\1</strong>",
-        text,
-    )
-
-
 # ---------------------------------------------------------------------------
-# CSS
+# CSS — Netz Premium Institutional System Design Doctrine
 # ---------------------------------------------------------------------------
 
-_CSS = f"""\
-@page {{ size: A4; margin: 0; }}
-* {{ margin: 0; padding: 0; box-sizing: border-box; }}
-html, body {{
-    font-family: {_FONT_STACK};
-    font-size: 10px; color: #374151; line-height: 1.5;
+_CSS = """\
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@page { size: A4; margin: 0; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+    --navy: #0A192F;
+    --navy-light: #0F172A;
+    --slate-900: #1E293B;
+    --slate-700: #334155;
+    --slate-500: #64748B;
+    --slate-400: #94A3B8;
+    --slate-300: #CBD5E1;
+    --slate-200: #E2E8F0;
+    --slate-100: #F1F5F9;
+    --slate-50:  #F8FAFC;
+    --copper: #B48608;
+    --copper-light: #D4A017;
+    --burgundy: #8B0000;
+    --white: #FFFFFF;
+    --text-primary: #0F172A;
+    --text-secondary: #334155;
+    --text-muted: #64748B;
+}
+
+html, body {
+    font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+    font-size: 10px; color: var(--text-primary); line-height: 1.5;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
-}}
-.page {{
-    width: 210mm; min-height: 297mm;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Page shell ── */
+.page {
+    width: 210mm; height: 297mm;
     position: relative; overflow: hidden;
-    page-break-after: always;
-}}
-.page:last-child {{ page-break-after: auto; }}
+    page-break-after: always; background: var(--white);
+}
+.page:last-child { page-break-after: auto; }
+
+/* ══════════════════════  COVER  ══════════════════════ */
+.cover {
+    background: var(--navy); height: 100%;
+    padding: 52px 48px; display: flex; flex-direction: column;
+}
+.cv-label {
+    font-size: 7.5px; letter-spacing: 0.18em;
+    color: var(--slate-500); text-transform: uppercase;
+    margin-bottom: 32px;
+}
+.cv-fund {
+    font-family: 'Playfair Display', serif;
+    font-size: 30px; font-weight: 700;
+    color: var(--white); line-height: 1.15;
+    margin-bottom: 10px;
+}
+.cv-sub {
+    font-size: 11px; color: var(--slate-400);
+    margin-bottom: 28px; letter-spacing: 0.02em;
+}
+.cv-rule {
+    width: 56px; height: 1.5px;
+    background: var(--copper); margin-bottom: 32px;
+}
+
+/* Cover — confidence & decision */
+.cv-meta {
+    display: flex; align-items: center;
+    gap: 32px; margin-bottom: 36px;
+}
+.cv-conf-label {
+    font-size: 7px; letter-spacing: 0.12em;
+    color: var(--slate-500); text-transform: uppercase;
+    margin-bottom: 5px;
+}
+.cv-conf-track {
+    height: 3px; background: rgba(255,255,255,0.07);
+    border-radius: 1.5px; overflow: hidden;
+    margin-bottom: 4px; width: 140px;
+}
+.cv-conf-fill { height: 100%; border-radius: 1.5px; }
+.cv-conf-val {
+    font-size: 22px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.cv-badge {
+    font-size: 8.5px; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    padding: 5px 16px; border: 1px solid; border-radius: 2px;
+}
+
+/* Cover — TOC */
+.toc-label {
+    font-size: 7px; letter-spacing: 0.14em;
+    color: var(--slate-500); text-transform: uppercase;
+    margin-bottom: 14px;
+}
+.toc-row {
+    display: flex; align-items: baseline; padding: 6px 0;
+}
+.toc-num {
+    font-size: 9px; color: var(--copper);
+    font-weight: 600; width: 22px; flex-shrink: 0;
+}
+.toc-title { font-size: 10px; color: var(--slate-300); }
+.toc-dots {
+    flex: 1; border-bottom: 0.5px dotted rgba(255,255,255,0.15);
+    margin: 0 8px; min-width: 20px;
+    position: relative; top: -3px;
+}
+.toc-page {
+    font-size: 8.5px; color: var(--slate-500);
+    font-variant-numeric: tabular-nums;
+}
+.cv-footer { font-size: 7.5px; color: rgba(255,255,255,0.25); }
+
+/* ══════════════════════  CHAPTER PAGES  ══════════════════════ */
+
+/* Page header bar */
+.ph {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 18px 40px 14px;
+    border-bottom: 0.75px solid var(--slate-200);
+}
+.ph-fund {
+    font-size: 10px; font-weight: 600;
+    color: var(--navy); letter-spacing: 0.01em;
+}
+.ph-page { font-size: 7.5px; color: var(--slate-400); }
+
+/* Chapter header (full-width, above the 70/30 split) */
+.ch-header {
+    margin: 18px 40px 0; padding-bottom: 10px;
+    border-bottom: 0.75px solid var(--slate-200);
+}
+.ch-ord {
+    font-size: 7px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--copper);
+    margin-bottom: 3px;
+}
+.ch-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 16px; font-weight: 700;
+    color: var(--navy); line-height: 1.25;
+}
+
+/* 70 / 30 sidenote layout */
+.ch-wrap {
+    display: flex; gap: 0;
+    padding: 14px 40px 0;
+}
+.ch-main {
+    flex: 7; padding-right: 22px;
+}
+.ch-margin {
+    flex: 3; padding-left: 18px;
+    border-left: 0.5px solid var(--slate-200);
+}
+
+/* ══════════════════════  BODY TYPOGRAPHY  ══════════════════════ */
+.bt {
+    font-size: 9.5px; line-height: 1.65;
+    color: var(--text-secondary); margin: 0 0 6px;
+}
+.bl {
+    margin: 6px 0; padding-left: 16px;
+    font-size: 9.5px; line-height: 1.65;
+    color: var(--text-secondary);
+}
+.bl li { margin-bottom: 3px; }
+.mh {
+    font-family: 'Playfair Display', serif;
+    font-size: 12.5px; font-weight: 700;
+    color: var(--navy); margin: 18px 0 8px;
+}
+.sh {
+    font-family: 'Playfair Display', serif;
+    font-size: 11px; font-weight: 600;
+    color: var(--slate-900); margin: 14px 0 6px;
+    padding-bottom: 3px;
+    border-bottom: 0.5px solid var(--slate-200);
+}
+.v-space { height: 8px; }
+.no-content {
+    color: var(--slate-400); font-style: italic; font-size: 9px;
+}
+
+/* ── Pull quote ── */
+.pull-quote {
+    margin: 22px 0; padding: 16px 0 16px 28px;
+    position: relative;
+}
+.q-mark {
+    position: absolute; left: 0; top: 2px;
+    font-family: 'Playfair Display', serif;
+    font-size: 44px; color: var(--slate-200); line-height: 1;
+}
+.q-text {
+    font-family: 'Playfair Display', serif;
+    font-style: italic; font-size: 13px;
+    line-height: 1.55; color: var(--slate-700);
+}
+
+/* ── Margin: evidence block ── */
+.mg-ev {
+    background: var(--slate-50);
+    border-left: 2px solid var(--slate-900);
+    padding: 10px 12px; margin-bottom: 14px;
+}
+.mg-ev-label {
+    font-size: 6.5px; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--slate-500); margin-bottom: 6px;
+}
+.mg-ev-item {
+    font-size: 7.5px; line-height: 1.5;
+    color: var(--text-secondary); margin-bottom: 2px;
+    letter-spacing: 0.015em;
+}
+
+/* ── Margin: quant metrics (hairline-separated, no background) ── */
+.mg-q {
+    display: flex; align-items: center;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 0.5px solid var(--slate-200);
+}
+.mg-q:last-child { border-bottom: none; }
+.mg-q-label {
+    font-size: 7px; color: var(--slate-500);
+    text-transform: uppercase; letter-spacing: 0.05em;
+}
+.mg-q-right {
+    display: flex; align-items: center; gap: 6px;
+}
+.mg-q-val {
+    font-size: 10px; font-weight: 600;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+/* ── Radar container ── */
+.radar-wrap {
+    display: flex; justify-content: center; margin: 8px 0 14px;
+}
+
+/* ── Page footer ── */
+.pf {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    padding: 10px 40px;
+    font-size: 7px; color: var(--slate-400);
+    border-top: 0.5px solid var(--slate-200);
+    display: flex; justify-content: space-between;
+    letter-spacing: 0.02em;
+}
+
+/* ── Disclaimer ── */
+.disc {
+    margin-top: 18px; padding: 18px 0 0;
+    border-top: 0.75px solid var(--slate-200);
+    font-size: 7.5px; line-height: 1.7;
+    color: var(--slate-500);
+}
+.disc-title {
+    font-weight: 700; font-size: 7.5px;
+    color: var(--slate-700); text-transform: uppercase;
+    letter-spacing: 0.08em; margin-bottom: 8px;
+}
+.disc p { margin-top: 5px; }
 """
-
-
-# ---------------------------------------------------------------------------
-# Decision anchor badge
-# ---------------------------------------------------------------------------
-
-
-def _decision_badge(anchor: str | None) -> str:
-    if not anchor:
-        return ""
-    upper = anchor.upper()
-    if upper in ("APPROVE", "INVEST", "PROCEED"):
-        bg, fg = "#D1FAE5", "#065F46"
-    elif upper in ("REJECT", "PASS", "DECLINE"):
-        bg, fg = "#FEE2E2", "#991B1B"
-    else:
-        bg, fg = "#FEF3C7", "#92400E"
-    return (
-        f'<span style="display:inline-block;padding:4px 14px;border-radius:12px;'
-        f"font-size:11px;font-weight:700;letter-spacing:.06em;"
-        f'background:{bg};color:{fg}">{_e(upper)}</span>'
-    )
-
-
-# ---------------------------------------------------------------------------
-# Confidence gauge
-# ---------------------------------------------------------------------------
-
-
-def _confidence_gauge(score: float) -> str:
-    pct = int(score * 100)
-    if score >= 0.8:
-        color = "#059669"
-    elif score >= 0.6:
-        color = "#D97706"
-    else:
-        color = "#DC2626"
-
-    bar_width = max(5, int(score * 100))
-    return (
-        f'<div style="margin:12px 0">'
-        f'<div style="font-size:9px;color:#6B7FA8;text-transform:uppercase;'
-        f'letter-spacing:.08em;margin-bottom:4px">Confidence Score</div>'
-        f'<div style="display:flex;align-items:center;gap:10px">'
-        f'<div style="flex:1;height:8px;background:#1F2937;border-radius:4px;overflow:hidden">'
-        f'<div style="height:100%;width:{bar_width}%;background:{color};'
-        f'border-radius:4px"></div></div>'
-        f'<span style="font-size:14px;font-weight:700;color:{color}">{pct}%</span>'
-        f"</div></div>"
-    )
-
-
-# ---------------------------------------------------------------------------
-# Page builders
-# ---------------------------------------------------------------------------
-
-
-def _cover_page(data: DDReportPDFData, labels: dict[str, str], language: Language, total_pages: int) -> str:
-    chapters = _sorted_chapters(data)
-
-    # TOC
-    toc_items = ""
-    for ch in chapters:
-        order = _ch_order(ch)
-        title = _ch_title(ch)
-        toc_items += (
-            f'<div style="display:flex;gap:8px;padding:3px 0;font-size:10px;'
-            f'border-bottom:0.5px solid #1F2937">'
-            f'<span style="color:#6B7FA8;width:20px">{order}.</span>'
-            f'<span style="color:#D1D5DB">{_e(title)}</span>'
-            f"</div>"
-        )
-
-    # Metadata
-    meta = (
-        f'<div style="display:flex;gap:16px;margin-top:12px;font-size:9px;color:#6B7FA8">'
-        f"<span>{format_date(data.as_of, language)}</span>"
-        f"</div>"
-    )
-
-    return (
-        f'<div class="page">'
-        f'<div style="background:#111827;height:100%;padding:40px 36px;'
-        f'display:flex;flex-direction:column">'
-        # Top label
-        f'<div style="font-size:9px;letter-spacing:.14em;color:#6B7FA8;'
-        f'text-transform:uppercase;margin-bottom:8px">'
-        f'{_e(labels["dd_report_title"])} &middot; CONFIDENTIAL</div>'
-        # Fund name
-        f'<div style="font-size:22px;font-weight:500;color:#F9FAFB;margin-bottom:4px">'
-        f"{_e(data.fund_name)}</div>"
-        # Subtitle
-        f'<div style="font-size:12px;color:#6B7FA8;margin-bottom:8px">'
-        f"Prepared {format_date(data.as_of, language)} &middot; "
-        f"Pending Investment Committee Review</div>"
-        # TOC
-        f'<div style="margin-top:20px">'
-        f'<div style="font-size:9px;letter-spacing:.1em;color:#6B7FA8;'
-        f'text-transform:uppercase;margin-bottom:8px">Table of Contents</div>'
-        f"{toc_items}</div>"
-        # Metadata
-        f"{meta}"
-        # Spacer
-        f'<div style="flex:1"></div>'
-        # Footer
-        f'<div style="font-size:8px;color:#4B5E7A">'
-        f"{_e(labels['confidential'])} &middot; p.&nbsp;1 of {total_pages}</div>"
-        f"</div></div>"
-    )
-
-
-def _chapter_page(
-    data: DDReportPDFData,
-    chapters_on_page: list[Any],
-    page_num: int,
-    total_pages: int,
-    labels: dict[str, str],
-    *,
-    is_final: bool = False,
-) -> str:
-    parts: list[str] = []
-
-    # Page header
-    parts.append(
-        f'<div style="display:flex;justify-content:space-between;align-items:center;'
-        f'padding:14px 24px 10px;border-bottom:1px solid #e5e7eb;margin-bottom:12px">'
-        f'<span style="font-size:11px;font-weight:600;color:#111827">'
-        f"{_e(data.fund_name)}</span>"
-        f'<span style="font-size:9px;color:#9ca3af">'
-        f"p.&nbsp;{page_num} of {total_pages}</span>"
-        f"</div>"
-    )
-
-    parts.append('<div style="padding:4px 28px 64px">')
-
-    for ch in chapters_on_page:
-        order = _ch_order(ch)
-        title = _ch_title(ch)
-        content = _ch_content_md(ch)
-        evidence = _ch_evidence(ch)
-        quant = _ch_quant(ch)
-        critic_iter = _ch_critic_iter(ch)
-        critic_status = _ch_critic_status(ch)
-
-        # Chapter header
-        parts.append(
-            f'<div style="border-left:3px solid #185FA5;padding-left:14px;margin-bottom:14px">'
-            f'<div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;'
-            f'color:#6B7280;margin-bottom:2px">Chapter {order}</div>'
-            f'<div style="font-size:14px;font-weight:500;color:#111827">{_e(title)}</div>'
-            f"</div>"
-        )
-
-        # Content
-        parts.append(f'<div style="margin-bottom:8px">{_md_to_html(content)}</div>')
-
-        # Evidence refs box
-        if evidence:
-            refs_list = ""
-            for key, val in evidence.items():
-                refs_list += f"<li>{_e(key)}: {_e(str(val))}</li>"
-            parts.append(
-                f'<div style="background:#EFF6FF;border-left:3px solid #185FA5;'
-                f'padding:8px 12px;margin:8px 0;border-radius:0 4px 4px 0">'
-                f'<div style="font-size:8px;font-weight:700;color:#1D4ED8;'
-                f'text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">'
-                f"Evidence Sources</div>"
-                f'<ul style="font-size:9px;color:#374151;padding-left:14px;'
-                f'margin:0;line-height:1.5">{refs_list}</ul>'
-                f"</div>"
-            )
-
-        # Quant data box
-        if quant:
-            quant_cards = ""
-            for key, val in quant.items():
-                quant_cards += (
-                    f'<div style="background:#f9fafb;border-radius:4px;padding:6px 10px;'
-                    f'text-align:center">'
-                    f'<div style="font-size:8px;color:#6b7280;text-transform:uppercase">'
-                    f"{_e(key.replace('_', ' '))}</div>"
-                    f'<div style="font-size:11px;font-weight:600;color:#111827">'
-                    f"{_e(str(val))}</div></div>"
-                )
-            parts.append(
-                f'<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0">'
-                f"{quant_cards}</div>"
-            )
-
-        parts.append('<div style="height:24px;border-top:0.5px solid #f3f4f6;margin-top:4px"></div>')
-
-    # Disclaimer on final page
-    if is_final:
-        parts.append(
-            '<div style="margin-top:12px;padding:14px 16px;background:#f9fafb;'
-            'border:0.5px solid #e5e7eb;border-radius:4px;'
-            'font-size:8px;line-height:1.7;color:#6B7280">'
-            '<div style="font-weight:700;font-size:9px;color:#374151;'
-            'margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">'
-            "Important Disclosures &amp; Disclaimer</div>"
-            "<p>This Due Diligence Report is produced by the InvestIntell quantitative "
-            "research platform. All analytics, risk metrics, performance data, and "
-            "portfolio assessments are derived from official regulatory filings "
-            "(SEC EDGAR Form ADV, Form N-PORT, Form 13F), macroeconomic data sources, "
-            "and proprietary quantitative models processed through institutional-grade "
-            "statistical engines.</p>"
-            '<p style="margin-top:6px">Narrative commentary reflects the analytical output '
-            "of the research platform and has been reviewed by the investment team prior "
-            "to distribution. This report does not constitute investment advice, an offer "
-            "to sell, or a solicitation to buy any securities or financial instruments.</p>"
-            '<p style="margin-top:6px">Past performance is not indicative of future results. '
-            "All analyses involve judgment and inherent uncertainty. Recipients should "
-            "conduct independent verification before making investment decisions.</p>"
-            '<p style="margin-top:6px"><strong>Confidentiality:</strong> This document is '
-            "proprietary and confidential. Unauthorized reproduction or distribution is "
-            "strictly prohibited.</p>"
-            '<p style="margin-top:6px">&copy; InvestIntell. All rights reserved.</p>'
-            "</div>"
-        )
-
-    parts.append("</div>")
-
-    # Page footer
-    parts.append(
-        f'<div style="position:absolute;bottom:0;left:0;right:0;padding:8px 24px;'
-        f"font-size:8px;color:#9ca3af;border-top:0.5px solid #e5e7eb;"
-        f'display:flex;justify-content:space-between">'
-        f"<span>Confidential &mdash; For authorized recipients only</span>"
-        f"<span>p.&nbsp;{page_num} of {total_pages}</span>"
-        f"</div>"
-    )
-
-    return f'<div class="page">{"".join(parts)}</div>'
 
 
 # ---------------------------------------------------------------------------
@@ -430,6 +496,239 @@ def _sorted_chapters(data: DDReportPDFData) -> list[Any]:
 
 
 # ---------------------------------------------------------------------------
+# Cover page
+# ---------------------------------------------------------------------------
+
+
+def _cover_page(
+    data: DDReportPDFData,
+    labels: dict[str, str],
+    language: Language,
+    total_pages: int,
+) -> str:
+    chapters = _sorted_chapters(data)
+
+    # ── Confidence gauge ──
+    pct = int(data.confidence_score * 100)
+    if data.confidence_score >= 0.8:
+        conf_color = "#059669"
+    elif data.confidence_score >= 0.6:
+        conf_color = "#D97706"
+    else:
+        conf_color = "#DC2626"
+
+    conf_width = max(5, int(data.confidence_score * 100))
+
+    confidence_html = (
+        f"<div>"
+        f'<div class="cv-conf-label">Confidence Score</div>'
+        f'<div class="cv-conf-track">'
+        f'<div class="cv-conf-fill" style="width:{conf_width}%;background:{conf_color}"></div>'
+        f"</div>"
+        f'<div class="cv-conf-val" style="color:{conf_color}">{pct}%</div>'
+        f"</div>"
+    )
+
+    # ── Decision badge ──
+    badge_html = ""
+    if data.decision_anchor:
+        upper = data.decision_anchor.upper()
+        if upper in ("APPROVE", "INVEST", "PROCEED"):
+            badge_c = "#059669"
+        elif upper in ("REJECT", "PASS", "DECLINE"):
+            badge_c = "#DC2626"
+        else:
+            badge_c = "#D97706"
+        badge_html = (
+            f'<div class="cv-badge" style="border-color:{badge_c};color:{badge_c}">'
+            f"{_e(upper)}</div>"
+        )
+
+    # ── Table of Contents with leader dots ──
+    toc_items = ""
+    for ch in chapters:
+        order = _ch_order(ch)
+        title = _ch_title(ch)
+        page = order + 1
+        toc_items += (
+            f'<div class="toc-row">'
+            f'<span class="toc-num">{order}.</span>'
+            f'<span class="toc-title">{_e(title)}</span>'
+            f'<span class="toc-dots"></span>'
+            f'<span class="toc-page">{page}</span>'
+            f"</div>"
+        )
+
+    return (
+        f'<div class="page"><div class="cover">'
+        # Label
+        f'<div class="cv-label">'
+        f'{_e(labels["dd_report_title"])} &middot; Confidential</div>'
+        # Fund name
+        f'<div class="cv-fund">{_e(data.fund_name)}</div>'
+        # Subtitle
+        f'<div class="cv-sub">'
+        f"Prepared {format_date(data.as_of, language)} &middot; "
+        f"Pending Investment Committee Review</div>"
+        # Copper accent rule
+        f'<div class="cv-rule"></div>'
+        # Confidence + Decision row
+        f'<div class="cv-meta">{confidence_html}{badge_html}</div>'
+        # TOC
+        f'<div style="margin-top:8px">'
+        f'<div class="toc-label">Table of Contents</div>'
+        f"{toc_items}</div>"
+        # Spacer
+        f'<div style="flex:1"></div>'
+        # Footer
+        f'<div class="cv-footer">'
+        f"{_e(labels['confidential'])} &middot; "
+        f"p.&thinsp;1 of {total_pages}</div>"
+        f"</div></div>"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Chapter page (one chapter per page, 70/30 sidenote layout)
+# ---------------------------------------------------------------------------
+
+
+def _chapter_page(
+    data: DDReportPDFData,
+    ch: Any,
+    page_num: int,
+    total_pages: int,
+    labels: dict[str, str],
+    *,
+    is_first_chapter: bool = False,
+    is_final: bool = False,
+) -> str:
+    order = _ch_order(ch)
+    title = _ch_title(ch)
+    content = _ch_content_md(ch)
+    evidence = _ch_evidence(ch)
+    quant = _ch_quant(ch)
+
+    parts: list[str] = []
+
+    # ── Page header ──
+    parts.append(
+        f'<div class="ph">'
+        f'<span class="ph-fund">{_e(data.fund_name)}</span>'
+        f'<span class="ph-page">p.&thinsp;{page_num} of {total_pages}</span>'
+        f"</div>"
+    )
+
+    # ── Chapter header (full width) ──
+    parts.append(
+        f'<div class="ch-header">'
+        f'<div class="ch-ord">Chapter {order}</div>'
+        f'<div class="ch-title">{_e(title)}</div>'
+        f"</div>"
+    )
+
+    # ── 70 / 30 layout ──
+    parts.append('<div class="ch-wrap">')
+
+    # --- Main content (70 %) ---
+    parts.append('<div class="ch-main">')
+
+    # Radar chart on first chapter when scoring data available
+    if is_first_chapter and data.scoring_components:
+        parts.append(
+            f'<div class="radar-wrap">'
+            f"{radar_chart(data.scoring_components, width=200, height=200)}"
+            f"</div>"
+        )
+
+    # Markdown body
+    parts.append(_md_to_html(content))
+
+    # Disclaimer on final page
+    if is_final:
+        parts.append(
+            '<div class="disc">'
+            '<div class="disc-title">Important Disclosures &amp; Disclaimer</div>'
+            "<p>This Due Diligence Report is produced by the InvestIntell quantitative "
+            "research platform. All analytics, risk metrics, performance data, and "
+            "portfolio assessments are derived from official regulatory filings "
+            "(SEC EDGAR Form ADV, Form N-PORT, Form 13F), macroeconomic data sources, "
+            "and proprietary quantitative models.</p>"
+            "<p>This report does not constitute investment advice. Past performance is "
+            "not indicative of future results. Recipients should conduct independent "
+            "verification before making investment decisions.</p>"
+            "<p><strong>Confidentiality:</strong> Proprietary and confidential. "
+            "Unauthorized reproduction or distribution is strictly prohibited.</p>"
+            "<p>&copy; InvestIntell. All rights reserved.</p>"
+            "</div>"
+        )
+
+    parts.append("</div>")  # close ch-main
+
+    # --- Margin content (30 %) ---
+    parts.append('<div class="ch-margin">')
+
+    # Evidence sources
+    if evidence:
+        parts.append('<div class="mg-ev">')
+        parts.append('<div class="mg-ev-label">Evidence Sources</div>')
+        for key, val in evidence.items():
+            parts.append(
+                f'<div class="mg-ev-item">'
+                f"<strong>{_e(key)}:</strong> {_e(str(val))}"
+                f"</div>"
+            )
+        parts.append("</div>")
+
+    # Quant metrics with optional sparklines
+    if quant:
+        spark_data = data.sparkline_data or {}
+        for key, val in quant.items():
+            spark_html = ""
+            if key in spark_data and spark_data[key]:
+                spark_html = sparkline_svg(
+                    spark_data[key], width=50, height=12,
+                )
+            parts.append(
+                f'<div class="mg-q">'
+                f'<div class="mg-q-label">{_e(key.replace("_", " "))}</div>'
+                f'<div class="mg-q-right">'
+                f"{spark_html}"
+                f'<div class="mg-q-val">{_e(str(val))}</div>'
+                f"</div></div>"
+            )
+
+    # Critic status (subtle indicator)
+    critic_iter = _ch_critic_iter(ch)
+    critic_status = _ch_critic_status(ch)
+    if critic_iter > 0:
+        status_color = "#059669" if critic_status == "accepted" else "#D97706"
+        parts.append(
+            f'<div style="margin-top:14px;padding-top:10px;'
+            f'border-top:0.5px solid var(--slate-200)">'
+            f'<div class="mg-ev-label">Critic Review</div>'
+            f'<div class="mg-ev-item">'
+            f'<span style="color:{status_color};font-weight:600">'
+            f"{_e(critic_status.title())}</span>"
+            f" &middot; {critic_iter} iteration{'s' if critic_iter != 1 else ''}"
+            f"</div></div>"
+        )
+
+    parts.append("</div>")  # close ch-margin
+    parts.append("</div>")  # close ch-wrap
+
+    # ── Page footer ──
+    parts.append(
+        f'<div class="pf">'
+        f"<span>Confidential &mdash; For authorized recipients only</span>"
+        f"<span>p.&thinsp;{page_num} of {total_pages}</span>"
+        f"</div>"
+    )
+
+    return f'<div class="page">{"".join(parts)}</div>'
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -452,28 +751,23 @@ def render_dd_report(data: DDReportPDFData, *, language: str = "en") -> str:
     labels = LABELS[language]
     chapters = _sorted_chapters(data)
 
-    # Distribute chapters across pages: ~2-3 chapters per page
-    # Cover = page 1, then chapters spread across remaining pages
-    chapter_groups: list[list[Any]] = []
-    i = 0
-    while i < len(chapters):
-        # 2 chapters per page (generous spacing)
-        group = chapters[i : i + 2]
-        chapter_groups.append(group)
-        i += 2
-
-    total_pages = 1 + len(chapter_groups)  # cover + chapter pages
+    # One chapter per page — generous whitespace, premium layout
+    total_pages = 1 + len(chapters)  # cover + one page per chapter
 
     pages: list[str] = []
     pages.append(_cover_page(data, labels, language, total_pages))
 
-    for gi, group in enumerate(chapter_groups):
-        page_num = gi + 2
-        is_final = gi == len(chapter_groups) - 1
+    for i, ch in enumerate(chapters):
+        page_num = i + 2
         pages.append(
             _chapter_page(
-                data, group, page_num, total_pages, labels,
-                is_final=is_final,
+                data,
+                ch,
+                page_num,
+                total_pages,
+                labels,
+                is_first_chapter=(i == 0),
+                is_final=(i == len(chapters) - 1),
             )
         )
 
