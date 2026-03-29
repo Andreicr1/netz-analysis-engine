@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
 	import "./screener.css";
-	import { formatAUM } from "@netz/ui";
+	import { formatAUM } from "@investintell/ui";
 	import type { UnifiedFundItem, UnifiedCatalogPage } from "$lib/types/catalog";
 	import { EMPTY_CATALOG_PAGE, UNIVERSE_LABELS } from "$lib/types/catalog";
 
@@ -264,7 +264,7 @@
 		font-weight: 700;
 		font-size: 13px;
 		letter-spacing: 0.3px;
-		color: var(--netz-text-primary, #1a202c);
+		color: var(--ii-text-primary, #1a202c);
 	}
 
 	.inst-name {
@@ -282,7 +282,7 @@
 		display: inline-block;
 		font-size: 11px;
 		color: #62748e;
-		font-family: Consolas, var(--netz-font-mono, monospace);
+		font-family: Consolas, var(--ii-font-mono, monospace);
 		background: #f1f5f9;
 		border-radius: 4px;
 		padding: 1px 6px;
@@ -431,7 +431,7 @@
 		color: #1447e6;
 		cursor: pointer;
 		text-decoration: underline;
-		font-family: var(--netz-font-sans);
+		font-family: var(--ii-font-sans);
 	}
 	.ct-detail-link:hover { color: #0f3ccc; }
 </style>

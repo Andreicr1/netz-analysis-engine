@@ -1,9 +1,8 @@
 <!-- Reverse Lookup: search by CUSIP to show all holders.
      Moved from us-fund-analysis/components/ReverseLookup.svelte -->
 <script lang="ts">
-	import { formatNumber, formatCompact, formatPercent } from "@netz/ui/utils";
-	import { Button } from "@netz/ui";
-	import { ChartContainer } from "@netz/ui/charts";
+	import { Button } from "@investintell/ui/components/ui/button";
+	import { formatNumber, formatCompact, formatPercent, ChartContainer } from "@investintell/ui";
 	import type { SecReverseLookup, SecHoldingsHistory } from "$lib/types/sec-analysis";
 	import { EMPTY_REVERSE } from "$lib/types/sec-analysis";
 
@@ -111,22 +110,22 @@
 
 <style>
 	.rl-search { display: flex; gap: 8px; align-items: center; padding: 8px 0; }
-	.rl-input { flex: 1; max-width: 300px; padding: 6px 10px; font-size: 13px; font-family: "IBM Plex Mono", monospace; border: 1px solid var(--netz-border-subtle); border-radius: 6px; background: var(--netz-surface-primary); color: var(--netz-text-primary); }
-	.rl-input:focus { outline: none; border-color: var(--netz-border-accent); }
-	.rl-loading { padding: 24px; color: var(--netz-text-muted); font-size: 13px; }
-	.rl-empty { padding: 48px 24px; text-align: center; color: var(--netz-text-muted); font-size: 14px; }
+	.rl-input { flex: 1; max-width: 300px; padding: 6px 10px; font-size: 13px; font-family: "IBM Plex Mono", monospace; border: 1px solid var(--ii-border-subtle); border-radius: 6px; background: var(--ii-surface-primary); color: var(--ii-text-primary); }
+	.rl-input:focus { outline: none; border-color: var(--ii-border-accent); }
+	.rl-loading { padding: 24px; color: var(--ii-text-muted); font-size: 13px; }
+	.rl-empty { padding: 48px 24px; text-align: center; color: var(--ii-text-muted); font-size: 14px; }
 	.rl-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; }
-	.rl-title { font-size: 15px; font-weight: 600; color: var(--netz-text-primary); }
-	.rl-count { font-size: 12px; color: var(--netz-text-muted); }
+	.rl-title { font-size: 15px; font-weight: 600; color: var(--ii-text-primary); }
+	.rl-count { font-size: 12px; color: var(--ii-text-muted); }
 	.rl-table-wrap { overflow-x: auto; }
 	.rl-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-	.rl-th { padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--netz-text-muted); border-bottom: 1px solid var(--netz-border-subtle); white-space: nowrap; }
+	.rl-th { padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ii-text-muted); border-bottom: 1px solid var(--ii-border-subtle); white-space: nowrap; }
 	.rl-th--right { text-align: right; }
-	.rl-row:hover { background: var(--netz-surface-secondary); }
-	.rl-td { padding: 8px 12px; border-bottom: 1px solid var(--netz-border-subtle); white-space: nowrap; }
+	.rl-row:hover { background: var(--ii-surface-secondary); }
+	.rl-td { padding: 8px 12px; border-bottom: 1px solid var(--ii-border-subtle); white-space: nowrap; }
 	.rl-td--name { max-width: 280px; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
 	.rl-td--mono { font-family: "IBM Plex Mono", monospace; font-size: 12px; }
 	.rl-td--right { text-align: right; font-variant-numeric: tabular-nums; }
-	.rl-chart-section { padding: 8px 0 16px; border-bottom: 1px solid var(--netz-border-subtle); margin-bottom: 12px; }
-	.rl-chart-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--netz-text-muted); }
+	.rl-chart-section { padding: 8px 0 16px; border-bottom: 1px solid var(--ii-border-subtle); margin-bottom: 12px; }
+	.rl-chart-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ii-text-muted); }
 </style>

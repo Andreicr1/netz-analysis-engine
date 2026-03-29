@@ -6,7 +6,7 @@
 	import "./screener.css";
 	import { getContext } from "svelte";
 	import { createClientApiClient } from "$lib/api/client";
-	import { formatAUM, formatPercent, formatDate } from "@netz/ui";
+	import { formatAUM, formatPercent, formatDate } from "@investintell/ui";
 	import type { NportHoldingsResponse } from "$lib/types/manager-screener";
 
 	interface Props {
@@ -81,7 +81,7 @@
 	<div class="dt-loading">Loading holdings…</div>
 {:else if error}
 	<div class="dt-section">
-		<p class="dt-empty-text" style="color: var(--netz-danger)">{error}</p>
+		<p class="dt-empty-text" style="color: var(--ii-danger)">{error}</p>
 		<button class="scr-page-btn" onclick={retry}>Retry</button>
 	</div>
 {:else if data && data.total_holdings > 0}
@@ -140,24 +140,24 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-md, 16px);
-		border-bottom: 1px solid var(--netz-border-subtle);
-		font-size: var(--netz-text-small, 0.8125rem);
+		padding: var(--ii-space-stack-xs, 8px) var(--ii-space-inline-md, 16px);
+		border-bottom: 1px solid var(--ii-border-subtle);
+		font-size: var(--ii-text-small, 0.8125rem);
 	}
 
 	.holdings-report-date {
-		color: var(--netz-text-secondary);
+		color: var(--ii-text-secondary);
 	}
 
 	.holdings-total {
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		font-variant-numeric: tabular-nums;
 	}
 
 	.holdings-isin {
 		display: block;
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
-		font-family: var(--netz-font-mono);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
+		font-family: var(--ii-font-mono);
 	}
 </style>

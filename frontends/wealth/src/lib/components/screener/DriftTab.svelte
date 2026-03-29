@@ -7,7 +7,7 @@
 	import { getContext } from "svelte";
 	import { SvelteMap } from "svelte/reactivity";
 	import { createClientApiClient } from "$lib/api/client";
-	import { formatPercent, formatNumber } from "@netz/ui";
+	import { formatPercent, formatNumber } from "@investintell/ui";
 	import type { ManagerDriftData, DriftQuarter } from "$lib/types/manager-screener";
 
 	interface Props {
@@ -76,9 +76,9 @@
 	}
 
 	function turnoverColor(turnover: number): string {
-		if (turnover > 0.3) return "var(--netz-danger)";
-		if (turnover > 0.15) return "var(--netz-warning)";
-		return "var(--netz-success)";
+		if (turnover > 0.3) return "var(--ii-danger)";
+		if (turnover > 0.15) return "var(--ii-warning)";
+		return "var(--ii-success)";
 	}
 </script>
 
@@ -90,7 +90,7 @@
 	<div class="dt-loading">Loading drift data…</div>
 {:else if error}
 	<div class="dt-section">
-		<p class="dt-empty-text" style="color: var(--netz-danger)">{error}</p>
+		<p class="dt-empty-text" style="color: var(--ii-danger)">{error}</p>
 	</div>
 {:else if data && data.quarters.length > 0}
 	{#if data.style_drift_detected}
@@ -137,8 +137,8 @@
 					<tr>
 						<td class="criteria-val">{q.quarter.slice(0, 7)}</td>
 						<td class="criteria-val" style:color={turnoverColor(q.turnover)}>{formatPercent(q.turnover)}</td>
-						<td class="criteria-val" style="color: var(--netz-success)">{formatNumber(topGainers(q))}</td>
-						<td class="criteria-val" style="color: var(--netz-danger)">{formatNumber(topLosers(q))}</td>
+						<td class="criteria-val" style="color: var(--ii-success)">{formatNumber(topGainers(q))}</td>
+						<td class="criteria-val" style="color: var(--ii-danger)">{formatNumber(topLosers(q))}</td>
 						<td class="criteria-val">{formatNumber(q.total_changes)}</td>
 					</tr>
 				{/each}
@@ -151,20 +151,20 @@
 
 <style>
 	.drift-alert {
-		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-md, 16px);
-		background: color-mix(in srgb, var(--netz-danger) 8%, transparent);
-		color: var(--netz-danger);
-		font-size: var(--netz-text-small, 0.8125rem);
+		padding: var(--ii-space-stack-xs, 8px) var(--ii-space-inline-md, 16px);
+		background: color-mix(in srgb, var(--ii-danger) 8%, transparent);
+		color: var(--ii-danger);
+		font-size: var(--ii-text-small, 0.8125rem);
 		font-weight: 500;
-		border-bottom: 1px solid var(--netz-border-subtle);
+		border-bottom: 1px solid var(--ii-border-subtle);
 	}
 
 	.drift-chart {
 		display: flex;
-		gap: var(--netz-space-inline-xs, 6px);
+		gap: var(--ii-space-inline-xs, 6px);
 		align-items: flex-end;
 		height: 120px;
-		padding-top: var(--netz-space-stack-xs, 8px);
+		padding-top: var(--ii-space-stack-xs, 8px);
 	}
 
 	.drift-bar-col {
@@ -179,7 +179,7 @@
 	.drift-bar-track {
 		width: 100%;
 		height: 80px;
-		background: var(--netz-surface-alt);
+		background: var(--ii-surface-alt);
 		border-radius: 3px;
 		overflow: hidden;
 		display: flex;
@@ -194,14 +194,14 @@
 
 	.drift-bar-label {
 		font-size: 9px;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		white-space: nowrap;
 	}
 
 	.drift-bar-value {
-		font-size: var(--netz-text-label, 0.75rem);
+		font-size: var(--ii-text-label, 0.75rem);
 		font-weight: 600;
 		font-variant-numeric: tabular-nums;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 	}
 </style>

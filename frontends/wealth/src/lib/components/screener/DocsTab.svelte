@@ -6,7 +6,7 @@
 	import "./screener.css";
 	import { getContext } from "svelte";
 	import { createClientApiClient } from "$lib/api/client";
-	import { formatDate } from "@netz/ui";
+	import { formatDate } from "@investintell/ui";
 	import type { BrochureSectionsResponse, BrochureSearchResponse } from "$lib/types/manager-screener";
 
 	interface Props {
@@ -105,7 +105,7 @@
 	<div class="dt-loading">Loading docs…</div>
 {:else if error}
 	<div class="dt-section">
-		<p class="dt-empty-text" style="color: var(--netz-danger)">{error}</p>
+		<p class="dt-empty-text" style="color: var(--ii-danger)">{error}</p>
 	</div>
 {:else}
 	<!-- Search -->
@@ -167,20 +167,20 @@
 	.docs-search {
 		display: flex;
 		align-items: center;
-		gap: var(--netz-space-inline-xs, 6px);
-		padding: var(--netz-space-stack-xs, 8px) var(--netz-space-inline-md, 16px);
-		border-bottom: 1px solid var(--netz-border-subtle);
+		gap: var(--ii-space-inline-xs, 6px);
+		padding: var(--ii-space-stack-xs, 8px) var(--ii-space-inline-md, 16px);
+		border-bottom: 1px solid var(--ii-border-subtle);
 	}
 
 	.docs-searching {
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
 		white-space: nowrap;
 	}
 
 	.docs-section-row, .docs-result {
-		padding: var(--netz-space-stack-xs, 8px) 0;
-		border-bottom: 1px solid var(--netz-border-subtle);
+		padding: var(--ii-space-stack-xs, 8px) 0;
+		border-bottom: 1px solid var(--ii-border-subtle);
 	}
 
 	.docs-section-header, .docs-result-header {
@@ -191,19 +191,19 @@
 	}
 
 	.docs-section-name {
-		font-size: var(--netz-text-small, 0.8125rem);
+		font-size: var(--ii-text-small, 0.8125rem);
 		font-weight: 500;
-		color: var(--netz-text-primary);
+		color: var(--ii-text-primary);
 	}
 
 	.docs-filing-date {
-		font-size: var(--netz-text-label, 0.75rem);
-		color: var(--netz-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
 	}
 
 	.docs-excerpt {
-		font-size: var(--netz-text-small, 0.8125rem);
-		color: var(--netz-text-secondary);
+		font-size: var(--ii-text-small, 0.8125rem);
+		color: var(--ii-text-secondary);
 		line-height: 1.4;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -213,13 +213,13 @@
 	}
 
 	.docs-headline {
-		font-size: var(--netz-text-small, 0.8125rem);
-		color: var(--netz-text-secondary);
+		font-size: var(--ii-text-small, 0.8125rem);
+		color: var(--ii-text-secondary);
 		line-height: 1.5;
 	}
 
 	.docs-headline :global(b) {
-		color: var(--netz-brand-primary);
+		color: var(--ii-brand-primary);
 		font-weight: 600;
 	}
 </style>

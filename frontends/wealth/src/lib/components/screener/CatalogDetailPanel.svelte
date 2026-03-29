@@ -6,8 +6,9 @@
 	import "./screener.css";
 	import { getContext } from "svelte";
 	import { goto } from "$app/navigation";
-	import { Button, StatusBadge, ConsequenceDialog, formatAUM, formatPercent } from "@netz/ui";
-	import type { ConsequenceDialogPayload } from "@netz/ui";
+	import { Button } from "@investintell/ui/components/ui/button";
+	import { StatusBadge, ConsequenceDialog, formatAUM, formatPercent } from "@investintell/ui";
+	import type { ConsequenceDialogPayload } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { UnifiedFundItem } from "$lib/types/catalog";
 	import { UNIVERSE_LABELS } from "$lib/types/catalog";
@@ -293,7 +294,7 @@
 	}
 
 	.cdp-matrix-label {
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 	}
 
 	.cdp-matrix-value {
@@ -339,7 +340,7 @@
 	}
 
 	.cdp-na-text {
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		font-size: 13px;
 		max-width: 320px;
 		line-height: 1.5;

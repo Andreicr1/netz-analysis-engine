@@ -7,7 +7,8 @@
   import "./screener.css";
   import { slide } from "svelte/transition";
   import { goto } from "$app/navigation";
-  import { Button, formatNumber } from "@netz/ui";
+  import { Button } from "@investintell/ui/components/ui/button";
+  import { formatNumber } from "@investintell/ui";
   import type { ScreenerFacets, FacetItem } from "$lib/types/screening";
   import { EMPTY_FACETS } from "$lib/types/screening";
 
@@ -402,11 +403,11 @@
   }
 
   .scr-label--disabled {
-    color: var(--netz-text-muted);
+    color: var(--ii-text-muted);
   }
 
   .scr-select--disabled {
     cursor: not-allowed;
-    background: var(--netz-surface-alt);
+    background: var(--ii-surface-alt);
   }
 </style>

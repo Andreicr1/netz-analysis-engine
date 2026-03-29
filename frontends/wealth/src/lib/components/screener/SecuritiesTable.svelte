@@ -86,10 +86,10 @@
 
 <style>
 	.st-page-label { margin-left: auto; font-size: 12px; color: #90a1b9; font-variant-numeric: tabular-nums; }
-	.ticker-cell { font-weight: 700; font-size: 13px; letter-spacing: 0.3px; color: var(--netz-text-primary, #1a202c); }
+	.ticker-cell { font-weight: 700; font-size: 13px; letter-spacing: 0.3px; color: var(--ii-text-primary, #1a202c); }
 	.inst-name { display: block; font-weight: 600; font-size: 14px; color: #1d293d; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	.st-exchange { color: #62748e; font-size: 13px; }
-	.st-cusip { font-family: Consolas, var(--netz-font-mono, monospace); font-size: 12px; color: #62748e; }
+	.st-cusip { font-family: Consolas, var(--ii-font-mono, monospace); font-size: 12px; color: #62748e; }
 	.st-type-badge { display: inline-block; padding: 3px 8px; border-radius: 8px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; }
 	.st-type-badge--equity { background: #eff6ff; border: 1px solid #dbeafe; color: #1447e6; }
 	.st-type-badge--real_estate { background: #fef9ec; border: 1px solid #fde68a; color: #b45309; }

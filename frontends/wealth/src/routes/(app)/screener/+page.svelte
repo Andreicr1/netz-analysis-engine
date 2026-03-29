@@ -7,7 +7,8 @@
 <script lang="ts">
 	import { untrack, getContext } from "svelte";
 	import { goto, invalidateAll } from "$app/navigation";
-	import { PageHeader, Button, ContextPanel, formatAUM } from "@netz/ui";
+	import { Button } from "@investintell/ui/components/ui/button";
+	import { PageHeader, ContextPanel, formatAUM } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
 
@@ -540,7 +541,7 @@
 		border-radius: 14px;
 		font-size: 14px;
 		font-weight: 600;
-		font-family: var(--netz-font-sans);
+		font-family: var(--ii-font-sans);
 		cursor: pointer;
 		transition: all 120ms ease;
 		border: none;
@@ -576,7 +577,7 @@
 		font-weight: 600;
 		color: #62748e;
 		cursor: pointer;
-		font-family: var(--netz-font-sans);
+		font-family: var(--ii-font-sans);
 		transition: color 120ms, border-color 120ms;
 		white-space: nowrap;
 	}
@@ -604,7 +605,7 @@
 		font-weight: 600;
 		color: #62748e;
 		cursor: pointer;
-		font-family: var(--netz-font-sans);
+		font-family: var(--ii-font-sans);
 		transition: color 120ms, border-color 120ms;
 		white-space: nowrap;
 	}
@@ -654,7 +655,7 @@
 		font-weight: 600;
 		color: #62748e;
 		cursor: pointer;
-		font-family: var(--netz-font-sans);
+		font-family: var(--ii-font-sans);
 	}
 
 	.scr-btn-text:hover { color: #1d293d; }
@@ -667,7 +668,7 @@
 		color: white;
 		font-size: 13px;
 		font-weight: 600;
-		font-family: var(--netz-font-sans);
+		font-family: var(--ii-font-sans);
 		cursor: pointer;
 		box-shadow: 0 1px 3px rgba(37,99,235,0.25);
 	}
@@ -680,7 +681,7 @@
 
 	.mgr-loading {
 		padding: 24px;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		font-size: 13px;
 	}
 
@@ -699,13 +700,13 @@
 	}
 
 	.mgr-detail__label {
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		font-weight: 500;
 	}
 
 	.mgr-fund-section {
 		padding: 16px;
-		border-top: 1px solid var(--netz-border-subtle);
+		border-top: 1px solid var(--ii-border-subtle);
 	}
 
 	.mgr-fund-title {
@@ -713,7 +714,7 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 	}
 
 	.mgr-fund-grid {
@@ -732,13 +733,13 @@
 	.mgr-fund-val {
 		font-size: 20px;
 		font-weight: 800;
-		color: var(--netz-text-primary, #1d293d);
+		color: var(--ii-text-primary, #1d293d);
 	}
 
 	.mgr-fund-lbl {
 		font-size: 11px;
 		font-weight: 600;
-		color: var(--netz-text-muted);
+		color: var(--ii-text-muted);
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
 	}

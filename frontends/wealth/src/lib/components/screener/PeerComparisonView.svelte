@@ -3,7 +3,8 @@
 -->
 <script lang="ts">
 	import "./screener.css";
-	import { Button, formatAUM } from "@netz/ui";
+	import { Button } from "@investintell/ui/components/ui/button";
+	import { formatAUM } from "@investintell/ui";
 	import type { CompareResult } from "$lib/types/manager-screener";
 
 	interface Props {

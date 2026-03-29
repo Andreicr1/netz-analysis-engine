@@ -4,7 +4,8 @@
 <script lang="ts">
 	import "./screener.css";
 	import { goto } from "$app/navigation";
-	import { Button, StatusBadge, formatNumber, formatDateTime } from "@netz/ui";
+	import { Button } from "@investintell/ui/components/ui/button";
+	import { StatusBadge, formatNumber, formatDateTime } from "@investintell/ui";
 	import type { ScreeningResult, ScreeningRun, ScreenerFilterConfig, OverallStatus } from "$lib/types/screening";
 	import { EMPTY_FILTERS } from "$lib/types/screening";
 

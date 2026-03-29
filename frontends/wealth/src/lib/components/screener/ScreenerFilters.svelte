@@ -321,14 +321,14 @@
     font-weight: 600;
     color: #62748e;
     cursor: pointer;
-    font-family: var(--netz-font-sans);
+    font-family: var(--ii-font-sans);
     transition: color 120ms, background 120ms;
     margin-bottom: -1px;
     position: relative;
   }
 
   .filter-tab:hover {
-    color: var(--netz-text-primary);
+    color: var(--ii-text-primary);
   }
 
   .filter-tab--active {
@@ -367,8 +367,8 @@
     background: rgba(248, 250, 252, 0.5);
     box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     font-size: 14px;
-    color: var(--netz-text-primary);
-    font-family: var(--netz-font-sans);
+    color: var(--ii-text-primary);
+    font-family: var(--ii-font-sans);
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%2390a1b9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: 14px center;
@@ -423,12 +423,12 @@
     font-weight: 600;
     color: #62748e;
     cursor: pointer;
-    font-family: var(--netz-font-sans);
+    font-family: var(--ii-font-sans);
     transition: color 120ms;
   }
 
   .filter-clear-btn:hover {
-    color: var(--netz-text-primary);
+    color: var(--ii-text-primary);
   }
 
   .filter-apply-btn {
@@ -439,7 +439,7 @@
     color: white;
     font-size: 14px;
     font-weight: 600;
-    font-family: var(--netz-font-sans);
+    font-family: var(--ii-font-sans);
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(37,99,235,0.25);
     transition: background 120ms;

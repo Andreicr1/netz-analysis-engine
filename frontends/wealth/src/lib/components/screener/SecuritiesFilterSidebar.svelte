@@ -89,7 +89,7 @@
 	.cfs-sidebar { width: 260px; min-width: 260px; background: white; border: 1px solid #e2e8f0; border-radius: 16px; overflow-y: auto; max-height: calc(100vh - 140px); position: sticky; top: 80px; box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1); }
 	.cfs-section { padding: 16px; border-bottom: 1px solid #f1f5f9; }
 	.cfs-section:last-child { border-bottom: none; }
-	.cfs-search { width: 100%; height: 38px; padding: 0 12px 0 36px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; font-size: 13px; color: var(--netz-text-primary); font-family: var(--netz-font-sans); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2390a1b9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: 10px center; }
+	.cfs-search { width: 100%; height: 38px; padding: 0 12px 0 36px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; font-size: 13px; color: var(--ii-text-primary); font-family: var(--ii-font-sans); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2390a1b9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: 10px center; }
 	.cfs-search::placeholder { color: #90a1b9; }
 	.cfs-search:focus { outline: none; border-color: #155dfc; box-shadow: 0 0 0 3px rgba(21,93,252,0.1); }
 	.cfs-group-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: #62748e; margin-bottom: 10px; }
@@ -98,6 +98,6 @@
 	.cfs-check-label { flex: 1; color: #314158; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.cfs-check-count { font-size: 11px; font-variant-numeric: tabular-nums; color: #90a1b9; font-weight: 600; }
 	.cfs-section--actions { border-bottom: none; }
-	.cfs-clear-btn { width: 100%; padding: 8px; border: 1px solid #e2e8f0; border-radius: 10px; background: white; font-size: 13px; font-weight: 600; color: #62748e; cursor: pointer; font-family: var(--netz-font-sans); transition: all 120ms; }
+	.cfs-clear-btn { width: 100%; padding: 8px; border: 1px solid #e2e8f0; border-radius: 10px; background: white; font-size: 13px; font-weight: 600; color: #62748e; cursor: pointer; font-family: var(--ii-font-sans); transition: all 120ms; }
 	.cfs-clear-btn:hover { background: #f8fafc; color: #1d293d; }
 </style>

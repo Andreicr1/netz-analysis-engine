@@ -5,11 +5,12 @@
 	import "./screener.css";
 	import { goto, invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
+	import { Button } from "@investintell/ui/components/ui/button";
 	import {
-		Button, StatusBadge, ConsequenceDialog,
+		StatusBadge, ConsequenceDialog,
 		formatAUM, formatPercent, formatDate,
-	} from "@netz/ui";
-	import type { ConsequenceDialogPayload } from "@netz/ui";
+	} from "@investintell/ui";
+	import type { ConsequenceDialogPayload } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type {
 		ManagerProfile, HoldingsData, InstitutionalData, UniverseStatus, DetailTab,

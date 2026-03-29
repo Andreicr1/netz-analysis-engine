@@ -288,8 +288,8 @@
 		border-radius: 10px;
 		background: #f8fafc;
 		font-size: 13px;
-		color: var(--netz-text-primary);
-		font-family: var(--netz-font-sans);
+		color: var(--ii-text-primary);
+		font-family: var(--ii-font-sans);
 		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2390a1b9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");
 		background-repeat: no-repeat;
 		background-position: 10px center;
@@ -349,8 +349,8 @@
 		border-radius: 10px;
 		background: #f8fafc;
 		font-size: 13px;
-		color: var(--netz-text-primary);
-		font-family: var(--netz-font-sans);
+		color: var(--ii-text-primary);
+		font-family: var(--ii-font-sans);
 	}
 
 	.cfs-select:focus { outline: none; border-color: #155dfc; }
@@ -367,7 +367,7 @@
 		font-weight: 600;
 		color: #62748e;
 		cursor: pointer;
-		font-family: var(--netz-font-sans);
+		font-family: var(--ii-font-sans);
 		transition: all 120ms;
 	}
 
@@ -392,14 +392,14 @@
 		align-items: center;
 		gap: 4px;
 		padding: 3px 10px;
-		border: 1px solid var(--netz-border-subtle, #e2e8f0);
+		border: 1px solid var(--ii-border-subtle, #e2e8f0);
 		border-radius: 100px;
 		background: color-mix(in srgb, #155dfc 8%, transparent);
 		border-color: #155dfc;
 		color: #155dfc;
 		font-size: 11px;
 		font-weight: 600;
-		font-family: var(--netz-font-sans);
+		font-family: var(--ii-font-sans);
 		cursor: pointer;
 		transition: all 120ms ease;
 	}

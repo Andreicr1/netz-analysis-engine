@@ -1,9 +1,8 @@
 <!-- Peer Compare: compare 2-5 managers side by side.
      Moved from us-fund-analysis/components/PeerCompare.svelte -->
 <script lang="ts">
-	import { formatPercent, formatCompact } from "@netz/ui/utils";
-	import { Button } from "@netz/ui";
-	import { ChartContainer } from "@netz/ui/charts";
+	import { Button } from "@investintell/ui/components/ui/button";
+	import { formatPercent, formatCompact, ChartContainer } from "@investintell/ui";
 	import type { SecPeerCompare, SecManagerFundBreakdown } from "$lib/types/sec-analysis";
 
 	let {
@@ -151,31 +150,31 @@
 
 <style>
 	.pc-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; }
-	.pc-hint { font-size: 13px; color: var(--netz-text-muted); }
+	.pc-hint { font-size: 13px; color: var(--ii-text-muted); }
 	.pc-loading, .pc-error { padding: 24px; font-size: 13px; }
-	.pc-loading { color: var(--netz-text-muted); }
-	.pc-error { color: var(--netz-color-error, #ef4444); }
+	.pc-loading { color: var(--ii-text-muted); }
+	.pc-error { color: var(--ii-color-error, #ef4444); }
 	.pc-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin: 16px 0; }
-	.pc-card { padding: 12px; border: 1px solid var(--netz-border-subtle); border-radius: 8px; background: var(--netz-surface-secondary); }
-	.pc-card__name { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--netz-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.pc-card { padding: 12px; border: 1px solid var(--ii-border-subtle); border-radius: 8px; background: var(--ii-surface-secondary); }
+	.pc-card__name { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--ii-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.pc-card__row { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }
-	.pc-card__label { color: var(--netz-text-muted); }
+	.pc-card__label { color: var(--ii-text-muted); }
 	.pc-card__mono { font-family: "IBM Plex Mono", monospace; font-size: 11px; }
-	.pc-subtitle { font-size: 13px; font-weight: 600; color: var(--netz-text-secondary); margin: 16px 0 8px; }
+	.pc-subtitle { font-size: 13px; font-weight: 600; color: var(--ii-text-secondary); margin: 16px 0 8px; }
 	.pc-table-wrap { overflow-x: auto; }
 	.pc-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-	.pc-th { padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--netz-text-muted); border-bottom: 1px solid var(--netz-border-subtle); white-space: nowrap; }
+	.pc-th { padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ii-text-muted); border-bottom: 1px solid var(--ii-border-subtle); white-space: nowrap; }
 	.pc-th--right { text-align: right; }
-	.pc-row:hover { background: var(--netz-surface-secondary); }
-	.pc-td { padding: 8px 12px; border-bottom: 1px solid var(--netz-border-subtle); }
+	.pc-row:hover { background: var(--ii-surface-secondary); }
+	.pc-td { padding: 8px 12px; border-bottom: 1px solid var(--ii-border-subtle); }
 	.pc-td--right { text-align: right; font-variant-numeric: tabular-nums; }
 	.pc-overlaps { display: flex; flex-direction: column; gap: 8px; }
-	.pc-overlap { display: flex; justify-content: space-between; padding: 8px 12px; border: 1px solid var(--netz-border-subtle); border-radius: 6px; font-size: 13px; }
-	.pc-overlap__pair { color: var(--netz-text-secondary); }
+	.pc-overlap { display: flex; justify-content: space-between; padding: 8px 12px; border: 1px solid var(--ii-border-subtle); border-radius: 6px; font-size: 13px; }
+	.pc-overlap__pair { color: var(--ii-text-secondary); }
 	.pc-overlap__value { font-weight: 600; font-variant-numeric: tabular-nums; }
 	.pc-fund-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin: 12px 0; }
-	.pc-fund-card { padding: 12px; border: 1px solid var(--netz-border-subtle); border-radius: 8px; background: var(--netz-surface-secondary); }
-	.pc-fund-card__name { font-size: 13px; font-weight: 600; color: var(--netz-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
-	.pc-fund-card__count { font-size: 11px; color: var(--netz-text-muted); margin-bottom: 8px; }
-	.pc-fund-empty { font-size: 12px; color: var(--netz-text-muted); padding: 20px 0; text-align: center; }
+	.pc-fund-card { padding: 12px; border: 1px solid var(--ii-border-subtle); border-radius: 8px; background: var(--ii-surface-secondary); }
+	.pc-fund-card__name { font-size: 13px; font-weight: 600; color: var(--ii-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
+	.pc-fund-card__count { font-size: 11px; color: var(--ii-text-muted); margin-bottom: 8px; }
+	.pc-fund-empty { font-size: 12px; color: var(--ii-text-muted); padding: 20px 0; text-align: center; }
 </style>

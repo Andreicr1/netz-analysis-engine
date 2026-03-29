@@ -2,7 +2,7 @@
      Uses @tanstack/svelte-virtual for row virtualization.
      Holdings data is kept as raw (non-reactive) to avoid $state proxy overhead. -->
 <script lang="ts">
-	import { formatNumber, formatPercent, formatCompact } from "@netz/ui/utils";
+	import { formatNumber, formatPercent, formatCompact } from "@investintell/ui";
 	import { createVirtualizer } from "@tanstack/svelte-virtual";
 	import type { SecHoldingsPage, SecReverseLookup } from "$lib/types/sec-analysis";
 	import { EMPTY_HOLDINGS, EMPTY_REVERSE } from "$lib/types/sec-analysis";
@@ -236,15 +236,15 @@
 {/if}
 
 <style>
-	.ht-empty { padding: 48px 24px; text-align: center; color: var(--netz-text-muted); font-size: 14px; }
+	.ht-empty { padding: 48px 24px; text-align: center; color: var(--ii-text-muted); font-size: 14px; }
 	.ht-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; }
-	.ht-title { font-size: 15px; font-weight: 600; color: var(--netz-text-primary); }
-	.ht-quarter-select { padding: 4px 8px; font-size: 12px; border: 1px solid var(--netz-border-subtle); border-radius: 4px; background: var(--netz-surface-primary); color: var(--netz-text-primary); }
-	.ht-summary { font-size: 12px; color: var(--netz-text-muted); padding-bottom: 8px; }
-	.ht-loading { padding: 24px; color: var(--netz-text-muted); font-size: 13px; }
+	.ht-title { font-size: 15px; font-weight: 600; color: var(--ii-text-primary); }
+	.ht-quarter-select { padding: 4px 8px; font-size: 12px; border: 1px solid var(--ii-border-subtle); border-radius: 4px; background: var(--ii-surface-primary); color: var(--ii-text-primary); }
+	.ht-summary { font-size: 12px; color: var(--ii-text-muted); padding-bottom: 8px; }
+	.ht-loading { padding: 24px; color: var(--ii-text-muted); font-size: 13px; }
 
 	/* Sticky header */
-	.ht-table-header { overflow: hidden; border-bottom: 1px solid var(--netz-border-subtle); }
+	.ht-table-header { overflow: hidden; border-bottom: 1px solid var(--ii-border-subtle); }
 
 	/* Virtual scroll container */
 	.ht-virtual-container { max-height: 520px; overflow-y: auto; overflow-x: auto; }
@@ -254,40 +254,40 @@
 	.ht-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
 	.ht-th {
 		padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 600;
-		text-transform: uppercase; letter-spacing: 0.04em; color: var(--netz-text-muted);
+		text-transform: uppercase; letter-spacing: 0.04em; color: var(--ii-text-muted);
 		white-space: nowrap; background: #f8fafc;
 	}
 	.ht-th--right { text-align: right; }
 	.ht-row { transition: background 120ms ease; }
-	.ht-row:hover { background: var(--netz-surface-secondary); }
+	.ht-row:hover { background: var(--ii-surface-secondary); }
 	.ht-td { padding: 8px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
 	.ht-td--name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
 	.ht-td--mono { font-family: "IBM Plex Mono", monospace; font-size: 12px; }
 	.ht-td--right { text-align: right; font-variant-numeric: tabular-nums; }
 	.ht-delta { font-size: 11px; font-weight: 600; }
-	.ht-delta--up { color: var(--netz-color-success, #22c55e); }
-	.ht-delta--down { color: var(--netz-color-error, #ef4444); }
+	.ht-delta--up { color: var(--ii-color-success, #22c55e); }
+	.ht-delta--down { color: var(--ii-color-error, #ef4444); }
 
 	.ht-load-more { padding: 12px; text-align: center; }
-	.ht-load-hint { font-size: 12px; color: var(--netz-text-muted); }
+	.ht-load-hint { font-size: 12px; color: var(--ii-text-muted); }
 
 	.ht-td--cusip { position: relative; }
 	.ht-cusip-btn {
 		background: none; border: none; padding: 0; font-family: "IBM Plex Mono", monospace;
-		font-size: 12px; color: var(--netz-brand-primary); cursor: pointer;
+		font-size: 12px; color: var(--ii-brand-primary); cursor: pointer;
 		text-decoration: underline; text-decoration-style: dotted;
 	}
 	.ht-cusip-btn:hover { text-decoration-style: solid; }
 	.ht-popover {
 		position: absolute; top: 100%; left: 0; z-index: 50; min-width: 360px; max-width: 480px;
-		padding: 12px; background: var(--netz-surface-elevated); border: 1px solid var(--netz-border-subtle);
+		padding: 12px; background: var(--ii-surface-elevated); border: 1px solid var(--ii-border-subtle);
 		border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 	}
-	.ht-popover__title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--netz-text-muted); margin-bottom: 8px; }
-	.ht-popover__loading { font-size: 12px; color: var(--netz-text-muted); }
+	.ht-popover__title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ii-text-muted); margin-bottom: 8px; }
+	.ht-popover__loading { font-size: 12px; color: var(--ii-text-muted); }
 	.ht-popover__table { width: 100%; border-collapse: collapse; font-size: 12px; }
-	.ht-popover__table th { text-align: left; font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--netz-text-muted); padding: 4px 8px; border-bottom: 1px solid var(--netz-border-subtle); }
-	.ht-popover__table td { padding: 4px 8px; border-bottom: 1px solid color-mix(in srgb, var(--netz-border-subtle) 50%, transparent); }
+	.ht-popover__table th { text-align: left; font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--ii-text-muted); padding: 4px 8px; border-bottom: 1px solid var(--ii-border-subtle); }
+	.ht-popover__table td { padding: 4px 8px; border-bottom: 1px solid color-mix(in srgb, var(--ii-border-subtle) 50%, transparent); }
 	.ht-popover__num { text-align: right; font-variant-numeric: tabular-nums; }
-	.ht-popover__more { font-size: 11px; color: var(--netz-text-muted); text-align: right; margin-top: 6px; }
+	.ht-popover__more { font-size: 11px; color: var(--ii-text-muted); text-align: right; margin-top: 6px; }
 </style>

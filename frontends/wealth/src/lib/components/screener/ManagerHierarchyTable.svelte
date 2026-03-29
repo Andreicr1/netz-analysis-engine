@@ -5,7 +5,7 @@
 	import "./screener.css";
 	import { goto } from "$app/navigation";
 	import { page } from "$app/stores";
-	import { StatusBadge, formatAUM, formatPercent } from "@netz/ui";
+	import { StatusBadge, formatAUM, formatPercent } from "@investintell/ui";
 	import type { ScreeningResult } from "$lib/types/screening";
 	import type { ManagerRow, ScreenerPage } from "$lib/types/manager-screener";
 
@@ -47,10 +47,10 @@
 	}
 
 	function scoreColor(score: number | null): string {
-		if (score === null) return "var(--netz-text-muted)";
-		if (score >= 0.7) return "var(--netz-success)";
-		if (score >= 0.4) return "var(--netz-warning)";
-		return "var(--netz-danger)";
+		if (score === null) return "var(--ii-text-muted)";
+		if (score >= 0.7) return "var(--ii-success)";
+		if (score >= 0.4) return "var(--ii-warning)";
+		return "var(--ii-danger)";
 	}
 
 	function ddLabel(type: string): string {

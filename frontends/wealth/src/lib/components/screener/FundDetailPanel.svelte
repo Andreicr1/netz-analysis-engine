@@ -4,7 +4,7 @@
 <script lang="ts">
 	import "./screener.css";
 	import { getContext } from "svelte";
-	import { StatusBadge, formatPercent, formatDateTime } from "@netz/ui";
+	import { StatusBadge, formatPercent, formatDateTime } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { ScreeningResult, CriterionResult } from "$lib/types/screening";
 
@@ -57,10 +57,10 @@
 	}
 
 	function scoreColor(score: number | null): string {
-		if (score === null) return "var(--netz-text-muted)";
-		if (score >= 0.7) return "var(--netz-success)";
-		if (score >= 0.4) return "var(--netz-warning)";
-		return "var(--netz-danger)";
+		if (score === null) return "var(--ii-text-muted)";
+		if (score >= 0.7) return "var(--ii-success)";
+		if (score >= 0.4) return "var(--ii-warning)";
+		return "var(--ii-danger)";
 	}
 
 	function ddLabel(type: string): string {

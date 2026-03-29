@@ -5,7 +5,8 @@
 	import "./screener.css";
 	import { getContext } from "svelte";
 	import { page } from "$app/stores";
-	import { Button, formatAUM } from "@netz/ui";
+	import { Button } from "@investintell/ui/components/ui/button";
+	import { formatAUM } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { InstrumentSearchPage, InstrumentSearchItem } from "$lib/types/screening";
 	import { EMPTY_SEARCH_PAGE } from "$lib/types/screening";
@@ -180,7 +181,7 @@
 		font-weight: 700;
 		font-size: 13px;
 		letter-spacing: 0.3px;
-		color: var(--netz-text-primary, #1a202c);
+		color: var(--ii-text-primary, #1a202c);
 	}
 
 	.scr-count-badge {
@@ -197,7 +198,7 @@
 	}
 
 	.scr-scroll-sentinel {
-		padding: var(--netz-space-stack-sm, 12px) 0;
+		padding: var(--ii-space-stack-sm, 12px) 0;
 		min-height: 1px;
 	}
 
@@ -205,18 +206,18 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		gap: var(--netz-space-inline-xs, 8px);
-		color: var(--netz-text-muted);
-		font-size: var(--netz-text-small, 0.8125rem);
-		padding: var(--netz-space-stack-xs, 8px);
+		gap: var(--ii-space-inline-xs, 8px);
+		color: var(--ii-text-muted);
+		font-size: var(--ii-text-small, 0.8125rem);
+		padding: var(--ii-space-stack-xs, 8px);
 	}
 
 	.scr-spinner {
 		display: inline-block;
 		width: 16px;
 		height: 16px;
-		border: 2px solid var(--netz-border);
-		border-top-color: var(--netz-brand-primary);
+		border: 2px solid var(--ii-border);
+		border-top-color: var(--ii-brand-primary);
 		border-radius: 50%;
 		animation: scr-spin 600ms linear infinite;
 	}
@@ -227,8 +228,8 @@
 
 	.scr-scroll-end {
 		text-align: center;
-		color: var(--netz-text-muted);
-		font-size: var(--netz-text-small, 0.8125rem);
-		padding: var(--netz-space-stack-xs, 8px);
+		color: var(--ii-text-muted);
+		font-size: var(--ii-text-small, 0.8125rem);
+		padding: var(--ii-space-stack-xs, 8px);
 	}
 </style>

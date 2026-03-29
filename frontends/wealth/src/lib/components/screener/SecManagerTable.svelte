@@ -1,6 +1,6 @@
 <!-- SEC Manager paginated table — absorbed from us-fund-analysis/components/ManagerTable.svelte -->
 <script lang="ts">
-	import { formatNumber, formatDate } from "@netz/ui/utils";
+	import { formatNumber, formatDate } from "@investintell/ui";
 	import type { SecManagerSearchPage } from "$lib/types/sec-analysis";
 
 	let {

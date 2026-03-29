@@ -5,8 +5,9 @@
 	import "./screener.css";
 	import { goto, invalidateAll } from "$app/navigation";
 	import { getContext } from "svelte";
-	import { Button, StatusBadge, ConsequenceDialog, formatAUM, formatPercent } from "@netz/ui";
-	import type { ConsequenceDialogPayload } from "@netz/ui";
+	import { Button } from "@investintell/ui/components/ui/button";
+	import { StatusBadge, ConsequenceDialog, formatAUM, formatPercent } from "@investintell/ui";
+	import type { ConsequenceDialogPayload } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { InstrumentSearchItem } from "$lib/types/screening";
 	import { SOURCE_LABELS } from "$lib/types/screening";

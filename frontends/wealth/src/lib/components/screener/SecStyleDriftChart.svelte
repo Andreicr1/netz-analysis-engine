@@ -1,8 +1,7 @@
 <!-- Style Drift: stacked bar chart + drift signal table.
      Moved from us-fund-analysis/components/StyleDriftChart.svelte -->
 <script lang="ts">
-	import { formatPercent } from "@netz/ui/utils";
-	import { ChartContainer } from "@netz/ui/charts";
+	import { formatPercent, ChartContainer } from "@investintell/ui";
 	import type { SecStyleDrift } from "$lib/types/sec-analysis";
 	import { EMPTY_STYLE_DRIFT } from "$lib/types/sec-analysis";
 
@@ -121,22 +120,22 @@
 {/if}
 
 <style>
-	.sd-empty { padding: 48px 24px; text-align: center; color: var(--netz-text-muted); font-size: 14px; }
-	.sd-loading { padding: 24px; color: var(--netz-text-muted); font-size: 13px; }
+	.sd-empty { padding: 48px 24px; text-align: center; color: var(--ii-text-muted); font-size: 14px; }
+	.sd-loading { padding: 24px; color: var(--ii-text-muted); font-size: 13px; }
 	.sd-header { padding: 8px 0; }
-	.sd-title { font-size: 15px; font-weight: 600; color: var(--netz-text-primary); }
+	.sd-title { font-size: 15px; font-weight: 600; color: var(--ii-text-primary); }
 	.sd-chart { margin: 16px 0; }
-	.sd-subtitle { font-size: 13px; font-weight: 600; color: var(--netz-text-secondary); margin: 16px 0 8px; }
+	.sd-subtitle { font-size: 13px; font-weight: 600; color: var(--ii-text-secondary); margin: 16px 0 8px; }
 	.sd-table-wrap { overflow-x: auto; }
 	.sd-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-	.sd-th { padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--netz-text-muted); border-bottom: 1px solid var(--netz-border-subtle); white-space: nowrap; }
+	.sd-th { padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ii-text-muted); border-bottom: 1px solid var(--ii-border-subtle); white-space: nowrap; }
 	.sd-th--right { text-align: right; }
-	.sd-row:hover { background: var(--netz-surface-secondary); }
-	.sd-td { padding: 8px 12px; border-bottom: 1px solid var(--netz-border-subtle); }
+	.sd-row:hover { background: var(--ii-surface-secondary); }
+	.sd-td { padding: 8px 12px; border-bottom: 1px solid var(--ii-border-subtle); }
 	.sd-td--right { text-align: right; font-variant-numeric: tabular-nums; }
-	.sd-delta--up { color: var(--netz-color-success, #22c55e); }
-	.sd-delta--down { color: var(--netz-color-error, #ef4444); }
+	.sd-delta--up { color: var(--ii-color-success, #22c55e); }
+	.sd-delta--down { color: var(--ii-color-error, #ef4444); }
 	.sd-signal { display: inline-block; padding: 2px 8px; font-size: 11px; font-weight: 600; border-radius: 4px; }
-	.sd-signal--drift { background: rgba(239, 68, 68, 0.1); color: var(--netz-color-error, #ef4444); }
-	.sd-signal--stable { background: rgba(34, 197, 94, 0.1); color: var(--netz-color-success, #22c55e); }
+	.sd-signal--drift { background: rgba(239, 68, 68, 0.1); color: var(--ii-color-error, #ef4444); }
+	.sd-signal--stable { background: rgba(34, 197, 94, 0.1); color: var(--ii-color-success, #22c55e); }
 </style>
