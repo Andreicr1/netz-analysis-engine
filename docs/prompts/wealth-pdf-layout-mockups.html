@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Netz PDF Layout Mockups — Reference</title>
+<style>
+  :root {
+    --navy: #020F59;
+    --deep-navy: #001B5C;
+    --orange: #FF975A;
+    --off-white: #FCFDFD;
+    --dark-grey: #323232;
+    --med-grey: #78788C;
+    --light-bg: #F0F2F8;
+    --green: #167832;
+    --amber: #C88C00;
+    --red: #B41E1E;
+    --white: #fff;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    background: #E8EAF0;
+    color: var(--dark-grey);
+    padding: 40px;
+  }
+
+  h1.page-title {
+    font-size: 28px;
+    color: var(--navy);
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  .page-subtitle {
+    text-align: center;
+    color: var(--med-grey);
+    font-size: 14px;
+    margin-bottom: 48px;
+  }
+
+  .doc-label {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--navy);
+    margin-top: 56px;
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+    border-bottom: 3px solid var(--orange);
+    display: inline-block;
+  }
+  .doc-desc {
+    color: var(--med-grey);
+    font-size: 13px;
+    margin-bottom: 24px;
+  }
+
+  /* ── A4 Page ── */
+  .page {
+    width: 595px; /* A4 width in pts */
+    min-height: 842px;
+    background: var(--white);
+    margin: 0 auto 32px;
+    padding: 0;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+    position: relative;
+    overflow: hidden;
+  }
+  .page-inner {
+    padding: 20px 24px 28px;
+  }
+
+  /* ── Footer ── */
+  .footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+  }
+  .footer-stripe {
+    height: 3px;
+    background: var(--orange);
+  }
+  .footer-text {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 24px 8px;
+    font-size: 8px;
+    color: var(--med-grey);
+  }
+
+  /* ── Header (p2+) ── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 24px;
+    border-bottom: 1px solid var(--navy);
+    margin-bottom: 16px;
+  }
+  .header-logo {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--navy);
+    letter-spacing: 2px;
+  }
+  .header-title {
+    font-size: 8px;
+    font-weight: 700;
+    color: var(--navy);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .header-necker {
+    font-size: 8px;
+    color: var(--med-grey);
+  }
+
+  /* ── Logo Row ── */
+  .logo-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0 8px;
+    border-bottom: 1px solid var(--navy);
+    margin-bottom: 16px;
+  }
+  .logo-netz {
+    background: var(--navy);
+    color: white;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 4px 14px;
+    border-radius: 2px;
+    letter-spacing: 3px;
+  }
+  .logo-necker {
+    font-size: 10px;
+    color: var(--med-grey);
+    font-weight: 600;
+  }
+
+  /* ── Cover Styles ── */
+  .cover-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--navy);
+    text-align: center;
+    margin-top: 24px;
+  }
+  .cover-rule {
+    width: 45%;
+    height: 2px;
+    background: var(--orange);
+    margin: 12px auto;
+  }
+  .cover-subtitle {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--navy);
+    text-align: center;
+  }
+  .cover-meta {
+    font-size: 10px;
+    color: var(--med-grey);
+    text-align: center;
+    margin-top: 4px;
+  }
+  .cover-confidential {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--med-grey);
+    text-align: center;
+    margin-top: 6px;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── KPI Cards ── */
+  .kpi-row {
+    display: flex;
+    gap: 12px;
+    margin: 14px 0;
+  }
+  .kpi-card {
+    flex: 1;
+    border: 1px solid #D8DAE4;
+    border-radius: 4px;
+    padding: 10px 8px 8px;
+    text-align: center;
+    background: var(--light-bg);
+  }
+  .kpi-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--navy);
+    line-height: 1.1;
+  }
+  .kpi-label {
+    font-size: 8px;
+    color: var(--med-grey);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 3px;
+  }
+  .kpi-delta {
+    font-size: 8px;
+    margin-top: 2px;
+    font-weight: 600;
+  }
+  .kpi-delta.positive { color: var(--green); }
+  .kpi-delta.negative { color: var(--red); }
+  .kpi-delta.neutral { color: var(--amber); }
+
+  .kpi-card.green-border { border-left: 3px solid var(--green); }
+  .kpi-card.amber-border { border-left: 3px solid var(--amber); }
+  .kpi-card.red-border { border-left: 3px solid var(--red); }
+
+  /* ── Section Heading ── */
+  .section-heading {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--navy);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    padding-bottom: 4px;
+    border-bottom: 2px solid var(--navy);
+    margin: 16px 0 10px;
+  }
+  .section-heading-bar {
+    font-size: 10px;
+    font-weight: 700;
+    color: white;
+    background: var(--deep-navy);
+    padding: 5px 10px;
+    margin: 16px 0 10px;
+    border-radius: 2px;
+  }
+
+  /* ── Tables ── */
+  .inst-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9px;
+    margin-bottom: 10px;
+  }
+  .inst-table th {
+    background: var(--navy);
+    color: white;
+    font-weight: 700;
+    padding: 5px 8px;
+    text-align: left;
+    font-size: 8px;
+  }
+  .inst-table td {
+    padding: 4px 8px;
+    border-bottom: 1px solid #E0E2EA;
+    color: var(--dark-grey);
+  }
+  .inst-table tr:nth-child(even) td { background: var(--light-bg); }
+  .inst-table .row-label {
+    font-weight: 600;
+    color: var(--navy);
+    font-size: 8px;
+  }
+
+  /* ── Two Column ── */
+  .two-col {
+    display: flex;
+    gap: 16px;
+  }
+  .two-col > * { flex: 1; min-width: 0; }
+
+  /* ── Callout Box ── */
+  .callout {
+    border-left: 3px solid var(--navy);
+    background: var(--light-bg);
+    padding: 8px 12px;
+    font-size: 9px;
+    color: var(--dark-grey);
+    margin: 8px 0;
+    font-style: italic;
+    line-height: 1.4;
+  }
+
+  /* ── Warning Box ── */
+  .warning-box {
+    background: #FFF3E0;
+    border: 1px solid var(--orange);
+    border-left: 4px solid var(--orange);
+    padding: 8px 12px;
+    font-size: 9px;
+    margin: 8px 0;
+    border-radius: 2px;
+  }
+  .warning-box .warning-title {
+    font-weight: 700;
+    color: var(--orange);
+    font-size: 9px;
+  }
+
+  /* ── Material Banner ── */
+  .material-banner {
+    background: var(--orange);
+    color: white;
+    font-weight: 700;
+    font-size: 11px;
+    text-align: center;
+    padding: 8px;
+    margin: 10px 0;
+    border-radius: 3px;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── Event Box ── */
+  .event-box {
+    background: #FFF8F0;
+    border: 1px solid var(--orange);
+    border-radius: 4px;
+    padding: 10px 14px;
+    margin: 10px 0;
+  }
+  .event-box .event-type {
+    display: inline-block;
+    background: var(--orange);
+    color: white;
+    font-size: 8px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 2px;
+    margin-bottom: 6px;
+  }
+  .event-box .event-detail {
+    font-size: 9px;
+    color: var(--dark-grey);
+    line-height: 1.4;
+  }
+
+  /* ── Badges ── */
+  .badge-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 6px 0;
+  }
+  .badge {
+    display: inline-block;
+    font-size: 7px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .badge-green { background: #E8F5E9; color: var(--green); border: 1px solid var(--green); }
+  .badge-amber { background: #FFF8E1; color: var(--amber); border: 1px solid var(--amber); }
+  .badge-red { background: #FFEBEE; color: var(--red); border: 1px solid var(--red); }
+  .badge-grey { background: #F0F0F0; color: #666; border: 1px solid #CCC; }
+  .badge-navy { background: #E8EAF4; color: var(--navy); border: 1px solid var(--navy); }
+
+  /* ── Regime Badges ── */
+  .regime-row {
+    display: flex;
+    gap: 10px;
+    margin: 8px 0;
+  }
+  .regime-item {
+    flex: 1;
+    text-align: center;
+  }
+  .regime-badge {
+    display: inline-block;
+    font-size: 8px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 12px;
+    margin-bottom: 3px;
+  }
+  .regime-label {
+    font-size: 7px;
+    color: var(--med-grey);
+  }
+
+  /* ── Chart Placeholder ── */
+  .chart-placeholder {
+    background: var(--light-bg);
+    border: 1px dashed #C8CAD4;
+    border-radius: 4px;
+    height: 140px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--med-grey);
+    font-size: 11px;
+    margin: 6px 0;
+  }
+  .chart-placeholder.small { height: 110px; }
+
+  /* ── Body text ── */
+  .body-text {
+    font-size: 9px;
+    line-height: 1.5;
+    color: var(--dark-grey);
+    margin: 4px 0;
+  }
+  .body-bold {
+    font-weight: 700;
+    color: var(--navy);
+  }
+
+  /* ── Disclaimer ── */
+  .disclaimer {
+    font-size: 7px;
+    color: var(--med-grey);
+    font-style: italic;
+    margin-top: 12px;
+    line-height: 1.3;
+  }
+
+  /* ── Identity Card ── */
+  .id-card {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border: 1px solid #D8DAE4;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 8px 0;
+  }
+  .id-card .id-item {
+    padding: 5px 10px;
+    font-size: 8px;
+    border-bottom: 1px solid #E8EAF0;
+    display: flex;
+    justify-content: space-between;
+  }
+  .id-card .id-item:nth-child(4n+1),
+  .id-card .id-item:nth-child(4n+2) { background: var(--light-bg); }
+  .id-label { color: var(--med-grey); font-weight: 600; }
+  .id-value { color: var(--dark-grey); font-weight: 700; text-align: right; }
+
+  /* ── TOC ── */
+  .toc-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px dotted #D8DAE4;
+    font-size: 9px;
+  }
+  .toc-chapter { color: var(--navy); font-weight: 600; }
+  .toc-page { color: var(--med-grey); font-size: 8px; }
+
+  /* ── Urgency Header ── */
+  .urgency-stripe {
+    height: 4px;
+    background: var(--orange);
+  }
+  .urgency-header {
+    background: linear-gradient(135deg, var(--orange), #FF7A3A);
+    color: white;
+    padding: 14px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .urgency-title {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+  .urgency-timestamp {
+    font-size: 10px;
+    opacity: 0.9;
+  }
+
+  /* ── Multi-page connector ── */
+  .page-connector {
+    text-align: center;
+    color: var(--med-grey);
+    font-size: 11px;
+    margin: 8px 0 0;
+    font-style: italic;
+  }
+
+  /* ── Narrative block ── */
+  .narrative-heading {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--navy);
+    margin: 10px 0 4px;
+    padding-left: 8px;
+    border-left: 3px solid var(--orange);
+  }
+  .narrative-text {
+    font-size: 9px;
+    line-height: 1.5;
+    color: var(--dark-grey);
+    margin: 4px 0 8px;
+  }
+
+  /* colored delta in tables */
+  .delta-pos { color: var(--green); font-weight: 600; }
+  .delta-neg { color: var(--red); font-weight: 600; }
+  .delta-flag { color: var(--red); font-weight: 700; }
+</style>
+</head>
+<body>
+
+<h1 class="page-title">Netz Wealth — PDF Layout Mockups</h1>
+<p class="page-subtitle">Referência visual para redesign dos 7 tipos de documento. Cores reais da marca. Escala A4.</p>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- A. FACT SHEET — EXECUTIVE (1 page)                     -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="doc-label">A. Fact Sheet — Executive (1 pg)</div>
+<p class="doc-desc">Dashboard one-pager. Escaneável em 30 segundos. Informação densa.</p>
+
+<div class="page">
+  <div class="page-inner">
+    <div class="logo-row">
+      <div class="logo-netz">NETZ</div>
+      <div class="logo-necker">NECKER</div>
+    </div>
+
+    <div class="cover-title" style="font-size:18px; margin-top:8px;">Resumo Executivo</div>
+    <div class="cover-rule"></div>
+    <div class="cover-subtitle" style="font-size:12px;">Netz Growth Allocation</div>
+    <div class="cover-meta">Perfil: Growth &middot; Data-base: 28/03/2026</div>
+    <div class="cover-confidential">CONFIDENCIAL &mdash; USO INTERNO</div>
+
+    <div class="kpi-row">
+      <div class="kpi-card green-border">
+        <div class="kpi-value">+9.25%</div>
+        <div class="kpi-label">Retorno 1 Ano</div>
+        <div class="kpi-delta positive">vs Bench +1.45%</div>
+      </div>
+      <div class="kpi-card green-border">
+        <div class="kpi-value">1.28</div>
+        <div class="kpi-label">Sharpe</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value">-4.72%</div>
+        <div class="kpi-label">CVaR 95%</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value">12.35%</div>
+        <div class="kpi-label">Volatilidade</div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div>
+        <div class="chart-placeholder small" style="height:130px;">NAV vs Benchmark (PT labels)</div>
+      </div>
+      <div>
+        <div class="chart-placeholder small" style="height:130px;">Alocação Estratégica (pie)</div>
+      </div>
+    </div>
+
+    <div class="section-heading">Retornos</div>
+    <table class="inst-table">
+      <tr><th></th><th>Mês</th><th>Trim.</th><th>Ano</th><th>1 Ano</th><th>3 Anos</th><th>Desde Início</th></tr>
+      <tr><td class="row-label">Portfólio</td><td>1,23%</td><td>3,45%</td><td>5,67%</td><td>9,25%</td><td>&mdash;</td><td>18,42%</td></tr>
+      <tr><td class="row-label">Benchmark</td><td>0,98%</td><td>2,87%</td><td>4,52%</td><td>7,80%</td><td>&mdash;</td><td>14,15%</td></tr>
+    </table>
+    <div style="font-size:7px; color:var(--med-grey); font-style:italic; margin-bottom:6px;">* Período de backtest (simulado)</div>
+
+    <div class="two-col">
+      <div>
+        <div class="section-heading">Maiores Posições</div>
+        <table class="inst-table">
+          <tr><th>Fundo</th><th>Bloco</th><th>Peso</th></tr>
+          <tr><td>Vanguard S&P 500 (VOO)</td><td>RV EUA</td><td>25,0%</td></tr>
+          <tr><td>PIMCO Total Return</td><td>Renda Fixa</td><td>20,0%</td></tr>
+          <tr><td>iShares EAFE (IEFA)</td><td>RV Intl</td><td>15,0%</td></tr>
+          <tr><td>BlackRock Strategic</td><td>Renda Fixa</td><td>10,0%</td></tr>
+          <tr><td>Ares Capital (ARCC)</td><td>Créd. Priv.</td><td>10,0%</td></tr>
+        </table>
+      </div>
+      <div>
+        <div class="section-heading">Métricas de Risco</div>
+        <div class="kpi-row" style="flex-direction:column; gap:6px;">
+          <div style="display:flex; justify-content:space-between; font-size:9px; padding:4px 8px; background:var(--light-bg); border-radius:2px;">
+            <span>Volatilidade Anualizada</span><span style="font-weight:700;">12,35%</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:9px; padding:4px 8px;">
+            <span>Índice de Sharpe</span><span style="font-weight:700;">1,28</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:9px; padding:4px 8px; background:var(--light-bg); border-radius:2px;">
+            <span>Drawdown Máximo</span><span style="font-weight:700; color:var(--red);">-8,45%</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; font-size:9px; padding:4px 8px;">
+            <span>CVaR 95%</span><span style="font-weight:700;">-4,72%</span>
+          </div>
+        </div>
+
+        <div class="section-heading" style="margin-top:12px;">Comentário do Gestor</div>
+        <div class="callout">
+          O portfólio entregou retornos ajustados ao risco sólidos durante Q1 2026, beneficiando-se do momentum em equities e renda de crédito privado.
+        </div>
+      </div>
+    </div>
+
+    <div class="disclaimer">
+      Este documento é de uso exclusivo do destinatário. Rentabilidade passada não é garantia de resultados futuros. Dados de backtest são simulados.
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-stripe"></div>
+    <div class="footer-text">
+      <span>Preparado em 28 de março de 2026</span>
+      <span>CONFIDENCIAL &mdash; USO INTERNO</span>
+      <span>Página 1</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- B. FACT SHEET — INSTITUTIONAL (p2 of multi-page)       -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="doc-label">B. Fact Sheet — Institutional (p4: Attribution + Stress)</div>
+<p class="doc-desc">Exemplo de página interna do relatório institucional multi-page.</p>
+
+<div class="page">
+  <div class="header">
+    <div class="header-logo">NETZ</div>
+    <div class="header-title">Netz Growth Allocation &mdash; Relatório Institucional</div>
+    <div class="header-necker">NECKER</div>
+  </div>
+  <div class="page-inner" style="padding-top:4px;">
+
+    <div class="section-heading">Análise de Atribuição (Brinson-Fachler)</div>
+    <table class="inst-table">
+      <tr><th>Bloco</th><th>Efeito Alocação</th><th>Efeito Seleção</th><th>Efeito Interação</th><th>Efeito Total</th></tr>
+      <tr><td class="row-label">Renda Variável EUA</td><td class="delta-pos">+0,45%</td><td class="delta-pos">+0,82%</td><td class="delta-neg">-0,12%</td><td class="delta-pos" style="font-weight:700;">+1,15%</td></tr>
+      <tr><td class="row-label">Renda Variável Intl</td><td class="delta-neg">-0,15%</td><td class="delta-pos">+0,30%</td><td class="delta-pos">+0,05%</td><td class="delta-pos">+0,20%</td></tr>
+      <tr><td class="row-label">Renda Fixa</td><td class="delta-pos">+0,10%</td><td class="delta-neg">-0,08%</td><td class="delta-pos">+0,02%</td><td class="delta-pos">+0,04%</td></tr>
+      <tr><td class="row-label">Crédito Privado</td><td class="delta-pos">+0,22%</td><td class="delta-pos">+0,15%</td><td class="delta-neg">-0,03%</td><td class="delta-pos">+0,34%</td></tr>
+      <tr><td class="row-label">Caixa</td><td class="delta-neg">-0,08%</td><td>0,00%</td><td>0,00%</td><td class="delta-neg">-0,08%</td></tr>
+      <tr style="background:var(--light-bg); font-weight:700;"><td class="row-label" style="font-weight:700;">Total</td><td class="delta-pos">+0,54%</td><td class="delta-pos">+1,19%</td><td class="delta-neg">-0,10%</td><td style="color:var(--navy); font-size:10px; font-weight:700;">+1,65%</td></tr>
+    </table>
+
+    <div class="chart-placeholder" style="height:150px;">Regimes Econômicos (overlay chart com labels em PT)</div>
+
+    <div class="section-heading">Cenários de Estresse</div>
+    <table class="inst-table">
+      <tr><th>Cenário</th><th>Período</th><th>Retorno Portfólio</th><th>Drawdown Máximo</th></tr>
+      <tr><td>Crise Financeira Global</td><td>Out 2007 &mdash; Mar 2009</td><td class="delta-neg">-32,50%</td><td class="delta-neg">-38,20%</td></tr>
+      <tr><td>COVID Crash</td><td>Fev 2020 &mdash; Mar 2020</td><td class="delta-neg">-18,70%</td><td class="delta-neg">-22,40%</td></tr>
+      <tr><td>Taper Tantrum</td><td>Mai 2013 &mdash; Set 2013</td><td class="delta-neg">-4,80%</td><td class="delta-neg">-6,10%</td></tr>
+      <tr><td>Rate Shock 2022</td><td>Jan 2022 &mdash; Out 2022</td><td class="delta-neg">-15,30%</td><td class="delta-neg">-19,80%</td></tr>
+    </table>
+
+    <div class="section-heading">Análise de Arrasto de Taxas</div>
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-value" style="font-size:16px;">8</div>
+        <div class="kpi-label">Instrumentos</div>
+      </div>
+      <div class="kpi-card green-border">
+        <div class="kpi-value" style="font-size:16px;">9,25%</div>
+        <div class="kpi-label">Retorno Bruto</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value" style="font-size:16px;">8,47%</div>
+        <div class="kpi-label">Retorno Líquido</div>
+      </div>
+      <div class="kpi-card amber-border">
+        <div class="kpi-value" style="font-size:16px;">8,4%</div>
+        <div class="kpi-label">Fee Drag</div>
+      </div>
+      <div class="kpi-card red-border">
+        <div class="kpi-value" style="font-size:16px;">2</div>
+        <div class="kpi-label">Ineficientes</div>
+      </div>
+    </div>
+
+    <table class="inst-table">
+      <tr><th>Fundo</th><th>Tx Gestão</th><th>Tx Perf.</th><th>Outras</th><th>Total</th><th>Drag</th><th>Status</th></tr>
+      <tr><td>Vanguard S&P 500 (VOO)</td><td>0,03%</td><td>&mdash;</td><td>&mdash;</td><td>0,03%</td><td>0,3%</td><td><span class="badge badge-green">Eficiente</span></td></tr>
+      <tr><td>PIMCO Total Return</td><td>0,71%</td><td>&mdash;</td><td>0,02%</td><td>0,73%</td><td>14,5%</td><td><span class="badge badge-green">Eficiente</span></td></tr>
+      <tr><td>Ares Capital (ARCC)</td><td>1,50%</td><td>2,00%</td><td>0,15%</td><td>3,65%</td><td>31,2%</td><td><span class="badge badge-green">Eficiente</span></td></tr>
+      <tr><td>T. Rowe Price Growth</td><td>0,65%</td><td>&mdash;</td><td>0,03%</td><td>0,68%</td><td>52,0%</td><td><span class="badge badge-red">Ineficiente</span></td></tr>
+      <tr><td>Fidelity Contrafund</td><td>0,82%</td><td>&mdash;</td><td>0,04%</td><td>0,86%</td><td>61,0%</td><td><span class="badge badge-red">Ineficiente</span></td></tr>
+    </table>
+  </div>
+
+  <div class="footer">
+    <div class="footer-stripe"></div>
+    <div class="footer-text">
+      <span>Preparado em 28 de março de 2026</span>
+      <span>CONFIDENCIAL &mdash; USO INTERNO</span>
+      <span>Página 4</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- C. MANAGER SPOTLIGHT                                   -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="doc-label">C. Manager Spotlight (p2: Identity + Quant)</div>
+<p class="doc-desc">Research note. Dados estruturados primários, narrativa LLM complementar.</p>
+
+<div class="page">
+  <div class="header">
+    <div class="header-logo">NETZ</div>
+    <div class="header-title">Destaque do Gestor &mdash; Ares Capital Corporation (ARCC)</div>
+    <div class="header-necker">NECKER</div>
+  </div>
+  <div class="page-inner" style="padding-top:4px;">
+
+    <div class="section-heading">Ficha do Fundo</div>
+    <div class="id-card">
+      <div class="id-item"><span class="id-label">Ticker</span><span class="id-value">ARCC</span></div>
+      <div class="id-item"><span class="id-label">Estratégia</span><span class="id-value">Private Credit</span></div>
+      <div class="id-item"><span class="id-label">ISIN</span><span class="id-value">&mdash;</span></div>
+      <div class="id-item"><span class="id-label">Inception</span><span class="id-value">08/10/2004</span></div>
+      <div class="id-item"><span class="id-label">AUM</span><span class="id-value">US$ 23,4B</span></div>
+      <div class="id-item"><span class="id-label">Expense Ratio</span><span class="id-value">1,50%</span></div>
+      <div class="id-item"><span class="id-label">Gestor</span><span class="id-value">Ares Management</span></div>
+      <div class="id-item"><span class="id-label">CRD</span><span class="id-value">152891</span></div>
+      <div class="id-item"><span class="id-label">Classe de Ativo</span><span class="id-value">BDC</span></div>
+      <div class="id-item"><span class="id-label">SEC CIK</span><span class="id-value">1287750</span></div>
+    </div>
+
+    <div class="badge-row">
+      <span class="badge badge-navy">BDC</span>
+      <span class="badge badge-navy">Externally Managed</span>
+      <span class="badge badge-grey">Not Index</span>
+      <span class="badge badge-grey">Not FoF</span>
+      <span class="badge badge-grey">Not Target Date</span>
+    </div>
+
+    <div class="section-heading">Dashboard Quantitativo</div>
+    <div class="kpi-row">
+      <div class="kpi-card green-border">
+        <div class="kpi-value">+14,2%</div>
+        <div class="kpi-label">Retorno Total 1Y</div>
+      </div>
+      <div class="kpi-card green-border">
+        <div class="kpi-value">1,45</div>
+        <div class="kpi-label">Sharpe</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value">-3,8%</div>
+        <div class="kpi-label">CVaR 95%</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value">-6,2%</div>
+        <div class="kpi-label">Max Drawdown</div>
+      </div>
+    </div>
+
+    <div class="section-heading">Sinais de Momentum</div>
+    <div class="kpi-row">
+      <div class="kpi-card amber-border">
+        <div class="kpi-value">58,3</div>
+        <div class="kpi-label">RSI 14</div>
+        <div class="kpi-delta neutral">Neutro</div>
+      </div>
+      <div class="kpi-card green-border">
+        <div class="kpi-value">0,65</div>
+        <div class="kpi-label">Bollinger Position</div>
+        <div class="kpi-delta positive">Terço Superior</div>
+      </div>
+      <div class="kpi-card green-border">
+        <div class="kpi-value">62,5</div>
+        <div class="kpi-label">Blended Score</div>
+        <div class="kpi-delta positive">Acima de 60</div>
+      </div>
+    </div>
+
+    <div class="section-heading">Análise de Taxas</div>
+    <table class="inst-table">
+      <tr><th>Componente</th><th>Valor</th></tr>
+      <tr><td>Taxa de Gestão</td><td>1,50%</td></tr>
+      <tr><td>Taxa de Performance</td><td>2,00%</td></tr>
+      <tr><td>Outras</td><td>0,15%</td></tr>
+      <tr style="font-weight:700;"><td style="font-weight:700;">Total</td><td style="font-weight:700;">3,65%</td></tr>
+      <tr><td>Fee Drag Ratio</td><td>31,2%</td></tr>
+      <tr><td>Fee Efficiency Score</td><td>25,0 / 100</td></tr>
+    </table>
+
+    <div class="section-heading">Comparação com Pares</div>
+    <table class="inst-table">
+      <tr><th>Métrica</th><th>ARCC</th><th>Mediana BDC</th><th>Percentil</th></tr>
+      <tr><td>Dividend Yield</td><td>9,8%</td><td>10,5%</td><td><span class="badge badge-amber">P45</span></td></tr>
+      <tr><td>NAV Discount</td><td>-2,1%</td><td>-8,5%</td><td><span class="badge badge-green">P85</span></td></tr>
+      <tr><td>Sharpe (1Y)</td><td>1,45</td><td>0,92</td><td><span class="badge badge-green">P82</span></td></tr>
+      <tr><td>Net Operating Exp.</td><td>1,50%</td><td>2,15%</td><td><span class="badge badge-green">P78</span></td></tr>
+      <tr><td>Non-Accrual Rate</td><td>1,2%</td><td>2,8%</td><td><span class="badge badge-green">P80</span></td></tr>
+    </table>
+
+  </div>
+  <div class="footer">
+    <div class="footer-stripe"></div>
+    <div class="footer-text">
+      <span>Preparado em 28 de março de 2026</span>
+      <span>CONFIDENCIAL &mdash; USO INTERNO</span>
+      <span>Página 2</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- D. INVESTMENT OUTLOOK                                  -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="doc-label">D. Investment Outlook (p2: Macro Dashboard + Narrative)</div>
+<p class="doc-desc">Editorial trimestral. Magazine-style com dashboard macro.</p>
+
+<div class="page">
+  <div class="header">
+    <div class="header-logo">NETZ</div>
+    <div class="header-title">Perspectiva de Investimento &mdash; Q2 2026</div>
+    <div class="header-necker">NECKER</div>
+  </div>
+  <div class="page-inner" style="padding-top:4px;">
+
+    <div class="section-heading">Painel Macroeconômico</div>
+    <table class="inst-table">
+      <tr><th>Região</th><th>Score Anterior</th><th>Score Atual</th><th>Delta</th><th>Regime</th></tr>
+      <tr><td class="row-label">América do Norte</td><td>72,5</td><td>73,1</td><td class="delta-pos">+0,6</td><td><span class="badge badge-green">Expansão</span></td></tr>
+      <tr><td class="row-label">Europa</td><td>65,8</td><td>66,2</td><td class="delta-pos">+0,4</td><td><span class="badge badge-green">Expansão</span></td></tr>
+      <tr><td class="row-label">Ásia-Pacífico</td><td>68,3</td><td>59,8</td><td class="delta-flag">-8,5 !</td><td><span class="badge badge-amber">Limiar</span></td></tr>
+      <tr><td class="row-label">Mercados Emergentes</td><td>58,2</td><td>57,9</td><td class="delta-neg">-0,3</td><td><span class="badge badge-red">Contração</span></td></tr>
+    </table>
+
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-value" style="font-size:16px;">48,7</div>
+        <div class="kpi-label">Geopolítico</div>
+        <div class="kpi-delta negative">+3,5</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value" style="font-size:16px;">$82,30</div>
+        <div class="kpi-label">Energia (WTI)</div>
+        <div class="kpi-delta negative">+4,8%</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value" style="font-size:16px;">287,1</div>
+        <div class="kpi-label">Commodities (CRB)</div>
+        <div class="kpi-delta neutral">+0,6%</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value" style="font-size:16px;">104,2</div>
+        <div class="kpi-label">USD (DXY)</div>
+        <div class="kpi-delta neutral">+0,4%</div>
+      </div>
+    </div>
+
+    <div class="narrative-heading">Resumo Macro Global</div>
+    <div class="narrative-text">
+      O cenário macroeconômico global permanece construtivo, embora com riscos assimétricos concentrados no setor de crédito corporativo e na geopolítica do Pacífico. A economia americana demonstra resiliência acima do esperado, com o mercado de trabalho em pleno emprego (desemprego 3,7%) e inflação convergindo para a meta de 2% (CPI core 2,4% a/a).
+    </div>
+
+    <div class="narrative-heading">Perspectiva Regional</div>
+    <div class="narrative-text">
+      <span class="body-bold">América do Norte:</span> Viés positivo. Earnings season de Q4 2025 surpreendeu em +4,2% vs. consenso. Setor de tecnologia lidera com AI capex em $180B anualizados.<br><br>
+      <span class="body-bold">Europa:</span> Neutro para positivo. Recuperação do setor manufatureiro alemão (+1,2% m/m) e acomodação monetária do BCE.<br><br>
+      <span class="body-bold">Ásia-Pacífico:</span> Neutro. Japão beneficia-se de yen fraco para exportações, mas BoJ pode surpreender com aperto monetário.<br><br>
+      <span class="body-bold">Mercados Emergentes:</span> Cauteloso. Diferencial de juros EUA-EM comprimido reduz atratividade de carry.
+    </div>
+
+    <div class="narrative-heading">Visão por Classe de Ativos</div>
+    <div class="narrative-text">
+      <span class="body-bold">Renda Variável:</span> Overweight (+5pp). Valuations em 19,2x P/E forward nos EUA &mdash; acima da média mas suportados por crescimento de earnings de 12%.<br><br>
+      <span class="body-bold">Renda Fixa:</span> Underweight (-5pp). Duration curta preferida. Yield de 10Y Treasury em 4,15% oferece carry atrativo.<br><br>
+      <span class="body-bold">Crédito Privado:</span> Neutral weight. Spreads de direct lending em 550-650bps sobre SOFR permanecem atrativos.
+    </div>
+
+  </div>
+  <div class="footer">
+    <div class="footer-stripe"></div>
+    <div class="footer-text">
+      <span>Preparado em 28 de março de 2026</span>
+      <span>CONFIDENCIAL &mdash; USO INTERNO</span>
+      <span>Página 2</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- E. FLASH REPORT                                        -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="doc-label">E. Flash Report (1-2 pg)</div>
+<p class="doc-desc">Briefing urgente. Sem separação de cover. Acento laranja para urgência.</p>
+
+<div class="page">
+  <div class="urgency-stripe"></div>
+  <div class="urgency-header">
+    <div class="urgency-title">RELATÓRIO FLASH</div>
+    <div class="urgency-timestamp">28/03/2026 &mdash; 15:42 UTC</div>
+  </div>
+
+  <div class="page-inner" style="padding-top:8px;">
+    <div class="logo-row" style="border-bottom:none; padding-bottom:0; margin-bottom:8px;">
+      <div class="logo-netz">NETZ</div>
+      <div class="cover-confidential" style="text-align:right;">CONFIDENCIAL &mdash; USO INTERNO</div>
+    </div>
+
+    <div class="event-box">
+      <div class="event-type">REVERSÃO DE POLÍTICA MONETÁRIA</div>
+      <div class="event-detail">
+        <strong>Evento:</strong> Bank of Japan anuncia reversão da política de juros negativos<br>
+        <strong>Data trigger:</strong> 28 Mar 2026 09:00 JST<br>
+        <strong>Regiões afetadas:</strong> Ásia-Pacífico, Global<br>
+        <strong>Setores:</strong> Câmbio, Renda Fixa, Equities (exportadores JP)
+      </div>
+    </div>
+
+    <div class="narrative-heading">Evento de Mercado</div>
+    <div class="narrative-text">
+      O Bank of Japan surpreendeu mercados ao anunciar o fim da política de juros negativos, elevando a taxa básica de -0,10% para +0,10%. A decisão, que contraria o consenso de manutenção, gerou forte apreciação do yen (JPY/USD -2,8% intraday) e sell-off em equities japoneses (Nikkei -3,2%).
+    </div>
+
+    <div class="narrative-heading">Impacto no Mercado</div>
+    <div class="narrative-text">
+      <span class="body-bold">Câmbio:</span> JPY/USD em 142,50 (de 146,50). Carry trades em desmonte.<br><br>
+      <span class="body-bold">Renda Fixa:</span> JGB 10Y yield em 0,85% (+15bps). Treasuries 10Y +5bps por contágio.<br><br>
+      <span class="body-bold">Equities:</span> Nikkei -3,2%. Exportadores japoneses (Toyota -4,1%, Sony -3,8%) liderando perdas. Impacto limitado em S&P futures (-0,3%).
+    </div>
+
+    <div class="narrative-heading">Ações Recomendadas</div>
+    <div class="narrative-text">
+      1. <strong>Monitorar exposição JPY</strong> em portfólios com >5% alocação em equities japoneses<br>
+      2. <strong>Não agir precipitadamente</strong> &mdash; aguardar conferência de imprensa do BoJ (14:30 JST) para calibrar magnitude<br>
+      3. <strong>Preparar cenário de contração APAC</strong> caso score regional caia abaixo de 55<br>
+      4. <strong>Próxima revisão:</strong> Comitê macro extraordinário agendado para 29 Mar 08:00 BRT
+    </div>
+
+    <div class="disclaimer" style="margin-top:24px;">
+      Este conteúdo foi gerado por inteligência artificial e requer aprovação do comitê de investimento antes de distribuição.
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-stripe"></div>
+    <div class="footer-text">
+      <span>Preparado em 28 de março de 2026, 15:42 UTC</span>
+      <span>CONFIDENCIAL &mdash; USO INTERNO</span>
+      <span>Página 1</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- F. MACRO COMMITTEE REVIEW                              -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="doc-label">F. Revisão Macro Semanal (2 pg)</div>
+<p class="doc-desc">Dashboard operacional. Dados puros, sem narrativa LLM. Printout para comitê.</p>
+
+<div class="page">
+  <div class="page-inner">
+    <div class="logo-row">
+      <div class="logo-netz">NETZ</div>
+      <div style="text-align:right;">
+        <div style="font-size:11px; font-weight:700; color:var(--navy);">REVISÃO MACRO SEMANAL</div>
+        <div style="font-size:9px; color:var(--med-grey);">Comitê de Investimentos &middot; 28/03/2026</div>
+      </div>
+    </div>
+
+    <div class="material-banner">
+      MUDANÇA MATERIAL IDENTIFICADA
+    </div>
+
+    <div class="section-heading">Scores Regionais</div>
+    <table class="inst-table">
+      <tr><th>Região</th><th>Score Anterior</th><th>Score Atual</th><th>Delta</th><th>Status</th></tr>
+      <tr><td class="row-label">América do Norte</td><td>72,5</td><td>73,1</td><td class="delta-pos">&#9650; +0,6</td><td style="font-size:8px; color:var(--med-grey);">Estável</td></tr>
+      <tr><td class="row-label">Europa</td><td>65,8</td><td>66,2</td><td class="delta-pos">&#9650; +0,4</td><td style="font-size:8px; color:var(--med-grey);">Estável</td></tr>
+      <tr style="background:#FFF3E0 !important;"><td class="row-label" style="font-weight:700; color:var(--red);">Ásia-Pacífico</td><td>68,3</td><td style="font-weight:700;">59,8</td><td class="delta-flag">&#9660; -8,5 !</td><td><span class="badge badge-red" style="font-size:7px;">MUDANÇA MATERIAL</span></td></tr>
+      <tr><td class="row-label">Mercados Emergentes</td><td>58,2</td><td>57,9</td><td class="delta-neg">&#9660; -0,3</td><td style="font-size:8px; color:var(--med-grey);">Estável</td></tr>
+    </table>
+
+    <div class="section-heading">Status de Regime</div>
+    <div class="regime-row">
+      <div class="regime-item">
+        <div class="regime-badge" style="background:#E8F5E9; color:var(--green);">Expansão</div>
+        <div class="regime-label">América do Norte</div>
+      </div>
+      <div class="regime-item">
+        <div class="regime-badge" style="background:#E8F5E9; color:var(--green);">Expansão</div>
+        <div class="regime-label">Europa</div>
+      </div>
+      <div class="regime-item">
+        <div class="regime-badge" style="background:#FFF8E1; color:var(--amber); border:1px solid var(--amber);">Próx. Limiar</div>
+        <div class="regime-label">Ásia-Pacífico</div>
+      </div>
+      <div class="regime-item">
+        <div class="regime-badge" style="background:#FFEBEE; color:var(--red);">Contração</div>
+        <div class="regime-label">Merc. Emergentes</div>
+      </div>
+    </div>
+
+    <div class="section-heading">Indicadores Globais</div>
+    <div class="kpi-row">
+      <div class="kpi-card red-border">
+        <div class="kpi-value" style="font-size:18px;">48,7</div>
+        <div class="kpi-label">Geopolítico</div>
+        <div class="kpi-delta negative">&#9650; +3,5</div>
+      </div>
+      <div class="kpi-card amber-border">
+        <div class="kpi-value" style="font-size:18px;">$82,30</div>
+        <div class="kpi-label">Energia (WTI)</div>
+        <div class="kpi-delta negative">&#9650; +4,8%</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value" style="font-size:18px;">287,1</div>
+        <div class="kpi-label">Commodities (CRB)</div>
+        <div class="kpi-delta neutral">&#9650; +0,6%</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value" style="font-size:18px;">104,2</div>
+        <div class="kpi-label">USD (DXY)</div>
+        <div class="kpi-delta neutral">&#9650; +0,4%</div>
+      </div>
+    </div>
+
+    <div class="section-heading">Alertas de Staleness</div>
+    <div class="warning-box">
+      <div class="warning-title">Dados Atrasados (&gt;7 dias)</div>
+      <div style="font-size:8px; margin-top:4px; line-height:1.6;">
+        <code style="background:#FFF0E0; padding:1px 4px; border-radius:2px;">imf_weo_gdp_forecast</code> &mdash; última atualização: 15/03/2026<br>
+        <code style="background:#FFF0E0; padding:1px 4px; border-radius:2px;">bis_credit_gap_cn</code> &mdash; última atualização: 12/03/2026
+      </div>
+    </div>
+
+    <div class="disclaimer">
+      Gerado automaticamente pelo motor macro Netz. Dados de fontes: FRED, BIS, IMF, OFR, Treasury. Requer validação do comitê.
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-stripe"></div>
+    <div class="footer-text">
+      <span>Preparado em 28 de março de 2026</span>
+      <span>CONFIDENCIAL &mdash; USO INTERNO</span>
+      <span>Página 1</span>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- G. LONG-FORM REPORT                                    -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="doc-label">G. Long-Form Report — Cover + TOC</div>
+<p class="doc-desc">Relatório institucional completo. 5-8 páginas. Capa + sumário + capítulos com dados estruturados.</p>
+
+<div class="page">
+  <div class="page-inner">
+    <div class="logo-row">
+      <div class="logo-netz">NETZ</div>
+      <div class="logo-necker">NECKER</div>
+    </div>
+
+    <div style="height:80px;"></div>
+
+    <div class="cover-title">Relatório Institucional</div>
+    <div class="cover-rule"></div>
+    <div class="cover-subtitle">Netz Growth Allocation</div>
+    <div class="cover-meta" style="margin-top:8px;">Perfil: Growth &middot; Data-base: 28/03/2026</div>
+    <div class="cover-confidential" style="margin-top:12px;">CONFIDENCIAL &mdash; USO INTERNO</div>
+
+    <div style="height:40px;"></div>
+
+    <div class="kpi-row">
+      <div class="kpi-card green-border">
+        <div class="kpi-value">+9,25%</div>
+        <div class="kpi-label">Retorno 1Y</div>
+        <div class="kpi-delta positive">+1,45% vs Bench</div>
+      </div>
+      <div class="kpi-card green-border">
+        <div class="kpi-value">1,28</div>
+        <div class="kpi-label">Sharpe</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value">-4,72%</div>
+        <div class="kpi-label">CVaR 95%</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value">8</div>
+        <div class="kpi-label">Instrumentos</div>
+      </div>
+    </div>
+
+    <div style="height:60px;"></div>
+
+    <div class="section-heading">Sumário</div>
+    <div class="toc-item">
+      <span class="toc-chapter">1. Contexto Macroeconômico</span>
+      <span><span class="badge badge-green" style="font-size:6px;">Confiança: 0.95</span> <span class="toc-page">p.3</span></span>
+    </div>
+    <div class="toc-item">
+      <span class="toc-chapter">2. Racional de Alocação Estratégica</span>
+      <span><span class="badge badge-green" style="font-size:6px;">Confiança: 0.92</span> <span class="toc-page">p.3</span></span>
+    </div>
+    <div class="toc-item">
+      <span class="toc-chapter">3. Composição do Portfólio e Mudanças</span>
+      <span><span class="badge badge-green" style="font-size:6px;">Confiança: 0.98</span> <span class="toc-page">p.4</span></span>
+    </div>
+    <div class="toc-item">
+      <span class="toc-chapter">4. Atribuição de Performance (Brinson-Fachler)</span>
+      <span><span class="badge badge-green" style="font-size:6px;">Confiança: 0.90</span> <span class="toc-page">p.5</span></span>
+    </div>
+    <div class="toc-item">
+      <span class="toc-chapter">5. Decomposição de Risco (CVaR)</span>
+      <span><span class="badge badge-green" style="font-size:6px;">Confiança: 0.88</span> <span class="toc-page">p.5</span></span>
+    </div>
+    <div class="toc-item">
+      <span class="toc-chapter">6. Análise de Taxas</span>
+      <span><span class="badge badge-green" style="font-size:6px;">Confiança: 0.94</span> <span class="toc-page">p.6</span></span>
+    </div>
+    <div class="toc-item">
+      <span class="toc-chapter">7. Destaques por Fundo</span>
+      <span><span class="badge badge-green" style="font-size:6px;">Confiança: 0.91</span> <span class="toc-page">p.6</span></span>
+    </div>
+    <div class="toc-item">
+      <span class="toc-chapter">8. Perspectiva Forward</span>
+      <span><span class="badge badge-green" style="font-size:6px;">Confiança: 0.87</span> <span class="toc-page">p.7</span></span>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <div class="footer-stripe"></div>
+    <div class="footer-text">
+      <span>Preparado em 28 de março de 2026</span>
+      <span>CONFIDENCIAL &mdash; USO INTERNO</span>
+      <span>Página 1</span>
+    </div>
+  </div>
+</div>
+
+
+<div class="doc-label">G. Long-Form Report — p3: Capítulo com dados estruturados</div>
+<p class="doc-desc">Capítulos renderizam tabelas estruturadas de chapter.content + narrativa LLM.</p>
+
+<div class="page">
+  <div class="header">
+    <div class="header-logo">NETZ</div>
+    <div class="header-title">Relatório Institucional &mdash; Netz Growth Allocation</div>
+    <div class="header-necker">NECKER</div>
+  </div>
+  <div class="page-inner" style="padding-top:4px;">
+
+    <div class="section-heading-bar">2. Racional de Alocação Estratégica <span style="float:right; font-size:7px; opacity:0.8;">Confiança: 0.92</span></div>
+
+    <table class="inst-table">
+      <tr><th>Bloco</th><th>Target</th><th>Atual</th><th>Delta</th><th>Benchmark</th></tr>
+      <tr><td class="row-label">Renda Variável EUA</td><td>35%</td><td>40%</td><td class="delta-pos">+5pp</td><td>35%</td></tr>
+      <tr><td class="row-label">Renda Variável Intl</td><td>15%</td><td>15%</td><td style="color:var(--med-grey);">0</td><td>15%</td></tr>
+      <tr><td class="row-label">Renda Fixa</td><td>35%</td><td>30%</td><td class="delta-neg">-5pp</td><td>35%</td></tr>
+      <tr><td class="row-label">Crédito Privado</td><td>10%</td><td>10%</td><td style="color:var(--med-grey);">0</td><td>10%</td></tr>
+      <tr><td class="row-label">Caixa</td><td>5%</td><td>5%</td><td style="color:var(--med-grey);">0</td><td>5%</td></tr>
+    </table>
+
+    <div class="narrative-text" style="margin-top:10px;">
+      A alocação atual do portfólio reflete um posicionamento pró-cíclico moderado, consistente com o regime de expansão identificado pelo modelo de Markov. A sobreposição de equities (40% vs. benchmark 35%) é justificada pelo momentum positivo nos fatores de crescimento e qualidade.
+    </div>
+    <div class="narrative-text">
+      A redução de 5pp em renda fixa a favor de equities domésticos foi implementada em janeiro 2026, após confirmação do regime de expansão por três meses consecutivos.
+    </div>
+
+    <div class="section-heading-bar">3. Composição do Portfólio e Mudanças <span style="float:right; font-size:7px; opacity:0.8;">Confiança: 0.98</span></div>
+
+    <table class="inst-table">
+      <tr><th>Fundo</th><th>Peso Anterior</th><th>Peso Atual</th><th>Mudança</th></tr>
+      <tr><td class="row-label">Vanguard S&P 500 (VOO)</td><td>25%</td><td>25%</td><td style="color:var(--med-grey);">Manutenção</td></tr>
+      <tr><td class="row-label">iShares EAFE (IEFA)</td><td>15%</td><td>15%</td><td style="color:var(--med-grey);">Manutenção</td></tr>
+      <tr><td class="row-label">PIMCO Total Return</td><td>25%</td><td>20%</td><td class="delta-neg">-5pp &#9660;</td></tr>
+      <tr style="background:#E8F5E9 !important;"><td class="row-label" style="color:var(--green);">T. Rowe Price Growth</td><td>&mdash;</td><td>8%</td><td class="delta-pos">Adição &#9650;</td></tr>
+      <tr style="background:#FFEBEE !important;"><td class="row-label" style="color:var(--red); text-decoration:line-through;">ARK Innovation (ARKK)</td><td>8%</td><td>&mdash;</td><td class="delta-neg">Removido &#9660;</td></tr>
+    </table>
+
+    <div class="narrative-text" style="margin-top:10px;">
+      O portfólio é composto por 8 instrumentos selecionados via processo de screening de 3 camadas (eliminatório → mandato → quantitativo). A substituição de ARKK por PRGFX foi motivada pela falha no gate de drawdown máximo (-32% em 12 meses, limiar: -25%).
+    </div>
+
+    <div class="section-heading-bar">4. Atribuição de Performance (Brinson-Fachler) <span style="float:right; font-size:7px; opacity:0.8;">Confiança: 0.90</span></div>
+
+    <table class="inst-table">
+      <tr><th>Bloco</th><th>Efeito Alocação</th><th>Efeito Seleção</th><th>Efeito Interação</th><th>Efeito Total</th></tr>
+      <tr><td class="row-label">RV EUA</td><td class="delta-pos">+0,45%</td><td class="delta-pos">+0,82%</td><td class="delta-neg">-0,12%</td><td class="delta-pos" style="font-weight:700;">+1,15%</td></tr>
+      <tr><td class="row-label">RV Intl</td><td class="delta-neg">-0,15%</td><td class="delta-pos">+0,30%</td><td class="delta-pos">+0,05%</td><td class="delta-pos">+0,20%</td></tr>
+      <tr><td class="row-label">Renda Fixa</td><td class="delta-pos">+0,10%</td><td class="delta-neg">-0,08%</td><td class="delta-pos">+0,02%</td><td class="delta-pos">+0,04%</td></tr>
+      <tr style="font-weight:700;"><td class="row-label" style="font-weight:700;">Total</td><td class="delta-pos">+0,54%</td><td class="delta-pos">+1,19%</td><td class="delta-neg">-0,10%</td><td style="color:var(--navy); font-weight:700; font-size:10px;">+1,65%</td></tr>
+    </table>
+
+  </div>
+
+  <div class="footer">
+    <div class="footer-stripe"></div>
+    <div class="footer-text">
+      <span>Preparado em 28 de março de 2026</span>
+      <span>CONFIDENCIAL &mdash; USO INTERNO</span>
+      <span>Página 3</span>
+    </div>
+  </div>
+</div>
+
+
+<div style="text-align:center; margin:48px 0 24px; color:var(--med-grey); font-size:13px;">
+  &mdash; Fim dos Mockups &mdash;<br>
+  <span style="font-size:11px;">Abrir no browser para visualizar. Cores: Netz brand book 2026.</span>
+</div>
+
+</body>
+</html>
