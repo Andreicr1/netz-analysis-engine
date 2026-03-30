@@ -1,7 +1,6 @@
-/** Home page — redirect to dashboard (default entry point). */
 import { redirect } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types";
 
-export const load: PageServerLoad = async () => {
+export const load: PageServerLoad = () => {
 	throw redirect(303, "/dashboard");
 };
