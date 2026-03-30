@@ -64,14 +64,32 @@ def upgrade() -> None:
         END $$
     """)
 
+    # Disable columnstore/compression on the hypertable before ALTER TABLE ops
+    # (newer TimescaleDB versions block ALTER TABLE on columnstore-enabled hypertables)
+    op.execute("""
+        DO $$
+        BEGIN
+            ALTER TABLE nav_timeseries SET (timescaledb.compress = false);
+        EXCEPTION WHEN OTHERS THEN
+            NULL;
+        END $$
+    """)
+
     # Drop RLS
     op.execute("DROP POLICY IF EXISTS nav_timeseries_rls ON nav_timeseries")
     op.execute("DROP POLICY IF EXISTS nav_timeseries_isolation ON nav_timeseries")
-    op.execute("ALTER TABLE nav_timeseries DISABLE ROW LEVEL SECURITY")
+    op.execute("""
+        DO $$
+        BEGIN
+            ALTER TABLE nav_timeseries DISABLE ROW LEVEL SECURITY;
+        EXCEPTION WHEN undefined_object THEN
+            NULL;
+        END $$
+    """)
 
     # Drop organization_id column
     op.execute("DROP INDEX IF EXISTS ix_nav_timeseries_organization_id")
-    op.execute("ALTER TABLE nav_timeseries DROP COLUMN IF EXISTS organization_id")
+    op.execute("ALTER TABLE nav_timeseries DROP COLUMN IF EXISTS organization_id CASCADE")
 
     # Re-enable compression with instrument_id as segmentby
     op.execute("""
