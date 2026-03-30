@@ -288,8 +288,9 @@
 			</thead>
 			<tbody>
 				{#each managerGroups as mg (mg.manager_key)}
-					<!-- Manager row (L1) — only if not standalone -->
-					{#if !mg.is_standalone}
+					<!-- Manager row (L1) — show only for multi-fund managers (single-fund
+					     managers would just duplicate the fund name as trust fallback) -->
+					{#if !mg.is_standalone && mg.funds.length > 1}
 						<tr
 							class="scr-inst-row ct-manager-row"
 							class:ct-manager-row--expanded={expandedManagers.has(mg.manager_key)}
@@ -328,7 +329,7 @@
 						{#each mg.funds as group (group.fund_key)}
 							<tr
 								class="scr-inst-row ct-fund-row"
-								class:ct-fund-row--nested={!mg.is_standalone}
+								class:ct-fund-row--nested={!mg.is_standalone && mg.funds.length > 1}
 								class:ct-fund-row--expanded={expandedFunds.has(group.fund_key)}
 								onclick={() => {
 									if (group.has_classes || group.has_vintages) {
@@ -348,7 +349,7 @@
 									<span class="ct-type-label">{fundTypeLabel(group.representative.fund_type)}</span>
 								</td>
 								<td class="ct-col-name">
-									<div class="ct-fund-name-cell" class:ct-fund-name-cell--nested={!mg.is_standalone}>
+									<div class="ct-fund-name-cell" class:ct-fund-name-cell--nested={!mg.is_standalone && mg.funds.length > 1}>
 										<span class="ct-fund-name" class:ct-fund-name--unnamed={!group.representative.name || group.representative.name.trim() === "" || group.representative.name === "()"}>
 											{formatFundName(group.representative.name)}
 										</span>
