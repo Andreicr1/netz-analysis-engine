@@ -807,13 +807,23 @@ ORDER BY objid;
 | 53 | Global instruments | `instruments_universe` sem RLS, `instruments_org` com RLS, `nav_timeseries` sem RLS | ✅ GO |
 | 54 | Migration 0070 Alembic sync | `alembic current == heads` após migration stub | ✅ GO |
 | 55 | `make check` pós-refactor | 0 failed (14 fixes aplicados — ver Resultados Prompt G) | ✅ GO |
-| 56 | Import screener 2-step | Cria em `instruments_universe` (global) + `instruments_org` (org-scoped) | - [ ] |
-| 57 | NAV backfill ≥ 4k instrumentos | `COUNT(DISTINCT instrument_id) FROM nav_timeseries` ≥ 4.000 | - [ ] |
-| 58 | `_deactivate_no_nav` | `is_active=false` para instrumentos sem NAV (ESMA sem cobertura Yahoo) | - [ ] |
-| 59 | `risk_calc` em escala | `fund_risk_metrics` para ≥ 1.000 instrumentos com NAV ≥ 252 obs | - [ ] |
-| 60 | N-PORT 24 trimestres | 4.47M+ rows, `MAX(report_date)` = 2025-Q4 | - [ ] |
-| 61 | RR1 prospectus returns | `sec_fund_prospectus_returns` → 17.500+ rows | - [ ] |
-| 62 | RR1 prospectus stats | `sec_fund_prospectus_stats` → 72.000+ rows | - [ ] |
+### Go/No-Go — Resultados Prompt H / P1-P2 Catálogo + Dados (2026-03-29)
+
+| # | Item | Detalhe | Status |
+|---|------|---------|--------|
+| 56 | Import screener 2-step | `instruments_universe` (global) + `instruments_org` (org-scoped) | ✅ GO |
+| 57 | NAV backfill ≥ 4k instrumentos | 6.164 instrumentos, 12.1M rows — backfill completou durante o deploy | ✅ GO |
+| 58 | `_deactivate_no_nav` executado | Instrumentos ESMA sem cobertura Yahoo marcados `is_active=false` | ✅ GO |
+| 59 | `run_global_risk_metrics` em escala | **6.074 computados, 89 skipped (NAV insuficiente), 0 errors — 24 min** | ✅ GO |
+| 60 | N-PORT 24 trimestres | Row count < 4.47M — bulk loader rodou com filtro mais restrito | ❌ PENDENTE |
+| 61 | RR1 prospectus returns | 17.500+ rows confirmado | ✅ GO |
+| 62 | RR1 prospectus stats | 72.000+ rows confirmado | ✅ GO |
+
+**Nota #59:** `run_global_risk_metrics()` extraído do `run_risk_calc()` — calcula CVaR, Sharpe, volatility, momentum, GARCH para todos os instrumentos ativos com `organization_id = NULL`. DTW drift e breach detection permanecem org-scoped em `run_risk_calc(org_id)`.
+
+**Nota #60:** Investigar N-PORT. Verificar se o bulk loader rodou com filtro de CIKs ou se faltam trimestres. Ver seção de diagnóstico abaixo.
+
+**Resultado: 6/7 GO.**
 
 **Todos 35 itens marcados = sistema em produção.**
 

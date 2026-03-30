@@ -1,8 +1,8 @@
 # Database Inventory Reference
 
-**Last updated:** 2026-03-29
+**Last updated:** 2026-03-30
 **Database:** Timescale Cloud (PostgreSQL 16 + TimescaleDB + pgvector)
-**Migration head:** `0069_globalize_instruments_nav`
+**Migration head:** `0070_global_instruments_sync`
 **Total tables:** ~135 | **Total data rows:** ~26.5M across key tables
 
 ---
@@ -915,7 +915,7 @@ All sources use incremental embedding via LEFT JOIN anti-pattern (only rows with
 | **org_id** | `e28fc30c-9d6d-4b21-8e91-cad8696b44fa` |
 | **Instruments** | 5,461 active in global `instruments_universe`, 17 linked via `instruments_org` for demo tenant |
 | **NAV history** | 12.1M daily observations in global `nav_timeseries` (2016-03-28 to 2026-03-27) |
-| **Risk metrics** | 6,074 instruments computed (CVaR, Sharpe, volatility, GARCH, momentum) — calc 2026-03-30 |
+| **Risk metrics** | 6,074 instruments computed (CVaR, Sharpe, volatility, GARCH, momentum, **manager_score**) — calc 2026-03-30 |
 | **Portfolios** | 3 live model portfolios (Conservative Income, Balanced Growth, Aggressive Growth) |
 | **Regime** | All profiles: RISK_ON, trigger status OK |
 
@@ -929,7 +929,8 @@ All sources use incremental embedding via LEFT JOIN anti-pattern (only rows with
 | `treasury_ingestion` | 900_011 | global | Daily | US Treasury API | `treasury_data` |
 | `benchmark_ingest` | 900_004 | global | Daily | Yahoo Finance | `benchmark_nav` |
 | `instrument_ingestion` | 900_010 | global | Daily | Yahoo Finance | `nav_timeseries` |
-| `risk_calc` | 900_007 | org | Daily | Computed | `fund_risk_metrics` |
+| `risk_calc` | 900_007 | org | Daily | Computed | `fund_risk_metrics` (+ manager_score, DTW drift) |
+| `global_risk_metrics` | 900_071 | global | Daily | Computed | `fund_risk_metrics` (base metrics + manager_score for all 6k+ instruments, no DTW) |
 | `portfolio_eval` | 900_008 | org | Daily | Computed | `portfolio_snapshots` |
 | `drift_check` | 42 | org | Daily | Computed | `strategy_drift_alerts` |
 | `ofr_ingestion` | 900_012 | global | Weekly | OFR API | `ofr_hedge_fund_data` |
@@ -1019,9 +1020,9 @@ SELECT * FROM nav_timeseries WHERE instrument_id = :id;
 | **Coverage — BDCs** | sec_bdcs | 196 funds (all = Private Credit) |
 | **Coverage — MMFs** | sec_money_market_funds | 373 series; 20,270 daily metric rows |
 | **Coverage — Share Classes** | sec_fund_classes | 36,516 rows + 11 XBRL columns (8,278 enriched), **17,233 with ticker** (5,002 series) via SEC series/class XML + company_tickers_mf.json |
-| **Coverage — Global Catalog** | instruments_universe | **5,461 active** (of 8,950 total). Instruments without Yahoo NAV or reported AUM auto-deactivated |
+| **Coverage — Global Catalog** | instruments_universe | **6,164 active** (of 8,950 total). AUM coverage: **5,460/6,164 (88.6%)** — sources: Yahoo Finance (ETFs), XBRL net_assets (share classes), N-CEN monthly_avg_net_assets (registered funds, backfilled 2026-03-30). Instruments without Yahoo NAV auto-deactivated by `universe_sync` |
 | **Coverage — NAV History** | nav_timeseries (global, no RLS) | **12.1M rows**, 6,164 instruments, 2016-2026, ~1,967 days/instrument avg |
-| **Coverage — Risk Metrics** | fund_risk_metrics | **8,346 rows**, 6,074 instruments. CVaR 95%, Sharpe, Sortino, volatility (1Y), GARCH, momentum (RSI, Bollinger, OBV), max drawdown, 3Y annualized returns. Calc date: 2026-03-30 |
+| **Coverage — Risk Metrics** | fund_risk_metrics | **8,346+ rows**, 6,074 instruments. CVaR 95%, Sharpe, Sortino, volatility (1Y), GARCH, momentum (RSI, Bollinger, OBV), max drawdown, 3Y annualized returns. **manager_score** (0-100 composite, 6-component: return_consistency, risk_adjusted_return, drawdown_control, information_ratio, flows_momentum, fee_efficiency) computed by global worker for **5,459 instruments** (avg 50.93, range 14.48–74.58). Calc date: 2026-03-30 |
 | **Coverage — N-PORT Holdings** | sec_nport_holdings | **2.03M rows**, 1,215 CIKs, 7,759 series, 24 quarters (2020 Q1 — 2025 Q4), top 50 holdings/fund |
 | **Coverage — Prospectus Returns** | sec_fund_prospectus_returns | **17,502 annual returns**, 2,086 series, 2012-2025 (RR1 bar chart data) |
 | **Coverage — Prospectus Stats** | sec_fund_prospectus_stats | **72,157 rows**, 20,390 series — fees, expense ratios, turnover, risk |
@@ -1038,7 +1039,7 @@ SELECT * FROM nav_timeseries WHERE instrument_id = :id;
 | **Coverage — Embeddings** | pgvector sources | **16 active sources**, **153,664 chunks** across all fund universes (prospectus stats 72k, brochures 13k, series profiles 13k, fund classes 13k, ESMA 10k, holdings 7.7k, private funds 6.3k, manager profiles 5.7k, fund profiles 4.7k, ESMA managers 2.9k, prospectus returns 2k, ETF/BDC/MMF/13F/DD 1.6k) |
 | **Freshness — Markets** | NAV data | **12.1M rows**, 6,164 instruments, 10Y history through 2026-03-27 |
 | **Freshness — Markets** | Benchmark NAV | Updated to 2026-03-25 |
-| **Freshness — Risk** | fund_risk_metrics | **8,346 rows**, 6,074 instruments, calc 2026-03-30 |
+| **Freshness — Risk** | fund_risk_metrics | **8,346+ rows**, 6,074 instruments, **5,459 with manager_score**, calc 2026-03-30 |
 | **Freshness — Macro** | FRED data | Updated to 2026-03-24 |
 | **Freshness — SEC** | 13F holdings | Through Q4 2025 |
 | **Freshness — SEC** | N-PORT filings | Through 2026-03-23 |
@@ -1055,4 +1056,5 @@ SELECT * FROM nav_timeseries WHERE instrument_id = :id;
 | **Automation** | Quarterly SEC bulk ingestion | `sec_bulk_ingestion` worker (lock 900_050) — N-CEN, N-MFP, BDC, strategy_label |
 | **Automation** | Weekly universe sync | `universe_sync` worker (lock 900_070) — auto-fetches SEC company_tickers_mf.json, syncs SEC/ESMA → instruments_universe, deactivates funds without NAV |
 | **Automation** | Daily NAV ingestion | `instrument_ingestion` worker (lock 900_010, **global**) — Yahoo Finance for all active instruments |
+| **Automation** | Daily global risk + scoring | `global_risk_metrics` worker (lock 900_071) — CVaR, Sharpe, GARCH, momentum, **manager_score** for all 6k+ active instruments. Score = 6-component composite (return_consistency 0.20, risk_adjusted_return 0.25, drawdown_control 0.20, information_ratio 0.15, flows_momentum 0.10, fee_efficiency 0.10). Org-scoped `risk_calc` (lock 900_007) adds DTW drift and can override with tenant-specific scoring config |
 | **Automation** | Daily wealth embedding | `wealth_embedding` worker (lock 900_041) — 12 sources + 4 new brochure sections, incremental |
