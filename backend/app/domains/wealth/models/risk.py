@@ -7,11 +7,19 @@ from sqlalchemy import Date, ForeignKey, Numeric, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.db.base import Base, OrganizationScopedMixin
+from app.core.db.base import Base
 
 
-class FundRiskMetrics(OrganizationScopedMixin, Base):
+class FundRiskMetrics(Base):
     __tablename__ = "fund_risk_metrics"
+
+    # Nullable: global risk_metrics worker writes with NULL org_id,
+    # org-scoped run_risk_calc overwrites with actual org_id + DTW drift.
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        nullable=True,
+        index=True,
+    )
 
     instrument_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), ForeignKey("instruments_universe.instrument_id"), primary_key=True,

@@ -195,6 +195,7 @@ async def _sync_sec_mf_series(db: AsyncSession) -> dict:
                 fc.class_name AS canonical_class,
                 fc.expense_ratio_pct,
                 fc.net_assets,
+                rf.monthly_avg_net_assets,
                 fc.cik,
                 rf.strategy_label,
                 rf.fund_type,
@@ -244,7 +245,7 @@ async def _sync_sec_mf_series(db: AsyncSession) -> dict:
                 'strategy_label', c.strategy_label,
                 'canonical_class', c.canonical_class,
                 'expense_ratio_pct', c.expense_ratio_pct,
-                'aum_usd', c.net_assets,
+                'aum_usd', COALESCE(c.net_assets, c.monthly_avg_net_assets),
                 'manager_name', COALESCE(c.manager_name, c.series_name),
                 'inception_date', c.inception_date,
                 'source', 'universe_sync'
