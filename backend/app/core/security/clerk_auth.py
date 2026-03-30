@@ -57,6 +57,8 @@ CLERK_TO_ROLE: dict[str, Role] = {
     "org:auditor": Role.AUDITOR,
     "org:investor": Role.INVESTOR,
     "org:advisor": Role.ADVISOR,
+    # Fallback: Clerk default roles
+    "org:member": Role.INVESTOR,
 }
 
 
