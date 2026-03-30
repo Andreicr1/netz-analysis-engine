@@ -111,7 +111,7 @@
 		factSheetError = null;
 		try {
 			const api = createClientApiClient(getToken);
-			await api.post(`/fact-sheets/model-portfolios/${portfolioId}`, { language: generateLang });
+			await api.post(`/fact-sheets/model-portfolios/${portfolioId}?language=${generateLang}`, {});
 			await invalidateAll();
 		} catch (e) {
 			factSheetError = e instanceof Error ? e.message : "Failed to generate fact sheet";
@@ -519,7 +519,7 @@
 		<div class="fs-content">
 			<div class="fs-generate">
 				<select class="fs-lang-select" bind:value={generateLang}>
-					<option value="pt">Portugues</option>
+					<option value="pt">Português</option>
 					<option value="en">English</option>
 				</select>
 				<Button size="sm" onclick={generateFactSheet} disabled={generating}>

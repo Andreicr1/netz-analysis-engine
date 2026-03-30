@@ -62,31 +62,26 @@
 			],
 		},
 		{
-			id: "setup", label: "Setup", defaultOpen: true,
+			id: "research", label: "Research", defaultOpen: true,
 			items: [
-				{ label: "Investment Policy", href: "/investment-policy", icon: ShieldCheck },
+				{ label: "Screener",        href: "/screener",   icon: Search },
+				{ label: "DD Reports",      href: "/dd-reports", icon: ClipboardList },
+				{ label: "Assets Universe", href: "/universe",   icon: Database },
 			],
 		},
 		{
 			id: "portfolio", label: "Portfolio", defaultOpen: true,
 			items: [
-				{ label: "Portfolio Builder", href: "/model-portfolios", icon: Layers },
-				{ label: "Assets Universe",   href: "/universe",         icon: Database },
-				{ label: "Portfolios",        href: "/portfolios",       icon: Briefcase },
-			],
-		},
-		{
-			id: "research", label: "Research", defaultOpen: true,
-			items: [
-				{ label: "Screener",   href: "/screener",   icon: Search },
-				{ label: "DD Reports", href: "/dd-reports", icon: ClipboardList },
+				{ label: "Investment Policy", href: "/investment-policy", icon: ShieldCheck },
+				{ label: "Macro",             href: "/macro",             icon: Globe },
+				{ label: "Portfolio Builder", href: "/model-portfolios",  icon: Layers },
+				{ label: "Portfolios",        href: "/portfolios",        icon: Briefcase },
 			],
 		},
 		{
 			id: "intelligence", label: "Intelligence", defaultOpen: true,
 			items: [
 				{ label: "Analytics", href: "/analytics", icon: BarChart2 },
-				{ label: "Macro",     href: "/macro",     icon: Globe },
 				{ label: "Risk",      href: "/risk",      icon: Zap },
 			],
 		},
@@ -162,7 +157,7 @@
 						</div>
 					{:else}
 						<!-- Collapsed: divider between sections, icon-only items -->
-						{#if section.id !== "setup"}
+						{#if section.id !== "overview"}
 							<div class="sidebar-divider"></div>
 						{/if}
 						<nav class="section-items-collapsed" aria-label={section.label}>

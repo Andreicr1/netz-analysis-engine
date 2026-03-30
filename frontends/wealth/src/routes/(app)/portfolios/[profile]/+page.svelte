@@ -19,6 +19,7 @@
 		PortfolioSummary, PortfolioSnapshot,
 		StrategicAllocation, EffectiveAllocation, EditableWeight,
 	} from "$lib/types/portfolio";
+	import type { ModelPortfolio, InstrumentWeight } from "$lib/types/model-portfolio";
 	import RebalancingTab from "$lib/components/RebalancingTab.svelte";
 	import BlendedBenchmarkEditor from "$lib/components/BlendedBenchmarkEditor.svelte";
 
@@ -32,6 +33,31 @@
 	let snapshot = $derived(data.snapshot as PortfolioSnapshot | null);
 	let strategic = $derived((data.strategic ?? []) as StrategicAllocation[]);
 	let effective = $derived((data.effective ?? []) as EffectiveAllocation[]);
+	let blockLabels = $derived((data.blockLabels ?? {}) as Record<string, string>);
+
+	let modelPortfolio = $derived(data.modelPortfolio as ModelPortfolio | null);
+	let fundsByBlock = $derived.by(() => {
+		const map = new Map<string, InstrumentWeight[]>();
+		const funds = modelPortfolio?.fund_selection_schema?.funds ?? [];
+		for (const f of funds) {
+			const list = map.get(f.block_id) ?? [];
+			list.push(f);
+			map.set(f.block_id, list);
+		}
+		return map;
+	});
+
+	let expandedBlocks = $state<Set<string>>(new Set());
+
+	function toggleBlockExpand(blockId: string) {
+		const next = new Set(expandedBlocks);
+		next.has(blockId) ? next.delete(blockId) : next.add(blockId);
+		expandedBlocks = next;
+	}
+
+	function blockName(block_id: string): string {
+		return blockLabels[block_id] ?? block_id.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+	}
 
 	// Live risk data
 	let live = $derived(riskStore.cvarByProfile[profile]);
@@ -284,7 +310,7 @@
 							{@const delta = weightDelta(row)}
 							{@const inBounds = isWeightInBounds(row)}
 							<tr class="alloc-row" class:alloc-row--oob={!inBounds}>
-								<td class="atd-block">{row.block_id}</td>
+								<td class="atd-block">{blockName(row.block_id)}</td>
 								<td class="atd-current">{formatPercent(row.strategic_weight)}</td>
 								<td class="atd-input">
 									<input
@@ -309,31 +335,52 @@
 				</table>
 			</div>
 		{:else}
-			<!-- ── STRATEGIC VIEW (read-only) ────────────────────────────── -->
+			<!-- ── STRATEGIC VIEW (read-only, expandable fund breakdown) ── -->
 			{#if strategic.length === 0}
 				<div class="pw-empty">No strategic allocation defined.</div>
 			{:else}
 				<table class="alloc-table alloc-table--readonly">
 					<thead>
 						<tr>
+							<th></th>
 							<th>Block</th>
 							<th>Target</th>
 							<th>Min</th>
 							<th>Max</th>
-							<th>Approved By</th>
-							<th>Effective</th>
+							<th>Funds</th>
 						</tr>
 					</thead>
 					<tbody>
 						{#each strategic as row (row.allocation_id)}
-							<tr>
-								<td class="atd-block">{row.block_id}</td>
+							{@const blockFunds = fundsByBlock.get(row.block_id) ?? []}
+							{@const isExpanded = expandedBlocks.has(row.block_id)}
+							<tr
+								class="alloc-row-expandable"
+								class:alloc-row-expandable--has-funds={blockFunds.length > 0}
+								onclick={() => { if (blockFunds.length > 0) toggleBlockExpand(row.block_id); }}
+							>
+								<td class="atd-chevron">
+									{#if blockFunds.length > 0}
+										<span class="row-chevron" class:row-chevron--open={isExpanded}>&#9654;</span>
+									{/if}
+								</td>
+								<td class="atd-block">{blockName(row.block_id)}</td>
 								<td class="atd-weight">{formatPercent(row.target_weight)}</td>
 								<td class="atd-bound">{formatPercent(row.min_weight)}</td>
 								<td class="atd-bound">{formatPercent(row.max_weight)}</td>
-								<td class="atd-approver">{row.approved_by ?? "—"}</td>
-								<td class="atd-date">{row.effective_from}</td>
+								<td class="atd-count">{blockFunds.length > 0 ? `${blockFunds.length} fund${blockFunds.length !== 1 ? "s" : ""}` : "—"}</td>
 							</tr>
+							{#if isExpanded}
+								{#each blockFunds as fund (fund.instrument_id)}
+									<tr class="alloc-row-fund">
+										<td></td>
+										<td class="atd-fund-name" colspan="1">{fund.fund_name}</td>
+										<td class="atd-fund-weight">{formatPercent(fund.weight)}</td>
+										<td class="atd-fund-score" colspan="2">Score {formatNumber(fund.score, 2)}</td>
+										<td></td>
+									</tr>
+								{/each}
+							{/if}
 						{/each}
 					</tbody>
 				</table>
@@ -391,7 +438,7 @@
 				<tbody>
 					{#each effective as row (row.block_id)}
 						<tr>
-							<td class="atd-block">{row.block_id}</td>
+							<td class="atd-block">{blockName(row.block_id)}</td>
 							<td class="atd-weight">{formatPercent(row.strategic_weight)}</td>
 							<td class="atd-delta" style:color={deltaColor(Number(row.tactical_overweight ?? 0))}>
 								{Number(row.tactical_overweight ?? 0) >= 0 ? "+" : ""}{formatPercent(row.tactical_overweight)}
@@ -614,7 +661,6 @@
 	.atd-weight { font-variant-numeric: tabular-nums; color: var(--ii-text-primary); }
 	.atd-weight--bold { font-weight: 700; }
 	.atd-bound { font-variant-numeric: tabular-nums; color: var(--ii-text-muted); font-size: var(--ii-text-label, 0.75rem); }
-	.atd-approver { color: var(--ii-text-secondary); }
 	.atd-date { color: var(--ii-text-muted); font-variant-numeric: tabular-nums; }
 	.atd-delta { font-variant-numeric: tabular-nums; font-weight: 600; }
 	.atd-current { font-variant-numeric: tabular-nums; color: var(--ii-text-secondary); }
@@ -706,6 +752,54 @@
 
 	.alloc-row--oob {
 		background: color-mix(in srgb, var(--ii-danger) 4%, transparent);
+	}
+
+	/* ── Expandable block rows ───────────────────────────────────────────── */
+	.alloc-row-expandable--has-funds { cursor: pointer; }
+	.alloc-row-expandable--has-funds:hover { background: var(--ii-surface-alt); }
+
+	.atd-chevron {
+		width: 28px;
+		text-align: center;
+		padding: 0 4px;
+	}
+
+	.row-chevron {
+		display: inline-block;
+		font-size: 9px;
+		color: var(--ii-text-muted);
+		transition: transform 150ms ease;
+	}
+
+	.row-chevron--open { transform: rotate(90deg); }
+
+	.atd-count {
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
+	}
+
+	.alloc-row-fund td {
+		background: var(--ii-surface-alt);
+		padding: var(--ii-space-stack-2xs, 4px) var(--ii-space-inline-sm, 12px);
+	}
+
+	.atd-fund-name {
+		font-size: var(--ii-text-small, 0.8125rem);
+		color: var(--ii-text-secondary);
+		padding-left: var(--ii-space-inline-md, 16px) !important;
+	}
+
+	.atd-fund-weight {
+		font-size: var(--ii-text-small, 0.8125rem);
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		color: var(--ii-text-primary);
+	}
+
+	.atd-fund-score {
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
+		font-variant-numeric: tabular-nums;
 	}
 
 	/* ── Responsive ──────────────────────────────────────────────────────── */
