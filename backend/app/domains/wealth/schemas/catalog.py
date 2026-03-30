@@ -48,6 +48,7 @@ class UnifiedFundItem(BaseModel):
     # Classification
     region: Literal["US", "EU"]
     fund_type: str
+    strategy_label: str | None = None
     domicile: str | None = None
     currency: str | None = None
 

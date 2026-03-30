@@ -25,6 +25,7 @@ export interface UnifiedFundItem {
 
 	region: FundRegion;
 	fund_type: string;
+	strategy_label: string | null;
 	domicile: string | null;
 	currency: string | null;
 

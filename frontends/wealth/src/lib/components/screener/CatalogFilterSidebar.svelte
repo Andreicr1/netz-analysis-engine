@@ -172,24 +172,6 @@
 		{/each}
 	</div>
 
-	<!-- Fund Type (conditional — shows types from selected universes) -->
-	{#if showFundTypeFilter}
-		<div class="cfs-section">
-			<h4 class="cfs-group-title">Fund Type</h4>
-			{#each facets.fund_types as item (item.value)}
-				<label class="cfs-check">
-					<input
-						type="checkbox"
-						checked={selectedFundTypes.includes(item.value)}
-						onchange={() => toggleFundType(item.value)}
-					/>
-					<span class="cfs-check-label">{fundTypeLabel(item.value)}</span>
-					<span class="cfs-check-count">{item.count.toLocaleString()}</span>
-				</label>
-			{/each}
-		</div>
-	{/if}
-
 	<!-- Strategy Label (conditional) -->
 	{#if showStrategyFilter}
 		<div class="cfs-section">

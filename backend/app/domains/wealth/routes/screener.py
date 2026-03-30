@@ -1423,6 +1423,7 @@ async def get_catalog(
                 class_name=getattr(r, "class_name", None),
                 region=r.region,
                 fund_type=r.fund_type or "unknown",
+                strategy_label=getattr(r, "strategy_label", None),
                 domicile=r.domicile,
                 currency=r.currency,
                 manager_name=r.manager_name,

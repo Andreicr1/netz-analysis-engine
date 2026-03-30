@@ -1,14 +1,16 @@
 <!--
-  Server-side paginated catalog table for UnifiedFundItem[].
-  Groups rows by fund (external_id) and expands share classes for registered_us funds.
-  No infinite scroll — clean Prev/Next pagination synced with URL params.
+  Catalog table with Manager → Fund → Class hierarchy.
+  Sortable headers, neutral AUM formatting, strategy column.
+  Server-side pagination synced with URL params.
 -->
 <script lang="ts">
 	import "./screener.css";
-	import { goto } from "$app/navigation";
-	import { formatAUM } from "@investintell/ui";
+	import { formatCompact } from "@investintell/ui";
 	import type { UnifiedFundItem, UnifiedCatalogPage } from "$lib/types/catalog";
-	import { EMPTY_CATALOG_PAGE, UNIVERSE_LABELS } from "$lib/types/catalog";
+	import { EMPTY_CATALOG_PAGE, FUND_TYPE_LABELS } from "$lib/types/catalog";
+
+	type SortField = "manager" | "name" | "aum" | "strategy";
+	type SortDir = "asc" | "desc";
 
 	interface FundGroup {
 		fund_key: string;
@@ -17,45 +19,160 @@
 		has_classes: boolean;
 	}
 
+	interface ManagerGroup {
+		manager_key: string;
+		manager_name: string;
+		manager_id: string | null;
+		funds: FundGroup[];
+		total_aum: number | null;
+		is_standalone: boolean; // funds without manager
+	}
+
 	interface Props {
 		catalog: UnifiedCatalogPage;
 		searchQ: string;
+		currentSort: string;
 		onSelectFund: (item: UnifiedFundItem) => void;
 		onSendToDDReview: (items: UnifiedFundItem[]) => void;
 		onPageChange: (page: number) => void;
+		onSortChange: (sort: string) => void;
+		onOpenManager: (managerId: string) => void;
 	}
 
 	let {
 		catalog = EMPTY_CATALOG_PAGE,
 		searchQ = "",
+		currentSort = "name_asc",
 		onSelectFund,
 		onSendToDDReview,
 		onPageChange,
+		onSortChange,
+		onOpenManager,
 	}: Props = $props();
 
 	let totalPages = $derived(Math.ceil(catalog.total / catalog.page_size) || 1);
 
-	// ── Group items by fund (external_id) ──
-	let fundGroups = $derived.by((): FundGroup[] => {
-		const map = new Map<string, UnifiedFundItem[]>();
+	// ── Parse current sort into field + direction ──
+	let sortField = $derived.by((): SortField => {
+		if (currentSort.startsWith("manager")) return "manager";
+		if (currentSort.startsWith("aum")) return "aum";
+		if (currentSort.startsWith("strategy")) return "strategy";
+		return "name";
+	});
+	let sortDir = $derived<SortDir>(currentSort.endsWith("_desc") ? "desc" : "asc");
+
+	function handleSort(field: SortField) {
+		const defaultDir: Record<SortField, SortDir> = {
+			manager: "asc",
+			name: "asc",
+			aum: "desc",
+			strategy: "asc",
+		};
+		let dir: SortDir;
+		if (sortField === field) {
+			dir = sortDir === "asc" ? "desc" : "asc";
+		} else {
+			dir = defaultDir[field];
+		}
+		onSortChange(`${field === "name" ? "name" : field}_${dir}`);
+	}
+
+	function sortIndicator(field: SortField): string {
+		if (sortField !== field) return "";
+		return sortDir === "asc" ? " \u25B2" : " \u25BC";
+	}
+
+	// ── Group items: Manager → Fund → Class ──
+	let managerGroups = $derived.by((): ManagerGroup[] => {
+		// Step 1: group items by fund (external_id)
+		const fundMap = new Map<string, UnifiedFundItem[]>();
 		for (const item of catalog.items) {
 			const key = item.external_id;
-			if (!map.has(key)) map.set(key, []);
-			map.get(key)!.push(item);
+			if (!fundMap.has(key)) fundMap.set(key, []);
+			fundMap.get(key)!.push(item);
 		}
-		return Array.from(map.entries()).map(([key, items]) => ({
+
+		const fundGroups: FundGroup[] = Array.from(fundMap.entries()).map(([key, items]) => ({
 			fund_key: key,
 			representative: items[0]!,
 			classes: items,
 			has_classes: items[0]!.universe === "registered_us" && items.length > 1 && items.some((i) => i.class_id != null),
 		}));
+
+		// Step 2: group funds by manager
+		const mgrMap = new Map<string, FundGroup[]>();
+		const standaloneGroups: FundGroup[] = [];
+
+		for (const fg of fundGroups) {
+			const mgrKey = fg.representative.manager_id ?? fg.representative.manager_name;
+			if (mgrKey) {
+				if (!mgrMap.has(mgrKey)) mgrMap.set(mgrKey, []);
+				mgrMap.get(mgrKey)!.push(fg);
+			} else {
+				standaloneGroups.push(fg);
+			}
+		}
+
+		const groups: ManagerGroup[] = [];
+
+		// Manager-grouped funds
+		for (const [key, funds] of mgrMap) {
+			const rep = funds[0]!.representative;
+			let totalAum: number | null = null;
+			for (const fg of funds) {
+				if (fg.representative.aum != null) {
+					totalAum = (totalAum ?? 0) + fg.representative.aum;
+				}
+			}
+			groups.push({
+				manager_key: key,
+				manager_name: rep.manager_name ?? "Unknown Manager",
+				manager_id: rep.manager_id,
+				funds,
+				total_aum: totalAum,
+				is_standalone: false,
+			});
+		}
+
+		// Standalone funds (no manager)
+		for (const fg of standaloneGroups) {
+			groups.push({
+				manager_key: `standalone:${fg.fund_key}`,
+				manager_name: "",
+				manager_id: null,
+				funds: [fg],
+				total_aum: fg.representative.aum,
+				is_standalone: true,
+			});
+		}
+
+		return groups;
 	});
 
 	// ── Expand / select state ──
+	let expandedManagers = $state<Set<string>>(new Set());
 	let expandedFunds = $state<Set<string>>(new Set());
 	let selectedClasses = $state<Set<string>>(new Set());
 
-	function toggleExpand(fundKey: string) {
+	// Auto-expand standalone groups and single-fund managers
+	$effect(() => {
+		const next = new Set(expandedManagers);
+		for (const mg of managerGroups) {
+			if (mg.is_standalone || mg.funds.length === 1) {
+				next.add(mg.manager_key);
+			}
+		}
+		expandedManagers = next;
+	});
+
+	function toggleManager(key: string) {
+		const next = new Set(expandedManagers);
+		if (next.has(key)) next.delete(key);
+		else next.add(key);
+		expandedManagers = next;
+	}
+
+	function toggleFund(fundKey: string) {
 		const next = new Set(expandedFunds);
 		if (next.has(fundKey)) next.delete(fundKey);
 		else next.add(fundKey);
@@ -85,17 +202,18 @@
 		selectedClasses = new Set();
 	}
 
-	function universeBadgeClass(universe: string): string {
-		switch (universe) {
-			case "registered_us": return "univ-badge--registered";
-			case "private_us": return "univ-badge--private";
-			case "ucits_eu": return "univ-badge--ucits";
-			default: return "";
-		}
+	function fundTypeLabel(ft: string): string {
+		return FUND_TYPE_LABELS[ft] ?? ft.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 	}
 
-	function fundTypeLabel(ft: string): string {
-		return ft.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+	function formatFundName(name: string | null | undefined): string {
+		if (!name || name.trim() === "" || name === "()") return "Unnamed Fund";
+		return name;
+	}
+
+	function formatAumNeutral(value: number | null | undefined): string {
+		if (value == null) return "\u2014";
+		return formatCompact(value);
 	}
 </script>
 
@@ -126,119 +244,146 @@
 				<tr>
 					<th class="ct-col-expand"></th>
 					<th class="ct-col-check"></th>
-					<th class="sth-univ">Universe</th>
-					<th>Ticker</th>
-					<th class="sth-name">Name / Class</th>
-					<th>Manager</th>
-					<th>Type</th>
-					<th class="sth-aum">AUM</th>
-					<th>Region</th>
-					<th>Disclosure</th>
+					<th class="ct-col-type">
+						<button class="ct-sort-btn" onclick={() => handleSort("name")}>
+							Type{sortIndicator("name")}
+						</button>
+					</th>
+					<th class="ct-col-name">
+						<button class="ct-sort-btn" onclick={() => handleSort("manager")}>
+							Manager / Fund / Class{sortIndicator("manager")}
+						</button>
+					</th>
+					<th class="ct-col-strategy">
+						<button class="ct-sort-btn" onclick={() => handleSort("strategy")}>
+							Strategy{sortIndicator("strategy")}
+						</button>
+					</th>
+					<th class="ct-col-aum">
+						<button class="ct-sort-btn ct-sort-btn--right" onclick={() => handleSort("aum")}>
+							AUM{sortIndicator("aum")}
+						</button>
+					</th>
+					<th class="ct-col-cy">CY</th>
 				</tr>
 			</thead>
 			<tbody>
-				{#each fundGroups as group (group.fund_key)}
-					<!-- Fund row (parent) -->
-					<tr
-						class="scr-inst-row ct-fund-row"
-						class:ct-fund-row--expanded={expandedFunds.has(group.fund_key)}
-						onclick={() => {
-							if (group.has_classes) {
-								toggleExpand(group.fund_key);
-							} else {
-								onSelectFund(group.representative);
-							}
-						}}
-					>
-						<td class="ct-col-expand">
-							{#if group.has_classes}
-								<span class="ct-chevron" class:ct-chevron--open={expandedFunds.has(group.fund_key)}>&#9654;</span>
-							{/if}
-						</td>
-						<td class="ct-col-check"></td>
-						<td>
-							<span class="univ-badge {universeBadgeClass(group.representative.universe)}">
-								{UNIVERSE_LABELS[group.representative.universe] ?? group.representative.universe}
-							</span>
-						</td>
-						<td class="std-ticker">
-							<span class="ticker-cell">{group.representative.ticker ?? "\u2014"}</span>
-						</td>
-						<td class="std-name">
-							<span class="inst-name">{group.representative.name}</span>
-							{#if group.has_classes}
-								<span class="ct-class-count">{group.classes.length} classes</span>
-							{:else if group.representative.isin}
-								<span class="inst-ids">{group.representative.isin}</span>
-							{/if}
-						</td>
-						<td class="std-manager">{group.representative.manager_name ?? "\u2014"}</td>
-						<td>
-							<span class="ct-type-label">{fundTypeLabel(group.representative.fund_type)}</span>
-						</td>
-						<td class="std-aum">{group.representative.aum ? formatAUM(group.representative.aum) : "\u2014"}</td>
-						<td>{group.representative.region}</td>
-						<td>
-							<div class="ct-disclosure-dots">
-								<span class="ct-dot" class:ct-dot--on={group.representative.disclosure.has_holdings} title="Holdings"></span>
-								<span class="ct-dot" class:ct-dot--on={group.representative.disclosure.has_nav_history} title="NAV"></span>
-								<span class="ct-dot" class:ct-dot--on={group.representative.disclosure.has_quant_metrics} title="Quant"></span>
-								<span class="ct-dot" class:ct-dot--on={group.representative.disclosure.has_style_analysis} title="Style"></span>
-								{#if group.representative.universe === "registered_us"}
+				{#each managerGroups as mg (mg.manager_key)}
+					<!-- Manager row (L1) — only if not standalone -->
+					{#if !mg.is_standalone}
+						<tr
+							class="scr-inst-row ct-manager-row"
+							class:ct-manager-row--expanded={expandedManagers.has(mg.manager_key)}
+							onclick={() => toggleManager(mg.manager_key)}
+						>
+							<td class="ct-col-expand">
+								<span class="ct-chevron" class:ct-chevron--open={expandedManagers.has(mg.manager_key)}>&#9654;</span>
+							</td>
+							<td class="ct-col-check"></td>
+							<td></td>
+							<td class="ct-col-name">
+								<div class="ct-manager-name-cell">
 									<button
-										class="ct-full-detail-link"
-										title="Full Detail Page"
-										onclick={(e) => { e.stopPropagation(); goto(`/screener/${group.representative.external_id}`); }}
-									>&#x2197;</button>
-								{/if}
-							</div>
-						</td>
-					</tr>
+										class="ct-manager-link"
+										onclick={(e) => {
+											e.stopPropagation();
+											if (mg.manager_id) onOpenManager(mg.manager_id);
+										}}
+										title={mg.manager_id ? `View manager (CRD: ${mg.manager_id})` : undefined}
+									>
+										{mg.manager_name}
+									</button>
+									<span class="ct-fund-count">{mg.funds.length} fund{mg.funds.length !== 1 ? "s" : ""}</span>
+								</div>
+							</td>
+							<td></td>
+							<td class="std-aum">{formatAumNeutral(mg.total_aum)}</td>
+							<td></td>
+						</tr>
+					{/if}
 
-					<!-- Class rows (children) — only if expanded -->
-					{#if group.has_classes && expandedFunds.has(group.fund_key)}
-						{#each group.classes as cls (`${cls.external_id}:${cls.class_id}`)}
+					<!-- Fund rows (L2) — shown when manager expanded or standalone -->
+					{#if mg.is_standalone || expandedManagers.has(mg.manager_key)}
+						{#each mg.funds as group (group.fund_key)}
 							<tr
-								class="scr-inst-row ct-class-row"
-								class:ct-class-row--selected={isClassSelected(cls)}
+								class="scr-inst-row ct-fund-row"
+								class:ct-fund-row--nested={!mg.is_standalone}
+								class:ct-fund-row--expanded={expandedFunds.has(group.fund_key)}
+								onclick={() => {
+									if (group.has_classes) {
+										toggleFund(group.fund_key);
+									} else {
+										onSelectFund(group.representative);
+									}
+								}}
 							>
-								<td class="ct-col-expand ct-class-indent"></td>
-								<td class="ct-col-check">
-									<input
-										type="checkbox"
-										class="ct-class-checkbox"
-										checked={isClassSelected(cls)}
-										onchange={() => toggleClass(cls)}
-										onclick={(e) => e.stopPropagation()}
-									/>
-								</td>
-								<td></td>
-								<td class="std-ticker">
-									<span class="ticker-cell">{cls.ticker ?? "\u2014"}</span>
-								</td>
-								<td class="std-name">
-									<span class="ct-class-name">{cls.class_name ?? cls.class_id ?? "\u2014"}</span>
-									{#if cls.isin}
-										<span class="inst-ids">{cls.isin}</span>
+								<td class="ct-col-expand">
+									{#if group.has_classes}
+										<span class="ct-chevron ct-chevron--fund" class:ct-chevron--open={expandedFunds.has(group.fund_key)}>&#9654;</span>
 									{/if}
 								</td>
-								<td colspan="4">
-									<button
-										class="ct-detail-link"
-										onclick={(e) => { e.stopPropagation(); onSelectFund(cls); }}
-									>
-										View details &rarr;
-									</button>
-								</td>
+								<td class="ct-col-check"></td>
 								<td>
-									<div class="ct-disclosure-dots">
-										<span class="ct-dot" class:ct-dot--on={cls.disclosure.has_holdings} title="Holdings"></span>
-										<span class="ct-dot" class:ct-dot--on={cls.disclosure.has_nav_history} title="NAV"></span>
-										<span class="ct-dot" class:ct-dot--on={cls.disclosure.has_quant_metrics} title="Quant"></span>
-										<span class="ct-dot" class:ct-dot--on={cls.disclosure.has_style_analysis} title="Style"></span>
+									<span class="ct-type-label">{fundTypeLabel(group.representative.fund_type)}</span>
+								</td>
+								<td class="ct-col-name">
+									<div class="ct-fund-name-cell" class:ct-fund-name-cell--nested={!mg.is_standalone}>
+										<span class="ct-fund-name" class:ct-fund-name--unnamed={!group.representative.name || group.representative.name.trim() === "" || group.representative.name === "()"}>
+											{formatFundName(group.representative.name)}
+										</span>
+										{#if group.representative.ticker}
+											<span class="ct-ticker">{group.representative.ticker}</span>
+										{/if}
+										{#if group.has_classes}
+											<span class="ct-class-count">{group.classes.length} classes</span>
+										{/if}
 									</div>
 								</td>
+								<td>
+									<span class="ct-strategy-label">{group.representative.strategy_label ?? "\u2014"}</span>
+								</td>
+								<td class="std-aum">{formatAumNeutral(group.representative.aum)}</td>
+								<td class="ct-cy">{group.representative.currency ?? "\u2014"}</td>
 							</tr>
+
+							<!-- Class rows (L3) — only if expanded -->
+							{#if group.has_classes && expandedFunds.has(group.fund_key)}
+								{#each group.classes as cls (`${cls.external_id}:${cls.class_id}`)}
+									<tr
+										class="scr-inst-row ct-class-row"
+										class:ct-class-row--selected={isClassSelected(cls)}
+									>
+										<td class="ct-col-expand"></td>
+										<td class="ct-col-check">
+											<input
+												type="checkbox"
+												class="ct-class-checkbox"
+												checked={isClassSelected(cls)}
+												onchange={() => toggleClass(cls)}
+												onclick={(e) => e.stopPropagation()}
+											/>
+										</td>
+										<td></td>
+										<td class="ct-col-name">
+											<div class="ct-class-name-cell">
+												<span class="ct-class-name">{cls.class_name ?? cls.class_id ?? "\u2014"}</span>
+												{#if cls.ticker}
+													<span class="ct-ticker">{cls.ticker}</span>
+												{/if}
+												<button
+													class="ct-detail-link"
+													onclick={(e) => { e.stopPropagation(); onSelectFund(cls); }}
+												>
+													View details &rarr;
+												</button>
+											</div>
+										</td>
+										<td></td>
+										<td></td>
+										<td></td>
+									</tr>
+								{/each}
+							{/if}
 						{/each}
 					{/if}
 				{/each}
@@ -268,63 +413,118 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	.ticker-cell {
+	/* ── Sort buttons ── */
+	.ct-sort-btn {
+		background: none;
+		border: none;
+		padding: 0;
+		font: inherit;
+		color: inherit;
+		cursor: pointer;
+		white-space: nowrap;
+		user-select: none;
+		font-size: 11px;
 		font-weight: 700;
-		font-size: 13px;
-		letter-spacing: 0.3px;
-		color: var(--ii-text-primary, #1a202c);
+		text-transform: uppercase;
+		letter-spacing: 1.1px;
+	}
+	.ct-sort-btn:hover { color: #1d293d; }
+	.ct-sort-btn--right { text-align: right; display: block; width: 100%; }
+
+	/* ── Column widths ── */
+	.ct-col-expand { width: 28px; }
+	.ct-col-check  { width: 36px; text-align: center; }
+	.ct-col-type   { width: 110px; }
+	.ct-col-name   { min-width: 280px; }
+	.ct-col-strategy { width: 150px; }
+	.ct-col-aum    { width: 90px; text-align: right; }
+	.ct-col-cy     { width: 50px; }
+
+	/* ── Manager row (L1) ── */
+	.ct-manager-row {
+		cursor: pointer;
+		background: #f8fafc;
+		border-bottom: 1px solid #e2e8f0;
+	}
+	.ct-manager-row:hover { background: #f1f5f9; }
+	.ct-manager-row--expanded { background: #f1f5f9; }
+
+	.ct-manager-name-cell {
+		display: flex;
+		align-items: center;
+		gap: 10px;
 	}
 
-	.inst-name {
-		display: block;
+	.ct-manager-link {
+		background: none;
+		border: none;
+		padding: 0;
+		font-size: 14px;
+		font-weight: 700;
+		color: #1d293d;
+		cursor: pointer;
+		font-family: var(--ii-font-sans);
+		text-align: left;
+	}
+	.ct-manager-link:hover { color: #155dfc; text-decoration: underline; }
+
+	.ct-fund-count {
+		font-size: 11px;
+		color: #6b7280;
+		background: #e5e7eb;
+		border-radius: 8px;
+		padding: 1px 7px;
+		font-weight: 600;
+	}
+
+	/* ── Fund row (L2) ── */
+	.ct-fund-row { cursor: pointer; }
+	.ct-fund-row:hover { background: #f8fafc; }
+	.ct-fund-row--nested { }
+	.ct-fund-row--expanded { background: #f8fafc; }
+
+	.ct-fund-name-cell {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.ct-fund-name-cell--nested {
+		padding-left: 16px;
+	}
+
+	.ct-fund-name {
 		font-weight: 600;
 		font-size: 14px;
 		color: #1d293d;
-		max-width: 280px;
+		max-width: 300px;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
+	.ct-fund-name--unnamed {
+		color: #9ca3af;
+		font-style: italic;
+	}
 
-	.inst-ids {
-		display: inline-block;
+	.ct-ticker {
 		font-size: 11px;
+		font-weight: 700;
 		color: #62748e;
-		font-family: Consolas, var(--ii-font-mono, monospace);
 		background: #f1f5f9;
 		border-radius: 4px;
 		padding: 1px 6px;
-		margin-top: 4px;
+		font-family: Consolas, var(--ii-font-mono, monospace);
+		letter-spacing: 0.3px;
+		flex-shrink: 0;
 	}
 
-	/* Universe badges */
-	.univ-badge {
-		display: inline-block;
-		padding: 3px 8px;
+	.ct-class-count {
+		font-size: 11px;
+		color: #6b7280;
+		background: #f3f4f6;
 		border-radius: 8px;
-		font-size: 10px;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.02em;
-		white-space: nowrap;
-	}
-
-	.univ-badge--registered {
-		background: #fff7ed;
-		border: 1px solid #fed7aa;
-		color: #c2410c;
-	}
-
-	.univ-badge--private {
-		background: #fef2f2;
-		border: 1px solid #fecaca;
-		color: #dc2626;
-	}
-
-	.univ-badge--ucits {
-		background: #ecfdf5;
-		border: 1px solid #d0fae5;
-		color: #007a55;
+		padding: 1px 7px;
+		flex-shrink: 0;
 	}
 
 	.ct-type-label {
@@ -334,47 +534,23 @@
 		white-space: nowrap;
 	}
 
-	/* Disclosure dots */
-	.ct-disclosure-dots {
-		display: flex;
-		gap: 4px;
-		align-items: center;
+	.ct-strategy-label {
+		font-size: 13px;
+		color: #374151;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 150px;
+		display: block;
 	}
 
-	.ct-dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: #e2e8f0;
-		flex-shrink: 0;
+	.ct-cy {
+		font-size: 12px;
+		color: #62748e;
+		font-weight: 500;
 	}
 
-	.ct-dot--on {
-		background: #22c55e;
-	}
-
-	.scr-count-badge {
-		display: inline-flex;
-		align-items: center;
-		padding: 3px 10px;
-		background: #eff6ff;
-		border-radius: 8px;
-		font-size: 11px;
-		font-weight: 700;
-		color: #1447e6;
-		text-transform: uppercase;
-		letter-spacing: 0.55px;
-	}
-
-	/* ── Tree table ── */
-	.ct-tree-table .ct-col-expand { width: 28px; }
-	.ct-tree-table .ct-col-check  { width: 36px; text-align: center; }
-
-	/* Fund row parent */
-	.ct-fund-row { cursor: pointer; }
-	.ct-fund-row--expanded { background: #f8fafc; }
-
-	/* Chevron */
+	/* ── Chevron ── */
 	.ct-chevron {
 		display: inline-block;
 		font-size: 10px;
@@ -383,12 +559,19 @@
 		user-select: none;
 	}
 	.ct-chevron--open { transform: rotate(90deg); }
+	.ct-chevron--fund { font-size: 9px; color: #9ca3af; }
 
-	/* Class rows (children) */
+	/* ── Class rows (L3) ── */
 	.ct-class-row { background: #fbfdff; }
 	.ct-class-row:hover { background: #f0f7ff; }
 	.ct-class-row--selected { background: #eff6ff !important; }
-	.ct-class-indent { padding-left: 28px; }
+
+	.ct-class-name-cell {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding-left: 36px;
+	}
 
 	.ct-class-name {
 		font-size: 13px;
@@ -396,18 +579,6 @@
 		color: #374151;
 	}
 
-	/* Class count badge next to fund name */
-	.ct-class-count {
-		display: inline-block;
-		margin-left: 8px;
-		font-size: 11px;
-		color: #6b7280;
-		background: #f3f4f6;
-		border-radius: 8px;
-		padding: 1px 7px;
-	}
-
-	/* Checkbox */
 	.ct-class-checkbox {
 		cursor: pointer;
 		width: 15px;
@@ -415,7 +586,7 @@
 		accent-color: #1447e6;
 	}
 
-	/* Send to DD button (appears when selection exists) */
+	/* ── Send to DD / Detail ── */
 	.ct-send-dd-btn {
 		margin-left: auto;
 		padding: 6px 14px;
@@ -430,7 +601,6 @@
 	}
 	.ct-send-dd-btn:hover { background: #0f3ccc; }
 
-	/* Detail link inside class row */
 	.ct-detail-link {
 		background: none;
 		border: none;
@@ -440,19 +610,20 @@
 		cursor: pointer;
 		text-decoration: underline;
 		font-family: var(--ii-font-sans);
+		margin-left: auto;
 	}
 	.ct-detail-link:hover { color: #0f3ccc; }
 
-	.ct-full-detail-link {
-		background: none;
-		border: none;
-		padding: 2px 4px;
-		font-size: 14px;
+	.scr-count-badge {
+		display: inline-flex;
+		align-items: center;
+		padding: 3px 10px;
+		background: #eff6ff;
+		border-radius: 8px;
+		font-size: 11px;
+		font-weight: 700;
 		color: #1447e6;
-		cursor: pointer;
-		line-height: 1;
-		opacity: 0.6;
-		transition: opacity 120ms;
+		text-transform: uppercase;
+		letter-spacing: 0.55px;
 	}
-	.ct-full-detail-link:hover { opacity: 1; }
 </style>

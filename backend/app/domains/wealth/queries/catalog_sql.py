@@ -72,6 +72,7 @@ sec_registered_funds = Table(
     Column("inception_date", Date),
     Column("currency", Text),
     Column("domicile", Text),
+    Column("monthly_avg_net_assets", Numeric(20, 2)),
     Column("last_nport_date", Date),
     Column("aum_below_threshold", Boolean),
 )
@@ -306,7 +307,10 @@ def _registered_us_branch(f: CatalogFilters) -> Select | None:
             literal("US").label("region"),
             sec_registered_funds.c.fund_type,
             sec_registered_funds.c.strategy_label,
-            sec_registered_funds.c.total_assets.label("aum"),
+            func.coalesce(
+                sec_registered_funds.c.total_assets,
+                sec_registered_funds.c.monthly_avg_net_assets,
+            ).label("aum"),
             sec_registered_funds.c.currency,
             sec_registered_funds.c.domicile,
             sec_managers.c.firm_name.label("manager_name"),
@@ -729,6 +733,10 @@ _SORT_MAP = {
     "name_desc": "name DESC",
     "aum_desc": "aum DESC NULLS LAST",
     "aum_asc": "aum ASC NULLS LAST",
+    "manager_asc": "manager_name ASC NULLS LAST",
+    "manager_desc": "manager_name DESC NULLS LAST",
+    "strategy_asc": "strategy_label ASC NULLS LAST",
+    "strategy_desc": "strategy_label DESC NULLS LAST",
 }
 
 
