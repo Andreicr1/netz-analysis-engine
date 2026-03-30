@@ -9,12 +9,23 @@ Revises: 0060_portfolio_views
 Create Date: 2026-03-27
 """
 
+import os
+
+import psycopg
 from alembic import op
 
 revision = "0061_macro_regime_history"
 down_revision = "0060_portfolio_views"
 branch_labels = None
 depends_on = None
+
+
+def _autocommit_conninfo() -> str:
+    """Resolve a psycopg-compatible connection string for autocommit DDL."""
+    sync_url = os.getenv("DATABASE_URL_SYNC", "")
+    if sync_url:
+        return sync_url.replace("+psycopg", "")
+    return op.get_bind().connection.dbapi_connection.info.dsn
 
 
 def upgrade() -> None:
@@ -30,31 +41,33 @@ def upgrade() -> None:
         )
     """)
 
-    # create_hypertable requires autocommit — same pattern as migrations 0025, 0038
-    conn = op.get_bind().connection.dbapi_connection
-    conn.autocommit = True
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT create_hypertable(
-            'macro_regime_history', 'regime_date',
-            chunk_time_interval => INTERVAL '1 month',
-            if_not_exists => TRUE
-        )
-    """)
-    cursor.execute("""
-        ALTER TABLE macro_regime_history SET (
-            timescaledb.compress,
-            timescaledb.compress_orderby = 'regime_date DESC'
-        )
-    """)
-    cursor.execute("""
-        SELECT add_compression_policy(
-            'macro_regime_history',
-            INTERVAL '3 months',
-            if_not_exists => TRUE
-        )
-    """)
-    conn.autocommit = False
+    # create_hypertable requires autocommit — use separate connection
+    # (same pattern as migrations 0049)
+    conninfo = _autocommit_conninfo()
+    op.get_bind().connection.dbapi_connection.commit()
+
+    with psycopg.connect(conninfo, autocommit=True) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT create_hypertable(
+                'macro_regime_history', 'regime_date',
+                chunk_time_interval => INTERVAL '1 month',
+                if_not_exists => TRUE
+            )
+        """)
+        cursor.execute("""
+            ALTER TABLE macro_regime_history SET (
+                timescaledb.compress,
+                timescaledb.compress_orderby = 'regime_date DESC'
+            )
+        """)
+        cursor.execute("""
+            SELECT add_compression_policy(
+                'macro_regime_history',
+                INTERVAL '3 months',
+                if_not_exists => TRUE
+            )
+        """)
 
     op.execute("""
         CREATE INDEX IF NOT EXISTS ix_macro_regime_history_date_regime
