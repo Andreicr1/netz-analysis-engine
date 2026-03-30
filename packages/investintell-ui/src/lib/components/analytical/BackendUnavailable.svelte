@@ -18,14 +18,22 @@
 		className,
 	)}
 >
-	<!-- Logo placeholder -->
+	<!-- Logo -->
 	<div class="mb-8 flex items-center gap-3">
-		<div
-			class="flex h-10 w-10 items-center justify-center rounded-lg bg-white/10 text-lg font-bold text-white"
-		>
-			N
-		</div>
-		<span class="text-2xl font-semibold text-white">Netz</span>
+		<svg width="20" height="24" viewBox="0 0 20 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+			<circle cx="4"  cy="4"  r="1.5" fill="white"/>
+			<circle cx="10" cy="4"  r="1.5" fill="white"/>
+			<circle cx="16" cy="4"  r="1.5" fill="white"/>
+			<circle cx="10" cy="12" r="2"   fill="white"/>
+			<circle cx="4"  cy="20" r="1.5" fill="rgba(255,255,255,0.5)"/>
+			<circle cx="10" cy="20" r="1.5" fill="rgba(255,255,255,0.5)"/>
+			<circle cx="16" cy="20" r="1.5" fill="rgba(255,255,255,0.5)"/>
+			<line x1="4"  y1="4"  x2="10" y2="12" stroke="white" stroke-width="1" stroke-linecap="round"/>
+			<line x1="16" y1="4"  x2="10" y2="12" stroke="white" stroke-width="1" stroke-linecap="round"/>
+			<line x1="4"  y1="20" x2="10" y2="12" stroke="rgba(255,255,255,0.5)" stroke-width="1" stroke-linecap="round"/>
+			<line x1="16" y1="20" x2="10" y2="12" stroke="rgba(255,255,255,0.5)" stroke-width="1" stroke-linecap="round"/>
+		</svg>
+		<span class="text-2xl font-semibold text-white">invest<span class="font-bold">intell</span></span>
 	</div>
 
 	<div class="rounded-lg bg-white/10 p-8 backdrop-blur-sm">
