@@ -544,7 +544,10 @@
 
 			<h3 class="subsection-title">Macro Review</h3>
 			{#if macroReviews.length === 0}
-				<p class="step-subtitle">No approved macro reviews available.</p>
+				<div class="step-empty-hint">
+					No approved macro reviews available.
+					<a href="/macro" class="step-empty-link">Generate one in Macro &rarr;</a>
+				</div>
 			{:else}
 				<div class="macro-reviews">
 					{#each macroReviews as review (review.id)}
@@ -1585,6 +1588,19 @@
 		display: flex;
 		gap: var(--ii-space-inline-sm, 8px);
 	}
+
+	/* ── Macro empty hint ───────────────────────────────────────────────── */
+	.step-empty-hint {
+		font-size: var(--ii-text-small, 0.8125rem);
+		color: var(--ii-text-muted);
+		padding: var(--ii-space-stack-xs, 8px) 0;
+	}
+	.step-empty-link {
+		color: var(--ii-brand-primary);
+		text-decoration: none;
+		font-weight: 600;
+	}
+	.step-empty-link:hover { text-decoration: underline; }
 
 	/* ── Responsive ─────────────────────────────────────────────────────── */
 	@media (max-width: 768px) {

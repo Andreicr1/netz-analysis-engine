@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 import structlog
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 logger = structlog.get_logger()
@@ -50,9 +51,15 @@ def gather_quant_metrics(
             db.query(FundRiskMetrics)
             .filter(
                 FundRiskMetrics.instrument_id == instrument_id,
-                FundRiskMetrics.organization_id == organization_id,
+                or_(
+                    FundRiskMetrics.organization_id == organization_id,
+                    FundRiskMetrics.organization_id.is_(None),
+                ),
             )
-            .order_by(FundRiskMetrics.calc_date.desc())
+            .order_by(
+                FundRiskMetrics.organization_id.nulls_last(),
+                FundRiskMetrics.calc_date.desc(),
+            )
             .first()
         )
 

@@ -996,6 +996,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/screener/catalog/{external_id}/detail",
+    "name": "get_catalog_fund_detail"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/screener/facets",
     "name": "get_screener_facets"
   },
