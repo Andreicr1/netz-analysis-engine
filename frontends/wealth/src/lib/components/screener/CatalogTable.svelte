@@ -4,6 +4,7 @@
   Server-side pagination synced with URL params.
 -->
 <script lang="ts">
+	import { untrack } from "svelte";
 	import "./screener.css";
 	import { formatCompact } from "@investintell/ui";
 	import type { UnifiedFundItem, UnifiedCatalogPage } from "$lib/types/catalog";
@@ -156,13 +157,21 @@
 
 	// Auto-expand standalone groups and single-fund managers
 	$effect(() => {
-		const next = new Set(expandedManagers);
-		for (const mg of managerGroups) {
+		// Read managerGroups reactively (triggers on data change)
+		const groups = managerGroups;
+		// Read current expanded WITHOUT subscribing to avoid infinite loop
+		const current = untrack(() => expandedManagers);
+		const next = new Set(current);
+		let changed = false;
+		for (const mg of groups) {
 			if (mg.is_standalone || mg.funds.length === 1) {
-				next.add(mg.manager_key);
+				if (!next.has(mg.manager_key)) {
+					next.add(mg.manager_key);
+					changed = true;
+				}
 			}
 		}
-		expandedManagers = next;
+		if (changed) expandedManagers = next;
 	});
 
 	function toggleManager(key: string) {
