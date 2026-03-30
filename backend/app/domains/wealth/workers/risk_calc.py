@@ -31,6 +31,7 @@ from app.domains.wealth.models.risk import FundRiskMetrics
 from quant_engine.cvar_service import compute_cvar_from_returns
 from quant_engine.drift_service import DtwDriftResult, DtwDriftStatus, compute_dtw_drift_batch
 from quant_engine.garch_service import fit_garch
+from quant_engine.scoring_service import compute_fund_score
 from quant_engine.talib_momentum_service import (
     compute_flow_momentum,
     compute_momentum_signals_talib,
@@ -44,6 +45,15 @@ TRADING_DAYS_PER_YEAR = 252
 RISK_FREE_RATE_FALLBACK = 0.04  # Fallback ~4% if FRED DFF unavailable
 
 MIN_STRESS_OBS = 10  # Minimum stress observations for conditional CVaR
+
+# Minimum annualized volatility for Sharpe/Sortino to be meaningful.
+# Funds below this threshold have stale or frozen NAV data (Yahoo Finance
+# returns flat prices for closed/merged/liquidated funds). With near-zero
+# vol, Sharpe = excess_return / epsilon diverges to ±infinity.
+# 1% annualized vol threshold — below this indicates stale Yahoo Finance NAV,
+# not a legitimate low-vol fund (lowest confirmed legitimate: SOUCX at 3.4%).
+# Diagnosed 2026-03-30: 15 funds with flat NAV producing Sharpe = -9999.
+MIN_ANNUALIZED_VOL = 0.01
 
 
 async def get_risk_free_rate(db: AsyncSession) -> float:
@@ -87,6 +97,9 @@ def _compute_annualized_return(returns: np.ndarray, years: int) -> float | None:
         return None
     window = returns[-days:]
     total = float(np.prod(1 + window))
+    if total <= 0:
+        # Fund lost 100%+ over the period — annualization undefined
+        return -1.0
     return float(total ** (1 / years) - 1)
 
 
@@ -110,7 +123,12 @@ def _compute_max_drawdown(returns: np.ndarray, days: int) -> float | None:
 
 
 def _compute_sharpe(returns: np.ndarray, days: int, risk_free_rate: float = 0.04) -> float | None:
-    """Compute annualized Sharpe ratio."""
+    """Compute annualized Sharpe ratio.
+
+    Returns None when annualized volatility < MIN_ANNUALIZED_VOL (1%).
+    Stale NAV data (flat prices from Yahoo Finance for closed/merged funds)
+    produces near-zero vol, causing Sharpe to diverge to ±infinity.
+    """
     if len(returns) < days:
         return None
     window = returns[-days:]
@@ -118,11 +136,18 @@ def _compute_sharpe(returns: np.ndarray, days: int, risk_free_rate: float = 0.04
     vol = float(np.std(excess, ddof=1))
     if vol == 0:
         return None
+    annualized_vol = vol * np.sqrt(TRADING_DAYS_PER_YEAR)
+    if annualized_vol < MIN_ANNUALIZED_VOL:
+        return None
     return float(np.mean(excess) / vol * np.sqrt(TRADING_DAYS_PER_YEAR))
 
 
 def _compute_sortino(returns: np.ndarray, days: int, risk_free_rate: float = 0.04) -> float | None:
-    """Compute annualized Sortino ratio."""
+    """Compute annualized Sortino ratio.
+
+    Same MIN_ANNUALIZED_VOL guard as Sharpe — stale NAV produces
+    near-zero downside vol, causing Sortino to diverge.
+    """
     if len(returns) < days:
         return None
     window = returns[-days:]
@@ -132,6 +157,9 @@ def _compute_sortino(returns: np.ndarray, days: int, risk_free_rate: float = 0.0
         return None
     downside_vol = float(np.std(downside, ddof=1))
     if downside_vol == 0:
+        return None
+    annualized_downside_vol = downside_vol * np.sqrt(TRADING_DAYS_PER_YEAR)
+    if annualized_downside_vol < MIN_ANNUALIZED_VOL:
         return None
     return float(np.mean(excess) / downside_vol * np.sqrt(TRADING_DAYS_PER_YEAR))
 
@@ -469,10 +497,16 @@ async def compute_fund_risk_metrics(
     return _compute_metrics_from_returns(fund, raw, as_of_date, risk_free_rate)
 
 
+_NUMERIC_10_6_MAX = 9999.999999  # Numeric(10,6) max absolute value
+
+
 def _round_or_none(value: float | None, decimals: int = 6) -> float | None:
     if value is None:
         return None
-    return round(value, decimals)
+    if not np.isfinite(value):
+        return None
+    clamped = max(-_NUMERIC_10_6_MAX, min(_NUMERIC_10_6_MAX, value))
+    return round(clamped, decimals)
 
 
 async def _fetch_block_returns_batch(
@@ -669,6 +703,25 @@ async def _write_risk_cache(
         logger.warning("Failed to write risk cache to Redis — continuing without cache")
 
 
+class _MetricsAdapter:
+    """Adapter to expose a metrics dict as the RiskMetrics protocol for scoring."""
+
+    def __init__(self, m: dict):
+        self._m = m
+
+    def __getattr__(self, name: str):
+        return self._m.get(name)
+
+
+def _score_metrics(metrics: dict) -> None:
+    """Compute manager_score and score_components from base metrics in-place."""
+    adapter = _MetricsAdapter(metrics)
+    flows = float(metrics.get("blended_momentum_score") or 50.0)
+    score_val, components = compute_fund_score(adapter, flows_momentum_score=flows)
+    metrics["manager_score"] = round(score_val, 2)
+    metrics["score_components"] = components
+
+
 async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> dict[str, int]:
     """Compute risk metrics for all active funds with NAV data."""
     logger.info("Starting risk calculation", as_of_date=str(as_of_date))
@@ -787,6 +840,10 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
                 for _, metrics in computed:
                     metrics["cvar_95_conditional"] = None
 
+            # Pass 1.7: compute manager_score from base metrics + momentum
+            for _, metrics in computed:
+                _score_metrics(metrics)
+
             # Pass 2: compute DTW drift scores per block (reuses DB session, no extra query per fund)
             logger.info("Computing DTW drift scores", n_funds=len(computed))
             dtw_scores = await _compute_block_dtw_scores(db, computed, as_of_date=eval_date, block_id_map=block_id_map)
@@ -816,7 +873,7 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
                     upsert = pg_insert(FundRiskMetrics).values(**metrics)
                     upsert = upsert.on_conflict_do_update(
                         index_elements=["instrument_id", "calc_date"],
-                        set_={k: upsert.excluded[k] for k in metrics if k not in ("instrument_id", "calc_date", "organization_id")},
+                        set_={k: upsert.excluded[k] for k in metrics if k not in ("instrument_id", "calc_date")},
                     )
                     await db.execute(upsert)
                     results[fund.ticker or str(fund.instrument_id)] = 1
@@ -842,6 +899,154 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
     total = sum(results.values())
     logger.info("Risk calculation complete", funds_computed=total)
     return results
+
+
+GLOBAL_RISK_METRICS_LOCK_ID = 900_071
+GLOBAL_RISK_BATCH_SIZE = 200
+
+
+async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, int]:
+    """Compute base risk metrics for ALL active instruments with NAV.
+
+    Global worker — no org_id, no RLS, no DTW drift.
+    Writes to fund_risk_metrics with organization_id = NULL.
+    Any tenant importing a fund immediately sees pre-computed metrics.
+
+    The org-scoped run_risk_calc() can later overwrite specific rows
+    with organization_id + DTW drift for instruments in instruments_org.
+    """
+    logger.info("global_risk_metrics.start", as_of_date=str(as_of_date))
+    results: dict[str, int] = {"computed": 0, "skipped": 0, "error": 0}
+
+    async with async_session() as db:
+        lock_result = await db.execute(
+            text(f"SELECT pg_try_advisory_lock({GLOBAL_RISK_METRICS_LOCK_ID})"),
+        )
+        if not lock_result.scalar():
+            logger.warning("global_risk_metrics.lock_held")
+            return {"status": "skipped", "reason": "lock_held"}
+
+        try:
+            rfr = await get_risk_free_rate(db)
+            eval_date = as_of_date or date.today()
+            start_date = eval_date - timedelta(days=3 * 365 + 30)
+
+            # All active funds with ticker (no org join)
+            stmt = (
+                select(Instrument)
+                .where(
+                    Instrument.is_active == True,  # noqa: E712
+                    Instrument.ticker.is_not(None),
+                    Instrument.instrument_type == "fund",
+                )
+            )
+            result = await db.execute(stmt)
+            all_funds = result.scalars().all()
+            logger.info("global_risk_metrics.funds_found", count=len(all_funds))
+
+            # Process in batches to avoid memory pressure
+            for batch_start in range(0, len(all_funds), GLOBAL_RISK_BATCH_SIZE):
+                batch = all_funds[batch_start:batch_start + GLOBAL_RISK_BATCH_SIZE]
+                batch_ids = [f.instrument_id for f in batch]
+
+                # Batch resolve return types
+                return_type_by_fund = await _batch_resolve_return_types(
+                    db, batch_ids, start_date, eval_date,
+                )
+
+                # Batch fetch returns
+                nav_returns_by_fund = await _batch_fetch_nav_returns(
+                    db, batch_ids, return_type_by_fund, start_date, eval_date,
+                )
+
+                # Pass 1: compute standard metrics
+                computed: list[tuple[Instrument, dict]] = []
+                for fund in batch:
+                    fid_str = str(fund.instrument_id)
+                    returns_raw = nav_returns_by_fund.get(fid_str, [])
+                    metrics = _compute_metrics_from_returns(fund, returns_raw, eval_date, risk_free_rate=rfr)
+                    if metrics is None:
+                        results["skipped"] += 1
+                        continue
+                    computed.append((fund, metrics))
+
+                # Pass 1.5: momentum signals
+                nav_price_map = await _batch_fetch_nav_prices(db, batch_ids, eval_date)
+                for fund, metrics in computed:
+                    fid_str = str(fund.instrument_id)
+                    nav_data = nav_price_map.get(fid_str)
+                    if nav_data is None:
+                        metrics.update({
+                            "rsi_14": None, "bb_position": None,
+                            "nav_momentum_score": None,
+                            "flow_momentum_score": None,
+                            "blended_momentum_score": None,
+                        })
+                        continue
+                    close, aum = nav_data
+                    metrics.update(_compute_momentum_from_nav(close, aum))
+
+                # Pass 1.6: regime-conditional CVaR
+                stress_dates = await _fetch_stress_dates(db, start_date, eval_date)
+                if stress_dates:
+                    dated_returns_by_fund = await _batch_fetch_dated_returns(
+                        db, batch_ids, return_type_by_fund, start_date, eval_date,
+                    )
+                    for fund, metrics in computed:
+                        fid_str = str(fund.instrument_id)
+                        dated_returns = dated_returns_by_fund.get(fid_str, [])
+                        stress_returns = [r for d, r in dated_returns if d in stress_dates]
+                        if len(stress_returns) >= MIN_STRESS_OBS:
+                            cvar_cond, _ = compute_cvar_from_returns(
+                                np.array(stress_returns), confidence=0.95,
+                            )
+                            metrics["cvar_95_conditional"] = round(cvar_cond, 6)
+                        else:
+                            metrics["cvar_95_conditional"] = None
+                else:
+                    for _, metrics in computed:
+                        metrics["cvar_95_conditional"] = None
+
+                # Pass 1.7: compute manager_score from base metrics + momentum
+                for _, metrics in computed:
+                    _score_metrics(metrics)
+
+                # Upsert batch — no DTW drift, no org_id
+                try:
+                    for fund, metrics in computed:
+                        metrics["organization_id"] = None
+                        metrics["dtw_drift_score"] = None
+                        upsert = pg_insert(FundRiskMetrics).values(**metrics)
+                        upsert = upsert.on_conflict_do_update(
+                            index_elements=["instrument_id", "calc_date"],
+                            set_={
+                                k: upsert.excluded[k]
+                                for k in metrics
+                                if k not in ("instrument_id", "calc_date")
+                            },
+                        )
+                        await db.execute(upsert)
+                    await db.commit()
+                    results["computed"] += len(computed)
+                    logger.info(
+                        "global_risk_metrics.batch_committed",
+                        batch_start=batch_start,
+                        batch_computed=len(computed),
+                    )
+                except Exception as exc:
+                    await db.rollback()
+                    results["error"] += len(computed)
+                    logger.error("global_risk_metrics.batch_failed", batch_start=batch_start, error=str(exc)[:200])
+
+            logger.info("global_risk_metrics.done", **results)
+            return results
+        finally:
+            try:
+                await db.execute(
+                    text(f"SELECT pg_advisory_unlock({GLOBAL_RISK_METRICS_LOCK_ID})"),
+                )
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
