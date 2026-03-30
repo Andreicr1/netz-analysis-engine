@@ -19,7 +19,7 @@
 		PortfolioSummary, PortfolioSnapshot,
 		StrategicAllocation, EffectiveAllocation, EditableWeight,
 	} from "$lib/types/portfolio";
-	import type { ModelPortfolio, InstrumentWeight } from "$lib/types/model-portfolio";
+	import type { ModelPortfolio, InstrumentWeight, OverlapResult } from "$lib/types/model-portfolio";
 	import RebalancingTab from "$lib/components/RebalancingTab.svelte";
 	import BlendedBenchmarkEditor from "$lib/components/BlendedBenchmarkEditor.svelte";
 	import LongFormReportPanel from "$lib/components/LongFormReportPanel.svelte";
@@ -58,6 +58,7 @@
 	}
 
 	let factSheets = $derived((data.factSheets ?? []) as FactSheetEntry[]);
+	let overlapData = $derived((data.overlapData ?? null) as OverlapResult | null);
 
 	let fsGenerating = $state(false);
 	let fsLang = $state<"pt" | "en">("pt");
@@ -115,13 +116,14 @@
 
 	// ── Tab state ─────────────────────────────────────────────────────────
 
-	type TabKey = "strategic" | "tactical" | "effective" | "rebalancing" | "benchmark" | "reports" | "history";
+	type TabKey = "strategic" | "tactical" | "effective" | "overlap" | "rebalancing" | "benchmark" | "reports" | "history";
 	let activeTab = $state<TabKey>("strategic");
 
 	const tabs = [
 		{ key: "strategic" as const, label: "Strategic" },
 		{ key: "tactical" as const, label: "Tactical" },
 		{ key: "effective" as const, label: "Effective" },
+		{ key: "overlap" as const, label: "Overlap" },
 		{ key: "rebalancing" as const, label: "Rebalancing" },
 		{ key: "benchmark" as const, label: "Benchmark" },
 		{ key: "reports" as const, label: "Reports" },
@@ -542,6 +544,111 @@
 					{/each}
 				</tbody>
 			</table>
+		{/if}
+	{:else if activeTab === "overlap"}
+		<!-- ── OVERLAP VIEW ──────────────────────────────────────────── -->
+		{#if !overlapData}
+			<div class="pw-empty">No overlap data available. Ensure the portfolio has a fund selection with N-PORT data.</div>
+		{:else if !overlapData.has_sufficient_data}
+			<div class="overlap-empty">
+				<p class="overlap-empty-title">Holdings overlap analysis requires N-PORT data for at least 2 funds.</p>
+				{#if overlapData.data_warning}
+					<p class="overlap-empty-detail">{overlapData.data_warning}</p>
+				{/if}
+			</div>
+		{:else}
+			{#if overlapData.data_warning}
+				<div class="overlap-warning">{overlapData.data_warning}</div>
+			{/if}
+
+			<!-- Breaches -->
+			{#if overlapData.breaches.length > 0}
+				<div class="overlap-section">
+					<h3 class="overlap-section-title overlap-section-title--danger">
+						{overlapData.breaches.length} {overlapData.breaches.length === 1 ? "security exceeds" : "securities exceed"} the {formatPercent(overlapData.limit_pct)} concentration threshold
+					</h3>
+					<table class="alloc-table">
+						<thead>
+							<tr>
+								<th>CUSIP</th>
+								<th>Issuer</th>
+								<th>Exposure</th>
+								<th>Funds Holding</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each overlapData.breaches as b (b.cusip)}
+								<tr class="overlap-breach-row">
+									<td class="atd-block"><code>{b.cusip}</code></td>
+									<td>{b.issuer_name ?? "—"}</td>
+									<td class="atd-weight overlap-breach-pct">{formatPercent(b.total_exposure_pct / 100)}</td>
+									<td class="overlap-funds-cell">{b.funds_holding.join(", ")}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+
+			<!-- Sector Concentration -->
+			{#if overlapData.sector_exposures.length > 0}
+				<div class="overlap-section">
+					<h3 class="overlap-section-title">Sector Concentration</h3>
+					<div class="overlap-sectors">
+						{#each overlapData.sector_exposures as sec (sec.sector)}
+							{@const barWidth = Math.min(sec.total_exposure_pct, 100)}
+							<div class="overlap-sector-row">
+								<span class="overlap-sector-name">{sec.sector}</span>
+								<span class="overlap-sector-pct">{formatPercent(sec.total_exposure_pct / 100)}</span>
+								<div class="overlap-sector-bar-track">
+									<div class="overlap-sector-bar-fill" style:width="{barWidth}%"></div>
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			<!-- Top Cross-Fund Exposures -->
+			{#if overlapData.top_cusip_exposures.length > 0}
+				<div class="overlap-section">
+					<h3 class="overlap-section-title">Top Cross-Fund Exposures</h3>
+					<table class="alloc-table alloc-table--readonly">
+						<thead>
+							<tr>
+								<th>CUSIP</th>
+								<th>Issuer</th>
+								<th>Exposure</th>
+								<th>Funds Holding</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each overlapData.top_cusip_exposures as exp (exp.cusip)}
+								{@const nearBreach = !exp.is_breach && exp.total_exposure_pct >= overlapData.limit_pct * 100 * 0.8}
+								<tr>
+									<td class="atd-block"><code>{exp.cusip}</code></td>
+									<td>{exp.issuer_name ?? "—"}</td>
+									<td class="atd-weight">
+										<span
+											class:overlap-breach-pct={exp.is_breach}
+											class:overlap-near-breach-pct={nearBreach}
+										>{formatPercent(exp.total_exposure_pct / 100)}</span>
+										{#if exp.is_breach}
+											<span class="overlap-breach-badge">BREACH</span>
+										{:else if nearBreach}
+											<span class="overlap-near-badge">NEAR</span>
+										{/if}
+									</td>
+									<td class="overlap-funds-cell">{exp.funds_holding.join(", ")}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+					<p class="overlap-meta">
+						{overlapData.funds_analyzed} funds analyzed &middot; {formatNumber(overlapData.total_holdings, 0)} total holdings
+					</p>
+				</div>
+			{/if}
 		{/if}
 	{:else if activeTab === "rebalancing"}
 		<!-- ── REBALANCING VIEW ───────────────────────────────────────── -->
@@ -1073,6 +1180,146 @@
 		font-size: var(--ii-text-label, 0.75rem);
 		color: var(--ii-text-muted);
 		font-variant-numeric: tabular-nums;
+	}
+
+	/* ── Overlap tab ─────────────────────────────────────────────────────── */
+	.overlap-empty {
+		padding: var(--ii-space-stack-xl, 48px) var(--ii-space-inline-lg, 24px);
+		text-align: center;
+	}
+
+	.overlap-empty-title {
+		margin: 0 0 var(--ii-space-stack-xs, 8px);
+		font-size: var(--ii-text-body, 0.9375rem);
+		color: var(--ii-text-secondary);
+		font-weight: 500;
+	}
+
+	.overlap-empty-detail {
+		margin: 0;
+		font-size: var(--ii-text-small, 0.8125rem);
+		color: var(--ii-text-muted);
+	}
+
+	.overlap-warning {
+		margin-bottom: var(--ii-space-stack-md, 16px);
+		padding: var(--ii-space-stack-xs, 8px) var(--ii-space-inline-md, 16px);
+		border-radius: var(--ii-radius-sm, 8px);
+		background: color-mix(in srgb, var(--ii-warning) 8%, transparent);
+		color: var(--ii-warning);
+		font-size: var(--ii-text-small, 0.8125rem);
+	}
+
+	.overlap-section {
+		margin-bottom: var(--ii-space-stack-lg, 24px);
+	}
+
+	.overlap-section-title {
+		margin: 0 0 var(--ii-space-stack-sm, 12px);
+		font-size: var(--ii-text-body, 0.9375rem);
+		font-weight: 600;
+		color: var(--ii-text-primary);
+	}
+
+	.overlap-section-title--danger {
+		color: var(--ii-danger);
+	}
+
+	.overlap-breach-row td {
+		background: color-mix(in srgb, var(--ii-danger) 4%, transparent);
+	}
+
+	.overlap-breach-pct {
+		color: var(--ii-danger);
+		font-weight: 700;
+	}
+
+	.overlap-near-breach-pct {
+		color: var(--ii-warning);
+		font-weight: 600;
+	}
+
+	.overlap-breach-badge {
+		display: inline-block;
+		margin-left: 4px;
+		padding: 0 4px;
+		font-size: var(--ii-text-label, 0.75rem);
+		font-weight: 700;
+		color: #fff;
+		background: var(--ii-danger);
+		border-radius: 3px;
+		vertical-align: middle;
+	}
+
+	.overlap-near-badge {
+		display: inline-block;
+		margin-left: 4px;
+		padding: 0 4px;
+		font-size: var(--ii-text-label, 0.75rem);
+		font-weight: 600;
+		color: var(--ii-warning);
+		background: color-mix(in srgb, var(--ii-warning) 15%, transparent);
+		border-radius: 3px;
+		vertical-align: middle;
+	}
+
+	.overlap-funds-cell {
+		font-size: var(--ii-text-small, 0.8125rem);
+		color: var(--ii-text-secondary);
+		max-width: 280px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.overlap-sectors {
+		display: flex;
+		flex-direction: column;
+		gap: var(--ii-space-stack-xs, 8px);
+	}
+
+	.overlap-sector-row {
+		display: grid;
+		grid-template-columns: 160px 60px 1fr;
+		align-items: center;
+		gap: var(--ii-space-inline-sm, 8px);
+	}
+
+	.overlap-sector-name {
+		font-size: var(--ii-text-small, 0.8125rem);
+		font-weight: 500;
+		color: var(--ii-text-primary);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.overlap-sector-pct {
+		font-size: var(--ii-text-small, 0.8125rem);
+		font-variant-numeric: tabular-nums;
+		text-align: right;
+		color: var(--ii-text-primary);
+		font-weight: 600;
+	}
+
+	.overlap-sector-bar-track {
+		height: 8px;
+		background: var(--ii-surface-alt);
+		border-radius: 4px;
+		overflow: hidden;
+	}
+
+	.overlap-sector-bar-fill {
+		height: 100%;
+		background: var(--ii-brand-primary);
+		border-radius: 4px;
+		transition: width 200ms ease;
+	}
+
+	.overlap-meta {
+		margin: var(--ii-space-stack-sm, 12px) 0 0;
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
 	}
 
 	/* ── Responsive ──────────────────────────────────────────────────────── */

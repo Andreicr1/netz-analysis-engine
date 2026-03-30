@@ -126,6 +126,35 @@ export function blockLabel(blockId: string): string {
 	return labels[blockId] ?? blockId.replace(/_/g, " ");
 }
 
+/** Holdings overlap analysis result from GET /model-portfolios/{id}/overlap */
+export interface CusipExposure {
+	cusip: string;
+	issuer_name: string | null;
+	total_exposure_pct: number;
+	funds_holding: string[];
+	is_breach: boolean;
+}
+
+export interface SectorExposure {
+	sector: string;
+	total_exposure_pct: number;
+	cusip_count: number;
+}
+
+export interface OverlapResult {
+	portfolio_id: string;
+	computed_at: string;
+	limit_pct: number;
+	total_holdings: number;
+	funds_analyzed: number;
+	funds_without_data: number;
+	top_cusip_exposures: CusipExposure[];
+	sector_exposures: SectorExposure[];
+	breaches: CusipExposure[];
+	has_sufficient_data: boolean;
+	data_warning: string | null;
+}
+
 export function profileColor(profile: string): string {
 	switch (profile) {
 		case "conservative": return "var(--ii-info)";

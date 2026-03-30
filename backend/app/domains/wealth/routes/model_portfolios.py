@@ -17,7 +17,7 @@ from typing import Any
 
 import numpy as np
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,8 +27,11 @@ from app.domains.wealth.models.allocation import StrategicAllocation
 from app.domains.wealth.models.model_portfolio import ModelPortfolio
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.schemas.model_portfolio import (
+    CusipExposureRead,
     ModelPortfolioCreate,
     ModelPortfolioRead,
+    OverlapResultRead,
+    SectorExposureRead,
     StressTestRequest,
     StressTestResponse,
 )
@@ -397,6 +400,115 @@ async def run_parametric_stress_test(
         block_impacts=stress_result.block_impacts,
         worst_block=stress_result.worst_block,
         best_block=stress_result.best_block,
+    )
+
+
+@router.get(
+    "/{portfolio_id}/overlap",
+    response_model=OverlapResultRead,
+    summary="Holdings overlap analysis",
+    description="Computes cross-fund CUSIP and sector concentration from N-PORT data.",
+)
+async def get_portfolio_overlap(
+    portfolio_id: uuid.UUID,
+    limit_pct: float = Query(default=0.05, ge=0.01, le=0.50),
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> OverlapResultRead:
+    """Overlap scanner: explodes portfolio into N-PORT holdings and detects concentration."""
+    from datetime import datetime
+
+    from app.domains.wealth.services.holdings_exploder import fetch_portfolio_holdings_exploded
+    from vertical_engines.wealth.monitoring.overlap_scanner import compute_overlap
+
+    # 1. Load portfolio (RLS validates org)
+    result = await db.execute(
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
+    )
+    portfolio = result.scalar_one_or_none()
+    if portfolio is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model portfolio {portfolio_id} not found",
+        )
+
+    # 2. Count funds in schema
+    fund_ids_in_schema: set[str] = set()
+    if portfolio.fund_selection_schema:
+        for f in portfolio.fund_selection_schema.get("funds", []):
+            iid = f.get("instrument_id")
+            if iid:
+                fund_ids_in_schema.add(iid)
+
+    # 3. Explode holdings (I/O — sec_nport_holdings is global)
+    holdings = await fetch_portfolio_holdings_exploded(db, portfolio_id)
+
+    fund_ids_with_holdings = {str(h.fund_instrument_id) for h in holdings}
+    funds_without_data = len(fund_ids_in_schema) - len(fund_ids_with_holdings)
+    has_sufficient_data = len(fund_ids_with_holdings) >= 2
+
+    # 4. Empty case — valid response, not an error
+    if not holdings:
+        return OverlapResultRead(
+            portfolio_id=str(portfolio_id),
+            computed_at=datetime.utcnow(),
+            limit_pct=limit_pct,
+            total_holdings=0,
+            funds_analyzed=0,
+            funds_without_data=len(fund_ids_in_schema),
+            top_cusip_exposures=[],
+            sector_exposures=[],
+            breaches=[],
+            has_sufficient_data=False,
+            data_warning="No N-PORT holdings data available for funds in this portfolio",
+        )
+
+    # 5. Run scanner (zero I/O, pure math)
+    overlap = compute_overlap(holdings, limit_pct=limit_pct)
+
+    # 6. Resolve fund names for display
+    fund_names = await _resolve_fund_names_for_overlap(
+        db, list(fund_ids_with_holdings),
+    )
+
+    data_warning = None
+    if funds_without_data > 0:
+        data_warning = (
+            f"{funds_without_data} of {len(fund_ids_in_schema)} "
+            f"funds have no N-PORT holdings data"
+        )
+
+    # 7. Map to response schema
+    def _map_cusip(e: Any) -> CusipExposureRead:
+        return CusipExposureRead(
+            cusip=e.cusip,
+            issuer_name=e.issuer_name,
+            total_exposure_pct=round(e.total_weighted_pct * 100, 2),
+            funds_holding=[
+                fund_names.get(fid, fid) for fid in e.contributing_funds
+            ],
+            is_breach=e.breach,
+        )
+
+    return OverlapResultRead(
+        portfolio_id=str(portfolio_id),
+        computed_at=datetime.utcnow(),
+        limit_pct=limit_pct,
+        total_holdings=overlap.total_holdings,
+        funds_analyzed=len(fund_ids_with_holdings),
+        funds_without_data=funds_without_data,
+        top_cusip_exposures=[_map_cusip(e) for e in overlap.cusip_exposures[:20]],
+        sector_exposures=[
+            SectorExposureRead(
+                sector=s.sector,
+                total_exposure_pct=round(s.total_weighted_pct * 100, 2),
+                cusip_count=s.n_cusips,
+            )
+            for s in overlap.sector_exposures
+        ],
+        breaches=[_map_cusip(e) for e in overlap.breaches],
+        has_sufficient_data=has_sufficient_data,
+        data_warning=data_warning,
     )
 
 
@@ -985,6 +1097,25 @@ async def _create_day0_snapshot(
         cvar_limit=cvar_limit_val,
         trigger_status=trigger,
     )
+
+
+async def _resolve_fund_names_for_overlap(
+    db: AsyncSession,
+    fund_instrument_ids: list[str],
+) -> dict[str, str]:
+    """Resolve instrument_id → fund name for overlap display."""
+    if not fund_instrument_ids:
+        return {}
+    from app.domains.wealth.models.instrument import Instrument
+
+    stmt = select(
+        Instrument.instrument_id,
+        Instrument.name,
+    ).where(
+        Instrument.instrument_id.in_([uuid.UUID(fid) for fid in fund_instrument_ids]),
+    )
+    result = await db.execute(stmt)
+    return {str(row.instrument_id): row.name for row in result.all()}
 
 
 def _run_backtest(

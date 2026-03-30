@@ -2,7 +2,7 @@
 import type { PageServerLoad } from "./$types";
 import { createServerApiClient } from "$lib/api/client";
 import type { PortfolioSummary, PortfolioSnapshot, StrategicAllocation, EffectiveAllocation } from "$lib/types/portfolio";
-import type { ModelPortfolio } from "$lib/types/model-portfolio";
+import type { ModelPortfolio, OverlapResult } from "$lib/types/model-portfolio";
 
 interface BlockInfo {
 	block_id: string;
@@ -41,6 +41,18 @@ export const load: PageServerLoad = async ({ parent, params }) => {
 	// Find the active model portfolio for this profile
 	const modelPortfolio = modelPortfolios.find((mp) => mp.profile === profile) ?? null;
 
+	// Load overlap data if model portfolio exists (fail silently)
+	let overlapData: OverlapResult | null = null;
+	if (modelPortfolio) {
+		try {
+			overlapData = await api.get<OverlapResult>(
+				`/model-portfolios/${modelPortfolio.id}/overlap`,
+			);
+		} catch {
+			// N-PORT data may not be available — silent fallback
+		}
+	}
+
 	// Load fact sheets if model portfolio exists
 	let factSheets: FactSheetEntry[] = [];
 	if (modelPortfolio) {
@@ -54,5 +66,5 @@ export const load: PageServerLoad = async ({ parent, params }) => {
 		}
 	}
 
-	return { profile, portfolio, snapshot, strategic, effective, blockLabels, modelPortfolio, factSheets };
+	return { profile, portfolio, snapshot, strategic, effective, blockLabels, modelPortfolio, factSheets, overlapData };
 };

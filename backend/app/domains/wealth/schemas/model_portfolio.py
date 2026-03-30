@@ -60,3 +60,34 @@ class StressTestResponse(BaseModel):
     block_impacts: dict[str, float]
     worst_block: str | None = None
     best_block: str | None = None
+
+
+# ── Holdings Overlap ──────────────────────────────────────────────────────
+
+
+class CusipExposureRead(BaseModel):
+    cusip: str
+    issuer_name: str | None = None
+    total_exposure_pct: float
+    funds_holding: list[str]
+    is_breach: bool
+
+
+class SectorExposureRead(BaseModel):
+    sector: str
+    total_exposure_pct: float
+    cusip_count: int
+
+
+class OverlapResultRead(BaseModel):
+    portfolio_id: str
+    computed_at: datetime
+    limit_pct: float
+    total_holdings: int
+    funds_analyzed: int
+    funds_without_data: int
+    top_cusip_exposures: list[CusipExposureRead]
+    sector_exposures: list[SectorExposureRead]
+    breaches: list[CusipExposureRead]
+    has_sufficient_data: bool
+    data_warning: str | None = None
