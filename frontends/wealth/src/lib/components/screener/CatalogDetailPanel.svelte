@@ -111,7 +111,7 @@
 				{#if fund.ticker}<span>Ticker: {fund.ticker}</span>{/if}
 				{#if fund.isin}<span>ISIN: {fund.isin}</span>{/if}
 				{#if fund.manager_name}<span>Manager: {fund.manager_name}</span>{/if}
-				{#if fund.aum != null}<span>AUM: {formatAUM(fund.aum)}</span>{/if}
+				{#if fund.aum != null}<span>AUM: {formatAUM(fund.aum, fund.currency ?? "USD")}</span>{/if}
 				<span>Region: {fund.region}</span>
 				<span>Type: {fund.fund_type.replace(/_/g, " ")}</span>
 				{#if fund.domicile}<span>Domicile: {fund.domicile}</span>{/if}
@@ -121,6 +121,18 @@
 				{#if fund.investor_count != null}<span>Investors: {fund.investor_count.toLocaleString()}</span>{/if}
 			</div>
 		</div>
+
+		<!-- Cost & Performance -->
+		{#if fund.expense_ratio_pct != null || fund.avg_annual_return_1y != null || fund.avg_annual_return_10y != null}
+			<div class="dt-section">
+				<h4 class="dt-section-title">Cost & Performance</h4>
+				<div class="dt-fund-meta">
+					{#if fund.expense_ratio_pct != null}<span>Expense Ratio: {Number(fund.expense_ratio_pct).toFixed(2)}%</span>{/if}
+					{#if fund.avg_annual_return_1y != null}<span>1Y Return: {formatPercent(Number(fund.avg_annual_return_1y) / 100)}</span>{/if}
+					{#if fund.avg_annual_return_10y != null}<span>10Y Return: {formatPercent(Number(fund.avg_annual_return_10y) / 100)}</span>{/if}
+				</div>
+			</div>
+		{/if}
 
 		<!-- Disclosure Matrix -->
 		<div class="dt-section">

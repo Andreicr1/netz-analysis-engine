@@ -39,6 +39,11 @@ export interface UnifiedFundItem {
 	investor_count: number | null;
 	vintage_year: number | null;
 
+	// Fee & performance (from sec_fund_prospectus_stats — registered_us + etf only)
+	expense_ratio_pct: number | null;
+	avg_annual_return_1y: number | null;
+	avg_annual_return_10y: number | null;
+
 	// Share class fields (populated for registered_us funds with classes)
 	series_id: string | null;
 	series_name: string | null;

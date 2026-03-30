@@ -207,6 +207,11 @@
 	/>
 
 	<div class="scr-main">
+		{#if catalog.total === 0 && !catalogSearchQ && selectedCategories.length <= 1}
+			<div class="scr-error-banner">
+				Unable to load fund catalog. The backend may be unavailable.
+			</div>
+		{/if}
 		<div class="scr-results">
 			<CatalogTable
 				{catalog}
@@ -270,6 +275,17 @@
 	.scr-main {
 		flex: 1;
 		min-width: 0;
+	}
+
+	.scr-error-banner {
+		padding: 12px 16px;
+		margin-bottom: 12px;
+		background: color-mix(in srgb, var(--ii-warning) 10%, transparent);
+		border: 1px solid var(--ii-warning);
+		border-radius: var(--ii-radius-md);
+		color: var(--ii-text-primary);
+		font-size: 13px;
+		font-weight: 500;
 	}
 
 	.scr-results {

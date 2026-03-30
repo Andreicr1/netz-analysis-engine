@@ -177,6 +177,7 @@ sec_fund_prospectus_stats = Table(
     "sec_fund_prospectus_stats",
     _meta,
     Column("series_id", Text, primary_key=True),
+    Column("class_id", Text, primary_key=True),
     Column("expense_ratio_pct", Numeric),
     Column("avg_annual_return_1y", Numeric),
     Column("avg_annual_return_10y", Numeric),
@@ -390,6 +391,10 @@ def _registered_us_branch(f: CatalogFilters) -> Select | None:
                 default="US",
             ),
             literal_column("NULL").label("vintage_year"),
+            # Fee & performance (from prospectus stats)
+            sec_fund_prospectus_stats.c.expense_ratio_pct,
+            sec_fund_prospectus_stats.c.avg_annual_return_1y,
+            sec_fund_prospectus_stats.c.avg_annual_return_10y,
         )
         .select_from(sec_registered_funds)
         .outerjoin(
@@ -400,19 +405,21 @@ def _registered_us_branch(f: CatalogFilters) -> Select | None:
             sec_managers,
             sec_registered_funds.c.crd_number == sec_managers.c.crd_number,
         )
+        .outerjoin(
+            sec_fund_prospectus_stats,
+            and_(
+                sec_fund_classes.c.series_id == sec_fund_prospectus_stats.c.series_id,
+                sec_fund_classes.c.class_id == sec_fund_prospectus_stats.c.class_id,
+            ),
+        )
     )
 
-    # Prospectus-based filters: join sec_fund_prospectus_stats when needed
+    # Prospectus-based filters (applied on the already-joined table)
     _has_prospectus_filters = (
         f.max_expense_ratio is not None
         or f.min_return_1y is not None
         or f.min_return_10y is not None
     )
-    if _has_prospectus_filters:
-        stmt = stmt.join(
-            sec_fund_prospectus_stats,
-            sec_fund_classes.c.series_id == sec_fund_prospectus_stats.c.series_id,
-        )
 
     # Exclude series already captured in sec_etfs or sec_bdcs (prevents
     # ETF/BDC funds from showing as "Mutual Fund" via registered_us branch).
@@ -545,8 +552,16 @@ def _etf_branch(f: CatalogFilters) -> Select | None:
                 default="US",
             ),
             literal_column("NULL").label("vintage_year"),
+            # Fee & performance (ETFs have prospectus stats via series_id)
+            sec_fund_prospectus_stats.c.expense_ratio_pct,
+            sec_fund_prospectus_stats.c.avg_annual_return_1y,
+            sec_fund_prospectus_stats.c.avg_annual_return_10y,
         )
         .select_from(sec_etfs)
+        .outerjoin(
+            sec_fund_prospectus_stats,
+            sec_etfs.c.series_id == sec_fund_prospectus_stats.c.series_id,
+        )
     )
 
     conditions: list[object] = []
@@ -614,8 +629,16 @@ def _bdc_branch(f: CatalogFilters) -> Select | None:
                 default="US",
             ),
             literal_column("NULL").label("vintage_year"),
+            # Fee & performance (BDCs have prospectus stats via series_id)
+            sec_fund_prospectus_stats.c.expense_ratio_pct,
+            sec_fund_prospectus_stats.c.avg_annual_return_1y,
+            sec_fund_prospectus_stats.c.avg_annual_return_10y,
         )
         .select_from(sec_bdcs)
+        .outerjoin(
+            sec_fund_prospectus_stats,
+            sec_bdcs.c.series_id == sec_fund_prospectus_stats.c.series_id,
+        )
     )
 
     conditions: list[object] = []
@@ -704,6 +727,10 @@ def _private_us_branch(f: CatalogFilters) -> Select | None:
                 default="Global",
             ),
             sec_manager_funds.c.vintage_year,
+            # No prospectus data for private funds
+            literal_column("NULL").label("expense_ratio_pct"),
+            literal_column("NULL").label("avg_annual_return_1y"),
+            literal_column("NULL").label("avg_annual_return_10y"),
         )
         .select_from(sec_manager_funds)
         .join(
@@ -793,6 +820,10 @@ def _ucits_eu_branch(f: CatalogFilters) -> Select | None:
                 default="Europe",
             ),
             literal_column("NULL").label("vintage_year"),
+            # No prospectus data for UCITS funds
+            literal_column("NULL").label("expense_ratio_pct"),
+            literal_column("NULL").label("avg_annual_return_1y"),
+            literal_column("NULL").label("avg_annual_return_10y"),
         )
         .select_from(esma_funds)
         .join(esma_managers, esma_funds.c.esma_manager_id == esma_managers.c.esma_id)

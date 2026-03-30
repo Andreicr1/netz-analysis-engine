@@ -64,6 +64,11 @@ class UnifiedFundItem(BaseModel):
     investor_count: int | None = None
     vintage_year: int | None = None
 
+    # Fee & performance (from sec_fund_prospectus_stats — registered_us + etf only)
+    expense_ratio_pct: float | None = None
+    avg_annual_return_1y: float | None = None
+    avg_annual_return_10y: float | None = None
+
     # Screening overlay (if imported to tenant universe)
     instrument_id: str | None = None
     screening_status: Literal["PASS", "FAIL", "WATCHLIST"] | None = None

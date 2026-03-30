@@ -6,7 +6,7 @@
 <script lang="ts">
 	import { untrack } from "svelte";
 	import "./screener.css";
-	import { formatCompact } from "@investintell/ui";
+	import { formatCompact, formatPercent } from "@investintell/ui";
 	import type { UnifiedFundItem, UnifiedCatalogPage } from "$lib/types/catalog";
 	import { EMPTY_CATALOG_PAGE, FUND_TYPE_LABELS } from "$lib/types/catalog";
 
@@ -281,6 +281,8 @@
 							AUM{sortIndicator("aum")}
 						</button>
 					</th>
+					<th class="ct-col-er">ER%</th>
+					<th class="ct-col-ret">1Y Ret</th>
 					<th class="ct-col-cy">CY</th>
 				</tr>
 			</thead>
@@ -315,6 +317,8 @@
 							</td>
 							<td></td>
 							<td class="std-aum">{formatAumNeutral(mg.total_aum)}</td>
+							<td></td>
+							<td></td>
 							<td></td>
 						</tr>
 					{/if}
@@ -360,6 +364,8 @@
 									<span class="ct-strategy-label">{group.representative.strategy_label ?? "\u2014"}</span>
 								</td>
 								<td class="std-aum">{formatAumNeutral(group.representative.aum)}</td>
+								<td class="ct-col-er">{group.representative.expense_ratio_pct != null ? `${Number(group.representative.expense_ratio_pct).toFixed(2)}%` : "\u2014"}</td>
+								<td class="ct-col-ret">{group.representative.avg_annual_return_1y != null ? formatPercent(Number(group.representative.avg_annual_return_1y) / 100) : "\u2014"}</td>
 								<td class="ct-cy">{group.representative.currency ?? "\u2014"}</td>
 							</tr>
 
@@ -396,7 +402,8 @@
 											</div>
 										</td>
 										<td></td>
-										<td></td>
+										<td class="ct-col-er">{cls.expense_ratio_pct != null ? `${Number(cls.expense_ratio_pct).toFixed(2)}%` : ""}</td>
+										<td class="ct-col-ret">{cls.avg_annual_return_1y != null ? formatPercent(Number(cls.avg_annual_return_1y) / 100) : ""}</td>
 										<td></td>
 									</tr>
 								{/each}
@@ -426,6 +433,8 @@
 											<span class="ct-strategy-label">{vintage.strategy_label ?? "\u2014"}</span>
 										</td>
 										<td class="std-aum">{formatAumNeutral(vintage.aum)}</td>
+										<td></td>
+										<td></td>
 										<td></td>
 									</tr>
 								{/each}
@@ -485,6 +494,8 @@
 	.ct-col-strategy { width: 150px; }
 	.ct-col-aum    { width: 90px; text-align: right; }
 	.ct-col-cy     { width: 50px; }
+	.ct-col-er     { width: 60px; text-align: right; font-variant-numeric: tabular-nums; font-size: var(--ii-text-small, 0.8125rem); color: var(--ii-text-secondary); }
+	.ct-col-ret    { width: 70px; text-align: right; font-variant-numeric: tabular-nums; font-size: var(--ii-text-small, 0.8125rem); color: var(--ii-text-secondary); }
 
 	/* ── Manager row (L1) ── */
 	.ct-manager-row {
