@@ -1,6 +1,6 @@
 <!--
-  Portfolio Workbench — tactical allocation management.
-  Tabs: Strategic / Tactical / Effective / Rebalancing / Benchmark.
+  Portfolio Workbench — tactical allocation management + reports.
+  Tabs: Strategic / Tactical / Effective / Rebalancing / Benchmark / Reports / History.
   Allocation Editor: $state weights + $derived totalWeight (must == 100% to save).
   ConsequenceDialog on every rebalance submission.
 -->
@@ -9,7 +9,7 @@
 	import { invalidateAll } from "$app/navigation";
 	import {
 		PageHeader, PageTabs, StatusBadge, Button, ConsequenceDialog,
-		formatPercent, formatDateTime, formatNumber,
+		formatPercent, formatDateTime, formatNumber, formatDate,
 	} from "@investintell/ui";
 	import type { ConsequenceDialogPayload } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
@@ -22,6 +22,7 @@
 	import type { ModelPortfolio, InstrumentWeight } from "$lib/types/model-portfolio";
 	import RebalancingTab from "$lib/components/RebalancingTab.svelte";
 	import BlendedBenchmarkEditor from "$lib/components/BlendedBenchmarkEditor.svelte";
+	import LongFormReportPanel from "$lib/components/LongFormReportPanel.svelte";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const riskStore = getContext<RiskStore>("netz:riskStore");
@@ -47,6 +48,56 @@
 		return map;
 	});
 
+	// ── Fact Sheets ──────────────────────────────────────────────────────
+
+	interface FactSheetEntry {
+		path: string;
+		as_of: string;
+		language: string;
+		format: string;
+	}
+
+	let factSheets = $derived((data.factSheets ?? []) as FactSheetEntry[]);
+
+	let fsGenerating = $state(false);
+	let fsLang = $state<"pt" | "en">("pt");
+	let fsDownloading = $state<string | null>(null);
+	let fsError = $state<string | null>(null);
+
+	async function generateFactSheet() {
+		if (!modelPortfolio) return;
+		fsGenerating = true;
+		fsError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post(`/fact-sheets/model-portfolios/${modelPortfolio.id}?language=${fsLang}`, {});
+			await invalidateAll();
+		} catch (e) {
+			fsError = e instanceof Error ? e.message : "Failed to generate fact sheet";
+		} finally {
+			fsGenerating = false;
+		}
+	}
+
+	async function downloadFactSheet(path: string) {
+		fsDownloading = path;
+		fsError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			const blob = await api.getBlob(`/fact-sheets/${encodeURIComponent(path)}/download`);
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = `fact-sheet-${profile}.pdf`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (e) {
+			fsError = e instanceof Error ? e.message : "Download failed";
+		} finally {
+			fsDownloading = null;
+		}
+	}
+
 	let expandedBlocks = $state<Set<string>>(new Set());
 
 	function toggleBlockExpand(blockId: string) {
@@ -64,7 +115,7 @@
 
 	// ── Tab state ─────────────────────────────────────────────────────────
 
-	type TabKey = "strategic" | "tactical" | "effective" | "rebalancing" | "benchmark" | "history";
+	type TabKey = "strategic" | "tactical" | "effective" | "rebalancing" | "benchmark" | "reports" | "history";
 	let activeTab = $state<TabKey>("strategic");
 
 	const tabs = [
@@ -73,6 +124,7 @@
 		{ key: "effective" as const, label: "Effective" },
 		{ key: "rebalancing" as const, label: "Rebalancing" },
 		{ key: "benchmark" as const, label: "Benchmark" },
+		{ key: "reports" as const, label: "Reports" },
 		{ key: "history" as const, label: "History" },
 	];
 
@@ -204,6 +256,40 @@
 		if (Math.abs(d) < 0.0001) return "var(--ii-text-muted)";
 		return d > 0 ? "var(--ii-success)" : "var(--ii-danger)";
 	}
+
+	// ── KPI color coding ─────────────────────────────────────────────────
+	// CVaR utilization: green < 80%, yellow 80-99%, red ≥ 100%
+
+	let utilizationPct = $derived.by((): number | null => {
+		const raw = live?.cvar_utilized_pct ?? portfolio?.cvar_utilized_pct;
+		if (raw === null || raw === undefined) return null;
+		const n = typeof raw === "string" ? parseFloat(raw) : Number(raw);
+		return isNaN(n) ? null : n;
+	});
+
+	function utilizationColor(pct: number | null): string {
+		if (pct === null) return "var(--ii-text-primary)";
+		if (pct >= 100) return "var(--ii-danger)";
+		if (pct >= 80) return "var(--ii-warning)";
+		return "var(--ii-success)";
+	}
+
+	// Breach context for trigger status tooltip
+	let breachDays = $derived(
+		(live?.consecutive_breach_days ?? snapshot?.consecutive_breach_days) || 0
+	);
+
+	let triggerStatus = $derived(live?.trigger_status ?? portfolio?.trigger_status ?? "ok");
+
+	let triggerTooltip = $derived.by((): string => {
+		const s = triggerStatus;
+		if (s === "breach" || s === "critical") {
+			return `CVaR utilization exceeded limit for ${breachDays} consecutive day${breachDays !== 1 ? "s" : ""}`;
+		}
+		if (s === "rebalance_triggered") return "Automatic rebalance triggered due to drift";
+		if (s === "rebalance_executed") return "Rebalance recently executed";
+		return "Portfolio operating within risk limits";
+	});
 </script>
 
 <PageHeader
@@ -216,8 +302,10 @@
 			{#if portfolio?.regime ?? live?.regime}
 				<StatusBadge status={live?.regime ?? portfolio?.regime ?? "—"} />
 			{/if}
-			{#if portfolio?.trigger_status ?? live?.trigger_status}
-				<StatusBadge status={live?.trigger_status ?? portfolio?.trigger_status ?? "ok"} />
+			{#if triggerStatus !== "ok"}
+				<span class="pw-trigger-badge" class:pw-trigger-badge--critical={triggerStatus === "breach" || triggerStatus === "critical"} title={triggerTooltip}>
+					<StatusBadge status={triggerStatus} />
+				</span>
 			{/if}
 		</div>
 	{/snippet}
@@ -227,7 +315,9 @@
 <div class="pw-kpis">
 	<div class="pw-kpi-card">
 		<span class="pw-kpi-label">CVaR 95%</span>
-		<span class="pw-kpi-value">{cvarDisplay(live?.cvar_current ?? portfolio?.cvar_current)}</span>
+		<span class="pw-kpi-value" style:color={utilizationColor(utilizationPct)}>
+			{cvarDisplay(live?.cvar_current ?? portfolio?.cvar_current)}
+		</span>
 	</div>
 	<div class="pw-kpi-card">
 		<span class="pw-kpi-label">CVaR Limit</span>
@@ -235,12 +325,14 @@
 	</div>
 	<div class="pw-kpi-card">
 		<span class="pw-kpi-label">Utilized</span>
-		<span class="pw-kpi-value">{cvarDisplay(live?.cvar_utilized_pct ?? portfolio?.cvar_utilized_pct)}</span>
+		<span class="pw-kpi-value" style:color={utilizationColor(utilizationPct)}>
+			{cvarDisplay(live?.cvar_utilized_pct ?? portfolio?.cvar_utilized_pct)}
+		</span>
 	</div>
 	<div class="pw-kpi-card">
 		<span class="pw-kpi-label">Snapshot</span>
 		<span class="pw-kpi-value pw-kpi-value--date">
-			{snapshot?.snapshot_date ?? "—"}
+			{snapshot?.snapshot_date ? formatDate(snapshot.snapshot_date, "long", "en-US") : "—"}
 		</span>
 	</div>
 </div>
@@ -462,6 +554,68 @@
 	{:else if activeTab === "benchmark"}
 		<!-- ── BENCHMARK VIEW ─────────────────────────────────────────── -->
 		<BlendedBenchmarkEditor {profile} />
+	{:else if activeTab === "reports"}
+		<!-- ── REPORTS VIEW ───────────────────────────────────────────── -->
+		{#if !modelPortfolio}
+			<div class="pw-empty">No model portfolio found for this profile. Create one to generate reports.</div>
+		{:else}
+			<div class="reports-section">
+				<!-- Fact Sheets -->
+				<div class="reports-block">
+					<h3 class="reports-block-title">Fact Sheets</h3>
+
+					{#if fsError}
+						<div class="reports-error">
+							{fsError}
+							<button class="reports-error-dismiss" onclick={() => fsError = null}>dismiss</button>
+						</div>
+					{/if}
+
+					<div class="fs-generate-row">
+						<select class="fs-lang-select" bind:value={fsLang}>
+							<option value="pt">Portugu&ecirc;s</option>
+							<option value="en">English</option>
+						</select>
+						<Button size="sm" onclick={generateFactSheet} disabled={fsGenerating}>
+							{fsGenerating ? "Generating\u2026" : "Generate Fact Sheet"}
+						</Button>
+					</div>
+
+					{#if factSheets.length === 0}
+						<p class="reports-empty">No fact sheets generated yet.</p>
+					{:else}
+						<div class="fs-list">
+							{#each factSheets as fs (fs.path)}
+								<div class="fs-row">
+									<div class="fs-info">
+										<span class="fs-format">{fs.format}</span>
+										<span class="fs-lang-badge">{fs.language.toUpperCase()}</span>
+										<span class="fs-date">{fs.as_of}</span>
+									</div>
+									<Button
+										size="sm"
+										variant="outline"
+										onclick={() => downloadFactSheet(fs.path)}
+										disabled={fsDownloading === fs.path}
+									>
+										{fsDownloading === fs.path ? "\u2026" : "Download"}
+									</Button>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				</div>
+
+				<!-- Long-Form Report -->
+				<div class="reports-block">
+					<h3 class="reports-block-title">Long-Form DD Report</h3>
+					<LongFormReportPanel
+						portfolioId={modelPortfolio.id}
+						portfolioName={modelPortfolio.display_name}
+					/>
+				</div>
+			</div>
+		{/if}
 	{:else if activeTab === "history"}
 		<!-- ── HISTORY VIEW ───────────────────────────────────────────── -->
 		{#if historyLoading}
@@ -606,6 +760,19 @@
 		display: flex;
 		align-items: center;
 		gap: var(--ii-space-inline-sm, 8px);
+	}
+
+	.pw-trigger-badge {
+		cursor: help;
+	}
+
+	.pw-trigger-badge--critical {
+		animation: pw-pulse 2s ease-in-out infinite;
+	}
+
+	@keyframes pw-pulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.7; }
 	}
 
 	.pw-error {
@@ -797,6 +964,112 @@
 	}
 
 	.atd-fund-score {
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
+		font-variant-numeric: tabular-nums;
+	}
+
+	/* ── Reports tab ─────────────────────────────────────────────────────── */
+	.reports-section {
+		display: flex;
+		flex-direction: column;
+		gap: var(--ii-space-stack-lg, 24px);
+	}
+
+	.reports-block-title {
+		margin: 0 0 var(--ii-space-stack-sm, 12px);
+		font-size: var(--ii-text-body, 0.9375rem);
+		font-weight: 600;
+		color: var(--ii-text-primary);
+	}
+
+	.reports-error {
+		margin-bottom: var(--ii-space-stack-sm, 12px);
+		padding: var(--ii-space-stack-xs, 8px) var(--ii-space-inline-md, 16px);
+		border-radius: var(--ii-radius-sm, 8px);
+		background: color-mix(in srgb, var(--ii-danger) 8%, transparent);
+		color: var(--ii-danger);
+		font-size: var(--ii-text-small, 0.8125rem);
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+
+	.reports-error-dismiss {
+		background: none;
+		border: none;
+		color: inherit;
+		cursor: pointer;
+		text-decoration: underline;
+		font-size: var(--ii-text-label, 0.75rem);
+		font-family: var(--ii-font-sans);
+	}
+
+	.reports-empty {
+		color: var(--ii-text-muted);
+		font-size: var(--ii-text-small, 0.8125rem);
+		margin: 0;
+	}
+
+	.fs-generate-row {
+		display: flex;
+		align-items: center;
+		gap: var(--ii-space-inline-sm, 8px);
+		margin-bottom: var(--ii-space-stack-sm, 12px);
+	}
+
+	.fs-lang-select {
+		height: var(--ii-space-control-height-sm, 32px);
+		padding: 0 var(--ii-space-inline-sm, 8px);
+		border: 1px solid var(--ii-border);
+		border-radius: var(--ii-radius-sm, 6px);
+		background: var(--ii-surface-elevated);
+		color: var(--ii-text-primary);
+		font-size: var(--ii-text-small, 0.8125rem);
+		font-family: var(--ii-font-sans);
+	}
+
+	.fs-list {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-sm, 8px);
+		overflow: hidden;
+		background: var(--ii-border-subtle);
+	}
+
+	.fs-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: var(--ii-space-stack-2xs, 6px) var(--ii-space-inline-md, 16px);
+		background: var(--ii-surface-elevated);
+	}
+
+	.fs-info {
+		display: flex;
+		align-items: center;
+		gap: var(--ii-space-inline-sm, 8px);
+		font-size: var(--ii-text-small, 0.8125rem);
+	}
+
+	.fs-format {
+		font-weight: 500;
+		color: var(--ii-text-primary);
+		text-transform: capitalize;
+	}
+
+	.fs-lang-badge {
+		font-size: var(--ii-text-label, 0.75rem);
+		font-weight: 600;
+		color: var(--ii-text-muted);
+		background: var(--ii-surface-alt);
+		padding: 1px 6px;
+		border-radius: 4px;
+	}
+
+	.fs-date {
 		font-size: var(--ii-text-label, 0.75rem);
 		color: var(--ii-text-muted);
 		font-variant-numeric: tabular-nums;

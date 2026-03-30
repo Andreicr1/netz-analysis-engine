@@ -1,4 +1,4 @@
-/** Portfolio profile workbench — snapshot + allocations + model portfolio fund breakdown. */
+/** Portfolio profile workbench — snapshot + allocations + model portfolio fund breakdown + reports. */
 import type { PageServerLoad } from "./$types";
 import { createServerApiClient } from "$lib/api/client";
 import type { PortfolioSummary, PortfolioSnapshot, StrategicAllocation, EffectiveAllocation } from "$lib/types/portfolio";
@@ -7,6 +7,18 @@ import type { ModelPortfolio } from "$lib/types/model-portfolio";
 interface BlockInfo {
 	block_id: string;
 	display_name: string;
+}
+
+interface FactSheetEntry {
+	path: string;
+	as_of: string;
+	language: string;
+	format: string;
+}
+
+interface FactSheetListResponse {
+	portfolio_id: string;
+	fact_sheets: FactSheetEntry[];
 }
 
 export const load: PageServerLoad = async ({ parent, params }) => {
@@ -29,5 +41,18 @@ export const load: PageServerLoad = async ({ parent, params }) => {
 	// Find the active model portfolio for this profile
 	const modelPortfolio = modelPortfolios.find((mp) => mp.profile === profile) ?? null;
 
-	return { profile, portfolio, snapshot, strategic, effective, blockLabels, modelPortfolio };
+	// Load fact sheets if model portfolio exists
+	let factSheets: FactSheetEntry[] = [];
+	if (modelPortfolio) {
+		try {
+			const res = await api.get<FactSheetListResponse>(
+				`/fact-sheets/model-portfolios/${modelPortfolio.id}`,
+			);
+			factSheets = res.fact_sheets ?? [];
+		} catch {
+			// Feature may be disabled or portfolio not found — silent fallback
+		}
+	}
+
+	return { profile, portfolio, snapshot, strategic, effective, blockLabels, modelPortfolio, factSheets };
 };
