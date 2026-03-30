@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { X, Robot, PaperPlaneRight, SpinnerGap, Wrench, FileText } from "phosphor-svelte";
+	import { X, Robot, PaperPlaneRight, SpinnerGap, FileText } from "phosphor-svelte";
 
 	interface Props {
 		open: boolean;
@@ -270,15 +270,11 @@
 				<div class="agent-msg agent-msg--{msg.role}">
 					{#if msg.role === "assistant"}
 						<!-- Tool call indicators -->
-						{#if msg.toolCalls && msg.toolCalls.length > 0}
+						{#if msg.toolCalls && msg.toolCalls.filter(tc => tc.status === "running").length > 0}
 							<div class="agent-tools">
-								{#each msg.toolCalls as tc (tc.tool + tc.status)}
-									<div class="agent-tool" class:complete={tc.status === "complete"} class:running={tc.status === "running"}>
-										{#if tc.status === "running"}
-											<SpinnerGap size={12} weight="bold" class="agent-tool-spin" />
-										{:else}
-											<Wrench size={12} weight="light" />
-										{/if}
+								{#each msg.toolCalls.filter(tc => tc.status === "running") as tc (tc.tool)}
+									<div class="agent-tool running">
+										<SpinnerGap size={12} weight="bold" class="agent-tool-spin" />
 										<span>{tc.detail}</span>
 									</div>
 								{/each}
@@ -297,15 +293,18 @@
 
 						<!-- Citations -->
 						{#if msg.citations && msg.citations.length > 0}
-							<div class="agent-citations">
-								<span class="agent-citations-label">Sources ({msg.citations.length})</span>
-								{#each msg.citations as cite (cite.chunk_id)}
-									<div class="agent-citation" title={cite.excerpt || cite.chunk_id}>
-										<FileText size={11} weight="light" />
-										<span>{cite.chunk_id.slice(0, 12)}…</span>
-									</div>
-								{/each}
-							</div>
+							{@const documentedCites = msg.citations.filter(c => c.excerpt && c.excerpt.trim().length > 0)}
+							{#if documentedCites.length > 0}
+								<div class="agent-citations">
+									<span class="agent-citations-label">Sources</span>
+									{#each documentedCites as cite (cite.chunk_id)}
+										<div class="agent-citation" title={cite.excerpt}>
+											<FileText size={11} weight="light" />
+											<span>{citationLabel(cite.chunk_id)}</span>
+										</div>
+									{/each}
+								</div>
+							{/if}
 						{/if}
 					{:else}
 						<div class="agent-msg-text">{msg.content}</div>
@@ -500,7 +499,6 @@
 		background: color-mix(in srgb, var(--ii-brand-highlight, #3b82f6) 6%, transparent);
 	}
 
-	.agent-tool.complete { color: var(--ii-success, #22c55e); }
 	.agent-tool.running { color: var(--ii-brand-highlight, #3b82f6); }
 
 	.agent-tool :global(.agent-tool-spin) {
