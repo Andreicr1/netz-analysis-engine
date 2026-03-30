@@ -3,7 +3,7 @@
 **Last updated:** 2026-03-29
 **Database:** Timescale Cloud (PostgreSQL 16 + TimescaleDB + pgvector)
 **Migration head:** `0069_globalize_instruments_nav`
-**Total tables:** ~135 | **Total data rows:** ~26.4M across key tables
+**Total tables:** ~135 | **Total data rows:** ~26.5M across key tables
 
 ---
 
@@ -21,7 +21,7 @@ The Netz Analysis Engine database aggregates financial data from 7 authoritative
 - **10,436 European UCITS funds** from 658 ESMA-registered managers across 25 countries, with `strategy_label` (31 categories, 69.7% coverage)
 - **pgvector index** with 12 embedding sources covering all fund universes (SEC managers/funds/13F/private + ETF/BDC/MMF + ESMA enriched)
 - **1.09M institutional holdings** (13F-HR) from 12 major institutional investors, with 25 years of quarterly history
-- **6,164 active instruments in global catalog** (`instruments_universe`) with **10Y NAV history** (**12.1M rows** in `nav_timeseries`, 2016-2026). Org-scoped selection via `instruments_org` (RLS). Sources: SEC ETFs (925), mutual fund series (4,700), registered funds (358), BDCs (48), ESMA UCITS (2,929). Instruments without Yahoo NAV auto-deactivated by `universe_sync`
+- **5,461 active instruments in global catalog** (`instruments_universe`, 8,950 total) with **10Y NAV history** (**12.1M rows** in `nav_timeseries`, 2016-2026) and **risk metrics** (**8,346 rows** in `fund_risk_metrics` for 6,074 instruments: CVaR, Sharpe, volatility, momentum, GARCH). Instruments without Yahoo NAV or AUM auto-deactivated. Org-scoped selection via `instruments_org` (RLS)
 - **2.03M fund portfolio holdings** (N-PORT) from 1,215 CIKs across 24 quarters (2020 Q1 — 2025 Q4), top 50 holdings per fund/quarter, with 7,759 series and ISIN enrichment
 - **17,502 annual prospectus returns** (`sec_fund_prospectus_returns`) for 2,086 series (2012-2025) — bar chart data from RR1 filings
 - **72,157 fee/risk stats** (`sec_fund_prospectus_stats`) for 20,390 series — management fees, expense ratios, turnover, best/worst quarter, average annual returns
@@ -913,9 +913,9 @@ All sources use incremental embedding via LEFT JOIN anti-pattern (only rows with
 | Attribute | Value |
 |---|---|
 | **org_id** | `e28fc30c-9d6d-4b21-8e91-cad8696b44fa` |
-| **Instruments** | 6,164 active in global `instruments_universe`, 17 linked via `instruments_org` for demo tenant |
+| **Instruments** | 5,461 active in global `instruments_universe`, 17 linked via `instruments_org` for demo tenant |
 | **NAV history** | 12.1M daily observations in global `nav_timeseries` (2016-03-28 to 2026-03-27) |
-| **Risk metrics** | 15 instruments computed |
+| **Risk metrics** | 6,074 instruments computed (CVaR, Sharpe, volatility, GARCH, momentum) — calc 2026-03-30 |
 | **Portfolios** | 3 live model portfolios (Conservative Income, Balanced Growth, Aggressive Growth) |
 | **Regime** | All profiles: RISK_ON, trigger status OK |
 
@@ -1019,8 +1019,9 @@ SELECT * FROM nav_timeseries WHERE instrument_id = :id;
 | **Coverage — BDCs** | sec_bdcs | 196 funds (all = Private Credit) |
 | **Coverage — MMFs** | sec_money_market_funds | 373 series; 20,270 daily metric rows |
 | **Coverage — Share Classes** | sec_fund_classes | 36,516 rows + 11 XBRL columns (8,278 enriched), **17,233 with ticker** (5,002 series) via SEC series/class XML + company_tickers_mf.json |
-| **Coverage — Global Catalog** | instruments_universe | **6,164 active instruments** (of 8,950 total). ETFs 925, MF series 4,700, registered 358, BDCs 48, ESMA 2,929. Instruments without Yahoo NAV auto-deactivated |
+| **Coverage — Global Catalog** | instruments_universe | **5,461 active** (of 8,950 total). Instruments without Yahoo NAV or reported AUM auto-deactivated |
 | **Coverage — NAV History** | nav_timeseries (global, no RLS) | **12.1M rows**, 6,164 instruments, 2016-2026, ~1,967 days/instrument avg |
+| **Coverage — Risk Metrics** | fund_risk_metrics | **8,346 rows**, 6,074 instruments. CVaR 95%, Sharpe, Sortino, volatility (1Y), GARCH, momentum (RSI, Bollinger, OBV), max drawdown, 3Y annualized returns. Calc date: 2026-03-30 |
 | **Coverage — N-PORT Holdings** | sec_nport_holdings | **2.03M rows**, 1,215 CIKs, 7,759 series, 24 quarters (2020 Q1 — 2025 Q4), top 50 holdings/fund |
 | **Coverage — Prospectus Returns** | sec_fund_prospectus_returns | **17,502 annual returns**, 2,086 series, 2012-2025 (RR1 bar chart data) |
 | **Coverage — Prospectus Stats** | sec_fund_prospectus_stats | **72,157 rows**, 20,390 series — fees, expense ratios, turnover, risk |
@@ -1037,6 +1038,7 @@ SELECT * FROM nav_timeseries WHERE instrument_id = :id;
 | **Coverage — Embeddings** | pgvector sources | **16 active sources**, **153,664 chunks** across all fund universes (prospectus stats 72k, brochures 13k, series profiles 13k, fund classes 13k, ESMA 10k, holdings 7.7k, private funds 6.3k, manager profiles 5.7k, fund profiles 4.7k, ESMA managers 2.9k, prospectus returns 2k, ETF/BDC/MMF/13F/DD 1.6k) |
 | **Freshness — Markets** | NAV data | **12.1M rows**, 6,164 instruments, 10Y history through 2026-03-27 |
 | **Freshness — Markets** | Benchmark NAV | Updated to 2026-03-25 |
+| **Freshness — Risk** | fund_risk_metrics | **8,346 rows**, 6,074 instruments, calc 2026-03-30 |
 | **Freshness — Macro** | FRED data | Updated to 2026-03-24 |
 | **Freshness — SEC** | 13F holdings | Through Q4 2025 |
 | **Freshness — SEC** | N-PORT filings | Through 2026-03-23 |
