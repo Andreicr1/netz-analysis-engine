@@ -1,7 +1,8 @@
 <!--
   Investment Policy — reactive config editor with sliders.
   Four sections: Risk Limits, Scoring Weights, Universe Filters, Rebalancing Rules.
-  Each section saves independently via PATCH /admin/configs/wealth/{config_type}.
+  Risk Limits and Scoring save via PUT /admin/configs/defaults/liquid_funds/{config_type}.
+  Universe Filters and Rebalancing are session-only (no backend config_type yet).
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
@@ -23,6 +24,12 @@
 	function findConfig(type: string): Record<string, any> | undefined {
 		return data.configs.find((c: any) => c.config_type === type)?.value;
 	}
+	function getCalibration(): Record<string, any> {
+		return findConfig("calibration") ?? {};
+	}
+	function getScoringConfig(): Record<string, any> {
+		return findConfig("scoring") ?? {};
+	}
 
 	// ── Toast state ──
 	let toast = $state<{ message: string; type: "success" | "error" } | null>(null);
@@ -37,7 +44,29 @@
 		balanced:     { cvar_limit: 8.0, var_limit: 6.0, max_drawdown: 25, min_liquidity: 60 },
 		aggressive:   { cvar_limit: 12.0, var_limit: 10.0, max_drawdown: 35, min_liquidity: 40 },
 	};
-	const savedRiskLimits = findConfig("risk_limits");
+	// Read from calibration.cvar_limits — map to UI shape
+	const calibration = getCalibration();
+	const cvarLimits = calibration.cvar_limits ?? {};
+	const savedRiskLimits = Object.keys(cvarLimits).length > 0 ? {
+		conservative: {
+			cvar_limit:    Math.abs((cvarLimits.conservative?.cvar_95_lm ?? -0.05) * 100),
+			var_limit:     Math.abs((cvarLimits.conservative?.cvar_95_lm ?? -0.05) * 100 * 0.8),
+			max_drawdown:  Math.abs((cvarLimits.conservative?.cvar_95_lm ?? -0.05) * 100 * 3),
+			min_liquidity: 80,
+		},
+		balanced: {
+			cvar_limit:    Math.abs((cvarLimits.moderate?.cvar_95_lm ?? -0.08) * 100),
+			var_limit:     Math.abs((cvarLimits.moderate?.cvar_95_lm ?? -0.08) * 100 * 0.75),
+			max_drawdown:  Math.abs((cvarLimits.moderate?.cvar_95_lm ?? -0.08) * 100 * 3),
+			min_liquidity: 60,
+		},
+		aggressive: {
+			cvar_limit:    Math.abs((cvarLimits.growth?.cvar_95_lm ?? -0.15) * 100),
+			var_limit:     Math.abs((cvarLimits.growth?.cvar_95_lm ?? -0.15) * 100 * 0.67),
+			max_drawdown:  Math.abs((cvarLimits.growth?.cvar_95_lm ?? -0.15) * 100 * 2.3),
+			min_liquidity: 40,
+		},
+	} : null;
 	let riskLimits = $state(structuredClone(savedRiskLimits ?? defaultRiskLimits));
 	let riskLimitsSnapshot = JSON.stringify(riskLimits);
 	let riskLimitsDirty = $derived(JSON.stringify(riskLimits) !== riskLimitsSnapshot);
@@ -61,7 +90,17 @@
 		return_consistency: 20, risk_adjusted_return: 25, drawdown_control: 20,
 		information_ratio: 15, flows_momentum: 10, fee_efficiency: 10,
 	};
-	const savedScoring = findConfig("scoring_weights");
+	// Read from scoring.fund.weights
+	const scoringRaw = getScoringConfig();
+	const scoringFundWeights = scoringRaw?.fund?.weights ?? {};
+	const savedScoring = Object.keys(scoringFundWeights).length > 0 ? {
+		return_consistency:   Math.round((scoringFundWeights.pct_positive_months         ?? 0.2) * 100),
+		risk_adjusted_return: Math.round((scoringFundWeights.sharpe_ratio                ?? 0.25) * 100),
+		drawdown_control:     Math.round((scoringFundWeights.max_drawdown                ?? 0.2) * 100),
+		information_ratio:    Math.round((scoringFundWeights.correlation_diversification  ?? 0.15) * 100),
+		flows_momentum:       Math.round((scoringFundWeights.flows_momentum              ?? 0.1) * 100),
+		fee_efficiency:       Math.round((scoringFundWeights.fee_efficiency               ?? 0.1) * 100),
+	} : null;
 	let scoringWeights = $state(structuredClone(savedScoring ?? defaultScoringWeights));
 	let scoringSnapshot = JSON.stringify(scoringWeights);
 	let scoringDirty = $derived(JSON.stringify(scoringWeights) !== scoringSnapshot);
@@ -128,7 +167,26 @@
 	async function saveRiskLimits() {
 		riskLimitsSaving = true;
 		try {
-			await api.patch("/admin/configs/wealth/risk_limits", { value: structuredClone(riskLimits) });
+			// Convert UI shape back to calibration.cvar_limits format
+			const calibrationPatch = structuredClone(getCalibration());
+			calibrationPatch.cvar_limits = {
+				conservative: {
+					cvar_95_lm: -(riskLimits.conservative.cvar_limit / 100),
+					warning_threshold: 0.8,
+					breach_consecutive_days: 5,
+				},
+				moderate: {
+					cvar_95_lm: -(riskLimits.balanced.cvar_limit / 100),
+					warning_threshold: 0.8,
+					breach_consecutive_days: 3,
+				},
+				growth: {
+					cvar_95_lm: -(riskLimits.aggressive.cvar_limit / 100),
+					warning_threshold: 0.8,
+					breach_consecutive_days: 5,
+				},
+			};
+			await api.put("/admin/configs/defaults/liquid_funds/calibration", calibrationPatch);
 			riskLimitsSnapshot = JSON.stringify(riskLimits);
 			showToast("Risk limits saved");
 		} catch {
@@ -141,7 +199,18 @@
 	async function saveScoringWeights() {
 		scoringSaving = true;
 		try {
-			await api.patch("/admin/configs/wealth/scoring_weights", { value: structuredClone(scoringWeights) });
+			// Convert UI percentages back to scoring.fund.weights decimals
+			const scoringPatch = structuredClone(getScoringConfig());
+			if (!scoringPatch.fund) scoringPatch.fund = {};
+			scoringPatch.fund.weights = {
+				pct_positive_months:         scoringWeights.return_consistency   / 100,
+				sharpe_ratio:                scoringWeights.risk_adjusted_return / 100,
+				max_drawdown:                scoringWeights.drawdown_control     / 100,
+				correlation_diversification: scoringWeights.information_ratio    / 100,
+				flows_momentum:              scoringWeights.flows_momentum       / 100,
+				fee_efficiency:              scoringWeights.fee_efficiency        / 100,
+			};
+			await api.put("/admin/configs/defaults/liquid_funds/scoring", scoringPatch);
 			scoringSnapshot = JSON.stringify(scoringWeights);
 			showToast("Scoring weights saved");
 		} catch {
@@ -152,11 +221,12 @@
 	}
 
 	async function saveUniverseFilters() {
+		// universe_filters has no dedicated config_type in backend yet.
+		// Applied locally in session only.
 		filtersSaving = true;
 		try {
-			await api.patch("/admin/configs/wealth/universe_filters", { value: structuredClone(universeFilters) });
 			filtersSnapshot = JSON.stringify(universeFilters);
-			showToast("Universe filters saved");
+			showToast("Universe filters applied (session only)");
 		} catch {
 			showToast("Failed to save universe filters", "error");
 		} finally {
@@ -165,16 +235,12 @@
 	}
 
 	async function saveRebalancingRules() {
+		// rebalancing has no dedicated config_type in backend yet.
+		// drift_bands live in calibration.drift_bands — TODO: persist there.
 		rebalancingSaving = true;
-		try {
-			await api.patch("/admin/configs/wealth/rebalancing", { value: structuredClone(rebalancingRules) });
-			rebalancingSnapshot = JSON.stringify(rebalancingRules);
-			showToast("Rebalancing rules saved");
-		} catch {
-			showToast("Failed to save rebalancing rules", "error");
-		} finally {
-			rebalancingSaving = false;
-		}
+		rebalancingSnapshot = JSON.stringify(rebalancingRules);
+		showToast("Rebalancing rules applied (session only)");
+		rebalancingSaving = false;
 	}
 </script>
 
