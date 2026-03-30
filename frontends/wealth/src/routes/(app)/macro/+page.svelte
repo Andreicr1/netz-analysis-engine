@@ -199,15 +199,15 @@
 	}
 
 	function scoreColor(score: number): string {
-		if (score >= 70) return "#22c55e";
-		if (score >= 40) return "#fe9a00";
-		return "#ff2056";
+		if (score >= 70) return "#3fb950";   /* --ii-success */
+		if (score >= 40) return "#e3b341";   /* --ii-warning */
+		return "#f85149";                     /* --ii-danger */
 	}
 
 	function stressBarColor(value: number): string {
-		if (value > 80) return "#ff2056";
-		if (value >= 40) return "#fe9a00";
-		return "#155dfc";
+		if (value > 80) return "#f85149";    /* --ii-danger */
+		if (value >= 40) return "#e3b341";   /* --ii-warning */
+		return "#c9a84c";                    /* --ii-brand-primary (gold) */
 	}
 
 	// ── Snapshot regime badge ────────────────────────────────────────────
@@ -288,7 +288,7 @@
 	{#if globalInd}
 		<section class="fi-card">
 			<div class="fi-card-header">
-				<svg class="fi-icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="#62748e" stroke-width="1.5"/><path d="M8 4v5M8 11v1" stroke="#62748e" stroke-width="1.5" stroke-linecap="round"/></svg>
+				<svg class="fi-icon" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/><path d="M8 4v5M8 11v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
 				<span class="fi-card-title">GLOBAL STRESS INDEX</span>
 			</div>
 			<div class="ind-row">
@@ -382,7 +382,7 @@
 							<!-- Right: Context & Analysis -->
 							<div class="analysis-card">
 								<div class="analysis-card-header">
-									<svg class="fi-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="#62748e" stroke-width="1.2"/><path d="M5 6h6M5 8.5h4" stroke="#62748e" stroke-width="1.2" stroke-linecap="round"/></svg>
+									<svg class="fi-icon" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.2"/><path d="M5 6h6M5 8.5h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
 									<span class="analysis-card-title">CONTEXT & ANALYSIS</span>
 								</div>
 								<div class="analysis-card-body">
@@ -454,7 +454,7 @@
 	.macro-title {
 		font-size: 28px;
 		font-weight: 800;
-		color: #1d293d;
+		color: var(--ii-text-primary);
 		margin: 0;
 		line-height: 1.2;
 	}
@@ -470,24 +470,24 @@
 		font-size: 11px;
 		font-weight: 700;
 		text-transform: uppercase;
-		color: #62748e;
+		color: var(--ii-text-secondary);
 		letter-spacing: 0.03em;
 	}
 
 	.regime-value {
-		color: #1d293d;
+		color: var(--ii-text-primary);
 		font-weight: 900;
 	}
 
 	.macro-regime-separator {
-		color: #62748e;
+		color: var(--ii-text-secondary);
 		font-size: 11px;
 	}
 
 	.macro-region-tag {
 		font-size: 11px;
 		font-weight: 700;
-		color: #62748e;
+		color: var(--ii-text-secondary);
 		text-transform: uppercase;
 		letter-spacing: 0.03em;
 	}
@@ -495,13 +495,13 @@
 	.macro-asof {
 		font-size: 11px;
 		font-weight: 600;
-		color: #62748e;
+		color: var(--ii-text-secondary);
 		text-transform: uppercase;
 	}
 
 	/* ── Card base ───────────────────────────────────────────────────── */
 	.fi-card {
-		background: #fff;
+		background: var(--ii-surface);
 		border-radius: 16px;
 		box-shadow: 0 2px 8px rgba(0,0,0,0.02);
 		overflow: hidden;
@@ -516,15 +516,15 @@
 		align-items: center;
 		gap: 6px;
 		padding: 10px 20px;
-		background: rgba(248,250,252,0.5);
-		border-bottom: 1px solid #f1f5f9;
+		background: var(--ii-surface-alt);
+		border-bottom: 1px solid var(--ii-border-subtle);
 	}
 
 	.fi-card-title {
 		font-size: 11px;
 		font-weight: 700;
 		text-transform: uppercase;
-		color: #62748e;
+		color: var(--ii-text-secondary);
 		letter-spacing: 1.1px;
 	}
 
@@ -545,7 +545,7 @@
 		flex-direction: column;
 		gap: 2px;
 		padding: 14px 20px;
-		border-right: 1px solid #f1f5f9;
+		border-right: 1px solid var(--ii-border-subtle);
 	}
 
 	.ind-col--last {
@@ -556,14 +556,14 @@
 		font-size: 10px;
 		font-weight: 700;
 		text-transform: uppercase;
-		color: #90a1b9;
+		color: var(--ii-text-muted);
 		letter-spacing: 0.5px;
 	}
 
 	.ind-value {
 		font-size: 24px;
 		font-weight: 900;
-		color: #1d293d;
+		color: var(--ii-text-primary);
 		font-variant-numeric: tabular-nums;
 		line-height: 1.2;
 	}
@@ -571,7 +571,7 @@
 	.ind-date {
 		font-size: 10px;
 		font-weight: 500;
-		color: #90a1b9;
+		color: var(--ii-text-muted);
 	}
 
 	/* ── Stress Index specifics ──────────────────────────────────────── */
@@ -583,7 +583,7 @@
 		font-size: 11px;
 		font-weight: 700;
 		text-transform: uppercase;
-		color: #90a1b9;
+		color: var(--ii-text-muted);
 		letter-spacing: 0.55px;
 	}
 
@@ -596,7 +596,7 @@
 	.stress-value {
 		font-size: 30px;
 		font-weight: 900;
-		color: #1d293d;
+		color: var(--ii-text-primary);
 		font-variant-numeric: tabular-nums;
 		line-height: 1.1;
 	}
@@ -604,12 +604,12 @@
 	.stress-max {
 		font-size: 10px;
 		font-weight: 700;
-		color: #90a1b9;
+		color: var(--ii-text-muted);
 	}
 
 	.stress-bar-track {
 		height: 6px;
-		background: #f1f5f9;
+		background: var(--ii-surface-raised);
 		border-radius: 9999px;
 		overflow: hidden;
 		margin-top: 2px;
@@ -626,14 +626,14 @@
 		font-size: 11px;
 		font-weight: 700;
 		text-transform: uppercase;
-		color: #62748e;
+		color: var(--ii-text-secondary);
 		letter-spacing: 1.1px;
 		padding-top: 8px;
 	}
 
 	/* ── Region cards ────────────────────────────────────────────────── */
 	.region-card {
-		background: #fff;
+		background: var(--ii-surface);
 		border-radius: 16px;
 		box-shadow: 0 2px 8px rgba(0,0,0,0.02);
 		overflow: hidden;
@@ -642,8 +642,8 @@
 	}
 
 	.region-card--expanded {
-		border-color: #bedbff;
-		box-shadow: 0 0 0 1px #eff6ff, 0 4px 6px -1px rgba(0,0,0,0.1);
+		border-color: var(--ii-border-accent);
+		box-shadow: 0 0 0 1px var(--ii-accent-soft), 0 4px 6px -1px rgba(0,0,0,0.1);
 	}
 
 	.region-header {
@@ -660,7 +660,7 @@
 	}
 
 	.region-header:hover {
-		background: rgba(248,250,252,0.5);
+		background: var(--ii-bg-hover);
 	}
 
 	.region-header-left {
@@ -672,14 +672,14 @@
 	.region-name {
 		font-size: 20px;
 		font-weight: 700;
-		color: #1d293d;
+		color: var(--ii-text-primary);
 	}
 
 	.region-regime-badge {
 		font-size: 10px;
 		font-weight: 700;
-		color: #90a1b9;
-		background: #f1f5f9;
+		color: var(--ii-text-muted);
+		background: var(--ii-surface-raised);
 		padding: 2px 8px;
 		border-radius: 4px;
 		letter-spacing: 0.03em;
@@ -688,7 +688,7 @@
 	.region-coverage {
 		font-size: 10px;
 		font-weight: 600;
-		color: #90a1b9;
+		color: var(--ii-text-muted);
 		letter-spacing: 0.03em;
 	}
 
@@ -709,7 +709,7 @@
 		font-size: 10px;
 		font-weight: 700;
 		text-transform: uppercase;
-		color: #90a1b9;
+		color: var(--ii-text-muted);
 		letter-spacing: 0.5px;
 	}
 
@@ -726,9 +726,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: #eff6ff;
+		background: var(--ii-accent-soft);
 		border-radius: 9999px;
-		color: #155dfc;
+		color: var(--ii-brand-primary);
 		transition: transform 0.2s;
 	}
 
@@ -746,22 +746,22 @@
 	.mini-bar-track {
 		flex: 1;
 		height: 4px;
-		background: #f1f5f9;
+		background: var(--ii-surface-raised);
 		border-radius: 9999px;
 		overflow: hidden;
 	}
 
 	.mini-bar-fill {
 		height: 100%;
-		background: #cad5e2;
+		background: var(--ii-border);
 		border-radius: 9999px;
 		opacity: 0.5;
 	}
 
 	/* ── Expanded body ───────────────────────────────────────────────── */
 	.region-body {
-		background: rgba(248,250,252,0.5);
-		border-top: 1px solid #f1f5f9;
+		background: var(--ii-surface-inset);
+		border-top: 1px solid var(--ii-border-subtle);
 		padding: 20px;
 	}
 
@@ -782,7 +782,7 @@
 		font-size: 11px;
 		font-weight: 700;
 		text-transform: uppercase;
-		color: #62748e;
+		color: var(--ii-text-secondary);
 		letter-spacing: 1.1px;
 	}
 
@@ -807,7 +807,7 @@
 	.breakdown-dim-name {
 		font-size: 11px;
 		font-weight: 700;
-		color: #45556c;
+		color: var(--ii-text-secondary);
 		text-transform: capitalize;
 	}
 
@@ -819,22 +819,22 @@
 
 	.breakdown-bar-track {
 		height: 8px;
-		background: rgba(226,232,240,0.6);
+		background: var(--ii-surface-raised);
 		border-radius: 9999px;
 		overflow: hidden;
 	}
 
 	.breakdown-bar-fill {
 		height: 100%;
-		background: #155dfc;
+		background: var(--ii-brand-primary);
 		border-radius: 9999px;
 		transition: width 300ms ease;
 	}
 
 	/* ── Analysis card ───────────────────────────────────────────────── */
 	.analysis-card {
-		background: #fff;
-		border: 1px solid #e2e8f0;
+		background: var(--ii-surface);
+		border: 1px solid var(--ii-border-subtle);
 		border-radius: 14px;
 		box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 		display: flex;
@@ -846,14 +846,14 @@
 		align-items: center;
 		gap: 6px;
 		padding: 12px 16px;
-		border-bottom: 1px solid #f1f5f9;
+		border-bottom: 1px solid var(--ii-border-subtle);
 	}
 
 	.analysis-card-title {
 		font-size: 11px;
 		font-weight: 700;
 		text-transform: uppercase;
-		color: #62748e;
+		color: var(--ii-text-secondary);
 		letter-spacing: 1.1px;
 	}
 
@@ -865,26 +865,26 @@
 	.analysis-text {
 		font-size: 14px;
 		font-weight: 500;
-		color: #45556c;
+		color: var(--ii-text-secondary);
 		line-height: 22.75px;
 		margin: 0;
 	}
 
 	.analysis-text--empty {
-		color: #90a1b9;
+		color: var(--ii-text-muted);
 		font-style: italic;
 	}
 
 	.analysis-card-footer {
 		padding: 12px 16px;
-		border-top: 1px solid #f1f5f9;
+		border-top: 1px solid var(--ii-border-subtle);
 	}
 
 	.analysis-link {
 		font-size: 12px;
 		font-weight: 700;
 		text-transform: uppercase;
-		color: #155dfc;
+		color: var(--ii-brand-primary);
 		text-decoration: none;
 		letter-spacing: 0.03em;
 	}
@@ -935,7 +935,7 @@
 
 		.ind-col {
 			border-right: none;
-			border-bottom: 1px solid #f1f5f9;
+			border-bottom: 1px solid var(--ii-border-subtle);
 		}
 
 		.ind-col--last {

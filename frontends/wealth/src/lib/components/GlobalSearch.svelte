@@ -5,7 +5,7 @@
 <script lang="ts">
 	import { goto } from "$app/navigation";
 	import { getContext } from "svelte";
-	import { Search, X, FileText, Building2, Landmark, Loader2 } from "lucide-svelte";
+	import { MagnifyingGlass, X, FileText, Buildings, Bank, SpinnerGap } from "phosphor-svelte";
 	import { createClientApiClient } from "$lib/api/client";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
@@ -143,14 +143,14 @@
 		debounceTimer = setTimeout(() => doSearch(query), 300);
 	}
 
-	const CATEGORY_ICONS: Record<string, typeof Search> = {
-		funds: Landmark,
-		managers: Building2,
+	const CATEGORY_ICONS: Record<string, typeof MagnifyingGlass> = {
+		funds: Bank,
+		managers: Buildings,
 		documents: FileText,
 	};
 
 	function getCategoryIcon(cat: string) {
-		return CATEGORY_ICONS[cat] || Search;
+		return CATEGORY_ICONS[cat] || MagnifyingGlass;
 	}
 
 	// Compute flat index for a given group item
@@ -171,7 +171,7 @@
 		<div class="gs-dialog" role="dialog" aria-label="Global search">
 			<!-- Search input -->
 			<div class="gs-input-row">
-				<Search size={16} strokeWidth={1.5} class="gs-input-icon" />
+				<MagnifyingGlass size={16} weight="light" class="gs-input-icon" />
 				<input
 					bind:this={inputEl}
 					bind:value={query}
@@ -184,10 +184,10 @@
 					autocomplete="off"
 				/>
 				{#if loading}
-					<Loader2 size={16} strokeWidth={2} class="gs-spinner" />
+					<SpinnerGap size={16} weight="bold" class="gs-spinner" />
 				{/if}
 				<button class="gs-close-btn" onclick={closePalette} type="button" aria-label="Close">
-					<X size={14} strokeWidth={2} />
+					<X size={14} weight="light" />
 				</button>
 			</div>
 
@@ -204,7 +204,7 @@
 					</div>
 				{:else if loading && groups.length === 0}
 					<div class="gs-empty">
-						<Loader2 size={20} strokeWidth={2} class="gs-spinner" />
+						<SpinnerGap size={20} weight="bold" class="gs-spinner" />
 						<span class="gs-empty-text">Searching…</span>
 					</div>
 				{:else if !loading && groups.length === 0 && query.length >= 2}
@@ -216,7 +216,7 @@
 						{@const Icon = getCategoryIcon(group.category)}
 						<div class="gs-group">
 							<div class="gs-group-header">
-								<Icon size={13} strokeWidth={1.5} />
+								<Icon size={13} weight="light" />
 								<span>{group.label}</span>
 								{#if group.total > group.items.length}
 									<span class="gs-group-count">{group.total} total</span>

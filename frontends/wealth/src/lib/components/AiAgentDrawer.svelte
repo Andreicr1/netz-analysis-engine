@@ -5,7 +5,7 @@
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { X, Bot, Send, Loader2, Wrench, FileText } from "lucide-svelte";
+	import { X, Robot, PaperPlaneRight, SpinnerGap, Wrench, FileText } from "phosphor-svelte";
 
 	interface Props {
 		open: boolean;
@@ -205,6 +205,18 @@
 		}
 	}
 
+	function citationLabel(chunkId: string): string {
+		if (chunkId.startsWith("dd_chapter")) return "DD Report";
+		if (chunkId.startsWith("macro_review")) return "Macro Review";
+		if (chunkId.startsWith("adv_brochure") || chunkId.startsWith("brochure")) return "ADV Brochure";
+		if (chunkId.startsWith("fact_sheet")) return "Fact Sheet";
+		if (chunkId.startsWith("prospectus")) return "Prospectus";
+		if (chunkId.startsWith("flash_report")) return "Flash Report";
+		if (chunkId.startsWith("spotlight")) return "Manager Spotlight";
+		if (chunkId.startsWith("outlook")) return "Investment Outlook";
+		return "Document";
+	}
+
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === "Enter" && !e.shiftKey) {
 			e.preventDefault();
@@ -229,15 +241,15 @@
 		<!-- Header -->
 		<header class="agent-header">
 			<div class="agent-header-title">
-				<Bot size={18} strokeWidth={1.5} />
+				<Robot size={18} weight="light" />
 				<span>AI Assistant</span>
 			</div>
 			<div class="agent-header-actions">
 				<button class="agent-icon-btn" type="button" title="New chat" onclick={resetChat}>
-					<FileText size={15} strokeWidth={1.5} />
+					<FileText size={15} weight="light" />
 				</button>
 				<button class="agent-icon-btn" type="button" title="Close" onclick={onclose}>
-					<X size={18} strokeWidth={1.5} />
+					<X size={18} weight="light" />
 				</button>
 			</div>
 		</header>
@@ -246,7 +258,7 @@
 		<div class="agent-messages" bind:this={chatContainer}>
 			{#if messages.length === 0}
 				<div class="agent-empty">
-					<Bot size={32} strokeWidth={1} class="agent-empty-icon" />
+					<Robot size={32} weight="thin" class="agent-empty-icon" />
 					<p class="agent-empty-title">Wealth AI Assistant</p>
 					<p class="agent-empty-desc">
 						Ask about funds, managers, DD reports, portfolios, or macro analysis.
@@ -263,9 +275,9 @@
 								{#each msg.toolCalls as tc (tc.tool + tc.status)}
 									<div class="agent-tool" class:complete={tc.status === "complete"} class:running={tc.status === "running"}>
 										{#if tc.status === "running"}
-											<Loader2 size={12} strokeWidth={2} class="agent-tool-spin" />
+											<SpinnerGap size={12} weight="bold" class="agent-tool-spin" />
 										{:else}
-											<Wrench size={12} strokeWidth={2} />
+											<Wrench size={12} weight="light" />
 										{/if}
 										<span>{tc.detail}</span>
 									</div>
@@ -278,7 +290,7 @@
 							<div class="agent-msg-text">{msg.content}</div>
 						{:else if msg.isStreaming}
 							<div class="agent-msg-text agent-msg-text--loading">
-								<Loader2 size={14} strokeWidth={2} class="agent-tool-spin" />
+								<SpinnerGap size={14} weight="bold" class="agent-tool-spin" />
 								<span>Thinking…</span>
 							</div>
 						{/if}
@@ -289,7 +301,7 @@
 								<span class="agent-citations-label">Sources ({msg.citations.length})</span>
 								{#each msg.citations as cite (cite.chunk_id)}
 									<div class="agent-citation" title={cite.excerpt || cite.chunk_id}>
-										<FileText size={11} strokeWidth={1.5} />
+										<FileText size={11} weight="light" />
 										<span>{cite.chunk_id.slice(0, 12)}…</span>
 									</div>
 								{/each}
@@ -325,7 +337,7 @@
 					disabled={isLoading || !inputText.trim()}
 					title="Send"
 				>
-					<Send size={16} strokeWidth={1.5} />
+					<PaperPlaneRight size={16} weight="light" />
 				</button>
 			</div>
 		</div>

@@ -11,8 +11,8 @@
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
 	import {
-		ShieldCheck, Save, Check, AlertTriangle,
-	} from "lucide-svelte";
+		ShieldCheck, FloppyDisk, Check, Warning,
+	} from "phosphor-svelte";
 
 	let { data }: { data: PageData } = $props();
 
@@ -182,7 +182,7 @@
 	<!-- Left nav -->
 	<aside class="ip-nav">
 		<div class="ip-nav-header">
-			<ShieldCheck size={18} strokeWidth={1.5} />
+			<ShieldCheck size={18} weight="light" />
 			<span>Investment Policy</span>
 		</div>
 		<nav class="ip-nav-links">
@@ -237,7 +237,7 @@
 						disabled={!riskLimitsDirty || riskLimitsSaving}
 						onclick={saveRiskLimits}
 					>
-						<Save size={14} strokeWidth={1.5} class="mr-1.5" />
+						<FloppyDisk size={14} weight="light" class="mr-1.5" />
 						{riskLimitsSaving ? "Saving…" : "Save"}
 					</Button>
 				</div>
@@ -274,9 +274,9 @@
 
 				<div class="ip-scoring-total" class:error={Math.round(scoringTotal) !== 100}>
 					{#if Math.round(scoringTotal) === 100}
-						<Check size={14} strokeWidth={2} />
+						<Check size={14} weight="light" />
 					{:else}
-						<AlertTriangle size={14} strokeWidth={2} />
+						<Warning size={14} weight="light" />
 					{/if}
 					<span>Total: {scoringTotal}%</span>
 				</div>
@@ -292,7 +292,7 @@
 						disabled={!scoringDirty || scoringSaving}
 						onclick={saveScoringWeights}
 					>
-						<Save size={14} strokeWidth={1.5} class="mr-1.5" />
+						<FloppyDisk size={14} weight="light" class="mr-1.5" />
 						{scoringSaving ? "Saving…" : "Save Weights"}
 					</Button>
 				</div>
@@ -366,7 +366,7 @@
 						disabled={!filtersDirty || filtersSaving}
 						onclick={saveUniverseFilters}
 					>
-						<Save size={14} strokeWidth={1.5} class="mr-1.5" />
+						<FloppyDisk size={14} weight="light" class="mr-1.5" />
 						{filtersSaving ? "Saving…" : "Save Filters"}
 					</Button>
 				</div>
@@ -423,7 +423,7 @@
 						disabled={!rebalancingDirty || rebalancingSaving}
 						onclick={saveRebalancingRules}
 					>
-						<Save size={14} strokeWidth={1.5} class="mr-1.5" />
+						<FloppyDisk size={14} weight="light" class="mr-1.5" />
 						{rebalancingSaving ? "Saving…" : "Save Rules"}
 					</Button>
 				</div>
@@ -436,9 +436,9 @@
 {#if toast}
 	<div class="ip-toast" class:error={toast.type === "error"}>
 		{#if toast.type === "success"}
-			<Check size={14} strokeWidth={2} />
+			<Check size={14} weight="light" />
 		{:else}
-			<AlertTriangle size={14} strokeWidth={2} />
+			<Warning size={14} weight="light" />
 		{/if}
 		{toast.message}
 	</div>

@@ -273,11 +273,11 @@
 	}
 
 	.scr-results {
-		background: white;
-		border: 1px solid #e2e8f0;
-		border-radius: 16px;
+		background: var(--ii-surface);
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-lg);
 		overflow: hidden;
-		box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1);
+		box-shadow: none;
 	}
 
 	.scr-actions {
@@ -301,15 +301,15 @@
 	}
 
 	.scr-btn--outline {
-		background: white;
-		border: 1px solid #e2e8f0;
-		color: #45556c;
-		box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1);
+		background: transparent;
+		border: 1px solid var(--ii-border);
+		color: var(--ii-text-secondary);
 	}
 
 	.scr-btn--outline:hover {
-		background: #f8fafc;
-		border-color: #cbd5e1;
+		background: var(--ii-surface-alt);
+		border-color: var(--ii-border-strong);
+		color: var(--ii-text-primary);
 	}
 
 	/* ── Manager detail panel ── */

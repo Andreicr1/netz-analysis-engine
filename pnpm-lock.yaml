@@ -138,9 +138,9 @@ importers:
       dompurify:
         specifier: ^3.3.3
         version: 3.3.3
-      lucide-svelte:
-        specifier: ^0.577.0
-        version: 0.577.0(svelte@5.53.12)
+      phosphor-svelte:
+        specifier: ^3.0.0
+        version: 3.1.0(svelte@5.53.12)(vite@6.4.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.1)(yaml@2.8.2))
     devDependencies:
       '@fontsource-variable/inter':
         specifier: ^5.0.0
@@ -205,18 +205,15 @@ importers:
       '@codemirror/view':
         specifier: ^6.0.0
         version: 6.40.0
-      '@fontsource/geist':
-        specifier: ^5.2.8
-        version: 5.2.8
-      '@fontsource/geist-mono':
-        specifier: ^5.2.7
+      '@fontsource/ibm-plex-mono':
+        specifier: ^5.1.0
         version: 5.2.7
+      '@fontsource/ibm-plex-sans':
+        specifier: ^5.1.1
+        version: 5.2.8
       '@internationalized/date':
         specifier: ^3.12.0
         version: 3.12.0
-      '@lucide/svelte':
-        specifier: ^0.577.0
-        version: 0.577.0(svelte@5.53.12)
       '@tanstack/table-core':
         specifier: ^8.21.3
         version: 8.21.3
@@ -247,15 +244,15 @@ importers:
       layerchart:
         specifier: 2.0.0-next.43
         version: 2.0.0-next.43(svelte@5.53.12)
-      lucide-svelte:
-        specifier: ^0.400.0
-        version: 0.400.0(svelte@5.53.12)
       mode-watcher:
         specifier: ^1.1.0
         version: 1.1.0(svelte@5.53.12)
       paneforge:
         specifier: ^1.0.2
         version: 1.0.2(svelte@5.53.12)
+      phosphor-svelte:
+        specifier: ^3.0.0
+        version: 3.1.0(svelte@5.53.12)(vite@6.4.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.1)(yaml@2.8.2))
       svelte-sonner:
         specifier: ^1.1.0
         version: 1.1.0(svelte@5.53.12)
@@ -1491,11 +1488,6 @@ packages:
 
   '@lezer/yaml@1.0.4':
     resolution: {integrity: sha512-2lrrHqxalACEbxIbsjhqGpSW8kWpUKuY6RHgnSAFZa6qK62wvnPxA8hGOwOoDbwHcOFs5M4o27mjGu+P7TvBmw==}
-
-  '@lucide/svelte@0.577.0':
-    resolution: {integrity: sha512-0P6mkySd2MapIEgq08tADPmcN4DHndC/02PWwaLkOerXlx5Sv9aT4BxyXLIY+eccr0g/nEyCYiJesqS61YdBZQ==}
-    peerDependencies:
-      svelte: ^5
 
   '@marijn/find-cluster-break@1.0.2':
     resolution: {integrity: sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g==}
@@ -3822,16 +3814,6 @@ packages:
   lru-cache@5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
 
-  lucide-svelte@0.400.0:
-    resolution: {integrity: sha512-ED2fgoELg2qrXbQnsPhb1DlwfqwYTRqFvljQcpM2LZlsj5907RkJhKAdjBAc65fn3rMT7e6ecdXtTTMd2Vp8lg==}
-    peerDependencies:
-      svelte: ^3 || ^4 || ^5.0.0-next.42
-
-  lucide-svelte@0.577.0:
-    resolution: {integrity: sha512-0i88o57KsaHWnc80J57fY99CWzlZsSdtH5kKjLUJa7z8dum/9/AbINNLzJ7NiRFUdOgMnfAmJt8jFbW2zeC5qQ==}
-    peerDependencies:
-      svelte: ^3 || ^4 || ^5.0.0-next.42
-
   lz-string@1.5.0:
     resolution: {integrity: sha512-h5bgJWpxJNswbU7qCrV0tIKQCaS3blPDrqKWx+QxzuzL1zGUzij9XCWLrSLsJPu5t+eWA/ycetzYAO5IOMcWAQ==}
     hasBin: true
@@ -4182,6 +4164,15 @@ packages:
   pathval@2.0.1:
     resolution: {integrity: sha512-//nshmD55c46FuFw26xV/xFAaB5HF9Xdap7HJBBnrKdAd6/GxDBaNA1870O79+9ueg61cZLSVc+OaFlfmObYVQ==}
     engines: {node: '>= 14.16'}
+
+  phosphor-svelte@3.1.0:
+    resolution: {integrity: sha512-nldtxx+XCgNREvrb7O5xgDsefytXpSkPTx8Rnu3f2qQCUZLDV1rLxYSd2Jcwckuo9lZB1qKMqGR17P4UDC0PrA==}
+    peerDependencies:
+      svelte: ^5.0.0 || ^5.0.0-next.96
+      vite: '>=5'
+    peerDependenciesMeta:
+      vite:
+        optional: true
 
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
@@ -6236,10 +6227,6 @@ snapshots:
       '@lezer/highlight': 1.2.3
       '@lezer/lr': 1.4.8
     optional: true
-
-  '@lucide/svelte@0.577.0(svelte@5.53.12)':
-    dependencies:
-      svelte: 5.53.12
 
   '@marijn/find-cluster-break@1.0.2': {}
 
@@ -8933,14 +8920,6 @@ snapshots:
     dependencies:
       yallist: 3.1.1
 
-  lucide-svelte@0.400.0(svelte@5.53.12):
-    dependencies:
-      svelte: 5.53.12
-
-  lucide-svelte@0.577.0(svelte@5.53.12):
-    dependencies:
-      svelte: 5.53.12
-
   lz-string@1.5.0: {}
 
   magic-string@0.30.21:
@@ -9473,6 +9452,14 @@ snapshots:
   pathe@2.0.3: {}
 
   pathval@2.0.1: {}
+
+  phosphor-svelte@3.1.0(svelte@5.53.12)(vite@6.4.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.1)(yaml@2.8.2)):
+    dependencies:
+      estree-walker: 3.0.3
+      magic-string: 0.30.21
+      svelte: 5.53.12
+    optionalDependencies:
+      vite: 6.4.1(@types/node@25.5.0)(jiti@2.6.1)(lightningcss@1.31.1)(terser@5.46.1)(yaml@2.8.2)
 
   picocolors@1.1.1: {}
 

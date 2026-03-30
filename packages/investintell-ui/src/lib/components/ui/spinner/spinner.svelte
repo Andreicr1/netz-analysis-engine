@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { cn } from "$lib/utils.js";
-	import Loader2Icon from '@lucide/svelte/icons/loader-2';
+	import { SpinnerGap as Loader2Icon } from 'phosphor-svelte';
 	import type { SVGAttributes } from "svelte/elements";
 
 	let {

@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { Accordion as AccordionPrimitive } from "bits-ui";
 	import { cn, type WithoutChild } from "$lib/utils.js";
-	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
-	import ChevronUpIcon from '@lucide/svelte/icons/chevron-up';
+	import { CaretDown as ChevronDownIcon, CaretUp as ChevronUpIcon } from 'phosphor-svelte';
 
 	let {
 		ref = $bindable(null),

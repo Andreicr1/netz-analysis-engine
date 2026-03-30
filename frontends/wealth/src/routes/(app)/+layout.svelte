@@ -9,11 +9,10 @@
 	import { ThemeToggle } from "@investintell/ui";
 	import { createRiskStore, type RiskStore } from "$lib/stores/risk-store.svelte";
 	import {
-		ShieldCheck, Layers, Database, Briefcase, Search,
-		ClipboardList, BarChart2, Globe, Zap, Newspaper,
-		FileText, Settings, Bot, ChevronDown,
-		Search as SearchIcon,
-	} from "lucide-svelte";
+		ShieldCheck, Stack, Database, Briefcase, MagnifyingGlass,
+		ClipboardText, ChartBar, Globe, Lightning, Newspaper,
+		FileText, GearSix, Robot, CaretDown,
+	} from "phosphor-svelte";
 	import AiAgentDrawer from "$lib/components/AiAgentDrawer.svelte";
 	import GlobalSearch from "$lib/components/GlobalSearch.svelte";
 
@@ -58,14 +57,14 @@
 		{
 			id: "overview", label: "Overview", defaultOpen: true,
 			items: [
-				{ label: "Dashboard", href: "/dashboard", icon: BarChart2 },
+				{ label: "Dashboard", href: "/dashboard", icon: ChartBar },
 			],
 		},
 		{
 			id: "research", label: "Research", defaultOpen: true,
 			items: [
-				{ label: "Screener",        href: "/screener",   icon: Search },
-				{ label: "DD Reports",      href: "/dd-reports", icon: ClipboardList },
+				{ label: "Screener",        href: "/screener",   icon: MagnifyingGlass },
+				{ label: "DD Reports",      href: "/dd-reports", icon: ClipboardText },
 				{ label: "Assets Universe", href: "/universe",   icon: Database },
 			],
 		},
@@ -74,15 +73,15 @@
 			items: [
 				{ label: "Investment Policy", href: "/investment-policy", icon: ShieldCheck },
 				{ label: "Macro",             href: "/macro",             icon: Globe },
-				{ label: "Portfolio Builder", href: "/model-portfolios",  icon: Layers },
+				{ label: "Portfolio Builder", href: "/model-portfolios",  icon: Stack },
 				{ label: "Portfolios",        href: "/portfolios",        icon: Briefcase },
 			],
 		},
 		{
 			id: "intelligence", label: "Intelligence", defaultOpen: true,
 			items: [
-				{ label: "Analytics", href: "/analytics", icon: BarChart2 },
-				{ label: "Risk",      href: "/risk",      icon: Zap },
+				{ label: "Analytics", href: "/analytics", icon: ChartBar },
+				{ label: "Risk",      href: "/risk",      icon: Lightning },
 			],
 		},
 		{
@@ -95,7 +94,7 @@
 		{
 			id: "system", label: "System", defaultOpen: false,
 			items: [
-				{ label: "System", href: "/settings/system", icon: Settings },
+				{ label: "System", href: "/settings/system", icon: GearSix },
 			],
 		},
 	];
@@ -131,9 +130,9 @@
 							type="button"
 						>
 							<span class="section-label">{section.label}</span>
-							<ChevronDown
+							<CaretDown
 								size={12}
-								strokeWidth={2}
+								weight="light"
 								class="section-chevron {openSections.has(section.id) ? 'open' : ''}"
 							/>
 						</button>
@@ -149,7 +148,7 @@
 										class:active={isActive(item.href)}
 										aria-current={isActive(item.href) ? "page" : undefined}
 									>
-										<span class="nav-icon"><Icon size={18} strokeWidth={1.5} /></span>
+										<span class="nav-icon"><Icon size={18} weight="light" /></span>
 										<span class="nav-label">{item.label}</span>
 									</a>
 								{/each}
@@ -170,7 +169,7 @@
 									title={item.label}
 									aria-current={isActive(item.href) ? "page" : undefined}
 								>
-									<span class="nav-icon"><Icon size={18} strokeWidth={1.5} /></span>
+									<span class="nav-icon"><Icon size={18} weight="light" /></span>
 								</a>
 							{/each}
 						</nav>
@@ -212,17 +211,23 @@
 		<div class="ii-topbar-brand">
 			<!-- Hourglass SVG mark (inline) -->
 			<svg width="20" height="24" viewBox="0 0 20 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-				<circle cx="4"  cy="4"  r="1.5" fill="#2563EB"/>
-				<circle cx="10" cy="4"  r="1.5" fill="#2563EB"/>
-				<circle cx="16" cy="4"  r="1.5" fill="#2563EB"/>
-				<circle cx="10" cy="12" r="2"   fill="#2563EB"/>
-				<circle cx="4"  cy="20" r="1.5" fill="#64748B"/>
-				<circle cx="10" cy="20" r="1.5" fill="#64748B"/>
-				<circle cx="16" cy="20" r="1.5" fill="#64748B"/>
-				<line x1="4"  y1="4"  x2="10" y2="12" stroke="#2563EB" stroke-width="1" stroke-linecap="round"/>
-				<line x1="16" y1="4"  x2="10" y2="12" stroke="#2563EB" stroke-width="1" stroke-linecap="round"/>
-				<line x1="4"  y1="20" x2="10" y2="12" stroke="#64748B" stroke-width="1" stroke-linecap="round"/>
-				<line x1="16" y1="20" x2="10" y2="12" stroke="#64748B" stroke-width="1" stroke-linecap="round"/>
+				<style>
+					.logo-top    { fill: var(--ii-brand-primary); }
+					.logo-bottom { fill: var(--ii-text-tertiary); }
+					.logo-line-top    { stroke: var(--ii-brand-primary); }
+					.logo-line-bottom { stroke: var(--ii-text-tertiary); }
+				</style>
+				<circle class="logo-top" cx="4"  cy="4"  r="1.5"/>
+				<circle class="logo-top" cx="10" cy="4"  r="1.5"/>
+				<circle class="logo-top" cx="16" cy="4"  r="1.5"/>
+				<circle class="logo-top" cx="10" cy="12" r="2"/>
+				<circle class="logo-bottom" cx="4"  cy="20" r="1.5"/>
+				<circle class="logo-bottom" cx="10" cy="20" r="1.5"/>
+				<circle class="logo-bottom" cx="16" cy="20" r="1.5"/>
+				<line class="logo-line-top"    x1="4"  y1="4"  x2="10" y2="12" stroke-width="1" stroke-linecap="round"/>
+				<line class="logo-line-top"    x1="16" y1="4"  x2="10" y2="12" stroke-width="1" stroke-linecap="round"/>
+				<line class="logo-line-bottom" x1="4"  y1="20" x2="10" y2="12" stroke-width="1" stroke-linecap="round"/>
+				<line class="logo-line-bottom" x1="16" y1="20" x2="10" y2="12" stroke-width="1" stroke-linecap="round"/>
 			</svg>
 			{#if !sidebarCollapsed}
 				<span class="ii-topbar-wordmark">
@@ -235,14 +240,14 @@
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div class="ii-topbar-search" onclick={() => searchOpen = true}>
-				<SearchIcon size={15} strokeWidth={1.5} class="ii-topbar-search-icon" />
+				<MagnifyingGlass size={15} weight="light" class="ii-topbar-search-icon" />
 				<span class="ii-topbar-search-input">Search…</span>
 				<kbd class="ii-topbar-kbd">{typeof navigator !== "undefined" && navigator?.platform?.includes("Mac") ? "⌘K" : "Ctrl+K"}</kbd>
 			</div>
 
 			<div class="ii-topbar-actions">
 				<button class="ii-topbar-btn ii-topbar-btn--ai" type="button" title="AI Assistant" onclick={() => agentOpen = !agentOpen}>
-					<Bot size={18} strokeWidth={1.5} />
+					<Robot size={18} weight="light" />
 				</button>
 				<ThemeToggle />
 			</div>
@@ -425,7 +430,7 @@
 		display: flex;
 		flex-direction: column;
 		height: 100%;
-		background: var(--ii-surface-alt);
+		background: var(--ii-surface);
 		overflow: hidden;
 		font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
 		-webkit-font-smoothing: antialiased;
@@ -467,11 +472,11 @@
 		font-weight: 900;
 		text-transform: uppercase;
 		letter-spacing: 2px;
-		color: #90a1b9;
+		color: var(--ii-text-tertiary);
 	}
 
 	.section-header :global(.section-chevron) {
-		color: #90a1b9;
+		color: var(--ii-text-tertiary);
 		transition: transform 200ms var(--ii-ease-out, cubic-bezier(0,0,.2,1));
 		flex-shrink: 0;
 	}
@@ -526,7 +531,7 @@
 		gap: 12px;
 		padding: 10px 16px;
 		border-radius: 14px;
-		color: #62748e;
+		color: var(--ii-text-secondary);
 		font-size: 13px;
 		font-weight: 600;
 		line-height: 1;
@@ -536,13 +541,13 @@
 	}
 
 	.nav-item:hover {
-		background: rgba(239, 246, 255, 0.4);
+		background: var(--ii-bg-hover);
 		color: var(--ii-text-primary);
 	}
 
 	.nav-item.active {
-		background: rgba(239, 246, 255, 0.8);
-		color: #1447e6;
+		background: var(--ii-accent-soft);
+		color: var(--ii-brand-primary);
 		font-weight: 700;
 	}
 

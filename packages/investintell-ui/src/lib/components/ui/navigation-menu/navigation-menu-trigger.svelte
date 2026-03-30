@@ -9,7 +9,7 @@
 
 <script lang="ts">
 	import { NavigationMenu as NavigationMenuPrimitive } from "bits-ui";
-	import ChevronDownIcon from '@lucide/svelte/icons/chevron-down';
+	import { CaretDown as ChevronDownIcon } from 'phosphor-svelte';
 	let {
 		ref = $bindable(null),
 		class: className,
