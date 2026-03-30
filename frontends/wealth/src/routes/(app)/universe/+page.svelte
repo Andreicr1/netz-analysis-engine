@@ -178,7 +178,7 @@
 							class:selected={selectedAsset?.instrument_id === asset.instrument_id}
 							onclick={() => openDetail(asset)}
 						>
-							<td class="td-name">{asset.fund_name}</td>
+							<td class="td-name">{asset.fund_name ?? "—"}</td>
 							<td class="td-type">
 								<span class="type-badge" style:color={instrumentTypeColor(asset.instrument_type)} style:background="color-mix(in srgb, {instrumentTypeColor(asset.instrument_type)} 12%, transparent)">
 									{instrumentTypeLabel(asset.instrument_type)}
@@ -188,7 +188,11 @@
 							<td class="td-geo">{asset.geography ?? "—"}</td>
 							<td class="td-class">{asset.asset_class ?? "—"}</td>
 							<td class="td-decision">
-								<StatusBadge status={asset.approval_decision} />
+								{#if asset.approval_decision}
+									<StatusBadge status={asset.approval_decision} />
+								{:else}
+									<span>—</span>
+								{/if}
 							</td>
 							<td class="td-date">
 								{asset.approved_at ? formatDateTime(asset.approved_at) : "—"}
@@ -205,6 +209,7 @@
 <!-- DETAIL PANEL — risk metrics + scoring cross-referenced with approval   -->
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <ContextPanel open={panelOpen} onClose={closeDetail} title={selectedAsset?.fund_name ?? ""}>
+	<svelte:boundary onerror={(e) => console.error("Universe detail panel error:", e)}>
 	{#if selectedAsset}
 		<div class="detail">
 			<!-- Approval info -->
@@ -213,7 +218,11 @@
 				<div class="detail-grid">
 					<div class="detail-kv">
 						<span class="detail-k">Decision</span>
-						<StatusBadge status={selectedAsset.approval_decision} />
+						{#if selectedAsset.approval_decision}
+							<StatusBadge status={selectedAsset.approval_decision} />
+						{:else}
+							<span class="detail-v">—</span>
+						{/if}
 					</div>
 					<div class="detail-kv">
 						<span class="detail-k">Status</span>
@@ -253,7 +262,7 @@
 					</div>
 					<div class="detail-kv">
 						<span class="detail-k">Calc Date</span>
-						<span class="detail-v">{riskMetrics.calc_date}</span>
+						<span class="detail-v">{riskMetrics.calc_date ?? "—"}</span>
 					</div>
 				</section>
 
@@ -383,6 +392,12 @@
 			{/if}
 		</div>
 	{/if}
+	{#snippet failed()}
+		<div class="detail">
+			<p class="detail-empty">Failed to load fund details. Try closing and re-opening the panel.</p>
+		</div>
+	{/snippet}
+	</svelte:boundary>
 </ContextPanel>
 
 <style>
