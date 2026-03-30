@@ -14,6 +14,7 @@
 
 	function handleError(e: unknown) {
 		error = e instanceof Error ? e : new Error(String(e));
+		console.error("[ErrorBoundary] Caught error during render:", error.message, e);
 	}
 
 	function retry() {
@@ -26,7 +27,7 @@
 	{#if error}
 		<div
 			class={cn(
-				"flex flex-col items-center justify-center rounded-lg border border-(--ii-danger)/30 bg-(--ii-danger)/5 p-6 text-center",
+				"flex min-h-[200px] flex-col items-center justify-center rounded-lg border border-(--ii-danger)/30 bg-(--ii-danger)/5 p-6 text-center",
 				className,
 			)}
 		>
