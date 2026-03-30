@@ -34,7 +34,7 @@
 
 	// Catalog filter state (from URL params)
 	let selectedCategories = $state<CatalogCategory[]>(
-		initParams.category ? (initParams.category.split(",") as CatalogCategory[]) : [],
+		initParams.category ? (initParams.category.split(",") as CatalogCategory[]) : ["mutual_fund" as CatalogCategory],
 	);
 	let selectedFundTypes = $state<string[]>(initParams.fund_type ? initParams.fund_type.split(",") : []);
 	let selectedStrategyLabels = $state<string[]>(initParams.strategy_label ? initParams.strategy_label.split(",") : []);

@@ -20,8 +20,8 @@ export const load: PageServerLoad = async ({ parent, url }) => {
 	const catalogParams: Record<string, string> = { page, page_size: pageSize };
 	const q = url.searchParams.get("q");
 	if (q) catalogParams.q = q;
-	const category = url.searchParams.get("category");
-	if (category) catalogParams.fund_universe = category;
+	const category = url.searchParams.get("category") ?? "mutual_fund";
+	catalogParams.fund_universe = category;
 	const fundTypes = url.searchParams.get("fund_type");
 	if (fundTypes) catalogParams.fund_type = fundTypes;
 	const strategyLabel = url.searchParams.get("strategy_label");

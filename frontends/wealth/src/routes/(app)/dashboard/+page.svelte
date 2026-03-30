@@ -85,10 +85,10 @@
 	}
 
 	// ── Alerts ───────────────────────────────────────────────────────────
-	let dtwAlerts   = $derived(riskStore.driftAlerts.dtw_alerts.length > 0
+	let dtwAlerts   = $derived((riskStore.driftAlerts?.dtw_alerts?.length ?? 0) > 0
 		? riskStore.driftAlerts.dtw_alerts
 		: ((data.alerts as { dtw_alerts?: unknown[] } | null)?.dtw_alerts ?? []));
-	let behaviorAlerts = $derived(riskStore.driftAlerts.behavior_change_alerts.length > 0
+	let behaviorAlerts = $derived((riskStore.driftAlerts?.behavior_change_alerts?.length ?? 0) > 0
 		? riskStore.driftAlerts.behavior_change_alerts
 		: ((data.alerts as { behavior_change_alerts?: unknown[] } | null)?.behavior_change_alerts ?? []));
 

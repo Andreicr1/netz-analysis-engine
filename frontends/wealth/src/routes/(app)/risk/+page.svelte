@@ -20,12 +20,12 @@
 
 	// ── Derived reactive state from SSE ticks ─────────────────────────────
 
-	let profiles = $derived(Object.entries(riskStore.cvarByProfile) as [string, CVaRStatus][]);
+	let profiles = $derived(Object.entries(riskStore.cvarByProfile ?? {}) as [string, CVaRStatus][]);
 	let regime = $derived(riskStore.regime);
 	let connectionQuality = $derived(riskStore.connectionQuality);
 	let storeStatus = $derived(riskStore.status);
-	let dtwAlerts = $derived(riskStore.driftAlerts.dtw_alerts);
-	let behaviorAlerts = $derived(riskStore.driftAlerts.behavior_change_alerts);
+	let dtwAlerts = $derived(riskStore.driftAlerts?.dtw_alerts ?? []);
+	let behaviorAlerts = $derived(riskStore.driftAlerts?.behavior_change_alerts ?? []);
 	let totalAlerts = $derived(dtwAlerts.length + behaviorAlerts.length);
 
 	// ── Regime severity for visual flash ──────────────────────────────────
@@ -77,7 +77,8 @@
 
 	// ── CVaR history sparkline (CSS-only mini bar chart) ──────────────────
 
-	function sparkBars(history: CVaRPoint[]): { value: number; date: string }[] {
+	function sparkBars(history: CVaRPoint[] | undefined | null): { value: number; date: string }[] {
+		if (!Array.isArray(history)) return [];
 		const tail = history.slice(-20);
 		if (tail.length === 0) return [];
 		const max = Math.max(...tail.map((p) => Math.abs(p.cvar)), 0.001);
@@ -122,6 +123,12 @@
 	{/snippet}
 </PageHeader>
 
+{#if storeStatus === "loading" && profiles.length === 0}
+	<div class="rw-loading">
+		<p class="rw-loading-text">Connecting to risk data...</p>
+	</div>
+{/if}
+
 <div class="rw-grid">
 	<!-- ═══════════════════════════════════════════════════════════════════ -->
 	<!-- ROW 0: Aggregate Risk Summary                                      -->
@@ -161,13 +168,13 @@
 	<section class="rw-panel rw-panel--regime">
 		<h3 class="rw-panel-title">Market Regime</h3>
 		{#if regime}
-			<div class="regime-hero" style:color={regimeColor(regime.regime)}>
-				<span class="regime-name">{regime.regime.toUpperCase()}</span>
-				{#if regime.confidence !== null}
+			<div class="regime-hero" style:color={regimeColor(regime?.regime)}>
+				<span class="regime-name">{(regime?.regime ?? "UNKNOWN").toUpperCase()}</span>
+				{#if regime?.confidence != null}
 					<span class="regime-confidence">{(regime.confidence * 100).toFixed(0)}%</span>
 				{/if}
 			</div>
-			{#if regime.timestamp}
+			{#if regime?.timestamp}
 				<span class="regime-ts">{formatDateTime(regime.timestamp)}</span>
 			{/if}
 		{:else}
@@ -697,6 +704,24 @@
 		font-weight: 600;
 		color: var(--ii-text-primary);
 		font-variant-numeric: tabular-nums;
+	}
+
+	/* ── Loading skeleton ────────────────────────────────────────────────── */
+	.rw-loading {
+		display: flex;
+		justify-content: center;
+		padding: var(--ii-space-stack-lg, 32px);
+	}
+
+	.rw-loading-text {
+		font-size: var(--ii-text-body, 0.9375rem);
+		color: var(--ii-text-muted);
+		animation: pulse-loading 1.5s ease infinite;
+	}
+
+	@keyframes pulse-loading {
+		0%, 100% { opacity: 0.5; }
+		50% { opacity: 1; }
 	}
 
 	/* ── Responsive ──────────────────────────────────────────────────────── */

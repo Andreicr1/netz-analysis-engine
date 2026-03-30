@@ -803,8 +803,8 @@ def _ucits_eu_branch(f: CatalogFilters) -> Select | None:
 
 
 _SORT_MAP = {
-    "name_asc": "name ASC",
-    "name_desc": "name DESC",
+    "name_asc": "REGEXP_REPLACE(name, '^[^a-zA-Z]+', '', 'g') ASC, name ASC",
+    "name_desc": "REGEXP_REPLACE(name, '^[^a-zA-Z]+', '', 'g') DESC, name DESC",
     "aum_desc": "aum DESC NULLS LAST",
     "aum_asc": "aum ASC NULLS LAST",
     "manager_asc": "manager_name ASC NULLS LAST",

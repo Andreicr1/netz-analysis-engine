@@ -155,7 +155,7 @@ export function createRiskStore(config: RiskStoreConfig) {
 		}
 		version = update.version;
 
-		if (update.cvarByProfile !== undefined) {
+		if (update.cvarByProfile !== undefined && update.cvarByProfile && typeof update.cvarByProfile === "object" && !Array.isArray(update.cvarByProfile)) {
 			cvarByProfile = update.cvarByProfile;
 			// Extract computed_at from the first profile that has it
 			const firstWithTimestamp = Object.values(update.cvarByProfile).find((c) => c.computed_at);
@@ -164,17 +164,24 @@ export function createRiskStore(config: RiskStoreConfig) {
 				nextExpectedUpdate = firstWithTimestamp.next_expected_update ?? null;
 			}
 		}
-		if (update.cvarHistoryByProfile !== undefined) {
+		if (update.cvarHistoryByProfile !== undefined && update.cvarHistoryByProfile && typeof update.cvarHistoryByProfile === "object") {
 			cvarHistoryByProfile = update.cvarHistoryByProfile;
 		}
 		if (update.regime !== undefined) {
-			regime = update.regime;
+			// Accept null (clears regime) but validate non-null shapes
+			if (update.regime === null || (typeof update.regime === "object" && typeof update.regime.regime === "string")) {
+				regime = update.regime;
+			}
 		}
-		if (update.regimeHistory !== undefined) {
+		if (update.regimeHistory !== undefined && Array.isArray(update.regimeHistory)) {
 			regimeHistory = update.regimeHistory;
 		}
 		if (update.driftAlerts !== undefined) {
-			driftAlerts = update.driftAlerts;
+			// Validate shape — must have both arrays
+			const d = update.driftAlerts;
+			if (d && Array.isArray(d.dtw_alerts) && Array.isArray(d.behavior_change_alerts)) {
+				driftAlerts = d;
+			}
 		}
 		if (update.macroIndicators !== undefined) {
 			macroIndicators = update.macroIndicators;
