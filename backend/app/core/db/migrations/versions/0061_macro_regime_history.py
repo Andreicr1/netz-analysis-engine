@@ -68,12 +68,11 @@ def upgrade() -> None:
                 if_not_exists => TRUE
             )
         """)
-
-    op.execute("""
-        CREATE INDEX IF NOT EXISTS ix_macro_regime_history_date_regime
-        ON macro_regime_history (regime_date DESC, classified_regime)
-        WITH (timescaledb.transaction_per_chunk)
-    """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS ix_macro_regime_history_date_regime
+            ON macro_regime_history (regime_date DESC, classified_regime)
+            WITH (timescaledb.transaction_per_chunk)
+        """)
 
 
 def downgrade() -> None:
