@@ -59,9 +59,9 @@ def get_insider_sentiment_score(
                     SELECT buy_value, sell_value
                     FROM sec_insider_sentiment
                     WHERE issuer_cik = :cik
-                      AND quarter >= (CURRENT_DATE - INTERVAL ':n quarters')::date
+                      AND quarter >= (CURRENT_DATE - INTERVAL ':n months')::date
                     ORDER BY quarter DESC
-                """.replace(":n quarters", f"{lookback_quarters} quarters")),
+                """.replace(":n months", f"{lookback_quarters * 3} months")),
                 {"cik": issuer_cik},
             ).fetchall()
         else:
@@ -70,9 +70,9 @@ def get_insider_sentiment_score(
                     SELECT buy_value, sell_value
                     FROM sec_insider_sentiment
                     WHERE issuer_ticker = :ticker
-                      AND quarter >= (CURRENT_DATE - INTERVAL ':n quarters')::date
+                      AND quarter >= (CURRENT_DATE - INTERVAL ':n months')::date
                     ORDER BY quarter DESC
-                """.replace(":n quarters", f"{lookback_quarters} quarters")),
+                """.replace(":n months", f"{lookback_quarters * 3} months")),
                 {"ticker": issuer_ticker},
             ).fetchall()
 
@@ -127,9 +127,9 @@ def get_insider_summary(
                            unique_buyers, unique_sellers
                     FROM sec_insider_sentiment
                     WHERE issuer_cik = :cik
-                      AND quarter >= (CURRENT_DATE - INTERVAL ':n quarters')::date
+                      AND quarter >= (CURRENT_DATE - INTERVAL ':n months')::date
                     ORDER BY quarter DESC
-                """.replace(":n quarters", f"{lookback_quarters} quarters")),
+                """.replace(":n months", f"{lookback_quarters * 3} months")),
                 {"cik": issuer_cik},
             ).fetchall()
         else:
@@ -139,9 +139,9 @@ def get_insider_summary(
                            unique_buyers, unique_sellers
                     FROM sec_insider_sentiment
                     WHERE issuer_ticker = :ticker
-                      AND quarter >= (CURRENT_DATE - INTERVAL ':n quarters')::date
+                      AND quarter >= (CURRENT_DATE - INTERVAL ':n months')::date
                     ORDER BY quarter DESC
-                """.replace(":n quarters", f"{lookback_quarters} quarters")),
+                """.replace(":n months", f"{lookback_quarters * 3} months")),
                 {"ticker": issuer_ticker},
             ).fetchall()
 

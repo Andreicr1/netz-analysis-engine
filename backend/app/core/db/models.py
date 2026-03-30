@@ -46,7 +46,7 @@ class AuditEvent(Base, IdMixin, OrganizationScopedMixin, AuditMetaMixin):
         ARRAY(Text), nullable=False, server_default="{}",
     )
     action: Mapped[str] = mapped_column(
-        String(32), nullable=False, index=True,
+        String(64), nullable=False, index=True,
     )
     entity_type: Mapped[str] = mapped_column(
         String(64), nullable=False, index=True,
