@@ -82,40 +82,53 @@
 	}
 
 	// ── Helpers ───────────────────────────────────────────────────────────
+	// Backend may return Decimal fields as strings — always coerce to number.
 
-	function riskValue(v: number | null | undefined): string {
-		if (v === null || v === undefined) return "—";
-		return formatPercent(v);
+	function toNum(v: unknown): number | null {
+		if (v === null || v === undefined) return null;
+		const n = Number(v);
+		return isNaN(n) ? null : n;
 	}
 
-	function ratioValue(v: number | null | undefined): string {
-		if (v === null || v === undefined) return "—";
-		return v.toFixed(2);
+	function riskValue(v: unknown): string {
+		const n = toNum(v);
+		if (n === null) return "—";
+		return formatPercent(n);
 	}
 
-	function scoreValue(v: number | null | undefined): string {
-		if (v === null || v === undefined) return "—";
-		return v.toFixed(1);
+	function ratioValue(v: unknown): string {
+		const n = toNum(v);
+		if (n === null) return "—";
+		return n.toFixed(2);
 	}
 
-	function scoreColor(v: number | null | undefined): string {
-		if (v === null || v === undefined) return "var(--ii-text-muted)";
-		if (v >= 70) return "var(--ii-success)";
-		if (v >= 40) return "var(--ii-warning)";
+	function scoreValue(v: unknown): string {
+		const n = toNum(v);
+		if (n === null) return "—";
+		return n.toFixed(1);
+	}
+
+	function scoreColor(v: unknown): string {
+		const n = toNum(v);
+		if (n === null) return "var(--ii-text-muted)";
+		if (n >= 70) return "var(--ii-success)";
+		if (n >= 40) return "var(--ii-warning)";
 		return "var(--ii-danger)";
 	}
 
-	function momentumLabel(v: number | null | undefined): string {
-		if (v === null || v === undefined) return "—";
-		if (v >= 60) return "Bullish";
-		if (v >= 40) return "Neutral";
+	function momentumLabel(v: unknown): string {
+		const n = toNum(v);
+		if (n === null) return "—";
+		if (n >= 60) return "Bullish";
+		if (n >= 40) return "Neutral";
 		return "Bearish";
 	}
 
-	function momentumColor(v: number | null | undefined): string {
-		if (v === null || v === undefined) return "var(--ii-text-muted)";
-		if (v >= 60) return "var(--ii-success)";
-		if (v >= 40) return "var(--ii-text-secondary)";
+	function momentumColor(v: unknown): string {
+		const n = toNum(v);
+		if (n === null) return "var(--ii-text-muted)";
+		if (n >= 60) return "var(--ii-success)";
+		if (n >= 40) return "var(--ii-text-secondary)";
 		return "var(--ii-danger)";
 	}
 </script>
