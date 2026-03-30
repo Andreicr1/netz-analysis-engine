@@ -34,11 +34,11 @@ def upgrade() -> None:
           AND a.ticker = b.ticker
     """)
 
-    # Drop org-scoped columns
+    # Drop org-scoped columns (CASCADE drops dependent indexes/constraints)
     op.execute("DROP INDEX IF EXISTS ix_instruments_universe_organization_id")
-    op.execute("ALTER TABLE instruments_universe DROP COLUMN IF EXISTS organization_id")
-    op.execute("ALTER TABLE instruments_universe DROP COLUMN IF EXISTS block_id")
-    op.execute("ALTER TABLE instruments_universe DROP COLUMN IF EXISTS approval_status")
+    op.execute("ALTER TABLE instruments_universe DROP COLUMN IF EXISTS organization_id CASCADE")
+    op.execute("ALTER TABLE instruments_universe DROP COLUMN IF EXISTS block_id CASCADE")
+    op.execute("ALTER TABLE instruments_universe DROP COLUMN IF EXISTS approval_status CASCADE")
 
     # ── nav_timeseries: remove organization_id ─────────────────────────
 
