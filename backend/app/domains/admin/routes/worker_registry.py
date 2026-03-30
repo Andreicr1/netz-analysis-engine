@@ -50,8 +50,8 @@ def _build_registry() -> dict[str, tuple[Callable[..., Awaitable[Any]], str, int
     from app.domains.wealth.workers.sec_adv_ingestion import run_sec_adv_ingestion
     from app.domains.wealth.workers.sec_refresh import run_sec_refresh
     from app.domains.wealth.workers.treasury_ingestion import run_treasury_ingestion
-    from app.domains.wealth.workers.watchlist_batch import run_watchlist_check
     from app.domains.wealth.workers.universe_sync import run_universe_sync
+    from app.domains.wealth.workers.watchlist_batch import run_watchlist_check
     from app.domains.wealth.workers.wealth_embedding_worker import run_wealth_embedding
 
     return {

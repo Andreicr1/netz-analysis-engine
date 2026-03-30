@@ -12,7 +12,6 @@ Outputs:
 from __future__ import annotations
 
 import argparse
-import math
 import random
 import sys
 import uuid
@@ -233,7 +232,7 @@ def main() -> None:
     inst_path.write_text(inst_html, encoding="utf-8")
     print(f"Institutional: {inst_path}")
 
-    print(f"\nOpen in browser to validate visual output.")
+    print("\nOpen in browser to validate visual output.")
 
 
 if __name__ == "__main__":

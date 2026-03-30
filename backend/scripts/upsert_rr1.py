@@ -160,7 +160,7 @@ def main():
     stats_path = os.path.join(args.dir, "stats.csv")
 
     print(f"{'=' * 60}")
-    print(f"  RR1 Upserter (psycopg3 COPY)")
+    print("  RR1 Upserter (psycopg3 COPY)")
     print(f"{'=' * 60}")
 
     connstr = get_connection_string()

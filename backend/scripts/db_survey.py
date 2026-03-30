@@ -1,6 +1,10 @@
 """DB capabilities + vectorizable content survey."""
-import asyncio, os, asyncpg
+import asyncio
+import os
+
+import asyncpg
 from dotenv import load_dotenv
+
 load_dotenv()
 
 raw = os.environ.get("DIRECT_DATABASE_URL") or os.environ.get("DATABASE_URL", "")

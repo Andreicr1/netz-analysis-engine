@@ -18,7 +18,7 @@ import sys
 import time
 import traceback
 from contextlib import asynccontextmanager
-from dataclasses import FrozenInstanceError, dataclass, fields
+from dataclasses import FrozenInstanceError, dataclass
 from datetime import date
 from typing import Any
 
@@ -42,6 +42,20 @@ if _BACKEND_DIR not in sys.path:
 from sqlalchemy import delete, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+# ORM models for direct SQL cleanup.
+from app.shared.models import (
+    Sec13fDiff as Sec13fDiffModel,
+)
+from app.shared.models import (
+    Sec13fHolding as Sec13fHoldingModel,
+)
+from app.shared.models import (
+    SecInstitutionalAllocation as SecInstitutionalAllocationModel,
+)
+from app.shared.models import (
+    SecManager,
+)
+
 # SEC data providers — the modules under test.
 from data_providers.sec.models import (
     AdvFund,
@@ -58,20 +72,11 @@ from data_providers.sec.models import (
 from data_providers.sec.shared import (
     _check_rate_local,
     _normalize_heavy,
-    _normalize_light,
     check_edgar_rate,
     check_iapd_rate,
     resolve_cik,
     run_in_sec_thread,
     sanitize_entity_name,
-)
-
-# ORM models for direct SQL cleanup.
-from app.shared.models import (
-    Sec13fDiff as Sec13fDiffModel,
-    Sec13fHolding as Sec13fHoldingModel,
-    SecInstitutionalAllocation as SecInstitutionalAllocationModel,
-    SecManager,
 )
 
 # ---------------------------------------------------------------------------
@@ -216,7 +221,7 @@ def _group1_checks() -> list[tuple[str, Any]]:
         c = CikResolution(cik="1234", company_name="Test", method="ticker", confidence=1.0)
         try:
             c.cik = "5678"  # type: ignore[misc]
-            assert False, "should have raised"
+            raise AssertionError("should have raised")
         except (FrozenInstanceError, AttributeError):
             pass
     checks.append(("g1_cik_resolution_frozen", check_cik_resolution_frozen))
@@ -367,7 +372,7 @@ def _group3_checks() -> list[tuple[str, Any]]:
 
         # Verify no duplicates
         async with _get_session() as session:
-            from sqlalchemy import select, func
+            from sqlalchemy import func, select
             stmt = select(func.count()).select_from(SecManager).where(
                 SecManager.crd_number == _TEST_CRD,
             )
@@ -791,7 +796,7 @@ def _group7_checks() -> list[tuple[str, Any]]:
             try:
                 await asyncio.wait_for(coro, timeout=5.0)
             except asyncio.TimeoutError:
-                assert False, f"timed out after 5s"
+                raise AssertionError("timed out after 5s")
     checks.append(("g7_timeout_guard", check_timeout_guard))
 
     async def check_no_raise_on_fuzz():

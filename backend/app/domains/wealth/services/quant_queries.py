@@ -335,7 +335,6 @@ async def fetch_strategic_weights_for_funds(
     Maps block-level targets to individual fund weights (equal-split within block).
     Returns (N,) array aligned with fund_ids.
     """
-    from app.domains.wealth.models.instrument import Instrument
     from app.domains.wealth.models.instrument_org import InstrumentOrg
 
     today = date.today()

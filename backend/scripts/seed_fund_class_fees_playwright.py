@@ -24,8 +24,6 @@ import re
 import time
 import xml.etree.ElementTree as ET
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass, field
-from pathlib import Path
 
 import structlog
 

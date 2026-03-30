@@ -22,7 +22,6 @@ import time
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from datetime import datetime
-from pathlib import Path
 
 # Ensure backend/ is on sys.path
 _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -156,7 +155,7 @@ def parse_chunk(args: tuple) -> list[dict]:
         fields = line.rstrip("\n").split("\t")
         if len(fields) < len(header):
             fields.extend([""] * (len(header) - len(fields)))
-        r = dict(zip(header, fields))
+        r = dict(zip(header, fields, strict=False))
 
         acc = r.get("ACCESSION_NUMBER", "")
         if acc not in valid_accessions:
@@ -324,7 +323,7 @@ def main():
     os.makedirs(args.out, exist_ok=True)
 
     print(f"{'=' * 70}")
-    print(f"  N-PORT Holdings Parser → CSV")
+    print("  N-PORT Holdings Parser → CSV")
     print(f"  Quarters: {len(quarter_dirs)} | Workers: {args.workers} | Top: {args.top}/fund")
     print(f"  Output: {args.out}")
     print(f"{'=' * 70}")
@@ -341,12 +340,12 @@ def main():
 
         lookups = build_lookups(qdir, catalog_ciks)
         if not lookups["valid_accessions"]:
-            print(f"  SKIP: no catalog CIKs")
+            print("  SKIP: no catalog CIKs")
             continue
 
         rows = parse_and_filter(qdir, lookups, workers=args.workers, top_n=args.top)
         if not rows:
-            print(f"  SKIP: no rows")
+            print("  SKIP: no rows")
             continue
 
         csv_path = os.path.join(args.out, f"{qname}.csv")

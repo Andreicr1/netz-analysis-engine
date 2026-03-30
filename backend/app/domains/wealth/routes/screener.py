@@ -947,8 +947,10 @@ async def import_sec_security(
     )).scalar_one_or_none()
     if not sec_row:
         # Fallback: mutual fund tickers are in sec_fund_classes, not cusip_ticker_map
-        from app.shared.models import SecFundClass as _FcFallback, SecRegisteredFund as _RfFallback
         from types import SimpleNamespace
+
+        from app.shared.models import SecFundClass as _FcFallback
+        from app.shared.models import SecRegisteredFund as _RfFallback
 
         fc_fallback = (await db.execute(
             select(_FcFallback).where(_FcFallback.ticker == ticker.upper()).limit(1),

@@ -13,9 +13,8 @@ Requires DATABASE_URL env var.
 from __future__ import annotations
 
 import argparse
-import sys
 
-from sqlalchemy import create_engine, select, text, update
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings

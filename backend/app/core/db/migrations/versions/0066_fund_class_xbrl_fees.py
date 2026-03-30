@@ -8,8 +8,8 @@ Revises: 0065_enrich_registered_funds_ncen
 Create Date: 2026-03-28
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "0066_fund_class_xbrl_fees"
 down_revision = "0065_enrich_registered_funds_ncen"

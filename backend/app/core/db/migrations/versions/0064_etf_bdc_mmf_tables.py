@@ -12,7 +12,6 @@ Create Date: 2026-03-28
 """
 
 from alembic import op
-import sqlalchemy as sa
 
 revision = "0064_etf_bdc_mmf_tables"
 down_revision = "0063_add_strategy_label"

@@ -63,10 +63,10 @@ async def main() -> None:
     if not hasattr(settings, "MISTRAL_OCR_RATE_LIMIT"):
         _cls.MISTRAL_OCR_RATE_LIMIT = property(lambda s: 5)
 
-    from app.domains.credit.modules.documents.models import Document, DocumentVersion
-    from app.shared.enums import DocumentIngestionStatus
     from ai_engine.pipeline.models import IngestRequest
     from ai_engine.pipeline.unified_pipeline import process
+    from app.domains.credit.modules.documents.models import Document, DocumentVersion
+    from app.shared.enums import DocumentIngestionStatus
 
     engine = create_async_engine(settings.database_url, echo=False, pool_size=5)
     sf = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -255,7 +255,7 @@ async def main() -> None:
 
     # ── Summary ───────────────────────────────────────────────────
     print(f"\n{'='*70}")
-    print(f"  PIPELINE COMPLETE")
+    print("  PIPELINE COMPLETE")
     print(f"  {completed} completed, {failed} failed, {skipped} skipped")
     print(f"  Total time: {total_elapsed/60:.1f} min")
     print(f"{'='*70}")

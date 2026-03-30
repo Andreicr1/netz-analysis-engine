@@ -1,4 +1,5 @@
 import os
+
 os.environ.setdefault("DATABASE_URL_SYNC", 
     "postgresql+psycopg://tsdbadmin:s4wpyvwj0i5bjg0s@nvhhm6dwvh.keh9pcdgv1.tsdb.cloud.timescale.com:30124/tsdb?sslmode=require")
 

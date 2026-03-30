@@ -1524,7 +1524,7 @@ async def _embed_prospectus_returns(db: AsyncSession) -> dict:
         name = r.series_name or r.series_id
         year_returns = [
             f"{int(y)}: {float(ret) * 100:+.2f}%"
-            for y, ret in zip(r.years, r.returns)
+            for y, ret in zip(r.years, r.returns, strict=False)
         ]
         text_val = f"[Annual Returns] {name} (Series {r.series_id}). " + ", ".join(year_returns)
         texts.append(text_val[:4000])
@@ -1602,7 +1602,7 @@ async def _embed_nport_holdings(db: AsyncSession) -> dict:
     for r in rows:
         name = r.series_name or r.series_id
         holdings_text = []
-        for h_name, pct, ac, sec in zip(r.holdings, r.pcts, r.asset_classes, r.sectors):
+        for h_name, pct, ac, sec in zip(r.holdings, r.pcts, r.asset_classes, r.sectors, strict=False):
             pct_str = f"{float(pct):.2f}%" if pct else "N/A"
             parts = [h_name, pct_str]
             if ac:
@@ -1671,7 +1671,7 @@ async def _embed_fund_classes(db: AsyncSession) -> dict:
     texts = []
     for r in rows:
         classes_text = []
-        for cname, ticker, er, na in zip(r.class_names, r.tickers, r.expense_ratios, r.net_assets_arr):
+        for cname, ticker, er, na in zip(r.class_names, r.tickers, r.expense_ratios, r.net_assets_arr, strict=False):
             parts = [cname or "Unknown"]
             if ticker:
                 parts.append(f"ticker {ticker}")

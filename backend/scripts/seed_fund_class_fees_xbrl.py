@@ -23,7 +23,6 @@ import re
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from io import BytesIO
 
 import structlog
 

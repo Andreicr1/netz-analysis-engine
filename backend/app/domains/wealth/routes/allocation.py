@@ -271,7 +271,6 @@ async def simulate_allocation(
     try:
         import numpy as np
 
-        from app.domains.wealth.models.instrument import Instrument
         from app.domains.wealth.models.instrument_org import InstrumentOrg
         from app.domains.wealth.services.quant_queries import fetch_returns_matrix
         from quant_engine.cvar_service import compute_cvar_from_returns

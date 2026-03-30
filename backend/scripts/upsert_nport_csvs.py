@@ -114,7 +114,7 @@ def main():
     csv_files = sorted(f for f in os.listdir(args.dir) if f.endswith(".csv"))
 
     print(f"{'=' * 60}")
-    print(f"  N-PORT Holdings Upserter (psycopg3 COPY)")
+    print("  N-PORT Holdings Upserter (psycopg3 COPY)")
     print(f"  CSVs: {len(csv_files)} | Source: {args.dir}")
     print(f"{'=' * 60}")
 

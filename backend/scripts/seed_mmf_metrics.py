@@ -15,7 +15,6 @@ import csv
 import datetime
 import os
 import time
-from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 

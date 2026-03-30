@@ -21,7 +21,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from vertical_engines.wealth.content_pdf import render_content_pdf
 from vertical_engines.wealth.fact_sheet.i18n import Language
 
-
 # ═══════════════════════════════════════════════════════════════════
 #  Mock content generators
 # ═══════════════════════════════════════════════════════════════════

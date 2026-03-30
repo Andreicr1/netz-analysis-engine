@@ -81,6 +81,7 @@ from app.domains.credit.reporting.routes.investor_portal import (
 from app.domains.credit.reporting.routes.report_packs import router as credit_report_packs_router
 from app.domains.credit.reporting.routes.reports import router as credit_reports_router
 from app.domains.credit.reporting.routes.schedules import router as credit_schedules_router
+from app.domains.wealth.routes.agent import router as wealth_agent_router
 from app.domains.wealth.routes.allocation import router as wealth_allocation_router
 from app.domains.wealth.routes.analytics import router as wealth_analytics_router
 from app.domains.wealth.routes.attribution import router as wealth_attribution_router
@@ -97,16 +98,15 @@ from app.domains.wealth.routes.fact_sheets import router as wealth_fact_sheets_r
 from app.domains.wealth.routes.funds import router as wealth_funds_router
 from app.domains.wealth.routes.instruments import router as wealth_instruments_router
 from app.domains.wealth.routes.long_form_reports import router as wealth_long_form_reports_router
-from app.domains.wealth.routes.monthly_report import router as wealth_monthly_report_router
 from app.domains.wealth.routes.macro import router as wealth_macro_router
 from app.domains.wealth.routes.manager_screener import router as wealth_manager_screener_router
 from app.domains.wealth.routes.model_portfolios import router as wealth_model_portfolios_router
+from app.domains.wealth.routes.monthly_report import router as wealth_monthly_report_router
 from app.domains.wealth.routes.portfolio_views import router as wealth_portfolio_views_router
 from app.domains.wealth.routes.portfolios import router as wealth_portfolios_router
 from app.domains.wealth.routes.rebalancing import router as wealth_rebalancing_router
 from app.domains.wealth.routes.risk import router as wealth_risk_router
 from app.domains.wealth.routes.screener import router as wealth_screener_router
-from app.domains.wealth.routes.agent import router as wealth_agent_router
 from app.domains.wealth.routes.search import router as wealth_search_router
 from app.domains.wealth.routes.sec_analysis import router as wealth_sec_analysis_router
 from app.domains.wealth.routes.sec_funds import router as wealth_sec_funds_router

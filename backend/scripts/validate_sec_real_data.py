@@ -38,7 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from app.shared.models import Sec13fDiff as Sec13fDiffModel
 from app.shared.models import Sec13fHolding as Sec13fHoldingModel
 from data_providers.sec.adv_service import AdvService
-from data_providers.sec.institutional_service import InstitutionalService, _classify_filer_type
+from data_providers.sec.institutional_service import InstitutionalService
 from data_providers.sec.models import ThirteenFDiff, ThirteenFHolding
 from data_providers.sec.shared import resolve_cik
 from data_providers.sec.thirteenf_service import ThirteenFService

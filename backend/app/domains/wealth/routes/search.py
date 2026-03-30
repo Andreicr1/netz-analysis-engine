@@ -95,7 +95,7 @@ async def global_search(
     results = await asyncio.gather(*tasks.values(), return_exceptions=True)
 
     groups: list[SearchCategoryGroup] = []
-    for key, result in zip(tasks.keys(), results):
+    for key, result in zip(tasks.keys(), results, strict=False):
         if isinstance(result, Exception):
             logger.warning("global_search_category_error", category=key, error=str(result))
             continue

@@ -1,7 +1,6 @@
 """Test OpenFIGI response for a sample of ESMA ISINs to diagnose resolved=0."""
-import asyncio
-import json
 import os
+
 os.environ.setdefault("DATABASE_URL_SYNC",
     "postgresql+psycopg://tsdbadmin:s4wpyvwj0i5bjg0s@nvhhm6dwvh.keh9pcdgv1.tsdb.cloud.timescale.com:30124/tsdb?sslmode=require")
 
@@ -33,7 +32,7 @@ resp = httpx.post(
 )
 print(f"\nHTTP {resp.status_code}")
 results = resp.json()
-for isin, result in zip(isins, results):
+for isin, result in zip(isins, results, strict=False):
     if "data" in result:
         d = result["data"][0]
         print(f"  {isin}: ticker={d.get('ticker')} exchCode={d.get('exchCode')} sector={d.get('marketSector')} type={d.get('securityType')}")

@@ -13,7 +13,6 @@ from __future__ import annotations
 import argparse
 import csv
 import os
-import sys
 import time
 
 csv.field_size_limit(10_000_000)
@@ -142,7 +141,7 @@ def main():
     )
 
     print(f"{'=' * 60}")
-    print(f"  RR1 Parser → CSV")
+    print("  RR1 Parser → CSV")
     print(f"  Quarters: {len(quarter_dirs)} | Output: {args.out}")
     print(f"{'=' * 60}")
 
