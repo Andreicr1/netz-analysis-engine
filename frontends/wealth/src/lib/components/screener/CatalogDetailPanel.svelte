@@ -122,6 +122,15 @@
 			</div>
 		</div>
 
+		<!-- N-CEN Flags -->
+		{#if fund.is_index || fund.is_target_date || fund.is_fund_of_fund}
+			<div class="dt-ncen-flags">
+				{#if fund.is_index}<span class="dt-ncen-badge">Index Fund</span>{/if}
+				{#if fund.is_target_date}<span class="dt-ncen-badge">Target Date</span>{/if}
+				{#if fund.is_fund_of_fund}<span class="dt-ncen-badge">Fund of Funds</span>{/if}
+			</div>
+		{/if}
+
 		<!-- Cost & Performance -->
 		{#if fund.expense_ratio_pct != null || fund.avg_annual_return_1y != null || fund.avg_annual_return_10y != null}
 			<div class="dt-section">
@@ -274,6 +283,10 @@
 	.cdp-tab-content {
 		padding: 16px;
 	}
+
+	/* N-CEN flags */
+	.dt-ncen-flags { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 16px 8px; }
+	.dt-ncen-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: color-mix(in srgb, var(--ii-info) 12%, transparent); color: var(--ii-info); }
 
 	/* Universe badge inline */
 	.univ-badge {

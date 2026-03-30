@@ -359,6 +359,9 @@
 										{#if group.has_classes}
 											<span class="ct-class-count">{group.classes.length} classes</span>
 										{/if}
+										{#if group.representative.is_index}<span class="ct-ncen-badge">Index</span>{/if}
+										{#if group.representative.is_target_date}<span class="ct-ncen-badge">Target Date</span>{/if}
+										{#if group.representative.is_fund_of_fund}<span class="ct-ncen-badge">FoF</span>{/if}
 									</div>
 								</td>
 								<td>
@@ -497,6 +500,7 @@
 	.ct-col-cy     { width: 50px; }
 	.ct-col-er     { width: 60px; text-align: right; font-variant-numeric: tabular-nums; font-size: var(--ii-text-small, 0.8125rem); color: var(--ii-text-secondary); }
 	.ct-col-ret    { width: 70px; text-align: right; font-variant-numeric: tabular-nums; font-size: var(--ii-text-small, 0.8125rem); color: var(--ii-text-secondary); }
+	.ct-ncen-badge { display: inline-block; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 600; background: color-mix(in srgb, var(--ii-info) 12%, transparent); color: var(--ii-info); white-space: nowrap; }
 
 	/* ── Manager row (L1) ── */
 	.ct-manager-row {

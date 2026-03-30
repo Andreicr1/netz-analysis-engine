@@ -69,6 +69,11 @@ class UnifiedFundItem(BaseModel):
     avg_annual_return_1y: float | None = None
     avg_annual_return_10y: float | None = None
 
+    # N-CEN enrichment flags (registered_us only)
+    is_index: bool | None = None
+    is_target_date: bool | None = None
+    is_fund_of_fund: bool | None = None
+
     # Screening overlay (if imported to tenant universe)
     instrument_id: str | None = None
     screening_status: Literal["PASS", "FAIL", "WATCHLIST"] | None = None

@@ -44,6 +44,11 @@ export interface UnifiedFundItem {
 	avg_annual_return_1y: number | null;
 	avg_annual_return_10y: number | null;
 
+	// N-CEN enrichment flags (registered_us only)
+	is_index: boolean | null;
+	is_target_date: boolean | null;
+	is_fund_of_fund: boolean | null;
+
 	// Share class fields (populated for registered_us funds with classes)
 	series_id: string | null;
 	series_name: string | null;

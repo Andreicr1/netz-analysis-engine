@@ -76,6 +76,10 @@ sec_registered_funds = Table(
     Column("monthly_avg_net_assets", Numeric(20, 2)),
     Column("last_nport_date", Date),
     Column("aum_below_threshold", Boolean),
+    # N-CEN enrichment flags (migration 0065)
+    Column("is_index", Boolean),
+    Column("is_target_date", Boolean),
+    Column("is_fund_of_fund", Boolean),
 )
 
 sec_fund_classes = Table(
@@ -395,6 +399,10 @@ def _registered_us_branch(f: CatalogFilters) -> Select | None:
             sec_fund_prospectus_stats.c.expense_ratio_pct,
             sec_fund_prospectus_stats.c.avg_annual_return_1y,
             sec_fund_prospectus_stats.c.avg_annual_return_10y,
+            # N-CEN enrichment flags
+            sec_registered_funds.c.is_index,
+            sec_registered_funds.c.is_target_date,
+            sec_registered_funds.c.is_fund_of_fund,
         )
         .select_from(sec_registered_funds)
         .outerjoin(
@@ -556,6 +564,10 @@ def _etf_branch(f: CatalogFilters) -> Select | None:
             sec_fund_prospectus_stats.c.expense_ratio_pct,
             sec_fund_prospectus_stats.c.avg_annual_return_1y,
             sec_fund_prospectus_stats.c.avg_annual_return_10y,
+            # N-CEN flags (ETFs don't have these in sec_etfs table)
+            literal_column("NULL").label("is_index"),
+            literal_column("NULL").label("is_target_date"),
+            literal_column("NULL").label("is_fund_of_fund"),
         )
         .select_from(sec_etfs)
         .outerjoin(
@@ -633,6 +645,10 @@ def _bdc_branch(f: CatalogFilters) -> Select | None:
             sec_fund_prospectus_stats.c.expense_ratio_pct,
             sec_fund_prospectus_stats.c.avg_annual_return_1y,
             sec_fund_prospectus_stats.c.avg_annual_return_10y,
+            # N-CEN flags (BDCs don't have these in sec_bdcs table)
+            literal_column("NULL").label("is_index"),
+            literal_column("NULL").label("is_target_date"),
+            literal_column("NULL").label("is_fund_of_fund"),
         )
         .select_from(sec_bdcs)
         .outerjoin(
@@ -731,6 +747,10 @@ def _private_us_branch(f: CatalogFilters) -> Select | None:
             literal_column("NULL").label("expense_ratio_pct"),
             literal_column("NULL").label("avg_annual_return_1y"),
             literal_column("NULL").label("avg_annual_return_10y"),
+            # No N-CEN flags for private funds
+            literal_column("NULL").label("is_index"),
+            literal_column("NULL").label("is_target_date"),
+            sec_manager_funds.c.is_fund_of_funds.label("is_fund_of_fund"),
         )
         .select_from(sec_manager_funds)
         .join(
@@ -824,6 +844,10 @@ def _ucits_eu_branch(f: CatalogFilters) -> Select | None:
             literal_column("NULL").label("expense_ratio_pct"),
             literal_column("NULL").label("avg_annual_return_1y"),
             literal_column("NULL").label("avg_annual_return_10y"),
+            # No N-CEN flags for UCITS
+            literal_column("NULL").label("is_index"),
+            literal_column("NULL").label("is_target_date"),
+            literal_column("NULL").label("is_fund_of_fund"),
         )
         .select_from(esma_funds)
         .join(esma_managers, esma_funds.c.esma_manager_id == esma_managers.c.esma_id)

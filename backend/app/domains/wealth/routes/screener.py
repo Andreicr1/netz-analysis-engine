@@ -1457,6 +1457,12 @@ async def get_catalog(
                 total_shareholder_accounts=r.total_shareholder_accounts,
                 investor_count=r.investor_count,
                 vintage_year=getattr(r, "vintage_year", None),
+                expense_ratio_pct=float(r.expense_ratio_pct) if getattr(r, "expense_ratio_pct", None) is not None else None,
+                avg_annual_return_1y=float(r.avg_annual_return_1y) if getattr(r, "avg_annual_return_1y", None) is not None else None,
+                avg_annual_return_10y=float(r.avg_annual_return_10y) if getattr(r, "avg_annual_return_10y", None) is not None else None,
+                is_index=bool(r.is_index) if getattr(r, "is_index", None) is not None else None,
+                is_target_date=bool(r.is_target_date) if getattr(r, "is_target_date", None) is not None else None,
+                is_fund_of_fund=bool(r.is_fund_of_fund) if getattr(r, "is_fund_of_fund", None) is not None else None,
                 disclosure=_build_disclosure(
                     universe=r.universe,
                     has_holdings=bool(r.has_holdings),
@@ -1574,4 +1580,90 @@ async def get_catalog_facets(
         geographies=to_facets(geography_counts),
         domiciles=to_facets(domicile_counts),
         total=grand_total,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Fund detail — enriched single-fund lookup by external_id
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class FundDetailOut(UnifiedFundItem):
+    """Extended fund detail (superset of UnifiedFundItem)."""
+    pass
+
+
+@router.get(
+    "/catalog/{external_id}/detail",
+    response_model=FundDetailOut,
+    summary="Enriched fund detail by external_id",
+)
+async def get_catalog_fund_detail(
+    external_id: str,
+    db: AsyncSession = Depends(get_db_with_rls),
+) -> FundDetailOut:
+    """Return a single fund's enriched detail from the catalog.
+
+    Queries all 5 branches (registered_us, ETF, BDC, private, UCITS) with
+    external_id filter to find the matching fund. Returns the same schema
+    as catalog items but with all fee/performance/N-CEN fields populated.
+    """
+    from app.domains.wealth.queries.catalog_sql import build_catalog_query
+
+    # Build catalog query filtering by external_id across all universes
+    filters = CatalogFilters(q=external_id, page=1, page_size=5)
+    stmt = build_catalog_query(filters)
+    if stmt is None:
+        raise HTTPException(status_code=404, detail="Fund not found")
+
+    rows = (await db.execute(stmt)).all()
+
+    # Find exact match on external_id
+    match = None
+    for r in rows:
+        if str(r.external_id) == external_id:
+            match = r
+            break
+
+    if match is None:
+        raise HTTPException(status_code=404, detail="Fund not found")
+
+    r = match
+    aum_val = float(r.aum) if r.aum is not None else None
+
+    return FundDetailOut(
+        external_id=str(r.external_id),
+        universe=r.universe,
+        name=r.name or "",
+        ticker=r.ticker,
+        isin=r.isin,
+        series_id=getattr(r, "series_id", None),
+        series_name=getattr(r, "series_name", None),
+        class_id=getattr(r, "class_id", None),
+        class_name=getattr(r, "class_name", None),
+        region=r.region,
+        fund_type=r.fund_type or "unknown",
+        strategy_label=getattr(r, "strategy_label", None),
+        investment_geography=getattr(r, "investment_geography", None),
+        domicile=r.domicile,
+        currency=r.currency,
+        manager_name=r.manager_name,
+        manager_id=r.manager_id,
+        aum=aum_val,
+        inception_date=r.inception_date,
+        total_shareholder_accounts=r.total_shareholder_accounts,
+        investor_count=r.investor_count,
+        vintage_year=getattr(r, "vintage_year", None),
+        expense_ratio_pct=float(r.expense_ratio_pct) if getattr(r, "expense_ratio_pct", None) is not None else None,
+        avg_annual_return_1y=float(r.avg_annual_return_1y) if getattr(r, "avg_annual_return_1y", None) is not None else None,
+        avg_annual_return_10y=float(r.avg_annual_return_10y) if getattr(r, "avg_annual_return_10y", None) is not None else None,
+        is_index=bool(r.is_index) if getattr(r, "is_index", None) is not None else None,
+        is_target_date=bool(r.is_target_date) if getattr(r, "is_target_date", None) is not None else None,
+        is_fund_of_fund=bool(r.is_fund_of_fund) if getattr(r, "is_fund_of_fund", None) is not None else None,
+        disclosure=_build_disclosure(
+            universe=r.universe,
+            has_holdings=bool(r.has_holdings),
+            has_nav=bool(r.has_nav),
+            has_13f_overlay=bool(getattr(r, "has_13f_overlay", False)),
+        ),
     )
