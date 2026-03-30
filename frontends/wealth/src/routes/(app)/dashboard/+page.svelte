@@ -95,10 +95,10 @@
 	// ── Timestamp ────────────────────────────────────────────────────────
 	let updatedAt = $derived(
 		riskStore.computedAt
-			? new Date(riskStore.computedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+			? new Date(riskStore.computedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
 			: null
 	);
-	let today = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
+	let today = new Date().toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" });
 </script>
 
 <div class="dashboard">

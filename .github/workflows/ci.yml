@@ -85,6 +85,8 @@ jobs:
     needs: changes
     if: needs.changes.outputs.frontends == 'true'
     runs-on: ubuntu-latest
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4

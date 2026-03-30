@@ -97,12 +97,12 @@ function formatNumericValue(
 
 /**
  * Format a number as currency.
- * Default: BRL with pt-BR locale.
+ * Default: USD with en-US locale.
  */
 export function formatCurrency(
 	value: NullableNumber,
-	currency = "BRL",
-	locale = "pt-BR",
+	currency = "USD",
+	locale = "en-US",
 ): string {
 	return formatNumericValue(value, locale, {
 		style: "currency",
@@ -118,7 +118,7 @@ export function formatCurrency(
 export function formatNumber(
 	value: NullableNumber,
 	decimals = 2,
-	locale = "pt-BR",
+	locale = "en-US",
 	options: Intl.NumberFormatOptions = {},
 ): string {
 	return formatNumericValue(value, locale, {
@@ -134,7 +134,7 @@ export function formatNumber(
 export function formatPercent(
 	value: NullableNumber,
 	decimals = 2,
-	locale = "pt-BR",
+	locale = "en-US",
 	signed = false,
 ): string {
 	return formatNumericValue(value, locale, {
@@ -160,8 +160,8 @@ export function formatCompact(value: NullableNumber, locale = "en-US"): string {
  */
 export function formatAUM(
 	value: NullableNumber,
-	currency = "BRL",
-	locale = "pt-BR",
+	currency = "USD",
+	locale = "en-US",
 ): string {
 	return formatNumericValue(value, locale, {
 		style: "currency",
@@ -224,7 +224,7 @@ export function formatRatio(
 export function formatDate(
 	date: DateInput,
 	style: DateStyle = "medium",
-	locale = "pt-BR",
+	locale = "en-US",
 ): string {
 	const resolvedDate = toDate(date);
 
@@ -245,7 +245,7 @@ export function formatDate(
 /**
  * Format a date/time for audit surfaces.
  */
-export function formatDateTime(date: DateInput, locale = "pt-BR"): string {
+export function formatDateTime(date: DateInput, locale = "en-US"): string {
 	const resolvedDate = toDate(date);
 
 	if (!resolvedDate) {
@@ -268,7 +268,7 @@ export function formatDateTime(date: DateInput, locale = "pt-BR"): string {
 export function formatDateRange(
 	start: DateInput,
 	end: DateInput,
-	locale = "pt-BR",
+	locale = "en-US",
 ): string {
 	const startDate = toDate(start);
 	const endDate = toDate(end);
@@ -358,7 +358,7 @@ export function plColor(value: NullableNumber): string {
  * Format a date as "DD/MM" for compact chart axes (e.g., "17/03").
  * Useful for DriftHistoryPanel and any chart with dense date labels.
  */
-export function formatShortDate(date: DateInput, locale = "pt-BR"): string {
+export function formatShortDate(date: DateInput, locale = "en-US"): string {
 	const resolvedDate = toDate(date);
 
 	if (!resolvedDate) {

@@ -59,8 +59,17 @@ def run_migrations_online() -> None:
         connection.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
         connection.commit()
 
-        # Widen alembic_version.version_num if needed (default is varchar(32),
-        # but our revision IDs can be longer, e.g. '0049_wealth_continuous_aggregates')
+        # Ensure alembic_version table uses varchar(128) for version_num.
+        # Default is varchar(32), but our revision IDs can exceed that
+        # (e.g. '0049_wealth_continuous_aggregates' is 33 chars).
+        # On fresh databases (CI), pre-create the table so Alembic doesn't
+        # create it with the narrow default. On existing databases, widen it.
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS alembic_version (
+                version_num VARCHAR(128) NOT NULL,
+                CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)
+            )
+        """))
         connection.execute(text("""
             DO $$
             BEGIN
