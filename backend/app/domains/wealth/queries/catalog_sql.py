@@ -109,6 +109,7 @@ sec_manager_funds = Table(
     Column("gross_asset_value", BigInteger),
     Column("investor_count", Integer),
     Column("is_fund_of_funds", Boolean),
+    Column("vintage_year", Integer),
 )
 
 sec_13f_holdings = Table(
@@ -346,9 +347,12 @@ def _registered_us_branch(f: CatalogFilters) -> Select | None:
     stmt = (
         select(
             literal("registered_us").label("universe"),
-            sec_registered_funds.c.cik.label("external_id"),
             func.coalesce(
-                sec_fund_classes.c.class_name + literal(" - ") + sec_registered_funds.c.fund_name,
+                sec_fund_classes.c.series_id,
+                sec_registered_funds.c.cik,
+            ).label("external_id"),
+            func.coalesce(
+                sec_fund_classes.c.series_name,
                 sec_registered_funds.c.fund_name,
             ).label("name"),
             _effective_ticker.label("ticker"),
@@ -379,6 +383,7 @@ def _registered_us_branch(f: CatalogFilters) -> Select | None:
                 sec_registered_funds.c.strategy_label,
                 default="US",
             ),
+            literal_column("NULL").label("vintage_year"),
         )
         .select_from(sec_registered_funds)
         .outerjoin(
@@ -510,6 +515,7 @@ def _etf_branch(f: CatalogFilters) -> Select | None:
                 sec_etfs.c.strategy_label,
                 default="US",
             ),
+            literal_column("NULL").label("vintage_year"),
         )
         .select_from(sec_etfs)
     )
@@ -578,6 +584,7 @@ def _bdc_branch(f: CatalogFilters) -> Select | None:
                 sec_bdcs.c.strategy_label,
                 default="US",
             ),
+            literal_column("NULL").label("vintage_year"),
         )
         .select_from(sec_bdcs)
     )
@@ -667,6 +674,7 @@ def _private_us_branch(f: CatalogFilters) -> Select | None:
                 sec_manager_funds.c.strategy_label,
                 default="Global",
             ),
+            sec_manager_funds.c.vintage_year,
         )
         .select_from(sec_manager_funds)
         .join(
@@ -755,6 +763,7 @@ def _ucits_eu_branch(f: CatalogFilters) -> Select | None:
                 esma_funds.c.strategy_label,
                 default="Europe",
             ),
+            literal_column("NULL").label("vintage_year"),
         )
         .select_from(esma_funds)
         .join(esma_managers, esma_funds.c.esma_manager_id == esma_managers.c.esma_id)

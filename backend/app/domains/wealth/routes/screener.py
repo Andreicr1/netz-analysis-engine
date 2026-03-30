@@ -1456,6 +1456,7 @@ async def get_catalog(
                 inception_date=inception,
                 total_shareholder_accounts=r.total_shareholder_accounts,
                 investor_count=r.investor_count,
+                vintage_year=getattr(r, "vintage_year", None),
                 disclosure=_build_disclosure(
                     universe=r.universe,
                     has_holdings=bool(r.has_holdings),

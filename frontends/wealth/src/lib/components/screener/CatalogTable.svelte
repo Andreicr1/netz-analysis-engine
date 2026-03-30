@@ -18,6 +18,7 @@
 		representative: UnifiedFundItem;
 		classes: UnifiedFundItem[];
 		has_classes: boolean;
+		has_vintages: boolean;
 	}
 
 	interface ManagerGroup {
@@ -97,7 +98,14 @@
 			fund_key: key,
 			representative: items[0]!,
 			classes: items,
-			has_classes: items[0]!.universe === "registered_us" && items.length > 1 && items.some((i) => i.class_id != null),
+			has_classes:
+				items[0]!.universe === "registered_us" &&
+				items.length > 1 &&
+				items.some((i) => i.class_id != null && i.class_id !== ""),
+			has_vintages:
+				items[0]!.universe === "private_us" &&
+				items.some((i) => i.vintage_year != null) &&
+				items[0]!.fund_type !== "Hedge Fund",
 		}));
 
 		// Step 2: group funds by manager
@@ -319,7 +327,7 @@
 								class:ct-fund-row--nested={!mg.is_standalone}
 								class:ct-fund-row--expanded={expandedFunds.has(group.fund_key)}
 								onclick={() => {
-									if (group.has_classes) {
+									if (group.has_classes || group.has_vintages) {
 										toggleFund(group.fund_key);
 									} else {
 										onSelectFund(group.representative);
@@ -327,7 +335,7 @@
 								}}
 							>
 								<td class="ct-col-expand">
-									{#if group.has_classes}
+									{#if group.has_classes || group.has_vintages}
 										<span class="ct-chevron ct-chevron--fund" class:ct-chevron--open={expandedFunds.has(group.fund_key)}>&#9654;</span>
 									{/if}
 								</td>
@@ -389,6 +397,35 @@
 										</td>
 										<td></td>
 										<td></td>
+										<td></td>
+									</tr>
+								{/each}
+							{/if}
+
+							<!-- Vintage rows (L3) — PE/VC private funds only -->
+							{#if group.has_vintages && expandedFunds.has(group.fund_key)}
+								{#each group.classes.toSorted((a, b) => (b.vintage_year ?? 0) - (a.vintage_year ?? 0)) as vintage (`${vintage.external_id}:${vintage.vintage_year}`)}
+									<tr class="scr-inst-row ct-vintage-row" onclick={(e) => { e.stopPropagation(); onSelectFund(vintage); }}>
+										<td class="ct-col-expand"></td>
+										<td class="ct-col-check"></td>
+										<td></td>
+										<td class="ct-col-name">
+											<div class="ct-vintage-name-cell">
+												<span class="ct-vintage-label">
+													{vintage.vintage_year != null ? `Vintage ${vintage.vintage_year}` : vintage.name}
+												</span>
+												{#if vintage.aum != null}
+													<span class="ct-vintage-aum">{formatAumNeutral(vintage.aum)}</span>
+												{/if}
+												{#if vintage.investor_count != null}
+													<span class="ct-vintage-meta">{vintage.investor_count} investors</span>
+												{/if}
+											</div>
+										</td>
+										<td>
+											<span class="ct-strategy-label">{vintage.strategy_label ?? "\u2014"}</span>
+										</td>
+										<td class="std-aum">{formatAumNeutral(vintage.aum)}</td>
 										<td></td>
 									</tr>
 								{/each}
@@ -569,6 +606,40 @@
 	}
 	.ct-chevron--open { transform: rotate(90deg); }
 	.ct-chevron--fund { font-size: 9px; color: #9ca3af; }
+
+	/* ── Vintage rows (L3 — PE/VC) ── */
+	.ct-vintage-row {
+		background: var(--ii-surface-alt, #fbfdff);
+		cursor: pointer;
+	}
+	.ct-vintage-row:hover {
+		background: var(--ii-bg-hover, #f0f7ff);
+	}
+
+	.ct-vintage-name-cell {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding-left: 36px;
+	}
+
+	.ct-vintage-label {
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--ii-text-primary, #1d293d);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.ct-vintage-aum {
+		font-size: 12px;
+		color: var(--ii-text-secondary, #62748e);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.ct-vintage-meta {
+		font-size: 11px;
+		color: var(--ii-text-muted, #9ca3af);
+	}
 
 	/* ── Class rows (L3) ── */
 	.ct-class-row { background: #fbfdff; }

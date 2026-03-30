@@ -37,6 +37,7 @@ export interface UnifiedFundItem {
 	inception_date: string | null;
 	total_shareholder_accounts: number | null;
 	investor_count: number | null;
+	vintage_year: number | null;
 
 	// Share class fields (populated for registered_us funds with classes)
 	series_id: string | null;

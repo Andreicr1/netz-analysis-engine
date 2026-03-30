@@ -62,6 +62,7 @@ class UnifiedFundItem(BaseModel):
     inception_date: date | None = None
     total_shareholder_accounts: int | None = None
     investor_count: int | None = None
+    vintage_year: int | None = None
 
     # Screening overlay (if imported to tenant universe)
     instrument_id: str | None = None

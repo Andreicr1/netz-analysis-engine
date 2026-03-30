@@ -176,6 +176,7 @@ class SecManagerFund(Base, IdMixin):
     strategy_label: Mapped[str | None] = mapped_column(Text)
     is_fund_of_funds: Mapped[bool | None] = mapped_column(Boolean)
     investor_count: Mapped[int | None] = mapped_column(Integer)
+    vintage_year: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )
