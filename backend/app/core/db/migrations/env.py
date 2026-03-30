@@ -59,7 +59,28 @@ def run_migrations_online() -> None:
         connection.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
         connection.commit()
 
-        context.configure(connection=connection, target_metadata=target_metadata)
+        # Widen alembic_version.version_num if needed (default is varchar(32),
+        # but our revision IDs can be longer, e.g. '0049_wealth_continuous_aggregates')
+        connection.execute(text("""
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name = 'alembic_version'
+                      AND column_name = 'version_num'
+                      AND character_maximum_length < 128
+                ) THEN
+                    ALTER TABLE alembic_version ALTER COLUMN version_num TYPE varchar(128);
+                END IF;
+            END $$;
+        """))
+        connection.commit()
+
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            version_table_schema=target_metadata.schema,
+        )
         with context.begin_transaction():
             context.run_migrations()
 
