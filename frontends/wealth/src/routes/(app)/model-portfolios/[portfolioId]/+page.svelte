@@ -13,7 +13,7 @@
 	import { Button } from "@investintell/ui/components/ui/button";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
-	import type { ModelPortfolio, TrackRecord, InstrumentWeight, BacktestFold, StressScenario, PortfolioView, ParametricStressResult } from "$lib/types/model-portfolio";
+	import type { ModelPortfolio, TrackRecord, InstrumentWeight, BacktestFold, StressScenario, PortfolioView, ParametricStressResult, OverlapResult, CusipExposure, SectorExposure } from "$lib/types/model-portfolio";
 	import type { UniverseAsset } from "$lib/types/universe";
 	import ICViewsPanel from "$lib/components/model-portfolio/ICViewsPanel.svelte";
 	import { instrumentTypeLabel, instrumentTypeColor } from "$lib/types/universe";
@@ -37,6 +37,7 @@
 	let backtest = $derived(trackRecord?.backtest ?? null);
 	let stress = $derived(trackRecord?.stress ?? null);
 	let funds = $derived(portfolio.fund_selection_schema?.funds ?? [] as InstrumentWeight[]);
+	let overlap = $derived((data.overlap ?? null) as OverlapResult | null);
 
 	// ── Fact Sheets ──────────────────────────────────────────────────────
 
@@ -497,6 +498,111 @@
 	<!-- IC VIEWS (Black-Litterman)                                         -->
 	<!-- ═══════════════════════════════════════════════════════════════════ -->
 	<ICViewsPanel {portfolioId} {views} {instruments} {canEdit} />
+
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<!-- OVERLAP ANALYSIS                                                   -->
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<section class="mp-section mp-section--full">
+		<h3 class="mp-section-title">
+			Holdings Overlap
+			{#if overlap?.has_sufficient_data}
+				<span class="mp-section-count">{overlap.total_holdings} positions analyzed</span>
+			{/if}
+		</h3>
+
+		{#if !overlap || !overlap.has_sufficient_data}
+			<EmptyState
+				title="Insufficient holdings data"
+				message={overlap?.data_warning ?? "Holdings overlap analysis requires N-PORT data for at least 2 funds in the portfolio."}
+			/>
+		{:else}
+			<!-- Breaches -->
+			{#if overlap.breaches.length > 0}
+				<div class="ovl-breaches">
+					<h4 class="ovl-subtitle ovl-subtitle--warn">
+						{overlap.breaches.length} securit{overlap.breaches.length === 1 ? "y" : "ies"} exceed{overlap.breaches.length === 1 ? "s" : ""} the {formatPercent(overlap.limit_pct, 0)} concentration threshold
+					</h4>
+					<div class="ovl-table-wrap">
+						<table class="ovl-table">
+							<thead>
+								<tr>
+									<th>CUSIP</th>
+									<th>Issuer</th>
+									<th class="ovl-num">Exposure</th>
+									<th>Funds</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each overlap.breaches as b (b.cusip)}
+									<tr class="ovl-row--breach">
+										<td class="ovl-mono">{b.cusip}</td>
+										<td>{b.issuer_name ?? "—"}</td>
+										<td class="ovl-num ovl-breach-pct">{formatPercent(b.total_exposure_pct / 100, 2)}</td>
+										<td class="ovl-funds">{b.funds_holding.join(" · ")}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Sector Concentration -->
+			{#if overlap.sector_exposures.length > 0}
+				<div class="ovl-sectors">
+					<h4 class="ovl-subtitle">Sector Exposure</h4>
+					{#each overlap.sector_exposures.slice(0, 10) as s (s.sector)}
+						<div class="ovl-bar-row">
+							<span class="ovl-bar-label">{s.sector}</span>
+							<div class="ovl-bar-track">
+								<div
+									class="ovl-bar-fill"
+									style="width: {Math.min(s.total_exposure_pct, 100)}%"
+								></div>
+							</div>
+							<span class="ovl-bar-pct">{formatPercent(s.total_exposure_pct / 100, 1)}</span>
+						</div>
+					{/each}
+				</div>
+			{/if}
+
+			<!-- Top Holdings -->
+			{#if overlap.top_cusip_exposures.length > 0}
+				<div class="ovl-top-holdings">
+					<h4 class="ovl-subtitle">Top Cross-Fund Holdings</h4>
+					<div class="ovl-table-wrap">
+						<table class="ovl-table">
+							<thead>
+								<tr>
+									<th>CUSIP</th>
+									<th>Issuer</th>
+									<th class="ovl-num">Exposure</th>
+									<th>Funds</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each overlap.top_cusip_exposures as e (e.cusip)}
+									<tr class:ovl-row--breach={e.is_breach}>
+										<td class="ovl-mono">{e.cusip}</td>
+										<td>{e.issuer_name ?? "—"}</td>
+										<td class="ovl-num" class:ovl-breach-pct={e.is_breach}>
+											{formatPercent(e.total_exposure_pct / 100, 2)}
+										</td>
+										<td class="ovl-funds">{e.funds_holding.join(" · ")}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Data warning -->
+			{#if overlap.data_warning}
+				<p class="ovl-data-warning">{overlap.data_warning}</p>
+			{/if}
+		{/if}
+	</section>
 
 	<!-- ═══════════════════════════════════════════════════════════════════ -->
 	<!-- FACT SHEETS                                                        -->
@@ -1103,5 +1209,126 @@
 
 	.fs-date {
 		color: var(--ii-text-muted);
+	}
+
+	/* ── Overlap Analysis ──────────────────────────────────────────────── */
+
+	.ovl-breaches {
+		margin-bottom: var(--ii-space-stack-lg, 24px);
+	}
+
+	.ovl-subtitle {
+		font-size: var(--ii-text-body, 0.9375rem);
+		font-weight: 600;
+		color: var(--ii-text-primary);
+		margin-bottom: var(--ii-space-stack-sm, 12px);
+	}
+
+	.ovl-subtitle--warn {
+		color: var(--ii-warning, #b45309);
+	}
+
+	.ovl-table-wrap {
+		overflow-x: auto;
+	}
+
+	.ovl-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: var(--ii-text-label, 0.8125rem);
+	}
+
+	.ovl-table th {
+		text-align: left;
+		font-weight: 600;
+		color: var(--ii-text-secondary);
+		padding: 6px 12px 6px 0;
+		border-bottom: 1px solid var(--ii-border-subtle, #e5e5e5);
+		font-size: 0.6875rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+
+	.ovl-table td {
+		padding: 8px 12px 8px 0;
+		border-bottom: 1px solid var(--ii-border-subtle, #f0f0f0);
+		color: var(--ii-text-primary);
+	}
+
+	.ovl-num {
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.ovl-mono {
+		font-family: var(--ii-font-mono, monospace);
+		font-size: 0.75rem;
+		color: var(--ii-text-secondary);
+	}
+
+	.ovl-breach-pct {
+		color: var(--ii-danger, #dc2626);
+		font-weight: 600;
+	}
+
+	.ovl-row--breach {
+		background: color-mix(in srgb, var(--ii-danger, #dc2626) 5%, transparent);
+	}
+
+	.ovl-funds {
+		color: var(--ii-text-secondary);
+		font-size: 0.75rem;
+	}
+
+	.ovl-sectors {
+		margin-bottom: var(--ii-space-stack-lg, 24px);
+	}
+
+	.ovl-bar-row {
+		display: grid;
+		grid-template-columns: 160px 1fr 60px;
+		align-items: center;
+		gap: 12px;
+		margin-bottom: 6px;
+	}
+
+	.ovl-bar-label {
+		font-size: var(--ii-text-label, 0.8125rem);
+		color: var(--ii-text-primary);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.ovl-bar-track {
+		height: 16px;
+		background: var(--ii-surface-alt, #f5f5f5);
+		border-radius: 3px;
+		overflow: hidden;
+	}
+
+	.ovl-bar-fill {
+		height: 100%;
+		background: var(--ii-brand-primary, #3b82f6);
+		border-radius: 3px;
+		transition: width 0.3s ease;
+	}
+
+	.ovl-bar-pct {
+		font-size: var(--ii-text-label, 0.8125rem);
+		font-variant-numeric: tabular-nums;
+		text-align: right;
+		color: var(--ii-text-secondary);
+	}
+
+	.ovl-top-holdings {
+		margin-bottom: var(--ii-space-stack-lg, 24px);
+	}
+
+	.ovl-data-warning {
+		font-size: var(--ii-text-label, 0.8125rem);
+		color: var(--ii-text-muted);
+		font-style: italic;
+		margin-top: var(--ii-space-stack-sm, 12px);
 	}
 </style>

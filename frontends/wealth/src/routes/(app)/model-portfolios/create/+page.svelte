@@ -80,6 +80,30 @@
 			?? blockId.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 	}
 
+	// Geography pre-filter mapping: block → expected investment geography
+	const BLOCK_GEOGRAPHY: Record<string, string> = {
+		na_equity_large: "US",
+		na_equity_value: "US",
+		na_equity_small: "US",
+		fi_us_aggregate: "US",
+		fi_us_high_yield: "US",
+		fi_us_tips: "US",
+		fi_us_treasury: "US",
+		fi_treasury: "US",
+		fi_credit_ig: "US",
+		fi_credit_hy: "US",
+		dm_europe_equity: "Europe",
+		intl_equity_dm: "Global",
+		intl_equity_em: "Emerging Markets",
+		em_equity: "Emerging Markets",
+		alt_gold: "Global",
+		alt_real_estate: "US",
+		alt_reits: "US",
+		cash: "US",
+	};
+
+	let showAllGeographies = $state(false);
+
 	// ── Block list from strategic allocation ─────────────────────────────
 
 	let blockIds = $derived(strategic.map((s) => s.block_id));
@@ -167,7 +191,16 @@
 
 	let fundsForSelectedBlock = $derived.by(() => {
 		if (!selectedBlockId) return [];
-		return approvedFunds.filter((f) => f.block_id === selectedBlockId);
+		let funds = approvedFunds.filter((f) => f.block_id === selectedBlockId);
+		if (!showAllGeographies) {
+			const expectedGeo = BLOCK_GEOGRAPHY[selectedBlockId];
+			if (expectedGeo) {
+				const geoFiltered = funds.filter((f) => f.investment_geography === expectedGeo);
+				// Only apply filter if it leaves some results; otherwise show all
+				if (geoFiltered.length > 0) funds = geoFiltered;
+			}
+		}
+		return funds;
 	});
 
 	let selectedFundIdsForBlock = $derived.by(() => {
@@ -458,6 +491,15 @@
 							<h3 class="fund-list-title">{blockDisplayName(selectedBlockId)}</h3>
 							<span class="fund-list-count">{fundsForSelectedBlock.length} approved fund{fundsForSelectedBlock.length !== 1 ? "s" : ""}</span>
 						</div>
+						{#if BLOCK_GEOGRAPHY[selectedBlockId]}
+							<label class="geo-toggle">
+								<input type="checkbox" bind:checked={showAllGeographies} />
+								<span>Show all geographies</span>
+								{#if !showAllGeographies}
+									<span class="geo-tag">{BLOCK_GEOGRAPHY[selectedBlockId]}</span>
+								{/if}
+							</label>
+						{/if}
 						<div class="fund-items">
 							{#each fundsForSelectedBlock as fund (fund.fund_id)}
 								{@const isSelected = selectedFundIdsForBlock.has(fund.fund_id)}
@@ -470,7 +512,7 @@
 									<div class="fund-item-info">
 										<span class="fund-item-name">{fund.fund_name}</span>
 										<span class="fund-item-meta">
-											{fund.geography ?? ""}{fund.geography && fund.asset_class ? " · " : ""}{fund.asset_class ?? ""}
+											{fund.investment_geography ?? fund.geography ?? ""}{(fund.investment_geography || fund.geography) && fund.asset_class ? " · " : ""}{fund.asset_class ?? ""}
 										</span>
 									</div>
 									<span class="fund-item-toggle">
@@ -1079,6 +1121,25 @@
 		justify-content: space-between;
 		align-items: center;
 		margin-bottom: var(--ii-space-stack-sm, 12px);
+	}
+
+	.geo-toggle {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-secondary);
+		margin-bottom: var(--ii-space-stack-sm, 12px);
+		cursor: pointer;
+	}
+
+	.geo-tag {
+		display: inline-block;
+		padding: 1px 6px;
+		border-radius: 3px;
+		background: var(--ii-surface-alt, #f0f0f0);
+		font-size: 0.6875rem;
+		font-weight: 500;
 	}
 
 	.fund-list-title {

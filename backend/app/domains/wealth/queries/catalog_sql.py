@@ -42,6 +42,7 @@ from sqlalchemy import (
     Table,
     Text,
     and_,
+    case,
     func,
     literal,
     literal_column,
@@ -193,6 +194,53 @@ def _escape_ilike(text: str) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+#  Investment geography — SQL-level keyword classification (Layer 2 cascade)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _geography_case(name_col, strategy_col=None, *, default: str = "US"):
+    """Build a SQL CASE for investment_geography from fund name + strategy_label.
+
+    This mirrors Layer 2 of geography_classifier.py using SQL ILIKE.
+    """
+    text_col = func.coalesce(strategy_col, name_col) if strategy_col is not None else name_col
+    return case(
+        (text_col.ilike("%emerging%"), literal("Emerging Markets")),
+        (text_col.ilike("%frontier%"), literal("Emerging Markets")),
+        (text_col.ilike("%china%"), literal("Emerging Markets")),
+        (text_col.ilike("%india%"), literal("Emerging Markets")),
+        (text_col.ilike("%latin america%"), literal("Latin America")),
+        (text_col.ilike("%latam%"), literal("Latin America")),
+        (text_col.ilike("%brazil%"), literal("Latin America")),
+        (text_col.ilike("%europe%"), literal("Europe")),
+        (text_col.ilike("%european%"), literal("Europe")),
+        (text_col.ilike("%eurozone%"), literal("Europe")),
+        (text_col.ilike("%asia%"), literal("Asia Pacific")),
+        (text_col.ilike("%japan%"), literal("Asia Pacific")),
+        (text_col.ilike("%pacific%"), literal("Asia Pacific")),
+        (text_col.ilike("%global%"), literal("Global")),
+        (text_col.ilike("%world%"), literal("Global")),
+        (text_col.ilike("%international%"), literal("Global")),
+        (text_col.ilike("%foreign%"), literal("Global")),
+        (text_col.ilike("%ex-us%"), literal("Global")),
+        (text_col.ilike("%ex us%"), literal("Global")),
+        else_=literal(default),
+    ).label("investment_geography")
+
+
+def _apply_geography_filter(stmt, geo_col, f: "CatalogFilters"):
+    """Apply investment_geography filter if set."""
+    if not f.investment_geography:
+        return stmt
+    geo_list = [v.strip() for v in f.investment_geography.split(",") if v.strip()]
+    if len(geo_list) == 1:
+        return stmt.where(geo_col == geo_list[0])
+    if geo_list:
+        return stmt.where(geo_col.in_(geo_list))
+    return stmt
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 #  Filter dataclass
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -204,6 +252,7 @@ class CatalogFilters:
     fund_universe: str | None = None      # comma-separated categories or legacy values
     fund_type: str | None = None          # additional fund_type filter within universe
     strategy_label: str | None = None     # comma-separated strategy labels
+    investment_geography: str | None = None  # comma-separated geography values
     aum_min: float | None = None
     has_nav: bool | None = None           # True = only funds with ticker
     domicile: str | None = None
@@ -325,6 +374,11 @@ def _registered_us_branch(f: CatalogFilters) -> Select | None:
             literal(True).label("has_holdings"),
             (_effective_ticker.isnot(None)).label("has_nav"),
             _13f_exists.label("has_13f_overlay"),
+            _geography_case(
+                sec_registered_funds.c.fund_name,
+                sec_registered_funds.c.strategy_label,
+                default="US",
+            ),
         )
         .select_from(sec_registered_funds)
         .outerjoin(
@@ -451,6 +505,11 @@ def _etf_branch(f: CatalogFilters) -> Select | None:
             literal(True).label("has_holdings"),
             (sec_etfs.c.ticker.isnot(None)).label("has_nav"),
             literal(False).label("has_13f_overlay"),
+            _geography_case(
+                sec_etfs.c.fund_name,
+                sec_etfs.c.strategy_label,
+                default="US",
+            ),
         )
         .select_from(sec_etfs)
     )
@@ -514,6 +573,11 @@ def _bdc_branch(f: CatalogFilters) -> Select | None:
             literal(True).label("has_holdings"),
             (sec_bdcs.c.ticker.isnot(None)).label("has_nav"),
             literal(False).label("has_13f_overlay"),
+            _geography_case(
+                sec_bdcs.c.fund_name,
+                sec_bdcs.c.strategy_label,
+                default="US",
+            ),
         )
         .select_from(sec_bdcs)
     )
@@ -598,6 +662,11 @@ def _private_us_branch(f: CatalogFilters) -> Select | None:
             literal(False).label("has_holdings"),
             literal(False).label("has_nav"),
             _priv_13f_exists.label("has_13f_overlay"),
+            _geography_case(
+                sec_manager_funds.c.fund_name,
+                sec_manager_funds.c.strategy_label,
+                default="Global",
+            ),
         )
         .select_from(sec_manager_funds)
         .join(
@@ -681,6 +750,11 @@ def _ucits_eu_branch(f: CatalogFilters) -> Select | None:
             literal(False).label("has_holdings"),
             literal(True).label("has_nav"),
             literal(False).label("has_13f_overlay"),
+            _geography_case(
+                esma_funds.c.fund_name,
+                esma_funds.c.strategy_label,
+                default="Europe",
+            ),
         )
         .select_from(esma_funds)
         .join(esma_managers, esma_funds.c.esma_manager_id == esma_managers.c.esma_id)
@@ -768,8 +842,18 @@ def build_catalog_query(filters: CatalogFilters) -> Select | None:
     sort_expr = literal_column(_SORT_MAP.get(filters.sort, "name ASC"))
     offset = (filters.page - 1) * filters.page_size
 
+    stmt = select(combined, func.count().over().label("_total"))
+
+    # Apply investment_geography filter on the UNION ALL result
+    if filters.investment_geography:
+        geo_list = [v.strip() for v in filters.investment_geography.split(",") if v.strip()]
+        if len(geo_list) == 1:
+            stmt = stmt.where(combined.c.investment_geography == geo_list[0])
+        elif geo_list:
+            stmt = stmt.where(combined.c.investment_geography.in_(geo_list))
+
     return (
-        select(combined, func.count().over().label("_total"))
+        stmt
         .order_by(sort_expr)
         .offset(offset)
         .limit(filters.page_size)
@@ -779,7 +863,8 @@ def build_catalog_query(filters: CatalogFilters) -> Select | None:
 def build_catalog_facets_query(filters: CatalogFilters) -> Select | None:
     """Build facet aggregation query over the unified catalog.
 
-    Returns counts grouped by universe, region, fund_type, strategy_label, domicile.
+    Returns counts grouped by universe, region, fund_type, strategy_label,
+    domicile, investment_geography.
     Uses a single scan with grouping sets for efficiency.
     """
     facet_filters = CatalogFilters(
@@ -788,6 +873,7 @@ def build_catalog_facets_query(filters: CatalogFilters) -> Select | None:
         fund_universe=filters.fund_universe,
         fund_type=filters.fund_type,
         strategy_label=filters.strategy_label,
+        investment_geography=filters.investment_geography,
         aum_min=filters.aum_min,
         has_nav=filters.has_nav,
         domicile=filters.domicile,
@@ -801,12 +887,13 @@ def build_catalog_facets_query(filters: CatalogFilters) -> Select | None:
 
     combined = union_all(*branches).subquery("catalog_facets")
 
-    return select(
+    stmt = select(
         combined.c.universe,
         combined.c.region,
         combined.c.fund_type,
         combined.c.strategy_label,
         combined.c.domicile,
+        combined.c.investment_geography,
         func.count().label("cnt"),
     ).group_by(
         combined.c.universe,
@@ -814,4 +901,15 @@ def build_catalog_facets_query(filters: CatalogFilters) -> Select | None:
         combined.c.fund_type,
         combined.c.strategy_label,
         combined.c.domicile,
+        combined.c.investment_geography,
     )
+
+    # Apply geography filter to facet query too
+    if filters.investment_geography:
+        geo_list = [v.strip() for v in filters.investment_geography.split(",") if v.strip()]
+        if len(geo_list) == 1:
+            stmt = stmt.where(combined.c.investment_geography == geo_list[0])
+        elif geo_list:
+            stmt = stmt.where(combined.c.investment_geography.in_(geo_list))
+
+    return stmt

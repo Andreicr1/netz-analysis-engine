@@ -26,6 +26,7 @@ export interface UnifiedFundItem {
 	region: FundRegion;
 	fund_type: string;
 	strategy_label: string | null;
+	investment_geography: string | null;
 	domicile: string | null;
 	currency: string | null;
 
@@ -62,6 +63,7 @@ export interface CatalogFacets {
 	regions: CatalogFacetItem[];
 	fund_types: CatalogFacetItem[];
 	strategy_labels: CatalogFacetItem[];
+	geographies: CatalogFacetItem[];
 	domiciles: CatalogFacetItem[];
 	total: number;
 }
@@ -89,6 +91,7 @@ export const EMPTY_FACETS: CatalogFacets = {
 	regions: [],
 	fund_types: [],
 	strategy_labels: [],
+	geographies: [],
 	domiciles: [],
 	total: 0,
 };

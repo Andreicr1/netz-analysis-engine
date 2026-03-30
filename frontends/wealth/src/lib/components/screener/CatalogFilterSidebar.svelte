@@ -13,6 +13,7 @@
 		selectedCategories: CatalogCategory[];
 		selectedFundTypes: string[];
 		selectedStrategyLabels: string[];
+		selectedGeographies: string[];
 		selectedDomiciles: string[];
 		searchQ: string;
 		aumMin: string;
@@ -27,6 +28,7 @@
 		selectedCategories = $bindable([]),
 		selectedFundTypes = $bindable([]),
 		selectedStrategyLabels = $bindable([]),
+		selectedGeographies = $bindable([]),
 		selectedDomiciles = $bindable([]),
 		searchQ = $bindable(""),
 		aumMin = $bindable(""),
@@ -64,10 +66,16 @@
 		onFilterChange();
 	}
 
+	function toggleGeography(val: string) {
+		selectedGeographies = toggleValue(selectedGeographies, val);
+		onFilterChange();
+	}
+
 	function clearAll() {
 		selectedCategories = [];
 		selectedFundTypes = [];
 		selectedStrategyLabels = [];
+		selectedGeographies = [];
 		selectedDomiciles = [];
 		searchQ = "";
 		aumMin = "";
@@ -81,6 +89,7 @@
 		selectedCategories.length > 0 ||
 		selectedFundTypes.length > 0 ||
 		selectedStrategyLabels.length > 0 ||
+		selectedGeographies.length > 0 ||
 		selectedDomiciles.length > 0 ||
 		searchQ.length > 0 ||
 		aumMin.length > 0 ||
@@ -190,6 +199,24 @@
 		</div>
 	{/if}
 
+	<!-- Geography -->
+	{#if facets.geographies.length > 0}
+		<div class="cfs-section">
+			<h4 class="cfs-group-title">Geography</h4>
+			{#each facets.geographies as item (item.value)}
+				<label class="cfs-check">
+					<input
+						type="checkbox"
+						checked={selectedGeographies.includes(item.value)}
+						onchange={() => toggleGeography(item.value)}
+					/>
+					<span class="cfs-check-label">{item.label}</span>
+					<span class="cfs-check-count">{item.count.toLocaleString()}</span>
+				</label>
+			{/each}
+		</div>
+	{/if}
+
 	<!-- Domicile -->
 	{#if facets.domiciles.length > 0}
 		<div class="cfs-section">
@@ -264,7 +291,7 @@
 	</div>
 
 	<!-- Active filter chips -->
-	{#if selectedFundTypes.length > 0 || selectedStrategyLabels.length > 0}
+	{#if selectedFundTypes.length > 0 || selectedStrategyLabels.length > 0 || selectedGeographies.length > 0}
 		<div class="cfs-section cfs-chips-section">
 			<h4 class="cfs-group-title">Active Filters</h4>
 			<div class="cfs-chip-grid">
@@ -277,6 +304,12 @@
 				{#each selectedStrategyLabels as sl (sl)}
 					<button class="cfs-chip" onclick={() => toggleStrategy(sl)}>
 						{sl}
+						<span class="cfs-chip-x">&times;</span>
+					</button>
+				{/each}
+				{#each selectedGeographies as geo (geo)}
+					<button class="cfs-chip" onclick={() => toggleGeography(geo)}>
+						{geo}
 						<span class="cfs-chip-x">&times;</span>
 					</button>
 				{/each}

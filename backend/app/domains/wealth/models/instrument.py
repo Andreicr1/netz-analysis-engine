@@ -36,6 +36,9 @@ class Instrument(Base):
     currency: Mapped[str] = mapped_column(
         String(3), nullable=False, server_default="USD",
     )
+    investment_geography: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True,
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, server_default="true")
     attributes: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(

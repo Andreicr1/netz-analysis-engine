@@ -32,6 +32,7 @@ class UniverseAssetRead(BaseModel):
     fund_name: str
     block_id: str | None = None
     geography: str | None = None
+    investment_geography: str | None = None
     asset_class: str | None = None
     approval_status: str | None = None
     approval_decision: str

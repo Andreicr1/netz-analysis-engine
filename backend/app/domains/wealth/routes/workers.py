@@ -30,7 +30,7 @@ from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_curr
 from app.domains.wealth.workers.ingestion import run_ingestion
 from app.domains.wealth.workers.macro_ingestion import run_macro_ingestion
 from app.domains.wealth.workers.portfolio_eval import run_portfolio_eval
-from app.domains.wealth.workers.risk_calc import run_risk_calc
+from app.domains.wealth.workers.risk_calc import run_global_risk_metrics, run_risk_calc
 from app.shared.enums import Role
 
 logger = structlog.get_logger()
@@ -186,6 +186,30 @@ async def trigger_run_risk_calc(
         background_tasks, "run-risk-calc", str(user.organization_id),
         run_risk_calc, user.organization_id,
         timeout_seconds=_HEAVY_WORKER_TIMEOUT, org_id=user.organization_id,
+    )
+
+
+@router.post(
+    "/run-global-risk-metrics",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger global risk metrics calculation",
+    description=(
+        "Computes base risk metrics (CVaR, Sharpe, volatility, momentum, GARCH) "
+        "for ALL active instruments with NAV. Global scope — no org_id, no DTW drift. "
+        "Pre-populates fund_risk_metrics so any tenant's screener has data immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_global_risk_metrics(
+    background_tasks: BackgroundTasks,
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+    return await _dispatch_worker(
+        background_tasks, "run-global-risk-metrics", "global",
+        run_global_risk_metrics,
+        timeout_seconds=14400,  # 4h for 6k+ instruments
     )
 
 
@@ -890,6 +914,36 @@ async def trigger_run_form345_ingestion(
         background_tasks, "run-form345-ingestion", "global",
         run_form345_ingestion,
         timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )
+
+
+@router.post(
+    "/run-geography-enrichment",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger investment geography enrichment",
+    description=(
+        "Schedules the geography enrichment worker as a background task. "
+        "Classifies investment geography for all instruments using a 3-layer "
+        "cascade: N-PORT country allocations, strategy_label/name keywords, "
+        "default by fund_type/domicile. Uses advisory lock 900_060. "
+        "Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_geography_enrichment(
+    background_tasks: BackgroundTasks,
+    recalculate: bool = Query(default=False, description="Re-classify all instruments, not just NULLs"),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.geography_enrichment import run_geography_enrichment
+
+    return await _dispatch_worker(
+        background_tasks, "run-geography-enrichment", "global",
+        run_geography_enrichment, recalculate,
+        timeout_seconds=_LIGHT_WORKER_TIMEOUT,
     )
 
 

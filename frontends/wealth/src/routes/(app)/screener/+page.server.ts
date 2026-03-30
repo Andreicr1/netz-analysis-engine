@@ -26,6 +26,8 @@ export const load: PageServerLoad = async ({ parent, url }) => {
 	if (fundTypes) catalogParams.fund_type = fundTypes;
 	const strategyLabel = url.searchParams.get("strategy_label");
 	if (strategyLabel) catalogParams.strategy_label = strategyLabel;
+	const investmentGeography = url.searchParams.get("investment_geography");
+	if (investmentGeography) catalogParams.investment_geography = investmentGeography;
 	const domiciles = url.searchParams.getAll("domicile");
 	if (domiciles.length) catalogParams.domicile = domiciles.join(",");
 	const aumMin = url.searchParams.get("aum_min");

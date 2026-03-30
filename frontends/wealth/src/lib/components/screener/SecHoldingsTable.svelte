@@ -23,14 +23,14 @@
 	let selectedQuarter = $state<string | null>(null);
 	let dataVersion = $state(0); // bump to trigger re-render
 
-	// ── Fetch ALL holdings for the quarter (page_size=500 for virtual scroll) ──
+	// ── Fetch holdings for the quarter (page_size=200 — backend max) ──
 	async function fetchHoldings() {
 		if (!cik) return;
 		loading = true;
 		try {
 			const params: Record<string, string> = {
 				page: "1",
-				page_size: "500",
+				page_size: "200",
 			};
 			if (selectedQuarter) params.quarter = selectedQuarter;
 			holdings = await api.get<SecHoldingsPage>(

@@ -77,6 +77,7 @@ async def list_universe(
                     fund_name=a.fund_name,
                     block_id=a.block_id,
                     geography=a.geography,
+                    investment_geography=a.investment_geography,
                     asset_class=a.asset_class,
                     approval_status=a.approval_status,
                     approval_decision=a.approval_decision,

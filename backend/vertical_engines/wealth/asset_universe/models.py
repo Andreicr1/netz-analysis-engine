@@ -35,6 +35,7 @@ class UniverseAsset:
     fund_name: str
     block_id: str | None
     geography: str | None
+    investment_geography: str | None
     asset_class: str | None
     approval_status: str | None
     approval_decision: str

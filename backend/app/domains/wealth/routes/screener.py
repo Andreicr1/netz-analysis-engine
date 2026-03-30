@@ -357,6 +357,7 @@ def _build_internal_query(
             Instrument.ticker.label("ticker"),
             Instrument.asset_class.label("asset_class"),
             _internal_geo_case.label("geography"),
+            Instrument.investment_geography.label("investment_geography"),
             Instrument.attributes["domicile"].astext.label("domicile"),
             Instrument.currency.label("currency"),
             Instrument.attributes["strategy"].astext.label("strategy"),
@@ -945,7 +946,25 @@ async def import_sec_security(
         ).limit(1),
     )).scalar_one_or_none()
     if not sec_row:
-        raise HTTPException(status_code=404, detail=f"Tradeable security with ticker {ticker} not found")
+        # Fallback: mutual fund tickers are in sec_fund_classes, not cusip_ticker_map
+        from app.shared.models import SecFundClass as _FcFallback, SecRegisteredFund as _RfFallback
+        from types import SimpleNamespace
+
+        fc_fallback = (await db.execute(
+            select(_FcFallback).where(_FcFallback.ticker == ticker.upper()).limit(1),
+        )).scalar_one_or_none()
+        if not fc_fallback:
+            raise HTTPException(status_code=404, detail=f"Tradeable security with ticker {ticker} not found")
+        rf_fallback = (await db.execute(
+            select(_RfFallback).where(_RfFallback.cik == fc_fallback.cik),
+        )).scalar_one_or_none()
+        sec_row = SimpleNamespace(
+            ticker=ticker.upper(),
+            issuer_name=rf_fallback.fund_name if rf_fallback else (fc_fallback.series_name or ticker),
+            security_type="Open-End Fund",
+            cusip=None, exchange=None, figi=None, composite_figi=None,
+            is_tradeable=True,
+        )
 
     # Map security_type to instrument_type
     _type_map = {
@@ -1353,6 +1372,7 @@ async def get_catalog(
     fund_universe: str | None = Query(None, description="Comma-separated categories: mutual_fund,etf,closed_end,bdc,hedge_fund,private_fund,ucits"),
     fund_type: str | None = Query(None, description="Additional fund_type filter within universe"),
     strategy_label: str | None = Query(None, description="Comma-separated strategy labels"),
+    investment_geography: str | None = Query(None, description="Comma-separated: US,Europe,Emerging Markets,Asia Pacific,Global,Latin America"),
     aum_min: float | None = Query(None, ge=0, description="Minimum AUM in USD"),
     has_nav: bool | None = Query(None, description="Only funds with NAV history (ticker)"),
     domicile: str | None = Query(None),
@@ -1371,6 +1391,7 @@ async def get_catalog(
         fund_universe=fund_universe,
         fund_type=fund_type,
         strategy_label=strategy_label,
+        investment_geography=investment_geography,
         aum_min=aum_min,
         has_nav=has_nav,
         domicile=domicile,
@@ -1424,6 +1445,7 @@ async def get_catalog(
                 region=r.region,
                 fund_type=r.fund_type or "unknown",
                 strategy_label=getattr(r, "strategy_label", None),
+                investment_geography=getattr(r, "investment_geography", None),
                 domicile=r.domicile,
                 currency=r.currency,
                 manager_name=r.manager_name,
@@ -1462,6 +1484,7 @@ async def get_catalog_facets(
     fund_universe: str | None = Query(None),
     fund_type: str | None = Query(None),
     strategy_label: str | None = Query(None),
+    investment_geography: str | None = Query(None),
     aum_min: float | None = Query(None, ge=0),
     has_nav: bool | None = Query(None),
     domicile: str | None = Query(None),
@@ -1474,6 +1497,7 @@ async def get_catalog_facets(
         fund_universe=fund_universe,
         fund_type=fund_type,
         strategy_label=strategy_label,
+        investment_geography=investment_geography,
         aum_min=aum_min,
         has_nav=has_nav,
         domicile=domicile,
@@ -1491,6 +1515,7 @@ async def get_catalog_facets(
     type_counts: dict[str, int] = {}
     strategy_counts: dict[str, int] = {}
     domicile_counts: dict[str, int] = {}
+    geography_counts: dict[str, int] = {}
     grand_total = 0
 
     for r in rows:
@@ -1513,6 +1538,10 @@ async def get_catalog_facets(
         dom = r.domicile
         if dom:
             domicile_counts[dom] = domicile_counts.get(dom, 0) + cnt
+
+        geo = getattr(r, "investment_geography", None)
+        if geo:
+            geography_counts[geo] = geography_counts.get(geo, 0) + cnt
 
     _UNIVERSE_LABELS = {
         "registered_us": "US Registered",
@@ -1539,6 +1568,7 @@ async def get_catalog_facets(
         regions=to_facets(region_counts),
         fund_types=to_facets(type_counts),
         strategy_labels=to_facets(strategy_counts),
+        geographies=to_facets(geography_counts),
         domiciles=to_facets(domicile_counts),
         total=grand_total,
     )

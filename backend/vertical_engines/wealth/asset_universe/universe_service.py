@@ -164,6 +164,7 @@ class UniverseService:
                 fund_name=inst.name,
                 block_id=inst_org.block_id,
                 geography=inst.geography,
+                investment_geography=inst.investment_geography,
                 asset_class=inst.asset_class,
                 approval_status=inst_org.approval_status,
                 approval_decision=approval.decision,

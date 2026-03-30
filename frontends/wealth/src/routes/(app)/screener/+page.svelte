@@ -38,6 +38,7 @@
 	);
 	let selectedFundTypes = $state<string[]>(initParams.fund_type ? initParams.fund_type.split(",") : []);
 	let selectedStrategyLabels = $state<string[]>(initParams.strategy_label ? initParams.strategy_label.split(",") : []);
+	let selectedGeographies = $state<string[]>(initParams.investment_geography ? initParams.investment_geography.split(",") : []);
 	let selectedDomiciles = $state<string[]>(initParams.domicile ? initParams.domicile.split(",") : []);
 	let catalogSearchQ = $state(initParams.q ?? "");
 	let catalogAumMin = $state(initParams.aum_min ?? "");
@@ -53,6 +54,7 @@
 		if (selectedCategories.length) params.set("category", selectedCategories.join(","));
 		if (selectedFundTypes.length) params.set("fund_type", selectedFundTypes.join(","));
 		if (selectedStrategyLabels.length) params.set("strategy_label", selectedStrategyLabels.join(","));
+		if (selectedGeographies.length) params.set("investment_geography", selectedGeographies.join(","));
 		for (const d of selectedDomiciles) params.append("domicile", d);
 		if (catalogAumMin) params.set("aum_min", catalogAumMin);
 		if (catalogMaxER) params.set("max_expense_ratio", catalogMaxER);
@@ -194,6 +196,7 @@
 		bind:selectedCategories
 		bind:selectedFundTypes
 		bind:selectedStrategyLabels
+		bind:selectedGeographies
 		bind:selectedDomiciles
 		bind:searchQ={catalogSearchQ}
 		bind:aumMin={catalogAumMin}

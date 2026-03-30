@@ -8,6 +8,7 @@ export interface UniverseAsset {
 	instrument_type: InstrumentType | null;
 	block_id: string | null;
 	geography: string | null;
+	investment_geography: string | null;
 	asset_class: string | null;
 	approval_status: string | null;
 	approval_decision: "approved" | "watchlist";

@@ -49,6 +49,7 @@ class UnifiedFundItem(BaseModel):
     region: Literal["US", "EU"]
     fund_type: str
     strategy_label: str | None = None
+    investment_geography: str | None = None
     domicile: str | None = None
     currency: str | None = None
 
@@ -83,6 +84,7 @@ class CatalogFacets(BaseModel):
     regions: list[CatalogFacetItem] = Field(default_factory=list)
     fund_types: list[CatalogFacetItem] = Field(default_factory=list)
     strategy_labels: list[CatalogFacetItem] = Field(default_factory=list)
+    geographies: list[CatalogFacetItem] = Field(default_factory=list)
     domiciles: list[CatalogFacetItem] = Field(default_factory=list)
     total: int = 0
 
