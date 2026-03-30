@@ -55,8 +55,15 @@ async def list_instruments(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> list[InstrumentRead]:
-    stmt = select(Instrument).join(
-        InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id,
+    # Select both Instrument and InstrumentOrg columns — schema needs org-scoped fields
+    stmt = (
+        select(
+            Instrument,
+            InstrumentOrg.organization_id,
+            InstrumentOrg.block_id,
+            InstrumentOrg.approval_status,
+        )
+        .join(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
     )
     if instrument_type:
         stmt = stmt.where(Instrument.instrument_type == instrument_type)
@@ -68,8 +75,18 @@ async def list_instruments(
         stmt = stmt.where(InstrumentOrg.approval_status == approval_status)
     stmt = stmt.order_by(Instrument.name)
     result = await db.execute(stmt)
-    instruments = result.scalars().all()
-    return [InstrumentRead.model_validate(i) for i in instruments]
+    rows = result.all()
+    return [
+        InstrumentRead.model_validate(
+            {
+                **{c.key: getattr(row[0], c.key) for c in Instrument.__table__.columns},
+                "organization_id": row[1],
+                "block_id": row[2],
+                "approval_status": row[3],
+            }
+        )
+        for row in rows
+    ]
 
 
 @router.get(
@@ -83,12 +100,26 @@ async def get_instrument(
     user: CurrentUser = Depends(get_current_user),
 ) -> InstrumentRead:
     result = await db.execute(
-        select(Instrument).where(Instrument.instrument_id == instrument_id),
+        select(
+            Instrument,
+            InstrumentOrg.organization_id,
+            InstrumentOrg.block_id,
+            InstrumentOrg.approval_status,
+        )
+        .join(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
+        .where(Instrument.instrument_id == instrument_id),
     )
-    instrument = result.scalar_one_or_none()
-    if not instrument:
+    row = result.one_or_none()
+    if not row:
         raise HTTPException(status_code=404, detail="Instrument not found")
-    return InstrumentRead.model_validate(instrument)
+    return InstrumentRead.model_validate(
+        {
+            **{c.key: getattr(row[0], c.key) for c in Instrument.__table__.columns},
+            "organization_id": row[1],
+            "block_id": row[2],
+            "approval_status": row[3],
+        }
+    )
 
 
 @router.patch(
@@ -116,8 +147,22 @@ async def update_instrument(
 
     await db.flush()
     await db.refresh(instrument)
+
+    # Fetch org-scoped fields for response
+    org_result = await db.execute(
+        select(InstrumentOrg.organization_id, InstrumentOrg.block_id, InstrumentOrg.approval_status)
+        .where(InstrumentOrg.instrument_id == instrument_id),
+    )
+    org_row = org_result.one_or_none()
     await db.commit()
-    return InstrumentRead.model_validate(instrument)
+    return InstrumentRead.model_validate(
+        {
+            **{c.key: getattr(instrument, c.key) for c in Instrument.__table__.columns},
+            "organization_id": org_row[0] if org_row else actor.organization_id,
+            "block_id": org_row[1] if org_row else None,
+            "approval_status": org_row[2] if org_row else "pending",
+        }
+    )
 
 
 @router.post(
@@ -157,7 +202,14 @@ async def create_instrument(
     await db.flush()
     await db.refresh(instrument)
     await db.commit()
-    return InstrumentRead.model_validate(instrument)
+    return InstrumentRead.model_validate(
+        {
+            **{c.key: getattr(instrument, c.key) for c in Instrument.__table__.columns},
+            "organization_id": org_id,
+            "block_id": instrument_org.block_id,
+            "approval_status": instrument_org.approval_status,
+        }
+    )
 
 
 @router.post(
@@ -210,7 +262,17 @@ async def import_from_yahoo(
             await db.refresh(inst)
         await db.commit()
 
-    return [InstrumentRead.model_validate(i) for i in created]
+    return [
+        InstrumentRead.model_validate(
+            {
+                **{c.key: getattr(i, c.key) for c in Instrument.__table__.columns},
+                "organization_id": org_id,
+                "block_id": None,
+                "approval_status": "pending",
+            }
+        )
+        for i in created
+    ]
 
 
 @router.post(

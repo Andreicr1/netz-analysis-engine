@@ -55,8 +55,12 @@
 
 			// Get session token and set cookie
 			if (clerk.session) {
-				// Use JWT template 'netz-wealth' (3600s lifetime) — avoids 60s default expiry loop
-				const token = await clerk.session.getToken({ template: "investintell-wealth" });
+				// Try custom template first (3600s lifetime), fall back to default session token
+				let token = await clerk.session.getToken({ template: "investintell-wealth" }).catch(() => null);
+				if (!token) {
+					console.warn("investintell-wealth template unavailable, using default session token");
+					token = await clerk.session.getToken();
+				}
 				if (token) {
 					document.cookie = `__session=${token}; path=/; secure; samesite=lax; max-age=3600`;
 					// Success — redirect to app
@@ -66,6 +70,17 @@
 			}
 
 			// No session — user not signed in, redirect to Clerk
+			// Guard against redirect loops: if we've been here recently, show error instead
+			const loopKey = "auth_callback_ts";
+			const lastAttempt = parseInt(sessionStorage.getItem(loopKey) ?? "0", 10);
+			const now = Date.now();
+			if (now - lastAttempt < 10_000) {
+				status = "Authentication loop detected. Please clear cookies and try again.";
+				sessionStorage.removeItem(loopKey);
+				return;
+			}
+			sessionStorage.setItem(loopKey, String(now));
+
 			status = "No active session. Redirecting to sign-in...";
 			setTimeout(() => {
 				window.location.href = `https://accounts.investintell.com/sign-in?redirect_url=${encodeURIComponent(window.location.href)}`;

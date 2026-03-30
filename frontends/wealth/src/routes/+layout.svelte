@@ -25,9 +25,15 @@
 		}
 	});
 
-	// 401 redirect + conflict handler
+	// 401 redirect + conflict handler (with loop guard)
 	$effect(() => {
 		setAuthRedirectHandler(() => {
+			// Prevent redirect loop: if page just loaded, don't redirect immediately
+			const pageLoadTime = performance.now();
+			if (pageLoadTime < 3000) {
+				console.warn("Auth redirect suppressed — page just loaded (possible 401 loop)");
+				return;
+			}
 			window.location.href = "https://accounts.investintell.com/sign-in?redirect_url=" + encodeURIComponent("https://wealth.investintell.com/auth/callback");
 		});
 		setConflictHandler((msg: string) => {

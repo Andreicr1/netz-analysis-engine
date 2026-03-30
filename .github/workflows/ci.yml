@@ -94,8 +94,8 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Build shared UI package
-        run: pnpm --filter @netz/ui build
+      - name: Build shared UI packages
+        run: pnpm --filter @netz/ui build && pnpm --filter @investintell/ui build
       - name: Sync SvelteKit generated types
         run: pnpm --filter "./frontends/*" exec svelte-kit sync
       - name: Type-check all frontends
