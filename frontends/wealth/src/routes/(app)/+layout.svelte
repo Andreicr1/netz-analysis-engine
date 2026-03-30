@@ -56,6 +56,12 @@
 	// ── Navigation taxonomy — institutional process flow ──
 	const sections: SidebarSection[] = [
 		{
+			id: "overview", label: "Overview", defaultOpen: true,
+			items: [
+				{ label: "Dashboard", href: "/dashboard", icon: BarChart2 },
+			],
+		},
+		{
 			id: "setup", label: "Setup", defaultOpen: true,
 			items: [
 				{ label: "Investment Policy", href: "/investment-policy", icon: ShieldCheck },

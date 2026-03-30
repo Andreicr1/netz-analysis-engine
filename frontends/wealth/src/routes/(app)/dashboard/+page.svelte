@@ -13,8 +13,11 @@
 	const riskStore = getContext<RiskStore>("netz:riskStore");
 
 	onMount(() => {
-		try { riskStore.start(); } catch (e) { console.warn("Risk store failed to start:", e); }
-		return () => riskStore.destroy();
+		// Delay riskStore start to avoid hydration interference
+		const timer = setTimeout(() => {
+			try { riskStore.start(); } catch (e) { console.warn("Risk store failed to start:", e); }
+		}, 2000);
+		return () => { clearTimeout(timer); riskStore.destroy(); };
 	});
 
 	// ── Regime — live from store, SSR fallback ──────────────────────────
