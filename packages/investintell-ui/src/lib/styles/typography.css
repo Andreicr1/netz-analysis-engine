@@ -1,30 +1,30 @@
 /* ============================================================
  * InvestIntell Design Tokens - Typography
- * Geist (interface) + Geist Mono (data/financial)
+ * IBM Plex Sans (interface) + IBM Plex Mono (data/financial)
  * ============================================================ */
 
-@import "@fontsource/geist/300.css";
-@import "@fontsource/geist/400.css";
-@import "@fontsource/geist/500.css";
-@import "@fontsource/geist/600.css";
-@import "@fontsource/geist/700.css";
-@import "@fontsource/geist-mono/400.css";
-@import "@fontsource/geist-mono/500.css";
+@import "@fontsource/ibm-plex-sans/300.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-sans/700.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
 
 :root {
 	/* Font families */
-	--ii-font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
-	--ii-font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, Monaco, monospace;
+	--ii-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+	--ii-font-mono: "IBM Plex Mono", "Fira Code", ui-monospace, monospace;
 
-	/* Font feature settings */
-	--ii-font-features: "rlig" 1, "calt" 1, "ss01" 1;
+	/* Font feature settings — IBM Plex has strong OpenType support */
+	--ii-font-features: "rlig" 1, "calt" 1, "tnum" 1;   /* tnum: tabular nums for financial data */
 
 	/* ── Scale ── */
-	--ii-text-xs: 11px;
-	--ii-text-sm: 14px;
+	--ii-text-xs:   11px;
+	--ii-text-sm:   14px;
 	--ii-text-base: 16px;
-	--ii-text-md: 15px;
-	--ii-text-lg: 20px;
+	--ii-text-md:   15px;
+	--ii-text-lg:   20px;
 
 	/* Heading sizes */
 	--ii-text-h1: 30px;
@@ -39,86 +39,86 @@
 
 	/* Body sizes */
 	--ii-text-body-lg: 1rem;
-	--ii-text-body: 0.9375rem;
-	--ii-text-small: 0.8125rem;
-	--ii-text-label: 0.75rem;
+	--ii-text-body:    0.9375rem;
+	--ii-text-small:   0.8125rem;
+	--ii-text-label:   0.75rem;
 	--ii-text-caption: 0.75rem;
-	--ii-text-mono: 0.875rem;
+	--ii-text-mono:    0.875rem;
 
-	/* ── Line heights ── */
-	--ii-leading-tight: 1.11;
-	--ii-leading-snug: 1.33;
-	--ii-leading-normal: 1.5;
+	/* ── Line heights — tighter than Geist defaults ── */
+	--ii-leading-tight:   1.11;
+	--ii-leading-snug:    1.33;
+	--ii-leading-normal:  1.5;
 	--ii-leading-relaxed: 1.75;
 
 	--ii-leading-display: 1.08;
-	--ii-leading-h1: 1.11;
-	--ii-leading-h2: 1.20;
-	--ii-leading-h3: 1.33;
-	--ii-leading-h4: 1.3;
-	--ii-leading-h5: 1.35;
-	--ii-leading-h6: 1.4;
+	--ii-leading-h1:      1.11;
+	--ii-leading-h2:      1.20;
+	--ii-leading-h3:      1.33;
+	--ii-leading-h4:      1.3;
+	--ii-leading-h5:      1.35;
+	--ii-leading-h6:      1.4;
 	--ii-leading-body-lg: 1.6;
-	--ii-leading-body: 1.65;
-	--ii-leading-small: 1.55;
-	--ii-leading-label: 1.3;
+	--ii-leading-body:    1.55;   /* tighter than before: IBM Plex is denser */
+	--ii-leading-small:   1.5;
+	--ii-leading-label:   1.3;
 	--ii-leading-caption: 1.45;
-	--ii-leading-mono: 1.55;
+	--ii-leading-mono:    1.5;    /* tighter: Plex Mono reads well at 1.5 */
 
 	/* ── Letter spacing ── */
-	--ii-tracking-tight: -0.025em;
+	--ii-tracking-tight:  -0.025em;
 	--ii-tracking-normal: normal;
-	--ii-tracking-wide: 0.07em;
+	--ii-tracking-wide:   0.07em;
 
-	--ii-tracking-display: -0.035em;
-	--ii-tracking-h1: -0.025em;
-	--ii-tracking-h2: -0.025em;
-	--ii-tracking-h3: -0.025em;
-	--ii-tracking-h4: -0.014em;
-	--ii-tracking-h5: -0.01em;
-	--ii-tracking-h6: -0.006em;
-	--ii-tracking-body: -0.005em;
-	--ii-tracking-small: 0em;
-	--ii-tracking-label: 0.08em;
+	--ii-tracking-display: -0.03em;
+	--ii-tracking-h1:      -0.02em;
+	--ii-tracking-h2:      -0.02em;
+	--ii-tracking-h3:      -0.015em;
+	--ii-tracking-h4:      -0.01em;
+	--ii-tracking-h5:      -0.008em;
+	--ii-tracking-h6:      -0.004em;
+	--ii-tracking-body:    0em;      /* IBM Plex Sans needs no negative track at body */
+	--ii-tracking-small:   0em;
+	--ii-tracking-label:   0.08em;
 	--ii-tracking-caption: 0.01em;
-	--ii-tracking-mono: -0.02em;
+	--ii-tracking-mono:    -0.01em;  /* Plex Mono is slightly wider than Geist Mono */
 
 	/* ── Font weights ── */
-	--ii-weight-light: 300;
-	--ii-weight-normal: 400;
-	--ii-weight-medium: 500;
+	--ii-weight-light:    300;
+	--ii-weight-normal:   400;
+	--ii-weight-medium:   500;
 	--ii-weight-semibold: 600;
-	--ii-weight-bold: 700;
+	--ii-weight-bold:     700;
 
 	/* ── Heading margins ── */
 	--ii-heading-h1-mt: 16px;
 	--ii-heading-h2-mt: 40px;
 	--ii-heading-h3-mt: 32px;
-	--ii-paragraph-mt: 20px;
+	--ii-paragraph-mt:  20px;
 
 	/* ── Measures ── */
 	--ii-measure-compact: 48ch;
-	--ii-measure-body: 70ch;
-	--ii-measure-wide: 82ch;
+	--ii-measure-body:    70ch;
+	--ii-measure-wide:    82ch;
 }
 
 /* ── Component tokens — theme-specific ── */
 
 :root {
-	--ii-link-color: #2563EB;
-	--ii-link-hover-color: #1D4ED8;
-	--ii-code-bg: rgba(99, 102, 241, 0.12);
-	--ii-code-border: rgba(0, 0, 0, 0.04);
-	--ii-kbd-bg: #fafafa;
-	--ii-kbd-border: #e5e7eb;
+	--ii-link-color:       #c9a84c;   /* gold */
+	--ii-link-hover-color: #b8953f;   /* gold hover */
+	--ii-code-bg:     rgba(201, 168, 76, 0.10);
+	--ii-code-border: rgba(255, 255, 255, 0.06);
+	--ii-kbd-bg:      #27272a;   /* zinc-800 */
+	--ii-kbd-border:  #3f3f46;   /* zinc-700 */
 }
 
-.dark,
-[data-theme="dark"] {
-	--ii-link-color: #60A5FA;
-	--ii-link-hover-color: #93BBFD;
-	--ii-code-bg: rgba(99, 102, 241, 0.12);
-	--ii-code-border: rgba(255, 255, 255, 0.06);
-	--ii-kbd-bg: #152440;
-	--ii-kbd-border: #243B55;
+.light,
+[data-theme="light"] {
+	--ii-link-color:       #9a7a2e;
+	--ii-link-hover-color: #806520;
+	--ii-code-bg:     rgba(154, 122, 46, 0.10);
+	--ii-code-border: rgba(0, 0, 0, 0.06);
+	--ii-kbd-bg:      #f4f4f5;   /* zinc-100 */
+	--ii-kbd-border:  #d4d4d8;   /* zinc-300 */
 }

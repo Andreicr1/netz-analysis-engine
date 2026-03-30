@@ -21,9 +21,14 @@
 }
 
 html {
-	background-color: var(--ii-surface);
+	background-color: var(--ii-bg);
 	text-rendering: optimizeLegibility;
-	font-feature-settings: var(--ii-font-features, "rlig" 1, "calt" 1, "ss01" 1);
+	font-feature-settings: var(--ii-font-features, "rlig" 1, "calt" 1, "tnum" 1);
+}
+
+/* Trading density — tighter line-height globally */
+* {
+	line-height: 1.25;
 }
 
 body {
