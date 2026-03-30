@@ -62,11 +62,17 @@ def upgrade() -> None:
     with psycopg.connect(conninfo, autocommit=True) as conn:
         cursor = conn.cursor()
 
-        # Remove continuous aggregate policy + view
-        cursor.execute("""
-            SELECT remove_continuous_aggregate_policy('nav_monthly_returns_agg', if_exists => true)
-        """)
-        cursor.execute("DROP MATERIALIZED VIEW IF EXISTS nav_monthly_returns_agg CASCADE")
+        # Remove continuous aggregate policy + view (with retry for scheduler race)
+        for _attempt in range(3):
+            try:
+                cursor.execute("""
+                    SELECT remove_continuous_aggregate_policy('nav_monthly_returns_agg', if_exists => true)
+                """)
+                cursor.execute("DROP MATERIALIZED VIEW IF EXISTS nav_monthly_returns_agg CASCADE")
+                break
+            except psycopg.errors.InternalError_:
+                import time
+                time.sleep(1)
 
     # 2. Disable compression on the hypertable before ALTER TABLE ops
     op.execute("""
