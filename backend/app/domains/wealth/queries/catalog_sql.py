@@ -441,6 +441,10 @@ def _registered_us_branch(f: CatalogFilters) -> Select | None:
     )
     stmt = stmt.where(~_in_etf).where(~_in_bdc)
 
+    # Only show funds linked to a known manager (excludes separate accounts,
+    # variable annuities, insurance wrappers — irrelevant to wealth offshore).
+    stmt = stmt.where(sec_registered_funds.c.crd_number.isnot(None))
+
     conditions = _common_conditions_registered(f)
     # Category-based fund_type restriction
     if active is not None and active != reg_cats:
