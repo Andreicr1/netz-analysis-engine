@@ -6,7 +6,7 @@ import type { ContentSummary } from "$lib/types/content";
 type FundSummary = { fund_id: string; name: string; manager_name?: string | null };
 
 export const load: PageServerLoad = async ({ parent }) => {
-	const { token } = await parent();
+	const { token, actor } = await parent();
 	const api = createServerApiClient(token);
 
 	const [content, funds] = await Promise.all([
@@ -14,5 +14,5 @@ export const load: PageServerLoad = async ({ parent }) => {
 		api.get<FundSummary[]>("/funds").catch(() => [] as FundSummary[]),
 	]);
 
-	return { content, funds };
+	return { content, funds, actorId: actor?.user_id ?? null };
 };

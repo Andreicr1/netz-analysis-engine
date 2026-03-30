@@ -9,9 +9,9 @@
 	import { getContext } from "svelte";
 	import {
 		PageHeader, StatusBadge, MetricCard,
-		formatPercent, formatDateTime, formatNumber,
+		formatPercent, formatDateTime, formatNumber, formatBps,
 	} from "@investintell/ui";
-	import { CorrelationHeatmap, ChartContainer, RegimeChart } from "@investintell/ui/charts";
+	import { CorrelationHeatmap, ChartContainer, RegimeChart, BarChart } from "@investintell/ui/charts";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
 	import type {
@@ -66,15 +66,50 @@
 		return value >= 0 ? "positive" : "negative";
 	}
 
+	// ── Attribution ECharts option ───────────────────────────────────────
+	let attributionChartOption = $derived.by(() => {
+		if (sectors.length === 0) return null;
+		const names = sectors.map((s) => s.sector);
+		const allocData = sectors.map((s) => +(s.allocation_effect * 10000).toFixed(1));
+		const selData = sectors.map((s) => +(s.selection_effect * 10000).toFixed(1));
+		return {
+			tooltip: {
+				trigger: "axis" as const,
+				axisPointer: { type: "shadow" as const },
+				valueFormatter: (v: number) => `${v >= 0 ? "+" : ""}${formatNumber(v, 1, "en-US")} bps`,
+			},
+			legend: { data: ["Allocation", "Selection"], bottom: 0 },
+			grid: { containLabel: true, left: 16, right: 24, top: 12, bottom: 36 },
+			xAxis: {
+				type: "value" as const,
+				axisLabel: { formatter: (v: number) => `${v} bps`, fontSize: 10 },
+			},
+			yAxis: {
+				type: "category" as const,
+				data: names,
+				axisLabel: { width: 120, overflow: "truncate" as const, fontSize: 11 },
+			},
+			series: [
+				{
+					name: "Allocation",
+					type: "bar" as const,
+					data: allocData,
+					itemStyle: { color: "var(--ii-success)", borderRadius: [0, 2, 2, 0] },
+				},
+				{
+					name: "Selection",
+					type: "bar" as const,
+					data: selData,
+					itemStyle: { color: "var(--ii-info)", borderRadius: [0, 2, 2, 0] },
+				},
+			],
+		} as Record<string, unknown>;
+	});
+
 	// ── Helpers ───────────────────────────────────────────────────────────
 
-	function fmtBps(v: number): string {
-		return `${(v * 10000).toFixed(1)} bps`;
-	}
-
 	function fmtEffect(v: number): string {
-		const sign = v >= 0 ? "+" : "";
-		return `${sign}${(v * 10000).toFixed(1)} bps`;
+		return formatBps(v, { decimals: 1, signed: true });
 	}
 
 	// ── Correlation ──────────────────────────────────────────────────────
@@ -458,6 +493,17 @@
 		{:else}
 			<!-- All sectors comparative view -->
 			<h3 class="an-detail-title">Attribution by Sector — Allocation vs Selection</h3>
+			{#if attributionChartOption}
+				<div class="an-attribution-chart">
+					<ChartContainer
+						option={attributionChartOption}
+						height={Math.max(200, sectors.length * 40 + 48)}
+						ariaLabel="{profile} attribution by sector"
+					/>
+				</div>
+			{:else if attribution}
+				<div class="an-empty">Attribution requires at least 2 periods of performance data. Check back after the next portfolio evaluation.</div>
+			{/if}
 			<div class="an-all-sectors">
 				{#each sectors as sector (sector.block_id)}
 					<div class="an-comp-row">
@@ -665,13 +711,13 @@
 				<div class="an-kpi">
 					<span class="an-kpi-label">Mean Sharpe</span>
 					<span class="an-kpi-value">
-						{backtestResult.mean_sharpe !== null ? backtestResult.mean_sharpe.toFixed(3) : "—"}
+						{formatNumber(backtestResult.mean_sharpe, 3, "en-US")}
 					</span>
 				</div>
 				<div class="an-kpi">
 					<span class="an-kpi-label">Std Sharpe</span>
 					<span class="an-kpi-value">
-						{backtestResult.std_sharpe !== null ? backtestResult.std_sharpe.toFixed(3) : "—"}
+						{formatNumber(backtestResult.std_sharpe, 3, "en-US")}
 					</span>
 				</div>
 				<div class="an-kpi">
@@ -702,7 +748,7 @@
 										—
 									{/if}
 								</td>
-								<td>{fold.sharpe !== null ? fold.sharpe.toFixed(3) : "—"}</td>
+								<td>{formatNumber(fold.sharpe, 3, "en-US")}</td>
 								<td>{fold.cvar_95 !== null ? formatPercent(fold.cvar_95) : "—"}</td>
 								<td>{fold.max_drawdown !== null ? formatPercent(fold.max_drawdown) : "—"}</td>
 							</tr>
@@ -1119,6 +1165,14 @@
 
 	.an-legend-dot--alloc { background: var(--ii-success); }
 	.an-legend-dot--sel { background: var(--ii-info); }
+
+	/* ── Attribution chart ───────────────────────────────────────────────── */
+	.an-attribution-chart {
+		margin-bottom: var(--ii-space-stack-md, 16px);
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-sm, 8px);
+		overflow: hidden;
+	}
 
 	/* ── Pareto section ──────────────────────────────────────────────────── */
 	.an-pareto-section {

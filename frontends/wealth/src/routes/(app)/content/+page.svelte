@@ -1,14 +1,17 @@
 <!--
   Content — Flash Reports, Investment Outlooks, Manager Spotlights.
   Tabbed grid view with generate, approve, download actions.
+  Polls for status updates after generation triggers.
+  Self-approval blocked: approve button disabled when actorId === created_by.
 -->
 <script lang="ts">
-	import { getContext } from "svelte";
+	import { getContext, onDestroy } from "svelte";
 	import { invalidateAll } from "$app/navigation";
 	import {
 		PageHeader, Button, StatusBadge, EmptyState, ConsequenceDialog,
 		formatDateTime,
 	} from "@investintell/ui";
+	import { ForbiddenError } from "@investintell/ui/utils";
 	import type { ConsequenceDialogPayload } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
@@ -20,6 +23,7 @@
 	let { data }: { data: PageData } = $props();
 
 	let content = $derived((data.content ?? []) as ContentSummary[]);
+	let actorId = $derived((data.actorId ?? null) as string | null);
 
 	type FundSummary = { fund_id: string; name: string; manager_name?: string | null };
 	let funds = $derived((data.funds ?? []) as FundSummary[]);
@@ -41,6 +45,25 @@
 		manager_spotlight: content.filter((c) => c.content_type === "manager_spotlight").length,
 	});
 
+	// ── Polling — refresh list while any item is generating ──────────────
+
+	let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+	let hasGenerating = $derived(content.some((c) => c.status === "draft"));
+
+	$effect(() => {
+		if (hasGenerating && !pollTimer) {
+			pollTimer = setInterval(() => { invalidateAll(); }, 5000);
+		} else if (!hasGenerating && pollTimer) {
+			clearInterval(pollTimer);
+			pollTimer = null;
+		}
+	});
+
+	onDestroy(() => {
+		if (pollTimer) clearInterval(pollTimer);
+	});
+
 	// ── Generate actions ──────────────────────────────────────────────────
 
 	let generating = $state(false);
@@ -55,10 +78,30 @@
 			await api.post(`/content/${endpoint}${qs}`, {});
 			await invalidateAll();
 		} catch (e) {
-			error = e instanceof Error ? e.message : "Generation failed";
+			if (e instanceof Error && e.message.includes("409")) {
+				error = "A flash report was already generated recently. Please wait before generating another.";
+			} else {
+				error = e instanceof Error ? e.message : "Generation failed";
+			}
 		} finally {
 			generating = false;
 		}
+	}
+
+	// ── Retry failed content ────────────────────────────────────────────
+
+	async function retryContent(item: ContentSummary) {
+		if (item.content_type === "manager_spotlight") {
+			// Re-open fund picker since we don't have instrument_id in the summary
+			requestSpotlight();
+			return;
+		}
+		const endpointMap: Record<string, string> = {
+			investment_outlook: "outlooks",
+			flash_report: "flash-reports",
+		};
+		const endpoint = endpointMap[item.content_type];
+		if (endpoint) await generateContent(endpoint);
 	}
 
 	// ── Spotlight fund picker ────────────────────────────────────────────
@@ -97,7 +140,12 @@
 			approveDialogOpen = false;
 			await invalidateAll();
 		} catch (e) {
-			error = e instanceof Error ? e.message : "Approval failed";
+			if (e instanceof ForbiddenError) {
+				error = "Cannot approve your own content. Another team member must approve.";
+			} else {
+				error = e instanceof Error ? e.message : "Approval failed";
+			}
+			approveDialogOpen = false;
 		}
 	}
 
@@ -108,13 +156,8 @@
 	async function downloadPdf(item: ContentSummary) {
 		downloadingId = item.id;
 		try {
-			const token = await getToken();
-			const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
-			const res = await fetch(`${apiBase}/content/${item.id}/download`, {
-				headers: { Authorization: `Bearer ${token}` },
-			});
-			if (!res.ok) throw new Error("Download failed");
-			const blob = await res.blob();
+			const api = createClientApiClient(getToken);
+			const blob = await api.getBlob(`/content/${item.id}/download`);
 			const url = URL.createObjectURL(blob);
 			const a = document.createElement("a");
 			a.href = url;
@@ -130,8 +173,16 @@
 
 	// ── Helpers ───────────────────────────────────────────────────────────
 
-	function canApprove(item: ContentSummary): boolean {
+	function isApprovable(item: ContentSummary): boolean {
 		return item.status === "draft" || item.status === "review";
+	}
+
+	function isSelfAuthored(item: ContentSummary): boolean {
+		return actorId !== null && item.created_by === actorId;
+	}
+
+	function canApprove(item: ContentSummary): boolean {
+		return isApprovable(item) && !isSelfAuthored(item);
 	}
 
 	function canDownload(item: ContentSummary): boolean {
@@ -156,7 +207,10 @@
 </PageHeader>
 
 {#if error}
-	<div class="ct-error">{error}</div>
+	<div class="ct-error">
+		<span>{error}</span>
+		<button class="ct-error-dismiss" onclick={() => error = null} type="button">&times;</button>
+	</div>
 {/if}
 
 <!-- Tabs -->
@@ -194,20 +248,41 @@
 						<span class="ct-date">{formatDateTime(item.created_at)}</span>
 					</div>
 
+					{#if item.created_by}
+						<div class="ct-created-by">by {item.created_by}</div>
+					{/if}
+
 					{#if item.approved_at}
 						<div class="ct-approved">
 							Approved {formatDateTime(item.approved_at)}
+							{#if item.approved_by}
+								by {item.approved_by}
+							{/if}
+						</div>
+					{/if}
+
+					{#if item.status === "draft"}
+						<div class="ct-generating">
+							<span class="ct-spinner"></span>
+							Generating&hellip;
 						</div>
 					{/if}
 
 					<div class="ct-card-actions">
 						{#if canApprove(item)}
 							<Button size="sm" variant="outline" onclick={() => requestApprove(item)}>Approve</Button>
+						{:else if isApprovable(item) && isSelfAuthored(item)}
+							<span class="ct-self-approve-hint" title="Cannot approve your own content. Another team member must approve.">
+								<Button size="sm" variant="outline" disabled>Approve</Button>
+							</span>
 						{/if}
 						{#if canDownload(item)}
 							<Button size="sm" onclick={() => downloadPdf(item)} disabled={downloadingId === item.id}>
-								{downloadingId === item.id ? "…" : "Download PDF"}
+								{downloadingId === item.id ? "Downloading\u2026" : "Download PDF"}
 							</Button>
+						{/if}
+						{#if item.status === "failed"}
+							<Button size="sm" variant="outline" onclick={() => retryContent(item)}>Retry</Button>
 						{/if}
 					</div>
 				</div>
@@ -237,7 +312,7 @@
 	impactSummary="A Manager Spotlight report will be generated for the selected fund."
 	requireRationale={false}
 	confirmLabel="Generate"
-	metadata={[{ label: "Fund", value: funds.find((f) => f.fund_id === spotlightFundId)?.name ?? "—" }]}
+	metadata={[{ label: "Fund", value: funds.find((f) => f.fund_id === spotlightFundId)?.name ?? "\u2014" }]}
 	onConfirm={handleSpotlightConfirm}
 >
 	<div class="ct-spotlight-picker">
@@ -245,7 +320,7 @@
 		<select id="spotlight-fund-select" class="ct-spotlight-select" bind:value={spotlightFundId}>
 			{#each funds as fund (fund.fund_id)}
 				<option value={fund.fund_id}>
-					{fund.name}{fund.manager_name ? ` — ${fund.manager_name}` : ""}
+					{fund.name}{fund.manager_name ? ` \u2014 ${fund.manager_name}` : ""}
 				</option>
 			{/each}
 		</select>
@@ -259,10 +334,23 @@
 	}
 
 	.ct-error {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
 		padding: var(--ii-space-stack-xs, 8px) var(--ii-space-inline-lg, 24px);
 		background: color-mix(in srgb, var(--ii-danger) 8%, transparent);
 		color: var(--ii-danger);
 		font-size: var(--ii-text-small, 0.8125rem);
+	}
+
+	.ct-error-dismiss {
+		background: none;
+		border: none;
+		color: var(--ii-danger);
+		cursor: pointer;
+		font-size: 1.2em;
+		padding: 0 4px;
+		line-height: 1;
 	}
 
 	/* Tabs */
@@ -360,10 +448,43 @@
 		color: var(--ii-text-secondary);
 	}
 
+	.ct-created-by {
+		padding: 0 var(--ii-space-inline-md, 16px);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
+	}
+
 	.ct-approved {
 		padding: var(--ii-space-stack-2xs, 4px) var(--ii-space-inline-md, 16px);
 		font-size: var(--ii-text-label, 0.75rem);
 		color: var(--ii-success);
+	}
+
+	.ct-generating {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: var(--ii-space-stack-2xs, 6px) var(--ii-space-inline-md, 16px);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-info);
+	}
+
+	.ct-spinner {
+		display: inline-block;
+		width: 12px;
+		height: 12px;
+		border: 2px solid color-mix(in srgb, var(--ii-info) 30%, transparent);
+		border-top-color: var(--ii-info);
+		border-radius: 50%;
+		animation: ct-spin 0.8s linear infinite;
+	}
+
+	@keyframes ct-spin {
+		to { transform: rotate(360deg); }
+	}
+
+	.ct-self-approve-hint {
+		cursor: not-allowed;
 	}
 
 	.ct-card-actions {
