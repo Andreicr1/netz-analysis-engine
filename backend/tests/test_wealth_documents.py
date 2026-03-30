@@ -165,6 +165,38 @@ class TestSchemaImports:
         assert CreditStatus is SharedStatus
 
 
+class TestFilenameSanitization:
+    """Unit tests for filename and title sanitization functions."""
+
+    def test_sanitize_filename_strips_path_traversal(self):
+        from app.domains.wealth.routes.documents import _sanitize_filename
+        assert _sanitize_filename("../../../etc/passwd") == "passwd"
+
+    def test_sanitize_filename_strips_backslashes(self):
+        from app.domains.wealth.routes.documents import _sanitize_filename
+        assert _sanitize_filename("..\\..\\windows\\system32\\cmd.exe") == "cmd.exe"
+
+    def test_sanitize_filename_preserves_normal_names(self):
+        from app.domains.wealth.routes.documents import _sanitize_filename
+        assert _sanitize_filename("report.pdf") == "report.pdf"
+
+    def test_sanitize_filename_empty_fallback(self):
+        from app.domains.wealth.routes.documents import _sanitize_filename
+        assert _sanitize_filename("../../../") == "upload"
+
+    def test_sanitize_title_strips_traversal(self):
+        from app.domains.wealth.routes.documents import _sanitize_title
+        assert _sanitize_title("../../../etc/passwd") == "passwd"
+
+    def test_sanitize_title_preserves_normal_titles(self):
+        from app.domains.wealth.routes.documents import _sanitize_title
+        assert _sanitize_title("Q4 2025 Fund Report") == "Q4 2025 Fund Report"
+
+    def test_sanitize_title_empty_fallback(self):
+        from app.domains.wealth.routes.documents import _sanitize_title
+        assert _sanitize_title("../../../") == "Untitled"
+
+
 class TestUploadUrlFlow:
     """Test the upload-url endpoint with invalid filename."""
 
@@ -180,7 +212,8 @@ class TestUploadUrlFlow:
                         "content_type": "application/pdf",
                     },
                 )
-                # Should get 400 for invalid filename (or rejected by service/DB error)
+                # Should get 400 for invalid filename (sanitized to "passwd" which is valid,
+                # but service may reject for other reasons like missing DB)
                 assert resp.status_code in (400, 422, 500)
             except Exception:
                 # ASGI transport may raise if middleware doesn't catch the error

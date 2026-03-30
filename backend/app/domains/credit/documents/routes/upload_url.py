@@ -12,6 +12,7 @@ used as the Redis pub/sub channel for SSE progress streaming.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import uuid
 
@@ -34,6 +35,22 @@ from app.shared.enums import Role
 logger = logging.getLogger(__name__)
 
 _SAFE_FILENAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._\- ]*$")
+
+
+def _sanitize_filename(raw: str) -> str:
+    """Strip path traversal components from a user-supplied filename."""
+    name = os.path.basename(raw)
+    name = name.replace("/", "").replace("\\", "").replace("..", "")
+    return name or "upload"
+
+
+def _sanitize_title(raw: str) -> str:
+    """Strip path traversal prefixes from a user-supplied title."""
+    cleaned = re.sub(r"[\\/]+", "/", raw)
+    cleaned = cleaned.replace("..", "")
+    cleaned = cleaned.rsplit("/", 1)[-1] if "/" in cleaned else cleaned
+    return cleaned.strip() or "Untitled"
+
 
 router = APIRouter(prefix="/documents", tags=["documents.upload"])
 
@@ -86,6 +103,12 @@ async def generate_upload_url(
     """
     storage = get_storage_client()
 
+    # Sanitize filename and title BEFORE any persistence or service call
+    safe_filename = _sanitize_filename(payload.filename)
+    if not safe_filename or not _SAFE_FILENAME_RE.match(safe_filename):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    safe_title = _sanitize_title(payload.title or safe_filename)
+
     # Create document + pending version record
     try:
         res = await service.create_document_pending(
@@ -95,17 +118,12 @@ async def generate_upload_url(
             root_folder=payload.root_folder,
             subfolder_path=payload.subfolder_path,
             domain=payload.domain,
-            title=payload.title or payload.filename,
-            filename=payload.filename,
+            title=safe_title,
+            filename=safe_filename,
             content_type=payload.content_type,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-    # Sanitize filename — strip traversal characters, reject unsafe names
-    safe_filename = payload.filename.replace("/", "").replace("\\", "").replace("..", "")
-    if not safe_filename or not _SAFE_FILENAME_RE.match(safe_filename):
-        raise HTTPException(status_code=400, detail="Invalid filename")
 
     # Generate SAS upload URL
     blob_path = bronze_upload_blob_path(

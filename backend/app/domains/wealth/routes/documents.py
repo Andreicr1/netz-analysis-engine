@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 import uuid
 from datetime import UTC, datetime
@@ -43,6 +44,23 @@ logger = logging.getLogger(__name__)
 
 _SAFE_FILENAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._\- ]*$")
 
+
+def _sanitize_filename(raw: str) -> str:
+    """Strip path traversal components from a user-supplied filename."""
+    name = os.path.basename(raw)
+    name = name.replace("/", "").replace("\\", "").replace("..", "")
+    return name or "upload"
+
+
+def _sanitize_title(raw: str) -> str:
+    """Strip path traversal prefixes from a user-supplied title."""
+    cleaned = re.sub(r"[\\/]+", "/", raw)
+    cleaned = cleaned.replace("..", "")
+    # Take only the final path component if slashes remain
+    cleaned = cleaned.rsplit("/", 1)[-1] if "/" in cleaned else cleaned
+    return cleaned.strip() or "Untitled"
+
+
 router = APIRouter(prefix="/wealth/documents", tags=["wealth.documents"])
 
 _WRITE_ROLES = (Role.ADMIN, Role.GP, Role.INVESTMENT_TEAM)
@@ -62,6 +80,12 @@ async def generate_upload_url(
     """Generate a pre-signed upload URL and create a pending WealthDocumentVersion."""
     storage = get_storage_client()
 
+    # Sanitize filename and title BEFORE any persistence or service call
+    safe_filename = _sanitize_filename(payload.filename)
+    if not safe_filename or not _SAFE_FILENAME_RE.match(safe_filename):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    safe_title = _sanitize_title(payload.title or safe_filename)
+
     try:
         res = await service.create_document_pending(
             db,
@@ -71,16 +95,12 @@ async def generate_upload_url(
             root_folder=payload.root_folder,
             subfolder_path=payload.subfolder_path,
             domain=payload.domain,
-            title=payload.title or payload.filename,
-            filename=payload.filename,
+            title=safe_title,
+            filename=safe_filename,
             content_type=payload.content_type,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-    safe_filename = payload.filename.replace("/", "").replace("\\", "").replace("..", "")
-    if not safe_filename or not _SAFE_FILENAME_RE.match(safe_filename):
-        raise HTTPException(status_code=400, detail="Invalid filename")
 
     # Use portfolio_id or instrument_id as fund_id path segment
     path_id = payload.portfolio_id or payload.instrument_id or res.document.id
@@ -186,6 +206,9 @@ async def upload(
 
     storage = get_storage_client()
 
+    safe_filename = _sanitize_filename(file.filename or "document.pdf")
+    safe_title = _sanitize_title(title or safe_filename or "Document")
+
     try:
         res = await service.upload_document(
             db,
@@ -195,8 +218,8 @@ async def upload(
             root_folder=root_folder,
             subfolder_path=subfolder_path,
             domain=domain,
-            title=title or (file.filename or "Document"),
-            filename=file.filename or "document.pdf",
+            title=safe_title,
+            filename=safe_filename,
             content_type=file.content_type,
             data=data,
             storage_client=storage,
