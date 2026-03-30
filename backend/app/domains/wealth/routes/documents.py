@@ -47,7 +47,8 @@ _SAFE_FILENAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._\- ]*$")
 
 def _sanitize_filename(raw: str) -> str:
     """Strip path traversal components from a user-supplied filename."""
-    name = os.path.basename(raw)
+    # Normalise backslashes so os.path.basename works on all platforms
+    name = os.path.basename(raw.replace("\\", "/"))
     name = name.replace("/", "").replace("\\", "").replace("..", "")
     return name or "upload"
 

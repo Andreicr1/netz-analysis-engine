@@ -126,7 +126,7 @@ class TestApproveEndpoint:
 
         assert resp.status_code == 200
         assert report.status == "approved"
-        assert report.approved_by == "ic-reviewer"
+        assert report.approved_by == "Test User"
         assert report.approved_at is not None
 
     async def test_self_approval_blocked(self, client: AsyncClient):

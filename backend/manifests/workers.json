@@ -36,6 +36,16 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/workers/run-geography-enrichment",
+    "name": "trigger_run_geography_enrichment"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-global-risk-metrics",
+    "name": "trigger_run_global_risk_metrics"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/workers/run-imf-ingestion",
     "name": "trigger_run_imf_ingestion"
   },

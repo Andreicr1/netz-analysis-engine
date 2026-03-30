@@ -861,6 +861,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/overlap",
+    "name": "get_portfolio_overlap"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/model-portfolios/{portfolio_id}/track-record",
     "name": "get_track_record"
   },
@@ -1893,6 +1898,16 @@
     "method": "POST",
     "path": "/api/v1/workers/run-form345-ingestion",
     "name": "trigger_run_form345_ingestion"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-geography-enrichment",
+    "name": "trigger_run_geography_enrichment"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-global-risk-metrics",
+    "name": "trigger_run_global_risk_metrics"
   },
   {
     "method": "POST",

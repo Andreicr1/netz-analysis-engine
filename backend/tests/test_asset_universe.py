@@ -50,6 +50,7 @@ class TestApprovalModels:
             fund_name="Test Fund",
             block_id="equity_global",
             geography="US",
+            investment_geography="global",
             asset_class="equity",
             approval_status="approved",
             approval_decision="approved",

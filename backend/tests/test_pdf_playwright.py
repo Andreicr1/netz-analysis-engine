@@ -6,6 +6,29 @@ from datetime import date
 import pytest
 
 
+def _playwright_chromium_available() -> bool:
+    """Return True only when playwright is installed AND Chromium browser binary exists."""
+    try:
+        from playwright.sync_api import sync_playwright
+
+        with sync_playwright() as pw:
+            path = pw.chromium.executable_path
+            if not path:
+                return False
+            import os
+
+            return os.path.isfile(path)
+    except Exception:
+        return False
+
+
+_skip_no_playwright = pytest.mark.skipif(
+    not _playwright_chromium_available(),
+    reason="Playwright Chromium browser not installed",
+)
+
+
+@_skip_no_playwright
 @pytest.mark.asyncio
 async def test_html_to_pdf_basic():
     """html_to_pdf returns non-empty bytes for trivial HTML."""
