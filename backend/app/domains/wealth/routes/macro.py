@@ -439,12 +439,12 @@ async def approve_review(
         )
 
     review.status = "approved"
-    review.approved_by = user.actor_id
+    review.approved_by = user.name
     review.approved_at = datetime.now(UTC)
     review.decision_rationale = body.decision_rationale
 
     # ── G1.1 + G1.2: Generate allocation proposals from regime ──
-    await _generate_allocation_proposals(db, review, user.actor_id, org_id)
+    await _generate_allocation_proposals(db, review, user.name, org_id)
 
     await db.flush()
     return MacroReviewRead.model_validate(review)
@@ -598,7 +598,7 @@ async def reject_review(
         )
 
     review.status = "rejected"
-    review.approved_by = user.actor_id  # Record who rejected for audit trail
+    review.approved_by = user.name  # Record who rejected for audit trail
     review.decision_rationale = body.decision_rationale
 
     await db.flush()

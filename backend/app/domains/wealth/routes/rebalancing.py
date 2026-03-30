@@ -153,7 +153,7 @@ async def apply_rebalance_proposal(
 
     # ── 5. Mark proposal as applied ──
     proposal.status = "applied"
-    proposal.approved_by = actor.actor_id
+    proposal.approved_by = actor.name
     proposal.weights_after = proposal.weights_after  # preserve
 
     # Audit trail

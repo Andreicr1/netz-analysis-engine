@@ -413,7 +413,7 @@ async def approve_dd_report(
     # BL-17: Detect override — user action contradicts AI recommendation
     is_override = report.decision_anchor in ("REJECT", "CONDITIONAL")
     report.status = DDReportStatus.approved.value
-    report.approved_by = actor.actor_id
+    report.approved_by = actor.name
     report.approved_at = datetime.now(UTC)
     report.rejection_reason = None
     logger.info(

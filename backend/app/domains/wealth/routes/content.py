@@ -292,7 +292,7 @@ async def approve_content(
         )
 
     content.status = "approved"
-    content.approved_by = user.actor_id
+    content.approved_by = user.name
     content.approved_at = datetime.now(UTC)
     await db.commit()
 
