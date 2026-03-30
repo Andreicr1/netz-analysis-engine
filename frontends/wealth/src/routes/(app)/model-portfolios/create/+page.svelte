@@ -501,12 +501,12 @@
 							</label>
 						{/if}
 						<div class="fund-items">
-							{#each fundsForSelectedBlock as fund (fund.fund_id)}
-								{@const isSelected = selectedFundIdsForBlock.has(fund.fund_id)}
+							{#each fundsForSelectedBlock as fund (fund.instrument_id)}
+								{@const isSelected = selectedFundIdsForBlock.has(fund.instrument_id)}
 								<button
 									class="fund-item"
 									class:fund-item--selected={isSelected}
-									onclick={() => toggleFund(fund.fund_id)}
+									onclick={() => toggleFund(fund.instrument_id)}
 									type="button"
 								>
 									<div class="fund-item-info">

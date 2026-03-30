@@ -44,7 +44,7 @@
 		if (search) {
 			const q = search.toLowerCase();
 			rows = rows.filter((a) =>
-				a.fund_name.toLowerCase().includes(q) ||
+				a.fund_name?.toLowerCase().includes(q) ||
 				a.block_id?.toLowerCase().includes(q) ||
 				a.geography?.toLowerCase().includes(q) ||
 				a.asset_class?.toLowerCase().includes(q)
@@ -67,7 +67,7 @@
 		loadingRisk = true;
 		try {
 			const api = createClientApiClient(getToken);
-			riskMetrics = await api.get<InstrumentRiskMetrics>(`/funds/${asset.fund_id}/risk`);
+			riskMetrics = await api.get<InstrumentRiskMetrics>(`/funds/${asset.instrument_id}/risk`);
 		} catch {
 			riskMetrics = null;
 		} finally {
@@ -172,10 +172,10 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each filtered as asset (asset.fund_id)}
+					{#each filtered as asset (asset.instrument_id)}
 						<tr
 							class="universe-row"
-							class:selected={selectedAsset?.fund_id === asset.fund_id}
+							class:selected={selectedAsset?.instrument_id === asset.instrument_id}
 							onclick={() => openDetail(asset)}
 						>
 							<td class="td-name">{asset.fund_name}</td>

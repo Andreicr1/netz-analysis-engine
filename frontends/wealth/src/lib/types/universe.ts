@@ -3,15 +3,15 @@
 export type InstrumentType = "fund" | "bond" | "equity";
 
 export interface UniverseAsset {
-	fund_id: string;
+	instrument_id: string;
 	fund_name: string;
-	instrument_type: InstrumentType | null;
+	instrument_type?: InstrumentType | null;
 	block_id: string | null;
 	geography: string | null;
 	investment_geography: string | null;
 	asset_class: string | null;
 	approval_status: string | null;
-	approval_decision: "approved" | "watchlist";
+	approval_decision: string;
 	approved_at: string | null;
 }
 

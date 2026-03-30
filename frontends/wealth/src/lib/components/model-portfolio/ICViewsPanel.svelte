@@ -58,17 +58,17 @@
 		peerQuery.length >= 2
 			? instruments.filter((i) =>
 					i.fund_name.toLowerCase().includes(peerQuery.toLowerCase()) &&
-					i.fund_id !== formInstrumentId
+					i.instrument_id !== formInstrumentId
 				).slice(0, 10)
 			: []
 	);
 
 	let selectedInstrumentName = $derived(
-		instruments.find((i) => i.fund_id === formInstrumentId)?.fund_name ?? ""
+		instruments.find((i) => i.instrument_id === formInstrumentId)?.fund_name ?? ""
 	);
 
 	let selectedPeerName = $derived(
-		instruments.find((i) => i.fund_id === formPeerId)?.fund_name ?? ""
+		instruments.find((i) => i.instrument_id === formPeerId)?.fund_name ?? ""
 	);
 
 	// ── Validation ──────────────────────────────────────────────────────
@@ -84,7 +84,7 @@
 	// ── Instrument name lookup ──────────────────────────────────────────
 	function instrumentName(id: string | null): string {
 		if (!id) return "—";
-		return instruments.find((i) => i.fund_id === id)?.fund_name ?? id.slice(0, 8);
+		return instruments.find((i) => i.instrument_id === id)?.fund_name ?? id.slice(0, 8);
 	}
 
 	// ── Actions ─────────────────────────────────────────────────────────
@@ -154,13 +154,13 @@
 	}
 
 	function selectInstrument(asset: UniverseAsset) {
-		formInstrumentId = asset.fund_id;
+		formInstrumentId = asset.instrument_id;
 		instrumentQuery = asset.fund_name;
 		instrumentDropdownOpen = false;
 	}
 
 	function selectPeer(asset: UniverseAsset) {
-		formPeerId = asset.fund_id;
+		formPeerId = asset.instrument_id;
 		peerQuery = asset.fund_name;
 		peerDropdownOpen = false;
 	}
@@ -310,7 +310,7 @@
 							/>
 							{#if instrumentDropdownOpen && filteredInstruments.length > 0}
 								<div class="picker-dropdown">
-									{#each filteredInstruments as asset (asset.fund_id)}
+									{#each filteredInstruments as asset (asset.instrument_id)}
 										<button
 											class="picker-option"
 											type="button"
@@ -345,7 +345,7 @@
 								/>
 								{#if peerDropdownOpen && filteredPeers.length > 0}
 									<div class="picker-dropdown">
-										{#each filteredPeers as asset (asset.fund_id)}
+										{#each filteredPeers as asset (asset.instrument_id)}
 											<button
 												class="picker-option"
 												type="button"
