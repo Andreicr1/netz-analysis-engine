@@ -53,9 +53,9 @@
 	function getCvar(profile: Profile): CVaRStatus | null {
 		const live = riskStore.cvarByProfile[profile];
 		if (live?.cvar_current != null) return live;
-		// SSR fallback from riskSummary
-		const summaryProfiles = (data.riskSummary as { profiles?: CVaRStatus[] } | null)?.profiles;
-		return summaryProfiles?.find(p => p.profile === profile) ?? null;
+		// SSR fallback from riskSummary — backend returns profiles as dict, not array
+		const summaryProfiles = (data.riskSummary as { profiles?: Record<string, CVaRStatus | null> } | null)?.profiles;
+		return summaryProfiles?.[profile] ?? null;
 	}
 
 	function utilizationColor(pct: number | null): string {

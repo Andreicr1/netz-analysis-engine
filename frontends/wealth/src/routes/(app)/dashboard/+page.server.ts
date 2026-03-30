@@ -9,6 +9,17 @@ const PROFILES = ["conservative", "moderate", "growth"] as const;
 
 export const load: PageServerLoad = async (event) => {
 	const { token } = await event.parent();
+
+	// token may be null if auth hasn't resolved yet — return empty state
+	if (!token) {
+		return {
+			riskSummary: null,
+			regime: null,
+			alerts: { dtw_alerts: [], behavior_change_alerts: [] },
+			snapshotsByProfile: {},
+		};
+	}
+
 	const api = createServerApiClient(token);
 
 	const [riskSummary, regime, alerts, ...snapshots] = await Promise.all([
