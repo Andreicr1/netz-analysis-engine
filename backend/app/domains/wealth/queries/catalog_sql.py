@@ -371,14 +371,8 @@ def _registered_us_branch(f: CatalogFilters) -> Select | None:
             ).label("aum"),
             sec_registered_funds.c.currency,
             sec_registered_funds.c.domicile,
-            func.coalesce(
-                sec_managers.c.firm_name,
-                sec_registered_funds.c.fund_name,
-            ).label("manager_name"),
-            func.coalesce(
-                sec_managers.c.crd_number,
-                sec_registered_funds.c.cik,
-            ).label("manager_id"),
+            sec_managers.c.firm_name.label("manager_name"),
+            sec_managers.c.crd_number.label("manager_id"),
             sec_registered_funds.c.inception_date,
             sec_registered_funds.c.total_shareholder_accounts,
             literal_column("NULL").label("investor_count"),
@@ -513,11 +507,7 @@ def _common_conditions_registered(f: CatalogFilters) -> list:
         conditions.append(sec_registered_funds.c.domicile == f.domicile)
     if f.manager:
         escaped = _escape_ilike(f.manager)
-        pattern_mgr = f"%{escaped}%"
-        conditions.append(
-            sec_managers.c.firm_name.ilike(pattern_mgr)
-            | sec_registered_funds.c.fund_name.ilike(pattern_mgr),
-        )
+        conditions.append(sec_managers.c.firm_name.ilike(f"%{escaped}%"))
     return conditions
 
 
