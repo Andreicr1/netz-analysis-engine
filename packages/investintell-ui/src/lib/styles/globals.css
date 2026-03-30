@@ -293,7 +293,8 @@ a:focus-visible {
 	transition: var(--ii-transition-surface);
 }
 
-.dark .ii-ui-field {
+.dark .ii-ui-field,
+[data-theme="dark"] .ii-ui-field {
 	border-color: var(--ii-border);
 	background: var(--ii-surface-inset);
 }

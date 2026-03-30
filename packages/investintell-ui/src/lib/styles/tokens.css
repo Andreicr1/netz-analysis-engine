@@ -141,7 +141,8 @@
 	--sidebar-ring:                var(--ii-border-focus);
 }
 
-.dark {
+.dark,
+[data-theme="dark"] {
 	color-scheme: dark;
 
 	--ii-brand-primary:    #3B82F6;

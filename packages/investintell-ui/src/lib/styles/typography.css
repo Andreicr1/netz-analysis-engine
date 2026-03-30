@@ -113,7 +113,8 @@
 	--ii-kbd-border: #e5e7eb;
 }
 
-.dark {
+.dark,
+[data-theme="dark"] {
 	--ii-link-color: #60A5FA;
 	--ii-link-hover-color: #93BBFD;
 	--ii-code-bg: rgba(99, 102, 241, 0.12);

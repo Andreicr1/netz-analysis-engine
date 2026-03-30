@@ -1,17 +1,17 @@
-/* Import @netz/ui design tokens + base reset */
-@import "@netz/ui/styles";
+/* Import @investintell/ui design tokens + base reset */
+@import "@investintell/ui/styles";
 @import "tailwindcss";
 
 /* ── Content sources (replaces tailwind.config content[]) ── */
+@source "../../../packages/investintell-ui/src/**/*.{svelte,ts}";
 @source "../../../packages/ui/src/**/*.{svelte,ts}";
 
-/* ── Custom theme tokens ───────────────────────────────── */
+/* ── Custom theme tokens (Tailwind v4 @theme) ── */
 @theme {
-	--color-netz-navy: var(--netz-navy);
-	--color-netz-blue: var(--netz-blue);
-	--color-netz-slate: var(--netz-slate);
-	--color-netz-light: var(--netz-light);
-	--color-netz-orange: var(--netz-orange);
-	--font-sans: var(--netz-font-sans), "Inter Variable", system-ui, sans-serif;
-	--font-mono: var(--netz-font-mono), "JetBrains Mono", monospace;
+	--color-ii-brand: var(--ii-brand-primary);
+	--color-ii-accent: var(--ii-brand-accent);
+	--color-ii-surface: var(--ii-surface);
+	--color-ii-muted: var(--ii-text-muted);
+	--font-sans: var(--ii-font-sans), "Geist", system-ui, sans-serif;
+	--font-mono: var(--ii-font-mono), "Geist Mono", monospace;
 }
