@@ -18,9 +18,9 @@ You assist portfolio managers, analysts, and CIOs by answering questions about:
 Return a JSON object with exactly two keys:
 ```json
 {
-  "answer": "Your answer in markdown format with inline citations like [chunk_id].",
+  "answer": "Your answer in plain prose. Do NOT embed chunk IDs, references, or brackets anywhere in the answer text. Write as if citations are shown separately.",
   "citations": [
-    {"chunk_id": "abc-123", "excerpt": "Brief quote from the source"}
+    {"chunk_id": "abc-123", "excerpt": "One-sentence excerpt justifying this source"}
   ]
 }
 ```

@@ -85,7 +85,7 @@ async def agent_chat(
     async def event_generator() -> AsyncGenerator[ServerSentEvent, None]:
         try:
             # ── Step 1: Embed the question ──
-            yield _sse("tool_call", {"tool": "embedding", "status": "running", "detail": "Generating query embedding…"})
+            yield _sse("tool_call", {"tool": "embedding", "status": "running", "detail": "Analyzing question…"})
 
             from ai_engine.extraction.embedding_service import generate_embeddings
 
@@ -99,10 +99,10 @@ async def agent_chat(
                 yield _sse("error", {"message": "Failed to generate query embedding"})
                 return
 
-            yield _sse("tool_call", {"tool": "embedding", "status": "complete", "detail": "Query embedded"})
+            yield _sse("tool_call", {"tool": "embedding", "status": "complete", "detail": "Question analyzed"})
 
             # ── Step 2: Parallel retrieval from wealth_vector_chunks ──
-            yield _sse("tool_call", {"tool": "vector_search", "status": "running", "detail": "Searching knowledge base…"})
+            yield _sse("tool_call", {"tool": "vector_search", "status": "running", "detail": "Searching funds, reports, and filings…"})
 
             from ai_engine.extraction.pgvector_search_service import (
                 search_fund_analysis_sync,
@@ -161,10 +161,29 @@ async def agent_chat(
             unique_chunks.sort(key=lambda c: c.get("score", 0.0), reverse=True)
             unique_chunks = unique_chunks[:20]
 
+            # ── Search scope summary ──────────────────────────────────────────────────────
+            # org_chunks:    wealth_vector_chunks WHERE organization_id = org_id
+            #                entity_types: dd_chapter, macro_review, fact_sheet, portfolio
+            #                (org-scoped — only this tenant's produced content)
+            #
+            # firm_chunks:   wealth_vector_chunks WHERE entity_type IN ('firm', 'adv_brochure')
+            #                AND (sec_crd = ? OR esma_manager_id = ?)
+            #                (global — SEC ADV data shared across tenants, triggered by CRD/ESMA)
+            #
+            # global_chunks: wealth_vector_chunks WHERE entity_type IN ('fund', 'esma_fund', 'etf')
+            #                AND organization_id IS NULL
+            #                (global — public fund registry data, triggered when no instrument_id)
+            #
+            # The agent does NOT search: nav_timeseries, fund_risk_metrics, macro_data,
+            # sec_13f_holdings or any other hypertable. Those are queried via dedicated
+            # routes, not via the vector search. If users ask about current NAV or risk
+            # metrics, the agent should acknowledge this limitation.
+            # ─────────────────────────────────────────────────────────────────────────────
+
             yield _sse("tool_call", {
                 "tool": "vector_search",
                 "status": "complete",
-                "detail": f"Found {len(unique_chunks)} relevant chunks",
+                "detail": f"Found {len(unique_chunks)} relevant sources",
             })
 
             if not unique_chunks:
@@ -174,7 +193,7 @@ async def agent_chat(
                 return
 
             # ── Step 3: Build prompt and call LLM ──
-            yield _sse("tool_call", {"tool": "llm", "status": "running", "detail": "Generating answer…"})
+            yield _sse("tool_call", {"tool": "llm", "status": "running", "detail": "Composing answer…"})
 
             from ai_engine.model_config import get_model
             from ai_engine.openai_client import async_create_completion
@@ -215,7 +234,7 @@ async def agent_chat(
                 response_format={"type": "json_object"},
             )
 
-            yield _sse("tool_call", {"tool": "llm", "status": "complete", "detail": "Answer generated"})
+            yield _sse("tool_call", {"tool": "llm", "status": "complete", "detail": "Answer ready"})
 
             # ── Step 4: Parse LLM response and stream answer ──
             raw = (result.text or "").strip()
