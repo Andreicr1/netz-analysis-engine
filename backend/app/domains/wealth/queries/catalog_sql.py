@@ -260,7 +260,7 @@ class CatalogFilters:
     strategy_label: str | None = None     # comma-separated strategy labels
     investment_geography: str | None = None  # comma-separated geography values
     aum_min: float | None = None
-    has_nav: bool | None = None           # True = only funds with ticker
+    has_nav: bool | None = True            # True = only funds with ticker (default: exclude untradeable)
     domicile: str | None = None
     manager: str | None = None            # text search on manager name
     sort: str = "name_asc"               # name_asc | name_desc | aum_desc | aum_asc
@@ -366,7 +366,7 @@ def _registered_us_branch(f: CatalogFilters) -> Select | None:
             sec_registered_funds.c.fund_type,
             sec_registered_funds.c.strategy_label,
             func.coalesce(
-                sec_registered_funds.c.total_assets,
+                func.nullif(sec_registered_funds.c.total_assets, 0),
                 sec_registered_funds.c.monthly_avg_net_assets,
             ).label("aum"),
             sec_registered_funds.c.currency,
@@ -501,7 +501,11 @@ def _common_conditions_registered(f: CatalogFilters) -> list:
         elif sl_list:
             conditions.append(sec_registered_funds.c.strategy_label.in_(sl_list))
     if f.aum_min is not None:
-        conditions.append(sec_registered_funds.c.total_assets >= int(f.aum_min))
+        _aum_col = func.coalesce(
+            func.nullif(sec_registered_funds.c.total_assets, 0),
+            sec_registered_funds.c.monthly_avg_net_assets,
+        )
+        conditions.append(_aum_col >= int(f.aum_min))
     if f.has_nav is True:
         _eff_ticker = func.coalesce(
             sec_fund_classes.c.ticker, sec_registered_funds.c.ticker,
