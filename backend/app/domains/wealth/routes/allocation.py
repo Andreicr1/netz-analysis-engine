@@ -43,7 +43,7 @@ async def get_strategic(
             StrategicAllocation.profile == profile,
             StrategicAllocation.effective_from <= today,
             (StrategicAllocation.effective_to.is_(None))
-            | (StrategicAllocation.effective_to >= today),
+            | (StrategicAllocation.effective_to > today),
         )
         .order_by(StrategicAllocation.block_id)
     )
@@ -71,7 +71,7 @@ async def update_strategic(
         StrategicAllocation.profile == profile,
         StrategicAllocation.effective_from <= today,
         (StrategicAllocation.effective_to.is_(None))
-        | (StrategicAllocation.effective_to >= today),
+        | (StrategicAllocation.effective_to > today),
     )
     current_result = await db.execute(current_stmt)
     for row in current_result.scalars().all():
@@ -191,7 +191,7 @@ async def get_effective(
         StrategicAllocation.profile == profile,
         StrategicAllocation.effective_from <= today,
         (StrategicAllocation.effective_to.is_(None))
-        | (StrategicAllocation.effective_to >= today),
+        | (StrategicAllocation.effective_to > today),
     )
     strategic_result = await db.execute(strategic_stmt)
     strategic_map: dict[str, StrategicAllocation] = {

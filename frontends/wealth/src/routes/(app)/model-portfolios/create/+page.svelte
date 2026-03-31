@@ -106,7 +106,7 @@
 
 	// ── Block list from strategic allocation ─────────────────────────────
 
-	let blockIds = $derived(strategic.map((s) => s.block_id));
+	let blockIds = $derived([...new Set(strategic.map((s) => s.block_id))]);
 
 	// ── Wizard state ─────────────────────────────────────────────────────
 
