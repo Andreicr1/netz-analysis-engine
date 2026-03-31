@@ -4,7 +4,7 @@ export interface DisclosureMatrix {
 	has_holdings: boolean;
 	has_nav_history: boolean;
 	has_quant_metrics: boolean;
-	has_private_fund_data: boolean;
+	has_fund_details: boolean;
 	has_style_analysis: boolean;
 	has_13f_overlay: boolean;
 	has_peer_analysis: boolean;

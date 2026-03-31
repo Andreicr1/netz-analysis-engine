@@ -14,6 +14,7 @@
 	import { UNIVERSE_LABELS } from "$lib/types/catalog";
 	import SecHoldingsTable from "./SecHoldingsTable.svelte";
 	import SecStyleDriftChart from "./SecStyleDriftChart.svelte";
+	import FundDetailsTab from "./FundDetailsTab.svelte";
 
 	interface Props {
 		fund: UnifiedFundItem;
@@ -25,12 +26,13 @@
 	const api = createClientApiClient(getToken);
 
 	// Tabs driven by disclosure
-	type DetailTab = "overview" | "holdings" | "style" | "quant";
+	type DetailTab = "overview" | "details" | "holdings" | "style" | "quant";
 
 	let activeTab = $state<DetailTab>("overview");
 
 	let availableTabs = $derived.by(() => {
 		const tabs: { key: DetailTab; label: string }[] = [{ key: "overview", label: "Overview" }];
+		if (fund.disclosure.has_fund_details) tabs.push({ key: "details", label: "Fund Details" });
 		if (fund.disclosure.has_holdings) tabs.push({ key: "holdings", label: "Holdings" });
 		if (fund.disclosure.has_style_analysis) tabs.push({ key: "style", label: "Style Drift" });
 		if (fund.disclosure.has_quant_metrics) tabs.push({ key: "quant", label: "Quant Metrics" });
@@ -173,8 +175,8 @@
 				</div>
 				<div class="cdp-matrix-row">
 					<span class="cdp-matrix-label">Fund Details</span>
-					<span class="cdp-matrix-value" class:cdp-avail={fund.disclosure.has_private_fund_data} class:cdp-unavail={!fund.disclosure.has_private_fund_data}>
-						{fund.disclosure.has_private_fund_data ? "Available" : "N/A"}
+					<span class="cdp-matrix-value" class:cdp-avail={fund.disclosure.has_fund_details} class:cdp-unavail={!fund.disclosure.has_fund_details}>
+						{fund.disclosure.has_fund_details ? "Available" : "N/A"}
 					</span>
 				</div>
 				<div class="cdp-matrix-row">
@@ -207,6 +209,9 @@
 				<span class="dt-add-error">{reviewError}</span>
 			{/if}
 		</div>
+
+	{:else if activeTab === "details"}
+		<FundDetailsTab {api} cik={fundCik} managerId={fund.manager_id} />
 
 	{:else if activeTab === "holdings"}
 		<div class="cdp-tab-content">

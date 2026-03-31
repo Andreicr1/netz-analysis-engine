@@ -20,7 +20,7 @@ class DisclosureMatrix(BaseModel):
     has_holdings: bool = False
     has_nav_history: bool = False
     has_quant_metrics: bool = False
-    has_private_fund_data: bool = False
+    has_fund_details: bool = False
     has_style_analysis: bool = False
     has_13f_overlay: bool = False
     has_peer_analysis: bool = False

@@ -173,12 +173,12 @@ class TestDisclosureMatrix:
 
     def test_private_us_minimal_disclosure(self):
         d = DisclosureMatrix(
-            has_private_fund_data=True,
+            has_fund_details=True,
             aum_source="schedule_d",
         )
         assert d.has_holdings is False
         assert d.has_nav_history is False
-        assert d.has_private_fund_data is True
+        assert d.has_fund_details is True
         assert d.aum_source == "schedule_d"
 
     def test_ucits_eu_nav_only(self):
@@ -197,7 +197,7 @@ class TestDisclosureMatrix:
         assert d.has_holdings is False
         assert d.has_nav_history is False
         assert d.has_quant_metrics is False
-        assert d.has_private_fund_data is False
+        assert d.has_fund_details is False
         assert d.has_style_analysis is False
         assert d.has_13f_overlay is False
         assert d.has_peer_analysis is False
@@ -252,7 +252,7 @@ class TestUnifiedFundItem:
             aum=20_000_000_000,
             investor_count=150,
             disclosure=DisclosureMatrix(
-                has_private_fund_data=True,
+                has_fund_details=True,
                 aum_source="schedule_d",
             ),
         )
@@ -294,7 +294,7 @@ class TestUnifiedFundItem:
         data = item.model_dump()
         assert data["universe"] == "private_us"
         assert data["disclosure"]["has_holdings"] is False
-        assert data["disclosure"]["has_private_fund_data"] is True
+        assert data["disclosure"]["has_fund_details"] is True
         assert data["ticker"] is None
         assert data["isin"] is None
         assert data["investor_count"] == 150

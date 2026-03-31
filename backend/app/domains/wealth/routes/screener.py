@@ -1147,6 +1147,7 @@ def _build_disclosure(
     has_holdings: bool,
     has_nav: bool,
     has_13f_overlay: bool = False,
+    has_prospectus: bool = False,
 ) -> DisclosureMatrix:
     """Build DisclosureMatrix from universe type and computed flags."""
     if universe == "registered_us":
@@ -1154,7 +1155,7 @@ def _build_disclosure(
             has_holdings=has_holdings,
             has_nav_history=has_nav,
             has_quant_metrics=has_nav,
-            has_private_fund_data=False,
+            has_fund_details=has_prospectus,
             has_style_analysis=has_holdings,
             has_13f_overlay=has_13f_overlay,
             has_peer_analysis=True,
@@ -1167,7 +1168,7 @@ def _build_disclosure(
             has_holdings=False,
             has_nav_history=False,
             has_quant_metrics=False,
-            has_private_fund_data=True,
+            has_fund_details=True,
             has_style_analysis=False,
             has_13f_overlay=has_13f_overlay,
             has_peer_analysis=False,
@@ -1180,7 +1181,7 @@ def _build_disclosure(
         has_holdings=False,
         has_nav_history=has_nav,
         has_quant_metrics=has_nav,
-        has_private_fund_data=False,
+        has_fund_details=False,
         has_style_analysis=False,
         has_13f_overlay=False,
         has_peer_analysis=has_nav,
@@ -1468,6 +1469,7 @@ async def get_catalog(
                     has_holdings=bool(r.has_holdings),
                     has_nav=bool(r.has_nav),
                     has_13f_overlay=bool(getattr(r, "has_13f_overlay", False)),
+                    has_prospectus=getattr(r, "expense_ratio_pct", None) is not None,
                 ),
             ),
         )
@@ -1665,5 +1667,6 @@ async def get_catalog_fund_detail(
             has_holdings=bool(r.has_holdings),
             has_nav=bool(r.has_nav),
             has_13f_overlay=bool(getattr(r, "has_13f_overlay", False)),
+            has_prospectus=getattr(r, "expense_ratio_pct", None) is not None,
         ),
     )
