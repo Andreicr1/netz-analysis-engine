@@ -90,16 +90,16 @@
 		return_consistency: 20, risk_adjusted_return: 25, drawdown_control: 20,
 		information_ratio: 15, flows_momentum: 10, fee_efficiency: 10,
 	};
-	// Read from scoring.fund.weights
+	// Read from scoring_weights (same format as scoring_service.py)
 	const scoringRaw = getScoringConfig();
-	const scoringFundWeights = scoringRaw?.fund?.weights ?? {};
-	const savedScoring = Object.keys(scoringFundWeights).length > 0 ? {
-		return_consistency:   Math.round((scoringFundWeights.pct_positive_months         ?? 0.2) * 100),
-		risk_adjusted_return: Math.round((scoringFundWeights.sharpe_ratio                ?? 0.25) * 100),
-		drawdown_control:     Math.round((scoringFundWeights.max_drawdown                ?? 0.2) * 100),
-		information_ratio:    Math.round((scoringFundWeights.correlation_diversification  ?? 0.15) * 100),
-		flows_momentum:       Math.round((scoringFundWeights.flows_momentum              ?? 0.1) * 100),
-		fee_efficiency:       Math.round((scoringFundWeights.fee_efficiency               ?? 0.1) * 100),
+	const scoringWeightsDb = scoringRaw?.scoring_weights ?? {};
+	const savedScoring = Object.keys(scoringWeightsDb).length > 0 ? {
+		return_consistency:   Math.round((scoringWeightsDb.return_consistency   ?? 0.2) * 100),
+		risk_adjusted_return: Math.round((scoringWeightsDb.risk_adjusted_return ?? 0.25) * 100),
+		drawdown_control:     Math.round((scoringWeightsDb.drawdown_control     ?? 0.2) * 100),
+		information_ratio:    Math.round((scoringWeightsDb.information_ratio    ?? 0.15) * 100),
+		flows_momentum:       Math.round((scoringWeightsDb.flows_momentum      ?? 0.1) * 100),
+		fee_efficiency:       Math.round((scoringWeightsDb.fee_efficiency       ?? 0.1) * 100),
 	} : null;
 	let scoringWeights = $state(structuredClone(savedScoring ?? defaultScoringWeights));
 	let scoringSnapshot = JSON.stringify(scoringWeights);
@@ -199,16 +199,17 @@
 	async function saveScoringWeights() {
 		scoringSaving = true;
 		try {
-			// Convert UI percentages back to scoring.fund.weights decimals
-			const scoringPatch = structuredClone(getScoringConfig());
-			if (!scoringPatch.fund) scoringPatch.fund = {};
-			scoringPatch.fund.weights = {
-				pct_positive_months:         scoringWeights.return_consistency   / 100,
-				sharpe_ratio:                scoringWeights.risk_adjusted_return / 100,
-				max_drawdown:                scoringWeights.drawdown_control     / 100,
-				correlation_diversification: scoringWeights.information_ratio    / 100,
-				flows_momentum:              scoringWeights.flows_momentum       / 100,
-				fee_efficiency:              scoringWeights.fee_efficiency        / 100,
+			// Write scoring_weights in the format scoring_service.py expects:
+			// { scoring_weights: { component_name: decimal_weight } }
+			const scoringPatch = {
+				scoring_weights: {
+					return_consistency:   scoringWeights.return_consistency   / 100,
+					risk_adjusted_return: scoringWeights.risk_adjusted_return / 100,
+					drawdown_control:     scoringWeights.drawdown_control     / 100,
+					information_ratio:    scoringWeights.information_ratio    / 100,
+					flows_momentum:       scoringWeights.flows_momentum       / 100,
+					fee_efficiency:       scoringWeights.fee_efficiency        / 100,
+				},
 			};
 			await api.put("/admin/configs/defaults/liquid_funds/scoring", scoringPatch);
 			scoringSnapshot = JSON.stringify(scoringWeights);
