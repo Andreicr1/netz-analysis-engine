@@ -471,7 +471,7 @@
 						>
 							<span class="block-item-name">{blockDisplayName(blockId)}</span>
 							<span class="block-item-count" class:block-item-count--zero={count === 0}>
-								{count > 0 ? `${count} selected` : available > 0 ? "Empty" : "No funds"}
+								{count > 0 ? `${count} selected` : available > 0 ? "Optional" : "No funds"}
 							</span>
 						</button>
 					{/each}
@@ -526,8 +526,8 @@
 			</div>
 
 			{#if coveredBlocks < blockIds.length && totalSelectedFunds > 0}
-				<div class="step-warning">
-					Some blocks have no funds — the optimizer will exclude them from allocation.
+				<div class="step-info">
+					{blockIds.length - coveredBlocks} block{blockIds.length - coveredBlocks !== 1 ? "s" : ""} skipped — the optimizer will redistribute weight proportionally across selected blocks.
 				</div>
 			{/if}
 		</div>
@@ -952,6 +952,15 @@
 		border-radius: var(--ii-radius-sm, 8px);
 		background: color-mix(in srgb, var(--ii-warning) 8%, transparent);
 		color: var(--ii-warning);
+		font-size: var(--ii-text-small, 0.8125rem);
+	}
+
+	.step-info {
+		margin-top: var(--ii-space-stack-sm, 12px);
+		padding: var(--ii-space-stack-xs, 8px) var(--ii-space-inline-md, 16px);
+		border-radius: var(--ii-radius-sm, 8px);
+		background: color-mix(in srgb, var(--ii-brand-primary) 6%, transparent);
+		color: var(--ii-text-secondary);
 		font-size: var(--ii-text-small, 0.8125rem);
 	}
 

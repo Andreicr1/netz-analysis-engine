@@ -43,11 +43,9 @@ _YAML_FALLBACK_MAP: dict[tuple[str, str], str] = {
     ("liquid_funds", "calibration"): "calibration/config/limits.yaml",
     ("liquid_funds", "portfolio_profiles"): "calibration/config/profiles.yaml",
     ("liquid_funds", "scoring"): "calibration/config/scoring.yaml",
-    ("liquid_funds", "blocks"): "calibration/config/blocks.yaml",
     ("private_credit", "chapters"): "profiles/private_credit/profile.yaml",
     ("private_credit", "calibration"): "calibration/seeds/private_credit/calibration.yaml",
     ("private_credit", "scoring"): "calibration/seeds/private_credit/scoring.yaml",
-    ("liquid_funds", "chapters"): "profiles/liquid_funds/profile.yaml",
     ("liquid_funds", "macro_intelligence"): "calibration/seeds/liquid_funds/macro_intelligence.yaml",
     ("private_credit", "governance_policy"): "calibration/seeds/private_credit/governance_policy.yaml",
 }
@@ -64,7 +62,7 @@ class ConfigService:
     # IP protection: prompts, chapters, and internal config types never returned
     # to clients. Chapters expose IC memo structure (analytical methodology IP).
     CLIENT_VISIBLE_TYPES: ClassVar[frozenset[str]] = frozenset(
-        {"calibration", "scoring", "blocks", "portfolio_profiles"},
+        {"calibration", "scoring", "portfolio_profiles"},
     )
 
     def __init__(self, db: AsyncSession) -> None:

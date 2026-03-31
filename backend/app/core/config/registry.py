@@ -54,20 +54,8 @@ _REGISTRY: tuple[ConfigDomain, ...] = (
         client_visible=True,
         description="Scoring weights for fund evaluation",
     ),
-    ConfigDomain(
-        vertical="liquid_funds",
-        config_type="blocks",
-        ownership="config_service",
-        client_visible=True,
-        description="Allocation blocks for portfolio construction",
-    ),
-    ConfigDomain(
-        vertical="liquid_funds",
-        config_type="chapters",
-        ownership="config_service",
-        client_visible=False,
-        description="Analysis profile chapters (IP-protected)",
-    ),
+    # blocks: REMOVED — allocation_blocks table is the source of truth, not ConfigService.
+    # chapters: REMOVED — CHAPTER_REGISTRY in dd_report/models.py is the source of truth.
     ConfigDomain(
         vertical="liquid_funds",
         config_type="macro_intelligence",
