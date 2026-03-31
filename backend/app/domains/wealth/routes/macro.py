@@ -50,6 +50,7 @@ from app.shared.enums import Role
 from app.shared.models import (
     BisStatistics,
     ImfWeoForecast,
+    MacroData,
     MacroRegionalSnapshot,
     OfrHedgeFundData,
     TreasuryData,
@@ -668,6 +669,14 @@ async def get_bis_data(
 
     Cached in Redis for 6 hours. 2-year lookback by default.
     """
+    # Map frontend UPPER_CASE IDs to DB lowercase values
+    _BIS_MAP: dict[str, str] = {
+        "CREDIT_GAP": "credit_to_gdp_gap",
+        "DSR": "debt_service_ratio",
+        "PROPERTY_PRICES": "property_prices",
+    }
+    db_indicator = _BIS_MAP.get(indicator, indicator)
+
     cache_key = f"bis:{country}:{indicator}"
     cached = await _get_cached(cache_key)
     if cached is not None:
@@ -678,7 +687,7 @@ async def get_bis_data(
         select(BisStatistics.period, BisStatistics.value)
         .where(
             BisStatistics.country_code == country,
-            BisStatistics.indicator == indicator,
+            BisStatistics.indicator == db_indicator,
             BisStatistics.period >= cutoff,
         )
         .order_by(BisStatistics.period)
@@ -755,24 +764,44 @@ async def get_treasury_data(
     series: str = Query(..., description="Treasury series ID, e.g. 10Y_RATE"),
     user: CurrentUser = Depends(get_current_user),
 ) -> TreasuryDataResponse:
-    """Return raw Treasury time series for a given series ID.
+    """Return raw Treasury/FRED time series for a given series ID.
 
+    Market interest rates (10Y, 2Y, Fed Funds, yield curve) come from
+    macro_data (FRED). Debt statistics come from treasury_data.
     Cached in Redis for 1 hour. 2-year lookback by default.
     """
+    # Map frontend-friendly IDs to FRED series in macro_data
+    _FRED_MAP: dict[str, str] = {
+        "10Y_RATE": "DGS10",
+        "2Y_RATE": "DGS2",
+        "30Y_RATE": "MORTGAGE30US",
+        "FED_FUNDS": "DFF",
+        "YIELD_CURVE": "BAA10Y",
+        "SOFR": "SOFR",
+    }
+
     cache_key = f"treasury:{series}"
     cached = await _get_cached(cache_key)
     if cached is not None:
         return TreasuryDataResponse(series=series, data=cached)
 
     cutoff = date.today() - timedelta(days=_DEFAULT_LOOKBACK_DAYS)
-    stmt = (
-        select(TreasuryData.obs_date, TreasuryData.value)
-        .where(
-            TreasuryData.series_id == series,
-            TreasuryData.obs_date >= cutoff,
+    fred_id = _FRED_MAP.get(series)
+
+    if fred_id:
+        # Interest rates from macro_data (FRED)
+        stmt = (
+            select(MacroData.obs_date, MacroData.value)
+            .where(MacroData.series_id == fred_id, MacroData.obs_date >= cutoff)
+            .order_by(MacroData.obs_date)
         )
-        .order_by(TreasuryData.obs_date)
-    )
+    else:
+        # Debt statistics from treasury_data
+        stmt = (
+            select(TreasuryData.obs_date, TreasuryData.value)
+            .where(TreasuryData.series_id == series, TreasuryData.obs_date >= cutoff)
+            .order_by(TreasuryData.obs_date)
+        )
 
     async with async_session_factory() as db:
         result = await db.execute(stmt)
@@ -803,6 +832,14 @@ async def get_ofr_data(
 
     Cached in Redis for 1 hour. 2-year lookback by default.
     """
+    # Map frontend-friendly IDs to actual OFR series_id values
+    _OFR_MAP: dict[str, str] = {
+        "HF_AUM": "OFR_INDUSTRY_NAV",
+        "HF_LEVERAGE": "OFR_LEVERAGE_P50",
+        "HF_REPO_STRESS": "OFR_REPO_VOLUME",
+    }
+    db_metric = _OFR_MAP.get(metric, metric)
+
     cache_key = f"ofr:{metric}"
     cached = await _get_cached(cache_key)
     if cached is not None:
@@ -812,7 +849,7 @@ async def get_ofr_data(
     stmt = (
         select(OfrHedgeFundData.obs_date, OfrHedgeFundData.value)
         .where(
-            OfrHedgeFundData.series_id == metric,
+            OfrHedgeFundData.series_id == db_metric,
             OfrHedgeFundData.obs_date >= cutoff,
         )
         .order_by(OfrHedgeFundData.obs_date)

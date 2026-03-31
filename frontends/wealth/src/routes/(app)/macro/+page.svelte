@@ -301,11 +301,11 @@
 					<div class="ind-col stress-col" class:ind-col--last={i === 3}>
 						<span class="stress-label">{item.label}</span>
 						<div class="stress-value-row">
-							<span class="stress-value">{item.value.toFixed(0)}</span>
+							<span class="stress-value">{item.value != null ? item.value.toFixed(0) : "—"}</span>
 							<span class="stress-max">/ 100</span>
 						</div>
 						<div class="stress-bar-track">
-							<div class="stress-bar-fill" style:width="{item.value}%" style:background={stressBarColor(item.value)}></div>
+							<div class="stress-bar-fill" style:width="{item.value ?? 0}%" style:background={stressBarColor(item.value ?? 0)}></div>
 						</div>
 					</div>
 				{/each}
@@ -331,13 +331,13 @@
 						{#if regime?.regional_regimes[regionName]}
 							<span class="region-regime-badge">{regime.regional_regimes[regionName].replace(/_/g, " ").toUpperCase()}</span>
 						{/if}
-						<span class="region-coverage">COVERAGE {(regionData.coverage * 100).toFixed(0)}%</span>
+						<span class="region-coverage">COVERAGE {regionData.coverage != null ? (regionData.coverage * 100).toFixed(0) : "—"}%</span>
 					</div>
 					<div class="region-header-right">
 						<div class="region-score-group">
 							<span class="region-score-label">MACRO SCORE</span>
 							<span class="region-score-value" style:color={scoreColor(regionData.composite_score)}>
-								{regionData.composite_score.toFixed(0)}
+								{regionData.composite_score != null ? regionData.composite_score.toFixed(0) : "—"}
 							</span>
 						</div>
 						<div class="region-chevron" class:region-chevron--open={isExpanded}>
@@ -351,7 +351,7 @@
 					<div class="region-mini-bars">
 						{#each dimEntries.slice(0, 3) as [, dim]}
 							<div class="mini-bar-track">
-								<div class="mini-bar-fill" style:width="{dim.score}%"></div>
+								<div class="mini-bar-fill" style:width="{dim.score ?? 0}%"></div>
 							</div>
 						{/each}
 					</div>
@@ -369,10 +369,10 @@
 										<div class="breakdown-item">
 											<div class="breakdown-item-header">
 												<span class="breakdown-dim-name">{formatLabel(dimName)}</span>
-												<span class="breakdown-dim-score" style:color={scoreColor(dim.score)}>{dim.score.toFixed(0)}</span>
+												<span class="breakdown-dim-score" style:color={scoreColor(dim.score ?? 0)}>{dim.score != null ? dim.score.toFixed(0) : "—"}</span>
 											</div>
 											<div class="breakdown-bar-track">
-												<div class="breakdown-bar-fill" style:width="{dim.score}%"></div>
+												<div class="breakdown-bar-fill" style:width="{dim.score ?? 0}%"></div>
 											</div>
 										</div>
 									{/each}
