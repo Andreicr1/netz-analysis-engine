@@ -1,18 +1,49 @@
 <!--
-  CommitteeReviews — list + generate + approve/reject with role-gating.
+  CommitteeReviews — list + generate + expand report + approve/reject with role-gating.
   Spec: WM-S1-05
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { ConsequenceDialog, StatusBadge, formatDate, formatDateTime } from "@investintell/ui";
+	import { ConsequenceDialog, StatusBadge, formatDate, formatDateTime, formatNumber } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
+
+	interface ScoreDelta {
+		region: string;
+		previous_score: number;
+		current_score: number;
+		delta: number;
+		flagged: boolean;
+	}
+
+	interface GlobalIndicatorsDelta {
+		usd_strength?: number;
+		energy_stress?: number;
+		commodity_stress?: number;
+		geopolitical_risk_score?: number;
+	}
+
+	interface ReportJson {
+		type?: string;
+		as_of_date?: string;
+		regime?: {
+			global?: string;
+			regional?: Record<string, string>;
+			composition_reasons?: Record<string, string>;
+		};
+		score_deltas?: ScoreDelta[];
+		regime_transitions?: Record<string, unknown>;
+		staleness_alerts?: string[];
+		global_indicators_delta?: GlobalIndicatorsDelta;
+		has_material_changes?: boolean;
+		[key: string]: unknown;
+	}
 
 	interface MacroReview {
 		id: string;
 		status: string;
 		is_emergency: boolean;
 		as_of_date: string;
-		report_json: Record<string, unknown>;
+		report_json: ReportJson;
 		approved_by: string | null;
 		approved_at: string | null;
 		decision_rationale: string | null;
@@ -49,6 +80,12 @@
 	let showRejectDialog = $state(false);
 	let targetReview = $state<MacroReview | null>(null);
 
+	// Expandable detail
+	let expandedId = $state<string | null>(null);
+	function toggleExpand(id: string) {
+		expandedId = expandedId === id ? null : id;
+	}
+
 	const IC_ROLES = ["investment_team", "analyst", "portfolio_manager", "director", "admin", "super_admin"];
 	const APPROVER_ROLES = ["director", "admin", "super_admin"];
 	let canGenerate = $derived(actorRole !== null && IC_ROLES.includes(actorRole));
@@ -74,6 +111,8 @@
 			const newReview = await api.post<MacroReview>("/macro/reviews/generate", {});
 			setReviews([newReview, ...reviews]);
 			showGenerateDialog = false;
+			// Auto-expand the new review
+			expandedId = newReview.id;
 		} catch (e) {
 			generateError = e instanceof Error ? e.message : "Failed to generate review.";
 		} finally {
@@ -148,17 +187,39 @@
 		return "default";
 	}
 
-	function reportSummary(review: MacroReview): string {
-		const rj = review.report_json;
-		if (typeof rj === "object" && rj !== null) {
-			const summary = (rj as Record<string, unknown>).executive_summary
-				?? (rj as Record<string, unknown>).summary
-				?? "";
-			if (typeof summary === "string" && summary.length > 0) {
-				return summary.length > 200 ? summary.slice(0, 200) + "…" : summary;
-			}
+	function regimeLabel(regime: string | undefined): string {
+		if (!regime) return "—";
+		return regime.replace(/_/g, " ");
+	}
+
+	function regimeColorVar(regime: string | undefined): string {
+		if (!regime) return "var(--ii-text-muted)";
+		if (regime === "CRISIS") return "var(--ii-danger)";
+		if (regime === "RISK_OFF") return "var(--ii-warning)";
+		return "var(--ii-success)";
+	}
+
+	function deltaSign(d: number): string {
+		if (d > 0) return "+";
+		return "";
+	}
+
+	function deltaColor(d: number, flagged: boolean): string {
+		if (flagged) return "var(--ii-danger)";
+		if (Math.abs(d) >= 3) return "var(--ii-warning)";
+		return "var(--ii-text-secondary)";
+	}
+
+	function reportHeadline(rj: ReportJson): string {
+		const regime = rj.regime?.global ?? "Unknown";
+		const materialTag = rj.has_material_changes ? "Material changes detected" : "No material changes";
+		const deltas = rj.score_deltas ?? [];
+		const flagged = deltas.filter((d) => d.flagged);
+		if (flagged.length > 0) {
+			const regions = flagged.map((d) => d.region).join(", ");
+			return `${regimeLabel(regime)} — ${materialTag}. Flagged: ${regions}`;
 		}
-		return "Committee review generated.";
+		return `${regimeLabel(regime)} — ${materialTag}`;
 	}
 </script>
 
@@ -186,17 +247,130 @@
 	{:else}
 		<div class="reviews-list">
 			{#each reviews as review (review.id)}
-				<div class="review-card">
-					<div class="review-meta">
-						<span class="review-date">{formatDate(review.as_of_date)}</span>
-						<StatusBadge status={review.status} type={statusType(review.status)} />
-						{#if review.is_emergency}
-							<span class="review-emergency">EMERGENCY</span>
-						{/if}
-					</div>
-					<p class="review-summary">{reportSummary(review)}</p>
+				{@const rj = (review.report_json ?? {}) as ReportJson}
+				{@const expanded = expandedId === review.id}
+				<div class="review-card" class:review-card--expanded={expanded}>
+					<!-- Header row — clickable to expand -->
+					<button class="review-header-btn" onclick={() => toggleExpand(review.id)} type="button">
+						<div class="review-meta">
+							<span class="review-date">{formatDate(review.as_of_date)}</span>
+							<StatusBadge status={review.status} type={statusType(review.status)} />
+							{#if review.is_emergency || rj.type === "emergency"}
+								<span class="review-emergency">EMERGENCY</span>
+							{/if}
+							<span class="review-expand-icon">{expanded ? "▾" : "▸"}</span>
+						</div>
+						<p class="review-headline">{reportHeadline(rj)}</p>
+					</button>
+
+					<!-- Expanded report detail -->
+					{#if expanded}
+						<div class="report-detail">
+							<!-- Global Regime -->
+							{#if rj.regime}
+								<div class="report-block">
+									<h4 class="report-block-title">Regime Assessment</h4>
+									<div class="regime-global">
+										<span class="regime-label">Global</span>
+										<span class="regime-value" style:color={regimeColorVar(rj.regime.global)}>
+											{regimeLabel(rj.regime.global)}
+										</span>
+									</div>
+									{#if rj.regime.regional}
+										<div class="regime-grid">
+											{#each Object.entries(rj.regime.regional) as [region, regime]}
+												<div class="regime-cell">
+													<span class="regime-region">{region}</span>
+													<span class="regime-value" style:color={regimeColorVar(regime)}>
+														{regimeLabel(regime)}
+													</span>
+												</div>
+											{/each}
+										</div>
+									{/if}
+									{#if rj.regime.composition_reasons?.decision}
+										<p class="regime-reason">{rj.regime.composition_reasons.decision}</p>
+									{/if}
+								</div>
+							{/if}
+
+							<!-- Regional Score Deltas -->
+							{#if rj.score_deltas && rj.score_deltas.length > 0}
+								<div class="report-block">
+									<h4 class="report-block-title">Regional Score Changes</h4>
+									<table class="delta-table">
+										<thead>
+											<tr>
+												<th>Region</th>
+												<th>Previous</th>
+												<th>Current</th>
+												<th>Delta</th>
+											</tr>
+										</thead>
+										<tbody>
+											{#each rj.score_deltas as d}
+												<tr>
+													<td class="delta-region">{d.region}</td>
+													<td class="delta-num">{formatNumber(d.previous_score, 1)}</td>
+													<td class="delta-num">{formatNumber(d.current_score, 1)}</td>
+													<td class="delta-num" style:color={deltaColor(d.delta, d.flagged)}>
+														{deltaSign(d.delta)}{formatNumber(d.delta, 2)}
+														{#if d.flagged}<span class="delta-flag">!</span>{/if}
+													</td>
+												</tr>
+											{/each}
+										</tbody>
+									</table>
+								</div>
+							{/if}
+
+							<!-- Global Indicators Delta -->
+							{#if rj.global_indicators_delta}
+								<div class="report-block">
+									<h4 class="report-block-title">Global Indicators</h4>
+									<div class="indicators-grid">
+										{#each Object.entries(rj.global_indicators_delta) as [key, val]}
+											<div class="indicator-cell">
+												<span class="indicator-label">{key.replace(/_/g, " ")}</span>
+												<span class="indicator-value">
+													{typeof val === "number" ? formatNumber(val, 2) : "—"}
+												</span>
+											</div>
+										{/each}
+									</div>
+								</div>
+							{/if}
+
+							<!-- Staleness Alerts -->
+							{#if rj.staleness_alerts && rj.staleness_alerts.length > 0}
+								<div class="report-block">
+									<h4 class="report-block-title">Stale Series ({rj.staleness_alerts.length})</h4>
+									<p class="staleness-list">{rj.staleness_alerts.join(", ")}</p>
+								</div>
+							{/if}
+
+							<!-- Regime Transitions -->
+							{#if rj.regime_transitions && Object.keys(rj.regime_transitions).length > 0}
+								<div class="report-block">
+									<h4 class="report-block-title">Regime Transitions</h4>
+									{#each Object.entries(rj.regime_transitions) as [region, change]}
+										<p class="transition-item">
+											<strong>{region}:</strong> {JSON.stringify(change)}
+										</p>
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{/if}
+
+					<!-- Footer + actions -->
 					<div class="review-footer">
 						<span class="review-created">Created {formatDateTime(review.created_at)}</span>
+						{#if review.approved_by}
+							<span class="review-approved-by">
+								{review.status === "approved" ? "Approved" : "Rejected"} by {review.approved_by}
+							</span>
+						{/if}
 						{#if review.decision_rationale}
 							<span class="review-rationale" title={review.decision_rationale}>
 								Rationale: {review.decision_rationale.length > 80 ? review.decision_rationale.slice(0, 80) + "…" : review.decision_rationale}
@@ -320,12 +494,27 @@
 	}
 
 	.review-card {
-		padding: 12px 16px;
 		border-bottom: 1px solid var(--ii-border-subtle);
 	}
 
 	.review-card:last-child {
 		border-bottom: none;
+	}
+
+	.review-card--expanded {
+		background: color-mix(in srgb, var(--ii-brand-primary) 2%, transparent);
+	}
+
+	/* Clickable header */
+	.review-header-btn {
+		display: block;
+		width: 100%;
+		padding: 12px 16px 4px;
+		text-align: left;
+		background: none;
+		border: none;
+		cursor: pointer;
+		font-family: var(--ii-font-sans);
 	}
 
 	.review-meta {
@@ -348,22 +537,192 @@
 		letter-spacing: 0.06em;
 	}
 
-	.review-summary {
+	.review-expand-icon {
+		margin-left: auto;
+		font-size: 12px;
+		color: var(--ii-text-muted);
+	}
+
+	.review-headline {
 		font-size: var(--ii-text-small, 0.8125rem);
 		color: var(--ii-text-secondary);
-		margin: 4px 0;
+		margin: 0 0 4px;
 		line-height: 1.4;
 	}
 
+	/* Expanded report */
+	.report-detail {
+		padding: 8px 16px 12px;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	.report-block {
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-sm, 8px);
+		overflow: hidden;
+	}
+
+	.report-block-title {
+		padding: 5px 10px;
+		font-size: var(--ii-text-label, 0.75rem);
+		font-weight: 600;
+		letter-spacing: 0.03em;
+		text-transform: uppercase;
+		color: var(--ii-text-muted);
+		background: var(--ii-surface-alt);
+		border-bottom: 1px solid var(--ii-border-subtle);
+		margin: 0;
+	}
+
+	/* Regime */
+	.regime-global {
+		display: flex;
+		justify-content: space-between;
+		padding: 8px 10px;
+		border-bottom: 1px solid var(--ii-border-subtle);
+	}
+
+	.regime-label {
+		font-size: var(--ii-text-small, 0.8125rem);
+		font-weight: 500;
+		color: var(--ii-text-primary);
+	}
+
+	.regime-value {
+		font-size: var(--ii-text-small, 0.8125rem);
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+	}
+
+	.regime-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+		gap: 0;
+	}
+
+	.regime-cell {
+		display: flex;
+		justify-content: space-between;
+		padding: 5px 10px;
+		border-bottom: 1px solid var(--ii-border-subtle);
+		font-size: var(--ii-text-small, 0.8125rem);
+	}
+
+	.regime-region {
+		color: var(--ii-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
+		font-weight: 500;
+	}
+
+	.regime-reason {
+		padding: 6px 10px;
+		font-size: 11px;
+		color: var(--ii-text-muted);
+		font-style: italic;
+		margin: 0;
+	}
+
+	/* Score deltas table */
+	.delta-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: var(--ii-text-small, 0.8125rem);
+	}
+
+	.delta-table th {
+		padding: 4px 10px;
+		text-align: left;
+		font-size: var(--ii-text-label, 0.75rem);
+		font-weight: 600;
+		color: var(--ii-text-muted);
+		background: var(--ii-surface-alt);
+		border-bottom: 1px solid var(--ii-border-subtle);
+	}
+
+	.delta-table td {
+		padding: 5px 10px;
+		border-bottom: 1px solid var(--ii-border-subtle);
+	}
+
+	.delta-region {
+		font-weight: 500;
+		color: var(--ii-text-primary);
+	}
+
+	.delta-num {
+		font-variant-numeric: tabular-nums;
+		text-align: right;
+	}
+
+	.delta-flag {
+		font-weight: 700;
+		color: var(--ii-danger);
+		margin-left: 4px;
+	}
+
+	/* Indicators */
+	.indicators-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0;
+	}
+
+	.indicator-cell {
+		display: flex;
+		justify-content: space-between;
+		padding: 5px 10px;
+		border-bottom: 1px solid var(--ii-border-subtle);
+		font-size: var(--ii-text-small, 0.8125rem);
+	}
+
+	.indicator-label {
+		color: var(--ii-text-muted);
+		font-size: var(--ii-text-label, 0.75rem);
+		text-transform: capitalize;
+	}
+
+	.indicator-value {
+		font-weight: 500;
+		color: var(--ii-text-primary);
+		font-variant-numeric: tabular-nums;
+	}
+
+	/* Staleness */
+	.staleness-list {
+		padding: 6px 10px;
+		font-size: 11px;
+		color: var(--ii-text-muted);
+		margin: 0;
+		line-height: 1.5;
+		word-break: break-all;
+	}
+
+	/* Transitions */
+	.transition-item {
+		padding: 4px 10px;
+		font-size: var(--ii-text-small, 0.8125rem);
+		color: var(--ii-text-secondary);
+		margin: 0;
+	}
+
+	/* Footer */
 	.review-footer {
 		display: flex;
 		gap: 12px;
 		font-size: 11px;
 		color: var(--ii-text-muted);
 		flex-wrap: wrap;
+		padding: 4px 16px 8px;
 	}
 
 	.review-created {
+		white-space: nowrap;
+	}
+
+	.review-approved-by {
 		white-space: nowrap;
 	}
 
@@ -374,7 +733,7 @@
 	.review-actions {
 		display: flex;
 		gap: 8px;
-		margin-top: 8px;
+		padding: 0 16px 12px;
 	}
 
 	.action-btn {
