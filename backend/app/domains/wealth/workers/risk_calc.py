@@ -713,11 +713,20 @@ class _MetricsAdapter:
         return self._m.get(name)
 
 
-def _score_metrics(metrics: dict) -> None:
+def _score_metrics(
+    metrics: dict,
+    scoring_config: dict | None = None,
+    expense_ratio_pct: float | None = None,
+) -> None:
     """Compute manager_score and score_components from base metrics in-place."""
     adapter = _MetricsAdapter(metrics)
     flows = float(metrics.get("blended_momentum_score") or 50.0)
-    score_val, components = compute_fund_score(adapter, flows_momentum_score=flows)
+    score_val, components = compute_fund_score(
+        adapter,
+        flows_momentum_score=flows,
+        config=scoring_config,
+        expense_ratio_pct=expense_ratio_pct,
+    )
     metrics["manager_score"] = round(score_val, 2)
     metrics["score_components"] = components
 
@@ -740,6 +749,14 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
             # Fetch live risk-free rate from FRED DFF (once for all funds)
             rfr = await get_risk_free_rate(db)
             logger.info("Risk-free rate for this run", rate=rfr)
+
+            # Load scoring config from ConfigService (once for all funds)
+            from app.core.config.config_service import ConfigService
+
+            config_svc = ConfigService(db)
+            scoring_result = await config_svc.get("liquid_funds", "scoring", str(org_id))
+            scoring_config = scoring_result.value if scoring_result else None
+            logger.info("Scoring config loaded", source=getattr(scoring_result, "source", "unknown"))
 
             stmt = (
                 select(Instrument)
@@ -840,9 +857,14 @@ async def run_risk_calc(org_id: "uuid.UUID", as_of_date: date | None = None) -> 
                 for _, metrics in computed:
                     metrics["cvar_95_conditional"] = None
 
-            # Pass 1.7: compute manager_score from base metrics + momentum
-            for _, metrics in computed:
-                _score_metrics(metrics)
+            # Pass 1.7: compute manager_score from base metrics + momentum + config
+            for fund, metrics in computed:
+                er = (fund.attributes or {}).get("expense_ratio_pct")
+                _score_metrics(
+                    metrics,
+                    scoring_config=scoring_config,
+                    expense_ratio_pct=float(er) if er is not None else None,
+                )
 
             # Pass 2: compute DTW drift scores per block (reuses DB session, no extra query per fund)
             logger.info("Computing DTW drift scores", n_funds=len(computed))
