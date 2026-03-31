@@ -16,7 +16,7 @@
 	let portfolios = $derived((data.portfolios ?? []) as ModelPortfolio[]);
 	let actorRole = $derived((data.actorRole ?? null) as string | null);
 
-	const IC_ROLES = ["investment_team", "director", "admin"];
+	const IC_ROLES = ["investment_team", "director", "admin", "super_admin"];
 	let canCreate = $derived(actorRole !== null && IC_ROLES.includes(actorRole));
 </script>
 

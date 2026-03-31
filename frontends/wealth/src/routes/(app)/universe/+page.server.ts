@@ -1,18 +1,25 @@
-/** Universe — approved instruments with optional risk data. */
+/** Universe — approved instruments + pending approvals. */
 import type { PageServerLoad } from "./$types";
 import { createServerApiClient } from "$lib/api/client";
-import type { UniverseAsset } from "$lib/types/universe";
+import type { UniverseAsset, UniverseApproval } from "$lib/types/universe";
 
 export const load: PageServerLoad = async ({ parent }) => {
-	const { token } = await parent();
+	const { token, actor } = await parent();
 
 	if (!token) {
-		return { assets: [] as UniverseAsset[] };
+		return { assets: [] as UniverseAsset[], pending: [] as UniverseApproval[], actorRole: null };
 	}
 
 	const api = createServerApiClient(token);
 
-	const assets = await api.get<UniverseAsset[]>("/universe").catch(() => [] as UniverseAsset[]);
+	const [assetsResult, pendingResult] = await Promise.allSettled([
+		api.get<UniverseAsset[]>("/universe"),
+		api.get<UniverseApproval[]>("/universe/pending"),
+	]);
 
-	return { assets };
+	return {
+		assets: assetsResult.status === "fulfilled" ? assetsResult.value : [],
+		pending: pendingResult.status === "fulfilled" ? pendingResult.value : [],
+		actorRole: actor?.role ?? null,
+	};
 };

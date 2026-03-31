@@ -11,6 +11,7 @@ import uuid
 
 import structlog
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -163,6 +164,49 @@ async def update_instrument(
             "approval_status": org_row[2] if org_row else "pending",
         }
     )
+
+
+class InstrumentOrgPatch(BaseModel):
+    """Patch schema for org-scoped instrument metadata (block_id, etc.)."""
+
+    block_id: str | None = None
+    asset_class: str | None = None
+    geography: str | None = None
+    currency: str | None = None
+
+
+@router.patch(
+    "/{instrument_id}/org",
+    summary="Update org-scoped instrument metadata",
+)
+async def update_instrument_org(
+    instrument_id: uuid.UUID,
+    body: InstrumentOrgPatch,
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    org_id: str = Depends(get_org_id),
+) -> dict:
+    """Update block_id, asset_class, geography for an instrument in this org."""
+    _require_investment_role(actor)
+
+    from sqlalchemy import update
+
+    patch = body.model_dump(exclude_none=True)
+    if not patch:
+        raise HTTPException(status_code=422, detail="No fields to update")
+
+    result = await db.execute(
+        update(InstrumentOrg)
+        .where(
+            InstrumentOrg.instrument_id == instrument_id,
+            InstrumentOrg.organization_id == uuid.UUID(org_id),
+        )
+        .values(**patch)
+    )
+    if result.rowcount == 0:  # type: ignore[union-attr]
+        raise HTTPException(status_code=404, detail="InstrumentOrg not found")
+    await db.commit()
+    return {"status": "updated", "instrument_id": str(instrument_id), **patch}
 
 
 @router.post(

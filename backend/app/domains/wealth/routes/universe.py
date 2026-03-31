@@ -99,19 +99,54 @@ async def list_pending_approvals(
     user: CurrentUser = Depends(get_current_user),
     org_id: str = Depends(get_org_id),
 ) -> list[UniverseApprovalRead]:
-    """List all pending approval requests for the organization."""
+    """List all pending approval requests for the organization.
+
+    Enriches each approval with fund_name, ticker, and block_id from
+    Instrument + InstrumentOrg tables for UI display.
+    """
     from vertical_engines.wealth.asset_universe import UniverseService
 
     svc = UniverseService()
 
     def _list_pending() -> list:
+        from sqlalchemy import select as sa_select
+
         from app.core.db.session import sync_session_factory
+        from app.domains.wealth.models.instrument import Instrument
+        from app.domains.wealth.models.instrument_org import InstrumentOrg
 
         with sync_session_factory() as sync_db, sync_db.begin():
             sync_db.expire_on_commit = False
             _set_rls_sync(sync_db, org_id)
             approvals = svc.list_pending(sync_db, organization_id=org_id)
-            return [UniverseApprovalRead.model_validate(a) for a in approvals]
+
+            # Build lookup for instrument metadata
+            instrument_ids = [a.instrument_id for a in approvals]
+            if instrument_ids:
+                rows = sync_db.execute(
+                    sa_select(
+                        Instrument.instrument_id,
+                        Instrument.name,
+                        Instrument.ticker,
+                        InstrumentOrg.block_id,
+                    )
+                    .outerjoin(InstrumentOrg, InstrumentOrg.instrument_id == Instrument.instrument_id)
+                    .where(Instrument.instrument_id.in_(instrument_ids))
+                ).all()
+                meta = {r[0]: (r[1], r[2], r[3]) for r in rows}
+            else:
+                meta = {}
+
+            result = []
+            for a in approvals:
+                data = UniverseApprovalRead.model_validate(a)
+                info = meta.get(a.instrument_id)
+                if info:
+                    data.fund_name = info[0]
+                    data.ticker = info[1]
+                    data.block_id = info[2]
+                result.append(data)
+            return result
 
     return await asyncio.to_thread(_list_pending)
 

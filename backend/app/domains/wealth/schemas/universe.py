@@ -13,7 +13,7 @@ class UniverseApprovalRead(BaseModel):
 
     id: uuid.UUID
     instrument_id: uuid.UUID
-    analysis_report_id: uuid.UUID
+    analysis_report_id: uuid.UUID | None = None
     decision: str
     rationale: str | None = None
     created_by: str | None = None
@@ -21,6 +21,10 @@ class UniverseApprovalRead(BaseModel):
     decided_at: datetime | None = None
     is_current: bool
     created_at: datetime
+    # Enrichment fields (populated by route, not ORM)
+    fund_name: str | None = None
+    ticker: str | None = None
+    block_id: str | None = None
 
 
 class UniverseAssetRead(BaseModel):

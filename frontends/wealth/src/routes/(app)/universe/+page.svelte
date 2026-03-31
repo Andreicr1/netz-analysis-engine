@@ -1,26 +1,38 @@
 <!--
-  Asset Universe — approved instruments only (post DD-approval).
+  Asset Universe — approved instruments + pending approvals.
   Master/Detail: results table + ContextPanel with risk/scoring data.
-  No ESMA/OFR tabs — this view looks only at internal bank data.
+  Pending tab: IC approval workflow with block_id assignment.
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
+	import { invalidateAll } from "$app/navigation";
 	import {
-		PageHeader, ContextPanel, StatusBadge, EmptyState,
+		PageHeader, ContextPanel, StatusBadge, EmptyState, ConsequenceDialog,
 		formatDateTime, formatNumber, formatPercent, formatCurrency,
 	} from "@investintell/ui";
+	import { Button } from "@investintell/ui/components/ui/button";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
-	import type { UniverseAsset, InstrumentRiskMetrics } from "$lib/types/universe";
+	import type { UniverseAsset, UniverseApproval, InstrumentRiskMetrics } from "$lib/types/universe";
 	import { instrumentTypeLabel, instrumentTypeColor } from "$lib/types/universe";
+	import type { ConsequenceDialogPayload } from "@investintell/ui";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let { data }: { data: PageData } = $props();
 
 	let assets = $derived((data.assets ?? []) as UniverseAsset[]);
+	let pending = $derived((data.pending ?? []) as UniverseApproval[]);
+	let actorRole = $derived((data.actorRole ?? null) as string | null);
 
-	// ── Search filter ─────────────────────────────────────────────────────
+	const IC_ROLES = ["investment_team", "director", "admin", "super_admin"];
+	let canApprove = $derived(actorRole !== null && IC_ROLES.includes(actorRole));
+
+	// ── Tab state ─────────────────────────────────────────────────────
+	type Tab = "approved" | "pending";
+	let activeTab = $state<Tab>("approved");
+
+	// ── Search filter ─────────────────────────────────────────────────
 
 	let search = $state("");
 	let blockFilter = $state<string | null>(null);
@@ -53,7 +65,7 @@
 		return rows;
 	});
 
-	// ── Detail panel ──────────────────────────────────────────────────────
+	// ── Detail panel ──────────────────────────────────────────────────
 
 	let panelOpen = $state(false);
 	let selectedAsset = $state<UniverseAsset | null>(null);
@@ -81,7 +93,7 @@
 		riskMetrics = null;
 	}
 
-	// ── Helpers ───────────────────────────────────────────────────────────
+	// ── Helpers ───────────────────────────────────────────────────────
 	// Backend may return Decimal fields as strings — always coerce to number.
 
 	function toNum(v: unknown): number | null {
@@ -131,92 +143,205 @@
 		if (n >= 40) return "var(--ii-text-secondary)";
 		return "var(--ii-danger)";
 	}
+
+	// ── Approval workflow ─────────────────────────────────────────────
+
+	const DEFAULT_BLOCKS = [
+		"na_equity_large", "na_equity_value", "na_equity_small",
+		"fi_us_aggregate", "fi_us_treasury", "fi_us_high_yield",
+		"alt_gold", "alt_real_estate", "alt_commodities",
+		"em_equity", "dm_asia_equity", "dm_europe_equity", "cash",
+	];
+	let availableBlocks = $derived(
+		[...new Set(assets.map((a) => a.block_id).filter(Boolean))] as string[]
+	);
+	let blocks = $derived(availableBlocks.length > 0 ? availableBlocks : DEFAULT_BLOCKS);
+
+	let approvalDialogOpen = $state(false);
+	let approvalTarget = $state<UniverseApproval | null>(null);
+	let approvalBlockId = $state("");
+	let approvalError = $state<string | null>(null);
+	let approving = $state(false);
+
+	function requestApprove(item: UniverseApproval) {
+		approvalTarget = item;
+		approvalBlockId = item.block_id ?? blocks[0] ?? "";
+		approvalError = null;
+		approvalDialogOpen = true;
+	}
+
+	async function handleApprove(_payload: ConsequenceDialogPayload) {
+		if (!approvalTarget) return;
+		approvalDialogOpen = false;
+		approvalError = null;
+		approving = true;
+		try {
+			const api = createClientApiClient(getToken);
+			// 1. Assign block_id on InstrumentOrg
+			await api.patch(`/instruments/${approvalTarget.instrument_id}/org`, {
+				block_id: approvalBlockId,
+			});
+			// 2. Approve in universe
+			await api.post(`/universe/funds/${approvalTarget.instrument_id}/approve`, {
+				decision: "approved",
+				rationale: "Approved via Assets Universe",
+			});
+			await invalidateAll();
+		} catch (e) {
+			approvalError = e instanceof Error ? e.message : "Approval failed";
+		} finally {
+			approving = false;
+		}
+	}
 </script>
 
-<PageHeader title="Asset Universe" />
-
-<div class="universe-page">
-	<!-- Filters bar -->
-	<div class="universe-toolbar">
-		<input
-			type="text"
-			class="universe-search"
-			placeholder="Search by name, block, geography…"
-			bind:value={search}
-		/>
-		<select class="universe-select" bind:value={typeFilter}>
-			<option value={null}>All types</option>
-			{#each distinctTypes as t (t)}
-				<option value={t}>{instrumentTypeLabel(t)}</option>
-			{/each}
-		</select>
-		<select class="universe-select" bind:value={blockFilter}>
-			<option value={null}>All blocks</option>
-			{#each distinctBlocks as b (b)}
-				<option value={b}>{b}</option>
-			{/each}
-		</select>
-		<span class="universe-count">
-			{filtered.length} asset{filtered.length !== 1 ? "s" : ""}
-		</span>
-	</div>
-
-	<!-- Master table -->
-	{#if filtered.length === 0}
-		<EmptyState
-			title={assets.length === 0 ? "No approved assets" : "No results"}
-			message={assets.length === 0
-				? "Instruments enter the universe after DD Report approval."
-				: "No assets match current filters."
-			}
-		/>
-	{:else}
-		<div class="table-wrap">
-			<table class="universe-table">
-				<thead>
-					<tr>
-						<th class="th-name">Instrument</th>
-						<th class="th-type">Type</th>
-						<th class="th-block">Block</th>
-						<th class="th-geo">Geography</th>
-						<th class="th-class">Asset Class</th>
-						<th class="th-decision">Decision</th>
-						<th class="th-date">Approved</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each filtered as asset (asset.instrument_id)}
-						<tr
-							class="universe-row"
-							class:selected={selectedAsset?.instrument_id === asset.instrument_id}
-							onclick={() => openDetail(asset)}
-						>
-							<td class="td-name">{asset.fund_name ?? "—"}</td>
-							<td class="td-type">
-								<span class="type-badge" style:color={instrumentTypeColor(asset.instrument_type)} style:background="color-mix(in srgb, {instrumentTypeColor(asset.instrument_type)} 12%, transparent)">
-									{instrumentTypeLabel(asset.instrument_type)}
-								</span>
-							</td>
-							<td class="td-block">{asset.block_id ?? "—"}</td>
-							<td class="td-geo">{asset.geography ?? "—"}</td>
-							<td class="td-class">{asset.asset_class ?? "—"}</td>
-							<td class="td-decision">
-								{#if asset.approval_decision}
-									<StatusBadge status={asset.approval_decision} />
-								{:else}
-									<span>—</span>
-								{/if}
-							</td>
-							<td class="td-date">
-								{asset.approved_at ? formatDateTime(asset.approved_at) : "—"}
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
+<PageHeader title="Asset Universe">
+	{#snippet actions()}
+		<div class="tab-group">
+			<button class="tab-btn" class:tab-btn--active={activeTab === "approved"}
+				onclick={() => activeTab = "approved"} type="button">
+				Approved ({assets.length})
+			</button>
+			<button class="tab-btn" class:tab-btn--active={activeTab === "pending"}
+				onclick={() => activeTab = "pending"} type="button">
+				Pending ({pending.length})
+			</button>
 		</div>
-	{/if}
-</div>
+	{/snippet}
+</PageHeader>
+
+{#if approvalError}
+	<div class="approval-error">
+		{approvalError}
+		<button onclick={() => approvalError = null} type="button">&times;</button>
+	</div>
+{/if}
+
+{#if activeTab === "approved"}
+	<div class="universe-page">
+		<!-- Filters bar -->
+		<div class="universe-toolbar">
+			<input
+				type="text"
+				class="universe-search"
+				placeholder="Search by name, block, geography…"
+				bind:value={search}
+			/>
+			<select class="universe-select" bind:value={typeFilter}>
+				<option value={null}>All types</option>
+				{#each distinctTypes as t (t)}
+					<option value={t}>{instrumentTypeLabel(t)}</option>
+				{/each}
+			</select>
+			<select class="universe-select" bind:value={blockFilter}>
+				<option value={null}>All blocks</option>
+				{#each distinctBlocks as b (b)}
+					<option value={b}>{b}</option>
+				{/each}
+			</select>
+			<span class="universe-count">
+				{filtered.length} asset{filtered.length !== 1 ? "s" : ""}
+			</span>
+		</div>
+
+		<!-- Master table -->
+		{#if filtered.length === 0}
+			<EmptyState
+				title={assets.length === 0 ? "No approved assets" : "No results"}
+				message={assets.length === 0
+					? "Instruments enter the universe after DD Report approval."
+					: "No assets match current filters."
+				}
+			/>
+		{:else}
+			<div class="table-wrap">
+				<table class="universe-table">
+					<thead>
+						<tr>
+							<th class="th-name">Instrument</th>
+							<th class="th-type">Type</th>
+							<th class="th-block">Block</th>
+							<th class="th-geo">Geography</th>
+							<th class="th-class">Asset Class</th>
+							<th class="th-decision">Decision</th>
+							<th class="th-date">Approved</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each filtered as asset (asset.instrument_id)}
+							<tr
+								class="universe-row"
+								class:selected={selectedAsset?.instrument_id === asset.instrument_id}
+								onclick={() => openDetail(asset)}
+							>
+								<td class="td-name">{asset.fund_name ?? "—"}</td>
+								<td class="td-type">
+									<span class="type-badge" style:color={instrumentTypeColor(asset.instrument_type)} style:background="color-mix(in srgb, {instrumentTypeColor(asset.instrument_type)} 12%, transparent)">
+										{instrumentTypeLabel(asset.instrument_type)}
+									</span>
+								</td>
+								<td class="td-block">{asset.block_id ?? "—"}</td>
+								<td class="td-geo">{asset.geography ?? "—"}</td>
+								<td class="td-class">{asset.asset_class ?? "—"}</td>
+								<td class="td-decision">
+									{#if asset.approval_decision}
+										<StatusBadge status={asset.approval_decision} />
+									{:else}
+										<span>—</span>
+									{/if}
+								</td>
+								<td class="td-date">
+									{asset.approved_at ? formatDateTime(asset.approved_at) : "—"}
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
+	</div>
+{:else}
+	<!-- Pending approvals tab -->
+	<div class="universe-page">
+		{#if pending.length === 0}
+			<EmptyState title="No pending approvals"
+				message="Instruments added via Screener appear here for review." />
+		{:else}
+			<div class="table-wrap">
+				<table class="universe-table">
+					<thead>
+						<tr>
+							<th class="th-name">Instrument</th>
+							<th>Ticker</th>
+							<th>Submitted</th>
+							<th>Block</th>
+							<th>Action</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each pending as item (item.instrument_id)}
+							<tr class="universe-row">
+								<td class="td-name">{item.fund_name ?? item.instrument_id}</td>
+								<td>{item.ticker ?? "—"}</td>
+								<td class="td-date">{formatDateTime(item.created_at)}</td>
+								<td>{item.block_id ?? "—"}</td>
+								<td>
+									{#if canApprove}
+										<Button size="sm" onclick={() => requestApprove(item)}>
+											Approve
+										</Button>
+									{:else}
+										<span class="role-hint">IC role required</span>
+									{/if}
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
+	</div>
+{/if}
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!-- DETAIL PANEL — risk metrics + scoring cross-referenced with approval   -->
@@ -413,6 +538,26 @@
 	</svelte:boundary>
 </ContextPanel>
 
+<!-- Approval dialog -->
+<ConsequenceDialog
+	bind:open={approvalDialogOpen}
+	title="Approve Instrument"
+	impactSummary="This instrument will be added to the approved universe and become available in Portfolio Builder."
+	requireRationale={false}
+	confirmLabel="Approve"
+	metadata={[{ label: "Instrument", value: approvalTarget?.fund_name ?? approvalTarget?.instrument_id ?? "" }]}
+	onConfirm={handleApprove}
+>
+	<div class="approval-block-select">
+		<label class="approval-label">Allocation Block</label>
+		<select class="universe-select" style="width:100%;" bind:value={approvalBlockId}>
+			{#each blocks as b (b)}
+				<option value={b}>{b}</option>
+			{/each}
+		</select>
+	</div>
+</ConsequenceDialog>
+
 <style>
 	/* ── Page layout ─────────────────────────────────────────────────────── */
 	.universe-page {
@@ -420,6 +565,69 @@
 		flex-direction: column;
 		height: calc(100vh - 64px);
 		overflow: hidden;
+	}
+
+	/* Tab group */
+	.tab-group {
+		display: flex;
+		gap: 6px;
+	}
+
+	.tab-btn {
+		padding: 6px 14px;
+		border: 1px solid var(--ii-border);
+		border-radius: 8px;
+		background: transparent;
+		color: var(--ii-text-secondary);
+		font-size: 13px;
+		font-weight: 500;
+		cursor: pointer;
+		font-family: var(--ii-font-sans);
+		transition: all 120ms ease;
+	}
+
+	.tab-btn--active {
+		background: color-mix(in srgb, var(--ii-brand-primary) 10%, transparent);
+		color: var(--ii-brand-primary);
+		border-color: var(--ii-brand-primary);
+		font-weight: 600;
+	}
+
+	/* Approval error banner */
+	.approval-error {
+		padding: 8px 24px;
+		background: color-mix(in srgb, var(--ii-danger) 8%, transparent);
+		color: var(--ii-danger);
+		font-size: 13px;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+	}
+
+	.approval-error button {
+		background: none;
+		border: none;
+		color: var(--ii-danger);
+		cursor: pointer;
+		font-size: 16px;
+		padding: 0 4px;
+	}
+
+	.role-hint {
+		font-size: 12px;
+		color: var(--ii-text-muted);
+	}
+
+	.approval-block-select {
+		padding: 8px 0;
+	}
+
+	.approval-label {
+		font-size: 13px;
+		font-weight: 500;
+		color: var(--ii-text-secondary);
+		display: block;
+		margin-bottom: 6px;
 	}
 
 	/* Toolbar */

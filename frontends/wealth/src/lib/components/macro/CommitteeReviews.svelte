@@ -49,8 +49,8 @@
 	let showRejectDialog = $state(false);
 	let targetReview = $state<MacroReview | null>(null);
 
-	const IC_ROLES = ["investment_team", "analyst", "portfolio_manager", "director", "admin"];
-	const APPROVER_ROLES = ["director", "admin"];
+	const IC_ROLES = ["investment_team", "analyst", "portfolio_manager", "director", "admin", "super_admin"];
+	const APPROVER_ROLES = ["director", "admin", "super_admin"];
 	let canGenerate = $derived(actorRole !== null && IC_ROLES.includes(actorRole));
 	let canApprove = $derived(actorRole !== null && APPROVER_ROLES.includes(actorRole));
 

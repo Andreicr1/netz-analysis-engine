@@ -31,7 +31,7 @@
 	let views = $derived((data.views ?? []) as PortfolioView[]);
 	let instruments = $derived((data.instruments ?? []) as UniverseAsset[]);
 
-	const IC_ROLES = ["investment_team", "director", "admin"];
+	const IC_ROLES = ["investment_team", "director", "admin", "super_admin"];
 	let canEdit = $derived(actorRole !== null && IC_ROLES.includes(actorRole));
 
 	let backtest = $derived(trackRecord?.backtest ?? null);

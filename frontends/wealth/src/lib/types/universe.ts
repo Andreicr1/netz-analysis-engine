@@ -36,7 +36,7 @@ export function instrumentTypeColor(type: InstrumentType | string | null | undef
 export interface UniverseApproval {
 	id: string;
 	instrument_id: string;
-	analysis_report_id: string;
+	analysis_report_id: string | null;
 	decision: "pending" | "approved" | "rejected" | "watchlist";
 	rationale: string | null;
 	created_by: string | null;
@@ -44,6 +44,9 @@ export interface UniverseApproval {
 	decided_at: string | null;
 	is_current: boolean;
 	created_at: string;
+	fund_name: string | null;
+	ticker: string | null;
+	block_id: string | null;
 }
 
 /** Risk metrics — shared across all instrument types (fund, bond, equity). */
