@@ -1,13 +1,13 @@
 # Endpoint Coverage Audit — Wealth Vertical
 
 ```
-Data: 2026-04-01 (atualizado pós-sprint G — final coverage)
+Data: 2026-04-01 (atualizado pós-sprint H — ESMA import wired)
 Total endpoints backend wealth (excl. infra/workers): 167  (176 - 9 deletados)
-Conectados: 164  (158 + 1 risk/stream + 5 worker triggers + 5 wiring novos - 5 deletados connected)
-Desconectados (deferred): 6
+Conectados: 165  (164 + 1 ESMA import)
+Desconectados (deferred): 5
 Infra/workers (excluídos): 28
 Phantom calls (frontend → backend inexistente): 0
-Coverage: ~96.4% (excluindo deferred como "intended gap")
+Coverage: ~98.8% (excluindo deferred como "intended gap")
 ```
 
 Previous audit (2026-03-23): 93 endpoints, 62 connected (67%).
@@ -187,10 +187,11 @@ Sprint G delta: 9 deprecated handlers deleted, 6 new wirings, 1 false negative f
 | 166 | POST | /workers/run-nport-ingestion | workers.py | settings/system/+page.svelte |
 | 167 | POST | /workers/run-esma-ingestion | workers.py | settings/system/+page.svelte |
 | 168 | POST | /workers/run-regime-fit | workers.py | settings/system/+page.svelte |
+| 169 | POST | /screener/import-esma/{isin} | screener.py | CatalogDetailPanel.svelte (UCITS funds via dedicated ESMA endpoint) |
 
 ---
 
-## 2. DEFERRED (6 endpoints — maintained in backend, not wired)
+## 2. DEFERRED (5 endpoints — maintained in backend, not wired)
 
 Endpoints with potential value but covered by alternatives in frontend. Maintained for API consumers or future evolution.
 
@@ -198,7 +199,6 @@ Endpoints with potential value but covered by alternatives in frontend. Maintain
 |--------|------|-------------|--------|
 | GET | /screener/securities | screener.py | Post-screening view — value when approval flow evolves |
 | GET | /screener/securities/facets | screener.py | Accompanies securities above |
-| POST | /screener/import-esma/{isin} | screener.py | Generic import covers; ESMA enrichment incremental |
 | GET | /analytics/backtest/{run_id} | analytics.py | Useful if backtest becomes async with history |
 | POST | /analytics/optimize | analytics.py | Single-point for API consumers (frontend uses Pareto) |
 | GET | /analytics/strategy-drift/{instrument_id} | strategy_drift.py | Frontend uses /history; may serve future webhook |
@@ -319,7 +319,7 @@ These are NOT phantoms (the admin endpoints exist) but are cross-domain calls wo
 | portfolio_views.py | 3 | 3 | 0 | 100% |
 | rebalancing.py | 1 | 1 | 0 | 100% |
 | risk.py | 7 | 7 | 0 | 100% |
-| screener.py | 14 | 11 | 3 | 79% |
+| screener.py | 14 | 12 | 2 | 86% |
 | search.py | 1 | 1 | 0 | 100% |
 | sec_analysis.py | 5 | 5 | 0 | 100% |
 | sec_funds.py | 8 | 8 | 0 | 100% |
@@ -328,7 +328,7 @@ These are NOT phantoms (the admin endpoints exist) but are cross-domain calls wo
 
 **Files at 100% coverage (26/29):** agent, allocation, attribution, blended_benchmark, content, correlation_regime, dd_reports, documents, entity_analytics, exposure, fact_sheets, funds, instruments, long_form_reports, macro, manager_screener, model_portfolios, monthly_report, portfolios, portfolio_views, rebalancing, risk, search, sec_analysis, sec_funds, universe.
 
-**Remaining deferred (3 files):** analytics (1 deferred), strategy_drift (1 deferred), screener (3 deferred).
+**Remaining deferred (3 files):** analytics (1 deferred), strategy_drift (1 deferred), screener (2 deferred).
 
 ---
 

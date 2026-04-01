@@ -61,13 +61,35 @@
 			let instrumentId = fund.instrument_id;
 
 			if (!instrumentId) {
-				const identifier = fund.isin || fund.ticker;
-				if (!identifier) {
-					reviewError = "Cannot import: no ISIN or ticker available.";
-					return;
+				try {
+					if (fund.universe === "ucits_eu" && fund.isin) {
+						const imported = await api.post<{ instrument_id: string }>(
+							`/screener/import-esma/${fund.isin}`,
+							{ block_id: null, strategy: null },
+						);
+						instrumentId = imported.instrument_id;
+					} else {
+						const identifier = fund.isin || fund.ticker;
+						if (!identifier) {
+							reviewError = "Cannot import: no ISIN or ticker available.";
+							return;
+						}
+						const imported = await api.post<{ instrument_id: string }>(
+							`/screener/import/${identifier}`,
+							{},
+						);
+						instrumentId = imported.instrument_id;
+					}
+				} catch (e) {
+					if (e instanceof Error && e.message.includes("409")) {
+						const existing = await api.get<{ instrument_id: string }>(
+							`/screener/catalog/${fund.external_id}/detail`,
+						);
+						instrumentId = existing.instrument_id ?? null;
+					} else {
+						throw e;
+					}
 				}
-				const imported = await api.post<{ instrument_id: string }>(`/screener/import/${identifier}`, {});
-				instrumentId = imported.instrument_id;
 			}
 
 			if (!instrumentId) {
