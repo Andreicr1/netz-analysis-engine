@@ -224,7 +224,7 @@
 
 			{#if report.confidence_score !== null}
 				<span class="action-confidence" style:color={confidenceColor(report.confidence_score)}>
-					{report.confidence_score.toFixed(1)}%
+					{Number(report.confidence_score).toFixed(1)}%
 				</span>
 			{/if}
 
@@ -429,7 +429,7 @@
 	confirmLabel="Approve Report"
 	metadata={[
 		{ label: "AI Recommendation", value: anchorLabel(report.decision_anchor), emphasis: isApproveOverride },
-		{ label: "Confidence Score", value: report.confidence_score !== null ? `${report.confidence_score.toFixed(1)}%` : "—" },
+		{ label: "Confidence Score", value: report.confidence_score != null ? `${Number(report.confidence_score).toFixed(1)}%` : "—" },
 	]}
 	onConfirm={handleApprove}
 >
@@ -456,7 +456,7 @@
 	confirmLabel="Reject Report"
 	metadata={[
 		{ label: "AI Recommendation", value: anchorLabel(report.decision_anchor), emphasis: isRejectOverride },
-		{ label: "Confidence Score", value: report.confidence_score !== null ? `${report.confidence_score.toFixed(1)}%` : "—" },
+		{ label: "Confidence Score", value: report.confidence_score != null ? `${Number(report.confidence_score).toFixed(1)}%` : "—" },
 	]}
 	onConfirm={handleReject}
 >

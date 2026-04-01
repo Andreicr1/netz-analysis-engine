@@ -78,7 +78,7 @@
 							<div class="report-meta-row">
 								<span class="report-meta-label">Confidence</span>
 								<span class="report-meta-value" style:color={confidenceColor(report.confidence_score)}>
-									{report.confidence_score.toFixed(1)}%
+									{Number(report.confidence_score).toFixed(1)}%
 								</span>
 							</div>
 						{/if}

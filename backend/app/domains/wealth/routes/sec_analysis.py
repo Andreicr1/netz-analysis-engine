@@ -122,16 +122,22 @@ async def get_manager_detail(
     _require_investment_role(actor)
     cik = _validate_cik(cik)
 
+    # Try CIK first, then fall back to CRD (frontend catalog sends CRD as manager_id)
     stmt = select(SecManager).where(SecManager.cik == cik)
     result = await db.execute(stmt)
     manager = result.scalar_one_or_none()
     if not manager:
-        raise HTTPException(status_code=404, detail=f"Manager with CIK {cik} not found")
+        stmt_crd = select(SecManager).where(SecManager.crd_number == cik)
+        result_crd = await db.execute(stmt_crd)
+        manager = result_crd.scalar_one_or_none()
+    if not manager:
+        raise HTTPException(status_code=404, detail=f"Manager with CIK/CRD {cik} not found")
 
     today = date.today()
 
     # Resolve all CIKs (own + parent 13F filers via entity links)
-    cik_list = await _resolve_ciks(db, cik, crd=manager.crd_number)
+    resolved_cik = manager.cik or cik
+    cik_list = await _resolve_ciks(db, resolved_cik, crd=manager.crd_number)
 
     # Latest quarter summary — always filter report_date for chunk pruning
     latest_q_stmt = (
@@ -160,7 +166,7 @@ async def get_manager_detail(
             total_value = int(row["total"]) if row["total"] else None
 
     # Linked 13F CIKs for frontend display
-    linked_13f_ciks = [c for c in cik_list if c != cik] or None
+    linked_13f_ciks = [c for c in cik_list if c != resolved_cik] or None
 
     # Brochure sections
     brochure_stmt = (
