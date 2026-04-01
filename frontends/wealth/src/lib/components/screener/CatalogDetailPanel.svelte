@@ -220,9 +220,16 @@
 			{#if !fund.instrument_id}
 				<p class="dt-empty-text">This fund is not yet in your universe. Import and send to DD review.</p>
 			{/if}
-			<Button size="sm" onclick={() => reviewDialogOpen = true} disabled={sendingToReview}>
-				{sendingToReview ? "Sending\u2026" : "Send to Review"}
-			</Button>
+			<div class="dt-action-row">
+				<Button size="sm" onclick={() => reviewDialogOpen = true} disabled={sendingToReview}>
+					{sendingToReview ? "Sending\u2026" : "Send to Review"}
+				</Button>
+				{#if fund.instrument_id}
+					<Button size="sm" variant="outline" onclick={() => goto(`/analytics/${fund.instrument_id}`)}>
+						Analytics
+					</Button>
+				{/if}
+			</div>
 			{#if reviewError}
 				<span class="dt-add-error">{reviewError}</span>
 			{/if}

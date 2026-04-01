@@ -3,6 +3,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+import sqlalchemy as sa
 from sqlalchemy import Date, ForeignKey, Numeric, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -78,3 +79,11 @@ class FundRiskMetrics(Base):
 
     # DTW drift signal (derivative DTW vs block benchmark, length-normalized)
     dtw_drift_score: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+
+    # Peer group percentile rankings (pre-computed by risk_calc worker)
+    peer_strategy_label: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    peer_sharpe_pctl: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    peer_sortino_pctl: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    peer_return_pctl: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    peer_drawdown_pctl: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    peer_count: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)

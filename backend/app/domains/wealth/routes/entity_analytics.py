@@ -1,7 +1,8 @@
 """Entity Analytics Vitrine — polymorphic analytics for funds and model portfolios.
 
-Orchestrates nav_reader (I/O) → quant_engine (math) for the 5 institutional
-metric groups: Risk Statistics, Drawdown, Capture, Rolling Returns, Distribution.
+Orchestrates nav_reader (I/O) → quant_engine (math) for the 7 institutional
+metric groups: Risk Statistics, Drawdown, Capture, Rolling Returns, Distribution,
+Return Statistics (eVestment I-V), Tail Risk (eVestment VII).
 
 INVARIANT: Never imports NavTimeseries directly.  All NAV access goes through
 nav_reader.fetch_nav_series / fetch_returns_only.
@@ -32,9 +33,11 @@ from app.domains.wealth.schemas.entity_analytics import (
     DrawdownPeriod,
     EntityAnalyticsResponse,
     ReturnDistribution,
+    ReturnStatistics,
     RiskStatistics,
     RollingReturns,
     RollingSeries,
+    TailRiskMetrics,
 )
 from app.domains.wealth.services.nav_reader import (
     NavRow,
@@ -44,7 +47,9 @@ from app.domains.wealth.services.nav_reader import (
 from quant_engine.cvar_service import compute_cvar_from_returns
 from quant_engine.drawdown_service import analyze_drawdowns
 from quant_engine.portfolio_metrics_service import aggregate as compute_metrics
+from quant_engine.return_statistics_service import compute_return_statistics
 from quant_engine.rolling_service import compute_rolling_returns
+from quant_engine.tail_var_service import compute_tail_risk
 
 logger = structlog.get_logger()
 
@@ -251,8 +256,9 @@ def _compute_distribution(returns: np.ndarray) -> ReturnDistribution:
     summary="Entity analytics vitrine (polymorphic)",
     description=(
         "Comprehensive analytics for any entity (fund or model portfolio). "
-        "Returns 5 institutional metric groups: Risk Statistics, Drawdown, "
-        "Up/Down Capture, Rolling Returns, Return Distribution. "
+        "Returns 7 institutional metric groups: Risk Statistics, Drawdown, "
+        "Up/Down Capture, Rolling Returns, Return Distribution, "
+        "Return Statistics (eVestment I-V), Tail Risk (eVestment VII). "
         "Entity type is auto-detected via nav_reader polymorphism."
     ),
 )
@@ -399,6 +405,58 @@ async def get_entity_analytics(
     valid_returns = np.array([r for r in returns_raw if r is not None])
     distribution = _compute_distribution(valid_returns if len(valid_returns) > 10 else returns)
 
+    # ── 6. Return Statistics (eVestment Sections I-V) ────────────────
+    return_stats_result = None
+    try:
+        return_stats_raw = compute_return_statistics(
+            daily_returns=returns,
+            benchmark_returns=bm_aligned,
+            risk_free_rate=0.04,
+            mar=0.0,
+        )
+        return_stats_result = ReturnStatistics(
+            arithmetic_mean_monthly=return_stats_raw.arithmetic_mean_monthly,
+            geometric_mean_monthly=return_stats_raw.geometric_mean_monthly,
+            avg_monthly_gain=return_stats_raw.avg_monthly_gain,
+            avg_monthly_loss=return_stats_raw.avg_monthly_loss,
+            gain_loss_ratio=return_stats_raw.gain_loss_ratio,
+            gain_std_dev=return_stats_raw.gain_std_dev,
+            loss_std_dev=return_stats_raw.loss_std_dev,
+            downside_deviation=return_stats_raw.downside_deviation,
+            semi_deviation=return_stats_raw.semi_deviation,
+            sterling_ratio=return_stats_raw.sterling_ratio,
+            omega_ratio=return_stats_raw.omega_ratio,
+            treynor_ratio=return_stats_raw.treynor_ratio,
+            jensen_alpha=return_stats_raw.jensen_alpha,
+            up_percentage_ratio=return_stats_raw.up_percentage_ratio,
+            down_percentage_ratio=return_stats_raw.down_percentage_ratio,
+            r_squared=return_stats_raw.r_squared,
+        )
+    except Exception:
+        logger.warning("return_statistics_computation_failed", entity_id=str(entity_id))
+
+    # ── 7. Tail Risk (eVestment Section VII) ─────────────────────────
+    tail_risk_result = None
+    try:
+        tail_raw = compute_tail_risk(daily_returns=returns)
+        tail_risk_result = TailRiskMetrics(
+            var_parametric_90=tail_raw.var_parametric_90,
+            var_parametric_95=tail_raw.var_parametric_95,
+            var_parametric_99=tail_raw.var_parametric_99,
+            var_modified_95=tail_raw.var_modified_95,
+            var_modified_99=tail_raw.var_modified_99,
+            etl_95=tail_raw.etl_95,
+            etl_modified_95=tail_raw.etl_modified_95,
+            etr_95=tail_raw.etr_95,
+            starr_ratio=tail_raw.starr_ratio,
+            rachev_ratio=tail_raw.rachev_ratio,
+            jarque_bera_stat=tail_raw.jarque_bera_stat,
+            jarque_bera_pvalue=tail_raw.jarque_bera_pvalue,
+            is_normal=tail_raw.is_normal,
+        )
+    except Exception:
+        logger.warning("tail_risk_computation_failed", entity_id=str(entity_id))
+
     return EntityAnalyticsResponse(
         entity_id=entity_id,
         entity_type=entity_type,
@@ -410,4 +468,6 @@ async def get_entity_analytics(
         capture=capture,
         rolling_returns=rolling,
         distribution=distribution,
+        return_statistics=return_stats_result,
+        tail_risk=tail_risk_result,
     )

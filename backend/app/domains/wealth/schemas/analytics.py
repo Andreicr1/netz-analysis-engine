@@ -103,3 +103,122 @@ class ParetoOptimizeResult(BaseModel):
     input_hash: str
     status: str
     job_id: str | None = None
+
+
+# ── Risk Budgeting (eVestment p.43-44) ────────────────────────────────
+
+
+class FundRiskBudgetRead(BaseModel):
+    block_id: str
+    block_name: str
+    weight: float
+    mean_return: float
+    mctr: float | None = None
+    pctr: float | None = None
+    mcetl: float | None = None
+    pcetl: float | None = None
+    implied_return_vol: float | None = None
+    implied_return_etl: float | None = None
+    difference_vol: float | None = None
+    difference_etl: float | None = None
+
+
+class RiskBudgetResponse(BaseModel):
+    profile: str
+    portfolio_volatility: float
+    portfolio_etl: float
+    portfolio_starr: float | None = None
+    funds: list[FundRiskBudgetRead] = Field(default_factory=list)
+    as_of_date: date | None = None
+
+
+# ── Factor Analysis (eVestment p.46) ──────────────────────────────────
+
+
+class FactorContribution(BaseModel):
+    factor_label: str
+    pct_contribution: float
+
+
+class FactorAnalysisResponse(BaseModel):
+    profile: str
+    systematic_risk_pct: float
+    specific_risk_pct: float
+    factor_contributions: list[FactorContribution] = Field(default_factory=list)
+    r_squared: float
+    portfolio_factor_exposures: dict[str, float] = Field(default_factory=dict)
+    as_of_date: date | None = None
+
+
+# ── Monte Carlo Simulation ───────────────────────────────────────────
+
+
+class MonteCarloConfidenceBar(BaseModel):
+    horizon: str
+    horizon_days: int
+    pct_5: float
+    pct_10: float
+    pct_25: float
+    pct_50: float
+    pct_75: float
+    pct_90: float
+    pct_95: float
+    mean: float
+
+
+class MonteCarloRequest(BaseModel):
+    entity_id: uuid.UUID
+    n_simulations: int = Field(default=10_000, ge=1_000, le=100_000)
+    statistic: str = Field(default="max_drawdown", pattern="^(max_drawdown|return|sharpe)$")
+    horizons: list[int] | None = None
+
+
+class MonteCarloResponse(BaseModel):
+    entity_id: uuid.UUID
+    entity_name: str
+    n_simulations: int
+    statistic: str
+    percentiles: dict[str, float] = Field(default_factory=dict)
+    mean: float
+    median: float
+    std: float
+    historical_value: float
+    confidence_bars: list[MonteCarloConfidenceBar] = Field(default_factory=list)
+
+
+# ── Peer Group Rankings (eVestment Section IV) ───────────────────────
+
+
+class PeerRankingRead(BaseModel):
+    metric_name: str
+    value: float | None = None
+    percentile: float = 0.0
+    quartile: int = 4
+    peer_count: int = 0
+    peer_median: float = 0.0
+    peer_p25: float = 0.0
+    peer_p75: float = 0.0
+
+
+class PeerGroupResponse(BaseModel):
+    entity_id: uuid.UUID
+    entity_name: str
+    strategy_label: str
+    peer_count: int = 0
+    rankings: list[PeerRankingRead] = Field(default_factory=list)
+    as_of_date: date | None = None
+
+
+# ── Active Share (eVestment p.73) ────────────────────────────────────
+
+
+class ActiveShareResponse(BaseModel):
+    entity_id: uuid.UUID
+    entity_name: str
+    active_share: float
+    overlap: float
+    active_share_efficiency: float | None = None
+    n_portfolio_positions: int = 0
+    n_benchmark_positions: int = 0
+    n_common_positions: int = 0
+    as_of_date: date | None = None

@@ -1,11 +1,13 @@
 """Schemas for the polymorphic entity analytics vitrine.
 
-Five metric groups matching eVestment institutional standards:
+Seven metric groups matching eVestment institutional standards:
 1. Risk Statistics (Sharpe, Sortino, Calmar, Vol, Alpha, Beta, TE, IR)
 2. Drawdown Analysis (series, max, current, recovery)
 3. Up/Down Capture Ratios (vs benchmark)
 4. Rolling Returns (1M, 3M, 6M, 1Y time series)
 5. Return Distribution (histogram, skew, kurtosis, VaR, CVaR)
+6. Return Statistics (eVestment Sections I-V: gain/loss, deviations, ratios)
+7. Tail Risk (eVestment Section VII: parametric/modified VaR, ETL, ETR, normality)
 """
 
 from __future__ import annotations
@@ -90,6 +92,45 @@ class ReturnDistribution(BaseModel):
     cvar_95: float | None = None
 
 
+# ── 6. Return Statistics (eVestment Sections I-V) ─────────────────────
+
+class ReturnStatistics(BaseModel):
+    arithmetic_mean_monthly: float | None = None
+    geometric_mean_monthly: float | None = None
+    avg_monthly_gain: float | None = None
+    avg_monthly_loss: float | None = None
+    gain_loss_ratio: float | None = None
+    gain_std_dev: float | None = None
+    loss_std_dev: float | None = None
+    downside_deviation: float | None = None
+    semi_deviation: float | None = None
+    sterling_ratio: float | None = None
+    omega_ratio: float | None = None
+    treynor_ratio: float | None = None
+    jensen_alpha: float | None = None
+    up_percentage_ratio: float | None = None
+    down_percentage_ratio: float | None = None
+    r_squared: float | None = None
+
+
+# ── 7. Tail Risk (eVestment Section VII) ──────────────────────────────
+
+class TailRiskMetrics(BaseModel):
+    var_parametric_90: float | None = None
+    var_parametric_95: float | None = None
+    var_parametric_99: float | None = None
+    var_modified_95: float | None = None
+    var_modified_99: float | None = None
+    etl_95: float | None = None
+    etl_modified_95: float | None = None
+    etr_95: float | None = None
+    starr_ratio: float | None = None
+    rachev_ratio: float | None = None
+    jarque_bera_stat: float | None = None
+    jarque_bera_pvalue: float | None = None
+    is_normal: bool | None = None
+
+
 # ── Unified Response ────────────────────────────────────────────────────
 
 class EntityAnalyticsResponse(BaseModel):
@@ -103,3 +144,5 @@ class EntityAnalyticsResponse(BaseModel):
     capture: CaptureRatios
     rolling_returns: RollingReturns
     distribution: ReturnDistribution
+    return_statistics: ReturnStatistics | None = None  # Group 6
+    tail_risk: TailRiskMetrics | None = None  # Group 7
