@@ -1,24 +1,23 @@
 <!--
-  Unified Screener — Fund Catalog with sidebar facets + server-side pagination.
+  Unified Screener — Fund Catalog with horizontal filter bar + full-width table.
   Manager detail accessible via click on manager name in catalog table.
 -->
 <script lang="ts">
 	import { untrack, getContext } from "svelte";
 	import { goto } from "$app/navigation";
-	import { PageHeader, ContextPanel, formatAUM } from "@investintell/ui";
+	import { ContextPanel, formatAUM } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
 
 	// Catalog types
 	import type { UnifiedFundItem, UnifiedCatalogPage, CatalogFacets, CatalogCategory } from "$lib/types/catalog";
-	import { EMPTY_CATALOG_PAGE, EMPTY_FACETS } from "$lib/types/catalog";
+	import { EMPTY_CATALOG_PAGE, EMPTY_FACETS, CATALOG_CATEGORIES } from "$lib/types/catalog";
 
 	// Manager types
 	import type { SecManagerDetail, SecManagerFundBreakdown } from "$lib/types/sec-analysis";
 
 	// Components
 	import {
-		CatalogFilterSidebar,
 		CatalogTable,
 		CatalogDetailPanel,
 	} from "$lib/components/screener";
@@ -85,6 +84,74 @@
 		params.set("page", "1");
 		params.set("page_size", "50");
 		goto(`/screener?${params.toString()}`, { invalidateAll: true });
+	}
+
+	// ── Dropdown helpers ──
+	function setCategory(e: Event) {
+		const val = (e.target as HTMLSelectElement).value;
+		selectedCategories = val ? [val as CatalogCategory] : [];
+		selectedFundTypes = [];
+		selectedStrategyLabels = [];
+		applyCatalogFilters();
+	}
+
+	function setStrategy(e: Event) {
+		const val = (e.target as HTMLSelectElement).value;
+		selectedStrategyLabels = val ? [val] : [];
+		applyCatalogFilters();
+	}
+
+	function setGeography(e: Event) {
+		const val = (e.target as HTMLSelectElement).value;
+		selectedGeographies = val ? [val] : [];
+		applyCatalogFilters();
+	}
+
+	function setAumMin(e: Event) {
+		catalogAumMin = (e.target as HTMLSelectElement).value;
+		applyCatalogFilters();
+	}
+
+	function setMaxER(e: Event) {
+		catalogMaxER = (e.target as HTMLSelectElement).value;
+		applyCatalogFilters();
+	}
+
+	function clearAllFilters() {
+		selectedCategories = [];
+		selectedFundTypes = [];
+		selectedStrategyLabels = [];
+		selectedGeographies = [];
+		selectedDomiciles = [];
+		catalogSearchQ = "";
+		catalogAumMin = "";
+		catalogMaxER = "";
+		catalogMinReturn1y = "";
+		catalogMinReturn10y = "";
+		applyCatalogFilters();
+	}
+
+	let hasActiveFilters = $derived(
+		selectedCategories.length > 0 ||
+		selectedStrategyLabels.length > 0 ||
+		selectedGeographies.length > 0 ||
+		catalogAumMin.length > 0 ||
+		catalogMaxER.length > 0 ||
+		catalogSearchQ.length > 0
+	);
+
+	// Debounce for search input
+	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+	function debouncedSearch() {
+		if (debounceTimer) clearTimeout(debounceTimer);
+		debounceTimer = setTimeout(() => applyCatalogFilters(), 400);
+	}
+
+	function handleSearchKeydown(e: KeyboardEvent) {
+		if (e.key === "Enter") {
+			if (debounceTimer) clearTimeout(debounceTimer);
+			applyCatalogFilters();
+		}
 	}
 
 	// ── Catalog detail panel ──
@@ -178,52 +245,94 @@
 	}
 </script>
 
-<PageHeader title="Screener">
-	{#snippet actions()}
-		<div class="scr-actions">
-			<button class="scr-btn scr-btn--outline" onclick={exportCSV}>
-				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-				Export
-			</button>
-		</div>
-	{/snippet}
-</PageHeader>
+<div class="scr-page">
+	<!-- ════════════════ HEADER BAR ════════════════ -->
+	<div class="scr-topbar">
+		<h1 class="scr-title">Screener</h1>
+		<button class="scr-btn scr-btn--outline" onclick={exportCSV}>
+			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+			Export
+		</button>
+	</div>
 
-<!-- ════════════════ CATALOG ════════════════ -->
-<div class="scr-master-detail">
-	<CatalogFilterSidebar
-		facets={catalogFacets}
-		bind:selectedCategories
-		bind:selectedFundTypes
-		bind:selectedStrategyLabels
-		bind:selectedGeographies
-		bind:selectedDomiciles
-		bind:searchQ={catalogSearchQ}
-		bind:aumMin={catalogAumMin}
-		bind:maxExpenseRatio={catalogMaxER}
-		bind:minReturn1y={catalogMinReturn1y}
-		bind:minReturn10y={catalogMinReturn10y}
-		onFilterChange={applyCatalogFilters}
-	/>
+	<!-- ════════════════ FILTER BAR ════════════════ -->
+	<div class="scr-filterbar">
+		<input
+			class="scr-search"
+			type="text"
+			placeholder="Search funds, managers..."
+			bind:value={catalogSearchQ}
+			oninput={debouncedSearch}
+			onkeydown={handleSearchKeydown}
+		/>
 
-	<div class="scr-main">
-		{#if catalog.total === 0 && !catalogSearchQ && selectedCategories.length <= 1}
-			<div class="scr-error-banner">
-				Unable to load fund catalog. The backend may be unavailable.
-			</div>
+		<select class="scr-dropdown" value={selectedCategories[0] ?? ""} onchange={setCategory}>
+			<option value="">All Universes</option>
+			{#each CATALOG_CATEGORIES as cat (cat.key)}
+				<option value={cat.key}>{cat.label}</option>
+			{/each}
+		</select>
+
+		{#if catalogFacets.strategy_labels.length > 0}
+			<select class="scr-dropdown" value={selectedStrategyLabels[0] ?? ""} onchange={setStrategy}>
+				<option value="">All Strategies</option>
+				{#each catalogFacets.strategy_labels as item (item.value)}
+					<option value={item.value}>{item.label} ({item.count.toLocaleString()})</option>
+				{/each}
+			</select>
 		{/if}
-		<div class="scr-results">
-			<CatalogTable
-				{catalog}
-				searchQ={catalogSearchQ}
-				{currentSort}
-				onSelectFund={openFundDetail}
-				onSendToDDReview={sendClassesToDDReview}
-				onPageChange={catalogPageChange}
-				onSortChange={handleSortChange}
-				onOpenManager={openManagerDetail}
-			/>
+
+		{#if catalogFacets.geographies.length > 0}
+			<select class="scr-dropdown" value={selectedGeographies[0] ?? ""} onchange={setGeography}>
+				<option value="">All Geographies</option>
+				{#each catalogFacets.geographies as item (item.value)}
+					<option value={item.value}>{item.label} ({item.count.toLocaleString()})</option>
+				{/each}
+			</select>
+		{/if}
+
+		<select class="scr-dropdown" value={catalogAumMin} onchange={setAumMin}>
+			<option value="">AUM: Any</option>
+			<option value="100000000">AUM $100M+</option>
+			<option value="500000000">AUM $500M+</option>
+			<option value="1000000000">AUM $1B+</option>
+			<option value="5000000000">AUM $5B+</option>
+			<option value="10000000000">AUM $10B+</option>
+			<option value="50000000000">AUM $50B+</option>
+		</select>
+
+		<select class="scr-dropdown" value={catalogMaxER} onchange={setMaxER}>
+			<option value="">ER: Any</option>
+			<option value="0.10">ER ≤ 0.10%</option>
+			<option value="0.25">ER ≤ 0.25%</option>
+			<option value="0.50">ER ≤ 0.50%</option>
+			<option value="0.75">ER ≤ 0.75%</option>
+			<option value="1.00">ER ≤ 1.00%</option>
+			<option value="1.50">ER ≤ 1.50%</option>
+		</select>
+
+		{#if hasActiveFilters}
+			<button class="scr-clear-btn" onclick={clearAllFilters}>Clear</button>
+		{/if}
+	</div>
+
+	<!-- ════════════════ CATALOG TABLE ════════════════ -->
+	{#if catalog.total === 0 && !catalogSearchQ && selectedCategories.length <= 1}
+		<div class="scr-error-banner">
+			Unable to load fund catalog. The backend may be unavailable.
 		</div>
+	{/if}
+	<div class="scr-table-card">
+		<CatalogTable
+			{catalog}
+			searchQ={catalogSearchQ}
+			{currentSort}
+			onSelectFund={openFundDetail}
+			onSendToDDReview={sendClassesToDDReview}
+			onPageChange={catalogPageChange}
+			onSortChange={handleSortChange}
+			onOpenManager={openManagerDetail}
+		/>
 	</div>
 </div>
 
@@ -264,51 +373,135 @@
 </ContextPanel>
 
 <style>
-	/* Master-detail layout for catalog */
-	.scr-master-detail {
+	/* ── Full-height page layout ── */
+	.scr-page {
 		display: flex;
-		gap: 24px;
-		padding-bottom: 48px;
-		align-items: flex-start;
+		flex-direction: column;
+		height: calc(100vh - 48px);
+		overflow: hidden;
 	}
 
-	.scr-main {
+	/* ── Top bar (title + export) ── */
+	.scr-topbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 16px 24px 0;
+		flex-shrink: 0;
+	}
+
+	.scr-title {
+		font-size: 24px;
+		font-weight: 800;
+		color: var(--ii-text-primary);
+		margin: 0;
+	}
+
+	/* ── Horizontal filter bar ── */
+	.scr-filterbar {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 12px 24px;
+		flex-shrink: 0;
+		flex-wrap: wrap;
+	}
+
+	.scr-search {
+		width: 220px;
+		height: 34px;
+		padding: 0 10px 0 34px;
+		border: 1px solid var(--ii-border);
+		border-radius: 8px;
+		background: var(--ii-surface-elevated);
+		font-size: 13px;
+		color: var(--ii-text-primary);
+		font-family: var(--ii-font-sans);
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2390a1b9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E");
+		background-repeat: no-repeat;
+		background-position: 10px center;
+	}
+
+	.scr-search::placeholder { color: var(--ii-text-muted); }
+	.scr-search:focus {
+		outline: none;
+		border-color: var(--ii-border-focus);
+		box-shadow: 0 0 0 2px color-mix(in srgb, var(--ii-brand-primary) 15%, transparent);
+	}
+
+	.scr-dropdown {
+		height: 34px;
+		padding: 0 28px 0 10px;
+		border: 1px solid var(--ii-border);
+		border-radius: 8px;
+		background: var(--ii-surface-elevated);
+		color: var(--ii-text-primary);
+		font-size: 13px;
+		font-family: var(--ii-font-sans);
+		cursor: pointer;
+		appearance: none;
+		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2362748e' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+		background-repeat: no-repeat;
+		background-position: right 8px center;
+		max-width: 200px;
+	}
+
+	.scr-dropdown:focus {
+		outline: none;
+		border-color: var(--ii-border-focus);
+	}
+
+	.scr-clear-btn {
+		height: 34px;
+		padding: 0 14px;
+		border: 1px solid var(--ii-border);
+		border-radius: 8px;
+		background: transparent;
+		color: var(--ii-text-secondary);
+		font-size: 13px;
+		font-weight: 600;
+		font-family: var(--ii-font-sans);
+		cursor: pointer;
+		transition: all 120ms ease;
+	}
+
+	.scr-clear-btn:hover {
+		background: var(--ii-surface-alt);
+		color: var(--ii-text-primary);
+	}
+
+	/* ── Table card (fills remaining height, internal scroll) ── */
+	.scr-table-card {
 		flex: 1;
-		min-width: 0;
+		min-height: 0;
+		margin: 0 24px 16px;
+		background: var(--ii-surface);
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-lg);
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
 	}
 
 	.scr-error-banner {
-		padding: 12px 16px;
-		margin-bottom: 12px;
+		padding: 12px 24px;
 		background: color-mix(in srgb, var(--ii-warning) 10%, transparent);
 		border: 1px solid var(--ii-warning);
 		border-radius: var(--ii-radius-md);
 		color: var(--ii-text-primary);
 		font-size: 13px;
 		font-weight: 500;
-	}
-
-	.scr-results {
-		background: var(--ii-surface);
-		border: 1px solid var(--ii-border-subtle);
-		border-radius: var(--ii-radius-lg);
-		overflow: hidden;
-		box-shadow: none;
-	}
-
-	.scr-actions {
-		display: flex;
-		align-items: center;
-		gap: 10px;
+		margin: 0 24px;
+		flex-shrink: 0;
 	}
 
 	.scr-btn {
 		display: inline-flex;
 		align-items: center;
 		gap: 8px;
-		padding: 10px 20px;
-		border-radius: 14px;
-		font-size: 14px;
+		padding: 8px 16px;
+		border-radius: 8px;
+		font-size: 13px;
 		font-weight: 600;
 		font-family: var(--ii-font-sans);
 		cursor: pointer;
@@ -391,11 +584,5 @@
 		color: var(--ii-text-muted);
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
-	}
-
-	@media (max-width: 900px) {
-		.scr-master-detail {
-			flex-direction: column;
-		}
 	}
 </style>
