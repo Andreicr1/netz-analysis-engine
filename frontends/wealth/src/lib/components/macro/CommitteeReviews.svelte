@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
+	import { goto } from "$app/navigation";
 	import { ConsequenceDialog, StatusBadge, formatDate, formatDateTime, formatNumber } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 
@@ -143,6 +144,7 @@
 				{ decision_rationale: payload.rationale ?? "" },
 			);
 			setReviews(reviews.map((r) => (r.id === updated.id ? updated : r)));
+			justApprovedId = updated.id;
 			showApproveDialog = false;
 		} catch (e) {
 			if (e instanceof Error && e.message.includes("409")) {
@@ -198,6 +200,28 @@
 			actionError = e instanceof Error ? e.message : "Download failed";
 		} finally {
 			downloadingId = null;
+		}
+	}
+
+	// ── Post-approval outlook CTA ────────────────────────────────────
+	let justApprovedId = $state<string | null>(null);
+	let generatingOutlook = $state(false);
+	let outlookError = $state<string | null>(null);
+
+	async function generateOutlook() {
+		generatingOutlook = true;
+		outlookError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			const result = await api.post<{ id: string; job_id: string }>(
+				"/content/outlooks",
+				{},
+			);
+			goto(`/content/${result.id}`);
+		} catch (e) {
+			outlookError = e instanceof Error ? e.message : "Failed to generate outlook";
+		} finally {
+			generatingOutlook = false;
 		}
 	}
 
@@ -417,6 +441,21 @@
 							</button>
 						{/if}
 					</div>
+					{#if justApprovedId === review.id}
+						<div class="outlook-cta">
+							<p class="outlook-cta-text">Review approved. Generate the Investment Outlook for the committee?</p>
+							<button
+								class="action-btn action-btn--outlook"
+								onclick={generateOutlook}
+								disabled={generatingOutlook}
+							>
+								{generatingOutlook ? "Generating\u2026" : "Generate Investment Outlook"}
+							</button>
+							{#if outlookError}
+								<p class="outlook-cta-error">{outlookError}</p>
+							{/if}
+						</div>
+					{/if}
 				</div>
 			{/each}
 		</div>
@@ -806,5 +845,38 @@
 	.action-btn--download:hover:not(:disabled) {
 		background: var(--ii-surface-alt);
 		color: var(--ii-text-primary);
+	}
+
+	/* Outlook CTA */
+	.outlook-cta {
+		padding: 12px 16px;
+		background: color-mix(in srgb, var(--ii-brand-primary) 6%, transparent);
+		border-top: 1px solid var(--ii-border-subtle);
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		flex-wrap: wrap;
+	}
+
+	.outlook-cta-text {
+		font-size: var(--ii-text-small, 0.8125rem);
+		color: var(--ii-text-secondary);
+		margin: 0;
+	}
+
+	.action-btn--outlook {
+		background: var(--ii-brand-primary);
+		border-color: var(--ii-brand-primary);
+		color: white;
+	}
+
+	.action-btn--outlook:hover:not(:disabled) {
+		opacity: 0.9;
+	}
+
+	.outlook-cta-error {
+		font-size: var(--ii-text-small, 0.8125rem);
+		color: var(--ii-danger);
+		margin: 0;
 	}
 </style>

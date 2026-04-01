@@ -124,20 +124,64 @@ class InvestmentOutlook:
         return await html_to_pdf(html_str, print_background=True)
 
     def _gather_macro_data(self, db: Session, organization_id: str) -> dict[str, Any]:
-        """Gather latest macro snapshot data for outlook generation."""
+        """Gather latest macro snapshot + real indicator values for outlook generation."""
+        from sqlalchemy import select
+
         from app.domains.wealth.models.macro_committee import MacroReview
+        from app.shared.models import MacroData, MacroRegionalSnapshot
 
-        review = (
-            db.query(MacroReview)
-            .filter(MacroReview.organization_id == organization_id)
-            .order_by(MacroReview.created_at.desc())
-            .first()
-        )
+        try:
+            # 1. MacroReview report_json (scores and deltas)
+            review = (
+                db.query(MacroReview)
+                .filter(MacroReview.organization_id == organization_id)
+                .order_by(MacroReview.created_at.desc())
+                .first()
+            )
+            report_json = review.report_json if review and review.report_json else {}
 
-        if review and review.report_json:
-            return review.report_json
+            # 2. MacroRegionalSnapshot (dimensions breakdown per region)
+            snapshot = (
+                db.query(MacroRegionalSnapshot)
+                .order_by(MacroRegionalSnapshot.as_of_date.desc())
+                .first()
+            )
+            raw = snapshot.data_json if snapshot else {}
+            snapshot_data = raw if isinstance(raw, dict) else {}
 
-        return {"regions": {}, "global_indicators": {}, "note": "No macro data available"}
+            # 3. Real FRED indicator values (absolute numbers)
+            series_to_fetch = [
+                "VIXCLS",             # VIX (volatility)
+                "YIELD_CURVE_10Y2Y",  # Yield curve 10Y-2Y spread
+                "CPI_YOY",           # CPI year-over-year
+                "DFF",               # Fed Funds rate
+                "SAHMREALTIME",      # Sahm rule (recession)
+                "BAMLH0A0HYM2",      # US HY OAS (credit spreads)
+                "BAMLHE00EHYIOAS",   # Euro HY OAS
+                "BAMLEMCBPIOAS",     # EM Corp OAS
+            ]
+            fred_rows = db.execute(
+                select(MacroData.series_id, MacroData.value, MacroData.obs_date)
+                .where(MacroData.series_id.in_(series_to_fetch))
+                .distinct(MacroData.series_id)
+                .order_by(MacroData.series_id, MacroData.obs_date.desc())
+            ).all()
+
+            fred_values: dict[str, dict[str, Any]] = {}
+            for series_id, value, obs_date in fred_rows:
+                fred_values[series_id] = {
+                    "value": float(value) if value is not None else None,
+                    "obs_date": str(obs_date),
+                }
+
+            return {
+                "report_json": report_json,
+                "snapshot_data": snapshot_data,
+                "fred_values": fred_values,
+            }
+        except Exception:
+            logger.warning("gather_macro_data_failed", organization_id=organization_id)
+            return {"report_json": {}, "snapshot_data": {}, "fred_values": {}}
 
     def _gather_vector_context(self, organization_id: str) -> list[dict[str, Any]]:
         """Retrieve macro review chunks from pgvector for historical depth."""
@@ -205,35 +249,125 @@ class InvestmentOutlook:
         macro_data: dict[str, Any],
         documents: list[dict[str, Any]] | None = None,
     ) -> str:
-        """Build user message from macro data + document chunks."""
-        parts: list[str] = ["## Macro Data Snapshot"]
+        """Build rich user message with real indicators, scores, and dimensions."""
+        report_json = macro_data.get("report_json", {})
+        snapshot_data = macro_data.get("snapshot_data", {})
+        fred = macro_data.get("fred_values", {})
+        parts: list[str] = []
 
-        regions = macro_data.get("regions", {})
-        for region, data in regions.items():
-            score = data.get("composite_score", "N/A") if isinstance(data, dict) else "N/A"
-            parts.append(f"- {region}: composite_score={score}")
+        # ── Section 1: Real economic indicators ───────────────────────────
+        parts.append("## MARKET CONDITIONS (Real Values)")
 
-        gi = macro_data.get("global_indicators", {})
-        if gi:
-            parts.append("\n## Global Indicators")
-            for key, val in gi.items():
-                parts.append(f"- {key}: {val}")
+        vix = fred.get("VIXCLS", {})
+        yc = fred.get("YIELD_CURVE_10Y2Y", {})
+        cpi = fred.get("CPI_YOY", {})
+        dff = fred.get("DFF", {})
+        sahm = fred.get("SAHMREALTIME", {})
+        us_hy = fred.get("BAMLH0A0HYM2", {})
+        eu_hy = fred.get("BAMLHE00EHYIOAS", {})
+        em_oas = fred.get("BAMLEMCBPIOAS", {})
 
-        score_deltas = macro_data.get("score_deltas", [])
+        if vix.get("value") is not None:
+            vix_interp = (
+                "elevated stress" if vix["value"] > 25
+                else "moderate caution" if vix["value"] > 18
+                else "complacency / low volatility"
+            )
+            parts.append(f"- VIX: {vix['value']:.1f} ({vix_interp})")
+
+        if yc.get("value") is not None:
+            yc_interp = "inverted (recession signal)" if yc["value"] < 0 else "positive (normal)"
+            parts.append(f"- Yield Curve 10Y-2Y: {yc['value']:+.2f}% ({yc_interp})")
+
+        if cpi.get("value") is not None:
+            cpi_interp = (
+                "well above target (hawkish risk)" if cpi["value"] > 3.5
+                else "above target (Fed vigilant)" if cpi["value"] > 2.5
+                else "near target (easing possible)"
+            )
+            parts.append(f"- CPI YoY: {cpi['value']:.1f}% ({cpi_interp})")
+
+        if dff.get("value") is not None:
+            parts.append(f"- Fed Funds Rate: {dff['value']:.2f}%")
+
+        if sahm.get("value") is not None:
+            sahm_interp = (
+                "recession triggered" if sahm["value"] >= 0.5
+                else f"{sahm['value']:.2f} (below threshold)"
+            )
+            parts.append(f"- Sahm Rule: {sahm_interp}")
+
+        if us_hy.get("value") is not None:
+            us_hy_interp = "stress" if us_hy["value"] > 600 else "caution" if us_hy["value"] > 400 else "benign"
+            parts.append(f"- US HY Spreads (OAS): {us_hy['value']:.0f}bps ({us_hy_interp})")
+
+        if eu_hy.get("value") is not None:
+            parts.append(f"- Euro HY Spreads (OAS): {eu_hy['value']:.0f}bps")
+
+        if em_oas.get("value") is not None:
+            parts.append(f"- EM Corp Spreads (OAS): {em_oas['value']:.0f}bps")
+
+        # ── Section 2: Regional scores with dimensions ────────────────────
+        parts.append(
+            "\n## REGIONAL MACRO SCORES "
+            "(0-100 scale: <30=deteriorating, 30-45=caution, "
+            "45-55=neutral, 55-70=expansion, >70=overheating)"
+        )
+
+        regions = snapshot_data.get("regions", {})
+        for region in ("US", "EUROPE", "ASIA", "EM"):
+            rdata = regions.get(region, {})
+            score = rdata.get("composite_score")
+            if score is None:
+                continue
+            parts.append(f"\n### {region}: {score:.1f}/100")
+            dims = rdata.get("dimensions", {})
+            for dim_name, dim_data in dims.items():
+                if isinstance(dim_data, dict):
+                    dim_score = dim_data.get("score")
+                    if dim_score is not None:
+                        parts.append(f"  - {dim_name.replace('_', ' ').title()}: {dim_score:.0f}/100")
+
+        # ── Section 3: Week-over-week material changes ────────────────────
+        score_deltas = report_json.get("score_deltas", [])
         if score_deltas:
-            parts.append("\n## Recent Score Changes")
+            parts.append("\n## WEEK-OVER-WEEK CHANGES")
             for sd in score_deltas:
                 if isinstance(sd, dict):
+                    delta = sd.get("delta", 0)
+                    flagged = sd.get("flagged", False)
+                    flag_marker = " !! MATERIAL" if flagged else ""
+                    prev = sd.get("previous_score", "?")
+                    curr = sd.get("current_score", "?")
+                    prev_str = f"{prev:.1f}" if isinstance(prev, (int, float)) else str(prev)
+                    curr_str = f"{curr:.1f}" if isinstance(curr, (int, float)) else str(curr)
                     parts.append(
-                        f"- {sd.get('region', '?')}: {sd.get('delta', 0):+.1f} "
-                        f"({sd.get('previous_score', '?')} → {sd.get('current_score', '?')})",
+                        f"- {sd.get('region', '?')}: {delta:+.1f} pts "
+                        f"({prev_str} -> {curr_str})"
+                        f"{flag_marker}"
                     )
 
+        # ── Section 4: Global stress indicators ──────────────────────────
+        gi = report_json.get("global_indicators_delta") or snapshot_data.get("global_indicators", {})
+        if gi:
+            parts.append("\n## GLOBAL STRESS INDICATORS")
+            label_map = {
+                "geopolitical_risk_score": "Geopolitical Risk",
+                "energy_stress": "Energy Stress",
+                "commodity_stress": "Commodity Stress",
+                "usd_strength": "USD Strength",
+            }
+            for key, label in label_map.items():
+                val = gi.get(key)
+                if val is not None:
+                    parts.append(f"- {label}: {val:+.2f}")
+
+        # ── Section 5: Historical context (vector search) ─────────────────
         if documents:
-            parts.append(f"\n## Historical Macro Analysis ({len(documents)} chunks)")
-            for i, doc in enumerate(documents[:15]):
-                text = doc.get("content", doc.get("text", ""))[:2000]
+            parts.append(f"\n## HISTORICAL MACRO CONTEXT ({len(documents)} prior analyses)")
+            for i, doc in enumerate(documents[:10]):
+                text = doc.get("content", doc.get("text", ""))[:1500]
                 source = doc.get("source_type", doc.get("section", f"doc_{i}"))
-                parts.append(f"\n### [{source}]\n{text}")
+                parts.append(f"\n### Prior Analysis [{source}]\n{text}")
 
         return "\n".join(parts)

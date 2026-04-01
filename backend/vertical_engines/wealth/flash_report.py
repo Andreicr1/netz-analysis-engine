@@ -163,20 +163,58 @@ class FlashReport:
         return last[0] if last else None
 
     def _gather_macro_context(self, db: Session, organization_id: str) -> dict[str, Any]:
-        """Gather macro context for flash report."""
+        """Gather macro context with real indicator values for flash report."""
+        from sqlalchemy import select
+
         from app.domains.wealth.models.macro_committee import MacroReview
+        from app.shared.models import MacroData, MacroRegionalSnapshot
 
-        review = (
-            db.query(MacroReview)
-            .filter(MacroReview.organization_id == organization_id)
-            .order_by(MacroReview.created_at.desc())
-            .first()
-        )
+        try:
+            # 1. MacroReview report_json (scores and deltas)
+            review = (
+                db.query(MacroReview)
+                .filter(MacroReview.organization_id == organization_id)
+                .order_by(MacroReview.created_at.desc())
+                .first()
+            )
+            report_json = review.report_json if review and review.report_json else {}
 
-        if review and review.report_json:
-            return review.report_json
+            # 2. MacroRegionalSnapshot (dimensions breakdown per region)
+            snapshot = (
+                db.query(MacroRegionalSnapshot)
+                .order_by(MacroRegionalSnapshot.as_of_date.desc())
+                .first()
+            )
+            raw = snapshot.data_json if snapshot else {}
+            snapshot_data = raw if isinstance(raw, dict) else {}
 
-        return {"note": "No macro context available"}
+            # 3. Real FRED indicator values
+            series_to_fetch = [
+                "VIXCLS", "YIELD_CURVE_10Y2Y", "CPI_YOY", "DFF",
+                "SAHMREALTIME", "BAMLH0A0HYM2", "BAMLHE00EHYIOAS", "BAMLEMCBPIOAS",
+            ]
+            fred_rows = db.execute(
+                select(MacroData.series_id, MacroData.value, MacroData.obs_date)
+                .where(MacroData.series_id.in_(series_to_fetch))
+                .distinct(MacroData.series_id)
+                .order_by(MacroData.series_id, MacroData.obs_date.desc())
+            ).all()
+
+            fred_values: dict[str, dict[str, Any]] = {}
+            for series_id, value, obs_date in fred_rows:
+                fred_values[series_id] = {
+                    "value": float(value) if value is not None else None,
+                    "obs_date": str(obs_date),
+                }
+
+            return {
+                "report_json": report_json,
+                "snapshot_data": snapshot_data,
+                "fred_values": fred_values,
+            }
+        except Exception:
+            logger.warning("gather_macro_context_failed", organization_id=organization_id)
+            return {"report_json": {}, "snapshot_data": {}, "fred_values": {}}
 
     def _gather_vector_context(
         self,
@@ -246,27 +284,87 @@ class FlashReport:
         return sanitize_llm_text(raw) if raw else None
 
     def _build_user_content(self, context: dict[str, Any]) -> str:
-        """Build user message from event context."""
+        """Build user message from event context with real indicators."""
         parts: list[str] = []
 
+        # ── Primary: Event description ────────────────────────────────────
         event = context.get("event_description", "Market event requiring analysis")
-        parts.append(f"## Event\n{event}")
+        parts.append(f"## EVENT\n{event}")
 
+        # ── Secondary: Real economic indicators ──────────────────────────
         macro = context.get("macro_snapshot", {})
-        if macro:
-            parts.append("\n## Current Macro Context")
-            regions = macro.get("regions", {})
-            for region, data in regions.items():
-                if isinstance(data, dict):
-                    score = data.get("composite_score", "N/A")
-                    parts.append(f"- {region}: composite_score={score}")
+        fred = macro.get("fred_values", {})
 
+        if fred:
+            parts.append("\n## MARKET CONDITIONS AT EVENT TIME (Real Values)")
+
+            vix = fred.get("VIXCLS", {})
+            if vix.get("value") is not None:
+                vix_interp = (
+                    "elevated stress" if vix["value"] > 25
+                    else "moderate caution" if vix["value"] > 18
+                    else "complacency / low volatility"
+                )
+                parts.append(f"- VIX: {vix['value']:.1f} ({vix_interp})")
+
+            yc = fred.get("YIELD_CURVE_10Y2Y", {})
+            if yc.get("value") is not None:
+                yc_interp = "inverted (recession signal)" if yc["value"] < 0 else "positive (normal)"
+                parts.append(f"- Yield Curve 10Y-2Y: {yc['value']:+.2f}% ({yc_interp})")
+
+            cpi = fred.get("CPI_YOY", {})
+            if cpi.get("value") is not None:
+                parts.append(f"- CPI YoY: {cpi['value']:.1f}%")
+
+            dff = fred.get("DFF", {})
+            if dff.get("value") is not None:
+                parts.append(f"- Fed Funds Rate: {dff['value']:.2f}%")
+
+            us_hy = fred.get("BAMLH0A0HYM2", {})
+            if us_hy.get("value") is not None:
+                us_hy_interp = "stress" if us_hy["value"] > 600 else "caution" if us_hy["value"] > 400 else "benign"
+                parts.append(f"- US HY Spreads (OAS): {us_hy['value']:.0f}bps ({us_hy_interp})")
+
+            eu_hy = fred.get("BAMLHE00EHYIOAS", {})
+            if eu_hy.get("value") is not None:
+                parts.append(f"- Euro HY Spreads (OAS): {eu_hy['value']:.0f}bps")
+
+            em_oas = fred.get("BAMLEMCBPIOAS", {})
+            if em_oas.get("value") is not None:
+                parts.append(f"- EM Corp Spreads (OAS): {em_oas['value']:.0f}bps")
+
+        # ── Regional scores ──────────────────────────────────────────────
+        snapshot_data = macro.get("snapshot_data", {})
+        regions = snapshot_data.get("regions", {})
+        if regions:
+            parts.append("\n## REGIONAL MACRO SCORES")
+            for region in ("US", "EUROPE", "ASIA", "EM"):
+                rdata = regions.get(region, {})
+                score = rdata.get("composite_score")
+                if score is not None:
+                    parts.append(f"- {region}: {score:.1f}/100")
+
+        # ── Score deltas ─────────────────────────────────────────────────
+        report_json = macro.get("report_json", {})
+        score_deltas = report_json.get("score_deltas", [])
+        if score_deltas:
+            parts.append("\n## WEEK-OVER-WEEK CHANGES")
+            for sd in score_deltas:
+                if isinstance(sd, dict):
+                    delta = sd.get("delta", 0)
+                    flagged = sd.get("flagged", False)
+                    flag_marker = " !! MATERIAL" if flagged else ""
+                    parts.append(
+                        f"- {sd.get('region', '?')}: {delta:+.1f} pts{flag_marker}"
+                    )
+
+        # ── Historical context ───────────────────────────────────────────
         docs = context.get("documents", [])
         if docs:
-            parts.append(f"\n## Historical Macro Analysis ({len(docs)} chunks)")
-            for i, doc in enumerate(docs[:15]):
-                text = doc.get("content", doc.get("text", ""))[:2000]
+            parts.append(f"\n## HISTORICAL MACRO CONTEXT ({len(docs)} prior analyses)")
+            for i, doc in enumerate(docs[:10]):
+                text = doc.get("content", doc.get("text", ""))[:1500]
                 source = doc.get("source_type", doc.get("section", f"doc_{i}"))
-                parts.append(f"\n### [{source}]\n{text}")
+                parts.append(f"\n### Prior Analysis [{source}]\n{text}")
 
         return "\n".join(parts)
