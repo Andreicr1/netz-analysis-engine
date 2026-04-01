@@ -30,6 +30,9 @@ export interface CVaRStatus {
 export interface CVaRPoint {
 	date: string;
 	cvar: number;
+	cvar_limit: number | null;
+	cvar_utilized_pct: number | null;
+	trigger_status: string | null;
 }
 
 export interface DriftAlert {
@@ -372,8 +375,18 @@ export function createRiskStore(config: RiskStoreConfig) {
 				const p = profileIds[i]!;
 				const r = historyResults[i];
 				if (r?.status === "fulfilled" && r.value) {
-					const val = r.value as CVaRPoint[] | { points: CVaRPoint[] };
-					newHistory[p] = Array.isArray(val) ? val : val.points ?? [];
+					const raw = r.value as unknown[];
+					const arr = Array.isArray(raw) ? raw : (raw as Record<string, unknown>).points as unknown[] ?? [];
+					newHistory[p] = arr.map((pt: unknown) => {
+						const o = pt as Record<string, unknown>;
+						return {
+							date: (o.snapshot_date ?? o.date ?? "") as string,
+							cvar: Number(o.cvar_current ?? o.cvar ?? 0),
+							cvar_limit: o.cvar_limit != null ? Number(o.cvar_limit) : null,
+							cvar_utilized_pct: o.cvar_utilized_pct != null ? Number(o.cvar_utilized_pct) : null,
+							trigger_status: (o.trigger_status ?? null) as string | null,
+						};
+					});
 				}
 			}
 

@@ -10,14 +10,15 @@
 	import { goto } from "$app/navigation";
 	import { getContext } from "svelte";
 	import {
-		PageHeader, Button, StatusBadge, EmptyState,
+		PageHeader, Button, StatusBadge, EmptyState, ConsequenceDialog,
 		formatPercent, formatNumber, formatDate,
 	} from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
 	import type { UniverseAsset } from "$lib/types/universe";
 	import type { ModelPortfolio, SelectionSchema } from "$lib/types/model-portfolio";
-	import { profileColor } from "$lib/types/model-portfolio";
+	import { profileColor, optimizerStatusLabel } from "$lib/types/model-portfolio";
+	import { blockLabel } from "$lib/constants/blocks";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -52,33 +53,7 @@
 	// Approved funds only
 	let approvedFunds = $derived(universe.filter((f) => f.approval_decision === "approved"));
 
-	// ── Block display names ──────────────────────────────────────────────
-
-	const BLOCK_DISPLAY_NAMES: Record<string, string> = {
-		na_equity_large: "US Large Cap Equity",
-		na_equity_value: "US Value Equity",
-		na_equity_small: "NA Equity Small",
-		fi_us_aggregate: "US Aggregate Fixed Income",
-		fi_us_high_yield: "US High Yield",
-		fi_us_tips: "US TIPS",
-		fi_us_treasury: "US Treasury",
-		fi_treasury: "Treasuries",
-		fi_credit_ig: "Credit IG",
-		fi_credit_hy: "Credit HY",
-		dm_europe_equity: "DM Europe Equity",
-		intl_equity_dm: "Intl Equity DM",
-		intl_equity_em: "Intl Equity EM",
-		em_equity: "Emerging Markets Equity",
-		alt_gold: "Alternative — Gold",
-		alt_real_estate: "Alternative — Real Estate",
-		alt_reits: "REITs",
-		cash: "Cash",
-	};
-
-	function blockDisplayName(blockId: string): string {
-		return BLOCK_DISPLAY_NAMES[blockId]
-			?? blockId.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-	}
+	// ── Block display names (from canonical source) ─────────────────────
 
 	// Geography pre-filter mapping: block → expected investment geography
 	const BLOCK_GEOGRAPHY: Record<string, string> = {
@@ -143,6 +118,8 @@
 	let icApproved = $state(false);
 	let isActivating = $state(false);
 	let activateError = $state<string | null>(null);
+	let showActivateDialog = $state(false);
+	let activatableCount = $derived(constructionResults.filter((r) => r.portfolio && r.optimization?.cvar_within_limit).length);
 
 	// ── Profile config ───────────────────────────────────────────────────
 
@@ -325,16 +302,23 @@
 				const result = constructionResults.find((r) => r.profile === profile);
 				if (!result?.portfolio) continue;
 
+				// Step 1: PATCH metadata only (display_name + inception_date, no status change)
 				await api.patch<ModelPortfolio>(`/model-portfolios/${result.portfolio.id}`, {
 					display_name: portfolioName || `${profile.charAt(0).toUpperCase() + profile.slice(1)} Portfolio`,
 					inception_date: inceptionDate || null,
-					status: "approved",
 				});
+
+				// Step 2: POST /activate (enforces backend CVaR guard)
+				await api.post(`/model-portfolios/${result.portfolio.id}/activate`, {});
 			}
 
 			goto("/portfolios");
 		} catch (e) {
-			activateError = e instanceof Error ? e.message : "Activation failed";
+			const msg = e instanceof Error ? e.message : "Activation failed";
+			// Surface 409 CONFLICT (CVaR guard) clearly
+			activateError = msg.includes("409") || msg.toLowerCase().includes("cvar")
+				? `CVaR limit exceeded — cannot activate. Adjust fund selection or increase risk budget. (${msg})`
+				: msg;
 		} finally {
 			isActivating = false;
 		}
@@ -469,7 +453,7 @@
 							onclick={() => selectedBlockId = blockId}
 							type="button"
 						>
-							<span class="block-item-name">{blockDisplayName(blockId)}</span>
+							<span class="block-item-name">{blockLabel(blockId)}</span>
 							<span class="block-item-count" class:block-item-count--zero={count === 0}>
 								{count > 0 ? `${count} selected` : available > 0 ? "Optional" : "No funds"}
 							</span>
@@ -484,11 +468,11 @@
 					{:else if fundsForSelectedBlock.length === 0}
 						<EmptyState
 							title="No approved funds"
-							message="No funds have been approved for the {blockDisplayName(selectedBlockId)} block. Approve funds in the Assets Universe first."
+							message="No funds have been approved for the {blockLabel(selectedBlockId)} block. Approve funds in the Assets Universe first."
 						/>
 					{:else}
 						<div class="fund-list-header">
-							<h3 class="fund-list-title">{blockDisplayName(selectedBlockId)}</h3>
+							<h3 class="fund-list-title">{blockLabel(selectedBlockId)}</h3>
 							<span class="fund-list-count">{fundsForSelectedBlock.length} approved fund{fundsForSelectedBlock.length !== 1 ? "s" : ""}</span>
 						</div>
 						{#if BLOCK_GEOGRAPHY[selectedBlockId]}
@@ -667,6 +651,7 @@
 									</div>
 								</div>
 
+								{@const optStatus = optimizerStatusLabel(opt.status)}
 								<div class="construct-status" style:color={cvarStatusColor(opt.cvar_within_limit, utilized)}>
 									{#if utilized < 80}
 										Within CVaR limit
@@ -675,6 +660,9 @@
 									{:else}
 										Exceeds limit — cannot activate
 									{/if}
+								</div>
+								<div class="construct-optimizer-status" title={optStatus.description}>
+									{optStatus.label}
 								</div>
 							{:else}
 								<!-- Portfolio was created but no optimization data returned -->
@@ -783,10 +771,14 @@
 								<td>
 									{#if r.error}
 										<span style:color="var(--ii-danger)">Failed</span>
-									{:else if r.optimization?.cvar_within_limit}
-										<span style:color="var(--ii-success)">OK</span>
+									{:else if r.optimization}
+										{@const s = optimizerStatusLabel(r.optimization.status)}
+										<span
+											style:color="var(--ii-{s.severity})"
+											title={s.description}
+										>{s.label}</span>
 									{:else}
-										<span style:color="var(--ii-warning)">Review</span>
+										<span style:color="var(--ii-text-muted)">&mdash;</span>
 									{/if}
 								</td>
 							</tr>
@@ -807,12 +799,34 @@
 
 			<div class="activate-actions">
 				<Button
-					onclick={activatePortfolios}
+					onclick={() => (showActivateDialog = true)}
 					disabled={!portfolioName.trim() || !icApproved || isActivating}
 				>
 					{isActivating ? "Activating..." : "Activate Portfolios"}
 				</Button>
 			</div>
+
+			<ConsequenceDialog
+				bind:open={showActivateDialog}
+				title="Activate {activatableCount} Portfolio{activatableCount !== 1 ? 's' : ''}"
+				impactSummary="Selected portfolios will move from Draft to Active. This action cannot be reversed. All changes will be recorded in the audit trail."
+				requireRationale
+				rationaleLabel="IC activation rationale"
+				rationalePlaceholder="e.g., Q2 2026 rebalancing approved by Investment Committee on 2026-03-28. Risk budget within mandate limits."
+				rationaleMinLength={20}
+				confirmLabel="Activate {activatableCount} Portfolio{activatableCount !== 1 ? 's' : ''}"
+				metadata={constructionResults.filter((r) => r.portfolio).map((r) => ({
+					label: r.profile.charAt(0).toUpperCase() + r.profile.slice(1),
+					value: r.optimization
+						? `CVaR ${formatPercent(r.optimization.cvar_95)} \u00b7 Sharpe ${formatNumber(r.optimization.sharpe_ratio, 2)}`
+						: "\u2014",
+				}))}
+				onConfirm={async () => {
+					await activatePortfolios();
+					showActivateDialog = false;
+				}}
+				onCancel={() => (showActivateDialog = false)}
+			/>
 		</div>
 	{/if}
 </div>
@@ -1417,6 +1431,14 @@
 		font-weight: 600;
 		text-align: center;
 		padding-bottom: var(--ii-space-stack-xs, 8px);
+	}
+
+	.construct-optimizer-status {
+		padding: 0 var(--ii-space-inline-md, 16px) var(--ii-space-stack-xs, 8px);
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
+		text-align: center;
+		cursor: help;
 	}
 
 	.construct-card-error {

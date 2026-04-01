@@ -24,7 +24,7 @@ export interface SelectionSchema {
 export interface InstrumentWeight {
 	instrument_id: string;
 	fund_name: string;
-	instrument_type: "fund" | "bond" | "equity" | null;
+	instrument_type: "mutual_fund" | "etf" | "bdc" | "money_market" | "closed_end" | "interval_fund" | "ucits" | "private" | null;
 	block_id: string;
 	weight: number;
 	score: number;
@@ -65,23 +65,68 @@ export interface StressResult {
 	scenarios: StressScenario[];
 }
 
+export interface NAVPoint {
+	date: string;
+	nav: number;
+	daily_return: number | null;
+}
+
 export interface TrackRecord {
 	portfolio_id: string;
 	profile: string;
 	status: string;
 	fund_selection: SelectionSchema | null;
 	backtest: BacktestResult | null;
+	nav_series: NAVPoint[] | null;
 	live_nav: unknown;
 	stress: StressResult | null;
 }
 
 export function scenarioLabel(name: string): string {
-	switch (name) {
-		case "2008_gfc": return "2008 GFC";
-		case "2020_covid": return "2020 COVID";
-		case "2022_rate_hike": return "2022 Rate Hike";
-		default: return name.replace(/_/g, " ");
-	}
+	const map: Record<string, string> = {
+		"2008_gfc": "Global Financial Crisis (2008)",
+		"2020_covid": "COVID-19 Crash (2020)",
+		"2022_rate_hike": "Rate Hike Cycle (2022)",
+		"taper_2013": "Taper Tantrum (2013)",
+		"rate_shock_200bps": "Rate Shock +200bps",
+	};
+	return map[name] ?? name.replace(/_/g, " ");
+}
+
+export function optimizerStatusLabel(status: string): { label: string; description: string; severity: "success" | "warning" | "danger" } {
+	const map: Record<string, { label: string; description: string; severity: "success" | "warning" | "danger" }> = {
+		"optimal": {
+			label: "Optimal",
+			description: "Maximum risk-adjusted return found within all constraints",
+			severity: "success",
+		},
+		"optimal:robust": {
+			label: "Robust Optimal",
+			description: "SOCP optimization applied \u2014 portfolio is resilient to estimation error in covariance matrix",
+			severity: "success",
+		},
+		"optimal:cvar_constrained": {
+			label: "CVaR-Constrained",
+			description: "Variance-capped solution \u2014 CVaR constraint was binding, reducing expected return to meet risk limit",
+			severity: "warning",
+		},
+		"optimal:min_variance_fallback": {
+			label: "Min-Variance Fallback",
+			description: "Minimum-variance portfolio \u2014 all higher-return phases exceeded CVaR limit",
+			severity: "warning",
+		},
+		"optimal:cvar_violated": {
+			label: "CVaR Limit Exceeded",
+			description: "Warning: CVaR limit exceeded in all optimization phases. Consider adding diversifying funds or adjusting the profile.",
+			severity: "danger",
+		},
+		"fallback:insufficient_fund_data": {
+			label: "Heuristic Fallback",
+			description: "Insufficient aligned trading data between funds \u2014 weights assigned by block-level heuristic, not optimizer",
+			severity: "danger",
+		},
+	};
+	return map[status] ?? { label: status.replace(/_/g, " "), description: "Optimizer status", severity: "warning" };
 }
 
 export interface PortfolioView {
@@ -110,21 +155,8 @@ export interface ParametricStressResult {
 	best_block: string | null;
 }
 
-/** Human-readable labels for allocation block IDs */
-export function blockLabel(blockId: string): string {
-	const labels: Record<string, string> = {
-		na_equity_large: "NA Equity Large",
-		na_equity_small: "NA Equity Small",
-		intl_equity_dm: "Intl Equity DM",
-		intl_equity_em: "Intl Equity EM",
-		fi_treasury: "Treasuries",
-		fi_credit_ig: "Credit IG",
-		fi_credit_hy: "Credit HY",
-		alt_gold: "Gold",
-		alt_reits: "REITs",
-	};
-	return labels[blockId] ?? blockId.replace(/_/g, " ");
-}
+/** Human-readable labels for allocation block IDs — re-exported from canonical source */
+export { blockLabel } from "$lib/constants/blocks";
 
 /** Holdings overlap analysis result from GET /model-portfolios/{id}/overlap */
 export interface CusipExposure {

@@ -8,6 +8,7 @@
 	import { setContext, getContext, type Snippet } from "svelte";
 	import { ThemeToggle } from "@investintell/ui";
 	import { createRiskStore, type RiskStore } from "$lib/stores/risk-store.svelte";
+	import ConnectionStatus from "$lib/components/ConnectionStatus.svelte";
 	import {
 		ShieldCheck, Stack, Database, Briefcase, MagnifyingGlass,
 		ClipboardText, ChartBar, Globe, Lightning, Newspaper,
@@ -246,6 +247,7 @@
 			</div>
 
 			<div class="ii-topbar-actions">
+				<ConnectionStatus quality={riskStore.connectionQuality} />
 				<button class="ii-topbar-btn ii-topbar-btn--ai" type="button" title="AI Assistant" onclick={() => agentOpen = !agentOpen}>
 					<Robot size={18} weight="light" />
 				</button>

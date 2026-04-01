@@ -7,9 +7,10 @@
 	import { getContext } from "svelte";
 	import { invalidateAll } from "$app/navigation";
 	import {
-		PageHeader, StatusBadge, EmptyState, ActionButton,
+		PageHeader, StatusBadge, EmptyState, ActionButton, ConsequenceDialog,
 		formatNumber, formatPercent, formatDateTime, formatDate,
 	} from "@investintell/ui";
+	import type { ConsequenceDialogMetadataItem } from "@investintell/ui";
 	import { Button } from "@investintell/ui/components/ui/button";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
@@ -17,8 +18,15 @@
 	import type { UniverseAsset } from "$lib/types/universe";
 	import ICViewsPanel from "$lib/components/model-portfolio/ICViewsPanel.svelte";
 	import ConstructionAdvisor from "$lib/components/model-portfolio/ConstructionAdvisor.svelte";
+	import ScoreBreakdownPopover from "$lib/components/model-portfolio/ScoreBreakdownPopover.svelte";
+	import CVaRHistoryChart from "$lib/components/charts/CVaRHistoryChart.svelte";
+	import PortfolioNAVChart from "$lib/components/charts/PortfolioNAVChart.svelte";
+	import BacktestEquityCurve from "$lib/components/charts/BacktestEquityCurve.svelte";
 	import { instrumentTypeLabel, instrumentTypeColor } from "$lib/types/universe";
-	import { scenarioLabel, profileColor, blockLabel } from "$lib/types/model-portfolio";
+	import { scenarioLabel, profileColor, blockLabel, optimizerStatusLabel } from "$lib/types/model-portfolio";
+
+	import type { RiskStore } from "$lib/stores/risk-store.svelte";
+	const riskStore = getContext<RiskStore>("netz:riskStore");
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -110,6 +118,7 @@
 	let stressing = $state(false);
 	let activating = $state(false);
 	let error = $state<string | null>(null);
+	let showActivateDialog = $state(false);
 
 	let canActivate = $derived(
 		portfolio.status === "draft" && !!portfolio.fund_selection_schema && cvarWithinLimit,
@@ -296,6 +305,7 @@
 			<span class="mp-profile-badge" style:color={profileColor(portfolio.profile)}>
 				{portfolio.profile}
 			</span>
+			<a href="/portfolios/{portfolio.profile}" class="mp-cross-link" data-sveltekit-preload-data>Portfolio Monitoring</a>
 			{#if !portfolio.fund_selection_schema}
 				<Button size="sm" onclick={runConstruct} disabled={constructing}>
 					{constructing ? "Constructing…" : "Construct Portfolio"}
@@ -312,7 +322,7 @@
 				</Button>
 				{#if portfolio.status === "draft"}
 					<span class="activate-wrap" title={!canActivate ? "CVaR exceeds profile limit" : ""}>
-						<Button size="sm" onclick={runActivate} disabled={!canActivate || activating}>
+						<Button size="sm" onclick={() => (showActivateDialog = true)} disabled={!canActivate || activating}>
 							{activating ? "Activating…" : "Activate"}
 						</Button>
 					</span>
@@ -335,6 +345,13 @@
 		<section class="mp-section">
 			<h3 class="mp-section-title">Backtest — Walk-Forward CV</h3>
 			{#if backtest}
+				{#if backtest.folds.length > 0}
+					<BacktestEquityCurve
+						folds={backtest.folds}
+						youngestFundStart={backtest.youngest_fund_start}
+						height={Math.max(backtest.folds.length * 40 + 40, 180)}
+					/>
+				{/if}
 				<div class="backtest-metrics">
 					<div class="metric-card">
 						<span class="metric-label">Mean Sharpe</span>
@@ -520,11 +537,19 @@
 	<!-- OPTIMIZATION METRICS                                               -->
 	<!-- ═══════════════════════════════════════════════════════════════════ -->
 	{#if optimizationMeta}
+		{@const optStatus = optimizerStatusLabel(optimizationMeta.status)}
 		<section class="mp-section mp-section--full">
 			<h3 class="mp-section-title">
 				Construction Result
 				<span class="mp-section-count">
-					{optimizationMeta.solver} · {optimizationMeta.status}
+					{optimizationMeta.solver} ·
+					<span
+						class="opt-status-label"
+						class:opt-status--success={optStatus.severity === "success"}
+						class:opt-status--warning={optStatus.severity === "warning"}
+						class:opt-status--danger={optStatus.severity === "danger"}
+						title={optStatus.description}
+					>{optStatus.label}</span>
 				</span>
 			</h3>
 			<div class="opt-metrics">
@@ -602,6 +627,34 @@
 	{/if}
 
 	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<!-- CVaR HISTORY + NAV CHART                                           -->
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<div class="mp-charts">
+		{#if riskStore?.cvarHistoryByProfile[portfolio.profile]?.length}
+			<section class="mp-section">
+				<h3 class="mp-section-title">CVaR History</h3>
+				<CVaRHistoryChart
+					data={riskStore.cvarHistoryByProfile[portfolio.profile] ?? []}
+					profile={portfolio.profile}
+					height={280}
+					loading={riskStore.status === "loading"}
+				/>
+			</section>
+		{/if}
+
+		{#if trackRecord?.nav_series?.length}
+			<section class="mp-section">
+				<h3 class="mp-section-title">Portfolio NAV</h3>
+				<PortfolioNAVChart
+					navSeries={trackRecord.nav_series}
+					inceptionDate={portfolio.inception_date}
+					height={280}
+				/>
+			</section>
+		{/if}
+	</div>
+
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
 	<!-- BOTTOM: Fund Selection Schema                                      -->
 	<!-- ═══════════════════════════════════════════════════════════════════ -->
 	<section class="mp-section mp-section--full">
@@ -638,9 +691,11 @@
 										{instrumentTypeLabel(fund.instrument_type)}
 									</span>
 								</td>
-								<td class="td-block">{fund.block_id}</td>
+								<td class="td-block">{blockLabel(fund.block_id)}</td>
 								<td class="td-weight">{formatPercent(fund.weight)}</td>
-								<td class="td-score">{fund.score.toFixed(1)}</td>
+								<td class="td-score">
+									<ScoreBreakdownPopover instrumentId={fund.instrument_id} score={fund.score} />
+								</td>
 								<td class="td-bar">
 									<div class="weight-bar-track">
 										<div class="weight-bar-fill" style:width="{fund.weight * 100}%"></div>
@@ -829,6 +884,32 @@
 	</section>
 </div>
 
+<!-- Activation Confirmation Dialog -->
+<ConsequenceDialog
+	bind:open={showActivateDialog}
+	title="Activate Portfolio"
+	impactSummary="This portfolio will move from Draft to Active and become available for monitoring and rebalancing. This action cannot be reversed."
+	scopeText="Profile: {portfolio.profile} — this will affect all monitoring dashboards using this profile."
+	requireRationale
+	rationaleLabel="Activation rationale"
+	rationalePlaceholder="e.g., Q2 2026 rebalancing approved by Investment Committee on 2026-03-28."
+	rationaleMinLength={20}
+	confirmLabel="Activate Portfolio"
+	metadata={[
+		{ label: "Profile", value: portfolio.profile },
+		{ label: "Solver", value: optimizationMeta?.solver ?? "\u2014" },
+		{ label: "CVaR 95%", value: optimizationMeta?.cvar_95 != null ? formatPercent(optimizationMeta.cvar_95) : "\u2014" },
+		{ label: "Sharpe", value: optimizationMeta?.sharpe_ratio != null ? formatNumber(optimizationMeta.sharpe_ratio, 2) : "\u2014" },
+		{ label: "Funds", value: String(funds.length) },
+		{ label: "Status", value: optimizationMeta ? optimizerStatusLabel(optimizationMeta.status).label : "\u2014" },
+	]}
+	onConfirm={async () => {
+		await runActivate();
+		showActivateDialog = false;
+	}}
+	onCancel={() => (showActivateDialog = false)}
+/>
+
 <style>
 	/* ── Actions bar ─────────────────────────────────────────────────────── */
 	.mp-actions {
@@ -840,6 +921,21 @@
 	.activate-wrap {
 		display: inline-flex;
 		cursor: default;
+	}
+
+	.mp-cross-link {
+		font-size: var(--ii-text-small, 0.8125rem);
+		font-weight: 500;
+		color: var(--ii-brand-primary);
+		text-decoration: none;
+		padding: 4px 10px;
+		border: 1px solid var(--ii-border);
+		border-radius: var(--ii-radius-md, 6px);
+		transition: background 120ms ease, border-color 120ms ease;
+	}
+	.mp-cross-link:hover {
+		background: var(--ii-surface-alt);
+		border-color: var(--ii-brand-primary);
 	}
 
 	.mp-profile-badge {
@@ -904,6 +1000,11 @@
 		font-weight: 400;
 		color: var(--ii-text-muted);
 	}
+
+	.opt-status-label { cursor: help; font-weight: 500; }
+	.opt-status--success { color: var(--ii-success); }
+	.opt-status--warning { color: var(--ii-warning); }
+	.opt-status--danger  { color: var(--ii-danger); }
 
 	.mp-empty {
 		padding: var(--ii-space-stack-lg, 32px);
@@ -1386,7 +1487,7 @@
 
 	.td-block { color: var(--ii-text-secondary); }
 	.td-weight { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ii-text-primary); }
-	.td-score { text-align: right; font-variant-numeric: tabular-nums; color: var(--ii-text-secondary); }
+	.td-score { text-align: right; font-variant-numeric: tabular-nums; color: var(--ii-text-secondary); position: relative; }
 
 	.weight-bar-track {
 		height: 6px;

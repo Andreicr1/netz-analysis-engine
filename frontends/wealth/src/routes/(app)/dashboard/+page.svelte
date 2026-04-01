@@ -7,6 +7,9 @@
 	import { getContext, onMount } from "svelte";
 	import { PageHeader, StatusBadge, formatPercent, formatNumber } from "@investintell/ui";
 	import type { RiskStore, CVaRStatus } from "$lib/stores/risk-store.svelte";
+	import { regimeMultiplierLabel } from "$lib/constants/regime";
+	import RegimeTimeline from "$lib/components/charts/RegimeTimeline.svelte";
+	import MacroIndicatorStrip from "$lib/components/MacroIndicatorStrip.svelte";
 
 	let { data } = $props();
 
@@ -112,11 +115,22 @@
 		</div>
 		<div class="dashboard-header-meta">
 			{#if regime}
-				<StatusBadge status={regimeBadgeStatus(regime)} label="{regime.replace('_', '_')} ativo" />
+				<span title={regimeMultiplierLabel(regime) || "No CVaR adjustment"}>
+					<StatusBadge status={regimeBadgeStatus(regime)} label="{regime.replace('_', '_')} ativo" />
+				</span>
+				{#if regimeMultiplierLabel(regime)}
+					<span class="regime-multiplier-hint">{regimeMultiplierLabel(regime)}</span>
+				{/if}
 			{/if}
 			<span class="org-label">Netz Partners</span>
 		</div>
 	</div>
+
+	<!-- Macro Indicators + Regime Timeline -->
+	<MacroIndicatorStrip indicators={riskStore.macroIndicators} />
+	{#if riskStore.regimeHistory.length > 0}
+		<RegimeTimeline history={riskStore.regimeHistory} />
+	{/if}
 
 	<!-- Portfolio Cards -->
 	<div class="portfolio-cards">
@@ -124,7 +138,7 @@
 			{@const cvar = getCvar(profile)}
 			{@const snap = getSnapshot(profile)}
 			{@const utilPct = cvar?.cvar_utilized_pct ?? null}
-			<div class="portfolio-card" data-status={cvar?.trigger_status ?? "ok"}>
+			<a class="portfolio-card" href="/portfolios/{profile}" data-sveltekit-preload-data data-status={cvar?.trigger_status ?? "ok"}>
 				<div class="card-header">
 					<span class="card-title">{profileLabel[profile]}</span>
 					<span class="card-sublabel">{profileSubLabel[profile]}</span>
@@ -160,7 +174,7 @@
 						style:background={utilizationBarColor(utilPct)}
 					></div>
 				</div>
-			</div>
+			</a>
 		{/each}
 	</div>
 
@@ -201,6 +215,7 @@
 .dashboard-header { display: flex; align-items: flex-start; justify-content: space-between; }
 .dashboard-header-meta { display: flex; align-items: center; gap: 12px; padding-top: 6px; }
 .org-label { font-size: 13px; font-weight: 500; color: var(--ii-text-muted); }
+.regime-multiplier-hint { font-size: 11px; font-weight: 500; color: var(--ii-warning); }
 
 /* Portfolio cards grid */
 .portfolio-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
@@ -211,6 +226,14 @@
 	border-radius: var(--ii-radius-lg, 12px);
 	padding: 20px 20px 16px;
 	display: flex; flex-direction: column; gap: 6px;
+	text-decoration: none; color: inherit;
+	cursor: pointer;
+	transition: border-color 150ms ease, box-shadow 150ms ease, transform 100ms ease;
+}
+.portfolio-card:hover {
+	border-color: var(--ii-border-focus, var(--ii-brand-primary));
+	box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+	transform: translateY(-1px);
 }
 .portfolio-card[data-status="breach"] { border-color: var(--ii-danger); }
 .portfolio-card[data-status="warning"] { border-color: var(--ii-warning); }

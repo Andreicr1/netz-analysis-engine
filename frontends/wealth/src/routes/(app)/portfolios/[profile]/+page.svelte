@@ -23,6 +23,9 @@
 	import RebalancingTab from "$lib/components/RebalancingTab.svelte";
 	import BlendedBenchmarkEditor from "$lib/components/BlendedBenchmarkEditor.svelte";
 	import LongFormReportPanel from "$lib/components/LongFormReportPanel.svelte";
+	import CVaRHistoryChart from "$lib/components/charts/CVaRHistoryChart.svelte";
+	import RegimeTimeline from "$lib/components/charts/RegimeTimeline.svelte";
+	import { regimeMultiplierLabel } from "$lib/constants/regime";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const riskStore = getContext<RiskStore>("netz:riskStore");
@@ -302,12 +305,19 @@
 	{#snippet actions()}
 		<div class="pw-actions">
 			{#if portfolio?.regime ?? live?.regime}
-				<StatusBadge status={live?.regime ?? portfolio?.regime ?? "—"} />
+				{@const currentRegime = live?.regime ?? portfolio?.regime ?? ""}
+				<StatusBadge status={currentRegime || "—"} />
+				{#if regimeMultiplierLabel(currentRegime)}
+					<span class="pw-regime-multiplier">{regimeMultiplierLabel(currentRegime)}</span>
+				{/if}
 			{/if}
 			{#if triggerStatus !== "ok"}
 				<span class="pw-trigger-badge" class:pw-trigger-badge--critical={triggerStatus === "breach" || triggerStatus === "critical"} title={triggerTooltip}>
 					<StatusBadge status={triggerStatus} />
 				</span>
+			{/if}
+			{#if modelPortfolio}
+				<a href="/model-portfolios/{modelPortfolio.id}" class="pw-cross-link" data-sveltekit-preload-data>Model Portfolio</a>
 			{/if}
 		</div>
 	{/snippet}
@@ -338,6 +348,27 @@
 		</span>
 	</div>
 </div>
+
+<!-- CVaR History -->
+{#if riskStore.cvarHistoryByProfile[profile]?.length}
+	<section class="pw-cvar-history">
+		<h3 class="pw-section-title">CVaR History</h3>
+		<CVaRHistoryChart
+			data={riskStore.cvarHistoryByProfile[profile]}
+			{profile}
+			height={280}
+			loading={riskStore.status === "loading"}
+		/>
+	</section>
+{/if}
+
+<!-- Regime Timeline -->
+{#if riskStore.regimeHistory.length > 0}
+	<section class="pw-regime-timeline">
+		<h3 class="pw-section-title">Regime History</h3>
+		<RegimeTimeline history={riskStore.regimeHistory} {profile} />
+	</section>
+{/if}
 
 <!-- Tabs -->
 <div class="pw-tabs">
@@ -789,6 +820,25 @@
 />
 
 <style>
+	/* ── CVaR History ────────────────────────────────────────────────────── */
+	.pw-cvar-history,
+	.pw-regime-timeline {
+		margin: 0 var(--ii-space-inline-lg, 24px);
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-md, 12px);
+		background: var(--ii-surface-elevated);
+		overflow: hidden;
+	}
+
+	.pw-section-title {
+		padding: var(--ii-space-stack-sm, 12px) var(--ii-space-inline-md, 16px);
+		font-size: var(--ii-text-body, 0.9375rem);
+		font-weight: 600;
+		color: var(--ii-text-primary);
+		border-bottom: 1px solid var(--ii-border-subtle);
+		background: var(--ii-surface-alt);
+	}
+
 	/* ── KPIs ─────────────────────────────────────────────────────────────── */
 	.pw-kpis {
 		display: grid;
@@ -867,6 +917,27 @@
 		display: flex;
 		align-items: center;
 		gap: var(--ii-space-inline-sm, 8px);
+	}
+
+	.pw-regime-multiplier {
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-warning);
+		font-weight: 500;
+	}
+
+	.pw-cross-link {
+		font-size: var(--ii-text-small, 0.8125rem);
+		font-weight: 500;
+		color: var(--ii-brand-primary);
+		text-decoration: none;
+		padding: 4px 10px;
+		border: 1px solid var(--ii-border);
+		border-radius: var(--ii-radius-md, 6px);
+		transition: background 120ms ease, border-color 120ms ease;
+	}
+	.pw-cross-link:hover {
+		background: var(--ii-surface-alt);
+		border-color: var(--ii-brand-primary);
 	}
 
 	.pw-trigger-badge {
