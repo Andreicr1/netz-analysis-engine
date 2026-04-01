@@ -1,8 +1,8 @@
 <!--
-  Document detail — metadata display with re-process action.
+  Document detail — metadata display + inline preview (PDF/image) + re-process action.
 -->
 <script lang="ts">
-	import { getContext } from "svelte";
+	import { getContext, onDestroy } from "svelte";
 	import { invalidateAll } from "$app/navigation";
 	import { PageHeader, Button, StatusBadge, EmptyState, formatDateTime } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
@@ -19,6 +19,45 @@
 
 	let reprocessing = $state(false);
 	let error = $state<string | null>(null);
+
+	// ── Preview state ────────────────────────────────────────────────
+	let previewUrl = $state<string | null>(null);
+	let previewContentType = $state<string | null>(null);
+	let previewFilename = $state<string>("document");
+	let previewLoading = $state(false);
+	let previewError = $state<string | null>(null);
+	let previewExpiresAt = $state<number>(0);
+
+	let isPdf = $derived(previewContentType?.startsWith("application/pdf") ?? false);
+	let isImage = $derived(previewContentType?.startsWith("image/") ?? false);
+	let isExpired = $derived(previewExpiresAt > 0 && Date.now() > previewExpiresAt);
+
+	async function loadPreview() {
+		if (!doc || doc.current_version < 1) return;
+		previewLoading = true;
+		previewError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			const res = await api.get<{ url: string; content_type: string; filename: string }>(
+				`/wealth/documents/${documentId}/preview-url`,
+			);
+			previewUrl = res.url;
+			previewContentType = res.content_type;
+			previewFilename = res.filename;
+			previewExpiresAt = Date.now() + 5 * 60 * 1000; // 5 min TTL
+		} catch (e) {
+			previewError = e instanceof Error ? e.message : "Failed to load preview";
+		} finally {
+			previewLoading = false;
+		}
+	}
+
+	// Auto-load preview when doc is available with a version
+	$effect(() => {
+		if (doc && doc.current_version >= 1 && !previewUrl && !previewLoading && !previewError) {
+			loadPreview();
+		}
+	});
 
 	async function reprocess() {
 		reprocessing = true;
@@ -67,13 +106,52 @@
 				<div class="dd-kv"><span class="dd-k">Created By</span><span class="dd-v">{doc.created_by}</span></div>
 			{/if}
 		</div>
+
+		<!-- Preview section -->
+		{#if doc.current_version >= 1}
+			<div class="dd-preview-section">
+				<div class="dd-preview-header">
+					<h3 class="dd-preview-title">Preview</h3>
+					{#if isExpired || previewError}
+						<Button size="sm" variant="outline" onclick={loadPreview} disabled={previewLoading}>
+							{previewLoading ? "Loading…" : "Refresh"}
+						</Button>
+					{/if}
+				</div>
+
+				{#if previewLoading}
+					<div class="dd-preview-loading">Loading preview…</div>
+				{:else if previewError}
+					<div class="dd-preview-error">{previewError}</div>
+				{:else if previewUrl && isPdf}
+					<div class="dd-pdf-preview">
+						<object data={previewUrl} type="application/pdf" title={previewFilename}>
+							<p class="dd-pdf-fallback">
+								PDF preview not available in this browser.
+								<a href={previewUrl} download={previewFilename}>Download PDF</a>
+							</p>
+						</object>
+					</div>
+				{:else if previewUrl && isImage}
+					<div class="dd-image-preview">
+						<img src={previewUrl} alt={previewFilename} />
+					</div>
+				{:else if previewUrl}
+					<div class="dd-download-only">
+						<a href={previewUrl} download={previewFilename} class="dd-download-link">
+							Download {previewFilename}
+						</a>
+					</div>
+				{/if}
+			</div>
+		{/if}
 	{/if}
 </div>
 
 <style>
 	.dd-page {
 		padding: var(--ii-space-stack-md, 16px) var(--ii-space-inline-lg, 24px);
-		max-width: 600px;
+		max-width: 900px;
 	}
 
 	.dd-error {
@@ -105,4 +183,89 @@
 	.dd-k { color: var(--ii-text-muted); }
 	.dd-v { color: var(--ii-text-primary); font-weight: 500; }
 	.dd-v--mono { font-family: var(--ii-font-mono); font-size: var(--ii-text-label, 0.75rem); }
+
+	/* Preview section */
+	.dd-preview-section {
+		margin-top: var(--ii-space-stack-md, 16px);
+	}
+
+	.dd-preview-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: var(--ii-space-stack-xs, 8px);
+	}
+
+	.dd-preview-title {
+		font-size: var(--ii-text-body, 0.9375rem);
+		font-weight: 600;
+		color: var(--ii-text-primary);
+	}
+
+	.dd-preview-loading {
+		padding: var(--ii-space-stack-lg, 24px);
+		text-align: center;
+		color: var(--ii-text-muted);
+		font-size: var(--ii-text-small, 0.8125rem);
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-md, 12px);
+	}
+
+	.dd-preview-error {
+		padding: var(--ii-space-stack-sm, 12px) var(--ii-space-inline-md, 16px);
+		border-radius: var(--ii-radius-sm, 8px);
+		background: color-mix(in srgb, var(--ii-danger) 8%, transparent);
+		color: var(--ii-danger);
+		font-size: var(--ii-text-small, 0.8125rem);
+	}
+
+	.dd-pdf-preview {
+		width: 100%;
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-md, 12px);
+		overflow: hidden;
+	}
+
+	.dd-pdf-preview object {
+		width: 100%;
+		height: 80vh;
+		min-height: 600px;
+	}
+
+	.dd-pdf-fallback {
+		padding: var(--ii-space-stack-lg, 24px);
+		text-align: center;
+		color: var(--ii-text-muted);
+		font-size: var(--ii-text-small, 0.8125rem);
+	}
+
+	.dd-pdf-fallback a {
+		color: var(--ii-brand-primary);
+		text-decoration: underline;
+	}
+
+	.dd-image-preview {
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-md, 12px);
+		overflow: hidden;
+	}
+
+	.dd-image-preview img {
+		width: 100%;
+		height: auto;
+		display: block;
+	}
+
+	.dd-download-only {
+		padding: var(--ii-space-stack-md, 16px);
+		text-align: center;
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-md, 12px);
+	}
+
+	.dd-download-link {
+		color: var(--ii-brand-primary);
+		text-decoration: underline;
+		font-size: var(--ii-text-small, 0.8125rem);
+	}
 </style>

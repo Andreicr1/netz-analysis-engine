@@ -436,8 +436,18 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/content/{content_id}",
+    "name": "get_content"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/content/{content_id}/download",
     "name": "download_content"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/content/{content_id}/stream/{job_id}",
+    "name": "stream_content_generation"
   },
   {
     "method": "GET",
@@ -778,6 +788,11 @@
     "method": "GET",
     "path": "/api/v1/macro/reviews",
     "name": "list_reviews"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/macro/reviews/{review_id}/download",
+    "name": "download_macro_review_pdf"
   },
   {
     "method": "GET",
@@ -1158,6 +1173,11 @@
     "method": "GET",
     "path": "/api/v1/wealth/documents/{document_id}",
     "name": "get_document"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/wealth/documents/{document_id}/preview-url",
+    "name": "get_preview_url"
   },
   {
     "method": "GET",
@@ -1731,6 +1751,11 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/activate",
+    "name": "activate_portfolio"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/model-portfolios/{portfolio_id}/backtest",
     "name": "trigger_backtest"
   },
@@ -1743,11 +1768,6 @@
     "method": "POST",
     "path": "/api/v1/model-portfolios/{portfolio_id}/construction-advice",
     "name": "get_construction_advice"
-  },
-  {
-    "method": "POST",
-    "path": "/api/v1/model-portfolios/{portfolio_id}/activate",
-    "name": "activate_portfolio"
   },
   {
     "method": "POST",

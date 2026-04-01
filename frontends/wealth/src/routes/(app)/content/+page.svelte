@@ -28,14 +28,27 @@
 	type FundSummary = { fund_id: string; name: string; manager_name?: string | null };
 	let funds = $derived((data.funds ?? []) as FundSummary[]);
 
-	// ── Tab filter ────────────────────────────────────────────────────────
+	// ── Tab filter + search + sort ────────────────────────────────────────
 
 	type TabKey = "all" | "investment_outlook" | "flash_report" | "manager_spotlight";
 	let activeTab = $state<TabKey>("all");
+	let searchQuery = $state("");
+	type SortKey = "newest" | "oldest" | "az";
+	let sortBy = $state<SortKey>("newest");
 
 	let filtered = $derived.by(() => {
-		if (activeTab === "all") return content;
-		return content.filter((c) => c.content_type === activeTab);
+		let items = activeTab === "all" ? content : content.filter((c) => c.content_type === activeTab);
+		if (searchQuery) {
+			const q = searchQuery.toLowerCase();
+			items = items.filter((c) => (c.title ?? "").toLowerCase().includes(q));
+		}
+		if (sortBy === "oldest") {
+			items = [...items].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+		} else if (sortBy === "az") {
+			items = [...items].sort((a, b) => (a.title ?? "").localeCompare(b.title ?? ""));
+		}
+		// "newest" is the default order from API (desc), no re-sort needed
+		return items;
 	});
 
 	let tabCounts = $derived({
@@ -45,14 +58,18 @@
 		manager_spotlight: content.filter((c) => c.content_type === "manager_spotlight").length,
 	});
 
-	// ── Polling — refresh list while any item is generating ──────────────
+	// ── SSE streaming + polling fallback ─────────────────────────────────
 
 	let pollTimer: ReturnType<typeof setInterval> | null = null;
+	let sseAbortController: AbortController | null = null;
+	let activeJobId = $state<string | null>(null);
+	let activeContentId = $state<string | null>(null);
 
 	let hasGenerating = $derived(content.some((c) => c.status === "draft"));
 
+	// Polling fallback: if no SSE active, poll while items are generating
 	$effect(() => {
-		if (hasGenerating && !pollTimer) {
+		if (hasGenerating && !pollTimer && !activeJobId) {
 			pollTimer = setInterval(() => { invalidateAll(); }, 5000);
 		} else if (!hasGenerating && pollTimer) {
 			clearInterval(pollTimer);
@@ -60,8 +77,96 @@
 		}
 	});
 
+	async function startSSEStream(contentId: string, jobId: string) {
+		activeJobId = jobId;
+		activeContentId = contentId;
+		sseAbortController = new AbortController();
+
+		// Start a 10s timer: if no SSE event received, fall back to polling
+		let sseReceived = false;
+		const fallbackTimer = setTimeout(() => {
+			if (!sseReceived && !pollTimer) {
+				pollTimer = setInterval(() => { invalidateAll(); }, 5000);
+			}
+		}, 10000);
+
+		try {
+			const token = await getToken();
+			const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
+			const response = await fetch(
+				`${apiBase}/content/${contentId}/stream/${jobId}`,
+				{
+					headers: {
+						Authorization: `Bearer ${token}`,
+						Accept: "text/event-stream",
+					},
+					signal: sseAbortController.signal,
+				},
+			);
+
+			if (!response.ok || !response.body) {
+				// SSE failed — fall back to polling
+				if (!pollTimer) {
+					pollTimer = setInterval(() => { invalidateAll(); }, 5000);
+				}
+				return;
+			}
+
+			const reader = response.body.getReader();
+			const decoder = new TextDecoder();
+			let buffer = "";
+			let currentEventType = "message";
+			let currentData = "";
+
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+
+				buffer += decoder.decode(value, { stream: true });
+				const lines = buffer.split("\n");
+				buffer = lines.pop() ?? "";
+
+				for (const line of lines) {
+					if (line.startsWith("event:")) {
+						currentEventType = line.slice(6).trim();
+					} else if (line.startsWith("data:")) {
+						const d = line.slice(5).trim();
+						currentData += currentData ? `\n${d}` : d;
+					} else if (line === "" || line.startsWith(":")) {
+						if (currentData) {
+							try {
+								sseReceived = true;
+								const data = JSON.parse(currentData);
+								if (currentEventType === "done" || currentEventType === "error") {
+									await invalidateAll();
+									break;
+								}
+							} catch {
+								// malformed JSON — skip
+							}
+						}
+						currentEventType = "message";
+						currentData = "";
+					}
+				}
+			}
+		} catch (err: unknown) {
+			if (err instanceof DOMException && err.name === "AbortError") return;
+			// SSE error — ensure polling is running
+			if (!pollTimer && hasGenerating) {
+				pollTimer = setInterval(() => { invalidateAll(); }, 5000);
+			}
+		} finally {
+			clearTimeout(fallbackTimer);
+			activeJobId = null;
+			activeContentId = null;
+			sseAbortController = null;
+		}
+	}
+
 	onDestroy(() => {
 		if (pollTimer) clearInterval(pollTimer);
+		if (sseAbortController) sseAbortController.abort();
 	});
 
 	// ── Generate actions ──────────────────────────────────────────────────
@@ -75,8 +180,12 @@
 		try {
 			const api = createClientApiClient(getToken);
 			const qs = params ? "?" + new URLSearchParams(params).toString() : "";
-			await api.post(`/content/${endpoint}${qs}`, {});
+			const res = await api.post<{ id: string; job_id?: string }>(`/content/${endpoint}${qs}`, {});
 			await invalidateAll();
+			// Start SSE stream if job_id returned
+			if (res.job_id && res.id) {
+				startSSEStream(res.id, res.job_id);
+			}
 		} catch (e) {
 			if (e instanceof Error && e.message.includes("409")) {
 				error = "A flash report was already generated recently. Please wait before generating another.";
@@ -213,23 +322,38 @@
 	</div>
 {/if}
 
-<!-- Tabs -->
+<!-- Tabs + search/sort -->
 <div class="ct-tabs">
-	{#each ([["all", "All"], ["investment_outlook", "Outlooks"], ["flash_report", "Flash Reports"], ["manager_spotlight", "Spotlights"]] as [TabKey, string][]) as [key, label] (key)}
-		<button
-			class="ct-tab"
-			class:ct-tab--active={activeTab === key}
-			onclick={() => activeTab = key}
-		>
-			{label}
-			<span class="ct-tab-count">{tabCounts[key]}</span>
-		</button>
-	{/each}
+	<div class="ct-tabs-left">
+		{#each ([["all", "All"], ["investment_outlook", "Outlooks"], ["flash_report", "Flash Reports"], ["manager_spotlight", "Spotlights"]] as [TabKey, string][]) as [key, label] (key)}
+			<button
+				class="ct-tab"
+				class:ct-tab--active={activeTab === key}
+				onclick={() => activeTab = key}
+			>
+				{label}
+				<span class="ct-tab-count">{tabCounts[key]}</span>
+			</button>
+		{/each}
+	</div>
+	<div class="ct-tabs-right">
+		<input
+			type="search"
+			class="ct-search"
+			placeholder="Search by title…"
+			bind:value={searchQuery}
+		/>
+		<select class="ct-sort" bind:value={sortBy}>
+			<option value="newest">Newest first</option>
+			<option value="oldest">Oldest first</option>
+			<option value="az">A–Z</option>
+		</select>
+	</div>
 </div>
 
 <div class="ct-page">
 	{#if filtered.length === 0}
-		<EmptyState title="No content" message="Generate an outlook or flash report to start." />
+		<EmptyState title="No content" message={searchQuery ? "No items match your search." : "Generate an outlook or flash report to start."} />
 	{:else}
 		<div class="ct-grid">
 			{#each filtered as item (item.id)}
@@ -358,9 +482,50 @@
 	/* Tabs */
 	.ct-tabs {
 		display: flex;
-		gap: var(--ii-space-inline-2xs, 4px);
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--ii-space-inline-sm, 8px);
 		padding: var(--ii-space-stack-xs, 8px) var(--ii-space-inline-lg, 24px);
 		border-bottom: 1px solid var(--ii-border-subtle);
+		flex-wrap: wrap;
+	}
+
+	.ct-tabs-left {
+		display: flex;
+		gap: var(--ii-space-inline-2xs, 4px);
+	}
+
+	.ct-tabs-right {
+		display: flex;
+		gap: var(--ii-space-inline-xs, 6px);
+		align-items: center;
+	}
+
+	.ct-search {
+		height: var(--ii-space-control-height-sm, 32px);
+		width: 180px;
+		padding: 0 var(--ii-space-inline-sm, 10px);
+		border: 1px solid var(--ii-border);
+		border-radius: var(--ii-radius-sm, 8px);
+		background: var(--ii-surface-elevated);
+		color: var(--ii-text-primary);
+		font-size: var(--ii-text-label, 0.75rem);
+		font-family: var(--ii-font-sans);
+	}
+
+	.ct-search::placeholder {
+		color: var(--ii-text-muted);
+	}
+
+	.ct-sort {
+		height: var(--ii-space-control-height-sm, 32px);
+		padding: 0 var(--ii-space-inline-sm, 10px);
+		border: 1px solid var(--ii-border);
+		border-radius: var(--ii-radius-sm, 8px);
+		background: var(--ii-surface-elevated);
+		color: var(--ii-text-primary);
+		font-size: var(--ii-text-label, 0.75rem);
+		font-family: var(--ii-font-sans);
 	}
 
 	.ct-tab {
