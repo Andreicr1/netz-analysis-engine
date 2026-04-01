@@ -975,3 +975,66 @@ def search_fund_analysis_sync(
     with engine.connect() as conn:
         result = conn.execute(query, params)
         return [dict(r) for r in result.mappings().all()]
+
+
+def search_wealth_global_sync(
+    *,
+    query_vector: list[float],
+    entity_type_filter: str | None = None,
+    top: int = 20,
+) -> list[dict[str, Any]]:
+    """Broad semantic search across ALL global wealth_vector_chunks.
+
+    Covers all global embedding sources (SEC managers, ADV brochures, 13F,
+    private funds, fund profiles, ETFs, BDCs, MMFs, ESMA, prospectus,
+    N-PORT holdings, fund share classes).  organization_id IS NULL for
+    shared data.
+    """
+    params: dict[str, Any] = {
+        "embedding": str(query_vector),
+        "top": top,
+    }
+    clauses: list[str] = []
+    if entity_type_filter:
+        params["entity_type"] = entity_type_filter
+        clauses.append("AND entity_type = :entity_type")
+
+    query = text(f"""
+        SELECT id, entity_id, entity_type, source_type, section,
+               content, source_row_id, firm_crd, filing_date,
+               1 - (embedding <=> CAST(:embedding AS vector)) AS score
+        FROM wealth_vector_chunks
+        WHERE organization_id IS NULL
+          AND embedding IS NOT NULL
+          {''.join(clauses)}
+        ORDER BY embedding <=> CAST(:embedding AS vector)
+        LIMIT :top
+    """)
+    engine = _get_sync_engine()
+    with engine.connect() as conn:
+        result = conn.execute(query, params)
+        return [dict(r) for r in result.mappings().all()]
+
+
+def get_catalog_stats_sync() -> dict[str, Any]:
+    """Fetch aggregate catalog statistics for AI Assistant context.
+
+    Lightweight subselect query — one round-trip, no sequential scans.
+    """
+    query = text("""
+        SELECT
+            (SELECT COUNT(*) FROM instruments_universe WHERE is_active = true) AS active_instruments,
+            (SELECT COUNT(*) FROM instruments_universe) AS total_instruments,
+            (SELECT COUNT(*) FROM sec_managers WHERE registration_status = 'Registered') AS registered_advisers,
+            (SELECT COUNT(*) FROM sec_registered_funds) AS registered_funds,
+            (SELECT COUNT(*) FROM sec_etfs) AS etfs,
+            (SELECT COUNT(*) FROM sec_bdcs) AS bdcs,
+            (SELECT COUNT(*) FROM sec_money_market_funds) AS money_market_funds,
+            (SELECT COUNT(*) FROM sec_manager_funds) AS private_funds,
+            (SELECT COUNT(*) FROM esma_funds) AS esma_ucits_funds,
+            (SELECT COUNT(*) FROM wealth_vector_chunks WHERE embedding IS NOT NULL) AS vector_chunks
+    """)
+    engine = _get_sync_engine()
+    with engine.connect() as conn:
+        row = conn.execute(query).mappings().one()
+        return dict(row)
