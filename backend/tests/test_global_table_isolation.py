@@ -119,6 +119,7 @@ ALLOWLISTED_GLOBAL_TABLE_CONSUMERS: dict[str, str] = {
     "app/domains/wealth/routes/screener.py": "read — SELECT only on SecManager (and EsmaFund/EsmaManager) for global instrument search; no writes; global tables shared across tenants",
     "app/domains/wealth/routes/sec_analysis.py": "read — SELECT only on SecManager, Sec13fHolding, Sec13fDiff, SecManagerFund; no writes; global SEC data shared across tenants",
     "app/domains/wealth/services/candidate_screener.py": "read — SELECT only on AllocationBlock for construction advisor candidate discovery; no writes",
+    "app/domains/wealth/routes/analytics.py": "read — SELECT only on AllocationBlock for benchmark resolution in analytics endpoints; no writes",
     # ── Background workers — use async_session_factory directly (no RLS) ────
     "app/domains/wealth/workers/macro_ingestion.py": "write — writes MacroData and MacroRegionalSnapshot via async_session_factory",
     "app/domains/wealth/workers/regime_fit.py": "read — reads MacroData via async_session_factory for regime fitting",

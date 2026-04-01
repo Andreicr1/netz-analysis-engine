@@ -376,8 +376,18 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/analytics/factor-analysis/{profile}",
+    "name": "get_factor_analysis"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/analytics/optimize/pareto/{job_id}/stream",
     "name": "stream_pareto_progress"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/analytics/peer-group/{entity_id}",
+    "name": "get_peer_group"
   },
   {
     "method": "GET",
@@ -1476,6 +1486,11 @@
   },
   {
     "method": "POST",
+    "path": "/api/v1/analytics/monte-carlo",
+    "name": "run_monte_carlo_endpoint"
+  },
+  {
+    "method": "POST",
     "path": "/api/v1/analytics/optimize",
     "name": "optimize"
   },
@@ -1483,6 +1498,11 @@
     "method": "POST",
     "path": "/api/v1/analytics/optimize/pareto",
     "name": "optimize_pareto"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/analytics/risk-budget/{profile}",
+    "name": "get_risk_budget"
   },
   {
     "method": "POST",

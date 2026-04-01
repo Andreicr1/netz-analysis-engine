@@ -216,6 +216,11 @@ class TestUniverseSchemas:
         mock.decided_at = None
         mock.is_current = True
         mock.created_at = "2026-03-16T00:00:00"
+        # Enrichment fields default to None — must be explicit so MagicMock
+        # doesn't return a MagicMock object instead of None.
+        mock.fund_name = None
+        mock.ticker = None
+        mock.block_id = None
 
         schema = UniverseApprovalRead.model_validate(mock)
         assert schema.decision == "pending"

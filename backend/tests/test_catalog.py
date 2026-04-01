@@ -39,7 +39,7 @@ class TestCatalogFilters:
         assert f.fund_universe is None
         assert f.fund_type is None
         assert f.aum_min is None
-        assert f.has_nav is None
+        assert f.has_nav is True
         assert f.sort == "name_asc"
         assert f.page == 1
         assert f.page_size == 50
@@ -62,6 +62,13 @@ class TestBranchPruning:
     def test_us_region_prunes_eu_branch(self):
         f = CatalogFilters(region="US")
         assert _registered_us_branch(f) is not None
+        # has_nav defaults to True, which prunes private (no NAV data)
+        assert _private_us_branch(f) is None
+        assert _ucits_eu_branch(f) is None
+
+    def test_us_region_includes_private_when_has_nav_none(self):
+        f = CatalogFilters(region="US", has_nav=None)
+        assert _registered_us_branch(f) is not None
         assert _private_us_branch(f) is not None
         assert _ucits_eu_branch(f) is None
 
@@ -72,7 +79,8 @@ class TestBranchPruning:
         assert _ucits_eu_branch(f) is None
 
     def test_private_universe_prunes_others(self):
-        f = CatalogFilters(fund_universe="private")
+        # has_nav=None required to include private (default has_nav=True prunes private)
+        f = CatalogFilters(fund_universe="private", has_nav=None)
         assert _registered_us_branch(f) is None
         assert _private_us_branch(f) is not None
         assert _ucits_eu_branch(f) is None
@@ -84,7 +92,8 @@ class TestBranchPruning:
         assert _ucits_eu_branch(f) is not None
 
     def test_all_universe_keeps_all(self):
-        f = CatalogFilters(fund_universe="all")
+        # has_nav=None required to include private (default has_nav=True prunes private)
+        f = CatalogFilters(fund_universe="all", has_nav=None)
         assert _registered_us_branch(f) is not None
         assert _private_us_branch(f) is not None
         assert _ucits_eu_branch(f) is not None
@@ -98,14 +107,15 @@ class TestBranchPruning:
 
     def test_aum_min_prunes_ucits(self):
         """ESMA has no AUM data — should be pruned when aum_min is set."""
-        f = CatalogFilters(aum_min=1_000_000)
+        # has_nav=None required to include private (default has_nav=True prunes private)
+        f = CatalogFilters(aum_min=1_000_000, has_nav=None)
         assert _ucits_eu_branch(f) is None
         assert _registered_us_branch(f) is not None
         assert _private_us_branch(f) is not None
 
     def test_non_us_domicile_prunes_private(self):
         """Private US funds are always US domicile."""
-        f = CatalogFilters(domicile="IE")
+        f = CatalogFilters(domicile="IE", has_nav=None)
         assert _private_us_branch(f) is None
 
     def test_impossible_filters_returns_none(self):
