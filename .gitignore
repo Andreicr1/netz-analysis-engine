@@ -51,12 +51,16 @@ pgdata/
 **/.codex-*.txt
 
 # Project-local data
+.data/
+backend/.data/
 Deals/
 scripts/
 !backend/scripts/
 dev.ps1
 backend/.sec_seed_checkpoint.json
 backend/.esma_seed_checkpoint.json
+backend/.nav_backfill_checkpoint.json
+backend/scripts/db_inventory_output.txt
 
 playwright-report/
 test-results/

@@ -838,6 +838,13 @@
 	font-family: var(--ii-font-sans);
 }
 
+.dt-action-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+
 .dt-add-error {
 	font-size: var(--ii-text-label, 0.75rem);
 	color: var(--ii-danger);

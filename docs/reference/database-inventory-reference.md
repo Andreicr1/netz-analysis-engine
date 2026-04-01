@@ -1,6 +1,6 @@
 # Database Inventory Reference
 
-**Last updated:** 2026-03-30
+**Last updated:** 2026-04-01
 **Database:** Timescale Cloud (PostgreSQL 16 + TimescaleDB + pgvector)
 **Migration head:** `0070_global_instruments_sync`
 **Total tables:** ~135 | **Total data rows:** ~26.5M across key tables
@@ -19,7 +19,7 @@ The Netz Analysis Engine database aggregates financial data from 7 authoritative
 - **373 money market fund series** in `sec_money_market_funds` — N-MFP with WAM, WAL, 7-day yield, liquidity; **20,270 daily metric rows** in `sec_mmf_metrics` hypertable
 - **36,516 share classes** in `sec_fund_classes` — **8,278 with expense ratios** from OEF XBRL (N-CSR filings), covering $100.9T in AUM across 615 fund families (Vanguard, Capital Group, Fidelity, BlackRock, etc.)
 - **10,436 European UCITS funds** from 658 ESMA-registered managers across 25 countries, with `strategy_label` (31 categories, 69.7% coverage)
-- **pgvector index** with 12 embedding sources covering all fund universes (SEC managers/funds/13F/private + ETF/BDC/MMF + ESMA enriched)
+- **pgvector index** with 17 embedding sources covering all fund universes (SEC managers/funds/13F/private + ETF/BDC/MMF + ESMA enriched + prospectus stats/returns + N-PORT holdings + fund classes + DD chapters + macro reviews)
 - **1.09M institutional holdings** (13F-HR) from 12 major institutional investors, with 25 years of quarterly history
 - **5,461 active instruments in global catalog** (`instruments_universe`, 8,950 total) with **10Y NAV history** (**12.1M rows** in `nav_timeseries`, 2016-2026) and **risk metrics** (**8,346 rows** in `fund_risk_metrics` for 6,074 instruments: CVaR, Sharpe, volatility, momentum, GARCH). Instruments without Yahoo NAV or AUM auto-deactivated. Org-scoped selection via `instruments_org` (RLS)
 - **2.03M fund portfolio holdings** (N-PORT) from 1,215 CIKs across 24 quarters (2020 Q1 — 2025 Q4), top 50 holdings per fund/quarter, with 7,759 series and ISIN enrichment
@@ -217,36 +217,16 @@ Top strategy_labels: Private Equity (19,935), Hedge Fund (8,281), Real Estate (5
 
 | Attribute | Value |
 |---|---|
-| **Source** | SEC EDGAR N-PORT XML filings |
+| **Source** | SEC EDGAR N-PORT XML filings (worker) + bulk quarterly TSV (seed scripts) |
 | **Worker** | `nport_ingestion` (lock ID 900_018) |
-| **Frequency** | Weekly |
+| **Frequency** | Weekly (worker), quarterly (bulk seed) |
 | **Table** | `sec_nport_holdings` (hypertable, 3-month chunks) |
-| **Rows** | 132,823 |
-| **Date range** | 2019-11-21 to 2026-03-23 |
-| **CIKs** | 69 US registered investment companies |
+| **Rows** | ~2,030,000 |
+| **Date range** | 2020 Q1 to 2025 Q4 (24 quarters) |
+| **CIKs** | 1,215 US registered investment companies |
+| **Series** | 7,759 with ISIN enrichment |
 
-#### Top Fund Complexes Filing N-PORT
-
-| CIK | Fund Complex | Holdings | Reports |
-|---|---|---|---|
-| 0000758003 | T. Rowe Price Tax-Free High Yield | 12,144 | 12 |
-| 0000806564 | Morgan Stanley Mortgage Securities | 6,452 | 12 |
-| 0000773478 | Franklin California Tax Free Trust | 6,226 | 12 |
-| 0000357057 | Fidelity Massachusetts Municipal Trust | 5,563 | 12 |
-| 0000703112 | Franklin New York Tax Free Income | 5,323 | 12 |
-
-#### Sector Distribution
-
-| Sector Code | Holdings | Description |
-|---|---|---|
-| MUN | 91,019 | Municipal bonds |
-| CORP | 26,446 | Corporate bonds |
-| USGSE | 7,671 | US Government-Sponsored Enterprises |
-| USGA | 4,880 | US Government Agency |
-| UST | 1,251 | US Treasury |
-| RF | 749 | Revenue/Funding |
-| NUSS | 310 | Non-US Sovereign |
-| PF | 81 | Preferred |
+**Data sources:** Weekly N-PORT XML ingestion via `nport_ingestion` worker provides ongoing updates. Quarterly DERA bulk TSV files (`FUND_REPORTED_INFO.tsv`, `INTEREST_RATE_RISK.tsv`, etc.) provide historical backfill. Top 50 holdings per fund per quarter are stored.
 
 #### Available Fields per Holding
 
@@ -873,21 +853,29 @@ CVaR current, CVaR limit, CVaR utilized %, trigger status (ok/warning/breach), c
 
 | Worker | Frequency | Table | Description |
 |---|---|---|---|
-| `wealth_embedding_worker` | On-demand | `wealth_vector_chunks` | 12-source incremental embedding pipeline |
+| `wealth_embedding_worker` | Daily (03:00 UTC) | `wealth_vector_chunks` | 17-source incremental embedding pipeline |
 
-**12 embedding sources (2026-03-28):**
+**17 embedding sources (2026-04-01):**
 
-| Source | Table | Description |
-|---|---|---|
-| F | `sec_managers` + `sec_manager_team` | SEC manager profiles — AUM, team, fees, compliance |
-| G | `sec_registered_funds` + `sec_fund_classes` | SEC fund profiles — strategy, fees (XBRL), share classes, N-PORT holdings |
-| H | `sec_13f_holdings` | 13F summaries — top 20 positions, sector concentration |
-| I | `sec_manager_funds` | Private fund portfolios — grouped by CRD, AUM ≥ $1B floor |
-| J | `esma_funds` | ESMA fund profiles — enriched with manager, domicile, strategy_label |
-| K | `esma_managers` | ESMA manager profiles — fund count, LEI, domicile cross-ref |
-| L | `sec_etfs` | ETF profiles — tracking difference, expense ratio, index info |
-| M | `sec_bdcs` | BDC profiles — NAV discount, Private Credit strategy |
-| N | `sec_money_market_funds` | MMF profiles — WAM, WAL, 7-day yield, liquidity buckets |
+| ID | source_type | entity_type | Scope | Table(s) | Description |
+|---|---|---|---|---|---|
+| A | `brochure` | firm | global | `sec_manager_brochure_text` | ADV Part 2A brochure — 10 classified sections per manager |
+| F | `sec_manager_profile` | firm | global | `sec_managers` + `sec_manager_team` | SEC manager profiles — AUM, team, fees, compliance |
+| G | `sec_fund_profile` | fund | global | `sec_registered_funds` + `sec_fund_classes` | SEC fund profiles — strategy, fees (XBRL), share classes |
+| O | `sec_fund_series_profile` | fund | global | `sec_fund_classes` | Per-series XBRL aggregation — expense ratio, returns, NAV |
+| H | `sec_13f_summary` | firm | global | `sec_13f_holdings` | 13F summaries — top 20 positions, sector concentration |
+| I | `sec_private_funds` | firm | global | `sec_manager_funds` | Private fund portfolios — grouped by CRD, AUM ≥ $1B floor |
+| J | `esma_fund_profile` | fund | global | `esma_funds` | ESMA fund profiles — enriched with manager, domicile, strategy_label |
+| K | `esma_manager_profile` | firm | global | `esma_managers` | ESMA manager profiles — fund count, LEI, domicile cross-ref |
+| L | `sec_etf_profile` | fund | global | `sec_etfs` | ETF profiles — tracking difference, expense ratio, index info |
+| M | `sec_bdc_profile` | fund | global | `sec_bdcs` | BDC profiles — NAV discount, Private Credit strategy |
+| N | `sec_mmf_profile` | fund | global | `sec_money_market_funds` | MMF profiles — WAM, WAL, 7-day yield, liquidity buckets |
+| P | `prospectus_stats` | fund | global | `sec_fund_prospectus_stats` | RR1 fees/risk — expense ratios, turnover, best/worst quarter |
+| Q | `prospectus_returns` | fund | global | `sec_fund_prospectus_returns` | RR1 bar chart — calendar year annual returns per series |
+| R | `nport_holdings` | fund | global | `sec_nport_holdings` | N-PORT top holdings — latest quarter, top 20 per fund |
+| S | `fund_classes` | fund | global | `sec_fund_classes` | Share class profiles — grouped by series, expense/return data |
+| D | `dd_chapter` | fund | org-scoped | `dd_chapters` | DD report chapters — analyst-authored fund analysis |
+| E | `macro_review` | macro | org-scoped | `macro_reviews` | Macro committee reviews — regional macro analysis |
 
 Sources B (esma_fund name-only) and C (esma_manager name-only) were retired and replaced by enriched J and K.
 `_cleanup_legacy_source_types()` removes old `esma_fund`/`esma_manager` rows on next run.
@@ -942,7 +930,9 @@ All sources use incremental embedding via LEFT JOIN anti-pattern (only rows with
 | `imf_ingestion` | 900_015 | global | Quarterly | IMF DataMapper | `imf_weo_forecasts` |
 | `sec_bulk_ingestion` | 900_050 | global | Quarterly | SEC DERA bulk ZIPs | sec_etfs, sec_bdcs, sec_money_market_funds, sec_mmf_metrics, sec_registered_funds + strategy_label backfill |
 | `form345_ingestion` | 900_051 | global | Quarterly | SEC EDGAR Form 345 bulk TSV | `sec_insider_transactions`, `sec_insider_sentiment` (MV) |
-| `wealth_embedding` | 900_041 | global | Daily | Computed | `wealth_vector_chunks` (12 sources) |
+| `wealth_embedding` | 900_041 | global | Daily | Computed | `wealth_vector_chunks` (17 sources) |
+| `nport_fund_discovery` | 900_024 | global | Weekly | SEC EDGAR N-PORT headers | `sec_registered_funds`, `sec_fund_classes` |
+| `portfolio_nav_synthesizer` | 900_030 | org | Daily | Computed (weighted NAV) | `model_portfolio_nav` |
 | `universe_sync` | 900_070 | global | Weekly | SEC/ESMA catalog | `instruments_universe` (8,950 instruments) |
 
 ---
@@ -1036,7 +1026,7 @@ SELECT * FROM nav_timeseries WHERE instrument_id = :id;
 | **Coverage — Global** | Countries in BIS/IMF data | 43-44 countries |
 | **Coverage — CUSIP Mapping** | sec_cusip_ticker_map | 12,609 CUSIPs, 95.0% resolved, 5,160 with issuer_cik |
 | **Coverage — Insider Transactions** | sec_insider_transactions (Q4 2025) | 59,677 transactions (5,447 P + 22,489 S); 2,956 issuer-quarters in sentiment MV |
-| **Coverage — Embeddings** | pgvector sources | **16 active sources**, **153,664 chunks** across all fund universes (prospectus stats 72k, brochures 13k, series profiles 13k, fund classes 13k, ESMA 10k, holdings 7.7k, private funds 6.3k, manager profiles 5.7k, fund profiles 4.7k, ESMA managers 2.9k, prospectus returns 2k, ETF/BDC/MMF/13F/DD 1.6k) |
+| **Coverage — Embeddings** | pgvector sources | **17 active source types**, **153,664 chunks** across all fund universes (prospectus stats 72k, brochures 13k, series profiles 13k, fund classes 13k, ESMA 10k, holdings 7.7k, private funds 6.3k, manager profiles 5.7k, fund profiles 4.7k, ESMA managers 2.9k, prospectus returns 2k, ETF/BDC/MMF/13F/DD 1.6k) |
 | **Freshness — Markets** | NAV data | **12.1M rows**, 6,164 instruments, 10Y history through 2026-03-27 |
 | **Freshness — Markets** | Benchmark NAV | Updated to 2026-03-25 |
 | **Freshness — Risk** | fund_risk_metrics | **8,346+ rows**, 6,074 instruments, **5,459 with manager_score**, calc 2026-03-30 |
@@ -1057,4 +1047,5 @@ SELECT * FROM nav_timeseries WHERE instrument_id = :id;
 | **Automation** | Weekly universe sync | `universe_sync` worker (lock 900_070) — auto-fetches SEC company_tickers_mf.json, syncs SEC/ESMA → instruments_universe, deactivates funds without NAV |
 | **Automation** | Daily NAV ingestion | `instrument_ingestion` worker (lock 900_010, **global**) — Yahoo Finance for all active instruments |
 | **Automation** | Daily global risk + scoring | `global_risk_metrics` worker (lock 900_071) — CVaR, Sharpe, GARCH, momentum, **manager_score** for all 6k+ active instruments. Score = 6-component composite (return_consistency 0.20, risk_adjusted_return 0.25, drawdown_control 0.20, information_ratio 0.15, flows_momentum 0.10, fee_efficiency 0.10). Org-scoped `risk_calc` (lock 900_007) adds DTW drift and can override with tenant-specific scoring config |
-| **Automation** | Daily wealth embedding | `wealth_embedding` worker (lock 900_041) — 12 sources + 4 new brochure sections, incremental |
+| **Automation** | Daily wealth embedding | `wealth_embedding` worker (lock 900_041) — 17 source types (A/F-N/O-S/D-E), incremental via LEFT JOIN anti-pattern |
+| **Automation** | Daily portfolio NAV synthesis | `portfolio_nav_synthesizer` worker (lock 900_030, org-scoped) — weighted NAV from nav_timeseries for model portfolios |

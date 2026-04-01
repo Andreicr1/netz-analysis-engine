@@ -132,7 +132,7 @@ warn_return_any = true
 warn_unused_configs = true
 
 [[tool.mypy.overrides]]
-module = ["redis.*", "sse_starlette.*", "edgar.*", "rapidfuzz.*", "pyarrow.*", "duckdb.*", "pgvector.*", "yfinance.*"]
+module = ["redis.*", "sse_starlette.*", "edgar.*", "rapidfuzz.*", "pyarrow.*", "duckdb.*", "pgvector.*", "yfinance.*", "scipy.*"]
 ignore_missing_imports = true
 
 # ── Import architecture enforcement (import-linter) ──────────────────
