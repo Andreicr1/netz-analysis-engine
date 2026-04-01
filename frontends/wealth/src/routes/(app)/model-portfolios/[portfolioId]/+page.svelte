@@ -16,6 +16,7 @@
 	import type { ModelPortfolio, TrackRecord, InstrumentWeight, BacktestFold, StressScenario, PortfolioView, ParametricStressResult, OverlapResult, CusipExposure, SectorExposure } from "$lib/types/model-portfolio";
 	import type { UniverseAsset } from "$lib/types/universe";
 	import ICViewsPanel from "$lib/components/model-portfolio/ICViewsPanel.svelte";
+	import ConstructionAdvisor from "$lib/components/model-portfolio/ConstructionAdvisor.svelte";
 	import { instrumentTypeLabel, instrumentTypeColor } from "$lib/types/universe";
 	import { scenarioLabel, profileColor, blockLabel } from "$lib/types/model-portfolio";
 
@@ -38,6 +39,50 @@
 	let stress = $derived(trackRecord?.stress ?? null);
 	let funds = $derived(portfolio.fund_selection_schema?.funds ?? [] as InstrumentWeight[]);
 	let overlap = $derived((data.overlap ?? null) as OverlapResult | null);
+
+	// ── Optimization metadata (embedded in fund_selection_schema) ─────────
+	interface OptimizationMeta {
+		expected_return: number;
+		portfolio_volatility: number;
+		sharpe_ratio: number;
+		cvar_95: number;
+		cvar_limit: number;
+		cvar_within_limit: boolean;
+		solver: string;
+		status: string;
+		factor_exposures: Record<string, number> | null;
+	}
+
+	let optimizationMeta = $derived(
+		(portfolio.fund_selection_schema as Record<string, unknown> | null)?.optimization as OptimizationMeta | undefined ?? undefined,
+	);
+	let cvarWithinLimit = $derived(optimizationMeta?.cvar_within_limit ?? true);
+
+	// ── Block allocation aggregation (for construct result display) ───────
+	interface BlockAlloc { block_id: string; label: string; weight: number; fund_count: number }
+	let blockAllocation = $derived.by((): BlockAlloc[] => {
+		const map = new Map<string, { weight: number; count: number }>();
+		for (const f of funds) {
+			const bid = f.block_id ?? "unassigned";
+			const entry = map.get(bid) ?? { weight: 0, count: 0 };
+			entry.weight += f.weight;
+			entry.count += 1;
+			map.set(bid, entry);
+		}
+		return [...map.entries()]
+			.map(([bid, v]) => ({ block_id: bid, label: blockLabel(bid), weight: v.weight, fund_count: v.count }))
+			.sort((a, b) => b.weight - a.weight);
+	});
+
+	// ── Construction Advisor ──────────────────────────────────────────────
+	let advisorRef: ConstructionAdvisor | undefined = $state(undefined);
+
+	// Auto-fetch advice after construct when CVaR fails
+	$effect(() => {
+		if (portfolio.fund_selection_schema && !cvarWithinLimit && advisorRef) {
+			advisorRef.fetchAdvice();
+		}
+	});
 
 	// ── Fact Sheets ──────────────────────────────────────────────────────
 
@@ -63,7 +108,12 @@
 	let constructing = $state(false);
 	let backtesting = $state(false);
 	let stressing = $state(false);
+	let activating = $state(false);
 	let error = $state<string | null>(null);
+
+	let canActivate = $derived(
+		portfolio.status === "draft" && !!portfolio.fund_selection_schema && cvarWithinLimit,
+	);
 
 	async function runConstruct() {
 		constructing = true;
@@ -72,10 +122,25 @@
 			const api = createClientApiClient(getToken);
 			await api.post(`/model-portfolios/${portfolioId}/construct`, {});
 			await invalidateAll();
+			// Advisor auto-fetch is handled by $effect watching cvarWithinLimit
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Construction failed";
 		} finally {
 			constructing = false;
+		}
+	}
+
+	async function runActivate() {
+		activating = true;
+		error = null;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post(`/model-portfolios/${portfolioId}/activate`, {});
+			await invalidateAll();
+		} catch (e) {
+			error = e instanceof Error ? e.message : "Activation failed";
+		} finally {
+			activating = false;
 		}
 	}
 
@@ -236,12 +301,22 @@
 					{constructing ? "Constructing…" : "Construct Portfolio"}
 				</Button>
 			{:else}
+				<Button size="sm" variant="outline" onclick={runConstruct} disabled={constructing}>
+					{constructing ? "Constructing…" : "Re-construct"}
+				</Button>
 				<Button size="sm" variant="outline" onclick={runBacktest} disabled={backtesting}>
 					{backtesting ? "Running…" : "Run Backtest"}
 				</Button>
 				<Button size="sm" variant="outline" onclick={runStress} disabled={stressing}>
 					{stressing ? "Running…" : "Stress Test"}
 				</Button>
+				{#if portfolio.status === "draft"}
+					<span class="activate-wrap" title={!canActivate ? "CVaR exceeds profile limit" : ""}>
+						<Button size="sm" onclick={runActivate} disabled={!canActivate || activating}>
+							{activating ? "Activating…" : "Activate"}
+						</Button>
+					</span>
+				{/if}
 			{/if}
 		</div>
 	{/snippet}
@@ -439,6 +514,91 @@
 				{/if}
 			</div>
 		</section>
+	{/if}
+
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<!-- OPTIMIZATION METRICS                                               -->
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	{#if optimizationMeta}
+		<section class="mp-section mp-section--full">
+			<h3 class="mp-section-title">
+				Construction Result
+				<span class="mp-section-count">
+					{optimizationMeta.solver} · {optimizationMeta.status}
+				</span>
+			</h3>
+			<div class="opt-metrics">
+				<div class="metric-card">
+					<span class="metric-label">Expected Return</span>
+					<span class="metric-value">{formatPercent(optimizationMeta.expected_return)}</span>
+				</div>
+				<div class="metric-card">
+					<span class="metric-label">Volatility</span>
+					<span class="metric-value">{formatPercent(optimizationMeta.portfolio_volatility)}</span>
+				</div>
+				<div class="metric-card">
+					<span class="metric-label">Sharpe Ratio</span>
+					<span class="metric-value">{optimizationMeta.sharpe_ratio.toFixed(3)}</span>
+				</div>
+				<div class="metric-card">
+					<span class="metric-label">CVaR 95%</span>
+					<span class="metric-value" class:opt-danger={!cvarWithinLimit}>
+						{formatPercent(optimizationMeta.cvar_95)}
+					</span>
+				</div>
+				<div class="metric-card">
+					<span class="metric-label">CVaR Limit</span>
+					<span class="metric-value">{formatPercent(optimizationMeta.cvar_limit)}</span>
+				</div>
+				<div class="metric-card">
+					<span class="metric-label">Status</span>
+					<span class="metric-value" class:opt-pass={cvarWithinLimit} class:opt-danger={!cvarWithinLimit}>
+						{cvarWithinLimit ? "Within limit" : "Exceeds limit"}
+					</span>
+				</div>
+			</div>
+			{#if optimizationMeta.factor_exposures}
+				<div class="opt-factors">
+					<span class="opt-factors-label">Factor Exposures:</span>
+					{#each Object.entries(optimizationMeta.factor_exposures) as [factor, exposure] (factor)}
+						<span class="opt-factor-chip">
+							{factor}: {(exposure * 100).toFixed(1)}%
+						</span>
+					{/each}
+				</div>
+			{/if}
+			{#if blockAllocation.length > 0}
+				<div class="block-alloc">
+					<span class="block-alloc-label">Block Allocation</span>
+					<div class="block-alloc-bars">
+						{#each blockAllocation as ba (ba.block_id)}
+							<div class="block-alloc-row">
+								<span class="block-alloc-name" title={ba.block_id}>{ba.label}</span>
+								<div class="block-alloc-track">
+									<div
+										class="block-alloc-fill"
+										style:width="{Math.min(ba.weight * 100, 100)}%"
+									></div>
+								</div>
+								<span class="block-alloc-pct">{formatPercent(ba.weight)}</span>
+								<span class="block-alloc-count">{ba.fund_count}f</span>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+		</section>
+	{/if}
+
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<!-- CONSTRUCTION ADVISOR (shown when CVaR exceeds limit)               -->
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	{#if portfolio.fund_selection_schema && !cvarWithinLimit}
+		<ConstructionAdvisor
+			bind:this={advisorRef}
+			{portfolioId}
+			onReconstruct={runConstruct}
+		/>
 	{/if}
 
 	<!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -675,6 +835,11 @@
 		display: flex;
 		align-items: center;
 		gap: var(--ii-space-inline-sm, 10px);
+	}
+
+	.activate-wrap {
+		display: inline-flex;
+		cursor: default;
 	}
 
 	.mp-profile-badge {
@@ -1055,6 +1220,119 @@
 
 	.cs-extreme-worst { color: var(--ii-danger); }
 	.cs-extreme-best { color: var(--ii-success); }
+
+	/* ── Optimization metrics ────────────────────────────────────────────── */
+	.opt-metrics {
+		display: grid;
+		grid-template-columns: repeat(6, 1fr);
+		gap: 1px;
+		background: var(--ii-border-subtle);
+		border-bottom: 1px solid var(--ii-border-subtle);
+	}
+
+	@media (max-width: 900px) {
+		.opt-metrics {
+			grid-template-columns: repeat(3, 1fr);
+		}
+	}
+
+	.opt-danger {
+		color: var(--ii-danger) !important;
+	}
+
+	.opt-pass {
+		color: var(--ii-success) !important;
+	}
+
+	.opt-factors {
+		padding: var(--ii-space-stack-xs, 8px) var(--ii-space-inline-md, 16px);
+		display: flex;
+		align-items: center;
+		gap: var(--ii-space-inline-sm, 8px);
+		flex-wrap: wrap;
+		font-size: var(--ii-text-small, 0.8125rem);
+	}
+
+	.opt-factors-label {
+		color: var(--ii-text-muted);
+		font-weight: 600;
+		font-size: var(--ii-text-label, 0.75rem);
+	}
+
+	.opt-factor-chip {
+		display: inline-block;
+		padding: 1px 8px;
+		border-radius: var(--ii-radius-pill, 999px);
+		background: var(--ii-surface-alt);
+		color: var(--ii-text-secondary);
+		font-size: var(--ii-text-label, 0.75rem);
+		font-variant-numeric: tabular-nums;
+	}
+
+	/* ── Block allocation bars ───────────────────────────────────────────── */
+	.block-alloc {
+		padding: var(--ii-space-stack-sm, 12px) var(--ii-space-inline-md, 16px);
+		border-top: 1px solid var(--ii-border-subtle);
+	}
+
+	.block-alloc-label {
+		display: block;
+		font-size: var(--ii-text-label, 0.75rem);
+		font-weight: 600;
+		color: var(--ii-text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
+		margin-bottom: var(--ii-space-stack-xs, 8px);
+	}
+
+	.block-alloc-bars {
+		display: flex;
+		flex-direction: column;
+		gap: 5px;
+	}
+
+	.block-alloc-row {
+		display: grid;
+		grid-template-columns: 140px 1fr 56px 28px;
+		align-items: center;
+		gap: 10px;
+	}
+
+	.block-alloc-name {
+		font-size: var(--ii-text-small, 0.8125rem);
+		color: var(--ii-text-primary);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.block-alloc-track {
+		height: 10px;
+		background: var(--ii-surface-alt);
+		border-radius: 5px;
+		overflow: hidden;
+	}
+
+	.block-alloc-fill {
+		height: 100%;
+		background: var(--ii-brand-primary);
+		border-radius: 5px;
+		transition: width 200ms ease;
+	}
+
+	.block-alloc-pct {
+		font-size: var(--ii-text-label, 0.75rem);
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		text-align: right;
+		color: var(--ii-text-primary);
+	}
+
+	.block-alloc-count {
+		font-size: var(--ii-text-label, 0.75rem);
+		color: var(--ii-text-muted);
+		text-align: right;
+	}
 
 	/* ── Fund selection table ────────────────────────────────────────────── */
 	.fund-table-wrap {

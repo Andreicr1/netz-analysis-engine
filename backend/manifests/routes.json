@@ -1261,6 +1261,11 @@
   },
   {
     "method": "PATCH",
+    "path": "/api/v1/instruments/{instrument_id}/org",
+    "name": "update_instrument_org"
+  },
+  {
+    "method": "PATCH",
     "path": "/api/v1/macro/reviews/{review_id}/approve",
     "name": "approve_review"
   },
@@ -1733,6 +1738,16 @@
     "method": "POST",
     "path": "/api/v1/model-portfolios/{portfolio_id}/construct",
     "name": "construct_portfolio"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/construction-advice",
+    "name": "get_construction_advice"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/model-portfolios/{portfolio_id}/activate",
+    "name": "activate_portfolio"
   },
   {
     "method": "POST",

@@ -27,6 +27,7 @@ from app.domains.wealth.models.allocation import StrategicAllocation
 from app.domains.wealth.models.model_portfolio import ModelPortfolio
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.schemas.model_portfolio import (
+    ConstructionAdviceRead,
     CusipExposureRead,
     ModelPortfolioCreate,
     ModelPortfolioRead,
@@ -510,6 +511,314 @@ async def get_portfolio_overlap(
         has_sufficient_data=has_sufficient_data,
         data_warning=data_warning,
     )
+
+
+@router.post(
+    "/{portfolio_id}/construction-advice",
+    response_model=ConstructionAdviceRead,
+    summary="Diagnose CVaR gaps and recommend candidate funds",
+)
+async def get_construction_advice(
+    portfolio_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+    org_id: str = Depends(get_org_id),
+) -> ConstructionAdviceRead:
+    """Analyze block coverage gaps and recommend candidate funds.
+
+    Uses existing optimizer result + strategic allocation to identify
+    uncovered blocks, screen candidates from the global catalog, project
+    per-candidate CVaR via historical simulation, and find a minimum viable
+    set of additions.  Advisory only — does not modify the portfolio.
+    """
+    from dataclasses import asdict
+
+    from app.domains.wealth.services.candidate_screener import (
+        discover_candidates,
+        fetch_candidate_holdings,
+        fetch_candidate_returns,
+        fetch_portfolio_holdings_cusips,
+        fetch_portfolio_returns,
+        load_block_metadata,
+        load_strategic_targets,
+    )
+    from vertical_engines.wealth.model_portfolio.construction_advisor import build_advice
+
+    _require_ic_role(actor)
+
+    # 1. Load portfolio
+    result = await db.execute(
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
+    )
+    portfolio = result.scalar_one_or_none()
+    if portfolio is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model portfolio {portfolio_id} not found",
+        )
+
+    fund_selection = portfolio.fund_selection_schema
+    if not fund_selection or not fund_selection.get("funds"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Portfolio has no fund selection. Run construct first.",
+        )
+
+    opt_meta = fund_selection.get("optimization", {})
+    current_cvar = opt_meta.get("cvar_95")
+    if current_cvar is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No CVaR data in optimization result. Run construct first.",
+        )
+
+    profile = portfolio.profile
+
+    # 2. Redis cache check
+    cache_key = _hash_advice_input(str(portfolio_id), str(portfolio.updated_at))
+    cached = await _get_cached_advice(cache_key)
+    if cached is not None:
+        logger.info("construction_advice_cache_hit", cache_key=cache_key)
+        return ConstructionAdviceRead(**cached)
+
+    # 3. Load block metadata + strategic targets
+    block_metadata, strategic_targets = await asyncio.gather(
+        load_block_metadata(db),
+        load_strategic_targets(db, profile),
+    )
+
+    if not strategic_targets:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No strategic allocation defined for this profile.",
+        )
+
+    # 4. Determine block weights from optimizer result
+    block_weights: dict[str, float] = {}
+    for f in fund_selection.get("funds", []):
+        bid = f.get("block_id")
+        w = f.get("weight", 0.0)
+        if bid:
+            block_weights[bid] = block_weights.get(bid, 0.0) + w
+
+    # 5. Identify gap blocks (target > 0 but missing or underweight)
+    gap_block_ids = [
+        bid for bid, target in strategic_targets.items()
+        if target > 0 and block_weights.get(bid, 0.0) < target * 0.5
+    ]
+
+    # 6. Discover candidates from global catalog
+    candidates = await discover_candidates(db, gap_block_ids, max_per_block=20)
+
+    # 7. Fetch NAV data in parallel
+    candidate_instrument_ids = [uuid.UUID(c.instrument_id) for c in candidates]
+
+    portfolio_returns_task = fetch_portfolio_returns(db, fund_selection)
+    candidate_returns_task = fetch_candidate_returns(db, candidate_instrument_ids)
+    portfolio_holdings_task = fetch_portfolio_holdings_cusips(db, fund_selection)
+    candidate_holdings_task = fetch_candidate_holdings(db, candidate_instrument_ids)
+
+    (
+        (portfolio_daily_returns, portfolio_ret_series, current_weights),
+        candidate_returns_map,
+        portfolio_holdings,
+        candidate_holdings_map,
+    ) = await asyncio.gather(
+        portfolio_returns_task,
+        candidate_returns_task,
+        portfolio_holdings_task,
+        candidate_holdings_task,
+    )
+
+    # 8. Resolve CVaR limits for all profiles (for alternative suggestions)
+    cvar_limit = opt_meta.get("cvar_limit") or await _resolve_cvar_limit(db, profile)
+    alternative_cvar_limits: dict[str, float] = {}
+    for alt_profile in ("conservative", "moderate", "growth"):
+        alt_limit = await _resolve_cvar_limit(db, alt_profile)
+        alternative_cvar_limits[alt_profile] = alt_limit
+
+    # 9. Run pure advisor engine in thread (CPU-bound numpy)
+    if portfolio_daily_returns.size > 0 and len(candidate_returns_map) > 0:
+        advice = await asyncio.to_thread(
+            build_advice,
+            portfolio_id=str(portfolio_id),
+            profile=profile,
+            current_cvar_95=float(current_cvar),
+            cvar_limit=float(cvar_limit),
+            block_weights=block_weights,
+            strategic_targets=strategic_targets,
+            block_metadata=block_metadata,
+            candidates=candidates,
+            portfolio_returns=portfolio_ret_series,
+            portfolio_daily_returns=portfolio_daily_returns,
+            candidate_returns=candidate_returns_map,
+            current_weights=current_weights,
+            candidate_holdings=candidate_holdings_map,
+            portfolio_holdings=portfolio_holdings,
+            alternative_cvar_limits=alternative_cvar_limits,
+        )
+    else:
+        # Not enough data for full analysis — return gap analysis only
+        from vertical_engines.wealth.model_portfolio.construction_advisor import analyze_block_gaps
+        from vertical_engines.wealth.model_portfolio.models import AlternativeProfile
+
+        coverage = analyze_block_gaps(block_weights, strategic_targets, block_metadata)
+        alt_profiles = [
+            AlternativeProfile(
+                profile=ap,
+                cvar_limit=al,
+                current_cvar_would_pass=float(current_cvar) >= al,
+            )
+            for ap, al in alternative_cvar_limits.items()
+            if ap != profile and float(current_cvar) >= al
+        ]
+        from vertical_engines.wealth.model_portfolio.models import ConstructionAdvice
+
+        advice = ConstructionAdvice(
+            portfolio_id=str(portfolio_id),
+            profile=profile,
+            current_cvar_95=float(current_cvar),
+            cvar_limit=float(cvar_limit),
+            cvar_gap=round(float(current_cvar) - float(cvar_limit), 6),
+            coverage=coverage,
+            candidates=[],
+            minimum_viable_set=None,
+            alternative_profiles=alt_profiles,
+        )
+
+    # 10. Serialize and cache
+    result_dict = asdict(advice)
+    await _set_cached_advice(cache_key, result_dict)
+
+    logger.info(
+        "construction_advice_computed",
+        portfolio_id=str(portfolio_id),
+        profile=profile,
+        current_cvar=current_cvar,
+        cvar_limit=cvar_limit,
+        n_candidates=len(advice.candidates),
+        mvs_found=advice.minimum_viable_set is not None,
+    )
+
+    return ConstructionAdviceRead(**result_dict)
+
+
+# ── Activate ─────────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/{portfolio_id}/activate",
+    response_model=ModelPortfolioRead,
+    summary="Activate a portfolio after successful construction",
+)
+async def activate_portfolio(
+    portfolio_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> ModelPortfolioRead:
+    """Transition portfolio status from draft to active.
+
+    Requires that the most recent construction produced a CVaR within
+    the profile limit.  Rejects activation if CVaR exceeds the limit.
+    """
+    _require_ic_role(actor)
+
+    result = await db.execute(
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
+    )
+    portfolio = result.scalar_one_or_none()
+    if portfolio is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model portfolio {portfolio_id} not found",
+        )
+
+    fund_selection = portfolio.fund_selection_schema
+    if not fund_selection or not fund_selection.get("funds"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Portfolio has no fund selection. Run construct first.",
+        )
+
+    opt_meta = fund_selection.get("optimization", {})
+    if not opt_meta.get("cvar_within_limit", False):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot activate: CVaR exceeds profile limit. Add funds or adjust profile.",
+        )
+
+    portfolio.status = "active"
+    await db.flush()
+    await db.refresh(portfolio)
+
+    logger.info(
+        "portfolio_activated",
+        portfolio_id=str(portfolio_id),
+        profile=portfolio.profile,
+    )
+
+    return ModelPortfolioRead.model_validate(portfolio)
+
+
+# ── Advice cache helpers ──────────────────────────────────────────────────
+
+
+def _hash_advice_input(portfolio_id: str, updated_at: str) -> str:
+    """Deterministic hash for advice cache key."""
+    import hashlib
+    import json
+
+    payload = json.dumps({
+        "portfolio_id": portfolio_id,
+        "updated_at": updated_at,
+        "date": date.today().isoformat(),
+    }, sort_keys=True).encode()
+    return hashlib.sha256(payload).hexdigest()[:24]
+
+
+async def _get_cached_advice(cache_key: str) -> dict | None:
+    """Check Redis for cached advice result (fail-open)."""
+    try:
+        import redis.asyncio as aioredis
+
+        from app.core.jobs.tracker import get_redis_pool
+
+        r = aioredis.Redis(connection_pool=get_redis_pool())
+        try:
+            cached = await r.get(f"advice:cache:{cache_key}")
+            if cached:
+                import json
+
+                return json.loads(cached)
+        finally:
+            await r.aclose()
+    except Exception:
+        logger.debug("advice_cache_miss", cache_key=cache_key)
+    return None
+
+
+async def _set_cached_advice(cache_key: str, result: dict, ttl: int = 600) -> None:
+    """Cache advice result in Redis (10min TTL, fail-open)."""
+    try:
+        import json
+
+        import redis.asyncio as aioredis
+
+        from app.core.jobs.tracker import get_redis_pool
+
+        r = aioredis.Redis(connection_pool=get_redis_pool())
+        try:
+            await r.set(
+                f"advice:cache:{cache_key}",
+                json.dumps(result, default=str),
+                ex=ttl,
+            )
+        finally:
+            await r.aclose()
+    except Exception:
+        logger.debug("advice_cache_set_failed", cache_key=cache_key)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

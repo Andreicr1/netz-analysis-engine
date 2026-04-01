@@ -91,3 +91,67 @@ class OverlapResultRead(BaseModel):
     breaches: list[CusipExposureRead]
     has_sufficient_data: bool
     data_warning: str | None = None
+
+
+# ── Construction Advisor ──────────────────────────────────────────────────
+
+
+class BlockGapRead(BaseModel):
+    block_id: str
+    display_name: str
+    asset_class: str
+    target_weight: float
+    current_weight: float
+    gap_weight: float
+    priority: int
+    reason: str
+
+
+class CoverageAnalysisRead(BaseModel):
+    total_blocks: int
+    covered_blocks: int
+    covered_pct: float
+    block_gaps: list[BlockGapRead] = []
+
+
+class CandidateFundRead(BaseModel):
+    block_id: str
+    instrument_id: str
+    name: str
+    ticker: str | None = None
+    strategy_label: str | None = None
+    volatility_1y: float | None = None
+    correlation_with_portfolio: float
+    overlap_pct: float
+    projected_cvar_95: float | None = None
+    cvar_improvement: float
+    in_universe: bool
+    external_id: str
+    has_holdings_data: bool = True
+
+
+class MinimumViableSetRead(BaseModel):
+    funds: list[str]
+    projected_cvar_95: float
+    projected_within_limit: bool
+    blocks_filled: list[str]
+    search_method: str
+
+
+class AlternativeProfileRead(BaseModel):
+    profile: str
+    cvar_limit: float
+    current_cvar_would_pass: bool
+
+
+class ConstructionAdviceRead(BaseModel):
+    portfolio_id: str
+    profile: str
+    current_cvar_95: float
+    cvar_limit: float
+    cvar_gap: float
+    coverage: CoverageAnalysisRead
+    candidates: list[CandidateFundRead] = []
+    minimum_viable_set: MinimumViableSetRead | None = None
+    alternative_profiles: list[AlternativeProfileRead] = []
+    projected_cvar_is_heuristic: bool = True

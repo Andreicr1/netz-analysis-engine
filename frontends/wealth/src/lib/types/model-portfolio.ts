@@ -163,3 +163,66 @@ export function profileColor(profile: string): string {
 		default: return "var(--ii-text-secondary)";
 	}
 }
+
+// ── Construction Advisor ────────────────────────────────────────────────
+
+export interface BlockGap {
+	block_id: string;
+	display_name: string;
+	asset_class: string;
+	target_weight: number;
+	current_weight: number;
+	gap_weight: number;
+	priority: number;
+	reason: string;
+}
+
+export interface CoverageAnalysis {
+	total_blocks: number;
+	covered_blocks: number;
+	covered_pct: number;
+	block_gaps: BlockGap[];
+}
+
+export interface CandidateFund {
+	block_id: string;
+	instrument_id: string;
+	name: string;
+	ticker: string | null;
+	strategy_label: string | null;
+	volatility_1y: number | null;
+	correlation_with_portfolio: number;
+	overlap_pct: number;
+	projected_cvar_95: number | null;
+	cvar_improvement: number;
+	in_universe: boolean;
+	external_id: string;
+	has_holdings_data: boolean;
+}
+
+export interface MinimumViableSet {
+	funds: string[];
+	projected_cvar_95: number;
+	projected_within_limit: boolean;
+	blocks_filled: string[];
+	search_method: string;
+}
+
+export interface AlternativeProfile {
+	profile: string;
+	cvar_limit: number;
+	current_cvar_would_pass: boolean;
+}
+
+export interface ConstructionAdvice {
+	portfolio_id: string;
+	profile: string;
+	current_cvar_95: number;
+	cvar_limit: number;
+	cvar_gap: number;
+	coverage: CoverageAnalysis;
+	candidates: CandidateFund[];
+	minimum_viable_set: MinimumViableSet | null;
+	alternative_profiles: AlternativeProfile[];
+	projected_cvar_is_heuristic: boolean;
+}
