@@ -6,7 +6,7 @@ export const load = async ({ parent, params }: { parent: () => Promise<{ token: 
 	const api = createServerApiClient(token);
 	const { cik } = params;
 
-	const [detail, holdings, prospectus, peers, reverseHoldings, holdingsHistory] =
+	const [detail, holdings, prospectus, peers, reverseHoldings, holdingsHistory, styleHistory] =
 		await Promise.allSettled([
 			api.get(`/sec/funds/${cik}`),
 			api.get(`/sec/funds/${cik}/holdings`),
@@ -14,6 +14,7 @@ export const load = async ({ parent, params }: { parent: () => Promise<{ token: 
 			api.get(`/sec/funds/${cik}/peer-analysis`),
 			api.get(`/sec/funds/${cik}/reverse-holdings`),
 			api.get(`/sec/funds/${cik}/holdings-history`),
+			api.get(`/sec/funds/${cik}/style-history?limit=8`),
 		]);
 
 	return {
@@ -24,5 +25,6 @@ export const load = async ({ parent, params }: { parent: () => Promise<{ token: 
 		peers: peers.status === "fulfilled" ? peers.value : null,
 		reverseHoldings: reverseHoldings.status === "fulfilled" ? reverseHoldings.value : null,
 		holdingsHistory: holdingsHistory.status === "fulfilled" ? holdingsHistory.value : null,
+		styleHistory: styleHistory.status === "fulfilled" ? styleHistory.value : null,
 	};
 };

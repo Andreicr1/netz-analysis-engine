@@ -96,6 +96,11 @@
 		{ name: "watchlist_check", label: "Watchlist Check", endpoint: "/workers/run-watchlist-check", scope: "wealth" },
 		{ name: "portfolio_nav_synthesizer", label: "Portfolio NAV Synthesizer", endpoint: "/workers/run-portfolio-nav-synthesizer", scope: "wealth" },
 		{ name: "wealth_embedding", label: "Wealth Embedding", endpoint: "/workers/run-wealth-embedding", scope: "wealth" },
+		{ name: "sec_13f_ingestion", label: "SEC 13F Holdings", endpoint: "/workers/run-sec-13f-ingestion", scope: "global" },
+		{ name: "sec_adv_ingestion", label: "SEC ADV Managers", endpoint: "/workers/run-sec-adv-ingestion", scope: "global" },
+		{ name: "nport_ingestion", label: "N-PORT Holdings", endpoint: "/workers/run-nport-ingestion", scope: "global" },
+		{ name: "esma_ingestion", label: "ESMA Fund Register", endpoint: "/workers/run-esma-ingestion", scope: "global" },
+		{ name: "regime_fit", label: "Regime Fit (HMM)", endpoint: "/workers/run-regime-fit", scope: "global" },
 	];
 
 	let triggeringWorker = $state<string | null>(null);

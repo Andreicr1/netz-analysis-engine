@@ -48,6 +48,15 @@ export interface StrategyDriftAlert {
 	detected_at: string;
 }
 
+export interface StrategyDriftScanResult {
+	scanned_count: number;
+	alerts_found?: number;
+	alerts: StrategyDriftAlert[];
+	stable_count: number;
+	insufficient_data_count: number;
+	scan_timestamp: string;
+}
+
 export interface ParetoResult {
 	profile: string;
 	recommended_weights: Record<string, number>;

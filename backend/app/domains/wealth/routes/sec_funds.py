@@ -43,8 +43,6 @@ from app.domains.wealth.schemas.sec_funds import (
     ProspectusDataResponse,
     ProspectusExpenseExamples,
     ProspectusFees,
-    RegisteredFundListResponse,
-    RegisteredFundSummary,
     ReverseHoldingsResponse,
     StyleHistoryResponse,
     StyleSnapshotItem,
@@ -73,65 +71,6 @@ def _require_investment_role(actor: Actor) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Investment Team or Admin role required",
         )
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  GET /sec/managers/{crd}/registered-funds
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-@router.get(
-    "/managers/{crd}/registered-funds",
-    response_model=RegisteredFundListResponse,
-    summary="Registered funds (mutual/ETF) for an adviser",
-)
-@route_cache(ttl=300, global_key=True, key_prefix="sec:reg_funds")
-async def get_registered_funds(
-    crd: str = Path(...),
-    db: AsyncSession = Depends(get_db_with_rls),
-    actor: Actor = Depends(get_actor),
-) -> RegisteredFundListResponse:
-    _require_investment_role(actor)
-    if not _CRD_RE.match(crd):
-        raise HTTPException(status_code=400, detail="Invalid CRD number")
-
-    # Main query with latest style via lateral join
-    result = await db.execute(
-        text("""
-            SELECT rf.cik, rf.fund_name, rf.fund_type, rf.ticker,
-                   rf.total_assets, rf.last_nport_date,
-                   sfs.style_label, sfs.confidence
-            FROM sec_registered_funds rf
-            LEFT JOIN LATERAL (
-                SELECT style_label, confidence
-                FROM sec_fund_style_snapshots
-                WHERE cik = rf.cik
-                ORDER BY report_date DESC
-                LIMIT 1
-            ) sfs ON true
-            WHERE rf.crd_number = :crd
-              AND rf.aum_below_threshold = FALSE
-            ORDER BY rf.total_assets DESC NULLS LAST
-        """),
-        {"crd": crd},
-    )
-    rows = result.fetchall()
-
-    funds = [
-        RegisteredFundSummary(
-            cik=r[0],
-            fund_name=r[1],
-            fund_type=r[2],
-            ticker=r[3],
-            total_assets=r[4],
-            last_nport_date=r[5],
-            style_label=r[6],
-            style_confidence=float(r[7]) if r[7] is not None else None,
-        )
-        for r in rows
-    ]
-
-    return RegisteredFundListResponse(funds=funds, total=len(funds))
 
 
 # ═══════════════════════════════════════════════════════════════════════════

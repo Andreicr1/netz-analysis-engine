@@ -16,7 +16,7 @@ import re
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -180,62 +180,6 @@ async def upload_complete(
         document_id=str(version.document_id),
     )
 
-
-# ── Single-step API upload ───────────────────────────────────
-
-
-@router.post("/upload")
-async def upload(
-    root_folder: str = Form("documents"),
-    subfolder_path: str | None = Form(None),
-    domain: str | None = Form(None),
-    title: str | None = Form(None),
-    portfolio_id: uuid.UUID | None = Form(None),
-    instrument_id: uuid.UUID | None = Form(None),
-    file: UploadFile = File(...),
-    db: AsyncSession = Depends(get_db_with_rls),
-    actor: Actor = Depends(get_actor),
-    _role_guard: Actor = Depends(require_role(*_WRITE_ROLES)),
-):
-    """Single-step upload: file in body, writes to storage directly."""
-    MAX_UPLOAD_SIZE = 100 * 1024 * 1024  # 100 MB
-    data = await file.read()
-    if not data:
-        raise HTTPException(status_code=400, detail="file is empty")
-    if len(data) > MAX_UPLOAD_SIZE:
-        raise HTTPException(status_code=413, detail="File too large (max 100 MB)")
-
-    storage = get_storage_client()
-
-    safe_filename = _sanitize_filename(file.filename or "document.pdf")
-    safe_title = _sanitize_title(title or safe_filename or "Document")
-
-    try:
-        res = await service.upload_document(
-            db,
-            actor=actor,
-            portfolio_id=portfolio_id,
-            instrument_id=instrument_id,
-            root_folder=root_folder,
-            subfolder_path=subfolder_path,
-            domain=domain,
-            title=safe_title,
-            filename=safe_filename,
-            content_type=file.content_type,
-            data=data,
-            storage_client=storage,
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error("Wealth document upload failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Upload failed — see server logs")
-
-    return {
-        "document_id": str(res.document.id),
-        "version_id": str(res.version.id),
-        "blob_path": res.blob_path,
-    }
 
 
 # ── Process pending (trigger pipeline) ───────────────────────

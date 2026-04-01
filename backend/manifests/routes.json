@@ -586,11 +586,6 @@
   },
   {
     "method": "GET",
-    "path": "/api/v1/funds/scoring",
-    "name": "get_fund_scoring"
-  },
-  {
-    "method": "GET",
     "path": "/api/v1/funds/{fund_id}",
     "name": "get_fund"
   },
@@ -688,11 +683,6 @@
     "method": "GET",
     "path": "/api/v1/funds/{fund_id}/investor/statements",
     "name": "list_published_statements"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/funds/{fund_id}/nav",
-    "name": "get_fund_nav"
   },
   {
     "method": "GET",
@@ -1131,28 +1121,8 @@
   },
   {
     "method": "GET",
-    "path": "/api/v1/sec/managers/search",
-    "name": "search_managers"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/sec/managers/sic-codes",
-    "name": "get_sic_codes"
-  },
-  {
-    "method": "GET",
     "path": "/api/v1/sec/managers/{cik}",
     "name": "get_manager_detail"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/sec/managers/{cik}/holdings",
-    "name": "get_holdings"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/sec/managers/{cik}/style-drift",
-    "name": "get_style_drift"
   },
   {
     "method": "GET",
@@ -1163,11 +1133,6 @@
     "method": "GET",
     "path": "/api/v1/sec/managers/{crd}/private-funds",
     "name": "get_private_funds"
-  },
-  {
-    "method": "GET",
-    "path": "/api/v1/sec/managers/{crd}/registered-funds",
-    "name": "get_registered_funds"
   },
   {
     "method": "GET",
@@ -1756,11 +1721,6 @@
   },
   {
     "method": "POST",
-    "path": "/api/v1/instruments/import/csv",
-    "name": "import_from_csv"
-  },
-  {
-    "method": "POST",
     "path": "/api/v1/instruments/import/yahoo",
     "name": "import_from_yahoo"
   },
@@ -1923,11 +1883,6 @@
     "method": "POST",
     "path": "/api/v1/wealth/documents/ingestion/process-pending",
     "name": "process_pending"
-  },
-  {
-    "method": "POST",
-    "path": "/api/v1/wealth/documents/upload",
-    "name": "upload"
   },
   {
     "method": "POST",

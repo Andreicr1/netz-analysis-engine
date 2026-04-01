@@ -1,16 +1,17 @@
 # Endpoint Coverage Audit — Wealth Vertical
 
 ```
-Data: 2026-04-01 (atualizado pós-sprint)
-Total endpoints backend wealth (excl. infra/workers): 176
-Conectados: 158 (89.8%)
-Desconectados: 18 (10.2%)
+Data: 2026-04-01 (atualizado pós-sprint G — final coverage)
+Total endpoints backend wealth (excl. infra/workers): 167  (176 - 9 deletados)
+Conectados: 164  (158 + 1 risk/stream + 5 worker triggers + 5 wiring novos - 5 deletados connected)
+Desconectados (deferred): 6
 Infra/workers (excluídos): 28
 Phantom calls (frontend → backend inexistente): 0
+Coverage: ~96.4% (excluindo deferred como "intended gap")
 ```
 
 Previous audit (2026-03-23): 93 endpoints, 62 connected (67%).
-Delta: +83 backend endpoints, +83 connected, coverage improved 67% → 82.4%.
+Sprint G delta: 9 deprecated handlers deleted, 6 new wirings, 1 false negative fixed (risk/stream).
 
 ---
 
@@ -175,100 +176,50 @@ Delta: +83 backend endpoints, +83 connected, coverage improved 67% → 82.4%.
 | 155 | GET | /screener/runs/{run_id} | screener.py | screener/runs/[runId]/+page.server.ts |
 | 156 | GET | /screener/results | screener.py | ScreeningRunPanel.svelte |
 | 157 | GET | /screener/facets | screener.py | ScreeningRunPanel.svelte |
+| 158 | GET | /risk/stream | risk.py | risk-store.svelte.ts (via `createSSEStream`) |
+| 159 | POST | /rebalancing/proposals/{proposal_id}/apply | rebalancing.py | RebalancingTab.svelte |
+| 160 | GET | /screener/catalog/{external_id}/detail | screener.py | screener/+page.svelte (CatalogDetailPanel enrichment) |
+| 161 | POST | /analytics/strategy-drift/scan | strategy_drift.py | analytics/+page.svelte |
+| 162 | GET | /sec/managers/{crd}/private-funds | sec_funds.py | ManagerDetailPanel.svelte (Private Funds tab) |
+| 163 | GET | /sec/funds/{cik}/style-history | sec_funds.py | screener/[cik]/+page.server.ts, +page.svelte (Style tab) |
+| 164 | POST | /workers/run-sec-13f-ingestion | workers.py | settings/system/+page.svelte |
+| 165 | POST | /workers/run-sec-adv-ingestion | workers.py | settings/system/+page.svelte |
+| 166 | POST | /workers/run-nport-ingestion | workers.py | settings/system/+page.svelte |
+| 167 | POST | /workers/run-esma-ingestion | workers.py | settings/system/+page.svelte |
+| 168 | POST | /workers/run-regime-fit | workers.py | settings/system/+page.svelte |
 
 ---
 
-## 2. DISCONNECTED (18 endpoints) — by Feature Area & Priority
+## 2. DEFERRED (6 endpoints — maintained in backend, not wired)
 
-### Rebalancing — P1
+Endpoints with potential value but covered by alternatives in frontend. Maintained for API consumers or future evolution.
 
-| Method | Path | Backend File | Impacto |
-|--------|------|-------------|---------|
-| POST | /rebalancing/proposals/{proposal_id}/apply | rebalancing.py | Apply optimizer-generated rebalancing proposal — entire advanced rebalancing pipeline dead-ends without this |
-
-### Screener Catalog — P2
-
-| Method | Path | Backend File | Impacto |
-|--------|------|-------------|---------|
-| GET | /screener/catalog/{external_id}/detail | screener.py | Deep fund detail from catalog (N-CEN, XBRL, N-PORT data) — unlocks drill-down from catalog browse |
-
-### Screener Securities — P2
-
-| Method | Path | Backend File | Impacto |
-|--------|------|-------------|---------|
-| GET | /screener/securities | screener.py | Browse securities imported into org (post-screening pipeline view) |
-| GET | /screener/securities/facets | screener.py | Faceted filtering for securities |
-| POST | /screener/import-esma/{isin} | screener.py | ESMA UCITS import by ISIN (frontend uses generic /import/{identifier} instead) |
-
-### Risk Streaming — P2
-
-| Method | Path | Backend File | Impacto |
-|--------|------|-------------|---------|
-| GET | /risk/stream | risk.py | Real-time SSE risk stream — enables live dashboard updates without polling |
-
-### Strategy Drift — P2
-
-| Method | Path | Backend File | Impacto |
-|--------|------|-------------|---------|
-| POST | /analytics/strategy-drift/scan | strategy_drift.py | Manual trigger for DTW strategy drift scan across portfolio |
-
-### SEC Funds — P2
-
-| Method | Path | Backend File | Impacto |
-|--------|------|-------------|---------|
-| GET | /sec/managers/{crd}/private-funds | sec_funds.py | List private funds for manager (PE, VC, hedge — from ADV Schedule D) |
-| GET | /sec/funds/{cik}/style-history | sec_funds.py | Historical style drift for registered fund (sector/asset allocation over time) |
-
-### Analytics Advanced — P3
-
-| Method | Path | Backend File | Impacto |
-|--------|------|-------------|---------|
-| GET | /analytics/backtest/{run_id} | analytics.py | Retrieve a specific backtest result by ID |
-| POST | /analytics/optimize | analytics.py | Single-point mean-variance optimization (frontend uses /optimize/pareto instead) |
-
-### Strategy Drift Detail — P3
-
-| Method | Path | Backend File | Impacto |
-|--------|------|-------------|---------|
-| GET | /analytics/strategy-drift/{instrument_id} | strategy_drift.py | Single instrument current drift score (frontend uses /history instead) |
-
-### SEC Analysis — P3
-
-| Method | Path | Backend File | Impacto |
-|--------|------|-------------|---------|
-| GET | /sec/managers/search | sec_analysis.py | Manager search by name/CIK (frontend uses /manager-screener/ instead) |
-| GET | /sec/managers/{cik}/holdings | sec_analysis.py | 13F holdings by CIK (frontend uses /manager-screener/managers/{crd}/holdings) |
-| GET | /sec/managers/{cik}/style-drift | sec_analysis.py | Manager-level style drift (frontend uses /manager-screener/managers/{crd}/drift) |
-| GET | /sec/managers/sic-codes | sec_analysis.py | SIC code reference list |
-
-### SEC Funds (Duplicate Routes) — P3
-
-| Method | Path | Backend File | Impacto |
-|--------|------|-------------|---------|
-| GET | /sec/managers/{crd}/registered-funds | sec_funds.py | Duplicates /manager-screener/managers/{crd}/registered-funds — frontend uses manager-screener |
-
-### Instruments — P3
-
-| Method | Path | Backend File | Impacto |
-|--------|------|-------------|---------|
-| POST | /instruments/import/csv | instruments.py | Bulk CSV import — frontend uses Yahoo import or screener import instead |
-
-### Documents — P3
-
-| Method | Path | Backend File | Impacto |
-|--------|------|-------------|---------|
-| POST | /wealth/documents/upload | documents.py | Legacy direct upload — frontend uses upload-url + upload-complete (pre-signed URL flow) |
-
-### Funds (Deprecated) — P3
-
-| Method | Path | Backend File | Impacto |
-|--------|------|-------------|---------|
-| GET | /funds/scoring | funds.py | Deprecated — replaced by /instruments |
-| GET | /funds/{fund_id}/nav | funds.py | Deprecated — NAV data available via entity analytics |
+| Method | Path | Backend File | Motivo |
+|--------|------|-------------|--------|
+| GET | /screener/securities | screener.py | Post-screening view — value when approval flow evolves |
+| GET | /screener/securities/facets | screener.py | Accompanies securities above |
+| POST | /screener/import-esma/{isin} | screener.py | Generic import covers; ESMA enrichment incremental |
+| GET | /analytics/backtest/{run_id} | analytics.py | Useful if backtest becomes async with history |
+| POST | /analytics/optimize | analytics.py | Single-point for API consumers (frontend uses Pareto) |
+| GET | /analytics/strategy-drift/{instrument_id} | strategy_drift.py | Frontend uses /history; may serve future webhook |
 
 ---
 
-## 3. INFRA (28 endpoints — excluded from coverage)
+| Method | Path | Former Backend File | Motivo |
+|--------|------|-------------------|--------|
+| GET | /sec/managers/search | sec_analysis.py | Duplicated by `GET /manager-screener/` (connected) |
+| GET | /sec/managers/{cik}/holdings | sec_analysis.py | Duplicated by `GET /manager-screener/managers/{crd}/holdings` |
+| GET | /sec/managers/{cik}/style-drift | sec_analysis.py | Duplicated by `GET /manager-screener/managers/{crd}/drift` |
+| GET | /sec/managers/sic-codes | sec_analysis.py | Static reference with no consumer |
+| GET | /sec/managers/{crd}/registered-funds | sec_funds.py | Duplicated by `/manager-screener/managers/{crd}/registered-funds` |
+| POST | /wealth/documents/upload | documents.py | Legacy — frontend uses pre-signed URL flow |
+| GET | /funds/scoring | funds.py | Deprecated — replaced by /instruments + fund_risk_metrics |
+| GET | /funds/{fund_id}/nav | funds.py | Deprecated — NAV via entity analytics |
+| POST | /instruments/import/csv | instruments.py | Frontend uses Yahoo import or screener import |
+
+---
+
+## 4. INFRA (28 endpoints — excluded from coverage)
 
 All endpoints in `workers.py` — worker trigger endpoints used by system settings page and cron jobs:
 
@@ -309,7 +260,7 @@ Note: 9 of these worker endpoints are already wired in the frontend settings/sys
 
 ---
 
-## 4. Phantom Calls (frontend → backend inexistente)
+## 5. Phantom Calls (frontend → backend inexistente)
 
 Nenhum phantom call remanescente após sprint de wiring (Prompts A-E, 2026-04-01).
 
@@ -330,7 +281,7 @@ These are NOT phantoms (the admin endpoints exist) but are cross-domain calls wo
 
 ---
 
-## 5. Top 4 por valor de negócio
+## 6. Top 4 por valor de negócio (resolved in Sprint G)
 
 | # | Method | Path | Wiring Complexity | Impacto |
 |---|--------|------|-------------------|---------|
@@ -341,24 +292,24 @@ These are NOT phantoms (the admin endpoints exist) but are cross-domain calls wo
 
 ---
 
-## Coverage by Route File
+## Coverage by Route File (post Sprint G)
 
-| File | Total | Connected | Disconnected | Coverage |
-|------|-------|-----------|-------------|----------|
+| File | Total | Connected | Deferred | Coverage |
+|------|-------|-----------|----------|----------|
 | allocation.py | 6 | 6 | 0 | 100% |
-| analytics.py | 11 | 9 | 2 | 82% |
+| analytics.py | 9 | 8 | 1 | 89% |
 | entity_analytics.py | 2 | 2 | 0 | 100% |
 | attribution.py | 1 | 1 | 0 | 100% |
 | correlation_regime.py | 2 | 2 | 0 | 100% |
-| strategy_drift.py | 5 | 3 | 2 | 60% |
+| strategy_drift.py | 5 | 4 | 1 | 80% |
 | blended_benchmark.py | 5 | 5 | 0 | 100% |
 | content.py | 8 | 8 | 0 | 100% |
 | dd_reports.py | 9 | 9 | 0 | 100% |
-| documents.py | 7 | 6 | 1 | 86% |
+| documents.py | 6 | 6 | 0 | 100% |
 | exposure.py | 2 | 2 | 0 | 100% |
 | fact_sheets.py | 4 | 4 | 0 | 100% |
-| funds.py | 5 | 3 | 2 | 60% |
-| instruments.py | 7 | 7 | 0 | 100% |
+| funds.py | 3 | 3 | 0 | 100% |
+| instruments.py | 6 | 6 | 0 | 100% |
 | long_form_reports.py | 3 | 3 | 0 | 100% |
 | monthly_report.py | 3 | 3 | 0 | 100% |
 | macro.py | 12 | 12 | 0 | 100% |
@@ -366,26 +317,28 @@ These are NOT phantoms (the admin endpoints exist) but are cross-domain calls wo
 | model_portfolios.py | 12 | 12 | 0 | 100% |
 | portfolios.py | 9 | 9 | 0 | 100% |
 | portfolio_views.py | 3 | 3 | 0 | 100% |
-| rebalancing.py | 1 | 0 | 1 | 0% |
-| risk.py | 7 | 6 | 1 | 86% |
-| screener.py | 15 | 11 | 4 | 73% |
+| rebalancing.py | 1 | 1 | 0 | 100% |
+| risk.py | 7 | 7 | 0 | 100% |
+| screener.py | 14 | 11 | 3 | 79% |
 | search.py | 1 | 1 | 0 | 100% |
-| sec_analysis.py | 9 | 5 | 4 | 56% |
-| sec_funds.py | 9 | 6 | 3 | 67% |
+| sec_analysis.py | 5 | 5 | 0 | 100% |
+| sec_funds.py | 8 | 8 | 0 | 100% |
 | universe.py | 5 | 5 | 0 | 100% |
 | agent.py | 1 | 1 | 0 | 100% |
 
-**Files at 100% coverage (20/29):** agent, allocation, attribution, blended_benchmark, content, correlation_regime, dd_reports, entity_analytics, exposure, fact_sheets, instruments, long_form_reports, macro, manager_screener, model_portfolios, monthly_report, portfolios, portfolio_views, search, universe.
+**Files at 100% coverage (26/29):** agent, allocation, attribution, blended_benchmark, content, correlation_regime, dd_reports, documents, entity_analytics, exposure, fact_sheets, funds, instruments, long_form_reports, macro, manager_screener, model_portfolios, monthly_report, portfolios, portfolio_views, rebalancing, risk, search, sec_analysis, sec_funds, universe.
 
-**Lowest coverage files:** rebalancing (0%), sec_analysis (56%), strategy_drift (60%), funds (60%), sec_funds (67%), screener (73%).
+**Remaining deferred (3 files):** analytics (1 deferred), strategy_drift (1 deferred), screener (3 deferred).
 
 ---
 
 ## Notes
 
 - All paths shown without `/api/v1` prefix (added by API client automatically).
-- `funds.py` is deprecated — 3 endpoints still consumed by frontend (`GET /funds`, `GET /funds/{fund_id}`, `GET /funds/{fund_id}/risk`). The 2 disconnected endpoints (`/scoring`, `/{fund_id}/nav`) should be removed when fund migration to instruments is complete.
-- Several `sec_analysis.py` disconnected endpoints are **functionally duplicated** by `manager_screener.py` routes (which the frontend uses instead). These are not true gaps — they are alternate access patterns via CIK vs CRD.
-- `POST /screener/import-esma/{isin}` is technically reachable via the generic `POST /screener/import/{identifier}` which handles ESMA ISINs. The dedicated ESMA route adds ESMA-specific enrichment. Low priority.
+- `funds.py` is deprecated — 3 endpoints still consumed by frontend (`GET /funds`, `GET /funds/{fund_id}`, `GET /funds/{fund_id}/risk`). Scoring and NAV endpoints deleted in Sprint G.
+- Sprint G deleted 4 `sec_analysis.py` duplicate handlers (search, holdings, style-drift, sic-codes) — all duplicated by `manager_screener.py` routes. 5 remaining handlers are at 100%.
+- `GET /risk/stream` connected via `createSSEStream` in `risk-store.svelte.ts` — pattern not detected by scanner regex `api.(get|post|...)`.
+- Workers wired in settings page: 14/28 (9 original + 5 added in Sprint G).
+- `POST /screener/import-esma/{isin}` is technically reachable via the generic `POST /screener/import/{identifier}` which handles ESMA ISINs. The dedicated ESMA route adds ESMA-specific enrichment. Deferred.
 - Worker endpoints in settings/system page are correctly wired (9/28 workers exposed in UI for manual triggers).
 - Updated 2026-04-01 after wiring sprint (Prompts A-E).

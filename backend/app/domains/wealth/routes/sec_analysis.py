@@ -1,26 +1,25 @@
 """SEC Analysis API routes — US Fund Analysis page.
 
-CIK-based manager search, holdings with quarter selection, style drift,
-reverse CUSIP lookup, and peer comparison. All queries hit global SEC tables
+CIK-based manager detail, reverse CUSIP lookup, peer comparison,
+fund-type breakdown, and holdings history. All queries hit global SEC tables
 (no RLS, no organization_id).
 
-GET  /sec/managers/search          — paginated text search + filters
-GET  /sec/managers/{cik}           — manager detail + latest holdings summary
-GET  /sec/managers/{cik}/holdings  — holdings by quarter (default: latest)
-GET  /sec/managers/{cik}/style-drift — sector allocation history
-GET  /sec/holdings/reverse         — reverse lookup by CUSIP
-GET  /sec/managers/compare         — peer comparison (max 5 CIKs)
+GET  /sec/managers/{cik}             — manager detail + latest holdings summary
+GET  /sec/holdings/reverse           — reverse lookup by CUSIP
+GET  /sec/managers/compare           — peer comparison (max 5 CIKs)
+GET  /sec/managers/{crd_number}/funds — fund-type breakdown
+GET  /sec/holdings/history           — quarterly holdings history
 """
 
 from __future__ import annotations
 
 import re
-from datetime import date, timedelta
+from datetime import date
 from itertools import combinations
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import route_cache
@@ -30,25 +29,16 @@ from app.domains.wealth.schemas.sec_analysis import (
     BrochureSection,
     PeerHoldingOverlap,
     ReverseLookupItem,
-    SecHoldingItem,
     SecHoldingsHistory,
     SecHoldingsHistoryPoint,
-    SecHoldingsPage,
     SecManagerDetail,
     SecManagerFundBreakdown,
     SecManagerFundItem,
-    SecManagerItem,
-    SecManagerSearchPage,
     SecPeerCompare,
     SecReverseLookup,
-    SecSicCodeItem,
-    SecStyleDrift,
-    SectorWeight,
-    StyleDriftSignal,
 )
 from app.shared.enums import Role
 from app.shared.models import (
-    Sec13fDiff,
     Sec13fHolding,
     SecEntityLink,
     SecManager,
@@ -112,196 +102,6 @@ async def _resolve_ciks(db: AsyncSession, cik: str, *, crd: str | None = None) -
     cik_list.extend(linked_ciks)
     return cik_list
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  GET /managers/search — paginated search with filters
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-@router.get(
-    "/managers/search",
-    response_model=SecManagerSearchPage,
-    summary="Search SEC managers with filters",
-    dependencies=[Depends(_require_investment_role_dep)],
-)
-@route_cache(ttl=300, global_key=True, key_prefix="sec:search")
-async def search_managers(
-    q: str | None = Query(None, max_length=200),
-    entity_type: str | None = Query(None),
-    state: str | None = Query(None),
-    has_cik: bool | None = Query(None),
-    aum_min: int | None = Query(None),
-    aum_max: int | None = Query(None),
-    filed_within_days: int | None = Query(None, ge=1, le=730),
-    sic: str | None = Query(None, max_length=10),
-    has_disclosures: bool | None = Query(None),
-    strategy_keywords: str | None = Query(None, max_length=200, description="Full-text search in ADV Part 2A Item 8 (investment strategy narrative)"),
-    has_13f: bool | None = Query(None),
-    has_private_funds: bool | None = Query(None),
-    fund_type: str | None = Query(None, description="Filter by fund type: hedge, pe, vc, real_estate"),
-    sort_by: str = Query("aum_total"),
-    sort_dir: str = Query("desc"),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(25, ge=1, le=100),
-    db: AsyncSession = Depends(get_db_with_rls),
-) -> SecManagerSearchPage:
-    # Subquery: CIKs that have 13F filings + last filing date
-    thirteen_f_sub = (
-        select(
-            Sec13fHolding.cik,
-            func.max(Sec13fHolding.report_date).label("last_13f_date"),
-        )
-        .where(Sec13fHolding.report_date <= date.today())
-        .group_by(Sec13fHolding.cik)
-        .subquery()
-    )
-
-    stmt = (
-        select(SecManager, thirteen_f_sub.c.last_13f_date)
-        .outerjoin(thirteen_f_sub, SecManager.cik == thirteen_f_sub.c.cik)
-    )
-    count_stmt = (
-        select(func.count())
-        .select_from(SecManager)
-        .outerjoin(thirteen_f_sub, SecManager.cik == thirteen_f_sub.c.cik)
-    )
-
-    conditions = []
-
-    if q:
-        q_lower = f"%{q.lower()}%"
-        conditions.append(
-            or_(
-                SecManager.firm_name.ilike(q_lower),
-                SecManager.cik == q if q.isdigit() else False,  # type: ignore[arg-type]
-                SecManager.crd_number == q,
-            ),
-        )
-
-    if entity_type and entity_type != "all":
-        conditions.append(SecManager.registration_status == entity_type)
-    elif not entity_type:
-        # Default: Registered advisers only (investment managers)
-        conditions.append(SecManager.registration_status == "Registered")
-    # entity_type == "all" → no filter
-
-    if state:
-        conditions.append(SecManager.state == state)
-
-    if has_cik is True:
-        conditions.append(SecManager.cik.isnot(None))
-    elif has_cik is False:
-        conditions.append(SecManager.cik.is_(None))
-
-    if aum_min is not None:
-        conditions.append(SecManager.aum_total >= aum_min)
-
-    if aum_max is not None:
-        conditions.append(SecManager.aum_total <= aum_max)
-
-    if filed_within_days is not None:
-        cutoff = date.today() - timedelta(days=filed_within_days)
-        conditions.append(SecManager.last_adv_filed_at >= cutoff)
-
-    if sic:
-        conditions.append(
-            SecManager.client_types["sic"].astext == sic,
-        )
-
-    if has_disclosures is True:
-        conditions.append(SecManager.compliance_disclosures > 0)
-    elif has_disclosures is False:
-        conditions.append(
-            (SecManager.compliance_disclosures.is_(None))
-            | (SecManager.compliance_disclosures == 0),
-        )
-
-    if strategy_keywords:
-        # Subquery: managers whose ADV Part 2A Item 8 mentions the keyword
-        kw = f"%{strategy_keywords.lower()}%"
-        brochure_subq = (
-            select(SecManagerBrochureText.crd_number)
-            .where(SecManagerBrochureText.section == "item_8")
-            .where(SecManagerBrochureText.content.ilike(kw))
-            .distinct()
-            .scalar_subquery()
-        )
-        conditions.append(SecManager.crd_number.in_(brochure_subq))
-
-    if has_13f is True:
-        conditions.append(thirteen_f_sub.c.cik.isnot(None))
-    elif has_13f is False:
-        conditions.append(thirteen_f_sub.c.cik.is_(None))
-
-    if has_private_funds is True:
-        conditions.append(SecManager.private_fund_count > 0)
-    elif has_private_funds is False:
-        conditions.append(
-            (SecManager.private_fund_count.is_(None)) | (SecManager.private_fund_count == 0),
-        )
-
-    if fund_type:
-        fund_col_map = {
-            "hedge": SecManager.hedge_fund_count,
-            "pe": SecManager.pe_fund_count,
-            "vc": SecManager.vc_fund_count,
-            "real_estate": SecManager.real_estate_fund_count,
-        }
-        col = fund_col_map.get(fund_type)
-        if col is not None:
-            conditions.append(col > 0)
-
-    for cond in conditions:
-        stmt = stmt.where(cond)
-        count_stmt = count_stmt.where(cond)
-
-    # Sorting
-    sort_col = getattr(SecManager, sort_by, SecManager.aum_total)
-    if sort_dir == "asc":
-        stmt = stmt.order_by(sort_col.asc().nulls_last())
-    else:
-        stmt = stmt.order_by(sort_col.desc().nulls_last())
-
-    offset = (page - 1) * page_size
-    stmt = stmt.limit(page_size).offset(offset)
-
-    data_result = await db.execute(stmt)
-    count_result = await db.execute(count_stmt)
-
-    total_count = count_result.scalar_one()
-    rows = data_result.all()
-
-    managers = [
-        SecManagerItem(
-            crd_number=m.crd_number,
-            cik=m.cik,
-            firm_name=m.firm_name,
-            registration_status=m.registration_status,
-            aum_total=m.aum_total,
-            state=m.state,
-            country=m.country,
-            sic=(m.client_types or {}).get("sic"),
-            sic_description=(m.client_types or {}).get("sic_description"),
-            last_adv_filed_at=m.last_adv_filed_at,
-            compliance_disclosures=m.compliance_disclosures,
-            has_13f_filings=last_13f_date is not None,
-            last_filing_date=last_13f_date or None,
-            private_fund_count=m.private_fund_count,
-            hedge_fund_count=m.hedge_fund_count,
-            pe_fund_count=m.pe_fund_count,
-            vc_fund_count=m.vc_fund_count,
-            total_private_fund_assets=m.total_private_fund_assets,
-        )
-        for m, last_13f_date in rows
-    ]
-
-    return SecManagerSearchPage(
-        managers=managers,
-        total_count=total_count,
-        page=page,
-        page_size=page_size,
-        has_next=(page * page_size) < total_count,
-    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -403,237 +203,6 @@ async def get_manager_detail(
         linked_13f_ciks=linked_13f_ciks,
     )
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  GET /managers/{cik}/holdings — holdings by quarter with deltas
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-@router.get(
-    "/managers/{cik}/holdings",
-    response_model=SecHoldingsPage,
-    summary="Manager holdings for a specific quarter",
-)
-@route_cache(ttl=300, global_key=True, key_prefix="sec:holdings")
-async def get_holdings(
-    cik: str = Path(...),
-    quarter: str | None = Query(None, description="YYYY-MM-DD format"),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db_with_rls),
-    actor: Actor = Depends(get_actor),
-) -> SecHoldingsPage:
-    _require_investment_role(actor)
-    cik = _validate_cik(cik)
-
-    today = date.today()
-
-    # Resolve all CIKs (own + parent 13F filers via entity links)
-    cik_list = await _resolve_ciks(db, cik)
-
-    # Available quarters
-    quarters_stmt = (
-        select(Sec13fHolding.report_date)
-        .where(Sec13fHolding.cik.in_(cik_list))
-        .where(Sec13fHolding.report_date <= today)
-        .distinct()
-        .order_by(Sec13fHolding.report_date.desc())
-        .limit(12)
-    )
-    q_result = await db.execute(quarters_stmt)
-    available_quarters = [row[0].isoformat() for row in q_result.all()]
-
-    if not available_quarters:
-        return SecHoldingsPage(cik=cik)
-
-    # Resolve target quarter
-    if quarter:
-        target_date = date.fromisoformat(quarter)
-    else:
-        target_date = date.fromisoformat(available_quarters[0])
-
-    # Count total holdings for this quarter
-    count_stmt = (
-        select(func.count())
-        .select_from(Sec13fHolding)
-        .where(Sec13fHolding.cik.in_(cik_list))
-        .where(Sec13fHolding.report_date == target_date)
-    )
-    count_result = await db.execute(count_stmt)
-    total_count = count_result.scalar_one()
-
-    # Total value
-    value_stmt = (
-        select(func.sum(Sec13fHolding.market_value))
-        .where(Sec13fHolding.cik.in_(cik_list))
-        .where(Sec13fHolding.report_date == target_date)
-    )
-    value_result = await db.execute(value_stmt)
-    total_value = value_result.scalar_one()
-
-    # Paginated holdings
-    offset = (page - 1) * page_size
-    holdings_stmt = (
-        select(Sec13fHolding)
-        .where(Sec13fHolding.cik.in_(cik_list))
-        .where(Sec13fHolding.report_date == target_date)
-        .order_by(Sec13fHolding.market_value.desc().nulls_last())
-        .limit(page_size)
-        .offset(offset)
-    )
-    h_result = await db.execute(holdings_stmt)
-    holdings = h_result.scalars().all()
-
-    # Get diffs for this quarter to annotate deltas
-    diff_map: dict[str, tuple[int | None, int | None, str | None]] = {}
-    diff_stmt = (
-        select(Sec13fDiff)
-        .where(Sec13fDiff.cik.in_(cik_list))
-        .where(Sec13fDiff.quarter_to == target_date)
-    )
-    d_result = await db.execute(diff_stmt)
-    for d in d_result.scalars().all():
-        value_delta = None
-        if d.value_after is not None and d.value_before is not None:
-            value_delta = d.value_after - d.value_before
-        diff_map[d.cusip] = (d.shares_delta, value_delta, d.action)
-
-    total_val = int(total_value) if total_value else 0
-    items = []
-    for h in holdings:
-        delta = diff_map.get(h.cusip, (None, None, None))
-        items.append(
-            SecHoldingItem(
-                cusip=h.cusip,
-                company_name=h.issuer_name or "Unknown",
-                sector=h.sector,
-                shares=h.shares,
-                market_value=h.market_value,
-                pct_portfolio=(h.market_value or 0) / total_val if total_val > 0 else None,
-                delta_shares=delta[0],
-                delta_value=delta[1],
-                delta_action=delta[2],
-            ),
-        )
-
-    return SecHoldingsPage(
-        cik=cik,
-        quarter=target_date.isoformat(),
-        available_quarters=available_quarters,
-        holdings=items,
-        total_count=total_count,
-        total_value=int(total_value) if total_value else None,
-        page=page,
-        page_size=page_size,
-        has_next=(page * page_size) < total_count,
-    )
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  GET /managers/{cik}/style-drift — sector allocation history
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-@router.get(
-    "/managers/{cik}/style-drift",
-    response_model=SecStyleDrift,
-    summary="Sector allocation history and drift signals",
-)
-@route_cache(ttl=300, global_key=True, key_prefix="sec:drift")
-async def get_style_drift(
-    cik: str = Path(...),
-    db: AsyncSession = Depends(get_db_with_rls),
-    actor: Actor = Depends(get_actor),
-) -> SecStyleDrift:
-    _require_investment_role(actor)
-    cik = _validate_cik(cik)
-
-    today = date.today()
-    cutoff = date(today.year - 2, today.month, today.day)
-
-    # Resolve all CIKs (own + parent 13F filers via entity links)
-    cik_list = await _resolve_ciks(db, cik)
-
-    # Sector allocation per quarter — always filter report_date for chunk pruning
-    stmt = (
-        select(
-            Sec13fHolding.report_date,
-            Sec13fHolding.sector,
-            func.sum(Sec13fHolding.market_value).label("value"),
-        )
-        .where(Sec13fHolding.cik.in_(cik_list))
-        .where(Sec13fHolding.report_date >= cutoff)
-        .where(Sec13fHolding.report_date <= today)
-        .group_by(Sec13fHolding.report_date, Sec13fHolding.sector)
-        .order_by(Sec13fHolding.report_date)
-    )
-    result = await db.execute(stmt)
-    rows = result.mappings().all()
-
-    # Group by quarter to compute weights
-    quarter_totals: dict[date, int] = {}
-    quarter_sectors: dict[date, dict[str, int]] = {}
-    for row in rows:
-        q = row["report_date"]
-        sector = row["sector"] or "Unknown"
-        val = int(row["value"] or 0)
-        quarter_totals[q] = quarter_totals.get(q, 0) + val
-        if q not in quarter_sectors:
-            quarter_sectors[q] = {}
-        quarter_sectors[q][sector] = quarter_sectors[q].get(sector, 0) + val
-
-    # Build history points
-    history: list[SectorWeight] = []
-    for q in sorted(quarter_totals.keys()):
-        total = quarter_totals[q]
-        if total <= 0:
-            continue
-        for sector, val in quarter_sectors[q].items():
-            history.append(
-                SectorWeight(
-                    quarter=q.isoformat(),
-                    sector=sector,
-                    weight_pct=val / total,
-                ),
-            )
-
-    # Drift signals: compare last two quarters
-    sorted_quarters = sorted(quarter_totals.keys())
-    drift_signals: list[StyleDriftSignal] = []
-    if len(sorted_quarters) >= 2:
-        prev_q = sorted_quarters[-2]
-        curr_q = sorted_quarters[-1]
-        prev_total = quarter_totals[prev_q]
-        curr_total = quarter_totals[curr_q]
-
-        all_sectors = set(quarter_sectors.get(prev_q, {}).keys()) | set(
-            quarter_sectors.get(curr_q, {}).keys(),
-        )
-
-        for sector in sorted(all_sectors):
-            w_prev = (
-                quarter_sectors.get(prev_q, {}).get(sector, 0) / prev_total
-                if prev_total > 0
-                else 0.0
-            )
-            w_curr = (
-                quarter_sectors.get(curr_q, {}).get(sector, 0) / curr_total
-                if curr_total > 0
-                else 0.0
-            )
-            delta = w_curr - w_prev
-            signal = "DRIFT" if abs(delta) > 0.05 else "STABLE"
-            drift_signals.append(
-                StyleDriftSignal(
-                    sector=sector,
-                    weight_current=w_curr,
-                    weight_prev=w_prev,
-                    delta=delta,
-                    signal=signal,
-                ),
-            )
-
-    return SecStyleDrift(cik=cik, history=history, drift_signals=drift_signals)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -895,41 +464,6 @@ async def compare_managers(
         fund_breakdowns=fund_breakdowns,
     )
 
-
-# ═══════════════════════════════════════════════════════════════════════════
-#  GET /managers/sic-codes — available SIC codes with counts (A-04)
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-@router.get(
-    "/managers/sic-codes",
-    response_model=list[SecSicCodeItem],
-    summary="SIC codes with manager counts",
-    dependencies=[Depends(_require_investment_role_dep)],
-)
-@route_cache(ttl=3600, global_key=True, key_prefix="sec:sic_codes")
-async def get_sic_codes(
-    db: AsyncSession = Depends(get_db_with_rls),
-) -> list[SecSicCodeItem]:
-    stmt = (
-        select(
-            SecManager.client_types["sic"].astext.label("sic"),
-            SecManager.client_types["sic_description"].astext.label("sic_desc"),
-            func.count().label("cnt"),
-        )
-        .where(SecManager.client_types["sic"].astext.isnot(None))
-        .where(SecManager.client_types["sic"].astext != "")
-        .group_by(
-            SecManager.client_types["sic"].astext,
-            SecManager.client_types["sic_description"].astext,
-        )
-        .order_by(func.count().desc())
-    )
-    result = await db.execute(stmt)
-    return [
-        SecSicCodeItem(sic=row.sic, sic_description=row.sic_desc, count=row.cnt)
-        for row in result.all()
-    ]
 
 
 # ═══════════════════════════════════════════════════════════════════════════

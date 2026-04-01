@@ -10,22 +10,17 @@ See SR-4 audit finding.
 """
 
 import uuid
-from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config.config_service import ConfigService
-from app.core.config.dependencies import get_config_service
-from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
+from app.core.security.clerk_auth import CurrentUser, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.fund import Fund
-from app.domains.wealth.models.nav import NavTimeseries
 from app.domains.wealth.models.risk import FundRiskMetrics
-from app.domains.wealth.schemas.fund import FundRead, NavPoint
-from app.domains.wealth.schemas.risk import FundRiskRead, FundScoreRead
-from quant_engine.scoring_service import compute_fund_score
+from app.domains.wealth.schemas.fund import FundRead
+from app.domains.wealth.schemas.risk import FundRiskRead
 
 router = APIRouter(prefix="/funds", tags=["funds (deprecated)"])
 
@@ -45,79 +40,6 @@ def _set_deprecation_headers(response: Response) -> None:
         response.headers[key] = value
 
 
-# IMPORTANT: /scoring must be defined BEFORE /{fund_id} to avoid path shadowing
-@router.get(
-    "/scoring",
-    response_model=list[FundScoreRead],
-    summary="[DEPRECATED] Fund scoring within block",
-    description="DEPRECATED — use /instruments endpoints instead. "
-    "Returns funds ranked by manager score within an allocation block.",
-    deprecated=True,
-)
-async def get_fund_scoring(
-    response: Response,
-    block: str = Query(..., description="Allocation block ID"),
-    top_n: int = Query(10, ge=1, le=100, description="Number of top funds to return"),
-    db: AsyncSession = Depends(get_db_with_rls),
-    user: CurrentUser = Depends(get_current_user),
-    config_service: ConfigService = Depends(get_config_service),
-    actor: Actor = Depends(get_actor),
-) -> list[FundScoreRead]:
-    _set_deprecation_headers(response)
-    # Batch-fetch funds and their latest risk metrics in two queries (no N+1)
-    funds_stmt = select(Fund).where(Fund.block_id == block, Fund.is_active == True)
-    funds_result = await db.execute(funds_stmt)
-    funds = funds_result.scalars().all()
-
-    if not funds:
-        return []
-
-    fund_ids = [f.fund_id for f in funds]
-    _ = {f.fund_id: f for f in funds}
-
-    # Fetch latest risk metrics for all funds in one query using DISTINCT ON
-    risk_stmt = (
-        select(FundRiskMetrics)
-        .where(FundRiskMetrics.instrument_id.in_(fund_ids))
-        .order_by(FundRiskMetrics.instrument_id, FundRiskMetrics.calc_date.desc())
-        .distinct(FundRiskMetrics.instrument_id)
-    )
-    risk_result = await db.execute(risk_stmt)
-    risk_map = {r.instrument_id: r for r in risk_result.scalars().all()}
-
-    # Momentum is pre-computed by risk_calc worker — read from FundRiskMetrics
-    scoring_result = await config_service.get("liquid_funds", "scoring", actor.organization_id)
-    scoring_config = scoring_result.value
-
-    scored: list[FundScoreRead] = []
-    for fund in funds:
-        risk = risk_map.get(fund.fund_id)
-        flows_momentum_score = (
-            float(risk.blended_momentum_score)
-            if risk and risk.blended_momentum_score is not None
-            else 50.0
-        )
-        if risk is not None:
-            score_val, components = compute_fund_score(
-                risk, flows_momentum_score=flows_momentum_score, config=scoring_config,
-            )
-        else:
-            score_val, components = 50.0, {}
-        scored.append(
-            FundScoreRead(
-                fund_id=fund.fund_id,
-                name=fund.name,
-                ticker=fund.ticker,
-                manager_score=score_val if risk else None,
-                score_components=components if risk else None,
-                cvar_95_3m=risk.cvar_95_3m if risk else None,
-                sharpe_1y=risk.sharpe_1y if risk else None,
-                return_1y=risk.return_1y if risk else None,
-            ),
-        )
-
-    scored.sort(key=lambda s: s.manager_score or 0, reverse=True)
-    return scored[:top_n]
 
 
 @router.get(
@@ -204,30 +126,3 @@ async def get_fund_risk(
     return FundRiskRead.model_validate(row)
 
 
-@router.get(
-    "/{fund_id}/nav",
-    response_model=list[NavPoint],
-    summary="[DEPRECATED] Fund NAV time-series",
-    description="DEPRECATED — use /instruments endpoints instead. "
-    "Returns NAV history for a fund within a date range.",
-    deprecated=True,
-)
-async def get_fund_nav(
-    fund_id: uuid.UUID,
-    response: Response,
-    from_date: date | None = Query(None, alias="from", description="Start date"),
-    to_date: date | None = Query(None, alias="to", description="End date"),
-    limit: int = Query(1000, ge=1, le=10000, description="Max rows to return"),
-    offset: int = Query(0, ge=0, description="Rows to skip"),
-    db: AsyncSession = Depends(get_db_with_rls),
-    user: CurrentUser = Depends(get_current_user),
-) -> list[NavPoint]:
-    _set_deprecation_headers(response)
-    stmt = select(NavTimeseries).where(NavTimeseries.instrument_id == fund_id)
-    if from_date is not None:
-        stmt = stmt.where(NavTimeseries.nav_date >= from_date)
-    if to_date is not None:
-        stmt = stmt.where(NavTimeseries.nav_date <= to_date)
-    stmt = stmt.order_by(NavTimeseries.nav_date).offset(offset).limit(limit)
-    result = await db.execute(stmt)
-    return [NavPoint.model_validate(row) for row in result.scalars().all()]

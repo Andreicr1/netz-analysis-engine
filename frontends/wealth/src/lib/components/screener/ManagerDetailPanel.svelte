@@ -16,6 +16,7 @@
 		ManagerProfile, HoldingsData, InstitutionalData, UniverseStatus, DetailTab,
 		ManagerBrochure, ManagerRegisteredFundsResponse,
 	} from "$lib/types/manager-screener";
+	import type { PrivateFundListResponse } from "$lib/types/sec-funds";
 	import DriftTab from "./DriftTab.svelte";
 	import HoldingsTab from "./HoldingsTab.svelte";
 	import DocsTab from "./DocsTab.svelte";
@@ -37,6 +38,7 @@
 	let universeData = $state<UniverseStatus | null>(null);
 	let brochureData = $state<ManagerBrochure | null>(null);
 	let registeredData = $state<ManagerRegisteredFundsResponse | null>(null);
+	let privateFundsData = $state<PrivateFundListResponse | null>(null);
 	let importingCik = $state<string | null>(null);
 	let importError = $state<string | null>(null);
 
@@ -57,6 +59,7 @@
 			universeData = null;
 			brochureData = null;
 			registeredData = null;
+			privateFundsData = null;
 			activeTab = "profile";
 			void fetchTab("profile");
 		}
@@ -83,6 +86,9 @@
 					break;
 				case "registered":
 					if (!registeredData) registeredData = await api.get<ManagerRegisteredFundsResponse>(`/manager-screener/managers/${panelCrd}/registered-funds`);
+					break;
+				case "private_funds":
+					if (!privateFundsData) privateFundsData = await api.get<PrivateFundListResponse>(`/sec/managers/${panelCrd}/private-funds`);
 					break;
 				case "brochure":
 					if (!brochureData) brochureData = await api.get<ManagerBrochure>(`/manager-screener/managers/${panelCrd}/brochure/key-sections`);
@@ -159,13 +165,13 @@
 
 <!-- Tab bar -->
 <div class="dt-tabs">
-	{#each (["profile", "holdings", "institutional", "universe", "registered", "drift", "nport", "docs", "brochure"] as DetailTab[]) as tab (tab)}
+	{#each (["profile", "holdings", "institutional", "universe", "registered", "private_funds", "drift", "nport", "docs", "brochure"] as DetailTab[]) as tab (tab)}
 		<button
 			class="dt-tab"
 			class:dt-tab--active={activeTab === tab}
 			onclick={() => tab === "drift" || tab === "nport" || tab === "docs" ? (activeTab = tab) : fetchTab(tab)}
 		>
-			{tab === "registered" ? "Reg. Funds" : tab === "nport" ? "Holdings" : tab === "docs" ? "Docs" : tab === "brochure" ? "ADV 2A" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+			{tab === "registered" ? "Reg. Funds" : tab === "private_funds" ? "Private Funds" : tab === "nport" ? "Holdings" : tab === "docs" ? "Docs" : tab === "brochure" ? "ADV 2A" : tab.charAt(0).toUpperCase() + tab.slice(1)}
 		</button>
 	{/each}
 </div>
@@ -364,6 +370,42 @@
 			{/if}
 		{:else}
 			<div class="dt-empty">No registered funds data.</div>
+		{/if}
+	{:else if activeTab === "private_funds"}
+		{#if privateFundsData}
+			{#if privateFundsData.funds.length === 0}
+				<div class="dt-empty">No Schedule D private fund data available.</div>
+			{:else}
+				<div class="dt-section">
+					<h4 class="dt-section-title">Private Funds ({privateFundsData.total})</h4>
+					<div class="overflow-x-auto">
+						<table class="w-full text-sm">
+							<thead>
+								<tr class="border-b border-(--ii-border) text-left text-xs font-medium uppercase tracking-wider text-(--ii-text-secondary)">
+									<th class="pb-2 pr-4">Fund Name</th>
+									<th class="pb-2 pr-4">Type</th>
+									<th class="pb-2 pr-4 text-right">AUM</th>
+									<th class="pb-2 pr-4 text-right">Investors</th>
+									<th class="pb-2 text-center">FoF</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each privateFundsData.funds as fund (fund.fund_name)}
+									<tr class="border-b border-(--ii-border)/50">
+										<td class="py-2 pr-4 text-(--ii-text-primary)">{fund.fund_name}</td>
+										<td class="py-2 pr-4 text-(--ii-text-secondary)">{fund.fund_type ?? "—"}</td>
+										<td class="py-2 pr-4 text-right font-mono text-(--ii-text-secondary)">{fund.gross_asset_value ? formatAUM(fund.gross_asset_value) : "—"}</td>
+										<td class="py-2 pr-4 text-right text-(--ii-text-secondary)">{fund.investor_count ?? "—"}</td>
+										<td class="py-2 text-center text-(--ii-text-secondary)">{fund.is_fund_of_funds ? "Yes" : "—"}</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			{/if}
+		{:else}
+			<div class="dt-empty">No Schedule D private fund data available.</div>
 		{/if}
 	{:else if activeTab === "drift"}
 		<DriftTab crd={panelCrd} />

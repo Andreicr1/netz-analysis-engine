@@ -188,9 +188,32 @@
 	let selectedFund = $state<UnifiedFundItem | null>(null);
 	let panelTitle = $derived(selectedFund?.name ?? "");
 
+	let enrichingDetail = $state(false);
+
 	function openFundDetail(item: UnifiedFundItem) {
+		// Registered US funds have full detail page at /screener/[cik]
+		if (item.universe === "registered_us") {
+			goto(`/screener/${item.external_id}`);
+			return;
+		}
+		// Open panel immediately with catalog data, then enrich
 		selectedFund = item;
 		panelOpen = true;
+		enrichDetail(item.external_id);
+	}
+
+	async function enrichDetail(externalId: string) {
+		enrichingDetail = true;
+		try {
+			const enriched = await api.get<UnifiedFundItem>(`/screener/catalog/${encodeURIComponent(externalId)}/detail`);
+			if (selectedFund && selectedFund.external_id === externalId) {
+				selectedFund = { ...selectedFund, ...enriched };
+			}
+		} catch {
+			// Fallback to catalog data — already displayed
+		} finally {
+			enrichingDetail = false;
+		}
 	}
 
 	function closePanel() {

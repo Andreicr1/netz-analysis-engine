@@ -8,7 +8,9 @@
 
 	let { data }: { data: Record<string, any> } = $props();
 
-	type DetailTab = "overview" | "holdings" | "peers" | "holders";
+	import type { StyleHistoryResponse } from "$lib/types/sec-funds";
+
+	type DetailTab = "overview" | "holdings" | "peers" | "holders" | "style";
 	let activeTab = $state<DetailTab>("overview");
 
 	const detail = $derived(data.detail as Record<string, any> | null);
@@ -17,6 +19,7 @@
 	const reverseHoldings = $derived(data.reverseHoldings as Record<string, any> | null);
 	const holdingsHistory = $derived(data.holdingsHistory as Record<string, any> | null);
 	const holdings = $derived(data.holdings as Record<string, any> | null);
+	const styleHistory = $derived(data.styleHistory as StyleHistoryResponse | null);
 
 	const fundName = $derived(detail?.fund_name ?? `Fund ${data.cik}`);
 
@@ -105,6 +108,7 @@
 		{ key: "holdings", label: "Portfolio Holdings" },
 		{ key: "peers", label: "Peer Analysis" },
 		{ key: "holders", label: "Institutional Holders" },
+		{ key: "style", label: "Style" },
 	];
 
 	// Holdings quarter selector
@@ -460,6 +464,50 @@
 				</p>
 			</div>
 		{/if}
+	{:else if activeTab === "style"}
+		{#if styleHistory && styleHistory.snapshots.length > 0}
+			<div class="fd-grid">
+				<div class="fd-card fd-card--full">
+					<div class="flex items-center gap-3">
+						<h3 class="fd-card-title" style="margin-bottom:0">Style Classification History</h3>
+						{#if styleHistory.drift_detected}
+							<span class="fd-drift-badge">Drift Detected</span>
+						{/if}
+					</div>
+					<div class="fd-style-timeline">
+						{#each styleHistory.snapshots as snap (snap.report_date)}
+							<div class="fd-style-snap">
+								<div class="flex items-center gap-2 mb-1">
+									<span class="fd-style-date">{snap.report_date.slice(0, 7)}</span>
+									{#if snap.style_label}
+										<span class="fd-style-label">{snap.style_label}</span>
+									{/if}
+									{#if snap.confidence != null}
+										<span class="fd-style-conf">{formatPercent(snap.confidence)} conf.</span>
+									{/if}
+								</div>
+								<div class="fd-style-bars">
+									{#if snap.equity_pct != null}
+										<div class="fd-style-bar" style:width="{snap.equity_pct * 100}%" style:background="var(--ii-accent, #155dfc)" title="Equity {formatPercent(snap.equity_pct)}"></div>
+									{/if}
+									{#if snap.fixed_income_pct != null}
+										<div class="fd-style-bar" style:width="{snap.fixed_income_pct * 100}%" style:background="var(--ii-secondary, #64748b)" title="Fixed Income {formatPercent(snap.fixed_income_pct)}"></div>
+									{/if}
+									{#if snap.cash_pct != null}
+										<div class="fd-style-bar" style:width="{snap.cash_pct * 100}%" style:background="var(--ii-muted, #cbd5e1)" title="Cash {formatPercent(snap.cash_pct)}"></div>
+									{/if}
+								</div>
+							</div>
+						{/each}
+					</div>
+					<p class="fd-style-footer">{styleHistory.quarters_analyzed} quarters analyzed</p>
+				</div>
+			</div>
+		{:else}
+			<div class="fd-empty-section">
+				<p class="fd-empty">No style classification data available for this fund.</p>
+			</div>
+		{/if}
 	{/if}
 </div>
 
@@ -780,6 +828,71 @@
 		border-radius: 16px;
 		padding: 48px 24px;
 		text-align: center;
+	}
+
+	/* Style tab */
+	.fd-drift-badge {
+		display: inline-block;
+		padding: 2px 10px;
+		border-radius: 999px;
+		font-size: 11px;
+		font-weight: 700;
+		background: #fef3c7;
+		color: #92400e;
+	}
+
+	.fd-style-timeline {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		margin-top: 16px;
+	}
+
+	.fd-style-snap {
+		padding: 8px 0;
+		border-bottom: 1px solid #f1f5f9;
+	}
+
+	.fd-style-date {
+		font-size: 12px;
+		font-weight: 600;
+		color: #62748e;
+		font-family: var(--ii-font-mono, monospace);
+	}
+
+	.fd-style-label {
+		display: inline-block;
+		padding: 1px 8px;
+		border-radius: 999px;
+		font-size: 11px;
+		font-weight: 600;
+		background: #eff6ff;
+		color: #1e40af;
+	}
+
+	.fd-style-conf {
+		font-size: 11px;
+		color: #90a1b9;
+	}
+
+	.fd-style-bars {
+		display: flex;
+		height: 8px;
+		border-radius: 4px;
+		overflow: hidden;
+		background: #f1f5f9;
+		margin-top: 4px;
+	}
+
+	.fd-style-bar {
+		height: 100%;
+		min-width: 1px;
+	}
+
+	.fd-style-footer {
+		margin-top: 12px;
+		font-size: 12px;
+		color: #90a1b9;
 	}
 
 	@media (max-width: 768px) {

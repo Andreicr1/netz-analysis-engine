@@ -45,6 +45,7 @@
 	// ── ConsequenceDialog state ──
 	let showApproveDialog = $state(false);
 	let showExecuteDialog = $state(false);
+	let showApplyDialog = $state(false);
 	let targetEventId = $state<string | null>(null);
 	let targetEventLabel = $state<string>("");
 
@@ -198,6 +199,29 @@
 		targetEventId = String(event.event_id ?? event.id ?? "");
 		targetEventLabel = `Event ${targetEventId.slice(0, 8)}`;
 		showExecuteDialog = true;
+	}
+
+	function openApplyDialog(event: Record<string, unknown>) {
+		targetEventId = String(event.event_id ?? event.id ?? "");
+		targetEventLabel = `Event ${targetEventId.slice(0, 8)}`;
+		showApplyDialog = true;
+	}
+
+	async function handleApply(_payload: ConsequenceDialogPayload) {
+		if (!targetEventId) return;
+		actionError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			await api.post(`/rebalancing/proposals/${targetEventId}/apply`, {});
+			await loadRebalanceEvents();
+			await invalidateAll();
+		} catch (e) {
+			if (e instanceof Error && e.message.includes("409")) {
+				actionError = "Proposal is no longer pending — it may have already been applied.";
+			} else {
+				actionError = e instanceof Error ? e.message : "Apply failed";
+			}
+		}
 	}
 
 	async function handleApprove(payload: ConsequenceDialogPayload) {
@@ -422,6 +446,15 @@
 										Approve
 									</ActionButton>
 								{/if}
+								{#if eventStatus === "pending"}
+									<ActionButton
+										size="sm"
+										variant="destructive"
+										onclick={() => openApplyDialog(event)}
+									>
+										Apply to Portfolio
+									</ActionButton>
+								{/if}
 								{#if eventStatus === "approved"}
 									<ActionButton
 										size="sm"
@@ -519,6 +552,25 @@
 	]}
 	onConfirm={handleApprove}
 	onCancel={() => { showApproveDialog = false; targetEventId = null; }}
+/>
+
+<!-- Apply ConsequenceDialog (fast path — bypasses governance) -->
+<ConsequenceDialog
+	bind:open={showApplyDialog}
+	title="Apply Rebalance to Portfolio"
+	impactSummary="This will update the model portfolio weights immediately, bypassing the standard approval workflow. This action cannot be undone."
+	destructive={true}
+	requireRationale={true}
+	rationaleLabel="Application rationale"
+	rationalePlaceholder="Provide the basis for applying directly (min 10 characters)."
+	confirmLabel="Apply"
+	metadata={[
+		{ label: "Event", value: targetEventLabel, emphasis: true },
+		{ label: "Portfolio", value: profile },
+		{ label: "Impact", value: "Portfolio weights updated immediately" },
+	]}
+	onConfirm={handleApply}
+	onCancel={() => { showApplyDialog = false; targetEventId = null; }}
 />
 
 <!-- Execute ConsequenceDialog (SEPARATE from approve) -->

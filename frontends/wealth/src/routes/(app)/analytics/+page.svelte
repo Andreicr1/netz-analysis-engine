@@ -18,6 +18,7 @@
 		AttributionResult, ParetoResult, SectorAttribution, StrategyDriftAlert, Timeframe,
 		CorrelationResult, RollingCorrelation, BacktestResult, BacktestFoldResult,
 		RiskBudgetResult, FactorAnalysisResult, CorrelationRegimeResult,
+		StrategyDriftScanResult,
 	} from "$lib/types/analytics";
 	import { effectColor, severityColor } from "$lib/types/analytics";
 	import { Button } from "@investintell/ui";
@@ -49,6 +50,32 @@
 	let profile = $derived(data.profile as string);
 	let instruments = $derived((data.instruments ?? []) as UniverseAsset[]);
 	let correlationRegime = $derived(data.correlationRegime as CorrelationRegimeResult | null);
+
+	// ── Drift scan state ──────────────────────────────────────────────────
+	let scanning = $state(false);
+	let scanResult = $state<StrategyDriftScanResult | null>(null);
+	let scanError = $state<string | null>(null);
+
+	async function triggerDriftScan() {
+		scanning = true;
+		scanResult = null;
+		scanError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			scanResult = await api.post<StrategyDriftScanResult>(
+				'/analytics/strategy-drift/scan', {}
+			);
+			await goto(`/analytics?profile=${selectedProfile}`, { replaceState: true, invalidateAll: true });
+		} catch (e) {
+			if (e instanceof Error && e.message.includes("409")) {
+				scanError = "Scan already in progress — try again in a moment.";
+			} else {
+				scanError = e instanceof Error ? e.message : "Scan failed";
+			}
+		} finally {
+			scanning = false;
+		}
+	}
 
 	// ── Filter state ──────────────────────────────────────────────────────
 
@@ -536,12 +563,35 @@
 		{/if}
 
 		<!-- Drift alerts below sectors -->
-		{#if driftAlerts.length > 0}
-			<div class="an-drift-section">
+		<div class="an-drift-section">
+			<div class="flex items-center justify-between">
 				<h3 class="an-master-title">
 					Strategy Drift
-					<span class="an-drift-count">{driftAlerts.length}</span>
+					{#if driftAlerts.length > 0}
+						<span class="an-drift-count">{driftAlerts.length}</span>
+					{/if}
 				</h3>
+				<Button
+					variant="outline"
+					size="sm"
+					disabled={scanning}
+					onclick={triggerDriftScan}
+				>
+					{scanning ? "Scanning…" : "Scan Now"}
+				</Button>
+			</div>
+
+			{#if scanError}
+				<p class="mt-2 text-xs text-(--ii-status-error)">{scanError}</p>
+			{/if}
+
+			{#if scanResult}
+				<p class="mt-2 text-xs text-(--ii-text-secondary)">
+					Scanned {scanResult.scanned_count} instruments, found {scanResult.alerts.length} alerts.
+				</p>
+			{/if}
+
+			{#if driftAlerts.length > 0}
 				<div class="an-drift-list">
 					{#each driftAlerts as alert (alert.instrument_id)}
 						<div class="an-drift-row">
@@ -553,8 +603,10 @@
 						</div>
 					{/each}
 				</div>
-			</div>
-		{/if}
+			{:else if !scanResult}
+				<p class="mt-2 text-xs text-(--ii-text-muted)">No drift alerts detected.</p>
+			{/if}
+		</div>
 	</aside>
 
 	<!-- ═══════════════════════════════════════════════════════════════════ -->

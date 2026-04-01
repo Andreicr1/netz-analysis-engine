@@ -47,12 +47,6 @@ class TestRouteRegistration:
             assert resp.status_code != 404, f"Route {BASE_URL}/upload-complete not found"
 
     @pytest.mark.asyncio
-    async def test_upload_route_registered(self):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post(f"{BASE_URL}/upload")
-            assert resp.status_code != 404, f"Route {BASE_URL}/upload not found"
-
-    @pytest.mark.asyncio
     async def test_list_documents_route_registered(self):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get(BASE_URL)
@@ -91,12 +85,6 @@ class TestAuthEnforcement:
             assert resp.status_code == 401
 
     @pytest.mark.asyncio
-    async def test_upload_requires_auth(self):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post(f"{BASE_URL}/upload")
-            assert resp.status_code == 401
-
-    @pytest.mark.asyncio
     async def test_list_documents_requires_auth(self):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.get(BASE_URL)
@@ -107,35 +95,6 @@ class TestAuthEnforcement:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             resp = await client.post(f"{BASE_URL}/ingestion/process-pending")
             assert resp.status_code == 401
-
-
-class TestUploadValidation:
-    """Upload endpoint validation tests (mocked storage)."""
-
-    @pytest.mark.asyncio
-    async def test_upload_rejects_empty_file(self):
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post(
-                f"{BASE_URL}/upload",
-                headers=DEV_ACTOR_HEADER,
-                files={"file": ("empty.pdf", b"", "application/pdf")},
-                data={"root_folder": "documents"},
-            )
-            assert resp.status_code == 400
-            assert "empty" in resp.json().get("detail", "").lower()
-
-    @pytest.mark.asyncio
-    async def test_upload_rejects_oversized_file(self):
-        # Create a file slightly over 100MB
-        oversized = b"x" * (100 * 1024 * 1024 + 1)
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post(
-                f"{BASE_URL}/upload",
-                headers=DEV_ACTOR_HEADER,
-                files={"file": ("big.pdf", oversized, "application/pdf")},
-                data={"root_folder": "documents"},
-            )
-            assert resp.status_code == 413
 
 
 class TestSchemaImports:

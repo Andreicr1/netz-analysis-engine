@@ -83,7 +83,7 @@ export interface CompareResult {
 	jaccard_overlap: number;
 }
 
-export type DetailTab = "profile" | "holdings" | "institutional" | "universe" | "registered" | "drift" | "nport" | "docs" | "brochure";
+export type DetailTab = "profile" | "holdings" | "institutional" | "universe" | "registered" | "private_funds" | "drift" | "nport" | "docs" | "brochure";
 
 // ── Registered Funds tab ──
 export interface ManagerRegisteredFundItem {
