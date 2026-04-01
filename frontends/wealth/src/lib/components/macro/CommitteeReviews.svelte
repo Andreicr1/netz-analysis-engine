@@ -180,6 +180,27 @@
 		}
 	}
 
+	// ── PDF download ─────────────────────────────────────────────────
+	let downloadingId = $state<string | null>(null);
+
+	async function downloadReviewPdf(reviewId: string, asOfDate: string) {
+		downloadingId = reviewId;
+		try {
+			const api = createClientApiClient(getToken);
+			const blob = await api.getBlob(`/macro/reviews/${reviewId}/download`);
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = `macro-review-${asOfDate}.pdf`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : "Download failed";
+		} finally {
+			downloadingId = null;
+		}
+	}
+
 	function statusType(s: string): string {
 		if (s === "approved") return "success";
 		if (s === "rejected") return "danger";
@@ -377,16 +398,25 @@
 							</span>
 						{/if}
 					</div>
-					{#if canApprove && review.status === "pending"}
-						<div class="review-actions">
+					<div class="review-actions">
+						{#if canApprove && review.status === "pending"}
 							<button class="action-btn action-btn--approve" onclick={() => openApprove(review)} disabled={processingId === review.id}>
 								Approve
 							</button>
 							<button class="action-btn action-btn--reject" onclick={() => openReject(review)} disabled={processingId === review.id}>
 								Reject
 							</button>
-						</div>
-					{/if}
+						{/if}
+						{#if review.status === "pending" || review.status === "approved"}
+							<button
+								class="action-btn action-btn--download"
+								onclick={() => downloadReviewPdf(review.id, review.as_of_date)}
+								disabled={downloadingId === review.id}
+							>
+								{downloadingId === review.id ? "Downloading\u2026" : "Download PDF"}
+							</button>
+						{/if}
+					</div>
 				</div>
 			{/each}
 		</div>
@@ -765,5 +795,16 @@
 
 	.action-btn--reject:hover:not(:disabled) {
 		background: color-mix(in srgb, var(--ii-danger) 10%, transparent);
+	}
+
+	.action-btn--download {
+		background: transparent;
+		border-color: var(--ii-border);
+		color: var(--ii-text-secondary);
+	}
+
+	.action-btn--download:hover:not(:disabled) {
+		background: var(--ii-surface-alt);
+		color: var(--ii-text-primary);
 	}
 </style>

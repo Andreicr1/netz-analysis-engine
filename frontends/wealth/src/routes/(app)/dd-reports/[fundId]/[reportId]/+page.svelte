@@ -18,6 +18,7 @@
 	import type { PageData } from "./$types";
 	import type { DDReportFull, DDChapter, DDReportStatus, DecisionAnchor, AuditEvent } from "$lib/types/dd-report";
 	import { chapterTitle, anchorLabel, anchorColor, confidenceColor } from "$lib/types/dd-report";
+	import { renderMarkdown, flattenObject } from "$lib/utils/render-markdown";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -203,37 +204,7 @@
 		}
 	}
 
-	// ── Markdown rendering (safe subset — no raw HTML) ────────────────────
-
-	function renderMarkdown(md: string | null): string {
-		if (!md) return "<p class=\"rw-empty\">Content not yet generated.</p>";
-		return md
-			.replace(/^### (.+)$/gm, '<h3 class="rw-h3">$1</h3>')
-			.replace(/^## (.+)$/gm, '<h2 class="rw-h2">$1</h2>')
-			.replace(/^# (.+)$/gm, '<h1 class="rw-h1">$1</h1>')
-			.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-			.replace(/\*(.+?)\*/g, "<em>$1</em>")
-			.replace(/`(.+?)`/g, '<code class="rw-code">$1</code>')
-			.replace(/^- (.+)$/gm, '<li class="rw-li">$1</li>')
-			.replace(/(<li[^>]*>.*<\/li>\n?)+/g, '<ul class="rw-ul">$&</ul>')
-			.replace(/^(?!<[hul]|<li|<strong|<em|<code)(.+)$/gm, '<p class="rw-p">$1</p>')
-			.replace(/\n{2,}/g, "");
-	}
-
-	// ── Evidence flattening ───────────────────────────────────────────────
-
-	function flattenObject(obj: Record<string, unknown>, prefix = ""): Array<{ key: string; value: string }> {
-		const entries: Array<{ key: string; value: string }> = [];
-		for (const [k, v] of Object.entries(obj)) {
-			const label = prefix ? `${prefix} › ${k}` : k;
-			if (v && typeof v === "object" && !Array.isArray(v)) {
-				entries.push(...flattenObject(v as Record<string, unknown>, label));
-			} else {
-				entries.push({ key: label, value: String(v ?? "—") });
-			}
-		}
-		return entries;
-	}
+	// renderMarkdown + flattenObject imported from $lib/utils/render-markdown
 </script>
 
 <!-- ═══════════════════════════════════════════════════════════════════════ -->

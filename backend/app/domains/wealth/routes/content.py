@@ -23,7 +23,7 @@ from app.core.config.settings import settings
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.content import WealthContent
-from app.domains.wealth.schemas.content import ContentSummary, ContentTrigger
+from app.domains.wealth.schemas.content import ContentRead, ContentSummary, ContentTrigger
 from app.shared.enums import Role
 
 logger = structlog.get_logger()
@@ -239,6 +239,31 @@ async def list_content(
     result = await db.execute(query)
     items = result.scalars().all()
     return [ContentSummary.model_validate(item) for item in items]
+
+
+@router.get(
+    "/{content_id}",
+    response_model=ContentRead,
+    summary="Get content detail with markdown body",
+)
+async def get_content(
+    content_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> ContentRead:
+    """Return full content item including ``content_md`` and ``content_data``."""
+    _require_feature()
+
+    result = await db.execute(
+        select(WealthContent).where(WealthContent.id == content_id),
+    )
+    content = result.scalar_one_or_none()
+    if content is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Content {content_id} not found",
+        )
+    return ContentRead.model_validate(content)
 
 
 # ── Approval ───────────────────────────────────────────────────────

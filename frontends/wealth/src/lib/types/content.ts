@@ -14,6 +14,11 @@ export interface ContentSummary {
 	updated_at: string;
 }
 
+export interface ContentFull extends ContentSummary {
+	content_md: string | null;
+	content_data: Record<string, unknown> | null;
+}
+
 export type ContentType = "investment_outlook" | "flash_report" | "manager_spotlight";
 
 export function contentTypeLabel(type: string): string {

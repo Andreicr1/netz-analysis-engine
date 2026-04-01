@@ -241,7 +241,9 @@
 						<StatusBadge status={item.status} />
 					</div>
 
-					<h3 class="ct-title">{item.title ?? contentTypeLabel(item.content_type)}</h3>
+					<a href="/content/{item.id}" class="ct-title-link">
+						<h3 class="ct-title">{item.title ?? contentTypeLabel(item.content_type)}</h3>
+					</a>
 
 					<div class="ct-meta">
 						<span class="ct-lang">{item.language.toUpperCase()}</span>
@@ -427,12 +429,22 @@
 		letter-spacing: 0.04em;
 	}
 
+	.ct-title-link {
+		text-decoration: none;
+		color: inherit;
+	}
+
 	.ct-title {
 		padding: var(--ii-space-stack-sm, 12px) var(--ii-space-inline-md, 16px) 0;
 		font-size: var(--ii-text-body, 0.9375rem);
 		font-weight: 600;
 		color: var(--ii-text-primary);
 		line-height: 1.4;
+		transition: color 120ms ease;
+	}
+
+	.ct-title-link:hover .ct-title {
+		color: var(--ii-brand-primary);
 	}
 
 	.ct-meta {
