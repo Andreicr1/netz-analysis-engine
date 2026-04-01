@@ -85,17 +85,8 @@
 	// ── Construction Advisor ──────────────────────────────────────────────
 	let advisorRef: ConstructionAdvisor | undefined = $state(undefined);
 
-	// Auto-fetch advice after construct when CVaR fails.
-	// Guard: track the schema identity to avoid infinite re-entry.
-	let lastAdvisedSchema = $state<unknown>(null);
-
-	$effect(() => {
-		const schema = portfolio.fund_selection_schema;
-		if (schema && !cvarWithinLimit && advisorRef && schema !== lastAdvisedSchema) {
-			lastAdvisedSchema = schema;
-			advisorRef.fetchAdvice();
-		}
-	});
+	// Advisor auto-fetch is triggered imperatively from runConstruct() —
+	// NOT via $effect (reactive loops with $derived object references).
 
 	// ── Fact Sheets ──────────────────────────────────────────────────────
 
@@ -136,7 +127,13 @@
 			const api = createClientApiClient(getToken);
 			await api.post(`/model-portfolios/${portfolioId}/construct`, {});
 			await invalidateAll();
-			// Advisor auto-fetch is handled by $effect watching cvarWithinLimit
+			// After data reloads, check if CVaR failed → auto-fetch advisor
+			// Use tick() equivalent: schedule after Svelte updates $derived values
+			setTimeout(() => {
+				if (advisorRef && !cvarWithinLimit) {
+					advisorRef.fetchAdvice();
+				}
+			}, 0);
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Construction failed";
 		} finally {

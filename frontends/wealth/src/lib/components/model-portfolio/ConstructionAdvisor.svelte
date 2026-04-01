@@ -108,8 +108,9 @@
 		addedFunds = new Set();
 		try {
 			const api = createClientApiClient(getToken);
-			const data = await api.get<ConstructionAdvice>(
+			const data = await api.post<ConstructionAdvice>(
 				`/model-portfolios/${portfolioId}/construction-advice`,
+				{},
 			);
 			advisorState = { status: "loaded", data };
 		} catch (e) {
