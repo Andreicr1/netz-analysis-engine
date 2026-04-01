@@ -6,7 +6,6 @@ import numpy as np
 import pytest
 
 from quant_engine.risk_budgeting_service import (
-    FundRiskBudget,
     RiskBudgetResult,
     compute_risk_budget,
 )

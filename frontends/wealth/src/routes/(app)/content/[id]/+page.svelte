@@ -93,10 +93,10 @@
 	);
 </script>
 
-<PageHeader title={content.title ?? contentTypeLabel(content.content_type)}>
-	{#snippet breadcrumbs()}
-		<a href="/content" class="cd-back">Content</a>
-	{/snippet}
+<PageHeader
+	title={content.title ?? contentTypeLabel(content.content_type)}
+	breadcrumbs={[{ label: "Content", href: "/content" }, { label: content.title ?? contentTypeLabel(content.content_type) }]}
+>
 	{#snippet actions()}
 		<div class="cd-actions">
 			{#if canApprove}
@@ -379,12 +379,4 @@
 		word-break: break-word;
 	}
 
-	.cd-back {
-		color: var(--ii-text-muted);
-		text-decoration: none;
-		font-size: var(--ii-text-small, 0.8125rem);
-	}
-	.cd-back:hover {
-		color: var(--ii-brand-primary);
-	}
 </style>

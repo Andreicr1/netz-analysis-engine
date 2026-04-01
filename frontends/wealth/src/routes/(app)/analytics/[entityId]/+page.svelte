@@ -5,6 +5,7 @@
   Fully polymorphic: entity_type is display-only, never branching logic.
 -->
 <script lang="ts">
+	import { getContext } from "svelte";
 	import { goto } from "$app/navigation";
 	import { PageHeader } from "@investintell/ui";
 	import type { PageData } from "./$types";
@@ -19,7 +20,9 @@
 	import TailRiskPanel from "$lib/components/analytics/entity/TailRiskPanel.svelte";
 	import PeerGroupPanel from "$lib/components/analytics/entity/PeerGroupPanel.svelte";
 	import MonteCarloPanel from "$lib/components/analytics/entity/MonteCarloPanel.svelte";
-	import { createBrowserApiClient } from "$lib/api/client";
+	import { createClientApiClient } from "$lib/api/client";
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let { data }: { data: PageData } = $props();
 
@@ -35,7 +38,7 @@
 		if (!analytics || mcLoading) return;
 		mcLoading = true;
 		try {
-			const api = createBrowserApiClient();
+			const api = createClientApiClient(getToken);
 			mcResult = await api.post<MonteCarloResult>("/analytics/monte-carlo", {
 				entity_id: analytics.entity_id,
 				n_simulations: 10_000,
