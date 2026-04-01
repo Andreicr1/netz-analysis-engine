@@ -94,12 +94,14 @@
 	let generationEvents = $state<GenerationEvent[]>([]);
 	let sseConnection: ReturnType<typeof createSSEStream<GenerationEvent>> | null = null;
 
+	const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
+
 	function startSSE() {
 		if (report.status !== "generating") return;
 		sseConnection?.disconnect();
 
 		sseConnection = createSSEStream<GenerationEvent>({
-			url: `/dd-reports/${reportId}/stream`,
+			url: `${apiBase}/dd-reports/${reportId}/stream`,
 			getToken,
 			onEvent(event) {
 				generationEvents = [...generationEvents, event];

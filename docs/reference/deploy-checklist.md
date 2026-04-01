@@ -825,6 +825,43 @@ ORDER BY objid;
 
 **Resultado: 6/7 GO.**
 
+---
+
+## Sessão 2026-03-30 — Frontend UX + Investment Policy Wiring
+
+### Problemas identificados e resolvidos (Prompts I e J)
+
+**Prompt I — 5 problemas de fluxo frontend:**
+
+| # | Problema | Root cause | Fix |
+|---|---|---|---|
+| I1 | Content "not enabled" | `FEATURE_WEALTH_CONTENT=False` default | Adicionar env var Railway |
+| I2 | Botão "New Portfolio" invisível | `canCreate` checa role Clerk — usuário demo não tem `investment_team` | Corrigir role no Clerk Dashboard |
+| I3 | Macro Review sem entrada óbvia | `/macro` existe no sidebar mas não há hint no wizard | Hint com link no create wizard quando sem reviews aprovados |
+| I4 | Analytics Portfolio 0.00% | Portfolio `Backtesting` nunca teve `construct` pós-refactor | `POST /construct` + `run-portfolio-nav-synthesizer` |
+| I5 | Score 0.0 nos fundos | Query de `fund_risk_metrics` não aceitava `organization_id IS NULL` (global) | Corrigir WHERE para aceitar NULL ou org-scoped |
+
+**Prompt J — Investment Policy desconectada do backend (3 desconexões):**
+
+| # | Desconexão | Antes (errado) | Depois (correto) |
+|---|---|---|---|
+| J1 | `+page.server.ts` vertical | Filtrava `c.vertical === "wealth"` → sempre `[]` | GET individual `/admin/configs/liquid_funds/{calibration,scoring,portfolio_profiles}` |
+| J2 | Leitura de configs | `findConfig("risk_limits")` → inexistente | `calibration.cvar_limits` com abs(decimal)→% |
+| J3 | Saves com endpoints 404 | `PATCH /admin/configs/wealth/risk_limits` → 404 | `PUT /admin/configs/defaults/liquid_funds/calibration` (super_admin global defaults) |
+
+**Decisão de arquitetura:** `saveUniverseFilters` e `saveRebalancingRules` ficam como session-only (toast informativo) por ora — não têm config_type dedicado no backend. `rebalancing` virá de `calibration.drift_bands` futuramente.
+
+### Estado do checklist pós-sessão 2026-03-30
+
+| Fase | Itens | Status |
+|---|---|---|
+| #1–#28 Baseline | 28/28 | ✅ |
+| #29–#35 Quant Upgrade | 7/7 | ✅ |
+| #36–#52 Embedding + Fund-Centric | 17/17 | ✅ |
+| #53–#55 P0 Estabilização | 3/3 | ✅ |
+| #56–#62 P1/P2 Catálogo + Dados | 6/7 | ✅ (exceto #60) |
+| **Total** | **61/62** | |
+
 **Todos 35 itens marcados = sistema em produção.**
 
 > ⚠️ **Itens #53–#62 adicionados em 2026-03-29** — obrigatórios antes do próximo deploy Railway.
@@ -1020,6 +1057,33 @@ Ref: `docs/reference/fund-centric-model-reference.md`
 | 50 | DisclosureMatrix holdings_source | Fundo importado com `sec_cik` tem `disclosure.holdings_source = "nport"` no catalog | ⏳ |
 | 51 | has_13f_overlay | Fundo cujo manager faz 13F tem `disclosure.has_13f_overlay = true` | ⏳ |
 | 52 | Identifier bridge | `instrument.attributes.sec_cik` (fund CIK) ≠ `instrument.attributes.sec_crd` (firm CRD) — não confundir adviser CIK com fund CIK | ⏳ |
+
+---
+
+## Sessão 2026-03-30 — CRD Link em sec_registered_funds
+
+### Problema
+`sec_registered_funds.crd_number` estava com 0.9% de cobertura (43/4.617).
+Fundos sem CRD aparecem como standalone (L1) no CatalogTable — sem gestor pai,
+sem checkbox de envio para DD Review.
+
+### Fix aplicado (Prompt L — Etapa 1)
+UPDATE via match direto `sec_managers.cik = sec_registered_funds.cik`.
+
+| Métrica | Antes | Depois |
+|---|---|---|
+| Total fundos | 4.617 | 4.617 |
+| Com CRD | 43 (0.9%) | 2.677 (58%) |
+| Sem CRD | 4.574 | 1.940 |
+| Links quebrados | — | 0 |
+
+**Top gestoras linkadas:** Nuveen (76), T. Rowe Price (69), BlackRock (69),
+Fidelity (55), Franklin (42), Capital Group (41), John Hancock (38),
+BNY Mellon (38), Eaton Vance (38), Vanguard (34).
+
+**Pendentes (1.940):** Separate accounts, variable annuity funds, interval funds
+menores. Cobertos pela Etapa 2 do Prompt L (EDGAR Submissions API + trigram).
+Não bloqueadores — as maiores gestoras já estão linkadas.
 
 ---
 
