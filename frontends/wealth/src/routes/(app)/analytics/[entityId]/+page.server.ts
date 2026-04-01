@@ -16,14 +16,21 @@ export const load: PageServerLoad = async ({ parent, url, params }) => {
 	if (benchmarkId) qp.benchmark_id = benchmarkId;
 
 	// Fetch all data in parallel — entity analytics, peer group, active share
-	const [analytics, peerGroup] = await Promise.all([
+	const [analytics, peerGroup, activeShare] = await Promise.all([
 		api
 			.get<EntityAnalyticsResponse>(`/analytics/entity/${entityId}`, qp)
 			.catch(() => null),
 		api
 			.get<PeerGroupResult>(`/analytics/peer-group/${entityId}`)
 			.catch(() => null),
+		benchmarkId
+			? api
+					.get<ActiveShareResult>(`/analytics/active-share/${entityId}`, {
+						benchmark_id: benchmarkId,
+					})
+					.catch(() => null)
+			: Promise.resolve(null),
 	]);
 
-	return { analytics, peerGroup, entityId, window };
+	return { analytics, peerGroup, activeShare, entityId, window };
 };

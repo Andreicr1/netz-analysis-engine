@@ -7,10 +7,11 @@
 <script lang="ts">
 	import { getContext } from "svelte";
 	import { goto } from "$app/navigation";
+	import { page } from "$app/stores";
 	import { PageHeader } from "@investintell/ui";
 	import type { PageData } from "./$types";
 	import type { EntityAnalyticsResponse } from "$lib/types/entity-analytics";
-	import type { PeerGroupResult, MonteCarloResult } from "$lib/types/analytics";
+	import type { PeerGroupResult, MonteCarloResult, ActiveShareResult } from "$lib/types/analytics";
 	import RiskStatisticsGrid from "$lib/components/analytics/entity/RiskStatisticsGrid.svelte";
 	import DrawdownChart from "$lib/components/analytics/entity/DrawdownChart.svelte";
 	import CaptureRatiosPanel from "$lib/components/analytics/entity/CaptureRatiosPanel.svelte";
@@ -19,6 +20,7 @@
 	import ReturnStatisticsPanel from "$lib/components/analytics/entity/ReturnStatisticsPanel.svelte";
 	import TailRiskPanel from "$lib/components/analytics/entity/TailRiskPanel.svelte";
 	import PeerGroupPanel from "$lib/components/analytics/entity/PeerGroupPanel.svelte";
+	import ActiveSharePanel from "$lib/components/analytics/entity/ActiveSharePanel.svelte";
 	import MonteCarloPanel from "$lib/components/analytics/entity/MonteCarloPanel.svelte";
 	import { createClientApiClient } from "$lib/api/client";
 
@@ -28,6 +30,7 @@
 
 	let analytics = $derived(data.analytics as EntityAnalyticsResponse | null);
 	let peerGroup = $derived(data.peerGroup as PeerGroupResult | null);
+	let activeShare = $derived(data.activeShare as ActiveShareResult | null);
 	let currentWindow = $derived(data.window as string);
 
 	// Monte Carlo is client-side triggered (expensive computation)
@@ -55,7 +58,10 @@
 
 	function switchWindow(w: string) {
 		const entityId = data.entityId;
-		goto(`/analytics/${entityId}?window=${w}`, { replaceState: true });
+		const params = new URLSearchParams({ window: w });
+		const bm = $page.url.searchParams.get("benchmark_id");
+		if (bm) params.set("benchmark_id", bm);
+		goto(`/analytics/${entityId}?${params.toString()}`, { replaceState: true });
 	}
 </script>
 
@@ -101,6 +107,8 @@
 	{#if peerGroup}
 		<PeerGroupPanel {peerGroup} />
 	{/if}
+
+	<ActiveSharePanel data={activeShare} benchmarkId={$page.url.searchParams.get('benchmark_id')} />
 
 	<!-- Monte Carlo: client-triggered (expensive) -->
 	{#if mcResult}

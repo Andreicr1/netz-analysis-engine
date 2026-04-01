@@ -9,6 +9,7 @@ import type { PageServerLoad } from "./$types";
 import { createServerApiClient } from "$lib/api/client";
 import type { UnifiedCatalogPage, CatalogFacets } from "$lib/types/catalog";
 import { EMPTY_CATALOG_PAGE, EMPTY_FACETS } from "$lib/types/catalog";
+import type { ScreeningRun, ScreeningResult } from "$lib/types/screening";
 
 export const load: PageServerLoad = async ({ parent, url }) => {
 	const { token } = await parent();
@@ -43,15 +44,19 @@ export const load: PageServerLoad = async ({ parent, url }) => {
 	const minReturn10y = url.searchParams.get("min_return_10y");
 	if (minReturn10y) catalogParams.min_return_10y = minReturn10y;
 
-	const [catalog, facets] = await Promise.all([
+	const [catalog, facets, screeningRuns, screeningResults] = await Promise.all([
 		api.get<UnifiedCatalogPage>("/screener/catalog", catalogParams).catch(() => EMPTY_CATALOG_PAGE),
 		api.get<CatalogFacets>("/screener/catalog/facets", catalogParams).catch(() => EMPTY_FACETS),
+		api.get<ScreeningRun[]>("/screener/runs", { limit: "10" }).catch(() => [] as ScreeningRun[]),
+		api.get<ScreeningResult[]>("/screener/results", { is_current: "true", limit: "100" }).catch(() => [] as ScreeningResult[]),
 	]);
 
 	return {
-		tab: "catalog",
+		tab: url.searchParams.get("tab") ?? "catalog",
 		catalog,
 		catalogFacets: facets,
+		screeningRuns,
+		screeningResults,
 		currentParams: Object.fromEntries(url.searchParams.entries()),
 	};
 };

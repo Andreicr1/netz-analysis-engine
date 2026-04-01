@@ -35,10 +35,24 @@ export interface ScreeningResult {
 
 export interface ScreeningRun {
 	run_id: string;
+	run_type: string;
 	instrument_count: number;
+	config_hash: string;
 	started_at: string;
 	completed_at: string | null;
 	status: "running" | "completed";
+}
+
+export interface ScreeningRunRequest {
+	instrument_type?: string | null;
+	block_id?: string | null;
+	instrument_ids?: string[] | null;
+}
+
+export interface ScreeningRunResponse {
+	run_id: string;
+	status: string;
+	instrument_count: number;
 }
 
 export type OverallStatus = "PASS" | "FAIL" | "WATCHLIST";

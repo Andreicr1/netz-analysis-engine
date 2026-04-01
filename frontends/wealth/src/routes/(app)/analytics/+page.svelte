@@ -17,13 +17,14 @@
 	import type {
 		AttributionResult, ParetoResult, SectorAttribution, StrategyDriftAlert, Timeframe,
 		CorrelationResult, RollingCorrelation, BacktestResult, BacktestFoldResult,
-		RiskBudgetResult, FactorAnalysisResult,
+		RiskBudgetResult, FactorAnalysisResult, CorrelationRegimeResult,
 	} from "$lib/types/analytics";
 	import { effectColor, severityColor } from "$lib/types/analytics";
 	import { Button } from "@investintell/ui";
 	import RiskBudgetTable from "$lib/components/analytics/RiskBudgetTable.svelte";
 	import RiskBudgetScatter from "$lib/components/analytics/RiskBudgetScatter.svelte";
 	import FactorContributionChart from "$lib/components/analytics/FactorContributionChart.svelte";
+	import CorrelationRegimePanel from "$lib/components/analytics/CorrelationRegimePanel.svelte";
 
 	// ── Entity analytics components (eVestment-inspired) ──────────────
 	import type { EntityAnalyticsResponse } from "$lib/types/entity-analytics";
@@ -47,6 +48,7 @@
 	let driftAlerts = $derived((data.driftAlerts ?? []) as StrategyDriftAlert[]);
 	let profile = $derived(data.profile as string);
 	let instruments = $derived((data.instruments ?? []) as UniverseAsset[]);
+	let correlationRegime = $derived(data.correlationRegime as CorrelationRegimeResult | null);
 
 	// ── Filter state ──────────────────────────────────────────────────────
 
@@ -797,6 +799,13 @@
 			</div>
 		{/if}
 	</div>
+{/if}
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- Correlation Regime (Marchenko-Pastur denoising, contagion)         -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+{#if correlationRegime}
+	<CorrelationRegimePanel data={correlationRegime} profile={selectedProfile} {instruments} />
 {/if}
 
 <!-- ═══════════════════════════════════════════════════════════════════ -->

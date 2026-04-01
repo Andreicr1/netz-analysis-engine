@@ -2,6 +2,7 @@
 export { default as CatalogFilterSidebar } from "./CatalogFilterSidebar.svelte";
 export { default as CatalogTable } from "./CatalogTable.svelte";
 export { default as CatalogDetailPanel } from "./CatalogDetailPanel.svelte";
+export { default as ScreeningRunPanel } from "./ScreeningRunPanel.svelte";
 
 // ── Global Securities (equities — no RLS) ──
 export { default as SecuritiesTable } from "./SecuritiesTable.svelte";

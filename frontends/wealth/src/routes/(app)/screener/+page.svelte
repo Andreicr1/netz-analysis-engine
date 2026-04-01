@@ -20,16 +20,41 @@
 	import {
 		CatalogTable,
 		CatalogDetailPanel,
+		ScreeningRunPanel,
 	} from "$lib/components/screener";
+
+	// Screening types
+	import type { ScreeningRun, ScreeningResult } from "$lib/types/screening";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	let { data }: { data: PageData } = $props();
 
 	const initParams = (untrack(() => data.currentParams) as Record<string, string>) ?? {};
 
+	// ── Tab state ──
+	let activeTab = $state<"catalog" | "screening">(
+		(untrack(() => data.tab) as string) === "screening" ? "screening" : "catalog",
+	);
+
+	function switchTab(tab: "catalog" | "screening") {
+		activeTab = tab;
+		if (tab === "catalog") {
+			const params = buildCatalogParams();
+			params.set("page", "1");
+			params.set("page_size", "50");
+			goto(`/screener?${params.toString()}`, { invalidateAll: true });
+		} else {
+			goto("?tab=screening", { invalidateAll: true });
+		}
+	}
+
 	// ── Catalog state ──
 	let catalog = $derived(((data as any).catalog ?? EMPTY_CATALOG_PAGE) as UnifiedCatalogPage);
 	let catalogFacets = $derived(((data as any).catalogFacets ?? EMPTY_FACETS) as CatalogFacets);
+
+	// ── Screening state ──
+	let screeningRuns = $derived(((data as any).screeningRuns ?? []) as ScreeningRun[]);
+	let screeningResults = $derived(((data as any).screeningResults ?? []) as ScreeningResult[]);
 
 	// Catalog filter state (from URL params)
 	let selectedCategories = $state<CatalogCategory[]>(
@@ -252,13 +277,39 @@
 <div class="scr-page">
 	<!-- ════════════════ HEADER BAR ════════════════ -->
 	<div class="scr-topbar">
-		<h1 class="scr-title">Screener</h1>
-		<button class="scr-btn scr-btn--outline" onclick={exportCSV}>
-			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-			Export
+		<div class="scr-topbar-left">
+			<h1 class="scr-title">Screener</h1>
+			<a href="/screener/managers" class="scr-btn scr-btn--outline">Managers</a>
+		</div>
+		<div class="scr-topbar-right">
+			{#if activeTab === "catalog"}
+				<button class="scr-btn scr-btn--outline" onclick={exportCSV}>
+					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+					Export
+				</button>
+			{/if}
+		</div>
+	</div>
+
+	<!-- ════════════════ TABS ════════════════ -->
+	<div class="scr-tabs">
+		<button
+			class="scr-tab"
+			class:scr-tab--active={activeTab === "catalog"}
+			onclick={() => switchTab("catalog")}
+		>
+			Catalog
+		</button>
+		<button
+			class="scr-tab"
+			class:scr-tab--active={activeTab === "screening"}
+			onclick={() => switchTab("screening")}
+		>
+			Screening
 		</button>
 	</div>
 
+	{#if activeTab === "catalog"}
 	<!-- ════════════════ FILTER BAR ════════════════ -->
 	<div class="scr-filterbar">
 		<input
@@ -343,6 +394,10 @@
 			onOpenManager={openManagerDetail}
 		/>
 	</div>
+	{:else}
+	<!-- ════════════════ SCREENING TAB ════════════════ -->
+	<ScreeningRunPanel runs={screeningRuns} results={screeningResults} />
+	{/if}
 </div>
 
 <!-- ════════════════ FUND DETAIL PANEL ════════════════ -->
@@ -399,11 +454,55 @@
 		flex-shrink: 0;
 	}
 
+	.scr-topbar-left {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+	}
+
+	.scr-topbar-right {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
 	.scr-title {
 		font-size: 24px;
 		font-weight: 800;
 		color: var(--ii-text-primary);
 		margin: 0;
+	}
+
+	/* ── Tabs ── */
+	.scr-tabs {
+		display: flex;
+		gap: 0;
+		padding: 0 24px;
+		border-bottom: 1px solid var(--ii-border-subtle);
+		flex-shrink: 0;
+	}
+
+	.scr-tab {
+		padding: 10px 20px;
+		font-size: 13px;
+		font-weight: 600;
+		font-family: var(--ii-font-sans);
+		color: var(--ii-text-muted);
+		background: none;
+		border: none;
+		border-bottom: 2px solid transparent;
+		cursor: pointer;
+		transition: all 120ms ease;
+		margin-bottom: -1px;
+	}
+
+	.scr-tab:hover {
+		color: var(--ii-text-primary);
+	}
+
+	.scr-tab--active {
+		color: var(--ii-brand-primary, #1447e6);
+		border-bottom-color: var(--ii-brand-primary, #1447e6);
 	}
 
 	/* ── Horizontal filter bar ── */

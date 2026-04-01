@@ -206,6 +206,56 @@ export interface ActiveShareResult {
 	as_of_date: string | null;
 }
 
+// ── Correlation Regime (Marchenko-Pastur denoising, contagion) ──────
+
+export interface InstrumentCorrelation {
+	instrument_a_id: string;
+	instrument_a_name: string;
+	instrument_b_id: string;
+	instrument_b_name: string;
+	current_correlation: number;
+	baseline_correlation: number;
+	correlation_change: number;
+	is_contagion: boolean;
+}
+
+export interface RegimeConcentrationAnalysis {
+	eigenvalues: number[];
+	explained_variance_ratios: number[];
+	first_eigenvalue_ratio: number;
+	concentration_status: string;
+	diversification_ratio: number;
+	dr_alert: boolean;
+	absorption_ratio: number;
+	absorption_status: string;
+	mp_threshold: number;
+	n_signal_eigenvalues: number;
+}
+
+export interface CorrelationRegimeResult {
+	profile: string;
+	instrument_count: number;
+	window_days: number;
+	correlation_matrix: number[][];
+	instrument_labels: string[];
+	contagion_pairs: InstrumentCorrelation[];
+	concentration: RegimeConcentrationAnalysis;
+	average_correlation: number;
+	baseline_average_correlation: number;
+	regime_shift_detected: boolean;
+	computed_at: string;
+}
+
+export interface PairCorrelationResult {
+	instrument_a_id: string;
+	instrument_a_name: string;
+	instrument_b_id: string;
+	instrument_b_name: string;
+	dates: string[];
+	correlations: number[];
+	window_days: number;
+}
+
 export type Timeframe = "ytd" | "1y" | "3y" | "custom";
 
 export function effectColor(value: number): string {

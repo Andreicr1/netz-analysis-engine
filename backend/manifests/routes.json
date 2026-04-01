@@ -771,6 +771,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/instruments/{instrument_id}/risk-metrics",
+    "name": "get_instrument_risk_metrics"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/jobs/{job_id}/status",
     "name": "get_job_status"
   },
@@ -1308,6 +1313,11 @@
     "method": "PATCH",
     "path": "/api/v1/macro/reviews/{review_id}/reject",
     "name": "reject_review"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/v1/model-portfolios/{portfolio_id}",
+    "name": "update_model_portfolio"
   },
   {
     "method": "PATCH",

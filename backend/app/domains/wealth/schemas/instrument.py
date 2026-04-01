@@ -54,6 +54,18 @@ class InstrumentUpdate(BaseModel):
     is_active: bool | None = None
 
 
+class InstrumentRiskMetricsRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
+
+    instrument_id: uuid.UUID
+    score_components: dict[str, float] | None = None
+    manager_score: float | None = None
+    sharpe_1y: float | None = None
+    volatility_1y: float | None = None
+    max_drawdown_1y: float | None = None
+    cvar_95_1m: float | None = None
+
+
 class InstrumentImportYahoo(BaseModel):
     """Request to import instruments via Yahoo Finance ticker(s)."""
 

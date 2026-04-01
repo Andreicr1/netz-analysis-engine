@@ -24,6 +24,7 @@ from app.domains.wealth.schemas.instrument import (
     InstrumentImportCsvResponse,
     InstrumentImportYahoo,
     InstrumentRead,
+    InstrumentRiskMetricsRead,
     InstrumentUpdate,
 )
 from app.shared.enums import Role
@@ -121,6 +122,36 @@ async def get_instrument(
             "approval_status": row[3],
         }
     )
+
+
+@router.get(
+    "/{instrument_id}/risk-metrics",
+    response_model=InstrumentRiskMetricsRead,
+    summary="Risk metrics and score breakdown for an instrument",
+)
+async def get_instrument_risk_metrics(
+    instrument_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> InstrumentRiskMetricsRead:
+    from app.domains.wealth.models.risk import FundRiskMetrics
+
+    stmt = (
+        select(FundRiskMetrics)
+        .where(FundRiskMetrics.instrument_id == instrument_id)
+        .order_by(FundRiskMetrics.calc_date.desc())
+        .limit(1)
+    )
+    result = await db.execute(stmt)
+    row = result.scalar_one_or_none()
+
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No risk metrics found for this instrument",
+        )
+
+    return InstrumentRiskMetricsRead.model_validate(row)
 
 
 @router.patch(

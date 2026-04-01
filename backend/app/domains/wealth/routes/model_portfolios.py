@@ -31,6 +31,7 @@ from app.domains.wealth.schemas.model_portfolio import (
     CusipExposureRead,
     ModelPortfolioCreate,
     ModelPortfolioRead,
+    ModelPortfolioUpdate,
     OverlapResultRead,
     SectorExposureRead,
     StressTestRequest,
@@ -125,6 +126,34 @@ async def get_model_portfolio(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Model portfolio {portfolio_id} not found",
         )
+    return ModelPortfolioRead.model_validate(portfolio)
+
+
+@router.patch(
+    "/{portfolio_id}",
+    response_model=ModelPortfolioRead,
+    summary="Update model portfolio metadata (display_name, inception_date, description)",
+)
+async def update_model_portfolio(
+    portfolio_id: uuid.UUID,
+    body: ModelPortfolioUpdate,
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> ModelPortfolioRead:
+    _require_ic_role(actor)
+
+    stmt = select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id)
+    result = await db.execute(stmt)
+    portfolio = result.scalar_one_or_none()
+    if not portfolio:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Portfolio not found")
+
+    update_data = body.model_dump(exclude_none=True)
+    for field, value in update_data.items():
+        setattr(portfolio, field, value)
+
+    await db.flush()
+    await db.refresh(portfolio)
     return ModelPortfolioRead.model_validate(portfolio)
 
 

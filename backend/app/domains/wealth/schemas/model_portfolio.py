@@ -38,6 +38,16 @@ class ModelPortfolioCreate(BaseModel):
     backtest_start_date: date | None = None
 
 
+class ModelPortfolioUpdate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    display_name: str | None = None
+    description: str | None = None
+    benchmark_composite: str | None = None
+    inception_date: date | None = None
+    backtest_start_date: date | None = None
+
+
 # ── Parametric Stress Test ──────────────────────────────────────────────────
 
 
