@@ -346,6 +346,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/analytics/active-share/{entity_id}",
+    "name": "get_active_share"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/analytics/attribution/{profile}",
     "name": "get_attribution"
   },

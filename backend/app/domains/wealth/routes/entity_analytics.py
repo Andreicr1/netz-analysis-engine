@@ -17,7 +17,7 @@ import numpy as np
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from scipy import stats as sp_stats
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security.clerk_auth import CurrentUser, get_current_user
@@ -27,6 +27,7 @@ from app.domains.wealth.models.block import AllocationBlock
 from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.instrument_org import InstrumentOrg
 from app.domains.wealth.models.model_portfolio import ModelPortfolio
+from app.domains.wealth.schemas.analytics import ActiveShareResponse
 from app.domains.wealth.schemas.entity_analytics import (
     CaptureRatios,
     DrawdownAnalysis,
@@ -39,11 +40,16 @@ from app.domains.wealth.schemas.entity_analytics import (
     RollingSeries,
     TailRiskMetrics,
 )
+from app.domains.wealth.services.holdings_exploder import (
+    fetch_portfolio_holdings_exploded,
+)
 from app.domains.wealth.services.nav_reader import (
     NavRow,
     fetch_nav_series,
     is_model_portfolio,
 )
+from app.shared.models import SecNportHolding
+from quant_engine.active_share_service import compute_active_share
 from quant_engine.cvar_service import compute_cvar_from_returns
 from quant_engine.drawdown_service import analyze_drawdowns
 from quant_engine.portfolio_metrics_service import aggregate as compute_metrics
@@ -470,4 +476,129 @@ async def get_entity_analytics(
         distribution=distribution,
         return_statistics=return_stats_result,
         tail_risk=tail_risk_result,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Active Share (eVestment p.73)
+# ---------------------------------------------------------------------------
+
+
+async def _fetch_fund_holdings_weights(
+    db: AsyncSession, entity_id: uuid.UUID,
+) -> dict[str, float]:
+    """Fetch latest N-PORT holdings as {cusip: weight} for a single fund.
+
+    Resolves sec_cik from Instrument.attributes, queries latest report_date.
+    """
+    inst_row = await db.execute(
+        select(Instrument.attributes).where(Instrument.instrument_id == entity_id),
+    )
+    attrs = inst_row.scalar_one_or_none()
+    if not attrs:
+        return {}
+    cik = attrs.get("sec_cik")
+    if not cik:
+        return {}
+
+    cik_str = str(cik)
+
+    # Latest report_date for this CIK
+    latest = await db.execute(
+        select(func.max(SecNportHolding.report_date)).where(
+            SecNportHolding.cik == cik_str,
+        ),
+    )
+    max_date = latest.scalar_one_or_none()
+    if max_date is None:
+        return {}
+
+    rows = await db.execute(
+        select(SecNportHolding.cusip, SecNportHolding.pct_of_nav).where(
+            SecNportHolding.cik == cik_str,
+            SecNportHolding.report_date == max_date,
+            SecNportHolding.cusip.isnot(None),
+            SecNportHolding.pct_of_nav.isnot(None),
+        ),
+    )
+    weights: dict[str, float] = {}
+    for r in rows.all():
+        pct = float(r[1])
+        # Aggregate by CUSIP (same security may appear twice)
+        weights[r[0]] = weights.get(r[0], 0.0) + pct / 100.0
+    return weights
+
+
+async def _fetch_entity_holdings_weights(
+    db: AsyncSession, entity_id: uuid.UUID, entity_type: str,
+) -> dict[str, float]:
+    """Polymorphic holdings weights resolver."""
+    if entity_type == "model_portfolio":
+        rows = await fetch_portfolio_holdings_exploded(db, entity_id)
+        weights: dict[str, float] = {}
+        for h in rows:
+            weights[h.cusip] = weights.get(h.cusip, 0.0) + h.weighted_pct
+        return weights
+    return await _fetch_fund_holdings_weights(db, entity_id)
+
+
+@router.get(
+    "/active-share/{entity_id}",
+    response_model=ActiveShareResponse,
+    summary="Active Share vs benchmark (eVestment p.73)",
+)
+async def get_active_share(
+    entity_id: uuid.UUID,
+    benchmark_id: uuid.UUID = Query(..., description="Benchmark entity UUID (fund with N-PORT data)"),
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> ActiveShareResponse:
+    """Holdings-based Active Share: 0.5 * sum(|w_fund - w_index|).
+
+    Both entity and benchmark must have N-PORT holdings data.
+    """
+    entity_type, entity_name, block_id = await _resolve_entity_meta(db, entity_id)
+
+    portfolio_weights = await _fetch_entity_holdings_weights(db, entity_id, entity_type)
+    benchmark_weights = await _fetch_fund_holdings_weights(db, benchmark_id)
+
+    # Compute excess return for efficiency (optional, best-effort)
+    excess_return = None
+    today = date.today()
+    start = today - timedelta(days=252)
+    try:
+        e_rows = await fetch_nav_series(db, entity_id, start, today)
+        b_rows = await fetch_nav_series(db, benchmark_id, start, today)
+        if len(e_rows) > 20 and len(b_rows) > 20:
+            e_ret = [r.daily_return for r in e_rows if r.daily_return is not None]
+            b_ret = [r.daily_return for r in b_rows if r.daily_return is not None]
+            if e_ret and b_ret:
+                e_cum = 1.0
+                for r in e_ret:
+                    e_cum *= (1 + r)
+                b_cum = 1.0
+                for r in b_ret:
+                    b_cum *= (1 + r)
+                e_ann = e_cum ** (252 / len(e_ret)) - 1
+                b_ann = b_cum ** (252 / len(b_ret)) - 1
+                excess_return = e_ann - b_ann
+    except Exception:
+        logger.debug("active_share_excess_return_unavailable", entity_id=str(entity_id))
+
+    result = compute_active_share(
+        portfolio_weights=portfolio_weights,
+        benchmark_weights=benchmark_weights,
+        excess_return=excess_return,
+    )
+
+    return ActiveShareResponse(
+        entity_id=entity_id,
+        entity_name=entity_name,
+        active_share=result.active_share,
+        overlap=result.overlap,
+        active_share_efficiency=result.active_share_efficiency,
+        n_portfolio_positions=result.n_portfolio_positions,
+        n_benchmark_positions=result.n_benchmark_positions,
+        n_common_positions=result.n_common_positions,
+        as_of_date=today,
     )

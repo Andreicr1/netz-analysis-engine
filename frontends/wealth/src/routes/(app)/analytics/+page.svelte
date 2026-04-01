@@ -25,6 +25,20 @@
 	import RiskBudgetScatter from "$lib/components/analytics/RiskBudgetScatter.svelte";
 	import FactorContributionChart from "$lib/components/analytics/FactorContributionChart.svelte";
 
+	// ── Entity analytics components (eVestment-inspired) ──────────────
+	import type { EntityAnalyticsResponse } from "$lib/types/entity-analytics";
+	import type { PeerGroupResult, MonteCarloResult } from "$lib/types/analytics";
+	import type { UniverseAsset } from "$lib/types/universe";
+	import RiskStatisticsGrid from "$lib/components/analytics/entity/RiskStatisticsGrid.svelte";
+	import DrawdownChart from "$lib/components/analytics/entity/DrawdownChart.svelte";
+	import CaptureRatiosPanel from "$lib/components/analytics/entity/CaptureRatiosPanel.svelte";
+	import RollingReturnsChart from "$lib/components/analytics/entity/RollingReturnsChart.svelte";
+	import ReturnDistributionChart from "$lib/components/analytics/entity/ReturnDistributionChart.svelte";
+	import ReturnStatisticsPanel from "$lib/components/analytics/entity/ReturnStatisticsPanel.svelte";
+	import TailRiskPanel from "$lib/components/analytics/entity/TailRiskPanel.svelte";
+	import PeerGroupPanel from "$lib/components/analytics/entity/PeerGroupPanel.svelte";
+	import MonteCarloPanel from "$lib/components/analytics/entity/MonteCarloPanel.svelte";
+
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let { data }: { data: PageData } = $props();
@@ -32,6 +46,7 @@
 	let attribution = $derived(data.attribution as AttributionResult | null);
 	let driftAlerts = $derived((data.driftAlerts ?? []) as StrategyDriftAlert[]);
 	let profile = $derived(data.profile as string);
+	let instruments = $derived((data.instruments ?? []) as UniverseAsset[]);
 
 	// ── Filter state ──────────────────────────────────────────────────────
 
@@ -279,6 +294,73 @@
 			factorLoading = false;
 		}
 	}
+
+	// ── Fund Analytics (eVestment entity-level) ─────────────────────────
+
+	let selectedFundId = $state<string>("");
+	let fundAnalytics = $state<EntityAnalyticsResponse | null>(null);
+	let fundPeerGroup = $state<PeerGroupResult | null>(null);
+	let fundLoading = $state(false);
+	let fundError = $state<string | null>(null);
+	let fundWindow = $state("1y");
+	let mcResult = $state<MonteCarloResult | null>(null);
+	let mcLoading = $state(false);
+
+	async function loadFundAnalytics(fundId: string, window: string) {
+		if (!fundId) {
+			fundAnalytics = null;
+			fundPeerGroup = null;
+			return;
+		}
+		fundLoading = true;
+		fundError = null;
+		mcResult = null;
+		try {
+			const api = createClientApiClient(getToken);
+			const [analytics, peer] = await Promise.all([
+				api.get<EntityAnalyticsResponse>(`/analytics/entity/${fundId}`, { window }),
+				api.get<PeerGroupResult>(`/analytics/peer-group/${fundId}`).catch(() => null),
+			]);
+			fundAnalytics = analytics;
+			fundPeerGroup = peer;
+		} catch (e) {
+			fundError = e instanceof Error ? e.message : "Failed to load fund analytics";
+			fundAnalytics = null;
+			fundPeerGroup = null;
+		} finally {
+			fundLoading = false;
+		}
+	}
+
+	function handleFundSelect(e: Event) {
+		const target = e.target as HTMLSelectElement;
+		selectedFundId = target.value;
+		loadFundAnalytics(selectedFundId, fundWindow);
+	}
+
+	function switchFundWindow(w: string) {
+		fundWindow = w;
+		if (selectedFundId) loadFundAnalytics(selectedFundId, w);
+	}
+
+	async function runMonteCarlo() {
+		if (!fundAnalytics || mcLoading) return;
+		mcLoading = true;
+		try {
+			const api = createClientApiClient(getToken);
+			mcResult = await api.post<MonteCarloResult>("/analytics/monte-carlo", {
+				entity_id: fundAnalytics.entity_id,
+				n_simulations: 10_000,
+				statistic: "max_drawdown",
+			});
+		} catch {
+			mcResult = null;
+		} finally {
+			mcLoading = false;
+		}
+	}
+
+	const fundWindows = ["3m", "6m", "1y", "3y", "5y"] as const;
 
 	// ── Pareto optimization ──────────────────────────────────────────────
 
@@ -836,7 +918,185 @@
 	<FactorContributionChart data={factorData} />
 {/if}
 
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- Fund Analytics (eVestment-inspired entity-level studies)           -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="an-fund-section">
+	<div class="an-fund-header">
+		<h3 class="an-section-title">Fund Analytics</h3>
+		<div class="an-fund-controls">
+			<select class="an-select an-fund-select" onchange={handleFundSelect} value={selectedFundId}>
+				<option value="">Select a fund…</option>
+				{#each instruments as inst (inst.instrument_id)}
+					<option value={inst.instrument_id}>{inst.fund_name}</option>
+				{/each}
+			</select>
+			{#if selectedFundId}
+				<div class="an-timeframe">
+					{#each fundWindows as w (w)}
+						<button
+							class="an-tf-btn"
+							class:an-tf-btn--active={fundWindow === w}
+							onclick={() => switchFundWindow(w)}
+						>
+							{w.toUpperCase()}
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
+	</div>
+
+	{#if !selectedFundId}
+		<div class="an-fund-empty">
+			Select a fund from the universe to view eVestment-style analytics: risk statistics, drawdown,
+			capture ratios, rolling returns, return distribution, tail risk, peer rankings, and Monte Carlo simulation.
+		</div>
+	{:else if fundLoading}
+		<div class="an-fund-loading">Loading fund analytics…</div>
+	{:else if fundError}
+		<div class="an-fund-error">{fundError}</div>
+	{:else if fundAnalytics}
+		<div class="an-fund-body">
+			<RiskStatisticsGrid stats={fundAnalytics.risk_statistics} asOfDate={fundAnalytics.as_of_date} />
+			<DrawdownChart drawdown={fundAnalytics.drawdown} />
+
+			<div class="an-fund-row">
+				<CaptureRatiosPanel capture={fundAnalytics.capture} />
+				<RollingReturnsChart rollingReturns={fundAnalytics.rolling_returns} />
+			</div>
+
+			<ReturnDistributionChart distribution={fundAnalytics.distribution} />
+
+			{#if fundAnalytics.return_statistics}
+				<ReturnStatisticsPanel stats={fundAnalytics.return_statistics} />
+			{/if}
+
+			{#if fundAnalytics.tail_risk}
+				<TailRiskPanel tailRisk={fundAnalytics.tail_risk} />
+			{/if}
+
+			{#if fundPeerGroup}
+				<PeerGroupPanel peerGroup={fundPeerGroup} />
+			{/if}
+
+			<!-- Monte Carlo: client-triggered -->
+			{#if mcResult}
+				<MonteCarloPanel mc={mcResult} />
+			{:else}
+				<div class="an-mc-trigger">
+					<button class="mc-run-btn" onclick={runMonteCarlo} disabled={mcLoading}>
+						{mcLoading ? "Running…" : "Run Monte Carlo (10k paths)"}
+					</button>
+				</div>
+			{/if}
+
+			<div class="an-fund-link">
+				<a href="/analytics/{selectedFundId}?window={fundWindow}">Open full analytics page →</a>
+			</div>
+		</div>
+	{/if}
+</div>
+
 <style>
+	/* ── Fund Analytics section ───────────────────────────────────────────── */
+	.an-fund-section {
+		margin: var(--ii-space-stack-md, 16px) var(--ii-space-inline-lg, 24px) 0;
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-md, 12px);
+		background: var(--ii-surface-elevated);
+		overflow: hidden;
+	}
+
+	.an-fund-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: var(--ii-space-stack-sm, 12px) var(--ii-space-inline-md, 16px);
+		border-bottom: 1px solid var(--ii-border-subtle);
+	}
+
+	.an-fund-controls {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+
+	.an-fund-select {
+		min-width: 280px;
+	}
+
+	.an-fund-empty,
+	.an-fund-loading,
+	.an-fund-error {
+		padding: 48px 24px;
+		text-align: center;
+		color: var(--ii-text-muted);
+		font-size: 0.8125rem;
+	}
+
+	.an-fund-error {
+		color: var(--ii-danger);
+	}
+
+	.an-fund-body {
+		padding: var(--ii-space-stack-sm, 12px) var(--ii-space-inline-md, 16px);
+	}
+
+	.an-fund-row {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 16px;
+	}
+
+	@media (max-width: 768px) {
+		.an-fund-row {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	.an-mc-trigger {
+		text-align: center;
+		padding: 20px;
+	}
+
+	.mc-run-btn {
+		padding: 8px 20px;
+		font-size: 0.8125rem;
+		font-weight: 600;
+		font-family: var(--ii-font-sans);
+		border: 1px solid var(--ii-border);
+		border-radius: var(--ii-radius-sm, 8px);
+		background: var(--ii-surface-elevated);
+		color: var(--ii-text-primary);
+		cursor: pointer;
+		transition: background-color 120ms ease;
+	}
+
+	.mc-run-btn:hover:not(:disabled) {
+		background: var(--ii-surface-alt);
+	}
+
+	.mc-run-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.an-fund-link {
+		text-align: center;
+		padding: 12px 0 4px;
+	}
+
+	.an-fund-link a {
+		font-size: 0.75rem;
+		color: var(--ii-brand-primary);
+		text-decoration: none;
+	}
+
+	.an-fund-link a:hover {
+		text-decoration: underline;
+	}
+
 	/* ── Risk Budget actions ──────────────────────────────────────────────── */
 	.an-rb-actions {
 		display: flex;
