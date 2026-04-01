@@ -85,9 +85,14 @@
 	// ── Construction Advisor ──────────────────────────────────────────────
 	let advisorRef: ConstructionAdvisor | undefined = $state(undefined);
 
-	// Auto-fetch advice after construct when CVaR fails
+	// Auto-fetch advice after construct when CVaR fails.
+	// Guard: track the schema identity to avoid infinite re-entry.
+	let lastAdvisedSchema = $state<unknown>(null);
+
 	$effect(() => {
-		if (portfolio.fund_selection_schema && !cvarWithinLimit && advisorRef) {
+		const schema = portfolio.fund_selection_schema;
+		if (schema && !cvarWithinLimit && advisorRef && schema !== lastAdvisedSchema) {
+			lastAdvisedSchema = schema;
 			advisorRef.fetchAdvice();
 		}
 	});
