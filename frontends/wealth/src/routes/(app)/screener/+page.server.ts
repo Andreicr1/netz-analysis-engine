@@ -34,6 +34,8 @@ export const load: PageServerLoad = async ({ parent, url }) => {
 	if (aumMin) catalogParams.aum_min = aumMin;
 	const sort = url.searchParams.get("sort");
 	if (sort) catalogParams.sort = sort;
+	// Default has_aum=true: show only funds with AUM > 0 unless toggled off
+	catalogParams.has_aum = url.searchParams.get("has_aum") ?? "true";
 	const maxER = url.searchParams.get("max_expense_ratio");
 	if (maxER) catalogParams.max_expense_ratio = maxER;
 	const minReturn1y = url.searchParams.get("min_return_1y");

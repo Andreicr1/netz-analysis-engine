@@ -27,6 +27,7 @@ class DisclosureMatrix(BaseModel):
     holdings_source: Literal["nport", "13f"] | None = None
     nav_source: Literal["yfinance"] | None = None
     aum_source: Literal["nport", "schedule_d", "yfinance"] | None = None
+    nav_status: Literal["available", "pending_import", "unavailable"] = "unavailable"
 
 
 class UnifiedFundItem(BaseModel):
@@ -73,6 +74,12 @@ class UnifiedFundItem(BaseModel):
     is_index: bool | None = None
     is_target_date: bool | None = None
     is_fund_of_fund: bool | None = None
+
+    # MMF metrics (money_market only — batch-enriched, not in UNION ALL)
+    mmf_category: str | None = None
+    seven_day_gross_yield: float | None = None
+    weighted_avg_maturity: int | None = None
+    weighted_avg_life: int | None = None
 
     # Screening overlay (if imported to tenant universe)
     instrument_id: str | None = None
