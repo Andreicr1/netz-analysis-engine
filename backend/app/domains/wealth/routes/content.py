@@ -19,11 +19,20 @@ from fastapi.responses import Response
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi import Request
+
 from app.core.config.settings import settings
+from app.core.jobs.sse import create_job_stream
+from app.core.jobs.tracker import (
+    publish_event,
+    publish_terminal_event,
+    register_job_owner,
+    verify_job_owner,
+)
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
 from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.content import WealthContent
-from app.domains.wealth.schemas.content import ContentSummary, ContentTrigger
+from app.domains.wealth.schemas.content import ContentRead, ContentSummary, ContentTrigger
 from app.shared.enums import Role
 
 logger = structlog.get_logger()
@@ -91,6 +100,8 @@ async def trigger_outlook(
     await db.flush()
 
     content_id = content.id
+    job_id = str(uuid.uuid4())
+    await register_job_owner(job_id, str(org_id))
 
     asyncio.create_task(
         _run_content_generation(
@@ -100,11 +111,13 @@ async def trigger_outlook(
             actor_id=user.actor_id,
             language=language,
             config=body.config_overrides if body else None,
+            job_id=job_id,
         ),
     )
 
     await db.commit()
-    return ContentSummary.model_validate(content)
+    summary = ContentSummary.model_validate(content)
+    return {**summary.model_dump(mode="json"), "job_id": job_id}
 
 
 @router.post(
@@ -137,6 +150,8 @@ async def trigger_flash_report(
     await db.flush()
 
     content_id = content.id
+    job_id = str(uuid.uuid4())
+    await register_job_owner(job_id, str(org_id))
 
     asyncio.create_task(
         _run_content_generation(
@@ -147,11 +162,13 @@ async def trigger_flash_report(
             language=language,
             config=body.config_overrides if body else None,
             event_context=body.config_overrides if body else None,
+            job_id=job_id,
         ),
     )
 
     await db.commit()
-    return ContentSummary.model_validate(content)
+    summary = ContentSummary.model_validate(content)
+    return {**summary.model_dump(mode="json"), "job_id": job_id}
 
 
 @router.post(
@@ -199,6 +216,8 @@ async def trigger_spotlight(
     await db.flush()
 
     content_id = content.id
+    job_id = str(uuid.uuid4())
+    await register_job_owner(job_id, str(org_id))
 
     asyncio.create_task(
         _run_content_generation(
@@ -209,11 +228,13 @@ async def trigger_spotlight(
             language=language,
             config=body.config_overrides if body else None,
             instrument_id=str(instrument_id),
+            job_id=job_id,
         ),
     )
 
     await db.commit()
-    return ContentSummary.model_validate(content)
+    summary = ContentSummary.model_validate(content)
+    return {**summary.model_dump(mode="json"), "job_id": job_id}
 
 
 # ── List + read ────────────────────────────────────────────────────
@@ -239,6 +260,31 @@ async def list_content(
     result = await db.execute(query)
     items = result.scalars().all()
     return [ContentSummary.model_validate(item) for item in items]
+
+
+@router.get(
+    "/{content_id}",
+    response_model=ContentRead,
+    summary="Get content detail with markdown body",
+)
+async def get_content(
+    content_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> ContentRead:
+    """Return full content item including ``content_md`` and ``content_data``."""
+    _require_feature()
+
+    result = await db.execute(
+        select(WealthContent).where(WealthContent.id == content_id),
+    )
+    content = result.scalar_one_or_none()
+    if content is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Content {content_id} not found",
+        )
+    return ContentRead.model_validate(content)
 
 
 # ── Approval ───────────────────────────────────────────────────────
@@ -353,6 +399,29 @@ async def download_content(
     )
 
 
+# ── SSE stream ────────────────────────────────────────────────────
+
+
+@router.get(
+    "/{content_id}/stream/{job_id}",
+    summary="Stream content generation progress via SSE",
+)
+async def stream_content_generation(
+    content_id: uuid.UUID,
+    job_id: str,
+    request: Request,
+    user: CurrentUser = Depends(get_current_user),
+    org_id: str = Depends(get_org_id),
+):
+    """SSE stream for content generation progress."""
+    if not await verify_job_owner(job_id, str(org_id)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Job not found or access denied",
+        )
+    return await create_job_stream(request, job_id)
+
+
 # ── Background generation helpers ──────────────────────────────────
 
 
@@ -366,10 +435,14 @@ async def _run_content_generation(
     config: dict[str, Any] | None = None,
     event_context: dict[str, Any] | None = None,
     instrument_id: str | None = None,
+    job_id: str | None = None,
 ) -> None:
     """Background task: run content generation in a sync thread."""
     async with _get_content_semaphore():
         try:
+            if job_id:
+                await publish_event(job_id, "started", {"content_type": content_type, "content_id": content_id})
+
             result = await asyncio.to_thread(
                 _sync_generate_content,
                 content_id=content_id,
@@ -406,12 +479,20 @@ async def _run_content_generation(
                 status=result.get("status"),
             )
 
+            if job_id:
+                final_status = "review" if result.get("content_md") else "failed"
+                await publish_terminal_event(job_id, "done", {"status": final_status, "content_id": content_id})
+
         except Exception:
             logger.exception(
                 "content_generation_background_failed",
                 content_id=content_id,
                 content_type=content_type,
             )
+
+            if job_id:
+                await publish_terminal_event(job_id, "error", {"error": "Content generation failed", "content_id": content_id})
+
             # Mark content as failed so the UI can display the error
             try:
                 async with async_session_factory() as err_db:

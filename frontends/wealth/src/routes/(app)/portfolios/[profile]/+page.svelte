@@ -23,6 +23,7 @@
 	import RebalancingTab from "$lib/components/RebalancingTab.svelte";
 	import BlendedBenchmarkEditor from "$lib/components/BlendedBenchmarkEditor.svelte";
 	import LongFormReportPanel from "$lib/components/LongFormReportPanel.svelte";
+	import MonthlyReportPanel from "$lib/components/MonthlyReportPanel.svelte";
 	import CVaRHistoryChart from "$lib/components/charts/CVaRHistoryChart.svelte";
 	import RegimeTimeline from "$lib/components/charts/RegimeTimeline.svelte";
 	import { regimeMultiplierLabel } from "$lib/constants/regime";
@@ -748,6 +749,15 @@
 				<div class="reports-block">
 					<h3 class="reports-block-title">Long-Form DD Report</h3>
 					<LongFormReportPanel
+						portfolioId={modelPortfolio.id}
+						portfolioName={modelPortfolio.display_name}
+					/>
+				</div>
+
+				<!-- Monthly Report -->
+				<div class="reports-block">
+					<h3 class="reports-block-title">Monthly Client Report</h3>
+					<MonthlyReportPanel
 						portfolioId={modelPortfolio.id}
 						portfolioName={modelPortfolio.display_name}
 					/>

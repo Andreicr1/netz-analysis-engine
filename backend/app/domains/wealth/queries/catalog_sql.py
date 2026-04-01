@@ -28,11 +28,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
     Column,
+    ColumnElement,
     Date,
     Integer,
     MetaData,
@@ -91,6 +93,7 @@ sec_fund_classes = Table(
     Column("series_name", Text),
     Column("class_name", Text),
     Column("ticker", Text),
+    Column("net_assets", Numeric(20, 2)),  # XBRL enrichment (migration 0066)
 )
 
 sec_managers = Table(
@@ -155,6 +158,26 @@ sec_bdcs = Table(
     Column("currency", String),
 )
 
+sec_money_market_funds = Table(
+    "sec_money_market_funds",
+    _meta,
+    Column("series_id", String, primary_key=True),
+    Column("cik", String, nullable=False),
+    Column("fund_name", String, nullable=False),
+    Column("strategy_label", String),
+    Column("mmf_category", String),
+    Column("net_assets", Numeric(20, 2)),
+    Column("seven_day_gross_yield", Numeric(8, 4)),
+    Column("weighted_avg_maturity", Integer),
+    Column("weighted_avg_life", Integer),
+    Column("investment_adviser", String),
+    Column("domicile", String),
+    Column("currency", String),
+    Column("is_govt_fund", Boolean),
+    Column("is_retail", Boolean),
+    extend_existing=True,
+)
+
 esma_funds = Table(
     "esma_funds",
     _meta,
@@ -204,7 +227,12 @@ def _escape_ilike(text: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def _geography_case(name_col, strategy_col=None, *, default: str = "US"):
+def _geography_case(
+    name_col: ColumnElement[Any],
+    strategy_col: ColumnElement[Any] | None = None,
+    *,
+    default: str = "US",
+) -> ColumnElement[str]:
     """Build a SQL CASE for investment_geography from fund name + strategy_label.
 
     This mirrors Layer 2 of geography_classifier.py using SQL ILIKE.
@@ -234,7 +262,9 @@ def _geography_case(name_col, strategy_col=None, *, default: str = "US"):
     ).label("investment_geography")
 
 
-def _apply_geography_filter(stmt, geo_col, f: "CatalogFilters"):
+def _apply_geography_filter(
+    stmt: Select[Any], geo_col: ColumnElement[Any], f: CatalogFilters,
+) -> Select[Any]:
     """Apply investment_geography filter if set."""
     if not f.investment_geography:
         return stmt
@@ -261,6 +291,7 @@ class CatalogFilters:
     investment_geography: str | None = None  # comma-separated geography values
     aum_min: float | None = None
     has_nav: bool | None = True            # True = only funds with ticker (default: exclude untradeable)
+    has_aum: bool | None = None            # True = only funds with AUM > 0
     domicile: str | None = None
     manager: str | None = None            # text search on manager name
     sort: str = "name_asc"               # name_asc | name_desc | aum_desc | aum_asc
@@ -281,6 +312,7 @@ class CatalogFilters:
 ALL_CATEGORIES = frozenset({
     "mutual_fund", "closed_end", "etf", "bdc",
     "hedge_fund", "private_fund", "ucits",
+    "money_market",
 })
 
 # Legacy value → expansion to new categories.
@@ -316,7 +348,7 @@ def _parse_categories(fund_universe: str | None) -> set[str] | None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def _registered_us_branch(f: CatalogFilters) -> Select | None:
+def _registered_us_branch(f: CatalogFilters) -> Select[Any] | None:
     """Registered US funds (mutual_fund, closed_end, interval_fund)."""
     cats = _parse_categories(f.fund_universe)
     reg_cats = {"mutual_fund", "closed_end"}
@@ -367,6 +399,7 @@ def _registered_us_branch(f: CatalogFilters) -> Select | None:
             sec_registered_funds.c.strategy_label,
             func.coalesce(
                 func.nullif(sec_registered_funds.c.total_assets, 0),
+                sec_fund_classes.c.net_assets,
                 sec_registered_funds.c.monthly_avg_net_assets,
             ).label("aum"),
             sec_registered_funds.c.currency,
@@ -380,7 +413,7 @@ def _registered_us_branch(f: CatalogFilters) -> Select | None:
             sec_fund_classes.c.series_name,
             sec_fund_classes.c.class_id,
             sec_fund_classes.c.class_name,
-            literal(True).label("has_holdings"),
+            (sec_registered_funds.c.last_nport_date.isnot(None)).label("has_holdings"),
             (_effective_ticker.isnot(None)).label("has_nav"),
             _13f_exists.label("has_13f_overlay"),
             _geography_case(
@@ -475,8 +508,8 @@ def _registered_us_branch(f: CatalogFilters) -> Select | None:
     return stmt
 
 
-def _common_conditions_registered(f: CatalogFilters) -> list:
-    conditions: list = []
+def _common_conditions_registered(f: CatalogFilters) -> list[ColumnElement[bool]]:
+    conditions: list[ColumnElement[bool]] = []
     if f.q:
         escaped = _escape_ilike(f.q)
         pattern = f"%{escaped}%"
@@ -503,9 +536,18 @@ def _common_conditions_registered(f: CatalogFilters) -> list:
     if f.aum_min is not None:
         _aum_col = func.coalesce(
             func.nullif(sec_registered_funds.c.total_assets, 0),
+            sec_fund_classes.c.net_assets,
             sec_registered_funds.c.monthly_avg_net_assets,
         )
         conditions.append(_aum_col >= int(f.aum_min))
+    if f.has_aum is True:
+        _aum_expr = func.coalesce(
+            func.nullif(sec_registered_funds.c.total_assets, 0),
+            sec_fund_classes.c.net_assets,
+            sec_registered_funds.c.monthly_avg_net_assets,
+        )
+        conditions.append(_aum_expr.isnot(None))
+        conditions.append(_aum_expr > 0)
     if f.has_nav is True:
         _eff_ticker = func.coalesce(
             sec_fund_classes.c.ticker, sec_registered_funds.c.ticker,
@@ -519,7 +561,7 @@ def _common_conditions_registered(f: CatalogFilters) -> list:
     return conditions
 
 
-def _etf_branch(f: CatalogFilters) -> Select | None:
+def _etf_branch(f: CatalogFilters) -> Select[Any] | None:
     """ETFs from sec_etfs (985 rows, N-CEN sourced)."""
     cats = _parse_categories(f.fund_universe)
     if cats is not None and "etf" not in cats:
@@ -549,6 +591,7 @@ def _etf_branch(f: CatalogFilters) -> Select | None:
             literal_column("NULL").label("series_name"),
             literal_column("NULL").label("class_id"),
             literal_column("NULL").label("class_name"),
+            # ETFs: keep True — no last_nport_date column, but N-PORT coverage is ~100%
             literal(True).label("has_holdings"),
             (sec_etfs.c.ticker.isnot(None)).label("has_nav"),
             literal(False).label("has_13f_overlay"),
@@ -574,7 +617,7 @@ def _etf_branch(f: CatalogFilters) -> Select | None:
         )
     )
 
-    conditions: list[object] = []
+    conditions: list[ColumnElement[bool]] = []
     if f.q:
         escaped = _escape_ilike(f.q)
         pattern = f"%{escaped}%"
@@ -591,6 +634,9 @@ def _etf_branch(f: CatalogFilters) -> Select | None:
             conditions.append(sec_etfs.c.strategy_label.in_(sl_list))
     if f.aum_min is not None:
         conditions.append(sec_etfs.c.monthly_avg_net_assets >= int(f.aum_min))
+    if f.has_aum is True:
+        conditions.append(sec_etfs.c.monthly_avg_net_assets.isnot(None))
+        conditions.append(sec_etfs.c.monthly_avg_net_assets > 0)
     if f.has_nav is True:
         conditions.append(sec_etfs.c.ticker.isnot(None))
     if f.domicile:
@@ -600,7 +646,7 @@ def _etf_branch(f: CatalogFilters) -> Select | None:
     return stmt
 
 
-def _bdc_branch(f: CatalogFilters) -> Select | None:
+def _bdc_branch(f: CatalogFilters) -> Select[Any] | None:
     """BDCs from sec_bdcs (196 rows, N-CEN sourced)."""
     cats = _parse_categories(f.fund_universe)
     if cats is not None and "bdc" not in cats:
@@ -630,6 +676,7 @@ def _bdc_branch(f: CatalogFilters) -> Select | None:
             literal_column("NULL").label("series_name"),
             literal_column("NULL").label("class_id"),
             literal_column("NULL").label("class_name"),
+            # BDCs: keep True — no last_nport_date column, but N-PORT coverage is ~100%
             literal(True).label("has_holdings"),
             (sec_bdcs.c.ticker.isnot(None)).label("has_nav"),
             literal(False).label("has_13f_overlay"),
@@ -655,7 +702,7 @@ def _bdc_branch(f: CatalogFilters) -> Select | None:
         )
     )
 
-    conditions: list[object] = []
+    conditions: list[ColumnElement[bool]] = []
     if f.q:
         escaped = _escape_ilike(f.q)
         pattern = f"%{escaped}%"
@@ -672,6 +719,9 @@ def _bdc_branch(f: CatalogFilters) -> Select | None:
             conditions.append(sec_bdcs.c.strategy_label.in_(sl_list))
     if f.aum_min is not None:
         conditions.append(sec_bdcs.c.monthly_avg_net_assets >= int(f.aum_min))
+    if f.has_aum is True:
+        conditions.append(sec_bdcs.c.monthly_avg_net_assets.isnot(None))
+        conditions.append(sec_bdcs.c.monthly_avg_net_assets > 0)
     if f.has_nav is True:
         conditions.append(sec_bdcs.c.ticker.isnot(None))
     if f.domicile:
@@ -681,7 +731,7 @@ def _bdc_branch(f: CatalogFilters) -> Select | None:
     return stmt
 
 
-def _private_us_branch(f: CatalogFilters) -> Select | None:
+def _private_us_branch(f: CatalogFilters) -> Select[Any] | None:
     """Private US funds (hedge, PE, VC) from sec_manager_funds."""
     cats = _parse_categories(f.fund_universe)
     if cats is not None:
@@ -757,7 +807,7 @@ def _private_us_branch(f: CatalogFilters) -> Select | None:
         )
     )
 
-    conditions: list = []
+    conditions: list[ColumnElement[bool]] = []
     # Category-based hedge / non-hedge restriction
     if priv_cats is not None:
         if priv_cats == {"hedge_fund"}:
@@ -787,6 +837,9 @@ def _private_us_branch(f: CatalogFilters) -> Select | None:
             conditions.append(sec_manager_funds.c.strategy_label.in_(sl_list))
     if f.aum_min is not None:
         conditions.append(sec_manager_funds.c.gross_asset_value >= int(f.aum_min))
+    if f.has_aum is True:
+        conditions.append(sec_manager_funds.c.gross_asset_value.isnot(None))
+        conditions.append(sec_manager_funds.c.gross_asset_value > 0)
     if f.domicile:
         if f.domicile != "US":
             return None
@@ -799,13 +852,15 @@ def _private_us_branch(f: CatalogFilters) -> Select | None:
     return stmt
 
 
-def _ucits_eu_branch(f: CatalogFilters) -> Select | None:
+def _ucits_eu_branch(f: CatalogFilters) -> Select[Any] | None:
     """EU UCITS funds from esma_funds (only with yahoo_ticker resolved)."""
     cats = _parse_categories(f.fund_universe)
     if cats is not None and "ucits" not in cats:
         return None
     if f.region and f.region != "EU":
         return None
+    if f.has_aum is True:
+        return None  # UCITS have no AUM source
 
     stmt = (
         select(
@@ -853,7 +908,7 @@ def _ucits_eu_branch(f: CatalogFilters) -> Select | None:
         .where(esma_funds.c.yahoo_ticker != "")
     )
 
-    conditions: list = []
+    conditions: list[ColumnElement[bool]] = []
     if f.q:
         escaped = _escape_ilike(f.q)
         pattern = f"%{escaped}%"
@@ -888,6 +943,77 @@ def _ucits_eu_branch(f: CatalogFilters) -> Select | None:
     return stmt
 
 
+def _mmf_branch(f: CatalogFilters) -> Select[Any] | None:
+    """Branch 6: US Money Market Funds from SEC N-MFP filings."""
+    cats = _parse_categories(f.fund_universe)
+    if cats is not None and "money_market" not in cats:
+        return None
+    if f.region and f.region != "US":
+        return None
+    if f.has_nav is True:
+        return None  # MMFs have stable NAV, no yfinance ticker
+
+    stmt = select(
+        literal("registered_us").label("universe"),
+        sec_money_market_funds.c.series_id.label("external_id"),
+        sec_money_market_funds.c.fund_name.label("name"),
+        literal_column("NULL").label("ticker"),
+        literal_column("NULL").label("isin"),
+        literal("US").label("region"),
+        literal("money_market").label("fund_type"),
+        sec_money_market_funds.c.strategy_label,
+        sec_money_market_funds.c.net_assets.label("aum"),
+        sec_money_market_funds.c.currency,
+        sec_money_market_funds.c.domicile,
+        sec_money_market_funds.c.investment_adviser.label("manager_name"),
+        literal_column("NULL").label("manager_id"),
+        literal_column("NULL::date").label("inception_date"),
+        literal_column("NULL::integer").label("total_shareholder_accounts"),
+        literal_column("NULL::integer").label("investor_count"),
+        literal_column("NULL").label("series_id"),
+        literal_column("NULL").label("series_name"),
+        literal_column("NULL").label("class_id"),
+        literal_column("NULL").label("class_name"),
+        literal(False).label("has_holdings"),
+        literal(False).label("has_nav"),
+        literal(False).label("has_13f_overlay"),
+        literal("US").label("investment_geography"),
+        literal_column("NULL::integer").label("vintage_year"),
+        literal_column("NULL::numeric").label("expense_ratio_pct"),
+        literal_column("NULL::numeric").label("avg_annual_return_1y"),
+        literal_column("NULL::numeric").label("avg_annual_return_10y"),
+        literal_column("NULL::boolean").label("is_index"),
+        literal_column("NULL::boolean").label("is_target_date"),
+        literal_column("NULL::boolean").label("is_fund_of_fund"),
+    ).select_from(sec_money_market_funds)
+
+    conditions: list[ColumnElement[bool]] = []
+    if f.q:
+        escaped = _escape_ilike(f.q)
+        pattern = f"%{escaped}%"
+        conditions.append(
+            sec_money_market_funds.c.fund_name.ilike(pattern)
+            | sec_money_market_funds.c.investment_adviser.ilike(pattern),
+        )
+    if f.aum_min is not None:
+        conditions.append(sec_money_market_funds.c.net_assets >= int(f.aum_min))
+    if f.has_aum is True:
+        conditions.append(sec_money_market_funds.c.net_assets.isnot(None))
+        conditions.append(sec_money_market_funds.c.net_assets > 0)
+    if f.strategy_label:
+        sl_list = [v.strip() for v in f.strategy_label.split(",") if v.strip()]
+        if len(sl_list) == 1:
+            conditions.append(sec_money_market_funds.c.strategy_label == sl_list[0])
+        elif sl_list:
+            conditions.append(sec_money_market_funds.c.strategy_label.in_(sl_list))
+    if f.domicile:
+        conditions.append(sec_money_market_funds.c.domicile == f.domicile)
+
+    if conditions:
+        stmt = stmt.where(and_(*conditions))
+    return stmt
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 #  Public API
 # ═══════════════════════════════════════════════════════════════════════════
@@ -905,7 +1031,7 @@ _SORT_MAP = {
 }
 
 
-def _all_branches(filters: CatalogFilters) -> list[Select]:
+def _all_branches(filters: CatalogFilters) -> list[Select[Any]]:
     return [
         b
         for b in [
@@ -914,12 +1040,13 @@ def _all_branches(filters: CatalogFilters) -> list[Select]:
             _bdc_branch(filters),
             _private_us_branch(filters),
             _ucits_eu_branch(filters),
+            _mmf_branch(filters),
         ]
         if b is not None
     ]
 
 
-def build_catalog_query(filters: CatalogFilters) -> Select | None:
+def build_catalog_query(filters: CatalogFilters) -> Select[Any] | None:
     """Build paginated UNION ALL query with count() OVER() window.
 
     Returns None if all branches are pruned by filters.
@@ -930,7 +1057,7 @@ def build_catalog_query(filters: CatalogFilters) -> Select | None:
 
     combined = union_all(*branches).subquery("catalog")
 
-    sort_expr = literal_column(_SORT_MAP.get(filters.sort, "name ASC"))
+    sort_expr: ColumnElement[Any] = literal_column(_SORT_MAP.get(filters.sort, "name ASC"))
     offset = (filters.page - 1) * filters.page_size
 
     stmt = select(combined, func.count().over().label("_total"))
@@ -951,7 +1078,7 @@ def build_catalog_query(filters: CatalogFilters) -> Select | None:
     )
 
 
-def build_catalog_facets_query(filters: CatalogFilters) -> Select | None:
+def build_catalog_facets_query(filters: CatalogFilters) -> Select[Any] | None:
     """Build facet aggregation query over the unified catalog.
 
     Returns counts grouped by universe, region, fund_type, strategy_label,
@@ -967,6 +1094,7 @@ def build_catalog_facets_query(filters: CatalogFilters) -> Select | None:
         investment_geography=filters.investment_geography,
         aum_min=filters.aum_min,
         has_nav=filters.has_nav,
+        has_aum=filters.has_aum,
         domicile=filters.domicile,
         manager=filters.manager,
         page=1,

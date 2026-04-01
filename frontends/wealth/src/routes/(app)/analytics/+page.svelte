@@ -17,9 +17,13 @@
 	import type {
 		AttributionResult, ParetoResult, SectorAttribution, StrategyDriftAlert, Timeframe,
 		CorrelationResult, RollingCorrelation, BacktestResult, BacktestFoldResult,
+		RiskBudgetResult, FactorAnalysisResult,
 	} from "$lib/types/analytics";
 	import { effectColor, severityColor } from "$lib/types/analytics";
 	import { Button } from "@investintell/ui";
+	import RiskBudgetTable from "$lib/components/analytics/RiskBudgetTable.svelte";
+	import RiskBudgetScatter from "$lib/components/analytics/RiskBudgetScatter.svelte";
+	import FactorContributionChart from "$lib/components/analytics/FactorContributionChart.svelte";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
@@ -235,6 +239,44 @@
 				clearInterval(backtestTimer);
 				backtestTimer = null;
 			}
+		}
+	}
+
+	// ── Risk Budget ─────────────────────────────────────────────────────
+
+	let riskBudgetLoading = $state(false);
+	let riskBudgetData = $state<RiskBudgetResult | null>(null);
+	let riskBudgetError = $state<string | null>(null);
+
+	async function loadRiskBudget() {
+		riskBudgetLoading = true;
+		riskBudgetError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			riskBudgetData = await api.post<RiskBudgetResult>(`/analytics/risk-budget/${selectedProfile}`, {});
+		} catch (e) {
+			riskBudgetError = e instanceof Error ? e.message : "Failed to load risk budget";
+		} finally {
+			riskBudgetLoading = false;
+		}
+	}
+
+	// ── Factor Analysis ─────────────────────────────────────────────────
+
+	let factorLoading = $state(false);
+	let factorData = $state<FactorAnalysisResult | null>(null);
+	let factorError = $state<string | null>(null);
+
+	async function loadFactorAnalysis() {
+		factorLoading = true;
+		factorError = null;
+		try {
+			const api = createClientApiClient(getToken);
+			factorData = await api.get<FactorAnalysisResult>(`/analytics/factor-analysis/${selectedProfile}`);
+		} catch (e) {
+			factorError = e instanceof Error ? e.message : "Failed to load factor analysis";
+		} finally {
+			factorLoading = false;
 		}
 	}
 
@@ -760,7 +802,55 @@
 	{/if}
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- Risk Budget + Factor Analysis                                      -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div class="an-risk-budget-section">
+	<div class="an-pareto-header">
+		<h3 class="an-pareto-title">Risk Budgeting & Factor Analysis</h3>
+		<div class="an-rb-actions">
+			<Button size="sm" variant="outline" onclick={loadRiskBudget} disabled={riskBudgetLoading}>
+				{riskBudgetLoading ? "Loading…" : "Risk Budget"}
+			</Button>
+			<Button size="sm" variant="outline" onclick={loadFactorAnalysis} disabled={factorLoading}>
+				{factorLoading ? "Loading…" : "Factor Analysis"}
+			</Button>
+		</div>
+	</div>
+
+	{#if riskBudgetError}
+		<div class="an-pareto-error">{riskBudgetError}</div>
+	{/if}
+
+	{#if factorError}
+		<div class="an-pareto-error">{factorError}</div>
+	{/if}
+</div>
+
+{#if riskBudgetData}
+	<RiskBudgetTable data={riskBudgetData} />
+	<RiskBudgetScatter data={riskBudgetData} />
+{/if}
+
+{#if factorData}
+	<FactorContributionChart data={factorData} />
+{/if}
+
 <style>
+	/* ── Risk Budget actions ──────────────────────────────────────────────── */
+	.an-rb-actions {
+		display: flex;
+		gap: 6px;
+	}
+
+	.an-risk-budget-section {
+		margin: var(--ii-space-stack-md, 16px) var(--ii-space-inline-lg, 24px) 0;
+		border: 1px solid var(--ii-border-subtle);
+		border-radius: var(--ii-radius-md, 12px);
+		background: var(--ii-surface-elevated);
+		overflow: hidden;
+	}
+
 	/* ── Controls ─────────────────────────────────────────────────────────── */
 	.an-controls {
 		display: flex;

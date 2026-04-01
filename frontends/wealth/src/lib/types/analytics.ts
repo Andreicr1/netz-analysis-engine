@@ -99,6 +99,113 @@ export interface BacktestResult {
 	folds: BacktestFoldResult[];
 }
 
+// ── Risk Budgeting (eVestment p.43-44) ──────────────────────────────
+
+export interface FundRiskBudget {
+	block_id: string;
+	block_name: string;
+	weight: number;
+	mean_return: number;
+	mctr: number | null;
+	pctr: number | null;
+	mcetl: number | null;
+	pcetl: number | null;
+	implied_return_vol: number | null;
+	implied_return_etl: number | null;
+	difference_vol: number | null;
+	difference_etl: number | null;
+}
+
+export interface RiskBudgetResult {
+	profile: string;
+	portfolio_volatility: number;
+	portfolio_etl: number;
+	portfolio_starr: number | null;
+	funds: FundRiskBudget[];
+	as_of_date: string | null;
+}
+
+// ── Factor Analysis (eVestment p.46) ────────────────────────────────
+
+export interface FactorContribution {
+	factor_label: string;
+	pct_contribution: number;
+}
+
+export interface FactorAnalysisResult {
+	profile: string;
+	systematic_risk_pct: number;
+	specific_risk_pct: number;
+	factor_contributions: FactorContribution[];
+	r_squared: number;
+	portfolio_factor_exposures: Record<string, number>;
+	as_of_date: string | null;
+}
+
+// ── Monte Carlo Simulation ─────────────────────────────────────────
+
+export interface MonteCarloConfidenceBar {
+	horizon: string;
+	horizon_days: number;
+	pct_5: number;
+	pct_10: number;
+	pct_25: number;
+	pct_50: number;
+	pct_75: number;
+	pct_90: number;
+	pct_95: number;
+	mean: number;
+}
+
+export interface MonteCarloResult {
+	entity_id: string;
+	entity_name: string;
+	n_simulations: number;
+	statistic: string;
+	percentiles: Record<string, number>;
+	mean: number;
+	median: number;
+	std: number;
+	historical_value: number;
+	confidence_bars: MonteCarloConfidenceBar[];
+}
+
+// ── Peer Group Rankings (eVestment Section IV) ────────────────────
+
+export interface PeerRanking {
+	metric_name: string;
+	value: number | null;
+	percentile: number;
+	quartile: number;
+	peer_count: number;
+	peer_median: number;
+	peer_p25: number;
+	peer_p75: number;
+}
+
+export interface PeerGroupResult {
+	entity_id: string;
+	entity_name: string;
+	strategy_label: string;
+	peer_count: number;
+	rankings: PeerRanking[];
+	as_of_date: string | null;
+}
+
+// ── Active Share (eVestment p.73) ─────────────────────────────────
+
+export interface ActiveShareResult {
+	entity_id: string;
+	entity_name: string;
+	active_share: number;
+	overlap: number;
+	active_share_efficiency: number | null;
+	n_portfolio_positions: number;
+	n_benchmark_positions: number;
+	n_common_positions: number;
+	as_of_date: string | null;
+}
+
 export type Timeframe = "ytd" | "1y" | "3y" | "custom";
 
 export function effectColor(value: number): string {

@@ -368,8 +368,8 @@
 									<span class="ct-strategy-label">{group.representative.strategy_label ?? "\u2014"}</span>
 								</td>
 								<td class="std-aum">{formatAumNeutral(group.representative.aum)}</td>
-								<td class="ct-col-er">{group.representative.expense_ratio_pct != null ? `${Number(group.representative.expense_ratio_pct).toFixed(2)}%` : "\u2014"}</td>
-								<td class="ct-col-ret">{group.representative.avg_annual_return_1y != null ? formatPercent(Number(group.representative.avg_annual_return_1y) / 100) : "\u2014"}</td>
+								<td class="ct-col-er">{group.representative.expense_ratio_pct != null ? formatPercent(Number(group.representative.expense_ratio_pct) / 100) : "\u2014"}</td>
+								<td class="ct-col-ret">{#if group.representative.fund_type === "money_market" && group.representative.seven_day_gross_yield != null}{formatPercent(Number(group.representative.seven_day_gross_yield) / 100)}{:else if group.representative.avg_annual_return_1y != null}{formatPercent(Number(group.representative.avg_annual_return_1y) / 100)}{:else}{"\u2014"}{/if}</td>
 								<td class="ct-cy">{group.representative.currency ?? "\u2014"}</td>
 							</tr>
 
@@ -406,7 +406,7 @@
 											</div>
 										</td>
 										<td></td>
-										<td class="ct-col-er">{cls.expense_ratio_pct != null ? `${Number(cls.expense_ratio_pct).toFixed(2)}%` : ""}</td>
+										<td class="ct-col-er">{cls.expense_ratio_pct != null ? formatPercent(Number(cls.expense_ratio_pct) / 100) : ""}</td>
 										<td class="ct-col-ret">{cls.avg_annual_return_1y != null ? formatPercent(Number(cls.avg_annual_return_1y) / 100) : ""}</td>
 										<td></td>
 									</tr>

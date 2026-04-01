@@ -45,6 +45,7 @@
 	let catalogMinReturn1y = $state(initParams.min_return_1y ?? "");
 	let catalogMinReturn10y = $state(initParams.min_return_10y ?? "");
 	let currentSort = $state(initParams.sort ?? "name_asc");
+	let showAllFunds = $state(initParams.has_aum === "false");
 
 	function buildCatalogParams(): URLSearchParams {
 		const params = new URLSearchParams();
@@ -60,6 +61,7 @@
 		if (catalogMinReturn1y) params.set("min_return_1y", catalogMinReturn1y);
 		if (catalogMinReturn10y) params.set("min_return_10y", catalogMinReturn10y);
 		if (currentSort && currentSort !== "name_asc") params.set("sort", currentSort);
+		if (showAllFunds) params.set("has_aum", "false");
 		return params;
 	}
 
@@ -128,6 +130,7 @@
 		catalogMaxER = "";
 		catalogMinReturn1y = "";
 		catalogMinReturn10y = "";
+		showAllFunds = false;
 		applyCatalogFilters();
 	}
 
@@ -137,7 +140,8 @@
 		selectedGeographies.length > 0 ||
 		catalogAumMin.length > 0 ||
 		catalogMaxER.length > 0 ||
-		catalogSearchQ.length > 0
+		catalogSearchQ.length > 0 ||
+		showAllFunds
 	);
 
 	// Debounce for search input
@@ -311,6 +315,11 @@
 			<option value="1.50">ER ≤ 1.50%</option>
 		</select>
 
+		<label class="scr-toggle">
+			<input type="checkbox" checked={showAllFunds} onchange={() => { showAllFunds = !showAllFunds; applyCatalogFilters(); }} />
+			Include all
+		</label>
+
 		{#if hasActiveFilters}
 			<button class="scr-clear-btn" onclick={clearAllFilters}>Clear</button>
 		{/if}
@@ -449,6 +458,24 @@
 	.scr-dropdown:focus {
 		outline: none;
 		border-color: var(--ii-border-focus);
+	}
+
+	.scr-toggle {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 13px;
+		color: var(--ii-text-secondary);
+		cursor: pointer;
+		white-space: nowrap;
+		user-select: none;
+	}
+
+	.scr-toggle input[type="checkbox"] {
+		width: 14px;
+		height: 14px;
+		accent-color: var(--ii-brand-primary, #1447e6);
+		cursor: pointer;
 	}
 
 	.scr-clear-btn {

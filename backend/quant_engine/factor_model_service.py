@@ -29,6 +29,16 @@ class FactorModelResult:
     residual_returns: np.ndarray  # (T,) portfolio idiosyncratic component
 
 
+@dataclass(frozen=True, slots=True)
+class FactorContributionResult:
+    """Factor contribution to portfolio risk/return — eVestment p.46."""
+
+    systematic_risk_pct: float  # % of total variance from factors
+    specific_risk_pct: float  # % of total variance idiosyncratic
+    factor_contributions: list[dict]  # [{factor_label, pct_contribution}]
+    r_squared: float  # overall model fit
+
+
 def decompose_factors(
     returns_matrix: np.ndarray,
     macro_proxies: dict[str, np.ndarray] | None,
@@ -165,3 +175,55 @@ def _safe_correlation(a: np.ndarray, b: np.ndarray) -> float:
     if np.std(a) < 1e-12 or np.std(b) < 1e-12:
         return 0.0
     return float(np.corrcoef(a, b)[0, 1])
+
+
+def compute_factor_contributions(
+    factor_result: FactorModelResult,
+) -> FactorContributionResult:
+    """Decompose portfolio variance into factor (systematic) vs specific.
+
+    Uses the existing PCA decomposition to compute each factor's
+    percentage contribution to total portfolio variance.
+    """
+    factor_returns = factor_result.factor_returns  # (T, K)
+    residual = factor_result.residual_returns  # (T,)
+    labels = factor_result.factor_labels
+
+    # Variance of factor-explained component per factor
+    # Each factor's contribution = var(exposure_k * factor_k)
+    exposures = np.array([
+        factor_result.portfolio_factor_exposures[label]
+        for label in labels
+    ])
+
+    factor_vars = np.array([
+        float(np.var(factor_returns[:, k], ddof=1)) * exposures[k] ** 2
+        for k in range(len(labels))
+    ])
+
+    systematic_var = float(np.sum(factor_vars))
+    specific_var = float(np.var(residual, ddof=1))
+    total_var = systematic_var + specific_var
+
+    if total_var < 1e-16:
+        return FactorContributionResult(
+            systematic_risk_pct=0.0,
+            specific_risk_pct=0.0,
+            factor_contributions=[],
+            r_squared=0.0,
+        )
+
+    factor_contributions = [
+        {
+            "factor_label": labels[k],
+            "pct_contribution": round(float(factor_vars[k] / total_var * 100), 2),
+        }
+        for k in range(len(labels))
+    ]
+
+    return FactorContributionResult(
+        systematic_risk_pct=round(systematic_var / total_var * 100, 2),
+        specific_risk_pct=round(specific_var / total_var * 100, 2),
+        factor_contributions=factor_contributions,
+        r_squared=factor_result.r_squared,
+    )

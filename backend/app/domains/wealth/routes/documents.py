@@ -393,3 +393,41 @@ async def get_document(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     return WealthDocumentOut.model_validate(doc)
+
+
+@router.get("/{document_id}/preview-url")
+async def get_preview_url(
+    document_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    _role_guard: Actor = Depends(require_role(*_READ_ROLES)),
+):
+    """Generate a time-limited presigned URL for document preview (5 min TTL)."""
+    result = await db.execute(
+        select(WealthDocument).where(WealthDocument.id == document_id),
+    )
+    doc = result.scalar_one_or_none()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if doc.current_version < 1:
+        raise HTTPException(status_code=404, detail="No version available for preview")
+
+    ver_result = await db.execute(
+        select(WealthDocumentVersion).where(
+            WealthDocumentVersion.document_id == document_id,
+            WealthDocumentVersion.version_number == doc.current_version,
+        ),
+    )
+    version = ver_result.scalar_one_or_none()
+    if not version or not version.blob_path:
+        raise HTTPException(status_code=404, detail="Document file not found")
+
+    storage = get_storage_client()
+    url = await storage.generate_read_url(version.blob_path, expires_in=300)
+
+    return {
+        "url": url,
+        "content_type": doc.content_type or "application/octet-stream",
+        "filename": doc.filename,
+    }

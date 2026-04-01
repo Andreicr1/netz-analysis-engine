@@ -15,6 +15,7 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -604,6 +605,56 @@ async def reject_review(
 
     await db.flush()
     return MacroReviewRead.model_validate(review)
+
+
+# ── Download ────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/reviews/{review_id}/download",
+    summary="Download macro committee review as PDF",
+    tags=["macro"],
+    dependencies=[Depends(require_role(Role.INVESTMENT_TEAM))],
+)
+async def download_macro_review_pdf(
+    review_id: UUID,
+    language: str = Query(default="pt", description="pt or en"),
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> Response:
+    """Render macro review as PDF on-demand via Playwright."""
+    result = await db.execute(
+        select(MacroReview).where(MacroReview.id == review_id),
+    )
+    review = result.scalar_one_or_none()
+    if review is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review not found.",
+        )
+    if review.status not in ("pending", "approved"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Review must be pending or approved (current: {review.status}).",
+        )
+
+    from vertical_engines.wealth.pdf.macro_pdf import generate_macro_review_pdf
+
+    pdf_bytes = await generate_macro_review_pdf(
+        review.report_json,
+        as_of_date=review.as_of_date,
+        language=language,
+    )
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="macro-review-{review.as_of_date}.pdf"'
+            ),
+        },
+    )
 
 
 # ---------------------------------------------------------------------------

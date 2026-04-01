@@ -124,6 +124,20 @@
 			</div>
 		</div>
 
+		<!-- MMF Metrics -->
+		{#if fund.fund_type === "money_market"}
+			<div class="dt-section">
+				<h4 class="dt-section-title">Money Market Metrics</h4>
+				<div class="dt-fund-meta">
+					{#if fund.mmf_category}<span>Category: {fund.mmf_category}</span>{/if}
+					{#if fund.seven_day_gross_yield != null}<span>7-Day Yield: {formatPercent(fund.seven_day_gross_yield / 100)}</span>{/if}
+					{#if fund.weighted_avg_maturity != null}<span>WAM: {fund.weighted_avg_maturity} days</span>{/if}
+					{#if fund.weighted_avg_life != null}<span>WAL: {fund.weighted_avg_life} days</span>{/if}
+					<span>Stable NAV: $1.00</span>
+				</div>
+			</div>
+		{/if}
+
 		<!-- N-CEN Flags -->
 		{#if fund.is_index || fund.is_target_date || fund.is_fund_of_fund}
 			<div class="dt-ncen-flags">
@@ -138,7 +152,7 @@
 			<div class="dt-section">
 				<h4 class="dt-section-title">Cost & Performance</h4>
 				<div class="dt-fund-meta">
-					{#if fund.expense_ratio_pct != null}<span>Expense Ratio: {Number(fund.expense_ratio_pct).toFixed(2)}%</span>{/if}
+					{#if fund.expense_ratio_pct != null}<span>Expense Ratio: {formatPercent(Number(fund.expense_ratio_pct) / 100)}</span>{/if}
 					{#if fund.avg_annual_return_1y != null}<span>1Y Return: {formatPercent(Number(fund.avg_annual_return_1y) / 100)}</span>{/if}
 					{#if fund.avg_annual_return_10y != null}<span>10Y Return: {formatPercent(Number(fund.avg_annual_return_10y) / 100)}</span>{/if}
 				</div>
@@ -157,9 +171,13 @@
 				</div>
 				<div class="cdp-matrix-row">
 					<span class="cdp-matrix-label">NAV History</span>
-					<span class="cdp-matrix-value" class:cdp-avail={fund.disclosure.has_nav_history} class:cdp-unavail={!fund.disclosure.has_nav_history}>
-						{fund.disclosure.has_nav_history ? "Available" : "N/A"}
-					</span>
+					{#if fund.disclosure.nav_status === "available"}
+						<span class="cdp-matrix-value cdp-avail">Available</span>
+					{:else if fund.disclosure.nav_status === "pending_import"}
+						<span class="cdp-matrix-value cdp-pending">After Import</span>
+					{:else}
+						<span class="cdp-matrix-value cdp-unavail">N/A</span>
+					{/if}
 				</div>
 				<div class="cdp-matrix-row">
 					<span class="cdp-matrix-label">Quant Metrics</span>
@@ -202,9 +220,16 @@
 			{#if !fund.instrument_id}
 				<p class="dt-empty-text">This fund is not yet in your universe. Import and send to DD review.</p>
 			{/if}
-			<Button size="sm" onclick={() => reviewDialogOpen = true} disabled={sendingToReview}>
-				{sendingToReview ? "Sending\u2026" : "Send to Review"}
-			</Button>
+			<div class="dt-action-row">
+				<Button size="sm" onclick={() => reviewDialogOpen = true} disabled={sendingToReview}>
+					{sendingToReview ? "Sending\u2026" : "Send to Review"}
+				</Button>
+				{#if fund.instrument_id}
+					<Button size="sm" variant="outline" onclick={() => goto(`/analytics/${fund.instrument_id}`)}>
+						Analytics
+					</Button>
+				{/if}
+			</div>
 			{#if reviewError}
 				<span class="dt-add-error">{reviewError}</span>
 			{/if}
@@ -335,6 +360,13 @@
 	.cdp-avail {
 		color: #059669;
 		background: #ecfdf5;
+		padding: 2px 8px;
+		border-radius: 6px;
+	}
+
+	.cdp-pending {
+		color: #d97706;
+		background: #fffbeb;
 		padding: 2px 8px;
 		border-radius: 6px;
 	}

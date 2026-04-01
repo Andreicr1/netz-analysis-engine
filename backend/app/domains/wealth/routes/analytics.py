@@ -22,6 +22,7 @@ from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_curr
 from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.allocation import StrategicAllocation
 from app.domains.wealth.models.backtest import BacktestRun
+from app.domains.wealth.models.block import AllocationBlock
 from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.nav import NavTimeseries
 from app.domains.wealth.routes.common import validate_profile as _validate_profile
@@ -29,19 +30,35 @@ from app.domains.wealth.schemas.analytics import (
     BacktestRequest,
     BacktestRunRead,
     CorrelationMatrix,
+    FactorAnalysisResponse,
+    FactorContribution,
+    FundRiskBudgetRead,
+    MonteCarloConfidenceBar,
+    MonteCarloRequest,
+    MonteCarloResponse,
     OptimizeRequest,
     OptimizeResult,
     ParetoOptimizeResult,
+    PeerGroupResponse,
+    PeerRankingRead,
+    RiskBudgetResponse,
     RollingCorrelationResult,
 )
 from app.domains.wealth.services.quant_queries import compute_inputs_from_nav, fetch_returns_matrix
 from quant_engine.backtest_service import walk_forward_backtest
+from quant_engine.factor_model_service import (
+    compute_factor_contributions,
+    decompose_factors,
+)
+from quant_engine.monte_carlo_service import run_monte_carlo
 from quant_engine.optimizer_service import (
     BlockConstraint,
     ProfileConstraints,
     optimize_portfolio,
     optimize_portfolio_pareto,
 )
+from quant_engine.peer_group_service import compute_peer_rankings
+from quant_engine.risk_budgeting_service import compute_risk_budget
 
 logger = structlog.get_logger()
 
@@ -569,4 +586,414 @@ async def get_rolling_correlation(
         values=values_out,
         instrument_a=name_map[inst_a],
         instrument_b=name_map[inst_b],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Risk Budgeting (eVestment p.43-44)
+# ---------------------------------------------------------------------------
+
+
+async def _resolve_profile_weights(
+    db: AsyncSession, profile: str,
+) -> tuple[list[StrategicAllocation], list[str], list[str], np.ndarray]:
+    """Resolve strategic allocations for a profile.
+
+    Returns (allocations, block_ids, block_names, target_weights).
+    """
+    today = date.today()
+    alloc_stmt = (
+        select(StrategicAllocation, AllocationBlock.display_name)
+        .join(AllocationBlock, AllocationBlock.block_id == StrategicAllocation.block_id)
+        .where(
+            StrategicAllocation.profile == profile,
+            StrategicAllocation.effective_from <= today,
+        )
+        .where(
+            (StrategicAllocation.effective_to.is_(None))
+            | (StrategicAllocation.effective_to >= today),
+        )
+    )
+    result = await db.execute(alloc_stmt)
+    rows = result.all()
+
+    if not rows:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"No strategic allocation found for profile '{profile}'",
+        )
+
+    allocations = [r[0] for r in rows]
+    block_ids = [a.block_id for a in allocations]
+    block_names = [r[1] for r in rows]
+    weights = np.array([float(a.target_weight) for a in allocations])
+
+    # Normalize weights to sum to 1
+    w_sum = weights.sum()
+    if w_sum > 0:
+        weights = weights / w_sum
+
+    return allocations, block_ids, block_names, weights
+
+
+@router.post(
+    "/risk-budget/{profile}",
+    response_model=RiskBudgetResponse,
+    summary="Risk budget decomposition (eVestment)",
+    description=(
+        "Computes MCTR, PCTR, MCETL, PCETL, and implied returns "
+        "for each allocation block in the given profile. "
+        "PCTR sums to 100%, PCETL sums to 100%."
+    ),
+)
+async def get_risk_budget(
+    profile: str,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> RiskBudgetResponse:
+    _validate_profile(profile)
+
+    allocations, block_ids, block_names, weights = await _resolve_profile_weights(db, profile)
+
+    try:
+        returns_matrix, _, _ = await fetch_returns_matrix(db, block_ids)
+    except ValueError as e:
+        logger.error("risk_budget_inputs_error", profile=profile, error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Insufficient NAV data to compute risk budget",
+        )
+
+    result = compute_risk_budget(
+        weights=weights,
+        returns_matrix=returns_matrix,
+        block_ids=block_ids,
+        block_names=block_names,
+    )
+
+    return RiskBudgetResponse(
+        profile=profile,
+        portfolio_volatility=result.portfolio_volatility,
+        portfolio_etl=result.portfolio_etl,
+        portfolio_starr=result.portfolio_starr,
+        funds=[
+            FundRiskBudgetRead(
+                block_id=f.block_id,
+                block_name=f.block_name,
+                weight=f.weight,
+                mean_return=f.mean_return,
+                mctr=f.mctr,
+                pctr=f.pctr,
+                mcetl=f.mcetl,
+                pcetl=f.pcetl,
+                implied_return_vol=f.implied_return_vol,
+                implied_return_etl=f.implied_return_etl,
+                difference_vol=f.difference_vol,
+                difference_etl=f.difference_etl,
+            )
+            for f in result.funds
+        ],
+        as_of_date=date.today(),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Factor Analysis (eVestment p.46)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/factor-analysis/{profile}",
+    response_model=FactorAnalysisResponse,
+    summary="Factor analysis decomposition (PCA)",
+    description=(
+        "Decomposes portfolio risk into systematic (factor) and specific "
+        "(idiosyncratic) components using PCA. Returns factor contributions "
+        "and R² per factor."
+    ),
+)
+async def get_factor_analysis(
+    profile: str,
+    n_factors: int = Query(3, ge=1, le=10, description="Number of PCA factors"),
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> FactorAnalysisResponse:
+    _validate_profile(profile)
+
+    _, block_ids, _, weights = await _resolve_profile_weights(db, profile)
+
+    try:
+        returns_matrix, _, _ = await fetch_returns_matrix(db, block_ids)
+    except ValueError as e:
+        logger.error("factor_analysis_inputs_error", profile=profile, error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Insufficient NAV data to compute factor analysis",
+        )
+
+    # Run PCA decomposition
+    factor_result = decompose_factors(
+        returns_matrix=returns_matrix,
+        macro_proxies=None,
+        portfolio_weights=weights,
+        n_factors=n_factors,
+    )
+
+    # Compute factor contributions
+    contributions = compute_factor_contributions(factor_result)
+
+    return FactorAnalysisResponse(
+        profile=profile,
+        systematic_risk_pct=contributions.systematic_risk_pct,
+        specific_risk_pct=contributions.specific_risk_pct,
+        factor_contributions=[
+            FactorContribution(
+                factor_label=fc["factor_label"],
+                pct_contribution=fc["pct_contribution"],
+            )
+            for fc in contributions.factor_contributions
+        ],
+        r_squared=contributions.r_squared,
+        portfolio_factor_exposures=factor_result.portfolio_factor_exposures,
+        as_of_date=date.today(),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Monte Carlo Simulation
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/monte-carlo",
+    response_model=MonteCarloResponse,
+    summary="Monte Carlo simulation (block bootstrap)",
+    description=(
+        "Runs bootstrapped Monte Carlo simulation on a fund or model portfolio. "
+        "Uses 21-day block bootstrap to preserve autocorrelation. "
+        "Supports max_drawdown, return, and sharpe statistics. "
+        "Results cached in Redis (1h TTL)."
+    ),
+)
+async def run_monte_carlo_endpoint(
+    body: MonteCarloRequest,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> MonteCarloResponse:
+    from app.domains.wealth.models.instrument import Instrument
+    from app.domains.wealth.models.model_portfolio import ModelPortfolio
+    from app.domains.wealth.services.nav_reader import fetch_nav_series, is_model_portfolio
+
+    # Resolve entity name
+    entity_id = body.entity_id
+    if await is_model_portfolio(db, entity_id):
+        row = await db.execute(
+            select(ModelPortfolio.display_name).where(ModelPortfolio.id == entity_id),
+        )
+        entity_name = row.scalar_one_or_none() or "Model Portfolio"
+    else:
+        row = await db.execute(
+            select(Instrument.name).where(Instrument.instrument_id == entity_id),
+        )
+        entity_name = row.scalar_one_or_none()
+        if entity_name is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
+
+    # Check Redis cache
+    cache_extra = {
+        "entity_id": str(entity_id),
+        "statistic": body.statistic,
+        "n_sims": body.n_simulations,
+        "horizons": body.horizons or [252, 756, 1260, 1764, 2520],
+    }
+    cache_key = hashlib.sha256(
+        json.dumps(cache_extra, sort_keys=True, default=str).encode(),
+    ).hexdigest()[:24]
+    cached = await _get_cached_result(f"mc:{cache_key}")
+    if cached:
+        return MonteCarloResponse(**cached)
+
+    # Fetch NAV data (max lookback for robust bootstrap)
+    from datetime import timedelta
+
+    today = date.today()
+    start_date = today - timedelta(days=int(1260 * 1.5))  # ~5Y buffer
+    nav_rows = await fetch_nav_series(db, entity_id, start_date, today)
+
+    if len(nav_rows) < 42:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Insufficient NAV data: {len(nav_rows)} rows (need ≥ 42)",
+        )
+
+    daily_returns = np.array([
+        r.daily_return if r.daily_return is not None else 0.0
+        for r in nav_rows
+    ])
+
+    result = run_monte_carlo(
+        daily_returns=daily_returns,
+        n_simulations=body.n_simulations,
+        horizons=body.horizons,
+        statistic=body.statistic,
+    )
+
+    response_dict = {
+        "entity_id": entity_id,
+        "entity_name": entity_name,
+        "n_simulations": result.n_simulations,
+        "statistic": result.statistic,
+        "percentiles": result.percentiles,
+        "mean": result.mean,
+        "median": result.median,
+        "std": result.std,
+        "historical_value": result.historical_value,
+        "confidence_bars": result.confidence_bars,
+    }
+
+    await _set_cached_result(f"mc:{cache_key}", response_dict)
+
+    return MonteCarloResponse(
+        entity_id=entity_id,
+        entity_name=entity_name,
+        n_simulations=result.n_simulations,
+        statistic=result.statistic,
+        percentiles=result.percentiles,
+        mean=result.mean,
+        median=result.median,
+        std=result.std,
+        historical_value=result.historical_value,
+        confidence_bars=[
+            MonteCarloConfidenceBar(**cb) for cb in result.confidence_bars
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Peer Group Rankings (eVestment Section IV)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/peer-group/{entity_id}",
+    response_model=PeerGroupResponse,
+    summary="Peer group rankings (eVestment Section IV)",
+    description=(
+        "Ranks a fund against strategy-matched peers on key risk/return metrics. "
+        "Uses strategy_label from instruments_universe for cohort selection. "
+        "Falls back to broader category if exact cohort < 10 funds."
+    ),
+)
+async def get_peer_group(
+    entity_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> PeerGroupResponse:
+    from app.domains.wealth.models.risk import FundRiskMetrics
+
+    # Resolve entity name and strategy_label
+    inst_row = await db.execute(
+        select(Instrument.name, Instrument.attributes)
+        .where(Instrument.instrument_id == entity_id),
+    )
+    inst = inst_row.one_or_none()
+    if inst is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entity not found")
+
+    entity_name = inst[0]
+    attrs = inst[1] or {}
+    strategy_label = attrs.get("strategy_label", "")
+
+    if not strategy_label:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Entity has no strategy_label — peer group comparison unavailable",
+        )
+
+    # Fetch fund's latest risk metrics
+    fund_row = await db.execute(
+        select(FundRiskMetrics)
+        .where(FundRiskMetrics.instrument_id == entity_id)
+        .order_by(FundRiskMetrics.calc_date.desc())
+        .limit(1),
+    )
+    fund_metrics_obj = fund_row.scalar_one_or_none()
+    if fund_metrics_obj is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No risk metrics available for this entity",
+        )
+
+    fund_date = fund_metrics_obj.calc_date
+
+    # Fetch all peer funds with same strategy_label
+    peer_stmt = (
+        select(FundRiskMetrics)
+        .join(Instrument, Instrument.instrument_id == FundRiskMetrics.instrument_id)
+        .where(
+            Instrument.attributes["strategy_label"].as_string() == strategy_label,
+            FundRiskMetrics.calc_date == fund_date,
+            FundRiskMetrics.instrument_id != entity_id,
+        )
+    )
+    peer_result = await db.execute(peer_stmt)
+    peer_rows = peer_result.scalars().all()
+
+    # Fallback: if < 10 peers, widen search (not filtered by strategy)
+    if len(peer_rows) < 10:
+        wider_stmt = (
+            select(FundRiskMetrics)
+            .where(
+                FundRiskMetrics.calc_date == fund_date,
+                FundRiskMetrics.instrument_id != entity_id,
+                FundRiskMetrics.sharpe_1y.isnot(None),
+            )
+            .limit(500)
+        )
+        wider_result = await db.execute(wider_stmt)
+        wider_rows = wider_result.scalars().all()
+        if len(wider_rows) > len(peer_rows):
+            peer_rows = wider_rows
+            strategy_label = f"{strategy_label} (broadened)"
+
+    # Convert to dicts for peer_group_service
+    def _to_dict(obj: FundRiskMetrics) -> dict[str, float | None]:
+        return {
+            "sharpe_1y": float(obj.sharpe_1y) if obj.sharpe_1y is not None else None,
+            "sortino_1y": float(obj.sortino_1y) if obj.sortino_1y is not None else None,
+            "return_1y": float(obj.return_1y) if obj.return_1y is not None else None,
+            "max_drawdown_1y": float(obj.max_drawdown_1y) if obj.max_drawdown_1y is not None else None,
+            "volatility_1y": float(obj.volatility_1y) if obj.volatility_1y is not None else None,
+            "alpha_1y": float(obj.alpha_1y) if obj.alpha_1y is not None else None,
+            "manager_score": float(obj.manager_score) if obj.manager_score is not None else None,
+        }
+
+    fund_dict = _to_dict(fund_metrics_obj)
+    peer_dicts = [_to_dict(p) for p in peer_rows]
+
+    result = compute_peer_rankings(
+        fund_metrics=fund_dict,
+        peer_metrics=peer_dicts,
+        strategy_label=strategy_label,
+    )
+
+    return PeerGroupResponse(
+        entity_id=entity_id,
+        entity_name=entity_name,
+        strategy_label=result.strategy_label,
+        peer_count=result.peer_count,
+        rankings=[
+            PeerRankingRead(
+                metric_name=r.metric_name,
+                value=r.value,
+                percentile=r.percentile,
+                quartile=r.quartile,
+                peer_count=r.peer_count,
+                peer_median=r.peer_median,
+                peer_p25=r.peer_p25,
+                peer_p75=r.peer_p75,
+            )
+            for r in result.rankings
+        ],
+        as_of_date=fund_date,
     )

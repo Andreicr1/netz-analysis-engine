@@ -105,8 +105,10 @@ async def agent_chat(
             yield _sse("tool_call", {"tool": "vector_search", "status": "running", "detail": "Searching funds, reports, and filings…"})
 
             from ai_engine.extraction.pgvector_search_service import (
+                get_catalog_stats_sync,
                 search_fund_analysis_sync,
                 search_fund_firm_context_sync,
+                search_wealth_global_sync,
             )
 
             all_chunks: list[dict[str, Any]] = []
@@ -136,18 +138,22 @@ async def agent_chat(
                 except Exception as exc:
                     logger.warning("Wealth agent: firm context search failed: %s", exc)
 
-            # Global fund search (no org filter — SEC/ESMA public data)
-            if not payload.instrument_id:
-                try:
-                    from ai_engine.extraction.pgvector_search_service import search_esma_funds_sync
+            # Broad global search across ALL source types (SEC + ESMA + prospectus + N-PORT)
+            try:
+                global_chunks = search_wealth_global_sync(
+                    query_vector=query_vector,
+                    top=15,
+                )
+                all_chunks.extend(global_chunks)
+            except Exception as exc:
+                logger.warning("Wealth agent: global search failed: %s", exc)
 
-                    global_chunks = search_esma_funds_sync(
-                        query_vector=query_vector,
-                        top=10,
-                    )
-                    all_chunks.extend(global_chunks)
-                except Exception as exc:
-                    logger.warning("Wealth agent: global fund search failed: %s", exc)
+            # Fetch catalog statistics for aggregate questions
+            catalog_stats: dict[str, Any] | None = None
+            try:
+                catalog_stats = get_catalog_stats_sync()
+            except Exception as exc:
+                logger.warning("Wealth agent: catalog stats failed: %s", exc)
 
             # Deduplicate by chunk id, sort by score
             seen: set[str] = set()
@@ -163,21 +169,23 @@ async def agent_chat(
 
             # ── Search scope summary ──────────────────────────────────────────────────────
             # org_chunks:    wealth_vector_chunks WHERE organization_id = org_id
-            #                entity_types: dd_chapter, macro_review, fact_sheet, portfolio
-            #                (org-scoped — only this tenant's produced content)
+            #                (org-scoped — DD chapters, macro reviews, fact sheets)
             #
-            # firm_chunks:   wealth_vector_chunks WHERE entity_type IN ('firm', 'adv_brochure')
+            # firm_chunks:   wealth_vector_chunks WHERE entity_type = 'firm'
             #                AND (sec_crd = ? OR esma_manager_id = ?)
-            #                (global — SEC ADV data shared across tenants, triggered by CRD/ESMA)
+            #                (global — ADV brochures, triggered when CRD/ESMA provided)
             #
-            # global_chunks: wealth_vector_chunks WHERE entity_type IN ('fund', 'esma_fund', 'etf')
-            #                AND organization_id IS NULL
-            #                (global — public fund registry data, triggered when no instrument_id)
+            # global_chunks: wealth_vector_chunks WHERE organization_id IS NULL
+            #                (global — ALL 14 source types: SEC managers, ADV brochures,
+            #                 13F summaries, private funds, fund profiles, ETFs, BDCs,
+            #                 MMFs, ESMA funds/managers, prospectus stats/returns,
+            #                 N-PORT holdings, fund share classes)
             #
-            # The agent does NOT search: nav_timeseries, fund_risk_metrics, macro_data,
-            # sec_13f_holdings or any other hypertable. Those are queried via dedicated
-            # routes, not via the vector search. If users ask about current NAV or risk
-            # metrics, the agent should acknowledge this limitation.
+            # catalog_stats: aggregate counts from structured tables (instruments_universe,
+            #                sec_managers, sec_registered_funds, sec_etfs, etc.)
+            #
+            # NOT searched: nav_timeseries, fund_risk_metrics, macro_data, sec_13f_holdings.
+            # Those are queried via dedicated routes, not via vector search.
             # ─────────────────────────────────────────────────────────────────────────────
 
             yield _sse("tool_call", {
@@ -186,7 +194,7 @@ async def agent_chat(
                 "detail": f"Found {len(unique_chunks)} relevant sources",
             })
 
-            if not unique_chunks:
+            if not unique_chunks and not catalog_stats:
                 yield _sse("chunk", {"text": "Insufficient evidence in the knowledge base to answer this question."})
                 yield _sse("citations", {"citations": []})
                 yield _sse("done", {})
@@ -210,6 +218,20 @@ async def agent_chat(
             source_types = {c.get("source_type", "") for c in unique_chunks}
 
             runtime_context = ""
+            if catalog_stats:
+                runtime_context += (
+                    "## Catalog Statistics (live from database)\n"
+                    f"- Active instruments in catalog: {catalog_stats.get('active_instruments', '?'):,}\n"
+                    f"- Total instruments (incl. inactive): {catalog_stats.get('total_instruments', '?'):,}\n"
+                    f"- SEC Registered Investment Advisers: {catalog_stats.get('registered_advisers', '?'):,}\n"
+                    f"- SEC Registered Funds (mutual funds, closed-end): {catalog_stats.get('registered_funds', '?'):,}\n"
+                    f"- SEC ETFs: {catalog_stats.get('etfs', '?'):,}\n"
+                    f"- SEC BDCs: {catalog_stats.get('bdcs', '?'):,}\n"
+                    f"- SEC Money Market Funds: {catalog_stats.get('money_market_funds', '?'):,}\n"
+                    f"- SEC Private Funds (ADV): {catalog_stats.get('private_funds', '?'):,}\n"
+                    f"- ESMA UCITS Funds: {catalog_stats.get('esma_ucits_funds', '?'):,}\n"
+                    f"- Vector knowledge chunks: {catalog_stats.get('vector_chunks', '?'):,}\n\n"
+                )
             if history_context:
                 runtime_context += f"Conversation history:\n{history_context}\n\n"
             if payload.instrument_id:
@@ -262,8 +284,13 @@ async def agent_chat(
                 if isinstance(cite, dict) and str(cite.get("chunk_id", "")) in valid_chunk_ids:
                     validated_citations.append(cite)
 
-            # If answer exists but no valid citations, reject it
-            if answer_text != "Insufficient evidence in the knowledge base to answer this question." and not validated_citations:
+            # If answer exists but no valid citations, reject it — unless catalog
+            # stats were provided (aggregate questions don't need chunk citations).
+            if (
+                answer_text != "Insufficient evidence in the knowledge base to answer this question."
+                and not validated_citations
+                and not catalog_stats
+            ):
                 answer_text = "Insufficient evidence in the knowledge base to answer this question."
                 validated_citations = []
 

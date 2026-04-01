@@ -22,11 +22,12 @@ import json
 import re
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import Float, String, case, literal, select, union_all
+from sqlalchemy import Float, Select, String, case, literal, select, union_all
 from sqlalchemy import func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,6 +42,7 @@ from app.domains.wealth.queries.catalog_sql import (
     CatalogFilters,
     build_catalog_facets_query,
     build_catalog_query,
+    sec_money_market_funds,
 )
 from app.domains.wealth.schemas.catalog import (
     CatalogFacetItem,
@@ -337,7 +339,7 @@ def _build_internal_query(
     aum_max: float | None,
     block_id: str | None,
     approval_status: str | None,
-):
+) -> Select[Any]:
     """Build a select for instruments_universe rows (joined with instruments_org)."""
     _internal_geo_case = case(
         (Instrument.geography == "north_america", literal("US")),
@@ -435,7 +437,7 @@ def _build_esma_query(
     geography: str | None,
     domicile: str | None,
     currency: str | None,
-):
+) -> Select[Any]:
     """Build a select for esma_funds — only funds with Yahoo tickers (investable)."""
     stmt = (
         select(
@@ -482,7 +484,7 @@ def _build_sec_query(
     q: str | None,
     geography: str | None,
     instrument_type: str | None,
-):
+) -> Select[Any]:
     """Build a select for US tradeable securities from sec_cusip_ticker_map.
 
     These are equities, ETFs, closed-end funds, REITs, and ADRs held by
@@ -841,7 +843,7 @@ async def import_esma_fund(
     db: AsyncSession = Depends(get_db_with_rls),
     org_id: uuid.UUID = Depends(get_org_id),
     actor: Actor = Depends(get_actor),
-) -> dict:
+) -> dict[str, object]:
     _require_investment_role(actor)
 
     from app.domains.wealth.services.esma_import_service import import_esma_fund_to_universe
@@ -875,7 +877,7 @@ async def import_fund(
     db: AsyncSession = Depends(get_db_with_rls),
     org_id: uuid.UUID = Depends(get_org_id),
     actor: Actor = Depends(get_actor),
-) -> dict:
+) -> dict[str, object]:
     """Auto-detect identifier format and route to the correct importer."""
     if _ISIN_RE.match(identifier.upper()):
         return await import_esma_fund(
@@ -900,7 +902,7 @@ async def import_sec_security(
     db: AsyncSession = Depends(get_db_with_rls),
     org_id: uuid.UUID = Depends(get_org_id),
     actor: Actor = Depends(get_actor),
-) -> dict:
+) -> dict[str, object]:
     _require_investment_role(actor)
 
     # Check if instrument already exists globally by ticker
@@ -960,13 +962,15 @@ async def import_sec_security(
         rf_fallback = (await db.execute(
             select(_RfFallback).where(_RfFallback.cik == fc_fallback.cik),
         )).scalar_one_or_none()
-        sec_row = SimpleNamespace(
+        sec_row = SimpleNamespace(  # type: ignore[assignment]  # duck-types as SecCusipTickerMap
             ticker=ticker.upper(),
             issuer_name=rf_fallback.fund_name if rf_fallback else (fc_fallback.series_name or ticker),
             security_type="Open-End Fund",
             cusip=None, exchange=None, figi=None, composite_figi=None,
             is_tradeable=True,
         )
+
+    assert sec_row is not None  # guaranteed: either from DB or SimpleNamespace fallback
 
     # Map security_type to instrument_type
     _type_map = {
@@ -1035,17 +1039,8 @@ async def import_sec_security(
                 enrichment_attrs["investment_focus"] = bdc_row.investment_focus
                 enrichment_attrs["is_externally_managed"] = bdc_row.is_externally_managed
 
-        # Fallback: search sec_money_market_funds by ticker
-        if not reg_fund and not enrichment_attrs.get("sec_universe"):
-            from app.shared.models import SecMoneyMarketFund
-
-            mmf_row = (await db.execute(
-                select(SecMoneyMarketFund).where(SecMoneyMarketFund.ticker == sec_row.ticker).limit(1),
-            )).scalar_one_or_none()
-            if mmf_row:
-                enrichment_attrs["sec_universe"] = "money_market"
-                enrichment_attrs["strategy_label"] = mmf_row.strategy_label
-                enrichment_attrs["mmf_category"] = mmf_row.mmf_category
+        # Note: sec_money_market_funds has no ticker column — MMFs are not
+        # importable via ticker. They appear in the catalog for browsing only.
 
         if reg_fund:
             sec_cik = reg_fund.cik
@@ -1148,8 +1143,22 @@ def _build_disclosure(
     has_nav: bool,
     has_13f_overlay: bool = False,
     has_prospectus: bool = False,
+    fund_type: str | None = None,
 ) -> DisclosureMatrix:
     """Build DisclosureMatrix from universe type and computed flags."""
+    if fund_type == "money_market":
+        return DisclosureMatrix(
+            has_holdings=False,
+            has_nav_history=False,
+            has_quant_metrics=False,
+            has_fund_details=True,
+            has_style_analysis=False,
+            has_13f_overlay=False,
+            has_peer_analysis=True,
+            holdings_source=None,
+            nav_source=None,
+            aum_source="nport",
+        )
     if universe == "registered_us":
         return DisclosureMatrix(
             has_holdings=has_holdings,
@@ -1378,6 +1387,7 @@ async def get_catalog(
     investment_geography: str | None = Query(None, description="Comma-separated: US,Europe,Emerging Markets,Asia Pacific,Global,Latin America"),
     aum_min: float | None = Query(None, ge=0, description="Minimum AUM in USD"),
     has_nav: bool | None = Query(None, description="Only funds with NAV history (ticker)"),
+    has_aum: bool | None = Query(None, description="Only funds with AUM > 0"),
     domicile: str | None = Query(None),
     manager: str | None = Query(None, description="Manager name text search"),
     sort: str = Query("name_asc", description="name_asc | name_desc | aum_desc | aum_asc"),
@@ -1397,6 +1407,7 @@ async def get_catalog(
         investment_geography=investment_geography,
         aum_min=aum_min,
         has_nav=has_nav,
+        has_aum=has_aum,
         domicile=domicile,
         manager=manager,
         sort=sort,
@@ -1469,10 +1480,62 @@ async def get_catalog(
                     has_holdings=bool(r.has_holdings),
                     has_nav=bool(r.has_nav),
                     has_13f_overlay=bool(getattr(r, "has_13f_overlay", False)),
-                    has_prospectus=getattr(r, "expense_ratio_pct", None) is not None,
+                    has_prospectus=(
+                        getattr(r, "expense_ratio_pct", None) is not None
+                        or getattr(r, "avg_annual_return_1y", None) is not None
+                    ),
+                    fund_type=r.fund_type,
                 ),
             ),
         )
+
+    # Batch-enrich MMF items with money market specific fields
+    mmf_ext_ids = [item.external_id for item in items if item.fund_type == "money_market"]
+    if mmf_ext_ids:
+        mmf_result = await db.execute(
+            select(
+                sec_money_market_funds.c.series_id,
+                sec_money_market_funds.c.mmf_category,
+                sec_money_market_funds.c.seven_day_gross_yield,
+                sec_money_market_funds.c.weighted_avg_maturity,
+                sec_money_market_funds.c.weighted_avg_life,
+            ).where(sec_money_market_funds.c.series_id.in_(mmf_ext_ids))
+        )
+        mmf_map = {r.series_id: r for r in mmf_result.all()}
+        for item in items:
+            if item.fund_type == "money_market" and item.external_id in mmf_map:
+                mmf = mmf_map[item.external_id]
+                item.mmf_category = mmf.mmf_category
+                item.seven_day_gross_yield = (
+                    float(mmf.seven_day_gross_yield)
+                    if mmf.seven_day_gross_yield is not None
+                    else None
+                )
+                item.weighted_avg_maturity = mmf.weighted_avg_maturity
+                item.weighted_avg_life = mmf.weighted_avg_life
+
+    # Batch-enrich nav_status — check which tickers are already imported
+    tickers_to_check = [
+        item.ticker for item in items if item.ticker and item.disclosure.has_nav_history
+    ]
+    imported_tickers: set[str] = set()
+    if tickers_to_check:
+        nav_result = await db.execute(
+            select(Instrument.ticker)
+            .where(Instrument.ticker.in_(tickers_to_check))
+            .where(Instrument.is_active == True)  # noqa: E712
+        )
+        imported_tickers = {r[0] for r in nav_result.all()}
+
+    for item in items:
+        if not item.disclosure.has_nav_history:
+            item.disclosure.nav_status = "unavailable"
+        elif item.ticker and item.ticker in imported_tickers:
+            item.disclosure.nav_status = "available"
+        elif item.ticker:
+            item.disclosure.nav_status = "pending_import"
+        else:
+            item.disclosure.nav_status = "unavailable"
 
     return UnifiedCatalogPage(
         items=items,
@@ -1498,6 +1561,7 @@ async def get_catalog_facets(
     investment_geography: str | None = Query(None),
     aum_min: float | None = Query(None, ge=0),
     has_nav: bool | None = Query(None),
+    has_aum: bool | None = Query(None),
     domicile: str | None = Query(None),
     manager: str | None = Query(None),
     db: AsyncSession = Depends(get_db_with_rls),
@@ -1511,6 +1575,7 @@ async def get_catalog_facets(
         investment_geography=investment_geography,
         aum_min=aum_min,
         has_nav=has_nav,
+        has_aum=has_aum,
         domicile=domicile,
         manager=manager,
     )
@@ -1633,7 +1698,7 @@ async def get_catalog_fund_detail(
     r = match
     aum_val = float(r.aum) if r.aum is not None else None
 
-    return FundDetailOut(
+    detail = FundDetailOut(
         external_id=str(r.external_id),
         universe=r.universe,
         name=r.name or "",
@@ -1667,6 +1732,25 @@ async def get_catalog_fund_detail(
             has_holdings=bool(r.has_holdings),
             has_nav=bool(r.has_nav),
             has_13f_overlay=bool(getattr(r, "has_13f_overlay", False)),
-            has_prospectus=getattr(r, "expense_ratio_pct", None) is not None,
+            has_prospectus=(
+                getattr(r, "expense_ratio_pct", None) is not None
+                or getattr(r, "avg_annual_return_1y", None) is not None
+            ),
+            fund_type=r.fund_type,
         ),
     )
+
+    # Enrich nav_status for detail route
+    if detail.disclosure.has_nav_history and detail.ticker:
+        nav_check = await db.execute(
+            select(Instrument.ticker)
+            .where(Instrument.ticker == detail.ticker)
+            .where(Instrument.is_active == True)  # noqa: E712
+            .limit(1)
+        )
+        if nav_check.scalar_one_or_none():
+            detail.disclosure.nav_status = "available"
+        else:
+            detail.disclosure.nav_status = "pending_import"
+
+    return detail

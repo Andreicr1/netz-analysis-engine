@@ -11,6 +11,7 @@ export interface DisclosureMatrix {
 	holdings_source: "nport" | "13f" | null;
 	nav_source: "yfinance" | null;
 	aum_source: "nport" | "schedule_d" | "yfinance" | null;
+	nav_status: "available" | "pending_import" | "unavailable";
 }
 
 export type FundUniverse = "registered_us" | "private_us" | "ucits_eu";
@@ -48,6 +49,12 @@ export interface UnifiedFundItem {
 	is_index: boolean | null;
 	is_target_date: boolean | null;
 	is_fund_of_fund: boolean | null;
+
+	// MMF metrics (money_market only)
+	mmf_category: string | null;
+	seven_day_gross_yield: number | null;
+	weighted_avg_maturity: number | null;
+	weighted_avg_life: number | null;
 
 	// Share class fields (populated for registered_us funds with classes)
 	series_id: string | null;
@@ -127,7 +134,8 @@ export type CatalogCategory =
 	| "bdc"
 	| "hedge_fund"
 	| "private_fund"
-	| "ucits";
+	| "ucits"
+	| "money_market";
 
 export interface CategoryDef {
 	key: CatalogCategory;
@@ -144,6 +152,7 @@ export const CATALOG_CATEGORIES: CategoryDef[] = [
 	{ key: "hedge_fund", label: "Hedge Funds", universe: "private_us", group: "us_private" },
 	{ key: "private_fund", label: "Private Funds", universe: "private_us", group: "us_private" },
 	{ key: "ucits", label: "UCITS", universe: "ucits_eu", group: "eu" },
+	{ key: "money_market", label: "Money Market", universe: "registered_us", group: "us_regulated" },
 ];
 
 export const CATEGORY_LABELS: Record<CatalogCategory, string> = Object.fromEntries(
@@ -161,6 +170,7 @@ export const FUND_TYPE_LABELS: Record<string, string> = {
 	closed_end: "Closed-End",
 	etf: "ETF",
 	bdc: "BDC",
+	money_market: "Money Market",
 	// private_us (Form ADV categories)
 	"Hedge Fund": "Hedge Fund",
 	"Private Equity Fund": "Private Equity",
