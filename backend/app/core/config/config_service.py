@@ -62,7 +62,7 @@ class ConfigService:
     # IP protection: prompts, chapters, and internal config types never returned
     # to clients. Chapters expose IC memo structure (analytical methodology IP).
     CLIENT_VISIBLE_TYPES: ClassVar[frozenset[str]] = frozenset(
-        {"calibration", "scoring", "portfolio_profiles", "blocks"},
+        {"calibration", "scoring", "portfolio_profiles"},
     )
 
     def __init__(self, db: AsyncSession) -> None:

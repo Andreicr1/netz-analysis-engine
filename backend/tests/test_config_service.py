@@ -95,8 +95,9 @@ class TestIPProtection:
     def test_client_visible_types_includes_scoring(self):
         assert "scoring" in ConfigService.CLIENT_VISIBLE_TYPES
 
-    def test_client_visible_types_includes_blocks(self):
-        assert "blocks" in ConfigService.CLIENT_VISIBLE_TYPES
+    def test_client_visible_types_excludes_blocks(self):
+        # blocks REMOVED from registry — allocation_blocks table is source of truth
+        assert "blocks" not in ConfigService.CLIENT_VISIBLE_TYPES
 
     def test_client_visible_types_includes_portfolio_profiles(self):
         assert "portfolio_profiles" in ConfigService.CLIENT_VISIBLE_TYPES
