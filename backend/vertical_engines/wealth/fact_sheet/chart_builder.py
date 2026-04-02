@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING
 _os.environ.setdefault("MPLBACKEND", "Agg")
 
 if TYPE_CHECKING:
+    from matplotlib.figure import Figure
+
     from vertical_engines.wealth.fact_sheet.i18n import Language
     from vertical_engines.wealth.fact_sheet.models import (
         AllocationBlock,
@@ -35,13 +37,13 @@ _CHART_HEIGHT_IN = 3.2
 _DPI = 150
 
 
-def _fig_to_bytesio(fig: object) -> BytesIO:
+def _fig_to_bytesio(fig: Figure) -> BytesIO:
     """Save matplotlib figure to in-memory PNG buffer."""
     import matplotlib.pyplot as plt
 
     buf = BytesIO()
-    fig.savefig(buf, format="png", dpi=_DPI, bbox_inches="tight", facecolor=NETZ_WHITE)  # type: ignore[union-attr]
-    plt.close(fig)  # type: ignore[arg-type]
+    fig.savefig(buf, format="png", dpi=_DPI, bbox_inches="tight", facecolor=NETZ_WHITE)
+    plt.close(fig)
     buf.seek(0)
     return buf
 
@@ -68,11 +70,11 @@ def render_nav_chart(
 
     # Use rasterized for dense time series
     rasterized = len(dates) > 1000
-    ax.plot(dates, navs, color=NETZ_NAVY, linewidth=1.5, label="Portfolio", rasterized=rasterized)
+    ax.plot(dates, navs, color=NETZ_NAVY, linewidth=1.5, label="Portfolio", rasterized=rasterized)  # type: ignore[arg-type]
 
     if has_benchmark:
-        bench_navs = [p.benchmark_nav for p in nav_series]
-        ax.plot(dates, bench_navs, color=NETZ_ORANGE, linewidth=1.2,
+        bench_navs: list[float | None] = [p.benchmark_nav for p in nav_series]
+        ax.plot(dates, bench_navs, color=NETZ_ORANGE, linewidth=1.2,  # type: ignore[arg-type]
                 label=benchmark_label, linestyle="--", rasterized=rasterized)
         ax.legend(fontsize=8, loc="upper left", frameon=False)
 
@@ -110,7 +112,7 @@ def render_allocation_pie(
     fig, ax = plt.subplots(figsize=(4.5, 3.5))
     fig.patch.set_facecolor(NETZ_WHITE)
 
-    wedges, texts, autotexts = ax.pie(
+    wedges, texts, autotexts = ax.pie(  # type: ignore[misc]
         weights, labels=labels, colors=colors, autopct="%1.1f%%",
         startangle=90, textprops={"fontsize": 7, "color": NETZ_DARK},
         pctdistance=0.75,
@@ -152,13 +154,13 @@ def render_regime_overlay(
     if regimes:
         sorted_regimes = sorted(regimes, key=lambda r: r.regime_date)
         for i, rp in enumerate(sorted_regimes):
-            start = date2num(rp.regime_date)
-            end = date2num(sorted_regimes[i + 1].regime_date) if i + 1 < len(sorted_regimes) else date2num(dates[-1])
+            start = date2num(rp.regime_date)  # type: ignore[no-untyped-call]
+            end = date2num(sorted_regimes[i + 1].regime_date) if i + 1 < len(sorted_regimes) else date2num(dates[-1])  # type: ignore[no-untyped-call]
             color = regime_colors.get(rp.regime, NETZ_GREY)
             ax.axvspan(start, end, facecolor=color, alpha=0.4)
 
     rasterized = len(dates) > 1000
-    ax.plot(dates, navs, color=NETZ_NAVY, linewidth=1.5, rasterized=rasterized)
+    ax.plot(dates, navs, color=NETZ_NAVY, linewidth=1.5, rasterized=rasterized)  # type: ignore[arg-type]
 
     ax.set_title(title, fontsize=10, color=NETZ_NAVY, fontweight="bold", pad=8)
     ax.tick_params(axis="both", labelsize=7, colors=NETZ_DARK)

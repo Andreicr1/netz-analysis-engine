@@ -89,6 +89,10 @@ async def run_bis_ingestion() -> dict:
 
             await db.commit()
 
+            # Refresh Materialized Views for macro performance layer
+            from app.domains.wealth.services.macro_view_refresh import refresh_macro_views
+            await refresh_macro_views(db)
+
             logger.info(
                 "BIS ingestion complete",
                 total_rows=len(rows),

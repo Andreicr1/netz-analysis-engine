@@ -13,10 +13,14 @@ GLOBAL TABLE: No organization_id, no RLS.
 Advisory lock ID = 900_018.
 """
 
+from __future__ import annotations
+
 import asyncio
+from typing import Any
 
 import structlog
 from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.engine import async_session_factory as async_session
 from app.shared.models import SecManager
@@ -26,7 +30,7 @@ NPORT_LOCK_ID = 900_018
 _DYNAMIC_BATCH_LIMIT = 200
 
 
-async def run_nport_ingestion(months: int = 12) -> dict:
+async def run_nport_ingestion(months: int = 12) -> dict[str, Any]:
     """Fetch N-PORT holdings for active funds and upsert to hypertable."""
     async with async_session() as db:
         lock_result = await db.execute(
@@ -101,10 +105,10 @@ async def run_nport_ingestion(months: int = 12) -> dict:
             )
 
 
-async def _get_ciks_from_registered_funds(db: object) -> list[str]:
+async def _get_ciks_from_registered_funds(db: AsyncSession) -> list[str]:
     """Get CIKs from sec_registered_funds that need N-PORT refresh."""
     try:
-        result = await db.execute(  # type: ignore[union-attr]
+        result = await db.execute(
             text("""
                 SELECT cik FROM sec_registered_funds
                 WHERE aum_below_threshold = FALSE
@@ -122,10 +126,10 @@ async def _get_ciks_from_registered_funds(db: object) -> list[str]:
         return []
 
 
-async def _update_last_nport_date(db: object, cik: str, report_date: str) -> None:
+async def _update_last_nport_date(db: AsyncSession, cik: str, report_date: str) -> None:
     """Update last_nport_date for a fund after successful ingestion."""
     try:
-        await db.execute(  # type: ignore[union-attr]
+        await db.execute(
             text("""
                 UPDATE sec_registered_funds
                 SET last_nport_date = :report_date
@@ -133,7 +137,7 @@ async def _update_last_nport_date(db: object, cik: str, report_date: str) -> Non
             """),
             {"cik": cik, "report_date": report_date},
         )
-        await db.commit()  # type: ignore[union-attr]
+        await db.commit()
     except Exception as exc:
         logger.debug("last_nport_date_update_failed", cik=cik, error=str(exc))
 

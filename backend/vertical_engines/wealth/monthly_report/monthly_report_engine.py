@@ -42,7 +42,7 @@ BLOCK_COLORS: dict[str, str] = {
 class MonthlyReportEngine:
     """Generate Monthly Client Report PDF for a model portfolio."""
 
-    def __init__(self, config: dict | None = None) -> None:
+    def __init__(self, config: dict[str, Any] | None = None) -> None:
         self._config = config or {}
 
     async def generate(
@@ -167,7 +167,7 @@ class MonthlyReportEngine:
         drawdown_series = self._compute_drawdown_series(nav_series)
 
         # Stress scenarios placeholder (from snapshot or empty)
-        stress_scenarios: list[dict] = []
+        stress_scenarios: list[dict[str, Any]] = []
 
         # Snapshot KV
         snapshot_kv = {
@@ -236,16 +236,16 @@ class MonthlyReportEngine:
         self,
         db: AsyncSession,
         portfolio_id: uuid.UUID,
-        funds_data: list[dict],
+        funds_data: list[dict[str, Any]],
         as_of: date,
-    ) -> tuple[list[NavPoint], list[MonthlyReturnRow], dict, dict]:
+    ) -> tuple[list[NavPoint], list[MonthlyReturnRow], dict[str, Any], dict[str, Any]]:
         """Load NAV series and compute monthly returns.
 
         Uses model_portfolio_nav if available, falls back to backtest.
         """
         nav_series: list[NavPoint] = []
         monthly_returns: list[MonthlyReturnRow] = []
-        trailing: dict[str, dict] = {}
+        trailing: dict[str, dict[str, Any]] = {}
         perf: dict[str, float] = {
             "month": 0.0, "ytd": 0.0, "inception": 0.0,
             "month_bm": 0.0, "ytd_bm": 0.0, "inception_bm": 0.0,
@@ -327,13 +327,13 @@ class MonthlyReportEngine:
         self,
         nav_series: list[NavPoint],
         as_of: date,
-    ) -> dict[str, dict]:
+    ) -> dict[str, dict[str, Any]]:
         """Compute trailing period returns (1M, 3M, YTD, 1Y, ITD)."""
         if not nav_series:
             return {}
 
         last = nav_series[-1]
-        result: dict[str, dict] = {}
+        result: dict[str, dict[str, Any]] = {}
 
         # Helper: find nav closest to target date
         def nav_at(target_date: date) -> NavPoint | None:
@@ -438,7 +438,7 @@ class MonthlyReportEngine:
         profile: str,
         regime: str,
         perf: dict[str, float],
-        funds_data: list[dict],
+        funds_data: list[dict[str, Any]],
         block_labels: dict[str, str],
     ) -> tuple[str, str, str, str]:
         """Generate 4 narrative sections via LLM. Never-raises per section."""

@@ -53,16 +53,16 @@ def reclassify_investment_risk(
     cash_flags = list(db.execute(select(CashImpactFlag).where(CashImpactFlag.fund_id == fund_id)).scalars().all())
 
     by_inv_drift: dict[uuid.UUID, list[PerformanceDriftFlag]] = defaultdict(list)
-    for row in drifts:
-        by_inv_drift[row.investment_id].append(row)
+    for drift_row in drifts:
+        by_inv_drift[drift_row.investment_id].append(drift_row)
 
     by_inv_cov: dict[uuid.UUID, list[CovenantStatusRegister]] = defaultdict(list)
-    for row in covenants:
-        by_inv_cov[row.investment_id].append(row)
+    for cov_row in covenants:
+        by_inv_cov[cov_row.investment_id].append(cov_row)
 
     by_inv_cash: dict[uuid.UUID, list[CashImpactFlag]] = defaultdict(list)
-    for row in cash_flags:
-        by_inv_cash[row.investment_id].append(row)
+    for cash_row in cash_flags:
+        by_inv_cash[cash_row.investment_id].append(cash_row)
 
     db.execute(delete(InvestmentRiskRegistry).where(InvestmentRiskRegistry.fund_id == fund_id))
 
@@ -113,7 +113,7 @@ def reclassify_investment_risk(
         ]
 
         for risk_type, level, trend, rationale in risk_rows:
-            row = InvestmentRiskRegistry(
+            risk_entry = InvestmentRiskRegistry(
                 fund_id=fund_id,
                 access_level="internal",
                 investment_id=inv.id,
@@ -130,8 +130,8 @@ def reclassify_investment_risk(
                 created_by=actor_id,
                 updated_by=actor_id,
             )
-            db.add(row)
-            saved.append(row)
+            db.add(risk_entry)
+            saved.append(risk_entry)
 
     db.flush()
     logger.info("reclassify_investment_risk.done", fund_id=str(fund_id), count=len(saved))

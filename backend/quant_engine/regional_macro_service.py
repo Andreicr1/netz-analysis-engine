@@ -276,10 +276,10 @@ def build_fetch_configs(
         batches[region] = configs
 
     global_configs: list[dict[str, Any]] = []
-    for s in GLOBAL_SERIES:
+    for gs in GLOBAL_SERIES:
         global_configs.append({
-            "series_id": s.series_id,
-            "limit": FREQUENCY_LIMITS.get(s.frequency, 120),
+            "series_id": gs.series_id,
+            "limit": FREQUENCY_LIMITS.get(gs.frequency, 120),
             "observation_start": observation_start,
             "sort_order": "asc",
         })

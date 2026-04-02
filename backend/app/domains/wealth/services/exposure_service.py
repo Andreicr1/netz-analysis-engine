@@ -10,7 +10,7 @@ Never-raises: returns empty response on any error.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 import structlog
@@ -113,7 +113,7 @@ async def get_exposure_metadata(
 
 async def _query_portfolio_exposure(
     db: AsyncSession, org_id: str, dim_col: str,
-) -> list:
+) -> list[Any]:
     """Rows = profiles, values = block weights grouped by dimension.
 
     dim_col is from _DIM_COL (fixed dict), not user input — safe to embed.
@@ -140,12 +140,12 @@ async def _query_portfolio_exposure(
         ORDER BY ps.profile, total_weight DESC
     """)
     result = await db.execute(sql, {"org_id": org_id})
-    return result.all()
+    return list(result.all())
 
 
 async def _query_manager_exposure(
     db: AsyncSession, org_id: str, dim_col: str,
-) -> list:
+) -> list[Any]:
     """Rows = manager names, values = proportional block weights by dimension.
 
     Block weight is distributed equally among active instruments in that block.
@@ -191,4 +191,4 @@ async def _query_manager_exposure(
         ORDER BY row_label, total_weight DESC
     """)
     result = await db.execute(sql, {"org_id": org_id})
-    return result.all()
+    return list(result.all())

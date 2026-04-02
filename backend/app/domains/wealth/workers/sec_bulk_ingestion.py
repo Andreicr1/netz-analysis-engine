@@ -298,6 +298,11 @@ async def run_sec_bulk_ingestion(
                 shutil.rmtree(work_dir, ignore_errors=True)
 
             stats["completed_at"] = datetime.now(UTC).isoformat()
+
+            # Refresh Materialized Views for screener and global search
+            from app.domains.wealth.services.view_refresh import refresh_screener_views
+            await refresh_screener_views(db)
+
             logger.info("sec_bulk_ingestion.complete", **stats)
             return {"status": "completed", **stats}
 

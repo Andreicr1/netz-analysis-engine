@@ -213,7 +213,7 @@ class DataCommonsService:
             geo_name = ""
             if isinstance(name_response, dict):
                 name_obj = name_response.get(geo_dcid)
-                if hasattr(name_obj, "value"):
+                if name_obj is not None and hasattr(name_obj, "value"):
                     geo_name = name_obj.value
                 elif isinstance(name_obj, str):
                     geo_name = name_obj

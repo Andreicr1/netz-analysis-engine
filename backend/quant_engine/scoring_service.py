@@ -8,7 +8,8 @@ Config is injected as parameter by callers via ConfigService.get("liquid_funds",
 
 from __future__ import annotations
 
-from typing import Protocol
+from decimal import Decimal
+from typing import Any, Protocol
 
 import structlog
 
@@ -18,10 +19,10 @@ logger = structlog.get_logger()
 class RiskMetrics(Protocol):
     """Protocol for risk metrics — satisfied by FundRiskMetrics ORM model."""
 
-    return_1y: float | None
-    sharpe_1y: float | None
-    max_drawdown_1y: float | None
-    information_ratio_1y: float | None
+    return_1y: Decimal | float | None
+    sharpe_1y: Decimal | float | None
+    max_drawdown_1y: Decimal | float | None
+    information_ratio_1y: Decimal | float | None
 
 
 # Hardcoded fallback — used only if config parameter is not provided.
@@ -37,7 +38,7 @@ _DEFAULT_SCORING_WEIGHTS: dict[str, float] = {
 }
 
 
-def resolve_scoring_weights(config: dict | None = None) -> dict[str, float]:
+def resolve_scoring_weights(config: dict[str, Any] | None = None) -> dict[str, float]:
     """Extract scoring weights from config dict.
 
     Falls back to hardcoded defaults if config is None or malformed.
@@ -67,7 +68,7 @@ def _normalize(value: float | None, min_val: float, max_val: float) -> float:
 def compute_fund_score(
     metrics: RiskMetrics,
     flows_momentum_score: float = 50.0,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
     expense_ratio_pct: float | None = None,
     insider_sentiment_score: float | None = None,
 ) -> tuple[float, dict[str, float]]:

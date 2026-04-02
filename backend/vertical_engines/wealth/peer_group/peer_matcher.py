@@ -9,6 +9,7 @@ Does NOT import service.py (enforced by import-linter).
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from typing import Any
 
 import structlog
@@ -114,7 +115,7 @@ def _equity_key_levels(block_id: str, attrs: dict[str, Any]) -> list[str]:
     ]
 
 
-_KEY_BUILDERS: dict[str, Any] = {
+_KEY_BUILDERS: dict[str, Callable[[str, dict[str, Any]], list[str]]] = {
     "fund": _fund_key_levels,
     "bond": _bond_key_levels,
     "equity": _equity_key_levels,

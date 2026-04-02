@@ -152,8 +152,8 @@ async def idempotent_worker_wrapper(
     worker_name: str,
     scope: str,
     coro_func: Any,
-    *args,
-    **kwargs,
+    *args: Any,
+    **kwargs: Any,
 ) -> None:
     """Wrap an async worker function with idempotency tracking.
 

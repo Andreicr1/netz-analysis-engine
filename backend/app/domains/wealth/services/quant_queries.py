@@ -16,7 +16,12 @@ import uuid
 from collections import defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from quant_engine.drift_service import DriftReport
+    from quant_engine.peer_comparison_service import PeerComparison, PeerRank
+    from quant_engine.rebalance_service import CascadeResult
 
 import numpy as np
 import structlog
@@ -219,7 +224,8 @@ def _apply_ledoit_wolf(returns_matrix: np.ndarray) -> np.ndarray:
 
     lw = LedoitWolf()
     lw.fit(returns_matrix)
-    return lw.covariance_
+    result: np.ndarray = lw.covariance_
+    return result
 
 
 async def _fetch_returns_by_type(
@@ -271,7 +277,7 @@ async def fetch_bl_views_for_portfolio(
     db: AsyncSession,
     portfolio_id: uuid.UUID,
     fund_ids: list[str],
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Fetch active IC views and map instrument_ids to fund index positions.
 
     Returns list of dicts ready for black_litterman_service.compute_bl_returns().
@@ -299,7 +305,7 @@ async def fetch_bl_views_for_portfolio(
     # Build instrument_id -> index map
     id_to_idx = {fid: i for i, fid in enumerate(fund_ids)}
 
-    bl_views: list[dict] = []
+    bl_views: list[dict[str, Any]] = []
     for v in views:
         if v.view_type == "absolute":
             asset_id = str(v.asset_instrument_id) if v.asset_instrument_id else None
@@ -388,7 +394,7 @@ async def compute_fund_level_inputs(
     instrument_ids: list[uuid.UUID],
     lookback_days: int = TRADING_DAYS_PER_YEAR,
     as_of_date: date | None = None,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
     portfolio_id: uuid.UUID | None = None,
     profile: str | None = None,
 ) -> tuple[np.ndarray, dict[str, float], list[str], np.ndarray, np.ndarray]:
@@ -569,12 +575,12 @@ def compute_regime_conditioned_cov(
         mean_r = np.average(recent_returns, axis=0, weights=weights)
         demeaned = recent_returns - mean_r
         weighted_cov = (demeaned.T * weights) @ demeaned / (weights.sum() - 1)
-        annual_cov = weighted_cov * TRADING_DAYS_PER_YEAR
+        annual_cov: np.ndarray = weighted_cov * TRADING_DAYS_PER_YEAR
     else:
         # Normal regime: use long window
         window = min(long_window, T)
         recent_returns = returns_matrix[-window:]
-        daily_cov = np.cov(recent_returns, rowvar=False)
+        daily_cov: np.ndarray = np.cov(recent_returns, rowvar=False)
         annual_cov = daily_cov * TRADING_DAYS_PER_YEAR
 
     # PSD adjustment
@@ -591,7 +597,7 @@ def _maybe_regime_condition_cov(
     db: AsyncSession,
     returns_matrix: np.ndarray,
     fallback_cov: np.ndarray,
-    config: dict | None,
+    config: dict[str, Any] | None,
 ) -> np.ndarray | None:
     """Try to apply regime-conditioned covariance. Returns None if regime data unavailable.
 
@@ -637,8 +643,8 @@ async def compute_drift(
     profile: str,
     as_of_date: date | None = None,
     min_trade_threshold: float = 0.005,
-    config: dict | None = None,
-):
+    config: dict[str, Any] | None = None,
+) -> DriftReport:
     """Compute drift for all blocks in a profile.
 
     Queries PortfolioSnapshot, StrategicAllocation, TacticalPosition,
@@ -761,7 +767,7 @@ def compare(
     aum_min: Decimal | None = None,
     aum_max: Decimal | None = None,
     config: dict[str, Any] | None = None,
-):
+) -> PeerComparison:
     """Rank a fund against its peers within a block.
 
     Queries Fund and FundRiskMetrics, then ranks by manager_score.
@@ -797,7 +803,7 @@ def compare(
     risk_result = db.execute(risk_stmt)
     risk_map = {r.instrument_id: r for r in risk_result.scalars().all()}
 
-    scored = []
+    scored: list[dict[str, Any]] = []
     for f in funds:
         risk = risk_map.get(f.fund_id)
         scored.append({
@@ -808,17 +814,17 @@ def compare(
             "return_1y": float(risk.return_1y) if risk and risk.return_1y else None,
         })
 
-    scored.sort(key=lambda s: s["manager_score"] or -999, reverse=True)
+    scored.sort(key=lambda s: float(s["manager_score"]) if s["manager_score"] is not None else -999.0, reverse=True)
 
-    peers = []
+    peers: list[PeerRank] = []
     target_rank = None
     for i, s in enumerate(scored, 1):
         peer = PeerRank(
-            fund_id=s["fund_id"],
-            fund_name=s["fund_name"],
-            manager_score=s["manager_score"],
-            sharpe_1y=s["sharpe_1y"],
-            return_1y=s["return_1y"],
+            fund_id=uuid.UUID(str(s["fund_id"])),
+            fund_name=str(s["fund_name"]),
+            manager_score=float(s["manager_score"]) if s["manager_score"] is not None else None,
+            sharpe_1y=float(s["sharpe_1y"]) if s["sharpe_1y"] is not None else None,
+            return_1y=float(s["return_1y"]) if s["return_1y"] is not None else None,
             rank=i,
             peer_count=len(scored),
         )
@@ -879,8 +885,8 @@ async def process_cascade(
     consecutive_breach_days: int,
     cvar_current: float | None = None,
     current_weights: dict[str, Any] | None = None,
-    config: dict | None = None,
-):
+    config: dict[str, Any] | None = None,
+) -> CascadeResult:
     """Process the rebalance cascade for a profile.
 
     Queries PortfolioSnapshot for previous status, delegates to
@@ -919,7 +925,7 @@ async def process_cascade(
         db,
         profile=profile,
         event_type=event_type,
-        trigger_reason=reason,
+        trigger_reason=reason or "",
         weights_before=current_weights,
         cvar_before=cvar_current,
         actor_source="system",

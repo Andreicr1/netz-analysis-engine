@@ -48,6 +48,10 @@ from app.domains.wealth.schemas.catalog import (
     CatalogFacetItem,
     CatalogFacets,
     DisclosureMatrix,
+    FundFactSheet,
+    FundHolding,
+    NavPoint,
+    TeamMember,
     UnifiedCatalogPage,
     UnifiedFundItem,
 )
@@ -1678,7 +1682,7 @@ async def get_catalog_fund_detail(
     from app.domains.wealth.queries.catalog_sql import build_catalog_query
 
     # Build catalog query filtering by external_id across all universes
-    filters = CatalogFilters(q=external_id, page=1, page_size=5)
+    filters = CatalogFilters(q=external_id, page=1, page_size=10, has_nav=None)
     stmt = build_catalog_query(filters)
     if stmt is None:
         raise HTTPException(status_code=404, detail="Fund not found")
@@ -1754,3 +1758,154 @@ async def get_catalog_fund_detail(
             detail.disclosure.nav_status = "pending_import"
 
     return detail
+
+
+@router.get(
+    "/catalog/{external_id}/fact-sheet",
+    response_model=FundFactSheet,
+    summary="Comprehensive fact-sheet data for a single fund",
+)
+async def get_fund_fact_sheet(
+    external_id: str,
+    db: AsyncSession = Depends(get_db_with_rls),
+) -> FundFactSheet:
+    """Return comprehensive data for a fund fact sheet.
+
+    Aggregates:
+    - Base catalog detail (identity, fees, N-CEN)
+    - Management team (ADV Part 2B)
+    - Top 50 holdings (N-PORT)
+    - Annual return history (RR1)
+    - NAV history chart data (nav_timeseries)
+    """
+    # 1. Get base detail (reuses existing logic)
+    detail = await get_catalog_fund_detail(external_id, db)
+
+    # 2. Gather additional evidence via sync thread (orchestrates complex global SEC joins)
+    from app.core.db.session import sync_session_factory
+    from vertical_engines.wealth.dd_report.sec_injection import (
+        gather_fund_enrichment,
+        gather_nport_sector_history,
+        gather_prospectus_returns,
+        gather_prospectus_stats,
+        gather_sec_adv_data,
+        gather_sec_nport_data,
+    )
+
+    def _gather_evidence():
+        with sync_session_factory() as sync_db:
+            # We don't need org context for global SEC tables
+            fund_cik = detail.external_id if detail.universe == "registered_us" else None
+            manager_name = detail.manager_name
+            manager_id = detail.manager_id
+
+            # Team and Manager profile
+            adv_data = gather_sec_adv_data(sync_db, manager_name=manager_name, crd_number=manager_id)
+            
+            # Holdings (N-PORT) — increase limit to 50
+            nport_data = gather_sec_nport_data(sync_db, fund_cik=fund_cik, holdings_limit=50)
+            sector_history = gather_nport_sector_history(sync_db, fund_cik=fund_cik)
+            
+            # Returns and Stats
+            prop_stats = gather_prospectus_stats(sync_db, fund_cik=fund_cik)
+            prop_returns = gather_prospectus_returns(sync_db, fund_cik=fund_cik)
+            
+            # Enrichment (Classes)
+            enrichment = gather_fund_enrichment(sync_db, fund_cik=fund_cik, sec_universe=detail.universe)
+            
+            return {
+                "adv": adv_data,
+                "nport": nport_data,
+                "sector_history": sector_history,
+                "stats": prop_stats,
+                "returns": prop_returns,
+                "enrichment": enrichment,
+            }
+
+    evidence = await asyncio.to_thread(_gather_evidence)
+
+    # 3. Gather NAV History and Risk Metrics (Async)
+    nav_history: list[NavPoint] = []
+    scoring_metrics: dict[str, Any] | None = None
+    
+    # Find instrument_id if not already in detail
+    inst_id = detail.instrument_id
+    if not inst_id and detail.ticker:
+        res = await db.execute(
+            select(Instrument.instrument_id).where(Instrument.ticker == detail.ticker).limit(1)
+        )
+        inst_id = res.scalar_one_or_none()
+
+    if inst_id:
+        from app.domains.wealth.models.nav import NavTimeseries
+        from app.domains.wealth.models.risk import FundRiskMetrics
+        
+        # NAV History
+        if detail.ticker and detail.disclosure.nav_status == "available":
+            nav_res = await db.execute(
+                select(NavTimeseries.nav_date, NavTimeseries.nav)
+                .where(NavTimeseries.instrument_id == inst_id)
+                .order_by(NavTimeseries.nav_date.asc())
+                .limit(1000)
+            )
+            nav_history = [NavPoint(nav_date=r.nav_date, nav=float(r.nav)) for r in nav_res.all()]
+            
+        # Risk Metrics / Scoring
+        metrics_res = await db.execute(
+            select(FundRiskMetrics).where(FundRiskMetrics.instrument_id == inst_id).limit(1)
+        )
+        m = metrics_res.scalar_one_or_none()
+        if m:
+            scoring_metrics = {
+                "manager_score": m.manager_score,
+                "score_components": m.score_components,
+                "peer_percentiles": {
+                    "sharpe": m.peer_sharpe_pctl,
+                    "sortino": m.peer_sortino_pctl,
+                    "return": m.peer_return_pctl,
+                    "drawdown": m.peer_drawdown_pctl,
+                },
+                "peer_count": m.peer_count,
+                "peer_strategy": m.peer_strategy_label,
+            }
+
+    # 4. Map evidence to Fact Sheet schema
+    adv = evidence["adv"]
+    nport = evidence["nport"]
+    enrichment = evidence["enrichment"]
+
+    team = [
+        TeamMember(
+            person_name=t["person_name"],
+            title=t["title"],
+            role=t["role"],
+            education=t["education"],
+            certifications=t["certifications"],
+            years_experience=t["years_experience"],
+            bio_summary=t["bio_summary"],
+        )
+        for t in adv.get("adv_team", [])
+    ]
+
+    holdings = [
+        FundHolding(
+            name=h["name"],
+            cusip=h["cusip"],
+            sector=h["sector"],
+            pct_of_nav=h["pct_of_nav"],
+            market_value=float(h["market_value"]) if h.get("market_value") else None,
+        )
+        for h in nport.get("top_holdings", [])[:50]
+    ]
+
+    return FundFactSheet(
+        fund=detail,
+        team=team,
+        top_holdings=holdings,
+        annual_returns=evidence["returns"],
+        nav_history=nav_history,
+        sector_history=evidence["sector_history"],
+        prospectus_stats=evidence["stats"],
+        share_classes=enrichment.get("share_classes", []),
+        scoring_metrics=scoring_metrics,
+    )

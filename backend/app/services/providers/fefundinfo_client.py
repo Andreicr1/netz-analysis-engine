@@ -244,7 +244,7 @@ class FEFundInfoClient:
             try:
                 response = await client.get(url, params=params, headers=headers)
                 response.raise_for_status()
-                return response.json()
+                return dict(response.json())
 
             except httpx.HTTPStatusError as e:
                 action = _classify_error(e.response.status_code)

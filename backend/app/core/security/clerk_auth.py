@@ -15,6 +15,7 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
@@ -96,7 +97,7 @@ def _get_jwks_client() -> PyJWKClient:
     return _jwks_client
 
 
-def _verify_clerk_jwt(token: str) -> dict:
+def _verify_clerk_jwt(token: str) -> dict[str, Any]:
     """Verify a Clerk JWT and return decoded claims.
 
     Uses PyJWKClient with built-in key caching and rotation handling.
@@ -197,7 +198,7 @@ async def get_actor(
     )
 
 
-def require_role(*allowed_roles: Role):
+def require_role(*allowed_roles: Role) -> Any:
     """FastAPI dependency factory: require at least one of the allowed roles."""
 
     async def _check(actor: Actor = Depends(get_actor)) -> Actor:
@@ -221,18 +222,18 @@ get_current_user = get_actor
 require_roles = require_role
 
 
-def require_readonly_allowed():
+def require_readonly_allowed() -> Any:
     """Dependency: allow readonly roles (INVESTOR, AUDITOR, ADVISOR) plus all write roles."""
     from app.shared.enums import READONLY_ROLES
     return require_role(*READONLY_ROLES, Role.INVESTMENT_TEAM, Role.GP, Role.DIRECTOR, Role.COMPLIANCE)
 
 
-def require_ic_member():
+def require_ic_member() -> Any:
     """Dependency: require IC member role (ADMIN or INVESTMENT_TEAM)."""
     return require_role(Role.INVESTMENT_TEAM)
 
 
-def require_fund_access():
+def require_fund_access() -> Any:
     """FastAPI dependency factory: validate fund_id access + organization context.
 
     For non-admin actors whose fund_ids were not provided via dev header,

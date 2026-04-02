@@ -18,8 +18,9 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import date
+from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -67,6 +68,7 @@ async def fetch_nav_series(
     """
     is_portfolio = await is_model_portfolio(db, entity_id)
 
+    stmt: Select[Any]
     if is_portfolio:
         stmt = select(
             ModelPortfolioNav.portfolio_id,
@@ -120,6 +122,7 @@ def fetch_nav_series_sync(
     """
     is_portfolio = is_model_portfolio_sync(db, entity_id)
 
+    stmt: Select[Any]
     if is_portfolio:
         stmt = select(
             ModelPortfolioNav.portfolio_id,

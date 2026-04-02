@@ -117,5 +117,5 @@ class CorrelationService:
             average_correlation=result.average_correlation,
             baseline_average_correlation=result.baseline_average_correlation,
             regime_shift_detected=result.regime_shift_detected,
-            computed_at=datetime.now(UTC).isoformat(),
+            computed_at=datetime.now(UTC),
         )

@@ -78,8 +78,9 @@ def _chapter_content_text(content: dict[str, Any]) -> str:
 
     # Priority keys that contain the main narrative
     for key in ("summary", "global_summary", "narrative", "overview", "analysis"):
-        if key in content and isinstance(content[key], str):
-            return html.escape(content[key])
+        val = content.get(key)
+        if isinstance(val, str):
+            return html.escape(val)
 
     # Fall back: concatenate all string values
     parts: list[str] = []

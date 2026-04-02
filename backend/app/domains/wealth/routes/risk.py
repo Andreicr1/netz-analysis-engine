@@ -30,7 +30,7 @@ from app.domains.wealth.schemas.risk import (
     RegimeHistoryPoint,
 )
 from app.shared.schemas import RegimeRead
-from quant_engine.regime_service import get_current_regime, get_latest_macro_values
+from quant_engine.regime_service import get_current_regime
 
 logger = structlog.get_logger()
 
@@ -359,11 +359,28 @@ async def get_macro(
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
 ) -> MacroIndicators:
-    macro = await get_latest_macro_values(db)
-    vix_val, vix_date = macro.get("VIXCLS", (None, None))
-    yc_val, yc_date = macro.get("YIELD_CURVE_10Y2Y", (None, None))
-    cpi_val, cpi_date = macro.get("CPI_YOY", (None, None))
-    ff_val, ff_date = macro.get("DFF", (None, None))
+    """Return the latest macro indicators.
+    
+    Refactored to use mv_macro_latest for sub-10ms performance.
+    """
+    from sqlalchemy import text
+    
+    indicators = ["VIXCLS", "YIELD_CURVE_10Y2Y", "CPI_YOY", "DFF"]
+    stmt = text("""
+        SELECT indicator_id, value, obs_date 
+        FROM mv_macro_latest 
+        WHERE indicator_id IN :ids
+    """)
+    result = await db.execute(stmt, {"ids": tuple(indicators)})
+    
+    # Map results
+    macro_map = {r.indicator_id: (float(r.value), r.obs_date) for r in result.all()}
+    
+    vix_val, vix_date = macro_map.get("VIXCLS", (None, None))
+    yc_val, yc_date = macro_map.get("YIELD_CURVE_10Y2Y", (None, None))
+    cpi_val, cpi_date = macro_map.get("CPI_YOY", (None, None))
+    ff_val, ff_date = macro_map.get("DFF", (None, None))
+    
     return MacroIndicators(
         vix=vix_val,
         vix_date=vix_date,

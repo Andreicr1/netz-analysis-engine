@@ -86,7 +86,7 @@ _PLAUSIBILITY = {
 }
 
 
-def resolve_regime_thresholds(config: dict | None = None) -> RegimeThresholds:
+def resolve_regime_thresholds(config: dict[str, Any] | None = None) -> RegimeThresholds:
     """Extract regime thresholds from calibration config dict.
 
     Falls back to hardcoded defaults if config is None or malformed.
@@ -144,7 +144,7 @@ def classify_regime_multi_signal(
     cpi_yoy: float | None,
     sahm_rule: float | None = None,
     thresholds: RegimeThresholds | None = None,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
 ) -> tuple[str, dict[str, str]]:
     """Classify regime using priority hierarchy.
 
@@ -216,7 +216,7 @@ def classify_regime_from_volatility(
 def detect_regime(
     returns: np.ndarray,
     trading_days_per_year: int = 252,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
 ) -> RegimeResult:
     """Detect market regime from a returns series (volatility proxy fallback).
 
@@ -228,9 +228,10 @@ def detect_regime(
 
     if len(returns) < 10:
         default = thresholds["default"]
+        defn = REGIME_DEFINITIONS.get(default)
         return RegimeResult(
             regime=default,
-            description=REGIME_DEFINITIONS.get(default, {}).get("description"),
+            description=defn["description"] if defn is not None else None,
             reasons={"decision": "insufficient data, using default"},
         )
 
@@ -241,9 +242,10 @@ def detect_regime(
         vix_extreme=thresholds["vix_extreme"],
     )
 
+    defn = REGIME_DEFINITIONS.get(regime)
     return RegimeResult(
         regime=regime,
-        description=REGIME_DEFINITIONS.get(regime, {}).get("description"),
+        description=defn["description"] if defn is not None else None,
         reasons={"volatility_proxy": f"annualized_vol={vol:.4f}"},
     )
 
@@ -562,7 +564,7 @@ async def get_latest_macro_values(
 
 async def get_current_regime(
     db: AsyncSession,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
     *,
     fallback_regime: str = "RISK_ON",
 ) -> RegimeRead:

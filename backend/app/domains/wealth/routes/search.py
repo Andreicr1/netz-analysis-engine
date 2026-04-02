@@ -4,24 +4,22 @@ GET /search?q=&categories=funds,managers,documents
 
 Fan-out to existing SQL queries (catalog, manager_screener, wealth_documents).
 Returns grouped results by category with a small page_size for speed.
+
+Refactored to use mv_unified_assets for high-performance global instrument search.
 """
 
 from __future__ import annotations
 
 import asyncio
-import uuid
 
 import structlog
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import func, or_, select
+from sqlalchemy import Column, MetaData, Table, Text, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.cache import route_cache
-from app.core.security.clerk_auth import Actor, get_actor
-from app.core.tenancy.middleware import get_db_with_rls, get_org_id
+from app.core.tenancy.middleware import get_db_with_rls
 from app.domains.wealth.models.document import WealthDocument
-from app.domains.wealth.queries.catalog_sql import CatalogFilters, build_catalog_query
 from app.domains.wealth.queries.manager_screener_sql import (
     ScreenerFilters,
     build_screener_queries,
@@ -34,6 +32,20 @@ router = APIRouter(prefix="/search", tags=["search"])
 VALID_CATEGORIES = {"funds", "managers", "documents"}
 MAX_PER_CATEGORY = 6
 
+# ── Reflected Materialized View ──────────────────────────────
+
+_meta = MetaData()
+mv_unified_assets = Table(
+    "mv_unified_assets",
+    _meta,
+    Column("id", Text, primary_key=True),
+    Column("name", Text),
+    Column("ticker", Text),
+    Column("isin", Text),
+    Column("asset_class", Text),
+    Column("source", Text),
+    Column("geography", Text),
+)
 
 # ── Response schemas ────────────────────────────────────────
 
@@ -61,83 +73,154 @@ class GlobalSearchResponse(BaseModel):
 # ── Route ───────────────────────────────────────────────────
 
 
-@router.get("", response_model=GlobalSearchResponse, summary="Unified global search")
-@route_cache(ttl=30, key_prefix="global:search")
-async def global_search(
-    q: str = Query("", max_length=200),
-    categories: str | None = Query(None, description="Comma-separated: funds,managers,documents"),
+from app.domains.wealth.schemas.holdings import HoldingHolder, ReverseLookupResponse
+
+# ... existing code ...
+
+@router.get(
+    "/holdings/reverse",
+    response_model=ReverseLookupResponse,
+    summary="Reverse lookup: find institutional holders of a CUSIP/ISIN",
+)
+async def reverse_holdings_lookup(
+    cusip: str | None = Query(None),
+    isin: str | None = Query(None),
     db: AsyncSession = Depends(get_db_with_rls),
-    org_id: uuid.UUID = Depends(get_org_id),
-    actor: Actor = Depends(get_actor),
-) -> GlobalSearchResponse:
-    if not q or len(q.strip()) < 2:
-        return GlobalSearchResponse(query=q, groups=[])
+) -> ReverseLookupResponse:
+    """Find which Managers (13F) and Funds (N-PORT) hold a specific asset."""
+    if not cusip and not isin:
+        raise HTTPException(status_code=400, detail="CUSIP or ISIN required")
 
-    q_stripped = q.strip()
+    from sqlalchemy import text
+    
+    # 1. Search Managers (13F)
+    # Note: market_value in 13f is usually in $1000s
+    mgr_sql = """
+        SELECT 
+            m.firm_name as holder_name,
+            m.cik as holder_id,
+            'manager' as holder_type,
+            h.market_value * 1000 as market_value,
+            h.report_date,
+            (CAST(h.market_value * 1000 AS NUMERIC) / NULLIF(m.aum_total, 0)) * 100 as weight_pct
+        FROM sec_13f_holdings h
+        JOIN sec_managers m ON h.cik = m.cik
+        WHERE h.cusip = :cusip
+        AND h.report_date >= CURRENT_DATE - INTERVAL '180 days'
+        ORDER BY h.market_value DESC
+        LIMIT 20
+    """
+    
+    # 2. Search Funds (N-PORT)
+    fund_sql = """
+        SELECT 
+            f.fund_name as holder_name,
+            f.cik as holder_id,
+            'fund' as holder_type,
+            h.market_value,
+            h.report_date,
+            h.pct_of_nav as weight_pct
+        FROM sec_nport_holdings h
+        JOIN sec_registered_funds f ON h.cik = f.cik
+        WHERE (h.cusip = :cusip OR h.isin = :isin)
+        AND h.report_date >= CURRENT_DATE - INTERVAL '180 days'
+        ORDER BY h.market_value DESC NULLS LAST
+        LIMIT 20
+    """
 
-    # Parse requested categories
-    if categories:
-        requested = {c.strip().lower() for c in categories.split(",")} & VALID_CATEGORIES
-    else:
-        requested = VALID_CATEGORIES
+    holders = []
+    asset_name = "Selected Asset"
 
-    # Fan-out concurrently
-    tasks: dict[str, asyncio.Task[SearchCategoryGroup | None]] = {}
-    if "funds" in requested:
-        tasks["funds"] = asyncio.create_task(_search_funds(db, q_stripped))
-    if "managers" in requested:
-        tasks["managers"] = asyncio.create_task(
-            _search_managers(db, q_stripped, str(org_id)),
-        )
-    if "documents" in requested:
-        tasks["documents"] = asyncio.create_task(_search_documents(db, q_stripped))
+    # Execute queries
+    mgr_res = await db.execute(text(mgr_sql), {"cusip": cusip})
+    for r in mgr_res:
+        holders.append(HoldingHolder(
+            holder_name=r.holder_name,
+            holder_id=r.holder_id,
+            holder_type="manager",
+            weight_pct=float(r.weight_pct) if r.weight_pct else None,
+            market_value=float(r.market_value) if r.market_value else None,
+            report_date=r.report_date
+        ))
 
-    results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+    fund_res = await db.execute(text(fund_sql), {"cusip": cusip, "isin": isin})
+    for r in fund_res:
+        holders.append(HoldingHolder(
+            holder_name=r.holder_name,
+            holder_id=r.holder_id,
+            holder_type="fund",
+            weight_pct=float(r.weight_pct) if r.weight_pct else None,
+            market_value=float(r.market_value) if r.market_value else None,
+            report_date=r.report_date
+        ))
 
-    groups: list[SearchCategoryGroup] = []
-    for key, result in zip(tasks.keys(), results, strict=False):
-        if isinstance(result, Exception):
-            logger.warning("global_search_category_error", category=key, error=str(result))
-            continue
-        if result and result.items:
-            groups.append(result)
+    # Try to find a nice name for the asset from the results
+    if holders:
+        # Sort combined results by weight or value
+        holders.sort(key=lambda x: x.market_value or 0, reverse=True)
 
-    return GlobalSearchResponse(query=q_stripped, groups=groups)
+    return ReverseLookupResponse(
+        asset_name=asset_name,
+        cusip=cusip,
+        isin=isin,
+        holders=holders[:40]
+    )
 
 
 # ── Category search helpers ─────────────────────────────────
 
 
-async def _search_funds(db: AsyncSession, q: str) -> SearchCategoryGroup:
-    """Search fund catalog (uses existing catalog SQL builder)."""
-    filters = CatalogFilters(q=q, page=1, page_size=MAX_PER_CATEGORY)
-    stmt = build_catalog_query(filters)
-    if stmt is None:
-        return SearchCategoryGroup(category="funds", label="Funds", items=[], total=0)
+async def _search_assets(db: AsyncSession, q: str) -> SearchCategoryGroup:
+    """Search unified assets (Equities, Bonds, Funds) via mv_unified_assets."""
+    pattern = f"%{q}%"
+    
+    # Query mv_unified_assets
+    stmt = (
+        select(
+            mv_unified_assets,
+            func.count().over().label("_total")
+        )
+        .where(
+            or_(
+                mv_unified_assets.c.name.ilike(pattern),
+                mv_unified_assets.c.ticker.ilike(pattern),
+                mv_unified_assets.c.isin.ilike(pattern),
+            )
+        )
+        .order_by(mv_unified_assets.c.name.asc())
+        .limit(MAX_PER_CATEGORY)
+    )
 
     rows = (await db.execute(stmt)).all()
     total = rows[0]._total if rows else 0
 
     items: list[SearchResultItem] = []
     for r in rows:
-        ext_id = getattr(r, "external_id", None) or ""
-        universe = getattr(r, "universe", "") or ""
-        name = getattr(r, "name", "") or "Unnamed Fund"
-        ticker = getattr(r, "ticker", None) or ""
-        manager = getattr(r, "manager_name", None) or ""
+        # Logic for href: 
+        # - Funds go to /screener/{id}
+        # - Others (Equities/Bonds) could go to /universe/{id} or similar.
+        # For now, following existing pattern where search results often lead to screener/details.
+        
+        category_label = r.asset_class.replace("_", " ").title()
+        subtitle_parts = [p for p in [r.ticker, category_label, r.geography] if p]
+        
+        # If it's a SEC fund/equity from cusip_ticker_map, it might not be in screener yet
+        # But we use the ID (CUSIP or Instrument UUID)
+        href = f"/screener/{r.id}"
+        if r.source == "internal":
+            href = f"/universe/{r.id}"
 
-        subtitle_parts = [p for p in [ticker, universe, manager] if p]
         items.append(
             SearchResultItem(
-                id=str(ext_id),
-                title=name,
+                id=r.id,
+                title=r.name,
                 subtitle=" · ".join(subtitle_parts) if subtitle_parts else None,
-                category="funds",
-                href=f"/screener/{ext_id}",
+                category="funds", # Keep category as "funds" for UI grouping/icon consistency
+                href=href,
             ),
         )
 
-    return SearchCategoryGroup(category="funds", label="Funds", items=items, total=total)
+    return SearchCategoryGroup(category="funds", label="Assets", items=items, total=total)
 
 
 async def _search_managers(
@@ -156,7 +239,6 @@ async def _search_managers(
 
     items: list[SearchResultItem] = []
     for r in rows:
-        # Row columns: crd_number, firm_name, aum_total, registration_status, state, ...
         crd = r[0] or ""
         firm = r[1] or "Unknown Manager"
         aum = r[2]

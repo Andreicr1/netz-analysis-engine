@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import date
-from typing import Sequence
+from typing import Any, Sequence
 
 
 @dataclass
@@ -292,7 +292,7 @@ def drawdown_chart(
 
 
 def allocation_bars(
-    blocks: list[dict],  # [{"label": str, "weight": float, "color": str}]
+    blocks: list[dict[str, Any]],  # [{"label": str, "weight": float, "color": str}]
     *,
     width: int = 240,
 ) -> str:

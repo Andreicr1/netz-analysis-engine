@@ -10,10 +10,14 @@ GLOBAL TABLE: No organization_id, no RLS.
 Advisory lock ID = 900_025.
 """
 
+from __future__ import annotations
+
 import asyncio
+from typing import Any, Sequence
 
 import structlog
 from sqlalchemy import text
+from sqlalchemy.engine import Row
 
 from app.core.db.engine import async_session_factory as async_session
 
@@ -24,7 +28,7 @@ _MAX_FUNDS_PER_RUN = 500
 _OPENFIGI_URL = "https://api.openfigi.com/v3/mapping"
 
 
-async def run_nport_ticker_resolution() -> dict:
+async def run_nport_ticker_resolution() -> dict[str, Any]:
     """Resolve tickers for registered funds without ticker via OpenFIGI."""
     async with async_session() as db:
         lock_result = await db.execute(
@@ -106,7 +110,7 @@ async def run_nport_ticker_resolution() -> dict:
 
 
 async def _resolve_batch_openfigi(
-    batch: list[tuple],
+    batch: Sequence[Row[Any] | tuple[Any, ...]],
 ) -> list[str | None]:
     """Resolve a batch of funds to tickers via OpenFIGI.
 

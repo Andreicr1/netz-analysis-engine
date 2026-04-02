@@ -247,6 +247,10 @@ async def run_treasury_ingestion(lookback_days: int = 365) -> dict:
                     await db.execute(stmt)
                 await db.commit()
 
+            # Refresh Materialized Views for macro performance layer
+            from app.domains.wealth.services.macro_view_refresh import refresh_macro_views
+            await refresh_macro_views(db)
+
             logger.info("Treasury ingestion complete", rows_upserted=len(rows))
             return {"status": "completed", "rows": len(rows)}
 

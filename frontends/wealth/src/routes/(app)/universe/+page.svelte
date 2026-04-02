@@ -41,8 +41,8 @@
 	let distinctBlocks = $derived(
 		[...new Set(assets.map((a) => a.block_id).filter(Boolean))] as string[]
 	);
-	let distinctTypes = $derived(
-		[...new Set(assets.map((a) => a.instrument_type).filter(Boolean))] as string[]
+	let distinctClasses = $derived(
+		[...new Set(assets.map((a) => a.asset_class).filter(Boolean))] as string[]
 	);
 
 	let filtered = $derived.by(() => {
@@ -51,12 +51,13 @@
 			rows = rows.filter((a) => a.block_id === blockFilter);
 		}
 		if (typeFilter) {
-			rows = rows.filter((a) => a.instrument_type === typeFilter);
+			rows = rows.filter((a) => a.asset_class === typeFilter);
 		}
 		if (search) {
 			const q = search.toLowerCase();
 			rows = rows.filter((a) =>
 				a.fund_name?.toLowerCase().includes(q) ||
+				a.ticker?.toLowerCase().includes(q) ||
 				a.block_id?.toLowerCase().includes(q) ||
 				a.geography?.toLowerCase().includes(q) ||
 				a.asset_class?.toLowerCase().includes(q)
@@ -144,6 +145,11 @@
 		return "var(--ii-danger)";
 	}
 
+	function formatAssetClass(ac: string | null | undefined): string {
+		if (!ac) return "\u2014";
+		return ac.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+	}
+
 	// ── Approval workflow ─────────────────────────────────────────────
 
 	const DEFAULT_BLOCKS = [
@@ -228,9 +234,9 @@
 				bind:value={search}
 			/>
 			<select class="universe-select" bind:value={typeFilter}>
-				<option value={null}>All types</option>
-				{#each distinctTypes as t (t)}
-					<option value={t}>{instrumentTypeLabel(t)}</option>
+				<option value={null}>All classes</option>
+				{#each distinctClasses as c (c)}
+					<option value={c}>{formatAssetClass(c)}</option>
 				{/each}
 			</select>
 			<select class="universe-select" bind:value={blockFilter}>
@@ -259,10 +265,10 @@
 					<thead>
 						<tr>
 							<th class="th-name">Instrument</th>
-							<th class="th-type">Type</th>
+							<th class="th-ticker">Ticker</th>
+							<th class="th-type">Asset Class</th>
 							<th class="th-block">Block</th>
 							<th class="th-geo">Geography</th>
-							<th class="th-class">Asset Class</th>
 							<th class="th-decision">Decision</th>
 							<th class="th-date">Approved</th>
 						</tr>
@@ -275,14 +281,14 @@
 								onclick={() => openDetail(asset)}
 							>
 								<td class="td-name">{asset.fund_name ?? "—"}</td>
+								<td class="td-ticker"><code class="mini-ticker">{asset.ticker ?? "—"}</code></td>
 								<td class="td-type">
-									<span class="type-badge" style:color={instrumentTypeColor(asset.instrument_type)} style:background="color-mix(in srgb, {instrumentTypeColor(asset.instrument_type)} 12%, transparent)">
-										{instrumentTypeLabel(asset.instrument_type)}
+									<span class="type-badge">
+										{formatAssetClass(asset.asset_class)}
 									</span>
 								</td>
 								<td class="td-block">{asset.block_id ?? "—"}</td>
 								<td class="td-geo">{asset.geography ?? "—"}</td>
-								<td class="td-class">{asset.asset_class ?? "—"}</td>
 								<td class="td-decision">
 									{#if asset.approval_decision}
 										<StatusBadge status={asset.approval_decision} />
@@ -380,7 +386,7 @@
 					</div>
 					<div class="detail-kv">
 						<span class="detail-k">Asset Class</span>
-						<span class="detail-v">{selectedAsset.asset_class ?? "—"}</span>
+						<span class="detail-v">{formatAssetClass(selectedAsset.asset_class)}</span>
 					</div>
 				</div>
 			</section>
@@ -733,16 +739,28 @@
 	}
 
 	.th-name { min-width: 200px; }
-	.th-type { min-width: 90px; }
+	.th-ticker { min-width: 80px; }
+	.th-type { min-width: 100px; }
 	.th-block { min-width: 100px; }
 	.th-geo { min-width: 100px; }
-	.th-class { min-width: 100px; }
 	.th-decision { min-width: 90px; }
 	.th-date { min-width: 140px; }
 
 	.td-name {
 		font-weight: 500;
 		color: var(--ii-text-primary);
+	}
+
+	.td-ticker {
+		font-family: var(--ii-font-mono, monospace);
+	}
+
+	.mini-ticker {
+		font-size: 11px;
+		background: var(--ii-surface-alt);
+		padding: 2px 4px;
+		border-radius: 3px;
+		color: var(--ii-brand-primary);
 	}
 
 	.type-badge {
@@ -752,6 +770,9 @@
 		font-size: var(--ii-text-label, 0.75rem);
 		font-weight: 500;
 		white-space: nowrap;
+		background: var(--ii-surface-alt);
+		color: var(--ii-text-secondary);
+		border: 1px solid var(--ii-border-subtle);
 	}
 
 	.td-block, .td-geo, .td-class {

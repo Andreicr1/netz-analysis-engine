@@ -19,8 +19,10 @@ when instrument_type = 'fund'. All phases include these keys.
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import structlog
-from sqlalchemy import text
+from sqlalchemy import CursorResult, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.engine import async_session_factory as async_session
@@ -32,7 +34,7 @@ SEC_MF_TICKERS_URL = "https://www.sec.gov/files/company_tickers_mf.json"
 SEC_USER_AGENT = "Netz/1.0 (andrei@investintell.com)"
 
 
-async def run_universe_sync() -> dict:
+async def run_universe_sync() -> dict[str, Any]:
     """Sync global instrument catalog from SEC/ESMA sources."""
     logger.info("universe_sync.start")
 
@@ -45,7 +47,7 @@ async def run_universe_sync() -> dict:
             return {"status": "skipped", "reason": "lock_held"}
 
         try:
-            stats: dict = {}
+            stats: dict[str, Any] = {}
             stats["ticker_refresh"] = await _refresh_mf_tickers(db)
             stats["sec_etfs"] = await _sync_sec_etfs(db)
             stats["sec_mf_series"] = await _sync_sec_mf_series(db)
@@ -69,7 +71,7 @@ async def run_universe_sync() -> dict:
 # ── Pre-sync: refresh mutual fund tickers from SEC ───────────────────
 
 
-async def _refresh_mf_tickers(db: AsyncSession) -> dict:
+async def _refresh_mf_tickers(db: AsyncSession) -> dict[str, Any]:
     """Fetch SEC company_tickers_mf.json and update sec_fund_classes tickers.
 
     Single GET (~1MB), no rate limit. Maps class_id → ticker for all
@@ -81,10 +83,10 @@ async def _refresh_mf_tickers(db: AsyncSession) -> dict:
     import json
     from urllib.request import Request, urlopen
 
-    def _download() -> dict:
+    def _download() -> dict[str, Any]:
         req = Request(SEC_MF_TICKERS_URL, headers={"User-Agent": SEC_USER_AGENT})
         with urlopen(req, timeout=30) as resp:
-            return json.loads(resp.read())
+            return cast(dict[str, Any], json.loads(resp.read()))
 
     try:
         loop = asyncio.get_event_loop()
@@ -117,13 +119,13 @@ async def _refresh_mf_tickers(db: AsyncSession) -> dict:
         )
         await db.execute(text(f"INSERT INTO _tmp_mf_ticker VALUES {vals} ON CONFLICT DO NOTHING"))
 
-    result = await db.execute(text("""
+    result = cast(CursorResult[Any], await db.execute(text("""
         UPDATE sec_fund_classes fc
         SET ticker = t.ticker
         FROM _tmp_mf_ticker t
         WHERE fc.class_id = t.class_id
           AND (fc.ticker IS NULL OR fc.ticker != t.ticker)
-    """))
+    """)))
     updated = result.rowcount
     await db.commit()
     logger.info("universe_sync.mf_tickers_updated", updated=updated)
@@ -133,9 +135,9 @@ async def _refresh_mf_tickers(db: AsyncSession) -> dict:
 # ── Phase 1: SEC ETFs ────────────────────────────────────────────────
 
 
-async def _sync_sec_etfs(db: AsyncSession) -> dict:
+async def _sync_sec_etfs(db: AsyncSession) -> dict[str, Any]:
     """Upsert SEC ETFs into instruments_universe."""
-    result = await db.execute(text("""
+    result = cast(CursorResult[Any], await db.execute(text("""
         INSERT INTO instruments_universe (
             instrument_id, instrument_type, name, isin, ticker,
             asset_class, geography, currency, is_active, attributes
@@ -174,7 +176,7 @@ async def _sync_sec_etfs(db: AsyncSession) -> dict:
             name = EXCLUDED.name,
             attributes = instruments_universe.attributes || EXCLUDED.attributes,
             updated_at = now()
-    """))
+    """)))
     await db.commit()
     count = result.rowcount
     logger.info("universe_sync.sec_etfs", upserted=count)
@@ -184,9 +186,9 @@ async def _sync_sec_etfs(db: AsyncSession) -> dict:
 # ── Phase 2: SEC Mutual Fund Series (canonical class) ────────────────
 
 
-async def _sync_sec_mf_series(db: AsyncSession) -> dict:
+async def _sync_sec_mf_series(db: AsyncSession) -> dict[str, Any]:
     """Upsert SEC mutual fund series — one per series_id, canonical share class."""
-    result = await db.execute(text("""
+    result = cast(CursorResult[Any], await db.execute(text("""
         WITH per_series AS (
             SELECT DISTINCT ON (fc.series_id)
                 fc.series_id,
@@ -255,7 +257,7 @@ async def _sync_sec_mf_series(db: AsyncSession) -> dict:
             name = EXCLUDED.name,
             attributes = instruments_universe.attributes || EXCLUDED.attributes,
             updated_at = now()
-    """))
+    """)))
     await db.commit()
     count = result.rowcount
     logger.info("universe_sync.sec_mf_series", upserted=count)
@@ -265,9 +267,9 @@ async def _sync_sec_mf_series(db: AsyncSession) -> dict:
 # ── Phase 3: SEC Registered Funds with direct ticker ─────────────────
 
 
-async def _sync_sec_registered(db: AsyncSession) -> dict:
+async def _sync_sec_registered(db: AsyncSession) -> dict[str, Any]:
     """Upsert SEC registered funds that have a direct ticker (supplements Phase 2)."""
-    result = await db.execute(text("""
+    result = cast(CursorResult[Any], await db.execute(text("""
         INSERT INTO instruments_universe (
             instrument_id, instrument_type, name, isin, ticker,
             asset_class, geography, currency, is_active, attributes
@@ -307,7 +309,7 @@ async def _sync_sec_registered(db: AsyncSession) -> dict:
               SELECT 1 FROM instruments_universe iu WHERE iu.ticker = rf.ticker
           )
         ON CONFLICT (ticker) DO NOTHING
-    """))
+    """)))
     await db.commit()
     count = result.rowcount
     logger.info("universe_sync.sec_registered", upserted=count)
@@ -317,9 +319,9 @@ async def _sync_sec_registered(db: AsyncSession) -> dict:
 # ── Phase 3b: SEC BDCs (ticker resolved via cusip_ticker_map) ────────
 
 
-async def _sync_sec_bdcs(db: AsyncSession) -> dict:
+async def _sync_sec_bdcs(db: AsyncSession) -> dict[str, Any]:
     """Upsert SEC BDCs with resolved tickers into instruments_universe."""
-    result = await db.execute(text("""
+    result = cast(CursorResult[Any], await db.execute(text("""
         INSERT INTO instruments_universe (
             instrument_id, instrument_type, name, isin, ticker,
             asset_class, geography, currency, is_active, attributes
@@ -354,7 +356,7 @@ async def _sync_sec_bdcs(db: AsyncSession) -> dict:
             name = EXCLUDED.name,
             attributes = instruments_universe.attributes || EXCLUDED.attributes,
             updated_at = now()
-    """))
+    """)))
     await db.commit()
     count = result.rowcount
     logger.info("universe_sync.sec_bdcs", upserted=count)
@@ -364,9 +366,9 @@ async def _sync_sec_bdcs(db: AsyncSession) -> dict:
 # ── Phase 4: ESMA UCITS ──────────────────────────────────────────────
 
 
-async def _sync_esma_funds(db: AsyncSession) -> dict:
+async def _sync_esma_funds(db: AsyncSession) -> dict[str, Any]:
     """Upsert ESMA UCITS funds with resolved yahoo_ticker."""
-    result = await db.execute(text("""
+    result = cast(CursorResult[Any], await db.execute(text("""
         INSERT INTO instruments_universe (
             instrument_id, instrument_type, name, isin, ticker,
             asset_class, geography, currency, is_active, attributes
@@ -424,7 +426,7 @@ async def _sync_esma_funds(db: AsyncSession) -> dict:
             name = EXCLUDED.name,
             attributes = instruments_universe.attributes || EXCLUDED.attributes,
             updated_at = now()
-    """))
+    """)))
     await db.commit()
     count = result.rowcount
     logger.info("universe_sync.esma_funds", upserted=count)
@@ -434,14 +436,14 @@ async def _sync_esma_funds(db: AsyncSession) -> dict:
 # ── Post-sync: deactivate instruments without NAV ─────────────────────
 
 
-async def _deactivate_no_nav(db: AsyncSession) -> dict:
+async def _deactivate_no_nav(db: AsyncSession) -> dict[str, Any]:
     """Mark instruments without NAV data as inactive.
 
     Funds without NAV are not useful in catalog, screener, or analytics.
     Idempotent — if a ticker gains NAV later, next universe_sync re-inserts
     with is_active=true via ON CONFLICT UPDATE.
     """
-    result = await db.execute(text("""
+    result = cast(CursorResult[Any], await db.execute(text("""
         UPDATE instruments_universe
         SET is_active = false, updated_at = now()
         WHERE is_active = true
@@ -449,7 +451,7 @@ async def _deactivate_no_nav(db: AsyncSession) -> dict:
               SELECT 1 FROM nav_timeseries nt
               WHERE nt.instrument_id = instruments_universe.instrument_id
           )
-    """))
+    """)))
     await db.commit()
     count = result.rowcount
     logger.info("universe_sync.deactivated_no_nav", count=count)

@@ -13,6 +13,7 @@ Intentional tactical bets are NOT flagged as drift.
 from dataclasses import dataclass
 from datetime import date
 from enum import Enum
+from typing import Any
 
 import numpy as np
 import structlog
@@ -79,7 +80,7 @@ class DtwDriftResult:
         return default
 
 
-def resolve_drift_thresholds(config: dict | None = None) -> tuple[float, float]:
+def resolve_drift_thresholds(config: dict[str, Any] | None = None) -> tuple[float, float]:
     """Extract drift band thresholds from calibration config dict.
 
     Returns (maintenance_trigger, urgent_trigger) as decimals.
@@ -101,7 +102,7 @@ def resolve_drift_thresholds(config: dict | None = None) -> tuple[float, float]:
         return 0.05, 0.10
 
 
-def resolve_dtw_thresholds(config: dict | None = None) -> tuple[float, float]:
+def resolve_dtw_thresholds(config: dict[str, Any] | None = None) -> tuple[float, float]:
     """Extract DTW divergence thresholds from calibration config dict.
 
     Returns (warning_threshold, critical_threshold).

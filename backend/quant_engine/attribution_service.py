@@ -86,9 +86,9 @@ def compute_attribution(
     """
     if benchmark_weights is None or benchmark_returns is None:
         # No benchmark data — return empty result
-        r_p = float(np.sum(portfolio_weights * portfolio_returns))
+        total_r_p = float(np.sum(portfolio_weights * portfolio_returns))
         return AttributionResult(
-            total_portfolio_return=round(r_p, 6),
+            total_portfolio_return=round(total_r_p, 6),
             benchmark_available=False,
             n_periods=1,
         )
@@ -179,7 +179,7 @@ def compute_multi_period_attribution(
     def _carino_factor(r: float) -> float:
         if abs(r) < 1e-10:
             return 1.0
-        return np.log(1 + r) / r
+        return float(np.log(1 + r) / r)
 
     k_total = _carino_factor(R_p_total - R_b_total) if abs(R_p_total - R_b_total) > 1e-10 else 1.0
 

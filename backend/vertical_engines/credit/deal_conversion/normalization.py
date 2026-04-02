@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from typing import Any
 
 
 def normalize_amount(val: object | None) -> float | None:
@@ -27,7 +28,7 @@ def title_case_strategy(value: str | None) -> str | None:
     return " ".join(w.capitalize() for w in value.replace("_", " ").split())
 
 
-def derive_deal_type(research_output: dict | None) -> str:
+def derive_deal_type(research_output: dict[str, Any] | None) -> str:
     """Derive DealType enum value from research_output.deal_overview.instrument."""
     overview = (research_output or {}).get("deal_overview", {})
     instrument = (overview.get("instrument") or "").lower()

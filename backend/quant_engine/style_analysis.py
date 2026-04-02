@@ -7,7 +7,7 @@ Config is injected as parameter — never reads YAML at runtime, never uses @lru
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 StyleLabel = Literal[
     "large_growth", "large_blend", "large_value",
@@ -79,7 +79,7 @@ def _classify_asset(asset_class: str | None) -> str:
 
 
 def classify_fund_style(
-    holdings: list[dict],
+    holdings: list[dict[str, Any]],
     config: StyleConfig | None = None,
 ) -> StyleVector:
     """Classify fund style from N-PORT holdings.

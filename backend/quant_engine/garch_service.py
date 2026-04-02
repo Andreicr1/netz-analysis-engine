@@ -65,7 +65,7 @@ def fit_garch(
 
         model = arch_model(
             returns_pct,
-            vol="Garch",
+            vol="GARCH",
             p=1,
             q=1,
             mean="Zero",

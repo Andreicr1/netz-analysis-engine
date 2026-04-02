@@ -12,6 +12,8 @@ Implements the canonical Black-Litterman (1992) posterior:
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import structlog
 
@@ -21,7 +23,7 @@ logger = structlog.get_logger()
 def compute_bl_returns(
     sigma: "np.ndarray",
     w_market: "np.ndarray",
-    views: "list[dict[str, object]] | None",
+    views: "list[dict[str, Any]] | None",
     risk_aversion: float = 2.5,
     tau: float = 0.05,
 ) -> "np.ndarray":
@@ -57,7 +59,7 @@ def compute_bl_returns(
 
     # Step 2: No views — return equilibrium
     if not views:
-        return pi
+        return np.asarray(pi)
 
     # Step 3: Build P (K x N), Q (K,), Omega (K x K)
     P_rows: list[np.ndarray] = []
@@ -67,8 +69,8 @@ def compute_bl_returns(
     for view in views:
         vtype = view.get("type", "absolute")
         q_val = float(view["Q"])
-        confidence = float(view.get("confidence", 0.5))
-        confidence = max(0.01, min(confidence, 1.0))  # clamp
+        conf = view.get("confidence", 0.5)
+        confidence = max(0.01, min(float(conf), 1.0))
 
         p_row = np.zeros(n)
 
@@ -97,7 +99,7 @@ def compute_bl_returns(
         omega_diag.append(omega_k)
 
     if not P_rows:
-        return pi
+        return np.asarray(pi)
 
     P = np.array(P_rows)       # (K x N)
     Q = np.array(Q_list)       # (K,)
@@ -122,4 +124,4 @@ def compute_bl_returns(
         tau=tau,
     )
 
-    return mu_bl
+    return np.asarray(mu_bl)

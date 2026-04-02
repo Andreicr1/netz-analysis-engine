@@ -53,40 +53,68 @@ async def list_universe(
     user: CurrentUser = Depends(get_current_user),
     org_id: str = Depends(get_org_id),
 ) -> list[UniverseAssetRead]:
-    """List all approved and active funds in the investment universe."""
-    from vertical_engines.wealth.asset_universe import UniverseService
+    """List all approved and active funds in the investment universe.
+    
+    Refactored to join mv_unified_assets for enriched metadata (Ticker, ISIN, Geography).
+    """
+    from sqlalchemy import Column, MetaData, Table, Text, select
 
-    svc = UniverseService()
+    from app.domains.wealth.models.instrument_org import InstrumentOrg
 
-    def _list() -> list:
-        from app.core.db.session import sync_session_factory
+    # Dynamic reflection of mv_unified_assets
+    _meta = MetaData()
+    mv_assets = Table(
+        "mv_unified_assets", _meta,
+        Column("id", Text, primary_key=True),
+        Column("name", Text),
+        Column("ticker", Text),
+        Column("isin", Text),
+        Column("asset_class", Text),
+        Column("geography", Text),
+    )
 
-        with sync_session_factory() as sync_db, sync_db.begin():
-            sync_db.expire_on_commit = False
-            _set_rls_sync(sync_db, org_id)
-            assets = svc.list_universe(
-                sync_db,
-                organization_id=org_id,
-                block_id=block_id,
-                geography=geography,
-                asset_class=asset_class,
-            )
-            return [
-                UniverseAssetRead(
-                    instrument_id=a.instrument_id,
-                    fund_name=a.fund_name,
-                    block_id=a.block_id,
-                    geography=a.geography,
-                    investment_geography=a.investment_geography,
-                    asset_class=a.asset_class,
-                    approval_status=a.approval_status,
-                    approval_decision=a.approval_decision,
-                    approved_at=a.approved_at,
-                )
-                for a in assets
-            ]
+    stmt = (
+        select(
+            InstrumentOrg.instrument_id,
+            mv_assets.c.name.label("fund_name"),
+            mv_assets.c.ticker,
+            mv_assets.c.isin,
+            InstrumentOrg.block_id,
+            mv_assets.c.geography,
+            mv_assets.c.asset_class,
+            InstrumentOrg.approval_status,
+            InstrumentOrg.approval_decision,
+            InstrumentOrg.approved_at,
+        )
+        .join(mv_assets, mv_assets.c.id == InstrumentOrg.instrument_id.cast(Text))
+        .where(InstrumentOrg.approval_status == "approved")
+    )
 
-    return await asyncio.to_thread(_list)
+    if block_id:
+        stmt = stmt.where(InstrumentOrg.block_id == block_id)
+    if geography:
+        stmt = stmt.where(mv_assets.c.geography == geography)
+    if asset_class:
+        stmt = stmt.where(mv_assets.c.asset_class == asset_class)
+
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    return [
+        UniverseAssetRead(
+            instrument_id=r.instrument_id,
+            fund_name=r.fund_name,
+            ticker=r.ticker,
+            isin=r.isin,
+            block_id=r.block_id,
+            geography=r.geography,
+            asset_class=r.asset_class,
+            approval_status=r.approval_status,
+            approval_decision=r.approval_decision,
+            approved_at=r.approved_at,
+        )
+        for r in rows
+    ]
 
 
 @router.get(

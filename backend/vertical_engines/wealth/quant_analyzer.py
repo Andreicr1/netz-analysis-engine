@@ -11,7 +11,7 @@ No YAML loading, no @lru_cache — follows the quant_engine refactor pattern.
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import structlog
@@ -85,7 +85,7 @@ class QuantAnalyzer:
         if len(navs) < 30:
             return None
 
-        returns = np.array([float(r) for r in navs], dtype=np.float64)
+        returns = np.array([float(r) for r in navs if r is not None], dtype=np.float64)
 
         from quant_engine.cvar_service import resolve_cvar_config
 
@@ -118,10 +118,10 @@ class QuantAnalyzer:
         if risk is None:
             return None
 
-        from quant_engine.scoring_service import compute_fund_score
+        from quant_engine.scoring_service import RiskMetrics, compute_fund_score
 
         score_val, components = compute_fund_score(
-            risk,
+            cast(RiskMetrics, risk),
             flows_momentum_score=50.0,
             config=self._config.get("scoring"),
         )

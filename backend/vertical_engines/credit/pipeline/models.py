@@ -66,4 +66,4 @@ REQUIRED_DD_DOCUMENTS = [
      "reason": "Confirms priority of security interest and identifies competing claims"},
 ]
 
-TOTAL_DD_WEIGHT = sum(d["weight"] for d in REQUIRED_DD_DOCUMENTS)
+TOTAL_DD_WEIGHT: int = sum(int(d["weight"]) for d in REQUIRED_DD_DOCUMENTS)

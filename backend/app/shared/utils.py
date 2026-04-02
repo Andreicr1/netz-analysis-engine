@@ -4,6 +4,7 @@ import datetime as dt
 import uuid
 from decimal import Decimal
 from enum import Enum
+from typing import Any
 
 from sqlalchemy import inspect
 
@@ -16,10 +17,10 @@ def new_uuid() -> uuid.UUID:
     return uuid.uuid4()
 
 
-def sa_model_to_dict(obj) -> dict:
+def sa_model_to_dict(obj: Any) -> dict[str, Any]:
     """Shallow column-only serialization for audit before/after snapshots."""
     mapper = inspect(obj)
-    data: dict = {}
+    data: dict[str, Any] = {}
     for attr in mapper.mapper.column_attrs:
         key = attr.key
         val = getattr(obj, key)

@@ -520,7 +520,7 @@ def _annualized_return(data: FactSheetData) -> float | None:
     years = days / 365.25
     if years < 1:
         return si
-    return (1 + si) ** (1 / years) - 1
+    return float((1 + si) ** (1 / years) - 1)
 
 
 # ---------------------------------------------------------------------------
@@ -539,7 +539,7 @@ def _returns_table(data: FactSheetData, labels: dict[str, str]) -> str:
     ]
 
     bm = data.benchmark_returns
-    bm_vals = [
+    bm_vals: list[float | None] = [
         bm.mtd if bm else None,
         bm.qtd if bm else None,
         bm.ytd if bm else None,
@@ -569,7 +569,7 @@ def _returns_table(data: FactSheetData, labels: dict[str, str]) -> str:
     port_row = _row(labels["portfolio"], [v for _, v in periods])
     bm_row = _row("Benchmark", bm_vals)
 
-    active_vals = []
+    active_vals: list[float | None] = []
     for (_, pv), bv in zip(periods, bm_vals, strict=True):
         if pv is not None and bv is not None:
             active_vals.append(pv - bv)
@@ -1137,7 +1137,7 @@ def _page_performance(
     nav_vals = [p.nav for p in data.nav_series[-24:]] if data.nav_series else []
 
     for label, val, fmt in margin_metrics:
-        display = fmt(val) if val is not None else "&mdash;"
+        display = fmt(val) if val is not None else "&mdash;"  # type: ignore[no-untyped-call]
         color = "var(--burgundy)" if val is not None and val < 0 else "var(--text-primary)"
         spark_html = ""
         # Sparkline for annualized return and Sharpe (use NAV trend)
@@ -1254,7 +1254,7 @@ def _page_composition(
     ]
 
     for label, val, fmt in risk_items:
-        display = fmt(val) if val is not None else "&mdash;"
+        display = fmt(val) if val is not None else "&mdash;"  # type: ignore[no-untyped-call]
         color = "var(--burgundy)" if val is not None and val < 0 else "var(--text-primary)"
         parts.append(
             f'<div class="mg-q">'

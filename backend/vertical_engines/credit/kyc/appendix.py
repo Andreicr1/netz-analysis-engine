@@ -114,7 +114,7 @@ def _format_entity_table(
     return lines
 
 
-def _sum_check_hits(result: dict, *check_ids: str) -> int:
+def _sum_check_hits(result: dict[str, Any], *check_ids: str) -> int:
     """Sum hits across check results matching any of the given check IDs."""
     return sum(
         cr.get("hits", 0)

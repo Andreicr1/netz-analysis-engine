@@ -153,11 +153,13 @@ class FEFundInfoProvider:
     ) -> dict[str, Any]:
         """Fetch cumulative + annualised performance."""
         try:
-            cumulative, annualised = await asyncio.gather(
+            results = await asyncio.gather(
                 self._client.get_cumulative_performance_v2([isin], currency=currency),
                 self._client.get_annualised_performance([isin], currency=currency),
                 return_exceptions=True,
             )
+            cumulative: Any = results[0]
+            annualised: Any = results[1]
             return {
                 "cumulative": cumulative[0] if isinstance(cumulative, list) and cumulative else {},
                 "annualised": annualised[0] if isinstance(annualised, list) and annualised else {},
@@ -201,7 +203,7 @@ class FEFundInfoProvider:
         Used by DD reports and screener for complete fund profile.
         """
         try:
-            instrument, risk, performance, fees, aum = await asyncio.gather(
+            results = await asyncio.gather(
                 self._client.get_fund_information([isin]),
                 self._client.get_analytics([isin]),
                 self._client.get_cumulative_performance_v2([isin], currency=currency),
@@ -209,6 +211,11 @@ class FEFundInfoProvider:
                 self._client.get_aum([isin]),
                 return_exceptions=True,
             )
+            instrument: Any = results[0]
+            risk: Any = results[1]
+            performance: Any = results[2]
+            fees: Any = results[3]
+            aum: Any = results[4]
             return {
                 "instrument": instrument[0] if isinstance(instrument, list) and instrument else {},
                 "risk": risk[0] if isinstance(risk, list) and risk else {},

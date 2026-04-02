@@ -2,8 +2,8 @@
 
 Covers:
 - CatalogFilters defaults
-- Branch pruning (region/universe filters eliminate branches)
-- UNION ALL query generation
+- Category parsing and universe expansion
+- Query generation via mv_unified_funds materialized view
 - Facet query generation
 - DisclosureMatrix correctness per universe
 - UnifiedFundItem serialization
@@ -16,9 +16,7 @@ import pytest
 
 from app.domains.wealth.queries.catalog_sql import (
     CatalogFilters,
-    _private_us_branch,
-    _registered_us_branch,
-    _ucits_eu_branch,
+    _parse_categories,
     build_catalog_facets_query,
     build_catalog_query,
 )
@@ -50,88 +48,73 @@ class TestCatalogFilters:
             f.q = "changed"  # type: ignore[misc]
 
 
-class TestBranchPruning:
-    """Verify that filters correctly prune irrelevant UNION branches."""
+class TestCategoryParsing:
+    """Verify that _parse_categories correctly expands legacy and new values."""
 
-    def test_eu_region_prunes_us_branches(self):
-        f = CatalogFilters(region="EU")
-        assert _registered_us_branch(f) is None
-        assert _private_us_branch(f) is None
-        assert _ucits_eu_branch(f) is not None
+    def test_all_returns_none(self):
+        assert _parse_categories("all") is None
+        assert _parse_categories(None) is None
+        assert _parse_categories("") is None
 
-    def test_us_region_prunes_eu_branch(self):
-        f = CatalogFilters(region="US")
-        assert _registered_us_branch(f) is not None
-        # has_nav defaults to True, which prunes private (no NAV data)
-        assert _private_us_branch(f) is None
-        assert _ucits_eu_branch(f) is None
+    def test_legacy_registered_expands(self):
+        cats = _parse_categories("registered")
+        assert cats is not None
+        assert cats == {"mutual_fund", "closed_end", "etf", "bdc"}
 
-    def test_us_region_includes_private_when_has_nav_none(self):
-        f = CatalogFilters(region="US", has_nav=None)
-        assert _registered_us_branch(f) is not None
-        assert _private_us_branch(f) is not None
-        assert _ucits_eu_branch(f) is None
+    def test_legacy_private_expands(self):
+        cats = _parse_categories("private")
+        assert cats is not None
+        assert cats == {"hedge_fund", "private_fund"}
 
-    def test_registered_universe_prunes_others(self):
-        f = CatalogFilters(fund_universe="registered")
-        assert _registered_us_branch(f) is not None
-        assert _private_us_branch(f) is None
-        assert _ucits_eu_branch(f) is None
+    def test_legacy_ucits_expands(self):
+        cats = _parse_categories("ucits")
+        assert cats is not None
+        assert cats == {"ucits"}
 
-    def test_private_universe_prunes_others(self):
-        # has_nav=None required to include private (default has_nav=True prunes private)
-        f = CatalogFilters(fund_universe="private", has_nav=None)
-        assert _registered_us_branch(f) is None
-        assert _private_us_branch(f) is not None
-        assert _ucits_eu_branch(f) is None
+    def test_direct_category(self):
+        cats = _parse_categories("etf")
+        assert cats == {"etf"}
 
-    def test_ucits_universe_prunes_others(self):
-        f = CatalogFilters(fund_universe="ucits")
-        assert _registered_us_branch(f) is None
-        assert _private_us_branch(f) is None
-        assert _ucits_eu_branch(f) is not None
+    def test_comma_separated(self):
+        cats = _parse_categories("etf,bdc,ucits")
+        assert cats == {"etf", "bdc", "ucits"}
 
-    def test_all_universe_keeps_all(self):
-        # has_nav=None required to include private (default has_nav=True prunes private)
-        f = CatalogFilters(fund_universe="all", has_nav=None)
-        assert _registered_us_branch(f) is not None
-        assert _private_us_branch(f) is not None
-        assert _ucits_eu_branch(f) is not None
+    def test_mixed_legacy_and_direct(self):
+        cats = _parse_categories("registered,ucits")
+        assert cats is not None
+        assert "mutual_fund" in cats
+        assert "ucits" in cats
 
-    def test_has_nav_true_prunes_private(self):
-        """Private funds never have NAV — should be pruned."""
-        f = CatalogFilters(has_nav=True)
-        assert _private_us_branch(f) is None
-        assert _registered_us_branch(f) is not None
-        assert _ucits_eu_branch(f) is not None
 
-    def test_aum_min_prunes_ucits(self):
-        """ESMA has no AUM data — should be pruned when aum_min is set."""
-        # has_nav=None required to include private (default has_nav=True prunes private)
-        f = CatalogFilters(aum_min=1_000_000, has_nav=None)
-        assert _ucits_eu_branch(f) is None
-        assert _registered_us_branch(f) is not None
-        assert _private_us_branch(f) is not None
+class TestFilterPruning:
+    """Verify that filters produce SQL with appropriate WHERE clauses."""
 
-    def test_non_us_domicile_prunes_private(self):
-        """Private US funds are always US domicile."""
-        f = CatalogFilters(domicile="IE", has_nav=None)
-        assert _private_us_branch(f) is None
+    def _compile(self, f: CatalogFilters) -> str:
+        stmt = build_catalog_query(f)
+        assert stmt is not None
+        return str(stmt.compile(compile_kwargs={"literal_binds": True})).upper()
 
-    def test_impossible_filters_returns_none(self):
-        """EU region + registered universe = no branches."""
-        f = CatalogFilters(region="EU", fund_universe="registered")
-        assert build_catalog_query(f) is None
+    def test_eu_region_filters(self):
+        sql = self._compile(CatalogFilters(region="EU"))
+        assert "REGION" in sql
+
+    def test_has_nav_filters_ticker(self):
+        sql = self._compile(CatalogFilters(has_nav=True))
+        assert "TICKER" in sql
+
+    def test_aum_min_generates_where(self):
+        sql = self._compile(CatalogFilters(aum_min=1_000_000, has_nav=None))
+        assert "AUM_USD" in sql
+
+    def test_text_search_generates_ilike(self):
+        sql = self._compile(CatalogFilters(q="blackrock"))
+        assert "ILIKE" in sql or "LIKE" in sql
 
 
 class TestBuildCatalogQuery:
     def test_default_returns_query(self):
         stmt = build_catalog_query(CatalogFilters())
         assert stmt is not None
-
-    def test_all_pruned_returns_none(self):
-        f = CatalogFilters(region="EU", fund_universe="private")
-        assert build_catalog_query(f) is None
 
     def test_query_has_pagination(self):
         stmt = build_catalog_query(CatalogFilters(page=3, page_size=25))
@@ -140,23 +123,16 @@ class TestBuildCatalogQuery:
         assert "LIMIT" in compiled
         assert "OFFSET" in compiled
 
-    def test_text_search_generates_ilike(self):
-        stmt = build_catalog_query(CatalogFilters(q="blackrock"))
-        assert stmt is not None
-        compiled = str(stmt.compile(compile_kwargs={"literal_binds": True})).upper()
-        # Default dialect renders ilike as LOWER(...) LIKE LOWER(...);
-        # PostgreSQL dialect renders as ILIKE.  Accept either.
-        assert "ILIKE" in compiled or "LIKE" in compiled
+    def test_always_returns_query(self):
+        """MV-based approach never prunes to None — view handles all universes."""
+        f = CatalogFilters(region="EU", fund_universe="ucits")
+        assert build_catalog_query(f) is not None
 
 
 class TestBuildCatalogFacetsQuery:
     def test_default_returns_query(self):
         stmt = build_catalog_facets_query(CatalogFilters())
         assert stmt is not None
-
-    def test_pruned_returns_none(self):
-        f = CatalogFilters(region="EU", fund_universe="registered")
-        assert build_catalog_facets_query(f) is None
 
     def test_facets_group_by(self):
         stmt = build_catalog_facets_query(CatalogFilters())

@@ -8,6 +8,7 @@ Constraints: weights sum to 1, per-block bounds, portfolio CVaR <= limit, long-o
 import asyncio
 from dataclasses import dataclass
 from datetime import date as date_type
+from typing import Any
 
 import cvxpy as cp
 import numpy as np
@@ -90,7 +91,7 @@ class ParetoResult:
     solver_info: str | None = None
 
 
-def _make_portfolio_problem_class():
+def _make_portfolio_problem_class() -> tuple[type, type]:
     """Lazy factory for PortfolioProblem — only called when pymoo is available."""
     from pymoo.core.problem import Problem
     from pymoo.core.repair import Repair
@@ -102,7 +103,7 @@ def _make_portfolio_problem_class():
         per-run tuning and is numerically unreliable for budget constraints.
         """
 
-        def _do(self, problem, Z, **kwargs):
+        def _do(self, problem: Any, Z: Any, **kwargs: Any) -> Any:
             Z = np.clip(Z, problem.xl, problem.xu)
             Z[Z < 1e-4] = 0.0
             row_sums = Z.sum(axis=1, keepdims=True)
@@ -149,7 +150,7 @@ def _make_portfolio_problem_class():
             self.esg_scores = esg_scores
             self.esg_weight = esg_weight
 
-        def _evaluate(self, x, out, *args, **kwargs):
+        def _evaluate(self, x: Any, out: Any, *args: Any, **kwargs: Any) -> None:
             n = x.shape[0]
             sharpes = np.zeros(n)
             cvars = np.zeros(n)
@@ -242,12 +243,12 @@ async def optimize_portfolio(
         )
 
     # Offload CPU-bound solver to thread pool to avoid blocking the event loop
-    def _solve():
+    def _solve() -> None:
         try:
-            prob.solve(solver=cp.CLARABEL, verbose=False)
+            prob.solve(solver=cp.CLARABEL, verbose=False)  # type: ignore[no-untyped-call]
         except cp.SolverError:
             try:
-                prob.solve(solver=cp.SCS, verbose=False)
+                prob.solve(solver=cp.SCS, verbose=False)  # type: ignore[no-untyped-call]
             except cp.SolverError:
                 pass  # handled below by status check
 
@@ -267,6 +268,11 @@ async def optimize_portfolio(
         )
 
     opt_weights = w.value
+    if opt_weights is None:
+        return OptimizationResult(
+            weights={}, expected_return=0.0, portfolio_volatility=0.0,
+            sharpe_ratio=0.0, status="solver_failed: no weights",
+        )
     # Clean near-zero weights
     opt_weights = np.maximum(opt_weights, 0)
     total = opt_weights.sum()
@@ -365,9 +371,9 @@ async def optimize_fund_portfolio(
         if block:
             block_fund_indices.setdefault(block, []).append(i)
 
-    def _build_base_constraints(w_var: cp.Variable) -> list:
+    def _build_base_constraints(w_var: cp.Variable) -> list[Any]:
         """Build constraints shared by all solve phases."""
-        cs: list = [cp.sum(w_var) == 1]
+        cs: list[Any] = [cp.sum(w_var) == 1]  # type: ignore[attr-defined]
         for i in range(n):
             cs.append(w_var[i] <= max_fund_w)
         for blk_id, indices in block_fund_indices.items():
@@ -380,31 +386,32 @@ async def optimize_fund_portfolio(
 
     async def _solve_problem(prob: cp.Problem) -> str | None:
         """Solve with CLARABEL → SCS fallback. Returns status."""
-        def _do():
+        def _do() -> None:
             try:
-                prob.solve(solver=cp.CLARABEL, verbose=False)
+                prob.solve(solver=cp.CLARABEL, verbose=False)  # type: ignore[no-untyped-call]
                 if prob.status not in ("optimal", "optimal_inaccurate"):
                     # CLARABEL failed — try SCS with looser tolerances
-                    prob.solve(solver=cp.SCS, verbose=False,
+                    prob.solve(solver=cp.SCS, verbose=False,  # type: ignore[no-untyped-call]
                                eps=1e-5, max_iters=10000)
             except cp.SolverError:
                 try:
-                    prob.solve(solver=cp.SCS, verbose=False,
+                    prob.solve(solver=cp.SCS, verbose=False,  # type: ignore[no-untyped-call]
                                eps=1e-5, max_iters=10000)
                 except cp.SolverError:
                     pass
         await asyncio.to_thread(_do)
-        return prob.status
+        return str(prob.status) if prob.status is not None else None
 
     def _extract_weights(w_var: cp.Variable) -> np.ndarray | None:
         """Clean and normalize solved weights. Returns None if degenerate."""
         if w_var.value is None:
             return None
-        w_arr = np.maximum(w_var.value, 0)
+        w_arr: np.ndarray = np.maximum(w_var.value, 0)
         total = w_arr.sum()
         if total == 0:
             return None
-        return w_arr / total
+        result: np.ndarray = w_arr / total
+        return result
 
     # Resolve moments: use provided arrays or fall back to zeros
     _skew = skewness if skewness is not None else np.zeros(n)
@@ -577,6 +584,7 @@ async def optimize_fund_portfolio(
     # CVaR_95 = σ * (-z + φ(z)/α) - μ  →  σ_max = |cvar_limit| / cvar_coeff
     from scipy.stats import norm as sp_norm
 
+    assert cvar_limit is not None  # Phase 2 only reached when cvar_limit was set
     z_alpha = sp_norm.ppf(0.05)  # -1.645
     phi_z = sp_norm.pdf(z_alpha)
     cvar_coeff = -z_alpha + phi_z / 0.05  # ≈ 3.71

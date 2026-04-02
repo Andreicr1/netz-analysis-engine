@@ -10,6 +10,7 @@ Config is injected as parameter by callers via ConfigService.
 
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 import structlog
 
@@ -42,7 +43,7 @@ def determine_cascade_action(
     cvar_utilized_pct: float,
     consecutive_breach_days: int,
     profile: str,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
 ) -> tuple[str | None, str | None]:
     """Determine if a cascade action is needed based on status transition.
 

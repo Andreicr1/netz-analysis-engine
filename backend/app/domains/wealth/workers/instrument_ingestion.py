@@ -8,9 +8,12 @@ Deduplicates by ticker — one Yahoo call per unique ticker regardless of
 how many tenants have selected the instrument.
 """
 
+from __future__ import annotations
+
 import asyncio
 import concurrent.futures
 import math
+from typing import Any
 
 import structlog
 from sqlalchemy import select, text
@@ -67,7 +70,7 @@ async def run_instrument_ingestion(
     logger.info("Starting instrument NAV ingestion (global)", lookback_days=lookback_days)
 
     async with async_session_factory() as db:
-        db.expire_on_commit = False
+        db.expire_on_commit = False  # type: ignore[attr-defined]
 
         # Advisory lock — skip if already running
         lock_result = await db.execute(
@@ -116,8 +119,10 @@ async def _do_ingest(
 
     # Build ticker -> instrument mapping (extract scalars for thread safety)
     # Deduplicates: one Yahoo call per unique ticker
-    ticker_map: dict[str, list[tuple]] = {}
+    ticker_map: dict[str, list[tuple[Any, str]]] = {}
     for inst in instruments:
+        if not inst.ticker:
+            continue
         ticker = inst.ticker.strip().upper()
         ticker_map.setdefault(ticker, []).append(
             (inst.instrument_id, inst.currency or "USD"),
@@ -173,7 +178,7 @@ async def _do_ingest(
         }
 
     # 3. Process each ticker, validate, build rows
-    all_rows: list[dict] = []
+    all_rows: list[dict[str, Any]] = []
     instruments_processed: set[str] = set()
     skipped_tickers: list[str] = []
     errors: list[str] = []

@@ -10,12 +10,16 @@ GLOBAL TABLE: No organization_id, no RLS.
 Advisory lock ID = 900_024.
 """
 
+from __future__ import annotations
+
 import asyncio
 from datetime import UTC
+from typing import Any
 from xml.etree import ElementTree
 
 import structlog
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.engine import async_session_factory as async_session
 
@@ -26,7 +30,7 @@ _UPSERT_CHUNK_SIZE = 200
 _STALENESS_DAYS = 35
 
 
-async def run_nport_fund_discovery() -> dict:
+async def run_nport_fund_discovery() -> dict[str, Any]:
     """Discover registered funds filing N-PORT and populate sec_registered_funds."""
     async with async_session() as db:
         lock_result = await db.execute(
@@ -93,7 +97,7 @@ async def run_nport_fund_discovery() -> dict:
             upserted = 0
             errors = 0
             below_threshold = 0
-            batch: list[dict] = []
+            batch: list[dict[str, Any]] = []
 
             for cik in ciks_to_process:
                 try:
@@ -169,6 +173,11 @@ async def run_nport_fund_discovery() -> dict:
                 "below_threshold": below_threshold,
                 "errors": errors,
             }
+
+            # Refresh Materialized Views for screener and global search
+            from app.domains.wealth.services.view_refresh import refresh_screener_views
+            await refresh_screener_views(db)
+
             logger.info("nport_fund_discovery_complete", **summary)
             return summary
 
@@ -271,7 +280,7 @@ def _discover_nport_filers(user_agent: str) -> list[str]:
     return sorted(ciks)
 
 
-def _fetch_nport_header(cik: str, user_agent: str) -> dict | None:
+def _fetch_nport_header(cik: str, user_agent: str) -> dict[str, Any] | None:
     """Fetch latest N-PORT filing header for a CIK. Sync, rate-limited.
 
     Step 1: submissions JSON for fund name, SIC, fund type.
@@ -330,7 +339,7 @@ def _fetch_nport_header(cik: str, user_agent: str) -> dict | None:
                     ticker = val.strip().upper()
                     break
 
-        result: dict = {
+        result: dict[str, Any] = {
             "fund_name": fund_name,
             "fund_type": fund_type,
             "ticker": ticker,
@@ -393,7 +402,7 @@ def _fetch_nport_header(cik: str, user_agent: str) -> dict | None:
         return None
 
 
-def _parse_nport_xml(xml_text: str, result: dict) -> None:
+def _parse_nport_xml(xml_text: str, result: dict[str, Any]) -> None:
     """Extract totalAssets, adviser info, series/class from N-PORT XML."""
     try:
         # N-PORT XML uses a namespace — handle both with and without
@@ -445,7 +454,7 @@ def _parse_nport_xml(xml_text: str, result: dict) -> None:
         logger.debug("nport_xml_parse_failed", error=str(exc))
 
 
-async def _upsert_batch(db: object, batch: list[dict]) -> int:
+async def _upsert_batch(db: AsyncSession, batch: list[dict[str, Any]]) -> int:
     """Upsert a batch of fund records into sec_registered_funds."""
     if not batch:
         return 0
@@ -453,7 +462,7 @@ async def _upsert_batch(db: object, batch: list[dict]) -> int:
     count = 0
     for record in batch:
         try:
-            await db.execute(  # type: ignore[union-attr]
+            await db.execute(
                 text("""
                     INSERT INTO sec_registered_funds
                         (cik, crd_number, fund_name, fund_type, ticker, series_id, class_id,
@@ -480,11 +489,11 @@ async def _upsert_batch(db: object, batch: list[dict]) -> int:
         except Exception as exc:
             logger.warning("nport_upsert_failed", cik=record.get("cik"), error=str(exc))
 
-    await db.commit()  # type: ignore[union-attr]
+    await db.commit()
     return count
 
 
-async def _upsert_fund_classes(db: object, batch: list[dict]) -> None:
+async def _upsert_fund_classes(db: AsyncSession, batch: list[dict[str, Any]]) -> None:
     """Upsert fund classes from a batch of fund records into sec_fund_classes.
 
     Must be called AFTER _upsert_batch so the parent CIK exists (FK constraint).
@@ -496,7 +505,7 @@ async def _upsert_fund_classes(db: object, batch: list[dict]) -> None:
             continue
         for fc in fund_classes:
             try:
-                await db.execute(  # type: ignore[union-attr]
+                await db.execute(
                     text("""
                         INSERT INTO sec_fund_classes
                             (cik, series_id, series_name, class_id, class_name, ticker, data_fetched_at)
@@ -514,10 +523,10 @@ async def _upsert_fund_classes(db: object, batch: list[dict]) -> None:
                     "nport_fund_class_upsert_failed",
                     cik=cik, class_id=fc.get("class_id"), error=str(exc),
                 )
-    await db.commit()  # type: ignore[union-attr]
+    await db.commit()
 
 
-def _parse_series_class_header(sgml_text: str, result: dict) -> None:
+def _parse_series_class_header(sgml_text: str, result: dict[str, Any]) -> None:
     """Extract ALL series and classes from EDGAR filing header SGML.
 
     Populates result["fund_classes"] with list of dicts:
@@ -529,7 +538,7 @@ def _parse_series_class_header(sgml_text: str, result: dict) -> None:
     """
     import re
 
-    classes: list[dict] = []
+    classes: list[dict[str, Any]] = []
 
     series_blocks = re.split(r"<SERIES>", sgml_text)
     for block in series_blocks[1:]:  # skip text before first <SERIES>

@@ -1046,6 +1046,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/screener/catalog/{external_id}/fact-sheet",
+    "name": "get_fund_fact_sheet"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/screener/facets",
     "name": "get_screener_facets"
   },
@@ -1086,8 +1091,8 @@
   },
   {
     "method": "GET",
-    "path": "/api/v1/search",
-    "name": "global_search"
+    "path": "/api/v1/search/holdings/reverse",
+    "name": "reverse_holdings_lookup"
   },
   {
     "method": "GET",

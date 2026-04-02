@@ -410,7 +410,7 @@ EMPTY_TRANSFORM: dict[str, Any] = {
 
 def apply_transform(
     series_id: str,
-    observations: list[FredObservation] | list[dict],
+    observations: list[FredObservation] | list[dict[str, Any]],
     transform: str | None,
 ) -> dict[str, Any]:
     """Apply a transform to observations.

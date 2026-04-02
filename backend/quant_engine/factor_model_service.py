@@ -35,7 +35,7 @@ class FactorContributionResult:
 
     systematic_risk_pct: float  # % of total variance from factors
     specific_risk_pct: float  # % of total variance idiosyncratic
-    factor_contributions: list[dict]  # [{factor_label, pct_contribution}]
+    factor_contributions: list[dict[str, object]]  # [{factor_label, pct_contribution}]
     r_squared: float  # overall model fit
 
 

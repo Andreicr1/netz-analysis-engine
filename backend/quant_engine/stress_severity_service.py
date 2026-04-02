@@ -143,7 +143,7 @@ _DEFAULT_CONFIG: StressSeverityConfig = {
 # ---------------------------------------------------------------------------
 
 
-def resolve_stress_config(config: dict | None = None) -> StressSeverityConfig:
+def resolve_stress_config(config: dict[str, Any] | None = None) -> StressSeverityConfig:
     """Extract stress severity config from calibration config dict.
 
     Falls back to hardcoded credit defaults if config is None or malformed.
@@ -193,7 +193,7 @@ def _grade_score(score: int, boundaries: list[tuple[int, str]]) -> str:
 def compute_stress_severity(
     snapshot: dict[str, Any],
     *,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
 ) -> StressSeverityResult:
     """Compute graded stress severity from a macro snapshot.
 

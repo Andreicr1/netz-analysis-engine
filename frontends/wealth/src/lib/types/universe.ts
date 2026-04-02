@@ -5,6 +5,8 @@ export type InstrumentType = "fund" | "bond" | "equity";
 export interface UniverseAsset {
 	instrument_id: string;
 	fund_name: string;
+	ticker?: string | null;
+	isin?: string | null;
 	instrument_type?: InstrumentType | null;
 	block_id: string | null;
 	geography: string | null;

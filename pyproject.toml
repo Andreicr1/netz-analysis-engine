@@ -132,8 +132,33 @@ warn_return_any = true
 warn_unused_configs = true
 
 [[tool.mypy.overrides]]
-module = ["redis.*", "sse_starlette.*", "edgar.*", "rapidfuzz.*", "pyarrow.*", "duckdb.*", "pgvector.*", "yfinance.*", "scipy.*"]
+module = [
+    "redis.*", "sse_starlette.*", "edgar.*", "rapidfuzz.*", "pyarrow.*",
+    "duckdb.*", "pgvector.*", "yfinance.*", "scipy.*",
+    "asyncpg", "asyncpg.*", "fitz", "fitz.*", "pandas", "pandas.*",
+    "reportlab.*", "yaml", "jsonschema", "dateutil.*", "requests",
+    "cachetools", "openpyxl.*", "boto3", "botocore.*", "sklearn.*",
+    "statsmodels.*", "datacommons_client", "aeon.*", "pymoo.*",
+    "pymc", "arviz", "svglib.*", "pypdf", "edgartools", "docx",
+    "lmstudio", "aiohttp", "azure.*",
+    "app.domains.credit.modules.deals.ai_mode",
+    "app.domains.credit.modules.ai.ingest_job_model",
+    "app.domains.credit.modules.deals.doc_reclassification",
+    "app.domains.credit.modules.actions.models",
+    "app.services.presentation_data",
+    "app.services.presentation_builder",
+]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "tests", "tests.*",
+    "scripts", "scripts.*",
+    "tmp_apply_0060_0061", "tmp_apply_views",
+    "tmp_e2e_bloco1", "tmp_e2e_full", "tmp_e2e_preconditions",
+    "app.core.db.migrations.*", "app.core.db.migrations.versions.*",
+]
+disable_error_code = ["no-untyped-def", "no-untyped-call"]
 
 # ── Import architecture enforcement (import-linter) ──────────────────
 [tool.importlinter]

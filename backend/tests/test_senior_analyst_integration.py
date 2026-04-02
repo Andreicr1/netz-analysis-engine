@@ -138,7 +138,7 @@ class TestCorrelationEndToEnd:
             average_correlation=result.average_correlation,
             baseline_average_correlation=result.baseline_average_correlation,
             regime_shift_detected=result.regime_shift_detected,
-            computed_at=datetime.fromisoformat(result.computed_at),
+            computed_at=result.computed_at if isinstance(result.computed_at, datetime) else datetime.fromisoformat(result.computed_at),
         )
         assert schema.instrument_count == 3
 

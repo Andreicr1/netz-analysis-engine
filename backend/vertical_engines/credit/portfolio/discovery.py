@@ -106,7 +106,7 @@ def discover_active_investments(
         target_return = profile.target_return if profile else None
         strategy = profile.strategy_type if profile else None
 
-        transition_log: list[dict] = []
+        transition_log: list[dict[str, object]] = []
         if existing and existing.transition_log:
             transition_log = list(existing.transition_log)
 

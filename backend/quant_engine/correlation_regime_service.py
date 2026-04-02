@@ -119,7 +119,7 @@ def _marchenko_pastur_denoise(corr_matrix: np.ndarray, q: float) -> np.ndarray:
     denoised = denoised / np.outer(d, d)
     np.fill_diagonal(denoised, 1.0)
 
-    return denoised
+    return np.asarray(denoised)
 
 
 def _compute_concentration(

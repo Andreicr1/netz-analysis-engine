@@ -27,6 +27,7 @@ from __future__ import annotations
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 import structlog
@@ -333,30 +334,30 @@ class DDReportEngine:
         manager_name = attrs.get("manager_name")
 
         # ── Parallel evidence gathering ───────────────────────────────
-        def _run_quant() -> dict:
+        def _run_quant() -> dict[str, Any]:
             return gather_quant_metrics(db, instrument_id=fund_id, organization_id=organization_id)
 
-        def _run_risk() -> dict:
+        def _run_risk() -> dict[str, Any]:
             return gather_risk_metrics(db, instrument_id=fund_id, organization_id=organization_id)
 
-        def _run_nport() -> dict:
+        def _run_nport() -> dict[str, Any]:
             if sec_universe == "registered_us" and fund_cik:
                 return gather_sec_nport_data(db, fund_cik=fund_cik)
             return {}
 
-        def _run_13f() -> dict:
+        def _run_13f() -> dict[str, Any]:
             return gather_sec_13f_data(db, manager_name=manager_name)
 
-        def _run_adv() -> dict:
+        def _run_adv() -> dict[str, Any]:
             return gather_sec_adv_data(db, manager_name=manager_name)
 
-        def _run_enrichment() -> dict:
+        def _run_enrichment() -> dict[str, Any]:
             return gather_fund_enrichment(db, fund_cik=fund_cik, sec_universe=sec_universe)
 
-        def _run_prospectus_stats() -> dict:
+        def _run_prospectus_stats() -> dict[str, Any]:
             return gather_prospectus_stats(db, fund_cik=fund_cik)
 
-        def _run_prospectus_returns() -> list:
+        def _run_prospectus_returns() -> list[Any]:
             return gather_prospectus_returns(db, fund_cik=fund_cik)
 
         tasks = {
@@ -404,7 +405,7 @@ class DDReportEngine:
             search_fund_firm_context_sync,
         )
 
-        documents: list[dict] = []
+        documents: list[dict[str, Any]] = []
         try:
             query_text = "investment philosophy strategy risk management"
             embed_result = generate_embeddings([query_text])
@@ -607,7 +608,7 @@ class DDReportEngine:
         if report:
             completed = all(ch.status == "completed" for ch in chapters)
             report.status = "pending_approval" if completed else "draft"
-            report.confidence_score = confidence_score
+            report.confidence_score = Decimal(str(confidence_score))
             report.decision_anchor = decision_anchor
 
         # Delete existing chapters before re-inserting (regeneration safety)

@@ -13,6 +13,8 @@ Usage:
 
 from __future__ import annotations
 
+from typing import Any
+
 # ── Canonical table classification ──────────────────────────────────────────
 # Single source of truth for which tables are tenant-scoped vs global.
 # Derived from all migrations (0001-0015). Keep in sync when adding tables.
@@ -118,7 +120,7 @@ def audit_rls_from_migrations() -> list[str]:
     return errors
 
 
-def audit_rls_from_db(conn) -> list[str]:  # noqa: ANN001
+def audit_rls_from_db(conn: Any) -> list[str]:
     """Live audit: verify actual PG catalog matches expected RLS coverage.
 
     Parameters
@@ -171,7 +173,7 @@ def audit_rls_from_db(conn) -> list[str]:  # noqa: ANN001
         ORDER BY tablename, policyname
     """)
     policy_rows = policy_result.fetchall()
-    policies_by_table: dict[str, list] = {}
+    policies_by_table: dict[str, list[dict[str, Any]]] = {}
     for row in policy_rows:
         table = row[1]
         policies_by_table.setdefault(table, []).append({

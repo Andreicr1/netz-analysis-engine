@@ -11,7 +11,7 @@ Config is injected as parameter by callers via ConfigService.get("liquid_funds",
 """
 
 from dataclasses import dataclass
-from typing import TypedDict
+from typing import Any, TypedDict
 
 import numpy as np
 import structlog
@@ -56,7 +56,7 @@ _DEFAULT_CVAR_CONFIG: dict[str, ProfileCVaRConfig] = {
 
 
 def resolve_cvar_config(
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
 ) -> dict[str, ProfileCVaRConfig]:
     """Extract per-profile CVaR config from portfolio_profiles config dict.
 
@@ -193,7 +193,7 @@ def check_breach_status(
     profile: str,
     cvar_current: float,
     consecutive_breach_days: int = 0,
-    config: dict | None = None,
+    config: dict[str, Any] | None = None,
 ) -> BreachStatus:
     """Check breach status for a profile given current CVaR.
 
@@ -210,7 +210,9 @@ def check_breach_status(
 
     """
     profiles = resolve_cvar_config(config)
-    profile_config = profiles.get(profile, _DEFAULT_CVAR_CONFIG.get(profile, {}))
+    profile_config: ProfileCVaRConfig = profiles.get(
+        profile, _DEFAULT_CVAR_CONFIG.get(profile, _DEFAULT_CVAR_CONFIG["conservative"]),
+    )
     cvar_limit = profile_config["limit"]
 
     utilization = get_cvar_utilization(cvar_current, cvar_limit)

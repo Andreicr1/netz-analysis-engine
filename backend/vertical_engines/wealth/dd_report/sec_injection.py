@@ -103,6 +103,7 @@ def gather_sec_nport_data(
     db: Session,
     *,
     fund_cik: str | None,
+    holdings_limit: int = 10,
 ) -> dict[str, Any]:
     """Gather N-PORT fund-level holdings for DD report evidence.
 
@@ -116,6 +117,8 @@ def gather_sec_nport_data(
         Sync database session.
     fund_cik : str | None
         Fund CIK from sec_registered_funds (N-PORT filer).
+    holdings_limit : int
+        Number of top holdings to return (default 10).
 
     """
     if not fund_cik:
@@ -183,7 +186,7 @@ def gather_sec_nport_data(
             if v > 0
         }
 
-        # Top 10 holdings by pct_of_nav
+        # Top N holdings by pct_of_nav
         sorted_holdings = sorted(
             holdings, key=lambda h: float(h.pct_of_nav or 0), reverse=True,
         )
@@ -195,7 +198,7 @@ def gather_sec_nport_data(
                 "pct_of_nav": round(float(h.pct_of_nav or 0), 2),
                 "market_value": h.market_value,
             }
-            for h in sorted_holdings[:10]
+            for h in sorted_holdings[:holdings_limit]
         ]
 
         # Get latest style snapshot
@@ -285,6 +288,72 @@ def gather_sec_nport_data(
     except Exception:
         logger.exception("sec_nport_gather_failed", fund_cik=fund_cik)
         return {}
+
+
+def gather_nport_sector_history(
+    db: Session,
+    *,
+    fund_cik: str | None,
+) -> list[dict[str, Any]]:
+    """Gather historical sector weight allocation from N-PORT data.
+
+    Returns a list of dicts with report_date and sector_weights.
+    Used for area-stack charts in Fact Sheets.
+    """
+    if not fund_cik:
+        return []
+
+    try:
+        from app.shared.models import SecNportHolding
+
+        # Get all unique report dates for this fund
+        report_dates = (
+            db.query(SecNportHolding.report_date)
+            .filter(SecNportHolding.cik == fund_cik)
+            .distinct()
+            .order_by(SecNportHolding.report_date.asc())
+            .all()
+        )
+        if not report_dates:
+            return []
+
+        history = []
+        for (rd,) in report_dates:
+            # Aggregate by sector for this date
+            holdings = (
+                db.query(SecNportHolding)
+                .filter(
+                    SecNportHolding.cik == fund_cik,
+                    SecNportHolding.report_date == rd,
+                )
+                .all()
+            )
+            if not holdings:
+                continue
+
+            # Compute sector weights (group by sector, sum pct_of_nav)
+            sector_totals: dict[str, float] = {}
+            for h in holdings:
+                sector = h.sector or "Other"
+                pct = float(h.pct_of_nav or 0)
+                sector_totals[sector] = sector_totals.get(sector, 0.0) + pct
+
+            sector_weights = {
+                s: round(v / 100, 4)
+                for s, v in sorted(sector_totals.items(), key=lambda x: -x[1])
+                if v > 0
+            }
+
+            history.append({
+                "report_date": rd.isoformat(),
+                "sector_weights": sector_weights,
+            })
+
+        return history
+
+    except Exception:
+        logger.exception("sec_nport_history_failed", fund_cik=fund_cik)
+        return []
 
 
 def gather_fund_enrichment(

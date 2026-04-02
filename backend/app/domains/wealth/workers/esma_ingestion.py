@@ -256,6 +256,11 @@ async def run_esma_ingestion() -> dict:
                 "tickers_resolved": ticker_count,
                 "errors": errors,
             }
+
+            # Refresh Materialized Views for screener and global search
+            from app.domains.wealth.services.view_refresh import refresh_screener_views
+            await refresh_screener_views(db)
+
             logger.info("esma_ingestion.complete", **summary)
             return summary
 

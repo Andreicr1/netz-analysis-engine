@@ -20,20 +20,20 @@ MIN_NAV_OBSERVATIONS = 30
 # ── Backend detection ──────────────────────────────────────────────────────
 
 try:
-    import talib as _talib  # type: ignore[import]
+    import talib as _talib  # type: ignore[import-not-found]
 
     _BACKEND = "talib"
 except ImportError:
-    _talib = None  # type: ignore[assignment]
+    _talib = None
     try:
-        import pandas_ta as _pta  # type: ignore[import]
+        import pandas_ta as _pta  # type: ignore[import-not-found]
 
         _BACKEND = "pandas_ta"
     except ImportError:
-        _pta = None  # type: ignore[assignment]
+        _pta = None
         _BACKEND = "none"
 
-_NEUTRAL = {"rsi_norm": None, "bb_pos": None, "momentum_score": None}
+_NEUTRAL: dict[str, float | None] = {"rsi_norm": None, "bb_pos": None, "momentum_score": None}
 
 
 def _compute_talib(close_f: np.ndarray) -> dict[str, float | None]:

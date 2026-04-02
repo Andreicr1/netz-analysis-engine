@@ -449,16 +449,17 @@ html, body {
 
 def _ch_order(ch: Any) -> int:
     if isinstance(ch, dict):
-        return ch.get("chapter_order", ch.get("order", 0))
-    return getattr(ch, "order", getattr(ch, "chapter_order", 0))
+        return int(ch.get("chapter_order") or ch.get("order") or 0)
+    raw: Any = getattr(ch, "order", getattr(ch, "chapter_order", 0))
+    return int(raw)
 
 
 def _ch_title(ch: Any) -> str:
     if isinstance(ch, dict):
-        tag = ch.get("chapter_tag", ch.get("tag", ""))
-        return ch.get("title", tag.replace("_", " ").title())
-    tag = getattr(ch, "tag", getattr(ch, "chapter_tag", ""))
-    return getattr(ch, "title", tag.replace("_", " ").title())
+        tag: str = ch.get("chapter_tag", ch.get("tag", "")) or ""
+        return str(ch.get("title", tag.replace("_", " ").title()))
+    tag_attr: str = getattr(ch, "tag", getattr(ch, "chapter_tag", "")) or ""
+    return str(getattr(ch, "title", tag_attr.replace("_", " ").title()))
 
 
 def _ch_content_md(ch: Any) -> str | None:
@@ -469,26 +470,28 @@ def _ch_content_md(ch: Any) -> str | None:
 
 def _ch_evidence(ch: Any) -> dict[str, Any]:
     if isinstance(ch, dict):
-        return ch.get("evidence_refs", {})
-    return getattr(ch, "evidence_refs", {}) or {}
+        result: dict[str, Any] = ch.get("evidence_refs", {})
+        return result
+    return dict(getattr(ch, "evidence_refs", {}) or {})
 
 
 def _ch_quant(ch: Any) -> dict[str, Any]:
     if isinstance(ch, dict):
-        return ch.get("quant_data", {})
-    return getattr(ch, "quant_data", {}) or {}
+        result: dict[str, Any] = ch.get("quant_data", {})
+        return result
+    return dict(getattr(ch, "quant_data", {}) or {})
 
 
 def _ch_critic_iter(ch: Any) -> int:
     if isinstance(ch, dict):
-        return ch.get("critic_iterations", 0)
-    return getattr(ch, "critic_iterations", 0)
+        return int(ch.get("critic_iterations", 0))
+    return int(getattr(ch, "critic_iterations", 0))
 
 
 def _ch_critic_status(ch: Any) -> str:
     if isinstance(ch, dict):
-        return ch.get("critic_status", "pending")
-    return getattr(ch, "critic_status", "pending")
+        return str(ch.get("critic_status", "pending"))
+    return str(getattr(ch, "critic_status", "pending"))
 
 
 def _sorted_chapters(data: DDReportPDFData) -> list[Any]:
@@ -733,7 +736,7 @@ def _chapter_page(
 # ---------------------------------------------------------------------------
 
 
-def render_dd_report(data: DDReportPDFData, *, language: str = "en") -> str:
+def render_dd_report(data: DDReportPDFData, *, language: Language = "en") -> str:
     """Render a complete DD Report as self-contained HTML.
 
     Parameters

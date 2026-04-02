@@ -82,7 +82,8 @@ def _extract_org_id_from_jwt_lightweight(token: str) -> str | None:
         padded = parts[1] + "=" * (-len(parts[1]) % 4)
         payload = json.loads(base64.urlsafe_b64decode(padded))
         org_claims = payload.get("o", {})
-        return org_claims.get("id")
+        value = org_claims.get("id")
+        return str(value) if value is not None else None
     except Exception:
         return None
 
@@ -101,7 +102,8 @@ def _extract_org_id(request: Request) -> str | None:
         if dev_header:
             try:
                 data = _json.loads(dev_header)
-                return data.get("org_id")
+                value = data.get("org_id")
+                return str(value) if value is not None else None
             except Exception:
                 pass
 

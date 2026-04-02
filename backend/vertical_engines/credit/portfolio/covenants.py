@@ -41,7 +41,7 @@ def build_covenant_surveillance(
     ).scalars().all())
     latest_test_by_covenant: dict[uuid.UUID, CovenantTest] = {}
     for t in all_tests:
-        if t.covenant_id not in latest_test_by_covenant:
+        if t.covenant_id is not None and t.covenant_id not in latest_test_by_covenant:
             latest_test_by_covenant[t.covenant_id] = t
 
     test_ids = [t.id for t in latest_test_by_covenant.values()]
@@ -51,7 +51,7 @@ def build_covenant_surveillance(
             CovenantBreach.covenant_test_id.in_(test_ids),
         ),
     ).scalars().all()) if test_ids else []
-    breach_by_test: dict[uuid.UUID, CovenantBreach] = {b.covenant_test_id: b for b in all_breaches}
+    breach_by_test: dict[uuid.UUID, CovenantBreach] = {b.covenant_test_id: b for b in all_breaches if b.covenant_test_id is not None}
 
     saved: list[CovenantStatusRegister] = []
     for inv in investments:

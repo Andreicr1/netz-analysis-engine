@@ -9,7 +9,7 @@ panels/fields to show vs badge as "No Disclosure".
 from __future__ import annotations
 
 from datetime import date
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -114,3 +114,41 @@ class UnifiedCatalogPage(BaseModel):
     page_size: int
     has_next: bool
     facets: CatalogFacets | None = None
+
+
+# ── Fact Sheet Support ──
+
+
+class FundHolding(BaseModel):
+    name: str
+    cusip: str | None = None
+    sector: str | None = None
+    pct_of_nav: float
+    market_value: float | None = None
+
+
+class TeamMember(BaseModel):
+    person_name: str
+    title: str | None = None
+    role: str | None = None
+    education: str | None = None
+    certifications: list[str] = Field(default_factory=list)
+    years_experience: int | None = None
+    bio_summary: str | None = None
+
+
+class NavPoint(BaseModel):
+    nav_date: date
+    nav: float
+
+
+class FundFactSheet(BaseModel):
+    fund: UnifiedFundItem
+    team: list[TeamMember] = Field(default_factory=list)
+    top_holdings: list[FundHolding] = Field(default_factory=list)
+    annual_returns: list[dict[str, Any]] = Field(default_factory=list)
+    nav_history: list[NavPoint] = Field(default_factory=list)
+    sector_history: list[dict[str, Any]] = Field(default_factory=list)
+    prospectus_stats: dict[str, Any] | None = None
+    share_classes: list[dict[str, Any]] = Field(default_factory=list)
+    scoring_metrics: dict[str, Any] | None = None

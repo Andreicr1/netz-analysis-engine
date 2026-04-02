@@ -191,15 +191,7 @@
 	let enrichingDetail = $state(false);
 
 	function openFundDetail(item: UnifiedFundItem) {
-		// Registered US funds have full detail page at /screener/[cik]
-		if (item.universe === "registered_us") {
-			goto(`/screener/${item.external_id}`);
-			return;
-		}
-		// Open panel immediately with catalog data, then enrich
-		selectedFund = item;
-		panelOpen = true;
-		enrichDetail(item.external_id);
+		goto(`/screener/fund/${item.external_id}`);
 	}
 
 	async function enrichDetail(externalId: string) {
@@ -302,7 +294,6 @@
 	<div class="scr-topbar">
 		<div class="scr-topbar-left">
 			<h1 class="scr-title">Screener</h1>
-			<a href="/screener/managers" class="scr-btn scr-btn--outline">Managers</a>
 		</div>
 		<div class="scr-topbar-right">
 			{#if activeTab === "catalog"}

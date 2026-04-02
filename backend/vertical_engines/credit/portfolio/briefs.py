@@ -47,20 +47,20 @@ def build_board_monitoring_briefs(
         risks = list(db.execute(select(InvestmentRiskRegistry).where(InvestmentRiskRegistry.fund_id == fund_id)).scalars().all())
 
     by_inv_drift: dict[uuid.UUID, list[PerformanceDriftFlag]] = defaultdict(list)
-    for row in drifts:
-        by_inv_drift[row.investment_id].append(row)
+    for drift_row in drifts:
+        by_inv_drift[drift_row.investment_id].append(drift_row)
 
     by_inv_cov: dict[uuid.UUID, list[CovenantStatusRegister]] = defaultdict(list)
-    for row in covenants:
-        by_inv_cov[row.investment_id].append(row)
+    for cov_row in covenants:
+        by_inv_cov[cov_row.investment_id].append(cov_row)
 
     by_inv_cash: dict[uuid.UUID, list[CashImpactFlag]] = defaultdict(list)
-    for row in cash_flags:
-        by_inv_cash[row.investment_id].append(row)
+    for cash_row in cash_flags:
+        by_inv_cash[cash_row.investment_id].append(cash_row)
 
     by_inv_risk: dict[uuid.UUID, list[InvestmentRiskRegistry]] = defaultdict(list)
-    for row in risks:
-        by_inv_risk[row.investment_id].append(row)
+    for risk_row in risks:
+        by_inv_risk[risk_row.investment_id].append(risk_row)
 
     saved: list[BoardMonitoringBrief] = []
     for inv in investments:
@@ -109,8 +109,8 @@ def build_board_monitoring_briefs(
         ).scalar_one_or_none()
 
         if existing is None:
-            row = BoardMonitoringBrief(**brief_payload)
-            db.add(row)
+            brief = BoardMonitoringBrief(**brief_payload)
+            db.add(brief)
             db.flush()
         else:
             for key_name, value in brief_payload.items():
@@ -118,9 +118,9 @@ def build_board_monitoring_briefs(
                     continue
                 setattr(existing, key_name, value)
             db.flush()
-            row = existing
+            brief = existing
 
-        saved.append(row)
+        saved.append(brief)
 
     db.flush()
     logger.info("build_board_monitoring_briefs.done", fund_id=str(fund_id), count=len(saved))

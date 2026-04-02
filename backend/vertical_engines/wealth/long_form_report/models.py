@@ -63,10 +63,10 @@ class LongFormReportData:
     max_drawdown: float | None = None
 
     # Stress scenarios
-    stress: list[dict] = field(default_factory=list)
+    stress: list[dict[str, Any]] = field(default_factory=list)
 
     # Holdings
-    holdings: list[dict] = field(default_factory=list)
+    holdings: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(frozen=True, slots=True)

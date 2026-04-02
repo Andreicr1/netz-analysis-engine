@@ -35,7 +35,7 @@ class InstrumentScreeningResult:
     required_analysis_type: str  # dd_report | bond_brief | none
 
     @property
-    def layer_results_dict(self) -> list[dict]:
+    def layer_results_dict(self) -> list[dict[str, object]]:
         """Serialize layer_results for JSONB storage."""
         return [
             {

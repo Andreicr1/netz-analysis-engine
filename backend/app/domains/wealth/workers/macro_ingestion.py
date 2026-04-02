@@ -16,16 +16,20 @@ See fred_ingestion.py header for cutover sequence.
 DO NOT run both workers simultaneously.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
+from typing import Any
 
 import redis.asyncio as aioredis
 import structlog
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config.settings import settings
 from app.core.db.engine import async_session_factory as async_session
@@ -50,9 +54,9 @@ MACRO_INGESTION_LOCK_ID = 43
 
 def _obs_to_macro_data_rows(
     raw_observations: dict[str, list[FredObservation]],
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Convert FredObservation dicts to macro_data upsert rows."""
-    rows: list[dict] = []
+    rows: list[dict[str, Any]] = []
     for series_id, obs_list in raw_observations.items():
         for obs in obs_list:
             if obs.value is None:
@@ -76,7 +80,7 @@ def _obs_to_macro_data_rows(
     return rows
 
 
-async def _write_macro_cache(snapshot_data: dict, today: date) -> None:
+async def _write_macro_cache(snapshot_data: dict[str, Any], today: date) -> None:
     """Write macro snapshot data to Redis cache for fast dashboard reads."""
     try:
         r = aioredis.Redis(connection_pool=get_redis_pool())
@@ -103,7 +107,7 @@ async def _write_macro_cache(snapshot_data: dict, today: date) -> None:
         logger.warning("Failed to write macro cache to Redis — continuing without cache")
 
 
-async def _fetch_bis_data(db) -> list[BisDataPoint] | None:
+async def _fetch_bis_data(db: AsyncSession) -> list[BisDataPoint] | None:
     """Query BIS hypertable for recent credit cycle data. Returns None on failure."""
     try:
         bis_rows = await db.execute(
@@ -123,7 +127,7 @@ async def _fetch_bis_data(db) -> list[BisDataPoint] | None:
         return None
 
 
-async def _fetch_imf_data(db) -> list[ImfDataPoint] | None:
+async def _fetch_imf_data(db: AsyncSession) -> list[ImfDataPoint] | None:
     """Query IMF hypertable for recent WEO forecasts. Returns None on failure."""
     try:
         imf_rows = await db.execute(
@@ -146,7 +150,7 @@ async def _fetch_imf_data(db) -> list[ImfDataPoint] | None:
 
 async def run_macro_ingestion(
     lookback_years: int = 10,
-) -> dict:
+) -> dict[str, Any]:
     """Fetch all FRED series, compute regional scores, store snapshot.
 
     Returns summary dict with series counts and snapshot status.
@@ -238,7 +242,7 @@ async def run_macro_ingestion(
             macro_rows = _obs_to_macro_data_rows(raw_observations)
             if macro_rows:
                 # Deduplicate by PK
-                seen: dict[tuple, dict] = {}
+                seen: dict[tuple[str, date], dict[str, Any]] = {}
                 for r in macro_rows:
                     seen[(r["series_id"], r["obs_date"])] = r
                 macro_rows = list(seen.values())
@@ -261,6 +265,10 @@ async def run_macro_ingestion(
             await db.commit()
 
             await _write_macro_cache(snapshot_data, today)
+
+            # Refresh Materialized Views for macro performance layer
+            from app.domains.wealth.services.macro_view_refresh import refresh_macro_views
+            await refresh_macro_views(db)
 
             logger.info(
                 "Macro ingestion complete",

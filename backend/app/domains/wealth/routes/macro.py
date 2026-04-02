@@ -129,50 +129,53 @@ async def get_macro_scores(
     user: CurrentUser = Depends(get_current_user),
 ) -> MacroScoresResponse:
     """Return the most recent regional macro scores and global indicators.
-
-    Scores are percentile-ranked (0-100, 50 = historical median).
-    Higher = better conditions (except inverted indicators like VIX).
+    
+    Refactored to use mv_macro_regional_summary for performance.
     """
-    stmt = (
-        select(MacroRegionalSnapshot)
-        .order_by(MacroRegionalSnapshot.as_of_date.desc())
-        .limit(1)
-    )
+    from sqlalchemy import text
+    
+    # 1. Get regional summary from view
+    stmt = text("SELECT * FROM mv_macro_regional_summary")
     result = await db.execute(stmt)
-    snapshot = result.scalar_one_or_none()
+    rows = result.all()
 
-    if snapshot is None:
+    if not rows:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No macro snapshot available. Run macro ingestion worker first.",
         )
 
-    data = snapshot.data_json
-
-    # Parse regions
+    as_of_date = rows[0].as_of_date
     regions: dict[str, RegionalScoreRead] = {}
-    for region_key, region_data in data.get("regions", {}).items():
+    
+    for r in rows:
+        region_key = r.region_key
         dimensions = {
             dim: DimensionScoreRead(**dim_data)
-            for dim, dim_data in region_data.get("dimensions", {}).items()
+            for dim, dim_data in r.dimensions.items()
         }
         freshness = {
             sid: DataFreshnessRead(**f_data)
-            for sid, f_data in region_data.get("data_freshness", {}).items()
+            for sid, f_data in r.data_freshness.items()
         }
         analysis_text = _build_analysis_text(
-            region_key, region_data["composite_score"], dimensions,
+            region_key, float(r.composite_score), dimensions,
         )
         regions[region_key] = RegionalScoreRead(
-            composite_score=region_data["composite_score"],
-            coverage=region_data["coverage"],
+            composite_score=float(r.composite_score),
+            coverage=float(r.coverage),
             dimensions=dimensions,
             data_freshness=freshness,
             analysis_text=analysis_text,
         )
 
-    # Parse global indicators
-    gi_data = data.get("global_indicators", {})
+    # 2. Get global indicators from the main snapshot (global indicators are not yet flattened)
+    # Falling back to the latest snapshot for global indicators specifically
+    stmt_gi = select(MacroRegionalSnapshot).order_by(MacroRegionalSnapshot.as_of_date.desc()).limit(1)
+    res_gi = await db.execute(stmt_gi)
+    full_snapshot = res_gi.scalar_one_or_none()
+    
+    gi_data = full_snapshot.data_json.get("global_indicators", {}) if full_snapshot else {}
     global_indicators = GlobalIndicatorsRead(
         geopolitical_risk_score=gi_data.get("geopolitical_risk_score", 50.0),
         energy_stress=gi_data.get("energy_stress", 50.0),
@@ -181,7 +184,7 @@ async def get_macro_scores(
     )
 
     return MacroScoresResponse(
-        as_of_date=snapshot.as_of_date,
+        as_of_date=as_of_date,
         regions=regions,
         global_indicators=global_indicators,
     )

@@ -72,6 +72,11 @@ async def run_sec_adv_ingestion(
                 "links_created": links_created,
                 "xml_enriched": xml_enriched,
             }
+
+            # Refresh Materialized Views for screener and global search
+            from app.domains.wealth.services.view_refresh import refresh_screener_views
+            await refresh_screener_views(db)
+
             logger.info("sec_adv_ingestion_complete", **summary)
             return summary
 

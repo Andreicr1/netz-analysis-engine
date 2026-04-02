@@ -14,6 +14,7 @@ Design decisions:
 """
 
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
 import numpy as np
 import structlog
@@ -24,7 +25,7 @@ logger = structlog.get_logger()
 def _compute_fold_metrics(
     returns: np.ndarray,
     risk_free_daily: float = 0.04 / 252,
-) -> dict:
+) -> dict[str, Any]:
     """Compute Sharpe, CVaR(95%), and max drawdown for a single fold's return series."""
     if len(returns) == 0:
         return {"sharpe": None, "cvar_95": None, "max_drawdown": None, "n_obs": 0}
@@ -57,7 +58,7 @@ def walk_forward_backtest(
     gap: int = 2,
     min_train_size: int = 252,
     test_size: int = 63,
-) -> dict:
+) -> dict[str, Any]:
     """Walk-forward backtest with expanding window using TimeSeriesSplit.
 
     Args:
@@ -92,7 +93,7 @@ def walk_forward_backtest(
         if len(train_idx) >= min_train_size
     ]
 
-    def _evaluate_fold(args: tuple[int, np.ndarray, np.ndarray]) -> dict:
+    def _evaluate_fold(args: tuple[int, np.ndarray, np.ndarray]) -> dict[str, Any]:
         fold_idx, train_idx, test_idx = args
         test_returns = portfolio_returns[test_idx]
         metrics = _compute_fold_metrics(test_returns)

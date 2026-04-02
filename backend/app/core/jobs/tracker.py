@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import AsyncIterator
 from typing import Any
 
 import redis.asyncio as aioredis
@@ -138,7 +139,7 @@ async def verify_job_owner(job_id: str, organization_id: str) -> bool:
             logger.warning("job_owner_missing job_id=%s org_id=%s", job_id, organization_id)
             return False
         # Pool uses decode_responses=True, so owner is already str
-        return owner == organization_id
+        return bool(owner == organization_id)
     finally:
         await r.aclose()
 
@@ -225,12 +226,12 @@ async def get_job_state(job_id: str) -> dict[str, Any] | None:
         raw = await r.get(f"job:{job_id}:state")
         if raw is None:
             return None
-        return json.loads(raw)
+        return dict(json.loads(raw))
     finally:
         await r.aclose()
 
 
-async def subscribe_job(job_id: str):
+async def subscribe_job(job_id: str) -> AsyncIterator[dict[str, Any]]:
     """Async generator: yields messages from a job's Redis channel.
 
     Each subscriber gets its own Redis connection (pub/sub mode is exclusive).
@@ -248,5 +249,5 @@ async def subscribe_job(job_id: str):
                 yield json.loads(message["data"])
     finally:
         await pubsub.unsubscribe(channel)
-        await pubsub.aclose()
+        await pubsub.aclose()  # type: ignore[no-untyped-call]
         await r.aclose()

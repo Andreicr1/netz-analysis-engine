@@ -20,12 +20,15 @@ Architecture note: This is a SEPARATE worker. Do NOT merge into risk_calc.py
 or portfolio_eval.py (God worker anti-pattern).
 """
 
+from __future__ import annotations
+
 import asyncio
 from datetime import date, timedelta
+from typing import Any, cast
 
 import numpy as np
 import structlog
-from sqlalchemy import select, text, update
+from sqlalchemy import CursorResult, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db.engine import async_session_factory as async_session
@@ -139,7 +142,7 @@ def _fit_markov_regime(vix_series: list[float]) -> list[float] | None:
     low_vol_idx = int(np.argmin(means))   # lower mean log-VIX = low-vol = risk-on
     high_vol_col = 1 - low_vol_idx
 
-    return filtered_probs[:, high_vol_col].tolist()
+    return list(filtered_probs[:, high_vol_col].tolist())
 
 
 def _classify_regime_from_probs(
@@ -237,12 +240,12 @@ async def _update_snapshots_with_regime_probs(
         .where(PortfolioSnapshot.snapshot_date == today)
         .values(regime_probs=regime_probs_value)
     )
-    result = await db.execute(stmt)
+    result = cast(CursorResult[Any], await db.execute(stmt))
     await db.commit()
     return result.rowcount
 
 
-async def run_regime_fit() -> dict:
+async def run_regime_fit() -> dict[str, Any]:
     """Fit Markov regime model on VIX, persist full series, enrich snapshots."""
     logger.info("Starting Markov regime fitting")
 
@@ -273,7 +276,7 @@ async def run_regime_fit() -> dict:
     # Persist full regime history BEFORE discarding any data
     p_high_vol_series = high_vol_probs
     p_low_vol_series = [1.0 - p for p in p_high_vol_series]
-    vix_or_none: list[float | None] = vix_values
+    vix_or_none: list[float | None] = list(vix_values)
 
     async with async_session() as db:
         n_persisted = await _persist_regime_history(

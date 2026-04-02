@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
@@ -31,7 +33,7 @@ class StrategicAllocationItem(BaseModel):
     rationale: str | None = Field(None, max_length=5000)
 
     @model_validator(mode="after")
-    def validate_weight_bounds(self):
+    def validate_weight_bounds(self) -> StrategicAllocationItem:
         if self.min_weight > self.max_weight:
             raise ValueError("min_weight must be <= max_weight")
         if self.target_weight < self.min_weight or self.target_weight > self.max_weight:
@@ -43,9 +45,9 @@ class StrategicAllocationUpdate(BaseModel):
     allocations: list[StrategicAllocationItem]
 
     @model_validator(mode="after")
-    def validate_weights_sum(self):
+    def validate_weights_sum(self) -> StrategicAllocationUpdate:
         total = sum(a.target_weight for a in self.allocations)
-        if abs(total - 1) > Decimal("0.01"):
+        if abs(total - Decimal("1")) > Decimal("0.01"):
             raise ValueError(f"target_weight values must sum to ~1.0, got {total}")
         return self
 

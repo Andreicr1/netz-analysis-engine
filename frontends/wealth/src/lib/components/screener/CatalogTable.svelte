@@ -5,6 +5,7 @@
 -->
 <script lang="ts">
 	import { untrack } from "svelte";
+	import { goto } from "$app/navigation";
 	import "./screener.css";
 	import { formatCompact, formatPercent } from "@investintell/ui";
 	import type { UnifiedFundItem, UnifiedCatalogPage } from "$lib/types/catalog";
@@ -288,60 +289,59 @@
 			</thead>
 			<tbody>
 				{#each managerGroups as mg (mg.manager_key)}
-					<!-- Manager row (L1) — show only for multi-fund managers (single-fund
-					     managers would just duplicate the fund name as trust fallback) -->
-					{#if !mg.is_standalone && mg.funds.length > 1}
-						<tr
-							class="scr-inst-row ct-manager-row"
-							class:ct-manager-row--expanded={expandedManagers.has(mg.manager_key)}
-							onclick={() => toggleManager(mg.manager_key)}
-						>
-							<td class="ct-col-expand">
-								<span class="ct-chevron" class:ct-chevron--open={expandedManagers.has(mg.manager_key)}>&#9654;</span>
-							</td>
-							<td class="ct-col-check"></td>
-							<td></td>
-							<td class="ct-col-name">
-								<div class="ct-manager-name-cell">
-									<button
-										class="ct-manager-link"
-										onclick={(e) => {
-											e.stopPropagation();
-											if (mg.manager_id) onOpenManager(mg.manager_id);
-										}}
-										title={mg.manager_id ? `View manager (CRD: ${mg.manager_id})` : undefined}
-									>
-										{mg.manager_name}
-									</button>
-									<span class="ct-fund-count">{mg.funds.length} fund{mg.funds.length !== 1 ? "s" : ""}</span>
-								</div>
-							</td>
-							<td></td>
-							<td class="std-aum">{formatAumNeutral(mg.total_aum)}</td>
-							<td></td>
-							<td></td>
-							<td></td>
-						</tr>
-					{/if}
+					<!-- Manager row (L1) — Always show for structured tree -->
+					<tr
+						class="scr-inst-row ct-manager-row"
+						class:ct-manager-row--expanded={expandedManagers.has(mg.manager_key)}
+						onclick={() => toggleManager(mg.manager_key)}
+					>
+						<td class="ct-col-expand">
+							<span class="ct-chevron" class:ct-chevron--open={expandedManagers.has(mg.manager_key)}>&#9654;</span>
+						</td>
+						<td class="ct-col-check"></td>
+						<td class="ct-type-label">Manager</td>
+						<td class="ct-col-name">
+							<div class="ct-manager-name-cell">
+								<button
+									class="ct-manager-link"
+									onclick={(e) => {
+										e.stopPropagation();
+										if (mg.manager_id) onOpenManager(mg.manager_id);
+									}}
+									title={mg.manager_id ? `View manager (CRD: ${mg.manager_id})` : undefined}
+								>
+									{mg.manager_name || "Standalone Funds"}
+								</button>
+								<span class="ct-fund-count">{mg.funds.length} fund{mg.funds.length !== 1 ? "s" : ""}</span>
+							</div>
+						</td>
+						<td></td>
+						<td class="std-aum">{formatAumNeutral(mg.total_aum)}</td>
+						<td></td>
+						<td></td>
+						<td></td>
+					</tr>
 
-					<!-- Fund rows (L2) — shown when manager expanded or standalone -->
-					{#if mg.is_standalone || expandedManagers.has(mg.manager_key)}
+					<!-- Fund rows (L2) — shown when manager expanded -->
+					{#if expandedManagers.has(mg.manager_key)}
 						{#each mg.funds as group (group.fund_key)}
 							<tr
 								class="scr-inst-row ct-fund-row"
-								class:ct-fund-row--nested={!mg.is_standalone && mg.funds.length > 1}
+								class:ct-fund-row--nested={true}
 								class:ct-fund-row--expanded={expandedFunds.has(group.fund_key)}
 								onclick={() => {
-									if (group.has_classes || group.has_vintages) {
-										toggleFund(group.fund_key);
-									} else {
-										onSelectFund(group.representative);
-									}
+									// Navigate to individual fund page
+									goto(`/screener/fund/${group.representative.external_id}`);
 								}}
 							>
 								<td class="ct-col-expand">
 									{#if group.has_classes || group.has_vintages}
-										<span class="ct-chevron ct-chevron--fund" class:ct-chevron--open={expandedFunds.has(group.fund_key)}>&#9654;</span>
+										<button 
+											class="ct-chevron-btn" 
+											onclick={(e) => { e.stopPropagation(); toggleFund(group.fund_key); }}
+										>
+											<span class="ct-chevron ct-chevron--fund" class:ct-chevron--open={expandedFunds.has(group.fund_key)}>&#9654;</span>
+										</button>
 									{/if}
 								</td>
 								<td class="ct-col-check"></td>
@@ -349,7 +349,7 @@
 									<span class="ct-type-label">{fundTypeLabel(group.representative.fund_type)}</span>
 								</td>
 								<td class="ct-col-name">
-									<div class="ct-fund-name-cell" class:ct-fund-name-cell--nested={!mg.is_standalone && mg.funds.length > 1}>
+									<div class="ct-fund-name-cell ct-fund-name-cell--nested">
 										<span class="ct-fund-name" class:ct-fund-name--unnamed={!group.representative.name || group.representative.name.trim() === "" || group.representative.name === "()"}>
 											{formatFundName(group.representative.name)}
 										</span>
@@ -542,7 +542,7 @@
 	/* ── Fund row (L2) ── */
 	.ct-fund-row { cursor: pointer; }
 	.ct-fund-row:hover { background: #f8fafc; }
-	.ct-fund-row--nested { }
+	.ct-fund-row--nested { border-left: 2px solid #e2e8f0; }
 	.ct-fund-row--expanded { background: #f8fafc; }
 
 	.ct-fund-name-cell {
@@ -622,6 +622,18 @@
 	}
 	.ct-chevron--open { transform: rotate(90deg); }
 	.ct-chevron--fund { font-size: 9px; color: #9ca3af; }
+
+	.ct-chevron-btn {
+		background: none;
+		border: none;
+		padding: 4px;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: 4px;
+	}
+	.ct-chevron-btn:hover { background: #e2e8f0; }
 
 	/* ── Vintage rows (L3 — PE/VC) ── */
 	.ct-vintage-row {

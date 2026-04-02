@@ -34,6 +34,8 @@ class UniverseAssetRead(BaseModel):
 
     instrument_id: uuid.UUID
     fund_name: str
+    ticker: str | None = None
+    isin: str | None = None
     block_id: str | None = None
     geography: str | None = None
     investment_geography: str | None = None

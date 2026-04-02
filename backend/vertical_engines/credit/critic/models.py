@@ -47,7 +47,7 @@ class CriticVerdict:
         )
 
 
-INSTRUMENT_TYPE_PROFILES: dict[str, dict] = {
+INSTRUMENT_TYPE_PROFILES: dict[str, dict[str, Any]] = {
     "OPEN_ENDED_FUND": {
         "expected_absent": [
             "tenor", "maturity_date", "fixed_coupon", "principal_amount",

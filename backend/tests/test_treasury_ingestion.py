@@ -250,7 +250,7 @@ class TestTreasuryIngestionWorker:
 
         assert result["status"] == "completed"
         assert result["rows"] == 1
-        mock_db.commit.assert_called_once()
+        assert mock_db.commit.call_count >= 1
 
 
 # ═══════════════════════════════════════════════════════════════════════════

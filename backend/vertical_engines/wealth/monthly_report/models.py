@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
+from typing import Any
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,14 +88,14 @@ class MonthlyReportData:
     core_holdings: list[HoldingRow] = field(default_factory=list)
 
     # Performance page
-    nav_series: list = field(default_factory=list)  # list[NavPoint] from svg_charts
+    nav_series: list[Any] = field(default_factory=list)  # list[NavPoint] from svg_charts
     monthly_returns: list[MonthlyReturnRow] = field(default_factory=list)
-    trailing_periods: dict = field(default_factory=dict)  # {"1m": {...}, "3m": {...}, ...}
+    trailing_periods: dict[str, Any] = field(default_factory=dict)  # {"1m": {...}, "3m": {...}, ...}
 
     # Attribution page
     attribution_narrative: str = ""
-    attribution_rows: list = field(default_factory=list)  # list[dict]
-    attribution_total: dict = field(default_factory=dict)
+    attribution_rows: list[Any] = field(default_factory=list)  # list[dict]
+    attribution_total: dict[str, Any] = field(default_factory=dict)
 
     # Risk page
     risk_narrative: str = ""
@@ -102,15 +103,15 @@ class MonthlyReportData:
     sharpe: float | None = None
     max_drawdown: float | None = None
     cvar_95: float | None = None
-    drawdown_series: list = field(default_factory=list)  # list[DrawdownPoint]
-    stress_scenarios: list = field(default_factory=list)
+    drawdown_series: list[Any] = field(default_factory=list)  # list[DrawdownPoint]
+    stress_scenarios: list[Any] = field(default_factory=list)
 
     # Holdings page
     all_holdings: list[HoldingRow] = field(default_factory=list)
     watchpoints: list[WatchItem] = field(default_factory=list)
 
     # Sidebar
-    snapshot_kv: dict = field(default_factory=dict)  # {"Instruments": "8", ...}
+    snapshot_kv: dict[str, str] = field(default_factory=dict)  # {"Instruments": "8", ...}
 
     # Metadata
     is_backtest: bool = True

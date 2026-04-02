@@ -232,9 +232,9 @@ def compute_regime_tilted_weights(
         # Step 2: Regional score tilt (equity blocks only)
         regional_delta = 0.0
         tilt_source = "regime"
-        region = block_to_region.get(block_id)
-        if region and region in regional_scores and asset_class == "equity":
-            score = regional_scores[region]
+        block_region = block_to_region.get(block_id)
+        if block_region and block_region in regional_scores and asset_class == "equity":
+            score = regional_scores[block_region]
             score_deviation = score - score_neutral  # positive = favorable
             if score_deviation >= 0:
                 room_r = max_w - target
@@ -309,7 +309,8 @@ def extract_regime_from_review(report_json: dict[str, Any]) -> str:
     """
     regime_data = report_json.get("regime")
     if isinstance(regime_data, dict):
-        return regime_data.get("global", "RISK_ON")
+        result = regime_data.get("global", "RISK_ON")
+        return str(result) if result is not None else "RISK_ON"
     return "RISK_ON"
 
 
