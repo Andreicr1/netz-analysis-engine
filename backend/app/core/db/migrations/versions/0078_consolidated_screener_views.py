@@ -64,8 +64,8 @@ def upgrade() -> None:
                 COALESCE(NULLIF(rf.total_assets, 0), fc.net_assets, rf.monthly_avg_net_assets)::numeric as aum_usd,
                 rf.currency::text as currency,
                 rf.domicile::text as domicile,
-                m.firm_name::text as manager_name,
-                m.crd_number::text as manager_id,
+                COALESCE(m.firm_name, rf.fund_name)::text as manager_name,
+                CASE WHEN m.crd_number IS NOT NULL THEN m.crd_number ELSE NULL END::text as manager_id,
                 rf.inception_date as inception_date,
                 rf.total_shareholder_accounts as total_shareholder_accounts,
                 NULL::integer as investor_count,
@@ -91,9 +91,9 @@ def upgrade() -> None:
                 rf.is_fund_of_fund
             FROM sec_registered_funds rf
             LEFT JOIN sec_fund_classes fc ON rf.cik = fc.cik
-            LEFT JOIN sec_managers m ON rf.crd_number = m.crd_number
+            LEFT JOIN sec_managers m ON rf.crd_number = m.crd_number AND m.crd_number NOT LIKE 'cik_%%'
             LEFT JOIN sec_fund_prospectus_stats ps ON fc.series_id = ps.series_id AND fc.class_id = ps.class_id
-            WHERE rf.crd_number IS NOT NULL
+            WHERE TRUE
             AND NOT EXISTS (SELECT 1 FROM sec_etfs e WHERE e.series_id = COALESCE(fc.series_id, rf.series_id))
             AND NOT EXISTS (SELECT 1 FROM sec_bdcs b WHERE b.series_id = COALESCE(fc.series_id, rf.series_id))
             AND NOT EXISTS (SELECT 1 FROM sec_money_market_funds mmf WHERE mmf.series_id = COALESCE(fc.series_id, rf.series_id))
