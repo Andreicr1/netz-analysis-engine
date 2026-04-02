@@ -34,9 +34,11 @@
 		catalog: UnifiedCatalogPage;
 		searchQ: string;
 		currentSort: string;
+		infiniteScroll?: boolean;
+		isLoadingMore?: boolean;
 		onSelectFund: (item: UnifiedFundItem) => void;
 		onSendToDDReview: (items: UnifiedFundItem[]) => void;
-		onPageChange: (page: number) => void;
+		onPageChange?: (page: number) => void;
 		onSortChange: (sort: string) => void;
 		onOpenManager: (managerId: string) => void;
 	}
@@ -45,6 +47,8 @@
 		catalog = EMPTY_CATALOG_PAGE,
 		searchQ = "",
 		currentSort = "name_asc",
+		infiniteScroll = false,
+		isLoadingMore = false,
 		onSelectFund,
 		onSendToDDReview,
 		onPageChange,
@@ -178,13 +182,16 @@
 	let expandedFunds = $state<Set<string>>(new Set());
 	let selectedClasses = $state<Set<string>>(new Set());
 
-	// Reset expanded state when data changes (new page / filter)
+	// Reset expanded state on filter/page change (not on infinite scroll append)
+	let prevItemCount = 0;
 	$effect(() => {
-		// Read managerGroups reactively (triggers on data change)
-		const _groups = managerGroups;
-		// Start collapsed — user clicks to expand
-		expandedManagers = new Set();
-		expandedFunds = new Set();
+		const count = catalog.items.length;
+		// In infinite scroll, items grow monotonically — reset only when count drops (filter change)
+		if (!infiniteScroll || count < prevItemCount) {
+			expandedManagers = new Set();
+			expandedFunds = new Set();
+		}
+		prevItemCount = count;
 	});
 
 	function toggleManager(key: string) {
@@ -252,9 +259,11 @@
 			Send {selectedClasses.size} class{selectedClasses.size > 1 ? "es" : ""} to DD Review
 		</button>
 	{/if}
-	<span class="ct-page-label">
-		Page {catalog.page} of {totalPages}
-	</span>
+	{#if !infiniteScroll}
+		<span class="ct-page-label">
+			Page {catalog.page} of {totalPages}
+		</span>
+	{/if}
 </div>
 
 {#if catalog.items.length === 0}
@@ -454,18 +463,20 @@
 		</table>
 	</div>
 
+	{#if !infiniteScroll}
 	<!-- Server-side pagination -->
 	<div class="scr-pagination">
-		<button class="scr-page-btn" disabled={catalog.page <= 1} onclick={() => onPageChange(catalog.page - 1)}>
+		<button class="scr-page-btn" disabled={catalog.page <= 1} onclick={() => onPageChange?.(catalog.page - 1)}>
 			Prev
 		</button>
 		<span class="scr-page-info">
 			{catalog.page} / {totalPages}
 		</span>
-		<button class="scr-page-btn" disabled={!catalog.has_next} onclick={() => onPageChange(catalog.page + 1)}>
+		<button class="scr-page-btn" disabled={!catalog.has_next} onclick={() => onPageChange?.(catalog.page + 1)}>
 			Next
 		</button>
 	</div>
+	{/if}
 {/if}
 
 <style>

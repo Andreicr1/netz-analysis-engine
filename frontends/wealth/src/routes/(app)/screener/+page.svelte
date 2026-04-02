@@ -11,7 +11,7 @@
 
 	// Catalog types
 	import type { UnifiedFundItem, UnifiedCatalogPage, CatalogFacets, CatalogCategory } from "$lib/types/catalog";
-	import { EMPTY_CATALOG_PAGE, EMPTY_FACETS, CATALOG_CATEGORIES } from "$lib/types/catalog";
+	import { EMPTY_FACETS, CATALOG_CATEGORIES } from "$lib/types/catalog";
 
 	// Manager types
 	import type { SecManagerDetail, SecManagerFundBreakdown } from "$lib/types/sec-analysis";
@@ -49,7 +49,6 @@
 	}
 
 	// ── Catalog state ──
-	let catalog = $derived(((data as any).catalog ?? EMPTY_CATALOG_PAGE) as UnifiedCatalogPage);
 	let catalogFacets = $derived(((data as any).catalogFacets ?? EMPTY_FACETS) as CatalogFacets);
 
 	// ── Screening state ──
@@ -72,6 +71,26 @@
 	let currentSort = $state(initParams.sort ?? "name_asc");
 	let showAllFunds = $state(initParams.has_aum === "false");
 
+	// ── Infinite scroll state ──
+	let allCatalogItems = $state<UnifiedFundItem[]>([]);
+	let totalCatalogCount = $state(0);
+	let isLoadingMore = $state(false);
+	let hasMore = $state(true);
+	let clientPage = $state(2);
+	let fetchAbortCtrl: AbortController | null = null;
+	let sentinelEl = $state<HTMLElement | null>(null);
+
+	// Initialize from SSR data
+	$effect.pre(() => {
+		const serverCatalog = (data as any).catalog as UnifiedCatalogPage | undefined;
+		if (serverCatalog && allCatalogItems.length === 0) {
+			allCatalogItems = serverCatalog.items ?? [];
+			totalCatalogCount = serverCatalog.total ?? 0;
+			hasMore = serverCatalog.has_next ?? false;
+			clientPage = 2;
+		}
+	});
+
 	function buildCatalogParams(): URLSearchParams {
 		const params = new URLSearchParams();
 		params.set("tab", "catalog");
@@ -90,28 +109,86 @@
 		return params;
 	}
 
-	function applyCatalogFilters() {
-		const params = buildCatalogParams();
-		params.set("page", "1");
-		params.set("page_size", "50");
-		goto(`/screener?${params.toString()}`, { invalidateAll: true });
+	// ── Client-side fetch for infinite scroll ──
+	async function fetchCatalogPage(page: number, reset: boolean): Promise<void> {
+		if (fetchAbortCtrl) fetchAbortCtrl.abort();
+		fetchAbortCtrl = new AbortController();
+
+		isLoadingMore = true;
+		try {
+			const params = buildCatalogParams();
+			params.set("page", String(page));
+			params.set("page_size", "50");
+
+			history.replaceState(null, "", `/screener?${params.toString()}`);
+
+			const result = await api.get<UnifiedCatalogPage>(
+				"/screener/catalog",
+				Object.fromEntries(params.entries()),
+				{ signal: fetchAbortCtrl.signal },
+			);
+
+			if (reset) {
+				allCatalogItems = result.items ?? [];
+			} else {
+				allCatalogItems = [...allCatalogItems, ...(result.items ?? [])];
+			}
+			totalCatalogCount = result.total ?? 0;
+			hasMore = result.has_next ?? false;
+			clientPage = page + 1;
+		} catch (err: unknown) {
+			if (err instanceof Error && err.name === "AbortError") return;
+			console.error("catalog fetch failed", err);
+		} finally {
+			isLoadingMore = false;
+		}
 	}
 
-	function catalogPageChange(page: number) {
-		const params = buildCatalogParams();
-		params.set("page", String(page));
-		params.set("page_size", "50");
-		goto(`/screener?${params.toString()}`, { invalidateAll: true });
+	async function loadMore(): Promise<void> {
+		if (isLoadingMore || !hasMore) return;
+		await fetchCatalogPage(clientPage, false);
+	}
+
+	async function resetAndFetch(): Promise<void> {
+		allCatalogItems = [];
+		clientPage = 1;
+		hasMore = true;
+		await fetchCatalogPage(1, true);
+	}
+
+	function applyCatalogFilters() {
+		resetAndFetch();
 	}
 
 	function handleSortChange(sort: string) {
 		currentSort = sort;
-		const params = buildCatalogParams();
-		params.set("sort", sort);
-		params.set("page", "1");
-		params.set("page_size", "50");
-		goto(`/screener?${params.toString()}`, { invalidateAll: true });
+		resetAndFetch();
 	}
+
+	// ── IntersectionObserver for sentinel ──
+	$effect(() => {
+		if (!sentinelEl) return;
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries[0]?.isIntersecting && !isLoadingMore && hasMore) {
+					loadMore();
+				}
+			},
+			{ rootMargin: "200px" },
+		);
+		observer.observe(sentinelEl);
+		return () => observer.disconnect();
+	});
+
+	// ── Synthetic catalog for CatalogTable ──
+	let syntheticCatalog = $derived<UnifiedCatalogPage>({
+		items: allCatalogItems,
+		total: totalCatalogCount,
+		page: clientPage - 1,
+		page_size: 50,
+		has_next: hasMore,
+		facets: null,
+	});
 
 	// ── Dropdown helpers ──
 	function setCategory(e: Event) {
@@ -265,7 +342,7 @@
 
 	// ── CSV Export ──
 	function exportCSV() {
-		const items = catalog.items;
+		const items = allCatalogItems;
 		if (items.length === 0) return;
 		const headers = ["Manager", "Name", "Type", "Strategy", "AUM", "Currency"];
 		const lines = [
@@ -391,22 +468,38 @@
 	</div>
 
 	<!-- ════════════════ CATALOG TABLE ════════════════ -->
-	{#if catalog.total === 0 && !catalogSearchQ && selectedCategories.length <= 1}
+	{#if totalCatalogCount === 0 && !catalogSearchQ && selectedCategories.length <= 1}
 		<div class="scr-error-banner">
 			Unable to load fund catalog. The backend may be unavailable.
 		</div>
 	{/if}
 	<div class="scr-table-card">
 		<CatalogTable
-			{catalog}
+			catalog={syntheticCatalog}
 			searchQ={catalogSearchQ}
 			{currentSort}
+			infiniteScroll={true}
+			{isLoadingMore}
 			onSelectFund={openFundDetail}
 			onSendToDDReview={sendClassesToDDReview}
-			onPageChange={catalogPageChange}
 			onSortChange={handleSortChange}
 			onOpenManager={openManagerDetail}
 		/>
+
+		<!-- Sentinel: IntersectionObserver triggers loadMore() -->
+		<div
+			bind:this={sentinelEl}
+			class="scr-scroll-sentinel"
+			aria-hidden="true"
+		></div>
+
+		{#if isLoadingMore}
+			<div class="scr-loading-more">
+				<span class="scr-loading-dot"></span>
+				<span class="scr-loading-dot"></span>
+				<span class="scr-loading-dot"></span>
+			</div>
+		{/if}
 	</div>
 	{:else}
 	<!-- ════════════════ SCREENING TAB ════════════════ -->
@@ -633,6 +726,35 @@
 		font-weight: 500;
 		margin: 0 24px;
 		flex-shrink: 0;
+	}
+
+	.scr-scroll-sentinel {
+		height: 1px;
+		width: 100%;
+	}
+
+	.scr-loading-more {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 6px;
+		padding: 20px;
+	}
+
+	.scr-loading-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--ii-text-muted, #9ca3af);
+		animation: scr-dot-pulse 1.2s ease-in-out infinite;
+	}
+
+	.scr-loading-dot:nth-child(2) { animation-delay: 0.2s; }
+	.scr-loading-dot:nth-child(3) { animation-delay: 0.4s; }
+
+	@keyframes scr-dot-pulse {
+		0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+		40% { opacity: 1; transform: scale(1); }
 	}
 
 	.scr-btn {

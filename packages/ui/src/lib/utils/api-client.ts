@@ -167,14 +167,17 @@ export class NetzApiClient {
 		};
 	}
 
-	async get<T>(path: string, params?: Record<string, string | number | boolean | undefined>): Promise<T> {
+	async get<T>(path: string, params?: Record<string, string | number | boolean | undefined>, options?: { signal?: AbortSignal }): Promise<T> {
 		const url = buildUrl(this.baseUrl, path, params);
 		const headers = await this.headers();
+		const signal = options?.signal ?? AbortSignal.timeout(this.timeoutMs);
 		// GET is idempotent — retry once on timeout/network error
 		try {
-			const res = await fetch(url, { headers, signal: AbortSignal.timeout(this.timeoutMs) });
+			const res = await fetch(url, { headers, signal });
 			return handleResponse<T>(res);
 		} catch (err) {
+			// Don't retry if caller aborted
+			if (options?.signal && err instanceof DOMException && err.name === "AbortError") throw err;
 			if (err instanceof DOMException && err.name === "TimeoutError") {
 				// Retry once
 				const res = await fetch(url, { headers, signal: AbortSignal.timeout(this.timeoutMs) });
