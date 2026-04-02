@@ -56,12 +56,15 @@ async def list_universe(
     org_id: str = Depends(get_org_id),
 ) -> list[UniverseAssetRead]:
     """List all approved and active funds in the investment universe.
-    
-    Refactored to join mv_unified_assets for enriched metadata (Ticker, ISIN, Geography).
+
+    Joins mv_unified_assets for enriched metadata and universe_approvals
+    for the current approval decision/timestamp.
     """
     from sqlalchemy import Column, MetaData, Table, Text, select
+    from sqlalchemy.sql import and_
 
     from app.domains.wealth.models.instrument_org import InstrumentOrg
+    from app.domains.wealth.models.universe_approval import UniverseApproval
 
     # Dynamic reflection of mv_unified_assets
     _meta = MetaData()
@@ -85,10 +88,17 @@ async def list_universe(
             mv_assets.c.geography,
             mv_assets.c.asset_class,
             InstrumentOrg.approval_status,
-            InstrumentOrg.approval_decision,
-            InstrumentOrg.approved_at,
+            UniverseApproval.decision.label("approval_decision"),
+            UniverseApproval.decided_at.label("approved_at"),
         )
         .join(mv_assets, mv_assets.c.id == InstrumentOrg.instrument_id.cast(Text))
+        .outerjoin(
+            UniverseApproval,
+            and_(
+                UniverseApproval.instrument_id == InstrumentOrg.instrument_id,
+                UniverseApproval.is_current.is_(True),
+            ),
+        )
         .where(InstrumentOrg.approval_status == "approved")
     )
 
@@ -112,7 +122,7 @@ async def list_universe(
             geography=r.geography,
             asset_class=r.asset_class,
             approval_status=r.approval_status,
-            approval_decision=r.approval_decision,
+            approval_decision=r.approval_decision or "approved",
             approved_at=r.approved_at,
         )
         for r in rows

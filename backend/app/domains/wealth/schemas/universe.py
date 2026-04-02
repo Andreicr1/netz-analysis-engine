@@ -41,7 +41,7 @@ class UniverseAssetRead(BaseModel):
     investment_geography: str | None = None
     asset_class: str | None = None
     approval_status: str | None = None
-    approval_decision: str
+    approval_decision: str = "approved"
     approved_at: datetime | None = None
 
 
