@@ -584,8 +584,10 @@ class FactSheetEngine:
             with sync_session_factory() as sync_db, sync_db.begin():
                 sync_db.expire_on_commit = False
                 from sqlalchemy import text
-                safe_oid = str(organization_id).replace("'", "")
-                sync_db.execute(text(f"SET LOCAL app.current_organization_id = '{safe_oid}'"))
+                sync_db.execute(
+                    text("SELECT set_config('app.current_organization_id', :oid, true)"),
+                    {"oid": str(organization_id)},
+                )
                 return self._build_fact_sheet_data(
                     sync_db, portfolio_id, organization_id, as_of, format=format,
                 )

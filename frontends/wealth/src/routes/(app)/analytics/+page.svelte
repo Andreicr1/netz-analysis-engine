@@ -1008,7 +1008,12 @@
 		</div>
 	</div>
 
-	{#if !selectedFundId}
+	{#if instruments.length === 0}
+		<div class="an-fund-empty">
+			No approved funds in universe. <a href="/screener" class="an-fund-link">Import funds via Screener</a> first,
+			then approve them in the <a href="/universe" class="an-fund-link">Assets Universe</a>.
+		</div>
+	{:else if !selectedFundId}
 		<div class="an-fund-empty">
 			Select a fund from the universe to view eVestment-style analytics: risk statistics, drawdown,
 			capture ratios, rolling returns, return distribution, tail risk, peer rankings, and Monte Carlo simulation.
@@ -1098,6 +1103,15 @@
 
 	.an-fund-error {
 		color: var(--ii-danger);
+	}
+
+	.an-fund-link {
+		color: var(--ii-brand-primary);
+		font-weight: 600;
+		text-decoration: none;
+	}
+	.an-fund-link:hover {
+		text-decoration: underline;
 	}
 
 	.an-fund-body {

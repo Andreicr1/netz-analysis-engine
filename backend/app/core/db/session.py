@@ -46,8 +46,8 @@ def get_sync_db_with_rls(
     """
     with sync_session_factory() as session, session.begin():
         if actor.organization_id is not None:
-            safe_oid = str(actor.organization_id).replace("'", "")
             session.execute(
-                text(f"SET LOCAL app.current_organization_id = '{safe_oid}'"),
+                text("SELECT set_config('app.current_organization_id', :oid, true)"),
+                {"oid": str(actor.organization_id)},
             )
         yield session

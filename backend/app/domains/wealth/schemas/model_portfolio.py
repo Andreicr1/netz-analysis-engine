@@ -23,6 +23,8 @@ class ModelPortfolioRead(BaseModel):
     inception_nav: Decimal
     status: str
     fund_selection_schema: dict | None = None
+    backtest_result: dict | None = None
+    stress_result: dict | None = None
     created_at: datetime
     created_by: str | None = None
 

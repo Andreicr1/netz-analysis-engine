@@ -97,8 +97,10 @@ async def generate_fact_sheet(
         with sync_session_factory() as sync_db, sync_db.begin():
             sync_db.expire_on_commit = False
             from sqlalchemy import text
-            safe_oid = str(org_id).replace("'", "")
-            sync_db.execute(text(f"SET LOCAL app.current_organization_id = '{safe_oid}'"))
+            sync_db.execute(
+                text("SELECT set_config('app.current_organization_id', :oid, true)"),
+                {"oid": str(org_id)},
+            )
             return _run_fact_sheet_generation(
                 sync_db,
                 portfolio_id=str(portfolio_id),

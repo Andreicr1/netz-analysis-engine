@@ -36,10 +36,13 @@ async def set_rls_context(session: AsyncSession, org_id: uuid.UUID) -> None:
     Must be called after session creation and re-called after each commit(),
     because SET LOCAL is transaction-scoped and lost on commit/rollback.
     """
-    # asyncpg does not support bind parameters in SET commands — interpolate
-    # the UUID directly. UUIDs are safe to interpolate (hex chars + hyphens only).
-    safe_oid = str(org_id).replace("'", "")
-    await session.execute(text(f"SET LOCAL app.current_organization_id = '{safe_oid}'"))
+    # SET is a utility statement — PostgreSQL rejects bind params ($1) in it.
+    # Use set_config() which runs via SELECT (plannable, accepts params).
+    # Third arg true = transaction-scoped (equivalent to SET LOCAL).
+    await session.execute(
+        text("SELECT set_config('app.current_organization_id', :oid, true)"),
+        {"oid": str(org_id)},
+    )
 
 
 async def get_db_with_rls(

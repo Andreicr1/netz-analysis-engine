@@ -324,6 +324,20 @@
 	{/snippet}
 </PageHeader>
 
+{#if !modelPortfolio || modelPortfolio.status === "draft"}
+	<div class="pw-guidance-banner">
+		<p class="pw-guidance-text">
+			{#if !modelPortfolio}
+				No model portfolio exists for the <strong>{profile}</strong> profile.
+				<a href="/model-portfolios/create" class="pw-guidance-link">Create a Model Portfolio</a> to enable monitoring.
+			{:else}
+				The <strong>{profile}</strong> model portfolio is in <strong>draft</strong> status.
+				<a href="/model-portfolios/{modelPortfolio.id}" class="pw-guidance-link">Open it</a> to construct, backtest, and activate.
+			{/if}
+		</p>
+	</div>
+{/if}
+
 <!-- KPIs -->
 <div class="pw-kpis">
 	<div class="pw-kpi-card">
@@ -970,6 +984,29 @@
 		background: color-mix(in srgb, var(--ii-danger) 8%, transparent);
 		color: var(--ii-danger);
 		font-size: var(--ii-text-small, 0.8125rem);
+	}
+
+	.pw-guidance-banner {
+		margin: 0 var(--ii-space-inline-lg, 24px);
+		padding: var(--ii-space-stack-sm, 12px) var(--ii-space-inline-md, 16px);
+		border: 1px solid var(--ii-border);
+		border-radius: var(--ii-radius-md, 8px);
+		background: var(--ii-surface-alt);
+	}
+
+	.pw-guidance-text {
+		margin: 0;
+		font-size: var(--ii-text-small, 0.8125rem);
+		color: var(--ii-text-secondary);
+	}
+
+	.pw-guidance-link {
+		color: var(--ii-brand-primary);
+		font-weight: 600;
+		text-decoration: none;
+	}
+	.pw-guidance-link:hover {
+		text-decoration: underline;
 	}
 
 	.pw-empty {

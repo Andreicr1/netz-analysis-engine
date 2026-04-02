@@ -14,12 +14,13 @@
 	import { Button } from "@investintell/ui/components/ui/button";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
-	import type { ModelPortfolio, TrackRecord, InstrumentWeight, BacktestFold, StressScenario, PortfolioView, ParametricStressResult, OverlapResult, CusipExposure, SectorExposure } from "$lib/types/model-portfolio";
+	import type { ModelPortfolio, TrackRecord, InstrumentWeight, BacktestResult, BacktestFold, StressResult, StressScenario, PortfolioView, ParametricStressResult, OverlapResult, CusipExposure, SectorExposure } from "$lib/types/model-portfolio";
 	import type { UniverseAsset } from "$lib/types/universe";
 	import GeneratedReportsPanel from "$lib/components/model-portfolio/GeneratedReportsPanel.svelte";
 	import ICViewsPanel from "$lib/components/model-portfolio/ICViewsPanel.svelte";
 	import ConstructionAdvisor from "$lib/components/model-portfolio/ConstructionAdvisor.svelte";
 	import ScoreBreakdownPopover from "$lib/components/model-portfolio/ScoreBreakdownPopover.svelte";
+	import FundSelectionEditor from "$lib/components/model-portfolio/FundSelectionEditor.svelte";
 	import CVaRHistoryChart from "$lib/components/charts/CVaRHistoryChart.svelte";
 	import PortfolioNAVChart from "$lib/components/charts/PortfolioNAVChart.svelte";
 	import BacktestEquityCurve from "$lib/components/charts/BacktestEquityCurve.svelte";
@@ -45,8 +46,14 @@
 	const IC_ROLES = ["investment_team", "director", "admin", "super_admin"];
 	let canEdit = $derived(actorRole !== null && IC_ROLES.includes(actorRole));
 
-	let backtest = $derived(trackRecord?.backtest ?? null);
-	let stress = $derived(trackRecord?.stress ?? null);
+	// ── Optimistic state for backtest/stress (Phase 4) ───────────────────
+	// $state.raw avoids deep proxy overhead on large result objects.
+	// $derived merge: local result wins until server catches up via invalidateAll().
+	let localBacktest = $state.raw<BacktestResult | null>(null);
+	let localStress = $state.raw<StressResult | null>(null);
+
+	let backtest = $derived(localBacktest ?? trackRecord?.backtest ?? null);
+	let stress = $derived(localStress ?? trackRecord?.stress ?? null);
 	let funds = $derived(portfolio.fund_selection_schema?.funds ?? [] as InstrumentWeight[]);
 	let overlap = $derived((data.overlap ?? null) as OverlapResult | null);
 
@@ -119,6 +126,7 @@
 	let activating = $state(false);
 	let error = $state<string | null>(null);
 	let showActivateDialog = $state(false);
+	let editingFunds = $state(false);
 
 	let canActivate = $derived(
 		portfolio.status === "draft" && !!portfolio.fund_selection_schema && cvarWithinLimit,
@@ -162,11 +170,16 @@
 	async function runBacktest() {
 		backtesting = true;
 		error = null;
+		const previous = localBacktest;
 		try {
 			const api = createClientApiClient(getToken);
-			await api.post(`/model-portfolios/${portfolioId}/backtest`, {});
-			await invalidateAll();
+			const result = await api.post<{ backtest: import("$lib/types/model-portfolio").BacktestResult }>(
+				`/model-portfolios/${portfolioId}/backtest`, {},
+			);
+			localBacktest = result.backtest;
+			invalidateAll();
 		} catch (e) {
+			localBacktest = previous;
 			error = e instanceof Error ? e.message : "Backtest failed";
 		} finally {
 			backtesting = false;
@@ -176,11 +189,16 @@
 	async function runStress() {
 		stressing = true;
 		error = null;
+		const previous = localStress;
 		try {
 			const api = createClientApiClient(getToken);
-			await api.post(`/model-portfolios/${portfolioId}/stress`, {});
-			await invalidateAll();
+			const result = await api.post<{ stress: import("$lib/types/model-portfolio").StressResult }>(
+				`/model-portfolios/${portfolioId}/stress`, {},
+			);
+			localStress = result.stress;
+			invalidateAll();
 		} catch (e) {
+			localStress = previous;
 			error = e instanceof Error ? e.message : "Stress test failed";
 		} finally {
 			stressing = false;
@@ -655,6 +673,7 @@
 				<PortfolioNAVChart
 					navSeries={trackRecord.nav_series}
 					inceptionDate={portfolio.inception_date}
+					baseIndex={100}
 					height={280}
 				/>
 			</section>
@@ -667,10 +686,27 @@
 	<section class="mp-section mp-section--full">
 		<h3 class="mp-section-title">
 			Fund Selection
-			{#if funds.length > 0}
-				<span class="mp-section-count">{funds.length} funds · {formatPercent(portfolio.fund_selection_schema?.total_weight ?? 0)} allocated</span>
-			{/if}
+			<span class="mp-section-title-right">
+				{#if funds.length > 0}
+					<span class="mp-section-count">{funds.length} funds · {formatPercent(portfolio.fund_selection_schema?.total_weight ?? 0)} allocated</span>
+				{/if}
+				{#if canEdit && portfolio.status === "draft" && funds.length > 0}
+					<Button size="sm" variant="outline" onclick={() => (editingFunds = !editingFunds)}>
+						{editingFunds ? "Close Editor" : "Edit Funds"}
+					</Button>
+				{/if}
+			</span>
 		</h3>
+
+		{#if editingFunds}
+			<FundSelectionEditor
+				{portfolioId}
+				currentFunds={funds}
+				{instruments}
+				onApply={async () => { editingFunds = false; await runConstruct(); }}
+				onCancel={() => (editingFunds = false)}
+			/>
+		{/if}
 
 		{#if funds.length === 0}
 			<div class="mp-empty">
@@ -1017,6 +1053,12 @@
 		font-size: var(--ii-text-label, 0.75rem);
 		font-weight: 400;
 		color: var(--ii-text-muted);
+	}
+
+	.mp-section-title-right {
+		display: flex;
+		align-items: center;
+		gap: 10px;
 	}
 
 	.opt-status-label { cursor: help; font-weight: 500; }

@@ -31,11 +31,13 @@ router = APIRouter(prefix="/universe", tags=["universe"])
 
 
 def _set_rls_sync(session, org_id) -> None:
-    """SET LOCAL for RLS in sync sessions (asyncio.to_thread context)."""
+    """Set RLS tenant context in sync sessions (asyncio.to_thread context)."""
     from sqlalchemy import text as _text
 
-    safe_oid = str(org_id).replace("'", "")
-    session.execute(_text(f"SET LOCAL app.current_organization_id = '{safe_oid}'"))
+    session.execute(
+        _text("SELECT set_config('app.current_organization_id', :oid, true)"),
+        {"oid": str(org_id)},
+    )
 
 _APPROVE_DECISIONS = {UniverseDecision.approved.value, UniverseDecision.watchlist.value}
 

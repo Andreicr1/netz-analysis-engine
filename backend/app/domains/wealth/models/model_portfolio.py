@@ -36,6 +36,8 @@ class ModelPortfolio(OrganizationScopedMixin, Base):
         String(20), nullable=False, server_default="draft",
     )
     fund_selection_schema: Mapped[dict | None] = mapped_column(JSONB)
+    backtest_result: Mapped[dict | None] = mapped_column(JSONB)
+    stress_result: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )

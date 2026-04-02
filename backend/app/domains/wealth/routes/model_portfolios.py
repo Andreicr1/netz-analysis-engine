@@ -248,8 +248,8 @@ async def get_track_record(
         "status": portfolio.status,
         "fund_selection": portfolio.fund_selection_schema,
         "nav_series": nav_series,
-        "backtest": None,  # Populated by POST /backtest
-        "stress": None,  # Populated by POST /stress
+        "backtest": portfolio.backtest_result,
+        "stress": portfolio.stress_result,
     }
 
 
@@ -291,11 +291,15 @@ async def trigger_backtest(
         with sync_session_factory() as sync_db, sync_db.begin():
             sync_db.expire_on_commit = False
             from sqlalchemy import text
-            safe_oid = str(_org_id).replace("'", "")
-            sync_db.execute(text(f"SET LOCAL app.current_organization_id = '{safe_oid}'"))
+            sync_db.execute(
+                text("SELECT set_config('app.current_organization_id', :oid, true)"),
+                {"oid": str(_org_id)},
+            )
             return _run_backtest(sync_db, portfolio.fund_selection_schema, portfolio_id)
 
     backtest_result = await asyncio.to_thread(_backtest)
+    portfolio.backtest_result = backtest_result
+    await db.flush()
     return {
         "portfolio_id": str(portfolio_id),
         "status": "completed",
@@ -341,11 +345,15 @@ async def trigger_stress(
         with sync_session_factory() as sync_db, sync_db.begin():
             sync_db.expire_on_commit = False
             from sqlalchemy import text
-            safe_oid = str(_org_id_stress).replace("'", "")
-            sync_db.execute(text(f"SET LOCAL app.current_organization_id = '{safe_oid}'"))
+            sync_db.execute(
+                text("SELECT set_config('app.current_organization_id', :oid, true)"),
+                {"oid": str(_org_id_stress)},
+            )
             return _run_stress(sync_db, portfolio.fund_selection_schema, portfolio_id)
 
     stress_result = await asyncio.to_thread(_stress)
+    portfolio.stress_result = stress_result
+    await db.flush()
     return {
         "portfolio_id": str(portfolio_id),
         "status": "completed",
