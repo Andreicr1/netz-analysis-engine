@@ -467,7 +467,10 @@ async def _run_content_generation(
                 content = row.scalar_one_or_none()
                 if content:
                     content.content_md = result.get("content_md")
-                    content.status = "review" if result.get("content_md") else "draft"
+                    if result.get("content_md"):
+                        content.status = "review"
+                    elif result.get("status") == "failed":
+                        content.status = "failed"
                     content.content_data = result.get("content_data", content.content_data)
                     await db.commit()
 

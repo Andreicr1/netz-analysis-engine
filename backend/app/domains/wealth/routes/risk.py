@@ -367,11 +367,11 @@ async def get_macro(
     
     indicators = ["VIXCLS", "YIELD_CURVE_10Y2Y", "CPI_YOY", "DFF"]
     stmt = text("""
-        SELECT indicator_id, value, obs_date 
-        FROM mv_macro_latest 
-        WHERE indicator_id IN :ids
+        SELECT indicator_id, value, obs_date
+        FROM mv_macro_latest
+        WHERE indicator_id = ANY(:ids)
     """)
-    result = await db.execute(stmt, {"ids": tuple(indicators)})
+    result = await db.execute(stmt, {"ids": indicators})
     
     # Map results
     macro_map = {r.indicator_id: (float(r.value), r.obs_date) for r in result.all()}

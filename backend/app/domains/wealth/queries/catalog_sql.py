@@ -326,22 +326,23 @@ def build_catalog_facets_query(filters: CatalogFilters) -> Select[Any] | None:
     )
     
     base = _build_base_stmt(facet_filters)
-    
+    sub = base.subquery()
+
     stmt = select(
-        mv_unified_funds.c.universe,
-        mv_unified_funds.c.region,
-        mv_unified_funds.c.fund_type,
-        mv_unified_funds.c.strategy_label,
-        mv_unified_funds.c.domicile,
-        mv_unified_funds.c.investment_geography,
+        sub.c.universe,
+        sub.c.region,
+        sub.c.fund_type,
+        sub.c.strategy_label,
+        sub.c.domicile,
+        sub.c.investment_geography,
         func.count().label("cnt"),
-    ).select_from(base.subquery()).group_by(
-        literal_column("universe"),
-        literal_column("region"),
-        literal_column("fund_type"),
-        literal_column("strategy_label"),
-        literal_column("domicile"),
-        literal_column("investment_geography"),
+    ).group_by(
+        sub.c.universe,
+        sub.c.region,
+        sub.c.fund_type,
+        sub.c.strategy_label,
+        sub.c.domicile,
+        sub.c.investment_geography,
     )
 
     return stmt
