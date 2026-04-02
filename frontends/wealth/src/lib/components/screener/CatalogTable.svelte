@@ -4,7 +4,6 @@
   Server-side pagination synced with URL params.
 -->
 <script lang="ts">
-	import { untrack } from "svelte";
 	import { goto } from "$app/navigation";
 	import "./screener.css";
 	import { formatCompact, formatPercent } from "@investintell/ui";
@@ -164,23 +163,13 @@
 	let expandedFunds = $state<Set<string>>(new Set());
 	let selectedClasses = $state<Set<string>>(new Set());
 
-	// Auto-expand standalone groups and single-fund managers
+	// Reset expanded state when data changes (new page / filter)
 	$effect(() => {
 		// Read managerGroups reactively (triggers on data change)
-		const groups = managerGroups;
-		// Read current expanded WITHOUT subscribing to avoid infinite loop
-		const current = untrack(() => expandedManagers);
-		const next = new Set(current);
-		let changed = false;
-		for (const mg of groups) {
-			if (mg.is_standalone || mg.funds.length === 1) {
-				if (!next.has(mg.manager_key)) {
-					next.add(mg.manager_key);
-					changed = true;
-				}
-			}
-		}
-		if (changed) expandedManagers = next;
+		const _groups = managerGroups;
+		// Start collapsed — user clicks to expand
+		expandedManagers = new Set();
+		expandedFunds = new Set();
 	});
 
 	function toggleManager(key: string) {
