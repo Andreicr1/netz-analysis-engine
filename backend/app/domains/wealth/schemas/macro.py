@@ -202,3 +202,18 @@ class OfrDataResponse(BaseModel):
 
     metric: str
     data: list[OfrTimePoint]
+
+
+class FredTimePoint(BaseModel):
+    """Single FRED / macro_data observation."""
+
+    obs_date: date
+    value: float
+    source: str = "FRED"
+
+
+class FredDataResponse(BaseModel):
+    """GET /macro/fred response — raw FRED time series from macro_data."""
+
+    series_id: str
+    data: list[FredTimePoint]

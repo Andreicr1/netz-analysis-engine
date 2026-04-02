@@ -80,6 +80,73 @@ def _obs_to_macro_data_rows(
     return rows
 
 
+def _compute_derived_series(
+    raw_observations: dict[str, list[FredObservation]],
+) -> list[dict[str, Any]]:
+    """Compute derived macro_data rows from raw FRED series.
+
+    Derived series:
+      YIELD_CURVE_10Y2Y — DGS10 minus DGS2 (daily spread)
+      CPI_YOY — year-over-year % change of CPIAUCSL
+    """
+    rows: list[dict[str, Any]] = []
+
+    # ── Yield Curve 10Y-2Y spread ─────────────────────────────
+    dgs10_list = raw_observations.get("DGS10", [])
+    dgs2_list = raw_observations.get("DGS2", [])
+    if dgs10_list and dgs2_list:
+        dgs10_map: dict[str, float] = {}
+        for obs in dgs10_list:
+            if obs.value is not None:
+                dgs10_map[obs.date] = obs.value
+        for obs in dgs2_list:
+            if obs.value is not None and obs.date in dgs10_map:
+                spread = dgs10_map[obs.date] - obs.value
+                try:
+                    obs_date = date.fromisoformat(obs.date)
+                except (ValueError, TypeError):
+                    continue
+                rows.append({
+                    "series_id": "YIELD_CURVE_10Y2Y",
+                    "obs_date": obs_date,
+                    "value": Decimal(str(round(spread, 4))),
+                    "source": "derived",
+                    "is_derived": True,
+                })
+
+    # ── CPI YoY (%) ──────────────────────────────────────────
+    cpi_list = raw_observations.get("CPIAUCSL", [])
+    if cpi_list:
+        # Build date→value map
+        cpi_map: dict[str, float] = {}
+        for obs in cpi_list:
+            if obs.value is not None:
+                cpi_map[obs.date] = obs.value
+        # Compute YoY for each month that has a 12-month-prior value
+        for obs in cpi_list:
+            if obs.value is None:
+                continue
+            try:
+                obs_date = date.fromisoformat(obs.date)
+                prior_date = obs_date.replace(year=obs_date.year - 1)
+            except (ValueError, TypeError):
+                continue
+            prior_key = prior_date.isoformat()
+            if prior_key in cpi_map:
+                prior_val = cpi_map[prior_key]
+                if prior_val != 0:
+                    yoy = ((obs.value / prior_val) - 1) * 100  # percentage
+                    rows.append({
+                        "series_id": "CPI_YOY",
+                        "obs_date": obs_date,
+                        "value": Decimal(str(round(yoy, 4))),
+                        "source": "derived",
+                        "is_derived": True,
+                    })
+
+    return rows
+
+
 async def _write_macro_cache(snapshot_data: dict[str, Any], today: date) -> None:
     """Write macro snapshot data to Redis cache for fast dashboard reads."""
     try:
@@ -238,8 +305,13 @@ async def run_macro_ingestion(
             )
             await db.execute(snapshot_stmt)
 
+            # ── Compute derived series (spreads, YoY) ─────────
+            derived_rows = _compute_derived_series(raw_observations)
+            if derived_rows:
+                logger.info("Derived series computed", count=len(derived_rows))
+
             # ── Upsert to macro_data (backward compat) ────────
-            macro_rows = _obs_to_macro_data_rows(raw_observations)
+            macro_rows = _obs_to_macro_data_rows(raw_observations) + derived_rows
             if macro_rows:
                 # Deduplicate by PK
                 seen: dict[tuple[str, date], dict[str, Any]] = {}

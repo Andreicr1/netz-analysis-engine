@@ -64,6 +64,7 @@ def _parse_nport_xml_holdings(
     root: Element,
     cik: str,
     report_date: str,
+    series_id: str | None = None,
 ) -> list[NportHolding]:
     """Extract holdings from N-PORT XML ``<invstOrSec>`` elements.
 
@@ -102,6 +103,7 @@ def _parse_nport_xml_holdings(
             pct_of_nav=_safe_float(_text(elem, "pctVal")),
             is_restricted=(_text(elem, "isRestrictedSec") or "").upper() == "Y",
             fair_value_level=_text(elem, "fairValLevel"),
+            series_id=series_id,
         )
         holdings.append(holding)
 
@@ -228,18 +230,22 @@ class NportService:
 
                 root = ET.fromstring(xml_content)
 
-                # Extract report date from filing header
+                # Extract report date and series_id from filing header
                 report_date_str = None
+                filing_series_id = None
                 for elem in root.iter():
-                    if elem.tag.endswith("repPd") and elem.text:
+                    if elem.tag.endswith("repPd") and elem.text and not report_date_str:
                         report_date_str = elem.text.strip()[:10]
+                    if elem.tag.endswith("seriesId") and elem.text and not filing_series_id:
+                        filing_series_id = elem.text.strip()
+                    if report_date_str and filing_series_id:
                         break
 
                 if not report_date_str:
                     # Fallback to filing date
                     report_date_str = str(filing.filing_date)
 
-                holdings = _parse_nport_xml_holdings(root, cik, report_date_str)
+                holdings = _parse_nport_xml_holdings(root, cik, report_date_str, series_id=filing_series_id)
                 all_holdings.extend(holdings)
 
             except Exception as exc:
@@ -287,6 +293,7 @@ class NportService:
                     pct_of_nav=float(r.pct_of_nav) if r.pct_of_nav is not None else None,
                     is_restricted=r.is_restricted,
                     fair_value_level=r.fair_value_level,
+                    series_id=r.series_id,
                 )
                 for r in rows
             ]
@@ -323,6 +330,7 @@ class NportService:
                 "pct_of_nav": h.pct_of_nav,
                 "is_restricted": h.is_restricted,
                 "fair_value_level": h.fair_value_level,
+                "series_id": h.series_id,
             }
             for h in holdings
         ]
@@ -344,6 +352,7 @@ class NportService:
                         "pct_of_nav": stmt.excluded.pct_of_nav,
                         "is_restricted": stmt.excluded.is_restricted,
                         "fair_value_level": stmt.excluded.fair_value_level,
+                        "series_id": stmt.excluded.series_id,
                     },
                 )
                 await db.execute(stmt)

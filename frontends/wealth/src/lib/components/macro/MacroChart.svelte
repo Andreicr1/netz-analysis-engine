@@ -21,12 +21,14 @@
 
 	interface Props extends BaseChartProps {
 		series: MacroSeries[];
+		fetching?: boolean;
 		timeRange?: "1M" | "3M" | "6M" | "1Y" | "2Y";
 		onTimeRangeChange?: (range: "1M" | "3M" | "6M" | "1Y" | "2Y") => void;
 	}
 
 	let {
 		series,
+		fetching = false,
 		timeRange = "2Y",
 		onTimeRangeChange,
 		height = 440,
@@ -53,7 +55,7 @@
 		const subGridTop = "80%";
 
 		const grids: Record<string, unknown>[] = [
-			{ left: 60, right: 60, top: 40, bottom: mainGridBottom, containLabel: false },
+			{ left: 60, right: 140, top: 40, bottom: mainGridBottom, containLabel: false },
 		];
 		const xAxes: Record<string, unknown>[] = [
 			{ type: "time", gridIndex: 0, axisLabel: { fontSize: 10 }, axisTick: { show: false } },
@@ -80,14 +82,24 @@
 				data: s.data,
 				step: stepForFreq(s.frequency),
 				connectNulls: false,
-				showSymbol: s.frequency === "D" ? false : true,
-				symbolSize: 4,
+				showSymbol: false,
 				smooth: false,
 				lineStyle: {
-					width: 2,
+					width: 2.5,
 					type: s.lineStyle ?? "solid",
 				},
-				...(s.color ? { itemStyle: { color: s.color }, lineStyle: { color: s.color, width: 2, type: s.lineStyle ?? "solid" } } : {}),
+				endLabel: {
+					show: true,
+					formatter: "{a}",
+					fontSize: 11,
+					fontWeight: 600,
+					distance: 8,
+				},
+				labelLayout: { moveOverlap: "shiftY" },
+				emphasis: { focus: "series" },
+				animationDuration: 2000,
+				animationEasing: "cubicInOut",
+				...(s.color ? { itemStyle: { color: s.color }, lineStyle: { color: s.color, width: 2.5, type: s.lineStyle ?? "solid" } } : {}),
 			});
 		}
 
@@ -111,7 +123,9 @@
 		];
 
 		return {
-			animation: false,
+			animation: true,
+			animationDuration: 2000,
+			animationEasing: "cubicInOut" as const,
 			backgroundColor: "transparent",
 			textStyle: { fontFamily: "Inter, system-ui, sans-serif", fontSize: 12 },
 			grid: grids,
@@ -202,8 +216,8 @@
 	<ChartContainer
 		{option}
 		{height}
-		loading={series.length === 0}
-		empty={series.length === 0}
+		loading={fetching && series.length === 0}
+		empty={!fetching && series.length === 0}
 		emptyMessage="Select indicators to display"
 		ariaLabel="Macro Intelligence Chart"
 		{...rest}

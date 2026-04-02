@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import re
 from datetime import date
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
@@ -296,6 +297,7 @@ async def get_fund_detail(
 async def get_fund_holdings(
     cik: str = Path(...),
     quarter: date | None = Query(None, description="Quarter date (default: latest)"),
+    series_id: str | None = Query(None, description="Series ID to filter umbrella CIKs"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db_with_rls),
@@ -305,15 +307,21 @@ async def get_fund_holdings(
     if not _CIK_RE.match(cik):
         raise HTTPException(status_code=400, detail="Invalid CIK number")
 
+    # Build optional series_id clause for umbrella CIKs
+    sid_clause = "AND series_id = :series_id" if series_id else ""
+    params: dict[str, Any] = {"cik": cik}
+    if series_id:
+        params["series_id"] = series_id
+
     # Get available quarters
     q_result = await db.execute(
-        text("""
+        text(f"""
             SELECT DISTINCT report_date
             FROM sec_nport_holdings
-            WHERE cik = :cik
+            WHERE cik = :cik {sid_clause}
             ORDER BY report_date DESC
         """),
-        {"cik": cik},
+        params,
     )
     available_quarters = [r[0] for r in q_result.fetchall()]
 
@@ -321,29 +329,30 @@ async def get_fund_holdings(
         return NportHoldingsPage()
 
     target_quarter = quarter or available_quarters[0]
+    q_params = {**params, "quarter": target_quarter}
 
     # Holdings for target quarter
     result = await db.execute(
-        text("""
+        text(f"""
             SELECT cusip, isin, issuer_name, asset_class, sector,
                    market_value, quantity, pct_of_nav, currency, fair_value_level
             FROM sec_nport_holdings
-            WHERE cik = :cik AND report_date = :quarter
+            WHERE cik = :cik AND report_date = :quarter {sid_clause}
             ORDER BY market_value DESC NULLS LAST
             LIMIT :lim OFFSET :off
         """),
-        {"cik": cik, "quarter": target_quarter, "lim": limit, "off": offset},
+        {**q_params, "lim": limit, "off": offset},
     )
     rows = result.fetchall()
 
     # Total count + value
     agg = await db.execute(
-        text("""
+        text(f"""
             SELECT COUNT(*), COALESCE(SUM(market_value), 0)
             FROM sec_nport_holdings
-            WHERE cik = :cik AND report_date = :quarter
+            WHERE cik = :cik AND report_date = :quarter {sid_clause}
         """),
-        {"cik": cik, "quarter": target_quarter},
+        q_params,
     )
     agg_row = agg.fetchone()
     total_count = agg_row[0] if agg_row else 0
@@ -440,6 +449,7 @@ async def get_style_history(
 @route_cache(ttl=600, global_key=True, key_prefix="sec:holdings_hist")
 async def get_holdings_history(
     cik: str = Path(...),
+    series_id: str | None = Query(None, description="Series ID to filter umbrella CIKs"),
     db: AsyncSession = Depends(get_db_with_rls),
     actor: Actor = Depends(get_actor),
 ) -> HoldingsHistoryResponse:
@@ -447,8 +457,13 @@ async def get_holdings_history(
     if not _CIK_RE.match(cik):
         raise HTTPException(status_code=400, detail="Invalid CIK number")
 
+    sid_clause = "AND series_id = :series_id" if series_id else ""
+    params: dict[str, Any] = {"cik": cik}
+    if series_id:
+        params["series_id"] = series_id
+
     result = await db.execute(
-        text("""
+        text(f"""
             SELECT
                 report_date,
                 sector,
@@ -457,10 +472,11 @@ async def get_holdings_history(
             WHERE cik = :cik
               AND sector IS NOT NULL
               AND pct_of_nav IS NOT NULL
+              {sid_clause}
             GROUP BY report_date, sector
             ORDER BY report_date ASC, sector_pct_nav DESC
         """),
-        {"cik": cik},
+        params,
     )
     rows = result.fetchall()
 

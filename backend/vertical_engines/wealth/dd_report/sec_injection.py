@@ -23,9 +23,13 @@ logger = structlog.get_logger()
 # Sector weight change threshold (pp) to flag drift between quarters.
 _DRIFT_THRESHOLD_PP = 0.05
 
-# N-PORT issuerCat → human-readable labels (SEC fixed-income taxonomy).
-_NPORT_SECTOR_LABELS: dict[str, str] = {
-    "CORP": "Corporate Bonds",
+# N-PORT issuerCat → human-readable labels.
+# issuerCat describes the ISSUER type (corporate, government, etc.), not the
+# instrument type.  For debt holdings, "CORP" = corporate bonds.  For equity
+# holdings, "CORP" = corporate equity (stocks).  The asset_class-aware
+# _label_sector() function resolves this ambiguity.
+_NPORT_ISSUER_LABELS: dict[str, str] = {
+    "CORP": "Corporate",
     "UST": "US Treasury",
     "USGA": "US Govt Agency",
     "USGSE": "US Govt Sponsored",
@@ -43,12 +47,29 @@ _NPORT_SECTOR_LABELS: dict[str, str] = {
     "OT": "Other",
 }
 
+# N-PORT assetCat codes that indicate equity instruments
+_EQUITY_ASSET_CATS = {"EC", "STIV"}
 
-def _label_sector(raw: str | None) -> str:
-    """Map N-PORT issuerCat code to readable label."""
+
+def _label_sector(raw: str | None, asset_class: str | None = None) -> str:
+    """Map N-PORT issuerCat code to readable label.
+
+    When asset_class is provided, disambiguates issuerCat — e.g. "CORP" with
+    asset_class "EC" becomes "Corporate Equity" instead of "Corporate Bonds".
+    """
     if not raw:
         return "Other"
-    return _NPORT_SECTOR_LABELS.get(raw.strip().upper(), raw)
+    code = raw.strip().upper()
+    base = _NPORT_ISSUER_LABELS.get(code, raw)
+
+    # Disambiguate "Corporate" based on asset class
+    if code == "CORP" and asset_class:
+        ac = asset_class.strip().upper()
+        if ac in _EQUITY_ASSET_CATS:
+            return "Equity"
+        return "Corporate Bonds"
+
+    return base
 
 
 def gather_sec_13f_data(
@@ -130,6 +151,7 @@ def gather_sec_nport_data(
     db: Session,
     *,
     fund_cik: str | None,
+    series_id: str | None = None,
     holdings_limit: int = 10,
 ) -> dict[str, Any]:
     """Gather N-PORT fund-level holdings for DD report evidence.
@@ -144,6 +166,9 @@ def gather_sec_nport_data(
         Sync database session.
     fund_cik : str | None
         Fund CIK from sec_registered_funds (N-PORT filer).
+    series_id : str | None
+        Series ID to filter holdings for umbrella CIKs with multiple series.
+        When provided, only holdings tagged with this series are returned.
     holdings_limit : int
         Number of top holdings to return (default 10).
 
@@ -154,12 +179,19 @@ def gather_sec_nport_data(
     try:
         from app.shared.models import SecFundStyleSnapshot, SecNportHolding
 
+        # Build series filter for umbrella CIKs
+        series_filter = [
+            SecNportHolding.cik == fund_cik,
+        ]
+        if series_id:
+            series_filter.append(SecNportHolding.series_id == series_id)
+
         # Find the 2 most recent report dates for this fund
         lookback = date.today() - timedelta(days=400)  # ~13 months
         dates_result = (
             db.query(SecNportHolding.report_date)
             .filter(
-                SecNportHolding.cik == fund_cik,
+                *series_filter,
                 SecNportHolding.report_date >= lookback,
             )
             .distinct()
@@ -178,7 +210,7 @@ def gather_sec_nport_data(
         holdings = (
             db.query(SecNportHolding)
             .filter(
-                SecNportHolding.cik == fund_cik,
+                *series_filter,
                 SecNportHolding.report_date == latest_date,
             )
             .all()
@@ -190,7 +222,7 @@ def gather_sec_nport_data(
         # Compute sector weights (group by sector label, sum pct_of_nav)
         sector_totals: dict[str, float] = {}
         for h in holdings:
-            sector = _label_sector(h.sector)
+            sector = _label_sector(h.sector, h.asset_class)
             pct = float(h.pct_of_nav or 0)
             sector_totals[sector] = sector_totals.get(sector, 0.0) + pct
 
@@ -221,7 +253,7 @@ def gather_sec_nport_data(
             {
                 "name": h.issuer_name or "Unknown",
                 "cusip": h.cusip,
-                "sector": _label_sector(h.sector),
+                "sector": _label_sector(h.sector, h.asset_class),
                 "pct_of_nav": round(float(h.pct_of_nav or 0), 2),
                 "market_value": h.market_value,
             }
@@ -321,6 +353,7 @@ def gather_nport_sector_history(
     db: Session,
     *,
     fund_cik: str | None,
+    series_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Gather historical sector weight allocation from N-PORT data.
 
@@ -333,10 +366,14 @@ def gather_nport_sector_history(
     try:
         from app.shared.models import SecNportHolding
 
+        series_filter = [SecNportHolding.cik == fund_cik]
+        if series_id:
+            series_filter.append(SecNportHolding.series_id == series_id)
+
         # Get all unique report dates for this fund
         report_dates = (
             db.query(SecNportHolding.report_date)
-            .filter(SecNportHolding.cik == fund_cik)
+            .filter(*series_filter)
             .distinct()
             .order_by(SecNportHolding.report_date.asc())
             .all()
@@ -350,7 +387,7 @@ def gather_nport_sector_history(
             holdings = (
                 db.query(SecNportHolding)
                 .filter(
-                    SecNportHolding.cik == fund_cik,
+                    *series_filter,
                     SecNportHolding.report_date == rd,
                 )
                 .all()
@@ -361,7 +398,7 @@ def gather_nport_sector_history(
             # Compute sector weights (group by sector label, sum pct_of_nav)
             sector_totals: dict[str, float] = {}
             for h in holdings:
-                sector = _label_sector(h.sector)
+                sector = _label_sector(h.sector, h.asset_class)
                 pct = float(h.pct_of_nav or 0)
                 sector_totals[sector] = sector_totals.get(sector, 0.0) + pct
 
@@ -472,12 +509,13 @@ def gather_fund_enrichment(
             result["share_classes"].append({
                 "class_id": sc.class_id,
                 "ticker": sc.ticker,
-                "expense_ratio_pct": float(sc.expense_ratio_pct) if sc.expense_ratio_pct is not None else None,
+                # XBRL OEF stores _pct fields as pure fractions (0.0002 = 0.02%) → ×100
+                "expense_ratio_pct": round(float(sc.expense_ratio_pct) * 100, 6) if sc.expense_ratio_pct is not None else None,
                 "advisory_fees_paid": float(sc.advisory_fees_paid) if sc.advisory_fees_paid is not None else None,
                 "net_assets": float(sc.net_assets) if sc.net_assets is not None else None,
                 "holdings_count": sc.holdings_count,
-                "portfolio_turnover_pct": float(sc.portfolio_turnover_pct) if sc.portfolio_turnover_pct is not None else None,
-                "avg_annual_return_pct": float(sc.avg_annual_return_pct) if sc.avg_annual_return_pct is not None else None,
+                "portfolio_turnover_pct": round(float(sc.portfolio_turnover_pct) * 100, 4) if sc.portfolio_turnover_pct is not None else None,
+                "avg_annual_return_pct": round(float(sc.avg_annual_return_pct) * 100, 4) if sc.avg_annual_return_pct is not None else None,
             })
 
         # Vehicle-specific data (ETF / BDC / MMF)
@@ -793,6 +831,27 @@ def gather_prospectus_stats(
             "bar_chart_worst_qtr_pct": _f(row.bar_chart_worst_qtr_pct),
             "bar_chart_ytd_pct":       _f(row.bar_chart_ytd_pct),
         }
+
+        # XBRL/RR1 stores _pct fields as pure fractions → ×100 for LLM display
+        _PCT_KEYS = [
+            "expense_ratio_pct",
+            "net_expense_ratio_pct",
+            "management_fee_pct",
+            "fee_waiver_pct",
+            "distribution_12b1_pct",
+            "acquired_fund_fees_pct",
+            "other_expenses_pct",
+            "portfolio_turnover_pct",
+            "avg_annual_return_1y",
+            "avg_annual_return_5y",
+            "avg_annual_return_10y",
+            "bar_chart_best_qtr_pct",
+            "bar_chart_worst_qtr_pct",
+            "bar_chart_ytd_pct",
+        ]
+        for _k in _PCT_KEYS:
+            if result.get(_k) is not None:
+                result[_k] = round(result[_k] * 100, 6)
 
         logger.info(
             "prospectus_stats_gathered",

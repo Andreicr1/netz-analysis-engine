@@ -1903,12 +1903,7 @@ async def get_fund_fact_sheet(
             # Team and Manager profile
             adv_data = gather_sec_adv_data(sync_db, manager_name=manager_name, crd_number=effective_crd)
 
-            # Holdings (N-PORT) — increase limit to 50
-            nport_data = gather_sec_nport_data(sync_db, fund_cik=fund_cik, holdings_limit=50)
-            sector_history = gather_nport_sector_history(sync_db, fund_cik=fund_cik)
-
-            # Fix: resolver series_id a partir do external_id (que pode ser um class_id)
-            # quando a MV não tiver populado series_id corretamente
+            # Resolve series_id before N-PORT queries (external_id may be class_id)
             correct_series_id = detail.series_id
             if not correct_series_id and fund_cik and detail.external_id:
                 from app.shared.models import SecFundClass
@@ -1919,6 +1914,14 @@ async def get_fund_fact_sheet(
                 )
                 if fc_row:
                     correct_series_id = fc_row[0]
+
+            # Holdings (N-PORT) — filter by series_id to avoid mixing umbrella CIK holdings
+            nport_data = gather_sec_nport_data(
+                sync_db, fund_cik=fund_cik, series_id=correct_series_id, holdings_limit=50,
+            )
+            sector_history = gather_nport_sector_history(
+                sync_db, fund_cik=fund_cik, series_id=correct_series_id,
+            )
 
             # Returns and Stats (pass series_id when available for direct lookup)
             prop_stats = gather_prospectus_stats(sync_db, fund_cik=fund_cik, series_id=correct_series_id)

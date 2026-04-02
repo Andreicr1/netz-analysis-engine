@@ -72,6 +72,11 @@ export interface ImfPoint {
 	value: number;
 }
 
+export interface FredPoint {
+	obs_date: string;
+	value: number;
+}
+
 export function regimeColor(regime: string | null | undefined): string {
 	switch (regime) {
 		case "crisis":      return "var(--ii-danger)";

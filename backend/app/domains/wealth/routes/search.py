@@ -228,17 +228,11 @@ async def _search_assets(db: AsyncSession, q: str) -> SearchCategoryGroup:
 
     items: list[SearchResultItem] = []
     for r in rows:
-        # Logic for href: 
-        # - Funds go to /screener/{id}
-        # - Others (Equities/Bonds) could go to /universe/{id} or similar.
-        # For now, following existing pattern where search results often lead to screener/details.
-        
         category_label = r.asset_class.replace("_", " ").title()
         subtitle_parts = [p for p in [r.ticker, category_label, r.geography] if p]
-        
-        # If it's a SEC fund/equity from cusip_ticker_map, it might not be in screener yet
-        # But we use the ID (CUSIP or Instrument UUID)
-        href = f"/screener/{r.id}"
+
+        # Funds → fact-sheet route; internal instruments → universe detail
+        href = f"/screener/fund/{r.id}"
         if r.source == "internal":
             href = f"/universe/{r.id}"
 
