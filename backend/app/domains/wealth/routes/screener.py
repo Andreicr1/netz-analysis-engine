@@ -1785,10 +1785,30 @@ async def get_fund_fact_sheet(
         gather_sec_nport_data,
     )
 
+    def _resolve_cik(sync_db: Any) -> str | None:
+        """Resolve fund CIK from external_id (which may be class_id, series_id, or CIK)."""
+        if detail.universe != "registered_us":
+            return None
+        ext = detail.external_id
+        from app.shared.models import SecFundClass, SecRegisteredFund
+        # 1. Try as class_id → CIK
+        row = sync_db.query(SecFundClass.cik).filter(SecFundClass.class_id == ext).first()
+        if row:
+            return str(row[0])
+        # 2. Try as series_id → CIK
+        row = sync_db.query(SecFundClass.cik).filter(SecFundClass.series_id == ext).first()
+        if row:
+            return str(row[0])
+        # 3. Try as CIK directly
+        row = sync_db.query(SecRegisteredFund.cik).filter(SecRegisteredFund.cik == ext).first()
+        if row:
+            return str(row[0])
+        return None
+
     def _gather_evidence():
         with sync_session_factory() as sync_db:
-            # We don't need org context for global SEC tables
-            fund_cik = detail.external_id if detail.universe == "registered_us" else None
+            # Resolve actual fund CIK from external_id (may be class_id or series_id)
+            fund_cik = _resolve_cik(sync_db)
             manager_name = detail.manager_name
             manager_id = detail.manager_id
 
@@ -1799,9 +1819,9 @@ async def get_fund_fact_sheet(
             nport_data = gather_sec_nport_data(sync_db, fund_cik=fund_cik, holdings_limit=50)
             sector_history = gather_nport_sector_history(sync_db, fund_cik=fund_cik)
             
-            # Returns and Stats
-            prop_stats = gather_prospectus_stats(sync_db, fund_cik=fund_cik)
-            prop_returns = gather_prospectus_returns(sync_db, fund_cik=fund_cik)
+            # Returns and Stats (pass series_id when available for direct lookup)
+            prop_stats = gather_prospectus_stats(sync_db, fund_cik=fund_cik, series_id=detail.series_id)
+            prop_returns = gather_prospectus_returns(sync_db, fund_cik=fund_cik, series_id=detail.series_id)
             
             # Enrichment (Classes)
             enrichment = gather_fund_enrichment(sync_db, fund_cik=fund_cik, sec_universe=detail.universe)
