@@ -14,7 +14,7 @@
 	import type {
 		MacroScores, RegimeHierarchy, MacroIndicators,
 		RegionalScore, GlobalIndicators, TreasuryPoint, OfrPoint,
-		BisPoint, ImfPoint, MacroSnapshot, MacroReview,
+		BisPoint, ImfPoint, FredPoint, MacroSnapshot, MacroReview,
 	} from "$lib/types/macro";
 	import { regimeColor } from "$lib/types/macro";
 	import MacroChart from "$lib/components/macro/MacroChart.svelte";
@@ -103,7 +103,11 @@
 			let data: [string, number][] = [];
 			let frequency = entry.frequency;
 
-			if (entry.source === "treasury") {
+			if (entry.source === "fred") {
+				const res = await api.get<{ series_id: string; data: FredPoint[] }>("/macro/fred", entry.params);
+				if (controller.signal.aborted) return;
+				data = (res.data ?? []).map((p) => [p.obs_date, p.value]);
+			} else if (entry.source === "treasury") {
 				const res = await api.get<{ series: string; data: TreasuryPoint[] }>("/macro/treasury", entry.params);
 				if (controller.signal.aborted) return;
 				data = (res.data ?? []).map((p) => [p.obs_date, p.value]);
@@ -410,6 +414,7 @@
 			<div class="chart-main">
 				<MacroChart
 					series={chartSeries}
+					fetching={fetchControllers.size > 0}
 					{timeRange}
 					onTimeRangeChange={(r) => (timeRange = r)}
 					height={440}

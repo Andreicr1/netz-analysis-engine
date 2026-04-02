@@ -32,6 +32,8 @@ from app.domains.wealth.schemas.macro import (
     BisTimePoint,
     DataFreshnessRead,
     DimensionScoreRead,
+    FredDataResponse,
+    FredTimePoint,
     GlobalIndicatorsRead,
     ImfDataResponse,
     ImfYearPoint,
@@ -828,9 +830,9 @@ async def get_treasury_data(
     _FRED_MAP: dict[str, str] = {
         "10Y_RATE": "DGS10",
         "2Y_RATE": "DGS2",
-        "30Y_RATE": "MORTGAGE30US",
+        "30Y_RATE": "DGS30",
         "FED_FUNDS": "DFF",
-        "YIELD_CURVE": "BAA10Y",
+        "YIELD_CURVE": "YIELD_CURVE_10Y2Y",  # derived: DGS10 - DGS2
         "SOFR": "SOFR",
     }
 
@@ -921,3 +923,77 @@ async def get_ofr_data(
 
     await _set_cached(cache_key, [p.model_dump(mode="json") for p in points], ttl=3600)
     return OfrDataResponse(metric=metric, data=points)
+
+
+# ── Allowlist of FRED series exposed to frontend ──────────────────────
+# Prevents arbitrary macro_data queries. Add series_ids as needed.
+_FRED_ALLOWLIST: set[str] = {
+    # US Macro
+    "VIXCLS", "CPIAUCSL", "CPI_YOY", "UNRATE", "PAYEMS",
+    "A191RL1Q225SBEA", "INDPRO", "UMCSENT", "JTSJOL", "SAHMREALTIME",
+    # Interest rates & spreads
+    "DGS10", "DGS2", "DGS30", "DFF", "SOFR", "YIELD_CURVE_10Y2Y",
+    "BAA10Y", "BAMLH0A0HYM2", "MORTGAGE30US", "MORTGAGE15US",
+    # Financial conditions
+    "NFCI",
+    # Commodities & energy
+    "DCOILWTICO", "DCOILBRENTEU", "DHHNGSP", "GOLDAMGBD228NLBM", "PCOPPUSDM",
+    # Housing
+    "CSUSHPINSA", "HOUST", "PERMIT", "MSPUS",
+    # Europe
+    "CP0000EZ19M086NEST", "ECBDFR", "IRLTLT01DEM156N", "BAMLHE00EHYIEY",
+    # Asia
+    "JPNCPIALLMINMEI", "CHNCPIALLMINMEI", "IRLTLT01JPM156N",
+    # EM
+    "BRACPIALLMINMEI", "INDCPIALLMINMEI", "INTDSRBRM193N", "BAMLEMCBPIOAS",
+    # Global
+    "GPRH", "USEPUINDXD", "DTWEXBGS",
+}
+
+
+@router.get(
+    "/fred",
+    response_model=FredDataResponse,
+    summary="Raw FRED time series from macro_data",
+    tags=["macro"],
+    dependencies=[Depends(require_role(Role.INVESTMENT_TEAM))],
+)
+async def get_fred_data(
+    series_id: str = Query(..., description="FRED series ID, e.g. VIXCLS"),
+    user: CurrentUser = Depends(get_current_user),
+) -> FredDataResponse:
+    """Return raw FRED time series from macro_data hypertable.
+
+    Only allowlisted series are exposed. Cached in Redis for 1 hour.
+    2-year lookback by default.
+    """
+    if series_id not in _FRED_ALLOWLIST:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Series '{series_id}' is not available. Check /macro/fred allowlist.",
+        )
+
+    cache_key = f"fred:{series_id}"
+    cached = await _get_cached(cache_key)
+    if cached is not None:
+        return FredDataResponse(series_id=series_id, data=cached)
+
+    cutoff = date.today() - timedelta(days=_DEFAULT_LOOKBACK_DAYS)
+    stmt = (
+        select(MacroData.obs_date, MacroData.value)
+        .where(MacroData.series_id == series_id, MacroData.obs_date >= cutoff)
+        .order_by(MacroData.obs_date)
+    )
+
+    async with async_session_factory() as db:
+        result = await db.execute(stmt)
+
+    rows = result.all()
+    points = [
+        FredTimePoint(obs_date=r.obs_date, value=float(r.value))
+        for r in rows
+        if r.value is not None
+    ]
+
+    await _set_cached(cache_key, [p.model_dump(mode="json") for p in points], ttl=3600)
+    return FredDataResponse(series_id=series_id, data=points)

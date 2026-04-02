@@ -43,7 +43,65 @@
 	const FREQ_LABELS: Record<string, string> = { D: "Daily", M: "Monthly", Q: "Quarterly", A: "Annual" };
 
 	const CATALOG: IndicatorEntry[] = [
-		// ── US Treasury ──
+		// ── FRED: US Activity ──
+		{ id: "fred:VIXCLS", name: "VIX", group: "FRED US Activity", frequency: "D", source: "fred", region: "US", unit: "idx", params: { series_id: "VIXCLS" } },
+		{ id: "fred:UNRATE", name: "Unemployment Rate", group: "FRED US Activity", frequency: "M", source: "fred", region: "US", unit: "%", params: { series_id: "UNRATE" } },
+		{ id: "fred:PAYEMS", name: "Nonfarm Payrolls", group: "FRED US Activity", frequency: "M", source: "fred", region: "US", unit: "K", params: { series_id: "PAYEMS" } },
+		{ id: "fred:INDPRO", name: "Industrial Production", group: "FRED US Activity", frequency: "M", source: "fred", region: "US", unit: "idx", params: { series_id: "INDPRO" } },
+		{ id: "fred:UMCSENT", name: "Consumer Sentiment (Michigan)", group: "FRED US Activity", frequency: "M", source: "fred", region: "US", unit: "idx", params: { series_id: "UMCSENT" } },
+		{ id: "fred:JTSJOL", name: "JOLTS Openings", group: "FRED US Activity", frequency: "M", source: "fred", region: "US", unit: "K", params: { series_id: "JTSJOL" } },
+		{ id: "fred:SAHMREALTIME", name: "Sahm Rule Indicator", group: "FRED US Activity", frequency: "M", source: "fred", region: "US", unit: "pp", params: { series_id: "SAHMREALTIME" } },
+
+		// ── FRED: US Inflation ──
+		{ id: "fred:CPI_YOY", name: "CPI YoY (%)", group: "FRED US Inflation", frequency: "M", source: "fred", region: "US", unit: "%", params: { series_id: "CPI_YOY" } },
+		{ id: "fred:CPIAUCSL", name: "CPI Index (All Urban)", group: "FRED US Inflation", frequency: "M", source: "fred", region: "US", unit: "idx", params: { series_id: "CPIAUCSL" } },
+
+		// ── FRED: US Rates & Spreads ──
+		{ id: "fred:YIELD_CURVE_10Y2Y", name: "Yield Curve 10Y-2Y", group: "FRED Rates & Spreads", frequency: "D", source: "fred", region: "US", unit: "%", params: { series_id: "YIELD_CURVE_10Y2Y" } },
+		{ id: "fred:DGS10", name: "10-Year Treasury", group: "FRED Rates & Spreads", frequency: "D", source: "fred", region: "US", unit: "%", params: { series_id: "DGS10" } },
+		{ id: "fred:DGS2", name: "2-Year Treasury", group: "FRED Rates & Spreads", frequency: "D", source: "fred", region: "US", unit: "%", params: { series_id: "DGS2" } },
+		{ id: "fred:DGS30", name: "30-Year Treasury", group: "FRED Rates & Spreads", frequency: "D", source: "fred", region: "US", unit: "%", params: { series_id: "DGS30" } },
+		{ id: "fred:DFF", name: "Fed Funds Rate", group: "FRED Rates & Spreads", frequency: "D", source: "fred", region: "US", unit: "%", params: { series_id: "DFF" } },
+		{ id: "fred:SOFR", name: "SOFR", group: "FRED Rates & Spreads", frequency: "D", source: "fred", region: "US", unit: "%", params: { series_id: "SOFR" } },
+		{ id: "fred:BAA10Y", name: "Baa Corporate Spread", group: "FRED Rates & Spreads", frequency: "D", source: "fred", region: "US", unit: "%", params: { series_id: "BAA10Y" } },
+		{ id: "fred:BAMLH0A0HYM2", name: "HY OAS Spread", group: "FRED Rates & Spreads", frequency: "D", source: "fred", region: "US", unit: "%", params: { series_id: "BAMLH0A0HYM2" } },
+		{ id: "fred:NFCI", name: "Financial Conditions (NFCI)", group: "FRED Rates & Spreads", frequency: "D", source: "fred", region: "US", unit: "idx", params: { series_id: "NFCI" } },
+
+		// ── FRED: US Housing ──
+		{ id: "fred:CSUSHPINSA", name: "Case-Shiller National HPI", group: "FRED Housing", frequency: "M", source: "fred", region: "US", unit: "idx", params: { series_id: "CSUSHPINSA" } },
+		{ id: "fred:HOUST", name: "Housing Starts", group: "FRED Housing", frequency: "M", source: "fred", region: "US", unit: "K", params: { series_id: "HOUST" } },
+		{ id: "fred:PERMIT", name: "Building Permits", group: "FRED Housing", frequency: "M", source: "fred", region: "US", unit: "K", params: { series_id: "PERMIT" } },
+		{ id: "fred:MORTGAGE30US", name: "30Y Mortgage Rate", group: "FRED Housing", frequency: "D", source: "fred", region: "US", unit: "%", params: { series_id: "MORTGAGE30US" } },
+
+		// ── FRED: Commodities & Energy ──
+		{ id: "fred:DCOILWTICO", name: "WTI Crude Oil", group: "FRED Commodities", frequency: "D", source: "fred", region: "Global", unit: "$/bbl", params: { series_id: "DCOILWTICO" } },
+		{ id: "fred:DCOILBRENTEU", name: "Brent Crude Oil", group: "FRED Commodities", frequency: "D", source: "fred", region: "Global", unit: "$/bbl", params: { series_id: "DCOILBRENTEU" } },
+		{ id: "fred:DHHNGSP", name: "Henry Hub Nat Gas", group: "FRED Commodities", frequency: "D", source: "fred", region: "Global", unit: "$/MMBtu", params: { series_id: "DHHNGSP" } },
+		{ id: "fred:GOLDAMGBD228NLBM", name: "Gold (London PM Fix)", group: "FRED Commodities", frequency: "D", source: "fred", region: "Global", unit: "$/oz", params: { series_id: "GOLDAMGBD228NLBM" } },
+		{ id: "fred:PCOPPUSDM", name: "Copper Price", group: "FRED Commodities", frequency: "M", source: "fred", region: "Global", unit: "$/mt", params: { series_id: "PCOPPUSDM" } },
+
+		// ── FRED: Global Risk ──
+		{ id: "fred:GPRH", name: "Geopolitical Risk Index", group: "FRED Global Risk", frequency: "M", source: "fred", region: "Global", unit: "idx", params: { series_id: "GPRH" } },
+		{ id: "fred:USEPUINDXD", name: "Policy Uncertainty (US)", group: "FRED Global Risk", frequency: "D", source: "fred", region: "US", unit: "idx", params: { series_id: "USEPUINDXD" } },
+		{ id: "fred:DTWEXBGS", name: "USD Trade-Weighted Index", group: "FRED Global Risk", frequency: "D", source: "fred", region: "Global", unit: "idx", params: { series_id: "DTWEXBGS" } },
+
+		// ── FRED: Europe ──
+		{ id: "fred:ECBDFR", name: "ECB Deposit Rate", group: "FRED Europe", frequency: "D", source: "fred", region: "Europe", unit: "%", params: { series_id: "ECBDFR" } },
+		{ id: "fred:IRLTLT01DEM156N", name: "German 10Y Bund", group: "FRED Europe", frequency: "M", source: "fred", region: "Europe", unit: "%", params: { series_id: "IRLTLT01DEM156N" } },
+		{ id: "fred:CP0000EZ19M086NEST", name: "Eurozone HICP", group: "FRED Europe", frequency: "M", source: "fred", region: "Europe", unit: "idx", params: { series_id: "CP0000EZ19M086NEST" } },
+		{ id: "fred:BAMLHE00EHYIEY", name: "Euro HY Effective Yield", group: "FRED Europe", frequency: "D", source: "fred", region: "Europe", unit: "%", params: { series_id: "BAMLHE00EHYIEY" } },
+
+		// ── FRED: Asia ──
+		{ id: "fred:IRLTLT01JPM156N", name: "10Y JGB Yield", group: "FRED Asia", frequency: "M", source: "fred", region: "Asia", unit: "%", params: { series_id: "IRLTLT01JPM156N" } },
+		{ id: "fred:JPNCPIALLMINMEI", name: "Japan CPI", group: "FRED Asia", frequency: "M", source: "fred", region: "Asia", unit: "idx", params: { series_id: "JPNCPIALLMINMEI" } },
+		{ id: "fred:CHNCPIALLMINMEI", name: "China CPI", group: "FRED Asia", frequency: "M", source: "fred", region: "Asia", unit: "idx", params: { series_id: "CHNCPIALLMINMEI" } },
+
+		// ── FRED: Emerging Markets ──
+		{ id: "fred:BRACPIALLMINMEI", name: "Brazil CPI", group: "FRED EM", frequency: "M", source: "fred", region: "EM", unit: "idx", params: { series_id: "BRACPIALLMINMEI" } },
+		{ id: "fred:INTDSRBRM193N", name: "Brazil SELIC Rate", group: "FRED EM", frequency: "M", source: "fred", region: "EM", unit: "%", params: { series_id: "INTDSRBRM193N" } },
+		{ id: "fred:BAMLEMCBPIOAS", name: "EM Corporate OAS", group: "FRED EM", frequency: "D", source: "fred", region: "EM", unit: "bps", params: { series_id: "BAMLEMCBPIOAS" } },
+
+		// ── US Treasury (legacy, via treasury_data) ──
 		{ id: "treasury:YIELD_CURVE", name: "Yield Curve (10Y-2Y)", group: "US Treasury", frequency: "D", source: "treasury", region: "US", unit: "bps", params: { series: "YIELD_CURVE" } },
 		{ id: "treasury:10Y_RATE", name: "10-Year Rate", group: "US Treasury", frequency: "D", source: "treasury", region: "US", unit: "%", params: { series: "10Y_RATE" } },
 		{ id: "treasury:2Y_RATE", name: "2-Year Rate", group: "US Treasury", frequency: "D", source: "treasury", region: "US", unit: "%", params: { series: "2Y_RATE" } },
