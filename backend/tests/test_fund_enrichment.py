@@ -42,12 +42,13 @@ def _mock_fund_class(**kwargs):
     sc = MagicMock()
     sc.class_id = kwargs.get("class_id", "C000012345")
     sc.ticker = kwargs.get("ticker", "VFINX")
-    sc.expense_ratio_pct = kwargs.get("expense_ratio_pct", 0.14)
+    # XBRL OEF stores _pct fields as pure fractions (0.0014 = 0.14%)
+    sc.expense_ratio_pct = kwargs.get("expense_ratio_pct", 0.0014)
     sc.advisory_fees_paid = kwargs.get("advisory_fees_paid", 1_500_000.0)
     sc.net_assets = kwargs.get("net_assets", 40_000_000_000.0)
     sc.holdings_count = kwargs.get("holdings_count", 507)
-    sc.portfolio_turnover_pct = kwargs.get("portfolio_turnover_pct", 3.0)
-    sc.avg_annual_return_pct = kwargs.get("avg_annual_return_pct", 12.5)
+    sc.portfolio_turnover_pct = kwargs.get("portfolio_turnover_pct", 0.03)
+    sc.avg_annual_return_pct = kwargs.get("avg_annual_return_pct", 0.125)
     return sc
 
 
@@ -121,8 +122,8 @@ class TestGatherFundEnrichment:
 
         fund = _mock_fund()
         classes = [
-            _mock_fund_class(class_id="C000001", ticker="VFINX", expense_ratio_pct=0.14),
-            _mock_fund_class(class_id="C000002", ticker="VFIAX", expense_ratio_pct=0.04),
+            _mock_fund_class(class_id="C000001", ticker="VFINX", expense_ratio_pct=0.0014),
+            _mock_fund_class(class_id="C000002", ticker="VFIAX", expense_ratio_pct=0.0004),
         ]
         db = _mock_session(fund=fund, class_rows=classes)
 
