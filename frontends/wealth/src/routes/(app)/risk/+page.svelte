@@ -11,10 +11,26 @@
 	} from "@investintell/ui";
 	import type { RiskStore, CVaRStatus, CVaRPoint, DriftAlert, BehaviorAlert, RegimeData } from "$lib/stores/risk-store.svelte";
 
+	let { data } = $props();
+
 	const riskStore = getContext<RiskStore>("netz:riskStore");
 
 	onMount(() => {
-		try { riskStore.start(); } catch (e) { console.warn("Risk store failed to start:", e); }
+		try {
+			const hasSsrData = data.riskSummary || data.regime;
+			if (hasSsrData) {
+				riskStore.seedFromSSR({
+					riskSummary: data.riskSummary as Record<string, unknown> | null,
+					regime: data.regime as RegimeData | null,
+					driftAlerts: data.alerts as { dtw_alerts: DriftAlert[]; behavior_change_alerts: BehaviorAlert[] } | null,
+				});
+				riskStore.start(true);
+			} else {
+				riskStore.start(false);
+			}
+		} catch (e) {
+			console.warn("Risk store failed to start:", e);
+		}
 		return () => riskStore.destroy();
 	});
 

@@ -230,10 +230,15 @@ export function createRiskStore(config: RiskStoreConfig) {
 
 				applyUpdate(update);
 			},
-			onError: () => {
-				// SSE failed — activate poll fallback
+			onError: (err) => {
 				sseStatus = "error";
-				activatePollFallback();
+				// 429 rate-limited — delay before polling to avoid aggravating the problem
+				const is429 = err?.message?.includes("429");
+				if (is429) {
+					setTimeout(() => activatePollFallback(), 15_000);
+				} else {
+					activatePollFallback();
+				}
 			},
 		});
 
@@ -317,109 +322,116 @@ export function createRiskStore(config: RiskStoreConfig) {
 		profile_count: number;
 	}
 
+	// ── Parsing helpers (extracted for two-group fetch) ──────────
+
+	function _extractCvarFromBatch(
+		batchResult: PromiseSettledResult<BatchRiskSummaryOut> | undefined,
+	): Record<string, CVaRStatus> {
+		const cvar: Record<string, CVaRStatus> = {};
+		if (batchResult?.status === "fulfilled" && batchResult.value) {
+			for (const [p, entry] of Object.entries(batchResult.value.profiles)) {
+				if (entry !== null) cvar[p] = entry;
+			}
+		}
+		return cvar;
+	}
+
+	function _extractHistory(
+		historyResults: PromiseSettledResult<unknown>[],
+		pids: string[],
+	): Record<string, CVaRPoint[]> {
+		const hist: Record<string, CVaRPoint[]> = {};
+		for (let i = 0; i < pids.length; i++) {
+			const p = pids[i]!;
+			const r = historyResults[i];
+			if (r?.status === "fulfilled" && r.value) {
+				const raw = r.value as unknown[];
+				const arr = Array.isArray(raw) ? raw : (raw as Record<string, unknown>).points as unknown[] ?? [];
+				hist[p] = arr.map((pt: unknown) => {
+					const o = pt as Record<string, unknown>;
+					return {
+						date: (o.snapshot_date ?? o.date ?? "") as string,
+						cvar: Number(o.cvar_current ?? o.cvar ?? 0),
+						cvar_limit: o.cvar_limit != null ? Number(o.cvar_limit) : null,
+						cvar_utilized_pct: o.cvar_utilized_pct != null ? Number(o.cvar_utilized_pct) : null,
+						trigger_status: (o.trigger_status ?? null) as string | null,
+					};
+				});
+			}
+		}
+		return hist;
+	}
+
+	function _extractRegimeHistory(
+		result: PromiseSettledResult<unknown> | undefined,
+	): Array<{ date: string; regime: string }> | undefined {
+		if (result?.status === "fulfilled" && result.value) {
+			const val = result.value as Array<{ date: string; regime: string }> | { history: Array<{ date: string; regime: string }> };
+			return Array.isArray(val) ? val : val.history ?? [];
+		}
+		return undefined;
+	}
+
 	async function fetchAll() {
 		if (fetching) return;
 		fetching = true;
 		try {
 			const api = createClientApiClient(getToken);
-
-			// Batch CVaR summary — single request replaces N individual /risk/{p}/cvar calls.
-			// Falls back to per-profile calls only if the batch endpoint returns a non-2xx.
 			const profilesParam = profileIds.join(",");
 
-			const [batchResult, ...restResults] = await Promise.allSettled([
+			// ── Group A: critical data — renders main state immediately ──
+			const [batchResult, regimeResult, driftResult] = await Promise.allSettled([
 				api.get<BatchRiskSummaryOut>(`/risk/summary?profiles=${profilesParam}`),
-				...profileIds.map((p) => api.get(`/risk/${p}/cvar/history`).catch(() => null)),
 				api.get("/risk/regime").catch(() => null),
-				api.get("/risk/regime/history").catch(() => null),
 				api.get("/analytics/strategy-drift/alerts").catch(() => null),
-				api.get("/risk/macro").catch(() => null),
 			]);
 
-			const n = profileIds.length;
-			// restResults: [history*n, regime, regimeHist, drift, macro]
-			const historyResults = restResults.slice(0, n);
-			const regimeResult = restResults[n];
-			const regimeHistResult = restResults[n + 1];
-			const driftResult = restResults[n + 2];
-			const macroResult = restResults[n + 3];
-
-			// ── CVaR: prefer batch response; fall back to per-profile if batch failed ──
-			const newCvar: Record<string, CVaRStatus> = {};
-
-			if (batchResult?.status === "fulfilled" && batchResult.value) {
-				// Batch succeeded — unpack profiles map
-				const batch = batchResult.value;
-				for (const [p, cvarEntry] of Object.entries(batch.profiles)) {
-					if (cvarEntry !== null) {
-						newCvar[p] = cvarEntry;
-					}
-				}
-			} else {
-				// Batch failed — fall back to individual fetches in parallel
+			// Apply Group A immediately for fast partial render
+			let partialCvar = _extractCvarFromBatch(batchResult);
+			if (Object.keys(partialCvar).length === 0 && batchResult?.status !== "fulfilled") {
+				// Batch failed — fall back to individual fetches
 				const fallbackResults = await Promise.allSettled(
 					profileIds.map((p) => api.get<CVaRStatus>(`/risk/${p}/cvar`).catch(() => null))
 				);
-				for (let i = 0; i < n; i++) {
+				for (let i = 0; i < profileIds.length; i++) {
 					const p = profileIds[i]!;
 					const r = fallbackResults[i];
 					if (r?.status === "fulfilled" && r.value) {
-						newCvar[p] = r.value as CVaRStatus;
+						partialCvar[p] = r.value as CVaRStatus;
 					}
 				}
 			}
 
-			// ── History ────────────────────────────────────────────────────────
-			const newHistory: Record<string, CVaRPoint[]> = {};
-			for (let i = 0; i < n; i++) {
-				const p = profileIds[i]!;
-				const r = historyResults[i];
-				if (r?.status === "fulfilled" && r.value) {
-					const raw = r.value as unknown[];
-					const arr = Array.isArray(raw) ? raw : (raw as Record<string, unknown>).points as unknown[] ?? [];
-					newHistory[p] = arr.map((pt: unknown) => {
-						const o = pt as Record<string, unknown>;
-						return {
-							date: (o.snapshot_date ?? o.date ?? "") as string,
-							cvar: Number(o.cvar_current ?? o.cvar ?? 0),
-							cvar_limit: o.cvar_limit != null ? Number(o.cvar_limit) : null,
-							cvar_utilized_pct: o.cvar_utilized_pct != null ? Number(o.cvar_utilized_pct) : null,
-							trigger_status: (o.trigger_status ?? null) as string | null,
-						};
-					});
-				}
-			}
-
-			// ── Regime ────────────────────────────────────────────────────────
-			const newRegime = (regimeResult?.status === "fulfilled" && regimeResult.value)
+			const partialRegime = (regimeResult.status === "fulfilled" && regimeResult.value)
 				? regimeResult.value as RegimeData
 				: undefined;
-
-			let newRegimeHistory: Array<{ date: string; regime: string }> | undefined;
-			if (regimeHistResult?.status === "fulfilled" && regimeHistResult.value) {
-				const val = regimeHistResult.value as Array<{ date: string; regime: string }> | { history: Array<{ date: string; regime: string }> };
-				newRegimeHistory = Array.isArray(val) ? val : val.history ?? [];
-			}
-
-			// ── Drift + Macro ─────────────────────────────────────────────────
-			const newDrift = (driftResult?.status === "fulfilled" && driftResult.value)
+			const partialDrift = (driftResult.status === "fulfilled" && driftResult.value)
 				? driftResult.value as { dtw_alerts: DriftAlert[]; behavior_change_alerts: BehaviorAlert[] }
 				: undefined;
 
-			const newMacro = (macroResult?.status === "fulfilled" && macroResult.value)
-				? macroResult.value as Record<string, unknown>
-				: undefined;
-
-			// Use monotonic version — poll update must pass the gate
-			const nextVersion = version + 1;
 			applyUpdate({
-				version: nextVersion,
-				cvarByProfile: newCvar,
-				cvarHistoryByProfile: newHistory,
-				regime: newRegime,
-				regimeHistory: newRegimeHistory,
-				driftAlerts: newDrift,
-				macroIndicators: newMacro,
+				version: version + 1,
+				cvarByProfile: partialCvar,
+				regime: partialRegime,
+				driftAlerts: partialDrift,
+			});
+
+			// ── Group B: enrichment — history and macro (staggered 300ms) ──
+			await new Promise((r) => setTimeout(r, 300));
+
+			const [regimeHistResult, macroResult, ...historyResults] = await Promise.allSettled([
+				api.get("/risk/regime/history").catch(() => null),
+				api.get("/risk/macro").catch(() => null),
+				...profileIds.map((p) => api.get(`/risk/${p}/cvar/history`).catch(() => null)),
+			]);
+
+			applyUpdate({
+				version: version + 1,
+				cvarHistoryByProfile: _extractHistory(historyResults, profileIds),
+				regimeHistory: _extractRegimeHistory(regimeHistResult),
+				macroIndicators: (macroResult.status === "fulfilled" && macroResult.value)
+					? macroResult.value as Record<string, unknown>
+					: undefined,
 			});
 		} catch (e) {
 			error = e instanceof Error ? e.message : "Failed to load risk data";
@@ -459,11 +471,38 @@ export function createRiskStore(config: RiskStoreConfig) {
 		await fetchAll();
 	}
 
-	function start() {
-		// Initial fetch, then start SSE primary
-		fetchAll().then(() => {
+	function seedFromSSR(data: {
+		riskSummary: Record<string, unknown> | null;
+		regime: RegimeData | null;
+		driftAlerts: { dtw_alerts: DriftAlert[]; behavior_change_alerts: BehaviorAlert[] } | null;
+	}): void {
+		const partial: RiskUpdate = { version: 1 };
+
+		if (data.riskSummary) {
+			const summary = data.riskSummary as unknown as BatchRiskSummaryOut;
+			if (summary.profiles) {
+				const cvar: Record<string, CVaRStatus> = {};
+				for (const [p, v] of Object.entries(summary.profiles)) {
+					if (v !== null) cvar[p] = v;
+				}
+				if (Object.keys(cvar).length > 0) partial.cvarByProfile = cvar;
+			}
+		}
+		if (data.regime) partial.regime = data.regime;
+		if (data.driftAlerts) partial.driftAlerts = data.driftAlerts;
+
+		applyUpdate(partial);
+	}
+
+	function start(skipInitialFetch = false) {
+		if (skipInitialFetch) {
+			// Data already seeded via SSR — go straight to SSE
 			startSSE();
-		});
+		} else {
+			fetchAll().then(() => {
+				startSSE();
+			});
+		}
 	}
 
 	function destroy() {
@@ -486,6 +525,7 @@ export function createRiskStore(config: RiskStoreConfig) {
 		get sseStatus() { return sseStatus; },
 		fetchAll,
 		refresh,
+		seedFromSSR,
 		start,
 		destroy,
 		// Legacy compat — callers that used startPolling/stopPolling
