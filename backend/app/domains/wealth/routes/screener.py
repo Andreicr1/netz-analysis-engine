@@ -1681,25 +1681,18 @@ async def get_catalog_fund_detail(
     """
     from app.domains.wealth.queries.catalog_sql import build_catalog_query
 
-    # Build catalog query filtering by external_id across all universes
-    filters = CatalogFilters(q=external_id, page=1, page_size=10, has_nav=None)
+    # Build catalog query filtering by exact external_id
+    filters = CatalogFilters(external_id=external_id, page=1, page_size=1, has_nav=None)
     stmt = build_catalog_query(filters)
     if stmt is None:
         raise HTTPException(status_code=404, detail="Fund not found")
 
     rows = (await db.execute(stmt)).all()
 
-    # Find exact match on external_id
-    match = None
-    for r in rows:
-        if str(r.external_id) == external_id:
-            match = r
-            break
-
-    if match is None:
+    if not rows:
         raise HTTPException(status_code=404, detail="Fund not found")
 
-    r = match
+    r = rows[0]
     aum_val = float(r.aum) if r.aum is not None else None
 
     detail = FundDetailOut(

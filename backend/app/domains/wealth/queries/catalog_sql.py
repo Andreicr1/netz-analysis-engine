@@ -104,6 +104,7 @@ def _escape_ilike(text: str) -> str:
 @dataclass(frozen=True)
 class CatalogFilters:
     q: str | None = None
+    external_id: str | None = None        # exact match on external_id (for detail lookups)
     region: str | None = None             # US | EU
     fund_universe: str | None = None      # comma-separated categories or legacy values
     fund_type: str | None = None          # additional fund_type filter within universe
@@ -177,7 +178,11 @@ def _build_base_stmt(f: CatalogFilters) -> Select[Any]:
     stmt = select(mv_unified_funds)
     
     conditions: list[ColumnElement[bool]] = []
-    
+
+    # 0. Exact external_id match (for detail lookups — bypasses text search)
+    if f.external_id:
+        conditions.append(mv_unified_funds.c.external_id == f.external_id)
+
     # 1. Full-text search
     if f.q:
         escaped = _escape_ilike(f.q)
