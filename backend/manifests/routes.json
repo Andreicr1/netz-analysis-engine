@@ -781,6 +781,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/macro/fred",
+    "name": "get_fred_data"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/macro/imf",
     "name": "get_imf_data"
   },
