@@ -480,26 +480,12 @@
 			{currentSort}
 			infiniteScroll={true}
 			{isLoadingMore}
+			bind:sentinelEl
 			onSelectFund={openFundDetail}
 			onSendToDDReview={sendClassesToDDReview}
 			onSortChange={handleSortChange}
 			onOpenManager={openManagerDetail}
 		/>
-
-		<!-- Sentinel: IntersectionObserver triggers loadMore() -->
-		<div
-			bind:this={sentinelEl}
-			class="scr-scroll-sentinel"
-			aria-hidden="true"
-		></div>
-
-		{#if isLoadingMore}
-			<div class="scr-loading-more">
-				<span class="scr-loading-dot"></span>
-				<span class="scr-loading-dot"></span>
-				<span class="scr-loading-dot"></span>
-			</div>
-		{/if}
 	</div>
 	{:else}
 	<!-- ════════════════ SCREENING TAB ════════════════ -->
@@ -726,35 +712,6 @@
 		font-weight: 500;
 		margin: 0 24px;
 		flex-shrink: 0;
-	}
-
-	.scr-scroll-sentinel {
-		height: 1px;
-		width: 100%;
-	}
-
-	.scr-loading-more {
-		display: flex;
-		justify-content: center;
-		align-items: center;
-		gap: 6px;
-		padding: 20px;
-	}
-
-	.scr-loading-dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: var(--ii-text-muted, #9ca3af);
-		animation: scr-dot-pulse 1.2s ease-in-out infinite;
-	}
-
-	.scr-loading-dot:nth-child(2) { animation-delay: 0.2s; }
-	.scr-loading-dot:nth-child(3) { animation-delay: 0.4s; }
-
-	@keyframes scr-dot-pulse {
-		0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
-		40% { opacity: 1; transform: scale(1); }
 	}
 
 	.scr-btn {

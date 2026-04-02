@@ -41,17 +41,13 @@
 		scores ? Object.entries(scores.regions) as [string, RegionalScore][] : []
 	);
 	let globalInd = $derived(scores?.global_indicators ?? null);
+	let latestReviewId = $derived(initialReviews.length > 0 ? initialReviews[0]!.id : null);
 
 	// ── Expandable region state ─────────────────────────────────────────
 
 	let expandedRegion = $state<string | null>(null);
 
-	// Expand first region once data loads
-	$effect(() => {
-		if (regions.length > 0 && expandedRegion === null) {
-			expandedRegion = regions[0]?.[0] ?? null;
-		}
-	});
+	// All regions start collapsed — user clicks to expand
 
 	function toggleRegion(regionName: string) {
 		expandedRegion = expandedRegion === regionName ? null : regionName;
@@ -268,14 +264,14 @@
 				</div>
 				<div class="ind-col">
 					<span class="ind-label">CPI YOY</span>
-					<span class="ind-value">{indicators.cpi_yoy !== null ? formatPercent(indicators.cpi_yoy) : "—"}</span>
+					<span class="ind-value">{indicators.cpi_yoy !== null ? formatPercent(indicators.cpi_yoy / 100) : "—"}</span>
 					{#if indicators.cpi_date}
 						<span class="ind-date">{indicators.cpi_date}</span>
 					{/if}
 				</div>
 				<div class="ind-col ind-col--last">
 					<span class="ind-label">FED FUNDS</span>
-					<span class="ind-value">{indicators.fed_funds_rate !== null ? formatPercent(indicators.fed_funds_rate) : "—"}</span>
+					<span class="ind-value">{indicators.fed_funds_rate !== null ? formatPercent(indicators.fed_funds_rate / 100) : "—"}</span>
 					{#if indicators.fed_funds_date}
 						<span class="ind-date">{indicators.fed_funds_date}</span>
 					{/if}
@@ -393,7 +389,9 @@
 									{/if}
 								</div>
 								<div class="analysis-card-footer">
-									<a href="/macro/reports/{regionName.toLowerCase()}" class="analysis-link">VIEW FULL DETAILED REPORT</a>
+									{#if latestReviewId}
+									<a href="/macro/reviews/{latestReviewId}?region={regionName.toLowerCase()}" class="analysis-link">VIEW FULL DETAILED REPORT</a>
+								{/if}
 								</div>
 							</div>
 						</div>

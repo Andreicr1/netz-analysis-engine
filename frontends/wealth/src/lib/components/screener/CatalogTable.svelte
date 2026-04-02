@@ -36,6 +36,7 @@
 		currentSort: string;
 		infiniteScroll?: boolean;
 		isLoadingMore?: boolean;
+		sentinelEl?: HTMLElement | null;
 		onSelectFund: (item: UnifiedFundItem) => void;
 		onSendToDDReview: (items: UnifiedFundItem[]) => void;
 		onPageChange?: (page: number) => void;
@@ -49,6 +50,7 @@
 		currentSort = "name_asc",
 		infiniteScroll = false,
 		isLoadingMore = false,
+		sentinelEl = $bindable(null),
 		onSelectFund,
 		onSendToDDReview,
 		onPageChange,
@@ -297,7 +299,7 @@
 					</th>
 					<th class="ct-col-er">ER%</th>
 					<th class="ct-col-ret">1Y Ret</th>
-					<th class="ct-col-cy">CY</th>
+					<th class="ct-col-action"></th>
 				</tr>
 			</thead>
 			<tbody>
@@ -383,7 +385,15 @@
 								<td class="std-aum">{formatAumNeutral(group.representative.aum)}</td>
 								<td class="ct-col-er">{group.representative.expense_ratio_pct != null ? formatPercent(Number(group.representative.expense_ratio_pct) / 100) : "\u2014"}</td>
 								<td class="ct-col-ret">{#if group.representative.fund_type === "money_market" && group.representative.seven_day_gross_yield != null}{formatPercent(Number(group.representative.seven_day_gross_yield) / 100)}{:else if group.representative.avg_annual_return_1y != null}{formatPercent(Number(group.representative.avg_annual_return_1y) / 100)}{:else}{"\u2014"}{/if}</td>
-								<td class="ct-cy">{group.representative.currency ?? "\u2014"}</td>
+								<td class="ct-col-action">
+									<button
+										class="ct-dd-btn"
+										title="Run DD Report"
+										onclick={(e) => { e.stopPropagation(); onSendToDDReview([group.representative]); }}
+									>
+										DD Review
+									</button>
+								</td>
 							</tr>
 
 							<!-- Class rows (L3) — only if expanded -->
@@ -461,6 +471,19 @@
 				{/each}
 			</tbody>
 		</table>
+
+		{#if infiniteScroll}
+			<!-- Sentinel: IntersectionObserver in parent triggers loadMore() -->
+			<div bind:this={sentinelEl} class="ct-scroll-sentinel" aria-hidden="true"></div>
+
+			{#if isLoadingMore}
+				<div class="ct-loading-more">
+					<span class="ct-loading-dot"></span>
+					<span class="ct-loading-dot"></span>
+					<span class="ct-loading-dot"></span>
+				</div>
+			{/if}
+		{/if}
 	</div>
 
 	{#if !infiniteScroll}
@@ -480,6 +503,35 @@
 {/if}
 
 <style>
+	.ct-scroll-sentinel {
+		height: 1px;
+		width: 100%;
+	}
+
+	.ct-loading-more {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		gap: 6px;
+		padding: 20px;
+	}
+
+	.ct-loading-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--ii-text-muted, #9ca3af);
+		animation: ct-dot-pulse 1.2s ease-in-out infinite;
+	}
+
+	.ct-loading-dot:nth-child(2) { animation-delay: 0.2s; }
+	.ct-loading-dot:nth-child(3) { animation-delay: 0.4s; }
+
+	@keyframes ct-dot-pulse {
+		0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+		40% { opacity: 1; transform: scale(1); }
+	}
+
 	.ct-page-label {
 		margin-left: auto;
 		font-size: 12px;
@@ -512,7 +564,7 @@
 	.ct-col-name   { min-width: 280px; }
 	.ct-col-strategy { width: 150px; }
 	.ct-col-aum    { width: 90px; text-align: right; }
-	.ct-col-cy     { width: 50px; }
+	.ct-col-action { width: 90px; text-align: right; }
 	.ct-col-er     { width: 60px; text-align: right; font-variant-numeric: tabular-nums; font-size: var(--ii-text-small, 0.8125rem); color: var(--ii-text-secondary); }
 	.ct-col-ret    { width: 70px; text-align: right; font-variant-numeric: tabular-nums; font-size: var(--ii-text-small, 0.8125rem); color: var(--ii-text-secondary); }
 	.ct-ncen-badge { display: inline-block; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 600; background: color-mix(in srgb, var(--ii-info) 12%, transparent); color: var(--ii-info); white-space: nowrap; }
@@ -621,10 +673,22 @@
 		display: block;
 	}
 
-	.ct-cy {
-		font-size: 12px;
-		color: #62748e;
-		font-weight: 500;
+	.ct-dd-btn {
+		padding: 3px 10px;
+		font-size: 11px;
+		font-weight: 600;
+		font-family: var(--ii-font-sans);
+		color: var(--ii-brand-primary, #1447e6);
+		background: color-mix(in srgb, var(--ii-brand-primary, #1447e6) 8%, transparent);
+		border: 1px solid color-mix(in srgb, var(--ii-brand-primary, #1447e6) 20%, transparent);
+		border-radius: 6px;
+		cursor: pointer;
+		white-space: nowrap;
+		transition: all 120ms ease;
+	}
+	.ct-dd-btn:hover {
+		background: color-mix(in srgb, var(--ii-brand-primary, #1447e6) 15%, transparent);
+		border-color: var(--ii-brand-primary, #1447e6);
 	}
 
 	/* ── Chevron ── */

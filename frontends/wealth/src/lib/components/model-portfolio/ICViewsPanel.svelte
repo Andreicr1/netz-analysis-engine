@@ -23,7 +23,14 @@
 
 	// ── Local reactive state ────────────────────────────────────────────
 	let localViews = $state<PortfolioView[]>([]);
-	$effect(() => { localViews = [...views]; });
+	let prevViewIds = "";
+	$effect(() => {
+		const ids = views.map((v) => v.id).join(",");
+		if (ids !== prevViewIds) {
+			prevViewIds = ids;
+			localViews = [...views];
+		}
+	});
 
 	let submitting = $state(false);
 	let deleting = $state<string | null>(null);

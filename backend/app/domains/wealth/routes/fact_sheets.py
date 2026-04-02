@@ -195,52 +195,6 @@ async def list_fact_sheets(
 
 
 @router.get(
-    "/{fact_sheet_path:path}/download",
-    summary="Download a fact-sheet PDF",
-)
-async def download_fact_sheet(
-    fact_sheet_path: str,
-    user: CurrentUser = Depends(get_current_user),
-    org_id: str = Depends(get_org_id),
-) -> Response:
-    """Download a fact-sheet PDF by storage path."""
-    _require_feature()
-
-    # Prevent path traversal attacks
-    if ".." in fact_sheet_path:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid path",
-        )
-
-    # Verify path belongs to this org
-    parts = fact_sheet_path.split("/")
-    if len(parts) < 2 or parts[1] != str(org_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
-        )
-
-    from app.services.storage_client import get_storage_client
-
-    storage = get_storage_client()
-    try:
-        data = await storage.read(fact_sheet_path)
-    except FileNotFoundError:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Fact-sheet not found",
-        )
-
-    filename = fact_sheet_path.rsplit("/", maxsplit=1)[-1]
-    return Response(
-        content=data,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-@router.get(
     "/dd-reports/{report_id}/download",
     summary="Download DD Report PDF",
 )
@@ -342,6 +296,52 @@ async def download_dd_report_pdf(
     filename = f"dd_report_{safe_name}_{language}.pdf"
     return Response(
         content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
+    "/{fact_sheet_path:path}/download",
+    summary="Download a fact-sheet PDF",
+)
+async def download_fact_sheet(
+    fact_sheet_path: str,
+    user: CurrentUser = Depends(get_current_user),
+    org_id: str = Depends(get_org_id),
+) -> Response:
+    """Download a fact-sheet PDF by storage path."""
+    _require_feature()
+
+    # Prevent path traversal attacks
+    if ".." in fact_sheet_path:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid path",
+        )
+
+    # Verify path belongs to this org
+    parts = fact_sheet_path.split("/")
+    if len(parts) < 2 or parts[1] != str(org_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
+        )
+
+    from app.services.storage_client import get_storage_client
+
+    storage = get_storage_client()
+    try:
+        data = await storage.read(fact_sheet_path)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Fact-sheet not found",
+        )
+
+    filename = fact_sheet_path.rsplit("/", maxsplit=1)[-1]
+    return Response(
+        content=data,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

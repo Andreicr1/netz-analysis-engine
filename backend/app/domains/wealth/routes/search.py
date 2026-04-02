@@ -73,9 +73,41 @@ class GlobalSearchResponse(BaseModel):
 # ── Route ───────────────────────────────────────────────────
 
 
+from app.core.security.clerk_auth import CurrentUser, get_current_user
+from app.core.tenancy.middleware import get_org_id
 from app.domains.wealth.schemas.holdings import HoldingHolder, ReverseLookupResponse
 
-# ... existing code ...
+
+@router.get(
+    "",
+    response_model=GlobalSearchResponse,
+    summary="Global search across funds, managers, and documents",
+)
+async def global_search(
+    q: str = Query(..., min_length=2, max_length=200),
+    categories: str = Query("funds,managers,documents", description="Comma-separated categories"),
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+    org_id: str = Depends(get_org_id),
+) -> GlobalSearchResponse:
+    """Fan-out search across funds, managers, and documents."""
+    cats = {c.strip() for c in categories.split(",") if c.strip() in VALID_CATEGORIES}
+    if not cats:
+        cats = VALID_CATEGORIES
+
+    tasks = []
+    if "funds" in cats:
+        tasks.append(_search_assets(db, q))
+    if "managers" in cats:
+        tasks.append(_search_managers(db, q, org_id))
+    if "documents" in cats:
+        tasks.append(_search_documents(db, q))
+
+    groups = await asyncio.gather(*tasks, return_exceptions=True)
+    valid_groups = [g for g in groups if isinstance(g, SearchCategoryGroup) and g.items]
+
+    return GlobalSearchResponse(query=q, groups=valid_groups)
+
 
 @router.get(
     "/holdings/reverse",
