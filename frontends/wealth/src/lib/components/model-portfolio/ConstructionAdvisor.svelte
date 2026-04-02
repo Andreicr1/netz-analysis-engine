@@ -302,7 +302,7 @@
 													</td>
 													<td class="ca-td-num">{c.volatility_1y != null ? formatPercent(c.volatility_1y) : "—"}</td>
 													<td class="ca-td-num" class:ca-corr-neg={c.correlation_with_portfolio < 0}>
-														{c.correlation_with_portfolio.toFixed(2)}
+														{c.correlation_with_portfolio != null ? c.correlation_with_portfolio.toFixed(2) : "—"}
 													</td>
 													<td class="ca-td-num">{formatPercent(c.overlap_pct)}</td>
 													<td class="ca-td-num">{c.projected_cvar_95 != null ? formatPercent(c.projected_cvar_95) : "—"}</td>

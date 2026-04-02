@@ -209,7 +209,7 @@
 				{#each dtwAlerts as alert (alert.instrument_name)}
 					<div class="alert-row">
 						<span class="alert-name">{alert.instrument_name}</span>
-						<span class="alert-tag alert-tag--dtw">DTW {alert.dtw_score.toFixed(2)}</span>
+						<span class="alert-tag alert-tag--dtw">DTW {alert.dtw_score != null ? alert.dtw_score.toFixed(2) : "—"}</span>
 					</div>
 				{/each}
 				{#each behaviorAlerts as alert (alert.instrument_name)}

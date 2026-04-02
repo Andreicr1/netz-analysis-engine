@@ -100,7 +100,7 @@ class Settings(BaseSettings):
     feature_auto_rebalance: bool = False
     feature_adls_enabled: bool = False  # DEPRECATED: ADLS removed, kept for env var compat
     feature_wealth_fact_sheets: bool = True
-    feature_wealth_content: bool = False
+    feature_wealth_content: bool = False  # enabled per-tenant via env; fact_sheets is stable, content is newer
     feature_wealth_monitoring: bool = False
 
     # ── Storage ──────────────────────────────────────────────

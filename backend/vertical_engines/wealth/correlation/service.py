@@ -74,7 +74,7 @@ class CorrelationService:
                 average_correlation=0.0,
                 baseline_average_correlation=0.0,
                 regime_shift_detected=False,
-                computed_at=datetime.now(UTC).isoformat(),
+                computed_at=datetime.now(UTC),
             )
 
         # Map pair indices to instrument identifiers

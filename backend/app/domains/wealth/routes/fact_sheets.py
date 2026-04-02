@@ -32,10 +32,10 @@ router = APIRouter(prefix="/fact-sheets", tags=["fact-sheets"])
 
 
 def _require_feature() -> None:
-    """Raise 404 if fact-sheet feature is disabled."""
+    """Raise 501 if fact-sheet feature is disabled."""
     if not settings.feature_wealth_fact_sheets:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail="Fact-sheet feature is not enabled",
         )
 

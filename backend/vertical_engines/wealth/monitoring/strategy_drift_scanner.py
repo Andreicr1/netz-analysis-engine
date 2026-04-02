@@ -95,7 +95,7 @@ def scan_strategy_drift(
 
     """
     cfg = _resolve_config(config)
-    now_iso = datetime.now(UTC).isoformat()
+    now_dt = datetime.now(UTC)
 
     if not metrics_history:
         return StrategyDriftResult(
@@ -106,7 +106,7 @@ def scan_strategy_drift(
             total_metrics=0,
             metrics=(),
             severity="none",
-            detected_at=now_iso,
+            detected_at=now_dt,
         )
 
     # Split into recent and baseline windows by calc_date count
@@ -128,7 +128,7 @@ def scan_strategy_drift(
             total_metrics=0,
             metrics=(),
             severity="none",
-            detected_at=now_iso,
+            detected_at=now_dt,
         )
 
     if len(recent_rows) < cfg["min_recent_points"]:
@@ -140,7 +140,7 @@ def scan_strategy_drift(
             total_metrics=0,
             metrics=(),
             severity="none",
-            detected_at=now_iso,
+            detected_at=now_dt,
         )
 
     # Compute z-scores per metric
@@ -220,7 +220,7 @@ def scan_strategy_drift(
         total_metrics=len(metric_drifts),
         metrics=tuple(metric_drifts),
         severity=severity,
-        detected_at=now_iso,
+        detected_at=now_dt,
     )
 
 
@@ -246,7 +246,7 @@ def scan_all_strategy_drift(
         With only drift_detected instruments in alerts.
 
     """
-    now_iso = datetime.now(UTC).isoformat()
+    now_dt = datetime.now(UTC)
     alerts: list[StrategyDriftResult] = []
     all_results: list[StrategyDriftResult] = []
     stable_count = 0
@@ -273,5 +273,5 @@ def scan_all_strategy_drift(
         all_results=tuple(all_results),
         stable_count=stable_count,
         insufficient_data_count=insufficient_count,
-        scan_timestamp=now_iso,
+        scan_timestamp=now_dt,
     )

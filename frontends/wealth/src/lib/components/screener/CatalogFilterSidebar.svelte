@@ -176,7 +176,7 @@
 					onchange={() => toggleCategory(cat.key)}
 				/>
 				<span class="cfs-check-label">{cat.label}</span>
-				<span class="cfs-check-count">{count.toLocaleString()}</span>
+				<span class="cfs-check-count">{count?.toLocaleString() ?? "—"}</span>
 			</label>
 		{/each}
 	</div>
@@ -193,7 +193,7 @@
 						onchange={() => toggleStrategy(item.value)}
 					/>
 					<span class="cfs-check-label">{item.label}</span>
-					<span class="cfs-check-count">{item.count.toLocaleString()}</span>
+					<span class="cfs-check-count">{item.count?.toLocaleString() ?? "—"}</span>
 				</label>
 			{/each}
 		</div>
@@ -211,7 +211,7 @@
 						onchange={() => toggleGeography(item.value)}
 					/>
 					<span class="cfs-check-label">{item.label}</span>
-					<span class="cfs-check-count">{item.count.toLocaleString()}</span>
+					<span class="cfs-check-count">{item.count?.toLocaleString() ?? "—"}</span>
 				</label>
 			{/each}
 		</div>
@@ -229,7 +229,7 @@
 						onchange={() => toggleDomicile(item.value)}
 					/>
 					<span class="cfs-check-label">{item.label}</span>
-					<span class="cfs-check-count">{item.count.toLocaleString()}</span>
+					<span class="cfs-check-count">{item.count?.toLocaleString() ?? "—"}</span>
 				</label>
 			{/each}
 		</div>

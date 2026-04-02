@@ -48,10 +48,10 @@ def _get_content_semaphore() -> asyncio.Semaphore:
 
 
 def _require_feature() -> None:
-    """Raise 404 if content production feature is disabled."""
+    """Raise 501 if content production feature is disabled."""
     if not settings.feature_wealth_content:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail="Content production feature is not enabled",
         )
 
@@ -412,6 +412,7 @@ async def stream_content_generation(
     org_id: str = Depends(get_org_id),
 ):
     """SSE stream for content generation progress."""
+    _require_feature()
     if not await verify_job_owner(job_id, str(org_id)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

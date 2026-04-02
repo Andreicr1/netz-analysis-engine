@@ -566,7 +566,7 @@
 				</div>
 				<div class="metric-card">
 					<span class="metric-label">Sharpe Ratio</span>
-					<span class="metric-value">{optimizationMeta.sharpe_ratio.toFixed(3)}</span>
+					<span class="metric-value">{optimizationMeta.sharpe_ratio != null ? optimizationMeta.sharpe_ratio.toFixed(3) : "—"}</span>
 				</div>
 				<div class="metric-card">
 					<span class="metric-label">CVaR 95%</span>

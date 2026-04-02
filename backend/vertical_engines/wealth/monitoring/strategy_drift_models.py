@@ -7,6 +7,7 @@ ORM models live in backend/app/domains/wealth/models/.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,7 +33,7 @@ class StrategyDriftResult:
     total_metrics: int
     metrics: tuple[MetricDrift, ...]
     severity: str  # "none" | "moderate" (1-2 metrics) | "severe" (3+ metrics)
-    detected_at: str  # ISO datetime
+    detected_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,4 +45,4 @@ class StrategyDriftScanResult:
     all_results: tuple[StrategyDriftResult, ...]  # every instrument (stable + insufficient + drift_detected)
     stable_count: int
     insufficient_data_count: int
-    scan_timestamp: str
+    scan_timestamp: datetime

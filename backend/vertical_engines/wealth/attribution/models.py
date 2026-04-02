@@ -6,6 +6,7 @@ Frozen dataclasses for cross-boundary safety.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,8 +30,8 @@ class PortfolioAttributionResult:
     """Full attribution for a portfolio profile."""
 
     profile: str
-    start_date: str  # ISO date
-    end_date: str  # ISO date
+    start_date: date
+    end_date: date
     granularity: str  # "monthly" | "quarterly"
     total_portfolio_return: float
     total_benchmark_return: float

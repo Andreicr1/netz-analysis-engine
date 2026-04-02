@@ -60,7 +60,7 @@
 			<label class="cfs-check">
 				<input type="checkbox" checked={selectedTypes.includes(item.value)} onchange={() => toggleType(item.value)} />
 				<span class="cfs-check-label">{item.label}</span>
-				<span class="cfs-check-count">{item.count.toLocaleString()}</span>
+				<span class="cfs-check-count">{item.count?.toLocaleString() ?? "—"}</span>
 			</label>
 		{/each}
 	</div>
@@ -72,7 +72,7 @@
 				<label class="cfs-check">
 					<input type="checkbox" checked={selectedExchanges.includes(item.value)} onchange={() => toggleExchange(item.value)} />
 					<span class="cfs-check-label">{item.label}</span>
-					<span class="cfs-check-count">{item.count.toLocaleString()}</span>
+					<span class="cfs-check-count">{item.count?.toLocaleString() ?? "—"}</span>
 				</label>
 			{/each}
 		</div>

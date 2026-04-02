@@ -224,7 +224,7 @@ async def _do_drift_scan(
                 for m in a.metrics
             ],
             severity=a.severity,
-            detected_at=datetime.fromisoformat(a.detected_at) if isinstance(a.detected_at, str) else a.detected_at,
+            detected_at=a.detected_at,
         )
         for a in scan_result.alerts
         if severity_filter is None or a.severity == severity_filter
@@ -235,7 +235,7 @@ async def _do_drift_scan(
         alerts=alerts,
         stable_count=scan_result.stable_count,
         insufficient_data_count=scan_result.insufficient_data_count,
-        scan_timestamp=datetime.fromisoformat(scan_result.scan_timestamp) if isinstance(scan_result.scan_timestamp, str) else scan_result.scan_timestamp,
+        scan_timestamp=scan_result.scan_timestamp,
     )
 
 

@@ -355,7 +355,7 @@
 			<select class="scr-dropdown" value={selectedStrategyLabels[0] ?? ""} onchange={setStrategy}>
 				<option value="">All Strategies</option>
 				{#each catalogFacets.strategy_labels as item (item.value)}
-					<option value={item.value}>{item.label} ({item.count.toLocaleString()})</option>
+					<option value={item.value}>{item.label} ({item.count?.toLocaleString() ?? "—"})</option>
 				{/each}
 			</select>
 		{/if}
@@ -364,7 +364,7 @@
 			<select class="scr-dropdown" value={selectedGeographies[0] ?? ""} onchange={setGeography}>
 				<option value="">All Geographies</option>
 				{#each catalogFacets.geographies as item (item.value)}
-					<option value={item.value}>{item.label} ({item.count.toLocaleString()})</option>
+					<option value={item.value}>{item.label} ({item.count?.toLocaleString() ?? "—"})</option>
 				{/each}
 			</select>
 		{/if}

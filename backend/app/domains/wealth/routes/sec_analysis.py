@@ -4,7 +4,7 @@ CIK-based manager detail, reverse CUSIP lookup, peer comparison,
 fund-type breakdown, and holdings history. All queries hit global SEC tables
 (no RLS, no organization_id).
 
-GET  /sec/managers/{cik}             — manager detail + latest holdings summary
+GET  /sec/managers/{cik_or_crd}      — manager detail + latest holdings summary
 GET  /sec/holdings/reverse           — reverse lookup by CUSIP
 GET  /sec/managers/compare           — peer comparison (max 5 CIKs)
 GET  /sec/managers/{crd_number}/funds — fund-type breakdown
@@ -105,38 +105,38 @@ async def _resolve_ciks(db: AsyncSession, cik: str, *, crd: str | None = None) -
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  GET /managers/{cik} — detail with latest holdings summary
+#  GET /managers/{cik_or_crd} — detail with latest holdings summary
 # ═══════════════════════════════════════════════════════════════════════════
 
 
 @router.get(
-    "/managers/{cik}",
+    "/managers/{cik_or_crd}",
     response_model=SecManagerDetail,
-    summary="Manager detail by CIK",
+    summary="Manager detail by CIK or CRD",
 )
 async def get_manager_detail(
-    cik: str = Path(...),
+    cik_or_crd: str = Path(..., description="SEC CIK or IARD CRD number"),
     db: AsyncSession = Depends(get_db_with_rls),
     actor: Actor = Depends(get_actor),
 ) -> SecManagerDetail:
     _require_investment_role(actor)
-    cik = _validate_cik(cik)
+    identifier = _validate_cik(cik_or_crd)
 
     # Try CIK first, then fall back to CRD (frontend catalog sends CRD as manager_id)
-    stmt = select(SecManager).where(SecManager.cik == cik)
+    stmt = select(SecManager).where(SecManager.cik == identifier)
     result = await db.execute(stmt)
     manager = result.scalar_one_or_none()
     if not manager:
-        stmt_crd = select(SecManager).where(SecManager.crd_number == cik)
+        stmt_crd = select(SecManager).where(SecManager.crd_number == identifier)
         result_crd = await db.execute(stmt_crd)
         manager = result_crd.scalar_one_or_none()
     if not manager:
-        raise HTTPException(status_code=404, detail=f"Manager with CIK/CRD {cik} not found")
+        raise HTTPException(status_code=404, detail=f"Manager with CIK/CRD {identifier} not found")
 
     today = date.today()
 
     # Resolve all CIKs (own + parent 13F filers via entity links)
-    resolved_cik = manager.cik or cik
+    resolved_cik = manager.cik or identifier
     cik_list = await _resolve_ciks(db, resolved_cik, crd=manager.crd_number)
 
     # Latest quarter summary — always filter report_date for chunk pruning

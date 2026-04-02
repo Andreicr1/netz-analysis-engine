@@ -5,6 +5,7 @@ Frozen dataclasses for cross-boundary safety.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,4 +53,4 @@ class PortfolioCorrelationResult:
     average_correlation: float
     baseline_average_correlation: float
     regime_shift_detected: bool
-    computed_at: str
+    computed_at: datetime
