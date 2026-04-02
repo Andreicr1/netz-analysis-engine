@@ -95,7 +95,7 @@ frontends/
   wealth/           ← SvelteKit "netz-wealth-os"
 ```
 
-**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0070_global_instruments_sync`.
+**Database:** PostgreSQL 16 + TimescaleDB + pgvector. Managed via Timescale Cloud (prod) or docker-compose (dev). Redis 7 via Upstash (prod) or docker-compose (dev). Migrations via Alembic. App uses async asyncpg. Current migration head: `0079_macro_performance_layer`.
 
 **Auth:** Clerk JWT v2. `organization_id` from `o.id` claim. RLS via `SET LOCAL app.current_organization_id`. Dev bypass: `X-DEV-ACTOR` header. **Tenant and user management is 100% via Clerk Dashboard** — no custom admin UI. Organizations, user invites, and role assignment (`ADMIN`, `INVESTMENT_TEAM`, `investor`) are all managed in Clerk. `ConfigService` defaults mean new tenants work immediately without provisioning.
 
@@ -107,7 +107,7 @@ frontends/
 
 **Classification:** Three-layer hybrid classifier (no external ML APIs). Layer 1: filename + keyword rules (~60% of docs). Layer 2: TF-IDF + cosine similarity (~30%). Layer 3: LLM fallback (~10%). Cross-encoder local reranker for IC memo evidence (replaced Cohere).
 
-**2900+ tests.** All passing. Enforced by `make check` (lint + typecheck + test). CI: GitHub Actions (`pip install -e ".[dev,ai,quant]"`).
+**3176+ tests.** All passing. Enforced by `make check` (lint + typecheck + test). CI: GitHub Actions (`pip install -e ".[dev,ai,quant]"`).
 
 ## Product Scope — Analytical Core Only
 
@@ -218,6 +218,8 @@ Background workers ingest all external time-series data into hypertables. Routes
 | `form345_ingestion` | 900_051 | global | `sec_insider_transactions`, `sec_insider_sentiment` (MV) | SEC EDGAR Form 345 bulk TSV (insider buys/sells) | Quarterly |
 | `universe_sync` | 900_070 | global | `instruments_universe` | SEC/ESMA catalog (auto-fetches company_tickers_mf.json) | Weekly |
 
+**Materialized views** (migration 0078-0079): `mv_unified_funds` (6-universe fund catalog with prospectus stats), `mv_unified_assets` (global instrument search), `mv_macro_latest` (latest macro indicator values), `mv_macro_regional_summary` (regional macro aggregation). Refreshed by `view_refresh.py` (screener views, after universe_sync) and `macro_view_refresh.py` (macro views, after macro/treasury ingestion). Workers call refresh after data ingestion.
+
 **Credit market_data** reads all macro data from `macro_data` hypertable (zero FRED API calls at runtime, `fred_client.py` eliminated). Regional Case-Shiller (20 metros) also from `macro_data`.
 
 **Momentum signals** (RSI, Bollinger, OBV flow) are pre-computed by `risk_calc` worker into `fund_risk_metrics` columns (`rsi_14`, `bb_position`, `nav_momentum_score`, `flow_momentum_score`, `blended_momentum_score`). Scoring route reads pre-computed values — no in-request TA-Lib computation.
@@ -237,7 +239,7 @@ The engine is organized around **funds as the primary analytical entity**. Three
 | `private_us` | ADV Schedule D | UUID | `sec_manager_funds` | None | None |
 | `ucits_eu` | ESMA Register | ISIN | `esma_funds` | None | Yahoo Finance via ticker |
 
-**Catalog query:** `UNION ALL` of 3 SQL branches in `catalog_sql.py`. `LEFT JOIN sec_fund_classes` produces one row per share class for registered funds. Frontend groups by `external_id` and renders tree view.
+**Catalog query:** Reads from `mv_unified_funds` materialized view (migration 0078). The view consolidates 6 universe branches (registered, ETF, BDC, private, UCITS, MMF) with prospectus stats and share class data into a single pre-computed layer. `catalog_sql.py` applies filters/pagination on top of the view. `mv_unified_assets` provides global instrument search across instruments_universe, ESMA, and SEC CUSIP map. Both views refreshed by `view_refresh.py` service.
 
 **Share classes:** `sec_fund_classes` (CIK → series_id → class_id → ticker). One fund CIK can have multiple series, each with multiple share classes.
 
