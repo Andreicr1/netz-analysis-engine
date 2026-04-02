@@ -143,14 +143,29 @@
 			});
 		}
 
-		// Standalone funds (no manager)
-		for (const fg of standaloneGroups) {
+		// Sort real managers: by name (asc) or AUM depending on current sort
+		groups.sort((a, b) => {
+			if (currentSort.startsWith("aum")) {
+				const dir = currentSort.endsWith("desc") ? -1 : 1;
+				return dir * ((a.total_aum ?? 0) - (b.total_aum ?? 0));
+			}
+			return a.manager_name.localeCompare(b.manager_name);
+		});
+
+		// Standalone funds — ONE group at the end (not one per fund)
+		if (standaloneGroups.length > 0) {
+			let totalAum: number | null = null;
+			for (const fg of standaloneGroups) {
+				if (fg.representative.aum != null) {
+					totalAum = (totalAum ?? 0) + fg.representative.aum;
+				}
+			}
 			groups.push({
-				manager_key: `standalone:${fg.fund_key}`,
+				manager_key: "standalone",
 				manager_name: "",
 				manager_id: null,
-				funds: [fg],
-				total_aum: fg.representative.aum,
+				funds: standaloneGroups,
+				total_aum: totalAum,
 				is_standalone: true,
 			});
 		}
