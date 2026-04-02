@@ -14,11 +14,11 @@
 	import "./factsheet.css";
 
 	let { data } = $props();
-	const { factSheet } = data;
-	const { 
-		fund, team, top_holdings, annual_returns, 
-		nav_history, sector_history, prospectus_stats, 
-		share_classes, scoring_metrics 
+	const factSheet = data.factSheet as Record<string, any>;
+	const {
+		fund, team, top_holdings, annual_returns,
+		nav_history, sector_history, prospectus_stats,
+		share_classes, scoring_metrics
 	} = factSheet;
 
 	// ── Reverse Lookup State ──
