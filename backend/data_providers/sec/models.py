@@ -200,6 +200,7 @@ class NportHolding:
     pct_of_nav: float | None
     is_restricted: bool | None
     fair_value_level: str | None
+    series_id: str | None = None
 
 
 # ── Registered Funds (Mutual Funds, ETFs) ──────────────────────

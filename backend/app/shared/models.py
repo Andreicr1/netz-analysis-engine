@@ -520,6 +520,7 @@ class SecNportHolding(Base):
     pct_of_nav: Mapped[Decimal | None] = mapped_column(Numeric)
     is_restricted: Mapped[bool | None] = mapped_column(Boolean)
     fair_value_level: Mapped[str | None] = mapped_column(Text)
+    series_id: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )

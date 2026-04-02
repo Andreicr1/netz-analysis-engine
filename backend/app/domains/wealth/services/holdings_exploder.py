@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.model_portfolio import ModelPortfolio
-from app.shared.models import SecNportHolding
+from app.shared.models import SecFundClass, SecNportHolding
 
 logger = structlog.get_logger()
 
@@ -82,11 +82,13 @@ async def fetch_portfolio_holdings_exploded(
     inst_result = await db.execute(inst_stmt)
 
     instrument_to_cik: dict[uuid.UUID, str] = {}
+    instrument_to_series: dict[uuid.UUID, str | None] = {}
     for row in inst_result.all():
         attrs = row.attributes or {}
         cik = attrs.get("sec_cik")
         if cik:
             instrument_to_cik[row.instrument_id] = str(cik)
+            instrument_to_series[row.instrument_id] = attrs.get("sec_series_id")
 
     if not instrument_to_cik:
         logger.warning(
@@ -96,6 +98,26 @@ async def fetch_portfolio_holdings_exploded(
         )
         return []
 
+    # Resolve series_id from sec_fund_classes for instruments missing it
+    ciks_needing_series = [
+        cik for iid, cik in instrument_to_cik.items()
+        if not instrument_to_series.get(iid)
+    ]
+    if ciks_needing_series:
+        fc_result = await db.execute(
+            select(SecFundClass.cik, SecFundClass.series_id)
+            .where(SecFundClass.cik.in_(ciks_needing_series))
+            .distinct(SecFundClass.cik, SecFundClass.series_id),
+        )
+        # Map CIK → series_id (only if CIK has exactly one series)
+        from collections import defaultdict
+        cik_series: dict[str, list[str]] = defaultdict(list)
+        for fc_row in fc_result.all():
+            cik_series[fc_row.cik].append(fc_row.series_id)
+        for iid, cik in instrument_to_cik.items():
+            if not instrument_to_series.get(iid) and len(cik_series.get(cik, [])) == 1:
+                instrument_to_series[iid] = cik_series[cik][0]
+
     # Build reverse map: cik → instrument_id
     cik_to_instrument: dict[str, uuid.UUID] = {
         cik: iid for iid, cik in instrument_to_cik.items()
@@ -104,6 +126,13 @@ async def fetch_portfolio_holdings_exploded(
 
     # 3. Query latest N-PORT report date per CIK, then fetch holdings
     # sec_nport_holdings is a GLOBAL table — no RLS, no SET LOCAL
+    # For umbrella CIKs with series_id, filter by series to avoid mixing
+    # Build per-CIK series_id map for filtering
+    cik_to_series: dict[str, str | None] = {
+        cik: instrument_to_series.get(iid)
+        for cik, iid in cik_to_instrument.items()
+    }
+
     latest_date_subq = (
         select(
             SecNportHolding.cik,
@@ -121,6 +150,7 @@ async def fetch_portfolio_holdings_exploded(
             SecNportHolding.issuer_name,
             SecNportHolding.sector,
             SecNportHolding.pct_of_nav,
+            SecNportHolding.series_id,
         )
         .join(
             latest_date_subq,
@@ -132,10 +162,15 @@ async def fetch_portfolio_holdings_exploded(
 
     holdings_result = await db.execute(holdings_stmt)
 
-    # 4. Weight each holding
+    # 4. Weight each holding (filter by series_id when known)
     rows: list[HoldingRow] = []
     for h in holdings_result.all():
         instrument_id = cik_to_instrument[h.cik]
+        expected_series = cik_to_series.get(h.cik)
+        # Skip holdings from other series in umbrella CIKs
+        if expected_series and h.series_id and h.series_id != expected_series:
+            continue
+
         fund_w = fund_weights[instrument_id]
         pct = float(h.pct_of_nav) if h.pct_of_nav is not None else 0.0
 

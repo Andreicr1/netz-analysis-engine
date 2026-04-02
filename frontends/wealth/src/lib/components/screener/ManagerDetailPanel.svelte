@@ -216,7 +216,7 @@
 				</div>
 			{/if}
 		{:else}
-			<div class="dt-empty">No profile data.</div>
+			<div class="dt-empty">Manager not found in SEC filings. ADV data may not have been ingested for CRD {panelCrd}.</div>
 		{/if}
 	{:else if activeTab === "holdings"}
 		{#if holdingsData}
