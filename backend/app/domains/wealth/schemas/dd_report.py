@@ -39,6 +39,8 @@ class DDReportSummary(BaseModel):
     approved_by: str | None = None
     approved_at: datetime | None = None
     rejection_reason: str | None = None
+    storage_path: str | None = None
+    pdf_language: str | None = None
 
 
 class DDReportRead(DDReportSummary):

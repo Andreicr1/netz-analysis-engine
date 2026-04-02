@@ -187,6 +187,14 @@ export interface OverlapResult {
 	data_warning: string | null;
 }
 
+export interface GeneratedReport {
+	id: string;
+	job_id: string;
+	display_filename: string;
+	generated_at: string;
+	size_bytes: number | null;
+}
+
 export function profileColor(profile: string): string {
 	switch (profile) {
 		case "conservative": return "var(--ii-info)";

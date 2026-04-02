@@ -66,6 +66,8 @@ class DDReport(OrganizationScopedMixin, Base):
         DateTime(timezone=True), nullable=True,
     )
     rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    storage_path: Mapped[str | None] = mapped_column(String(800), nullable=True)
+    pdf_language: Mapped[str | None] = mapped_column(String(5), nullable=True)
 
     # Relationships
     chapters: Mapped[list[DDChapter]] = relationship(

@@ -281,6 +281,24 @@ async def download_dd_report_pdf(
     fund_name_row = fund_result.scalar_one_or_none()
     fund_name = fund_name_row or "Unknown Fund"
 
+    # Check R2 cache first (set on approval)
+    if report.storage_path:
+        try:
+            from app.services.storage_client import get_storage_client
+            storage = get_storage_client()
+            cached_bytes = await storage.read(report.storage_path)
+            if cached_bytes:
+                safe_name = re.sub(r"[^a-zA-Z0-9_\-]", "_", fund_name)
+                filename = f"dd_report_{safe_name}_{language}.pdf"
+                return Response(
+                    content=cached_bytes,
+                    media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+                )
+        except Exception:
+            logger.warning("dd_report_cache_miss", report_id=str(report_id), exc_info=True)
+            # Fall through to on-demand generation
+
     # Generate PDF (prefer Playwright async, fallback to ReportLab)
     chapters_data = [
         {

@@ -53,6 +53,8 @@ def _make_dd_report(
     report.approved_by = None
     report.approved_at = None
     report.rejection_reason = None
+    report.storage_path = None
+    report.pdf_language = None
     report.config_snapshot = None
     report.schema_version = 1
     report.chapters = []

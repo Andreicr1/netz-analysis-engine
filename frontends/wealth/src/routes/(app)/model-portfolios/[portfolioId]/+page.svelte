@@ -16,6 +16,7 @@
 	import type { PageData } from "./$types";
 	import type { ModelPortfolio, TrackRecord, InstrumentWeight, BacktestFold, StressScenario, PortfolioView, ParametricStressResult, OverlapResult, CusipExposure, SectorExposure } from "$lib/types/model-portfolio";
 	import type { UniverseAsset } from "$lib/types/universe";
+	import GeneratedReportsPanel from "$lib/components/model-portfolio/GeneratedReportsPanel.svelte";
 	import ICViewsPanel from "$lib/components/model-portfolio/ICViewsPanel.svelte";
 	import ConstructionAdvisor from "$lib/components/model-portfolio/ConstructionAdvisor.svelte";
 	import ScoreBreakdownPopover from "$lib/components/model-portfolio/ScoreBreakdownPopover.svelte";
@@ -24,6 +25,7 @@
 	import BacktestEquityCurve from "$lib/components/charts/BacktestEquityCurve.svelte";
 	import { instrumentTypeLabel, instrumentTypeColor } from "$lib/types/universe";
 	import { scenarioLabel, profileColor, blockLabel, optimizerStatusLabel } from "$lib/types/model-portfolio";
+	import type { GeneratedReport } from "$lib/types/model-portfolio";
 
 	import type { RiskStore } from "$lib/stores/risk-store.svelte";
 	const riskStore = getContext<RiskStore>("netz:riskStore");
@@ -101,6 +103,8 @@
 	}
 
 	let factSheets = $derived((data.factSheets ?? []) as FactSheet[]);
+	let monthlyReports = $derived((data.monthlyReports ?? []) as GeneratedReport[]);
+	let longFormReports = $derived((data.longFormReports ?? []) as GeneratedReport[]);
 
 	let generating = $state(false);
 	let generateLang = $state<"pt" | "en">("pt");
@@ -885,6 +889,17 @@
 			{/if}
 		</div>
 	</section>
+
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<!-- GENERATED REPORTS (Monthly + Long-Form DD)                         -->
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<GeneratedReportsPanel
+		{portfolioId}
+		portfolioName={portfolio.display_name}
+		{monthlyReports}
+		{longFormReports}
+		canGenerate={canEdit}
+	/>
 </div>
 
 <!-- Activation Confirmation Dialog -->

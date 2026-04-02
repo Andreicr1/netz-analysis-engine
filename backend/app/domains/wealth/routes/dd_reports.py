@@ -461,6 +461,64 @@ async def approve_dd_report(
     )
     db.add(approval)
 
+    # Generate and persist PDF on approval (cache for fast future downloads)
+    try:
+        chapters_data = [
+            {
+                "chapter_tag": ch.chapter_tag,
+                "chapter_order": ch.chapter_order,
+                "content_md": ch.content_md,
+            }
+            for ch in sorted(report.chapters, key=lambda c: c.chapter_order)
+        ]
+
+        pdf_language = "pt"
+        from app.domains.wealth.models.fund import Fund
+        fn_row = (await db.execute(
+            select(Fund.name).where(Fund.fund_id == report.instrument_id)
+        )).scalar_one_or_none()
+        fund_name = fn_row or "Fund"
+        confidence = float(report.confidence_score) if report.confidence_score else None
+
+        from ai_engine.pdf.generate_dd_report_pdf import generate_dd_report_pdf_async
+        pdf_bytes = await generate_dd_report_pdf_async(
+            fund_name=fund_name,
+            report_id=str(report.id),
+            chapters=chapters_data,
+            confidence_score=confidence,
+            decision_anchor=report.decision_anchor,
+            language=pdf_language,
+        )
+
+        if pdf_bytes:
+            import uuid as _uuid
+
+            from ai_engine.pipeline.storage_routing import gold_dd_report_path
+            from app.services.storage_client import get_storage_client
+
+            storage_key = gold_dd_report_path(
+                org_id=_uuid.UUID(str(report.organization_id)),
+                vertical="wealth",
+                report_id=str(report.id),
+                language=pdf_language,
+            )
+            storage = get_storage_client()
+            await storage.write(storage_key, pdf_bytes, content_type="application/pdf")
+
+            report.storage_path = storage_key
+            report.pdf_language = pdf_language
+
+            logger.info(
+                "dd_report_pdf_stored_on_approval",
+                report_id=str(report.id),
+                storage_path=storage_key,
+                size_bytes=len(pdf_bytes),
+            )
+    except Exception:
+        # Never-raises: approval succeeds even if PDF generation fails
+        logger.warning("dd_report_pdf_generation_on_approval_failed",
+                       report_id=str(report.id), exc_info=True)
+
     await db.commit()
 
     return DDReportSummary.model_validate(report)
