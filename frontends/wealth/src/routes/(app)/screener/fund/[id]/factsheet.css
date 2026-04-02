@@ -114,8 +114,16 @@
 /* ── Layout Grid ── */
 .fs-grid {
     display: grid;
-    grid-template-columns: 1.8fr 1fr;
+    grid-template-columns: 2fr 0.85fr;
     gap: 40px;
+}
+
+.fs-col-right {
+    position: sticky;
+    top: 80px;
+    align-self: start;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
 }
 
 .fs-section {

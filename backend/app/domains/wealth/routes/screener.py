@@ -17,6 +17,7 @@ POST /screener/import-sec/{ticker}   — import SEC security to universe (alias)
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import hashlib
 import json
 import re
@@ -1088,6 +1089,71 @@ async def import_sec_security(
                 if mgr:
                     fund_manager_name = mgr
 
+    # ── Resolve L1 screening attributes from SEC data ────────────
+    resolved_universe = sec_universe or enrichment_attrs.get("sec_universe")
+    _UNIVERSE_TO_STRUCTURE = {
+        "registered_us": "Mutual Fund",
+        "etf": "ETF",
+        "bdc": "BDC",
+        "money_market": "Money Market",
+    }
+    resolved_structure = _UNIVERSE_TO_STRUCTURE.get(str(resolved_universe))
+
+    # AUM: pick first non-null from SEC tables already queried
+    resolved_aum: float | None = None
+    if inst_type == "fund":
+        if reg_fund and reg_fund.monthly_avg_net_assets is not None:
+            resolved_aum = float(reg_fund.monthly_avg_net_assets)
+        elif reg_fund and reg_fund.daily_avg_net_assets is not None:
+            resolved_aum = float(reg_fund.daily_avg_net_assets)
+        elif enrichment_attrs.get("sec_universe") == "etf":
+            # etf_row was set above when enrichment_attrs["sec_universe"] == "etf"
+            etf_aum = locals().get("etf_row")
+            if etf_aum and getattr(etf_aum, "monthly_avg_net_assets", None) is not None:
+                resolved_aum = float(etf_aum.monthly_avg_net_assets)
+            elif etf_aum and getattr(etf_aum, "daily_avg_net_assets", None) is not None:
+                resolved_aum = float(etf_aum.daily_avg_net_assets)
+        elif enrichment_attrs.get("sec_universe") == "bdc":
+            bdc_aum = locals().get("bdc_row")
+            if bdc_aum and getattr(bdc_aum, "monthly_avg_net_assets", None) is not None:
+                resolved_aum = float(bdc_aum.monthly_avg_net_assets)
+            elif bdc_aum and getattr(bdc_aum, "daily_avg_net_assets", None) is not None:
+                resolved_aum = float(bdc_aum.daily_avg_net_assets)
+        # Fallback: XBRL net_assets from best share class
+        if resolved_aum is None and enrichment_attrs.get("expense_ratio_pct") is not None:
+            from app.shared.models import SecFundClass as _Fc
+            _fc_aum = (await db.execute(
+                select(_Fc.net_assets).where(
+                    _Fc.ticker == sec_row.ticker,
+                ).limit(1),
+            )).scalar_one_or_none()
+            if _fc_aum is not None:
+                resolved_aum = float(_fc_aum)
+
+    # Track record: compute from inception_date
+    resolved_track_years: float | None = None
+    inception_str = enrichment_attrs.get("fund_inception_date")
+    if inception_str:
+        try:
+            inception_dt = dt.date.fromisoformat(str(inception_str))
+            resolved_track_years = round(
+                (dt.date.today() - inception_dt).days / 365.25, 1,
+            )
+        except (ValueError, TypeError):
+            pass
+    # Fallback: XBRL perf_inception_date
+    if resolved_track_years is None and inst_type == "fund":
+        from app.shared.models import SecFundClass as _Fc2
+        _fc_inception = (await db.execute(
+            select(_Fc2.perf_inception_date).where(
+                _Fc2.ticker == sec_row.ticker,
+            ).limit(1),
+        )).scalar_one_or_none()
+        if _fc_inception is not None:
+            resolved_track_years = round(
+                (dt.date.today() - _fc_inception).days / 365.25, 1,
+            )
+
     instrument = Instrument(
         instrument_type=inst_type,
         name=sec_row.issuer_name,
@@ -1106,13 +1172,17 @@ async def import_sec_security(
             "strategy": body.strategy,
             # chk_fund_attrs requires these keys when instrument_type = 'fund'
             "manager_name": fund_manager_name,
-            "aum_usd": None,
-            "inception_date": None,
-            # SEC linkage for N-PORT fund-level data (Phase 1)
+            "aum_usd": resolved_aum,
+            "inception_date": inception_str,
+            # L1 screening attributes
+            "domicile": "US",
+            "structure": resolved_structure,
+            "track_record_years": resolved_track_years,
+            # SEC linkage for N-PORT fund-level data
             "sec_cik": sec_cik,
             "sec_crd": sec_crd,
-            "sec_universe": sec_universe or enrichment_attrs.get("sec_universe"),
-            # Enrichment from N-CEN + XBRL (Phase 2)
+            "sec_universe": resolved_universe,
+            # Enrichment from N-CEN + XBRL
             **enrichment_attrs,
         },
     )
@@ -1810,18 +1880,49 @@ async def get_fund_fact_sheet(
             # Resolve actual fund CIK from external_id (may be class_id or series_id)
             fund_cik = _resolve_cik(sync_db)
             manager_name = detail.manager_name
-            manager_id = detail.manager_id
+
+            # Fix: resolver CRD diretamente de sec_registered_funds — não confiar no manager_id da MV
+            # mv_unified_funds.manager_id pode ser NULL se o join a sec_managers foi filtrado
+            crd_from_db: str | None = None
+            if fund_cik:
+                from app.shared.models import SecRegisteredFund
+                crd_row = (
+                    sync_db.query(SecRegisteredFund.crd_number)
+                    .filter(
+                        SecRegisteredFund.cik == fund_cik,
+                        SecRegisteredFund.crd_number.isnot(None),
+                    )
+                    .first()
+                )
+                if crd_row:
+                    crd_from_db = crd_row[0]
+
+            # CRD do DB tem prioridade; manager_id da MV é fallback
+            effective_crd = crd_from_db or detail.manager_id
 
             # Team and Manager profile
-            adv_data = gather_sec_adv_data(sync_db, manager_name=manager_name, crd_number=manager_id)
-            
+            adv_data = gather_sec_adv_data(sync_db, manager_name=manager_name, crd_number=effective_crd)
+
             # Holdings (N-PORT) — increase limit to 50
             nport_data = gather_sec_nport_data(sync_db, fund_cik=fund_cik, holdings_limit=50)
             sector_history = gather_nport_sector_history(sync_db, fund_cik=fund_cik)
-            
+
+            # Fix: resolver series_id a partir do external_id (que pode ser um class_id)
+            # quando a MV não tiver populado series_id corretamente
+            correct_series_id = detail.series_id
+            if not correct_series_id and fund_cik and detail.external_id:
+                from app.shared.models import SecFundClass
+                fc_row = (
+                    sync_db.query(SecFundClass.series_id)
+                    .filter(SecFundClass.class_id == detail.external_id)
+                    .first()
+                )
+                if fc_row:
+                    correct_series_id = fc_row[0]
+
             # Returns and Stats (pass series_id when available for direct lookup)
-            prop_stats = gather_prospectus_stats(sync_db, fund_cik=fund_cik, series_id=detail.series_id)
-            prop_returns = gather_prospectus_returns(sync_db, fund_cik=fund_cik, series_id=detail.series_id)
+            prop_stats = gather_prospectus_stats(sync_db, fund_cik=fund_cik, series_id=correct_series_id)
+            prop_returns = gather_prospectus_returns(sync_db, fund_cik=fund_cik, series_id=correct_series_id)
             
             # Enrichment (Classes)
             enrichment = gather_fund_enrichment(sync_db, fund_cik=fund_cik, sec_universe=detail.universe)

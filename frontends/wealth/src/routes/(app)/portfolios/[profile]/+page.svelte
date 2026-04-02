@@ -516,8 +516,13 @@
 										<td></td>
 										<td class="atd-fund-name" colspan="1">{fund.fund_name}</td>
 										<td class="atd-fund-weight">{formatPercent(fund.weight)}</td>
-										<td class="atd-fund-score" colspan="2">Score {formatNumber(fund.score, 2)}</td>
-										<td></td>
+										<td class="atd-bound atd-fund-meta">—</td>
+										<td class="atd-bound atd-fund-meta">—</td>
+										<td class="atd-fund-score">
+											{#if fund.score != null}
+												<span class="atd-score-badge">Score {formatNumber(fund.score, 2)}</span>
+											{/if}
+										</td>
 									</tr>
 								{/each}
 							{/if}
@@ -1192,6 +1197,19 @@
 		font-size: var(--ii-text-label, 0.75rem);
 		color: var(--ii-text-muted);
 		font-variant-numeric: tabular-nums;
+	}
+
+	.atd-score-badge {
+		font-size: 11px;
+		font-weight: 600;
+		color: var(--ii-text-muted);
+		background: var(--ii-surface-alt);
+		padding: 2px 6px;
+		border-radius: 4px;
+	}
+
+	.atd-fund-meta {
+		color: var(--ii-text-muted);
 	}
 
 	/* ── Reports tab ─────────────────────────────────────────────────────── */

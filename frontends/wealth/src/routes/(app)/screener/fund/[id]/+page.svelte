@@ -139,6 +139,21 @@
 				</div>
 			</section>
 
+			<!-- ── Current Sector Allocation Treemap ── -->
+			<section class="fs-section">
+				<h3 class="fs-section-title">Current Sector Allocation</h3>
+				<div class="fs-chart-wrap">
+					{#if sector_history && sector_history.length > 0}
+						<SectorAllocationTreemap
+							sectorWeights={sector_history[sector_history.length - 1].sector_weights}
+							height={350}
+						/>
+					{:else}
+						<div class="fs-no-data">Current allocation data not available.</div>
+					{/if}
+				</div>
+			</section>
+
 			<!-- Annual Returns -->
 			<section class="fs-section">
 				<h3 class="fs-section-title">Annual Performance</h3>
@@ -155,6 +170,40 @@
 					</div>
 				{:else}
 					<div class="fs-no-data">Annual return history not available.</div>
+				{/if}
+			</section>
+
+			<!-- ── Top Portfolio Holdings ── -->
+			<section class="fs-section">
+				<h3 class="fs-section-title">Top Portfolio Holdings</h3>
+				<table class="fs-table fs-table--compact">
+					<thead>
+						<tr>
+							<th>Holding</th>
+							<th>Sector</th>
+							<th class="r">Weight</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each top_holdings as h, i}
+							<tr class={i >= 10 ? "fs-print-hide" : ""}>
+								<td>
+									<button
+										class="fs-holding-btn"
+										onclick={() => openReverseLookup(h)}
+										title="Reverse Lookup: find other holders"
+									>
+										<div class="fs-holding-name">{h.name}</div>
+									</button>
+								</td>
+								<td class="fs-holding-meta">{h.sector || "Other"}</td>
+								<td class="r fs-holding-weight">{formatPercent(h.pct_of_nav / 100)}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+				{#if top_holdings.length === 0}
+					<div class="fs-no-data">Recent holdings (N-PORT) not available for this fund.</div>
 				{/if}
 			</section>
 
@@ -212,63 +261,16 @@
 					{/if}
 				</div>
 			</section>
-
-			<!-- Current Allocation Treemap -->
-			<section class="fs-section">
-				<h3 class="fs-section-title">Current Sector Allocation</h3>
-				<div class="fs-chart-wrap">
-					{#if sector_history && sector_history.length > 0}
-						<SectorAllocationTreemap 
-							sectorWeights={sector_history[sector_history.length - 1].sector_weights} 
-							height={350} 
-						/>
-					{:else}
-						<div class="fs-no-data">Current allocation data not available.</div>
-					{/if}
-				</div>
-			</section>
-
-			<!-- Top Holdings -->
-			<section class="fs-section">
-				<h3 class="fs-section-title">Top Portfolio Holdings</h3>
-				<table class="fs-table fs-table--compact">
-					<thead>
-						<tr>
-							<th>Holding</th>
-							<th class="r">Weight</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each top_holdings as h, i}
-							<tr class={i >= 10 ? "fs-print-hide" : ""}>
-								<td>
-									<button 
-										class="fs-holding-btn" 
-										onclick={() => openReverseLookup(h)}
-										title="Reverse Lookup: find other holders"
-									>
-										<div class="fs-holding-name">{h.name}</div>
-									</button>
-									<div class="fs-holding-meta">{h.sector || "Other"}</div>
-								</td>
-								<td class="r fs-holding-weight">{formatPercent(h.pct_of_nav / 100)}</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-				{#if top_holdings.length === 0}
-					<div class="fs-no-data">Recent holdings (N-PORT) not available for this fund.</div>
-				{/if}
-			</section>
 		</div>
 	</div>
 </div>
 
 <!-- Reverse Lookup Sidebar (Non-printable) -->
-<ContextPanel 
-	open={rlOpen} 
-	onClose={() => { rlOpen = false; rlTarget = null; }} 
+<ContextPanel
+	open={rlOpen}
+	onClose={() => { rlOpen = false; rlTarget = null; }}
 	title="Reverse Lookup"
+	width="720px"
 >
 	{#if rlTarget}
 		<div class="rl-container">
