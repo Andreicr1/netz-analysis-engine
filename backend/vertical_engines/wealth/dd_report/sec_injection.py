@@ -23,9 +23,13 @@ logger = structlog.get_logger()
 # Sector weight change threshold (pp) to flag drift between quarters.
 _DRIFT_THRESHOLD_PP = 0.05
 
-# N-PORT issuerCat → human-readable labels (SEC fixed-income taxonomy).
-_NPORT_SECTOR_LABELS: dict[str, str] = {
-    "CORP": "Corporate Bonds",
+# N-PORT issuerCat → human-readable labels.
+# issuerCat describes the ISSUER type (corporate, government, etc.), not the
+# instrument type.  For debt holdings, "CORP" = corporate bonds.  For equity
+# holdings, "CORP" = corporate equity (stocks).  The asset_class-aware
+# _label_sector() function resolves this ambiguity.
+_NPORT_ISSUER_LABELS: dict[str, str] = {
+    "CORP": "Corporate",
     "UST": "US Treasury",
     "USGA": "US Govt Agency",
     "USGSE": "US Govt Sponsored",
@@ -43,12 +47,29 @@ _NPORT_SECTOR_LABELS: dict[str, str] = {
     "OT": "Other",
 }
 
+# N-PORT assetCat codes that indicate equity instruments
+_EQUITY_ASSET_CATS = {"EC", "STIV"}
 
-def _label_sector(raw: str | None) -> str:
-    """Map N-PORT issuerCat code to readable label."""
+
+def _label_sector(raw: str | None, asset_class: str | None = None) -> str:
+    """Map N-PORT issuerCat code to readable label.
+
+    When asset_class is provided, disambiguates issuerCat — e.g. "CORP" with
+    asset_class "EC" becomes "Corporate Equity" instead of "Corporate Bonds".
+    """
     if not raw:
         return "Other"
-    return _NPORT_SECTOR_LABELS.get(raw.strip().upper(), raw)
+    code = raw.strip().upper()
+    base = _NPORT_ISSUER_LABELS.get(code, raw)
+
+    # Disambiguate "Corporate" based on asset class
+    if code == "CORP" and asset_class:
+        ac = asset_class.strip().upper()
+        if ac in _EQUITY_ASSET_CATS:
+            return "Equity"
+        return "Corporate Bonds"
+
+    return base
 
 
 def gather_sec_13f_data(
@@ -201,7 +222,7 @@ def gather_sec_nport_data(
         # Compute sector weights (group by sector label, sum pct_of_nav)
         sector_totals: dict[str, float] = {}
         for h in holdings:
-            sector = _label_sector(h.sector)
+            sector = _label_sector(h.sector, h.asset_class)
             pct = float(h.pct_of_nav or 0)
             sector_totals[sector] = sector_totals.get(sector, 0.0) + pct
 
@@ -232,7 +253,7 @@ def gather_sec_nport_data(
             {
                 "name": h.issuer_name or "Unknown",
                 "cusip": h.cusip,
-                "sector": _label_sector(h.sector),
+                "sector": _label_sector(h.sector, h.asset_class),
                 "pct_of_nav": round(float(h.pct_of_nav or 0), 2),
                 "market_value": h.market_value,
             }
@@ -377,7 +398,7 @@ def gather_nport_sector_history(
             # Compute sector weights (group by sector label, sum pct_of_nav)
             sector_totals: dict[str, float] = {}
             for h in holdings:
-                sector = _label_sector(h.sector)
+                sector = _label_sector(h.sector, h.asset_class)
                 pct = float(h.pct_of_nav or 0)
                 sector_totals[sector] = sector_totals.get(sector, 0.0) + pct
 
