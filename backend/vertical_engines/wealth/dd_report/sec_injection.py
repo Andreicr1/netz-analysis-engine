@@ -23,6 +23,33 @@ logger = structlog.get_logger()
 # Sector weight change threshold (pp) to flag drift between quarters.
 _DRIFT_THRESHOLD_PP = 0.05
 
+# N-PORT issuerCat → human-readable labels (SEC fixed-income taxonomy).
+_NPORT_SECTOR_LABELS: dict[str, str] = {
+    "CORP": "Corporate Bonds",
+    "UST": "US Treasury",
+    "USGA": "US Govt Agency",
+    "USGSE": "US Govt Sponsored",
+    "MUN": "Municipal",
+    "MBS": "Mortgage-Backed",
+    "ABS": "Asset-Backed",
+    "CMO": "Collateralized Mortgage",
+    "FGN": "Foreign Govt",
+    "LOAN": "Bank Loans",
+    "MM": "Money Market",
+    "EC": "Equity",
+    "PF": "Preferred Stock",
+    "RF": "Real Estate Fund",
+    "FI": "Fixed Income",
+    "OT": "Other",
+}
+
+
+def _label_sector(raw: str | None) -> str:
+    """Map N-PORT issuerCat code to readable label."""
+    if not raw:
+        return "Other"
+    return _NPORT_SECTOR_LABELS.get(raw.strip().upper(), raw)
+
 
 def gather_sec_13f_data(
     db: Session,
@@ -160,10 +187,10 @@ def gather_sec_nport_data(
         if not holdings:
             return {}
 
-        # Compute sector weights (group by sector, sum pct_of_nav)
+        # Compute sector weights (group by sector label, sum pct_of_nav)
         sector_totals: dict[str, float] = {}
         for h in holdings:
-            sector = h.sector or "Unknown"
+            sector = _label_sector(h.sector)
             pct = float(h.pct_of_nav or 0)
             sector_totals[sector] = sector_totals.get(sector, 0.0) + pct
 
@@ -194,7 +221,7 @@ def gather_sec_nport_data(
             {
                 "name": h.issuer_name or "Unknown",
                 "cusip": h.cusip,
-                "sector": h.sector,
+                "sector": _label_sector(h.sector),
                 "pct_of_nav": round(float(h.pct_of_nav or 0), 2),
                 "market_value": h.market_value,
             }
@@ -331,10 +358,10 @@ def gather_nport_sector_history(
             if not holdings:
                 continue
 
-            # Compute sector weights (group by sector, sum pct_of_nav)
+            # Compute sector weights (group by sector label, sum pct_of_nav)
             sector_totals: dict[str, float] = {}
             for h in holdings:
-                sector = h.sector or "Other"
+                sector = _label_sector(h.sector)
                 pct = float(h.pct_of_nav or 0)
                 sector_totals[sector] = sector_totals.get(sector, 0.0) + pct
 

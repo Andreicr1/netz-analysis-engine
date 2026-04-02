@@ -161,15 +161,16 @@ def _parse_categories(fund_universe: str | None) -> set[str] | None:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+# All sort modes push NULL manager_name last so managed funds appear first
 _SORT_MAP = {
-    "name_asc": "REGEXP_REPLACE(name, '^[^a-zA-Z]+', '', 'g') ASC, name ASC",
-    "name_desc": "REGEXP_REPLACE(name, '^[^a-zA-Z]+', '', 'g') DESC, name DESC",
-    "aum_desc": "aum_usd DESC NULLS LAST",
-    "aum_asc": "aum_usd ASC NULLS LAST",
-    "manager_asc": "manager_name ASC NULLS LAST",
-    "manager_desc": "manager_name DESC NULLS LAST",
-    "strategy_asc": "strategy_label ASC NULLS LAST",
-    "strategy_desc": "strategy_label DESC NULLS LAST",
+    "name_asc": "(manager_name IS NULL), manager_name ASC, REGEXP_REPLACE(name, '^[^a-zA-Z]+', '', 'g') ASC, name ASC",
+    "name_desc": "(manager_name IS NULL), manager_name ASC, REGEXP_REPLACE(name, '^[^a-zA-Z]+', '', 'g') DESC, name DESC",
+    "aum_desc": "(manager_name IS NULL), aum_usd DESC NULLS LAST",
+    "aum_asc": "(manager_name IS NULL), aum_usd ASC NULLS LAST",
+    "manager_asc": "manager_name ASC NULLS LAST, name ASC",
+    "manager_desc": "manager_name DESC NULLS FIRST, name ASC",
+    "strategy_asc": "(manager_name IS NULL), strategy_label ASC NULLS LAST",
+    "strategy_desc": "(manager_name IS NULL), strategy_label DESC NULLS LAST",
 }
 
 
