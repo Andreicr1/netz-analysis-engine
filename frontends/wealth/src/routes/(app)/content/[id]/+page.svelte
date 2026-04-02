@@ -287,46 +287,83 @@
 		font-size: var(--ii-text-body, 0.9375rem);
 	}
 
-	.cd-body :global(.rw-h1) {
+	.cd-body :global(h1) {
 		font-size: var(--ii-text-h2, 1.75rem);
 		font-weight: 700;
 		margin: var(--ii-space-stack-lg, 28px) 0 var(--ii-space-stack-sm, 12px);
 		color: var(--ii-text-primary);
 	}
 
-	.cd-body :global(.rw-h2) {
+	.cd-body :global(h2) {
 		font-size: var(--ii-text-h3, 1.375rem);
 		font-weight: 600;
 		margin: var(--ii-space-stack-md, 20px) 0 var(--ii-space-stack-xs, 8px);
 		color: var(--ii-text-primary);
 	}
 
-	.cd-body :global(.rw-h3) {
+	.cd-body :global(h3) {
 		font-size: var(--ii-text-h4, 1.125rem);
 		font-weight: 600;
 		margin: var(--ii-space-stack-sm, 16px) 0 var(--ii-space-stack-2xs, 4px);
 		color: var(--ii-text-primary);
 	}
 
-	.cd-body :global(.rw-p) {
+	.cd-body :global(p) {
 		margin: 0 0 var(--ii-space-stack-sm, 12px);
 	}
 
-	.cd-body :global(.rw-ul) {
+	.cd-body :global(ul) {
 		margin: 0 0 var(--ii-space-stack-sm, 12px);
 		padding-left: var(--ii-space-inline-lg, 24px);
 	}
 
-	.cd-body :global(.rw-li) {
+	.cd-body :global(ol) {
+		margin: 0 0 var(--ii-space-stack-sm, 12px);
+		padding-left: var(--ii-space-inline-lg, 24px);
+	}
+
+	.cd-body :global(li) {
 		margin: 0 0 var(--ii-space-stack-2xs, 4px);
 	}
 
-	.cd-body :global(.rw-code) {
+	.cd-body :global(code) {
 		font-family: var(--ii-font-mono);
 		font-size: var(--ii-text-mono, 0.875rem);
 		padding: 1px 5px;
 		border-radius: 4px;
 		background: var(--ii-surface-alt);
+	}
+
+	.cd-body :global(table) {
+		width: 100%;
+		border-collapse: collapse;
+		margin: 1rem 0;
+		font-size: 0.875rem;
+	}
+
+	.cd-body :global(th),
+	.cd-body :global(td) {
+		border: 1px solid var(--ii-border-subtle, var(--border));
+		padding: 0.5rem 0.75rem;
+		text-align: left;
+	}
+
+	.cd-body :global(th) {
+		background: var(--ii-surface-alt, var(--muted));
+		font-weight: 600;
+	}
+
+	.cd-body :global(hr) {
+		border: none;
+		border-top: 1px solid var(--ii-border-subtle, var(--border));
+		margin: 1.5rem 0;
+	}
+
+	.cd-body :global(blockquote) {
+		border-left: 3px solid var(--ii-border-subtle, var(--border));
+		margin: 0 0 var(--ii-space-stack-sm, 12px);
+		padding-left: var(--ii-space-inline-md, 16px);
+		color: var(--ii-text-secondary);
 	}
 
 	.cd-body :global(.rw-empty) {

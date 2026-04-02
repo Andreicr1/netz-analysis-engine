@@ -313,7 +313,7 @@
 				<h2 class="chapter-title">{chapterTitle(activeChapter.chapter_tag)}</h2>
 				{#if activeChapter.generated_at}
 					<span class="chapter-generated">
-						AI-generated on {formatDateTime(activeChapter.generated_at)}
+						Generated on {formatDateTime(activeChapter.generated_at)}
 					</span>
 				{/if}
 				{#if activeChapter.critic_status !== "pending"}
@@ -652,46 +652,83 @@
 		font-size: var(--ii-text-body, 0.9375rem);
 	}
 
-	.chapter-body :global(.rw-h1) {
+	.chapter-body :global(h1) {
 		font-size: var(--ii-text-h2, 1.75rem);
 		font-weight: 700;
 		margin: var(--ii-space-stack-lg, 28px) 0 var(--ii-space-stack-sm, 12px);
 		color: var(--ii-text-primary);
 	}
 
-	.chapter-body :global(.rw-h2) {
+	.chapter-body :global(h2) {
 		font-size: var(--ii-text-h3, 1.375rem);
 		font-weight: 600;
 		margin: var(--ii-space-stack-md, 20px) 0 var(--ii-space-stack-xs, 8px);
 		color: var(--ii-text-primary);
 	}
 
-	.chapter-body :global(.rw-h3) {
+	.chapter-body :global(h3) {
 		font-size: var(--ii-text-h4, 1.125rem);
 		font-weight: 600;
 		margin: var(--ii-space-stack-sm, 16px) 0 var(--ii-space-stack-2xs, 4px);
 		color: var(--ii-text-primary);
 	}
 
-	.chapter-body :global(.rw-p) {
+	.chapter-body :global(p) {
 		margin: 0 0 var(--ii-space-stack-sm, 12px);
 	}
 
-	.chapter-body :global(.rw-ul) {
+	.chapter-body :global(ul) {
 		margin: 0 0 var(--ii-space-stack-sm, 12px);
 		padding-left: var(--ii-space-inline-lg, 24px);
 	}
 
-	.chapter-body :global(.rw-li) {
+	.chapter-body :global(ol) {
+		margin: 0 0 var(--ii-space-stack-sm, 12px);
+		padding-left: var(--ii-space-inline-lg, 24px);
+	}
+
+	.chapter-body :global(li) {
 		margin: 0 0 var(--ii-space-stack-2xs, 4px);
 	}
 
-	.chapter-body :global(.rw-code) {
+	.chapter-body :global(code) {
 		font-family: var(--ii-font-mono);
 		font-size: var(--ii-text-mono, 0.875rem);
 		padding: 1px 5px;
 		border-radius: 4px;
 		background: var(--ii-surface-alt);
+	}
+
+	.chapter-body :global(table) {
+		width: 100%;
+		border-collapse: collapse;
+		margin: 1rem 0;
+		font-size: 0.875rem;
+	}
+
+	.chapter-body :global(th),
+	.chapter-body :global(td) {
+		border: 1px solid var(--ii-border-subtle, var(--border));
+		padding: 0.5rem 0.75rem;
+		text-align: left;
+	}
+
+	.chapter-body :global(th) {
+		background: var(--ii-surface-alt, var(--muted));
+		font-weight: 600;
+	}
+
+	.chapter-body :global(hr) {
+		border: none;
+		border-top: 1px solid var(--ii-border-subtle, var(--border));
+		margin: 1.5rem 0;
+	}
+
+	.chapter-body :global(blockquote) {
+		border-left: 3px solid var(--ii-border-subtle, var(--border));
+		margin: 0 0 var(--ii-space-stack-sm, 12px);
+		padding-left: var(--ii-space-inline-md, 16px);
+		color: var(--ii-text-secondary);
 	}
 
 	.chapter-body :global(.rw-empty) {
