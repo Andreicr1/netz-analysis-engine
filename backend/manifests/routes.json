@@ -956,6 +956,16 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/reporting/model-portfolios/{portfolio_id}/long-form-report/download/{report_id}",
+    "name": "download_long_form_report_by_id"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/reporting/model-portfolios/{portfolio_id}/long-form-report/history",
+    "name": "list_long_form_reports"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/reporting/model-portfolios/{portfolio_id}/long-form-report/stream/{job_id}",
     "name": "stream_long_form_report"
   },
@@ -963,6 +973,16 @@
     "method": "GET",
     "path": "/api/v1/reporting/model-portfolios/{portfolio_id}/long-form-report/{job_id}/pdf",
     "name": "download_long_form_pdf"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/reporting/model-portfolios/{portfolio_id}/monthly-report/download/{report_id}",
+    "name": "download_monthly_report_by_id"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/reporting/model-portfolios/{portfolio_id}/monthly-report/history",
+    "name": "list_monthly_reports"
   },
   {
     "method": "GET",
@@ -1121,7 +1141,7 @@
   },
   {
     "method": "GET",
-    "path": "/api/v1/sec/managers/{cik}",
+    "path": "/api/v1/sec/managers/{cik_or_crd}",
     "name": "get_manager_detail"
   },
   {

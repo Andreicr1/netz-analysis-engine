@@ -174,6 +174,37 @@ def gold_dd_report_path(
     return f"gold/{org_id}/{vertical}/dd_reports/{report_id}/{language}/report.pdf"
 
 
+def gold_monthly_report_path(
+    org_id: UUID,
+    portfolio_id: str,
+    job_id: str,
+) -> str:
+    """``gold/{org_id}/wealth/reports/monthly-{portfolio_id}/{job_id}.pdf``
+
+    Stores generated monthly client report PDFs for model portfolios.
+    job_id provides uniqueness across multiple generations for the same
+    portfolio (e.g., mcr-{portfolio_id}-{hex}).
+    """
+    _validate_segment(portfolio_id, "portfolio_id")
+    _validate_segment(job_id, "job_id")
+    return f"gold/{org_id}/wealth/reports/monthly-{portfolio_id}/{job_id}.pdf"
+
+
+def gold_long_form_report_path(
+    org_id: UUID,
+    portfolio_id: str,
+    job_id: str,
+) -> str:
+    """``gold/{org_id}/wealth/reports/long-form-dd-{portfolio_id}/{job_id}.pdf``
+
+    Stores generated long-form due diligence report PDFs for model portfolios.
+    job_id provides uniqueness across multiple generations.
+    """
+    _validate_segment(portfolio_id, "portfolio_id")
+    _validate_segment(job_id, "job_id")
+    return f"gold/{org_id}/wealth/reports/long-form-dd-{portfolio_id}/{job_id}.pdf"
+
+
 # ── Global paths (no org_id, no vertical) ──────────────────────────
 
 

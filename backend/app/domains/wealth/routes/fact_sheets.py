@@ -117,6 +117,30 @@ async def generate_fact_sheet(
             storage = get_storage_client()
             await storage.write(gen_result["storage_path"], pdf_bytes, content_type="application/pdf")
 
+            # Persist permanent record
+            try:
+                from app.core.db.engine import async_session_factory
+                from app.core.tenancy.middleware import set_rls_context
+                from app.domains.wealth.models.generated_report import WealthGeneratedReport
+
+                fact_job_id = f"fs-{portfolio_id}-{uuid.uuid4().hex[:8]}"
+                async with async_session_factory() as record_db:
+                    await set_rls_context(record_db, uuid.UUID(str(org_id)))
+                    report_record = WealthGeneratedReport(
+                        organization_id=uuid.UUID(str(org_id)),
+                        portfolio_id=portfolio_id,
+                        report_type="fact_sheet",
+                        job_id=fact_job_id,
+                        storage_path=gen_result["storage_path"],
+                        display_filename=f"fact-sheet-{portfolio_id}-{fmt}.pdf",
+                        size_bytes=len(pdf_bytes),
+                        status="completed",
+                    )
+                    record_db.add(report_record)
+                    await record_db.commit()
+            except Exception:
+                logger.warning("fact_sheet_record_failed", exc_info=True)
+
         return gen_result
     finally:
         _get_content_semaphore().release()

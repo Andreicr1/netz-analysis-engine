@@ -196,9 +196,12 @@ async def _run_monthly_generation(
 
             if pdf_bytes:
                 # Store PDF via StorageClient
-                storage_key = (
-                    f"gold/{organization_id}/wealth/reports/"
-                    f"monthly-{portfolio_id}-{job_id}.pdf"
+                from ai_engine.pipeline.storage_routing import gold_monthly_report_path
+
+                storage_key = gold_monthly_report_path(
+                    org_id=uuid.UUID(organization_id),
+                    portfolio_id=portfolio_id,
+                    job_id=job_id,
                 )
                 try:
                     from app.services.storage_client import create_storage_client
@@ -221,6 +224,29 @@ async def _run_monthly_generation(
                         )
                     finally:
                         await r.aclose()
+                    # Persist permanent record (survives Redis TTL)
+                    try:
+                        async with async_session_factory() as record_db:
+                            await set_rls_context(record_db, uuid.UUID(organization_id))
+                            from app.domains.wealth.models.generated_report import (
+                                WealthGeneratedReport,
+                            )
+
+                            report_record = WealthGeneratedReport(
+                                organization_id=uuid.UUID(organization_id),
+                                portfolio_id=uuid.UUID(portfolio_id),
+                                report_type="monthly_report",
+                                job_id=job_id,
+                                storage_path=storage_key,
+                                display_filename=f"monthly-report-{portfolio_id}.pdf",
+                                size_bytes=len(pdf_bytes),
+                                status="completed",
+                            )
+                            record_db.add(report_record)
+                            await record_db.commit()
+                    except Exception:
+                        logger.warning("monthly_report_record_failed", exc_info=True)
+                        # Never-raises: Redis key still works for 24h
                 except Exception:
                     logger.warning("monthly_report_storage_failed", exc_info=True)
                     storage_key = ""
@@ -241,3 +267,84 @@ async def _run_monthly_generation(
         await publish_terminal_event(job_id, "error", {"error": str(exc)})
     finally:
         semaphore.release()
+
+
+# ── History / permanent download endpoints ────────────────────────
+
+
+@router.get(
+    "/model-portfolios/{portfolio_id}/monthly-report/history",
+    summary="List all generated monthly reports for a portfolio",
+)
+async def list_monthly_reports(
+    portfolio_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+    org_id: uuid.UUID = Depends(get_org_id),
+) -> list[dict]:
+    from app.domains.wealth.models.generated_report import WealthGeneratedReport
+
+    stmt = (
+        select(WealthGeneratedReport)
+        .where(
+            WealthGeneratedReport.portfolio_id == portfolio_id,
+            WealthGeneratedReport.report_type == "monthly_report",
+            WealthGeneratedReport.status == "completed",
+        )
+        .order_by(WealthGeneratedReport.generated_at.desc())
+        .limit(24)  # max 2 years of monthly history
+    )
+    result = await db.execute(stmt)
+    rows = result.scalars().all()
+
+    return [
+        {
+            "id": str(r.id),
+            "job_id": r.job_id,
+            "display_filename": r.display_filename,
+            "generated_at": r.generated_at.isoformat(),
+            "size_bytes": r.size_bytes,
+        }
+        for r in rows
+    ]
+
+
+@router.get(
+    "/model-portfolios/{portfolio_id}/monthly-report/download/{report_id}",
+    summary="Download a historical monthly report PDF by record ID",
+)
+async def download_monthly_report_by_id(
+    portfolio_id: uuid.UUID,
+    report_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+    org_id: uuid.UUID = Depends(get_org_id),
+) -> Response:
+    from app.domains.wealth.models.generated_report import WealthGeneratedReport
+
+    stmt = select(WealthGeneratedReport).where(
+        WealthGeneratedReport.id == report_id,
+        WealthGeneratedReport.portfolio_id == portfolio_id,
+        WealthGeneratedReport.report_type == "monthly_report",
+    )
+    result = await db.execute(stmt)
+    record = result.scalar_one_or_none()
+
+    if not record:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    from app.services.storage_client import create_storage_client
+
+    storage = create_storage_client()
+    pdf_bytes = await storage.read(record.storage_path)
+
+    if pdf_bytes is None:
+        raise HTTPException(status_code=404, detail="PDF file not found in storage")
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{record.display_filename}"',
+        },
+    )
