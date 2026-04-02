@@ -92,7 +92,7 @@
 				<h3 class="fs-section-title">Fund Analysis Score</h3>
 				<div class="fs-chart-wrap">
 					{#if scoring_metrics}
-						<FundScoringRadar {scoring_metrics} height={350} />
+						<FundScoringRadar scoringMetrics={scoring_metrics} height={350} />
 					{:else}
 						<div class="fs-no-data">Scoring data not available for this instrument.</div>
 					{/if}

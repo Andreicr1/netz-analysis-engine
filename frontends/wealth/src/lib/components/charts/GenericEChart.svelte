@@ -38,9 +38,9 @@
         }
     });
 
-    onMount(async () => {
-        await loadECharts();
-        
+    onMount(() => {
+        loadECharts();
+
         const resizeHandler = () => {
             chartInstance?.resize();
         };
