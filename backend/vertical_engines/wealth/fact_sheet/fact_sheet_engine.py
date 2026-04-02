@@ -31,6 +31,7 @@ from vertical_engines.wealth.fact_sheet.models import (
     AttributionRow,
     FactSheetData,
     HoldingRow,
+    NavPoint,
     ReturnMetrics,
     RiskMetrics,
     StressRow,
@@ -156,6 +157,39 @@ class FactSheetEngine:
         # Build stress results
         stress = self._compute_stress(db, pid, funds_data)
 
+        # Compute composite benchmark NAV (G7.6)
+        nav_series: list[NavPoint] = []
+        benchmark_returns: ReturnMetrics | None = None
+        try:
+            from app.domains.wealth.services.benchmark_resolver import (
+                fetch_benchmark_nav_series_sync,
+            )
+            from quant_engine.benchmark_composite_service import compute_composite_nav
+
+            bm_block_weights, bm_navs = fetch_benchmark_nav_series_sync(db, pid)
+            if bm_block_weights and bm_navs:
+                composite = compute_composite_nav(bm_block_weights, bm_navs)
+                if composite:
+                    nav_series = [
+                        NavPoint(
+                            nav_date=row.nav_date,
+                            nav=1000.0,
+                            benchmark_nav=row.nav,
+                        )
+                        for row in composite
+                    ]
+                    # Compute benchmark period returns from composite series
+                    if len(composite) >= 2:
+                        inception_nav = composite[0].nav
+                        latest_nav = composite[-1].nav
+                        bm_itd = (latest_nav / inception_nav) - 1.0 if inception_nav > 0 else None
+                        benchmark_returns = ReturnMetrics(
+                            since_inception=round(bm_itd, 6) if bm_itd is not None else None,
+                            is_backtest=True,
+                        )
+        except Exception:
+            logger.warning("fact_sheet_benchmark_composite_failed", exc_info=True)
+
         # Institutional-only: attribution and fee_drag
         attribution: list[AttributionRow] = []
         fee_drag_data: dict[str, Any] | None = None
@@ -170,9 +204,11 @@ class FactSheetEngine:
             as_of=as_of,
             inception_date=portfolio.inception_date,
             returns=returns,
+            benchmark_returns=benchmark_returns,
             risk=risk,
             holdings=holdings,
             allocations=allocations,
+            nav_series=nav_series,
             attribution=attribution,
             stress=stress,
             fee_drag=fee_drag_data,

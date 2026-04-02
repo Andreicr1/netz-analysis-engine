@@ -562,6 +562,21 @@ def _render_chapter_block(
         parts.append(_render_allocation_table(data.allocations))
     elif tag == "performance_attribution":
         parts.append(_render_attribution_table(data.attribution))
+        # Benchmark composite return from series (G7.6)
+        bm_series = content.get("benchmark_composite_series", [])
+        if len(bm_series) >= 2:
+            try:
+                first_nav = bm_series[0]["nav"]
+                last_nav = bm_series[-1]["nav"]
+                if first_nav and first_nav > 0:
+                    bm_ret = (last_nav / first_nav) - 1.0
+                    parts.append(
+                        f'<div style="font-size:9px;color:var(--slate-500);margin-top:8px;">'
+                        f"Composite Benchmark Return (trailing 12m): {_fmt_pct(bm_ret * 100)}"
+                        f"</div>"
+                    )
+            except (KeyError, TypeError, ZeroDivisionError):
+                pass
     elif tag == "portfolio_composition":
         parts.append(_render_holdings_table(data.holdings))
     elif tag == "risk_decomposition":

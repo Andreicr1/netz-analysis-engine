@@ -255,8 +255,26 @@ class MonthlyReportEngine:
             from app.domains.wealth.services.nav_reader import fetch_nav_series
 
             raw_rows = await fetch_nav_series(db, portfolio_id)
+
+            # Compute composite benchmark NAV for real benchmark returns (G7.6)
+            bm_by_date: dict[date, float] = {}
+            try:
+                from app.domains.wealth.services.benchmark_resolver import (
+                    fetch_benchmark_nav_series,
+                )
+                from quant_engine.benchmark_composite_service import compute_composite_nav
+
+                bm_block_weights, bm_navs = await fetch_benchmark_nav_series(
+                    db, portfolio_id,
+                )
+                if bm_block_weights and bm_navs:
+                    composite = compute_composite_nav(bm_block_weights, bm_navs)
+                    bm_by_date = {row.nav_date: row.nav for row in composite}
+            except Exception:
+                logger.warning("monthly_report_benchmark_composite_failed", exc_info=True)
+
             nav_rows = [
-                {"nav_date": r.nav_date, "nav": r.nav, "benchmark_nav": None}
+                {"nav_date": r.nav_date, "nav": r.nav, "benchmark_nav": bm_by_date.get(r.nav_date)}
                 for r in raw_rows
             ]
             if nav_rows and len(nav_rows) >= 2:

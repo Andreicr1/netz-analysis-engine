@@ -364,6 +364,21 @@ class LongFormReportEngine:
                     total_r *= (1.0 + row["return_1d"])
                 benchmark_returns[block_id] = total_r - 1.0
 
+        # Compute composite benchmark series for PDF rendering
+        composite_series: list[dict[str, Any]] = []
+        try:
+            from quant_engine.benchmark_composite_service import compute_composite_nav
+
+            composite_rows = compute_composite_nav(
+                bm_data["block_weights"], bm_data["benchmark_navs"],
+            )
+            composite_series = [
+                {"nav_date": str(row.nav_date), "nav": row.nav, "daily_return": row.daily_return}
+                for row in composite_rows[-252:]  # last 12 months
+            ]
+        except Exception:
+            pass
+
         def _run_attribution() -> dict[str, Any]:
             from vertical_engines.wealth.attribution.service import AttributionService
 
@@ -399,7 +414,9 @@ class LongFormReportEngine:
                 ],
             }
 
-        return await asyncio.to_thread(_run_attribution)
+        result_dict = await asyncio.to_thread(_run_attribution)
+        result_dict["benchmark_composite_series"] = composite_series
+        return result_dict
 
     async def _chapter_risk_decomposition(
         self, context: dict[str, Any], db: AsyncSession,
