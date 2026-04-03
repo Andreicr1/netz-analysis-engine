@@ -24,14 +24,15 @@
 		runDetailData?: Record<string, unknown> | null;
 	}
 
-	let { results, lastRun, runError, initParams = {}, fundFilters = $bindable(), onRunClick, runDetailOpen = false, runDetailLoading = false, runDetailData = null }: Props = $props();
+	let { results, lastRun, runError, initParams: _ip = {}, fundFilters = $bindable(), onRunClick, runDetailOpen = false, runDetailLoading = false, runDetailData = null }: Props = $props();
+	const ip = { ..._ip }; // one-time snapshot — filters are locally mutable
 
 	// ── Manager filters ──
-	let textSearch = $state(initParams.text_search ?? "");
-	let aumMin = $state(initParams.aum_min ?? "");
-	let aumMax = $state(initParams.aum_max ?? "");
-	let complianceClean = $state(initParams.compliance_clean === "true");
-	let hasInstitutional = $state(initParams.has_institutional_holders === "true");
+	let textSearch = $state(ip.text_search ?? "");
+	let aumMin = $state(ip.aum_min ?? "");
+	let aumMax = $state(ip.aum_max ?? "");
+	let complianceClean = $state(ip.compliance_clean === "true");
+	let hasInstitutional = $state(ip.has_institutional_holders === "true");
 
 	function applyManagerFilters() {
 		const params = new URLSearchParams();

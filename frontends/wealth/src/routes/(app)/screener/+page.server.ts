@@ -1,48 +1,35 @@
-/** Unified Screener SSR — Manager-first with 3-level drill-down.
+/** Screener Level 1 — Manager Catalog SSR load.
  *
- * Level 1: Fund Managers (from /manager-screener/)
- * Level 2: Funds by Manager (client-side, via /screener/catalog?manager_id=)
- * Level 3: Share Classes (client-side, via /screener/funds/{id}/classes)
- *
- * Screening tab remains for on-demand screening of imported instruments.
+ * Mock data based on Timescale inventory (sec_managers × sec_manager_funds).
+ * Will be replaced by real API call to /manager-screener/ once wired.
  */
 import type { PageServerLoad } from "./$types";
-import { createServerApiClient } from "$lib/api/client";
-import type { ScreenerPage } from "$lib/types/manager-screener";
-import { EMPTY_SCREENER } from "$lib/types/manager-screener";
-import type { ScreeningRun, ScreeningResult } from "$lib/types/screening";
 
-export const load: PageServerLoad = async ({ parent, url }) => {
-	const { token } = await parent();
-	const api = createServerApiClient(token);
+export interface CatalogManager {
+	crd: string;
+	name: string;
+	aum: number;
+	funds: string[];
+}
 
-	const page = url.searchParams.get("page") ?? "1";
-	const pageSize = url.searchParams.get("page_size") ?? "25";
-	const textSearch = url.searchParams.get("q") ?? "";
-	const sortBy = url.searchParams.get("sort_by") ?? "aum_total";
-	const sortDir = url.searchParams.get("sort_dir") ?? "desc";
-	const aumMin = url.searchParams.get("aum_min");
-
-	const managerParams: Record<string, string> = {
-		page,
-		page_size: pageSize,
-		sort_by: sortBy,
-		sort_dir: sortDir,
-	};
-	if (textSearch) managerParams.text_search = textSearch;
-	if (aumMin) managerParams.aum_min = aumMin;
-
-	const [managers, screeningRuns, screeningResults] = await Promise.all([
-		api.get<ScreenerPage>("/manager-screener/", managerParams).catch(() => EMPTY_SCREENER),
-		api.get<ScreeningRun[]>("/screener/runs", { limit: "10" }).catch(() => [] as ScreeningRun[]),
-		api.get<ScreeningResult[]>("/screener/results", { is_current: "true", limit: "100" }).catch(() => [] as ScreeningResult[]),
-	]);
+export const load: PageServerLoad = async () => {
+	const mockManagers: CatalogManager[] = [
+		{ crd: "105958", name: "VANGUARD GROUP INC", aum: 10_200_000_000_000, funds: ["MF", "HF"] },
+		{ crd: "108281", name: "FIDELITY MANAGEMENT & RESEARCH COMPANY LLC", aum: 4_700_000_000_000, funds: ["MF", "PE"] },
+		{ crd: "104559", name: "PACIFIC INVESTMENT MANAGEMENT COMPANY LLC", aum: 3_000_000_000_000, funds: ["HF", "PE"] },
+		{ crd: "105247", name: "BLACKROCK FUND ADVISORS", aum: 3_500_000_000_000, funds: ["MF"] },
+		{ crd: "105496", name: "T. ROWE PRICE ASSOCIATES, INC.", aum: 1_900_000_000_000, funds: ["MF", "HF", "PE"] },
+		{ crd: "106838", name: "CAPITAL RESEARCH AND MANAGEMENT COMPANY", aum: 2_800_000_000_000, funds: ["MF"] },
+		{ crd: "105497", name: "WELLINGTON MANAGEMENT COMPANY LLP", aum: 1_200_000_000_000, funds: ["MF", "HF", "PE"] },
+		{ crd: "106055", name: "JP MORGAN INVESTMENT MANAGEMENT INC", aum: 2_100_000_000_000, funds: ["MF", "HF", "PE", "VC"] },
+		{ crd: "105567", name: "GOLDMAN SACHS ASSET MANAGEMENT L.P.", aum: 1_800_000_000_000, funds: ["MF", "HF", "PE"] },
+		{ crd: "106405", name: "MORGAN STANLEY INVESTMENT MANAGEMENT INC", aum: 1_500_000_000_000, funds: ["MF", "HF"] },
+		{ crd: "105352", name: "STATE STREET GLOBAL ADVISORS INC", aum: 4_100_000_000_000, funds: ["MF"] },
+		{ crd: "106698", name: "INVESCO ADVISERS INC", aum: 1_600_000_000_000, funds: ["MF", "PE"] },
+	];
 
 	return {
-		tab: url.searchParams.get("tab") ?? "catalog",
-		managers,
-		screeningRuns,
-		screeningResults,
-		currentParams: Object.fromEntries(url.searchParams.entries()),
+		managers: mockManagers,
+		totalCount: 5_692,
 	};
 };
