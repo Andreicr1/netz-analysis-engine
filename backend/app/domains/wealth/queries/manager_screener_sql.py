@@ -100,6 +100,14 @@ instruments_universe = Table(
     extend_existing=True,
 )
 
+registered_funds = Table(
+    "sec_registered_funds",
+    _meta,
+    Column("cik", Text, primary_key=True),
+    Column("crd_number", Text),
+    extend_existing=True,
+)
+
 instruments_org = Table(
     "instruments_org",
     _meta,
@@ -236,11 +244,17 @@ def build_screener_queries(
     if filters.registration_status:
         conditions.append(sec_managers.c.registration_status == filters.registration_status)
     else:
-        # Default: only SEC-registered RIAs with private funds (5,657 of 976k)
-        # Excludes 910k defunct, 45k SEC-exempt, 3.9k state-registered (zero data),
-        # and 11.8k Registered without funds (pure AUM managers, no fund vehicles)
+        # Default: Registered RIAs with fund vehicles (5,669 of 976k)
+        # private_fund_count > 0 covers 5,634 (ADV Schedule D)
+        # EXISTS sec_registered_funds adds 35 mutual-fund-only shops
+        # (Capital Research $3.7T, Blackrock Fund Advisors $3.5T, etc.)
+        has_registered = select(literal_column("1")).select_from(registered_funds).where(
+            registered_funds.c.crd_number == sec_managers.c.crd_number,
+        ).exists()
         conditions.append(sec_managers.c.registration_status == "Registered")
-        conditions.append(sec_managers.c.private_fund_count > 0)
+        conditions.append(
+            (sec_managers.c.private_fund_count > 0) | has_registered,
+        )
     if filters.compliance_clean is True:
         conditions.append(
             (sec_managers.c.compliance_disclosures == 0)
