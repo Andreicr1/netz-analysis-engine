@@ -1,84 +1,84 @@
 /* ============================================================
- * InvestIntell Design Tokens v3.0
- * Font:    Inter (interface) + Geist Mono (data)
+ * InvestIntell Design Tokens v4.0
+ * Font:    Urbanist (interface) + Geist Mono (data)
  * Mode:    Dark-first (:root) + .light override
- * Palette: Tailwind Slate neutral — shadcn/ui aligned
+ * Palette: One X Investment Dashboard inspired
  * ============================================================ */
 
 :root {
 	color-scheme: dark;
 
-	/* ── Brand — neutral Slate (no gold) ── */
-	--ii-brand-primary:     #f8fafc;   /* slate-50 — primary action on dark */
-	--ii-brand-secondary:   #94a3b8;   /* slate-400 */
-	--ii-brand-navy:        #0f172a;   /* slate-900 */
-	--ii-brand-accent:      #e2e8f0;   /* slate-200 — hover accent */
+	/* ── Brand — Blue Neon accent ── */
+	--ii-brand-primary:     #0177fb;   /* One X accent blue */
+	--ii-brand-secondary:   #d9d9d9;   /* One X text-secondary */
+	--ii-brand-navy:        #000000;   /* pure black bg */
+	--ii-brand-accent:      #0177fb;   /* hover accent = primary */
 
 	/* ── Typography ── */
-	--ii-font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+	--ii-font-sans: "Urbanist Variable", "Urbanist", ui-sans-serif, system-ui, sans-serif;
 	--ii-font-mono: "Geist Mono Variable", "Geist Mono", "Menlo", ui-monospace, monospace;
 
 	/* ── Text ── */
-	--ii-text-primary:   #f8fafc;   /* slate-50 */
-	--ii-text-secondary: #cbd5e1;   /* slate-300 */
-	--ii-text-muted:     #94a3b8;   /* slate-400 */
-	--ii-text-tertiary:  #64748b;   /* slate-500 */
-	--ii-text-inverse:   #0f172a;   /* slate-900 */
-	--ii-text-accent:    #f8fafc;   /* slate-50 — was gold */
+	--ii-text-primary:   #ffffff;
+	--ii-text-secondary: #d9d9d9;
+	--ii-text-muted:     #cbccd1;
+	--ii-text-tertiary:  #c2c2c2;
+	--ii-text-inverse:   #141519;   /* One X card-inner */
+	--ii-text-accent:    #0177fb;   /* accent blue for emphasis */
 
 	/* ── Surface ── */
-	--ii-bg:                #020817;   /* slate-950 */
-	--ii-surface:           #0f172a;   /* slate-900 */
-	--ii-surface-alt:       #1e293b;   /* slate-800 */
-	--ii-surface-elevated:  #1e293b;   /* slate-800 */
-	--ii-surface-inset:     #020817;   /* slate-950 — sunken fields */
-	--ii-surface-overlay:   rgba(2, 8, 23, 0.72);
-	--ii-surface-raised:    #1e293b;   /* slate-800 */
-	--ii-surface-panel:     #0f172a;   /* slate-900 */
-	--ii-surface-highlight: rgba(248, 250, 252, 0.06);
-	--ii-surface-accent:    color-mix(in srgb, #f8fafc 6%, #0f172a);
+	--ii-bg:                #000000;   /* pure black — One X background */
+	--ii-surface:           #000000;   /* flush with bg */
+	--ii-surface-alt:       #141519;   /* One X card-inner */
+	--ii-surface-elevated:  #141519;   /* elevated cards */
+	--ii-surface-inset:     #000000;   /* sunken fields */
+	--ii-surface-overlay:   rgba(13, 13, 13, 0.60);  /* One X glass overlay */
+	--ii-surface-raised:    #1a1b20;   /* One X nav-item */
+	--ii-surface-panel:     #000000;   /* panel bg */
+	--ii-surface-highlight: rgba(255, 255, 255, 0.06);
+	--ii-surface-accent:    color-mix(in srgb, #0177fb 8%, #000000);
 
 	/* ── Border ── */
-	--ii-border-subtle:  #1e293b;               /* slate-800 */
-	--ii-border:         #334155;               /* slate-700 */
-	--ii-border-strong:  #475569;               /* slate-600 */
-	--ii-border-focus:   #f8fafc;               /* slate-50 */
-	--ii-border-accent:  rgba(248, 250, 252, 0.20);
+	--ii-border-subtle:  #404249;               /* One X divider */
+	--ii-border:         #43454b;               /* One X grid lines */
+	--ii-border-strong:  #484a52;               /* One X icon-inactive */
+	--ii-border-focus:   #0177fb;               /* accent blue focus */
+	--ii-border-accent:  rgba(1, 119, 251, 0.25);
 	--ii-border-inverse: rgba(255, 255, 255, 0.10);
 
 	/* ── Semantic ── */
-	--ii-success: #3fb950;
+	--ii-success: #11ec79;   /* One X positive green */
 	--ii-warning: #e3b341;
-	--ii-danger:  #f85149;
-	--ii-info:    #58a6ff;
+	--ii-danger:  #fc1a1a;   /* One X negative red */
+	--ii-info:    #0177fb;   /* accent blue */
 
 	/* ── Semantic subtle ── */
-	--ii-success-subtle: color-mix(in srgb, #3fb950 12%, #0f172a);
-	--ii-warning-subtle: color-mix(in srgb, #e3b341 14%, #0f172a);
-	--ii-danger-subtle:  color-mix(in srgb, #f85149 12%, #0f172a);
-	--ii-info-subtle:    color-mix(in srgb, #58a6ff 12%, #0f172a);
+	--ii-success-subtle: color-mix(in srgb, #11ec79 12%, #000000);
+	--ii-warning-subtle: color-mix(in srgb, #e3b341 14%, #000000);
+	--ii-danger-subtle:  color-mix(in srgb, #fc1a1a 12%, #000000);
+	--ii-info-subtle:    color-mix(in srgb, #0177fb 12%, #000000);
 
 	/* ── Regime ── */
-	--ii-regime-risk-on:   #3fb950;
+	--ii-regime-risk-on:   #11ec79;
 	--ii-regime-risk-off:  #e3b341;
 	--ii-regime-inflation: #f0883e;
-	--ii-regime-crisis:    #f85149;
+	--ii-regime-crisis:    #fc1a1a;
 
-	/* ── Chart palette — Slate monochrome + blue accent ── */
-	--ii-chart-1: #f8fafc;   /* slate-50 — primary series */
-	--ii-chart-2: #94a3b8;   /* slate-400 */
-	--ii-chart-3: #64748b;   /* slate-500 */
-	--ii-chart-4: #475569;   /* slate-600 */
-	--ii-chart-5: #334155;   /* slate-700 — muted/benchmark */
-	--ii-chart-accent: #3b82f6;  /* blue-500 — emphasis when 5+ series need contrast */
+	/* ── Chart palette — Blue accent + monochrome ── */
+	--ii-chart-1: #0177fb;   /* accent blue — primary series */
+	--ii-chart-2: #ffffff;   /* white — secondary series */
+	--ii-chart-3: #d9d9d9;   /* text-secondary */
+	--ii-chart-4: #484a52;   /* border-strong */
+	--ii-chart-5: #43454b;   /* grid lines — muted/benchmark */
+	--ii-chart-accent: #11ec79;  /* green for positive emphasis */
 
-	/* ── Radius ── */
+	/* ── Radius — One X rounded style ── */
 	--ii-radius-xs:   2px;
 	--ii-radius-sm:   4px;
-	--ii-radius-md:   6px;
-	--ii-radius-lg:   8px;
-	--ii-radius-xl:   12px;
-	--ii-radius-pill: 999px;
+	--ii-radius-md:   9px;
+	--ii-radius-lg:   24px;   /* One X card radius */
+	--ii-radius-xl:   32px;   /* One X pill radius */
+	--ii-radius-pill: 32px;   /* rounded pills (not 999px) */
 
 	/* ── Control heights ── */
 	--ii-control-sm: 28px;
@@ -86,13 +86,21 @@
 	--ii-control-lg: 44px;
 
 	/* ── Extended utility tokens ── */
-	--ii-accent-soft:      color-mix(in srgb, #f8fafc 6%, #0f172a);
-	--ii-accent-muted:     color-mix(in srgb, #f8fafc 8%, #020817);
-	--ii-focus-ring:       color-mix(in srgb, #f8fafc 25%, transparent);
-	--ii-bg-hover:         color-mix(in srgb, #f8fafc 5%, #1e293b);
-	--ii-bg-secondary:     #1e293b;
-	--ii-selection-bg:     color-mix(in srgb, #94a3b8 20%, #020817);
+	--ii-accent-soft:      color-mix(in srgb, #0177fb 8%, #000000);
+	--ii-accent-muted:     color-mix(in srgb, #0177fb 12%, #000000);
+	--ii-focus-ring:       color-mix(in srgb, #0177fb 30%, transparent);
+	--ii-bg-hover:         color-mix(in srgb, #ffffff 5%, #141519);
+	--ii-bg-secondary:     #141519;
+	--ii-selection-bg:     color-mix(in srgb, #0177fb 20%, #000000);
 	--ii-selection-color:  var(--ii-text-primary);
+
+	/* ── Glass / Blur effect tokens ── */
+	--ii-glass-bg:         rgba(13, 13, 13, 0.60);
+	--ii-glass-blur:       22px;
+	--ii-glass-border:     rgba(255, 255, 255, 0.10);
+	--ii-overlay-10:       rgba(255, 255, 255, 0.10);
+	--ii-overlay-13:       rgba(255, 255, 255, 0.13);
+	--ii-overlay-15:       rgba(255, 255, 255, 0.15);
 
 	/* ── Density ── */
 	--ii-space-card-padding-sm: clamp(12px, 0.5rem + 0.5vw, 16px);
@@ -128,7 +136,7 @@
 	--border:  var(--ii-border);
 	--input:   var(--ii-border);
 	--ring:    var(--ii-border-focus);
-	--radius:  var(--ii-radius-md);
+	--radius:  0.75rem;
 
 	/* ── Sidebar tokens ── */
 	--sidebar-background:         var(--ii-bg);
@@ -143,78 +151,87 @@
 
 /* ============================================================
  * Light mode override
+ * Tokens provided by Andrei — HSL-calibrated for accessibility
  * ============================================================ */
 
 .light,
 [data-theme="light"] {
 	color-scheme: light;
 
-	/* ── Brand — neutral Slate ── */
-	--ii-brand-primary:     #0f172a;   /* slate-900 — primary action = dark */
-	--ii-brand-secondary:   #475569;   /* slate-600 */
-	--ii-brand-accent:      #334155;   /* slate-700 */
+	/* ── Brand — Blue Neon works on white ── */
+	--ii-brand-primary:     #0177fb;   /* hsl(212 99% 49%) */
+	--ii-brand-secondary:   #64748b;   /* slate-500 */
+	--ii-brand-accent:      #0177fb;
 
 	/* ── Text ── */
-	--ii-text-primary:   #0f172a;   /* slate-900 */
+	--ii-text-primary:   #14151a;   /* hsl(228 11% 9%) — grafite sofisticado */
 	--ii-text-secondary: #475569;   /* slate-600 */
-	--ii-text-muted:     #64748b;   /* slate-500 */
+	--ii-text-muted:     #64748b;   /* hsl(215 16% 47%) — slate-500 */
 	--ii-text-tertiary:  #94a3b8;   /* slate-400 */
-	--ii-text-inverse:   #f8fafc;   /* slate-50 */
-	--ii-text-accent:    #0f172a;   /* slate-900 */
+	--ii-text-inverse:   #ffffff;
+	--ii-text-accent:    #0177fb;
 
 	/* ── Surface ── */
 	--ii-bg:                #ffffff;
 	--ii-surface:           #ffffff;
-	--ii-surface-alt:       #f1f5f9;   /* slate-100 */
+	--ii-surface-alt:       #f1f5f9;   /* hsl(210 40% 96%) — slate-100 */
 	--ii-surface-elevated:  #ffffff;
-	--ii-surface-inset:     #f1f5f9;   /* slate-100 */
-	--ii-surface-overlay:   rgba(15, 23, 42, 0.48);
+	--ii-surface-inset:     #f1f5f9;
+	--ii-surface-overlay:   rgba(20, 21, 26, 0.48);
 	--ii-surface-raised:    #ffffff;
 	--ii-surface-panel:     #ffffff;
-	--ii-surface-highlight: rgba(15, 23, 42, 0.04);
-	--ii-surface-accent:    color-mix(in srgb, #0f172a 4%, white);
+	--ii-surface-highlight: rgba(20, 21, 26, 0.04);
+	--ii-surface-accent:    color-mix(in srgb, #0177fb 4%, white);
 
 	/* ── Border ── */
-	--ii-border-subtle:  #e2e8f0;               /* slate-200 */
+	--ii-border-subtle:  #e2e8f0;               /* hsl(214 32% 91%) — slate-200 */
 	--ii-border:         #e2e8f0;               /* slate-200 */
 	--ii-border-strong:  #cbd5e1;               /* slate-300 */
-	--ii-border-focus:   #0f172a;               /* slate-900 */
-	--ii-border-accent:  rgba(15, 23, 42, 0.16);
+	--ii-border-focus:   #0177fb;               /* accent blue */
+	--ii-border-accent:  rgba(1, 119, 251, 0.20);
 	--ii-border-inverse: rgba(0, 0, 0, 0.08);
 
-	/* ── Semantic ── */
-	--ii-success: #2ea043;
+	/* ── Semantic — accessibility-calibrated ── */
+	--ii-success: #1b9858;   /* hsl(149 70% 35%) — institutional green */
 	--ii-warning: #d29922;
-	--ii-danger:  #ef4444;   /* red-500 */
-	--ii-info:    #0969da;
+	--ii-danger:  #ef4343;   /* hsl(0 84% 60%) — softened red */
+	--ii-info:    #0177fb;
 
 	/* ── Semantic subtle ── */
-	--ii-success-subtle: color-mix(in srgb, #2ea043 10%, white);
+	--ii-success-subtle: color-mix(in srgb, #1b9858 10%, white);
 	--ii-warning-subtle: color-mix(in srgb, #d29922 12%, white);
-	--ii-danger-subtle:  color-mix(in srgb, #ef4444 10%, white);
-	--ii-info-subtle:    color-mix(in srgb, #0969da 10%, white);
+	--ii-danger-subtle:  color-mix(in srgb, #ef4343 10%, white);
+	--ii-info-subtle:    color-mix(in srgb, #0177fb 10%, white);
 
 	/* ── Regime ── */
-	--ii-regime-risk-on:   #2ea043;
+	--ii-regime-risk-on:   #1b9858;
 	--ii-regime-risk-off:  #d29922;
 	--ii-regime-inflation: #bc4c00;
-	--ii-regime-crisis:    #ef4444;
+	--ii-regime-crisis:    #ef4343;
 
-	/* ── Chart palette — Slate monochrome ── */
-	--ii-chart-1: #0f172a;   /* slate-900 — primary series */
-	--ii-chart-2: #64748b;   /* slate-500 */
-	--ii-chart-3: #94a3b8;   /* slate-400 */
+	/* ── Chart palette — Blue accent + dark strokes on white ── */
+	--ii-chart-1: #0177fb;   /* accent blue — primary series */
+	--ii-chart-2: #14151a;   /* grafite — secondary series */
+	--ii-chart-3: #64748b;   /* slate-500 */
 	--ii-chart-4: #cbd5e1;   /* slate-300 */
 	--ii-chart-5: #e2e8f0;   /* slate-200 — muted/benchmark */
-	--ii-chart-accent: #3b82f6;  /* blue-500 — emphasis for 5+ series */
+	--ii-chart-accent: #1b9858;  /* green for positive emphasis */
+
+	/* ── Glass / Blur — lighter for white bg ── */
+	--ii-glass-bg:         rgba(255, 255, 255, 0.72);
+	--ii-glass-blur:       16px;
+	--ii-glass-border:     rgba(0, 0, 0, 0.06);
+	--ii-overlay-10:       rgba(0, 0, 0, 0.04);
+	--ii-overlay-13:       rgba(0, 0, 0, 0.06);
+	--ii-overlay-15:       rgba(0, 0, 0, 0.08);
 
 	/* ── Extended utility tokens ── */
-	--ii-accent-soft:     color-mix(in srgb, #0f172a 4%, white);
-	--ii-accent-muted:    color-mix(in srgb, #0f172a 6%, #ffffff);
-	--ii-focus-ring:      color-mix(in srgb, #0f172a 20%, transparent);
+	--ii-accent-soft:     color-mix(in srgb, #0177fb 4%, white);
+	--ii-accent-muted:    color-mix(in srgb, #0177fb 8%, white);
+	--ii-focus-ring:      color-mix(in srgb, #0177fb 25%, transparent);
 	--ii-bg-hover:        #f1f5f9;
 	--ii-bg-secondary:    #f1f5f9;
-	--ii-selection-bg:    color-mix(in srgb, #94a3b8 14%, white);
+	--ii-selection-bg:    color-mix(in srgb, #0177fb 14%, white);
 	--ii-selection-color: var(--ii-text-primary);
 
 	/* ── Domain-semantic aliases ── */

@@ -39,10 +39,10 @@ down:
 
 # ── Frontend (pnpm + Turborepo) ──────────────────────────
 dev-ui:
-	pnpm --filter @netz/ui dev
+	pnpm --filter @investintell/ui dev
 
 build-ui:
-	pnpm --filter @netz/ui build
+	pnpm --filter @investintell/ui build
 
 dev-credit:
 	pnpm --filter netz-credit-intelligence dev
@@ -69,7 +69,7 @@ check-all:
 	pnpm exec turbo run lint check
 
 types:
-	npx openapi-typescript http://localhost:8000/openapi.json -o packages/ui/src/types/api.d.ts
+	npx openapi-typescript http://localhost:8000/openapi.json -o packages/investintell-ui/src/types/api.d.ts
 
 # ── Help ──────────────────────────────────────────────────
 help:
@@ -85,8 +85,8 @@ help:
 	@echo "make down        - docker-compose down"
 	@echo ""
 	@echo "── Frontend ────────────────────────────────────────"
-	@echo "make dev-ui      - @netz/ui watch mode"
-	@echo "make build-ui    - Build @netz/ui package"
+	@echo "make dev-ui      - @investintell/ui watch mode"
+	@echo "make build-ui    - Build @investintell/ui package"
 	@echo "make dev-credit  - Credit frontend dev server"
 	@echo "make dev-wealth  - Wealth frontend dev server"
 	@echo "make dev-all     - All packages in parallel (Turborepo)"

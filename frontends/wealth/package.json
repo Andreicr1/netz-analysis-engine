@@ -13,7 +13,6 @@
   "dependencies": {
     "@clerk/clerk-js": "^6.3.2",
     "@investintell/ui": "workspace:*",
-    "@netz/ui": "workspace:*",
     "@tanstack/svelte-table": "9.0.0-alpha.10",
     "@tanstack/svelte-virtual": "^3.0.0",
     "@codemirror/commands": "^6.10.0",

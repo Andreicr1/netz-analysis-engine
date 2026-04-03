@@ -41,7 +41,7 @@
 
 <div class="review-page">
 	<div class="review-topbar">
-		<a href="/macro" class="review-back">&larr; Macro Intelligence</a>
+		<a href="/market" class="review-back">&larr; Macro Intelligence</a>
 	</div>
 
 	<h1 class="review-title">

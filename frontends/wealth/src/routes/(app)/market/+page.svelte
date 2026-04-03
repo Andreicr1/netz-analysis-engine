@@ -394,7 +394,7 @@
 								</div>
 								<div class="analysis-card-footer">
 									{#if latestReviewId}
-									<a href="/macro/reviews/{latestReviewId}?region={regionName.toLowerCase()}" class="analysis-link">VIEW FULL DETAILED REPORT</a>
+									<a href="/market/reviews/{latestReviewId}?region={regionName.toLowerCase()}" class="analysis-link">VIEW FULL DETAILED REPORT</a>
 								{/if}
 								</div>
 							</div>

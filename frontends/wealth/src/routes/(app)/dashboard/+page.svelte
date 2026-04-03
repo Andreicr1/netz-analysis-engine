@@ -1,273 +1,257 @@
 <!--
-  Dashboard — Wealth OS entry point.
-  SSR provides initial snapshot; riskStore (SSE) streams live CVaR/regime updates.
-  Owns riskStore lifecycle — start() on mount, destroy() on unmount.
+  Dashboard — InvestIntell Wealth OS.
+  12-column grid layout matching Figma. No risk jargon.
 -->
 <script lang="ts">
 	import { getContext, onMount } from "svelte";
-	import { PageHeader, StatusBadge, formatPercent, formatNumber } from "@investintell/ui";
-	import type { RiskStore, CVaRStatus } from "$lib/stores/risk-store.svelte";
-	import { regimeMultiplierLabel } from "$lib/constants/regime";
-	import RegimeTimeline from "$lib/components/charts/RegimeTimeline.svelte";
-	import MacroIndicatorStrip from "$lib/components/MacroIndicatorStrip.svelte";
+	import { formatNumber, formatPercent } from "@investintell/ui";
+	import type { RiskStore } from "$lib/stores/risk-store.svelte";
+	import { ArrowUpRight, ChevronDown, TrendingUp, TrendingDown } from "lucide-svelte";
 
 	let { data } = $props();
 
 	const riskStore = getContext<RiskStore>("netz:riskStore");
 
 	onMount(() => {
-		// Delay riskStore start to avoid hydration interference
 		const timer = setTimeout(() => {
 			try { riskStore.start(); } catch (e) { console.warn("Risk store failed to start:", e); }
 		}, 2000);
 		return () => { clearTimeout(timer); riskStore.destroy(); };
 	});
 
-	// ── Regime — live from store, SSR fallback ──────────────────────────
-	let regime = $derived(
-		riskStore.regime?.regime
-		?? (data.regime as { regime?: string } | null)?.regime
-		?? null
-	);
-
-	function regimeBadgeStatus(r: string | null): "neutral" | "warning" | "danger" | "success" {
-		switch (r) {
-			case "RISK_OFF":    return "warning";
-			case "CRISIS":      return "danger";
-			case "RISK_ON":     return "success";
-			case "INFLATION":   return "warning";
-			default:            return "neutral";
-		}
-	}
-
-	// ── Profile display config ───────────────────────────────────────────
 	const PROFILES = ["conservative", "moderate", "growth"] as const;
 	type Profile = typeof PROFILES[number];
 
-	const profileLabel: Record<Profile, string> = {
-		conservative: "Conservador",
-		moderate:     "Moderado",
-		growth:       "Growth",
-	};
-	const profileSubLabel: Record<Profile, string> = {
-		conservative: "Conservative",
-		moderate:     "Moderate",
-		growth:       "Aggressive",
-	};
-
-	// ── CVaR per profile — live from store, SSR fallback ────────────────
-	function getCvar(profile: Profile): CVaRStatus | null {
-		const live = riskStore.cvarByProfile[profile];
-		if (live?.cvar_current != null) return live;
-		// SSR fallback from riskSummary — backend returns profiles as dict, not array
-		const summaryProfiles = (data.riskSummary as { profiles?: Record<string, CVaRStatus | null> } | null)?.profiles;
-		return summaryProfiles?.[profile] ?? null;
-	}
-
-	function utilizationColor(pct: number | null): string {
-		if (pct == null) return "var(--ii-text-muted)";
-		if (pct >= 100)  return "var(--ii-danger)";
-		if (pct >= 80)   return "var(--ii-warning)";
-		return "var(--ii-success)";
-	}
-
-	function utilizationBarColor(pct: number | null): string {
-		if (pct == null) return "var(--ii-border)";
-		if (pct >= 100)  return "var(--ii-danger)";
-		if (pct >= 80)   return "var(--ii-warning)";
-		return "var(--ii-success)";
-	}
-
-	// ── NAV from snapshot SSR data ───────────────────────────────────────
 	function getSnapshot(profile: Profile) {
 		return (data.snapshotsByProfile as Record<string, unknown>)?.[profile] as {
-			nav?: number;
-			ytd_return?: number;
-			snapshot_date?: string;
+			nav?: number; ytd_return?: number;
 		} | null;
 	}
 
-	// ── Alerts ───────────────────────────────────────────────────────────
-	let dtwAlerts   = $derived((riskStore.driftAlerts?.dtw_alerts?.length ?? 0) > 0
-		? riskStore.driftAlerts.dtw_alerts
-		: ((data.alerts as { dtw_alerts?: unknown[] } | null)?.dtw_alerts ?? []));
-	let behaviorAlerts = $derived((riskStore.driftAlerts?.behavior_change_alerts?.length ?? 0) > 0
-		? riskStore.driftAlerts.behavior_change_alerts
-		: ((data.alerts as { behavior_change_alerts?: unknown[] } | null)?.behavior_change_alerts ?? []));
+	let totalAum = $derived(PROFILES.reduce((sum, p) => sum + (getSnapshot(p)?.nav ?? 0), 0));
 
-	// ── Timestamp ────────────────────────────────────────────────────────
-	let updatedAt = $derived(
-		riskStore.computedAt
-			? new Date(riskStore.computedAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
-			: null
-	);
-	let today = new Date().toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" });
+	let avgReturn = $derived(() => {
+		const returns = PROFILES.map(p => getSnapshot(p)?.ytd_return).filter((r): r is number => r != null);
+		return returns.length > 0 ? returns.reduce((a, b) => a + b, 0) / returns.length : null;
+	});
+
+	let selectedRange = $state("6M");
+	const timeRanges = ["1D", "1W", "1M", "6M", "1Y"];
+
+	let selectedProfile = $state("All");
+	const profileFilters = ["Conservative", "Balanced", "Growth", "All"];
+
+	let overviewFilter = $state("All");
+	let watchlistFilter = $state("Most Viewed");
+
+	// Holdings with per-card gradient border direction (Figma nodes 2:193–2:199)
+	const holdings = [
+		{ price: 1721.3, change: 12.31, changePct: 0.7, positive: true,  ticker: "TICKER", units: 104,
+		  borderGrad: "linear-gradient(to top, rgba(17,236,121,0.5), rgba(17,236,121,0.15) 50%, transparent)" },
+		{ price: 1521.3, change: 12.31, changePct: 0.7, positive: false, ticker: "TICKER", units: 124,
+		  borderGrad: "linear-gradient(to bottom, rgba(252,26,26,0.5), rgba(252,26,26,0.15) 50%, transparent)" },
+		{ price: 1721.3, change: 12.31, changePct: 0.7, positive: true,  ticker: "TICKER", units: 10,
+		  borderGrad: "linear-gradient(to bottom right, rgba(17,236,121,0.5), rgba(17,236,121,0.15) 50%, transparent)" },
+		{ price: 1721.3, change: 12.31, changePct: 0.7, positive: false, ticker: "TICKER", units: 110,
+		  borderGrad: "linear-gradient(to bottom left, rgba(252,26,26,0.5), rgba(252,26,26,0.15) 50%, transparent)" },
+		{ price: 1721.3, change: 12.31, changePct: 0.7, positive: true,  ticker: "TICKER", units: 104,
+		  borderGrad: "linear-gradient(to top right, rgba(17,236,121,0.5), rgba(17,236,121,0.12) 50%, transparent)" },
+	];
 </script>
 
-<div class="dashboard">
-	<!-- Header -->
-	<div class="dashboard-header">
-		<div class="dashboard-title">
-			<PageHeader
-				title="Wealth OS — Dashboard"
-				subtitle="{today}{updatedAt ? ` · Atualizado às ${updatedAt}` : ''}"
-			/>
-		</div>
-		<div class="dashboard-header-meta">
-			{#if regime}
-				<span title={regimeMultiplierLabel(regime) || "No CVaR adjustment"}>
-					<StatusBadge status={regimeBadgeStatus(regime)} label="{regime.replace('_', '_')} ativo" />
-				</span>
-				{#if regimeMultiplierLabel(regime)}
-					<span class="regime-multiplier-hint">{regimeMultiplierLabel(regime)}</span>
+<!-- 12-column master grid -->
+<div class="grid grid-cols-12 gap-6">
+
+	<!-- ══ Row 1: Total AUM (4 cols) + Portfolio Holdings (8 cols) ══ -->
+
+	<!-- Total AUM — glassmorphism -->
+	<div class="col-span-4 relative rounded-[24px] overflow-hidden bg-[#0d0d0d]/60 backdrop-blur-[11px] border border-white/5 min-h-[261px]">
+		<div class="absolute inset-0 bg-gradient-to-br from-[#0177fb]/15 via-transparent to-transparent pointer-events-none"></div>
+		<div class="relative flex flex-col justify-between h-full p-8">
+			<div class="flex items-center justify-between">
+				<span class="text-[20px] font-medium text-white">Total AUM</span>
+				<div class="flex items-center">
+					<span class="border border-white rounded-[32px] px-[26px] py-[18px] text-[16px] text-white leading-none">6M</span>
+					<span class="border border-white rounded-full p-[17px] leading-none">
+						<ChevronDown size={24} class="text-white" />
+					</span>
+				</div>
+			</div>
+
+			<p class="text-[44px] font-bold text-white tracking-tight tabular-nums leading-none">
+				$ {totalAum > 0 ? formatNumber(totalAum, 2) : "12,304.11"}
+			</p>
+
+			<div class="flex items-end gap-2">
+				<span class="text-[16px] text-white tracking-[-0.8px]">Return</span>
+				{#if avgReturn() != null}
+					<TrendingUp size={24} class="text-[#11ec79]" />
+					<span class="text-[16px] text-[#11ec79] tracking-[-0.8px]">
+						+{formatPercent(avgReturn()!)} ($ {formatNumber(Math.abs(totalAum * (avgReturn()! / 100)), 0)})
+					</span>
+				{:else}
+					<TrendingUp size={24} class="text-[#11ec79]" />
+					<span class="text-[16px] text-[#11ec79] tracking-[-0.8px]">+3.5% ($ 532)</span>
 				{/if}
-			{/if}
-			<span class="org-label">Netz Partners</span>
+			</div>
 		</div>
 	</div>
 
-	<!-- Macro Indicators + Regime Timeline -->
-	<MacroIndicatorStrip indicators={riskStore.macroIndicators} />
-	{#if riskStore.regimeHistory.length > 0}
-		<RegimeTimeline history={riskStore.regimeHistory} />
-	{/if}
+	<!-- Portfolio Holdings (8 cols) -->
+	<div class="col-span-8 bg-black rounded-[24px] p-8">
+		<div class="flex items-center justify-between mb-6">
+			<span class="text-[20px] font-medium text-white">Portfolio Holdings</span>
+			<div class="flex items-center">
+				<span class="border border-white rounded-[32px] px-[26px] py-[18px] text-[16px] text-white leading-none">See all</span>
+				<span class="border border-white rounded-full p-[13px] leading-none">
+					<ArrowUpRight size={24} class="text-white" />
+				</span>
+			</div>
+		</div>
 
-	<!-- Portfolio Cards -->
-	<div class="portfolio-cards">
-		{#each PROFILES as profile (profile)}
-			{@const cvar = getCvar(profile)}
-			{@const snap = getSnapshot(profile)}
-			{@const utilPct = cvar?.cvar_utilized_pct ?? null}
-			<a class="portfolio-card" href="/portfolios/{profile}" data-sveltekit-preload-data data-status={cvar?.trigger_status ?? "ok"}>
-				<div class="card-header">
-					<span class="card-title">{profileLabel[profile]}</span>
-					<span class="card-sublabel">{profileSubLabel[profile]}</span>
-				</div>
-				<div class="card-nav">
-					{snap?.nav != null ? `USD ${formatNumber(snap.nav, 0)}` : "—"}
-				</div>
-				<div class="card-ytd">
-					NAV · {snap?.ytd_return != null ? formatPercent(snap.ytd_return) : "—"} YTD
-				</div>
-				<div class="card-metrics">
-					<div class="metric">
-						<span class="metric-label">CVaR 95%</span>
-						<span class="metric-value" style:color={utilizationColor(utilPct)}>
-							{cvar?.cvar_current != null ? formatPercent(cvar.cvar_current) : "—"}
-						</span>
-						{#if cvar?.cvar_limit != null}
-							<span class="metric-limit">lim {formatPercent(cvar.cvar_limit)}</span>
-						{/if}
-					</div>
-					<div class="metric">
-						<span class="metric-label">Utilização</span>
-						<span class="metric-value" style:color={utilizationColor(utilPct)}>
-							{utilPct != null ? formatPercent(utilPct / 100) : "—"}
-						</span>
+		<!-- Cards: 5 cols on wide, 3 on medium, stacking vertically below -->
+		<div class="grid grid-cols-5 gap-3">
+			{#each holdings as h}
+				<div class="rounded-[24px] p-[1px]" style:background={h.borderGrad}>
+					<div class="bg-[#141519] rounded-[23px] p-4 flex flex-col justify-between min-h-[149px] h-full">
+						<div class="flex flex-col gap-1">
+							<span class="text-[18px] font-bold text-white tabular-nums">$ {formatNumber(h.price, 1)}</span>
+							<span class="text-[12px] {h.positive ? 'text-[#11ec79]' : 'text-[#fc1a1a]'}">
+								{h.positive ? "+" : "-"}{formatNumber(h.change, 2)} ({formatNumber(h.changePct, 1)}%)
+							</span>
+						</div>
+						<div class="flex items-center justify-between mt-auto pt-4">
+							<span class="text-[12px] text-white">{h.ticker}</span>
+							<span class="text-[12px] text-[#f3f4f8]">
+								Units <span class="font-bold text-white">{h.units}</span>
+							</span>
+						</div>
 					</div>
 				</div>
-				<!-- Utilization bar -->
-				<div class="util-bar-track">
-					<div
-						class="util-bar-fill"
-						style:width="{Math.min(utilPct ?? 0, 100)}%"
-						style:background={utilizationBarColor(utilPct)}
-					></div>
+			{/each}
+		</div>
+	</div>
+
+	<!-- ══ Row 2: Portfolio Performance (12 cols) ══ -->
+	<div class="col-span-12 bg-black rounded-[24px] p-8">
+		<div class="flex flex-wrap items-center justify-between gap-4 mb-8">
+			<div class="flex flex-wrap items-center gap-4">
+				<span class="text-[20px] font-medium text-white whitespace-nowrap">Portfolio Performance</span>
+				<div class="flex flex-wrap items-center gap-0">
+					{#each profileFilters as pf}
+						<button
+							type="button"
+							class="h-[55px] px-[21px] rounded-[32px] text-[16px] text-white transition-colors leading-none whitespace-nowrap
+								{selectedProfile === pf
+									? 'bg-[#0177fb]'
+									: 'bg-white/[0.13] hover:bg-white/[0.2]'}"
+							onclick={() => selectedProfile = pf}
+						>{pf}</button>
+					{/each}
 				</div>
-			</a>
+			</div>
+
+			<div class="flex flex-wrap items-center gap-0">
+				{#each timeRanges as tr}
+					<button
+						type="button"
+						class="h-[55px] px-[26px] rounded-[32px] text-[16px] text-white transition-colors leading-none
+							{selectedRange === tr
+								? 'bg-[#0177fb]'
+								: 'border border-white hover:bg-white/10'}"
+						onclick={() => selectedRange = tr}
+					>{tr}</button>
+				{/each}
+			</div>
+		</div>
+
+		<div class="h-[260px] flex items-center justify-center text-white/30 border border-dashed border-white/10 rounded-[16px]">
+			Performance chart ({selectedProfile} · {selectedRange})
+		</div>
+	</div>
+
+	<!-- ══ Row 3: Portfolio Overview (8 cols) + Watchlist (4 cols) ══ -->
+
+	<!-- Portfolio Overview -->
+	<div class="col-span-8 bg-black rounded-t-[24px] p-8">
+		<div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+			<span class="text-[20px] font-medium text-white">Portfolio Overview</span>
+			<div class="flex flex-wrap items-center gap-0">
+				{#each ["All", "Gainers", "Losers"] as f}
+					<button
+						type="button"
+						class="h-[55px] px-[26px] rounded-[32px] text-[16px] text-white transition-colors leading-none
+							{overviewFilter === f
+								? 'bg-[#0177fb]'
+								: 'border border-white hover:bg-white/10'}"
+						onclick={() => overviewFilter = f}
+					>{f}</button>
+				{/each}
+			</div>
+		</div>
+
+		<table class="w-full">
+			<thead>
+				<tr class="border-b border-white/10">
+					<th class="text-left text-[17px] font-semibold text-white pb-4 pr-4">Fund</th>
+					<th class="text-left text-[17px] font-semibold text-white pb-4 pr-4">Last Price</th>
+					<th class="text-left text-[17px] font-semibold text-white pb-4 pr-4">Change</th>
+					<th class="text-left text-[17px] font-semibold text-white pb-4 pr-4">AUM</th>
+					<th class="text-left text-[17px] font-semibold text-white pb-4 pr-4">Volume</th>
+					<th class="text-left text-[17px] font-semibold text-white pb-4">Last 7 days</th>
+				</tr>
+			</thead>
+			<tbody>
+				<tr class="border-b border-white/10">
+					<td class="py-5 text-[16px] text-white pr-4">TICKER</td>
+					<td class="py-5 text-[16px] text-white tabular-nums pr-4">$26,000.21</td>
+					<td class="py-5 text-[16px] text-white tabular-nums pr-4">+3.4%</td>
+					<td class="py-5 text-[16px] text-white tabular-nums pr-4">$ 564.06 B</td>
+					<td class="py-5 text-[16px] text-white tabular-nums pr-4">$ 379B</td>
+					<td class="py-5"><TrendingUp size={20} class="text-[#11ec79]" /></td>
+				</tr>
+				<tr class="border-b border-white/10">
+					<td class="py-5 text-[16px] text-white pr-4">TICKER</td>
+					<td class="py-5 text-[16px] text-white tabular-nums pr-4">$32,000.21</td>
+					<td class="py-5 text-[16px] text-white tabular-nums pr-4">-3.4%</td>
+					<td class="py-5 text-[16px] text-white tabular-nums pr-4">$ 564.06 B</td>
+					<td class="py-5 text-[16px] text-white tabular-nums pr-4">$ 379B</td>
+					<td class="py-5"><TrendingDown size={20} class="text-[#fc1a1a]" /></td>
+				</tr>
+			</tbody>
+		</table>
+	</div>
+
+	<!-- Watchlist -->
+	<div class="col-span-4 bg-black rounded-t-[24px] p-8">
+		<span class="text-[20px] font-medium text-white mb-6 block">Watchlist</span>
+		<div class="flex flex-wrap items-center gap-0 mb-8">
+			{#each ["Most Viewed", "Gainers", "Losers"] as f}
+				<button
+					type="button"
+					class="h-[55px] px-[21px] rounded-[32px] text-[16px] text-white transition-colors leading-none whitespace-nowrap
+						{watchlistFilter === f
+							? 'bg-[#0177fb]'
+							: 'border border-white hover:bg-white/10'}"
+					onclick={() => watchlistFilter = f}
+				>{f}</button>
+			{/each}
+		</div>
+
+		{#each [0, 1] as i}
+			{#if i > 0}
+				<div class="border-t border-white/10"></div>
+			{/if}
+			<div class="flex items-center justify-between py-5">
+				<div class="flex flex-col gap-1">
+					<span class="text-[16px] text-white">Fund Name</span>
+					<span class="text-[14px] text-[#c2c2c2]">TICKER</span>
+				</div>
+				<div class="flex flex-col gap-1 items-end">
+					<span class="text-[16px] text-white tabular-nums">$2,310.5</span>
+					<span class="text-[14px] text-[#11ec79] tabular-nums">+2.34%</span>
+				</div>
+			</div>
 		{/each}
 	</div>
-
-	<!-- Alerts Panel -->
-	<div class="bottom-row">
-		<div class="alerts-panel">
-			<h2 class="panel-title">Alertas ativos</h2>
-			{#if dtwAlerts.length === 0 && behaviorAlerts.length === 0}
-				<p class="alerts-empty">Nenhum alerta ativo.</p>
-			{/if}
-			{#each dtwAlerts as alert}
-				<div class="alert-card alert-card--dtw">
-					<span class="alert-dot alert-dot--red"></span>
-					<div class="alert-body">
-						<span class="alert-name">{(alert as { instrument_name: string }).instrument_name}</span>
-						<span class="alert-meta">DTW score: {formatNumber((alert as { dtw_score: number }).dtw_score, 2)}</span>
-					</div>
-				</div>
-			{/each}
-			{#each behaviorAlerts as alert}
-				{@const a = alert as { instrument_name: string; severity: string }}
-				<div class="alert-card" class:alert-card--warn={a.severity === "warning"}>
-					<span class="alert-dot" class:alert-dot--yellow={a.severity === "warning"} class:alert-dot--red={a.severity !== "warning"}></span>
-					<div class="alert-body">
-						<span class="alert-name">{a.instrument_name}</span>
-						<span class="alert-meta">Anomalia comportamental · {a.severity}</span>
-					</div>
-				</div>
-			{/each}
-		</div>
-	</div>
 </div>
-
-<style>
-.dashboard { display: flex; flex-direction: column; gap: 24px; padding: 32px 0; }
-
-/* Header */
-.dashboard-header { display: flex; align-items: flex-start; justify-content: space-between; }
-.dashboard-header-meta { display: flex; align-items: center; gap: 12px; padding-top: 6px; }
-.org-label { font-size: 13px; font-weight: 500; color: var(--ii-text-muted); }
-.regime-multiplier-hint { font-size: 11px; font-weight: 500; color: var(--ii-warning); }
-
-/* Portfolio cards grid */
-.portfolio-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-
-.portfolio-card {
-	background: var(--ii-surface-elevated);
-	border: 1px solid var(--ii-border-subtle);
-	border-radius: var(--ii-radius-lg, 12px);
-	padding: 20px 20px 16px;
-	display: flex; flex-direction: column; gap: 6px;
-	text-decoration: none; color: inherit;
-	cursor: pointer;
-	transition: border-color 150ms ease, box-shadow 150ms ease, transform 100ms ease;
-}
-.portfolio-card:hover {
-	border-color: var(--ii-border-focus, var(--ii-brand-primary));
-	box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-	transform: translateY(-1px);
-}
-.portfolio-card[data-status="breach"] { border-color: var(--ii-danger); }
-.portfolio-card[data-status="warning"] { border-color: var(--ii-warning); }
-
-.card-header { display: flex; align-items: baseline; justify-content: space-between; }
-.card-title { font-size: 15px; font-weight: 700; color: var(--ii-text-primary); }
-.card-sublabel { font-size: 11px; color: var(--ii-text-muted); background: var(--ii-surface-alt); padding: 2px 8px; border-radius: 99px; }
-.card-nav { font-size: 28px; font-weight: 700; color: var(--ii-text-primary); font-variant-numeric: tabular-nums; margin-top: 4px; }
-.card-ytd { font-size: 12px; color: var(--ii-text-secondary); }
-
-.card-metrics { display: flex; gap: 24px; margin-top: 8px; }
-.metric { display: flex; flex-direction: column; gap: 2px; }
-.metric-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--ii-text-muted); }
-.metric-value { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.metric-limit { font-size: 11px; color: var(--ii-text-muted); }
-
-.util-bar-track { height: 4px; background: var(--ii-border); border-radius: 99px; margin-top: 12px; overflow: hidden; }
-.util-bar-fill { height: 100%; border-radius: 99px; transition: width 600ms ease, background 300ms ease; }
-
-/* Alerts */
-.bottom-row { display: grid; grid-template-columns: 1fr; gap: 16px; }
-.alerts-panel { background: var(--ii-surface-elevated); border: 1px solid var(--ii-border-subtle); border-radius: var(--ii-radius-lg, 12px); padding: 20px; display: flex; flex-direction: column; gap: 12px; }
-.panel-title { font-size: 13px; font-weight: 700; color: var(--ii-text-primary); margin: 0; }
-.alerts-empty { font-size: 13px; color: var(--ii-text-muted); }
-
-.alert-card { display: flex; align-items: flex-start; gap: 10px; background: var(--ii-surface-alt); border-radius: var(--ii-radius-md, 8px); padding: 12px 14px; }
-.alert-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 3px; background: var(--ii-border); }
-.alert-dot--red { background: var(--ii-danger); }
-.alert-dot--yellow { background: var(--ii-warning); }
-.alert-body { display: flex; flex-direction: column; gap: 2px; }
-.alert-name { font-size: 13px; font-weight: 600; color: var(--ii-text-primary); }
-.alert-meta { font-size: 11px; color: var(--ii-text-muted); }
-
-@media (max-width: 900px) {
-	.portfolio-cards { grid-template-columns: 1fr; }
-}
-</style>

@@ -941,11 +941,6 @@
 		color: #90a1b9;
 	}
 
-	.alloc-row-instrument .alloc-td--final {
-		font-weight: 600;
-		color: #314158;
-	}
-
 	.alloc-positive {
 		color: #22c55e;
 		font-weight: 600;

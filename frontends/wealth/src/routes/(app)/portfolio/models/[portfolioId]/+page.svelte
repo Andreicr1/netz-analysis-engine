@@ -330,7 +330,7 @@
 				{portfolio.profile}
 			</span>
 			<a href="/portfolios/{portfolio.profile}" class="mp-cross-link" data-sveltekit-preload-data>Portfolio Monitoring</a>
-			<a href="/analytics/{portfolioId}" class="mp-cross-link" data-sveltekit-preload-data>Analytics</a>
+			<a href="/analysis/{portfolioId}" class="mp-cross-link" data-sveltekit-preload-data>Analytics</a>
 			{#if !portfolio.fund_selection_schema}
 				<Button size="sm" onclick={runConstruct} disabled={constructing}>
 					{constructing ? "Constructing…" : "Construct Portfolio"}

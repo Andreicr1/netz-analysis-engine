@@ -532,7 +532,7 @@
 			{#if macroReviews.length === 0}
 				<div class="step-empty-hint">
 					No approved macro reviews available.
-					<a href="/macro" class="step-empty-link">Generate one in Macro &rarr;</a>
+					<a href="/market" class="step-empty-link">Generate one in Macro &rarr;</a>
 				</div>
 			{:else}
 				<div class="macro-reviews">
@@ -840,7 +840,7 @@
 			Back
 		</Button>
 	{:else}
-		<Button variant="outline" onclick={() => goto("/model-portfolios")}>
+		<Button variant="outline" onclick={() => goto("/portfolio/models")}>
 			Cancel
 		</Button>
 	{/if}

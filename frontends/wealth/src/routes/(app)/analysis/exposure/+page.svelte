@@ -68,7 +68,7 @@
 				title="No portfolios configured"
 				description="Configure a Model Portfolio before viewing exposure."
 				actionLabel="Go to Model Portfolios"
-				onAction={() => goto("/model-portfolios")}
+				onAction={() => goto("/portfolio/models")}
 			/>
 		{:else}
 			<EmptyState

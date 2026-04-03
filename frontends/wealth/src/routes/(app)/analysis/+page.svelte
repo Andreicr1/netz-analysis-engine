@@ -1011,7 +1011,7 @@
 	{#if instruments.length === 0}
 		<div class="an-fund-empty">
 			No approved funds in universe. <a href="/screener" class="an-fund-link">Import funds via Screener</a> first,
-			then approve them in the <a href="/universe" class="an-fund-link">Assets Universe</a>.
+			then approve them in the <a href="/portfolio/approved" class="an-fund-link">Assets Universe</a>.
 		</div>
 	{:else if !selectedFundId}
 		<div class="an-fund-empty">
@@ -1058,7 +1058,7 @@
 			{/if}
 
 			<div class="an-fund-link">
-				<a href="/analytics/{selectedFundId}?window={fundWindow}">Open full analytics page →</a>
+				<a href="/analysis/{selectedFundId}?window={fundWindow}">Open full analytics page →</a>
 			</div>
 		</div>
 	{/if}

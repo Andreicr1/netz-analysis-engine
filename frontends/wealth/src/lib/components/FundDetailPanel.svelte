@@ -287,7 +287,7 @@
 								</span>
 							</div>
 							<a
-								href="/dd-reports/{fund.id}"
+								href="/screener/dd-reports/{fund.id}"
 								class="inline-flex items-center gap-1.5 rounded-md bg-(--ii-brand-primary) px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
 							>
 								Ver Relatório

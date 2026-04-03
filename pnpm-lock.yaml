@@ -123,9 +123,6 @@ importers:
       '@investintell/ui':
         specifier: workspace:*
         version: link:../../packages/investintell-ui
-      '@netz/ui':
-        specifier: workspace:*
-        version: link:../../packages/ui
       '@tanstack/svelte-table':
         specifier: 9.0.0-alpha.10
         version: 9.0.0-alpha.10(svelte@5.53.12)
@@ -211,9 +208,9 @@ importers:
       '@fontsource-variable/geist-mono':
         specifier: ^5.0.0
         version: 5.2.7
-      '@fontsource-variable/inter':
+      '@fontsource-variable/urbanist':
         specifier: ^5.0.0
-        version: 5.2.8
+        version: 5.2.7
       '@internationalized/date':
         specifier: ^3.12.0
         version: 3.12.0
@@ -1235,6 +1232,9 @@ packages:
 
   '@fontsource-variable/inter@5.2.8':
     resolution: {integrity: sha512-kOfP2D+ykbcX/P3IFnokOhVRNoTozo5/JxhAIVYLpea/UBmCQ/YWPBfWIDuBImXX/15KH+eKh4xpEUyS2sQQGQ==}
+
+  '@fontsource-variable/urbanist@5.2.7':
+    resolution: {integrity: sha512-OYeUoBQhwm3pbXG5yUxq1omO9H64Dx1eKxldKYOztrf+8GFG1vu3FP/zZpmFOwtgsPj2h6JYHX9VVWopSxvOyQ==}
 
   '@fontsource/geist-mono@5.2.7':
     resolution: {integrity: sha512-xVPVFISJg/K0VVd+aQN0Y7X/sw9hUcJPyDWFJ5GpyU3bHELhoRsJkPSRSHXW32mOi0xZCUQDOaPj1sqIFJ1FGg==}
@@ -5967,6 +5967,8 @@ snapshots:
   '@fontsource-variable/geist-mono@5.2.7': {}
 
   '@fontsource-variable/inter@5.2.8': {}
+
+  '@fontsource-variable/urbanist@5.2.7': {}
 
   '@fontsource/geist-mono@5.2.7': {}
 

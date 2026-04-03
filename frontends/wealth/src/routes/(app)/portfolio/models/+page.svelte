@@ -23,7 +23,7 @@
 <PageHeader title="Model Portfolios">
 	{#snippet actions()}
 		{#if canCreate}
-			<Button size="sm" onclick={() => goto("/model-portfolios/create")}>New Portfolio</Button>
+			<Button size="sm" onclick={() => goto("/portfolio/models/create")}>New Portfolio</Button>
 		{/if}
 	{/snippet}
 </PageHeader>

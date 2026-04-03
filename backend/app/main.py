@@ -277,9 +277,22 @@ async def global_exception_handler(request: Request, exc: Exception):
         error=str(exc),
         exc_type=type(exc).__name__,
     )
+    # Manually inject CORS headers — ServerErrorMiddleware can catch exceptions
+    # before CORSMiddleware enriches the response, causing browsers to mask
+    # the real 500 as "blocked by CORS".
+    origin = request.headers.get("origin", "")
+    headers: dict[str, str] = {}
+    if origin and origin in settings.cors_origins:
+        headers["access-control-allow-origin"] = origin
+        headers["access-control-allow-credentials"] = "true"
+    detail = "Internal server error"
+    if settings.is_development:
+        import traceback
+        detail = f"{type(exc).__name__}: {exc}\n{''.join(traceback.format_tb(exc.__traceback__))}"
     return JSONResponse(
         status_code=500,
-        content={"detail": "Internal server error"},
+        content={"detail": detail},
+        headers=headers,
     )
 
 

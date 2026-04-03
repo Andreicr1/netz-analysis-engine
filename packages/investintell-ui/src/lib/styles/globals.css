@@ -1,7 +1,7 @@
 /* ============================================================
  * @investintell/ui - Design System Entry Point
  * Import this file to get all tokens, resets, and base styles.
- * InvestIntell institutional typography & component alignment.
+ * Urbanist + One X inspired institutional design.
  * ============================================================ */
 
 @import "./tokens.css";
@@ -263,6 +263,31 @@ a:focus-visible {
 	outline: 2px solid var(--ii-border-focus);
 	outline-offset: 3px;
 	border-radius: 6px;
+}
+
+/* ── Scrollbar — thin, themed, consistent across app ── */
+
+* {
+	scrollbar-width: thin;
+	scrollbar-color: var(--ii-border) transparent;
+}
+
+*::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+	background: var(--ii-border);
+	border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+	background: var(--ii-border-strong, var(--ii-border));
 }
 
 /* ── Utility classes ── */

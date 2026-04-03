@@ -1,19 +1,19 @@
 /* ============================================================
  * InvestIntell Design Tokens - Typography
- * Inter (interface) + Geist Mono (data/financial)
- * Aligned with shadcn/ui Figma spec (Slate palette)
+ * Urbanist (interface) + Geist Mono (data/financial)
+ * Inspired by One X Investment Dashboard + shadcn/ui alignment
  * ============================================================ */
 
-@import "@fontsource-variable/inter";
+@import "@fontsource-variable/urbanist";
 @import "@fontsource-variable/geist-mono";
 
 :root {
 	/* Font families */
-	--ii-font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+	--ii-font-sans: "Urbanist Variable", "Urbanist", ui-sans-serif, system-ui, sans-serif;
 	--ii-font-mono: "Geist Mono Variable", "Geist Mono", "Menlo", ui-monospace, monospace;
 
-	/* Font feature settings — Inter has excellent OpenType support */
-	--ii-font-features: "rlig" 1, "calt" 1, "tnum" 1;   /* tnum: tabular nums for financial data */
+	/* Font feature settings — Urbanist supports contextual alternates + tabular nums */
+	--ii-font-features: "calt" 1, "tnum" 1;   /* tnum: tabular nums for financial data */
 
 	/* ── Scale ── */
 	--ii-text-xs:   11px;
@@ -61,7 +61,7 @@
 	--ii-leading-caption: 1.45;
 	--ii-leading-mono:    1.43;   /* 14px / 20px per shadcn "inline code" */
 
-	/* ── Letter spacing — Inter uses -0.025em for all headings ── */
+	/* ── Letter spacing — Urbanist is geometric, tighter headings ── */
 	--ii-tracking-tight:  -0.025em;
 	--ii-tracking-normal: normal;
 	--ii-tracking-wide:   0.07em;
@@ -102,8 +102,8 @@
 /* ── Component tokens — theme-specific ── */
 
 :root {
-	--ii-link-color:       #cbd5e1;   /* slate-300 */
-	--ii-link-hover-color: #f8fafc;   /* slate-50 */
+	--ii-link-color:       #d9d9d9;   /* One X text-secondary */
+	--ii-link-hover-color: #ffffff;   /* pure white */
 	--ii-code-bg:     rgba(248, 250, 252, 0.08);
 	--ii-code-border: rgba(255, 255, 255, 0.06);
 	--ii-kbd-bg:      #1e293b;   /* slate-800 */

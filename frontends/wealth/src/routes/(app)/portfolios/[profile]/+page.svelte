@@ -318,7 +318,7 @@
 				</span>
 			{/if}
 			{#if modelPortfolio}
-				<a href="/model-portfolios/{modelPortfolio.id}" class="pw-cross-link" data-sveltekit-preload-data>Model Portfolio</a>
+				<a href="/portfolio/models/{modelPortfolio.id}" class="pw-cross-link" data-sveltekit-preload-data>Model Portfolio</a>
 			{/if}
 		</div>
 	{/snippet}
@@ -329,10 +329,10 @@
 		<p class="pw-guidance-text">
 			{#if !modelPortfolio}
 				No model portfolio exists for the <strong>{profile}</strong> profile.
-				<a href="/model-portfolios/create" class="pw-guidance-link">Create a Model Portfolio</a> to enable monitoring.
+				<a href="/portfolio/models/create" class="pw-guidance-link">Create a Model Portfolio</a> to enable monitoring.
 			{:else}
 				The <strong>{profile}</strong> model portfolio is in <strong>draft</strong> status.
-				<a href="/model-portfolios/{modelPortfolio.id}" class="pw-guidance-link">Open it</a> to construct, backtest, and activate.
+				<a href="/portfolio/models/{modelPortfolio.id}" class="pw-guidance-link">Open it</a> to construct, backtest, and activate.
 			{/if}
 		</p>
 	</div>
