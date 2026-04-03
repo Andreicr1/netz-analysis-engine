@@ -11,7 +11,7 @@
 	import * as Tabs from "@investintell/ui/components/ui/tabs";
 	import * as Select from "@investintell/ui/components/ui/select";
 	import { DataTable, formatAUM, formatCompact } from "@investintell/ui";
-	import { renderSnippet } from "@investintell/ui/components/ui/data-table";
+	import { renderComponent } from "@tanstack/svelte-table";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
 	import type { ColumnDef } from "@tanstack/svelte-table";
@@ -24,6 +24,8 @@
 
 	// Components
 	import { ManagerFundsSheet, FundClassesSheet, ScreeningRunPanel } from "$lib/components/screener";
+	import RiskDot from "$lib/components/screener/RiskDot.svelte";
+	import StrategyBadges from "$lib/components/screener/StrategyBadges.svelte";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);
@@ -246,14 +248,19 @@
 			id: "risk",
 			header: "",
 			cell: ({ row }) =>
-				renderSnippet(riskDotSnippet, row.original.compliance_disclosures ?? 0),
+				renderComponent(RiskDot, { count: row.original.compliance_disclosures ?? 0 }),
 			enableSorting: false,
 			meta: { centered: true },
 		},
 		{
 			id: "strategy",
 			header: "Funds",
-			cell: ({ row }) => renderSnippet(strategyBadgesSnippet, row.original),
+			cell: ({ row }) =>
+				renderComponent(StrategyBadges, {
+					hedge_fund_count: row.original.hedge_fund_count,
+					pe_fund_count: row.original.pe_fund_count,
+					vc_fund_count: row.original.vc_fund_count,
+				}),
 			enableSorting: false,
 		},
 		{
@@ -262,16 +269,6 @@
 			cell: ({ row }) =>
 				row.original.aum_total != null ? formatAUM(row.original.aum_total) : "\u2014",
 			enableSorting: true,
-			meta: { numeric: true },
-		},
-		{
-			accessorKey: "portfolio_value",
-			header: "13F Portfolio",
-			cell: ({ row }) =>
-				row.original.portfolio_value != null
-					? formatAUM(row.original.portfolio_value)
-					: "\u2014",
-			enableSorting: false,
 			meta: { numeric: true },
 		},
 	];
@@ -305,33 +302,6 @@
 		URL.revokeObjectURL(url);
 	}
 </script>
-
-<!-- ── Snippets for DataTable cells ── -->
-{#snippet riskDotSnippet(disclosures: number)}
-	{#if disclosures > 0}
-		<span
-			class="inline-block h-2 w-2 rounded-full bg-destructive"
-			title="{disclosures} Disclosure{disclosures !== 1 ? 's' : ''}"
-		></span>
-	{/if}
-{/snippet}
-
-{#snippet strategyBadgesSnippet(mgr: ManagerRow)}
-	<div class="flex items-center gap-1">
-		{#if mgr.hedge_fund_count && mgr.hedge_fund_count > 0}
-			<span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold leading-none bg-blue-50 text-blue-600">HF {mgr.hedge_fund_count}</span>
-		{/if}
-		{#if mgr.pe_fund_count && mgr.pe_fund_count > 0}
-			<span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold leading-none bg-violet-50 text-violet-600">PE {mgr.pe_fund_count}</span>
-		{/if}
-		{#if mgr.vc_fund_count && mgr.vc_fund_count > 0}
-			<span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold leading-none bg-emerald-50 text-emerald-600">VC {mgr.vc_fund_count}</span>
-		{/if}
-		{#if !mgr.hedge_fund_count && !mgr.pe_fund_count && !mgr.vc_fund_count}
-			<span class="text-muted-foreground">{"\u2014"}</span>
-		{/if}
-	</div>
-{/snippet}
 
 <svelte:window onpopstate={handlePopState} onkeydown={handleKeydown} />
 
