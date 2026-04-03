@@ -235,6 +235,12 @@ def build_screener_queries(
         conditions.append(sec_managers.c.country.in_(filters.countries))
     if filters.registration_status:
         conditions.append(sec_managers.c.registration_status == filters.registration_status)
+    else:
+        # Default: only show active advisers (Registered + state-registered)
+        # Excludes 910k+ defunct/withdrawn "other" and 45k SEC-exempt "operating"
+        conditions.append(
+            sec_managers.c.registration_status.in_(("Registered", "investment")),
+        )
     if filters.compliance_clean is True:
         conditions.append(
             (sec_managers.c.compliance_disclosures == 0)
