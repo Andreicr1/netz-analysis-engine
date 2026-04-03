@@ -338,6 +338,16 @@ def build_screener_queries(
         .subquery("universe_status")
     )
 
+    # ── Registered fund count (mutual funds) ─────────────────────
+    mf_count_sub = (
+        select(func.count())
+        .select_from(registered_funds)
+        .where(registered_funds.c.crd_number == sec_managers.c.crd_number)
+        .correlate(sec_managers)
+        .scalar_subquery()
+        .label("mutual_fund_count")
+    )
+
     # ── Main query ──────────────────────────────────────────────
     base = (
         select(
@@ -352,6 +362,7 @@ def build_screener_queries(
             sec_managers.c.hedge_fund_count,
             sec_managers.c.pe_fund_count,
             sec_managers.c.vc_fund_count,
+            mf_count_sub,
             latest_q_sub.c.total_value.label("portfolio_value"),
             latest_q_sub.c.total_positions.label("position_count"),
             drift_sub.c.total_churn.label("drift_churn"),

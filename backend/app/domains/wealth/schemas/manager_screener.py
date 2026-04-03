@@ -113,6 +113,7 @@ class ManagerRow(BaseModel):
     hedge_fund_count: int | None = None
     pe_fund_count: int | None = None
     vc_fund_count: int | None = None
+    mutual_fund_count: int | None = None
     portfolio_value: int | None = None
     top_sectors: dict[str, float] = Field(default_factory=dict)
     hhi: float | None = None

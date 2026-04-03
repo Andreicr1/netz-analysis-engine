@@ -214,6 +214,7 @@ async def list_managers(
             hedge_fund_count=r["hedge_fund_count"],
             pe_fund_count=r["pe_fund_count"],
             vc_fund_count=r["vc_fund_count"],
+            mutual_fund_count=r["mutual_fund_count"],
             portfolio_value=r["portfolio_value"],
             position_count=r["position_count"],
             drift_churn=r["drift_churn"],

@@ -148,7 +148,7 @@
 		</div>
 	{/if}
 
-	<div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+	<div class="overflow-auto rounded-lg border border-border bg-card shadow-sm">
 		<table class="w-full caption-bottom text-sm">
 			<thead class="border-b border-border bg-muted/50">
 				{#each table.getHeaderGroups() as headerGroup (headerGroup.id)}
@@ -188,7 +188,7 @@
 					<!-- svelte-ignore a11y_click_events_have_key_events -->
 					<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 					<tr
-						class="h-10 border-0 transition-colors {i % 2 === 0 ? 'bg-background' : 'bg-slate-50/80'} hover:bg-muted/50 {onRowClick ? 'cursor-pointer' : ''}"
+						class="h-10 border-0 transition-colors {i % 2 === 1 ? 'bg-muted/40' : ''} hover:bg-muted/60 {onRowClick ? 'cursor-pointer' : ''}"
 						onclick={() => onRowClick?.(row.original)}
 					>
 						{#each row.getVisibleCells() as cell (cell.id)}

@@ -212,21 +212,12 @@
 		}
 	});
 
-	// ── Name cleansing ──
-	const LEGAL_SUFFIXES_RE =
-		/,?\s*\b(LLC|L\.?L\.?C\.?|INC\.?|L\.?P\.?|COMPANY|CORPORATION|CORP\.?|LTD\.?|S\.?A\.?|N\.?A\.?|CO\.?|GROUP|HOLDINGS?|PARTNERS|ADVISORS?|MANAGEMENT|INVESTMENTS?)\b\.?/gi;
+	// ── Name cleansing — strip trailing legal entity suffixes only ──
+	const LEGAL_TAIL_RE =
+		/(?:,?\s+(?:LLC|L\.L\.C\.|INC\.?|L\.P\.|LLP|CORP\.?|CORPORATION|LTD\.?|S\.A\.?|N\.A\.?))+\s*\.?\s*$/i;
 
 	function formatManagerName(name: string): string {
-		if (name !== name.toUpperCase()) return name;
-		const cleaned = name.replace(LEGAL_SUFFIXES_RE, "").trim().replace(/,\s*$/, "");
-		return cleaned
-			.toLowerCase()
-			.replace(/\b\w/g, (c) => c.toUpperCase())
-			.replace(/\bLlc\b/g, "LLC")
-			.replace(/\b(Jp|Jpmorgan)\b/g, "JPMorgan")
-			.replace(/\bSsga\b/g, "SSGA")
-			.replace(/\bPgim\b/g, "PGIM")
-			.replace(/\bBbva\b/g, "BBVA");
+		return name.replace(LEGAL_TAIL_RE, "").trim().replace(/,\s*$/, "");
 	}
 
 	// ── Manager DataTable columns ──
@@ -260,6 +251,7 @@
 					hedge_fund_count: row.original.hedge_fund_count,
 					pe_fund_count: row.original.pe_fund_count,
 					vc_fund_count: row.original.vc_fund_count,
+					mutual_fund_count: row.original.mutual_fund_count,
 				}),
 			enableSorting: false,
 		},
