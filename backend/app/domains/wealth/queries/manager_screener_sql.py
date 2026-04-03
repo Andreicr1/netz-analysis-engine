@@ -62,6 +62,10 @@ sec_managers = Table(
     Column("website", Text),
     Column("compliance_disclosures", Integer),
     Column("last_adv_filed_at", Date),
+    Column("private_fund_count", Integer),
+    Column("hedge_fund_count", Integer),
+    Column("pe_fund_count", Integer),
+    Column("vc_fund_count", Integer),
     extend_existing=True,
 )
 
@@ -324,6 +328,10 @@ def build_screener_queries(
             sec_managers.c.state,
             sec_managers.c.country,
             sec_managers.c.compliance_disclosures,
+            sec_managers.c.private_fund_count,
+            sec_managers.c.hedge_fund_count,
+            sec_managers.c.pe_fund_count,
+            sec_managers.c.vc_fund_count,
             latest_q_sub.c.total_value.label("portfolio_value"),
             latest_q_sub.c.total_positions.label("position_count"),
             drift_sub.c.total_churn.label("drift_churn"),

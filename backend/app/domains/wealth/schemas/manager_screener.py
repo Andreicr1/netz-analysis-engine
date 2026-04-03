@@ -109,6 +109,11 @@ class ManagerRow(BaseModel):
     state: str | None = None
     country: str | None = None
     compliance_disclosures: int | None = None
+    private_fund_count: int | None = None
+    hedge_fund_count: int | None = None
+    pe_fund_count: int | None = None
+    vc_fund_count: int | None = None
+    portfolio_value: int | None = None
     top_sectors: dict[str, float] = Field(default_factory=dict)
     hhi: float | None = None
     position_count: int | None = None

@@ -8,6 +8,11 @@ export interface ManagerRow {
 	state: string | null;
 	country: string | null;
 	compliance_disclosures: number | null;
+	private_fund_count: number | null;
+	hedge_fund_count: number | null;
+	pe_fund_count: number | null;
+	vc_fund_count: number | null;
+	portfolio_value: number | null;
 	top_sectors: Record<string, number>;
 	hhi: number | null;
 	position_count: number | null;

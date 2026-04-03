@@ -11,6 +11,7 @@
 	import * as Tabs from "@investintell/ui/components/ui/tabs";
 	import * as Select from "@investintell/ui/components/ui/select";
 	import { DataTable, formatAUM, formatCompact } from "@investintell/ui";
+	import { renderSnippet } from "@investintell/ui/components/ui/data-table";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
 	import type { ColumnDef } from "@tanstack/svelte-table";
@@ -209,13 +210,30 @@
 		}
 	});
 
+	// ── Name cleansing ──
+	const LEGAL_SUFFIXES_RE =
+		/,?\s*\b(LLC|L\.?L\.?C\.?|INC\.?|L\.?P\.?|COMPANY|CORPORATION|CORP\.?|LTD\.?|S\.?A\.?|N\.?A\.?|CO\.?|GROUP|HOLDINGS?|PARTNERS|ADVISORS?|MANAGEMENT|INVESTMENTS?)\b\.?/gi;
+
+	function formatManagerName(name: string): string {
+		if (name !== name.toUpperCase()) return name;
+		const cleaned = name.replace(LEGAL_SUFFIXES_RE, "").trim().replace(/,\s*$/, "");
+		return cleaned
+			.toLowerCase()
+			.replace(/\b\w/g, (c) => c.toUpperCase())
+			.replace(/\bLlc\b/g, "LLC")
+			.replace(/\b(Jp|Jpmorgan)\b/g, "JPMorgan")
+			.replace(/\bSsga\b/g, "SSGA")
+			.replace(/\bPgim\b/g, "PGIM")
+			.replace(/\bBbva\b/g, "BBVA");
+	}
+
 	// ── Manager DataTable columns ──
 	const managerColumns: ColumnDef<ManagerRow, unknown>[] = [
 		{
 			accessorKey: "firm_name",
-			header: "Manager Name",
-			cell: ({ row }) => row.original.firm_name,
-			enableSorting: false,
+			header: "Manager",
+			cell: ({ row }) => formatManagerName(row.original.firm_name),
+			enableSorting: true,
 		},
 		{
 			accessorKey: "crd_number",
@@ -225,10 +243,34 @@
 			meta: { muted: true },
 		},
 		{
+			id: "risk",
+			header: "",
+			cell: ({ row }) =>
+				renderSnippet(riskDotSnippet, row.original.compliance_disclosures ?? 0),
+			enableSorting: false,
+			meta: { centered: true },
+		},
+		{
+			id: "strategy",
+			header: "Funds",
+			cell: ({ row }) => renderSnippet(strategyBadgesSnippet, row.original),
+			enableSorting: false,
+		},
+		{
 			accessorKey: "aum_total",
 			header: "AUM",
 			cell: ({ row }) =>
 				row.original.aum_total != null ? formatAUM(row.original.aum_total) : "\u2014",
+			enableSorting: true,
+			meta: { numeric: true },
+		},
+		{
+			accessorKey: "portfolio_value",
+			header: "13F Portfolio",
+			cell: ({ row }) =>
+				row.original.portfolio_value != null
+					? formatAUM(row.original.portfolio_value)
+					: "\u2014",
 			enableSorting: false,
 			meta: { numeric: true },
 		},
@@ -238,14 +280,19 @@
 	function exportCSV() {
 		const items = managers.managers;
 		if (items.length === 0) return;
-		const headers = ["Manager", "CRD", "AUM"];
+		const headers = ["Manager", "CRD", "AUM", "13F Portfolio", "HF", "PE", "VC", "Disclosures"];
 		const lines = [
 			headers.join(","),
 			...items.map((r) =>
 				[
-					`"${r.firm_name}"`,
+					`"${formatManagerName(r.firm_name)}"`,
 					r.crd_number,
 					r.aum_total ?? "",
+					r.portfolio_value ?? "",
+					r.hedge_fund_count ?? "",
+					r.pe_fund_count ?? "",
+					r.vc_fund_count ?? "",
+					r.compliance_disclosures ?? "",
 				].join(","),
 			),
 		];
@@ -258,6 +305,33 @@
 		URL.revokeObjectURL(url);
 	}
 </script>
+
+<!-- ── Snippets for DataTable cells ── -->
+{#snippet riskDotSnippet(disclosures: number)}
+	{#if disclosures > 0}
+		<span
+			class="inline-block h-2 w-2 rounded-full bg-destructive"
+			title="{disclosures} Disclosure{disclosures !== 1 ? 's' : ''}"
+		></span>
+	{/if}
+{/snippet}
+
+{#snippet strategyBadgesSnippet(mgr: ManagerRow)}
+	<div class="flex items-center gap-1">
+		{#if mgr.hedge_fund_count && mgr.hedge_fund_count > 0}
+			<span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold leading-none bg-blue-50 text-blue-600">HF {mgr.hedge_fund_count}</span>
+		{/if}
+		{#if mgr.pe_fund_count && mgr.pe_fund_count > 0}
+			<span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold leading-none bg-violet-50 text-violet-600">PE {mgr.pe_fund_count}</span>
+		{/if}
+		{#if mgr.vc_fund_count && mgr.vc_fund_count > 0}
+			<span class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-bold leading-none bg-emerald-50 text-emerald-600">VC {mgr.vc_fund_count}</span>
+		{/if}
+		{#if !mgr.hedge_fund_count && !mgr.pe_fund_count && !mgr.vc_fund_count}
+			<span class="text-muted-foreground">{"\u2014"}</span>
+		{/if}
+	</div>
+{/snippet}
 
 <svelte:window onpopstate={handlePopState} onkeydown={handleKeydown} />
 
