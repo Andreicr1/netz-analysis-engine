@@ -5,6 +5,10 @@
 <script lang="ts">
 	import { untrack, getContext } from "svelte";
 	import { goto } from "$app/navigation";
+	import { Checkbox } from "@investintell/ui/components/ui/checkbox";
+	import { Label } from "@investintell/ui/components/ui/label";
+	import * as Tabs from "@investintell/ui/components/ui/tabs";
+	import * as Select from "@investintell/ui/components/ui/select";
 	import { ContextPanel, formatAUM } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
@@ -190,37 +194,6 @@
 		facets: null,
 	});
 
-	// ── Dropdown helpers ──
-	function setCategory(e: Event) {
-		const val = (e.target as HTMLSelectElement).value;
-		selectedCategories = val ? [val as CatalogCategory] : [];
-		selectedFundTypes = [];
-		selectedStrategyLabels = [];
-		applyCatalogFilters();
-	}
-
-	function setStrategy(e: Event) {
-		const val = (e.target as HTMLSelectElement).value;
-		selectedStrategyLabels = val ? [val] : [];
-		applyCatalogFilters();
-	}
-
-	function setGeography(e: Event) {
-		const val = (e.target as HTMLSelectElement).value;
-		selectedGeographies = val ? [val] : [];
-		applyCatalogFilters();
-	}
-
-	function setAumMin(e: Event) {
-		catalogAumMin = (e.target as HTMLSelectElement).value;
-		applyCatalogFilters();
-	}
-
-	function setMaxER(e: Event) {
-		catalogMaxER = (e.target as HTMLSelectElement).value;
-		applyCatalogFilters();
-	}
-
 	function clearAllFilters() {
 		selectedCategories = [];
 		selectedFundTypes = [];
@@ -383,22 +356,12 @@
 	</div>
 
 	<!-- ════════════════ TABS ════════════════ -->
-	<div class="scr-tabs">
-		<button
-			class="scr-tab"
-			class:scr-tab--active={activeTab === "catalog"}
-			onclick={() => switchTab("catalog")}
-		>
-			Catalog
-		</button>
-		<button
-			class="scr-tab"
-			class:scr-tab--active={activeTab === "screening"}
-			onclick={() => switchTab("screening")}
-		>
-			Screening
-		</button>
-	</div>
+	<Tabs.Root bind:value={activeTab} onValueChange={(v) => switchTab(v)}>
+		<Tabs.List class="scr-tabs">
+			<Tabs.Trigger value="catalog">Catalog</Tabs.Trigger>
+			<Tabs.Trigger value="screening">Screening</Tabs.Trigger>
+		</Tabs.List>
+	</Tabs.Root>
 
 	{#if activeTab === "catalog"}
 	<!-- ════════════════ FILTER BAR ════════════════ -->
@@ -412,55 +375,80 @@
 			onkeydown={handleSearchKeydown}
 		/>
 
-		<select class="scr-dropdown" value={selectedCategories[0] ?? ""} onchange={setCategory}>
-			<option value="">All Universes</option>
-			{#each CATALOG_CATEGORIES as cat (cat.key)}
-				<option value={cat.key}>{cat.label}</option>
-			{/each}
-		</select>
+		<Select.Root type="single" value={selectedCategories[0] ?? ""} onValueChange={(v) => { selectedCategories = v ? [v as CatalogCategory] : []; selectedFundTypes = []; selectedStrategyLabels = []; applyCatalogFilters(); }}>
+			<Select.Trigger class="h-[34px] w-auto min-w-[140px] text-[13px]">
+				{selectedCategories[0] ? CATALOG_CATEGORIES.find(c => c.key === selectedCategories[0])?.label ?? "All Universes" : "All Universes"}
+			</Select.Trigger>
+			<Select.Content>
+				<Select.Item value="">All Universes</Select.Item>
+				{#each CATALOG_CATEGORIES as cat (cat.key)}
+					<Select.Item value={cat.key}>{cat.label}</Select.Item>
+				{/each}
+			</Select.Content>
+		</Select.Root>
 
 		{#if catalogFacets.strategy_labels.length > 0}
-			<select class="scr-dropdown" value={selectedStrategyLabels[0] ?? ""} onchange={setStrategy}>
-				<option value="">All Strategies</option>
-				{#each catalogFacets.strategy_labels as item (item.value)}
-					<option value={item.value}>{item.label} ({item.count?.toLocaleString() ?? "—"})</option>
-				{/each}
-			</select>
+			<Select.Root type="single" value={selectedStrategyLabels[0] ?? ""} onValueChange={(v) => { selectedStrategyLabels = v ? [v] : []; applyCatalogFilters(); }}>
+				<Select.Trigger class="h-[34px] w-auto min-w-[140px] text-[13px]">
+					{selectedStrategyLabels[0] ? catalogFacets.strategy_labels.find(s => s.value === selectedStrategyLabels[0])?.label ?? "All Strategies" : "All Strategies"}
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Item value="">All Strategies</Select.Item>
+					{#each catalogFacets.strategy_labels as item (item.value)}
+						<Select.Item value={item.value}>{item.label} ({item.count?.toLocaleString() ?? "\u2014"})</Select.Item>
+					{/each}
+				</Select.Content>
+			</Select.Root>
 		{/if}
 
 		{#if catalogFacets.geographies.length > 0}
-			<select class="scr-dropdown" value={selectedGeographies[0] ?? ""} onchange={setGeography}>
-				<option value="">All Geographies</option>
-				{#each catalogFacets.geographies as item (item.value)}
-					<option value={item.value}>{item.label} ({item.count?.toLocaleString() ?? "—"})</option>
-				{/each}
-			</select>
+			<Select.Root type="single" value={selectedGeographies[0] ?? ""} onValueChange={(v) => { selectedGeographies = v ? [v] : []; applyCatalogFilters(); }}>
+				<Select.Trigger class="h-[34px] w-auto min-w-[140px] text-[13px]">
+					{selectedGeographies[0] ? catalogFacets.geographies.find(g => g.value === selectedGeographies[0])?.label ?? "All Geographies" : "All Geographies"}
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Item value="">All Geographies</Select.Item>
+					{#each catalogFacets.geographies as item (item.value)}
+						<Select.Item value={item.value}>{item.label} ({item.count?.toLocaleString() ?? "\u2014"})</Select.Item>
+					{/each}
+				</Select.Content>
+			</Select.Root>
 		{/if}
 
-		<select class="scr-dropdown" value={catalogAumMin} onchange={setAumMin}>
-			<option value="">AUM: Any</option>
-			<option value="100000000">AUM $100M+</option>
-			<option value="500000000">AUM $500M+</option>
-			<option value="1000000000">AUM $1B+</option>
-			<option value="5000000000">AUM $5B+</option>
-			<option value="10000000000">AUM $10B+</option>
-			<option value="50000000000">AUM $50B+</option>
-		</select>
+		<Select.Root type="single" value={catalogAumMin} onValueChange={(v) => { catalogAumMin = v; applyCatalogFilters(); }}>
+			<Select.Trigger class="h-[34px] w-auto min-w-[140px] text-[13px]">
+				{catalogAumMin === "100000000" ? "AUM $100M+" : catalogAumMin === "500000000" ? "AUM $500M+" : catalogAumMin === "1000000000" ? "AUM $1B+" : catalogAumMin === "5000000000" ? "AUM $5B+" : catalogAumMin === "10000000000" ? "AUM $10B+" : catalogAumMin === "50000000000" ? "AUM $50B+" : "AUM: Any"}
+			</Select.Trigger>
+			<Select.Content>
+				<Select.Item value="">AUM: Any</Select.Item>
+				<Select.Item value="100000000">AUM $100M+</Select.Item>
+				<Select.Item value="500000000">AUM $500M+</Select.Item>
+				<Select.Item value="1000000000">AUM $1B+</Select.Item>
+				<Select.Item value="5000000000">AUM $5B+</Select.Item>
+				<Select.Item value="10000000000">AUM $10B+</Select.Item>
+				<Select.Item value="50000000000">AUM $50B+</Select.Item>
+			</Select.Content>
+		</Select.Root>
 
-		<select class="scr-dropdown" value={catalogMaxER} onchange={setMaxER}>
-			<option value="">ER: Any</option>
-			<option value="0.10">ER ≤ 0.10%</option>
-			<option value="0.25">ER ≤ 0.25%</option>
-			<option value="0.50">ER ≤ 0.50%</option>
-			<option value="0.75">ER ≤ 0.75%</option>
-			<option value="1.00">ER ≤ 1.00%</option>
-			<option value="1.50">ER ≤ 1.50%</option>
-		</select>
+		<Select.Root type="single" value={catalogMaxER} onValueChange={(v) => { catalogMaxER = v; applyCatalogFilters(); }}>
+			<Select.Trigger class="h-[34px] w-auto min-w-[140px] text-[13px]">
+				{catalogMaxER === "0.10" ? "ER \u2264 0.10%" : catalogMaxER === "0.25" ? "ER \u2264 0.25%" : catalogMaxER === "0.50" ? "ER \u2264 0.50%" : catalogMaxER === "0.75" ? "ER \u2264 0.75%" : catalogMaxER === "1.00" ? "ER \u2264 1.00%" : catalogMaxER === "1.50" ? "ER \u2264 1.50%" : "ER: Any"}
+			</Select.Trigger>
+			<Select.Content>
+				<Select.Item value="">ER: Any</Select.Item>
+				<Select.Item value="0.10">ER \u2264 0.10%</Select.Item>
+				<Select.Item value="0.25">ER \u2264 0.25%</Select.Item>
+				<Select.Item value="0.50">ER \u2264 0.50%</Select.Item>
+				<Select.Item value="0.75">ER \u2264 0.75%</Select.Item>
+				<Select.Item value="1.00">ER \u2264 1.00%</Select.Item>
+				<Select.Item value="1.50">ER \u2264 1.50%</Select.Item>
+			</Select.Content>
+		</Select.Root>
 
-		<label class="scr-toggle">
-			<input type="checkbox" checked={showAllFunds} onchange={() => { showAllFunds = !showAllFunds; applyCatalogFilters(); }} />
-			Include all
-		</label>
+		<div class="scr-toggle">
+			<Checkbox id="scr-show-all" checked={showAllFunds} onCheckedChange={() => { showAllFunds = !showAllFunds; applyCatalogFilters(); }} />
+			<Label for="scr-show-all">Include all</Label>
+		</div>
 
 		{#if hasActiveFilters}
 			<button class="scr-clear-btn" onclick={clearAllFilters}>Clear</button>
@@ -566,36 +554,10 @@
 		margin: 0;
 	}
 
-	/* ── Tabs ── */
+	/* ── Tabs (shadcn overrides) ── */
 	.scr-tabs {
-		display: flex;
-		gap: 0;
 		padding: 0 24px;
-		border-bottom: 1px solid var(--ii-border-subtle);
 		flex-shrink: 0;
-	}
-
-	.scr-tab {
-		padding: 10px 20px;
-		font-size: 13px;
-		font-weight: 600;
-		font-family: var(--ii-font-sans);
-		color: var(--ii-text-muted);
-		background: none;
-		border: none;
-		border-bottom: 2px solid transparent;
-		cursor: pointer;
-		transition: all 120ms ease;
-		margin-bottom: -1px;
-	}
-
-	.scr-tab:hover {
-		color: var(--ii-text-primary);
-	}
-
-	.scr-tab--active {
-		color: var(--ii-brand-primary, #1447e6);
-		border-bottom-color: var(--ii-brand-primary, #1447e6);
 	}
 
 	/* ── Horizontal filter bar ── */
@@ -630,28 +592,6 @@
 		box-shadow: 0 0 0 2px color-mix(in srgb, var(--ii-brand-primary) 15%, transparent);
 	}
 
-	.scr-dropdown {
-		height: 34px;
-		padding: 0 28px 0 10px;
-		border: 1px solid var(--ii-border);
-		border-radius: 8px;
-		background: var(--ii-surface-elevated);
-		color: var(--ii-text-primary);
-		font-size: 13px;
-		font-family: var(--ii-font-sans);
-		cursor: pointer;
-		appearance: none;
-		background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2362748e' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-		background-repeat: no-repeat;
-		background-position: right 8px center;
-		max-width: 200px;
-	}
-
-	.scr-dropdown:focus {
-		outline: none;
-		border-color: var(--ii-border-focus);
-	}
-
 	.scr-toggle {
 		display: flex;
 		align-items: center;
@@ -661,13 +601,6 @@
 		cursor: pointer;
 		white-space: nowrap;
 		user-select: none;
-	}
-
-	.scr-toggle input[type="checkbox"] {
-		width: 14px;
-		height: 14px;
-		accent-color: var(--ii-brand-primary, #1447e6);
-		cursor: pointer;
 	}
 
 	.scr-clear-btn {

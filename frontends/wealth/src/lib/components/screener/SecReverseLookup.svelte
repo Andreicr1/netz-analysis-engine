@@ -110,7 +110,7 @@
 
 <style>
 	.rl-search { display: flex; gap: 8px; align-items: center; padding: 8px 0; }
-	.rl-input { flex: 1; max-width: 300px; padding: 6px 10px; font-size: 13px; font-family: "IBM Plex Mono", monospace; border: 1px solid var(--ii-border-subtle); border-radius: 6px; background: var(--ii-surface-primary); color: var(--ii-text-primary); }
+	.rl-input { flex: 1; max-width: 300px; padding: 6px 10px; font-size: 13px; font-family: var(--ii-font-mono), monospace; border: 1px solid var(--ii-border-subtle); border-radius: 6px; background: var(--ii-surface-primary); color: var(--ii-text-primary); }
 	.rl-input:focus { outline: none; border-color: var(--ii-border-accent); }
 	.rl-loading { padding: 24px; color: var(--ii-text-muted); font-size: 13px; }
 	.rl-empty { padding: 48px 24px; text-align: center; color: var(--ii-text-muted); font-size: 14px; }
@@ -124,7 +124,7 @@
 	.rl-row:hover { background: var(--ii-surface-secondary); }
 	.rl-td { padding: 8px 12px; border-bottom: 1px solid var(--ii-border-subtle); white-space: nowrap; }
 	.rl-td--name { max-width: 280px; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
-	.rl-td--mono { font-family: "IBM Plex Mono", monospace; font-size: 12px; }
+	.rl-td--mono { font-family: var(--ii-font-mono), monospace; font-size: 12px; }
 	.rl-td--right { text-align: right; font-variant-numeric: tabular-nums; }
 	.rl-chart-section { padding: 8px 0 16px; border-bottom: 1px solid var(--ii-border-subtle); margin-bottom: 12px; }
 	.rl-chart-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ii-text-muted); }

@@ -3,6 +3,8 @@
   Consumes GET /screener/securities/facets.
 -->
 <script lang="ts">
+	import { Checkbox } from "@investintell/ui/components/ui/checkbox";
+	import { Label } from "@investintell/ui/components/ui/label";
 	import type { SecurityFacets } from "$lib/types/catalog";
 	import { EMPTY_SECURITY_FACETS } from "$lib/types/catalog";
 
@@ -57,11 +59,11 @@
 	<div class="cfs-section">
 		<h4 class="cfs-group-title">Security Type</h4>
 		{#each facets.security_types as item (item.value)}
-			<label class="cfs-check">
-				<input type="checkbox" checked={selectedTypes.includes(item.value)} onchange={() => toggleType(item.value)} />
-				<span class="cfs-check-label">{item.label}</span>
+			<div class="cfs-check">
+				<Checkbox id="sectype-{item.value}" checked={selectedTypes.includes(item.value)} onCheckedChange={() => toggleType(item.value)} />
+				<Label for="sectype-{item.value}" class="cfs-check-label">{item.label}</Label>
 				<span class="cfs-check-count">{item.count?.toLocaleString() ?? "—"}</span>
-			</label>
+			</div>
 		{/each}
 	</div>
 
@@ -69,11 +71,11 @@
 		<div class="cfs-section">
 			<h4 class="cfs-group-title">Exchange</h4>
 			{#each facets.exchanges.slice(0, 12) as item (item.value)}
-				<label class="cfs-check">
-					<input type="checkbox" checked={selectedExchanges.includes(item.value)} onchange={() => toggleExchange(item.value)} />
-					<span class="cfs-check-label">{item.label}</span>
+				<div class="cfs-check">
+					<Checkbox id="exch-{item.value}" checked={selectedExchanges.includes(item.value)} onCheckedChange={() => toggleExchange(item.value)} />
+					<Label for="exch-{item.value}" class="cfs-check-label">{item.label}</Label>
 					<span class="cfs-check-count">{item.count?.toLocaleString() ?? "—"}</span>
-				</label>
+				</div>
 			{/each}
 		</div>
 	{/if}
@@ -94,8 +96,7 @@
 	.cfs-search:focus { outline: none; border-color: #155dfc; box-shadow: 0 0 0 3px rgba(21,93,252,0.1); }
 	.cfs-group-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.2px; color: #62748e; margin-bottom: 10px; }
 	.cfs-check { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; font-size: 13px; }
-	.cfs-check input[type="checkbox"] { width: 15px; height: 15px; border-radius: 4px; accent-color: #155dfc; cursor: pointer; flex-shrink: 0; }
-	.cfs-check-label { flex: 1; color: #314158; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+	.cfs-check :global([data-slot="label"]) { flex: 1; color: #314158; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 	.cfs-check-count { font-size: 11px; font-variant-numeric: tabular-nums; color: #90a1b9; font-weight: 600; }
 	.cfs-section--actions { border-bottom: none; }
 	.cfs-clear-btn { width: 100%; padding: 8px; border: 1px solid #e2e8f0; border-radius: 10px; background: white; font-size: 13px; font-weight: 600; color: #62748e; cursor: pointer; font-family: var(--ii-font-sans); transition: all 120ms; }

@@ -1,5 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import * as Alert from "$lib/components/ui/alert";
+	import { X } from 'lucide-svelte';
 
 	let {
 		variant = 'info',
@@ -37,15 +39,15 @@
 	const style = $derived(variantStyles[variant]);
 </script>
 
-<div
-	class="rounded-lg border px-4 py-3 text-sm"
+<Alert.Root
+	variant={variant === 'error' ? 'destructive' : 'default'}
+	class="rounded-lg border px-4 py-3"
 	style="border-color: {style.border}; background-color: color-mix(in srgb, {style.bg} 12%, var(--ii-surface)); color: var(--ii-text-primary);"
-	role="alert"
 >
 	<div class="flex items-start justify-between gap-3">
 		<div class="flex-1">
 			{#if message}
-				<p>{message}</p>
+				<Alert.Description>{message}</Alert.Description>
 			{/if}
 			{#if children}
 				{@render children()}
@@ -57,10 +59,8 @@
 				class="shrink-0 rounded p-0.5 opacity-60 transition-opacity hover:opacity-100"
 				aria-label="Dismiss"
 			>
-				<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-				</svg>
+				<X class="h-4 w-4" />
 			</button>
 		{/if}
 	</div>
-</div>
+</Alert.Root>

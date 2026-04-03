@@ -207,7 +207,7 @@
 	function stressBarColor(value: number): string {
 		if (value > 80) return "#f85149";    /* --ii-danger */
 		if (value >= 40) return "#e3b341";   /* --ii-warning */
-		return "#c9a84c";                    /* --ii-brand-primary (gold) */
+		return "#94a3b8";                    /* --ii-brand-secondary (slate-400) */
 	}
 
 	// ── Snapshot regime badge ────────────────────────────────────────────

@@ -5,8 +5,10 @@
 <script lang="ts">
 	import { EmptyState, formatAUM as formatSharedAUM, formatDate as formatSharedDate, formatNumber } from "@investintell/ui";
 	import { Badge } from "@investintell/ui/components/ui/badge";
+	import * as Tabs from "@investintell/ui/components/ui/tabs";
 	import { Button } from "@investintell/ui/components/ui/button";
 	import { Skeleton } from "@investintell/ui/components/ui/skeleton";
+	import { Spinner } from "@investintell/ui/components/ui/spinner";
 	import FundDetailPanel from "$lib/components/FundDetailPanel.svelte";
 	import { createClientApiClient } from "$lib/api/client";
 	import { getContext } from "svelte";
@@ -172,33 +174,22 @@
 			</Button>
 		</div>
 
+		<Tabs.Root bind:value={activeStatusTab}>
 		<div class="overflow-hidden rounded-(--ii-radius-xl) border border-(--ii-border-subtle) bg-(--ii-surface-panel) shadow-(--ii-shadow-card)">
 			<!-- Status Tabs -->
 			<div class="border-b border-(--ii-border-subtle) bg-(--ii-surface-highlight) px-3 py-3">
-				<div class="flex flex-wrap items-center gap-2">
+				<Tabs.List>
 					{#each statusTabs as tab (tab.value)}
-						<button
-							class="inline-flex min-h-(--ii-space-control-height-md) items-center gap-2 rounded-(--ii-radius-md) border px-3.5 py-2 text-sm font-medium tracking-[-0.01em] transition-[color,background-color,border-color,box-shadow] duration-(--ii-duration-fast)"
-							class:border-(--ii-border)={activeStatusTab === tab.value}
-							class:bg-(--ii-surface-elevated)={activeStatusTab === tab.value}
-							class:text-(--ii-text-primary)={activeStatusTab === tab.value}
-							class:shadow-(--ii-shadow-1)={activeStatusTab === tab.value}
-							class:border-transparent={activeStatusTab !== tab.value}
-							class:bg-transparent={activeStatusTab !== tab.value}
-							class:text-(--ii-text-muted)={activeStatusTab !== tab.value}
-							class:hover:bg-(--ii-accent-soft)={activeStatusTab !== tab.value}
-							class:hover:text-(--ii-text-secondary)={activeStatusTab !== tab.value}
-							onclick={() => (activeStatusTab = tab.value)}
-						>
+						<Tabs.Trigger value={tab.value}>
 							{tab.label}
 							{#if tabCounts[tab.value] > 0}
 								<Badge variant={activeStatusTab === tab.value ? "default" : "secondary"}>
 									{tabCounts[tab.value]}
 								</Badge>
 							{/if}
-						</button>
+						</Tabs.Trigger>
 					{/each}
-				</div>
+				</Tabs.List>
 			</div>
 
 			{#if filteredFunds.length > 0}
@@ -249,7 +240,7 @@
 									<td class="px-4 py-3">
 										<span class="inline-flex items-center gap-1.5 rounded-(--ii-radius-pill) px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={getDDReportStyle(fund.dd_report_status)}>
 											{#if fund.dd_report_status === "generating"}
-												<span class="h-1.5 w-1.5 animate-spin rounded-full border border-current border-t-transparent"></span>
+												<Spinner class="size-3" />
 											{:else}
 												<span class="h-1.5 w-1.5 rounded-full" style="background-color: currentColor;"></span>
 											{/if}
@@ -279,6 +270,7 @@
 				/>
 			{/if}
 		</div>
+		</Tabs.Root>
 	{/if}
 </div>
 

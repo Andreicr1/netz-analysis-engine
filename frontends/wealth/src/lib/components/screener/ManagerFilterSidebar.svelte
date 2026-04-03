@@ -4,7 +4,10 @@
 <script lang="ts">
 	import "./screener.css";
 	import { goto } from "$app/navigation";
+	import { Checkbox } from "@investintell/ui/components/ui/checkbox";
+	import { Label } from "@investintell/ui/components/ui/label";
 	import { Button } from "@investintell/ui/components/ui/button";
+	import * as Select from "@investintell/ui/components/ui/select";
 	import { StatusBadge, formatNumber, formatDateTime } from "@investintell/ui";
 	import type { ScreeningResult, ScreeningRun, ScreenerFilterConfig, OverallStatus } from "$lib/types/screening";
 	import { EMPTY_FILTERS } from "$lib/types/screening";
@@ -109,14 +112,14 @@
 		<input class="scr-input scr-input--half" type="number" placeholder="AUM min" bind:value={aumMin} onkeydown={handleFilterKeydown} />
 		<input class="scr-input scr-input--half" type="number" placeholder="AUM max" bind:value={aumMax} onkeydown={handleFilterKeydown} />
 	</div>
-	<label class="scr-checkbox">
-		<input type="checkbox" bind:checked={complianceClean} />
-		<span>Compliance clean</span>
-	</label>
-	<label class="scr-checkbox">
-		<input type="checkbox" bind:checked={hasInstitutional} />
-		<span>Has institutional holders</span>
-	</label>
+	<div class="scr-checkbox">
+		<Checkbox id="compliance-clean" checked={complianceClean} onCheckedChange={(v) => { complianceClean = !!v; }} />
+		<Label for="compliance-clean">Compliance clean</Label>
+	</div>
+	<div class="scr-checkbox">
+		<Checkbox id="has-institutional" checked={hasInstitutional} onCheckedChange={(v) => { hasInstitutional = !!v; }} />
+		<Label for="has-institutional">Has institutional holders</Label>
+	</div>
 	<div class="scr-filter-btns">
 		<Button size="sm" onclick={applyManagerFilters}>Apply</Button>
 		<Button size="sm" variant="ghost" onclick={clearManagerFilters}>Clear</Button>
@@ -181,7 +184,7 @@
 <div class="scr-filter-section">
 	<h3 class="scr-filter-title">Fund Filters</h3>
 	<div class="scr-field">
-		<label class="scr-label" for="scr-fund-search">Search</label>
+		<Label for="scr-fund-search" class="scr-label">Search</Label>
 		<input
 			id="scr-fund-search"
 			type="text"
@@ -191,22 +194,32 @@
 		/>
 	</div>
 	<div class="scr-field">
-		<label class="scr-label" for="scr-fund-type">Instrument Type</label>
-		<select id="scr-fund-type" class="scr-select" bind:value={fundFilters.instrument_type}>
-			<option value={null}>All types</option>
-			{#each distinctTypes as t (t)}
-				<option value={t}>{typeLabel(t)}</option>
-			{/each}
-		</select>
+		<Label for="scr-fund-type" class="scr-label">Instrument Type</Label>
+		<Select.Root type="single" value={fundFilters.instrument_type ?? ""} onValueChange={(v) => { fundFilters.instrument_type = v || null; }}>
+			<Select.Trigger class="h-[34px] w-full text-[13px]">
+				{fundFilters.instrument_type ? typeLabel(fundFilters.instrument_type) : "All types"}
+			</Select.Trigger>
+			<Select.Content>
+				<Select.Item value="">All types</Select.Item>
+				{#each distinctTypes as t (t)}
+					<Select.Item value={t}>{typeLabel(t)}</Select.Item>
+				{/each}
+			</Select.Content>
+		</Select.Root>
 	</div>
 	<div class="scr-field">
-		<label class="scr-label" for="scr-fund-block">Allocation Block</label>
-		<select id="scr-fund-block" class="scr-select" bind:value={fundFilters.block_id}>
-			<option value={null}>All blocks</option>
-			{#each distinctBlocks as b (b)}
-				<option value={b}>{b}</option>
-			{/each}
-		</select>
+		<Label for="scr-fund-block" class="scr-label">Allocation Block</Label>
+		<Select.Root type="single" value={fundFilters.block_id ?? ""} onValueChange={(v) => { fundFilters.block_id = v || null; }}>
+			<Select.Trigger class="h-[34px] w-full text-[13px]">
+				{fundFilters.block_id ?? "All blocks"}
+			</Select.Trigger>
+			<Select.Content>
+				<Select.Item value="">All blocks</Select.Item>
+				{#each distinctBlocks as b (b)}
+					<Select.Item value={b}>{b}</Select.Item>
+				{/each}
+			</Select.Content>
+		</Select.Root>
 	</div>
 	{#if hasFundFilters}
 		<button class="scr-clear-btn" onclick={clearFundFilters}>Clear fund filters</button>

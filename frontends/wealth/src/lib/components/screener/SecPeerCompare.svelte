@@ -159,7 +159,7 @@
 	.pc-card__name { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--ii-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	.pc-card__row { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; }
 	.pc-card__label { color: var(--ii-text-muted); }
-	.pc-card__mono { font-family: "IBM Plex Mono", monospace; font-size: 11px; }
+	.pc-card__mono { font-family: var(--ii-font-mono), monospace; font-size: 11px; }
 	.pc-subtitle { font-size: 13px; font-weight: 600; color: var(--ii-text-secondary); margin: 16px 0 8px; }
 	.pc-table-wrap { overflow-x: auto; }
 	.pc-table { width: 100%; border-collapse: collapse; font-size: 13px; }

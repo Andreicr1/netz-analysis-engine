@@ -1,5 +1,7 @@
 <!-- SEC Manager paginated table — absorbed from us-fund-analysis/components/ManagerTable.svelte -->
 <script lang="ts">
+	import { Button } from "@investintell/ui/components/ui/button";
+	import { Checkbox } from "@investintell/ui/components/ui/checkbox";
 	import { formatNumber, formatDate } from "@investintell/ui";
 	import type { SecManagerSearchPage } from "$lib/types/sec-analysis";
 
@@ -48,7 +50,10 @@
 					<tr class="mt-row" class:mt-row--no-cik={!mgr.cik} onclick={() => mgr.cik && onSelect(mgr.cik, mgr.firm_name)}>
 						<td class="mt-td mt-td--check">
 							{#if mgr.cik && onToggleCompare}
-								<input type="checkbox" checked={compareCiks.has(mgr.cik)} onchange={() => onToggleCompare?.(mgr.cik!)} onclick={(e) => e.stopPropagation()} title="Select for comparison" class="mt-checkbox" />
+								<!-- svelte-ignore a11y_click_events_have_key_events -->
+								<span onclick={(e) => e.stopPropagation()}>
+									<Checkbox checked={compareCiks.has(mgr.cik)} onCheckedChange={() => onToggleCompare?.(mgr.cik!)} aria-label="Select for comparison" />
+								</span>
 							{/if}
 						</td>
 						<td class="mt-td mt-td--name">
@@ -92,10 +97,10 @@
 		</table>
 	</div>
 
-	<div class="mt-pagination">
-		<button class="mt-page-btn" disabled={data.page <= 1} onclick={() => onPageChange(data.page - 1)}>Prev</button>
-		<span class="mt-page-info">{data.page} / {totalPages}</span>
-		<button class="mt-page-btn" disabled={!data.has_next} onclick={() => onPageChange(data.page + 1)}>Next</button>
+	<div class="flex items-center justify-center gap-3 py-3">
+		<Button variant="outline" size="sm" disabled={data.page <= 1} onclick={() => onPageChange(data.page - 1)}>Prev</Button>
+		<span class="text-xs text-muted-foreground tabular-nums">{data.page} / {totalPages}</span>
+		<Button variant="outline" size="sm" disabled={!data.has_next} onclick={() => onPageChange(data.page + 1)}>Next</Button>
 	</div>
 {/if}
 
@@ -127,12 +132,7 @@
 	.mt-text-muted { color: #90a1b9; }
 	.mt-td--aum { text-align: right; font-weight: 900; font-variant-numeric: tabular-nums; color: #314158; }
 	.mt-td--date { text-align: right; color: #90a1b9; font-weight: 500; }
-	.mt-pagination { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 12px 24px; }
-	.mt-page-btn { padding: 4px 12px; font-size: 12px; border: 1px solid #e2e8f0; border-radius: 4px; background: #ffffff; color: #1d293d; cursor: pointer; }
-	.mt-page-btn:disabled { opacity: 0.4; cursor: default; }
-	.mt-page-info { font-size: 12px; color: #62748e; }
 	.mt-badge { display: inline-block; padding: 4px 8px; font-size: 11px; font-weight: 700; border-radius: 4px; line-height: 1; text-transform: uppercase; letter-spacing: 0.55px; }
 	.mt-badge--success { background: #ecfdf5; color: #009966; }
 	.mt-th--check, .mt-td--check { width: 48px; text-align: center; padding: 0 12px; }
-	.mt-checkbox { width: 16px; height: 16px; border-radius: 4px; cursor: pointer; accent-color: #155dfc; }
 </style>

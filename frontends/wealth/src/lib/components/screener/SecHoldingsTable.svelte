@@ -3,6 +3,7 @@
      Holdings data is kept as raw (non-reactive) to avoid $state proxy overhead. -->
 <script lang="ts">
 	import { formatNumber, formatPercent, formatCompact } from "@investintell/ui";
+	import * as Select from "@investintell/ui/components/ui/select";
 	import { createVirtualizer } from "@tanstack/svelte-virtual";
 	import type { NportHoldingsPage } from "$lib/types/sec-funds";
 	import { EMPTY_HOLDINGS } from "$lib/types/sec-funds";
@@ -92,12 +93,16 @@
 	<div class="ht-header">
 		<h3 class="ht-title">{managerName}</h3>
 		{#if holdings.available_quarters.length > 0}
-			<select class="ht-quarter-select" value={selectedQuarter}
-				onchange={(e) => changeQuarter((e.target as HTMLSelectElement).value)}>
-				{#each holdings.available_quarters as q}
-					<option value={q}>{q}</option>
-				{/each}
-			</select>
+			<Select.Root type="single" value={selectedQuarter ?? ""} onValueChange={(v) => changeQuarter(v)}>
+				<Select.Trigger class="h-[30px] w-auto min-w-[100px] text-xs">
+					{selectedQuarter ?? "Quarter"}
+				</Select.Trigger>
+				<Select.Content>
+					{#each holdings.available_quarters as q}
+						<Select.Item value={q}>{q}</Select.Item>
+					{/each}
+				</Select.Content>
+			</Select.Root>
 		{/if}
 	</div>
 
@@ -161,7 +166,6 @@
 	.ht-empty { padding: 48px 24px; text-align: center; color: var(--ii-text-muted); font-size: 14px; }
 	.ht-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; }
 	.ht-title { font-size: 15px; font-weight: 600; color: var(--ii-text-primary); }
-	.ht-quarter-select { padding: 4px 8px; font-size: 12px; border: 1px solid var(--ii-border-subtle); border-radius: 4px; background: var(--ii-surface-primary); color: var(--ii-text-primary); }
 	.ht-summary { font-size: 12px; color: var(--ii-text-muted); padding-bottom: 8px; }
 	.ht-loading { padding: 24px; color: var(--ii-text-muted); font-size: 13px; }
 
@@ -184,6 +188,6 @@
 	.ht-row:hover { background: var(--ii-surface-secondary); }
 	.ht-td { padding: 8px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
 	.ht-td--name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
-	.ht-td--mono { font-family: "IBM Plex Mono", monospace; font-size: 12px; }
+	.ht-td--mono { font-family: var(--ii-font-mono), monospace; font-size: 12px; }
 	.ht-td--right { text-align: right; font-variant-numeric: tabular-nums; }
 </style>

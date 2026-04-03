@@ -10,10 +10,10 @@
 	import { createRiskStore, type RiskStore } from "$lib/stores/risk-store.svelte";
 	import ConnectionStatus from "$lib/components/ConnectionStatus.svelte";
 	import {
-		ShieldCheck, Stack, Database, Briefcase, MagnifyingGlass,
-		ClipboardText, ChartBar, Globe, Lightning, Newspaper,
-		FileText, GearSix, Robot, CaretDown,
-	} from "phosphor-svelte";
+		ShieldCheck, Layers, Database, Briefcase, Search,
+		ClipboardList, BarChart3, Globe, Zap, Newspaper,
+		FileText, Settings, Bot, ChevronDown,
+	} from "lucide-svelte";
 	import AiAgentDrawer from "$lib/components/AiAgentDrawer.svelte";
 	import GlobalSearch from "$lib/components/GlobalSearch.svelte";
 
@@ -58,14 +58,14 @@
 		{
 			id: "overview", label: "Overview", defaultOpen: true,
 			items: [
-				{ label: "Dashboard", href: "/dashboard", icon: ChartBar },
+				{ label: "Dashboard", href: "/dashboard", icon: BarChart3 },
 			],
 		},
 		{
 			id: "research", label: "Research", defaultOpen: true,
 			items: [
-				{ label: "Screener",        href: "/screener",   icon: MagnifyingGlass },
-				{ label: "DD Reports",      href: "/dd-reports", icon: ClipboardText },
+				{ label: "Screener",        href: "/screener",   icon: Search },
+				{ label: "DD Reports",      href: "/dd-reports", icon: ClipboardList },
 				{ label: "Assets Universe", href: "/universe",   icon: Database },
 			],
 		},
@@ -74,15 +74,15 @@
 			items: [
 				{ label: "Investment Policy", href: "/investment-policy", icon: ShieldCheck },
 				{ label: "Macro",             href: "/macro",             icon: Globe },
-				{ label: "Portfolio Builder", href: "/model-portfolios",  icon: Stack },
+				{ label: "Portfolio Builder", href: "/model-portfolios",  icon: Layers },
 				{ label: "Portfolios",        href: "/portfolios",        icon: Briefcase },
 			],
 		},
 		{
 			id: "intelligence", label: "Intelligence", defaultOpen: true,
 			items: [
-				{ label: "Analytics", href: "/analytics", icon: ChartBar },
-				{ label: "Risk",      href: "/risk",      icon: Lightning },
+				{ label: "Analytics", href: "/analytics", icon: BarChart3 },
+				{ label: "Risk",      href: "/risk",      icon: Zap },
 			],
 		},
 		{
@@ -95,7 +95,7 @@
 		{
 			id: "system", label: "System", defaultOpen: false,
 			items: [
-				{ label: "System", href: "/settings/system", icon: GearSix },
+				{ label: "System", href: "/settings/system", icon: Settings },
 			],
 		},
 	];
@@ -131,9 +131,8 @@
 							type="button"
 						>
 							<span class="section-label">{section.label}</span>
-							<CaretDown
+							<ChevronDown
 								size={12}
-								weight="light"
 								class="section-chevron {openSections.has(section.id) ? 'open' : ''}"
 							/>
 						</button>
@@ -149,7 +148,7 @@
 										class:active={isActive(item.href)}
 										aria-current={isActive(item.href) ? "page" : undefined}
 									>
-										<span class="nav-icon"><Icon size={18} weight="light" /></span>
+										<span class="nav-icon"><Icon size={18} /></span>
 										<span class="nav-label">{item.label}</span>
 									</a>
 								{/each}
@@ -170,7 +169,7 @@
 									title={item.label}
 									aria-current={isActive(item.href) ? "page" : undefined}
 								>
-									<span class="nav-icon"><Icon size={18} weight="light" /></span>
+									<span class="nav-icon"><Icon size={18} /></span>
 								</a>
 							{/each}
 						</nav>
@@ -241,7 +240,7 @@
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div class="ii-topbar-search" onclick={() => searchOpen = true}>
-				<MagnifyingGlass size={15} weight="light" class="ii-topbar-search-icon" />
+				<Search size={15} class="ii-topbar-search-icon" />
 				<span class="ii-topbar-search-input">Search…</span>
 				<kbd class="ii-topbar-kbd">{typeof navigator !== "undefined" && navigator?.platform?.includes("Mac") ? "⌘K" : "Ctrl+K"}</kbd>
 			</div>
@@ -249,7 +248,7 @@
 			<div class="ii-topbar-actions">
 				<ConnectionStatus quality={riskStore.connectionQuality} />
 				<button class="ii-topbar-btn ii-topbar-btn--ai" type="button" title="AI Assistant" onclick={() => agentOpen = !agentOpen}>
-					<Robot size={18} weight="light" />
+					<Bot size={18} />
 				</button>
 				<ThemeToggle />
 			</div>

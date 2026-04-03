@@ -5,7 +5,9 @@
 <script lang="ts">
 	import { goto } from "$app/navigation";
 	import { getContext } from "svelte";
-	import { MagnifyingGlass, X, FileText, Buildings, Bank, SpinnerGap } from "phosphor-svelte";
+	import { Search, X, FileText, Building2, Landmark } from "lucide-svelte";
+	import { Spinner } from "@investintell/ui/components/ui/spinner";
+	import { ScrollArea } from "@investintell/ui/components/ui/scroll-area";
 	import { createClientApiClient } from "$lib/api/client";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
@@ -143,14 +145,14 @@
 		debounceTimer = setTimeout(() => doSearch(query), 300);
 	}
 
-	const CATEGORY_ICONS: Record<string, typeof MagnifyingGlass> = {
-		funds: Bank,
-		managers: Buildings,
+	const CATEGORY_ICONS: Record<string, typeof Search> = {
+		funds: Landmark,
+		managers: Building2,
 		documents: FileText,
 	};
 
 	function getCategoryIcon(cat: string) {
-		return CATEGORY_ICONS[cat] || MagnifyingGlass;
+		return CATEGORY_ICONS[cat] || Search;
 	}
 
 	// Compute flat index for a given group item
@@ -171,7 +173,7 @@
 		<div class="gs-dialog" role="dialog" aria-label="Global search">
 			<!-- Search input -->
 			<div class="gs-input-row">
-				<MagnifyingGlass size={16} weight="light" class="gs-input-icon" />
+				<Search size={16} class="gs-input-icon" />
 				<input
 					bind:this={inputEl}
 					bind:value={query}
@@ -184,15 +186,15 @@
 					autocomplete="off"
 				/>
 				{#if loading}
-					<SpinnerGap size={16} weight="bold" class="gs-spinner" />
+					<Spinner class="size-4 text-(--ii-brand-primary)" />
 				{/if}
 				<button class="gs-close-btn" onclick={closePalette} type="button" aria-label="Close">
-					<X size={14} weight="light" />
+					<X size={14} />
 				</button>
 			</div>
 
 			<!-- Results -->
-			<div class="gs-results">
+			<ScrollArea class="gs-results">
 				{#if query.length < 2}
 					<div class="gs-empty">
 						<span class="gs-empty-text">Type at least 2 characters to search</span>
@@ -204,7 +206,7 @@
 					</div>
 				{:else if loading && groups.length === 0}
 					<div class="gs-empty">
-						<SpinnerGap size={20} weight="bold" class="gs-spinner" />
+						<Spinner class="size-5 text-(--ii-text-muted)" />
 						<span class="gs-empty-text">Searching…</span>
 					</div>
 				{:else if !loading && groups.length === 0 && query.length >= 2}
@@ -216,7 +218,7 @@
 						{@const Icon = getCategoryIcon(group.category)}
 						<div class="gs-group">
 							<div class="gs-group-header">
-								<Icon size={13} weight="light" />
+								<Icon size={13} />
 								<span>{group.label}</span>
 								{#if group.total > group.items.length}
 									<span class="gs-group-count">{group.total} total</span>
@@ -241,7 +243,7 @@
 						</div>
 					{/each}
 				{/if}
-			</div>
+			</ScrollArea>
 		</div>
 	</div>
 {/if}
@@ -299,9 +301,7 @@
 		color: var(--ii-text-muted);
 	}
 
-	.gs-input-row :global(.gs-spinner) {
-		color: var(--ii-brand-primary, #3b82f6);
-		animation: spin 0.8s linear infinite;
+	.gs-input-row :global([role="status"]) {
 		flex-shrink: 0;
 	}
 
@@ -324,10 +324,8 @@
 	}
 
 	/* ── Results area ─��� */
-	.gs-results {
+	:global(.gs-results) {
 		max-height: 380px;
-		overflow-y: auto;
-		scrollbar-width: thin;
 	}
 
 	/* ── Empty / loading states ── */
@@ -340,10 +338,6 @@
 		color: var(--ii-text-muted);
 	}
 
-	.gs-empty :global(.gs-spinner) {
-		color: var(--ii-text-muted);
-		animation: spin 0.8s linear infinite;
-	}
 
 	.gs-empty-text {
 		font-size: 0.8125rem;
@@ -431,9 +425,4 @@
 		flex: 1;
 	}
 
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
 </style>

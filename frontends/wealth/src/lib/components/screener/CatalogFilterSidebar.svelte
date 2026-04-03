@@ -5,6 +5,10 @@
 -->
 <script lang="ts">
 	import "./screener.css";
+	import { Checkbox } from "@investintell/ui/components/ui/checkbox";
+	import { Label } from "@investintell/ui/components/ui/label";
+	import * as Select from "@investintell/ui/components/ui/select";
+	import { ScrollArea } from "@investintell/ui/components/ui/scroll-area";
 	import type { CatalogFacets, CatalogFacetItem, CatalogCategory } from "$lib/types/catalog";
 	import { EMPTY_FACETS, CATALOG_CATEGORIES, FUND_TYPE_LABELS } from "$lib/types/catalog";
 
@@ -152,6 +156,7 @@
 </script>
 
 <aside class="cfs-sidebar">
+<ScrollArea class="cfs-scroll-area">
 	<!-- Search -->
 	<div class="cfs-section">
 		<input
@@ -169,15 +174,15 @@
 		<h4 class="cfs-group-title">Universe</h4>
 		{#each CATALOG_CATEGORIES as cat (cat.key)}
 			{@const count = categoryCounts[cat.key] ?? 0}
-			<label class="cfs-check">
-				<input
-					type="checkbox"
+			<div class="cfs-check">
+				<Checkbox
+					id="cat-{cat.key}"
 					checked={selectedCategories.includes(cat.key)}
-					onchange={() => toggleCategory(cat.key)}
+					onCheckedChange={() => toggleCategory(cat.key)}
 				/>
-				<span class="cfs-check-label">{cat.label}</span>
+				<Label for="cat-{cat.key}" class="cfs-check-label">{cat.label}</Label>
 				<span class="cfs-check-count">{count?.toLocaleString() ?? "—"}</span>
-			</label>
+			</div>
 		{/each}
 	</div>
 
@@ -186,15 +191,15 @@
 		<div class="cfs-section">
 			<h4 class="cfs-group-title">Strategy</h4>
 			{#each facets.strategy_labels.slice(0, 20) as item (item.value)}
-				<label class="cfs-check">
-					<input
-						type="checkbox"
+				<div class="cfs-check">
+					<Checkbox
+						id="strat-{item.value}"
 						checked={selectedStrategyLabels.includes(item.value)}
-						onchange={() => toggleStrategy(item.value)}
+						onCheckedChange={() => toggleStrategy(item.value)}
 					/>
-					<span class="cfs-check-label">{item.label}</span>
+					<Label for="strat-{item.value}" class="cfs-check-label">{item.label}</Label>
 					<span class="cfs-check-count">{item.count?.toLocaleString() ?? "—"}</span>
-				</label>
+				</div>
 			{/each}
 		</div>
 	{/if}
@@ -204,15 +209,15 @@
 		<div class="cfs-section">
 			<h4 class="cfs-group-title">Geography</h4>
 			{#each facets.geographies as item (item.value)}
-				<label class="cfs-check">
-					<input
-						type="checkbox"
+				<div class="cfs-check">
+					<Checkbox
+						id="geo-{item.value}"
 						checked={selectedGeographies.includes(item.value)}
-						onchange={() => toggleGeography(item.value)}
+						onCheckedChange={() => toggleGeography(item.value)}
 					/>
-					<span class="cfs-check-label">{item.label}</span>
+					<Label for="geo-{item.value}" class="cfs-check-label">{item.label}</Label>
 					<span class="cfs-check-count">{item.count?.toLocaleString() ?? "—"}</span>
-				</label>
+				</div>
 			{/each}
 		</div>
 	{/if}
@@ -222,15 +227,15 @@
 		<div class="cfs-section">
 			<h4 class="cfs-group-title">Domicile</h4>
 			{#each facets.domiciles.slice(0, 15) as item (item.value)}
-				<label class="cfs-check">
-					<input
-						type="checkbox"
+				<div class="cfs-check">
+					<Checkbox
+						id="dom-{item.value}"
 						checked={selectedDomiciles.includes(item.value)}
-						onchange={() => toggleDomicile(item.value)}
+						onCheckedChange={() => toggleDomicile(item.value)}
 					/>
-					<span class="cfs-check-label">{item.label}</span>
+					<Label for="dom-{item.value}" class="cfs-check-label">{item.label}</Label>
 					<span class="cfs-check-count">{item.count?.toLocaleString() ?? "—"}</span>
-				</label>
+				</div>
 			{/each}
 		</div>
 	{/if}
@@ -238,34 +243,44 @@
 	<!-- AUM Min -->
 	<div class="cfs-section">
 		<h4 class="cfs-group-title">AUM Minimum</h4>
-		<select class="cfs-select" bind:value={aumMin} onchange={() => onFilterChange()}>
-			<option value="">Any</option>
-			<option value="100000000">$100M+</option>
-			<option value="500000000">$500M+</option>
-			<option value="1000000000">$1B+</option>
-			<option value="5000000000">$5B+</option>
-			<option value="10000000000">$10B+</option>
-			<option value="50000000000">$50B+</option>
-		</select>
+		<Select.Root type="single" value={aumMin} onValueChange={(v) => { aumMin = v; onFilterChange(); }}>
+			<Select.Trigger class="cfs-select-trigger">
+				{aumMin === "100000000" ? "$100M+" : aumMin === "500000000" ? "$500M+" : aumMin === "1000000000" ? "$1B+" : aumMin === "5000000000" ? "$5B+" : aumMin === "10000000000" ? "$10B+" : aumMin === "50000000000" ? "$50B+" : "Any"}
+			</Select.Trigger>
+			<Select.Content>
+				<Select.Item value="">Any</Select.Item>
+				<Select.Item value="100000000">$100M+</Select.Item>
+				<Select.Item value="500000000">$500M+</Select.Item>
+				<Select.Item value="1000000000">$1B+</Select.Item>
+				<Select.Item value="5000000000">$5B+</Select.Item>
+				<Select.Item value="10000000000">$10B+</Select.Item>
+				<Select.Item value="50000000000">$50B+</Select.Item>
+			</Select.Content>
+		</Select.Root>
 	</div>
 
 	<!-- Cost & Performance -->
 	<div class="cfs-section">
 		<h4 class="cfs-group-title">Cost & Performance</h4>
 		<div class="cfs-field">
-			<label class="cfs-field-label" for="max-er">Max Expense Ratio</label>
-			<select id="max-er" class="cfs-select" bind:value={maxExpenseRatio} onchange={() => onFilterChange()}>
-				<option value="">Any</option>
-				<option value="0.10">≤ 0.10%</option>
-				<option value="0.25">≤ 0.25%</option>
-				<option value="0.50">≤ 0.50%</option>
-				<option value="0.75">≤ 0.75%</option>
-				<option value="1.00">≤ 1.00%</option>
-				<option value="1.50">≤ 1.50%</option>
-			</select>
+			<Label for="max-er" class="cfs-field-label">Max Expense Ratio</Label>
+			<Select.Root type="single" value={maxExpenseRatio} onValueChange={(v) => { maxExpenseRatio = v; onFilterChange(); }}>
+				<Select.Trigger class="cfs-select-trigger">
+					{maxExpenseRatio === "0.10" ? "≤ 0.10%" : maxExpenseRatio === "0.25" ? "≤ 0.25%" : maxExpenseRatio === "0.50" ? "≤ 0.50%" : maxExpenseRatio === "0.75" ? "≤ 0.75%" : maxExpenseRatio === "1.00" ? "≤ 1.00%" : maxExpenseRatio === "1.50" ? "≤ 1.50%" : "Any"}
+				</Select.Trigger>
+				<Select.Content>
+					<Select.Item value="">Any</Select.Item>
+					<Select.Item value="0.10">≤ 0.10%</Select.Item>
+					<Select.Item value="0.25">≤ 0.25%</Select.Item>
+					<Select.Item value="0.50">≤ 0.50%</Select.Item>
+					<Select.Item value="0.75">≤ 0.75%</Select.Item>
+					<Select.Item value="1.00">≤ 1.00%</Select.Item>
+					<Select.Item value="1.50">≤ 1.50%</Select.Item>
+				</Select.Content>
+			</Select.Root>
 		</div>
 		<div class="cfs-field">
-			<label class="cfs-field-label" for="min-1y">Min 1Y Return</label>
+			<Label for="min-1y" class="cfs-field-label">Min 1Y Return</Label>
 			<input
 				id="min-1y"
 				class="cfs-input"
@@ -277,7 +292,7 @@
 			/>
 		</div>
 		<div class="cfs-field">
-			<label class="cfs-field-label" for="min-10y">Min 10Y Return</label>
+			<Label for="min-10y" class="cfs-field-label">Min 10Y Return</Label>
 			<input
 				id="min-10y"
 				class="cfs-input"
@@ -323,6 +338,7 @@
 			<button class="cfs-clear-btn" onclick={clearAll}>Clear All Filters</button>
 		</div>
 	{/if}
+</ScrollArea>
 </aside>
 
 <style>
@@ -332,11 +348,16 @@
 		background: white;
 		border: 1px solid #e2e8f0;
 		border-radius: 16px;
-		overflow-y: auto;
+		overflow: hidden;
 		max-height: calc(100vh - 140px);
 		position: sticky;
 		top: 80px;
 		box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1);
+	}
+
+	:global(.cfs-scroll-area) {
+		height: 100%;
+		max-height: calc(100vh - 140px);
 	}
 
 	.cfs-section {
@@ -384,22 +405,14 @@
 		font-size: 13px;
 	}
 
-	.cfs-check input[type="checkbox"] {
-		width: 15px;
-		height: 15px;
-		border-radius: 4px;
-		accent-color: #155dfc;
-		cursor: pointer;
-		flex-shrink: 0;
-	}
-
-	.cfs-check-label {
+	.cfs-check :global([data-slot="label"]) {
 		flex: 1;
 		color: #314158;
 		font-weight: 500;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		cursor: pointer;
 	}
 
 	.cfs-check-count {
@@ -409,25 +422,17 @@
 		font-weight: 600;
 	}
 
-	.cfs-select {
+	.cfs-select-trigger {
 		width: 100%;
 		height: 36px;
-		padding: 0 10px;
-		border: 1px solid #e2e8f0;
-		border-radius: 10px;
-		background: #f8fafc;
 		font-size: 13px;
-		color: var(--ii-text-primary);
-		font-family: var(--ii-font-sans);
 	}
-
-	.cfs-select:focus { outline: none; border-color: #155dfc; }
 
 	.cfs-field {
 		margin-bottom: 10px;
 	}
 
-	.cfs-field-label {
+	.cfs-field :global([data-slot="label"]) {
 		display: block;
 		font-size: 12px;
 		font-weight: 500;

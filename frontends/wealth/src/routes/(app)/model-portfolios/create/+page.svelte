@@ -13,6 +13,8 @@
 		PageHeader, Button, StatusBadge, EmptyState, ConsequenceDialog,
 		formatPercent, formatNumber, formatDate,
 	} from "@investintell/ui";
+	import { Checkbox } from "@investintell/ui/components/ui/checkbox";
+	import { Spinner } from "@investintell/ui/components/ui/spinner";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
 	import type { UniverseAsset } from "$lib/types/universe";
@@ -476,13 +478,13 @@
 							<span class="fund-list-count">{fundsForSelectedBlock.length} approved fund{fundsForSelectedBlock.length !== 1 ? "s" : ""}</span>
 						</div>
 						{#if BLOCK_GEOGRAPHY[selectedBlockId]}
-							<label class="geo-toggle">
-								<input type="checkbox" bind:checked={showAllGeographies} />
-								<span>Show all geographies</span>
+							<div class="geo-toggle">
+								<Checkbox id="show-all-geo" checked={showAllGeographies} onCheckedChange={(v) => { showAllGeographies = !!v; }} />
+								<label for="show-all-geo">Show all geographies</label>
 								{#if !showAllGeographies}
 									<span class="geo-tag">{BLOCK_GEOGRAPHY[selectedBlockId]}</span>
 								{/if}
-							</label>
+							</div>
 						{/if}
 						<div class="fund-items">
 							{#each fundsForSelectedBlock as fund (fund.instrument_id)}
@@ -596,7 +598,7 @@
 
 			{#if isConstructing}
 				<div class="construct-loading">
-					<div class="construct-spinner"></div>
+					<Spinner class="size-6" />
 					<span>Running CLARABEL optimizer for 3 mandates...</span>
 				</div>
 			{/if}
@@ -788,10 +790,10 @@
 			{/if}
 
 			<!-- IC Approval checkbox -->
-			<label class="activate-checkbox">
-				<input type="checkbox" bind:checked={icApproved} />
-				<span>I confirm this portfolio construction has been reviewed and approved by the Investment Committee.</span>
-			</label>
+			<div class="activate-checkbox">
+				<Checkbox id="ic-approved" checked={icApproved} onCheckedChange={(v) => { icApproved = !!v; }} />
+				<label for="ic-approved">I confirm this portfolio construction has been reviewed and approved by the Investment Committee.</label>
+			</div>
 
 			{#if activateError}
 				<div class="step-error">{activateError}</div>
@@ -1342,18 +1344,6 @@
 		font-size: var(--ii-text-body, 0.9375rem);
 	}
 
-	.construct-spinner {
-		width: 24px;
-		height: 24px;
-		border: 2px solid var(--ii-border);
-		border-top-color: var(--ii-brand-primary);
-		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
-	}
-
-	@keyframes spin {
-		to { transform: rotate(360deg); }
-	}
 
 	.construct-results {
 		display: grid;
@@ -1593,7 +1583,7 @@
 		margin-bottom: var(--ii-space-stack-md, 16px);
 	}
 
-	.activate-checkbox input[type="checkbox"] {
+	.activate-checkbox :global([data-slot="checkbox"]) {
 		margin-top: 2px;
 		flex-shrink: 0;
 	}

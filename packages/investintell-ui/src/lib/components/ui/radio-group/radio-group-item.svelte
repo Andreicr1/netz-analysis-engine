@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { RadioGroup as RadioGroupPrimitive } from "bits-ui";
-	import { Circle as CircleIcon } from 'phosphor-svelte';
+	import { Circle as CircleIcon } from 'lucide-svelte';
 	import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
 
 	let {

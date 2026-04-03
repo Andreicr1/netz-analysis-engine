@@ -5,6 +5,8 @@
 	import "./screener.css";
 	import { goto } from "$app/navigation";
 	import { page } from "$app/stores";
+	import { Button } from "@investintell/ui/components/ui/button";
+	import { Checkbox } from "@investintell/ui/components/ui/checkbox";
 	import { StatusBadge, formatAUM, formatPercent } from "@investintell/ui";
 	import type { ScreeningResult } from "$lib/types/screening";
 	import type { ManagerRow, ScreenerPage } from "$lib/types/manager-screener";
@@ -116,10 +118,9 @@
 						onclick={() => onOpenManagerDetail(manager)}
 					>
 						<td class="std-check" onclick={(e) => e.stopPropagation()}>
-							<input
-								type="checkbox"
+							<Checkbox
 								checked={selectedManagers.has(manager.crd_number)}
-								onchange={() => onToggleSelection(manager.crd_number)}
+								onCheckedChange={() => onToggleSelection(manager.crd_number)}
 							/>
 						</td>
 						<td class="std-expand" onclick={(e) => { e.stopPropagation(); onToggleExpand(manager.crd_number); }}>
@@ -205,9 +206,9 @@
 	</div>
 
 	<!-- Pagination -->
-	<div class="scr-pagination">
-		<button class="scr-page-btn" disabled={screener.page <= 1} onclick={() => goToPage(screener.page - 1)}>Previous</button>
-		<span class="scr-page-info">Page {screener.page} · {screener.total_count} total</span>
-		<button class="scr-page-btn" disabled={!screener.has_next} onclick={() => goToPage(screener.page + 1)}>Next</button>
+	<div class="flex items-center justify-center gap-3 py-3">
+		<Button variant="outline" size="sm" disabled={screener.page <= 1} onclick={() => goToPage(screener.page - 1)}>Previous</Button>
+		<span class="text-xs text-muted-foreground tabular-nums">Page {screener.page} · {screener.total_count} total</span>
+		<Button variant="outline" size="sm" disabled={!screener.has_next} onclick={() => goToPage(screener.page + 1)}>Next</Button>
 	</div>
 {/if}

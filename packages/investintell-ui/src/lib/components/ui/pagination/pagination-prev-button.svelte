@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Pagination as PaginationPrimitive } from "bits-ui";
-	import { CaretLeft as ChevronLeftIcon } from 'phosphor-svelte';
+	import { ChevronLeft as ChevronLeftIcon } from 'lucide-svelte';
 	import { cn } from "$lib/utils.js";
 	import { buttonVariants } from "../button/index.js";
 

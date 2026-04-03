@@ -124,11 +124,11 @@ h6 {
 	font-feature-settings: var(--ii-font-features);
 }
 
-h1,
-h2 {
-	font-weight: var(--ii-weight-semibold);
+h1 {
+	font-weight: var(--ii-weight-extrabold);
 }
 
+h2,
 h3,
 h4,
 h5,

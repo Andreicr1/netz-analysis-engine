@@ -5,6 +5,7 @@
 <script lang="ts">
 	import { goto } from "$app/navigation";
 	import { getContext } from "svelte";
+	import { Checkbox } from "@investintell/ui/components/ui/checkbox";
 	import { formatAUM, ContextPanel } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { PageData } from "./$types";
@@ -134,11 +135,10 @@
 						{@const checked = selectedCrds.includes(mgr.crd_number)}
 						<tr class="mgrs-row" class:mgrs-row--selected={checked}>
 							<td class="mgrs-td mgrs-td--check">
-								<input
-									type="checkbox"
+								<Checkbox
 									{checked}
 									disabled={!checked && selectedCrds.length >= 3}
-									onchange={() => toggleSelect(mgr.crd_number)}
+									onCheckedChange={() => toggleSelect(mgr.crd_number)}
 								/>
 							</td>
 							<td class="mgrs-td mgrs-td--name">

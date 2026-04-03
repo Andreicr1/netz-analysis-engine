@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { cn, type WithElementRef } from "$lib/utils.js";
 	import type { HTMLLiAttributes } from "svelte/elements";
-	import { CaretRight as ChevronRightIcon } from 'phosphor-svelte';
+	import { ChevronRight as ChevronRightIcon } from 'lucide-svelte';
 
 	let {
 		ref = $bindable(null),

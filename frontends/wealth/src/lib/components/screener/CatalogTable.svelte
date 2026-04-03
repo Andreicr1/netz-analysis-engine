@@ -6,6 +6,8 @@
 <script lang="ts">
 	import { goto } from "$app/navigation";
 	import "./screener.css";
+	import { Button } from "@investintell/ui/components/ui/button";
+	import { Checkbox } from "@investintell/ui/components/ui/checkbox";
 	import { formatCompact, formatPercent } from "@investintell/ui";
 	import type { UnifiedFundItem, UnifiedCatalogPage } from "$lib/types/catalog";
 	import { EMPTY_CATALOG_PAGE, FUND_TYPE_LABELS } from "$lib/types/catalog";
@@ -404,13 +406,11 @@
 										class:ct-class-row--selected={isClassSelected(cls)}
 									>
 										<td class="ct-col-expand"></td>
-										<td class="ct-col-check">
-											<input
-												type="checkbox"
-												class="ct-class-checkbox"
+										<td class="ct-col-check" onclick={(e) => e.stopPropagation()}>
+											<Checkbox
 												checked={isClassSelected(cls)}
-												onchange={() => toggleClass(cls)}
-												onclick={(e) => e.stopPropagation()}
+												onCheckedChange={() => toggleClass(cls)}
+												aria-label="Select share class"
 											/>
 										</td>
 										<td></td>
@@ -487,17 +487,10 @@
 	</div>
 
 	{#if !infiniteScroll}
-	<!-- Server-side pagination -->
-	<div class="scr-pagination">
-		<button class="scr-page-btn" disabled={catalog.page <= 1} onclick={() => onPageChange?.(catalog.page - 1)}>
-			Prev
-		</button>
-		<span class="scr-page-info">
-			{catalog.page} / {totalPages}
-		</span>
-		<button class="scr-page-btn" disabled={!catalog.has_next} onclick={() => onPageChange?.(catalog.page + 1)}>
-			Next
-		</button>
+	<div class="flex items-center justify-center gap-3 py-3">
+		<Button variant="outline" size="sm" disabled={catalog.page <= 1} onclick={() => onPageChange?.(catalog.page - 1)}>Prev</Button>
+		<span class="text-xs text-muted-foreground tabular-nums">{catalog.page} / {totalPages}</span>
+		<Button variant="outline" size="sm" disabled={!catalog.has_next} onclick={() => onPageChange?.(catalog.page + 1)}>Next</Button>
 	</div>
 	{/if}
 {/if}

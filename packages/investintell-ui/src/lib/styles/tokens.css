@@ -1,50 +1,49 @@
 /* ============================================================
- * InvestIntell Design Tokens v2.0
- * Font:    IBM Plex Sans (interface) + IBM Plex Mono (data)
+ * InvestIntell Design Tokens v3.0
+ * Font:    Inter (interface) + Geist Mono (data)
  * Mode:    Dark-first (:root) + .light override
- * Palette: Zinc neutral + Gold accent (#c9a84c) + Teal secondary
+ * Palette: Tailwind Slate neutral — shadcn/ui aligned
  * ============================================================ */
 
 :root {
 	color-scheme: dark;
 
-	/* ── Brand ── */
-	--ii-brand-primary:     #c9a84c;   /* gold */
-	--ii-brand-secondary:   #1a7f6e;   /* teal */
-	--ii-brand-navy:        #18181b;   /* zinc-950 — used in PDF covers */
-	--ii-brand-accent:      #b8953f;   /* gold hover */
-	--ii-brand-teal-bright: #26a88f;
+	/* ── Brand — neutral Slate (no gold) ── */
+	--ii-brand-primary:     #f8fafc;   /* slate-50 — primary action on dark */
+	--ii-brand-secondary:   #94a3b8;   /* slate-400 */
+	--ii-brand-navy:        #0f172a;   /* slate-900 */
+	--ii-brand-accent:      #e2e8f0;   /* slate-200 — hover accent */
 
 	/* ── Typography ── */
-	--ii-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-	--ii-font-mono: "IBM Plex Mono", "Fira Code", ui-monospace, monospace;
+	--ii-font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+	--ii-font-mono: "Geist Mono Variable", "Geist Mono", "Menlo", ui-monospace, monospace;
 
 	/* ── Text ── */
-	--ii-text-primary:   #e4e4e7;   /* zinc-200 */
-	--ii-text-secondary: #a1a1aa;   /* zinc-400 */
-	--ii-text-muted:     #71717a;   /* zinc-500 */
-	--ii-text-tertiary:  #52525b;   /* zinc-600 */
-	--ii-text-inverse:   #18181b;   /* zinc-950 */
-	--ii-text-accent:    #c9a84c;   /* gold */
+	--ii-text-primary:   #f8fafc;   /* slate-50 */
+	--ii-text-secondary: #cbd5e1;   /* slate-300 */
+	--ii-text-muted:     #94a3b8;   /* slate-400 */
+	--ii-text-tertiary:  #64748b;   /* slate-500 */
+	--ii-text-inverse:   #0f172a;   /* slate-900 */
+	--ii-text-accent:    #f8fafc;   /* slate-50 — was gold */
 
 	/* ── Surface ── */
-	--ii-bg:                #18181b;   /* zinc-950 */
-	--ii-surface:           #1c1c1f;   /* zinc-900 */
-	--ii-surface-alt:       #27272a;   /* zinc-800 */
-	--ii-surface-elevated:  #27272a;   /* zinc-800 */
-	--ii-surface-inset:     #18181b;   /* zinc-950 — sunken fields */
-	--ii-surface-overlay:   rgba(0, 0, 0, 0.72);
-	--ii-surface-raised:    #303033;   /* between zinc-700/800 */
-	--ii-surface-panel:     #1c1c1f;
-	--ii-surface-highlight: rgba(201, 168, 76, 0.08);
-	--ii-surface-accent:    color-mix(in srgb, #c9a84c 6%, #1c1c1f);
+	--ii-bg:                #020817;   /* slate-950 */
+	--ii-surface:           #0f172a;   /* slate-900 */
+	--ii-surface-alt:       #1e293b;   /* slate-800 */
+	--ii-surface-elevated:  #1e293b;   /* slate-800 */
+	--ii-surface-inset:     #020817;   /* slate-950 — sunken fields */
+	--ii-surface-overlay:   rgba(2, 8, 23, 0.72);
+	--ii-surface-raised:    #1e293b;   /* slate-800 */
+	--ii-surface-panel:     #0f172a;   /* slate-900 */
+	--ii-surface-highlight: rgba(248, 250, 252, 0.06);
+	--ii-surface-accent:    color-mix(in srgb, #f8fafc 6%, #0f172a);
 
 	/* ── Border ── */
-	--ii-border-subtle:  #27272a;               /* zinc-800 */
-	--ii-border:         #3f3f46;               /* zinc-700 */
-	--ii-border-strong:  #52525b;               /* zinc-600 */
-	--ii-border-focus:   #c9a84c;               /* gold */
-	--ii-border-accent:  rgba(201, 168, 76, 0.30);
+	--ii-border-subtle:  #1e293b;               /* slate-800 */
+	--ii-border:         #334155;               /* slate-700 */
+	--ii-border-strong:  #475569;               /* slate-600 */
+	--ii-border-focus:   #f8fafc;               /* slate-50 */
+	--ii-border-accent:  rgba(248, 250, 252, 0.20);
 	--ii-border-inverse: rgba(255, 255, 255, 0.10);
 
 	/* ── Semantic ── */
@@ -54,10 +53,10 @@
 	--ii-info:    #58a6ff;
 
 	/* ── Semantic subtle ── */
-	--ii-success-subtle: color-mix(in srgb, #3fb950 12%, #1c1c1f);
-	--ii-warning-subtle: color-mix(in srgb, #e3b341 14%, #1c1c1f);
-	--ii-danger-subtle:  color-mix(in srgb, #f85149 12%, #1c1c1f);
-	--ii-info-subtle:    color-mix(in srgb, #58a6ff 12%, #1c1c1f);
+	--ii-success-subtle: color-mix(in srgb, #3fb950 12%, #0f172a);
+	--ii-warning-subtle: color-mix(in srgb, #e3b341 14%, #0f172a);
+	--ii-danger-subtle:  color-mix(in srgb, #f85149 12%, #0f172a);
+	--ii-info-subtle:    color-mix(in srgb, #58a6ff 12%, #0f172a);
 
 	/* ── Regime ── */
 	--ii-regime-risk-on:   #3fb950;
@@ -65,12 +64,13 @@
 	--ii-regime-inflation: #f0883e;
 	--ii-regime-crisis:    #f85149;
 
-	/* ── Chart palette ── */
-	--ii-chart-1: #c9a84c;   /* gold — primary series */
-	--ii-chart-2: #26a88f;   /* teal-bright */
-	--ii-chart-3: #58a6ff;   /* blue */
-	--ii-chart-4: #e3b341;   /* amber */
-	--ii-chart-5: #71717a;   /* zinc-500 — muted/benchmark */
+	/* ── Chart palette — Slate monochrome + blue accent ── */
+	--ii-chart-1: #f8fafc;   /* slate-50 — primary series */
+	--ii-chart-2: #94a3b8;   /* slate-400 */
+	--ii-chart-3: #64748b;   /* slate-500 */
+	--ii-chart-4: #475569;   /* slate-600 */
+	--ii-chart-5: #334155;   /* slate-700 — muted/benchmark */
+	--ii-chart-accent: #3b82f6;  /* blue-500 — emphasis when 5+ series need contrast */
 
 	/* ── Radius ── */
 	--ii-radius-xs:   2px;
@@ -86,12 +86,12 @@
 	--ii-control-lg: 44px;
 
 	/* ── Extended utility tokens ── */
-	--ii-accent-soft:      color-mix(in srgb, #c9a84c 8%, #1c1c1f);
-	--ii-accent-muted:     color-mix(in srgb, #c9a84c 10%, #18181b);
-	--ii-focus-ring:       color-mix(in srgb, #c9a84c 30%, transparent);
-	--ii-bg-hover:         color-mix(in srgb, #c9a84c 5%, #27272a);
-	--ii-bg-secondary:     #27272a;
-	--ii-selection-bg:     color-mix(in srgb, #c9a84c 20%, #18181b);
+	--ii-accent-soft:      color-mix(in srgb, #f8fafc 6%, #0f172a);
+	--ii-accent-muted:     color-mix(in srgb, #f8fafc 8%, #020817);
+	--ii-focus-ring:       color-mix(in srgb, #f8fafc 25%, transparent);
+	--ii-bg-hover:         color-mix(in srgb, #f8fafc 5%, #1e293b);
+	--ii-bg-secondary:     #1e293b;
+	--ii-selection-bg:     color-mix(in srgb, #94a3b8 20%, #020817);
 	--ii-selection-color:  var(--ii-text-primary);
 
 	/* ── Density ── */
@@ -121,7 +121,7 @@
 	--secondary-foreground: var(--ii-text-primary);
 	--muted:                var(--ii-surface-alt);
 	--muted-foreground:     var(--ii-text-muted);
-	--accent:               var(--ii-surface-inset);
+	--accent:               var(--ii-surface-alt);
 	--accent-foreground:    var(--ii-text-primary);
 	--destructive:          var(--ii-danger);
 	--destructive-foreground: var(--ii-text-inverse);
@@ -149,72 +149,72 @@
 [data-theme="light"] {
 	color-scheme: light;
 
-	/* ── Brand ── */
-	--ii-brand-primary:     #9a7a2e;   /* gold darkened for legibility on light */
-	--ii-brand-secondary:   #0f6b5a;
-	--ii-brand-accent:      #806520;
-	--ii-brand-teal-bright: #1a7f6e;
+	/* ── Brand — neutral Slate ── */
+	--ii-brand-primary:     #0f172a;   /* slate-900 — primary action = dark */
+	--ii-brand-secondary:   #475569;   /* slate-600 */
+	--ii-brand-accent:      #334155;   /* slate-700 */
 
 	/* ── Text ── */
-	--ii-text-primary:   #18181b;   /* zinc-950 */
-	--ii-text-secondary: #3f3f46;   /* zinc-700 */
-	--ii-text-muted:     #71717a;   /* zinc-500 */
-	--ii-text-tertiary:  #a1a1aa;   /* zinc-400 */
-	--ii-text-inverse:   #fafafa;   /* zinc-50 */
-	--ii-text-accent:    #9a7a2e;
+	--ii-text-primary:   #0f172a;   /* slate-900 */
+	--ii-text-secondary: #475569;   /* slate-600 */
+	--ii-text-muted:     #64748b;   /* slate-500 */
+	--ii-text-tertiary:  #94a3b8;   /* slate-400 */
+	--ii-text-inverse:   #f8fafc;   /* slate-50 */
+	--ii-text-accent:    #0f172a;   /* slate-900 */
 
 	/* ── Surface ── */
-	--ii-bg:                #fafafa;   /* zinc-50 */
+	--ii-bg:                #ffffff;
 	--ii-surface:           #ffffff;
-	--ii-surface-alt:       #f4f4f5;   /* zinc-100 */
+	--ii-surface-alt:       #f1f5f9;   /* slate-100 */
 	--ii-surface-elevated:  #ffffff;
-	--ii-surface-inset:     #e4e4e7;   /* zinc-200 */
-	--ii-surface-overlay:   rgba(24, 24, 27, 0.48);
+	--ii-surface-inset:     #f1f5f9;   /* slate-100 */
+	--ii-surface-overlay:   rgba(15, 23, 42, 0.48);
 	--ii-surface-raised:    #ffffff;
-	--ii-surface-panel:     #fafafa;
-	--ii-surface-highlight: rgba(154, 122, 46, 0.08);
-	--ii-surface-accent:    color-mix(in srgb, #9a7a2e 6%, white);
+	--ii-surface-panel:     #ffffff;
+	--ii-surface-highlight: rgba(15, 23, 42, 0.04);
+	--ii-surface-accent:    color-mix(in srgb, #0f172a 4%, white);
 
 	/* ── Border ── */
-	--ii-border-subtle:  #e4e4e7;               /* zinc-200 */
-	--ii-border:         #d4d4d8;               /* zinc-300 */
-	--ii-border-strong:  #a1a1aa;               /* zinc-400 */
-	--ii-border-focus:   #9a7a2e;
-	--ii-border-accent:  rgba(154, 122, 46, 0.30);
+	--ii-border-subtle:  #e2e8f0;               /* slate-200 */
+	--ii-border:         #e2e8f0;               /* slate-200 */
+	--ii-border-strong:  #cbd5e1;               /* slate-300 */
+	--ii-border-focus:   #0f172a;               /* slate-900 */
+	--ii-border-accent:  rgba(15, 23, 42, 0.16);
 	--ii-border-inverse: rgba(0, 0, 0, 0.08);
 
 	/* ── Semantic ── */
 	--ii-success: #2ea043;
 	--ii-warning: #d29922;
-	--ii-danger:  #da3633;
+	--ii-danger:  #ef4444;   /* red-500 */
 	--ii-info:    #0969da;
 
 	/* ── Semantic subtle ── */
 	--ii-success-subtle: color-mix(in srgb, #2ea043 10%, white);
 	--ii-warning-subtle: color-mix(in srgb, #d29922 12%, white);
-	--ii-danger-subtle:  color-mix(in srgb, #da3633 10%, white);
+	--ii-danger-subtle:  color-mix(in srgb, #ef4444 10%, white);
 	--ii-info-subtle:    color-mix(in srgb, #0969da 10%, white);
 
 	/* ── Regime ── */
 	--ii-regime-risk-on:   #2ea043;
 	--ii-regime-risk-off:  #d29922;
 	--ii-regime-inflation: #bc4c00;
-	--ii-regime-crisis:    #da3633;
+	--ii-regime-crisis:    #ef4444;
 
-	/* ── Chart palette ── */
-	--ii-chart-1: #9a7a2e;
-	--ii-chart-2: #1a7f6e;
-	--ii-chart-3: #0969da;
-	--ii-chart-4: #d29922;
-	--ii-chart-5: #a1a1aa;   /* zinc-400 */
+	/* ── Chart palette — Slate monochrome ── */
+	--ii-chart-1: #0f172a;   /* slate-900 — primary series */
+	--ii-chart-2: #64748b;   /* slate-500 */
+	--ii-chart-3: #94a3b8;   /* slate-400 */
+	--ii-chart-4: #cbd5e1;   /* slate-300 */
+	--ii-chart-5: #e2e8f0;   /* slate-200 — muted/benchmark */
+	--ii-chart-accent: #3b82f6;  /* blue-500 — emphasis for 5+ series */
 
 	/* ── Extended utility tokens ── */
-	--ii-accent-soft:     color-mix(in srgb, #9a7a2e 8%, white);
-	--ii-accent-muted:    color-mix(in srgb, #9a7a2e 10%, #fafafa);
-	--ii-focus-ring:      color-mix(in srgb, #9a7a2e 28%, transparent);
-	--ii-bg-hover:        #f4f4f5;
-	--ii-bg-secondary:    #f4f4f5;
-	--ii-selection-bg:    color-mix(in srgb, #9a7a2e 14%, white 86%);
+	--ii-accent-soft:     color-mix(in srgb, #0f172a 4%, white);
+	--ii-accent-muted:    color-mix(in srgb, #0f172a 6%, #ffffff);
+	--ii-focus-ring:      color-mix(in srgb, #0f172a 20%, transparent);
+	--ii-bg-hover:        #f1f5f9;
+	--ii-bg-secondary:    #f1f5f9;
+	--ii-selection-bg:    color-mix(in srgb, #94a3b8 14%, white);
 	--ii-selection-color: var(--ii-text-primary);
 
 	/* ── Domain-semantic aliases ── */
@@ -240,7 +240,7 @@
 	--secondary-foreground: var(--ii-text-primary);
 	--muted:                var(--ii-surface-alt);
 	--muted-foreground:     var(--ii-text-muted);
-	--accent:               var(--ii-surface-inset);
+	--accent:               var(--ii-surface-alt);
 	--accent-foreground:    var(--ii-text-primary);
 	--destructive:          var(--ii-danger);
 	--destructive-foreground: var(--ii-text-inverse);

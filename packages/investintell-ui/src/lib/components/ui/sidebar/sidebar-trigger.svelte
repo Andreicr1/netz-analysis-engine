@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Button } from "$lib/components/ui/button/index.js";
-	import { SidebarSimple as PanelLeftIcon } from 'phosphor-svelte';
+	import { PanelLeft as PanelLeftIcon } from 'lucide-svelte';
 	import { cn } from "$lib/utils.js";
 	import type { ComponentProps } from "svelte";
 	import { useSidebar } from "./context.svelte.js";
