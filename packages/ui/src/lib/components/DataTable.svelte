@@ -212,15 +212,15 @@
 				{/each}
 			</thead>
 			<tbody>
-				{#each table.getRowModel().rows as row (row.id)}
+				{#each table.getRowModel().rows as row, i (row.id)}
 					<!-- svelte-ignore a11y_click_events_have_key_events -->
 					<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 					<tr
-						class="border-b border-(--netz-border-subtle) bg-(--netz-surface-elevated) transition-colors last:border-b-0 hover:bg-(--netz-accent-soft) {onRowClick ? 'cursor-pointer' : ''}"
+						class="h-10 border-0 transition-colors {i % 2 === 0 ? 'bg-background' : 'bg-slate-50/80'} hover:bg-muted/50 {onRowClick ? 'cursor-pointer' : ''}"
 						onclick={() => onRowClick?.(row.original)}
 					>
 						{#each row.getVisibleCells() as cell (cell.id)}
-							<td class="px-4 py-3.5 align-middle text-(--netz-text-primary)">
+							<td class="px-3 py-1 align-middle text-sm text-foreground {cell.column.columnDef.meta?.numeric ? 'text-right tabular-nums font-semibold' : ''} {cell.column.columnDef.meta?.muted ? 'text-muted-foreground font-medium' : ''}">
 								<FlexRender content={cell.column.columnDef.cell} context={cell.getContext()} />
 							</td>
 						{/each}

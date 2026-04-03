@@ -222,6 +222,7 @@
 			header: "CRD",
 			cell: ({ row }) => row.original.crd_number,
 			enableSorting: false,
+			meta: { muted: true },
 		},
 		{
 			accessorKey: "aum_total",
@@ -231,35 +232,13 @@
 			enableSorting: false,
 			meta: { numeric: true },
 		},
-		{
-			accessorKey: "position_count",
-			header: "Holdings",
-			cell: ({ row }) =>
-				row.original.position_count != null
-					? row.original.position_count.toLocaleString()
-					: "\u2014",
-			enableSorting: false,
-			meta: { numeric: true },
-		},
-		{
-			accessorKey: "state",
-			header: "Domicile",
-			cell: ({ row }) => row.original.state ?? row.original.country ?? "\u2014",
-			enableSorting: false,
-		},
-		{
-			accessorKey: "registration_status",
-			header: "Status",
-			cell: ({ row }) => row.original.registration_status ?? "\u2014",
-			enableSorting: false,
-		},
 	];
 
 	// ── CSV Export ──
 	function exportCSV() {
 		const items = managers.managers;
 		if (items.length === 0) return;
-		const headers = ["Manager", "CRD", "AUM", "Holdings", "State", "Status"];
+		const headers = ["Manager", "CRD", "AUM"];
 		const lines = [
 			headers.join(","),
 			...items.map((r) =>
@@ -267,9 +246,6 @@
 					`"${r.firm_name}"`,
 					r.crd_number,
 					r.aum_total ?? "",
-					r.position_count ?? "",
-					r.state ?? "",
-					r.registration_status ?? "",
 				].join(","),
 			),
 		];
@@ -388,24 +364,6 @@
 				onRowClick={(row) => openManagerFunds(row as ManagerRow)}
 			/>
 
-			<!-- Server-side pagination -->
-			{#if managers.total_count > managers.page_size}
-				<div class="scr-pagination">
-					<button
-						class="scr-page-btn"
-						disabled={managers.page <= 1}
-						onclick={() => goPage(managers.page - 1)}>&larr; Previous</button
-					>
-					<span class="scr-page-info">
-						Page {managers.page} of {Math.ceil(managers.total_count / managers.page_size)}
-					</span>
-					<button
-						class="scr-page-btn"
-						disabled={!managers.has_next}
-						onclick={() => goPage(managers.page + 1)}>Next &rarr;</button
-					>
-				</div>
-			{/if}
 		</div>
 	{:else}
 		<!-- ════════════════ SCREENING TAB ════════════════ -->
@@ -470,7 +428,7 @@
 	}
 
 	/* ── Tabs (shadcn overrides) ── */
-	.scr-tabs {
+	:global(.scr-tabs) {
 		padding: 0 24px;
 		flex-shrink: 0;
 	}
@@ -570,41 +528,4 @@
 		color: var(--ii-text-primary);
 	}
 
-	/* ── Server-side pagination ── */
-	.scr-pagination {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 16px;
-		padding: 10px 16px;
-		border-top: 1px solid var(--ii-border-subtle);
-		flex-shrink: 0;
-	}
-
-	.scr-page-btn {
-		height: 30px;
-		padding: 0 14px;
-		border: 1px solid var(--ii-border);
-		border-radius: 6px;
-		background: var(--ii-surface-elevated);
-		color: var(--ii-text-secondary);
-		font-size: 12px;
-		font-weight: 600;
-		font-family: var(--ii-font-sans);
-		cursor: pointer;
-		transition: all 80ms ease;
-	}
-	.scr-page-btn:hover:not(:disabled) {
-		border-color: var(--ii-border-strong);
-		color: var(--ii-text-primary);
-	}
-	.scr-page-btn:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
-	}
-
-	.scr-page-info {
-		font-size: 12px;
-		color: var(--ii-text-muted);
-	}
 </style>
