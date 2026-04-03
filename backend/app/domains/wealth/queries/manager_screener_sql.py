@@ -236,11 +236,11 @@ def build_screener_queries(
     if filters.registration_status:
         conditions.append(sec_managers.c.registration_status == filters.registration_status)
     else:
-        # Default: only show active advisers (Registered + state-registered)
-        # Excludes 910k+ defunct/withdrawn "other" and 45k SEC-exempt "operating"
-        conditions.append(
-            sec_managers.c.registration_status.in_(("Registered", "investment")),
-        )
+        # Default: only SEC-registered RIAs with private funds (5,657 of 976k)
+        # Excludes 910k defunct, 45k SEC-exempt, 3.9k state-registered (zero data),
+        # and 11.8k Registered without funds (pure AUM managers, no fund vehicles)
+        conditions.append(sec_managers.c.registration_status == "Registered")
+        conditions.append(sec_managers.c.private_fund_count > 0)
     if filters.compliance_clean is True:
         conditions.append(
             (sec_managers.c.compliance_disclosures == 0)
