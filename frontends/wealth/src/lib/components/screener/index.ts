@@ -19,6 +19,10 @@ export { default as FundDetailPanel } from "./FundDetailPanel.svelte";
 // ── Manager hierarchy ──
 export { default as ManagerHierarchyTable } from "./ManagerHierarchyTable.svelte";
 export { default as ManagerDetailPanel } from "./ManagerDetailPanel.svelte";
+
+// ── 3-Level Drill-Down Sheets ──
+export { default as ManagerFundsSheet } from "./ManagerFundsSheet.svelte";
+export { default as FundClassesSheet } from "./FundClassesSheet.svelte";
 export { default as PeerComparisonView } from "./PeerComparisonView.svelte";
 
 // ── SEC analysis (moved from us-fund-analysis) ──

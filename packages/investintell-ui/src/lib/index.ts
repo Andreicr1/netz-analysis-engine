@@ -43,6 +43,8 @@ export type { AuditTrailEntry, AuditTrailStatus, AuditTrailFieldChange } from ".
 export { default as AlertBanner } from "./components/analytical/AlertBanner.svelte";
 export { default as DataTable } from "./components/analytical/DataTable.svelte";
 export { default as DataTableToolbar } from "./components/analytical/DataTableToolbar.svelte";
+export { default as Combobox } from "./components/analytical/Combobox.svelte";
+export { default as DatePicker } from "./components/analytical/DatePicker.svelte";
 
 // ── Legacy Wrapper Components (ported from @netz/ui) ────────────
 export { default as Button } from "./components/analytical/Button.svelte";

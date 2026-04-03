@@ -115,6 +115,7 @@ class CatalogFilters:
     has_aum: bool | None = None            # True = only funds with AUM > 0
     domicile: str | None = None
     manager: str | None = None            # text search on manager name
+    manager_id: str | None = None         # exact match on manager_id (CRD number)
     sort: str = "name_asc"               # name_asc | name_desc | aum_desc | aum_asc
     page: int = 1
     page_size: int = 50
@@ -268,6 +269,10 @@ def _build_base_stmt(f: CatalogFilters) -> Select[Any]:
     if f.manager:
         escaped = _escape_ilike(f.manager)
         conditions.append(mv_unified_funds.c.manager_name.ilike(f"%{escaped}%"))
+
+    # 10b. Manager ID (exact CRD match)
+    if f.manager_id:
+        conditions.append(mv_unified_funds.c.manager_id == f.manager_id)
         
     # 11. Prospectus filters
     if f.max_expense_ratio is not None:
@@ -321,6 +326,7 @@ def build_catalog_facets_query(filters: CatalogFilters) -> Select[Any] | None:
         has_aum=filters.has_aum,
         domicile=filters.domicile,
         manager=filters.manager,
+        manager_id=filters.manager_id,
         page=1,
         page_size=1_000_000,
     )

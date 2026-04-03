@@ -49,9 +49,11 @@ from app.domains.wealth.schemas.catalog import (
     CatalogFacetItem,
     CatalogFacets,
     DisclosureMatrix,
+    FundClassesResponse,
     FundFactSheet,
     FundHolding,
     NavPoint,
+    ShareClassItem,
     TeamMember,
     UnifiedCatalogPage,
     UnifiedFundItem,
@@ -1464,6 +1466,7 @@ async def get_catalog(
     has_aum: bool | None = Query(None, description="Only funds with AUM > 0"),
     domicile: str | None = Query(None),
     manager: str | None = Query(None, description="Manager name text search"),
+    manager_id: str | None = Query(None, description="Exact manager CRD number"),
     sort: str = Query("name_asc", description="name_asc | name_desc | aum_desc | aum_asc"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
@@ -1484,6 +1487,7 @@ async def get_catalog(
         has_aum=has_aum,
         domicile=domicile,
         manager=manager,
+        manager_id=manager_id,
         sort=sort,
         page=page,
         page_size=page_size,
@@ -2025,4 +2029,69 @@ async def get_fund_fact_sheet(
         prospectus_stats=evidence["stats"],
         share_classes=enrichment.get("share_classes", []),
         scoring_metrics=scoring_metrics,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  Fund share classes (Level 3 drill-down)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@router.get(
+    "/funds/{external_id}/classes",
+    response_model=FundClassesResponse,
+    summary="Share classes for a specific registered fund",
+)
+@route_cache(ttl=300, key_prefix="screener:fund_classes", global_key=True)
+async def get_fund_classes(
+    external_id: str,
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+) -> FundClassesResponse:
+    """Return share classes for a registered fund identified by CIK.
+
+    Queries sec_fund_classes by CIK (external_id for registered_us funds).
+    XBRL fractions (expense_ratio_pct, avg_annual_return_pct, portfolio_turnover_pct)
+    are stored as decimals — multiply by 100 for percentage display.
+    """
+    _require_investment_role(actor)
+
+    from app.shared.models import SecFundClass, SecRegisteredFund
+
+    # Get fund name from registered funds table
+    fund_row = (
+        await db.execute(
+            select(SecRegisteredFund.fund_name).where(SecRegisteredFund.cik == external_id)
+        )
+    ).scalar_one_or_none()
+
+    # Query share classes
+    rows = (
+        await db.execute(
+            select(SecFundClass)
+            .where(SecFundClass.cik == external_id)
+            .order_by(SecFundClass.class_name.asc())
+        )
+    ).scalars().all()
+
+    classes = [
+        ShareClassItem(
+            class_id=r.class_id,
+            class_name=r.class_name,
+            ticker=r.ticker,
+            expense_ratio_pct=float(r.expense_ratio_pct * 100) if r.expense_ratio_pct is not None else None,
+            net_assets=float(r.net_assets) if r.net_assets is not None else None,
+            avg_annual_return_pct=float(r.avg_annual_return_pct * 100) if r.avg_annual_return_pct is not None else None,
+            holdings_count=r.holdings_count,
+            portfolio_turnover_pct=float(r.portfolio_turnover_pct * 100) if r.portfolio_turnover_pct is not None else None,
+            perf_inception_date=r.perf_inception_date,
+        )
+        for r in rows
+    ]
+
+    return FundClassesResponse(
+        external_id=external_id,
+        fund_name=fund_row,
+        classes=classes,
+        total_classes=len(classes),
     )

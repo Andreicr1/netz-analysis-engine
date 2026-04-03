@@ -221,3 +221,24 @@ export const EMPTY_SECURITY_FACETS: SecurityFacets = {
 	exchanges: [],
 	total: 0,
 };
+
+// ── Share Classes (Level 3 drill-down) ──
+
+export interface ShareClassItem {
+	class_id: string;
+	class_name: string | null;
+	ticker: string | null;
+	expense_ratio_pct: number | null;
+	net_assets: number | null;
+	avg_annual_return_pct: number | null;
+	holdings_count: number | null;
+	portfolio_turnover_pct: number | null;
+	perf_inception_date: string | null;
+}
+
+export interface FundClassesResponse {
+	external_id: string;
+	fund_name: string | null;
+	classes: ShareClassItem[];
+	total_classes: number;
+}

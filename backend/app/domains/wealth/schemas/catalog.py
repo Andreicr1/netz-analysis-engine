@@ -152,3 +152,26 @@ class FundFactSheet(BaseModel):
     prospectus_stats: dict[str, Any] | None = None
     share_classes: list[dict[str, Any]] = Field(default_factory=list)
     scoring_metrics: dict[str, Any] | None = None
+
+
+class ShareClassItem(BaseModel):
+    """Single share class within a registered fund."""
+
+    class_id: str
+    class_name: str | None = None
+    ticker: str | None = None
+    expense_ratio_pct: float | None = None
+    net_assets: float | None = None
+    avg_annual_return_pct: float | None = None
+    holdings_count: int | None = None
+    portfolio_turnover_pct: float | None = None
+    perf_inception_date: date | None = None
+
+
+class FundClassesResponse(BaseModel):
+    """Share classes for a specific fund."""
+
+    external_id: str
+    fund_name: str | None = None
+    classes: list[ShareClassItem] = Field(default_factory=list)
+    total_classes: int = 0
