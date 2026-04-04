@@ -235,6 +235,30 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Netz Analysis Engine shutdown complete")
 
 
+async def _server_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    """ServerErrorMiddleware handler — ensures CORS headers on 500 responses.
+
+    Without this, Starlette's default handler returns text/plain without CORS
+    headers, causing browsers to mask the real 500 as "blocked by CORS".
+    """
+    import structlog
+    import traceback as tb_mod
+    slog = structlog.get_logger()
+    slog.error("unhandled_exception", path=str(request.url.path), error=str(exc), exc_type=type(exc).__name__)
+
+    origin = request.headers.get("origin", "")
+    headers: dict[str, str] = {}
+    if origin and origin in settings.cors_origins:
+        headers["access-control-allow-origin"] = origin
+        headers["access-control-allow-credentials"] = "true"
+
+    detail = "Internal server error"
+    if settings.is_development:
+        detail = f"{type(exc).__name__}: {exc}\n{''.join(tb_mod.format_tb(exc.__traceback__))}"
+
+    return JSONResponse(status_code=500, content={"detail": detail}, headers=headers)
+
+
 app = FastAPI(
     title="Netz Analysis Engine",
     description="Unified multi-tenant analysis engine for institutional investment verticals",
@@ -247,7 +271,7 @@ from app.core.middleware.rate_limit import RateLimitMiddleware  # noqa: E402
 
 app.add_middleware(RateLimitMiddleware)
 
-# CORS registered last (outermost) — handles preflight OPTIONS before rate limiter sees it
+# CORS registered next — handles preflight OPTIONS before rate limiter sees it
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -256,6 +280,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ServerErrorMiddleware registered LAST (outermost) with custom CORS-safe handler.
+# Starlette auto-adds ServerErrorMiddleware, but with the default text/plain handler
+# that lacks CORS headers. Adding it explicitly with our handler takes precedence.
+from starlette.middleware.errors import ServerErrorMiddleware  # noqa: E402
+
+app.add_middleware(ServerErrorMiddleware, handler=_server_error_handler)
 
 
 
@@ -294,6 +325,8 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": detail},
         headers=headers,
     )
+
+
 
 
 # ── Health endpoints ─────────────────────────────────────────

@@ -4,13 +4,17 @@
   Designed for fund-centric deep dives and print-ready reports.
 -->
 <script lang="ts">
+	import { getContext } from "svelte";
+	import { goto } from "$app/navigation";
 	import { formatCompact, formatPercent, formatDate, ContextPanel } from "@investintell/ui";
+	import { Sparkles, Loader2, FileCheck } from "lucide-svelte";
 	import NavPerformanceChart from "$lib/components/charts/NavPerformanceChart.svelte";
 	import SectorAllocationChart from "$lib/components/charts/SectorAllocationChart.svelte";
 	import SectorAllocationTreemap from "$lib/components/charts/SectorAllocationTreemap.svelte";
 	import FundScoringRadar from "$lib/components/charts/FundScoringRadar.svelte";
 	import DecileBoxplot from "$lib/components/charts/DecileBoxplot.svelte";
 	import ReverseLookupPanel from "$lib/components/holdings/ReverseLookupPanel.svelte";
+	import { createClientApiClient } from "$lib/api/client";
 	import "./factsheet.css";
 
 	let { data } = $props();
@@ -20,6 +24,31 @@
 		nav_history, sector_history, prospectus_stats,
 		share_classes, scoring_metrics
 	} = factSheet;
+
+	// ── DD Report State ──
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
+	const api = createClientApiClient(getToken);
+	let ddGenerating = $state(false);
+	let ddExistingId = $state<string | null>(null);
+
+	async function runDDReport() {
+		if (ddGenerating) return;
+		ddGenerating = true;
+		try {
+			const result = await api.post<{ id: string; instrument_id: string }>("/dd-reports/generate", {
+				instrument_external_id: fund.external_id,
+			});
+			goto(`/screener/dd-reports/${result.instrument_id}/${result.id}`);
+		} catch {
+			ddGenerating = false;
+		}
+	}
+
+	function viewDDReport() {
+		if (ddExistingId) {
+			goto(`/screener/dd-reports/${fund.external_id}/${ddExistingId}`);
+		}
+	}
 
 	// ── Reverse Lookup State ──
 	let rlOpen = $state(false);
@@ -51,12 +80,34 @@
 					<span class="fs-ticker">{fund.ticker}</span>
 				{/if}
 			</div>
-			<div class="fs-manager-box">
-				<span class="fs-mgr-label">Investment Manager</span>
-				<div class="fs-mgr-name">{fund.manager_name || "Standalone"}</div>
-				{#if fund.manager_id}
-					<span class="fs-mgr-id">ID: {fund.manager_id}</span>
+			<div class="fs-header-actions">
+				{#if ddExistingId}
+					<button class="fs-dd-btn fs-dd-btn--view" onclick={viewDDReport}>
+						<FileCheck size={16} />
+						View DD Report
+					</button>
+				{:else}
+					<button
+						class="fs-dd-btn fs-dd-btn--run"
+						onclick={runDDReport}
+						disabled={ddGenerating}
+					>
+						{#if ddGenerating}
+							<Loader2 size={16} class="animate-spin" />
+							Generating...
+						{:else}
+							<Sparkles size={16} />
+							Run DD Report
+						{/if}
+					</button>
 				{/if}
+				<div class="fs-manager-box">
+					<span class="fs-mgr-label">Investment Manager</span>
+					<div class="fs-mgr-name">{fund.manager_name || "Standalone"}</div>
+					{#if fund.manager_id}
+						<span class="fs-mgr-id">ID: {fund.manager_id}</span>
+					{/if}
+				</div>
 			</div>
 		</div>
 
@@ -79,7 +130,7 @@
 			</div>
 			<div class="fs-stat">
 				<span class="fs-stat-label">Exp. Ratio</span>
-				<span class="fs-stat-val">{fund.expense_ratio_pct != null ? formatPercent(fund.expense_ratio_pct / 100) : "\u2014"}</span>
+				<span class="fs-stat-val">{fund.expense_ratio_pct != null ? formatPercent(fund.expense_ratio_pct) : "\u2014"}</span>
 			</div>
 		</div>
 	</header>
@@ -163,7 +214,7 @@
 							<div class="fs-ret-card">
 								<span class="fs-ret-year">{r.year}</span>
 								<span class="fs-ret-val" class:neg={r.annual_return_pct < 0}>
-									{formatPercent(r.annual_return_pct / 100)}
+									{formatPercent(r.annual_return_pct)}
 								</span>
 							</div>
 						{/each}
@@ -197,7 +248,7 @@
 									</button>
 								</td>
 								<td class="fs-holding-meta">{h.sector || "Other"}</td>
-								<td class="r fs-holding-weight">{formatPercent(h.pct_of_nav / 100)}</td>
+								<td class="r fs-holding-weight">{formatPercent(h.pct_of_nav)}</td>
 							</tr>
 						{/each}
 					</tbody>
@@ -225,8 +276,8 @@
 							<tr>
 								<td>{sc.class_id || "Primary"}</td>
 								<td><code class="fs-mini-ticker">{sc.ticker || "\u2014"}</code></td>
-								<td class="r">{sc.expense_ratio_pct != null ? formatPercent(sc.expense_ratio_pct / 100) : "\u2014"}</td>
-								<td class="r">{sc.avg_annual_return_pct != null ? formatPercent(sc.avg_annual_return_pct / 100) : "\u2014"}</td>
+								<td class="r">{sc.expense_ratio_pct != null ? formatPercent(sc.expense_ratio_pct) : "\u2014"}</td>
+								<td class="r">{sc.avg_annual_return_pct != null ? formatPercent(sc.avg_annual_return_pct) : "\u2014"}</td>
 								<td class="r">{formatAum(sc.net_assets)}</td>
 							</tr>
 						{/each}

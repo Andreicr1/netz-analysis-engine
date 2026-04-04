@@ -43,6 +43,7 @@ from app.domains.wealth.queries.catalog_sql import (
     CatalogFilters,
     build_catalog_facets_query,
     build_catalog_query,
+    build_manager_catalog_query,
     sec_money_market_funds,
 )
 from app.domains.wealth.schemas.catalog import (
@@ -52,6 +53,8 @@ from app.domains.wealth.schemas.catalog import (
     FundClassesResponse,
     FundFactSheet,
     FundHolding,
+    ManagerCatalogItem,
+    ManagerCatalogPage,
     NavPoint,
     ShareClassItem,
     TeamMember,
@@ -1550,6 +1553,7 @@ async def get_catalog(
                 expense_ratio_pct=float(r.expense_ratio_pct) if getattr(r, "expense_ratio_pct", None) is not None else None,
                 avg_annual_return_1y=float(r.avg_annual_return_1y) if getattr(r, "avg_annual_return_1y", None) is not None else None,
                 avg_annual_return_10y=float(r.avg_annual_return_10y) if getattr(r, "avg_annual_return_10y", None) is not None else None,
+                class_count=int(r.class_count) if getattr(r, "class_count", None) is not None else 1,
                 is_index=bool(r.is_index) if getattr(r, "is_index", None) is not None else None,
                 is_target_date=bool(r.is_target_date) if getattr(r, "is_target_date", None) is not None else None,
                 is_fund_of_fund=bool(r.is_fund_of_fund) if getattr(r, "is_fund_of_fund", None) is not None else None,
@@ -1616,6 +1620,99 @@ async def get_catalog(
             item.disclosure.nav_status = "unavailable"
 
     return UnifiedCatalogPage(
+        items=items,
+        total=total,
+        page=page,
+        page_size=page_size,
+        has_next=(offset + page_size) < total,
+    )
+
+
+@router.get(
+    "/catalog/managers",
+    response_model=ManagerCatalogPage,
+    summary="Manager-grouped catalog — Level 1 screener (registered advisers with funds)",
+)
+@route_cache(ttl=120, key_prefix="screener:catalog:managers", global_key=True)
+async def get_catalog_managers(
+    q: str | None = Query(None, description="Text search (manager name, fund name, ticker)"),
+    region: str | None = Query(None),
+    fund_universe: str | None = Query(None),
+    fund_type: str | None = Query(None),
+    strategy_label: str | None = Query(None),
+    aum_min: float | None = Query(None, ge=0),
+    has_aum: bool | None = Query(None),
+    sort: str = Query("aum_desc"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db_with_rls),
+) -> ManagerCatalogPage:
+    """Group funds by manager_id, return aggregated AUM + fund types.
+
+    Enriched with location/website from sec_managers table.
+    """
+    filters = CatalogFilters(
+        q=q,
+        region=region,
+        fund_universe=fund_universe,
+        fund_type=fund_type,
+        strategy_label=strategy_label,
+        aum_min=aum_min,
+        has_nav=False,
+        has_aum=has_aum,
+        sort=sort,
+        page=page,
+        page_size=page_size,
+    )
+
+    stmt = build_manager_catalog_query(filters)
+    rows = (await db.execute(stmt)).all()
+
+    total = rows[0]._total if rows else 0
+    offset = (page - 1) * page_size
+
+    # Collect CRDs to batch-lookup sec_managers for location/website
+    crds = [r.manager_id for r in rows if r.manager_id]
+    manager_meta: dict[str, Any] = {}
+    if crds:
+        from sqlalchemy import text as sa_text
+
+        meta_result = await db.execute(
+            sa_text(
+                "SELECT crd_number, state, country, website "
+                "FROM sec_managers WHERE crd_number = ANY(:crds)"
+            ),
+            {"crds": crds},
+        )
+        for mr in meta_result.all():
+            manager_meta[mr.crd_number] = mr
+
+    items: list[ManagerCatalogItem] = []
+    for r in rows:
+        aum_val: float | None = None
+        if r.total_aum is not None:
+            try:
+                aum_val = float(r.total_aum)
+            except (ValueError, TypeError):
+                pass
+
+        fund_types = list(r.fund_types) if r.fund_types else []
+
+        meta = manager_meta.get(r.manager_id)
+        items.append(
+            ManagerCatalogItem(
+                manager_id=r.manager_id,
+                manager_name=r.manager_name or "Unknown",
+                total_aum=aum_val,
+                fund_count=int(r.fund_count),
+                fund_types=fund_types,
+                state=meta.state if meta else None,
+                country=meta.country if meta else None,
+                website=meta.website if meta else None,
+            ),
+        )
+
+    return ManagerCatalogPage(
         items=items,
         total=total,
         page=page,
@@ -2079,11 +2176,11 @@ async def get_fund_classes(
             class_id=r.class_id,
             class_name=r.class_name,
             ticker=r.ticker,
-            expense_ratio_pct=float(r.expense_ratio_pct * 100) if r.expense_ratio_pct is not None else None,
+            expense_ratio_pct=float(r.expense_ratio_pct) if r.expense_ratio_pct is not None else None,
             net_assets=float(r.net_assets) if r.net_assets is not None else None,
-            avg_annual_return_pct=float(r.avg_annual_return_pct * 100) if r.avg_annual_return_pct is not None else None,
+            avg_annual_return_pct=float(r.avg_annual_return_pct) if r.avg_annual_return_pct is not None else None,
             holdings_count=r.holdings_count,
-            portfolio_turnover_pct=float(r.portfolio_turnover_pct * 100) if r.portfolio_turnover_pct is not None else None,
+            portfolio_turnover_pct=float(r.portfolio_turnover_pct) if r.portfolio_turnover_pct is not None else None,
             perf_inception_date=r.perf_inception_date,
         )
         for r in rows

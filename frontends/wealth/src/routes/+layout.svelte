@@ -34,6 +34,11 @@
 				console.warn("Auth redirect suppressed — page just loaded (possible 401 loop)");
 				return;
 			}
+			// In dev mode, just reload to re-trigger server-side dev bypass
+			if (import.meta.env.DEV) {
+				window.location.reload();
+				return;
+			}
 			window.location.href = "https://accounts.investintell.com/sign-in?redirect_url=" + encodeURIComponent("https://wealth.investintell.com/auth/callback");
 		});
 		setConflictHandler((msg: string) => {

@@ -2,7 +2,7 @@
   Manager filter sidebar — manager search, funnel, fund filters, last run.
 -->
 <script lang="ts">
-	import "./screener.css";
+
 	import { goto } from "$app/navigation";
 	import { Checkbox } from "@investintell/ui/components/ui/checkbox";
 	import { Label } from "@investintell/ui/components/ui/label";

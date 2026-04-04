@@ -1,0 +1,168 @@
+# Wealth Frontend — Route Map (post-consolidation)
+
+> Generated 2026-04-03 after route consolidation (commits `40e0fc0`, `109d19a`).
+
+## Architecture
+
+```
+frontends/wealth/src/routes/
+├── +layout.server.ts          ← Root SSR (Clerk auth token)
+├── +layout.svelte             ← Root layout (providers)
+├── +page.server.ts            ← Redirect → /dashboard
+├── auth/callback/             ← Clerk OAuth callback
+└── (app)/                     ← Authenticated shell (TopNav + Sidebar)
+    ├── +layout.svelte         ← App shell layout
+    ├── dashboard/
+    ├── screener/              ← PILLAR: Fund Discovery
+    ├── analysis/              ← PILLAR: Portfolio Analytics
+    ├── market/                ← PILLAR: Macro Intelligence
+    ├── portfolio/             ← PILLAR: Construction & Policy
+    ├── portfolios/            ← Legacy portfolio profiles (pending migration)
+    ├── documents/             ← Document management
+    ├── content/               ← Content production
+    └── settings/              ← Org configuration
+```
+
+## Route Table
+
+### Auth & Root
+
+| Route | File | Purpose |
+|-------|------|---------|
+| `/` | `+page.server.ts` | Redirect → `/dashboard` |
+| `/auth/callback` | `auth/callback/` | Clerk OAuth callback handler |
+
+### Dashboard
+
+| Route | File | Purpose |
+|-------|------|---------|
+| `/dashboard` | `dashboard/+page.svelte` | Main dashboard (portfolio summary, alerts, recent activity) |
+
+### Screener (Fund Discovery Pipeline)
+
+| Route | File | Purpose |
+|-------|------|---------|
+| `/screener` | `screener/+page.svelte` | **Level 1** — Manager Catalog (CatalogTable + ManagerDetailPanel Sheet) |
+| `/screener/fund/[id]` | `screener/fund/[id]/+page.svelte` | **Level 3** — Fund Fact Sheet (NAV chart, sector allocation, scoring radar, holdings) |
+| `/screener/runs/[runId]` | `screener/runs/[runId]/+page.svelte` | Screening run results (3-layer eliminatory → mandate → quant) |
+| `/screener/dd-reports` | `screener/dd-reports/+page.svelte` | DD Report list (all funds with reports) |
+| `/screener/dd-reports/[fundId]` | `screener/dd-reports/[fundId]/+page.svelte` | DD Reports for a specific fund |
+| `/screener/dd-reports/[fundId]/[reportId]` | `screener/dd-reports/[fundId]/[reportId]/+page.svelte` | Full DD Report reader (8 chapters, SSE streaming, confidence scoring) |
+
+**Deleted routes:**
+- ~~`/screener/[cik]`~~ → was a 301 redirect to `/screener/fund/[cik]`, removed
+- ~~`/screener/managers`~~ → manager list absorbed into root `/screener` (Level 1)
+- ~~`/screener/managers/[crd]`~~ → manager detail absorbed into Sheet panel (Level 2)
+
+### Analysis (Portfolio Analytics)
+
+| Route | File | Purpose |
+|-------|------|---------|
+| `/analysis` | `analysis/+page.svelte` | Analytics hub (fund-level analytics, scoring, peer comparison) |
+| `/analysis/[entityId]` | `analysis/[entityId]/+page.svelte` | Entity-specific deep analytics |
+| `/analysis/entity-analytics` | `analysis/entity-analytics/+page.svelte` | Cross-entity analytics comparison |
+| `/analysis/exposure` | `analysis/exposure/+page.svelte` | Exposure analysis (sector, geography, factor) |
+| `/analysis/risk` | `analysis/risk/+page.svelte` | Risk dashboard (CVaR, drawdown, GARCH, regime) |
+
+**Consolidation:** Previously scattered as `/analytics`, `/entity-analytics`, `/exposure`, `/risk` at top level.
+
+### Market (Macro Intelligence)
+
+| Route | File | Purpose |
+|-------|------|---------|
+| `/market` | `market/+page.svelte` | Macro intelligence hub (regional charts, FRED indicators, regime) |
+| `/market/reviews/[reviewId]` | `market/reviews/[reviewId]/+page.svelte` | Macro committee review reader |
+
+**Consolidation:** Previously at `/macro` and `/macro/reviews/[reviewId]`.
+
+### Portfolio (Construction & Policy)
+
+| Route | File | Purpose |
+|-------|------|---------|
+| `/portfolio/approved` | `portfolio/approved/+page.svelte` | Approved instrument universe (import, approve, reject workflow) |
+| `/portfolio/builder` | `portfolio/builder/+page.svelte` | Allocation simulator / optimizer (Black-Litterman, CLARABEL) |
+| `/portfolio/models` | `portfolio/models/+page.svelte` | Model portfolio list |
+| `/portfolio/models/create` | `portfolio/models/create/+page.svelte` | Model portfolio builder (multi-step wizard) |
+| `/portfolio/models/[portfolioId]` | `portfolio/models/[portfolioId]/+page.svelte` | Model portfolio detail (stress test, track record, rebalance) |
+| `/portfolio/policy` | `portfolio/policy/+page.svelte` | Investment policy statement editor |
+
+**Consolidation:** Previously scattered as `/universe`, `/allocation`, `/model-portfolios/*`, `/investment-policy`.
+
+### Portfolios (Legacy)
+
+| Route | File | Purpose |
+|-------|------|---------|
+| `/portfolios` | `portfolios/+page.svelte` | Client portfolio profiles list |
+| `/portfolios/[profile]` | `portfolios/[profile]/+page.svelte` | Client portfolio profile detail |
+
+> **Note:** This is the legacy profile-based portfolio view. Pending migration into `/portfolio/` pillar.
+
+### Documents
+
+| Route | File | Purpose |
+|-------|------|---------|
+| `/documents` | `documents/+page.svelte` | Document list (uploaded PDFs, pipeline status) |
+| `/documents/upload` | `documents/upload/+page.svelte` | Document upload interface |
+| `/documents/[documentId]` | `documents/[documentId]/+page.svelte` | Document viewer (chunks, metadata, classification) |
+
+### Content
+
+| Route | File | Purpose |
+|-------|------|---------|
+| `/content` | `content/+page.svelte` | Content production hub (fact sheets, flash reports, outlooks) |
+| `/content/[id]` | `content/[id]/+page.svelte` | Content piece viewer/editor |
+
+### Settings
+
+| Route | File | Purpose |
+|-------|------|---------|
+| `/settings` | `settings/+page.svelte` | Settings landing (org info, preferences) |
+| `/settings/config` | `settings/config/+page.svelte` | Vertical config editor (ConfigService profiles, calibration) |
+| `/settings/system` | `settings/system/+page.svelte` | System diagnostics (workers, storage, vector stats) |
+
+## Navigation Mapping (TopNav → Sidebar)
+
+```
+TopNav Pillars:
+  Dashboard    → /dashboard
+  Screener     → /screener, /screener/fund/*, /screener/dd-reports/*
+  Analysis     → /analysis, /analysis/exposure, /analysis/risk
+  Market       → /market, /market/reviews/*
+  Portfolio    → /portfolio/approved, /portfolio/builder, /portfolio/models/*, /portfolio/policy
+  Documents    → /documents, /documents/upload
+  Content      → /content
+  Settings     → /settings, /settings/config, /settings/system
+```
+
+## Screener Drill-Down Flow
+
+```
+Level 1: /screener
+  └─ CatalogTable (5,692 managers, server-paginated)
+     └─ click row → ManagerDetailPanel (Sheet, right slide)
+
+Level 2: ManagerDetailPanel (Sheet)
+  └─ AI ADV Profile Summary (vector search by CRD)
+  └─ Managed Funds list
+     └─ click fund → /screener/fund/[id]
+
+Level 3: /screener/fund/[id]
+  └─ Fund Fact Sheet (NAV, sectors, scoring, holdings, peer)
+  └─ Action: Run DD Report → /screener/dd-reports/[fundId]/[reportId]
+```
+
+## Route Count
+
+| Pillar | Pages | Server Loads |
+|--------|-------|-------------|
+| Auth & Root | 2 | 2 |
+| Dashboard | 1 | 1 |
+| Screener | 6 | 6 |
+| Analysis | 5 | 5 |
+| Market | 2 | 2 |
+| Portfolio | 5 | 5 |
+| Portfolios (legacy) | 2 | 2 |
+| Documents | 3 | 2 |
+| Content | 2 | 2 |
+| Settings | 3 | 2 |
+| **Total** | **31** | **29** |

@@ -25,6 +25,7 @@ from sqlalchemy import (
     Text,
     and_,
     func,
+    literal,
     literal_column,
     or_,
     select,
@@ -289,16 +290,40 @@ def _build_base_stmt(f: CatalogFilters) -> Select[Any]:
 
 
 def build_catalog_query(filters: CatalogFilters) -> Select[Any] | None:
-    """Build paginated query from mv_unified_funds."""
+    """Build paginated query from mv_unified_funds.
+
+    Series dedup: for registered_us funds with a ``series_id``, only the
+    share class with the lowest ``expense_ratio_pct`` is returned.  A
+    ``class_count`` window column tells the frontend how many share classes
+    exist for that series.
+    """
     base = _build_base_stmt(filters)
-    
-    # Map 'aum' column to 'aum_usd' for the frontend expectations if needed, 
-    # but the catalog response mapper handles it. 
-    # Actually, we should rename it in the select to match previous 'aum' name.
-    stmt = base.add_columns(func.count().over().label("_total"))
-    
-    # Alias aum_usd as aum for backward compatibility in the Select result
-    stmt = stmt.column(mv_unified_funds.c.aum_usd.label("aum"))
+
+    # ── Series dedup via ROW_NUMBER ──
+    # Partition key: series_id when present, else external_id (1:1 for
+    # private/ucits/mmf funds that have no series concept).
+    partition_key = func.coalesce(
+        mv_unified_funds.c.series_id, mv_unified_funds.c.external_id,
+    )
+
+    ranked = base.add_columns(
+        func.row_number().over(
+            partition_by=partition_key,
+            order_by=[
+                mv_unified_funds.c.expense_ratio_pct.asc().nullslast(),
+                mv_unified_funds.c.aum_usd.desc().nullslast(),
+            ],
+        ).label("_rn"),
+        func.count(literal(1)).over(
+            partition_by=partition_key,
+        ).label("class_count"),
+        mv_unified_funds.c.aum_usd.label("aum"),
+    ).subquery("ranked")
+
+    deduped = select(ranked).where(ranked.c._rn == 1)
+
+    # Pagination + total
+    stmt = deduped.add_columns(func.count().over().label("_total"))
 
     sort_expr: ColumnElement[Any] = literal_column(_SORT_MAP.get(filters.sort, "name ASC"))
     offset = (filters.page - 1) * filters.page_size
@@ -309,6 +334,49 @@ def build_catalog_query(filters: CatalogFilters) -> Select[Any] | None:
         .offset(offset)
         .limit(filters.page_size)
     )
+
+
+_MANAGER_SORT_MAP = {
+    "name_asc": "manager_name ASC NULLS LAST",
+    "name_desc": "manager_name DESC NULLS FIRST",
+    "aum_desc": "total_aum DESC NULLS LAST",
+    "aum_asc": "total_aum ASC NULLS LAST",
+    "funds_desc": "fund_count DESC",
+    "funds_asc": "fund_count ASC",
+}
+
+
+def build_manager_catalog_query(filters: CatalogFilters) -> Select[Any]:
+    """Group funds by manager_id, aggregate total AUM and fund_type array.
+
+    Only returns managers that have a non-null manager_id (registered advisers).
+    """
+    base = _build_base_stmt(filters)
+
+    # Force filter: only rows with a manager
+    base = base.where(mv_unified_funds.c.manager_id.isnot(None))
+
+    sub = base.subquery("filtered")
+
+    grouped = select(
+        sub.c.manager_id,
+        func.max(sub.c.manager_name).label("manager_name"),
+        func.sum(sub.c.aum_usd).label("total_aum"),
+        func.count(literal(1)).label("fund_count"),
+        func.array_agg(func.distinct(sub.c.fund_type)).label("fund_types"),
+    ).group_by(sub.c.manager_id).subquery("grouped")
+
+    # Pagination + windowed total
+    stmt = select(grouped).add_columns(
+        func.count().over().label("_total"),
+    )
+
+    sort_expr: ColumnElement[Any] = literal_column(
+        _MANAGER_SORT_MAP.get(filters.sort, "manager_name ASC NULLS LAST"),
+    )
+    offset = (filters.page - 1) * filters.page_size
+
+    return stmt.order_by(sort_expr).offset(offset).limit(filters.page_size)
 
 
 def build_catalog_facets_query(filters: CatalogFilters) -> Select[Any] | None:

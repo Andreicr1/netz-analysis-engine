@@ -4,7 +4,7 @@
 -->
 <script lang="ts">
 	import { page } from "$app/stores";
-	import { setContext, getContext, type Snippet } from "svelte";
+	import { onMount, setContext, getContext, type Snippet } from "svelte";
 	import { createRiskStore, type RiskStore } from "$lib/stores/risk-store.svelte";
 	import AiAgentDrawer from "$lib/components/AiAgentDrawer.svelte";
 	import GlobalSearch from "$lib/components/GlobalSearch.svelte";
@@ -26,6 +26,13 @@
 		pollingFallbackMs: 30_000,
 	});
 	setContext<RiskStore>("netz:riskStore", riskStore);
+
+	// Risk store lifecycle — SSE connects once at layout level, persists across navigations.
+	// Pages with SSR risk data call seedFromSSR() to populate immediately.
+	onMount(() => {
+		riskStore.start(true);
+		return () => riskStore.destroy();
+	});
 
 	const navItems = [
 		{ label: "Dashboard", href: "/dashboard",         icon: LayoutDashboard },
@@ -81,10 +88,12 @@
 							<a
 								href={item.href}
 								aria-current={active ? "page" : undefined}
+								style:color="white"
+								style:text-decoration="none"
 								class="flex items-center gap-4 px-[23px] h-[58px] rounded-[4px] text-[18px] transition-colors
 									{active
-										? 'bg-[#0177fb] text-white font-semibold'
-										: 'text-white font-normal hover:bg-white/5'
+										? 'bg-[#0177fb] font-semibold'
+										: 'font-normal hover:bg-white/5'
 									}"
 							>
 								<Icon size={24} />
@@ -101,7 +110,9 @@
 					</p>
 					<a
 						href="/settings/system"
-						class="flex items-center gap-4 px-[23px] h-[58px] rounded-[4px] text-[18px] font-normal text-white hover:bg-white/5 transition-colors"
+						style:color="white"
+						style:text-decoration="none"
+						class="flex items-center gap-4 px-[23px] h-[58px] rounded-[4px] text-[18px] font-normal hover:bg-white/5 transition-colors"
 					>
 						<Settings size={24} />
 						<span>Settings</span>

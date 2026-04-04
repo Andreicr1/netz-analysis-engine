@@ -101,6 +101,9 @@ export function createRiskStore(config: RiskStoreConfig) {
 		heartbeatTimeoutMs = 45_000,
 	} = config;
 
+	// ── Lifecycle guard ────────────────────────────────────
+	let started = false;
+
 	// ── Monotonic version gate ──────────────────────────────
 	let version = 0;
 
@@ -416,9 +419,7 @@ export function createRiskStore(config: RiskStoreConfig) {
 				driftAlerts: partialDrift,
 			});
 
-			// ── Group B: enrichment — history and macro (staggered 300ms) ──
-			await new Promise((r) => setTimeout(r, 300));
-
+			// ── Group B: enrichment — history and macro ──
 			const [regimeHistResult, macroResult, ...historyResults] = await Promise.allSettled([
 				api.get("/risk/regime/history").catch(() => null),
 				api.get("/risk/macro").catch(() => null),
@@ -495,6 +496,8 @@ export function createRiskStore(config: RiskStoreConfig) {
 	}
 
 	function start(skipInitialFetch = false) {
+		if (started) return;
+		started = true;
 		if (skipInitialFetch) {
 			// Data already seeded via SSR — go straight to SSE
 			startSSE();
@@ -506,6 +509,7 @@ export function createRiskStore(config: RiskStoreConfig) {
 	}
 
 	function destroy() {
+		started = false;
 		stopSSE();
 		deactivatePollFallback();
 	}

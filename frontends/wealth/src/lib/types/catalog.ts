@@ -61,6 +61,7 @@ export interface UnifiedFundItem {
 	series_name: string | null;
 	class_id: string | null;
 	class_name: string | null;
+	class_count: number;
 
 	instrument_id: string | null;
 	screening_status: "PASS" | "FAIL" | "WATCHLIST" | null;
@@ -179,6 +180,59 @@ export const FUND_TYPE_LABELS: Record<string, string> = {
 	"Securitized Asset Fund": "Securitized Asset",
 	"Liquidity Fund": "Liquidity",
 	"Other Private Fund": "Other Private",
+};
+
+// ── Manager Catalog (Level 1 — grouped by manager) ──
+
+export interface ManagerCatalogItem {
+	manager_id: string;
+	manager_name: string;
+	total_aum: number | null;
+	fund_count: number;
+	fund_types: string[];
+	state: string | null;
+	country: string | null;
+	website: string | null;
+}
+
+export interface ManagerCatalogPage {
+	items: ManagerCatalogItem[];
+	total: number;
+	page: number;
+	page_size: number;
+	has_next: boolean;
+}
+
+export const EMPTY_MANAGER_CATALOG_PAGE: ManagerCatalogPage = {
+	items: [],
+	total: 0,
+	page: 1,
+	page_size: 50,
+	has_next: false,
+};
+
+/**
+ * Fund type → short badge label + color class for Level 1 manager badges.
+ * Maps raw DB fund_type values to institutional badge abbreviations.
+ */
+export const FUND_TYPE_BADGE_MAP: Record<string, { label: string; colorClass: string }> = {
+	// Registered US
+	mutual_fund: { label: "MF", colorClass: "badge-mf" },
+	interval_fund: { label: "MF", colorClass: "badge-mf" },
+	etf: { label: "ETF", colorClass: "badge-etf" },
+	closed_end: { label: "CEF", colorClass: "badge-cef" },
+	bdc: { label: "BDC", colorClass: "badge-bdc" },
+	money_market: { label: "MMF", colorClass: "badge-mmf" },
+	// Private US (Form ADV categories)
+	"Hedge Fund": { label: "HF", colorClass: "badge-hf" },
+	"Private Equity Fund": { label: "PE", colorClass: "badge-pe" },
+	"Venture Capital Fund": { label: "VC", colorClass: "badge-vc" },
+	"Real Estate Fund": { label: "RE", colorClass: "badge-re" },
+	"Securitized Asset Fund": { label: "SA", colorClass: "badge-sa" },
+	"Liquidity Fund": { label: "LF", colorClass: "badge-lf" },
+	"Other Private Fund": { label: "PF", colorClass: "badge-pf" },
+	// UCITS
+	ucits: { label: "UCITS", colorClass: "badge-ucits" },
 };
 
 // ── Global Securities (equities/ETFs from sec_cusip_ticker_map — no RLS) ──

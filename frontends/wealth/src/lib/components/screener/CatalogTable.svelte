@@ -7,6 +7,8 @@
   import * as Table from "@investintell/ui/components/ui/table";
   import { formatAUM } from "@investintell/ui";
   import ManagerDetailPanel from "./ManagerDetailPanel.svelte";
+  import type { ManagerCatalogItem } from "$lib/types/catalog";
+  import { ChevronUp, ChevronDown } from "lucide-svelte";
 
   interface Manager {
     crd: string;
@@ -24,10 +26,41 @@
 
   // ── Level 2 state ──
   let panelOpen = $state(false);
-  let selectedManager = $state<Manager | null>(null);
+  let selectedManager = $state<ManagerCatalogItem | null>(null);
+
+  // ── Sort state ──
+  let sortColumn = $state<'name' | 'aum'>('aum');
+  let sortDirection = $state<'asc' | 'desc'>('desc');
+
+  let sortedManagers = $derived([...managers].sort((a, b) => {
+    let valA = sortColumn === 'name' ? formatName(a.name) : a.aum;
+    let valB = sortColumn === 'name' ? formatName(b.name) : b.aum;
+    
+    if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+    if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  }));
+
+  function toggleSort(col: 'name' | 'aum') {
+    if (sortColumn === col) {
+      sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortColumn = col;
+      sortDirection = col === 'aum' ? 'desc' : 'asc';
+    }
+  }
 
   function openPanel(manager: Manager) {
-    selectedManager = manager;
+    selectedManager = {
+      manager_id: manager.crd,
+      manager_name: manager.name,
+      total_aum: manager.aum,
+      fund_count: manager.funds.length,
+      fund_types: manager.funds,
+      state: null,
+      country: null,
+      website: null,
+    };
     panelOpen = true;
   }
 
@@ -67,7 +100,7 @@
   }
 </script>
 
-<div class="w-full bg-card rounded-2xl border border-border/50 overflow-hidden shadow-sm">
+<div class="w-full bg-card rounded-2xl border border-border/50 shadow-sm h-[calc(100vh-140px)] flex flex-col overflow-hidden">
   <!-- ── Header ── -->
   <div class="px-6 py-5 border-b border-border/50 flex justify-between items-center">
     <div class="flex items-center gap-4">
@@ -85,25 +118,42 @@
   </div>
 
   <!-- ── Table ── -->
-  <Table.Root>
-    <Table.Header>
-      <Table.Row class="border-b border-border/50 hover:bg-transparent">
-        <Table.Head class="w-[420px] text-muted-foreground font-medium text-xs uppercase tracking-wider h-11 pl-6">
-          Manager
-        </Table.Head>
-        <Table.Head class="text-muted-foreground font-medium text-xs uppercase tracking-wider h-11 w-[100px]">
-          CRD
-        </Table.Head>
-        <Table.Head class="text-muted-foreground font-medium text-xs uppercase tracking-wider h-11">
-          Funds
-        </Table.Head>
-        <Table.Head class="text-right text-muted-foreground font-medium text-xs uppercase tracking-wider h-11 pr-6 w-[140px]">
-          AUM
-        </Table.Head>
-      </Table.Row>
-    </Table.Header>
-    <Table.Body>
-      {#each managers as manager (manager.crd)}
+  <div class="overflow-y-auto flex-1 custom-scrollbar">
+    <Table.Root>
+      <Table.Header class="sticky top-0 z-10 bg-card/95 backdrop-blur-md shadow-[0_1px_0_rgba(255,255,255,0.05)] border-b border-white/5">
+        <Table.Row class="hover:bg-transparent">
+          <Table.Head class="w-[420px] text-muted-foreground font-medium text-xs tracking-wider h-11 pl-6">
+            <button
+              class="flex items-center gap-1.5 uppercase transition-colors {sortColumn === 'name' ? 'text-foreground' : 'text-muted-foreground'}"
+              onclick={() => toggleSort('name')}
+            >
+              Manager
+              {#if sortColumn === 'name'}
+                {#if sortDirection === 'asc'}<ChevronUp size={14} />{:else}<ChevronDown size={14} />{/if}
+              {/if}
+            </button>
+          </Table.Head>
+          <Table.Head class="text-muted-foreground font-medium text-xs uppercase tracking-wider h-11 w-[100px] align-middle">
+            CRD
+          </Table.Head>
+          <Table.Head class="text-muted-foreground font-medium text-xs uppercase tracking-wider h-11 align-middle">
+            Funds
+          </Table.Head>
+          <Table.Head class="text-right text-muted-foreground font-medium text-xs tracking-wider h-11 pr-6 w-[140px]">
+            <button
+              class="flex items-center gap-1.5 uppercase transition-colors justify-end w-full {sortColumn === 'aum' ? 'text-foreground' : 'text-muted-foreground'}"
+              onclick={() => toggleSort('aum')}
+            >
+              AUM
+              {#if sortColumn === 'aum'}
+                {#if sortDirection === 'asc'}<ChevronUp size={14} />{:else}<ChevronDown size={14} />{/if}
+              {/if}
+            </button>
+          </Table.Head>
+        </Table.Row>
+      </Table.Header>
+      <Table.Body>
+        {#each sortedManagers as manager (manager.crd)}
         <Table.Row
           class="border-b border-border/30 hover:bg-accent/50 transition-colors cursor-pointer group"
           onclick={() => openPanel(manager)}
@@ -141,6 +191,7 @@
       {/if}
     </Table.Body>
   </Table.Root>
+  </div>
 </div>
 
 <!-- ── Level 2: Manager Detail Panel ── -->

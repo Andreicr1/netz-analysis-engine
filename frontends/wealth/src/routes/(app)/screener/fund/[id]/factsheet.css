@@ -1,20 +1,21 @@
-/* 
-  Fact Sheet CSS — Professional Financial Styling 
+/*
+  Fact Sheet CSS — Professional Financial Styling
   Optimized for screen and high-quality PDF print.
+  Dark mode theme.
 */
 
 .fs-container {
     max-width: 1200px;
     margin: 0 auto;
     padding: 40px;
-    background: #fff;
-    color: #1d293d;
+    background: #000;
+    color: #e5e7eb;
     font-family: var(--ii-font-sans, "Inter", sans-serif);
 }
 
 /* ── Header ── */
 .fs-header {
-    border-bottom: 2px solid #e2e8f0;
+    border-bottom: 2px solid rgba(255,255,255,0.05);
     padding-bottom: 24px;
     margin-bottom: 32px;
 }
@@ -29,8 +30,8 @@
 .fs-universe-badge {
     display: inline-block;
     padding: 2px 8px;
-    background: #f1f5f9;
-    color: #64748b;
+    background: #1a1b20;
+    color: #71717a;
     font-size: 10px;
     font-weight: 700;
     border-radius: 4px;
@@ -43,7 +44,7 @@
     font-size: 28px;
     font-weight: 800;
     line-height: 1.2;
-    color: #0f172a;
+    color: #fafafa;
 }
 
 .fs-ticker {
@@ -51,11 +52,56 @@
     font-family: var(--ii-font-mono, monospace);
     font-size: 16px;
     font-weight: 700;
-    color: #3b82f6;
-    background: #eff6ff;
+    color: #0177fb;
+    background: rgba(1,119,251,0.08);
     padding: 2px 8px;
     border-radius: 4px;
     margin-top: 8px;
+}
+
+.fs-header-actions {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.fs-dd-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: var(--ii-font-sans, "Inter", sans-serif);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 120ms ease, opacity 120ms ease;
+}
+
+.fs-dd-btn--run {
+    background: #0177fb;
+    color: #fff;
+}
+
+.fs-dd-btn--run:hover:not(:disabled) {
+    background: #0060d0;
+}
+
+.fs-dd-btn--run:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.fs-dd-btn--view {
+    background: #1a1b20;
+    color: #fafafa;
+    border: 1px solid rgba(255,255,255,0.05);
+}
+
+.fs-dd-btn--view:hover {
+    background: #22232a;
 }
 
 .fs-manager-box {
@@ -65,7 +111,7 @@
 .fs-mgr-label {
     font-size: 11px;
     font-weight: 600;
-    color: #94a3b8;
+    color: #71717a;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -73,13 +119,13 @@
 .fs-mgr-name {
     font-size: 18px;
     font-weight: 700;
-    color: #334155;
+    color: #fafafa;
     margin-top: 4px;
 }
 
 .fs-mgr-id {
     font-size: 12px;
-    color: #94a3b8;
+    color: #71717a;
 }
 
 /* ── Quick Stats ── */
@@ -87,7 +133,7 @@
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     gap: 16px;
-    background: #f8fafc;
+    background: #1a1b20;
     padding: 20px;
     border-radius: 12px;
 }
@@ -100,7 +146,7 @@
 .fs-stat-label {
     font-size: 11px;
     font-weight: 600;
-    color: #64748b;
+    color: #71717a;
     text-transform: uppercase;
     margin-bottom: 4px;
 }
@@ -108,7 +154,7 @@
 .fs-stat-val {
     font-size: 16px;
     font-weight: 700;
-    color: #0f172a;
+    color: #fafafa;
 }
 
 /* ── Layout Grid ── */
@@ -133,8 +179,8 @@
 .fs-section-title {
     font-size: 16px;
     font-weight: 700;
-    color: #334155;
-    border-left: 4px solid #3b82f6;
+    color: #fafafa;
+    border-left: 4px solid #0177fb;
     padding-left: 12px;
     margin-bottom: 20px;
     text-transform: uppercase;
@@ -151,16 +197,16 @@
     text-align: left;
     font-size: 11px;
     font-weight: 600;
-    color: #94a3b8;
+    color: #71717a;
     text-transform: uppercase;
     padding: 8px 12px;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
 .fs-table td {
     padding: 12px;
     font-size: 13px;
-    border-bottom: 1px solid #f1f5f9;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
 .fs-table th.r, .fs-table td.r {
@@ -173,7 +219,7 @@
 
 .fs-mini-ticker {
     font-size: 11px;
-    background: #f1f5f9;
+    background: #1a1b20;
     padding: 2px 4px;
     border-radius: 3px;
 }
@@ -181,8 +227,8 @@
 /* ── Performance ── */
 .fs-chart-wrap {
     height: 320px;
-    background: #fff;
-    border: 1px solid #f1f5f9;
+    background: #000;
+    border: 1px solid rgba(255,255,255,0.05);
     border-radius: 8px;
     padding: 16px;
 }
@@ -197,7 +243,7 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    background: #f8fafc;
+    background: #1a1b20;
     padding: 10px;
     border-radius: 8px;
 }
@@ -205,7 +251,7 @@
 .fs-ret-year {
     font-size: 11px;
     font-weight: 600;
-    color: #64748b;
+    color: #71717a;
 }
 
 .fs-ret-val {
@@ -221,7 +267,7 @@
 /* ── Team ── */
 .fs-team-card {
     padding: 16px;
-    background: #f8fafc;
+    background: #1a1b20;
     border-radius: 12px;
     margin-bottom: 16px;
 }
@@ -229,12 +275,12 @@
 .fs-team-name {
     font-size: 15px;
     font-weight: 700;
-    color: #0f172a;
+    color: #fafafa;
 }
 
 .fs-team-role {
     font-size: 12px;
-    color: #3b82f6;
+    color: #0177fb;
     font-weight: 600;
     margin-bottom: 8px;
 }
@@ -242,14 +288,14 @@
 .fs-team-bio {
     font-size: 12px;
     line-height: 1.5;
-    color: #475569;
+    color: #71717a;
     margin: 8px 0;
 }
 
 .fs-team-meta {
     font-size: 11px;
     font-style: italic;
-    color: #94a3b8;
+    color: #71717a;
 }
 
 /* ── Holdings ── */
@@ -265,7 +311,7 @@
 }
 
 .fs-holding-btn:hover .fs-holding-name {
-    color: #3b82f6;
+    color: #0177fb;
     text-decoration: underline;
 }
 
@@ -277,7 +323,7 @@
 
 .fs-holding-meta {
     font-size: 11px;
-    color: #94a3b8;
+    color: #71717a;
 }
 
 .fs-holding-weight {
@@ -288,8 +334,8 @@
 .fs-no-data {
     padding: 40px;
     text-align: center;
-    color: #94a3b8;
-    background: #f8fafc;
+    color: #71717a;
+    background: #1a1b20;
     border-radius: 8px;
     font-size: 13px;
     font-style: italic;
@@ -297,8 +343,8 @@
 
 /* ── Print Styles ── */
 @media print {
-    body { background: #fff; }
-    .fs-container { width: 100%; padding: 0; }
+    body { background: #fff; color: #1d293d; }
+    .fs-container { width: 100%; padding: 0; background: #fff; color: #1d293d; }
     .fs-grid { display: block; }
     .fs-col-left, .fs-col-right { width: 100%; }
     .fs-section { break-inside: avoid; }

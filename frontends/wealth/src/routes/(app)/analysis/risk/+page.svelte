@@ -15,23 +15,15 @@
 
 	const riskStore = getContext<RiskStore>("netz:riskStore");
 
+	// Seed risk store with SSR data — layout handles start/destroy lifecycle.
 	onMount(() => {
-		try {
-			const hasSsrData = data.riskSummary || data.regime;
-			if (hasSsrData) {
-				riskStore.seedFromSSR({
-					riskSummary: data.riskSummary as Record<string, unknown> | null,
-					regime: data.regime as RegimeData | null,
-					driftAlerts: data.alerts as { dtw_alerts: DriftAlert[]; behavior_change_alerts: BehaviorAlert[] } | null,
-				});
-				riskStore.start(true);
-			} else {
-				riskStore.start(false);
-			}
-		} catch (e) {
-			console.warn("Risk store failed to start:", e);
+		if (data.riskSummary || data.regime) {
+			riskStore.seedFromSSR({
+				riskSummary: data.riskSummary as Record<string, unknown> | null,
+				regime: data.regime as RegimeData | null,
+				driftAlerts: data.alerts as { dtw_alerts: DriftAlert[]; behavior_change_alerts: BehaviorAlert[] } | null,
+			});
 		}
-		return () => riskStore.destroy();
 	});
 
 	// ── Derived reactive state from SSE ticks ─────────────────────────────

@@ -81,6 +81,9 @@ class UnifiedFundItem(BaseModel):
     weighted_avg_maturity: int | None = None
     weighted_avg_life: int | None = None
 
+    # Series dedup — how many share classes exist for this series
+    class_count: int = 1
+
     # Screening overlay (if imported to tenant universe)
     instrument_id: str | None = None
     screening_status: Literal["PASS", "FAIL", "WATCHLIST"] | None = None
@@ -114,6 +117,28 @@ class UnifiedCatalogPage(BaseModel):
     page_size: int
     has_next: bool
     facets: CatalogFacets | None = None
+
+
+class ManagerCatalogItem(BaseModel):
+    """Single row in the manager-grouped catalog (Level 1)."""
+
+    manager_id: str
+    manager_name: str
+    total_aum: float | None = None
+    fund_count: int = 0
+    fund_types: list[str] = Field(default_factory=list)
+    # Enriched from sec_managers (joined server-side)
+    state: str | None = None
+    country: str | None = None
+    website: str | None = None
+
+
+class ManagerCatalogPage(BaseModel):
+    items: list[ManagerCatalogItem]
+    total: int
+    page: int
+    page_size: int
+    has_next: bool
 
 
 # ── Fact Sheet Support ──

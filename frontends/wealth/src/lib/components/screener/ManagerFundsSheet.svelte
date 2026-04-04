@@ -96,7 +96,7 @@
 			cell: ({ row }) => {
 				const val = row.original.avg_annual_return_1y;
 				if (val == null) return "\u2014";
-				return formatPercent(val / 100);
+				return formatPercent(val);
 			},
 			enableSorting: true,
 			meta: { numeric: true },
@@ -107,7 +107,7 @@
 			cell: ({ row }) => {
 				const val = row.original.expense_ratio_pct;
 				if (val == null) return "\u2014";
-				return formatPercent(val / 100);
+				return formatPercent(val);
 			},
 			enableSorting: true,
 			meta: { numeric: true },

@@ -3,7 +3,7 @@
   with tab-specific inline filters. Stacked layout, no sidebar.
 -->
 <script lang="ts">
-  import "./screener.css";
+
   import { goto } from "$app/navigation";
   import type { ScreenerTab, ScreenerFacets } from "$lib/types/screening";
   import { EMPTY_FACETS } from "$lib/types/screening";
