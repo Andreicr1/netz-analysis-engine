@@ -1,10 +1,18 @@
-# Python
+# ==============================================
+# Gemini / Antigravity Context Exclusions
+# More aggressive than .gitignore — optimized
+# to reduce AI indexing noise
+# ==============================================
+
+# ── Everything in .gitignore ──
+# Antigravity inherits .gitignore, but we add
+# AI-specific exclusions below
+
+# ── Python build/cache ──
 __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
-dist/
-build/
 .eggs/
 *.egg
 .venv/
@@ -12,70 +20,106 @@ venv/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.import_linter_cache/
 htmlcov/
 .coverage
 
-# Node
+# ── Node / Frontend build ──
 node_modules/
 .svelte-kit/
 .output/
-dist/
+**/build/
+**/dist/
+**/.turbo/
+pnpm-lock.yaml
 
-# Environment
+# ── Source maps & compiled assets ──
+**/*.js.map
+**/*.css.map
+**/*.woff
+**/*.woff2
+**/*.ttf
+**/*.eot
+**/*.ico
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.gif
+**/*.webp
+**/*.svg
+
+# ── Environment & secrets ──
 .env
-.env.dev
-.env.local
-.env.*.local
-.env.production
-.env.cloudflare
+.env.*
 frontends/**/.env
 backend/.env
 backend/.env.dev
 
-# IDE
+# ── IDE & tool config ──
 .vscode/
+.vscode_bkp/
 .idea/
+.claude/
+.playwright-mcp/
+**/.codex-*.txt
 *.swp
 *.swo
 
-# OS
+# ── OS ──
 .DS_Store
 Thumbs.db
 
-# Docker
+# ── Docker & infra ──
 pgdata/
+infra/_deprecated/
 
-# Claude Code
-.claude/
-
-# Tool artifacts
-.playwright-mcp/
-**/.turbo/
-**/.codex-*.txt
-
-# Project-local data
+# ── Data lake & large files ──
 .data/
 backend/.data/
 Deals/
-scripts/
-!backend/scripts/
+*.dump
+*.sql
+*.parquet
+*.csv
+restore_log.txt
+cloudflared.exe
+
+# ── Temporary files ──
+tmp_*.py
+tmp_*.json
+tmp_*.txt
+backend/tmp_*.json
+backend/tmp_*.txt
 dev.ps1
 backend/.sec_seed_checkpoint.json
 backend/.esma_seed_checkpoint.json
 backend/.nav_backfill_checkpoint.json
 backend/scripts/db_inventory_output.txt
 
+# ── Test artifacts ──
 playwright-report/
 test-results/
-cloudflared.exe
 
-# Temporary e2e / debug scripts and JWT files (never commit)
-tmp_*.py
-tmp_*.json
-tmp_*.txt
-backend/tmp_*.json
-backend/tmp_*.txt
+# ── Scripts (utility, not analytical logic) ──
+scripts/
+!backend/scripts/
 
-# Huge Database dumps causing AI extension to crash
-*.dump
-*.sql
+# ── Alembic migrations (SQL noise — 91 files) ──
+backend/app/core/db/migrations/versions/
+
+# ── Calibration & profile YAML (seed data only, runtime is DB) ──
+calibration/
+profiles/
+
+# ── Large reference docs (>100KB, consultable on demand) ──
+docs/reference/evestment-reference.md
+docs/reference/logs-to-baseline-e2e.md
+docs/reference/quant-engine-dd-report-reference.md
+
+# ── Generated type definitions ──
+**/*.d.ts
+
+# ── Brainstorm/plan archives (context is in CLAUDE.md) ──
+docs/brainstorms/
+docs/audits/
+docs/solutions/

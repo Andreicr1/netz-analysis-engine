@@ -12,6 +12,7 @@ venv/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.import_linter_cache/
 htmlcov/
 .coverage
 
@@ -19,7 +20,15 @@ htmlcov/
 node_modules/
 .svelte-kit/
 .output/
-dist/
+
+# Build artifacts
+**/build/
+**/dist/
+**/*.js.map
+**/*.css.map
+
+# Lock files (tracked by pnpm — not source code)
+pnpm-lock.yaml
 
 # Environment
 .env
@@ -34,6 +43,7 @@ backend/.env.dev
 
 # IDE
 .vscode/
+.vscode_bkp/
 .idea/
 *.swp
 *.swo
@@ -76,6 +86,11 @@ tmp_*.txt
 backend/tmp_*.json
 backend/tmp_*.txt
 
-# Huge Database dumps causing AI extension to crash
+# Large files that crash AI extensions
 *.dump
 *.sql
+*.parquet
+restore_log.txt
+
+# Deprecated infra (kept for reference but not indexed)
+infra/_deprecated/
