@@ -116,6 +116,7 @@ ALLOWLISTED_GLOBAL_TABLE_CONSUMERS: dict[str, str] = {
     "app/domains/wealth/services/blended_benchmark_service.py": "read — SELECT only on AllocationBlock and BenchmarkNav; no writes",
     "app/domains/wealth/services/benchmark_resolver.py": "read — SELECT only on AllocationBlock and BenchmarkNav for composite benchmark resolution; no writes",
     "app/domains/wealth/routes/model_portfolios.py": "read — SELECT only on MacroData (VIX series) for regime-conditioned covariance in portfolio construction; no writes",
+    "app/domains/wealth/queries/fund_extended_data.py": "read — SELECT only on SecRegisteredFund, SecEtf, SecBdc, SecMoneyMarketFund, SecManagerFund, EsmaFund, SecFundClass, SecFundProspectusStats for per-fund-type fact sheet hydration; no writes",
     "app/domains/wealth/routes/screener.py": "read — SELECT only on SecManager (and EsmaFund/EsmaManager) for global instrument search; no writes; global tables shared across tenants",
     "app/domains/wealth/routes/sec_analysis.py": "read — SELECT only on SecManager, Sec13fHolding, Sec13fDiff, SecManagerFund; no writes; global SEC data shared across tenants",
     "app/domains/wealth/services/candidate_screener.py": "read — SELECT only on AllocationBlock for construction advisor candidate discovery; no writes",

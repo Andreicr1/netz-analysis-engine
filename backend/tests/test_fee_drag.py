@@ -79,7 +79,9 @@ class TestFeeDragService:
             instrument_name="Hedge Fund A",
             instrument_type="fund",
             attributes={
-                "management_fee_pct": 2.0,
+                # management_fee_pct stored as decimal fraction (0.02 = 2%)
+                "management_fee_pct": 0.02,
+                # performance_fee_pct stored as percentage points (annualized drag)
                 "performance_fee_pct": 20.0,
                 "expected_return_pct": 12.0,
             },
@@ -124,7 +126,8 @@ class TestFeeDragService:
             instrument_id=uuid.uuid4(),
             instrument_name="Fund",
             instrument_type="fund",
-            attributes={"expected_return_pct": 5.0, "management_fee_pct": 1.0},
+            # 0.01 fraction = 1% → ×100 = 1.0 ppt; net = 10 - 1 = 9
+            attributes={"expected_return_pct": 5.0, "management_fee_pct": 0.01},
             gross_expected_return=10.0,
         )
         assert result.gross_expected_return == 10.0
@@ -136,7 +139,8 @@ class TestFeeDragService:
             instrument_id=uuid.uuid4(),
             instrument_name="Low Fee Fund",
             instrument_type="fund",
-            attributes={"management_fee_pct": 0.5, "expected_return_pct": 10.0},
+            # 0.005 fraction = 0.5% → ×100 = 0.5 ppt; drag = 0.5/10 = 0.05
+            attributes={"management_fee_pct": 0.005, "expected_return_pct": 10.0},
         )
         assert result.fee_drag_pct == pytest.approx(0.05)
         assert result.fee_efficient is True
@@ -147,7 +151,8 @@ class TestFeeDragService:
             instrument_id=uuid.uuid4(),
             instrument_name="Expensive Fund",
             instrument_type="fund",
-            attributes={"management_fee_pct": 4.0, "expected_return_pct": 8.0},
+            # 0.04 fraction = 4% → ×100 = 4.0 ppt; drag = 4/8 = 0.50
+            attributes={"management_fee_pct": 0.04, "expected_return_pct": 8.0},
         )
         assert result.fee_drag_pct == pytest.approx(0.50)
         assert result.fee_efficient is False
@@ -158,7 +163,8 @@ class TestFeeDragService:
             instrument_id=uuid.uuid4(),
             instrument_name="Zero Fund",
             instrument_type="fund",
-            attributes={"management_fee_pct": 1.0},
+            # 0.01 fraction = 1% → ×100 = 1.0 ppt
+            attributes={"management_fee_pct": 0.01},
             gross_expected_return=0.0,
         )
         assert result.fee_drag_pct == 1.0
@@ -225,7 +231,7 @@ class TestFeeDragService:
                 "instrument_id": id1,
                 "name": "Good Fund",
                 "instrument_type": "fund",
-                "attributes": {"management_fee_pct": 1.0, "expected_return_pct": 10.0},
+                "attributes": {"management_fee_pct": 0.01, "expected_return_pct": 10.0},
             },
             {
                 "instrument_id": id2,
@@ -266,13 +272,15 @@ class TestPortfolioFeeDrag:
                 "instrument_id": id1,
                 "name": "Fund A",
                 "instrument_type": "fund",
-                "attributes": {"management_fee_pct": 1.0, "expected_return_pct": 10.0},
+                # 0.01 fraction = 1% → ×100 = 1.0 ppt
+                "attributes": {"management_fee_pct": 0.01, "expected_return_pct": 10.0},
             },
             {
                 "instrument_id": id2,
                 "name": "Fund B",
                 "instrument_type": "fund",
-                "attributes": {"management_fee_pct": 3.0, "expected_return_pct": 10.0},
+                # 0.03 fraction = 3% → ×100 = 3.0 ppt
+                "attributes": {"management_fee_pct": 0.03, "expected_return_pct": 10.0},
             },
         ]
         result = svc.compute_portfolio_fee_drag(instruments)
@@ -288,13 +296,13 @@ class TestPortfolioFeeDrag:
                 "instrument_id": id1,
                 "name": "Fund A",
                 "instrument_type": "fund",
-                "attributes": {"management_fee_pct": 1.0, "expected_return_pct": 10.0},
+                "attributes": {"management_fee_pct": 0.01, "expected_return_pct": 10.0},
             },
             {
                 "instrument_id": id2,
                 "name": "Fund B",
                 "instrument_type": "fund",
-                "attributes": {"management_fee_pct": 3.0, "expected_return_pct": 10.0},
+                "attributes": {"management_fee_pct": 0.03, "expected_return_pct": 10.0},
             },
         ]
         weights = {id1: 0.8, id2: 0.2}
@@ -316,13 +324,15 @@ class TestPortfolioFeeDrag:
                 "instrument_id": uuid.uuid4(),
                 "name": "Cheap Fund",
                 "instrument_type": "fund",
-                "attributes": {"management_fee_pct": 0.5, "expected_return_pct": 10.0},
+                # 0.005 fraction = 0.5% → ×100 = 0.5 ppt; drag = 0.5/10 = 0.05 < 0.20
+                "attributes": {"management_fee_pct": 0.005, "expected_return_pct": 10.0},
             },
             {
                 "instrument_id": uuid.uuid4(),
                 "name": "Expensive Fund",
                 "instrument_type": "fund",
-                "attributes": {"management_fee_pct": 5.0, "expected_return_pct": 8.0},
+                # 0.05 fraction = 5% → ×100 = 5.0 ppt; drag = 5/8 = 0.625 > 0.20
+                "attributes": {"management_fee_pct": 0.05, "expected_return_pct": 8.0},
             },
         ]
         result = svc.compute_portfolio_fee_drag(instruments)
