@@ -1,0 +1,365 @@
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .all-\[unset\] {
+    all: unset;
+  }
+}
+
+:root {
+  --localhost-arial-black-font-family: "Arial", Helvetica;
+  --localhost-arial-black-font-size: 24px;
+  --localhost-arial-black-font-style: normal;
+  --localhost-arial-black-font-weight: 900;
+  --localhost-arial-black-letter-spacing: -0.6000000238418579px;
+  --localhost-arial-black-line-height: 24px;
+  --localhost-arial-bold-font-family: "Arial", Helvetica;
+  --localhost-arial-bold-font-size: 15px;
+  --localhost-arial-bold-font-style: normal;
+  --localhost-arial-bold-font-weight: 700;
+  --localhost-arial-bold-letter-spacing: -0.375px;
+  --localhost-arial-bold-line-height: 18.75px;
+  --localhost-arial-bold-upper-font-family: "Arial", Helvetica;
+  --localhost-arial-bold-upper-font-size: 14px;
+  --localhost-arial-bold-upper-font-style: normal;
+  --localhost-arial-bold-upper-font-weight: 700;
+  --localhost-arial-bold-upper-letter-spacing: 0.699999988079071px;
+  --localhost-arial-bold-upper-line-height: 17.5px;
+  --localhost-arial-regular-font-family: "Arial", Helvetica;
+  --localhost-arial-regular-font-size: 17px;
+  --localhost-arial-regular-font-style: normal;
+  --localhost-arial-regular-font-weight: 400;
+  --localhost-arial-regular-letter-spacing: 0px;
+  --localhost-arial-regular-line-height: normal;
+  --localhost-arial-regular-underline-font-family: "Arial", Helvetica;
+  --localhost-arial-regular-underline-font-size: 14px;
+  --localhost-arial-regular-underline-font-style: normal;
+  --localhost-arial-regular-underline-font-weight: 400;
+  --localhost-arial-regular-underline-letter-spacing: 0px;
+  --localhost-arial-regular-underline-line-height: 17.5px;
+  --localhost-cambria-math-regular-font-family: "Cambria Math", Helvetica;
+  --localhost-cambria-math-regular-font-size: 12px;
+  --localhost-cambria-math-regular-font-style: normal;
+  --localhost-cambria-math-regular-font-weight: 400;
+  --localhost-cambria-math-regular-letter-spacing: 0px;
+  --localhost-cambria-math-regular-line-height: 15px;
+  --localhost-cambria-math-regular-upper-font-family: "Cambria Math", Helvetica;
+  --localhost-cambria-math-regular-upper-font-size: 10px;
+  --localhost-cambria-math-regular-upper-font-style: normal;
+  --localhost-cambria-math-regular-upper-font-weight: 400;
+  --localhost-cambria-math-regular-upper-letter-spacing: 0.47999998927116394px;
+  --localhost-cambria-math-regular-upper-line-height: 12.5px;
+  --localhost-consolas-bold-font-family: "Consolas", Helvetica;
+  --localhost-consolas-bold-font-size: 15px;
+  --localhost-consolas-bold-font-style: normal;
+  --localhost-consolas-bold-font-weight: 700;
+  --localhost-consolas-bold-letter-spacing: 0px;
+  --localhost-consolas-bold-line-height: 18.75px;
+  --localhost-consolas-regular-font-family: "Consolas", Helvetica;
+  --localhost-consolas-regular-font-size: 14px;
+  --localhost-consolas-regular-font-style: normal;
+  --localhost-consolas-regular-font-weight: 400;
+  --localhost-consolas-regular-letter-spacing: 0px;
+  --localhost-consolas-regular-line-height: 17.5px;
+  --localhost-geist-mono-bold-font-family: "Geist Mono", Helvetica;
+  --localhost-geist-mono-bold-font-size: 16px;
+  --localhost-geist-mono-bold-font-style: normal;
+  --localhost-geist-mono-bold-font-weight: 700;
+  --localhost-geist-mono-bold-letter-spacing: 0px;
+  --localhost-geist-mono-bold-line-height: 20px;
+  --localhost-geist-mono-regular-font-family: "Geist Mono", Helvetica;
+  --localhost-geist-mono-regular-font-size: 11px;
+  --localhost-geist-mono-regular-font-style: normal;
+  --localhost-geist-mono-regular-font-weight: 400;
+  --localhost-geist-mono-regular-letter-spacing: 0px;
+  --localhost-geist-mono-regular-line-height: 15.729999542236328px;
+  --localhost-geist-mono-semibold-font-family: "Geist Mono", Helvetica;
+  --localhost-geist-mono-semibold-font-size: 28px;
+  --localhost-geist-mono-semibold-font-style: normal;
+  --localhost-geist-mono-semibold-font-weight: 600;
+  --localhost-geist-mono-semibold-letter-spacing: -0.8399999737739563px;
+  --localhost-geist-mono-semibold-line-height: 49px;
+  --localhost-inter-regular-font-family: "Inter", Helvetica;
+  --localhost-inter-regular-font-size: 12px;
+  --localhost-inter-regular-font-style: normal;
+  --localhost-inter-regular-font-weight: 400;
+  --localhost-inter-regular-letter-spacing: 0px;
+  --localhost-inter-regular-line-height: normal;
+  --localhost-urbanist-black-font-family: "Urbanist", Helvetica;
+  --localhost-urbanist-black-font-size: 30px;
+  --localhost-urbanist-black-font-style: normal;
+  --localhost-urbanist-black-font-weight: 900;
+  --localhost-urbanist-black-letter-spacing: 0px;
+  --localhost-urbanist-black-line-height: 33px;
+  --localhost-urbanist-black-upper-font-family: "Urbanist", Helvetica;
+  --localhost-urbanist-black-upper-font-size: 11px;
+  --localhost-urbanist-black-upper-font-style: normal;
+  --localhost-urbanist-black-upper-font-weight: 900;
+  --localhost-urbanist-black-upper-letter-spacing: 0.33000001311302185px;
+  --localhost-urbanist-black-upper-line-height: 13.75px;
+  --localhost-urbanist-bold-font-family: "Urbanist", Helvetica;
+  --localhost-urbanist-bold-font-size: 12px;
+  --localhost-urbanist-bold-font-style: normal;
+  --localhost-urbanist-bold-font-weight: 700;
+  --localhost-urbanist-bold-letter-spacing: 0px;
+  --localhost-urbanist-bold-line-height: 15px;
+  --localhost-urbanist-bold-upper-font-family: "Urbanist", Helvetica;
+  --localhost-urbanist-bold-upper-font-size: 16px;
+  --localhost-urbanist-bold-upper-font-style: normal;
+  --localhost-urbanist-bold-upper-font-weight: 700;
+  --localhost-urbanist-bold-upper-letter-spacing: 0.5px;
+  --localhost-urbanist-bold-upper-line-height: 21.280000686645508px;
+  --localhost-urbanist-extrabold-font-family: "Urbanist", Helvetica;
+  --localhost-urbanist-extrabold-font-size: 28px;
+  --localhost-urbanist-extrabold-font-style: normal;
+  --localhost-urbanist-extrabold-font-weight: 800;
+  --localhost-urbanist-extrabold-letter-spacing: -0.699999988079071px;
+  --localhost-urbanist-extrabold-line-height: 33.599998474121094px;
+  --localhost-urbanist-italic-font-family: "Urbanist", Helvetica;
+  --localhost-urbanist-italic-font-size: 13px;
+  --localhost-urbanist-italic-font-style: italic;
+  --localhost-urbanist-italic-font-weight: 400;
+  --localhost-urbanist-italic-letter-spacing: 0px;
+  --localhost-urbanist-italic-line-height: 16.25px;
+  --localhost-urbanist-light-font-family: "Urbanist", Helvetica;
+  --localhost-urbanist-light-font-size: 14px;
+  --localhost-urbanist-light-font-style: normal;
+  --localhost-urbanist-light-font-weight: 300;
+  --localhost-urbanist-light-letter-spacing: 0px;
+  --localhost-urbanist-light-line-height: 17.5px;
+  --localhost-urbanist-medium-font-family: "Urbanist", Helvetica;
+  --localhost-urbanist-medium-font-size: 20px;
+  --localhost-urbanist-medium-font-style: normal;
+  --localhost-urbanist-medium-font-weight: 500;
+  --localhost-urbanist-medium-letter-spacing: 0px;
+  --localhost-urbanist-medium-line-height: 25px;
+  --localhost-urbanist-medium-underline-font-family: "Urbanist", Helvetica;
+  --localhost-urbanist-medium-underline-font-size: 14px;
+  --localhost-urbanist-medium-underline-font-style: normal;
+  --localhost-urbanist-medium-underline-font-weight: 500;
+  --localhost-urbanist-medium-underline-letter-spacing: 0px;
+  --localhost-urbanist-medium-underline-line-height: 17.5px;
+  --localhost-urbanist-regular-font-family: "Urbanist", Helvetica;
+  --localhost-urbanist-regular-font-size: 27px;
+  --localhost-urbanist-regular-font-style: normal;
+  --localhost-urbanist-regular-font-weight: 400;
+  --localhost-urbanist-regular-letter-spacing: -0.675000011920929px;
+  --localhost-urbanist-regular-line-height: 33.75px;
+  --localhost-urbanist-regular-upper-font-family: "Urbanist", Helvetica;
+  --localhost-urbanist-regular-upper-font-size: 12px;
+  --localhost-urbanist-regular-upper-font-style: normal;
+  --localhost-urbanist-regular-upper-font-weight: 400;
+  --localhost-urbanist-regular-upper-letter-spacing: 2px;
+  --localhost-urbanist-regular-upper-line-height: 21px;
+  --localhost-urbanist-semibold-font-family: "Urbanist", Helvetica;
+  --localhost-urbanist-semibold-font-size: 17px;
+  --localhost-urbanist-semibold-font-style: normal;
+  --localhost-urbanist-semibold-font-weight: 600;
+  --localhost-urbanist-semibold-letter-spacing: 0px;
+  --localhost-urbanist-semibold-line-height: 21.25px;
+  --localhost-urbanist-semibold-underline-font-family: "Urbanist", Helvetica;
+  --localhost-urbanist-semibold-underline-font-size: 13px;
+  --localhost-urbanist-semibold-underline-font-style: normal;
+  --localhost-urbanist-semibold-underline-font-weight: 600;
+  --localhost-urbanist-semibold-underline-letter-spacing: 0px;
+  --localhost-urbanist-semibold-underline-line-height: 16.25px;
+  --localhost-urbanist-semibold-upper-font-family: "Urbanist", Helvetica;
+  --localhost-urbanist-semibold-upper-font-size: 12px;
+  --localhost-urbanist-semibold-upper-font-style: normal;
+  --localhost-urbanist-semibold-upper-font-weight: 600;
+  --localhost-urbanist-semibold-upper-letter-spacing: 0.9599999785423279px;
+  --localhost-urbanist-semibold-upper-line-height: 15.600000381469727px;
+  --localhostathens-gray: rgba(243, 244, 248, 1);
+  --localhostroyal-blue: rgba(37, 99, 235, 1);
+}
+
+:root {
+  --animate-spin: spin 1s linear infinite;
+}
+
+.animate-fade-in {
+  animation: fade-in 1s var(--animation-delay, 0s) ease forwards;
+}
+
+.animate-fade-up {
+  animation: fade-up 1s var(--animation-delay, 0s) ease forwards;
+}
+
+.animate-marquee {
+  animation: marquee var(--duration) infinite linear;
+}
+
+.animate-marquee-vertical {
+  animation: marquee-vertical var(--duration) linear infinite;
+}
+
+.animate-shimmer {
+  animation: shimmer 8s infinite;
+}
+
+.animate-spin {
+  animation: var(--animate-spin);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes image-glow {
+  0% {
+    opacity: 0;
+    animation-timing-function: cubic-bezier(0.74, 0.25, 0.76, 1);
+  }
+
+  10% {
+    opacity: 0.7;
+    animation-timing-function: cubic-bezier(0.12, 0.01, 0.08, 0.99);
+  }
+
+  to {
+    opacity: 0.4;
+  }
+}
+
+@keyframes fade-in {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-up {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes shimmer {
+  0%,
+  90%,
+  to {
+    background-position: calc(-100% - var(--shimmer-width)) 0;
+  }
+
+  30%,
+  60% {
+    background-position: calc(100% + var(--shimmer-width)) 0;
+  }
+}
+
+@keyframes marquee {
+  0% {
+    transform: translate(0);
+  }
+
+  to {
+    transform: translateX(calc(-100% - var(--gap)));
+  }
+}
+
+@keyframes marquee-vertical {
+  0% {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(calc(-100% - var(--gap)));
+  }
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 47.4% 11.2%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+
+    --card: transparent;
+    --card-foreground: 222.2 47.4% 11.2%;
+
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 100% 50%;
+    --destructive-foreground: 210 40% 98%;
+
+    --ring: 215 20.2% 65.1%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+
+    --muted: 223 47% 11%;
+    --muted-foreground: 215.4 16.3% 56.9%;
+
+    --accent: 216 34% 17%;
+    --accent-foreground: 210 40% 98%;
+
+    --popover: 224 71% 4%;
+    --popover-foreground: 215 20.2% 65.1%;
+
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
+
+    --card: transparent;
+    --card-foreground: 213 31% 91%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 1.2%;
+
+    --secondary: 222.2 47.4% 11.2%;
+    --secondary-foreground: 210 40% 98%;
+
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+
+    --ring: 216 34% 17%;
+
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}

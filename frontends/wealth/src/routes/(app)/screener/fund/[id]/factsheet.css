@@ -1,383 +1,64 @@
 /*
-  Fact Sheet CSS — Professional Financial Styling
-  Uses design system tokens from @investintell/ui.
-  Optimized for screen and high-quality PDF print.
+  Fact Sheet CSS — Minimal overrides for print and chart containers.
+  All layout styling uses Tailwind utilities in the Svelte template.
+  Tokens via @investintell/ui (--ii-* CSS custom properties).
 */
 
-/* Force dark mode tokens on fact sheet regardless of page theme */
-.fs-container {
-    --ii-bg:             #000000;
-    --ii-surface-alt:    #141519;
-    --ii-text-primary:   #ffffff;
-    --ii-text-secondary: #d9d9d9;
-    --ii-text-muted:     #cbccd1;
-    --ii-brand-primary:  #0177fb;
-    --ii-border-subtle:  #404249;
-    --ii-success:        #11ec79;
-    --ii-danger:         #fc1a1a;
-    color-scheme: dark;
-
-    width: 100%;
-    padding: 16px;
-    border-radius: 16px;
-    background: var(--ii-bg);
-    color: var(--ii-text-primary);
-    font-family: var(--ii-font-sans, "Inter", sans-serif);
-}
-
-/* ── Header ── */
-.fs-header {
-    border-bottom: 2px solid var(--ii-border-subtle);
-    padding-bottom: 24px;
-    margin-bottom: 32px;
-}
-
-.fs-header-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 24px;
-}
-
-.fs-universe-badge {
-    display: inline-block;
-    padding: 2px 8px;
-    background: var(--ii-surface-alt);
-    color: var(--ii-text-muted);
-    font-size: 10px;
-    font-weight: 700;
-    border-radius: 4px;
-    letter-spacing: 0.5px;
-    margin-bottom: 8px;
-}
-
-.fs-fund-name {
-    margin: 0;
-    font-size: 28px;
-    font-weight: 800;
-    line-height: 1.2;
-    color: var(--ii-text-primary);
-}
-
-.fs-ticker {
-    display: inline-block;
-    font-family: var(--ii-font-mono, monospace);
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--ii-brand-primary);
-    background: color-mix(in srgb, var(--ii-brand-primary) 8%, transparent);
-    padding: 2px 8px;
-    border-radius: 4px;
-    margin-top: 8px;
-}
-
-.fs-manager-box {
-    text-align: right;
-}
-
-.fs-mgr-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--ii-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.fs-mgr-name {
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--ii-text-primary);
-    margin-top: 4px;
-}
-
-.fs-mgr-id {
-    font-size: 12px;
-    color: var(--ii-text-muted);
-}
-
-/* ── Quick Stats ── */
-.fs-quick-stats {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 16px;
-    background: var(--ii-surface-alt);
-    padding: 20px;
-    border-radius: 12px;
-    border: 1px solid var(--ii-border-subtle);
-}
-
-.fs-stat {
-    display: flex;
-    flex-direction: column;
-}
-
-.fs-stat-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--ii-text-muted);
-    text-transform: uppercase;
-    margin-bottom: 4px;
-}
-
-.fs-stat-val {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--ii-text-primary);
-}
-
-/* ── Layout Grid ── */
-.fs-grid {
-    display: grid;
-    grid-template-columns: 2fr 0.85fr;
-    gap: 40px;
-}
-
-.fs-col-right {
-    position: sticky;
-    top: 80px;
-    align-self: start;
-    max-height: calc(100vh - 100px);
-    overflow-y: auto;
-}
-
-.fs-section {
-    margin-bottom: 40px;
-}
-
-.fs-section-title {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--ii-text-primary);
-    border-left: 4px solid var(--ii-brand-primary);
-    padding-left: 12px;
-    margin-bottom: 20px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-/* ── Tables ── */
-.fs-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.fs-table th {
-    text-align: left;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--ii-text-muted);
-    text-transform: uppercase;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--ii-border-subtle);
-}
-
-.fs-table td {
-    padding: 12px;
-    font-size: 13px;
-    border-bottom: 1px solid var(--ii-border-subtle);
-}
-
-.fs-table th.r,
-.fs-table td.r {
-    text-align: right;
-}
-
-.fs-table--compact td {
-    padding: 8px 12px;
-}
-
-.fs-mini-ticker {
-    font-size: 11px;
-    background: var(--ii-surface-alt);
-    padding: 2px 4px;
-    border-radius: 3px;
-}
-
-/* ── Performance ── */
+/* ── Chart containers need fixed height for ECharts ── */
 .fs-chart-wrap {
     height: 320px;
+    border: 1px solid var(--ii-border-subtle);
+    border-radius: var(--ii-radius-md);
+    padding: 16px;
     background: var(--ii-bg);
-    border: 1px solid var(--ii-border-subtle);
-    border-radius: 8px;
-    padding: 16px;
 }
 
-.fs-returns-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-    gap: 12px;
-}
-
-.fs-ret-card {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    background: var(--ii-surface-alt);
-    padding: 10px;
-    border-radius: 8px;
-    border: 1px solid var(--ii-border-subtle);
-}
-
-.fs-ret-year {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--ii-text-muted);
-}
-
-.fs-ret-val {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--ii-success);
-}
-
-.fs-ret-val.neg {
-    color: var(--ii-danger);
-}
-
-/* ── Narrative Cards (Brochure) ── */
-.fs-narrative-card {
-    padding: 16px;
-    background: var(--ii-surface-alt);
-    border: 1px solid var(--ii-border-subtle);
-    border-radius: 12px;
-}
-
-.fs-narrative-text {
-    font-size: 13px;
-    line-height: 1.65;
-    color: var(--ii-text-secondary);
-    margin: 0;
-    white-space: pre-line;
-}
-
-.fs-narrative-text + .fs-firm-link {
-    margin-top: 12px;
-}
-
-.fs-firm-link {
-    display: inline-block;
-    margin-top: 8px;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--ii-brand-primary);
-    text-decoration: none;
-}
-
-.fs-firm-link:hover {
-    text-decoration: underline;
-}
-
-/* ── Team ── */
-.fs-team-card {
-    padding: 16px;
-    background: var(--ii-surface-alt);
-    border: 1px solid var(--ii-border-subtle);
-    border-radius: 12px;
-    margin-bottom: 16px;
-}
-
-.fs-team-name {
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--ii-text-primary);
-}
-
-.fs-team-role {
-    font-size: 12px;
-    color: var(--ii-brand-primary);
-    font-weight: 600;
-    margin-bottom: 8px;
-}
-
-.fs-team-bio {
-    font-size: 12px;
-    line-height: 1.5;
-    color: var(--ii-text-muted);
-    margin: 8px 0;
-}
-
-.fs-team-meta {
-    font-size: 11px;
-    font-style: italic;
-    color: var(--ii-text-muted);
-}
-
-/* ── Holdings ── */
-.fs-holding-btn {
-    background: none;
-    border: none;
-    padding: 0;
-    margin: 0;
-    text-align: left;
-    cursor: pointer;
-    color: inherit;
-    font-family: inherit;
-}
-
-.fs-holding-btn:hover .fs-holding-name {
-    color: var(--ii-brand-primary);
-    text-decoration: underline;
-}
-
-.fs-holding-name {
-    font-weight: 600;
-    font-size: 13px;
-    transition: color 120ms ease;
-}
-
-.fs-holding-meta {
-    font-size: 11px;
-    color: var(--ii-text-muted);
-}
-
-.fs-holding-weight {
-    font-weight: 700;
+/* ── Tabular numbers for financial data ── */
+.fs-tabular {
     font-variant-numeric: tabular-nums;
-}
-
-.fs-no-data {
-    padding: 40px;
-    text-align: center;
-    color: var(--ii-text-muted);
-    background: var(--ii-surface-alt);
-    border: 1px solid var(--ii-border-subtle);
-    border-radius: 8px;
-    font-size: 13px;
-    font-style: italic;
 }
 
 /* ── Print Styles ── */
 @media print {
-    body {
-        background: #fff;
-        color: #1d293d;
-    }
-
+    /* Switch to light tokens for paper */
     .fs-container {
-        width: 100%;
-        padding: 0;
-        background: #fff;
-        color: #1d293d;
+        color-scheme: light;
+        background: white !important;
+        padding: 0 !important;
     }
 
-    .fs-grid {
-        display: block;
+    /* Apply light theme values for print */
+    .fs-container,
+    .fs-container * {
+        --ii-bg: #ffffff;
+        --ii-surface: #ffffff;
+        --ii-surface-alt: #f1f5f9;
+        --ii-text-primary: #0f172a;
+        --ii-text-secondary: #475569;
+        --ii-text-muted: #64748b;
+        --ii-brand-primary: #0177fb;
+        --ii-border-subtle: #e2e8f0;
+        --ii-border: #e2e8f0;
+        --ii-success: #1b9858;
+        --ii-danger: #ef4343;
+        color: var(--ii-text-primary);
     }
 
-    .fs-col-left,
-    .fs-col-right {
-        width: 100%;
+    .fs-no-print {
+        display: none !important;
     }
 
     .fs-section {
         break-inside: avoid;
     }
 
-    .fs-header {
-        border-bottom-width: 3px;
+    .fs-chart-wrap {
+        height: 260px;
+        border-color: var(--ii-border-subtle);
     }
 
-    .fs-print-hide {
-        display: none !important;
+    /* Collapse grid pairs to single column on print */
+    .fs-grid-pair {
+        grid-template-columns: 1fr !important;
     }
 }

@@ -2070,7 +2070,7 @@ async def get_fund_fact_sheet(
 
             # Holdings (N-PORT) — filter by series_id to avoid mixing umbrella CIK holdings
             nport_data = gather_sec_nport_data(
-                sync_db, fund_cik=fund_cik, series_id=correct_series_id, holdings_limit=50,
+                sync_db, fund_cik=fund_cik, series_id=correct_series_id, holdings_limit=10,
             )
             sector_history = gather_nport_sector_history(
                 sync_db, fund_cik=fund_cik, series_id=correct_series_id,
@@ -2087,7 +2087,7 @@ async def get_fund_fact_sheet(
             )
 
             # Enrichment (Classes)
-            enrichment = gather_fund_enrichment(sync_db, fund_cik=fund_cik, sec_universe=detail.universe)
+            enrichment = gather_fund_enrichment(sync_db, fund_cik=fund_cik, sec_universe=detail.universe, series_id=correct_series_id)
 
             # Per-fund-type extended data (Phase 5)
             from app.domains.wealth.queries.fund_extended_data import hydrate_extended_data
@@ -2212,7 +2212,7 @@ async def get_fund_fact_sheet(
             pct_of_nav=h["pct_of_nav"],
             market_value=float(h["market_value"]) if h.get("market_value") else None,
         )
-        for h in nport.get("top_holdings", [])[:50]
+        for h in nport.get("top_holdings", [])[:10]
     ]
 
     return FundFactSheet(

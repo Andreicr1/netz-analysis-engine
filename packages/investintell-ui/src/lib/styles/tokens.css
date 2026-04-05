@@ -18,30 +18,30 @@
 	--ii-font-sans: "Urbanist Variable", "Urbanist", ui-sans-serif, system-ui, sans-serif;
 	--ii-font-mono: "Geist Mono Variable", "Geist Mono", "Menlo", ui-monospace, monospace;
 
-	/* ── Text ── */
+	/* ── Text — Figma: white, grey/85, grey/81, grey/76 ── */
 	--ii-text-primary:   #ffffff;
 	--ii-text-secondary: #d9d9d9;
 	--ii-text-muted:     #cbccd1;
 	--ii-text-tertiary:  #c2c2c2;
-	--ii-text-inverse:   #141519;   /* One X card-inner */
-	--ii-text-accent:    #0177fb;   /* accent blue for emphasis */
+	--ii-text-inverse:   #14151a;   /* Figma color/blue/9 */
+	--ii-text-accent:    #0177fb;
 
-	/* ── Surface ── */
-	--ii-bg:                #000000;   /* pure black — One X background */
-	--ii-surface:           #000000;   /* flush with bg */
-	--ii-surface-alt:       #141519;   /* One X card-inner */
-	--ii-surface-elevated:  #141519;   /* elevated cards */
-	--ii-surface-inset:     #000000;   /* sunken fields */
-	--ii-surface-overlay:   rgba(13, 13, 13, 0.60);  /* One X glass overlay */
-	--ii-surface-raised:    #1a1b20;   /* One X nav-item */
-	--ii-surface-panel:     #000000;   /* panel bg */
+	/* ── Surface — Figma: black, blue/9, blue/11 ── */
+	--ii-bg:                #000000;
+	--ii-surface:           #000000;
+	--ii-surface-alt:       #14151a;   /* Figma color/blue/9 */
+	--ii-surface-elevated:  #14151a;   /* Figma color/blue/9 */
+	--ii-surface-inset:     #000000;
+	--ii-surface-overlay:   rgba(13, 13, 13, 0.60);
+	--ii-surface-raised:    #1a1b20;   /* Figma color/blue/11 */
+	--ii-surface-panel:     #000000;
 	--ii-surface-highlight: rgba(255, 255, 255, 0.06);
 	--ii-surface-accent:    color-mix(in srgb, #0177fb 8%, #000000);
 
-	/* ── Border ── */
-	--ii-border-subtle:  #404249;               /* One X divider */
-	--ii-border:         #43454b;               /* One X grid lines */
-	--ii-border-strong:  #484a52;               /* One X icon-inactive */
+	/* ── Border — Figma: grey/27, grey/34 ── */
+	--ii-border-subtle:  #404149;               /* Figma color/grey/27 */
+	--ii-border:         #43454b;
+	--ii-border-strong:  #52525b;               /* Figma color/grey/34 */
 	--ii-border-focus:   #0177fb;               /* accent blue focus */
 	--ii-border-accent:  rgba(1, 119, 251, 0.25);
 	--ii-border-inverse: rgba(255, 255, 255, 0.10);
@@ -89,8 +89,8 @@
 	--ii-accent-soft:      color-mix(in srgb, #0177fb 8%, #000000);
 	--ii-accent-muted:     color-mix(in srgb, #0177fb 12%, #000000);
 	--ii-focus-ring:       color-mix(in srgb, #0177fb 30%, transparent);
-	--ii-bg-hover:         color-mix(in srgb, #ffffff 5%, #141519);
-	--ii-bg-secondary:     #141519;
+	--ii-bg-hover:         color-mix(in srgb, #ffffff 5%, #14151a);
+	--ii-bg-secondary:     #14151a;
 	--ii-selection-bg:     color-mix(in srgb, #0177fb 20%, #000000);
 	--ii-selection-color:  var(--ii-text-primary);
 
@@ -163,11 +163,11 @@
 	--ii-brand-secondary:   #64748b;   /* slate-500 */
 	--ii-brand-accent:      #0177fb;
 
-	/* ── Text ── */
-	--ii-text-primary:   #14151a;   /* hsl(228 11% 9%) — grafite sofisticado */
-	--ii-text-secondary: #475569;   /* slate-600 */
-	--ii-text-muted:     #64748b;   /* hsl(215 16% 47%) — slate-500 */
-	--ii-text-tertiary:  #94a3b8;   /* slate-400 */
+	/* ── Text — Figma: azure/11, azure/35, azure/47, azure/65 ── */
+	--ii-text-primary:   #0f172a;   /* Figma color/azure/11 (slate-900) */
+	--ii-text-secondary: #475569;   /* Figma color/azure/35 */
+	--ii-text-muted:     #64748b;   /* Figma color/azure/47 */
+	--ii-text-tertiary:  #94a3b8;   /* Figma color/azure/65 */
 	--ii-text-inverse:   #ffffff;
 	--ii-text-accent:    #0177fb;
 

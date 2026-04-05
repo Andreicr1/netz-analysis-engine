@@ -1,5 +1,8 @@
 /** Model Portfolio domain types — maps 1:1 to backend schemas. */
 
+/** Universal cash instrument ID — matches backend CASH_INSTRUMENT_ID. */
+export const CASH_INSTRUMENT_ID = "00000000-0000-0000-0000-000000000000";
+
 export interface ModelPortfolio {
 	id: string;
 	profile: string;
@@ -144,6 +147,12 @@ export interface PortfolioView {
 	created_at: string;
 }
 
+/** Parametric stress test request for POST /model-portfolios/{id}/stress-test */
+export interface ParametricStressRequest {
+	scenario_name: "gfc_2008" | "covid_2020" | "taper_2013" | "rate_shock_200bps" | "custom";
+	shocks?: Record<string, number>;
+}
+
 /** Parametric stress test result from POST /stress-test */
 export interface ParametricStressResult {
 	portfolio_id: string;
@@ -193,6 +202,53 @@ export interface GeneratedReport {
 	display_filename: string;
 	generated_at: string;
 	size_bytes: number | null;
+}
+
+// ── Rebalance Preview ─────────────────────────────────────────────────
+
+export interface HoldingInput {
+	instrument_id: string;
+	quantity: number;
+	current_price: number;
+}
+
+export interface RebalancePreviewRequest {
+	total_aum?: number;
+	cash_available: number;
+	current_holdings: HoldingInput[];
+}
+
+export interface SuggestedTrade {
+	instrument_id: string;
+	fund_name: string;
+	block_id: string;
+	action: "BUY" | "SELL" | "HOLD";
+	current_weight: number;
+	target_weight: number;
+	delta_weight: number;
+	current_value: number;
+	target_value: number;
+	trade_value: number;
+	estimated_quantity: number;
+}
+
+export interface WeightDelta {
+	block_id: string;
+	current_weight: number;
+	target_weight: number;
+	delta_pp: number;
+}
+
+export interface RebalancePreviewResponse {
+	portfolio_id: string;
+	portfolio_name: string;
+	profile: string;
+	total_aum: number;
+	cash_available: number;
+	total_trades: number;
+	estimated_turnover_pct: number;
+	trades: SuggestedTrade[];
+	weight_comparison: WeightDelta[];
 }
 
 export function profileColor(profile: string): string {

@@ -156,6 +156,67 @@ class AlternativeProfileRead(BaseModel):
     current_cvar_would_pass: bool
 
 
+# ── Rebalance Preview ──────────────────────────────────────────────────────
+
+
+class HoldingInput(BaseModel):
+    """A single current holding in the client's account (external input)."""
+
+    instrument_id: uuid.UUID
+    quantity: float
+    current_price: float
+
+
+class RebalancePreviewRequest(BaseModel):
+    """Request body for POST /{portfolio_id}/rebalance/preview."""
+
+    total_aum: float | None = None  # If omitted, computed from holdings + cash
+    cash_available: float = 0.0
+    current_holdings: list[HoldingInput]
+
+
+class SuggestedTrade(BaseModel):
+    """A single trade suggestion: BUY, SELL, or HOLD."""
+
+    instrument_id: str
+    fund_name: str
+    block_id: str
+    action: Literal["BUY", "SELL", "HOLD"]
+    current_weight: float
+    target_weight: float
+    delta_weight: float  # target - current (percentage points)
+    current_value: float
+    target_value: float
+    trade_value: float  # positive = buy, negative = sell
+    estimated_quantity: float
+
+
+class WeightDelta(BaseModel):
+    """Block-level weight comparison: current vs target."""
+
+    block_id: str
+    current_weight: float
+    target_weight: float
+    delta_pp: float  # delta in percentage points
+
+
+class RebalancePreviewResponse(BaseModel):
+    """Response body for POST /{portfolio_id}/rebalance/preview."""
+
+    portfolio_id: str
+    portfolio_name: str
+    profile: str
+    total_aum: float
+    cash_available: float
+    total_trades: int
+    estimated_turnover_pct: float
+    trades: list[SuggestedTrade]
+    weight_comparison: list[WeightDelta]
+
+
+# ── Construction Advisor ──────────────────────────────────────────────────
+
+
 class ConstructionAdviceRead(BaseModel):
     portfolio_id: str
     profile: str

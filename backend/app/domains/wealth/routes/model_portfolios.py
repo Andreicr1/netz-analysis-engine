@@ -33,6 +33,8 @@ from app.domains.wealth.schemas.model_portfolio import (
     ModelPortfolioRead,
     ModelPortfolioUpdate,
     OverlapResultRead,
+    RebalancePreviewRequest,
+    RebalancePreviewResponse,
     SectorExposureRead,
     StressTestRequest,
     StressTestResponse,
@@ -739,6 +741,60 @@ async def get_construction_advice(
     )
 
     return ConstructionAdviceRead(**result_dict)
+
+
+# ── Rebalance Preview ────────────────────────────────────────────────────
+
+
+@router.post(
+    "/{portfolio_id}/rebalance/preview",
+    response_model=RebalancePreviewResponse,
+    summary="Preview rebalance trades (stateless)",
+    description=(
+        "Computes suggested BUY/SELL/HOLD trades by comparing the model "
+        "portfolio's target weights against externally-provided current "
+        "holdings. No DB writes — pure calculation. All values in USD."
+    ),
+)
+async def rebalance_preview(
+    portfolio_id: uuid.UUID,
+    body: RebalancePreviewRequest,
+    db: AsyncSession = Depends(get_db_with_rls),
+    user: CurrentUser = Depends(get_current_user),
+) -> RebalancePreviewResponse:
+    """Stateless rebalance preview: target vs current → trades."""
+    result = await db.execute(
+        select(ModelPortfolio).where(ModelPortfolio.id == portfolio_id),
+    )
+    portfolio = result.scalar_one_or_none()
+    if portfolio is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model portfolio {portfolio_id} not found",
+        )
+
+    fund_selection = portfolio.fund_selection_schema
+    if not fund_selection or not fund_selection.get("funds"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Portfolio has no fund selection. Run Construct first.",
+        )
+
+    from vertical_engines.wealth.rebalancing.preview_service import (
+        compute_rebalance_preview,
+    )
+
+    preview = compute_rebalance_preview(
+        portfolio_id=portfolio_id,
+        portfolio_name=portfolio.display_name,
+        profile=portfolio.profile,
+        fund_selection_schema=fund_selection,
+        current_holdings=[h.model_dump() for h in body.current_holdings],
+        cash_available=body.cash_available,
+        total_aum_override=body.total_aum,
+    )
+
+    return RebalancePreviewResponse(**preview)
 
 
 # ── Activate ─────────────────────────────────────────────────────────────

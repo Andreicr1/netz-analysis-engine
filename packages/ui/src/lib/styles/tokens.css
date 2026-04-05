@@ -1,75 +1,75 @@
 /* ============================================================
- * Netz Design Tokens — Thunder Client Design System (exact)
- * Palette measured via getComputedStyle on docs.thunderclient.com.
+ * Netz Design Tokens — Figma "investintell" Variables (synced)
+ * Source: docs/ux/Investintell Variables.json
  * ============================================================ */
 
 :root {
 	color-scheme: light;
 
-	/* Brand */
-	--netz-brand-primary: #0077e6;
-	--netz-brand-secondary: #24467f;
-	--netz-brand-accent: #1a5fb4;
-	--netz-brand-light: #eef3fb;
-	--netz-brand-highlight: #d97706;
+	/* Brand — Figma: color/azure/49, color/azure/35, color/orange/48 */
+	--netz-brand-primary: #0177fb;
+	--netz-brand-secondary: #475569;
+	--netz-brand-accent: #0177fb;
+	--netz-brand-light: #f1f5f9;
+	--netz-brand-highlight: #d29922;
 	--netz-navy: var(--netz-brand-primary);
 	--netz-blue: var(--netz-brand-secondary);
 	--netz-slate: var(--netz-brand-accent);
 	--netz-light: var(--netz-brand-light);
 	--netz-orange: var(--netz-brand-highlight);
-	--netz-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-	--netz-font-mono: "JetBrains Mono", monospace;
+	--netz-font-sans: "Urbanist Variable", "Urbanist", ui-sans-serif, system-ui, sans-serif;
+	--netz-font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, monospace;
 
-	/* Radius — Thunder Client / Nextra scale */
+	/* Radius — Figma: radius/12, radius/32 */
 	--netz-radius-xs: 4px;
 	--netz-radius-sm: 4px;
-	--netz-radius-md: 6px;
-	--netz-radius-lg: 8px;
+	--netz-radius-md: 9px;
+	--netz-radius-lg: 12px;
 	--netz-radius-xl: 12px;
-	--netz-radius-pill: 999px;
+	--netz-radius-pill: 32px;
 
 	/* Easing */
 	--netz-ease-out: cubic-bezier(0, 0, 0.2, 1);
 
-	/* Surface — tc light: bg #f5f8fd, nav #ffffff */
-	--netz-surface: #f5f8fd;
-	--netz-surface-alt: #f5f8fd;
+	/* Surface — Figma light: white bg, slate-100 alt */
+	--netz-surface: #ffffff;
+	--netz-surface-alt: #f1f5f9;
 	--netz-surface-elevated: #ffffff;
-	--netz-surface-inset: #eef3fb;
-	--netz-surface-overlay: rgba(8, 14, 24, 0.56);
-	--netz-surface-raised: #f9fbfe;
+	--netz-surface-inset: #f1f5f9;
+	--netz-surface-overlay: rgba(20, 21, 26, 0.48);
+	--netz-surface-raised: #ffffff;
 	--netz-surface-panel: #ffffff;
-	--netz-surface-highlight: #e0efff;
-	--netz-surface-accent: color-mix(in srgb, var(--netz-brand-primary) 5%, #ffffff);
-	--netz-bg: #f5f8fd;
+	--netz-surface-highlight: rgba(20, 21, 26, 0.04);
+	--netz-surface-accent: color-mix(in srgb, var(--netz-brand-primary) 4%, #ffffff);
+	--netz-bg: #ffffff;
 
-	/* Border — cool blue tint */
-	--netz-border-subtle: #e8eef7;
-	--netz-border: #d8e2f0;
-	--netz-border-strong: #b8c5de;
-	--netz-border-accent: #c5d3e8;
-	--netz-border-focus: #0077e6;
-	--netz-border-inverse: rgba(255, 255, 255, 0.2);
+	/* Border — Figma: color/grey/91 (#e2e8f0), color/azure/35 14% */
+	--netz-border-subtle: #e2e8f0;
+	--netz-border: #e2e8f0;
+	--netz-border-strong: #cbd5e1;
+	--netz-border-accent: rgba(1, 119, 251, 0.20);
+	--netz-border-focus: #0177fb;
+	--netz-border-inverse: rgba(0, 0, 0, 0.08);
 
-	/* Text — tc light: #101828 primary, #24467f secondary (institutional blue) */
-	--netz-text-primary: #101828;
-	--netz-text-secondary: #24467f;
-	--netz-text-muted: #4b5565;
-	--netz-text-tertiary: #7a8fad;
+	/* Text — Figma: color/azure/11 (#0f172a), color/azure/35, color/azure/47, color/azure/65 */
+	--netz-text-primary: #0f172a;
+	--netz-text-secondary: #475569;
+	--netz-text-muted: #64748b;
+	--netz-text-tertiary: #94a3b8;
 	--netz-text-on-accent: #ffffff;
 
-	/* Semantic */
-	--netz-success: #0f8f70;
-	--netz-warning: #b7791f;
-	--netz-danger: #c15766;
-	--netz-info: #316cc4;
+	/* Semantic — Figma: color/spring green/35, color/orange/48, color/red/60 */
+	--netz-success: #1b9858;
+	--netz-warning: #d29922;
+	--netz-danger: #ef4343;
+	--netz-info: #0177fb;
 
-	/* Chart palette */
-	--netz-chart-1: #0077e6;
-	--netz-chart-2: #0f8f70;
-	--netz-chart-3: #d97706;
-	--netz-chart-4: #7a8fad;
-	--netz-chart-5: #3b9eff;
+	/* Chart palette — accent blue + slate scale */
+	--netz-chart-1: #0177fb;
+	--netz-chart-2: #1b9858;
+	--netz-chart-3: #d29922;
+	--netz-chart-4: #94a3b8;
+	--netz-chart-5: #cbd5e1;
 
 	/* Aliases (backward compat) */
 	--netz-primary: var(--netz-brand-primary);
@@ -77,11 +77,11 @@
 	--netz-primary-muted: color-mix(in srgb, var(--netz-brand-primary) 12%, transparent);
 
 	/* Extended semantic tokens */
-	--netz-accent-soft: color-mix(in srgb, var(--netz-brand-primary) 8%, #ffffff);
-	--netz-accent-muted: color-mix(in srgb, var(--netz-brand-primary) 10%, #f5f8fd);
-	--netz-focus-ring: color-mix(in srgb, var(--netz-border-focus) 32%, transparent);
-	--netz-bg-hover: #f3f4f6;
-	--netz-bg-secondary: #f5f8fd;
+	--netz-accent-soft: color-mix(in srgb, var(--netz-brand-primary) 4%, #ffffff);
+	--netz-accent-muted: color-mix(in srgb, var(--netz-brand-primary) 8%, #ffffff);
+	--netz-focus-ring: color-mix(in srgb, var(--netz-border-focus) 25%, transparent);
+	--netz-bg-hover: #f1f5f9;
+	--netz-bg-secondary: #f1f5f9;
 	--netz-status-error: var(--netz-danger);
 	--netz-danger-subtle: color-mix(in srgb, var(--netz-danger) 10%, #ffffff);
 	--netz-success-subtle: color-mix(in srgb, var(--netz-success) 10%, #ffffff);
@@ -113,69 +113,69 @@
 [data-theme="dark"] {
 	color-scheme: dark;
 
-	/* Brand — lighter primary in dark, lighter secondary for hover */
-	--netz-brand-primary: #3b9eff;
-	--netz-brand-secondary: #60b0ff;
-	--netz-brand-accent: #1a5fb4;
-	--netz-brand-light: #1e1e1e;
-	--netz-brand-highlight: #f0a03a;
+	/* Brand — Figma: color/azure/49 (#0177fb), color/grey/85 (#d9d9d9) */
+	--netz-brand-primary: #0177fb;
+	--netz-brand-secondary: #d9d9d9;
+	--netz-brand-accent: #0177fb;
+	--netz-brand-light: #14151a;
+	--netz-brand-highlight: #e3b341;
 	--netz-navy: var(--netz-brand-primary);
 	--netz-blue: var(--netz-brand-secondary);
 	--netz-slate: var(--netz-brand-accent);
 	--netz-light: var(--netz-brand-light);
 	--netz-orange: var(--netz-brand-highlight);
-	--netz-font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-	--netz-font-mono: "JetBrains Mono", monospace;
+	--netz-font-sans: "Urbanist Variable", "Urbanist", ui-sans-serif, system-ui, sans-serif;
+	--netz-font-mono: "Geist Mono Variable", "Geist Mono", ui-monospace, monospace;
 
-	/* Radius */
+	/* Radius — same as light */
 	--netz-radius-sm: 4px;
-	--netz-radius-md: 6px;
-	--netz-radius-lg: 8px;
+	--netz-radius-md: 9px;
+	--netz-radius-lg: 12px;
 	--netz-radius-xl: 12px;
-	--netz-radius-pill: 999px;
+	--netz-radius-pill: 32px;
 
 	/* Easing */
 	--netz-ease-out: cubic-bezier(0, 0, 0.2, 1);
 
-	/* Surface — tc dark: #111111 */
-	--netz-surface: #111111;
-	--netz-surface-alt: #111111;
-	--netz-surface-elevated: #1a1a1a;
-	--netz-surface-inset: #0a0a0a;
-	--netz-surface-overlay: rgba(0, 0, 0, 0.72);
-	--netz-surface-raised: #1e1e1e;
-	--netz-surface-panel: #1e1e1e;
-	--netz-surface-highlight: rgba(59, 130, 246, 0.1);
-	--netz-surface-accent: color-mix(in srgb, var(--netz-brand-primary) 10%, #1a1a1a);
-	--netz-bg: #111111;
+	/* Surface — Figma: color/black/solid, color/blue/9, color/blue/11 */
+	--netz-surface: #000000;
+	--netz-surface-alt: #14151a;
+	--netz-surface-elevated: #14151a;
+	--netz-surface-inset: #000000;
+	--netz-surface-overlay: rgba(13, 13, 13, 0.60);
+	--netz-surface-raised: #1a1b20;
+	--netz-surface-panel: #000000;
+	--netz-surface-highlight: rgba(255, 255, 255, 0.06);
+	--netz-surface-accent: color-mix(in srgb, var(--netz-brand-primary) 8%, #000000);
+	--netz-bg: #000000;
 
-	/* Border */
-	--netz-border-subtle: #262626;
-	--netz-border: #333333;
-	--netz-border-strong: #404040;
-	--netz-border-accent: #404040;
-	--netz-border-focus: #3b9eff;
-	--netz-border-inverse: rgba(255, 255, 255, 0.12);
+	/* Border — Figma: color/grey/27 (#404149), color/grey/34 (#52525b) */
+	--netz-border-subtle: #404149;
+	--netz-border: #43454b;
+	--netz-border-strong: #52525b;
+	--netz-border-accent: rgba(1, 119, 251, 0.25);
+	--netz-border-focus: #0177fb;
+	--netz-border-inverse: rgba(255, 255, 255, 0.10);
 
-	/* Text — tc dark: #f0f0f0 primary, #a8a8a8 secondary */
-	--netz-text-primary: #f0f0f0;
-	--netz-text-secondary: #a8a8a8;
-	--netz-text-muted: #666666;
-	--netz-text-tertiary: #444444;
+	/* Text — Figma: color/white/solid, color/grey/85, color/grey/81, color/grey/76 */
+	--netz-text-primary: #ffffff;
+	--netz-text-secondary: #d9d9d9;
+	--netz-text-muted: #cbccd1;
+	--netz-text-tertiary: #c2c2c2;
 	--netz-text-on-accent: #ffffff;
 
-	/* Semantic */
-	--netz-success: #39b38d;
-	--netz-warning: #d6a24a;
-	--netz-danger: #e07c89;
-	--netz-info: #77abff;
+	/* Semantic — Figma: color/spring green/50, color/orange/57, color/red/55 */
+	--netz-success: #11ec79;
+	--netz-warning: #e3b341;
+	--netz-danger: #fc1a1a;
+	--netz-info: #0177fb;
 
-	/* Chart palette */
-	--netz-chart-1: #3b9eff;
-	--netz-chart-2: #39b38d;
-	--netz-chart-3: #f0a03a;
-	--netz-chart-4: #b2b9c4;
-	--netz-chart-5: #77abff;
+	/* Chart palette — accent blue + monochrome */
+	--netz-chart-1: #0177fb;
+	--netz-chart-2: #ffffff;
+	--netz-chart-3: #d9d9d9;
+	--netz-chart-4: #52525b;
+	--netz-chart-5: #43454b;
 
 	/* Aliases (backward compat) */
 	--netz-primary: var(--netz-brand-primary);
@@ -183,22 +183,22 @@
 	--netz-primary-muted: color-mix(in srgb, var(--netz-brand-primary) 18%, transparent);
 
 	/* Extended semantic tokens */
-	--netz-accent-soft: color-mix(in srgb, var(--netz-brand-primary) 12%, #1a1a1a);
-	--netz-accent-muted: color-mix(in srgb, var(--netz-brand-primary) 14%, #111111);
-	--netz-focus-ring: color-mix(in srgb, var(--netz-border-focus) 26%, transparent);
-	--netz-bg-hover: color-mix(in srgb, var(--netz-brand-primary) 7%, #111111);
-	--netz-bg-secondary: #111111;
+	--netz-accent-soft: color-mix(in srgb, var(--netz-brand-primary) 8%, #000000);
+	--netz-accent-muted: color-mix(in srgb, var(--netz-brand-primary) 12%, #000000);
+	--netz-focus-ring: color-mix(in srgb, var(--netz-border-focus) 30%, transparent);
+	--netz-bg-hover: color-mix(in srgb, #ffffff 5%, #14151a);
+	--netz-bg-secondary: #14151a;
 	--netz-status-error: var(--netz-danger);
-	--netz-danger-subtle: color-mix(in srgb, var(--netz-danger) 14%, #1a1a1a);
-	--netz-success-subtle: color-mix(in srgb, var(--netz-success) 14%, #1a1a1a);
-	--netz-warning-subtle: color-mix(in srgb, var(--netz-warning) 16%, #1a1a1a);
-	--netz-info-subtle: color-mix(in srgb, var(--netz-info) 14%, #1a1a1a);
+	--netz-danger-subtle: color-mix(in srgb, var(--netz-danger) 12%, #000000);
+	--netz-success-subtle: color-mix(in srgb, var(--netz-success) 12%, #000000);
+	--netz-warning-subtle: color-mix(in srgb, var(--netz-warning) 14%, #000000);
+	--netz-info-subtle: color-mix(in srgb, var(--netz-info) 12%, #000000);
 	--netz-error-surface: var(--netz-danger-subtle);
 	--netz-error-on-surface: var(--netz-danger);
 	--netz-warning-surface: var(--netz-warning-subtle);
 	--netz-warning-on-surface: var(--netz-warning);
 	--netz-page-background: var(--netz-bg);
-	--netz-selection-bg: color-mix(in srgb, var(--netz-brand-primary) 28%, black 72%);
+	--netz-selection-bg: color-mix(in srgb, var(--netz-brand-primary) 20%, #000000);
 	--netz-selection-color: var(--netz-text-primary);
 
 	/* Domain-semantic aliases */
