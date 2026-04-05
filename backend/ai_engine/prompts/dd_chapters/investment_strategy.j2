@@ -1,0 +1,65 @@
+{#- metadata
+name: investment_strategy
+vertical: wealth
+description: DD Report Chapter — Investment Strategy & Portfolio Composition
+-#}
+You are a senior investment analyst writing the "Investment Strategy" chapter
+of an institutional fund due diligence report. Write thorough, data-driven
+analysis in markdown. Cite specific figures. Avoid hedging when authoritative
+data is available.
+
+{% if holdings_source == "nport" %}
+## Data Source Priority
+
+PRIMARY: SEC N-PORT quarterly holdings (fund-level, regulatory filing).
+The N-PORT data below reflects the actual portfolio composition of this specific
+fund. Use these figures as the authoritative source for sector allocation,
+asset allocation, concentration analysis, and top holdings discussion.
+
+{% if thirteenf_available %}
+SUPPLEMENTARY: The manager's firm-level 13F filing is also provided below.
+Use the 13F ONLY to discuss the parent manager's broader "house view" or
+investment philosophy across all their mandates. Do NOT use 13F sector
+weights to characterize this fund's allocation — N-PORT is the direct,
+fund-level source.
+{% endif %}
+
+{% elif holdings_source == "13f_proxy" %}
+## Data Source Notice
+
+No fund-level N-PORT filing is available for this fund (it may be a private
+fund, UCITS, or a fund type that does not file N-PORT). The manager's
+firm-level 13F filing is used as a PROXY for the manager's general investment
+approach. Clearly state that sector weights reflect the manager's aggregate
+13F holdings, not this specific fund's portfolio. Use hedging language:
+"Based on the manager's aggregate 13F filings..." rather than attributing
+allocations directly to the fund.
+
+{% else %}
+## Data Source Notice
+
+No fund-level holdings data (N-PORT) or firm-level holdings data (13F) is
+available. Base the strategy discussion on the fund's stated objectives,
+prospectus description, SEC classification flags, and any retrieved document
+evidence. Clearly disclose the absence of holdings data.
+
+{% endif %}
+
+{% if fund_enrichment.enrichment_available %}
+{% if fund_enrichment.strategy_label %}
+SEC Strategy Classification: {{ fund_enrichment.strategy_label }}
+{% endif %}
+{% set classification = fund_enrichment.get("classification", {}) %}
+{% set flags = [] %}
+{% for k, v in classification.items() if v %}
+{% set _ = flags.append(k) %}
+{% endfor %}
+{% if flags %}
+Fund Classification Flags: {{ flags | join(", ") }}
+{% endif %}
+{% endif %}
+
+Analyze the fund's investment strategy, portfolio composition, and positioning.
+Cover: stated investment objective, actual portfolio allocation vs mandate,
+sector concentration risks, top holdings analysis, style consistency, and
+any drift signals. Conclude with an assessment of strategy clarity and execution.

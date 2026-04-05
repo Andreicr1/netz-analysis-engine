@@ -27,12 +27,13 @@ _DRIFT_THRESHOLD_PP = 0.05
 # issuerCat describes the ISSUER type (corporate, government, etc.), not the
 # instrument type.  For debt holdings, "CORP" = corporate bonds.  For equity
 # holdings, "CORP" = corporate equity (stocks).  The asset_class-aware
-# _label_sector() function resolves this ambiguity.
-_NPORT_ISSUER_LABELS: dict[str, str] = {
+# label_nport_sector() function resolves this ambiguity.
+NPORT_ISSUER_LABELS: dict[str, str] = {
     "CORP": "Corporate",
     "UST": "US Treasury",
     "USGA": "US Govt Agency",
     "USGSE": "US Govt Sponsored",
+    "NUSS": "Non-US Sovereign",
     "MUN": "Municipal",
     "MBS": "Mortgage-Backed",
     "ABS": "Asset-Backed",
@@ -41,18 +42,23 @@ _NPORT_ISSUER_LABELS: dict[str, str] = {
     "LOAN": "Bank Loans",
     "MM": "Money Market",
     "EC": "Equity",
-    "PF": "Preferred Stock",
-    "RF": "Real Estate Fund",
+    "PF": "Private Fund",
+    "RF": "Registered Fund",
     "FI": "Fixed Income",
     "OT": "Other",
+    "OTHER": "Other",
 }
 
 # N-PORT assetCat codes that indicate equity instruments
 _EQUITY_ASSET_CATS = {"EC", "STIV"}
 
 
-def _label_sector(raw: str | None, asset_class: str | None = None) -> str:
+def label_nport_sector(raw: str | None, asset_class: str | None = None) -> str:
     """Map N-PORT issuerCat code to readable label.
+
+    If the ``sector`` column already contains an enriched GICS label
+    (e.g. "Technology", "Healthcare"), returns it as-is.  Only raw
+    issuerCat codes (EC, CORP, UST, etc.) are remapped.
 
     When asset_class is provided, disambiguates issuerCat — e.g. "CORP" with
     asset_class "EC" becomes "Corporate Equity" instead of "Corporate Bonds".
@@ -60,7 +66,11 @@ def _label_sector(raw: str | None, asset_class: str | None = None) -> str:
     if not raw:
         return "Other"
     code = raw.strip().upper()
-    base = _NPORT_ISSUER_LABELS.get(code, raw)
+
+    # If the value is NOT a known issuerCat code, it's already an enriched
+    # GICS sector label — return the original casing as-is.
+    if code not in NPORT_ISSUER_LABELS:
+        return raw.strip()
 
     # Disambiguate "Corporate" based on asset class
     if code == "CORP" and asset_class:
@@ -69,7 +79,7 @@ def _label_sector(raw: str | None, asset_class: str | None = None) -> str:
             return "Equity"
         return "Corporate Bonds"
 
-    return base
+    return NPORT_ISSUER_LABELS[code]
 
 
 def gather_sec_13f_data(
@@ -222,7 +232,7 @@ def gather_sec_nport_data(
         # Compute sector weights (group by sector label, sum pct_of_nav)
         sector_totals: dict[str, float] = {}
         for h in holdings:
-            sector = _label_sector(h.sector, h.asset_class)
+            sector = label_nport_sector(h.sector, h.asset_class)
             pct = float(h.pct_of_nav or 0)
             sector_totals[sector] = sector_totals.get(sector, 0.0) + pct
 
@@ -253,8 +263,10 @@ def gather_sec_nport_data(
             {
                 "name": h.issuer_name or "Unknown",
                 "cusip": h.cusip,
-                "sector": _label_sector(h.sector, h.asset_class),
-                "pct_of_nav": round(float(h.pct_of_nav or 0), 2),
+                "sector": label_nport_sector(h.sector, h.asset_class),
+                "issuer_category": h.sector,
+                # Normalize human percent (7.41) → decimal fraction (0.0741)
+                "pct_of_nav": round(float(h.pct_of_nav or 0) / 100.0, 6),
                 "market_value": h.market_value,
             }
             for h in sorted_holdings[:holdings_limit]
@@ -398,7 +410,7 @@ def gather_nport_sector_history(
             # Compute sector weights (group by sector label, sum pct_of_nav)
             sector_totals: dict[str, float] = {}
             for h in holdings:
-                sector = _label_sector(h.sector, h.asset_class)
+                sector = label_nport_sector(h.sector, h.asset_class)
                 pct = float(h.pct_of_nav or 0)
                 sector_totals[sector] = sector_totals.get(sector, 0.0) + pct
 
@@ -698,6 +710,7 @@ def gather_sec_adv_data(
             "adv_team": adv_team,
             "adv_registration_status": manager.registration_status,
             "adv_firm_name": manager.firm_name,
+            "adv_website": manager.website,
             "crd_number": resolved_crd,
         }
 

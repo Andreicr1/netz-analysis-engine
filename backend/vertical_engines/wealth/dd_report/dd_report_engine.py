@@ -394,6 +394,8 @@ class DDReportEngine:
         holdings_source: str | None = None
         if sec_nport:
             holdings_source = "nport"
+        elif sec_13f and sec_13f.get("thirteenf_available"):
+            holdings_source = "13f_proxy"
 
         # ADV brochure depends on sec_adv result — must stay sequential
         adv_brochure = gather_sec_adv_brochure(db, sec_adv.get("crd_number"))
