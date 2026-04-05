@@ -82,6 +82,53 @@ def label_nport_sector(raw: str | None, asset_class: str | None = None) -> str:
     return NPORT_ISSUER_LABELS[code]
 
 
+def _batch_gics_lookup(
+    db: Session,
+    cusips: list[str],
+) -> dict[str, str]:
+    """Batch lookup GICS sectors from sec_cusip_ticker_map for given CUSIPs.
+
+    Returns a dict mapping cusip → gics_sector for CUSIPs that have a
+    non-null gics_sector. Used to enrich equity holdings in N-PORT data
+    with granular GICS labels instead of generic "Equity" issuerCat.
+    """
+    if not cusips:
+        return {}
+    try:
+        from app.shared.models import SecCusipTickerMap
+
+        rows = (
+            db.query(SecCusipTickerMap.cusip, SecCusipTickerMap.gics_sector)
+            .filter(
+                SecCusipTickerMap.cusip.in_(cusips),
+                SecCusipTickerMap.gics_sector.isnot(None),
+            )
+            .all()
+        )
+        return {r.cusip: r.gics_sector for r in rows}
+    except Exception:
+        logger.exception("gics_batch_lookup_failed", cusip_count=len(cusips))
+        return {}
+
+
+def _resolve_sector(
+    holding: Any,
+    cusip_to_gics: dict[str, str],
+) -> str:
+    """Resolve sector label for an N-PORT holding.
+
+    For equity holdings (asset_class in EC/STIV), uses GICS sector from
+    cusip_to_gics if available. Falls back to label_nport_sector() for
+    non-equity or when GICS is not available.
+    """
+    ac = (holding.asset_class or "").strip().upper()
+    if ac in _EQUITY_ASSET_CATS and holding.cusip:
+        gics = cusip_to_gics.get(holding.cusip)
+        if gics:
+            return gics
+    return label_nport_sector(holding.sector, holding.asset_class)
+
+
 def gather_sec_13f_data(
     db: Session,
     *,
@@ -229,10 +276,23 @@ def gather_sec_nport_data(
         if not holdings:
             return {}
 
+        # Batch GICS lookup for equity holdings
+        equity_cusips = [
+            h.cusip for h in holdings
+            if h.cusip and (h.asset_class or "").strip().upper() in _EQUITY_ASSET_CATS
+        ]
+        cusip_to_gics = _batch_gics_lookup(db, equity_cusips)
+        logger.info(
+            "nport_gics_lookup",
+            fund_cik=fund_cik,
+            equity_cusips=len(equity_cusips),
+            gics_matched=len(cusip_to_gics),
+        )
+
         # Compute sector weights (group by sector label, sum pct_of_nav)
         sector_totals: dict[str, float] = {}
         for h in holdings:
-            sector = label_nport_sector(h.sector, h.asset_class)
+            sector = _resolve_sector(h, cusip_to_gics)
             pct = float(h.pct_of_nav or 0)
             sector_totals[sector] = sector_totals.get(sector, 0.0) + pct
 
@@ -263,7 +323,7 @@ def gather_sec_nport_data(
             {
                 "name": h.issuer_name or "Unknown",
                 "cusip": h.cusip,
-                "sector": label_nport_sector(h.sector, h.asset_class),
+                "sector": _resolve_sector(h, cusip_to_gics),
                 "issuer_category": h.sector,
                 # Normalize human percent (7.41) → decimal fraction (0.0741)
                 "pct_of_nav": round(float(h.pct_of_nav or 0) / 100.0, 6),
@@ -393,24 +453,39 @@ def gather_nport_sector_history(
         if not report_dates:
             return []
 
-        history = []
-        for (rd,) in report_dates:
-            # Aggregate by sector for this date
-            holdings = (
-                db.query(SecNportHolding)
-                .filter(
-                    *series_filter,
-                    SecNportHolding.report_date == rd,
-                )
-                .all()
+        # Pre-fetch all holdings across all dates for batch GICS lookup
+        all_dates = [rd for (rd,) in report_dates]
+        all_holdings = (
+            db.query(SecNportHolding)
+            .filter(
+                *series_filter,
+                SecNportHolding.report_date.in_(all_dates),
             )
+            .all()
+        )
+
+        # Batch GICS lookup for all equity CUSIPs across all dates
+        equity_cusips = list({
+            h.cusip for h in all_holdings
+            if h.cusip and (h.asset_class or "").strip().upper() in _EQUITY_ASSET_CATS
+        })
+        cusip_to_gics = _batch_gics_lookup(db, equity_cusips)
+
+        # Group holdings by report_date
+        holdings_by_date: dict[date, list[Any]] = {}
+        for h in all_holdings:
+            holdings_by_date.setdefault(h.report_date, []).append(h)
+
+        history = []
+        for rd in all_dates:
+            holdings = holdings_by_date.get(rd, [])
             if not holdings:
                 continue
 
             # Compute sector weights (group by sector label, sum pct_of_nav)
             sector_totals: dict[str, float] = {}
             for h in holdings:
-                sector = label_nport_sector(h.sector, h.asset_class)
+                sector = _resolve_sector(h, cusip_to_gics)
                 pct = float(h.pct_of_nav or 0)
                 sector_totals[sector] = sector_totals.get(sector, 0.0) + pct
 
@@ -437,6 +512,7 @@ def gather_fund_enrichment(
     *,
     fund_cik: str | None,
     sec_universe: str | None,
+    series_id: str | None = None,
 ) -> dict[str, Any]:
     """Gather N-CEN classification flags and XBRL fee data for DD report.
 
@@ -511,23 +587,24 @@ def gather_fund_enrichment(
                 "net_operating_expenses": float(fund.net_operating_expenses) if fund.net_operating_expenses is not None else None,
             }
 
-        # XBRL per-share-class data
-        class_rows = (
-            db.query(SecFundClass)
-            .filter(SecFundClass.cik == fund_cik)
-            .all()
-        )
+        # XBRL per-share-class data — filter by series_id when available
+        # to avoid returning all classes from umbrella CIKs
+        class_q = db.query(SecFundClass).filter(SecFundClass.cik == fund_cik)
+        if series_id:
+            class_q = class_q.filter(SecFundClass.series_id == series_id)
+        class_rows = class_q.all()
         for sc in class_rows:
             result["share_classes"].append({
                 "class_id": sc.class_id,
                 "ticker": sc.ticker,
-                # XBRL OEF stores _pct fields as pure fractions (0.0002 = 0.02%) → ×100
-                "expense_ratio_pct": round(float(sc.expense_ratio_pct) * 100, 6) if sc.expense_ratio_pct is not None else None,
+                # XBRL OEF stores _pct fields as pure fractions (0.007 = 0.7%).
+                # Keep as fractions — frontend formatPercent() handles display.
+                "expense_ratio_pct": float(sc.expense_ratio_pct) if sc.expense_ratio_pct is not None else None,
                 "advisory_fees_paid": float(sc.advisory_fees_paid) if sc.advisory_fees_paid is not None else None,
                 "net_assets": float(sc.net_assets) if sc.net_assets is not None else None,
                 "holdings_count": sc.holdings_count,
-                "portfolio_turnover_pct": round(float(sc.portfolio_turnover_pct) * 100, 4) if sc.portfolio_turnover_pct is not None else None,
-                "avg_annual_return_pct": round(float(sc.avg_annual_return_pct) * 100, 4) if sc.avg_annual_return_pct is not None else None,
+                "portfolio_turnover_pct": float(sc.portfolio_turnover_pct) if sc.portfolio_turnover_pct is not None else None,
+                "avg_annual_return_pct": float(sc.avg_annual_return_pct) if sc.avg_annual_return_pct is not None else None,
             })
 
         # Vehicle-specific data (ETF / BDC / MMF)
@@ -919,6 +996,8 @@ def gather_prospectus_returns(
         if not rows:
             return []
 
+        # SEC DERA RR1 stores returns as pure fractions (0.0469 = 4.69%).
+        # Frontend formatPercent() expects fractions — no ×100 needed.
         result = [
             {"year": r.year, "annual_return_pct": float(r.annual_return_pct)}
             for r in rows

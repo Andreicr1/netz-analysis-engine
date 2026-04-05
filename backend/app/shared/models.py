@@ -352,6 +352,7 @@ class SecCusipTickerMap(Base):
     issuer_cik: Mapped[str | None] = mapped_column(Text)
     resolved_via: Mapped[str] = mapped_column(Text, nullable=False)
     is_tradeable: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    gics_sector: Mapped[str | None] = mapped_column(Text)
     last_verified_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )

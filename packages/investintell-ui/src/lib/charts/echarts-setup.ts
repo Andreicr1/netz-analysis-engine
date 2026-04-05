@@ -6,6 +6,7 @@ import {
 	GaugeChart,
 	FunnelChart,
 	HeatmapChart,
+	TreemapChart,
 } from "echarts/charts";
 import {
 	GridComponent,
@@ -27,6 +28,7 @@ echarts.use([
 	GaugeChart,
 	FunnelChart,
 	HeatmapChart,
+	TreemapChart,
 	GridComponent,
 	TooltipComponent,
 	LegendComponent,

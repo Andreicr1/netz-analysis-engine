@@ -187,6 +187,10 @@ async def _resolve_cusips(db: AsyncSession, *, max_cusips: int) -> dict:
     cleaned = await _clean_resolved_from_queue(db)
     logger.info("cusip_resolution_queue_cleaned", removed=cleaned)
 
+    # ── Phase 5: Enrich gics_sector for CUSIPs missing it ──
+    gics_enriched = await _enrich_gics_sector(db)
+    stats["gics_enriched"] = gics_enriched
+
     logger.info("cusip_resolution_complete", **stats)
     return stats
 
@@ -365,6 +369,39 @@ async def _clean_resolved_from_queue(db: AsyncSession) -> int:
     except Exception as exc:
         await db.rollback()
         logger.warning("cusip_queue_cleanup_failed", error=str(exc))
+        return 0
+
+
+async def _enrich_gics_sector(db: AsyncSession) -> int:
+    """Backfill gics_sector on sec_cusip_ticker_map from sec_13f_holdings.
+
+    Finds CUSIPs in the map that have no gics_sector yet but have a matching
+    sector in sec_13f_holdings (most recent report_date wins). Returns count
+    of rows updated.
+    """
+    try:
+        result = await db.execute(text("""
+            UPDATE sec_cusip_ticker_map m
+            SET gics_sector = sub.sector
+            FROM (
+                SELECT DISTINCT ON (SUBSTRING(cusip FROM 1 FOR 9))
+                    SUBSTRING(cusip FROM 1 FOR 9) AS cusip9,
+                    sector
+                FROM sec_13f_holdings
+                WHERE sector IS NOT NULL AND sector != ''
+                ORDER BY SUBSTRING(cusip FROM 1 FOR 9), report_date DESC
+            ) sub
+            WHERE m.cusip = sub.cusip9
+              AND m.gics_sector IS NULL
+        """))
+        await db.commit()
+        count = result.rowcount or 0
+        if count > 0:
+            logger.info("gics_sector_enriched", updated=count)
+        return count
+    except Exception as exc:
+        await db.rollback()
+        logger.warning("gics_sector_enrichment_failed", error=str(exc))
         return 0
 
 
