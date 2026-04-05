@@ -7,6 +7,7 @@
   import { goto } from "$app/navigation";
   import type { ScreenerTab, ScreenerFacets } from "$lib/types/screening";
   import { EMPTY_FACETS } from "$lib/types/screening";
+  import { createDebouncedState } from "$lib/utils/reactivity";
 
   interface Props {
     activeTab: ScreenerTab;
@@ -49,13 +50,22 @@
     { key: "etf", label: "ETF" },
   ];
 
-  // ── Debounce ──
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  // ── Debounce (300ms) — single signal triggers applyFilters ──
+  const debounceTrigger = createDebouncedState(0, 300);
+  let _lastApplied = 0;
 
   function debouncedApply() {
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => applyFilters(), 300);
+    debounceTrigger.current = Date.now();
   }
+
+  // React to debounced trigger changing
+  $effect(() => {
+    const v = debounceTrigger.debounced;
+    if (v !== _lastApplied && v !== 0) {
+      _lastApplied = v;
+      applyFilters();
+    }
+  });
 
   function selectTab(tab: ScreenerTab) {
     // Reset tab-specific filters when switching
@@ -159,6 +169,7 @@
         type="text"
         placeholder="Search by name, ISIN, ticker, manager…"
         bind:value={searchQ}
+        oninput={debouncedApply}
         onkeydown={handleSearchKeydown}
       />
     </div>

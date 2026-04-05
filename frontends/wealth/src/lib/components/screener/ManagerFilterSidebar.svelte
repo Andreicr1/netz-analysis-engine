@@ -11,6 +11,7 @@
 	import { StatusBadge, formatNumber, formatDateTime } from "@investintell/ui";
 	import type { ScreeningResult, ScreeningRun, ScreenerFilterConfig, OverallStatus } from "$lib/types/screening";
 	import { EMPTY_FILTERS } from "$lib/types/screening";
+	import { createDebouncedState } from "$lib/utils/reactivity";
 
 	interface Props {
 		results: ScreeningResult[];
@@ -27,17 +28,25 @@
 	let { results, lastRun, runError, initParams: _ip = {}, fundFilters = $bindable(), onRunClick, runDetailOpen = false, runDetailLoading = false, runDetailData = null }: Props = $props();
 	const ip = { ..._ip }; // one-time snapshot — filters are locally mutable
 
-	// ── Manager filters ──
-	let textSearch = $state(ip.text_search ?? "");
+	// ── Manager filters (debounced text inputs) ──
+	const managerSearch = createDebouncedState(ip.text_search ?? "", 300);
 	let aumMin = $state(ip.aum_min ?? "");
 	let aumMax = $state(ip.aum_max ?? "");
 	let complianceClean = $state(ip.compliance_clean === "true");
 	let hasInstitutional = $state(ip.has_institutional_holders === "true");
 
+	// Auto-apply when debounced text search settles
+	$effect(() => {
+		const _q = managerSearch.debounced;
+		// Skip the initial value to avoid navigating on mount
+		if (_q === (ip.text_search ?? "")) return;
+		applyManagerFilters();
+	});
+
 	function applyManagerFilters() {
 		const params = new URLSearchParams();
 		params.set("mode", "managers");
-		if (textSearch) params.set("text_search", textSearch);
+		if (managerSearch.current) params.set("text_search", managerSearch.current);
 		if (aumMin) params.set("aum_min", aumMin);
 		if (aumMax) params.set("aum_max", aumMax);
 		if (complianceClean) params.set("compliance_clean", "true");
@@ -48,7 +57,7 @@
 	}
 
 	function clearManagerFilters() {
-		textSearch = "";
+		managerSearch.current = "";
 		aumMin = "";
 		aumMax = "";
 		complianceClean = false;
@@ -57,7 +66,10 @@
 	}
 
 	function handleFilterKeydown(e: KeyboardEvent) {
-		if (e.key === "Enter") applyManagerFilters();
+		if (e.key === "Enter") {
+			managerSearch.flush();
+			applyManagerFilters();
+		}
 	}
 
 	// ── Fund filter helpers ──
@@ -107,7 +119,7 @@
 <div class="scr-filter-section">
 	<h3 class="scr-filter-title">Manager</h3>
 	<div class="scr-field">
-		<input class="scr-input" type="text" placeholder="Firm name…" bind:value={textSearch} onkeydown={handleFilterKeydown} />
+		<input class="scr-input" type="text" placeholder="Firm name…" value={managerSearch.current} oninput={(e) => { managerSearch.current = e.currentTarget.value; }} onkeydown={handleFilterKeydown} />
 	</div>
 	<div class="scr-field-row">
 		<input class="scr-input scr-input--half" type="number" placeholder="AUM min" bind:value={aumMin} onkeydown={handleFilterKeydown} />

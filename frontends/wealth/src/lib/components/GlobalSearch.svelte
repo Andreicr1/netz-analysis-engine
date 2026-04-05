@@ -9,6 +9,7 @@
 	import { Search, FileText, Building2, Landmark } from "lucide-svelte";
 	import * as Command from "@investintell/ui/components/ui/command";
 	import { createClientApiClient } from "$lib/api/client";
+	import { createDebouncedState } from "$lib/utils/reactivity";
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);
@@ -34,31 +35,30 @@
 	}
 
 	let { open = $bindable(false) }: { open?: boolean } = $props();
-	let searchQuery = $state("");
+	const search = createDebouncedState("", 300);
 	let loading = $state(false);
 	let groups = $state<SearchCategoryGroup[]>([]);
-	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
 	let abortController: AbortController | null = null;
 
 	// Reset state when dialog opens
 	$effect(() => {
 		if (open) {
-			searchQuery = "";
+			search.current = "";
+			search.flush();
 			groups = [];
 			loading = false;
 		}
 	});
 
-	// Debounced search on query change
+	// React to debounced search value
 	$effect(() => {
-		const q = searchQuery;
-		clearTimeout(debounceTimer);
+		const q = search.debounced;
 		if (q.length < 2) {
 			groups = [];
 			loading = false;
 			return;
 		}
-		debounceTimer = setTimeout(() => doSearch(q), 300);
+		doSearch(q);
 	});
 
 	function handleGlobalKeydown(e: KeyboardEvent) {
@@ -128,7 +128,8 @@
 >
 	<Command.Input
 		placeholder="Search funds, managers, documents…"
-		bind:value={searchQuery}
+		value={search.current}
+		oninput={(e: Event) => { search.current = (e.target as HTMLInputElement).value; }}
 	/>
 	<Command.List class="max-h-[380px]">
 		{#if loading}
@@ -139,7 +140,7 @@
 			</Command.Loading>
 		{/if}
 
-		{#if searchQuery.length < 2}
+		{#if search.current.length < 2}
 			<div class="flex flex-col items-center gap-2 py-8 text-muted-foreground">
 				<span class="text-sm">Type at least 2 characters to search</span>
 				<div class="flex gap-3 text-xs">
@@ -148,8 +149,8 @@
 					<span><kbd class="rounded border border-border bg-muted px-1 py-0.5 font-mono text-[10px]">Enter</kbd> open</span>
 				</div>
 			</div>
-		{:else if !loading && groups.length === 0 && searchQuery.length >= 2}
-			<Command.Empty>No results for "{searchQuery}"</Command.Empty>
+		{:else if !loading && groups.length === 0 && search.current.length >= 2}
+			<Command.Empty>No results for "{search.current}"</Command.Empty>
 		{:else}
 			{#each groups as group (group.category)}
 				{@const Icon = getCategoryIcon(group.category)}
