@@ -94,3 +94,10 @@ restore_log.txt
 
 # Deprecated infra (kept for reference but not indexed)
 infra/_deprecated/
+
+# Scratch / personal notes at repo root
+*.workspace.svelte.ts
+design dashboard figma.txt
+Inventário Completo*
+
+CLAUDE.md

@@ -1,18 +1,13 @@
-# ==============================================
-# Gemini / Antigravity Context Exclusions
-# More aggressive than .gitignore — optimized
-# to reduce AI indexing noise
-# ==============================================
+# Gemini CLI Ignore Patterns
+# Mirrors and extends .gitignore to keep the agent focused on code and architecture.
 
-# ── Everything in .gitignore ──
-# Antigravity inherits .gitignore, but we add
-# AI-specific exclusions below
-
-# ── Python build/cache ──
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
+dist/
+build/
 .eggs/
 *.egg
 .venv/
@@ -24,102 +19,74 @@ venv/
 htmlcov/
 .coverage
 
-# ── Node / Frontend build ──
+# Node
 node_modules/
 .svelte-kit/
 .output/
+
+# Build artifacts
 **/build/
 **/dist/
-**/.turbo/
-pnpm-lock.yaml
-
-# ── Source maps & compiled assets ──
 **/*.js.map
 **/*.css.map
-**/*.woff
-**/*.woff2
-**/*.ttf
-**/*.eot
-**/*.ico
-**/*.png
-**/*.jpg
-**/*.jpeg
-**/*.gif
-**/*.webp
-**/*.svg
 
-# ── Environment & secrets ──
+# Lock files (Do not index these as code)
+pnpm-lock.yaml
+package-lock.json
+
+# Environment
 .env
-.env.*
+.env.dev
+.env.local
+.env.*.local
+.env.production
+.env.cloudflare
 frontends/**/.env
 backend/.env
 backend/.env.dev
 
-# ── IDE & tool config ──
+# IDE and OS
 .vscode/
 .vscode_bkp/
 .idea/
-.claude/
-.playwright-mcp/
-**/.codex-*.txt
 *.swp
 *.swo
-
-# ── OS ──
 .DS_Store
 Thumbs.db
 
-# ── Docker & infra ──
+# Docker and Data
 pgdata/
-infra/_deprecated/
-
-# ── Data lake & large files ──
 .data/
 backend/.data/
 Deals/
+scripts/
+!backend/scripts/
+backend/scripts/db_inventory_output.txt
+
+# Project Artifacts
+.claude/
+CLAUDE.md
+**/.turbo/
+**/.codex-*.txt
+.playwright-mcp/
+playwright-report/
+test-results/
+
+# Large files and Binary (Strict Ignore)
 *.dump
 *.sql
 *.parquet
-*.csv
-restore_log.txt
+*.exe
 cloudflared.exe
+restore_log.txt
 
-# ── Temporary files ──
+# Deprecated/Temporary
+infra/_deprecated/
 tmp_*.py
 tmp_*.json
 tmp_*.txt
 backend/tmp_*.json
 backend/tmp_*.txt
-dev.ps1
-backend/.sec_seed_checkpoint.json
-backend/.esma_seed_checkpoint.json
-backend/.nav_backfill_checkpoint.json
-backend/scripts/db_inventory_output.txt
 
-# ── Test artifacts ──
-playwright-report/
-test-results/
-
-# ── Scripts (utility, not analytical logic) ──
-scripts/
-!backend/scripts/
-
-# ── Alembic migrations (SQL noise — 91 files) ──
-backend/app/core/db/migrations/versions/
-
-# ── Calibration & profile YAML (seed data only, runtime is DB) ──
-calibration/
-profiles/
-
-# ── Large reference docs (>100KB, consultable on demand) ──
-docs/reference/evestment-reference.md
-docs/reference/logs-to-baseline-e2e.md
-docs/reference/quant-engine-dd-report-reference.md
-
-# ── Generated type definitions ──
-**/*.d.ts
-
-# ── Brainstorm/plan archives (context is in CLAUDE.md) ──
-docs/brainstorms/
-docs/audits/
-docs/solutions/
+# Specific to Gemini (Uncomment if you want to hide GEMINI.md from the agent's file list, though not recommended)
+# GEMINI.md
