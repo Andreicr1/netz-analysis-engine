@@ -11,6 +11,7 @@
       "svelte": "./dist/index.js"
     },
     "./styles": "./src/lib/styles/index.css",
+    "./investintell-theme": "./src/lib/styles/investintell-theme.css",
     "./charts": {
       "types": "./dist/charts/index.d.ts",
       "svelte": "./dist/charts/index.js"

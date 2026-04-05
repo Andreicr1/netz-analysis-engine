@@ -4,17 +4,13 @@
   Designed for fund-centric deep dives and print-ready reports.
 -->
 <script lang="ts">
-	import { getContext } from "svelte";
-	import { goto } from "$app/navigation";
 	import { formatCompact, formatPercent, formatDate, ContextPanel } from "@investintell/ui";
-	import { Sparkles, Loader2, FileCheck } from "lucide-svelte";
 	import NavPerformanceChart from "$lib/components/charts/NavPerformanceChart.svelte";
 	import SectorAllocationChart from "$lib/components/charts/SectorAllocationChart.svelte";
 	import SectorAllocationTreemap from "$lib/components/charts/SectorAllocationTreemap.svelte";
 	import FundScoringRadar from "$lib/components/charts/FundScoringRadar.svelte";
 	import DecileBoxplot from "$lib/components/charts/DecileBoxplot.svelte";
 	import ReverseLookupPanel from "$lib/components/holdings/ReverseLookupPanel.svelte";
-	import { createClientApiClient } from "$lib/api/client";
 	import "./factsheet.css";
 
 	let { data } = $props();
@@ -22,33 +18,9 @@
 	const {
 		fund, team, top_holdings, annual_returns,
 		nav_history, sector_history, prospectus_stats,
-		share_classes, scoring_metrics
+		share_classes, scoring_metrics,
+		strategy_narrative, firm_description, firm_website
 	} = factSheet;
-
-	// ── DD Report State ──
-	const getToken = getContext<() => Promise<string>>("netz:getToken");
-	const api = createClientApiClient(getToken);
-	let ddGenerating = $state(false);
-	let ddExistingId = $state<string | null>(null);
-
-	async function runDDReport() {
-		if (ddGenerating) return;
-		ddGenerating = true;
-		try {
-			const result = await api.post<{ id: string; instrument_id: string }>("/dd-reports/generate", {
-				instrument_external_id: fund.external_id,
-			});
-			goto(`/screener/dd-reports/${result.instrument_id}/${result.id}`);
-		} catch {
-			ddGenerating = false;
-		}
-	}
-
-	function viewDDReport() {
-		if (ddExistingId) {
-			goto(`/screener/dd-reports/${fund.external_id}/${ddExistingId}`);
-		}
-	}
 
 	// ── Reverse Lookup State ──
 	let rlOpen = $state(false);
@@ -69,7 +41,7 @@
 	<title>{fund.name} | Fact Sheet</title>
 </svelte:head>
 
-<div class="fs-container">
+<div class="fs-container" data-theme="dark">
 	<!-- ── Header ── -->
 	<header class="fs-header">
 		<div class="fs-header-top">
@@ -80,34 +52,12 @@
 					<span class="fs-ticker">{fund.ticker}</span>
 				{/if}
 			</div>
-			<div class="fs-header-actions">
-				{#if ddExistingId}
-					<button class="fs-dd-btn fs-dd-btn--view" onclick={viewDDReport}>
-						<FileCheck size={16} />
-						View DD Report
-					</button>
-				{:else}
-					<button
-						class="fs-dd-btn fs-dd-btn--run"
-						onclick={runDDReport}
-						disabled={ddGenerating}
-					>
-						{#if ddGenerating}
-							<Loader2 size={16} class="animate-spin" />
-							Generating...
-						{:else}
-							<Sparkles size={16} />
-							Run DD Report
-						{/if}
-					</button>
+			<div class="fs-manager-box">
+				<span class="fs-mgr-label">Investment Manager</span>
+				<div class="fs-mgr-name">{fund.manager_name || "Standalone"}</div>
+				{#if fund.manager_id}
+					<span class="fs-mgr-id">ID: {fund.manager_id}</span>
 				{/if}
-				<div class="fs-manager-box">
-					<span class="fs-mgr-label">Investment Manager</span>
-					<div class="fs-mgr-name">{fund.manager_name || "Standalone"}</div>
-					{#if fund.manager_id}
-						<span class="fs-mgr-id">ID: {fund.manager_id}</span>
-					{/if}
-				</div>
 			</div>
 		</div>
 
@@ -288,6 +238,34 @@
 
 		<!-- ── Right Column: Components ── -->
 		<div class="fs-col-right">
+			<!-- Firm Overview -->
+			{#if firm_description || firm_website}
+				<section class="fs-section">
+					<h3 class="fs-section-title">About the Firm</h3>
+					<div class="fs-narrative-card">
+						{#if firm_description}
+							<p class="fs-narrative-text">{firm_description}</p>
+						{/if}
+						{#if firm_website}
+							<a href={firm_website.startsWith("http") ? firm_website : `https://${firm_website}`}
+								target="_blank" rel="noopener noreferrer" class="fs-firm-link">
+								{firm_website}
+							</a>
+						{/if}
+					</div>
+				</section>
+			{/if}
+
+			<!-- Investment Strategy -->
+			{#if strategy_narrative}
+				<section class="fs-section">
+					<h3 class="fs-section-title">Investment Strategy</h3>
+					<div class="fs-narrative-card">
+						<p class="fs-narrative-text">{strategy_narrative}</p>
+					</div>
+				</section>
+			{/if}
+
 			<!-- Management Team -->
 			<section class="fs-section">
 				<h3 class="fs-section-title">Management Team</h3>
@@ -301,7 +279,7 @@
 							{/if}
 							{#if member.education || (member.certifications && member.certifications.length > 0)}
 								<div class="fs-team-meta">
-									{member.education || ""} 
+									{member.education || ""}
 									{member.certifications?.join(", ") || ""}
 								</div>
 							{/if}

@@ -39,7 +39,7 @@
     try {
       const result = await api.get<UnifiedCatalogPage>("/screener/catalog", {
         manager_id: crd,
-        has_nav: "false",
+        has_nav: "true",
         has_aum: "false",
         page_size: "200",
       });
@@ -201,11 +201,7 @@
                       <span style="color:#fafafa;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:400px">{fund.name}</span>
                     </td>
                     <td style="padding:12px 16px;font-size:0.8125rem;vertical-align:middle">
-                      {#if fund.ticker}
-                        <span style="font-family:'Geist Mono',monospace;font-size:0.75rem;color:#a1a1aa">{fund.ticker}</span>
-                      {:else}
-                        <span style="color:#71717a;font-size:0.75rem">Private</span>
-                      {/if}
+                      <span style="font-family:'Geist Mono',monospace;font-size:0.75rem;color:#a1a1aa">{fund.ticker ?? "\u2014"}</span>
                     </td>
                     <td style="padding:12px 16px;vertical-align:middle">
                       <span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.04em;border:1px solid;{badgeStyle(badgeFor(fund.fund_type).colorClass)}">{badgeFor(fund.fund_type).label}</span>

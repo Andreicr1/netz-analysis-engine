@@ -109,10 +109,14 @@
 						System
 					</p>
 					<a
-						href="/settings/system"
+						href="/settings"
 						style:color="white"
 						style:text-decoration="none"
-						class="flex items-center gap-4 px-[23px] h-[58px] rounded-[4px] text-[18px] font-normal hover:bg-white/5 transition-colors"
+						class="flex items-center gap-4 px-[23px] h-[58px] rounded-[4px] text-[18px] font-normal hover:bg-white/5 transition-colors
+							{isActive('/settings')
+								? 'bg-[#0177fb] font-semibold'
+								: ''
+							}"
 					>
 						<Settings size={24} />
 						<span>Settings</span>

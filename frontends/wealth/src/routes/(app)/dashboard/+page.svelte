@@ -145,10 +145,10 @@
 					{#each profileFilters as pf}
 						<button
 							type="button"
-							class="h-[55px] px-[21px] rounded-[32px] text-[16px] text-white transition-colors leading-none whitespace-nowrap
+							class="h-[55px] px-[26px] rounded-[32px] text-[16px] text-white transition-colors leading-none whitespace-nowrap
 								{selectedProfile === pf
 									? 'bg-[#0177fb]'
-									: 'bg-white/[0.13] hover:bg-white/[0.2]'}"
+									: 'border border-white hover:bg-white/10'}"
 							onclick={() => selectedProfile = pf}
 						>{pf}</button>
 					{/each}

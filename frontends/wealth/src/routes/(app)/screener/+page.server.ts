@@ -13,28 +13,26 @@ export const load: PageServerLoad = async ({ url, parent }) => {
 	const { token } = await parent();
 	const api = createServerApiClient(token);
 
-	const tab = url.searchParams.get("tab") ?? "screening";
 	const q = url.searchParams.get("q") ?? "";
 	const page = parseInt(url.searchParams.get("page") ?? "1", 10);
 	const pageSize = 50;
 
-	// Only fetch catalog for the "screening" tab
-	if (tab !== "screening") {
-		return { tab, catalog: EMPTY_MANAGER_CATALOG_PAGE, q, page: 1 };
-	}
+	const aum_min = url.searchParams.get("aum_min");
+
+	const sort = url.searchParams.get("sort") ?? "aum_desc";
 
 	try {
 		const params: Record<string, string> = {
 			page: String(page),
 			page_size: String(pageSize),
-			has_aum: "true",
-			sort: "aum_desc",
+			sort: sort,
 		};
 		if (q) params.q = q;
+		if (aum_min) params.aum_min = aum_min;
 
 		const catalog = await api.get<ManagerCatalogPage>("/screener/catalog/managers", params);
-		return { tab, catalog, q, page };
+		return { catalog, q, aum_min, page, sort };
 	} catch {
-		return { tab, catalog: EMPTY_MANAGER_CATALOG_PAGE, q, page };
+		return { catalog: EMPTY_MANAGER_CATALOG_PAGE, q, aum_min, page, sort };
 	}
 };

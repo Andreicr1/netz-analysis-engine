@@ -17,6 +17,7 @@
     pageSize: number;
     hasNext: boolean;
     searchQuery?: string;
+    sort?: string;
     onPageChange?: (page: number) => void;
   }
 
@@ -27,12 +28,31 @@
     pageSize = 50,
     hasNext = false,
     searchQuery = "",
+    sort = "aum_desc",
     onPageChange,
   }: Props = $props();
 
   // ── Level 2 state ──
   let panelOpen = $state(false);
   let selectedManager = $state<ManagerCatalogItem | null>(null);
+
+  import { page as pageState } from "$app/state";
+  import { goto } from "$app/navigation";
+  import { ChevronUp, ChevronDown } from "lucide-svelte";
+
+  function setSort(col: "name" | "aum") {
+    const params = new URLSearchParams(pageState.url.searchParams);
+    let newSort = "";
+    if (col === "name") {
+      newSort = sort === "name_asc" ? "name_desc" : "name_asc";
+    } else if (col === "aum") {
+      newSort = sort === "aum_desc" ? "aum_asc" : "aum_desc";
+    }
+    params.set("sort", newSort);
+    // Reset to page 1 on sort change
+    params.set("page", "1");
+    goto(`?${params.toString()}`);
+  }
 
   function openManagerPanel(item: ManagerCatalogItem) {
     selectedManager = item;
@@ -87,9 +107,21 @@
       <thead>
         <tr class="ct2-thead-row">
           <th class="ct2-th ct2-th--crd">CRD</th>
-          <th class="ct2-th ct2-th--manager">Manager</th>
+          <th class="ct2-th ct2-th--manager ct2-th--sortable" onclick={() => setSort("name")}>
+            Manager
+            <div class="sort-stacked">
+              <ChevronUp size={12} color={sort === "name_asc" ? "#fff" : "#52525b"} strokeWidth={sort === "name_asc" ? 3 : 2} />
+              <ChevronDown size={12} color={sort === "name_desc" ? "#fff" : "#52525b"} strokeWidth={sort === "name_desc" ? 3 : 2} />
+            </div>
+          </th>
           <th class="ct2-th ct2-th--funds">Funds</th>
-          <th class="ct2-th ct2-th--aum">AUM</th>
+          <th class="ct2-th ct2-th--aum ct2-th--sortable" onclick={() => setSort("aum")}>
+            AUM
+            <div class="sort-stacked">
+              <ChevronUp size={12} color={sort === "aum_asc" ? "#fff" : "#52525b"} strokeWidth={sort === "aum_asc" ? 3 : 2} />
+              <ChevronDown size={12} color={sort === "aum_desc" ? "#fff" : "#52525b"} strokeWidth={sort === "aum_desc" ? 3 : 2} />
+            </div>
+          </th>
           <th class="ct2-th ct2-th--location">Location</th>
           <th class="ct2-th ct2-th--website">Website</th>
         </tr>
@@ -151,7 +183,7 @@
                   class="ct2-website-link"
                   onclick={(e: MouseEvent) => e.stopPropagation()}
                 >
-                  {item.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}
+                  {item.website.toLowerCase().replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}
                 </a>
               {:else}
                 <span class="ct2-muted">&mdash;</span>
@@ -199,6 +231,9 @@
      ══════════════════════════════════════════════════════════ */
   .ct2-root {
     width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
     background: #141519;
     border-radius: 32px 0 0 0;
     overflow: hidden;
@@ -211,7 +246,25 @@
   }
 
   .ct2-table-wrap {
+    flex: 1;
+    overflow-y: auto;
     overflow-x: auto;
+  }
+
+  /* Custom scrollbar for table */
+  .ct2-table-wrap::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .ct2-table-wrap::-webkit-scrollbar-track {
+    background: #141519;
+  }
+  .ct2-table-wrap::-webkit-scrollbar-thumb {
+    background: #2a2b33;
+    border-radius: 4px;
+  }
+  .ct2-table-wrap::-webkit-scrollbar-thumb:hover {
+    background: #3f3f46;
   }
 
   /* ── Header ── */
@@ -224,8 +277,8 @@
   }
 
   .ct2-th {
-    color: #71717a;
-    font-size: 0.75rem;
+    color: #cbccd1;
+    font-size: 0.875rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -234,14 +287,42 @@
     padding: 0 16px;
     font-family: "Urbanist", sans-serif;
     text-align: left;
+    position: sticky;
+    top: 0;
+    background: #141519;
+    z-index: 10;
+  }
+
+  .ct2-th--sortable {
+    cursor: pointer;
+    transition: color 100ms ease;
+  }
+
+  .ct2-th--sortable:hover {
+    color: #fff;
+  }
+
+  .sort-stacked {
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    vertical-align: middle;
+    margin-left: 6px;
+    gap: 0;
+  }
+  
+  .sort-stacked :global(svg) {
+    display: block;
+    margin: -2px 0; /* Tighten the gap between the two chevrons */
   }
 
   .ct2-th--crd { width: 100px; padding-left: 24px; }
   .ct2-th--manager { min-width: 240px; }
   .ct2-th--funds { min-width: 180px; }
-  .ct2-th--aum { width: 140px; text-align: right; }
+  .ct2-th--aum { width: 180px; text-align: right; padding-right: 48px; }
   .ct2-th--location { width: 160px; }
-  .ct2-th--website { width: 200px; }
+  .ct2-th--website { width: 220px; }
 
   /* ── Rows ── */
   .ct2-row {
@@ -266,8 +347,8 @@
   .ct2-cell {
     padding: 14px 16px;
     font-family: "Urbanist", sans-serif;
-    font-size: 0.8125rem;
-    color: #a1a1aa;
+    font-size: 0.9375rem;
+    color: #cbccd1;
     vertical-align: middle;
   }
 
@@ -275,8 +356,8 @@
 
   .ct2-crd {
     font-family: "Geist Mono", monospace;
-    font-size: 0.75rem;
-    color: #71717a;
+    font-size: 0.875rem;
+    color: #a1a1aa;
   }
 
   .ct2-manager-flex {
@@ -301,12 +382,13 @@
   }
 
   .ct2-manager-name {
-    color: #fafafa;
+    color: #fff;
     font-weight: 500;
+    font-size: 1rem;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 220px;
+    max-width: 260px;
   }
 
   .ct2-badges {
@@ -345,6 +427,7 @@
 
   .ct2-cell--aum {
     text-align: right;
+    padding-right: 48px;
     font-family: "Geist Mono", monospace;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
@@ -361,13 +444,13 @@
   .ct2-website-link {
     color: #0177fb;
     text-decoration: none;
-    font-size: 0.75rem;
+    font-size: 0.875rem;
     transition: color 80ms ease;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     display: block;
-    max-width: 180px;
+    max-width: 200px;
   }
 
   .ct2-website-link:hover {

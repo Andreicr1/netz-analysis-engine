@@ -1,21 +1,33 @@
 /*
   Fact Sheet CSS — Professional Financial Styling
+  Uses design system tokens from @investintell/ui.
   Optimized for screen and high-quality PDF print.
-  Dark mode theme.
 */
 
+/* Force dark mode tokens on fact sheet regardless of page theme */
 .fs-container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 40px;
-    background: #000;
-    color: #e5e7eb;
+    --ii-bg:             #000000;
+    --ii-surface-alt:    #141519;
+    --ii-text-primary:   #ffffff;
+    --ii-text-secondary: #d9d9d9;
+    --ii-text-muted:     #cbccd1;
+    --ii-brand-primary:  #0177fb;
+    --ii-border-subtle:  #404249;
+    --ii-success:        #11ec79;
+    --ii-danger:         #fc1a1a;
+    color-scheme: dark;
+
+    width: 100%;
+    padding: 16px;
+    border-radius: 16px;
+    background: var(--ii-bg);
+    color: var(--ii-text-primary);
     font-family: var(--ii-font-sans, "Inter", sans-serif);
 }
 
 /* ── Header ── */
 .fs-header {
-    border-bottom: 2px solid rgba(255,255,255,0.05);
+    border-bottom: 2px solid var(--ii-border-subtle);
     padding-bottom: 24px;
     margin-bottom: 32px;
 }
@@ -30,8 +42,8 @@
 .fs-universe-badge {
     display: inline-block;
     padding: 2px 8px;
-    background: #1a1b20;
-    color: #71717a;
+    background: var(--ii-surface-alt);
+    color: var(--ii-text-muted);
     font-size: 10px;
     font-weight: 700;
     border-radius: 4px;
@@ -44,7 +56,7 @@
     font-size: 28px;
     font-weight: 800;
     line-height: 1.2;
-    color: #fafafa;
+    color: var(--ii-text-primary);
 }
 
 .fs-ticker {
@@ -52,56 +64,11 @@
     font-family: var(--ii-font-mono, monospace);
     font-size: 16px;
     font-weight: 700;
-    color: #0177fb;
-    background: rgba(1,119,251,0.08);
+    color: var(--ii-brand-primary);
+    background: color-mix(in srgb, var(--ii-brand-primary) 8%, transparent);
     padding: 2px 8px;
     border-radius: 4px;
     margin-top: 8px;
-}
-
-.fs-header-actions {
-    display: flex;
-    align-items: flex-start;
-    gap: 16px;
-}
-
-.fs-dd-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 10px 20px;
-    border: none;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 700;
-    font-family: var(--ii-font-sans, "Inter", sans-serif);
-    cursor: pointer;
-    white-space: nowrap;
-    transition: background 120ms ease, opacity 120ms ease;
-}
-
-.fs-dd-btn--run {
-    background: #0177fb;
-    color: #fff;
-}
-
-.fs-dd-btn--run:hover:not(:disabled) {
-    background: #0060d0;
-}
-
-.fs-dd-btn--run:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
-.fs-dd-btn--view {
-    background: #1a1b20;
-    color: #fafafa;
-    border: 1px solid rgba(255,255,255,0.05);
-}
-
-.fs-dd-btn--view:hover {
-    background: #22232a;
 }
 
 .fs-manager-box {
@@ -111,7 +78,7 @@
 .fs-mgr-label {
     font-size: 11px;
     font-weight: 600;
-    color: #71717a;
+    color: var(--ii-text-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -119,13 +86,13 @@
 .fs-mgr-name {
     font-size: 18px;
     font-weight: 700;
-    color: #fafafa;
+    color: var(--ii-text-primary);
     margin-top: 4px;
 }
 
 .fs-mgr-id {
     font-size: 12px;
-    color: #71717a;
+    color: var(--ii-text-muted);
 }
 
 /* ── Quick Stats ── */
@@ -133,9 +100,10 @@
     display: grid;
     grid-template-columns: repeat(5, 1fr);
     gap: 16px;
-    background: #1a1b20;
+    background: var(--ii-surface-alt);
     padding: 20px;
     border-radius: 12px;
+    border: 1px solid var(--ii-border-subtle);
 }
 
 .fs-stat {
@@ -146,7 +114,7 @@
 .fs-stat-label {
     font-size: 11px;
     font-weight: 600;
-    color: #71717a;
+    color: var(--ii-text-muted);
     text-transform: uppercase;
     margin-bottom: 4px;
 }
@@ -154,7 +122,7 @@
 .fs-stat-val {
     font-size: 16px;
     font-weight: 700;
-    color: #fafafa;
+    color: var(--ii-text-primary);
 }
 
 /* ── Layout Grid ── */
@@ -179,8 +147,8 @@
 .fs-section-title {
     font-size: 16px;
     font-weight: 700;
-    color: #fafafa;
-    border-left: 4px solid #0177fb;
+    color: var(--ii-text-primary);
+    border-left: 4px solid var(--ii-brand-primary);
     padding-left: 12px;
     margin-bottom: 20px;
     text-transform: uppercase;
@@ -197,19 +165,20 @@
     text-align: left;
     font-size: 11px;
     font-weight: 600;
-    color: #71717a;
+    color: var(--ii-text-muted);
     text-transform: uppercase;
     padding: 8px 12px;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
+    border-bottom: 1px solid var(--ii-border-subtle);
 }
 
 .fs-table td {
     padding: 12px;
     font-size: 13px;
-    border-bottom: 1px solid rgba(255,255,255,0.05);
+    border-bottom: 1px solid var(--ii-border-subtle);
 }
 
-.fs-table th.r, .fs-table td.r {
+.fs-table th.r,
+.fs-table td.r {
     text-align: right;
 }
 
@@ -219,7 +188,7 @@
 
 .fs-mini-ticker {
     font-size: 11px;
-    background: #1a1b20;
+    background: var(--ii-surface-alt);
     padding: 2px 4px;
     border-radius: 3px;
 }
@@ -227,8 +196,8 @@
 /* ── Performance ── */
 .fs-chart-wrap {
     height: 320px;
-    background: #000;
-    border: 1px solid rgba(255,255,255,0.05);
+    background: var(--ii-bg);
+    border: 1px solid var(--ii-border-subtle);
     border-radius: 8px;
     padding: 16px;
 }
@@ -243,31 +212,66 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    background: #1a1b20;
+    background: var(--ii-surface-alt);
     padding: 10px;
     border-radius: 8px;
+    border: 1px solid var(--ii-border-subtle);
 }
 
 .fs-ret-year {
     font-size: 11px;
     font-weight: 600;
-    color: #71717a;
+    color: var(--ii-text-muted);
 }
 
 .fs-ret-val {
     font-size: 14px;
     font-weight: 700;
-    color: #10b981;
+    color: var(--ii-success);
 }
 
 .fs-ret-val.neg {
-    color: #ef4444;
+    color: var(--ii-danger);
+}
+
+/* ── Narrative Cards (Brochure) ── */
+.fs-narrative-card {
+    padding: 16px;
+    background: var(--ii-surface-alt);
+    border: 1px solid var(--ii-border-subtle);
+    border-radius: 12px;
+}
+
+.fs-narrative-text {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--ii-text-secondary);
+    margin: 0;
+    white-space: pre-line;
+}
+
+.fs-narrative-text + .fs-firm-link {
+    margin-top: 12px;
+}
+
+.fs-firm-link {
+    display: inline-block;
+    margin-top: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ii-brand-primary);
+    text-decoration: none;
+}
+
+.fs-firm-link:hover {
+    text-decoration: underline;
 }
 
 /* ── Team ── */
 .fs-team-card {
     padding: 16px;
-    background: #1a1b20;
+    background: var(--ii-surface-alt);
+    border: 1px solid var(--ii-border-subtle);
     border-radius: 12px;
     margin-bottom: 16px;
 }
@@ -275,12 +279,12 @@
 .fs-team-name {
     font-size: 15px;
     font-weight: 700;
-    color: #fafafa;
+    color: var(--ii-text-primary);
 }
 
 .fs-team-role {
     font-size: 12px;
-    color: #0177fb;
+    color: var(--ii-brand-primary);
     font-weight: 600;
     margin-bottom: 8px;
 }
@@ -288,14 +292,14 @@
 .fs-team-bio {
     font-size: 12px;
     line-height: 1.5;
-    color: #71717a;
+    color: var(--ii-text-muted);
     margin: 8px 0;
 }
 
 .fs-team-meta {
     font-size: 11px;
     font-style: italic;
-    color: #71717a;
+    color: var(--ii-text-muted);
 }
 
 /* ── Holdings ── */
@@ -311,7 +315,7 @@
 }
 
 .fs-holding-btn:hover .fs-holding-name {
-    color: #0177fb;
+    color: var(--ii-brand-primary);
     text-decoration: underline;
 }
 
@@ -323,7 +327,7 @@
 
 .fs-holding-meta {
     font-size: 11px;
-    color: #71717a;
+    color: var(--ii-text-muted);
 }
 
 .fs-holding-weight {
@@ -334,8 +338,9 @@
 .fs-no-data {
     padding: 40px;
     text-align: center;
-    color: #71717a;
-    background: #1a1b20;
+    color: var(--ii-text-muted);
+    background: var(--ii-surface-alt);
+    border: 1px solid var(--ii-border-subtle);
     border-radius: 8px;
     font-size: 13px;
     font-style: italic;
@@ -343,11 +348,36 @@
 
 /* ── Print Styles ── */
 @media print {
-    body { background: #fff; color: #1d293d; }
-    .fs-container { width: 100%; padding: 0; background: #fff; color: #1d293d; }
-    .fs-grid { display: block; }
-    .fs-col-left, .fs-col-right { width: 100%; }
-    .fs-section { break-inside: avoid; }
-    .fs-header { border-bottom-width: 3px; }
-    .fs-print-hide { display: none !important; }
+    body {
+        background: #fff;
+        color: #1d293d;
+    }
+
+    .fs-container {
+        width: 100%;
+        padding: 0;
+        background: #fff;
+        color: #1d293d;
+    }
+
+    .fs-grid {
+        display: block;
+    }
+
+    .fs-col-left,
+    .fs-col-right {
+        width: 100%;
+    }
+
+    .fs-section {
+        break-inside: avoid;
+    }
+
+    .fs-header {
+        border-bottom-width: 3px;
+    }
+
+    .fs-print-hide {
+        display: none !important;
+    }
 }

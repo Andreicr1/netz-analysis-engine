@@ -52,7 +52,7 @@
 		try {
 			const result = await api.get<UnifiedCatalogPage>("/screener/catalog", {
 				manager_id: managerId,
-				has_nav: "false",
+				has_nav: "true",
 				has_aum: "false",
 				page_size: "200",
 			});
