@@ -62,6 +62,7 @@ from app.domains.wealth.schemas.manager_screener import (
     NportHoldingsResponse,
 )
 from app.shared.enums import Role
+from vertical_engines.wealth.dd_report.sec_injection import label_nport_sector
 from app.shared.models import (
     Sec13fDiff,
     Sec13fHolding,
@@ -676,11 +677,14 @@ async def get_manager_nport_holdings(
             isin=h.isin,
             issuer_name=h.issuer_name or "Unknown",
             asset_class=h.asset_class,
-            sector=h.sector,
+            sector=label_nport_sector(h.sector, h.asset_class),
+            issuer_category=h.sector,
             market_value=float(h.market_value) if h.market_value else None,
             quantity=float(h.quantity) if h.quantity else None,
             currency=h.currency,
-            pct_of_nav=float(h.pct_of_nav) if h.pct_of_nav else None,
+            # N-PORT pctVal is human percent (7.41 = 7.41%); normalize to
+            # pure decimal fraction (0.0741) for frontend formatPercent().
+            pct_of_nav=float(h.pct_of_nav) / 100.0 if h.pct_of_nav else None,
             report_date=h.report_date,
         )
         for h in rows

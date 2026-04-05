@@ -13,6 +13,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.domains.wealth.schemas.instrument import FundExtendedData
+
 
 class DisclosureMatrix(BaseModel):
     """Data availability flags driven by fund universe and source."""
@@ -145,9 +147,17 @@ class ManagerCatalogPage(BaseModel):
 
 
 class FundHolding(BaseModel):
+    """Fund holding from N-PORT.
+
+    ``pct_of_nav`` is a pure decimal fraction (0.0741 = 7.41%).
+    ``sector`` is the enriched GICS sector or issuer category label.
+    ``issuer_category`` is the raw N-PORT issuerCat code.
+    """
+
     name: str
     cusip: str | None = None
     sector: str | None = None
+    issuer_category: str | None = None
     pct_of_nav: float
     market_value: float | None = None
 
@@ -169,6 +179,7 @@ class NavPoint(BaseModel):
 
 class FundFactSheet(BaseModel):
     fund: UnifiedFundItem
+    extended_data: FundExtendedData | None = None
     team: list[TeamMember] = Field(default_factory=list)
     top_holdings: list[FundHolding] = Field(default_factory=list)
     annual_returns: list[dict[str, Any]] = Field(default_factory=list)
@@ -177,6 +188,11 @@ class FundFactSheet(BaseModel):
     prospectus_stats: dict[str, Any] | None = None
     share_classes: list[dict[str, Any]] = Field(default_factory=list)
     scoring_metrics: dict[str, Any] | None = None
+
+    # Brochure narratives (ADV Part 2A)
+    strategy_narrative: str | None = None
+    firm_description: str | None = None
+    firm_website: str | None = None
 
 
 class ShareClassItem(BaseModel):

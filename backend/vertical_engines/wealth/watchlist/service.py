@@ -118,19 +118,22 @@ class WatchlistService:
             if not prev_attrs:
                 continue
 
-            # Fee increase detection (>5bps = 0.05 pct points)
+            # Fee increase detection (>5bps = 0.0005 decimal fraction)
             curr_er = current_attrs.get("expense_ratio_pct")
             prev_er = prev_attrs.get("expense_ratio_pct")
             if curr_er is not None and prev_er is not None:
                 delta = float(curr_er) - float(prev_er)
-                if delta > 0.05:
+                if delta > 0.0005:
+                    prev_human = float(prev_er) * 100.0
+                    curr_human = float(curr_er) * 100.0
+                    delta_bps = delta * 10000.0
                     alerts.append(TransitionAlert(
                         instrument_id=instrument_id,
                         instrument_name=instrument_name,
-                        previous_outcome=f"ER {prev_er}%",
-                        new_outcome=f"ER {curr_er}%",
+                        previous_outcome=f"ER {prev_human:.2f}%",
+                        new_outcome=f"ER {curr_human:.2f}%",
                         direction="enrichment_change",
-                        message=f"Expense ratio increased by {delta:.3f}pp ({prev_er}% → {curr_er}%)",
+                        message=f"Expense ratio increased by {delta_bps:.1f}bps ({prev_human:.2f}% → {curr_human:.2f}%)",
                         detected_at=now,
                     ))
 

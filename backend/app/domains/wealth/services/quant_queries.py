@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from quant_engine.rebalance_service import CascadeResult
 
 import numpy as np
+import pandas as pd
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -95,20 +96,14 @@ async def fetch_returns_matrix(
     for fid, nav_date, ret in ret_result.all():
         grouped[str(fid)][str(nav_date)] = float(ret)
 
-    date_sets = [set(grouped[fid].keys()) for fid in fund_ids]
-    common_dates = sorted(set.intersection(*date_sets) if date_sets else set())
+    matrix, common_dates = _align_returns_with_ffill(grouped, fund_ids)
 
     if len(common_dates) < 120:
         raise ValueError(
             f"Insufficient aligned return data: {len(common_dates)} common dates (need ≥120)",
         )
 
-    T, N = len(common_dates), len(fund_ids)
-    matrix = np.zeros((T, N), dtype=np.float64)
-    for j, fid in enumerate(fund_ids):
-        for i, d in enumerate(common_dates):
-            matrix[i, j] = grouped[fid][d]
-
+    N = len(fund_ids)
     equal_weights = [1.0 / N] * N
     return matrix, fund_ids, equal_weights
 
@@ -117,6 +112,52 @@ async def fetch_returns_matrix(
 
 TRADING_DAYS_PER_YEAR = 252
 MIN_OBSERVATIONS = 120
+_FFILL_LIMIT = 3  # max business days to forward-fill a stale NAV
+
+
+def _align_returns_with_ffill(
+    fund_returns: dict[str, dict],
+    fund_ids: list[str],
+) -> tuple[np.ndarray, list]:
+    """Build aligned T×N returns matrix with forward-fill before intersection.
+
+    Steps:
+        1. Construct a DataFrame (dates × funds) from the sparse dicts.
+        2. Forward-fill each fund column up to *_FFILL_LIMIT* rows (T-1 to T-3
+           projection — prevents stale NAV from propagating further).
+        3. Drop rows that still contain NaN (strict intersection after fill).
+
+    Returns:
+        (returns_matrix, common_dates) — both numpy-friendly.
+
+    The caller is responsible for checking len(common_dates) >= MIN_OBSERVATIONS.
+    """
+    # Collect the full date universe across all funds
+    all_dates: set = set()
+    for fid in fund_ids:
+        all_dates.update(fund_returns[fid].keys())
+
+    if not all_dates:
+        return np.empty((0, len(fund_ids)), dtype=np.float64), []
+
+    sorted_dates = sorted(all_dates)
+
+    # Build DataFrame: rows=dates, cols=fund_ids, missing = NaN
+    data = {fid: [fund_returns[fid].get(d) for d in sorted_dates] for fid in fund_ids}
+    df = pd.DataFrame(data, index=sorted_dates, dtype=np.float64)
+
+    # Forward-fill with limit — propagates last known return for up to 3 days
+    df = df.ffill(limit=_FFILL_LIMIT)
+
+    # Drop any row that still has gaps (strict intersection post-fill)
+    df = df.dropna()
+
+    if df.empty:
+        return np.empty((0, len(fund_ids)), dtype=np.float64), []
+
+    returns_matrix = df.to_numpy(dtype=np.float64)
+    common_dates = list(df.index)
+    return returns_matrix, common_dates
 
 
 async def compute_inputs_from_nav(
@@ -173,12 +214,11 @@ async def compute_inputs_from_nav(
         fund_returns[str(instrument_id)][nav_date] = float(return_1d)
 
     fund_id_strs = [str(block_funds[bid].fund_id) for bid in available_blocks]
-    all_date_sets = [set(fund_returns[fid].keys()) for fid in fund_id_strs]
 
-    if not all_date_sets:
+    if not fund_returns:
         raise ValueError("No return data found for any block")
 
-    common_dates = sorted(set.intersection(*all_date_sets))
+    returns_matrix, common_dates = _align_returns_with_ffill(fund_returns, fund_id_strs)
 
     if len(common_dates) < MIN_OBSERVATIONS:
         raise ValueError(
@@ -186,12 +226,7 @@ async def compute_inputs_from_nav(
             f"(minimum: {MIN_OBSERVATIONS}). Some funds may have sparse history.",
         )
 
-    returns_matrix = np.array([
-        [fund_returns[fid][d] for fid in fund_id_strs]
-        for d in common_dates
-    ])
-
-    daily_cov = np.cov(returns_matrix, rowvar=False)
+    daily_cov = _apply_ledoit_wolf(returns_matrix)
     annual_cov = daily_cov * TRADING_DAYS_PER_YEAR
 
     eigenvalues = np.linalg.eigvalsh(annual_cov)
@@ -219,13 +254,18 @@ def _apply_ledoit_wolf(returns_matrix: np.ndarray) -> np.ndarray:
     """Apply Ledoit-Wolf shrinkage to compute covariance from returns.
 
     Input: (T x N) returns matrix. Returns: (N x N) shrinkage covariance.
+    Falls back to sample covariance (np.cov) if sklearn fails.
     """
-    from sklearn.covariance import LedoitWolf
+    try:
+        from sklearn.covariance import LedoitWolf
 
-    lw = LedoitWolf()
-    lw.fit(returns_matrix)
-    result: np.ndarray = lw.covariance_
-    return result
+        lw = LedoitWolf()
+        lw.fit(returns_matrix)
+        result: np.ndarray = lw.covariance_
+        return result
+    except Exception:
+        logger.warning("ledoit_wolf_fallback", reason="sklearn LedoitWolf failed, using sample cov")
+        return np.cov(returns_matrix, rowvar=False)
 
 
 async def _fetch_returns_by_type(
@@ -433,19 +473,13 @@ async def compute_fund_level_inputs(
     if len(available_ids) < 2:
         raise ValueError(f"Need ≥2 funds with NAV data, found {len(available_ids)}")
 
-    all_date_sets = [set(fund_returns[fid].keys()) for fid in available_ids]
-    common_dates = sorted(set.intersection(*all_date_sets))
+    returns_matrix, common_dates = _align_returns_with_ffill(fund_returns, available_ids)
 
     if len(common_dates) < MIN_OBSERVATIONS:
         raise ValueError(
             f"Insufficient aligned fund data: {len(common_dates)} trading days "
             f"(minimum: {MIN_OBSERVATIONS})",
         )
-
-    returns_matrix = np.array([
-        [fund_returns[fid][d] for fid in available_ids]
-        for d in common_dates
-    ])
 
     # ── BL-2: Ledoit-Wolf shrinkage (configurable) ──
     apply_shrinkage = True
@@ -520,7 +554,8 @@ async def compute_fund_level_inputs(
             if inst and inst.attributes:
                 er = inst.attributes.get("expense_ratio_pct")
                 if er is not None:
-                    expected_returns[fid] -= float(er) / 100.0  # pct → decimal
+                    # er is pure decimal fraction (0.015 = 1.5% annual fee drag)
+                    expected_returns[fid] -= float(er)
                     fee_adjusted = True
 
     logger.info(
@@ -577,10 +612,10 @@ def compute_regime_conditioned_cov(
         weighted_cov = (demeaned.T * weights) @ demeaned / (weights.sum() - 1)
         annual_cov: np.ndarray = weighted_cov * TRADING_DAYS_PER_YEAR
     else:
-        # Normal regime: use long window
+        # Normal regime: use long window with Ledoit-Wolf shrinkage
         window = min(long_window, T)
         recent_returns = returns_matrix[-window:]
-        daily_cov: np.ndarray = np.cov(recent_returns, rowvar=False)
+        daily_cov: np.ndarray = _apply_ledoit_wolf(recent_returns)
         annual_cov = daily_cov * TRADING_DAYS_PER_YEAR
 
     # PSD adjustment

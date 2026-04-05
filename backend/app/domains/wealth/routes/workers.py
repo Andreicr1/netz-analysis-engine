@@ -918,6 +918,36 @@ async def trigger_run_form345_ingestion(
 
 
 @router.post(
+    "/run-cusip-resolution",
+    response_model=WorkerScheduledResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Trigger CUSIP → ticker resolution",
+    description=(
+        "Schedules the CUSIP resolution worker as a background task. "
+        "Drains _cusip_resolve_queue and discovers new unresolved CUSIPs from "
+        "sec_13f_holdings and sec_nport_holdings, resolves via OpenFIGI batch API, "
+        "and upserts to sec_cusip_ticker_map. Uses advisory lock 900_025. "
+        "Returns immediately."
+    ),
+    tags=["workers"],
+)
+async def trigger_run_cusip_resolution(
+    background_tasks: BackgroundTasks,
+    user: CurrentUser = Depends(get_current_user),
+    actor: Actor = Depends(get_actor),
+) -> WorkerScheduledResponse:
+    _require_admin_role(actor)
+
+    from app.domains.wealth.workers.cusip_resolution import run_cusip_resolution
+
+    return await _dispatch_worker(
+        background_tasks, "run-cusip-resolution", "global",
+        run_cusip_resolution,
+        timeout_seconds=_HEAVY_WORKER_TIMEOUT,
+    )
+
+
+@router.post(
     "/run-geography-enrichment",
     response_model=WorkerScheduledResponse,
     status_code=status.HTTP_202_ACCEPTED,

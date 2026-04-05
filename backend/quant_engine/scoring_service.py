@@ -103,7 +103,9 @@ def compute_fund_score(
     # Fee efficiency — default component (replaces Lipper rating).
     # 0% ER → 100 (best), 2% ER → 0 (worst). Neutral 50.0 when no data.
     if expense_ratio_pct is not None:
-        components["fee_efficiency"] = max(0.0, 100.0 - expense_ratio_pct * 50.0)
+        # expense_ratio_pct is a pure decimal fraction (0.015 = 1.5%)
+        er_human_pct = float(expense_ratio_pct) * 100.0
+        components["fee_efficiency"] = max(0.0, 100.0 - er_human_pct * 50.0)
     else:
         components["fee_efficiency"] = 50.0
 

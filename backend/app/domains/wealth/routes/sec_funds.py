@@ -50,6 +50,7 @@ from app.domains.wealth.schemas.sec_funds import (
     TopHoldingItem,
 )
 from app.shared.enums import Role
+from vertical_engines.wealth.dd_report.sec_injection import label_nport_sector
 from app.shared.models import (
     SecFundStyleSnapshot,
     SecManager,
@@ -364,10 +365,12 @@ async def get_fund_holdings(
             isin=r[1],
             issuer_name=r[2],
             asset_class=r[3],
-            sector=r[4],
+            sector=label_nport_sector(r[4], r[3]),
+            issuer_category=r[4],
             market_value=r[5],
             quantity=float(r[6]) if r[6] is not None else None,
-            pct_of_nav=float(r[7]) if r[7] is not None else None,
+            # N-PORT pctVal is human percent (7.41); normalize to fraction
+            pct_of_nav=float(r[7]) / 100.0 if r[7] is not None else None,
             currency=r[8],
             fair_value_level=r[9],
         )
@@ -483,9 +486,12 @@ async def get_holdings_history(
     from collections import defaultdict
 
     quarter_sector: dict[str, dict[str, float]] = defaultdict(dict)
-    for report_date, sector, sector_pct in rows:
+    for report_date, sector_code, sector_pct in rows:
         q = str(report_date)
-        quarter_sector[q][sector] = round(float(sector_pct), 4)
+        label = label_nport_sector(sector_code)
+        # Normalize human percent → decimal fraction and merge same labels
+        val = round(float(sector_pct) / 100.0, 6)
+        quarter_sector[q][label] = quarter_sector[q].get(label, 0.0) + val
 
     quarters = sorted(quarter_sector.keys())
 
@@ -522,8 +528,10 @@ async def get_holdings_history(
         top_holdings_latest=[
             TopHoldingItem(
                 issuer_name=r[0],
-                sector=r[1],
-                pct_of_nav=round(float(r[2]), 4) if r[2] else None,
+                sector=label_nport_sector(r[1]),
+                issuer_category=r[1],
+                # Normalize human percent → decimal fraction
+                pct_of_nav=round(float(r[2]) / 100.0, 6) if r[2] else None,
                 cusip=r[3],
                 market_value=r[4],
             )

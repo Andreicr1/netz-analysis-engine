@@ -77,9 +77,50 @@ from app.domains.wealth.schemas.screening import (
 from app.shared.enums import Role
 from app.shared.models import EsmaFund, EsmaManager, SecCusipTickerMap
 
-logger = structlog.get_logger()
+logger = structlog.get_logger(__name__)
+
+
+def _normalize_to_fraction(value: float | Any | None, source: str) -> float | None:
+    """Ensure percentage value is stored as pure decimal fraction (0.015 = 1.5%).
+
+    Some SEC sources (N-CEN) may store human percent (e.g. 1.50) while others
+    store fractions. This guard normalizes values > 1.0 (impossible for fees
+    unless it's a convention mismatch).
+    """
+    if value is None:
+        return None
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    if f > 1.0:
+        # Likely human percent (1.50) — convert to fraction (0.015)
+        logger.warning(
+            "normalizing_to_fraction",
+            source=source,
+            original_value=f,
+            normalized_value=f / 100.0,
+        )
+        return f / 100.0
+    return f
+
 
 router = APIRouter(prefix="/screener", tags=["screener"])
+
+
+_SOCIAL_MEDIA_DOMAINS = {"twitter.com", "x.com", "linkedin.com", "facebook.com", "instagram.com", "youtube.com"}
+
+
+def _clean_website(url: str | None) -> str | None:
+    """Return institutional website URL, filtering out social media profiles."""
+    if not url:
+        return None
+    lower = url.lower().replace("https://", "").replace("http://", "").replace("www.", "")
+    for domain in _SOCIAL_MEDIA_DOMAINS:
+        if lower.startswith(domain):
+            return None
+    return url
 
 
 def _require_investment_role(actor: Actor) -> None:
@@ -1029,9 +1070,13 @@ async def import_sec_security(
                 enrichment_attrs["strategy_label"] = etf_row.strategy_label
                 enrichment_attrs["is_index"] = etf_row.is_index
                 if etf_row.net_operating_expenses is not None:
-                    enrichment_attrs["expense_ratio_pct"] = float(etf_row.net_operating_expenses)
+                    enrichment_attrs["expense_ratio_pct"] = _normalize_to_fraction(
+                        etf_row.net_operating_expenses, "sec_etfs.net_operating_expenses",
+                    )
                 if etf_row.tracking_difference_net is not None:
-                    enrichment_attrs["tracking_difference_net"] = float(etf_row.tracking_difference_net)
+                    enrichment_attrs["tracking_difference_net"] = _normalize_to_fraction(
+                        etf_row.tracking_difference_net, "sec_etfs.tracking_difference_net",
+                    )
                 enrichment_attrs["index_tracked"] = etf_row.index_tracked
 
         # Fallback: search sec_bdcs by ticker
@@ -1045,7 +1090,9 @@ async def import_sec_security(
                 enrichment_attrs["sec_universe"] = "bdc"
                 enrichment_attrs["strategy_label"] = bdc_row.strategy_label
                 if bdc_row.net_operating_expenses is not None:
-                    enrichment_attrs["expense_ratio_pct"] = float(bdc_row.net_operating_expenses)
+                    enrichment_attrs["expense_ratio_pct"] = _normalize_to_fraction(
+                        bdc_row.net_operating_expenses, "sec_bdcs.net_operating_expenses",
+                    )
                 enrichment_attrs["investment_focus"] = bdc_row.investment_focus
                 enrichment_attrs["is_externally_managed"] = bdc_row.is_externally_managed
 
@@ -1077,11 +1124,15 @@ async def import_sec_security(
                     max(class_rows, key=lambda c: float(c.net_assets or 0)),
                 )
                 if best.expense_ratio_pct is not None:
-                    enrichment_attrs["expense_ratio_pct"] = float(best.expense_ratio_pct)
+                    enrichment_attrs["expense_ratio_pct"] = _normalize_to_fraction(
+                        best.expense_ratio_pct, "sec_fund_classes.expense_ratio_pct",
+                    )
                 if best.holdings_count is not None:
                     enrichment_attrs["holdings_count"] = best.holdings_count
                 if best.portfolio_turnover_pct is not None:
-                    enrichment_attrs["portfolio_turnover_pct"] = float(best.portfolio_turnover_pct)
+                    enrichment_attrs["portfolio_turnover_pct"] = _normalize_to_fraction(
+                        best.portfolio_turnover_pct, "sec_fund_classes.portfolio_turnover_pct",
+                    )
 
             # Resolve manager name from sec_managers if available
             if reg_fund.crd_number:
@@ -1658,7 +1709,7 @@ async def get_catalog_managers(
         fund_type=fund_type,
         strategy_label=strategy_label,
         aum_min=aum_min,
-        has_nav=False,
+        has_nav=None,
         has_aum=has_aum,
         sort=sort,
         page=page,
@@ -1952,6 +2003,7 @@ async def get_fund_fact_sheet(
         gather_nport_sector_history,
         gather_prospectus_returns,
         gather_prospectus_stats,
+        gather_sec_adv_brochure,
         gather_sec_adv_data,
         gather_sec_nport_data,
     )
@@ -2028,9 +2080,40 @@ async def get_fund_fact_sheet(
             prop_stats = gather_prospectus_stats(sync_db, fund_cik=fund_cik, series_id=correct_series_id)
             prop_returns = gather_prospectus_returns(sync_db, fund_cik=fund_cik, series_id=correct_series_id)
             
+            # Brochure narratives (ADV Part 2A — item_4 = firm description, item_8 = strategy)
+            brochure = gather_sec_adv_brochure(
+                sync_db, crd_number=effective_crd,
+                sections=["item_4", "item_8"],
+            )
+
             # Enrichment (Classes)
             enrichment = gather_fund_enrichment(sync_db, fund_cik=fund_cik, sec_universe=detail.universe)
-            
+
+            # Per-fund-type extended data (Phase 5)
+            from app.domains.wealth.queries.fund_extended_data import hydrate_extended_data
+
+            extended = hydrate_extended_data(
+                sync_db,
+                external_id=detail.external_id,
+                universe=detail.universe,
+                fund_type=detail.fund_type,
+                series_id=correct_series_id,
+            )
+
+            # Inception date fallback: fund.inception_date → earliest share class perf_inception_date
+            inception_fallback: dt.date | None = None
+            if not detail.inception_date and fund_cik:
+                from sqlalchemy import func as sa_func
+
+                from app.shared.models import SecFundClass
+                earliest = (
+                    sync_db.query(sa_func.min(SecFundClass.perf_inception_date))
+                    .filter(SecFundClass.cik == fund_cik, SecFundClass.perf_inception_date.isnot(None))
+                    .scalar()
+                )
+                if earliest:
+                    inception_fallback = earliest
+
             return {
                 "adv": adv_data,
                 "nport": nport_data,
@@ -2038,6 +2121,9 @@ async def get_fund_fact_sheet(
                 "stats": prop_stats,
                 "returns": prop_returns,
                 "enrichment": enrichment,
+                "extended_data": extended,
+                "brochure": brochure,
+                "inception_fallback": inception_fallback,
             }
 
     evidence = await asyncio.to_thread(_gather_evidence)
@@ -2091,6 +2177,18 @@ async def get_fund_fact_sheet(
     adv = evidence["adv"]
     nport = evidence["nport"]
     enrichment = evidence["enrichment"]
+    brochure = evidence.get("brochure", {})
+
+    # Apply inception_date fallback on the detail object if missing
+    inception_fallback = evidence.get("inception_fallback")
+    if not detail.inception_date and inception_fallback:
+        detail.inception_date = inception_fallback
+
+    # Strategy fallback: if strategy_label is null, use style_label from N-PORT analysis
+    if not detail.strategy_label:
+        style_label = nport.get("fund_style", {}).get("style_label")
+        if style_label:
+            detail.strategy_label = style_label
 
     team = [
         TeamMember(
@@ -2110,6 +2208,7 @@ async def get_fund_fact_sheet(
             name=h["name"],
             cusip=h["cusip"],
             sector=h["sector"],
+            issuer_category=h.get("issuer_category"),
             pct_of_nav=h["pct_of_nav"],
             market_value=float(h["market_value"]) if h.get("market_value") else None,
         )
@@ -2118,6 +2217,7 @@ async def get_fund_fact_sheet(
 
     return FundFactSheet(
         fund=detail,
+        extended_data=evidence["extended_data"],
         team=team,
         top_holdings=holdings,
         annual_returns=evidence["returns"],
@@ -2126,6 +2226,9 @@ async def get_fund_fact_sheet(
         prospectus_stats=evidence["stats"],
         share_classes=enrichment.get("share_classes", []),
         scoring_metrics=scoring_metrics,
+        strategy_narrative=brochure.get("item_8"),
+        firm_description=brochure.get("item_4"),
+        firm_website=_clean_website(adv.get("adv_website")),
     )
 
 

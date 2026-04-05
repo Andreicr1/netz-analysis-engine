@@ -123,13 +123,19 @@ class FundDetailResponse(BaseModel):
 
 
 class NportHoldingItem(BaseModel):
-    """Single N-PORT holding row."""
+    """Single N-PORT holding row.
+
+    ``pct_of_nav`` is a pure decimal fraction (0.0741 = 7.41%).
+    ``sector`` is the human-readable issuer category label.
+    ``issuer_category`` is the raw N-PORT issuerCat code.
+    """
 
     cusip: str | None = None
     isin: str | None = None
     issuer_name: str | None = None
     asset_class: str | None = None
     sector: str | None = None
+    issuer_category: str | None = None
     market_value: int | None = None
     quantity: float | None = None
     pct_of_nav: float | None = None
@@ -174,8 +180,11 @@ class StyleHistoryResponse(BaseModel):
 
 
 class TopHoldingItem(BaseModel):
+    """Top holding — pct_of_nav is a pure decimal fraction."""
+
     issuer_name: str | None = None
     sector: str | None = None
+    issuer_category: str | None = None
     pct_of_nav: float | None = None
     cusip: str | None = None
     market_value: int | None = None

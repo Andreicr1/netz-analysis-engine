@@ -213,11 +213,20 @@ class ManagerCompareResult(BaseModel):
 
 
 class NportHoldingItem(BaseModel):
+    """N-PORT holding with normalized data.
+
+    ``pct_of_nav`` is a **pure decimal fraction** (0.0741 = 7.41%).
+    ``sector`` is the enriched GICS sector (via resolve_sector), falling
+    back to the human-readable issuer category label when unavailable.
+    ``issuer_category`` is the raw N-PORT issuerCat code (CORP, RF, etc.).
+    """
+
     cusip: str | None = None
     isin: str | None = None
     issuer_name: str
     asset_class: str | None = None
     sector: str | None = None
+    issuer_category: str | None = None
     market_value: float | None = None
     quantity: float | None = None
     currency: str | None = None

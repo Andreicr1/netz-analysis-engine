@@ -73,6 +73,13 @@ mv_unified_funds = Table(
     Column("is_fund_of_fund", Boolean),
 )
 
+sec_managers = Table(
+    "sec_managers",
+    _meta,
+    Column("crd_number", Text, primary_key=True),
+    Column("aum_total", Numeric),
+)
+
 sec_money_market_funds = Table(
     "sec_money_market_funds",
     _meta,
@@ -122,9 +129,10 @@ class CatalogFilters:
     page_size: int = 50
 
     # Prospectus-based filters (applied to registered_us + etf branches)
+    # User provides human percent (0.50 = 0.50%), DB stores fraction (0.005)
     max_expense_ratio: float | None = None      # e.g. 0.50 → ER ≤ 0.50%
-    min_return_1y: float | None = None          # e.g. 5.0 → avg_annual_return_1y ≥ 5%
-    min_return_10y: float | None = None         # e.g. 8.0 → avg_annual_return_10y ≥ 8%
+    min_return_1y: float | None = None          # e.g. 5.0 → return ≥ 5%
+    min_return_10y: float | None = None         # e.g. 8.0 → return ≥ 8%
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -277,11 +285,14 @@ def _build_base_stmt(f: CatalogFilters) -> Select[Any]:
         
     # 11. Prospectus filters
     if f.max_expense_ratio is not None:
-        conditions.append(mv_unified_funds.c.expense_ratio_pct <= f.max_expense_ratio)
+        # User enters 0.50 (meaning 0.50%), DB stores 0.005
+        conditions.append(mv_unified_funds.c.expense_ratio_pct <= f.max_expense_ratio / 100.0)
     if f.min_return_1y is not None:
-        conditions.append(mv_unified_funds.c.avg_annual_return_1y >= f.min_return_1y)
+        # User enters 5.0 (meaning 5%), DB stores 0.05
+        conditions.append(mv_unified_funds.c.avg_annual_return_1y >= f.min_return_1y / 100.0)
     if f.min_return_10y is not None:
-        conditions.append(mv_unified_funds.c.avg_annual_return_10y >= f.min_return_10y)
+        # User enters 8.0 (meaning 8%), DB stores 0.08
+        conditions.append(mv_unified_funds.c.avg_annual_return_10y >= f.min_return_10y / 100.0)
 
     if conditions:
         stmt = stmt.where(and_(*conditions))
@@ -347,8 +358,11 @@ _MANAGER_SORT_MAP = {
 
 
 def build_manager_catalog_query(filters: CatalogFilters) -> Select[Any]:
-    """Group funds by manager_id, aggregate total AUM and fund_type array.
+    """Group funds by manager_id, join sec_managers for official AUM.
 
+    Uses sec_managers.aum_total (Form ADV Q5F2C) instead of summing
+    fund-level AUM which double-counts share classes and fund-of-funds.
+    fund_count uses DISTINCT series_id to count actual funds, not classes.
     Only returns managers that have a non-null manager_id (registered advisers).
     """
     base = _build_base_stmt(filters)
@@ -361,13 +375,25 @@ def build_manager_catalog_query(filters: CatalogFilters) -> Select[Any]:
     grouped = select(
         sub.c.manager_id,
         func.max(sub.c.manager_name).label("manager_name"),
-        func.sum(sub.c.aum_usd).label("total_aum"),
-        func.count(literal(1)).label("fund_count"),
+        func.count(func.distinct(func.coalesce(
+            sub.c.series_id, sub.c.external_id,
+        ))).label("fund_count"),
         func.array_agg(func.distinct(sub.c.fund_type)).label("fund_types"),
-    ).group_by(sub.c.manager_id).subquery("grouped")
+    ).group_by(sub.c.manager_id).having(
+        # Only managers with at least one fund with ticker (tradeable via YFinance)
+        func.count(sub.c.ticker) > 0,
+    ).subquery("grouped")
+
+    # JOIN sec_managers for official AUM (Form ADV)
+    joined = select(
+        grouped,
+        sec_managers.c.aum_total.label("total_aum"),
+    ).outerjoin(
+        sec_managers, grouped.c.manager_id == sec_managers.c.crd_number,
+    ).subquery("joined")
 
     # Pagination + windowed total
-    stmt = select(grouped).add_columns(
+    stmt = select(joined).add_columns(
         func.count().over().label("_total"),
     )
 

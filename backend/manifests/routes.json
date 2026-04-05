@@ -1046,6 +1046,11 @@
   },
   {
     "method": "GET",
+    "path": "/api/v1/screener/catalog/managers",
+    "name": "get_catalog_managers"
+  },
+  {
+    "method": "GET",
     "path": "/api/v1/screener/catalog/{external_id}/detail",
     "name": "get_catalog_fund_detail"
   },
@@ -1058,6 +1063,11 @@
     "method": "GET",
     "path": "/api/v1/screener/facets",
     "name": "get_screener_facets"
+  },
+  {
+    "method": "GET",
+    "path": "/api/v1/screener/funds/{external_id}/classes",
+    "name": "get_fund_classes"
   },
   {
     "method": "GET",
@@ -1948,6 +1958,11 @@
     "method": "POST",
     "path": "/api/v1/workers/run-brochure-extract",
     "name": "trigger_run_brochure_extract"
+  },
+  {
+    "method": "POST",
+    "path": "/api/v1/workers/run-cusip-resolution",
+    "name": "trigger_run_cusip_resolution"
   },
   {
     "method": "POST",
