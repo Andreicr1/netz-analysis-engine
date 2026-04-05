@@ -4,6 +4,7 @@
 > Migration: `wealth_content` table (org-scoped, RLS)
 > Concorrencia: `asyncio.Semaphore(3)` — max 3 geracoes simultaneas
 > SSE: Redis pub/sub via `app.core.jobs.tracker`
+> Atualizado: 2026-04-05 — v2: Adicionadas secoes 5.4/5.5 (DD Report + Long-Form Report vector search), expandida tabela de embedding usage por engine
 
 ---
 
@@ -289,6 +290,48 @@ backend/vertical_engines/wealth/manager_spotlight.py
 
 **Labels i18n usados no prompt:** `fund_overview`, `quant_analysis`, `peer_comparison`, `key_risks`
 
+### 5.4 Due Diligence Report (DD Report)
+
+```
+backend/vertical_engines/wealth/dd_report/dd_report_engine.py
+```
+
+O DD Report tambem utiliza busca semantica para enriquecer o contexto dos capitulos:
+
+**Fontes de dados vetoriais:**
+
+| Fonte | Metodo | Descricao |
+|-------|--------|-----------|
+| `wealth_vector_chunks` (firm) | `search_fund_firm_context_sync()` | 15 chunks firm-level (ADV brochure, SEC profile) via `sec_crd` |
+| `wealth_vector_chunks` (analysis) | `search_fund_analysis_sync()` | 10 chunks org-scoped (DD chapters, macro reviews) via `instrument_id` |
+
+**Query de embedding:** `"investment philosophy strategy risk management"`
+
+**Contexto:** Chapters 1-7 geram em paralelo via `ThreadPoolExecutor(max_workers=5)`. Chapter 8 (Recommendation) roda sequencialmente apos 1-7. `EvidencePack` (frozen dataclass) contem toda a evidencia. Vector search fornece contexto documental para capitulos que requerem evidencia externa.
+
+**Reference:** `dd_report/dd_report_engine.py:401-429`
+
+### 5.5 Long-Form Report
+
+```
+backend/vertical_engines/wealth/long_form_report/long_form_report_engine.py
+```
+
+O Long-Form Report utiliza duas buscas vetoriais distintas:
+
+**Fontes de dados vetoriais:**
+
+| Fonte | Metodo | Descricao |
+|-------|--------|-----------|
+| `wealth_vector_chunks` (firm) | `search_fund_firm_context_sync()` | 20 chunks firm-level (highlights da gestora) via `sec_crd` |
+| `wealth_vector_chunks` (analysis) | `search_fund_analysis_sync()` | 15 chunks org-scoped `source_type="macro_review"` (outlook macro) |
+
+**Queries de embedding:**
+- Fund highlights: `"investment philosophy strategy risk management team"`
+- Macro outlook: `"macro economic outlook regional growth inflation monetary policy"`
+
+**Reference:** `long_form_report/long_form_report_engine.py:587-641`
+
 ---
 
 ## 6. Renderizacao PDF
@@ -497,19 +540,36 @@ O `macro_committee_engine.py` gera `WeeklyReportData` persistido em `MacroReview
 
 Os engines usam busca semantica no `wealth_vector_chunks` para enriquecer o contexto LLM:
 
-| Engine | Source Types Buscados | Scope |
-|--------|----------------------|-------|
-| InvestmentOutlook | `macro_review` | org-scoped |
-| FlashReport | `macro_review` | org-scoped |
-| ManagerSpotlight | firm chunks (brochure, sec_profile) + analysis chunks (dd_chapter, macro_review) | global (firm) + org (analysis) |
+| Engine | Source Types Buscados | Scope | Top K |
+|--------|----------------------|-------|-------|
+| InvestmentOutlook | `macro_review` | org-scoped | 10 |
+| FlashReport | `macro_review` (event-driven) | org-scoped | 10 |
+| ManagerSpotlight | firm chunks (brochure, sec_profile) + analysis chunks (dd_chapter, macro_review) | global (firm) + org (analysis) | 15 + 10 |
+| DDReport | firm chunks (brochure, sec_profile) + analysis chunks (dd_chapter, macro_review) | global (firm) + org (analysis) | 15 + 10 |
+| LongFormReport | firm chunks (highlights) + analysis chunks (macro_review) | global (firm) + org (analysis) | 20 + 15 |
+
+**Nota:** Existem duas tabelas pgvector distintas no sistema:
+- `vector_chunks` — Dominio Credit (deals, documentos de credito)
+- `wealth_vector_chunks` — Dominio Wealth (analyses org-scoped, macro reviews, firm profiles)
 
 ### DD Report / Quant Injection
 
-O ManagerSpotlight reutiliza funcoes do DD Report para enriquecimento de dados:
+O ManagerSpotlight e o DDReport reutilizam funcoes compartilhadas para enriquecimento de dados:
 
+**Quant & Risk Metrics:**
 - `gather_quant_metrics()` — metricas quant do `fund_risk_metrics`
 - `gather_risk_metrics()` — metricas de risco do `fund_risk_metrics`
-- `gather_fund_enrichment()` — SEC N-CEN flags + share classes
+
+**Fund-Level SEC Data (N-PORT para registered US funds):**
+- `gather_sec_nport_data()` — fund portfolio holdings, sector allocation, fund style (PRIMARY para registered_us)
+
+**Manager-Level SEC Data:**
+- `gather_sec_13f_data()` — firm sector weights, drift detection (SUPPLEMENTARY)
+- `gather_sec_adv_data()` — manager profile, AUM history, compliance
+- `gather_sec_adv_brochure()` — narrative sections from ADV Part 2A
+
+**Fee & Prospectus Data:**
+- `gather_fund_enrichment()` — SEC N-CEN classification flags, share classes, vehicle-specific data
 - `gather_prospectus_stats()` — fee structure do DERA RR1
 - `gather_prospectus_returns()` — historico de retornos anuais
 

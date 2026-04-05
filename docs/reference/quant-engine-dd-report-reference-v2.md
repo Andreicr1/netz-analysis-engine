@@ -1,9 +1,11 @@
 # Netz Analysis Engine — Quantitative Infrastructure & Due Diligence Report Reference
 
-**Version:** 1.0
-**Date:** 2026-03-24
+**Version:** 2.0
+**Date:** 2026-04-05
 **Audience:** Institutional investors, compliance officers, portfolio managers, auditors
 **Purpose:** Transparent, code-traceable documentation of every computation, threshold, and method in the Netz quantitative stack
+
+> **Changelog v2.0:** Updated from v1.0 to reflect Global Instruments Refactor, fund-centric N-PORT pivot, and scoring component corrections.
 
 ---
 
@@ -282,11 +284,10 @@ $$\text{score} = \sum_{k} w_k \times C_k$$
 | `drawdown_control` | 0.20 | max\_drawdown\_1y in $[-0.50, 0.0]$ | `scoring_service.py:88` |
 | `information_ratio` | 0.15 | info\_ratio\_1y in $[-1.0, 2.0]$ | `scoring_service.py:91` |
 | `flows_momentum` | 0.10 | passed through (0-100) | `scoring_service.py:93` |
-| `lipper_rating` | 0.10 | passed through (0-100) | `scoring_service.py:94` |
-| `fee_drag` | opt-in | $100 - \text{ER}\% \times 50$ (2% ER → 0) | `scoring_service.py:101` |
+| `fee_efficiency` | 0.10 | $100 - \text{ER\_human\_pct} \times 50$ where ER\_human\_pct = expense\_ratio\_pct × 100 (0% ER → 100, 2% ER → 0) | `scoring_service.py:103` |
 | `insider_sentiment` | opt-in | passed through (0-100), from Form 345 | `scoring_service.py:106` |
 
-**Optional components:** `fee_drag` and `insider_sentiment` are activated only when the config dict includes their weight key with value > 0. When absent (default), behavior is unchanged.
+**Optional components:** `insider_sentiment` is activated only when the config dict includes its weight key with value > 0. When absent (default), behavior is unchanged.
 
 **Insider sentiment score:** Computed from `sec_insider_sentiment` materialized view. Score = `buy_value / (buy_value + sell_value) * 100`. Excludes sole 10% Owners (`TenPercentOwner`). Uses only informative codes P (purchase) and S (sale). Default 4-quarter lookback. Score of 50.0 = neutral/no data. Reference: `insider_queries.py`.
 
@@ -343,6 +344,10 @@ The following columns are upserted per `(instrument_id, calc_date)`:
 | `manager_score` | Weighted composite | Manager composite score (0-100) |
 | `score_components` | JSONB | Per-component breakdown |
 | `dtw_drift_score` | Derivative DTW | Strategy drift vs block benchmark |
+| `volatility_garch` | GARCH(1,1) | Conditional volatility estimate (migration 0058) |
+| `cvar_95_conditional` | GARCH-conditioned | CVaR at 95% using GARCH volatility (migration 0058) |
+
+**GARCH fallback behavior:** Returns `None` if `arch` library not installed or if fewer than 100 observations. Returns `GarchResult(converged=False)` if model fails to converge — upstream falls back to sample volatility (`volatility_1y`).
 
 ### 2.14 Redis Cache (Post-Computation)
 
@@ -1291,7 +1296,7 @@ Generates 8-chapter institutional due diligence reports with evidence-backed ana
 
 ```
 1. Ensure report record (idempotent, versioned)
-2. Build evidence pack (Fund + quant + risk + SEC 13F + SEC ADV)
+2. Build evidence pack (Fund + quant + risk + SEC N-PORT + SEC 13F + SEC ADV + vector search)
 3. Generate chapters 1-7 in parallel (ThreadPoolExecutor, max_workers=5)
 4. Generate chapter 8 sequentially (requires chapters 1-7 summaries)
 5. Compute confidence score
@@ -1327,7 +1332,8 @@ A frozen dataclass containing all evidence for the report:
 | Risk metrics | Nested CVaR/VaR windows, max drawdown | `fund_risk_metrics` |
 | Scoring data | manager_score, components | `fund_risk_metrics` |
 | Macro snapshot | Region scores | `macro_regional_snapshots` |
-| SEC 13F | thirteenf_available, sector_weights, drift_detected, drift_quarters | `sec_13f_holdings` |
+| SEC 13F | thirteenf_available, sector_weights, drift_detected, drift_quarters | `sec_13f_holdings` (manager-level, SUPPLEMENTARY — firm sector exposure overlay) |
+| SEC N-PORT Holdings | nport_available, nport_sector_weights, nport_asset_allocation, nport_top_holdings, fund_style, style_drift_detected | `sec_nport_holdings` (fund-level, PRIMARY for registered US funds) |
 | SEC ADV | compliance_disclosures, aum_history, fee_structure, funds, team | `sec_managers`, `sec_manager_funds`, `sec_manager_team` |
 | SEC ADV Brochure | adv_brochure_sections (item_5, item_8, item_9, item_10) | `sec_manager_brochure_text` |
 | SEC Fund Enrichment | insider_sentiment_score, insider_summary (buy/sell counts + values) | `sec_insider_sentiment` MV |
@@ -1395,6 +1401,39 @@ Two integration points inject insider sentiment into DD reports:
 **Query service:** `insider_queries.py` provides `get_insider_sentiment_score()` and `get_insider_summary()` — sync functions matching DD report `asyncio.to_thread()` context.
 
 **Reference:** `dd_report/sec_injection.py:392-415` (fund-level), `dd_report/sec_injection.py:230-270` (portfolio-level), `domains/wealth/services/insider_queries.py`
+
+### 13.7a N-PORT Fund-Level Holdings (Primary Source)
+
+For registered US funds (`sec_universe == "registered_us"`), N-PORT data is the **primary holdings source**, replacing the 13F manager-level view with actual fund portfolio data.
+
+**Function:** `gather_sec_nport_data(db, fund_cik)` in `dd_report/sec_injection.py:160-361`
+
+**Returns:**
+
+| Field | Description |
+|-------|-------------|
+| `nport_available` | Boolean flag |
+| `report_date` | Latest N-PORT filing date |
+| `holdings_count` | Total number of holdings in fund |
+| `sector_weights` | Dict of normalized sector allocations (0-1 scale) |
+| `asset_allocation` | Equity / fixed income / cash / other split |
+| `top_holdings` | Top N holdings by % of NAV (CUSIP, issuer, sector, pct_of_nav) |
+| `fund_style` | Computed classification (style_label, growth_tilt, equity_pct, fi_pct, cash_pct, confidence) |
+| `style_drift_detected` | Boolean — fund style changed quarter-over-quarter |
+| `portfolio_insider_sentiment` | Weighted average insider sentiment across top 20 holdings (optional) |
+
+**Data normalization:**
+- N-PORT `pct_of_nav` fields (0-100) are normalized to decimals (0-1): `sector_weights[s] = round(v / 100, 4)`
+- Sector labels map N-PORT `issuerCat` codes (EC, CORP, UST, MUN, etc.) to readable names via `label_nport_sector()`
+- Asset-class-aware labeling: "CORP" + EC asset class → "Corporate Equity", "CORP" + FI → "Corporate Bonds"
+
+**Holdings source resolution:** The DD Report engine sets `holdings_source = "nport"` when N-PORT data is available (`dd_report_engine.py:394-396`). This controls chapter context:
+- **investment_strategy chapter:** N-PORT presented as primary section with full asset allocation, sectors, top holdings; 13F as supplementary "Manager Firm Context"
+- **manager_assessment chapter:** Fund-level style (N-PORT) injected alongside firm-level ADV data
+
+**13F as supplementary overlay:** When N-PORT is available, 13F data is labeled "supplementary" in chapter context. When N-PORT is unavailable (private funds, UCITS), 13F serves as "proxy" holdings source.
+
+**Reference:** `dd_report/sec_injection.py:160-361` (N-PORT), `dd_report/dd_report_engine.py:343-400` (resolution), `dd_report/chapters.py:196-237` (chapter context)
 
 ### 13.8 Confidence Scoring
 
@@ -1706,8 +1745,8 @@ Implements `BaseAnalyzer` ABC for the `liquid_funds` profile:
 | `treasury_ingestion` | 900_011 | global | `treasury_data` (1mo chunks) | US Treasury Fiscal Data API | Daily |
 | `ofr_ingestion` | 900_012 | global | `ofr_hedge_fund_data` (3mo chunks) | OFR API | Weekly |
 | `benchmark_ingest` | 900_004 | global | `benchmark_nav` (1mo chunks) | Yahoo Finance | Daily |
-| `instrument_ingestion` | 900_010 | org | `nav_timeseries` | Yahoo Finance | Daily |
-| `risk_calc` | 900_007 | org | `fund_risk_metrics` | Computed | Daily |
+| `instrument_ingestion` | 900_010 | global | `nav_timeseries` (global, no RLS) | Yahoo Finance | Daily |
+| `risk_calc` | 900_007 | org | `fund_risk_metrics` | Computed (reads nav_timeseries globally, org-scoping via instruments_org JOIN) | Daily |
 | `portfolio_eval` | 900_008 | org | `portfolio_snapshots` | Computed | Daily |
 | `nport_ingestion` | 900_018 | global | `sec_nport_holdings` (3mo chunks) | SEC EDGAR N-PORT XML | Weekly |
 | `sec_13f_ingestion` | 900_021 | global | `sec_13f_holdings`, `sec_13f_diffs` | SEC EDGAR 13F-HR | Weekly |
@@ -1760,12 +1799,11 @@ All workers follow the same pattern:
 
 ### 17.1 nav_monthly_returns_agg
 
-**Source:** `nav_timeseries` hypertable (tenant-scoped)
+**Source:** `nav_timeseries` hypertable (GLOBAL — no RLS, no organization_id. Org-scoping via instruments_org JOIN at query time)
 
 ```sql
 SELECT
     instrument_id,
-    organization_id,
     time_bucket('1 month', nav_date) AS month,
     SUM(return_1d) AS compound_log_return,
     (EXP(SUM(return_1d)) - 1) AS compound_return,
@@ -1774,7 +1812,7 @@ SELECT
     MAX(nav) AS max_nav
 FROM nav_timeseries
 WHERE return_1d IS NOT NULL
-GROUP BY instrument_id, organization_id, time_bucket('1 month', nav_date)
+GROUP BY instrument_id, time_bucket('1 month', nav_date)
 ```
 
 **Refresh policy:** Daily, `start_offset` = 3 months, `end_offset` = 1 day
@@ -2034,7 +2072,7 @@ All workers use PostgreSQL advisory locks with deterministic integer IDs to prev
 
 **Hypertable indexes (7):**
 - `nav_timeseries(instrument_id, nav_date) INCLUDE (return_1d)` — covering index for correlation/attribution (index-only scan)
-- `nav_timeseries(organization_id, instrument_id)` — RLS optimization
+- ~~`nav_timeseries(organization_id, instrument_id)`~~ — **REMOVED:** nav_timeseries is GLOBAL with no organization_id column; org-scoping happens via instruments_org JOIN at query time
 - `fund_risk_metrics(instrument_id, calc_date DESC)` — DISTINCT ON optimization for latest metric
 - `fund_risk_metrics(organization_id, instrument_id, calc_date DESC)` — RLS + instrument + latest
 - `fund_risk_metrics(manager_score DESC NULLS LAST)` filtered `WHERE manager_score IS NOT NULL` — scoring ranking
@@ -2053,7 +2091,7 @@ TimescaleDB hypertable compression:
 | `treasury_data` | 1 month | — | `series_id` |
 | `ofr_hedge_fund_data` | 3 months | — | `series_id` |
 | `benchmark_nav` | 1 month | — | `block_id` |
-| `nav_timeseries` | — | — | `organization_id` |
+| `nav_timeseries` | 1 month | — | `instrument_id` (global table, no organization_id) |
 | `fund_risk_metrics` | — | — | `organization_id` |
 | `sec_13f_holdings` | 3 months | 6 months | `cik` |
 | `sec_13f_diffs` | 3 months | 6 months | `cik` |

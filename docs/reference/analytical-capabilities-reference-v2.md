@@ -1,5 +1,7 @@
 # Analytical Capabilities Reference
 
+> Atualizado: 2026-04-05 (v2: Active Share benchmark corrigido, N-PORT vs 13F documentado, regime thresholds alinhados com codigo)
+
 Comprehensive reference of the Netz Analysis Engine's quantitative, risk, and performance analytics stack. Covers 30 quant services, 9 vertical engines, 31 background workers, and 5 report engines — totaling ~9,000 lines of analytics code.
 
 ---
@@ -328,7 +330,35 @@ Optional macro labeling: correlates PCA factors with VIX, DGS10, CPI, etc.
 
 **Classification:** >= 80% = Stock Picker, >= 60% = Active, >= 30% = Moderately Active, < 30% = Closet Indexer.
 
-**Data source:** Fund holdings from `sec_nport_holdings` (N-PORT quarterly). Benchmark from 13F or static reference.
+**Data source:** Fund holdings from `sec_nport_holdings` (N-PORT quarterly). Benchmark index from static reference (e.g., S&P 500, MSCI World). 13F manager-level holdings may serve as supplementary context, NOT as benchmark.
+
+### 5.4 N-PORT vs 13F Holdings
+
+O Netz Analysis Engine usa DUAS fontes de holdings SEC distintas:
+
+| Dimensao | N-PORT (Fund-Level) | 13F (Manager-Level) |
+|----------|-------------------|-------------------|
+| **Filer** | Registered investment companies (fundos) | Institutional investment managers (gestoras) |
+| **Escopo** | Portfolio do fundo individual | Posicoes agregadas da gestora |
+| **Frequencia** | Trimestral (N-PORT-X, N-PORT-EX) | Trimestral (13F-HR) |
+| **Uso no DD Report** | **PRIMARY** para registered US funds | **SUPPLEMENTARY** ou proxy se N-PORT indisponivel |
+| **Holdings** | Securities + alternatives + cash | Equity + options apenas |
+| **Classificacao setorial** | `issuerCat` (tipo de emissor) + GICS enriched | GICS padrao |
+| **Disponibilidade** | ~2000 registered funds (+ ETFs, BDCs) | ~8500 managers |
+| **Tabela** | `sec_nport_holdings` | `sec_13f_holdings` |
+
+**Regra de priorizacao no DD Report:**
+1. Se `sec_universe == "registered_us"` e `fund_cik` disponivel → N-PORT como fonte primaria (`holdings_source = "nport"`)
+2. 13F serve como overlay suplementar ("Manager Firm Context") quando N-PORT disponivel
+3. 13F serve como proxy ("proxy — no fund-level N-PORT available") quando N-PORT indisponivel (fundos privados, UCITS)
+
+**Active Share computation:** Usa N-PORT fund holdings vs benchmark estatico (nao 13F).
+
+**Fund sector analysis:** Usa N-PORT sector weights (mapeamento asset-class-aware via `label_nport_sector()`).
+
+**Manager firm context:** Usa 13F sector weights (perspectiva suplementar).
+
+**Reference:** `dd_report/sec_injection.py:160-361` (N-PORT), `dd_report/sec_injection.py:85-158` (13F), `dd_report/dd_report_engine.py:343-400` (resolucao)
 
 ---
 
@@ -378,9 +408,9 @@ Available via `POST /stress-test` with portfolio weights.
 
 | Regime | Trigger Signals |
 |--------|----------------|
-| CRISIS | VIX > 30 AND yield curve inverted |
+| CRISIS | VIX >= 35 |
 | INFLATION | CPI YoY > threshold |
-| RISK_OFF | VIX elevated OR SAHM rule triggered |
+| RISK_OFF | VIX >= 25 (below CRISIS threshold) |
 | RISK_ON | Default (no stress signals) |
 
 **Priority cascade:** CRISIS > INFLATION > RISK_OFF > RISK_ON.

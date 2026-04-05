@@ -4,7 +4,7 @@
 > Covers every stage from macro regime detection through fund-level optimization,
 > construction advisor, validation, and activation.
 
-**Last updated:** 2026-04-01
+**Last updated:** 2026-04-05 (v2: fee_efficiency formula clarified, momentum components documented)
 **Supersedes:** Partial coverage in `portfolio-construction-reference-v2-post-quant-upgrade.md` (optimizer detail) and `institutional-portfolio-lifecycle-reference.md` (lifecycle overview).
 
 ---
@@ -305,8 +305,8 @@ The `manager_score` (0-100) is a composite of 6 components:
 | Risk-adjusted return | 0.25 | [-1.0, 3.0] Sharpe → [0, 100] | `fund_risk_metrics.sharpe_1y` |
 | Drawdown control | 0.20 | [-50%, 0%] → [0, 100] | `fund_risk_metrics.max_drawdown_1y` |
 | Information ratio | 0.15 | [-1.0, 2.0] → [0, 100] | `fund_risk_metrics.information_ratio_1y` |
-| Flows momentum | 0.10 | [0, 100] direct | `fund_risk_metrics.blended_momentum_score` |
-| Fee efficiency | 0.10 | `max(0, 100 - ER_pct * 50)` | `instrument.attributes.expense_ratio_pct` |
+| Flows momentum | 0.10 | [0, 100] direct | `fund_risk_metrics.blended_momentum_score` (combinacao de RSI-14, Bollinger position, NAV momentum e flow momentum — pre-computados pelo risk_calc worker) |
+| Fee efficiency | 0.10 | `max(0, 100 - ER_human_pct * 50)` onde ER_human_pct = expense_ratio_pct × 100 | `instrument.attributes.expense_ratio_pct` (0% ER → 100, 1% → 50, 2% → 0, None → 50 neutral) |
 
 **Optional component:** `insider_sentiment` (opt-in via config weight > 0).
 
@@ -581,6 +581,8 @@ CVaR = -(μ_p + σ_p × z_cf) + σ_p × φ(z_cf) / α
 ```
 
 **Validity bounds:** |γ₁| > 2.5 or |γ₂| > 12 → CF expansion unreliable. The construction advisor (Stage 7) uses historical simulation CVaR instead.
+
+**GARCH fallback behavior:** `garch_service.py` returns `None` if `arch` library not installed or if fewer than 100 observations. Returns `GarchResult(converged=False)` if model fails to converge — upstream computation falls back to sample volatility (`volatility_1y`). This graceful degradation ensures the optimizer always has volatility estimates even when GARCH is unavailable.
 
 ### 7.6 Output: FundOptimizationResult
 
