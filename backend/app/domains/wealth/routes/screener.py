@@ -2154,9 +2154,12 @@ async def get_fund_fact_sheet(
             )
             nav_history = [NavPoint(nav_date=r.nav_date, nav=float(r.nav)) for r in nav_res.all()]
             
-        # Risk Metrics / Scoring
+        # Risk Metrics / Scoring — global table (no RLS), reads NULL or any org_id
         metrics_res = await db.execute(
-            select(FundRiskMetrics).where(FundRiskMetrics.instrument_id == inst_id).limit(1)
+            select(FundRiskMetrics)
+            .where(FundRiskMetrics.instrument_id == inst_id)
+            .order_by(FundRiskMetrics.calc_date.desc())
+            .limit(1)
         )
         m = metrics_res.scalar_one_or_none()
         if m:
