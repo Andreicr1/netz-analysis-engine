@@ -7,7 +7,7 @@
 <script lang="ts">
   import { getContext } from "svelte";
   import { goto } from "$app/navigation";
-  import { ArrowLeft, ExternalLink, Loader2, Sparkles } from "lucide-svelte";
+  import { ArrowLeft, ExternalLink, Loader2, Sparkles, ChartNoAxesCombined } from "lucide-svelte";
   import { formatAUM } from "@investintell/ui";
   import { createClientApiClient } from "$lib/api/client";
   import type { UnifiedFundItem, UnifiedCatalogPage, ManagerCatalogItem } from "$lib/types/catalog";
@@ -193,6 +193,13 @@
                   onclick={(e: MouseEvent) => { e.stopPropagation(); promptDD(fund); }}
                 >
                   <Sparkles size={14} />
+                </button>
+                <button
+                  class="l2-action-btn"
+                  title="Analytics"
+                  onclick={(e: MouseEvent) => { e.stopPropagation(); goto(`/screener/analytics?fund=${fund.external_id}`); }}
+                >
+                  <ChartNoAxesCombined size={14} />
                 </button>
                 <button
                   class="l2-action-btn"

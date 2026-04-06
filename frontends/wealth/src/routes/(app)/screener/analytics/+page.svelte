@@ -1,16 +1,18 @@
 <!--
-  Screener Analytics — eVestment-style fund analytics for the universe.
-  Fund selector + window toggle, then full-width analytics panels.
+  Screener Analytics — eVestment-style fund analytics for the global catalog.
+  Search + filters (fund type, strategy) + fund selector + window toggle.
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
+	import { page as pageState } from "$app/state";
 	import { EmptyState } from "@investintell/ui";
 	import { Button } from "@investintell/ui/components/ui/button";
 	import Loader2 from "lucide-svelte/icons/loader-2";
+	import { Search } from "lucide-svelte";
 	import { createClientApiClient } from "$lib/api/client";
 	import type { EntityAnalyticsResponse } from "$lib/types/entity-analytics";
 	import type { PeerGroupResult, MonteCarloResult } from "$lib/types/analytics";
-	import type { UniverseAsset } from "$lib/types/universe";
+	import type { UnifiedFundItem, UnifiedCatalogPage } from "$lib/types/catalog";
 
 	import RiskStatisticsGrid from "$lib/components/analytics/entity/RiskStatisticsGrid.svelte";
 	import DrawdownChart from "$lib/components/analytics/entity/DrawdownChart.svelte";
@@ -25,26 +27,76 @@
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);
 
-	// ── Fund list ───────────────────────────────────────────────────
-	let instruments = $state<UniverseAsset[]>([]);
+	// ── Restore from URL params (e.g. from L2 link) ─────────────────
+	let initialFundId = $derived(pageState.url.searchParams.get("fund") ?? "");
+
+	// ── Filter state ────────────────────────────────────────────────
+	let searchQuery = $state("");
+	let filterType = $state("");
+	let filterStrategy = $state("");
+	let searchDebounce: ReturnType<typeof setTimeout> | null = null;
+
+	// ── Fund catalog ────────────────────────────────────────────────
+	let funds = $state<UnifiedFundItem[]>([]);
+	let totalFunds = $state(0);
 	let loadingList = $state(true);
 
-	$effect(() => {
-		(async () => {
-			try {
-				instruments = await api.get<UniverseAsset[]>("/universe");
-			} catch {
-				instruments = [];
-			} finally {
-				loadingList = false;
-			}
-		})();
-	});
+	async function fetchCatalog() {
+		loadingList = true;
+		try {
+			const params: Record<string, string> = {
+				page_size: "100",
+				has_nav: "true",
+				sort: "name_asc",
+			};
+			if (searchQuery) params.q = searchQuery;
+			if (filterType) params.fund_type = filterType;
+			if (filterStrategy) params.strategy_label = filterStrategy;
+
+			const result = await api.get<UnifiedCatalogPage>("/screener/catalog", params);
+			funds = result.items;
+			totalFunds = result.total;
+		} catch {
+			funds = [];
+			totalFunds = 0;
+		} finally {
+			loadingList = false;
+		}
+	}
+
+	// Initial load
+	$effect(() => { fetchCatalog(); });
+
+	function onSearchInput(e: Event) {
+		const val = (e.target as HTMLInputElement).value;
+		searchQuery = val;
+		if (searchDebounce) clearTimeout(searchDebounce);
+		searchDebounce = setTimeout(() => fetchCatalog(), 350);
+	}
+
+	function setFilterType(val: string) {
+		filterType = filterType === val ? "" : val;
+		fetchCatalog();
+	}
+
+	function setFilterStrategy(val: string) {
+		filterStrategy = filterStrategy === val ? "" : val;
+		fetchCatalog();
+	}
 
 	// ── Selection state ─────────────────────────────────────────────
-	let selectedFundId = $state("");
+	let selectedFundId = $state(initialFundId);
 	let fundWindow = $state("1y");
 	const windows = ["3m", "6m", "1y", "3y", "5y"] as const;
+
+	// Auto-load if fund came from URL
+	$effect(() => {
+		const fundFromUrl = pageState.url.searchParams.get("fund");
+		if (fundFromUrl && !analytics && !loading) {
+			selectedFundId = fundFromUrl;
+			loadFundAnalytics(fundFromUrl, fundWindow);
+		}
+	});
 
 	// ── Analytics data ──────────────────────────────────────────────
 	let analytics = $state<EntityAnalyticsResponse | null>(null);
@@ -100,6 +152,10 @@
 			mcLoading = false;
 		}
 	}
+
+	// ── Fund type pills ─────────────────────────────────────────────
+	const FUND_TYPES = ["MF", "ETF", "CEF", "HF", "PE", "VC"];
+	const STRATEGIES = ["Private Credit", "Long/Short Equity", "Multi-Strategy", "Growth Equity", "Buyout", "Infrastructure"];
 </script>
 
 <svelte:head>
@@ -108,46 +164,91 @@
 
 <div class="ea-page">
 
-	<!-- Toolbar: fund selector + window pills -->
+	<!-- ── Toolbar row 1: Search + Type pills ── -->
 	<div class="ea-toolbar">
-		<select class="ea-select" onchange={handleFundSelect} value={selectedFundId}>
-			<option value="">Select a fund...</option>
-			{#each instruments as inst (inst.instrument_id)}
-				<option value={inst.instrument_id}>{inst.fund_name}</option>
-			{/each}
-		</select>
+		<div class="ea-toolbar-left">
+			<div class="ea-search">
+				<Search size={18} />
+				<input
+					type="text"
+					class="ea-search-input"
+					placeholder="Search by name, ticker, manager..."
+					value={searchQuery}
+					oninput={onSearchInput}
+				/>
+			</div>
 
-		{#if selectedFundId}
-			<div class="ea-windows">
-				{#each windows as w (w)}
+			<div class="ea-toggles">
+				{#each FUND_TYPES as ft (ft)}
 					<button
-						class="ea-window-pill"
-						class:ea-window-pill--active={fundWindow === w}
-						onclick={() => switchWindow(w)}
+						class="ea-toggle"
+						class:ea-toggle--active={filterType === ft}
+						onclick={() => setFilterType(ft)}
 					>
-						{w.toUpperCase()}
+						{ft}
 					</button>
 				{/each}
 			</div>
-		{/if}
+		</div>
+
+		<span class="ea-count">{totalFunds.toLocaleString()} funds</span>
+	</div>
+
+	<!-- ── Toolbar row 2: Strategy pills + Fund selector + Window ── -->
+	<div class="ea-toolbar">
+		<div class="ea-toolbar-left">
+			<div class="ea-toggles">
+				{#each STRATEGIES as st (st)}
+					<button
+						class="ea-toggle ea-toggle--strategy"
+						class:ea-toggle--active={filterStrategy === st}
+						onclick={() => setFilterStrategy(st)}
+					>
+						{st}
+					</button>
+				{/each}
+			</div>
+		</div>
+	</div>
+
+	<div class="ea-toolbar">
+		<div class="ea-toolbar-left">
+			<select class="ea-select" onchange={handleFundSelect} value={selectedFundId}>
+				<option value="">Select a fund...</option>
+				{#each funds as fund (fund.external_id)}
+					<option value={fund.external_id}>
+						{fund.name}{fund.ticker ? ` (${fund.ticker})` : ""}{fund.manager_name ? ` — ${fund.manager_name}` : ""}
+					</option>
+				{/each}
+			</select>
+
+			{#if selectedFundId}
+				<div class="ea-windows">
+					{#each windows as w (w)}
+						<button
+							class="ea-window-pill"
+							class:ea-window-pill--active={fundWindow === w}
+							onclick={() => switchWindow(w)}
+						>
+							{w.toUpperCase()}
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
 	</div>
 
 	<!-- Content -->
 	<div class="ea-content">
-		{#if loadingList}
+		{#if loadingList && funds.length === 0}
 			<div class="ea-loading">
 				<Loader2 class="h-6 w-6 animate-spin text-[#0177fb]" />
-				<span>Loading fund universe...</span>
+				<span>Loading fund catalog...</span>
 			</div>
-		{:else if instruments.length === 0}
-			<EmptyState
-				title="No approved funds"
-				message="Import funds via the Screening tab and approve them to unlock analytics."
-			/>
 		{:else if !selectedFundId}
 			<EmptyState
 				title="Fund Universe Analytics"
-				message="Select a fund above to view risk statistics, drawdown, capture ratios, rolling returns, return distribution, tail risk, peer rankings, and Monte Carlo simulation."
+				message="Search and filter funds above, then select one to view risk statistics, drawdown, capture ratios, rolling returns, distribution, tail risk, peer rankings, and Monte Carlo."
 			/>
 		{:else if loading}
 			<div class="ea-loading">
@@ -197,7 +298,7 @@
 		height: 100%;
 		display: flex;
 		flex-direction: column;
-		gap: 24px;
+		gap: 16px;
 		overflow: hidden;
 	}
 
@@ -205,12 +306,98 @@
 	.ea-toolbar {
 		display: flex;
 		align-items: center;
+		justify-content: space-between;
 		gap: 12px;
 		flex-shrink: 0;
 	}
 
+	.ea-toolbar-left {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	/* ── Search ── */
+	.ea-search {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 10px 20px;
+		border: 1px solid #fff;
+		border-radius: 36px;
+		background: #000;
+		color: #cbccd1;
+		max-width: 360px;
+		flex: 1;
+	}
+
+	.ea-search-input {
+		flex: 1;
+		min-width: 0;
+		border: none !important;
+		background: transparent !important;
+		color: #fff;
+		font-size: 14px;
+		font-weight: 400;
+		font-family: "Urbanist", sans-serif;
+		outline: none !important;
+		box-shadow: none !important;
+		padding: 0;
+	}
+
+	.ea-search-input::placeholder { color: #cbccd1; }
+
+	/* ── Toggles (fund type + strategy) ── */
+	.ea-toggles {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.ea-toggle {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 6px 14px;
+		border: 1px solid #3a3b44;
+		border-radius: 36px;
+		background: transparent;
+		color: #a1a1aa;
+		font-size: 13px;
+		font-weight: 600;
+		font-family: "Urbanist", sans-serif;
+		cursor: pointer;
+		white-space: nowrap;
+		transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+	}
+
+	.ea-toggle:hover { background: #22232a; border-color: #52525b; color: #fff; }
+
+	.ea-toggle--active {
+		background: #0177fb;
+		border-color: transparent;
+		color: #fff;
+	}
+
+	.ea-toggle--active:hover { background: #0166d9; }
+
+	.ea-toggle--strategy {
+		font-size: 12px;
+		padding: 5px 12px;
+	}
+
+	/* ── Count ── */
+	.ea-count {
+		font-size: 14px;
+		color: #fff;
+		font-weight: 400;
+		font-family: "Urbanist", sans-serif;
+		white-space: nowrap;
+	}
+
+	/* ── Fund selector ── */
 	.ea-select {
-		min-width: 320px;
+		min-width: 400px;
 		height: 40px;
 		padding: 0 16px;
 		border: 1px solid #3a3b44;
@@ -220,9 +407,9 @@
 		font-size: 14px;
 		font-family: "Urbanist", sans-serif;
 		cursor: pointer;
-		appearance: none;
 	}
 
+	/* ── Window pills ── */
 	.ea-windows {
 		display: flex;
 		gap: 0;
