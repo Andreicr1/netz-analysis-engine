@@ -4,6 +4,32 @@
   Tokens via @investintell/ui (--ii-* CSS custom properties).
 */
 
+/* ── Back button — matches L2 ManagerDetailPanel ── */
+.fs-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: #71717a;
+    font-size: 0.8125rem;
+    font-family: "Urbanist", sans-serif;
+    cursor: pointer;
+    transition: color 120ms ease;
+    margin-bottom: 16px;
+}
+
+.fs-back:hover {
+    color: #0177fb;
+}
+
+/* ── Scrollable body — custom scrollbar ── */
+.fs-body::-webkit-scrollbar { width: 6px; }
+.fs-body::-webkit-scrollbar-track { background: transparent; }
+.fs-body::-webkit-scrollbar-thumb { background: #2a2b33; border-radius: 3px; }
+.fs-body::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+
 /* ── Chart containers need fixed height for ECharts ── */
 .fs-chart-wrap {
     height: 320px;

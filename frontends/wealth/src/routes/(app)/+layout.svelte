@@ -6,6 +6,8 @@
 	import { page } from "$app/stores";
 	import { onMount, setContext, getContext, type Snippet } from "svelte";
 	import { createRiskStore, type RiskStore } from "$lib/stores/risk-store.svelte";
+	import { createMarketDataStore, type MarketDataStore } from "$lib/stores/market-data.svelte";
+	import { createPortfolioAnalytics, type PortfolioAnalyticsStore } from "$lib/stores/portfolio-analytics.svelte";
 	import AiAgentDrawer from "$lib/components/AiAgentDrawer.svelte";
 	import GlobalSearch from "$lib/components/GlobalSearch.svelte";
 	import {
@@ -27,11 +29,21 @@
 	});
 	setContext<RiskStore>("netz:riskStore", riskStore);
 
+	const marketStore = createMarketDataStore({ getToken });
+	setContext<MarketDataStore>("netz:marketDataStore", marketStore);
+
+	const portfolioAnalytics = createPortfolioAnalytics(marketStore);
+	setContext<PortfolioAnalyticsStore>("netz:portfolioAnalytics", portfolioAnalytics);
+
 	// Risk store lifecycle — SSE connects once at layout level, persists across navigations.
-	// Pages with SSR risk data call seedFromSSR() to populate immediately.
+	// Market data store — WebSocket connects once, persists across navigations.
 	onMount(() => {
 		riskStore.start(true);
-		return () => riskStore.destroy();
+		marketStore.start();
+		return () => {
+			riskStore.destroy();
+			marketStore.stop();
+		};
 	});
 
 	const navItems = [
@@ -200,8 +212,8 @@
 			class="bg-black overflow-hidden"
 			style="height: calc(100vh - 88px); padding: 34px;"
 		>
-			<main class="w-full h-full bg-[#1a1b20] rounded-tl-[32px] shadow-2xl border border-[#404149] overflow-hidden">
-				<div class="h-full overflow-y-auto p-6">
+			<main class="w-full h-full bg-[#1a1b20] rounded-tl-[32px] shadow-2xl border border-[#404149] flex flex-col overflow-hidden">
+				<div class="flex-1 min-h-0 overflow-y-auto p-6">
 					<div class="mx-auto w-full max-w-screen-2xl">
 						{@render children()}
 					</div>

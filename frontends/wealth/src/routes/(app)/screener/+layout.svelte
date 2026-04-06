@@ -29,11 +29,11 @@
     return "screening";
   });
 
-  /** Show back chevron in detail sub-routes */
+  /** Show back chevron in detail sub-routes (NOT fund pages — they have their own back) */
   let showBack = $derived.by(() => {
     const path = $page.url.pathname;
+    if (path.startsWith("/screener/fund/")) return false;
     return (
-      path.startsWith("/screener/fund/") ||
       path.startsWith("/screener/runs/") ||
       /^\/screener\/dd-reports\/[^/]+\//.test(path)
     );
@@ -116,11 +116,17 @@
 
 <style>
   .scr-layout {
-    height: 100%;
+    /*
+     * Fixed height = viewport minus topbar(88px) minus black padding(68px).
+     * This creates a contained flex column so child tables scroll internally
+     * instead of pushing the outer main scrollbar.
+     */
+    height: calc(100vh - 88px - 68px);
     display: flex;
     flex-direction: column;
     padding: 24px;
     gap: 34px;
+    overflow: hidden;
   }
 
   /* ── Nav Bar ── */
@@ -211,9 +217,10 @@
     cursor: not-allowed;
   }
 
-  /* ── Slot ── */
+  /* ── Slot — overflow hidden; each page manages its own scroll ── */
   .scr-slot {
     flex: 1;
     min-height: 0;
+    overflow: hidden;
   }
 </style>

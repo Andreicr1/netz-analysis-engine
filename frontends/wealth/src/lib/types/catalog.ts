@@ -235,6 +235,41 @@ export const FUND_TYPE_BADGE_MAP: Record<string, { label: string; colorClass: st
 	ucits: { label: "UCITS", colorClass: "badge-ucits" },
 };
 
+// ── Screener Asset Catalog (live-ticking grid) ──
+
+export interface ScreenerAsset {
+	external_id: string;
+	ticker: string | null;
+	name: string;
+	asset_class: string;
+	region: string;
+	fund_type: string;
+	strategy_label: string | null;
+	currency: string | null;
+	aum: number | null;
+	expense_ratio_pct: number | null;
+	inception_date: string | null;
+	last_price: number | null;
+	change: number | null;
+	change_pct: number | null;
+}
+
+export interface ScreenerAssetPage {
+	items: ScreenerAsset[];
+	total: number;
+	page: number;
+	page_size: number;
+	has_next: boolean;
+}
+
+export const EMPTY_SCREENER_ASSET_PAGE: ScreenerAssetPage = {
+	items: [],
+	total: 0,
+	page: 1,
+	page_size: 50,
+	has_next: false,
+};
+
 // ── Global Securities (equities/ETFs from sec_cusip_ticker_map — no RLS) ──
 
 export interface SecurityItem {

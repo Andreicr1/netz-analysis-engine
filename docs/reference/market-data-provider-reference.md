@@ -1,8 +1,8 @@
 # Market Data Provider Reference
 
-> Authoritative reference for market data ingestion in the Netz Analysis Engine.
+> Authoritative reference for market data ingestion and real-time distribution in the Netz Analysis Engine.
 > Supersedes: `market-data-provider-audit-massive-poc.md` (Fase 12 audit).
-> Last updated: 2026-04-05 (Fase 12.1 -- Tiingo implementation complete).
+> Last updated: 2026-04-05 (Fase 12.2 -- WebSocket infrastructure + Portfolio Holdings + Live Screener Catalog).
 
 ---
 
@@ -255,17 +255,23 @@ class InstrumentDataProvider(Protocol):
 
 ### 5.2 Migration Path
 
-| Step | What | Files | Effort |
-|------|------|-------|--------|
-| 1 | Move `providers.py` into `backend/app/services/providers/tiingo_provider.py` | 1 file | Low |
-| 2 | Adapt `TiingoProvider` to implement existing `InstrumentDataProvider` protocol (add `fetch_instrument`, `fetch_batch`, `fetch_batch_history` wrappers) | 1 file | Low |
-| 3 | Update factory `get_instrument_provider()` to return `TiingoProvider` | `__init__.py` | Low |
-| 4 | Migrate `benchmark_ingest.py` -- replace direct `yf.download()` with provider | 1 file | Medium |
-| 5 | Migrate `sec/shared.py` -- replace `yf.Ticker().info` and `.fast_info` | 1 file | Medium |
-| 6 | Remove `yfinance` from `pyproject.toml` dependencies | 1 file | Low |
-| 7 | Add WebSocket bridge route for frontend live quotes | New route | Medium |
+| Step | What | Files | Effort | Status |
+|------|------|-------|--------|--------|
+| 1 | Move `providers.py` into `backend/app/services/providers/tiingo_provider.py` | 1 file | Low | Pending |
+| 2 | Adapt `TiingoProvider` to implement existing `InstrumentDataProvider` protocol (add `fetch_instrument`, `fetch_batch`, `fetch_batch_history` wrappers) | 1 file | Low | Pending |
+| 3 | Update factory `get_instrument_provider()` to return `TiingoProvider` | `__init__.py` | Low | Pending |
+| 4 | Migrate `benchmark_ingest.py` -- replace direct `yf.download()` with provider | 1 file | Medium | Pending |
+| 5 | Migrate `sec/shared.py` -- replace `yf.Ticker().info` and `.fast_info` | 1 file | Medium | Pending |
+| 6 | Remove `yfinance` from `pyproject.toml` dependencies | 1 file | Low | Pending |
+| 7 | WebSocket infrastructure: ConnectionManager + Redis Pub/Sub bridge + WS endpoint | `core/ws/`, `routes/market_data.py` | Medium | **DONE** |
+| 8 | Portfolio Holdings REST endpoint (positions + cost basis + pricing) | `routes/market_data.py`, `schemas/market_data.py` | Medium | **DONE** |
+| 9 | Screener Catalog REST endpoint (paginated assets + latest prices) | `routes/market_data.py`, `schemas/market_data.py` | Medium | **DONE** |
+| 10 | Frontend MarketDataStore (WS client + SSR hydration) | `stores/market-data.svelte.ts` | Medium | **DONE** |
+| 11 | Frontend PortfolioAnalyticsStore ($derived NAV, P&L, allocation) | `stores/portfolio-analytics.svelte.ts` | Medium | **DONE** |
+| 12 | Frontend Screener live asset grid (WS subscribe/unsubscribe via $effect) | `routes/(app)/screener/+page.svelte` | Medium | **DONE** |
+| 13 | Frontend Dashboard integration (analytics store consumption) | `routes/(app)/dashboard/+page.svelte` | Low | **DONE** |
 
-Steps 1-3 enable the switch. Steps 4-5 eliminate direct yfinance coupling. Step 6 removes the dependency. Step 7 enables the Dashboard live feed.
+Steps 1-6 migrate the data ingestion layer from YFinance to Tiingo. Steps 7-13 implement the real-time distribution and frontend consumption layer (all complete).
 
 ### 5.3 Points of Direct YFinance Coupling (to migrate)
 
@@ -281,34 +287,273 @@ Steps 1-3 enable the switch. Steps 4-5 eliminate direct yfinance coupling. Step 
 
 ---
 
-## 6. Frontend Integration (WebSocket -> SSE)
+## 6. Backend WebSocket Infrastructure (IMPLEMENTED)
 
 ### 6.1 Architecture
 
 ```
-Tiingo WS (IEX)          FastAPI Backend              Svelte Frontend
-wss://api.tiingo.com  ->  TiingoProvider.subscribe()  ->  SSE endpoint
-                          on_quote callback                /api/live-quotes
-                          Redis pub/sub bridge             fetch() + ReadableStream
-                                                          (not EventSource -- auth)
+Tiingo WS (IEX)     publish_price_tick()    Redis Pub/Sub       ConnectionManager       Svelte Frontend
+wss://api.tiingo  -> backend worker       -> market:prices    -> broadcast_to_subs()  -> WebSocket client
+                     (or instrument_ingestion)  channel            per-client ticker      $state priceMap
+                                                                   filtering              $derived analytics
 ```
 
-### 6.2 Dashboard Components That Consume Live Data
+**Key design:** Workers publish to Redis `market:prices` channel. A single `redis_subscriber()` background task (started in `app.main` lifespan) listens to that channel and forwards ticks to all authenticated WebSocket clients via `ConnectionManager.broadcast_to_subscribers()`. Each client connection tracks its own subscribed ticker set — only matching ticks are forwarded.
 
-| Component | Data | Update Frequency |
-|-----------|------|------------------|
-| Portfolio Holdings cards | Last price, change, change% | Real-time (per trade) |
-| Portfolio Overview table | Last Price, Change columns | Real-time (per trade) |
-| Watchlist panel | Price, change% | Real-time (per trade) |
-| Total AUM | Sum of holdings * price | Derived (recalc on price update) |
+### 6.2 File Layout
 
-### 6.3 Mutual Funds in Dashboard
+| File | Purpose |
+|------|---------|
+| `backend/app/core/ws/__init__.py` | Package marker |
+| `backend/app/core/ws/manager.py` | `ConnectionManager` + `redis_subscriber()` + `publish_price_tick()` |
+| `backend/app/core/ws/auth.py` | `authenticate_ws()` — JWT via `?token=` query param |
+| `backend/app/domains/wealth/routes/market_data.py` | WS endpoint + REST endpoints (dashboard, holdings, screener) |
+| `backend/app/domains/wealth/schemas/market_data.py` | `PriceTick`, `Position`, `PortfolioHoldingsResponse`, `ScreenerAsset`, `ScreenerAssetPage`, `DashboardSnapshot` |
 
-Mutual fund prices update **once daily** (after market close, ~00:00 EST via REST). The Dashboard should show the latest EOD NAV from `nav_timeseries` for MF holdings, and only stream real-time updates for equity/ETF holdings. The frontend must handle mixed update frequencies gracefully.
+### 6.3 WebSocket Endpoint
+
+```
+WS  /api/v1/market-data/live/ws?token=<jwt>
+```
+
+**Protocol (client → server):**
+
+| Action | Payload | Server Response |
+|--------|---------|-----------------|
+| `subscribe` | `{"action": "subscribe", "tickers": ["SPY", "QQQ"]}` | `{"type": "subscribed", "data": {"tickers": ["QQQ", "SPY"]}}` |
+| `unsubscribe` | `{"action": "unsubscribe", "tickers": ["SPY"]}` | `{"type": "subscribed", "data": {"tickers": ["QQQ"]}}` |
+| `ping` | `{"action": "ping"}` | `{"type": "pong"}` |
+
+**Protocol (server → client):**
+
+| Type | When | Shape |
+|------|------|-------|
+| `price` | Redis tick matches subscribed ticker | `{"type": "price", "data": PriceTick}` |
+| `subscribed` | After subscribe/unsubscribe | `{"type": "subscribed", "data": {"tickers": [...]}}` |
+| `pong` | Response to ping + 15s heartbeat | `{"type": "pong"}` |
+| `error` | Invalid JSON, unknown action | `{"type": "error", "data": {"message": "..."}}` |
+
+**Close codes:** `1008` = auth failure (missing/invalid/expired JWT). `1000` = normal close.
+
+**Auth:** JWT query param validated by `authenticate_ws()` — reuses same `_verify_clerk_jwt` logic as REST. Dev bypass: `dev-token-change-me`.
+
+### 6.4 ConnectionManager
+
+```python
+class ConnectionManager:
+    _connections: dict[int, ClientConnection]  # keyed by id(ws)
+
+    async def accept(ws, actor) -> ClientConnection
+    def disconnect(ws) -> None
+    def update_subscriptions(ws, tickers: set[str]) -> None
+    async def broadcast_to_subscribers(message: dict) -> None  # filters by ticker
+    async def send_personal(ws, data: dict) -> None
+```
+
+- **One instance per app** (`app.state.ws_manager`), created in `main.py` lifespan.
+- **Stale connection cleanup:** `broadcast_to_subscribers()` catches `send_json` exceptions and auto-removes dead connections.
+- **No module-level asyncio primitives** — all state is instance-level.
+
+### 6.5 Redis Pub/Sub Bridge
+
+```python
+async def redis_subscriber(manager: ConnectionManager) -> None
+```
+
+- Background `asyncio.Task` started in lifespan, cancelled on shutdown.
+- Subscribes to `market:prices` channel.
+- Auto-reconnects with exponential backoff (1s → 30s cap).
+- Workers publish ticks via `publish_price_tick(tick_dict)`.
+
+### 6.6 REST Endpoints (IMPLEMENTED)
+
+| Endpoint | Response Schema | Purpose |
+|----------|-----------------|---------|
+| `GET /market-data/dashboard-snapshot` | `DashboardSnapshot` | SSR seed for dashboard — holdings + latest prices from `nav_timeseries` |
+| `GET /market-data/portfolio/{id}/holdings` | `PortfolioHoldingsResponse` | Detailed positions with cost basis, quantity, previous close for P&L |
+| `GET /market-data/screener/catalog` | `ScreenerAssetPage` | Paginated asset catalog with latest prices for live screener grid |
+
+**Portfolio Holdings** (`GET /market-data/portfolio/{id}/holdings`):
+- `{id}` accepts UUID or profile name (growth, moderate, conservative).
+- Resolves model portfolio → `fund_selection_schema` → instruments + `nav_timeseries` join.
+- Returns `Position[]` with: `weight`, `quantity` (notional = weight * portfolio_nav / price), `avg_cost` (previous close proxy), `last_price`, `previous_close`.
+- Empty fallback if no model portfolio exists (200, empty `holdings[]`).
+
+**Screener Catalog** (`GET /market-data/screener/catalog`):
+- Reads from `mv_unified_funds` materialized view + `nav_timeseries` for latest pricing.
+- Params: `page`, `page_size`, `q` (name/ticker search), `asset_class`, `region`.
+- Returns `ScreenerAsset[]` with: static metadata + `last_price`, `change`, `change_pct`.
+- Frontend uses this as SSR seed, then subscribes to visible tickers via WebSocket.
+
+### 6.7 Schema Reference
+
+```python
+class Position(BaseModel):
+    instrument_id: str; ticker: str; name: str
+    asset_class: str; currency: str
+    weight: Decimal          # 0.0-1.0
+    quantity: Decimal         # notional units
+    avg_cost: Decimal         # cost basis per unit
+    last_price: Decimal       # latest NAV/price
+    previous_close: Decimal   # previous day close
+    price_date: str | None
+    aum_usd: Decimal | None
+
+class PortfolioHoldingsResponse(BaseModel):
+    portfolio_id: str; profile: str
+    holdings: list[Position]
+    cash_balance: Decimal
+    portfolio_nav: Decimal
+    as_of: str
+
+class ScreenerAsset(BaseModel):
+    external_id: str; ticker: str | None; name: str
+    asset_class: str; region: str; fund_type: str
+    strategy_label: str | None; currency: str | None
+    aum: Decimal | None; expense_ratio_pct: Decimal | None
+    inception_date: str | None
+    last_price: Decimal | None; change: Decimal | None; change_pct: Decimal | None
+
+class ScreenerAssetPage(BaseModel):
+    items: list[ScreenerAsset]; total: int; page: int; page_size: int; has_next: bool
+```
 
 ---
 
-## 7. Environment Variables
+## 7. Frontend Real-Time Architecture (IMPLEMENTED)
+
+### 7.1 Store Architecture
+
+```
++layout.svelte (app shell)
+  ├── createMarketDataStore()    → context "netz:marketDataStore"
+  ├── createPortfolioAnalytics() → context "netz:portfolioAnalytics"
+  └── createRiskStore()          → context "netz:riskStore"
+```
+
+All stores are created once at layout level and persist across navigations. No localStorage — in-memory only.
+
+### 7.2 MarketDataStore (`market-data.svelte.ts`)
+
+**Reactive state (Svelte 5 `$state`):**
+- `status: WsStatus` — "connecting" | "connected" | "reconnecting" | "disconnected" | "error"
+- `priceMap: Record<string, PriceTick>` — ticker → latest tick (live or SSR)
+- `holdings: HoldingSummary[]` — from dashboard snapshot
+- `totalAum`, `totalReturnPct`, `asOf` — portfolio summary
+- `subscribedTickers: string[]` — current server-confirmed subscriptions
+
+**Public API:**
+- `start()` / `stop()` — lifecycle control (called by layout `onMount`)
+- `subscribe(tickers)` / `unsubscribe(tickers)` — dynamic ticker management
+- `seedFromSSR(snapshot: DashboardSnapshot)` — hydrate from server-rendered data
+
+**Resilience:**
+- Heartbeat monitoring (45s timeout → reconnect)
+- Exponential backoff reconnection (1s → 30s cap, max 5 retries)
+- Monotonic version counter (prevents stale data overwrites)
+- Auth failure (close code 1008) → error state, no reconnect
+
+### 7.3 PortfolioAnalyticsStore (`portfolio-analytics.svelte.ts`)
+
+**Derived state (Svelte 5 `$derived`):** All recomputation is automatic as `priceMap` or `holdings` change.
+
+```
+MarketDataStore.priceMap ──→ $derived.by positions[]
+                                  │   (fuse live tick + SSR holding)
+                                  │   positionValue = weight * portfolioNAV
+                                  │   intradayPnl = positionValue * changePct
+                                  │
+                                  ├── $derived totalNav (sum position values)
+                                  ├── $derived totalPnl (sum intraday P&L)
+                                  ├── $derived totalPnlPct (weighted %)
+                                  ├── $derived allocation[] (grouped by asset_class)
+                                  ├── $derived gainers[] (sorted by P&L desc)
+                                  └── $derived losers[] (sorted by P&L asc)
+```
+
+**Price source precedence:** Live WS tick → SSR holding price → 0 (never stale).
+
+**Portfolio NAV formula:**
+```
+weightedReturn = Σ (weight_i × changePct_i)
+navNow = inceptionNAV × (1 + weightedReturn)
+positionValue_i = weight_i × navNow
+intradayPnl_i = positionValue_i × changePct_i
+```
+
+### 7.4 Screener WS Subscription Lifecycle
+
+The screener uses Svelte 5 `$effect` to manage WebSocket subscriptions based on the currently visible page of assets:
+
+```svelte
+// Extract tickers from current page (reactive)
+let visibleTickers = $derived(
+  data.assets.items.map(a => a.ticker).filter(Boolean)
+);
+
+// Subscribe/unsubscribe lifecycle
+$effect(() => {
+  const tickers = visibleTickers;
+  if (tickers.length === 0 || activeView !== "assets") return;
+  marketStore.subscribe(tickers);
+  return () => {
+    marketStore.unsubscribe(tickers);  // cleanup on paginate/filter/leave
+  };
+});
+```
+
+**Bandwidth optimization:** Only tickers visible on the current page are subscribed. Pagination, filtering, search, or navigation triggers cleanup → unsubscribe → new subscribe cycle. No leaked subscriptions.
+
+**Live fusion:** SSR provides initial `last_price`, `change`, `change_pct`. As WS ticks arrive, `$derived liveAssets` merges them:
+
+```svelte
+let liveAssets = $derived.by(() => {
+  return data.assets.items.map(asset => {
+    const tick = asset.ticker ? marketStore.priceMap[asset.ticker] : undefined;
+    return {
+      ...asset,
+      last_price: tick?.price ?? asset.last_price,
+      change: tick?.change ?? asset.change,
+      change_pct: tick?.change_pct ?? asset.change_pct,
+    };
+  });
+});
+```
+
+### 7.5 Dashboard Integration
+
+The dashboard consumes both `MarketDataStore` and `PortfolioAnalyticsStore`:
+
+| Component | Data Source | Live Updates |
+|-----------|------------|--------------|
+| Total AUM card | `analytics.totalNav` → `marketStore.totalAum` → risk snapshots (fallback chain) | Yes — recomputes on each tick |
+| Return indicator | `analytics.totalPnlPct` with absolute P&L in parens | Yes |
+| Holdings cards (top 5) | `marketStore.holdings[0:5]` | Yes — price, change, change_pct tick |
+| Portfolio Overview table | `analytics.positions[]` → `marketStore.holdings[]` (fallback) | Yes — live P&L per row |
+| Watchlist | `marketStore.holdings` filtered by gainers/losers | Yes |
+
+### 7.6 Mutual Funds in Dashboard
+
+Mutual fund prices update **once daily** (after market close, ~00:00 EST via REST). The Dashboard shows the latest EOD NAV from `nav_timeseries` for MF holdings, and only streams real-time updates for equity/ETF holdings. The frontend handles mixed update frequencies gracefully — MF rows show SSR data until the next daily refresh, while equity/ETF rows tick live.
+
+### 7.7 Components That Consume Live Data
+
+| Component | File | Store | Update Trigger |
+|-----------|------|-------|----------------|
+| Dashboard (AUM, Holdings, Overview, Watchlist) | `routes/(app)/dashboard/+page.svelte` | `marketStore` + `analytics` | WS price tick |
+| Screener Asset Grid | `routes/(app)/screener/+page.svelte` | `marketStore.priceMap` | WS price tick (page-scoped) |
+| Screener Manager Grid | `components/screener/CatalogTableV2.svelte` | None (static SSR) | Page navigation only |
+
+### 7.8 Test Coverage
+
+| Test File | Cases | Coverage |
+|-----------|-------|----------|
+| `tests/test_market_data_ws.py` | 10 | WS auth, subscribe/unsubscribe, ping/pong, ConnectionManager broadcast, stale cleanup, dashboard REST |
+| `tests/test_portfolio_screener_rest.py` | 10 | Portfolio holdings (auth, shape, empty fallback, position fields), Screener catalog (auth, shape, pagination, search, asset fields, region filter) |
+
+---
+
+## 8. Environment Variables
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
@@ -318,9 +563,9 @@ No feature flags needed -- Tiingo is the only provider. The key is already in `.
 
 ---
 
-## 8. Rate Limits & Pricing
+## 9. Rate Limits & Pricing
 
-### 8.1 Free Tier (Current)
+### 9.1 Free Tier (Current)
 
 | Limit | Value |
 |-------|-------|
@@ -330,14 +575,14 @@ No feature flags needed -- Tiingo is the only provider. The key is already in `.
 | Coverage | 82,468 securities (37k stocks + 45k ETFs/MFs) |
 | Update frequency | EOD at 17:30 ET (equities/ETFs), 00:00 ET (MFs) |
 
-### 8.2 Paid Tier (Prod Target)
+### 9.2 Paid Tier (Prod Target)
 
 | Plan | Price | REST | WebSocket | Note |
 |------|-------|------|-----------|------|
 | Power | ~$10/mo | 500 sym/hr | 100 symbols | Sufficient for <50 tenants |
 | Commercial | ~$30/mo | 5000 sym/hr | Unlimited | Scale target |
 
-### 8.3 Cost Comparison
+### 9.3 Cost Comparison
 
 | Solution | Monthly Cost | Coverage |
 |----------|-------------|----------|
@@ -349,7 +594,7 @@ No feature flags needed -- Tiingo is the only provider. The key is already in `.
 
 ---
 
-## 9. Decision Log
+## 10. Decision Log
 
 ### Why not CompositeProvider (multi-provider routing)?
 

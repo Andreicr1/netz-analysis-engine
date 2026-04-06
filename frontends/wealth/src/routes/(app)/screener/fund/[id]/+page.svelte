@@ -5,6 +5,9 @@
   Read-only view — analysis belongs in the Analytics tab.
 -->
 <script lang="ts">
+	import { goto } from "$app/navigation";
+	import { page as pageState } from "$app/state";
+	import { ArrowLeft } from "lucide-svelte";
 	import { formatCompact, formatPercent, formatDate } from "@investintell/ui";
 	import { UNIVERSE_LABELS } from "$lib/types/catalog";
 	import NavPerformanceChart from "$lib/components/charts/NavPerformanceChart.svelte";
@@ -15,6 +18,20 @@
 	import "./factsheet.css";
 
 	let { data } = $props();
+
+	// ── Back navigation — return to L2 (manager fund list) if came from there ──
+	const managerId = $derived(pageState.url.searchParams.get("manager"));
+	const managerName = $derived(pageState.url.searchParams.get("manager_name"));
+
+	function goBack() {
+		if (managerId) {
+			const params = new URLSearchParams({ manager: managerId });
+			if (managerName) params.set("manager_name", managerName);
+			goto(`/screener?${params.toString()}`);
+		} else {
+			goto("/screener");
+		}
+	}
 
 	const factSheet = $derived(data.factSheet as Record<string, any>);
 	const fund = $derived(factSheet.fund);
@@ -53,12 +70,18 @@
 	<title>{fund.name} | Fact Sheet</title>
 </svelte:head>
 
-<div class="fs-container w-full rounded-2xl bg-[var(--ii-bg)] text-[var(--ii-text-primary)] font-[family-name:var(--ii-font-sans)] p-4 md:p-6">
+<div class="fs-container w-full h-full rounded-2xl bg-[var(--ii-bg)] text-[var(--ii-text-primary)] font-[family-name:var(--ii-font-sans)] flex flex-col overflow-hidden">
 
 	<!-- ════════════════════════════════════════════════════════
-	     HEADER — Bloomberg-style
+	     STICKY HEADER — Bloomberg-style (stays pinned)
 	     ════════════════════════════════════════════════════════ -->
-	<header class="border-b-2 border-[var(--ii-border-subtle)] pb-6 mb-8">
+	<header class="flex-shrink-0 border-b-2 border-[var(--ii-border-subtle)] pb-6 px-4 md:px-6 pt-4 md:pt-6">
+		<!-- Back button — L2 style -->
+		<button onclick={goBack} class="fs-back fs-no-print">
+			<ArrowLeft size={16} />
+			<span>{managerId ? "Back to Fund List" : "Back to Managers"}</span>
+		</button>
+
 		<!-- Top row: manager + actions -->
 		<div class="flex items-start justify-between mb-4">
 			<div class="flex flex-col gap-1">
@@ -119,6 +142,11 @@
 			</div>
 		</div>
 	</header>
+
+	<!-- ════════════════════════════════════════════════════════
+	     SCROLLABLE BODY — everything below header scrolls
+	     ════════════════════════════════════════════════════════ -->
+	<div class="fs-body flex-1 min-h-0 overflow-y-auto p-4 md:p-6">
 
 	<!-- ════════════════════════════════════════════════════════
 	     KPI CARDS — full-width 5-column grid
@@ -478,4 +506,5 @@
 		</div>
 	{/if}
 
+	</div><!-- /fs-body -->
 </div>

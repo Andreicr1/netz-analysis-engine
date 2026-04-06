@@ -6,7 +6,6 @@
 -->
 <script lang="ts">
   import { formatAUM } from "@investintell/ui";
-  import ManagerDetailPanel from "./ManagerDetailPanel.svelte";
   import type { ManagerCatalogItem } from "$lib/types/catalog";
   import { FUND_TYPE_BADGE_MAP } from "$lib/types/catalog";
 
@@ -19,6 +18,7 @@
     searchQuery?: string;
     sort?: string;
     onPageChange?: (page: number) => void;
+    onSelectManager?: (manager: ManagerCatalogItem) => void;
   }
 
   let {
@@ -30,11 +30,8 @@
     searchQuery = "",
     sort = "aum_desc",
     onPageChange,
+    onSelectManager,
   }: Props = $props();
-
-  // ── Level 2 state ──
-  let panelOpen = $state(false);
-  let selectedManager = $state<ManagerCatalogItem | null>(null);
 
   import { page as pageState } from "$app/state";
   import { goto } from "$app/navigation";
@@ -55,8 +52,7 @@
   }
 
   function openManagerPanel(item: ManagerCatalogItem) {
-    selectedManager = item;
-    panelOpen = true;
+    onSelectManager?.(item);
   }
 
   // ── Name cleansing: strip legal suffixes + Title Case ──
@@ -220,8 +216,6 @@
   {/if}
 </div>
 
-<!-- ── Level 2: Manager Detail Panel ── -->
-<ManagerDetailPanel bind:open={panelOpen} manager={selectedManager} />
 
 <style>
   /* ══════════════════════════════════════════════════════════

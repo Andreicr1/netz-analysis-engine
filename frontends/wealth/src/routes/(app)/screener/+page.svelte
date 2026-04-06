@@ -1,17 +1,56 @@
 <!--
-  Screener Level 1 — Unified Fund Catalog.
-  Toolbar: Search + AUM dropdown + Export (pill-shaped, bg-black).
-  Content: CatalogTableV2 (manager-grouped grid from /screener/catalog/managers).
-  Pills are in the parent +layout.svelte.
+  Screener — Canvas-swap architecture.
+  L1: CatalogTableV2 (manager grid) with toolbar.
+  L2: ManagerDetailPanel (fund drill-down) replaces L1 in the same space.
+  No Sheet/modal — pure canvas swap.
 -->
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { page as pageState } from "$app/state";
   import { Search, Download, ChevronDown } from "lucide-svelte";
   import { CatalogTableV2 } from "$lib/components/screener";
+  import ManagerDetailPanel from "$lib/components/screener/ManagerDetailPanel.svelte";
+  import type { ManagerCatalogItem } from "$lib/types/catalog";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
+
+  // ── Canvas swap state: null = L1, manager = L2 ──
+  let selectedManager = $state<ManagerCatalogItem | null>(null);
+
+  // Restore L2 from URL params (e.g. back from fact sheet)
+  $effect(() => {
+    const managerId = pageState.url.searchParams.get("manager");
+    const managerName = pageState.url.searchParams.get("manager_name");
+    if (managerId && managerName && !selectedManager) {
+      // Find from loaded items or create minimal stub
+      const found = data.catalog.items.find((m: ManagerCatalogItem) => m.manager_id === managerId);
+      selectedManager = found ?? {
+        manager_id: managerId,
+        manager_name: managerName,
+        total_aum: null,
+        fund_count: 0,
+        fund_types: [],
+        state: null,
+        country: null,
+        website: null,
+      };
+    }
+  });
+
+  function onSelectManager(manager: ManagerCatalogItem) {
+    selectedManager = manager;
+  }
+
+  function onBack() {
+    selectedManager = null;
+    // Clean URL params
+    const params = new URLSearchParams(pageState.url.searchParams);
+    params.delete("manager");
+    params.delete("manager_name");
+    const qs = params.toString();
+    goto(`/screener${qs ? `?${qs}` : ""}`, { replaceState: true });
+  }
 
   // ── Search (synced to SSR data) ──
   let searchInput = $derived(data.q ?? "");
@@ -85,7 +124,6 @@
       next.add(key);
     }
     activeFundTypes = next;
-    // TODO: propagate to backend via URL param once endpoint supports fund_type filter
   }
 </script>
 
@@ -94,75 +132,83 @@
 </svelte:head>
 
 <div class="scr-page">
-  <!-- ── Toolbar: Search + AUM + Export + Count ── -->
-  <div class="scr-toolbar">
-    <div class="scr-toolbar-left">
-      <div class="scr-search">
-        <Search size={20} />
-        <input
-          type="text"
-          class="scr-search-input"
-          placeholder="Search by name..."
-          value={searchInput}
-          oninput={onSearchInput}
-        />
-      </div>
+  {#if selectedManager}
+    <!-- ══ L2: Manager Fund Drill-down (canvas swap) ══ -->
+    <ManagerDetailPanel manager={selectedManager} onBack={onBack} />
+  {:else}
+    <!-- ══ L1: Manager Catalog ══ -->
 
-      <div class="scr-aum-wrapper">
-        <button class="scr-aum-pill" onclick={() => aumDropdownOpen = !aumDropdownOpen}>
-          <span>{currentAumLabel}</span>
-          <ChevronDown size={20} />
-        </button>
+    <!-- ── Toolbar: Search + AUM + Export + Count ── -->
+    <div class="scr-toolbar">
+      <div class="scr-toolbar-left">
+        <div class="scr-search">
+          <Search size={20} />
+          <input
+            type="text"
+            class="scr-search-input"
+            placeholder="Search by name..."
+            value={searchInput}
+            oninput={onSearchInput}
+          />
+        </div>
 
-        {#if aumDropdownOpen}
-          <div class="scr-aum-dropdown">
-            {#each AUM_OPTIONS as opt}
-              <button class="scr-aum-option" onclick={() => onAumSelect(opt.value)}>
-                {opt.label}
-              </button>
-            {/each}
-          </div>
-        {/if}
-      </div>
-
-      <!-- Fund Type Quick Toggles -->
-      <div class="scr-toggles">
-        {#each FUND_TYPE_PILLS as pill (pill.key)}
-          <button
-            class="scr-toggle"
-            class:scr-toggle--active={activeFundTypes.has(pill.key)}
-            onclick={() => toggleFundType(pill.key)}
-          >
-            {pill.label}
+        <div class="scr-aum-wrapper">
+          <button class="scr-aum-pill" onclick={() => aumDropdownOpen = !aumDropdownOpen}>
+            <span>{currentAumLabel}</span>
+            <ChevronDown size={20} />
           </button>
-        {/each}
+
+          {#if aumDropdownOpen}
+            <div class="scr-aum-dropdown">
+              {#each AUM_OPTIONS as opt}
+                <button class="scr-aum-option" onclick={() => onAumSelect(opt.value)}>
+                  {opt.label}
+                </button>
+              {/each}
+            </div>
+          {/if}
+        </div>
+
+        <!-- Fund Type Quick Toggles -->
+        <div class="scr-toggles">
+          {#each FUND_TYPE_PILLS as pill (pill.key)}
+            <button
+              class="scr-toggle"
+              class:scr-toggle--active={activeFundTypes.has(pill.key)}
+              onclick={() => toggleFundType(pill.key)}
+            >
+              {pill.label}
+            </button>
+          {/each}
+        </div>
+      </div>
+
+      <div class="scr-toolbar-right">
+        <span class="scr-count">
+          {data.catalog.total.toLocaleString()} managers
+        </span>
+        <button class="scr-export" title="Export">
+          <span>Export</span>
+          <Download size={20} />
+        </button>
       </div>
     </div>
 
-    <div class="scr-toolbar-right">
-      <span class="scr-count">
-        {data.catalog.total.toLocaleString()} managers
-      </span>
-      <button class="scr-export" title="Export">
-        <span>Export</span>
-        <Download size={20} />
-      </button>
+    <!-- ── Table ── -->
+    <div class="scr-content">
+      <CatalogTableV2
+        items={data.catalog.items}
+        total={data.catalog.total}
+        page={data.page}
+        pageSize={data.catalog.page_size}
+        hasNext={data.catalog.has_next}
+        searchQuery={data.q}
+        sort={data.sort || "aum_desc"}
+        onPageChange={onPageChange}
+        onSelectManager={onSelectManager}
+      />
     </div>
-  </div>
-
-  <!-- ── Table ── -->
-  <div class="scr-content">
-    <CatalogTableV2
-      items={data.catalog.items}
-      total={data.catalog.total}
-      page={data.page}
-      pageSize={data.catalog.page_size}
-      hasNext={data.catalog.has_next}
-      searchQuery={data.q}
-      sort={data.sort || "aum_desc"}
-      onPageChange={onPageChange}
-    />
-  </div>
+  {/if}
 </div>
 
 <style>
