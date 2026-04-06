@@ -81,14 +81,11 @@
 				trigger: "axis",
 				axisPointer: {
 					type: "cross",
-					label: {
-						backgroundColor: "var(--ii-bg-elevated, #1e1e22)",
-						color: "var(--ii-text-primary, #e4e4e7)",
-					},
+					label: { backgroundColor: "#1e1e22", color: "#e4e4e7" },
 				},
-				backgroundColor: "var(--ii-bg-elevated, #1e1e22)",
-				borderColor: "var(--ii-border-subtle, #2a2a2e)",
-				textStyle: { color: "var(--ii-text-primary, #e4e4e7)", fontSize: 12 },
+				backgroundColor: "#1e1e22",
+				borderColor: "#2a2a2e",
+				textStyle: { color: "#e4e4e7", fontSize: 12 },
 				formatter(params: any) {
 					if (!Array.isArray(params) || params.length === 0) return "";
 					let res = `<span style="font-weight:600">${params[0].name}</span><br/>`;
@@ -107,28 +104,25 @@
 				data: sectors,
 				bottom: 0,
 				type: "scroll",
-				textStyle: {
-					color: "var(--ii-text-secondary, #a1a1aa)",
-					fontSize: 11,
-				},
-				pageTextStyle: { color: "var(--ii-text-muted, #71717a)" },
-				pageIconColor: "var(--ii-text-secondary, #a1a1aa)",
-				pageIconInactiveColor: "var(--ii-border-subtle, #2a2a2e)",
+				textStyle: { color: "#a1a1aa", fontSize: 11 },
+				pageTextStyle: { color: "#71717a" },
+				pageIconColor: "#a1a1aa",
+				pageIconInactiveColor: "#2a2a2e",
 			},
 			grid: {
-				left: 48,
+				left: 16,
 				right: 16,
-				top: 12,
-				bottom: 48,
-				containLabel: false,
+				top: 16,
+				bottom: 52,
+				containLabel: true,
 			},
 			xAxis: {
 				type: "category",
 				boundaryGap: false,
 				data: dates,
-				axisLine: { lineStyle: { color: "var(--ii-border-subtle, #2a2a2e)" } },
+				axisLine: { lineStyle: { color: "#3f3f46" } },
 				axisLabel: {
-					color: "var(--ii-text-muted, #71717a)",
+					color: "#a1a1aa",
 					fontSize: 11,
 					formatter(val: string) {
 						const d = new Date(val);
@@ -144,14 +138,11 @@
 				max: 100,
 				axisLabel: {
 					formatter: "{value}%",
-					color: "var(--ii-text-muted, #71717a)",
+					color: "#a1a1aa",
 					fontSize: 11,
 				},
 				splitLine: {
-					lineStyle: {
-						color: "var(--ii-border-subtle, #2a2a2e)",
-						type: "dashed" as const,
-					},
+					lineStyle: { color: "#2a2a2e", type: "dashed" as const },
 				},
 				axisLine: { show: false },
 				axisTick: { show: false },

@@ -218,6 +218,19 @@ export function createMarketDataStore(config: MarketDataStoreConfig): MarketData
 			return;
 		}
 
+		// Preflight: verify backend is reachable before opening WebSocket.
+		// Avoids noisy browser console errors when backend is down.
+		try {
+			const healthUrl = apiBaseUrl.replace(/\/api\/v1$/, '') + '/health';
+			const health = await fetch(healthUrl, {
+				signal: AbortSignal.timeout(3000),
+			});
+			if (!health.ok) throw new Error("unhealthy");
+		} catch {
+			scheduleReconnect();
+			return;
+		}
+
 		// Build WS URL: http→ws, https→wss
 		const wsBase = apiBaseUrl.replace(/^http/, "ws");
 		const url = `${wsBase}/market-data/live/ws?token=${encodeURIComponent(token)}`;

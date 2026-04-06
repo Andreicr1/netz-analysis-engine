@@ -63,10 +63,10 @@
 
 	<!-- ── Sidebar ── -->
 	{#if sidebarOpen}
-		<aside class="w-[300px] flex-shrink-0 flex flex-col bg-black h-full transition-all duration-300">
+		<aside class="w-[240px] flex-shrink-0 flex flex-col bg-black h-full transition-all duration-300">
 
 			<!-- Hamburger — same row height as TopNav, aligned with nav icons -->
-			<div class="h-[88px] flex items-center px-[50px]">
+			<div class="h-[72px] flex items-center px-6">
 				<button
 					type="button"
 					class="text-white hover:bg-white/10 size-10 rounded-full flex items-center justify-center shrink-0 -ml-2"
@@ -78,18 +78,18 @@
 			</div>
 
 			<!-- Welcome -->
-			<div class="px-[50px] pb-4">
-				<p class="text-[32px] leading-tight">
+			<div class="px-6 pb-4">
+				<p class="text-2xl leading-tight">
 					<span class="font-normal text-[#85a0bd]">Welcome,</span><br />
 					<span class="font-semibold text-white">User</span>
 				</p>
 			</div>
 
-			<div class="mx-[27px] mt-6 mb-4 border-t border-[#404249]"></div>
+			<div class="mx-6 mt-4 mb-3 border-t border-[#404249]"></div>
 
 			<!-- Navigation block — flex-1 to push logo down -->
-			<nav class="px-[27px] flex-1 flex flex-col overflow-y-auto">
-				<p class="px-[23px] mb-3 text-[12px] font-normal tracking-[2px] uppercase text-[#d9d9d9]">
+			<nav class="px-4 flex-1 flex flex-col overflow-y-auto">
+				<p class="px-4 mb-3 text-[11px] font-normal tracking-[2px] uppercase text-[#d9d9d9]">
 					Main Menu
 				</p>
 				<ul class="space-y-0">
@@ -102,13 +102,13 @@
 								aria-current={active ? "page" : undefined}
 								style:color="white"
 								style:text-decoration="none"
-								class="flex items-center gap-4 px-[23px] h-[58px] rounded-[4px] text-[18px] transition-colors
+								class="flex items-center gap-3 px-4 h-11 rounded-[4px] text-[15px] transition-colors
 									{active
 										? 'bg-[#0177fb] font-semibold'
 										: 'font-normal hover:bg-white/5'
 									}"
 							>
-								<Icon size={24} />
+								<Icon size={20} />
 								<span>{item.label}</span>
 							</a>
 						</li>
@@ -117,29 +117,29 @@
 
 				<!-- System — pushed to bottom of nav, with margin below -->
 				<div class="mt-auto mb-12">
-					<p class="px-[23px] mb-3 text-[12px] font-normal tracking-[2px] uppercase text-[#d9d9d9]">
+					<p class="px-4 mb-3 text-[11px] font-normal tracking-[2px] uppercase text-[#d9d9d9]">
 						System
 					</p>
 					<a
 						href="/settings"
 						style:color="white"
 						style:text-decoration="none"
-						class="flex items-center gap-4 px-[23px] h-[58px] rounded-[4px] text-[18px] font-normal hover:bg-white/5 transition-colors
+						class="flex items-center gap-3 px-4 h-11 rounded-[4px] text-[15px] font-normal hover:bg-white/5 transition-colors
 							{isActive('/settings')
 								? 'bg-[#0177fb] font-semibold'
 								: ''
 							}"
 					>
-						<Settings size={24} />
+						<Settings size={20} />
 						<span>Settings</span>
 					</a>
 				</div>
 			</nav>
 
 			<!-- Logo — anchored to bottom with generous spacing -->
-			<div class="mt-auto px-[50px] pb-8">
-				<div class="flex items-center gap-3">
-					<svg width="40" height="48" viewBox="0 0 20 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+			<div class="mt-auto px-6 pb-6">
+				<div class="flex items-center gap-2.5">
+					<svg width="32" height="38" viewBox="0 0 20 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 						<circle cx="4" cy="4" r="1.5" fill="#0177fb" /><circle cx="10" cy="4" r="1.5" fill="#0177fb" />
 						<circle cx="16" cy="4" r="1.5" fill="#0177fb" /><circle cx="10" cy="12" r="2" fill="#0177fb" />
 						<circle cx="4" cy="20" r="1.5" fill="#888" /><circle cx="10" cy="20" r="1.5" fill="#888" /><circle cx="16" cy="20" r="1.5" fill="#888" />
@@ -148,7 +148,7 @@
 						<line x1="4" y1="20" x2="10" y2="12" stroke="#888" stroke-width="1" stroke-linecap="round" />
 						<line x1="16" y1="20" x2="10" y2="12" stroke="#888" stroke-width="1" stroke-linecap="round" />
 					</svg>
-					<span class="text-[27px] tracking-tight whitespace-nowrap">
+					<span class="text-[22px] tracking-tight whitespace-nowrap">
 						<span class="font-normal text-white">invest</span><span class="font-bold text-[#2563eb]">intell</span>
 					</span>
 				</div>
@@ -160,7 +160,7 @@
 	<div class="flex flex-1 flex-col h-full min-w-0 bg-black">
 
 		<!-- TopNav -->
-		<header class="h-[88px] flex-shrink-0 bg-black flex items-center px-8 py-4 gap-6">
+		<header class="h-[72px] flex-shrink-0 bg-black flex items-center px-6 py-3 gap-4">
 			{#if !sidebarOpen}
 				<button
 					type="button"
@@ -177,31 +177,31 @@
 			<!-- svelte-ignore a11y_click_events_have_key_events -->
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
-				class="flex items-center gap-3 pl-6 pr-20 py-4 rounded-[35px] bg-[#1a1b20] cursor-pointer hover:bg-[#25262b] transition-colors max-w-[480px] w-full"
+				class="flex items-center gap-2.5 pl-5 pr-14 h-10 rounded-full bg-[#1a1b20] cursor-pointer hover:bg-[#25262b] transition-colors max-w-md w-full"
 				onclick={() => searchOpen = true}
 			>
-				<Mic size={20} class="text-[#cbccd1] shrink-0" />
-				<span class="text-[#cbccd1] text-[20px] whitespace-nowrap">Ask InvestIntell anything</span>
+				<Mic size={16} class="text-[#cbccd1] shrink-0" />
+				<span class="text-[#cbccd1] text-sm whitespace-nowrap">Ask InvestIntell anything</span>
 			</div>
 
 			<div class="flex-1"></div>
 
-			<div class="flex items-center gap-4 shrink-0">
-				<!-- Bell + CPU: gap-0 between them -->
+			<div class="flex items-center gap-3 shrink-0">
+				<!-- Bell + CPU -->
 				<div class="flex items-center">
-					<button type="button" class="rounded-full bg-[#1a1b20] p-4 flex items-center justify-center hover:bg-[#25262b] transition-colors" onclick={() => {}}>
-						<Bell size={24} class="text-white" />
+					<button type="button" class="rounded-full bg-[#1a1b20] p-2.5 flex items-center justify-center hover:bg-[#25262b] transition-colors" onclick={() => {}}>
+						<Bell size={20} class="text-white" />
 					</button>
-					<button type="button" class="rounded-full bg-[#1a1b20] p-4 flex items-center justify-center hover:bg-[#25262b] transition-colors" onclick={() => agentOpen = !agentOpen}>
-						<Cpu size={24} class="text-white" />
+					<button type="button" class="rounded-full bg-[#1a1b20] p-2.5 flex items-center justify-center hover:bg-[#25262b] transition-colors" onclick={() => agentOpen = !agentOpen}>
+						<Cpu size={20} class="text-white" />
 					</button>
 				</div>
 				<!-- Avatar + name -->
-				<div class="flex items-center gap-3">
-					<div class="size-[61px] rounded-full bg-gradient-to-br from-[#0177fb] to-[#6366f1] flex items-center justify-center text-white text-xl font-semibold shrink-0">U</div>
+				<div class="flex items-center gap-2.5">
+					<div class="size-10 rounded-full bg-gradient-to-br from-[#0177fb] to-[#6366f1] flex items-center justify-center text-white text-sm font-semibold shrink-0">U</div>
 					<div class="flex flex-col gap-0.5 leading-tight">
-						<span class="text-[18px] text-white">User l</span>
-						<span class="text-[14px] font-light text-white">e-mail</span>
+						<span class="text-sm text-white">User l</span>
+						<span class="text-xs font-light text-white">e-mail</span>
 					</div>
 				</div>
 			</div>
@@ -210,7 +210,7 @@
 		<!-- Content panel — calc() height locks the box, padding creates black margins -->
 		<div
 			class="bg-black overflow-hidden"
-			style="height: calc(100vh - 88px); padding: 34px;"
+			style="height: calc(100vh - 72px); padding: 0 24px 24px 0;"
 		>
 			<main class="w-full h-full bg-[#1a1b20] rounded-tl-[32px] shadow-2xl border border-[#404149] flex flex-col overflow-hidden">
 				<div class="flex-1 min-h-0 overflow-y-auto p-6">

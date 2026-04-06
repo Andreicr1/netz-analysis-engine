@@ -77,6 +77,61 @@ async def html_to_pdf(
     return pdf_bytes
 
 
+async def url_to_pdf(
+    url: str,
+    *,
+    format: str = "A4",
+    print_background: bool = True,
+    margin_mm: int = 8,
+    wait_for_selector: str | None = None,
+) -> bytes:
+    """Navigate to a URL and render the page to PDF via Playwright Chromium.
+
+    Parameters
+    ----------
+    url:
+        Full URL to navigate to (e.g. http://localhost:5175/screener/fund/...).
+    wait_for_selector:
+        Optional CSS selector to wait for before rendering (ensures data loaded).
+    """
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError as exc:
+        raise RuntimeError(
+            "playwright is not installed. Add it to requirements and run "
+            "'playwright install chromium --with-deps'."
+        ) from exc
+
+    margin = f"{margin_mm}mm"
+    async with async_playwright() as pw:
+        browser = await pw.chromium.launch(
+            args=["--no-sandbox", "--disable-setuid-sandbox"],
+        )
+        try:
+            page = await browser.new_page()
+            await page.goto(url, wait_until="networkidle")
+            if wait_for_selector:
+                await page.wait_for_selector(wait_for_selector, timeout=15_000)
+            # Hide non-print elements (sidebar, topbar, action buttons)
+            await page.add_style_tag(content="""
+                .fs-no-print, aside, header, [data-no-print] { display: none !important; }
+                main { border: none !important; border-radius: 0 !important; box-shadow: none !important; }
+            """)
+            pdf_bytes = await page.pdf(
+                format=format,
+                print_background=print_background,
+                margin={
+                    "top": margin, "right": margin,
+                    "bottom": margin, "left": margin,
+                },
+            )
+        finally:
+            await browser.close()
+
+    logger.info("url_to_pdf_rendered", url=url, size_bytes=len(pdf_bytes), format=format)
+    return pdf_bytes
+
+
 def html_to_pdf_sync(
     html: str,
     *,

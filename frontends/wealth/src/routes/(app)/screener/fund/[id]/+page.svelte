@@ -7,6 +7,7 @@
 <script lang="ts">
 	import { goto } from "$app/navigation";
 	import { page as pageState } from "$app/state";
+	import { getContext } from "svelte";
 	import { ArrowLeft } from "lucide-svelte";
 	import { formatCompact, formatPercent, formatDate } from "@investintell/ui";
 	import { UNIVERSE_LABELS } from "$lib/types/catalog";
@@ -18,6 +19,7 @@
 	import "./factsheet.css";
 
 	let { data } = $props();
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	// ── Back navigation — return to L2 (manager fund list) if came from there ──
 	const managerId = $derived(pageState.url.searchParams.get("manager"));
@@ -61,8 +63,35 @@
 		return formatCompact(val);
 	}
 
-	function handlePrint() {
-		window.print();
+	let pdfLoading = $state(false);
+
+	async function handleDownloadPdf() {
+		if (pdfLoading) return;
+		pdfLoading = true;
+		try {
+			const apiBase = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api/v1";
+			const params = new URLSearchParams();
+			if (managerId) params.set("manager", managerId);
+			if (managerName) params.set("manager_name", managerName);
+			const qs = params.toString() ? `?${params.toString()}` : "";
+			const token = getToken ? await getToken() : "";
+			const res = await fetch(`${apiBase}/screener/catalog/${fund.external_id}/fact-sheet/pdf${qs}`, {
+				method: "POST",
+				headers: { Authorization: `Bearer ${token}` },
+			});
+			if (!res.ok) throw new Error(`PDF generation failed: ${res.status}`);
+			const blob = await res.blob();
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.href = url;
+			a.download = `fact-sheet-${fund.ticker || fund.external_id}.pdf`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (err) {
+			console.error("PDF download failed:", err);
+		} finally {
+			pdfLoading = false;
+		}
 	}
 </script>
 
@@ -95,30 +124,20 @@
 				{/if}
 			</div>
 
-			<!-- Print / PDF actions -->
-			<div class="flex items-center gap-2 fs-no-print">
+			<!-- PDF export -->
+			<div class="flex items-center fs-no-print">
 				<button
-					onclick={handlePrint}
-					class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
-					       border border-[var(--ii-border-subtle)] text-[var(--ii-text-secondary)]
-					       hover:bg-[var(--ii-surface-alt)] transition-colors cursor-pointer"
-				>
-					<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-						<path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
-						<rect x="6" y="14" width="12" height="8" rx="1"/>
-					</svg>
-					Print Fact Sheet
-				</button>
-				<button
-					onclick={handlePrint}
-					class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg
+					onclick={handleDownloadPdf}
+					disabled={pdfLoading}
+					class="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-lg
 					       bg-[var(--ii-brand-primary)] text-[var(--ii-text-inverse)]
-					       hover:opacity-90 transition-opacity cursor-pointer"
+					       hover:opacity-90 transition-opacity cursor-pointer
+					       disabled:opacity-50 disabled:cursor-wait"
 				>
 					<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
 						<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
 					</svg>
-					PDF
+					{pdfLoading ? "Generating..." : "PDF"}
 				</button>
 			</div>
 		</div>
@@ -291,8 +310,8 @@
 				<h3 class="text-sm font-bold uppercase tracking-wider text-[var(--ii-text-primary)] border-l-4 border-[var(--ii-brand-primary)] pl-3 mb-5">
 					Sector Evolution
 				</h3>
-				<div class="fs-chart-wrap">
-					<SectorAllocationChart history={sector_history} height={300} />
+				<div class="fs-chart-wrap" style="height: 400px;">
+					<SectorAllocationChart history={sector_history} height={380} />
 				</div>
 			</section>
 		</div>

@@ -2236,6 +2236,58 @@ async def get_fund_fact_sheet(
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+#  Fund fact sheet — PDF export (Playwright)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@router.post(
+    "/catalog/{external_id}/fact-sheet/pdf",
+    summary="Generate fund fact-sheet PDF via Playwright",
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+async def generate_fund_fact_sheet_pdf(
+    external_id: str,
+    manager: str | None = Query(default=None, description="Manager CRD for back link"),
+    manager_name: str | None = Query(default=None, description="Manager name for back link"),
+    user: CurrentUser = Depends(get_current_user),
+) -> Any:
+    """Render the fund fact-sheet page to PDF via headless Chromium.
+
+    Navigates to the SvelteKit fund page and captures it as a pixel-perfect PDF.
+    """
+    from fastapi.responses import Response
+
+    from vertical_engines.wealth.pdf.html_renderer import url_to_pdf
+
+    # Build the frontend URL for this fund's fact sheet
+    frontend_base = "http://localhost:5175"
+    params = f"?manager={manager}&manager_name={manager_name}" if manager else ""
+    page_url = f"{frontend_base}/screener/fund/{external_id}{params}"
+
+    try:
+        pdf_bytes = await url_to_pdf(
+            page_url,
+            format="A4",
+            print_background=True,
+            margin_mm=6,
+        )
+    except Exception as exc:
+        logger.error("fund_fact_sheet_pdf_failed", external_id=external_id, error=str(exc), exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"PDF generation failed: {exc}",
+        ) from exc
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="fact-sheet-{external_id}.pdf"',
+        },
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 #  Fund share classes (Level 3 drill-down)
 # ═══════════════════════════════════════════════════════════════════════════
 
