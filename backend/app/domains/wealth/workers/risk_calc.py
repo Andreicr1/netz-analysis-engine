@@ -404,7 +404,11 @@ def _compute_momentum_from_nav(
     }
 
     if aum.any():
-        slope = compute_flow_momentum(close, aum)
+        # Low-pass filter: 63-day EMA (~3 months) dampens noise from
+        # dividends, splits, merges, and performance fee payouts that
+        # distort the AUM-minus-NAV flow proxy.
+        aum_smooth = _ema_smooth(aum, span=63) if len(aum) >= 63 else aum
+        slope = compute_flow_momentum(close, aum_smooth)
         flow_score = normalize_flow_momentum(slope)
         result["flow_momentum_score"] = round(flow_score, 2)
         if nav_score is not None:
@@ -465,12 +469,14 @@ def _compute_metrics_from_returns(
     metrics["sortino_1y"] = _round_or_none(_compute_sortino(returns, 252, risk_free_rate))
 
     # GARCH(1,1) conditional volatility (BL-11)
+    # Fallback: EWMA(λ=0.94) preserves volatility clustering without
+    # iterative convergence. Avoids mixing conditional (GARCH) with
+    # static (σ_1y) methodologies across the dashboard.
     garch_result = fit_garch(returns)
     if garch_result is not None and garch_result.converged and garch_result.volatility_garch is not None:
         metrics["volatility_garch"] = round(garch_result.volatility_garch, 6)
     else:
-        # Fallback: use sample volatility (already computed above)
-        metrics["volatility_garch"] = metrics.get("volatility_1y")
+        metrics["volatility_garch"] = _ewma_volatility(returns, lam=0.94)
 
     return metrics
 
@@ -498,6 +504,42 @@ async def compute_fund_risk_metrics(
 
 
 _NUMERIC_10_6_MAX = 9999.999999  # Numeric(10,6) max absolute value
+
+
+def _ema_smooth(series: np.ndarray, span: int = 63) -> np.ndarray:
+    """Exponential Moving Average low-pass filter.
+
+    Dampens high-frequency noise (dividends, splits, merges) in AUM series
+    before computing flow momentum. span=63 ≈ 3-month rolling window.
+    """
+    alpha = 2.0 / (span + 1)
+    result = np.empty_like(series, dtype=float)
+    result[0] = series[0]
+    for i in range(1, len(series)):
+        result[i] = alpha * series[i] + (1 - alpha) * result[i - 1]
+    return result
+
+
+def _ewma_volatility(returns: np.ndarray, lam: float = 0.94) -> float | None:
+    """EWMA (RiskMetrics) conditional volatility.
+
+    σ²_t = λ·σ²_{t-1} + (1-λ)·r²_{t-1}
+
+    Preserves volatility clustering like GARCH but without iterative MLE.
+    Used as fallback when GARCH(1,1) fails to converge.
+    λ=0.94 is the J.P. Morgan RiskMetrics standard for daily data.
+
+    Returns annualized volatility (×√252) or None if insufficient data.
+    """
+    if len(returns) < 20:
+        return None
+
+    variance = float(np.var(returns))  # seed with unconditional variance
+    for r in returns:
+        variance = lam * variance + (1 - lam) * (r ** 2)
+
+    ewma_vol = float(np.sqrt(variance) * np.sqrt(252))
+    return round(ewma_vol, 6)
 
 
 def _round_or_none(value: float | None, decimals: int = 6) -> float | None:

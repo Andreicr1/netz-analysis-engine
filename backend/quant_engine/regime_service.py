@@ -148,7 +148,8 @@ def classify_regime_multi_signal(
     *,
     hy_oas: float | None = None,
     baa_spread: float | None = None,
-    fed_funds: float | None = None,
+    fed_funds_delta_6m: float | None = None,
+    dxy_zscore: float | None = None,
 ) -> tuple[str, dict[str, str]]:
     """Classify regime using multi-factor stress scoring.
 
@@ -159,19 +160,21 @@ def classify_regime_multi_signal(
     Regime classification from composite stress score:
         score < 25  → RISK_ON   (benign conditions)
         score < 50  → RISK_OFF  (elevated caution, defensive tilt)
-        score < 75  → CRISIS    (multiple stress signals, capital preservation)
-        score >= 75 → CRISIS    (extreme — panic territory)
+        score ≥ 50  → CRISIS    (multiple stress signals, capital preservation)
 
     CPI override: inflation above threshold triggers INFLATION regime
     regardless of stress score.
 
     Signals and weights:
-        VIX (30%):        Long-term avg ~19. Score ramps linearly 18→35.
-        HY OAS (25%):     US HY credit spread. Normal ~3.0, stress >5.0.
-        Yield curve (15%): 10Y-2Y. Inverted = recession signal.
-        BAA spread (10%):  Corporate credit risk. Normal ~1.2, stress >2.0.
-        Fed Funds (10%):   Monetary tightness. Neutral 2-3%, restrictive >4%.
-        Sahm Rule (10%):   Labor market recession indicator. Trigger at 0.50.
+        VIX (25%):              Long-term avg ~19. Score ramps linearly 18→35.
+        HY OAS (20%):           US HY credit spread. Normal ~3.0, stress >5.0.
+        Yield curve (15%):      10Y-2Y. Inverted = recession signal.
+        BAA spread (10%):       Corporate credit risk. Normal ~1.2, stress >2.5.
+        FF Rate-of-Change (10%): 6-month change in Fed Funds. Rapid hikes = stress.
+                                 Replaces absolute level (avoids structural bias).
+        Sahm Rule (10%):        Labor market recession indicator. Trigger at 0.50.
+        DXY Z-score (10%):      Dollar strength surprise. Sharp USD rally = global
+                                 liquidity stress for risk assets.
 
     """
     if thresholds is None:
@@ -192,74 +195,64 @@ def classify_regime_multi_signal(
         return "INFLATION", reasons
 
     # ── Multi-factor stress scoring ──
-    stress_score = 0.0
-    signal_count = 0
+    # Each signal produces a sub-score 0-100 via _ramp().
+    # Weighted sum → composite stress score (0-100).
+    signals: list[tuple[str, float, float, str]] = []  # (label, sub_score, weight, reason)
 
-    # VIX (weight 30): ramp 18→35, where 18=0 and 35=100
+    # VIX (25%): LT avg ~19, ramp 18→35
     if vix is not None:
-        vix_score = _ramp(vix, calm=18.0, panic=35.0)
-        stress_score += vix_score * 0.30
-        signal_count += 1
-        reasons["vix"] = f"VIX={vix:.1f} (stress={vix_score:.0f}/100)"
+        s = _ramp(vix, calm=18.0, panic=35.0)
+        signals.append(("vix", s, 0.25, f"VIX={vix:.1f} (stress={s:.0f}/100)"))
 
-    # HY OAS (weight 25): ramp 2.5→6.0
+    # US HY OAS (20%): normal ~3.0%, stress >5.0%
     if hy_oas is not None:
-        hy_score = _ramp(hy_oas, calm=2.5, panic=6.0)
-        stress_score += hy_score * 0.25
-        signal_count += 1
-        reasons["hy_oas"] = f"US_HY_OAS={hy_oas:.2f}% (stress={hy_score:.0f}/100)"
+        s = _ramp(hy_oas, calm=2.5, panic=6.0)
+        signals.append(("hy_oas", s, 0.20, f"US_HY_OAS={hy_oas:.2f}% (stress={s:.0f}/100)"))
 
-    # Yield curve (weight 15): positive=calm, inverted=stress
+    # Yield curve (15%): +1.0=calm, -0.5=full stress (inverted)
     if yield_curve_spread is not None:
-        # +1.0 = calm (0), 0.0 = neutral (50), -0.5 = full stress (100)
-        yc_score = _ramp(-yield_curve_spread, calm=-1.0, panic=0.5)
-        stress_score += yc_score * 0.15
-        signal_count += 1
-        reasons["yield_curve"] = f"10Y-2Y={yield_curve_spread:+.2f}% (stress={yc_score:.0f}/100)"
+        s = _ramp(-yield_curve_spread, calm=-1.0, panic=0.5)
+        signals.append(("yield_curve", s, 0.15, f"10Y-2Y={yield_curve_spread:+.2f}% (stress={s:.0f}/100)"))
 
-    # BAA spread (weight 10): ramp 1.2→2.5
+    # BAA-10Y spread (10%): normal ~1.2%, stress >2.5%
     if baa_spread is not None:
-        baa_score = _ramp(baa_spread, calm=1.2, panic=2.5)
-        stress_score += baa_score * 0.10
-        signal_count += 1
-        reasons["baa_spread"] = f"BAA-10Y={baa_spread:.2f}% (stress={baa_score:.0f}/100)"
+        s = _ramp(baa_spread, calm=1.2, panic=2.5)
+        signals.append(("baa_spread", s, 0.10, f"BAA-10Y={baa_spread:.2f}% (stress={s:.0f}/100)"))
 
-    # Fed Funds (weight 10): ramp 2.0→5.0 (higher = more restrictive)
-    if fed_funds is not None:
-        ff_score = _ramp(fed_funds, calm=2.0, panic=5.0)
-        stress_score += ff_score * 0.10
-        signal_count += 1
-        reasons["fed_funds"] = f"FF={fed_funds:.2f}% (stress={ff_score:.0f}/100)"
+    # Fed Funds rate-of-change (10%): 6-month delta captures surprise tightening.
+    # Positive delta = hiking (stress). Negative = cutting (dovish, calm).
+    # Replaces absolute FF level to avoid structural bias in high-rate regimes.
+    if fed_funds_delta_6m is not None:
+        s = _ramp(fed_funds_delta_6m, calm=-0.50, panic=1.50)
+        signals.append(("ff_roc", s, 0.10, f"FF_Δ6m={fed_funds_delta_6m:+.2f}% (stress={s:.0f}/100)"))
 
-    # Sahm Rule (weight 10): ramp 0.0→0.50
+    # Sahm Rule (10%): recession onset at 0.50
     if sahm_rule is not None:
-        sahm_score = _ramp(sahm_rule, calm=0.0, panic=0.50)
-        stress_score += sahm_score * 0.10
-        signal_count += 1
-        reasons["sahm"] = f"Sahm={sahm_rule:.2f} (stress={sahm_score:.0f}/100)"
+        s = _ramp(sahm_rule, calm=0.0, panic=0.50)
+        signals.append(("sahm", s, 0.10, f"Sahm={sahm_rule:.2f} (stress={s:.0f}/100)"))
 
-    # If too few signals, be conservative
-    if signal_count < 2:
+    # DXY Z-score (10%): sharp dollar rally = global liquidity crunch.
+    # Z-score of Trade-Weighted Dollar Index vs 1Y rolling mean.
+    # z > 2.0 = parabolic USD strength = EM/commodity/risk-asset stress.
+    if dxy_zscore is not None:
+        s = _ramp(dxy_zscore, calm=0.0, panic=2.0)
+        signals.append(("dxy", s, 0.10, f"DXY_z={dxy_zscore:+.2f}σ (stress={s:.0f}/100)"))
+
+    # Need at least 2 signals for confident classification
+    if len(signals) < 2:
         reasons["decision"] = "RISK_OFF: insufficient signals for confident classification"
         return "RISK_OFF", reasons
 
-    # Normalize: if not all 6 signals present, scale up proportionally
-    # so that available signals fill the full 0-100 range
-    if signal_count > 0:
-        max_possible_weight = sum(w for w, present in [
-            (0.30, vix is not None),
-            (0.25, hy_oas is not None),
-            (0.15, yield_curve_spread is not None),
-            (0.10, baa_spread is not None),
-            (0.10, fed_funds is not None),
-            (0.10, sahm_rule is not None),
-        ] if present)
-        if max_possible_weight > 0 and max_possible_weight < 1.0:
-            stress_score = stress_score / max_possible_weight
-        # stress_score is already on a 0-100 scale (weighted sum of 0-100 components)
+    # Compute weighted composite — normalize for missing signals
+    raw_score = sum(s * w for _, s, w, _ in signals)
+    weight_sum = sum(w for _, _, w, _ in signals)
+    stress_score = raw_score / weight_sum if weight_sum > 0 else 50.0
+
+    for label, _, _, reason_str in signals:
+        reasons[label] = reason_str
 
     stress_score = round(min(100.0, max(0.0, stress_score)), 1)
-    reasons["composite_stress"] = f"{stress_score}/100 ({signal_count} signals)"
+    reasons["composite_stress"] = f"{stress_score}/100 ({len(signals)} signals)"
 
     # ── Classify from composite score ──
     if stress_score >= 75:
@@ -649,6 +642,74 @@ async def get_latest_macro_values(
     return result
 
 
+async def _compute_ff_delta_6m(db: AsyncSession) -> float | None:
+    """Compute 6-month change in Fed Funds Rate from macro_data.
+
+    Returns positive delta for tightening (stress), negative for easing (calm).
+    None if insufficient data.
+    """
+    try:
+        result = await db.execute(
+            select(MacroData.value, MacroData.obs_date)
+            .where(MacroData.series_id == "DFF")
+            .order_by(MacroData.obs_date.desc())
+            .limit(1),
+        )
+        latest = result.first()
+        if not latest:
+            return None
+
+        from datetime import timedelta
+
+        target_date = latest.obs_date - timedelta(days=180)
+        result_6m = await db.execute(
+            select(MacroData.value)
+            .where(
+                MacroData.series_id == "DFF",
+                MacroData.obs_date <= target_date,
+            )
+            .order_by(MacroData.obs_date.desc())
+            .limit(1),
+        )
+        past_val = result_6m.scalar_one_or_none()
+        if past_val is None:
+            return None
+
+        return round(float(latest.value) - float(past_val), 4)
+    except Exception:
+        logger.exception("ff_delta_6m_failed")
+        return None
+
+
+async def _compute_dxy_zscore(db: AsyncSession) -> float | None:
+    """Compute Z-score of Trade-Weighted Dollar Index vs 1Y rolling mean.
+
+    Positive z = USD strength (stress for EM/commodities/risk assets).
+    Uses DTWEXBGS (Broad Trade-Weighted Dollar Index) from FRED.
+    """
+    try:
+        result = await db.execute(
+            select(MacroData.value)
+            .where(MacroData.series_id == "DTWEXBGS")
+            .order_by(MacroData.obs_date.desc())
+            .limit(252),  # ~1Y of daily observations
+        )
+        values = [float(r[0]) for r in result.all()]
+        if len(values) < 60:  # Need at least ~3 months
+            return None
+
+        latest = values[0]
+        mean_1y = np.mean(values)
+        std_1y = np.std(values)
+        if std_1y < 0.001:
+            return 0.0
+
+        return round((latest - mean_1y) / std_1y, 2)
+    except Exception:
+        logger.exception("dxy_zscore_failed")
+        return None
+
+
 async def get_current_regime(
     db: AsyncSession,
     config: dict[str, Any] | None = None,
@@ -673,14 +734,20 @@ async def get_current_regime(
     sahm_val = macro.get("SAHMREALTIME", (None, None))[0]
     hy_oas_val = macro.get("BAMLH0A0HYM2", (None, None))[0]
     baa_val = macro.get("BAA10Y", (None, None))[0]
-    dff_val = macro.get("DFF", (None, None))[0]
+
+    # A. Fed Funds rate-of-change (6-month delta) — avoids absolute-level bias
+    ff_delta = await _compute_ff_delta_6m(db)
+
+    # E. DXY Z-score (dollar strength surprise vs 1Y rolling mean)
+    dxy_z = await _compute_dxy_zscore(db)
 
     # Need at least VIX or HY OAS to classify
     if vix_val is not None or hy_oas_val is not None:
         regime, reasons = classify_regime_multi_signal(
             vix_val, yield_val, cpi_val,
             sahm_rule=sahm_val, config=config,
-            hy_oas=hy_oas_val, baa_spread=baa_val, fed_funds=dff_val,
+            hy_oas=hy_oas_val, baa_spread=baa_val,
+            fed_funds_delta_6m=ff_delta, dxy_zscore=dxy_z,
         )
 
         as_of = None
