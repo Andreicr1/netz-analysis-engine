@@ -10,19 +10,21 @@
 
 ### 1.1 Filosofia
 
-O modelo classifica o regime de mercado combinando sinais financeiros de alta frequência com indicadores de economia real. Isto evita o viés monetário de modelos puramente financeiros, que são cegos a choques de oferta (petróleo, commodities) e contrações de produção até que estes contaminem VIX e credit spreads — tipicamente semanas depois.
+O Netz Analysis Engine monitoriza os mercados globais partindo da premissa de que a destruição de capital não é um evento monolítico. Ela manifesta-se através de cinco quadrantes vectoriais distintos. O modelo emprega sinais independentes para identificar e isolar a origem do estresse, garantindo que o portfólio reaja adequadamente à natureza de cada crise.
 
-### 1.2 Cinco Quadrantes de Destruição de Capital
+O motor combina sinais financeiros de alta frequência com indicadores de economia real, evitando o viés monetário de modelos puramente financeiros — que são cegos a choques de oferta (petróleo, commodities) e contrações de produção até que estes contaminem VIX e credit spreads, tipicamente semanas depois.
 
-O motor é desenhado para cobrir os 5 principais vectores de risco sem pontos cegos:
+### 1.2 Taxonomia de Risco: Os 5 Quadrantes de Destruição de Capital
 
-| Quadrante | Sinal Primário | Sinal Secundário |
-|---|---|---|
-| **Crise de Liquidez** | DXY Z-score (dollar crunch) | VIX |
-| **Crise de Crédito** | HY OAS, BAA-10Y | Yield Curve |
-| **Crise de Crescimento / Recessão** | CFNAI, Sahm Rule | Yield Curve |
-| **Choque de Oferta** | Energy Shock Composite | CPI override |
-| **Estagflação Estrutural** | CPI YoY override (≥4%) | CFNAI + Energy |
+| Quadrante | Perfil do Estresse (Drivers) | Defesas do Motor Netz (Sinais) | Racional de Protecção |
+|---|---|---|---|
+| **1. Crises de Liquidez** | Fuga massiva para segurança, desalavancagem forçada e escassez de dólares globais | DXY Z-score (Fast), VIX (Fast) | Captura flash crashes e aversão ao risco extrema antes que os fundamentos económicos se deteriorem. O Dólar age como o termómetro global de liquidez. |
+| **2. Crises de Crédito** | Aumento da probabilidade de default, credit crunches e deterioração de balanços corporativos | US HY OAS (Fast), BAA-10Y Spread (Slow) | Identifica a reprecificação do risco corporativo e o fechamento dos mercados de dívida (High Yield e Investment Grade). |
+| **3. Recessão / Crescimento** | Contração da procura agregada, aumento do desemprego e colapso na expectativa de lucros | CFNAI (Slow), Sahm Rule (Slow), Yield Curve 10Y-2Y (Slow) | Monitoriza a economia real (85 indicadores via CFNAI) e o mercado de Treasuries para confirmar recessões estruturais que exigem posicionamento defensivo de longo prazo. |
+| **4. Choques de Oferta** | Ruturas geopolíticas, estrangulamento severo de cadeias de abastecimento ou crises energéticas | Energy Shock Composite (Fast) | Age como um proxy em tempo real para a destruição abrupta das margens de lucro corporativas e do poder de compra do consumidor via energia. |
+| **5. Estagflação / Inflação** | Expansão fiscal crónica, espirais de salário-preço e rigidez persistente no sector de serviços | CPI YoY ≥ 4.0% (Override), Fed Funds Δ6m (Slow) | Funciona como uma rede de segurança inflexível (Override). Garante a preservação de capital em cenários onde a inflação corrói os retornos reais, mesmo sob aparente "calma" nos mercados financeiros e de volatilidade. |
+
+Ao expor o motor de risco através desta taxonomia, o sistema demonstra que não é uma "caixa preta" estatística, mas sim um sistema arquitectado de forma determinística. Ele não apenas reage à queda dos preços, mas possui um "mandato" específico para detectar **de onde o golpe está a vir**, resolvendo o problema fundamental dos fundos quantitativos que falham em transições complexas de regime macroeconómico.
 
 ### 1.3 Arquitectura de Sinais
 
