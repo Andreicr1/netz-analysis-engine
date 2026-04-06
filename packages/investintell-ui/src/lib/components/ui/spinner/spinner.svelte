@@ -14,4 +14,4 @@
 	}: SVGAttributes<SVGSVGElement> = $props();
 </script>
 
-<Loader2Icon {role} color={color === null ? undefined : color} stroke={stroke === null ? undefined : stroke} aria-label={ariaLabel} class={cn("size-4 animate-spin", className)} {...restProps} />
+<Loader2Icon {role} color={color === null ? undefined : (color as any)} stroke={stroke === null ? undefined : (stroke as any)} aria-label={ariaLabel} class={cn("size-4 animate-spin", className)} {...(restProps as any)} />

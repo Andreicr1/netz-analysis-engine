@@ -69,7 +69,10 @@
                     label: {
                         show: true,
                         position: 'top',
-                        formatter: (p: any) => `${p.value[1].toFixed(0)}th`,
+                        formatter: (p: any) => {
+                            const v = Number(p.value?.[1]);
+                            return Number.isFinite(v) ? `${v.toFixed(0)}th` : "";
+                        },
                         fontSize: 12,
                         fontWeight: 'bold',
                         color: '#fafafa',

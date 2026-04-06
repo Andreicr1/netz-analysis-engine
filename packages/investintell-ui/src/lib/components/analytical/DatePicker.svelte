@@ -93,8 +93,9 @@
 	</Popover.Trigger>
 	<Popover.Content class="w-auto p-0" align="start">
 		<Calendar
-			value={calendarValue}
-			onValueChange={handleSelect}
+			type="single"
+			value={calendarValue as any}
+			onValueChange={handleSelect as any}
 			minValue={minDateValue}
 			maxValue={maxDateValue}
 			captionLayout="dropdown"

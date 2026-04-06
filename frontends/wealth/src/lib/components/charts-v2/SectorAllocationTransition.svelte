@@ -26,7 +26,7 @@
     "#06b6d4",
   ];
 
-  // ── Mock hierarchical data ──
+  // ── Hierarchical Data (Sample) ──
   const HIERARCHY = [
     {
       name: "Technology",

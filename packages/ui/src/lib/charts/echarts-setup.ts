@@ -9,6 +9,7 @@ import {
 	GraphChart,
 	TreemapChart,
 	SunburstChart,
+	PieChart,
 } from "echarts/charts";
 import {
 	GridComponent,
@@ -33,6 +34,7 @@ echarts.use([
 	GraphChart,
 	TreemapChart,
 	SunburstChart,
+	PieChart,
 	GridComponent,
 	TooltipComponent,
 	LegendComponent,

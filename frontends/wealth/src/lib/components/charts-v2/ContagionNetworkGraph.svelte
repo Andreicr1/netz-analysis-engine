@@ -16,7 +16,7 @@
     grid: "#404149",
   } as const;
 
-  // ── Mock Data: "Who holds NVDA?" ──
+  // ── Sample Data: "Who holds NVDA?" ──
   interface GraphNode {
     name: string;
     category: number; // 0=asset, 1=manager, 2=fund

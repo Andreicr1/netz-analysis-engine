@@ -1,6 +1,6 @@
 <!--
   Screener Analytics — Advanced fund universe analysis.
-  Mock placeholder — will be enriched with scatter plots, correlation, factor analysis.
+  Placeholder — will be enriched with scatter plots, correlation, factor analysis.
 -->
 <script lang="ts">
   import { Axis3d } from "lucide-svelte";

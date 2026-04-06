@@ -171,12 +171,13 @@ export function createMarketDataStore(config: MarketDataStoreConfig): MarketData
 					const idx = holdings.findIndex((h) => h.ticker === tick.ticker);
 					if (idx >= 0) {
 						const updated = [...holdings];
+						const existing = updated[idx]!;
 						updated[idx] = {
-							...updated[idx],
+							...existing,
 							price: tick.price,
 							change: tick.change,
 							change_pct: tick.change_pct,
-							aum_usd: tick.aum_usd ?? updated[idx].aum_usd,
+							aum_usd: tick.aum_usd ?? existing.aum_usd,
 						};
 						holdings = updated;
 					}

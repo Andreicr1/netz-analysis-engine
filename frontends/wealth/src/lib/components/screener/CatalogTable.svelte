@@ -194,5 +194,7 @@
   </div>
 </div>
 
-<!-- ── Level 2: Manager Detail Panel ── -->
-<ManagerDetailPanel bind:open={panelOpen} manager={selectedManager} />
+<!-- ── Level 2: Manager Detail Panel (legacy — CatalogTableV2 is primary) ── -->
+{#if selectedManager && panelOpen}
+	<ManagerDetailPanel manager={selectedManager} onBack={() => { panelOpen = false; selectedManager = null; }} />
+{/if}

@@ -28,7 +28,7 @@
     "Money Market": "#6b7280",
   };
 
-  // ── Mock Data (high fidelity) ──
+  // ── Sample Data (high fidelity) ──
   interface FundPoint {
     name: string;
     strategy: string;
@@ -38,7 +38,7 @@
     sharpe: number;
   }
 
-  const MOCK_FUNDS: FundPoint[] = [
+  const SAMPLE_FUNDS: FundPoint[] = [
     { name: "Vanguard 500 Index", strategy: "Equities", volatility_1y: 0.162, return_1y: 0.243, aum: 820_000_000_000, sharpe: 1.50 },
     { name: "PIMCO Total Return", strategy: "Fixed Income", volatility_1y: 0.048, return_1y: 0.051, aum: 130_000_000_000, sharpe: 1.06 },
     { name: "Fidelity Contrafund", strategy: "Equities", volatility_1y: 0.178, return_1y: 0.281, aum: 140_000_000_000, sharpe: 1.58 },
@@ -74,12 +74,12 @@
   }
 
   // ── Build series per strategy (for legend) ──
-  const strategies = [...new Set(MOCK_FUNDS.map((f) => f.strategy))];
+  const strategies = [...new Set(SAMPLE_FUNDS.map((f) => f.strategy))];
 
   const series = strategies.map((strat) => ({
     name: strat,
     type: "scatter" as const,
-    data: MOCK_FUNDS.filter((f) => f.strategy === strat).map((f) => ({
+    data: SAMPLE_FUNDS.filter((f) => f.strategy === strat).map((f) => ({
       value: [f.volatility_1y, f.return_1y, f.aum, f.sharpe],
       name: f.name,
       symbolSize: aumToSize(f.aum),

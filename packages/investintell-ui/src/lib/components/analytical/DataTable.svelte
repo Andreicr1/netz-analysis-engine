@@ -158,7 +158,7 @@
 							<Table.Head
 								class={cn(
 									"h-10 px-2 text-xs font-semibold uppercase tracking-wide",
-									(header.column.columnDef.meta as Record<string, unknown>)?.numeric && "text-right",
+									((header.column.columnDef.meta as Record<string, unknown>)?.numeric === true) && "text-right",
 								)}
 							>
 								{#if !header.isPlaceholder}
@@ -205,7 +205,7 @@
 							<Table.Cell
 								class={cn(
 									"py-2 px-2 text-sm",
-									(cell.column.columnDef.meta as Record<string, unknown>)?.numeric &&
+									((cell.column.columnDef.meta as Record<string, unknown>)?.numeric === true) &&
 										"text-right tabular-nums font-[var(--ii-font-mono,ui-monospace)]",
 								)}
 							>
