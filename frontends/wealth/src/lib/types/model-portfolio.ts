@@ -339,6 +339,9 @@ export interface RebalancePreviewResponse {
 	estimated_turnover_pct: number;
 	trades: SuggestedTrade[];
 	weight_comparison: WeightDelta[];
+	cvar_95_projected: number | null;
+	cvar_limit: number | null;
+	cvar_warning: boolean;
 }
 
 export function profileColor(profile: string): string {

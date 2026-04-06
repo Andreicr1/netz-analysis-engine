@@ -99,6 +99,8 @@
 	let backtest = $derived(localBacktest ?? trackRecord?.backtest ?? null);
 	let stress = $derived(localStress ?? trackRecord?.stress ?? null);
 	let funds = $derived(portfolio.fund_selection_schema?.funds ?? [] as InstrumentWeight[]);
+	let totalWeight = $derived(funds.reduce((sum, f) => sum + (f.weight ?? 0), 0));
+	let weightWarning = $derived(funds.length > 0 && (totalWeight < 0.98 || totalWeight > 1.02));
 	let overlap = $derived((data.overlap ?? null) as OverlapResult | null);
 
 	// ── Optimization metadata (embedded in fund_selection_schema) ─────────
@@ -733,6 +735,12 @@
 			<span class="mp-section-title-right">
 				{#if funds.length > 0}
 					<span class="mp-section-count">{funds.length} funds · {formatPercent(portfolio.fund_selection_schema?.total_weight ?? 0)} allocated</span>
+					<span
+						class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold tabular-nums {weightWarning ? 'bg-[#f59e0b]/15 text-[#f59e0b] border border-[#f59e0b]/30' : 'bg-[#11ec79]/10 text-[#11ec79] border border-[#11ec79]/20'}"
+						title="Sum of all fund weights (target: 100%)"
+					>
+						Total: {formatPercent(totalWeight * 100)}
+					</span>
 				{/if}
 				{#if canEdit && portfolio.status === "draft" && funds.length > 0}
 					<Button size="sm" variant="outline" onclick={() => (editingFunds = !editingFunds)}>

@@ -7,7 +7,10 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+import structlog
+from pydantic import BaseModel, ConfigDict, model_validator
+
+logger = structlog.get_logger()
 
 
 class ModelPortfolioRead(BaseModel):
@@ -27,6 +30,31 @@ class ModelPortfolioRead(BaseModel):
     stress_result: dict | None = None
     created_at: datetime
     created_by: str | None = None
+    weight_warning: bool = False
+
+    @model_validator(mode="after")
+    def _check_fund_weights(self) -> ModelPortfolioRead:
+        """Flag when fund_selection_schema weights are outside [0.98, 1.02].
+
+        Does NOT reject the payload (drafts are legitimate), but sets
+        ``weight_warning=True`` so the frontend can surface a badge.
+        """
+        schema = self.fund_selection_schema
+        if not schema or not isinstance(schema, dict):
+            return self
+        funds = schema.get("funds")
+        if not funds:
+            return self
+        total = sum(float(f.get("weight", 0)) for f in funds)
+        if total < 0.98 or total > 1.02:
+            self.weight_warning = True
+            logger.warning(
+                "fund_weight_sum_anomaly",
+                portfolio_id=str(self.id),
+                total_weight=round(total, 6),
+                status=self.status,
+            )
+        return self
 
 
 class ModelPortfolioCreate(BaseModel):
@@ -212,6 +240,9 @@ class RebalancePreviewResponse(BaseModel):
     estimated_turnover_pct: float
     trades: list[SuggestedTrade]
     weight_comparison: list[WeightDelta]
+    cvar_95_projected: float | None = None
+    cvar_limit: float | None = None
+    cvar_warning: bool = False
 
 
 # ── Construction Advisor ──────────────────────────────────────────────────

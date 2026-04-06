@@ -132,6 +132,12 @@ export class PortfolioWorkspaceState {
 	portfolioId = $derived(this.portfolio?.id ?? null);
 	funds = $derived(this.portfolio?.fund_selection_schema?.funds ?? []);
 
+	/** Sum of all fund weights across all blocks (should be ~1.0 after construction). */
+	totalWeight = $derived(this.funds.reduce((sum, f) => sum + (f.weight ?? 0), 0));
+
+	/** True when total weight is outside the acceptable [0.98, 1.02] range. */
+	weightWarning = $derived(this.funds.length > 0 && (this.totalWeight < 0.98 || this.totalWeight > 1.02));
+
 	/** Group current funds by block_id for drop-zone rendering */
 	fundsByBlock = $derived.by(() => {
 		const map: Record<string, any[]> = {};

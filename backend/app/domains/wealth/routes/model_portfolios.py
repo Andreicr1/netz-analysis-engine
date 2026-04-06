@@ -800,6 +800,72 @@ async def rebalance_preview(
         total_aum_override=body.total_aum,
     )
 
+    # ── CVaR awareness: estimate projected CVaR from fund_risk_metrics ──
+    cvar_95_projected: float | None = None
+    cvar_limit_value: float | None = None
+    cvar_warning = False
+
+    try:
+        from app.domains.wealth.models.risk import FundRiskMetrics
+
+        target_funds = fund_selection.get("funds", [])
+        target_ids = [uuid.UUID(f["instrument_id"]) for f in target_funds]
+        target_weights = {str(f["instrument_id"]): float(f.get("weight", 0)) for f in target_funds}
+
+        if target_ids:
+            # Latest CVaR per fund from fund_risk_metrics (GLOBAL table, no RLS)
+            risk_stmt = (
+                select(
+                    FundRiskMetrics.instrument_id,
+                    FundRiskMetrics.cvar_95_12m,
+                )
+                .where(FundRiskMetrics.instrument_id.in_(target_ids))
+                .where(FundRiskMetrics.cvar_95_12m.is_not(None))
+                .distinct(FundRiskMetrics.instrument_id)
+                .order_by(FundRiskMetrics.instrument_id, FundRiskMetrics.as_of.desc())
+            )
+            risk_rows = await db.execute(risk_stmt)
+            cvar_map = {
+                str(row.instrument_id): float(row.cvar_95_12m)
+                for row in risk_rows.all()
+            }
+
+            # Weighted portfolio CVaR (linear approximation — conservative upper bound)
+            if cvar_map:
+                weighted_cvar = sum(
+                    target_weights.get(iid, 0) * cvar
+                    for iid, cvar in cvar_map.items()
+                )
+                cvar_95_projected = round(weighted_cvar, 6)
+
+            # Load cvar_limit from strategic allocation
+            today = date.today()
+            alloc_stmt = (
+                select(StrategicAllocation.cvar_limit)
+                .where(
+                    StrategicAllocation.profile == portfolio.profile,
+                    StrategicAllocation.effective_from <= today,
+                )
+                .where(
+                    (StrategicAllocation.effective_to.is_(None))
+                    | (StrategicAllocation.effective_to >= today),
+                )
+                .limit(1)
+            )
+            alloc_row = (await db.execute(alloc_stmt)).scalar_one_or_none()
+            if alloc_row is not None:
+                cvar_limit_value = float(alloc_row)
+
+            if cvar_95_projected is not None and cvar_limit_value is not None:
+                # Warning when projected CVaR >= 90% of limit (approaching breach)
+                cvar_warning = cvar_95_projected >= cvar_limit_value * 0.9
+    except Exception:
+        logger.warning("rebalance_cvar_estimation_failed", portfolio_id=str(portfolio_id), exc_info=True)
+
+    preview["cvar_95_projected"] = cvar_95_projected
+    preview["cvar_limit"] = cvar_limit_value
+    preview["cvar_warning"] = cvar_warning
+
     return RebalancePreviewResponse(**preview)
 
 
@@ -919,11 +985,14 @@ async def get_live_drift(
         .subquery()
     )
     nav_result = await db.execute(select(latest_nav_subq))
+    nav_rows = nav_result.all()
     price_map: dict[str, float] = {
         str(row.instrument_id): float(row.nav)
-        for row in nav_result.all()
+        for row in nav_rows
         if row.nav is not None
     }
+    # Track the most recent NAV date across all instruments for staleness indicator
+    latest_nav_date = max((row.nav_date for row in nav_rows if row.nav_date is not None), default=None)
 
     # Compute live position values: target_weight * latest_nav
     instrument_block: dict[str, str] = {}
@@ -1025,6 +1094,7 @@ async def get_live_drift(
         overall_status=overall,
         rebalance_recommended=rebalance_recommended,
         estimated_turnover=round(turnover, 6),
+        latest_nav_date=latest_nav_date,
     )
 
 

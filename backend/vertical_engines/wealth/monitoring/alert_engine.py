@@ -143,7 +143,7 @@ def _check_rebalance_overdue(db: Session, organization_id: str) -> list[Alert]:
         db.query(ModelPortfolio)
         .filter(
             ModelPortfolio.organization_id == organization_id,
-            ModelPortfolio.status == "live",
+            ModelPortfolio.status == "active",
         )
         .all()
     )
@@ -176,13 +176,13 @@ def _check_rebalance_overdue(db: Session, organization_id: str) -> list[Alert]:
         if last_date is None or last_date < cutoff:
             if last_date is None:
                 detail_str = (
-                    f"Portfolio '{portfolio.display_name}' has never been rebalanced "
+                    f"Portfolio '{portfolio.display_name}' has no rebalance on record "
                     f"(threshold: {_REBALANCE_OVERDUE_DAYS} days)."
                 )
             else:
                 days_since = (date.today() - last_date).days
                 detail_str = (
-                    f"Portfolio '{portfolio.display_name}' last rebalanced "
+                    f"Portfolio '{portfolio.display_name}' was last rebalanced "
                     f"{days_since} days ago (threshold: {_REBALANCE_OVERDUE_DAYS} days)."
                 )
             alerts.append(Alert(
