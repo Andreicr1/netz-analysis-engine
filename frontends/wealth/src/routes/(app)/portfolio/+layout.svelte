@@ -10,13 +10,15 @@
   let { children }: { children: Snippet } = $props();
 
   const TABS = [
-    { key: "builder",   href: "/portfolio",           label: "Builder" },
-    { key: "model",     href: "/portfolio/model",      label: "Model" },
-    { key: "analytics", href: "/portfolio/analytics",  label: "Analytics & Risk" },
+    { key: "builder",   href: "/portfolio",            label: "Builder" },
+    { key: "model",     href: "/portfolio/model",       label: "Model" },
+    { key: "analytics", href: "/portfolio/analytics",   label: "Analytics & Risk" },
+    { key: "advanced",  href: "/portfolio/advanced",    label: "Advanced" },
   ] as const;
 
   let activeTab = $derived.by(() => {
     const path = $page.url.pathname;
+    if (path.startsWith("/portfolio/advanced")) return "advanced";
     if (path.startsWith("/portfolio/analytics")) return "analytics";
     if (path.startsWith("/portfolio/model")) return "model";
     return "builder";

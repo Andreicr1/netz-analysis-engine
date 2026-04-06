@@ -1,6 +1,6 @@
 <!--
-  Screener Analytics — eVestment-style fund analytics for the universe.
-  Fund selector + window toggle, then full-width analytics panels.
+  Advanced — eVestment-style entity analytics for funds within the portfolio.
+  Fund selector (from portfolio universe) + window toggle, then full-width panels.
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
@@ -8,9 +8,11 @@
 	import { Button } from "@investintell/ui/components/ui/button";
 	import Loader2 from "lucide-svelte/icons/loader-2";
 	import { createClientApiClient } from "$lib/api/client";
+	import { workspace } from "$lib/state/portfolio-workspace.svelte";
 	import type { EntityAnalyticsResponse } from "$lib/types/entity-analytics";
 	import type { PeerGroupResult, MonteCarloResult } from "$lib/types/analytics";
 	import type { UniverseAsset } from "$lib/types/universe";
+	import type { PageData } from "./$types";
 
 	import RiskStatisticsGrid from "$lib/components/analytics/entity/RiskStatisticsGrid.svelte";
 	import DrawdownChart from "$lib/components/analytics/entity/DrawdownChart.svelte";
@@ -22,24 +24,21 @@
 	import PeerGroupPanel from "$lib/components/analytics/entity/PeerGroupPanel.svelte";
 	import MonteCarloPanel from "$lib/components/analytics/entity/MonteCarloPanel.svelte";
 
+	let { data }: { data: PageData } = $props();
+
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);
 
-	// ── Fund list ───────────────────────────────────────────────────
-	let instruments = $state<UniverseAsset[]>([]);
-	let loadingList = $state(true);
-
-	$effect(() => {
-		(async () => {
-			try {
-				instruments = await api.get<UniverseAsset[]>("/universe");
-			} catch {
-				instruments = [];
-			} finally {
-				loadingList = false;
-			}
-		})();
-	});
+	// ── Fund list: portfolio funds (if constructed) or full universe ──
+	let instruments = $derived((data.instruments ?? []) as UniverseAsset[]);
+	let portfolioFundIds = $derived(
+		new Set(workspace.funds.map((f) => f.instrument_id))
+	);
+	let fundList = $derived(
+		portfolioFundIds.size > 0
+			? instruments.filter((i) => portfolioFundIds.has(i.instrument_id))
+			: instruments
+	);
 
 	// ── Selection state ─────────────────────────────────────────────
 	let selectedFundId = $state("");
@@ -103,26 +102,26 @@
 </script>
 
 <svelte:head>
-	<title>Analytics — Screener — InvestIntell</title>
+	<title>Advanced — Portfolio — InvestIntell</title>
 </svelte:head>
 
-<div class="ea-page">
+<div class="adv-page">
 
 	<!-- Toolbar: fund selector + window pills -->
-	<div class="ea-toolbar">
-		<select class="ea-select" onchange={handleFundSelect} value={selectedFundId}>
+	<div class="adv-toolbar">
+		<select class="adv-select" onchange={handleFundSelect} value={selectedFundId}>
 			<option value="">Select a fund...</option>
-			{#each instruments as inst (inst.instrument_id)}
+			{#each fundList as inst (inst.instrument_id)}
 				<option value={inst.instrument_id}>{inst.fund_name}</option>
 			{/each}
 		</select>
 
 		{#if selectedFundId}
-			<div class="ea-windows">
+			<div class="adv-windows">
 				{#each windows as w (w)}
 					<button
-						class="ea-window-pill"
-						class:ea-window-pill--active={fundWindow === w}
+						class="adv-window-pill"
+						class:adv-window-pill--active={fundWindow === w}
 						onclick={() => switchWindow(w)}
 					>
 						{w.toUpperCase()}
@@ -130,37 +129,36 @@
 				{/each}
 			</div>
 		{/if}
+
+		{#if portfolioFundIds.size > 0}
+			<span class="adv-scope">{fundList.length} portfolio funds</span>
+		{/if}
 	</div>
 
 	<!-- Content -->
-	<div class="ea-content">
-		{#if loadingList}
-			<div class="ea-loading">
-				<Loader2 class="h-6 w-6 animate-spin text-[#0177fb]" />
-				<span>Loading fund universe...</span>
-			</div>
-		{:else if instruments.length === 0}
+	<div class="adv-content">
+		{#if fundList.length === 0}
 			<EmptyState
-				title="No approved funds"
-				message="Import funds via the Screening tab and approve them to unlock analytics."
+				title="No funds available"
+				message="Select a portfolio in the Builder and construct it to access fund-level advanced analytics."
 			/>
 		{:else if !selectedFundId}
 			<EmptyState
-				title="Fund Universe Analytics"
-				message="Select a fund above to view risk statistics, drawdown, capture ratios, rolling returns, return distribution, tail risk, peer rankings, and Monte Carlo simulation."
+				title="Fund-Level Advanced Analytics"
+				message="Select a fund above to view risk statistics, drawdown, capture ratios, rolling returns, distribution, tail risk, peer rankings, and Monte Carlo."
 			/>
 		{:else if loading}
-			<div class="ea-loading">
+			<div class="adv-loading">
 				<Loader2 class="h-6 w-6 animate-spin text-[#0177fb]" />
 				<span>Loading analytics...</span>
 			</div>
 		{:else if error}
-			<div class="ea-error">{error}</div>
+			<div class="adv-error">{error}</div>
 		{:else if analytics}
 			<RiskStatisticsGrid stats={analytics.risk_statistics} asOfDate={analytics.as_of_date} />
 			<DrawdownChart drawdown={analytics.drawdown} />
 
-			<div class="ea-row-2">
+			<div class="adv-row-2">
 				<CaptureRatiosPanel capture={analytics.capture} />
 				<RollingReturnsChart rollingReturns={analytics.rolling_returns} />
 			</div>
@@ -182,7 +180,7 @@
 			{#if mcResult}
 				<MonteCarloPanel mc={mcResult} />
 			{:else}
-				<div class="ea-mc-trigger">
+				<div class="adv-mc-trigger">
 					<Button variant="outline" onclick={runMonteCarlo} disabled={mcLoading}>
 						{mcLoading ? "Running..." : "Run Monte Carlo (10k paths)"}
 					</Button>
@@ -193,7 +191,7 @@
 </div>
 
 <style>
-	.ea-page {
+	.adv-page {
 		height: 100%;
 		display: flex;
 		flex-direction: column;
@@ -202,14 +200,14 @@
 	}
 
 	/* ── Toolbar ── */
-	.ea-toolbar {
+	.adv-toolbar {
 		display: flex;
 		align-items: center;
 		gap: 12px;
 		flex-shrink: 0;
 	}
 
-	.ea-select {
+	.adv-select {
 		min-width: 320px;
 		height: 40px;
 		padding: 0 16px;
@@ -223,12 +221,12 @@
 		appearance: none;
 	}
 
-	.ea-windows {
+	.adv-windows {
 		display: flex;
 		gap: 0;
 	}
 
-	.ea-window-pill {
+	.adv-window-pill {
 		padding: 8px 16px;
 		border: 1px solid #3a3b44;
 		background: transparent;
@@ -240,22 +238,29 @@
 		transition: background 120ms ease, color 120ms ease;
 	}
 
-	.ea-window-pill:first-child { border-radius: 36px 0 0 36px; }
-	.ea-window-pill:last-child { border-radius: 0 36px 36px 0; }
-	.ea-window-pill:not(:first-child) { border-left: none; }
+	.adv-window-pill:first-child { border-radius: 36px 0 0 36px; }
+	.adv-window-pill:last-child { border-radius: 0 36px 36px 0; }
+	.adv-window-pill:not(:first-child) { border-left: none; }
 
-	.ea-window-pill:hover { background: #22232a; color: #fff; }
+	.adv-window-pill:hover { background: #22232a; color: #fff; }
 
-	.ea-window-pill--active {
+	.adv-window-pill--active {
 		background: #0177fb;
 		border-color: transparent;
 		color: #fff;
 	}
 
-	.ea-window-pill--active:hover { background: #0166d9; }
+	.adv-window-pill--active:hover { background: #0166d9; }
+
+	.adv-scope {
+		font-size: 13px;
+		color: #85a0bd;
+		font-family: "Urbanist", sans-serif;
+		white-space: nowrap;
+	}
 
 	/* ── Content ── */
-	.ea-content {
+	.adv-content {
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
@@ -264,13 +269,13 @@
 		gap: 20px;
 	}
 
-	.ea-row-2 {
+	.adv-row-2 {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 16px;
 	}
 
-	.ea-loading {
+	.adv-loading {
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -282,14 +287,14 @@
 		font-family: "Urbanist", sans-serif;
 	}
 
-	.ea-error {
+	.adv-error {
 		padding: 48px 24px;
 		text-align: center;
 		color: #ef4444;
 		font-size: 14px;
 	}
 
-	.ea-mc-trigger {
+	.adv-mc-trigger {
 		text-align: center;
 		padding: 24px;
 	}
