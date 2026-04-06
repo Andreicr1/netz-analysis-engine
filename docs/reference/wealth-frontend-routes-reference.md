@@ -75,18 +75,13 @@ frontends/wealth/src/routes/
 
 **Consolidation:** Previously at `/macro` and `/macro/reviews/[reviewId]`.
 
-### Portfolio (Construction & Policy)
+### Portfolio (App-in-App Workspace)
 
 | Route | File | Purpose |
 |-------|------|---------|
-| `/portfolio/approved` | `portfolio/approved/+page.svelte` | Approved instrument universe (import, approve, reject workflow) |
-| `/portfolio/builder` | `portfolio/builder/+page.svelte` | Allocation simulator / optimizer (Black-Litterman, CLARABEL) |
-| `/portfolio/models` | `portfolio/models/+page.svelte` | Model portfolio list |
-| `/portfolio/models/create` | `portfolio/models/create/+page.svelte` | Model portfolio builder (multi-step wizard) |
-| `/portfolio/models/[portfolioId]` | `portfolio/models/[portfolioId]/+page.svelte` | Model portfolio detail (stress test, track record, rebalance) |
-| `/portfolio/policy` | `portfolio/policy/+page.svelte` | Investment policy statement editor |
+| `/portfolio` | `portfolio/+page.svelte` | **Portfolio Workspace** — unified App-in-App hub (approved universe, builder, models, policy). All sub-views are rendered as components within this single route. |
 
-**Consolidation:** Previously scattered as `/universe`, `/allocation`, `/model-portfolios/*`, `/investment-policy`.
+**Consolidation:** Previously split across `/portfolio/approved`, `/portfolio/builder`, `/portfolio/models/*`, `/portfolio/policy`. Now centralized at `/portfolio` as a single-page App-in-App workspace with internal tab/panel navigation managed by components in `$lib/components/portfolio/`.
 
 ### Portfolios (Legacy)
 
@@ -128,7 +123,7 @@ TopNav Pillars:
   Screener     → /screener, /screener/fund/*, /screener/dd-reports/*
   Analysis     → /analysis, /analysis/exposure, /analysis/risk
   Market       → /market, /market/reviews/*
-  Portfolio    → /portfolio/approved, /portfolio/builder, /portfolio/models/*, /portfolio/policy
+  Portfolio    → /portfolio (App-in-App workspace)
   Documents    → /documents, /documents/upload
   Content      → /content
   Settings     → /settings, /settings/config, /settings/system
@@ -160,9 +155,9 @@ Level 3: /screener/fund/[id]
 | Screener | 6 | 6 |
 | Analysis | 5 | 5 |
 | Market | 2 | 2 |
-| Portfolio | 5 | 5 |
+| Portfolio | 1 | 1 |
 | Portfolios (legacy) | 2 | 2 |
 | Documents | 3 | 2 |
 | Content | 2 | 2 |
 | Settings | 3 | 2 |
-| **Total** | **31** | **29** |
+| **Total** | **27** | **25** |
