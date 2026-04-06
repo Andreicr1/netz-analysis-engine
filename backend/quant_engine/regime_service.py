@@ -150,9 +150,8 @@ def classify_regime_multi_signal(
     baa_spread: float | None = None,
     fed_funds_delta_6m: float | None = None,
     dxy_zscore: float | None = None,
-    crude_oil_zscore: float | None = None,
-    crude_oil_roc_3m: float | None = None,
-    indpro_roc_6m: float | None = None,
+    energy_shock: float | None = None,
+    cfnai: float | None = None,
 ) -> tuple[str, dict[str, str]]:
     """Classify regime using multi-factor stress scoring.
 
@@ -168,22 +167,28 @@ def classify_regime_multi_signal(
     CPI override: inflation above threshold triggers INFLATION regime
     regardless of stress score.
 
-    === FINANCIAL SIGNALS (55%) ===
+    === FAST SIGNALS (55%) — react within days ===
         VIX (20%):              Implied vol. LT avg ~19, ramp 18→35.
         HY OAS (15%):           US HY credit spread. Normal ~3.0, stress >5.0.
-        Yield curve (10%):      10Y-2Y. Inverted = recession signal.
+        Energy Shock (10%):     Composite of WTI Z-score (1Y) and WTI RoC (3m),
+                                fused via max(z_score, roc_score). Single signal
+                                avoids multicollinearity — both spike together
+                                during supply shocks but capture different tails.
         DXY Z-score (10%):      Dollar strength surprise → global liquidity crunch.
 
-    === REAL ECONOMY SIGNALS (45%) ===
-        Crude Oil Z-score (15%): WTI vs 1Y rolling mean. Supply shock proxy.
-                                 Captures Hormuz closures, OPEC shocks, sanctions
-                                 that VIX misses for weeks. z>2σ = extreme.
-        Crude Oil RoC 3m (10%): Velocity of oil price spike. >30% in 3 months
-                                 historically precedes recession + margin compression.
+    === SLOW SIGNALS (45%) — structural, weeks-to-months lag ===
+        CFNAI (15%):            Chicago Fed National Activity Index. Composite
+                                of 85 indicators (production, employment,
+                                consumption, sales). 0 = trend growth, below
+                                -0.70 = high probability of recession. Replaces
+                                INDPRO (heavy retroactive revisions) and ISM PMI
+                                (not available on FRED).
+        Yield curve (10%):      10Y-2Y. Inverted = recession signal.
         BAA spread (5%):        Corporate credit risk → real economy stress.
         FF Rate-of-Change (5%): 6-month Fed Funds delta. Rapid hikes = stress.
         Sahm Rule (5%):         Labor market recession onset at 0.50.
-        INDPRO RoC 6m (5%):    Industrial production change. Negative = contraction.
+        Reserved (5%):          Placeholder for future signals (e.g. Baltic Dry,
+                                soft commodities, shipping rates).
 
     """
     if thresholds is None:
@@ -221,30 +226,35 @@ def classify_regime_multi_signal(
         s = _ramp(hy_oas, calm=2.5, panic=6.0)
         signals.append(("hy_oas", s, 0.15, f"US_HY_OAS={hy_oas:.2f}% (stress={s:.0f}/100)"))
 
-    # Yield curve (10%): +1.0=calm, -0.5=full stress (inverted)
-    if yield_curve_spread is not None:
-        s = _ramp(-yield_curve_spread, calm=-1.0, panic=0.5)
-        signals.append(("yield_curve", s, 0.10, f"10Y-2Y={yield_curve_spread:+.2f}% (stress={s:.0f}/100)"))
-
     # DXY Z-score (10%): sharp dollar rally = global liquidity crunch
     if dxy_zscore is not None:
         s = _ramp(dxy_zscore, calm=0.0, panic=2.0)
         signals.append(("dxy", s, 0.10, f"DXY_z={dxy_zscore:+.2f}σ (stress={s:.0f}/100)"))
 
-    # ═══ REAL ECONOMY SIGNALS (45%) ═══
+    # ═══ SLOW SIGNALS (45%) — structural, weeks-to-months lag ═══
 
-    # Crude Oil Z-score (15%): supply shock proxy.
-    # WTI vs 1Y rolling mean. Captures Hormuz closures, OPEC shocks,
-    # sanctions weeks before VIX reacts. z>2σ = extreme.
-    if crude_oil_zscore is not None:
-        s = _ramp(crude_oil_zscore, calm=0.5, panic=3.0)
-        signals.append(("crude_oil", s, 0.15, f"WTI_z={crude_oil_zscore:+.2f}σ (stress={s:.0f}/100)"))
+    # Energy Shock Composite (10%): fuses WTI Z-score (1Y) and WTI RoC (3m)
+    # into a single signal via max(). Avoids multicollinearity — during a supply
+    # shock both spike together (correlation ~1.0), so separate weights would
+    # double-count the same event. max() captures whichever tail is louder.
+    if energy_shock is not None:
+        s = _ramp(energy_shock, calm=0.0, panic=100.0)
+        signals.append(("energy_shock", s, 0.10, f"Energy_shock={energy_shock:.0f}/100 (stress={s:.0f}/100)"))
 
-    # Crude Oil rate-of-change 3m (10%): velocity of supply shock.
-    # >30% in 3 months historically precedes recession + margin compression.
-    if crude_oil_roc_3m is not None:
-        s = _ramp(crude_oil_roc_3m, calm=0.0, panic=50.0)
-        signals.append(("crude_roc", s, 0.10, f"WTI_Δ3m={crude_oil_roc_3m:+.1f}% (stress={s:.0f}/100)"))
+    # CFNAI (15%): Chicago Fed National Activity Index.
+    # Composite of 85 indicators. 0 = trend growth, negative = below trend.
+    # Below -0.70 = high probability of recession (NBER-calibrated).
+    # Monthly, minimal revisions. Much more robust than INDPRO alone.
+    if cfnai is not None:
+        # Inverted: positive = calm (above-trend growth), negative = stress
+        s = _ramp(-cfnai, calm=0.20, panic=0.70)
+        signals.append(("cfnai", s, 0.15, f"CFNAI={cfnai:+.2f} (stress={s:.0f}/100)"))
+
+    # Yield curve (10%): +1.0=calm, -0.5=full stress (inverted)
+    if yield_curve_spread is not None:
+        yc_s = _ramp(-yield_curve_spread, calm=-1.0, panic=0.5)
+        # Move to slow block (recession signal takes months to materialize)
+        signals.append(("yield_curve", yc_s, 0.10, f"10Y-2Y={yield_curve_spread:+.2f}% (stress={yc_s:.0f}/100)"))
 
     # BAA-10Y spread (5%): corporate credit → real economy stress
     if baa_spread is not None:
@@ -260,13 +270,6 @@ def classify_regime_multi_signal(
     if sahm_rule is not None:
         s = _ramp(sahm_rule, calm=0.0, panic=0.50)
         signals.append(("sahm", s, 0.05, f"Sahm={sahm_rule:.2f} (stress={s:.0f}/100)"))
-
-    # Industrial Production RoC 6m (5%): negative = contraction
-    # Captures demand-side weakness that financial signals miss.
-    if indpro_roc_6m is not None:
-        # Inverted: positive growth = calm, contraction = stress
-        s = _ramp(-indpro_roc_6m, calm=-3.0, panic=3.0)
-        signals.append(("indpro", s, 0.05, f"INDPRO_Δ6m={indpro_roc_6m:+.1f}% (stress={s:.0f}/100)"))
 
     # Need at least 2 signals for confident classification
     if len(signals) < 2:
@@ -629,6 +632,8 @@ async def get_latest_macro_values(
         "CPI_YOY": STALENESS_MONTHLY,
         "DFF": STALENESS_DAILY,
         "SAHMREALTIME": STALENESS_MONTHLY,
+        "CFNAI": 75,                             # Chicago Fed National Activity Index (published ~1mo lag)
+        "BAA10Y": STALENESS_DAILY,              # BAA corporate spread
         # Regional credit spread signals (Phase 2 — hierarchical regime)
         "BAMLH0A0HYM2": STALENESS_DAILY,       # US HY OAS
         "BAMLHE00EHYIOAS": STALENESS_DAILY,     # Euro HY OAS
@@ -815,19 +820,28 @@ async def get_current_regime(
     # Derived signals — rate-of-change and Z-scores
     ff_delta = await _compute_ff_delta_6m(db)
     dxy_z = await _compute_dxy_zscore(db)
+
+    # Energy Shock Composite: fuse WTI Z-score + WTI RoC via max()
+    # Avoids multicollinearity — both spike together during supply shocks
     crude_z = await _compute_series_zscore(db, "DCOILWTICO", lookback_days=252)
     crude_roc = await _compute_series_roc(db, "DCOILWTICO", months=3)
-    indpro_roc = await _compute_series_roc(db, "INDPRO", months=6)
+    energy_shock: float | None = None
+    if crude_z is not None or crude_roc is not None:
+        z_score = _ramp(crude_z, calm=0.5, panic=3.0) if crude_z is not None else 0.0
+        roc_score = _ramp(crude_roc, calm=0.0, panic=50.0) if crude_roc is not None else 0.0
+        energy_shock = max(z_score, roc_score)
 
-    # Need at least VIX or HY OAS or crude oil to classify
-    if vix_val is not None or hy_oas_val is not None or crude_z is not None:
+    # CFNAI — Chicago Fed National Activity Index (composite of 85 indicators)
+    cfnai_val = macro.get("CFNAI", (None, None))[0]
+
+    # Need at least VIX or HY OAS or energy data to classify
+    if vix_val is not None or hy_oas_val is not None or energy_shock is not None:
         regime, reasons = classify_regime_multi_signal(
             vix_val, yield_val, cpi_val,
             sahm_rule=sahm_val, config=config,
             hy_oas=hy_oas_val, baa_spread=baa_val,
             fed_funds_delta_6m=ff_delta, dxy_zscore=dxy_z,
-            crude_oil_zscore=crude_z, crude_oil_roc_3m=crude_roc,
-            indpro_roc_6m=indpro_roc,
+            energy_shock=energy_shock, cfnai=cfnai_val,
         )
 
         as_of = None

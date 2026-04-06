@@ -124,6 +124,7 @@ REGION_SERIES: dict[str, list[SeriesSpec]] = {
         SeriesSpec("UNRATE", "labor", "Unemployment Rate", "monthly", invert=True),
         SeriesSpec("JTSJOL", "labor", "JOLTS Openings", "monthly"),
         SeriesSpec("SAHMREALTIME", "labor", "Sahm Rule", "monthly", invert=True),
+        SeriesSpec("CFNAI", "activity", "Chicago Fed National Activity Index", "monthly"),
         SeriesSpec("UMCSENT", "sentiment", "Michigan Consumer Sentiment", "monthly"),
     ],
     "EUROPE": [
