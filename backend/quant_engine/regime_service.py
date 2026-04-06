@@ -145,12 +145,33 @@ def classify_regime_multi_signal(
     sahm_rule: float | None = None,
     thresholds: RegimeThresholds | None = None,
     config: dict[str, Any] | None = None,
+    *,
+    hy_oas: float | None = None,
+    baa_spread: float | None = None,
+    fed_funds: float | None = None,
 ) -> tuple[str, dict[str, str]]:
-    """Classify regime using priority hierarchy.
+    """Classify regime using multi-factor stress scoring.
 
-    Args:
-        thresholds: Pre-resolved thresholds (takes precedence).
-        config: Raw calibration config dict from ConfigService (resolved if thresholds is None).
+    Instead of binary VIX thresholds, accumulates a stress score (0-100)
+    from multiple independent signals. Each signal contributes proportionally
+    to its severity, with diminishing-returns capping.
+
+    Regime classification from composite stress score:
+        score < 25  → RISK_ON   (benign conditions)
+        score < 50  → RISK_OFF  (elevated caution, defensive tilt)
+        score < 75  → CRISIS    (multiple stress signals, capital preservation)
+        score >= 75 → CRISIS    (extreme — panic territory)
+
+    CPI override: inflation above threshold triggers INFLATION regime
+    regardless of stress score.
+
+    Signals and weights:
+        VIX (30%):        Long-term avg ~19. Score ramps linearly 18→35.
+        HY OAS (25%):     US HY credit spread. Normal ~3.0, stress >5.0.
+        Yield curve (15%): 10Y-2Y. Inverted = recession signal.
+        BAA spread (10%):  Corporate credit risk. Normal ~1.2, stress >2.0.
+        Fed Funds (10%):   Monetary tightness. Neutral 2-3%, restrictive >4%.
+        Sahm Rule (10%):   Labor market recession indicator. Trigger at 0.50.
 
     """
     if thresholds is None:
@@ -164,38 +185,104 @@ def classify_regime_multi_signal(
 
     reasons: dict[str, str] = {}
 
-    if vix is not None and vix >= thresholds["vix_extreme"]:
-        reasons["vix"] = f"VIX={vix:.1f} >= {thresholds['vix_extreme']} (CRISIS)"
-        reasons["decision"] = "CRISIS: extreme VIX overrides all other signals"
-        return "CRISIS", reasons
-
+    # ── Inflation override (structural regime, not stress-driven) ──
     if cpi_yoy is not None and cpi_yoy >= thresholds["cpi_yoy_high"]:
         reasons["cpi"] = f"CPI_YoY={cpi_yoy:.1f}% >= {thresholds['cpi_yoy_high']}% (INFLATION)"
-        reasons["decision"] = "INFLATION: CPI above threshold"
+        reasons["decision"] = "INFLATION: CPI above threshold overrides stress score"
         return "INFLATION", reasons
 
-    if vix is not None and vix >= thresholds["vix_risk_off"]:
-        reasons["vix"] = f"VIX={vix:.1f} >= {thresholds['vix_risk_off']} (RISK_OFF)"
-        reasons["decision"] = "RISK_OFF: elevated volatility"
+    # ── Multi-factor stress scoring ──
+    stress_score = 0.0
+    signal_count = 0
+
+    # VIX (weight 30): ramp 18→35, where 18=0 and 35=100
+    if vix is not None:
+        vix_score = _ramp(vix, calm=18.0, panic=35.0)
+        stress_score += vix_score * 0.30
+        signal_count += 1
+        reasons["vix"] = f"VIX={vix:.1f} (stress={vix_score:.0f}/100)"
+
+    # HY OAS (weight 25): ramp 2.5→6.0
+    if hy_oas is not None:
+        hy_score = _ramp(hy_oas, calm=2.5, panic=6.0)
+        stress_score += hy_score * 0.25
+        signal_count += 1
+        reasons["hy_oas"] = f"US_HY_OAS={hy_oas:.2f}% (stress={hy_score:.0f}/100)"
+
+    # Yield curve (weight 15): positive=calm, inverted=stress
+    if yield_curve_spread is not None:
+        # +1.0 = calm (0), 0.0 = neutral (50), -0.5 = full stress (100)
+        yc_score = _ramp(-yield_curve_spread, calm=-1.0, panic=0.5)
+        stress_score += yc_score * 0.15
+        signal_count += 1
+        reasons["yield_curve"] = f"10Y-2Y={yield_curve_spread:+.2f}% (stress={yc_score:.0f}/100)"
+
+    # BAA spread (weight 10): ramp 1.2→2.5
+    if baa_spread is not None:
+        baa_score = _ramp(baa_spread, calm=1.2, panic=2.5)
+        stress_score += baa_score * 0.10
+        signal_count += 1
+        reasons["baa_spread"] = f"BAA-10Y={baa_spread:.2f}% (stress={baa_score:.0f}/100)"
+
+    # Fed Funds (weight 10): ramp 2.0→5.0 (higher = more restrictive)
+    if fed_funds is not None:
+        ff_score = _ramp(fed_funds, calm=2.0, panic=5.0)
+        stress_score += ff_score * 0.10
+        signal_count += 1
+        reasons["fed_funds"] = f"FF={fed_funds:.2f}% (stress={ff_score:.0f}/100)"
+
+    # Sahm Rule (weight 10): ramp 0.0→0.50
+    if sahm_rule is not None:
+        sahm_score = _ramp(sahm_rule, calm=0.0, panic=0.50)
+        stress_score += sahm_score * 0.10
+        signal_count += 1
+        reasons["sahm"] = f"Sahm={sahm_rule:.2f} (stress={sahm_score:.0f}/100)"
+
+    # If too few signals, be conservative
+    if signal_count < 2:
+        reasons["decision"] = "RISK_OFF: insufficient signals for confident classification"
         return "RISK_OFF", reasons
 
-    # Informational signals — IC awareness only
-    if yield_curve_spread is not None and yield_curve_spread < thresholds["yield_curve_inversion"]:
-        reasons["yield_curve"] = (
-            f"10Y-2Y={yield_curve_spread:.2f}% inverted "
-            f"(threshold: {thresholds['yield_curve_inversion']}%) — IC awareness"
-        )
+    # Normalize: if not all 6 signals present, scale up proportionally
+    # so that available signals fill the full 0-100 range
+    if signal_count > 0:
+        max_possible_weight = sum(w for w, present in [
+            (0.30, vix is not None),
+            (0.25, hy_oas is not None),
+            (0.15, yield_curve_spread is not None),
+            (0.10, baa_spread is not None),
+            (0.10, fed_funds is not None),
+            (0.10, sahm_rule is not None),
+        ] if present)
+        if max_possible_weight > 0 and max_possible_weight < 1.0:
+            stress_score = stress_score / max_possible_weight
+        # stress_score is already on a 0-100 scale (weighted sum of 0-100 components)
 
-    if sahm_rule is not None and sahm_rule >= thresholds["sahm_rule_recession"]:
-        reasons["sahm_rule"] = (
-            f"Sahm={sahm_rule:.2f} >= {thresholds['sahm_rule_recession']} "
-            f"(recession onset signal — IC awareness)"
-        )
+    stress_score = round(min(100.0, max(0.0, stress_score)), 1)
+    reasons["composite_stress"] = f"{stress_score}/100 ({signal_count} signals)"
 
-    if vix is not None:
-        reasons["vix"] = f"VIX={vix:.1f} < {thresholds['vix_risk_off']} (RISK_ON)"
-    reasons["decision"] = "RISK_ON: no stress signals triggered"
-    return "RISK_ON", reasons
+    # ── Classify from composite score ──
+    if stress_score >= 75:
+        regime = "CRISIS"
+        reasons["decision"] = f"CRISIS: composite stress {stress_score}/100 — extreme multi-signal stress"
+    elif stress_score >= 50:
+        regime = "CRISIS"
+        reasons["decision"] = f"CRISIS: composite stress {stress_score}/100 — multiple elevated signals"
+    elif stress_score >= 25:
+        regime = "RISK_OFF"
+        reasons["decision"] = f"RISK_OFF: composite stress {stress_score}/100 — caution warranted"
+    else:
+        regime = "RISK_ON"
+        reasons["decision"] = f"RISK_ON: composite stress {stress_score}/100 — benign conditions"
+
+    return regime, reasons
+
+
+def _ramp(value: float, calm: float, panic: float) -> float:
+    """Linear ramp from 0 (at calm) to 100 (at panic). Clamped to [0, 100]."""
+    if panic == calm:
+        return 50.0
+    return max(0.0, min(100.0, (value - calm) / (panic - calm) * 100))
 
 
 def classify_regime_from_volatility(
@@ -584,10 +671,16 @@ async def get_current_regime(
     yield_val = macro.get("YIELD_CURVE_10Y2Y", (None, None))[0]
     cpi_val = macro.get("CPI_YOY", (None, None))[0]
     sahm_val = macro.get("SAHMREALTIME", (None, None))[0]
+    hy_oas_val = macro.get("BAMLH0A0HYM2", (None, None))[0]
+    baa_val = macro.get("BAA10Y", (None, None))[0]
+    dff_val = macro.get("DFF", (None, None))[0]
 
-    if vix_val is not None:
+    # Need at least VIX or HY OAS to classify
+    if vix_val is not None or hy_oas_val is not None:
         regime, reasons = classify_regime_multi_signal(
-            vix_val, yield_val, cpi_val, sahm_rule=sahm_val, config=config,
+            vix_val, yield_val, cpi_val,
+            sahm_rule=sahm_val, config=config,
+            hy_oas=hy_oas_val, baa_spread=baa_val, fed_funds=dff_val,
         )
 
         as_of = None
