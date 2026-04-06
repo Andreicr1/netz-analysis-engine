@@ -5,7 +5,6 @@
 -->
 <script lang="ts">
 	import { AlertBanner, EmptyState, formatPercent } from "@investintell/ui";
-	import Scan from "lucide-svelte/icons/scan";
 	import { workspace } from "$lib/state/portfolio-workspace.svelte";
 	import type { CusipExposure } from "$lib/types/model-portfolio";
 
@@ -53,7 +52,6 @@
 	<div class="flex flex-col gap-4 p-5 h-full">
 		<!-- Header -->
 		<div class="flex items-center gap-2">
-			<Scan class="h-4 w-4 text-[#d29922]" />
 			<span class="text-[15px] font-bold text-white">Overlap Scanner</span>
 			<span class="text-[12px] text-[#85a0bd] ml-auto">
 				{data.total_holdings} distinct holdings &middot; {formatPercent(data.limit_pct)} limit

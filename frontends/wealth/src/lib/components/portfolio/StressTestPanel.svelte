@@ -11,8 +11,6 @@
 	import { globalChartOptions } from "@investintell/ui/charts/echarts-setup";
 	import { EmptyState, formatPercent } from "@investintell/ui";
 	import { blockLabel } from "$lib/constants/blocks";
-	import Activity from "lucide-svelte/icons/activity";
-	import Zap from "lucide-svelte/icons/zap";
 	import Loader2 from "lucide-svelte/icons/loader-2";
 	import { workspace } from "$lib/state/portfolio-workspace.svelte";
 
@@ -198,9 +196,6 @@
 		<div class="px-6 py-5 border-b border-[#404249]/30">
 			<!-- Header -->
 			<div class="flex items-center gap-3 mb-5">
-				<div class="flex items-center justify-center h-9 w-9 rounded-full bg-gradient-to-tr from-[#0177fb]/20 to-[#0177fb]/5 border border-[#0177fb]/30 shadow-[0_0_15px_rgba(1,119,251,0.15)] shrink-0">
-					<Zap class="h-4 w-4 text-[#0177fb]" />
-				</div>
 				<span class="text-[16px] font-bold text-white tracking-tight">Parametric Stress Scenario</span>
 			</div>
 
@@ -224,8 +219,7 @@
 					<Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
 					Running…
 				{:else}
-					<Activity class="mr-1.5 h-4 w-4" />
-					Run Scenario
+						Run Scenario
 				{/if}
 			</Button>
 		</div>
@@ -289,7 +283,6 @@
 			</div>
 		{:else if !workspace.isStressing}
 			<div class="flex flex-col items-center justify-center gap-3 flex-1 py-12 text-center">
-				<Activity class="h-8 w-8 text-[#85a0bd]/30" />
 				<p class="text-[13px] text-[#85a0bd]">Configure shocks above and click <strong class="text-[#cbccd1]">Run Scenario</strong> to see projected impacts.</p>
 			</div>
 		{/if}

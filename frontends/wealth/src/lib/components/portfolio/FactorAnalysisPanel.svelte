@@ -7,7 +7,6 @@
 	import { ChartContainer } from "@investintell/ui/charts";
 	import { globalChartOptions } from "@investintell/ui/charts/echarts-setup";
 	import { EmptyState } from "@investintell/ui";
-	import PieChart from "lucide-svelte/icons/pie-chart";
 	import { workspace, type FactorContribution } from "$lib/state/portfolio-workspace.svelte";
 
 	// ── Real API Data Integration ───────────────────────────────────────
@@ -190,9 +189,6 @@
 	<div class="flex flex-col gap-6 p-6 h-full">
 		<!-- Header -->
 		<div class="flex items-center gap-3">
-			<div class="flex items-center justify-center h-9 w-9 rounded-full bg-gradient-to-tr from-[#0177fb]/20 to-[#0177fb]/5 border border-[#0177fb]/30 shadow-[0_0_15px_rgba(1,119,251,0.15)] shrink-0">
-				<PieChart class="h-4 w-4 text-[#0177fb]" />
-			</div>
 			<span class="text-[16px] font-bold text-white tracking-tight">Factor Analysis</span>
 			<span class="text-[12px] text-[#85a0bd] bg-white/5 border border-white/10 px-2 py-0.5 rounded-full ml-auto">{fundCount} fund{fundCount !== 1 ? "s" : ""}</span>
 		</div>

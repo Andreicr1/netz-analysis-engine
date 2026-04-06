@@ -5,6 +5,7 @@
   Below: full-width panel content with strategic block table, stress, overlap, rebalance.
 -->
 <script lang="ts">
+	import { getContext } from "svelte";
 	import { EmptyState } from "@investintell/ui";
 	import { workspace } from "$lib/state/portfolio-workspace.svelte";
 	import { portfolioDisplayName } from "$lib/constants/blocks";
@@ -14,6 +15,14 @@
 	import OverlapScannerPanel from "$lib/components/portfolio/OverlapScannerPanel.svelte";
 	import RebalanceSimulationPanel from "$lib/components/portfolio/RebalanceSimulationPanel.svelte";
 	import FactorAnalysisPanel from "$lib/components/portfolio/FactorAnalysisPanel.svelte";
+	import type { ModelPortfolio } from "$lib/types/model-portfolio";
+	import type { PageData } from "./$types";
+
+	let { data }: { data: PageData } = $props();
+	let portfolios = $derived((data.portfolios ?? []) as ModelPortfolio[]);
+
+	const getToken = getContext<() => Promise<string>>("netz:getToken");
+	workspace.setGetToken(getToken);
 
 	const subTabs = [
 		{ value: "overview", label: "Holdings" },
@@ -34,17 +43,32 @@
 	<title>Model — InvestIntell</title>
 </svelte:head>
 
-{#if !workspace.portfolio}
-	<div class="mdl-empty">
-		<EmptyState
-			title="No portfolio selected"
-			message="Go to Builder and select a model portfolio to view its detail."
-		/>
-	</div>
-{:else}
-	<div class="mdl-page">
+<div class="mdl-page">
 
-		<!-- Chart card (full-width) -->
+	<!-- Portfolio selector (horizontal pills) -->
+	<div class="mdl-portfolio-bar">
+		{#each portfolios as mp (mp.id)}
+			{@const active = mp.id === workspace.portfolioId}
+			<button
+				type="button"
+				class="mdl-portfolio-pill"
+				class:mdl-portfolio-pill--active={active}
+				onclick={() => workspace.selectPortfolio(mp)}
+			>
+				{portfolioDisplayName(mp.display_name)}
+			</button>
+		{/each}
+	</div>
+
+	{#if !workspace.portfolio}
+		<div class="mdl-empty">
+			<EmptyState
+				title="No portfolio selected"
+				message="Select a model portfolio above to view its detail."
+			/>
+		</div>
+	{:else}
+		<!-- Chart card (full-width, spacious) -->
 		<div class="mdl-chart-card">
 			<div class="mdl-chart-header">
 				<span class="mdl-chart-title">{chartTitle}</span>
@@ -83,8 +107,8 @@
 				<RebalanceSimulationPanel />
 			{/if}
 		</div>
-	</div>
-{/if}
+	{/if}
+</div>
 
 <!-- Error notification -->
 {#if workspace.lastError}
@@ -110,13 +134,53 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		height: 100%;
+		flex: 1;
+	}
+
+	/* ── Portfolio selector ── */
+	.mdl-portfolio-bar {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		flex-shrink: 0;
+	}
+
+	.mdl-portfolio-pill {
+		display: inline-flex;
+		align-items: center;
+		padding: 7px 18px;
+		border: 1px solid #3a3b44;
+		border-radius: 36px;
+		background: transparent;
+		color: #a1a1aa;
+		font-size: 13px;
+		font-weight: 600;
+		font-family: "Urbanist", sans-serif;
+		cursor: pointer;
+		white-space: nowrap;
+		transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+	}
+
+	.mdl-portfolio-pill:hover {
+		background: #22232a;
+		border-color: #52525b;
+		color: #fff;
+	}
+
+	.mdl-portfolio-pill--active {
+		background: #0177fb;
+		border-color: transparent;
+		color: #fff;
+	}
+
+	.mdl-portfolio-pill--active:hover {
+		background: #0166d9;
 	}
 
 	/* ── Chart card ── */
 	.mdl-chart-card {
 		flex-shrink: 0;
-		height: 260px;
+		height: 380px;
 		background: #141519;
 		border-radius: 20px;
 		border: 1px solid rgba(64, 66, 73, 0.3);

@@ -10,11 +10,8 @@
 	import { Input } from "@investintell/ui/components/ui/input";
 	import { EmptyState, formatCurrency, formatPercent } from "@investintell/ui";
 	import { blockLabel } from "$lib/constants/blocks";
-	import ArrowRightLeft from "lucide-svelte/icons/arrow-right-left";
 	import Loader2 from "lucide-svelte/icons/loader-2";
-	import Plus from "lucide-svelte/icons/plus";
 	import Trash2 from "lucide-svelte/icons/trash-2";
-	import Sparkles from "lucide-svelte/icons/sparkles";
 	import { workspace } from "$lib/state/portfolio-workspace.svelte";
 	import { CASH_INSTRUMENT_ID, type HoldingInput } from "$lib/types/model-portfolio";
 
@@ -126,11 +123,9 @@
 		<div class="px-5 py-4" style="border-bottom: 1px solid #404249;">
 			<div class="flex items-center justify-between mb-4">
 				<div class="flex items-center gap-2">
-					<ArrowRightLeft class="h-4 w-4 text-[#0177fb]" />
 					<span class="text-[15px] font-bold text-white">Rebalance Simulation</span>
 				</div>
 				<Button size="sm" variant="outline" onclick={loadDummyPortfolio}>
-					<Sparkles class="mr-1.5 h-3.5 w-3.5" />
 					Load Dummy Portfolio
 				</Button>
 			</div>
@@ -149,8 +144,7 @@
 				<div class="flex items-center justify-between mb-2">
 					<span class="text-[11px] font-semibold text-[#85a0bd] uppercase tracking-wide">Current Holdings</span>
 					<Button size="sm" variant="ghost" onclick={addHolding}>
-						<Plus class="mr-1 h-3.5 w-3.5" />
-						Add
+						+ Add
 					</Button>
 				</div>
 
@@ -198,8 +192,7 @@
 					<Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
 					Computing…
 				{:else}
-					<ArrowRightLeft class="mr-1.5 h-4 w-4" />
-					Run Preview
+						Run Preview
 				{/if}
 			</Button>
 		</div>
@@ -320,8 +313,7 @@
 							<Loader2 class="mr-2 h-4 w-4 animate-spin" />
 							Executing Trades...
 						{:else if executionSuccess}
-							<Plus class="mr-2 h-4 w-4" /> <!-- Using the existing Plus icon as fallback success -->
-							Trade Batch Sent to OMS
+										Trade Batch Sent to OMS
 						{:else}
 							Execute Trades
 						{/if}
@@ -330,7 +322,6 @@
 			</div>
 		{:else if !workspace.isRebalancing}
 			<div class="flex flex-col items-center justify-center gap-3 flex-1 py-12 text-center">
-				<ArrowRightLeft class="h-8 w-8 text-[#85a0bd]/30" />
 				<p class="text-[13px] text-[#85a0bd]">Add current holdings above and click <strong class="text-[#cbccd1]">Run Preview</strong> to see suggested trades.</p>
 			</div>
 		{/if}
