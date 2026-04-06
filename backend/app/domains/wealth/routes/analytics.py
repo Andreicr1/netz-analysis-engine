@@ -19,7 +19,7 @@ from app.core.jobs.tracker import (
     register_job_owner,
 )
 from app.core.security.clerk_auth import Actor, CurrentUser, get_actor, get_current_user
-from app.core.tenancy.middleware import get_db_with_rls
+from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.allocation import StrategicAllocation
 from app.domains.wealth.models.backtest import BacktestRun
 from app.domains.wealth.models.block import AllocationBlock
@@ -135,6 +135,7 @@ async def create_backtest(
     body: BacktestRequest,
     db: AsyncSession = Depends(get_db_with_rls),
     user: CurrentUser = Depends(get_current_user),
+    org_id: str = Depends(get_org_id),
 ) -> BacktestRunRead:
     _validate_profile(body.profile)
 
@@ -185,6 +186,7 @@ async def create_backtest(
             status = "failed"
 
     run = BacktestRun(
+        organization_id=org_id,
         profile=body.profile,
         params=body.params.model_dump(),
         status=status,

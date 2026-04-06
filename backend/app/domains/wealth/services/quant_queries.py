@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from app.domains.wealth.models.allocation import StrategicAllocation, TacticalPosition
 from app.domains.wealth.models.fund import Fund
+from app.domains.wealth.models.instrument_org import InstrumentOrg
 from app.domains.wealth.models.nav import NavTimeseries
 from app.domains.wealth.models.portfolio import PortfolioSnapshot
 from app.domains.wealth.models.rebalance import RebalanceEvent
@@ -62,21 +63,37 @@ async def fetch_returns_matrix(
     """
     start_date = date.today() - timedelta(days=int(lookback_days * 1.5))
 
-    funds_stmt = (
-        select(Fund)
-        .where(Fund.block_id.in_(block_ids), Fund.is_active == True, Fund.ticker.is_not(None))
-        .distinct(Fund.block_id)
-        .order_by(Fund.block_id, Fund.name)
+    # Pick one approved instrument per block from instruments_org (org-scoped via RLS).
+    # Falls back to deprecated funds_universe if instruments_org is empty.
+    io_stmt = (
+        select(InstrumentOrg.block_id, InstrumentOrg.instrument_id)
+        .where(
+            InstrumentOrg.block_id.in_(block_ids),
+            InstrumentOrg.approval_status == "approved",
+        )
+        .distinct(InstrumentOrg.block_id)
+        .order_by(InstrumentOrg.block_id, InstrumentOrg.selected_at.desc())
     )
-    funds_result = await db.execute(funds_stmt)
-    block_funds = {f.block_id: f for f in funds_result.scalars().all()}
+    io_result = await db.execute(io_stmt)
+    block_instruments = {row.block_id: row.instrument_id for row in io_result.all()}
 
-    if not block_funds:
+    # Legacy fallback: funds_universe (for orgs that haven't migrated yet)
+    if not block_instruments:
+        funds_stmt = (
+            select(Fund)
+            .where(Fund.block_id.in_(block_ids), Fund.is_active == True, Fund.ticker.is_not(None))
+            .distinct(Fund.block_id)
+            .order_by(Fund.block_id, Fund.name)
+        )
+        funds_result = await db.execute(funds_stmt)
+        block_instruments = {f.block_id: f.fund_id for f in funds_result.scalars().all()}
+
+    if not block_instruments:
         raise ValueError("No active funds found for the requested blocks")
 
-    available = [bid for bid in block_ids if bid in block_funds]
-    fund_uuids = [block_funds[bid].fund_id for bid in available]
-    fund_ids = [str(block_funds[bid].fund_id) for bid in available]
+    available = [bid for bid in block_ids if bid in block_instruments]
+    fund_uuids = [block_instruments[bid] for bid in available]
+    fund_ids = [str(block_instruments[bid]) for bid in available]
 
     if len(fund_ids) < 2:
         raise ValueError(f"Need ≥2 blocks with data, found {len(fund_ids)}")
@@ -180,23 +197,38 @@ async def compute_inputs_from_nav(
 
     start_date = as_of_date - timedelta(days=int(lookback_days * 1.5))
 
-    funds_stmt = (
-        select(Fund)
-        .where(Fund.block_id.in_(block_ids), Fund.is_active == True, Fund.ticker.is_not(None))
-        .distinct(Fund.block_id)
-        .order_by(Fund.block_id, Fund.name)
+    # Pick one approved instrument per block from instruments_org (org-scoped via RLS).
+    io_stmt = (
+        select(InstrumentOrg.block_id, InstrumentOrg.instrument_id)
+        .where(
+            InstrumentOrg.block_id.in_(block_ids),
+            InstrumentOrg.approval_status == "approved",
+        )
+        .distinct(InstrumentOrg.block_id)
+        .order_by(InstrumentOrg.block_id, InstrumentOrg.selected_at.desc())
     )
-    funds_result = await db.execute(funds_stmt)
-    block_funds = {f.block_id: f for f in funds_result.scalars().all()}
+    io_result = await db.execute(io_stmt)
+    block_instruments = {row.block_id: row.instrument_id for row in io_result.all()}
 
-    if not block_funds:
+    # Legacy fallback: funds_universe
+    if not block_instruments:
+        funds_stmt = (
+            select(Fund)
+            .where(Fund.block_id.in_(block_ids), Fund.is_active == True, Fund.ticker.is_not(None))
+            .distinct(Fund.block_id)
+            .order_by(Fund.block_id, Fund.name)
+        )
+        funds_result = await db.execute(funds_stmt)
+        block_instruments = {f.block_id: f.fund_id for f in funds_result.scalars().all()}
+
+    if not block_instruments:
         raise ValueError("No active funds found for the requested blocks")
 
-    available_blocks = [bid for bid in block_ids if bid in block_funds]
+    available_blocks = [bid for bid in block_ids if bid in block_instruments]
     if len(available_blocks) < 2:
         raise ValueError(f"Need at least 2 blocks with data, found {len(available_blocks)}")
 
-    fund_ids = [block_funds[bid].fund_id for bid in available_blocks]
+    fund_ids = [block_instruments[bid] for bid in available_blocks]
     ret_stmt = (
         select(NavTimeseries.instrument_id, NavTimeseries.nav_date, NavTimeseries.return_1d)
         .where(
@@ -213,7 +245,7 @@ async def compute_inputs_from_nav(
     for instrument_id, nav_date, return_1d in ret_result.all():
         fund_returns[str(instrument_id)][nav_date] = float(return_1d)
 
-    fund_id_strs = [str(block_funds[bid].fund_id) for bid in available_blocks]
+    fund_id_strs = [str(block_instruments[bid]) for bid in available_blocks]
 
     if not fund_returns:
         raise ValueError("No return data found for any block")

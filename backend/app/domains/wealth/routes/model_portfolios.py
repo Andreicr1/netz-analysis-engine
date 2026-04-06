@@ -10,6 +10,7 @@ from StrategicAllocation and CVaR limit from profile config.
 from __future__ import annotations
 
 import asyncio
+import math
 import uuid
 from datetime import date
 from decimal import Decimal
@@ -199,7 +200,8 @@ async def construct_portfolio(
             detail=f"Model portfolio {portfolio_id} not found",
         )
 
-    fund_selection = await _run_construction_async(db, portfolio.profile, org_id, portfolio_id=portfolio_id)
+    raw_selection = await _run_construction_async(db, portfolio.profile, org_id, portfolio_id=portfolio_id)
+    fund_selection = _sanitize_for_jsonb(raw_selection)
 
     portfolio.fund_selection_schema = fund_selection
     portfolio.status = "backtesting"
@@ -1218,6 +1220,17 @@ async def _set_cached_advice(cache_key: str, result: dict, ttl: int = 600) -> No
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
+def _sanitize_for_jsonb(obj: Any) -> Any:
+    """Replace NaN/Inf floats with None so PostgreSQL JSONB accepts the payload."""
+    if isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_jsonb(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_for_jsonb(v) for v in obj]
+    return obj
+
+
 def _require_ic_role(actor: Actor) -> None:
     """Verify actor has INVESTMENT_TEAM or ADMIN role."""
     if not actor.has_role(Role.INVESTMENT_TEAM):
@@ -1749,11 +1762,18 @@ async def _create_day0_snapshot(
     optimization = fund_selection.get("optimization", {})
     snapshot_date = date.today()
 
-    # Use actual CVaR from optimizer (not volatility)
+    # Use actual CVaR from optimizer (not volatility).
+    # Values may be None (sanitized from NaN upstream) — treat as missing.
     cvar_current_val = optimization.get("cvar_95")
     cvar_limit_val = optimization.get("cvar_limit")
 
-    # Compute utilization: |cvar_current / cvar_limit| × 100
+    # Guard against any residual NaN/Inf floats
+    if isinstance(cvar_current_val, float) and not math.isfinite(cvar_current_val):
+        cvar_current_val = None
+    if isinstance(cvar_limit_val, float) and not math.isfinite(cvar_limit_val):
+        cvar_limit_val = None
+
+    # Compute utilization: |cvar_current / cvar_limit| x 100
     cvar_utilized = None
     if cvar_current_val is not None and cvar_limit_val is not None and cvar_limit_val != 0:
         cvar_utilized = round(abs(cvar_current_val / cvar_limit_val) * 100, 2)
@@ -1781,8 +1801,8 @@ async def _create_day0_snapshot(
         organization_id=org_id,
         profile=portfolio.profile,
         snapshot_date=snapshot_date,
-        weights=block_weights,
-        fund_selection=fund_selection,
+        weights=_sanitize_for_jsonb(block_weights),
+        fund_selection=_sanitize_for_jsonb(fund_selection),
         cvar_current=Decimal(str(round(cvar_current_val, 6))) if cvar_current_val is not None else None,
         cvar_limit=Decimal(str(round(cvar_limit_val, 6))) if cvar_limit_val is not None else None,
         cvar_utilized_pct=Decimal(str(cvar_utilized)) if cvar_utilized is not None else None,
