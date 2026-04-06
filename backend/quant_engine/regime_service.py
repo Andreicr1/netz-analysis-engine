@@ -74,7 +74,7 @@ REGIME_DEFINITIONS: dict[str, RegimeDefinition] = {
 }
 
 # Staleness thresholds (business days)
-STALENESS_DAILY = 3
+STALENESS_DAILY = 5  # Accommodates weekends + US holidays (FRED publishes Mon-Fri only)
 STALENESS_MONTHLY = 45
 
 # Plausibility bounds for input validation
