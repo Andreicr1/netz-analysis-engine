@@ -230,7 +230,10 @@ export class PortfolioWorkspaceState {
 		if (p.profile) {
 			this.loadFactorAnalysis(p.profile);
 			this.loadAttribution(p.profile);
-			this.loadCorrelationRegime(p.profile);
+			// Correlation regime requires constructed portfolio with fund data
+			if (p.fund_selection_schema?.funds?.length) {
+				this.loadCorrelationRegime(p.profile);
+			}
 		}
 		if (p.id) {
 			this.loadOverlap();
