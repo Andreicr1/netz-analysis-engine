@@ -5,6 +5,8 @@ import type { ModelPortfolio } from "$lib/types/model-portfolio";
 
 export const load: PageServerLoad = async ({ parent }) => {
 	const { token, actor } = await parent();
+	if (!token) return { portfolios: [], actorRole: null };
+
 	const api = createServerApiClient(token);
 
 	const portfolios = await api
