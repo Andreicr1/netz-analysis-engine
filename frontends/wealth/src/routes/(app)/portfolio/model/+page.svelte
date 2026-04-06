@@ -1,8 +1,8 @@
 <!--
-  Model — Selected portfolio detail view.
-  Top: portfolio allocation chart (full-width card).
-  Sub-pills: Overview | Stress Testing | Overlap | Rebalance
-  Below: full-width panel content.
+  Model — Active portfolio analysis and monitoring.
+  Top: portfolio allocation chart (full-width).
+  Sub-pills: Holdings | Stress Testing | Overlap | Rebalance
+  Below: full-width panel content with strategic block table, stress, overlap, rebalance.
 -->
 <script lang="ts">
 	import { EmptyState } from "@investintell/ui";
@@ -13,9 +13,11 @@
 	import StressTestPanel from "$lib/components/portfolio/StressTestPanel.svelte";
 	import OverlapScannerPanel from "$lib/components/portfolio/OverlapScannerPanel.svelte";
 	import RebalanceSimulationPanel from "$lib/components/portfolio/RebalanceSimulationPanel.svelte";
+	import FactorAnalysisPanel from "$lib/components/portfolio/FactorAnalysisPanel.svelte";
 
 	const subTabs = [
-		{ value: "overview", label: "Overview" },
+		{ value: "overview", label: "Holdings" },
+		{ value: "factor", label: "Factor Analysis" },
 		{ value: "stress", label: "Stress Testing" },
 		{ value: "overlap", label: "Overlap" },
 		{ value: "rebalance", label: "Rebalance" },
@@ -42,7 +44,7 @@
 {:else}
 	<div class="mdl-page">
 
-		<!-- ── Chart card (full-width, capped height) ── -->
+		<!-- Chart card (full-width) -->
 		<div class="mdl-chart-card">
 			<div class="mdl-chart-header">
 				<span class="mdl-chart-title">{chartTitle}</span>
@@ -52,7 +54,7 @@
 			</div>
 		</div>
 
-		<!-- ── Sub-pill bar ── -->
+		<!-- Sub-pill bar -->
 		<div class="mdl-sub-pills">
 			{#each subTabs as tab (tab.value)}
 				{@const active = workspace.activeModelTab === tab.value}
@@ -67,10 +69,12 @@
 			{/each}
 		</div>
 
-		<!-- ── Panel content ── -->
+		<!-- Panel content -->
 		<div class="mdl-content">
 			{#if workspace.activeModelTab === "overview"}
 				<PortfolioOverview />
+			{:else if workspace.activeModelTab === "factor"}
+				<FactorAnalysisPanel />
 			{:else if workspace.activeModelTab === "stress"}
 				<StressTestPanel />
 			{:else if workspace.activeModelTab === "overlap"}
@@ -85,7 +89,7 @@
 <!-- Error notification -->
 {#if workspace.lastError}
 	<div class="mdl-error-toast">
-		<span class="mdl-error-text">
+		<span>
 			<strong>{workspace.lastError.action} failed:</strong>
 			{workspace.lastError.message}
 		</span>
@@ -98,7 +102,7 @@
 		height: 100%;
 		display: flex;
 		flex-direction: column;
-		gap: 24px;
+		gap: 20px;
 		overflow: hidden;
 	}
 
@@ -112,11 +116,10 @@
 	/* ── Chart card ── */
 	.mdl-chart-card {
 		flex-shrink: 0;
-		height: 280px;
+		height: 260px;
 		background: #141519;
-		border-radius: 24px;
+		border-radius: 20px;
 		border: 1px solid rgba(64, 66, 73, 0.3);
-		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
@@ -125,12 +128,12 @@
 	.mdl-chart-header {
 		display: flex;
 		align-items: center;
-		padding: 14px 24px;
+		padding: 12px 20px;
 		flex-shrink: 0;
 	}
 
 	.mdl-chart-title {
-		font-size: 16px;
+		font-size: 15px;
 		font-weight: 600;
 		color: #cbccd1;
 		font-family: "Urbanist", sans-serif;
@@ -142,7 +145,7 @@
 		padding: 0 12px 12px;
 	}
 
-	/* ── Sub-pills (smaller, visual hierarchy below top pills) ── */
+	/* ── Sub-pills ── */
 	.mdl-sub-pills {
 		display: flex;
 		align-items: center;
@@ -211,7 +214,6 @@
 		backdrop-filter: blur(8px);
 	}
 
-	.mdl-error-text { flex: 1; }
 	.mdl-error-close {
 		flex-shrink: 0;
 		color: #f87171;
