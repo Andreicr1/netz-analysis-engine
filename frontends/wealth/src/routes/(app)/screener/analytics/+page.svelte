@@ -89,10 +89,12 @@
 	let fundWindow = $state("1y");
 	const windows = ["3m", "6m", "1y", "3y", "5y"] as const;
 
-	// Auto-load if fund came from URL
+	// Auto-load if fund came from URL (one-shot)
+	let urlFundHandled = false;
 	$effect(() => {
 		const fundFromUrl = pageState.url.searchParams.get("fund");
-		if (fundFromUrl && !analytics && !loading) {
+		if (fundFromUrl && !urlFundHandled) {
+			urlFundHandled = true;
 			selectedFundId = fundFromUrl;
 			loadFundAnalytics(fundFromUrl, fundWindow);
 		}
