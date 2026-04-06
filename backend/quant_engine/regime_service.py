@@ -150,12 +150,15 @@ def classify_regime_multi_signal(
     baa_spread: float | None = None,
     fed_funds_delta_6m: float | None = None,
     dxy_zscore: float | None = None,
+    crude_oil_zscore: float | None = None,
+    crude_oil_roc_3m: float | None = None,
+    indpro_roc_6m: float | None = None,
 ) -> tuple[str, dict[str, str]]:
     """Classify regime using multi-factor stress scoring.
 
-    Instead of binary VIX thresholds, accumulates a stress score (0-100)
-    from multiple independent signals. Each signal contributes proportionally
-    to its severity, with diminishing-returns capping.
+    Combines financial market signals with real-economy indicators to avoid
+    monetary bias. Supply shocks (oil, commodities) and production contractions
+    are leading indicators that precede VIX/credit spread reactions by weeks.
 
     Regime classification from composite stress score:
         score < 25  → RISK_ON   (benign conditions)
@@ -165,16 +168,22 @@ def classify_regime_multi_signal(
     CPI override: inflation above threshold triggers INFLATION regime
     regardless of stress score.
 
-    Signals and weights:
-        VIX (25%):              Long-term avg ~19. Score ramps linearly 18→35.
-        HY OAS (20%):           US HY credit spread. Normal ~3.0, stress >5.0.
-        Yield curve (15%):      10Y-2Y. Inverted = recession signal.
-        BAA spread (10%):       Corporate credit risk. Normal ~1.2, stress >2.5.
-        FF Rate-of-Change (10%): 6-month change in Fed Funds. Rapid hikes = stress.
-                                 Replaces absolute level (avoids structural bias).
-        Sahm Rule (10%):        Labor market recession indicator. Trigger at 0.50.
-        DXY Z-score (10%):      Dollar strength surprise. Sharp USD rally = global
-                                 liquidity stress for risk assets.
+    === FINANCIAL SIGNALS (55%) ===
+        VIX (20%):              Implied vol. LT avg ~19, ramp 18→35.
+        HY OAS (15%):           US HY credit spread. Normal ~3.0, stress >5.0.
+        Yield curve (10%):      10Y-2Y. Inverted = recession signal.
+        DXY Z-score (10%):      Dollar strength surprise → global liquidity crunch.
+
+    === REAL ECONOMY SIGNALS (45%) ===
+        Crude Oil Z-score (15%): WTI vs 1Y rolling mean. Supply shock proxy.
+                                 Captures Hormuz closures, OPEC shocks, sanctions
+                                 that VIX misses for weeks. z>2σ = extreme.
+        Crude Oil RoC 3m (10%): Velocity of oil price spike. >30% in 3 months
+                                 historically precedes recession + margin compression.
+        BAA spread (5%):        Corporate credit risk → real economy stress.
+        FF Rate-of-Change (5%): 6-month Fed Funds delta. Rapid hikes = stress.
+        Sahm Rule (5%):         Labor market recession onset at 0.50.
+        INDPRO RoC 6m (5%):    Industrial production change. Negative = contraction.
 
     """
     if thresholds is None:
@@ -197,46 +206,67 @@ def classify_regime_multi_signal(
     # ── Multi-factor stress scoring ──
     # Each signal produces a sub-score 0-100 via _ramp().
     # Weighted sum → composite stress score (0-100).
+    # Two layers: financial (55%) + real economy (45%).
     signals: list[tuple[str, float, float, str]] = []  # (label, sub_score, weight, reason)
 
-    # VIX (25%): LT avg ~19, ramp 18→35
+    # ═══ FINANCIAL SIGNALS (55%) ═══
+
+    # VIX (20%): implied vol. LT avg ~19, ramp 18→35
     if vix is not None:
         s = _ramp(vix, calm=18.0, panic=35.0)
-        signals.append(("vix", s, 0.25, f"VIX={vix:.1f} (stress={s:.0f}/100)"))
+        signals.append(("vix", s, 0.20, f"VIX={vix:.1f} (stress={s:.0f}/100)"))
 
-    # US HY OAS (20%): normal ~3.0%, stress >5.0%
+    # US HY OAS (15%): credit stress. Normal ~3.0%, stress >5.0%
     if hy_oas is not None:
         s = _ramp(hy_oas, calm=2.5, panic=6.0)
-        signals.append(("hy_oas", s, 0.20, f"US_HY_OAS={hy_oas:.2f}% (stress={s:.0f}/100)"))
+        signals.append(("hy_oas", s, 0.15, f"US_HY_OAS={hy_oas:.2f}% (stress={s:.0f}/100)"))
 
-    # Yield curve (15%): +1.0=calm, -0.5=full stress (inverted)
+    # Yield curve (10%): +1.0=calm, -0.5=full stress (inverted)
     if yield_curve_spread is not None:
         s = _ramp(-yield_curve_spread, calm=-1.0, panic=0.5)
-        signals.append(("yield_curve", s, 0.15, f"10Y-2Y={yield_curve_spread:+.2f}% (stress={s:.0f}/100)"))
+        signals.append(("yield_curve", s, 0.10, f"10Y-2Y={yield_curve_spread:+.2f}% (stress={s:.0f}/100)"))
 
-    # BAA-10Y spread (10%): normal ~1.2%, stress >2.5%
-    if baa_spread is not None:
-        s = _ramp(baa_spread, calm=1.2, panic=2.5)
-        signals.append(("baa_spread", s, 0.10, f"BAA-10Y={baa_spread:.2f}% (stress={s:.0f}/100)"))
-
-    # Fed Funds rate-of-change (10%): 6-month delta captures surprise tightening.
-    # Positive delta = hiking (stress). Negative = cutting (dovish, calm).
-    # Replaces absolute FF level to avoid structural bias in high-rate regimes.
-    if fed_funds_delta_6m is not None:
-        s = _ramp(fed_funds_delta_6m, calm=-0.50, panic=1.50)
-        signals.append(("ff_roc", s, 0.10, f"FF_Δ6m={fed_funds_delta_6m:+.2f}% (stress={s:.0f}/100)"))
-
-    # Sahm Rule (10%): recession onset at 0.50
-    if sahm_rule is not None:
-        s = _ramp(sahm_rule, calm=0.0, panic=0.50)
-        signals.append(("sahm", s, 0.10, f"Sahm={sahm_rule:.2f} (stress={s:.0f}/100)"))
-
-    # DXY Z-score (10%): sharp dollar rally = global liquidity crunch.
-    # Z-score of Trade-Weighted Dollar Index vs 1Y rolling mean.
-    # z > 2.0 = parabolic USD strength = EM/commodity/risk-asset stress.
+    # DXY Z-score (10%): sharp dollar rally = global liquidity crunch
     if dxy_zscore is not None:
         s = _ramp(dxy_zscore, calm=0.0, panic=2.0)
         signals.append(("dxy", s, 0.10, f"DXY_z={dxy_zscore:+.2f}σ (stress={s:.0f}/100)"))
+
+    # ═══ REAL ECONOMY SIGNALS (45%) ═══
+
+    # Crude Oil Z-score (15%): supply shock proxy.
+    # WTI vs 1Y rolling mean. Captures Hormuz closures, OPEC shocks,
+    # sanctions weeks before VIX reacts. z>2σ = extreme.
+    if crude_oil_zscore is not None:
+        s = _ramp(crude_oil_zscore, calm=0.5, panic=3.0)
+        signals.append(("crude_oil", s, 0.15, f"WTI_z={crude_oil_zscore:+.2f}σ (stress={s:.0f}/100)"))
+
+    # Crude Oil rate-of-change 3m (10%): velocity of supply shock.
+    # >30% in 3 months historically precedes recession + margin compression.
+    if crude_oil_roc_3m is not None:
+        s = _ramp(crude_oil_roc_3m, calm=0.0, panic=50.0)
+        signals.append(("crude_roc", s, 0.10, f"WTI_Δ3m={crude_oil_roc_3m:+.1f}% (stress={s:.0f}/100)"))
+
+    # BAA-10Y spread (5%): corporate credit → real economy stress
+    if baa_spread is not None:
+        s = _ramp(baa_spread, calm=1.2, panic=2.5)
+        signals.append(("baa_spread", s, 0.05, f"BAA-10Y={baa_spread:.2f}% (stress={s:.0f}/100)"))
+
+    # Fed Funds rate-of-change (5%): surprise tightening
+    if fed_funds_delta_6m is not None:
+        s = _ramp(fed_funds_delta_6m, calm=-0.50, panic=1.50)
+        signals.append(("ff_roc", s, 0.05, f"FF_Δ6m={fed_funds_delta_6m:+.2f}% (stress={s:.0f}/100)"))
+
+    # Sahm Rule (5%): labor market recession onset at 0.50
+    if sahm_rule is not None:
+        s = _ramp(sahm_rule, calm=0.0, panic=0.50)
+        signals.append(("sahm", s, 0.05, f"Sahm={sahm_rule:.2f} (stress={s:.0f}/100)"))
+
+    # Industrial Production RoC 6m (5%): negative = contraction
+    # Captures demand-side weakness that financial signals miss.
+    if indpro_roc_6m is not None:
+        # Inverted: positive growth = calm, contraction = stress
+        s = _ramp(-indpro_roc_6m, calm=-3.0, panic=3.0)
+        signals.append(("indpro", s, 0.05, f"INDPRO_Δ6m={indpro_roc_6m:+.1f}% (stress={s:.0f}/100)"))
 
     # Need at least 2 signals for confident classification
     if len(signals) < 2:
@@ -681,33 +711,80 @@ async def _compute_ff_delta_6m(db: AsyncSession) -> float | None:
         return None
 
 
-async def _compute_dxy_zscore(db: AsyncSession) -> float | None:
-    """Compute Z-score of Trade-Weighted Dollar Index vs 1Y rolling mean.
+async def _compute_series_zscore(
+    db: AsyncSession, series_id: str, lookback_days: int = 252,
+) -> float | None:
+    """Compute Z-score of any macro series vs its rolling mean.
 
-    Positive z = USD strength (stress for EM/commodities/risk assets).
-    Uses DTWEXBGS (Broad Trade-Weighted Dollar Index) from FRED.
+    Positive z = above-average (stress for supply shocks like oil).
     """
     try:
         result = await db.execute(
             select(MacroData.value)
-            .where(MacroData.series_id == "DTWEXBGS")
+            .where(MacroData.series_id == series_id)
             .order_by(MacroData.obs_date.desc())
-            .limit(252),  # ~1Y of daily observations
+            .limit(lookback_days),
         )
         values = [float(r[0]) for r in result.all()]
-        if len(values) < 60:  # Need at least ~3 months
+        if len(values) < 60:
             return None
 
         latest = values[0]
-        mean_1y = np.mean(values)
-        std_1y = np.std(values)
-        if std_1y < 0.001:
+        mean = float(np.mean(values))
+        std = float(np.std(values))
+        if std < 0.001:
             return 0.0
 
-        return round((latest - mean_1y) / std_1y, 2)
+        return round((latest - mean) / std, 2)
     except Exception:
-        logger.exception("dxy_zscore_failed")
+        logger.exception("series_zscore_failed", series_id=series_id)
         return None
+
+
+async def _compute_series_roc(
+    db: AsyncSession, series_id: str, months: int = 3,
+) -> float | None:
+    """Compute rate-of-change (%) for any macro series over N months.
+
+    Returns percentage change: (latest - past) / past * 100.
+    Positive = increase (stress for commodities, calm for INDPRO).
+    """
+    try:
+        result = await db.execute(
+            select(MacroData.value, MacroData.obs_date)
+            .where(MacroData.series_id == series_id)
+            .order_by(MacroData.obs_date.desc())
+            .limit(1),
+        )
+        latest = result.first()
+        if not latest:
+            return None
+
+        from datetime import timedelta
+
+        target_date = latest.obs_date - timedelta(days=months * 30)
+        result_past = await db.execute(
+            select(MacroData.value)
+            .where(
+                MacroData.series_id == series_id,
+                MacroData.obs_date <= target_date,
+            )
+            .order_by(MacroData.obs_date.desc())
+            .limit(1),
+        )
+        past_val = result_past.scalar_one_or_none()
+        if past_val is None or float(past_val) == 0:
+            return None
+
+        return round((float(latest.value) - float(past_val)) / float(past_val) * 100, 2)
+    except Exception:
+        logger.exception("series_roc_failed", series_id=series_id)
+        return None
+
+
+async def _compute_dxy_zscore(db: AsyncSession) -> float | None:
+    """Compute Z-score of Trade-Weighted Dollar Index vs 1Y rolling mean."""
+    return await _compute_series_zscore(db, "DTWEXBGS", lookback_days=252)
 
 
 async def get_current_regime(
@@ -735,19 +812,22 @@ async def get_current_regime(
     hy_oas_val = macro.get("BAMLH0A0HYM2", (None, None))[0]
     baa_val = macro.get("BAA10Y", (None, None))[0]
 
-    # A. Fed Funds rate-of-change (6-month delta) — avoids absolute-level bias
+    # Derived signals — rate-of-change and Z-scores
     ff_delta = await _compute_ff_delta_6m(db)
-
-    # E. DXY Z-score (dollar strength surprise vs 1Y rolling mean)
     dxy_z = await _compute_dxy_zscore(db)
+    crude_z = await _compute_series_zscore(db, "DCOILWTICO", lookback_days=252)
+    crude_roc = await _compute_series_roc(db, "DCOILWTICO", months=3)
+    indpro_roc = await _compute_series_roc(db, "INDPRO", months=6)
 
-    # Need at least VIX or HY OAS to classify
-    if vix_val is not None or hy_oas_val is not None:
+    # Need at least VIX or HY OAS or crude oil to classify
+    if vix_val is not None or hy_oas_val is not None or crude_z is not None:
         regime, reasons = classify_regime_multi_signal(
             vix_val, yield_val, cpi_val,
             sahm_rule=sahm_val, config=config,
             hy_oas=hy_oas_val, baa_spread=baa_val,
             fed_funds_delta_6m=ff_delta, dxy_zscore=dxy_z,
+            crude_oil_zscore=crude_z, crude_oil_roc_3m=crude_roc,
+            indpro_roc_6m=indpro_roc,
         )
 
         as_of = None
