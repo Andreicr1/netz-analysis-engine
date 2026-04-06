@@ -137,8 +137,12 @@ export interface FactorAnalysisResponse {
 }
 
 export class PortfolioWorkspaceState {
-	activeSidebarTab = $state<"universe" | "policy" | "models">("models");
-	activeMainTab = $state<"overview" | "analytics" | "stress" | "overlap" | "rebalance">("overview");
+	/** Builder sub-pills: Models | Universe | Policy */
+	activeBuilderTab = $state<"models" | "universe" | "policy">("models");
+	/** Model detail sub-pills: Overview | Stress Testing | Overlap | Rebalance */
+	activeModelTab = $state<"overview" | "stress" | "overlap" | "rebalance">("overview");
+	/** Analytics sub-pills: Attribution | Factor | Drift | Risk Budget */
+	activeAnalyticsTab = $state<"attribution" | "factor" | "drift" | "risk-budget">("attribution");
 	portfolio = $state<ModelPortfolio | null>(null);
 	localStress = $state.raw<StressResultView | null>(null);
 	localFactorAnalysis = $state.raw<FactorAnalysisResponse | null>(null);
