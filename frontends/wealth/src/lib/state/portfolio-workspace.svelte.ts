@@ -16,6 +16,12 @@ import type {
 	TrackRecord,
 	OverlapResult,
 } from "$lib/types/model-portfolio";
+import type {
+	AttributionResult,
+	StrategyDriftAlert,
+	CorrelationRegimeResult,
+	RiskBudgetResult,
+} from "$lib/types/analytics";
 
 // ── Shock mapping: UI macro-shocks → per-block shocks ────────────────
 // The backend stress engine expects shocks keyed by allocation block_id.
@@ -132,7 +138,7 @@ export interface FactorAnalysisResponse {
 
 export class PortfolioWorkspaceState {
 	activeSidebarTab = $state<"universe" | "policy" | "models">("models");
-	activeMainTab = $state<"overview" | "analytics" | "stress" | "holdings" | "rebalance">("overview");
+	activeMainTab = $state<"overview" | "analytics" | "stress" | "overlap" | "rebalance">("overview");
 	portfolio = $state<ModelPortfolio | null>(null);
 	localStress = $state.raw<StressResultView | null>(null);
 	localFactorAnalysis = $state.raw<FactorAnalysisResponse | null>(null);
@@ -148,6 +154,22 @@ export class PortfolioWorkspaceState {
 	isExecuting = $state(false);
 	rebalanceResult = $state.raw<RebalancePreviewResponse | null>(null);
 	lastError = $state.raw<WorkspaceError | null>(null);
+
+	/** Attribution analysis (Brinson-Fachler) for current portfolio profile. */
+	attribution = $state.raw<AttributionResult | null>(null);
+	isLoadingAttribution = $state(false);
+
+	/** Strategy drift alerts across instruments. */
+	driftAlerts = $state.raw<StrategyDriftAlert[]>([]);
+	isLoadingDrift = $state(false);
+
+	/** Correlation regime analysis (Marchenko-Pastur denoising). */
+	correlationRegime = $state.raw<CorrelationRegimeResult | null>(null);
+	isLoadingCorrelationRegime = $state(false);
+
+	/** Risk budget decomposition (on-demand). */
+	riskBudget = $state.raw<RiskBudgetResult | null>(null);
+	isLoadingRiskBudget = $state(false);
 
 	/** Approved universe funds for DnD — loaded from API when portfolio is selected. */
 	universe = $state<UniverseFund[]>([]);
@@ -191,13 +213,20 @@ export class PortfolioWorkspaceState {
 		this.localFactorAnalysis = null;
 		this.localOverlap = null;
 		this.rebalanceResult = null;
+		this.attribution = null;
+		this.driftAlerts = [];
+		this.correlationRegime = null;
+		this.riskBudget = null;
 		this.lastError = null;
 		this.navSeries = [];
-		// Fire-and-forget: load track-record NAV series and factor analysis in background
+		// Fire-and-forget: load track-record, factor analysis, attribution, drift
 		this.loadTrackRecord();
+		this.loadDriftAlerts();
 
 		if (p.profile) {
 			this.loadFactorAnalysis(p.profile);
+			this.loadAttribution(p.profile);
+			this.loadCorrelationRegime(p.profile);
 		}
 		if (p.id) {
 			this.loadOverlap();
@@ -271,6 +300,77 @@ export class PortfolioWorkspaceState {
 			this.localOverlap = null;
 		} finally {
 			this.isLoadingOverlap = false;
+		}
+	}
+
+	// ── Attribution loading (Brinson-Fachler) ───────────────────────
+
+	async loadAttribution(profile: string) {
+		if (!this._getToken) return;
+		this.isLoadingAttribution = true;
+		try {
+			const api = this.api();
+			this.attribution = await api.get<AttributionResult>(
+				`/analytics/attribution/${profile}`,
+			);
+		} catch {
+			this.attribution = null;
+		} finally {
+			this.isLoadingAttribution = false;
+		}
+	}
+
+	// ── Drift alerts loading ────────────────────────────────────────
+
+	async loadDriftAlerts() {
+		if (!this._getToken) return;
+		this.isLoadingDrift = true;
+		try {
+			const api = this.api();
+			this.driftAlerts = await api.get<StrategyDriftAlert[]>(
+				"/analytics/strategy-drift/alerts",
+				{ limit: "50" },
+			);
+		} catch {
+			this.driftAlerts = [];
+		} finally {
+			this.isLoadingDrift = false;
+		}
+	}
+
+	// ── Correlation regime loading ──────────────────────────────────
+
+	async loadCorrelationRegime(profile: string) {
+		if (!this._getToken) return;
+		this.isLoadingCorrelationRegime = true;
+		try {
+			const api = this.api();
+			this.correlationRegime = await api.get<CorrelationRegimeResult>(
+				`/analytics/correlation-regime/${profile}`,
+				{ window_days: "60" },
+			);
+		} catch {
+			this.correlationRegime = null;
+		} finally {
+			this.isLoadingCorrelationRegime = false;
+		}
+	}
+
+	// ── Risk budget loading (on-demand) ─────────────────────────────
+
+	async loadRiskBudget() {
+		if (!this._getToken || !this.portfolio?.profile) return;
+		this.isLoadingRiskBudget = true;
+		try {
+			const api = this.api();
+			this.riskBudget = await api.post<RiskBudgetResult>(
+				`/analytics/risk-budget/${this.portfolio.profile}`,
+				{},
+			);
+		} catch {
+			this.riskBudget = null;
+		} finally {
+			this.isLoadingRiskBudget = false;
 		}
 	}
 

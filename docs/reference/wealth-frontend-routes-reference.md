@@ -1,6 +1,6 @@
 # Wealth Frontend — Route Map (post-consolidation)
 
-> Generated 2026-04-03 after route consolidation (commits `40e0fc0`, `109d19a`).
+> Updated 2026-04-06 after analytics absorption into Portfolio Workspace.
 
 ## Architecture
 
@@ -14,7 +14,6 @@ frontends/wealth/src/routes/
     ├── +layout.svelte         ← App shell layout
     ├── dashboard/
     ├── screener/              ← PILLAR: Fund Discovery
-    ├── analysis/              ← PILLAR: Portfolio Analytics
     ├── market/                ← PILLAR: Macro Intelligence
     ├── portfolio/             ← PILLAR: Construction & Policy
     ├── portfolios/            ← Legacy portfolio profiles (pending migration)
@@ -54,18 +53,6 @@ frontends/wealth/src/routes/
 - ~~`/screener/managers`~~ → manager list absorbed into root `/screener` (Level 1)
 - ~~`/screener/managers/[crd]`~~ → manager detail absorbed into Sheet panel (Level 2)
 
-### Analysis (Portfolio Analytics)
-
-| Route | File | Purpose |
-|-------|------|---------|
-| `/analysis` | `analysis/+page.svelte` | Analytics hub (fund-level analytics, scoring, peer comparison) |
-| `/analysis/[entityId]` | `analysis/[entityId]/+page.svelte` | Entity-specific deep analytics |
-| `/analysis/entity-analytics` | `analysis/entity-analytics/+page.svelte` | Cross-entity analytics comparison |
-| `/analysis/exposure` | `analysis/exposure/+page.svelte` | Exposure analysis (sector, geography, factor) |
-| `/analysis/risk` | `analysis/risk/+page.svelte` | Risk dashboard (CVaR, drawdown, GARCH, regime) |
-
-**Consolidation:** Previously scattered as `/analytics`, `/entity-analytics`, `/exposure`, `/risk` at top level.
-
 ### Market (Macro Intelligence)
 
 | Route | File | Purpose |
@@ -79,9 +66,16 @@ frontends/wealth/src/routes/
 
 | Route | File | Purpose |
 |-------|------|---------|
-| `/portfolio` | `portfolio/+page.svelte` | **Portfolio Workspace** — unified App-in-App hub (approved universe, builder, models, policy). All sub-views are rendered as components within this single route. |
+| `/portfolio` | `portfolio/+page.svelte` | **Portfolio Workspace** — unified App-in-App hub (models, universe, policy, analytics & risk, stress testing, overlap, rebalance). All sub-views are rendered as pill-tabbed panels within this single route. |
 
-**Consolidation:** Previously split across `/portfolio/approved`, `/portfolio/builder`, `/portfolio/models/*`, `/portfolio/policy`. Now centralized at `/portfolio` as a single-page App-in-App workspace with internal tab/panel navigation managed by components in `$lib/components/portfolio/`.
+**Consolidation:** Previously split across `/portfolio/approved`, `/portfolio/builder`, `/portfolio/models/*`, `/portfolio/policy`. Analytics capabilities (attribution, drift, factor analysis, risk budget) previously at `/analysis` are now absorbed into the "Analytics & Risk" tab. Centralized at `/portfolio` as a single-page App-in-App workspace with internal pill navigation managed by components in `$lib/components/portfolio/`.
+
+**Deleted routes (absorbed into Portfolio Workspace):**
+- ~~`/analysis`~~ → Attribution, drift, factor analysis, risk budget absorbed into "Analytics & Risk" tab
+- ~~`/analysis/[entityId]`~~ → Entity analytics (fund-level via screener drill-down)
+- ~~`/analysis/entity-analytics`~~ → Cross-entity comparison
+- ~~`/analysis/exposure`~~ → Exposure analysis
+- ~~`/analysis/risk`~~ → Risk dashboard (SSE-driven CVaR/regime available via riskStore at layout level)
 
 ### Portfolios (Legacy)
 
@@ -121,9 +115,8 @@ frontends/wealth/src/routes/
 TopNav Pillars:
   Dashboard    → /dashboard
   Screener     → /screener, /screener/fund/*, /screener/dd-reports/*
-  Analysis     → /analysis, /analysis/exposure, /analysis/risk
   Market       → /market, /market/reviews/*
-  Portfolio    → /portfolio (App-in-App workspace)
+  Portfolio    → /portfolio (App-in-App workspace, includes Analytics & Risk)
   Documents    → /documents, /documents/upload
   Content      → /content
   Settings     → /settings, /settings/config, /settings/system
@@ -153,11 +146,10 @@ Level 3: /screener/fund/[id]
 | Auth & Root | 2 | 2 |
 | Dashboard | 1 | 1 |
 | Screener | 6 | 6 |
-| Analysis | 5 | 5 |
 | Market | 2 | 2 |
 | Portfolio | 1 | 1 |
 | Portfolios (legacy) | 2 | 2 |
 | Documents | 3 | 2 |
 | Content | 2 | 2 |
 | Settings | 3 | 2 |
-| **Total** | **27** | **25** |
+| **Total** | **22** | **20** |

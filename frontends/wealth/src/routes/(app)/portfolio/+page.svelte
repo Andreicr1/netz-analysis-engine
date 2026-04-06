@@ -3,6 +3,7 @@
   Left sidebar: Title + Models / Universe / Policy pills.
   Right main: Chart + pill-tabbed detail panels.
   Design system: Figma One X — dark premium, glassmorphism, pill navigation.
+  Navigation pills match Screener page pattern (Urbanist, 36px radius, #0177fb active).
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
@@ -21,11 +22,12 @@
 	import ModelListPanel from "$lib/components/portfolio/ModelListPanel.svelte";
 	import PortfolioOverview from "$lib/components/portfolio/PortfolioOverview.svelte";
 	import StressTestPanel from "$lib/components/portfolio/StressTestPanel.svelte";
-	import FactorAnalysisPanel from "$lib/components/portfolio/FactorAnalysisPanel.svelte";
+	import AnalyticsRiskPanel from "$lib/components/portfolio/AnalyticsRiskPanel.svelte";
 	import OverlapScannerPanel from "$lib/components/portfolio/OverlapScannerPanel.svelte";
 	import RebalanceSimulationPanel from "$lib/components/portfolio/RebalanceSimulationPanel.svelte";
 	import MainPortfolioChart from "$lib/components/portfolio/MainPortfolioChart.svelte";
 	import type { ModelPortfolio } from "$lib/types/model-portfolio";
+	import type { AttributionResult, StrategyDriftAlert, CorrelationRegimeResult } from "$lib/types/analytics";
 	import type { PageData } from "./$types";
 
 	let { data }: { data: PageData } = $props();
@@ -33,6 +35,16 @@
 
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	workspace.setGetToken(getToken);
+
+	// Seed workspace with SSR analytics data (default "moderate" profile)
+	$effect(() => {
+		const ssrAttribution = data.attribution as AttributionResult | null;
+		const ssrDrift = (data.driftAlerts ?? []) as StrategyDriftAlert[];
+		const ssrCorrelation = data.correlationRegime as CorrelationRegimeResult | null;
+		if (ssrAttribution && !workspace.attribution) workspace.attribution = ssrAttribution;
+		if (ssrDrift.length > 0 && workspace.driftAlerts.length === 0) workspace.driftAlerts = ssrDrift;
+		if (ssrCorrelation && !workspace.correlationRegime) workspace.correlationRegime = ssrCorrelation;
+	});
 
 	$effect(() => {
 		if (workspace.universe.length === 0 && !workspace.isLoadingUniverse) {
@@ -55,11 +67,11 @@
 	] as const;
 
 	const mainTabs = [
-		{ value: "overview", label: "Fund Selection" },
-		{ value: "analytics", label: "Factor Analysis" },
+		{ value: "overview", label: "Overview" },
+		{ value: "analytics", label: "Analytics & Risk" },
 		{ value: "stress", label: "Stress Testing" },
-		{ value: "holdings", label: "Overlap Scanner" },
-		{ value: "rebalance", label: "Rebalance Sim" },
+		{ value: "overlap", label: "Overlap" },
+		{ value: "rebalance", label: "Rebalance" },
 	] as const;
 
 	let chartTitle = $derived(
@@ -69,19 +81,23 @@
 	);
 </script>
 
-<div class="flex flex-col" style="height: calc(100vh - 88px); padding: 24px; min-height: 0;">
+<svelte:head>
+	<title>Portfolio — InvestIntell</title>
+</svelte:head>
 
-	<!-- Main grid: sidebar + workspace (no top-level PageHeader) -->
-	<div class="grid flex-1 grid-cols-12 gap-5 overflow-hidden min-h-0">
+<div class="pw-root">
 
-		<!-- ── Left sidebar (widened for Universe table) ── -->
-		<div class="col-span-5 flex flex-col overflow-hidden">
-			<div class="flex flex-1 flex-col overflow-hidden bg-[#141519] rounded-[24px] border border-[#404249]/30 shadow-xl">
+	<!-- Main grid: sidebar + workspace -->
+	<div class="pw-grid">
+
+		<!-- ── Left sidebar ── -->
+		<div class="pw-sidebar">
+			<div class="pw-sidebar-card">
 
 				<!-- Sidebar header: title + action buttons -->
-				<div class="flex items-center justify-between px-5 pt-5 pb-2 shrink-0">
-					<h1 class="text-[18px] font-semibold text-white tracking-[-0.01em]">Portfolio Builder</h1>
-					<div class="flex items-center gap-1.5">
+				<div class="pw-sidebar-header">
+					<h1 class="pw-sidebar-title">Portfolio Builder</h1>
+					<div class="pw-sidebar-actions">
 						<Button
 							size="sm"
 							variant="outline"
@@ -91,7 +107,7 @@
 						>
 							{#if workspace.isConstructing}
 								<Loader2 class="mr-1 h-3.5 w-3.5 animate-spin" />
-								Building…
+								Building...
 							{:else}
 								<Play class="mr-1 h-3.5 w-3.5" />
 								Construct
@@ -110,17 +126,15 @@
 					</div>
 				</div>
 
-				<!-- Sidebar pills -->
-				<div class="flex items-center gap-2 px-5 pb-3 shrink-0">
+				<!-- Sidebar pills (Screener-matched style) -->
+				<div class="pw-pill-bar">
 					{#each sidebarTabs as tab (tab.value)}
 						{@const Icon = tab.icon}
 						{@const active = workspace.activeSidebarTab === tab.value}
 						<button
 							type="button"
-							class="flex items-center gap-1.5 text-[12px] transition-all duration-150
-								{active
-									? 'bg-[#0177fb] text-white font-semibold rounded-full px-4 py-1.5'
-									: 'border border-white/10 text-[#cbccd1] rounded-full px-4 py-1.5 hover:bg-white/5'}"
+							class="pw-pill"
+							class:pw-pill--active={active}
 							onclick={() => workspace.activeSidebarTab = tab.value}
 						>
 							<Icon class="h-3 w-3" />
@@ -130,7 +144,7 @@
 				</div>
 
 				<!-- Sidebar content -->
-				<div class="flex-1 overflow-y-auto min-h-0">
+				<div class="pw-sidebar-content">
 					{#if workspace.activeSidebarTab === "models"}
 						<ModelListPanel {portfolios} />
 					{:else if workspace.activeSidebarTab === "universe"}
@@ -143,33 +157,29 @@
 		</div>
 
 		<!-- ── Right workspace ── -->
-		<div class="col-span-7 flex flex-col gap-5 overflow-hidden">
+		<div class="pw-main">
 
 			<!-- Top chart area (45%) -->
-			<div class="flex shrink-0 flex-col bg-[#141519] rounded-[24px] border border-[#404249]/30 shadow-xl overflow-hidden" style="height: 45%;">
-				<div class="flex items-center justify-between px-6 py-3">
-					<span class="text-[15px] font-medium text-[#cbccd1]">
-						{chartTitle}
-					</span>
+			<div class="pw-chart-card">
+				<div class="pw-chart-header">
+					<span class="pw-chart-title">{chartTitle}</span>
 				</div>
-				<div class="flex flex-1 flex-col px-3 pb-3" style="min-height: 0;">
+				<div class="pw-chart-body">
 					<MainPortfolioChart />
 				</div>
 			</div>
 
 			<!-- Bottom detail area (55%) -->
-			<div class="flex flex-1 flex-col min-h-0 bg-[#141519] rounded-[24px] border border-[#404249]/30 shadow-xl overflow-hidden">
+			<div class="pw-detail-card">
 
-				<!-- Main pills -->
-				<div class="flex items-center gap-2 px-6 py-4 shrink-0 flex-wrap">
+				<!-- Main pills (Screener-matched style) -->
+				<div class="pw-pill-bar pw-pill-bar--main">
 					{#each mainTabs as tab (tab.value)}
 						{@const active = workspace.activeMainTab === tab.value}
 						<button
 							type="button"
-							class="text-[13px] transition-all duration-150
-								{active
-									? 'bg-[#0177fb] text-white font-semibold rounded-full px-5 py-2'
-									: 'border border-white/10 text-[#cbccd1] rounded-full px-5 py-2 hover:bg-white/5'}"
+							class="pw-pill pw-pill--main"
+							class:pw-pill--active={active}
 							onclick={() => workspace.activeMainTab = tab.value}
 						>
 							{tab.label}
@@ -178,14 +188,14 @@
 				</div>
 
 				<!-- Main content -->
-				<div class="flex-1 overflow-y-auto min-h-0">
+				<div class="pw-detail-content">
 					{#if workspace.activeMainTab === "overview"}
 						<PortfolioOverview />
 					{:else if workspace.activeMainTab === "analytics"}
-						<FactorAnalysisPanel />
+						<AnalyticsRiskPanel />
 					{:else if workspace.activeMainTab === "stress"}
 						<StressTestPanel />
-					{:else if workspace.activeMainTab === "holdings"}
+					{:else if workspace.activeMainTab === "overlap"}
 						<OverlapScannerPanel />
 					{:else}
 						<RebalanceSimulationPanel />
@@ -197,13 +207,15 @@
 
 	<!-- Error notification -->
 	{#if workspace.lastError}
-		<div class="fixed bottom-6 right-6 z-50 flex max-w-sm items-start gap-3 rounded-[16px] border border-red-500/30 bg-red-950/90 px-4 py-3 text-sm text-red-200 shadow-lg backdrop-blur-sm">
-			<span class="flex-1">
-				<strong class="text-red-100">{({ construct: "Construction", rebalance: "Rebalance Preview", universe: "Universe Loading", stress: "Stress Test" })[workspace.lastError.action] ?? workspace.lastError.action} failed:</strong>
+		<div class="pw-error-toast">
+			<span class="pw-error-text">
+				<strong class="pw-error-label">
+					{({ construct: "Construction", rebalance: "Rebalance Preview", universe: "Universe Loading", stress: "Stress Test" })[workspace.lastError.action] ?? workspace.lastError.action} failed:
+				</strong>
 				{workspace.lastError.message}
 			</span>
 			<button
-				class="shrink-0 text-red-400 hover:text-red-200"
+				class="pw-error-close"
 				onclick={() => { workspace.lastError = null; }}
 			>
 				&times;
@@ -211,3 +223,228 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	/* ── Root layout ── */
+	.pw-root {
+		display: flex;
+		flex-direction: column;
+		height: calc(100vh - 88px);
+		padding: 24px;
+		min-height: 0;
+	}
+
+	.pw-grid {
+		display: grid;
+		flex: 1;
+		grid-template-columns: 5fr 7fr;
+		gap: 20px;
+		overflow: hidden;
+		min-height: 0;
+	}
+
+	/* ── Sidebar ── */
+	.pw-sidebar {
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+
+	.pw-sidebar-card {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		overflow: hidden;
+		background: #141519;
+		border-radius: 24px;
+		border: 1px solid rgba(64, 66, 73, 0.3);
+		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+	}
+
+	.pw-sidebar-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 20px 20px 8px;
+		flex-shrink: 0;
+	}
+
+	.pw-sidebar-title {
+		font-size: 18px;
+		font-weight: 600;
+		color: #fff;
+		letter-spacing: -0.01em;
+	}
+
+	.pw-sidebar-actions {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.pw-sidebar-content {
+		flex: 1;
+		overflow-y: auto;
+		min-height: 0;
+	}
+
+	/* ── Main workspace ── */
+	.pw-main {
+		display: flex;
+		flex-direction: column;
+		gap: 20px;
+		overflow: hidden;
+	}
+
+	/* ── Chart card ── */
+	.pw-chart-card {
+		display: flex;
+		flex-shrink: 0;
+		flex-direction: column;
+		background: #141519;
+		border-radius: 24px;
+		border: 1px solid rgba(64, 66, 73, 0.3);
+		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+		overflow: hidden;
+		height: 45%;
+	}
+
+	.pw-chart-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 12px 24px;
+	}
+
+	.pw-chart-title {
+		font-size: 15px;
+		font-weight: 500;
+		color: #cbccd1;
+	}
+
+	.pw-chart-body {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		padding: 0 12px 12px;
+		min-height: 0;
+	}
+
+	/* ── Detail card ── */
+	.pw-detail-card {
+		display: flex;
+		flex: 1;
+		flex-direction: column;
+		min-height: 0;
+		background: #141519;
+		border-radius: 24px;
+		border: 1px solid rgba(64, 66, 73, 0.3);
+		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+		overflow: hidden;
+	}
+
+	.pw-detail-content {
+		flex: 1;
+		overflow-y: auto;
+		min-height: 0;
+	}
+
+	/* ══════════════════════════════════════════════════════════════════
+	   Pill Navigation — matches Screener pattern (Urbanist, 36px radius)
+	   ══════════════════════════════════════════════════════════════════ */
+
+	.pw-pill-bar {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 0 20px 12px;
+		flex-shrink: 0;
+	}
+
+	.pw-pill-bar--main {
+		padding: 16px 24px 0;
+		gap: 8px;
+	}
+
+	.pw-pill {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		padding: 8px 16px;
+		border: 1px solid #3a3b44;
+		border-radius: 36px;
+		background: transparent;
+		color: #a1a1aa;
+		font-size: 12px;
+		font-weight: 600;
+		font-family: "Urbanist", sans-serif;
+		cursor: pointer;
+		white-space: nowrap;
+		transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+		letter-spacing: 0.02em;
+	}
+
+	.pw-pill:hover {
+		background: #22232a;
+		border-color: #52525b;
+		color: #fff;
+	}
+
+	.pw-pill--active {
+		background: #0177fb;
+		border-color: transparent;
+		color: #fff;
+	}
+
+	.pw-pill--active:hover {
+		background: #0166d9;
+	}
+
+	/* Main pills are slightly larger */
+	.pw-pill--main {
+		padding: 10px 20px;
+		font-size: 13px;
+	}
+
+	/* ── Error toast ── */
+	.pw-error-toast {
+		position: fixed;
+		bottom: 24px;
+		right: 24px;
+		z-index: 50;
+		display: flex;
+		max-width: 384px;
+		align-items: flex-start;
+		gap: 12px;
+		border-radius: 16px;
+		border: 1px solid rgba(239, 68, 68, 0.3);
+		background: rgba(69, 10, 10, 0.9);
+		padding: 12px 16px;
+		font-size: 14px;
+		color: #fecaca;
+		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+		backdrop-filter: blur(8px);
+	}
+
+	.pw-error-text {
+		flex: 1;
+	}
+
+	.pw-error-label {
+		color: #fee2e2;
+	}
+
+	.pw-error-close {
+		flex-shrink: 0;
+		color: #f87171;
+		background: none;
+		border: none;
+		cursor: pointer;
+		font-size: 18px;
+	}
+
+	.pw-error-close:hover {
+		color: #fecaca;
+	}
+</style>
