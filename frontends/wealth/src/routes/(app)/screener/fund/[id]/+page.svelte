@@ -415,7 +415,7 @@
 					<tbody>
 						{#each share_classes as sc}
 							<tr class="border-t border-[var(--ii-border-subtle)] hover:bg-[var(--ii-surface-highlight)]">
-								<td class="px-4 py-2.5 text-sm text-[var(--ii-text-primary)]">{sc.class_id || "Primary"}</td>
+								<td class="px-4 py-2.5 text-sm text-[var(--ii-text-primary)]">{sc.class_name || sc.series_name || sc.class_id || "Primary"}</td>
 								<td class="px-4 py-2.5">
 									<code class="text-xs font-[family-name:var(--ii-font-mono)] bg-[var(--ii-surface-alt)] px-1.5 py-0.5 rounded text-[var(--ii-text-primary)]">
 										{sc.ticker || "\u2014"}

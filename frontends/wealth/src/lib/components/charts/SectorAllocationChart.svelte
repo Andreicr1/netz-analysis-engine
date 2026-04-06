@@ -130,6 +130,12 @@
 				axisLabel: {
 					color: "var(--ii-text-muted, #71717a)",
 					fontSize: 11,
+					formatter(val: string) {
+						const d = new Date(val);
+						if (isNaN(d.getTime())) return val;
+						return `${d.toLocaleString("en", { month: "short" })} ${d.getFullYear()}`;
+					},
+					rotate: 0,
 				},
 				axisTick: { show: false },
 			},

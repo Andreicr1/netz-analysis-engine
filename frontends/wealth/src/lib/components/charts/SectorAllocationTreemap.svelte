@@ -75,10 +75,13 @@
 					breadcrumb: { show: false },
 					label: {
 						show: true,
-						formatter: "{b}",
+						formatter(params: any) {
+							return `${params.name}\n${params.value.toFixed(1)}%`;
+						},
 						fontSize: 13,
 						fontWeight: 500,
 						color: "#fff",
+						lineHeight: 18,
 						textShadowColor: "rgba(0,0,0,0.4)",
 						textShadowBlur: 3,
 					},

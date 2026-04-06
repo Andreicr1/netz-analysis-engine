@@ -596,6 +596,8 @@ def gather_fund_enrichment(
         for sc in class_rows:
             result["share_classes"].append({
                 "class_id": sc.class_id,
+                "class_name": sc.class_name,
+                "series_name": sc.series_name,
                 "ticker": sc.ticker,
                 # XBRL OEF stores _pct fields as pure fractions (0.007 = 0.7%).
                 # Keep as fractions — frontend formatPercent() handles display.
