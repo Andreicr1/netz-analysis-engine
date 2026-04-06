@@ -1029,9 +1029,24 @@ async def run_global_risk_metrics(as_of_date: date | None = None) -> dict[str, i
                     for _, metrics in computed:
                         metrics["cvar_95_conditional"] = None
 
-                # Pass 1.7: compute manager_score from base metrics + momentum
-                for _, metrics in computed:
-                    _score_metrics(metrics)
+                # Pass 1.7: compute manager_score from base metrics + momentum + expense ratio
+                # Batch-fetch expense ratios from mv_unified_funds via ticker
+                batch_tickers = [f.ticker for f in batch if f.ticker]
+                er_map: dict[str, float] = {}
+                if batch_tickers:
+                    placeholders = ", ".join(f"'{t}'" for t in batch_tickers)
+                    er_result = await db.execute(text(f"""
+                        SELECT ticker, expense_ratio_pct
+                        FROM mv_unified_funds
+                        WHERE ticker IN ({placeholders})
+                          AND expense_ratio_pct IS NOT NULL
+                    """))
+                    for row in er_result.mappings().all():
+                        er_map[row["ticker"]] = float(row["expense_ratio_pct"])
+
+                for fund, metrics in computed:
+                    er = er_map.get(fund.ticker) if fund.ticker else None
+                    _score_metrics(metrics, expense_ratio_pct=er)
 
                 # Upsert batch — no DTW drift, no org_id
                 try:
