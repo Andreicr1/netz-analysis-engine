@@ -5,6 +5,8 @@ import type { AttributionResult, StrategyDriftAlert, CorrelationRegimeResult } f
 
 export const load: PageServerLoad = async ({ parent }) => {
 	const { token } = await parent();
+	if (!token) return { attribution: null, driftAlerts: [], correlationRegime: null };
+
 	const api = createServerApiClient(token);
 
 	const [attribution, driftAlerts, correlationRegime] = await Promise.all([
