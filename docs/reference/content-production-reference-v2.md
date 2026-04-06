@@ -1,10 +1,10 @@
 # Content Production — Referencia Tecnica
 
 > Status: **Implementado** (2026-04-01) | Feature flag: `FEATURE_WEALTH_CONTENT`
-> Migration: `wealth_content` table (org-scoped, RLS)
-> Concorrencia: `asyncio.Semaphore(3)` — max 3 geracoes simultaneas
+> Migration: `wealth_content` table (org-scoped, RLS) + `wealth_generated_reports` (org-scoped, RLS)
+> Concorrencia: `asyncio.Semaphore(4)` content geral + `Semaphore(3)` DD + `Semaphore(2)` Long-Form/Monthly
 > SSE: Redis pub/sub via `app.core.jobs.tracker`
-> Atualizado: 2026-04-05 — v2: Adicionadas secoes 5.4/5.5 (DD Report + Long-Form Report vector search), expandida tabela de embedding usage por engine
+> Atualizado: 2026-04-05 — v3: Adicionada secao 13 (Unified Portfolio Report Endpoints), secoes 5.4/5.5 (DD Report + Long-Form Report vector search), secao 14 (Portfolio Workspace integration)
 
 ---
 
@@ -619,3 +619,290 @@ Renderizados via `PromptRegistry` com `SandboxedEnvironment`. **Nunca expostos e
 | `frontends/wealth/src/routes/(app)/content/[id]/+page.svelte` | Detalhe com markdown reader, approve, download |
 | `frontends/wealth/src/lib/types/content.ts` | Types + helpers (label, color) |
 | `frontends/wealth/src/lib/utils/render-markdown.ts` | Markdown → HTML sanitizado (DOMPurify) |
+
+---
+
+## 13. Unified Portfolio Report Endpoints
+
+> Adicionado: 2026-04-05 — Integra report generation no Portfolio Workspace via endpoints unificados com SSE progress tracking.
+
+### 13.1 Motivacao
+
+Os endpoints originais de geracao de reports estao espalhados em route files separados (`fact_sheets.py`, `long_form_reports.py`, `monthly_report.py`). O Portfolio Workspace precisa de uma API unificada para:
+- Listar todos os reports de um portfolio em um unico request
+- Disparar geracao de qualquer tipo de report via um unico endpoint
+- Acompanhar progresso via SSE com stages granulares
+
+### 13.2 Modelo de Dados — `wealth_generated_reports`
+
+```
+backend/app/domains/wealth/models/generated_report.py
+```
+
+Tabela persistente (desacoplada de Redis TTL) para registro permanente de PDFs gerados:
+
+| Coluna | Tipo | Nullable | Descricao |
+|--------|------|----------|-----------|
+| `id` | UUID PK | N | `uuid.uuid4()` |
+| `organization_id` | UUID | N | Tenant (RLS via `OrganizationScopedMixin`) |
+| `portfolio_id` | UUID | N | Portfolio alvo (indexado) |
+| `report_type` | VARCHAR(50) | N | `fact_sheet` / `long_form_dd` / `monthly_report` (indexado) |
+| `job_id` | VARCHAR(128) | N | Identificador unico do job (unique constraint) |
+| `storage_path` | VARCHAR(800) | N | Path completo no StorageClient (R2 prod, LocalStorage dev) |
+| `display_filename` | VARCHAR(300) | N | Nome legivel para Content-Disposition |
+| `generated_at` | TIMESTAMPTZ | N | `server_default=now()` |
+| `generated_by` | VARCHAR(128) | S | Actor ID do criador |
+| `size_bytes` | INTEGER | S | Tamanho do PDF em bytes |
+| `status` | VARCHAR(20) | N | `completed` / `failed` |
+
+### 13.3 Schemas Pydantic
+
+```
+backend/app/domains/wealth/schemas/generated_report.py
+```
+
+| Schema | Uso | Campos chave |
+|--------|-----|--------------|
+| `ReportGenerateRequest` | Body do POST trigger | `report_type` (Literal), `as_of_date`, `language`, `format` |
+| `ReportGenerateResponse` | Response do POST | `job_id`, `portfolio_id`, `report_type`, `status` |
+| `ReportHistoryItem` | Item da listagem | Todos os campos da tabela via `from_attributes=True` |
+| `ReportHistoryResponse` | Response do GET list | `portfolio_id`, `reports[]`, `total` |
+
+`ReportType = Literal["fact_sheet", "long_form_dd", "monthly_report"]`
+
+### 13.4 Endpoints Unificados
+
+```
+Router: backend/app/domains/wealth/routes/model_portfolios.py
+Prefix: /model-portfolios (tags: model-portfolios)
+```
+
+#### `GET /model-portfolios/{portfolio_id}/reports`
+
+Lista historico de reports do portfolio. Consulta `WealthGeneratedReport` (apenas `status="completed"`).
+
+| Param | Tipo | Default | Descricao |
+|-------|------|---------|-----------|
+| `report_type` | query | — | Filtro opcional: `fact_sheet`, `long_form_dd`, `monthly_report` |
+| `limit` | query | 50 | Max resultados (1-200) |
+
+**Response:** `ReportHistoryResponse` (JSON)
+
+#### `POST /model-portfolios/{portfolio_id}/reports/generate`
+
+Dispara geracao em background. Requer `INVESTMENT_TEAM` ou `ADMIN`.
+
+| Param | Tipo | Default | Descricao |
+|-------|------|---------|-----------|
+| body | `ReportGenerateRequest` | — | `report_type` (required), `as_of_date`, `language`, `format` |
+
+**Preconditions:**
+- Portfolio existe
+- `fund_selection_schema` presente (senao → 400)
+- Role IC/Admin
+
+**Response:** `{"job_id": str, "portfolio_id": str, "report_type": str, "status": "accepted"}` (202 Accepted)
+
+**Job ID prefixes:**
+- `fs-{portfolio_id}-{hex8}` — fact_sheet
+- `lfr-{portfolio_id}-{hex8}` — long_form_dd
+- `mcr-{portfolio_id}-{hex8}` — monthly_report
+
+#### `GET /model-portfolios/{portfolio_id}/reports/stream/{job_id}`
+
+SSE stream de progresso. Tenant-isolated via `verify_job_owner()`.
+
+### 13.5 Pipeline de Geracao em Background
+
+A funcao `_run_report_generation()` despacha para handlers especificos:
+
+```
+POST /reports/generate
+  → asyncio.create_task(_run_report_generation)
+  → publish_event("progress", stage="QUEUED", pct=0)
+  → dispatch por report_type:
+      fact_sheet  → _generate_fact_sheet_job()
+      long_form_dd → _generate_long_form_job()
+      monthly_report → _generate_monthly_report_job()
+  → publish_terminal_event("done" | "error")
+```
+
+**Stages SSE publicados:**
+
+| Stage | Descricao | pct aprox |
+|-------|-----------|-----------|
+| `QUEUED` | Job aceito, aguardando slot | 0% |
+| `FETCHING_MARKET_DATA` | Carregando portfolio + dados de mercado | 10% |
+| `RUNNING_QUANT_ENGINE` | Computando metricas quant e atribuicao | 25% |
+| `SYNTHESIZING_LLM` | Gerando capitulos via LLM (long-form: per-chapter events) | 25-65% |
+| `GENERATING_PDF` | Renderizando PDF (Playwright/ReportLab) | 70% |
+| `STORING_PDF` | Upload para StorageClient (R2/LocalStorage) | 85% |
+| `COMPLETED` | Terminal (via "done" event) | 100% |
+
+**Backpressure:** Cada tipo usa o semaphore compartilhado do sistema existente:
+- Fact Sheet: `require_content_slot()` (Semaphore(4) do `common.py`)
+- Long-Form DD: Session + engine async (sem semaphore adicional no unified — o original tem `Semaphore(2)`)
+- Monthly Report: Session + engine async (mesmo padrao)
+
+**Persistencia:** Cada handler:
+1. Gera PDF via engine especifico
+2. Upload para StorageClient (R2 prod, LocalStorage dev)
+3. Persiste `WealthGeneratedReport` record (sobrevive Redis TTL)
+4. Publica terminal SSE event com `storage_path` e `size_bytes`
+
+### 13.6 Relacao com Endpoints Originais
+
+Os endpoints unificados **coexistem** com os originais. Nao substituem:
+
+| Original | Unified | Nota |
+|----------|---------|------|
+| `POST /fact-sheets/model-portfolios/{id}` | `POST /model-portfolios/{id}/reports/generate` (type=fact_sheet) | Original retorna inline; unified retorna job_id |
+| `POST /reporting/.../long-form-report` | `POST /model-portfolios/{id}/reports/generate` (type=long_form_dd) | Ambos criam WealthGeneratedReport |
+| `POST /reporting/.../monthly-report` | `POST /model-portfolios/{id}/reports/generate` (type=monthly_report) | Ambos criam WealthGeneratedReport |
+| `GET /reporting/.../history` (por tipo) | `GET /model-portfolios/{id}/reports` (todos os tipos) | Unified agrega todos em uma query |
+
+---
+
+## 14. Portfolio Workspace — Reporting Integration
+
+> Adicionado: 2026-04-05 — Frontend: store Svelte 5, componentes ReportVault/ReportGeneratorCard/JobProgressTracker.
+
+### 14.1 Store: `portfolio-reports.svelte.ts`
+
+```
+frontends/wealth/src/lib/stores/portfolio-reports.svelte.ts
+```
+
+**State (Svelte 5 runes):**
+- `$state<ReportHistoryItem[]>` — historico de reports, seeded do SSR
+- `$state<ActiveJob[]>` — jobs em andamento com SSE tracking
+
+**Interface publica:**
+
+| Propriedade/Metodo | Tipo | Descricao |
+|--------------------|------|-----------|
+| `reports` | `ReportHistoryItem[]` | Historico de reports (reativo) |
+| `reportsLoading` | `boolean` | Loading state do fetch |
+| `reportsError` | `string \| null` | Erro do ultimo fetch |
+| `refreshReports()` | `() => void` | Refetch manual |
+| `activeJobs` | `ActiveJob[]` | Jobs em andamento |
+| `hasActiveJobs` | `boolean` | Tem algum job "running" |
+| `triggerGeneration(req)` | `(ReportGenerateRequest) => Promise<string \| null>` | Dispara geracao + conecta SSE |
+| `destroy()` | `() => void` | Aborta todas as SSE connections |
+
+**SSE Lifecycle:**
+1. `triggerGeneration()` faz `POST /reports/generate` → recebe `job_id`
+2. Cria `ActiveJob` no array com `stage=QUEUED`, `status=running`
+3. Conecta SSE via `fetch()` + `ReadableStream` (auth headers)
+4. Parseia eventos line-by-line (manual buffer management)
+5. `handleSSEMessage()` atualiza `ActiveJob` reativo
+6. On `done` → marca completed + `fetchReports()` para refresh
+7. On `error` → marca failed com mensagem
+8. `destroy()` → `AbortController.abort()` em todas as connections
+
+### 14.2 Componentes UI
+
+#### `ReportVault.svelte`
+
+```
+frontends/wealth/src/lib/components/model-portfolio/ReportVault.svelte
+```
+
+Tabela institucional de todos os reports gerados:
+- **Filtro por tipo:** dropdown (All, Fact Sheets, Long-Form DD, Monthly Reports)
+- **Colunas:** Type (badge colorido), Filename, Generated At, Size, Download
+- **Badges:** `rv-badge--factsheet` (info), `rv-badge--longform` (success), `rv-badge--monthly` (warning)
+- **Download:** `api.getBlob()` por endpoint especifico do tipo (fact-sheet, long-form, monthly)
+
+#### `ReportGeneratorCard.svelte`
+
+```
+frontends/wealth/src/lib/components/model-portfolio/ReportGeneratorCard.svelte
+```
+
+Seletor de tipo de report + trigger:
+- **Report Type:** select com 3 opcoes (labels de `REPORT_TYPE_LABELS`)
+- **Language:** PT/EN toggle
+- **Format:** Executive/Institutional (visivel apenas para fact_sheet)
+- **Generate button:** disabled quando `!canGenerate || generating`
+- **Descricao dinamica** por tipo selecionado
+
+#### `JobProgressTracker.svelte`
+
+```
+frontends/wealth/src/lib/components/model-portfolio/JobProgressTracker.svelte
+```
+
+Visualizacao step-based do pipeline de geracao:
+- **7 stages:** QUEUED → FETCHING_MARKET_DATA → RUNNING_QUANT_ENGINE → SYNTHESIZING_LLM → GENERATING_PDF → STORING_PDF → COMPLETED
+- **Dots com estados:** completed (green), active (blue pulse animation), pending (gray), failed (red)
+- **Progress bar:** width animado por `pct` (transition 300ms)
+- **Message:** texto descritivo do stage atual (long-form: per-chapter updates)
+- **Error display:** mensagem de erro em vermelho quando `status=failed`
+
+### 14.3 Integracao no Portfolio Workspace
+
+```
+frontends/wealth/src/routes/(app)/portfolio/models/[portfolioId]/+page.svelte
+frontends/wealth/src/routes/(app)/portfolio/models/[portfolioId]/+page.server.ts
+```
+
+**Server load:** Adicionado `GET /model-portfolios/{id}/reports` ao `Promise.all()` do `+page.server.ts`. Retorna `unifiedReports: ReportHistoryResponse` como prop.
+
+**Page integration:** `createPortfolioReportsStore()` inicializado no `onMount()` junto com o `PortfolioWorkspaceStore`. O store recebe `initialReports` do SSR para hydration imediata. `destroy()` chamado no cleanup function do `onMount`.
+
+**Layout no workbench:** Secao "Reporting & Documentation" posicionada entre Drift/Rebalance e o painel legado `GeneratedReportsPanel` (mantido por backward compatibility):
+
+```
+1. JobProgressTracker (jobs ativos — SSE progress)
+2. ReportGeneratorCard (seletor + trigger)
+3. ReportVault (tabela de historico unificada)
+4. GeneratedReportsPanel (legacy — monthly + long-form com triggers simples)
+```
+
+### 14.4 Tipos TypeScript
+
+```
+frontends/wealth/src/lib/types/model-portfolio.ts
+```
+
+**Tipos adicionados:**
+
+| Tipo | Descricao |
+|------|-----------|
+| `ReportType` | `"fact_sheet" \| "long_form_dd" \| "monthly_report"` |
+| `ReportStage` | 7 stages do pipeline SSE |
+| `ReportHistoryItem` | Item da listagem unificada |
+| `ReportHistoryResponse` | Response do GET list |
+| `ReportGenerateRequest` | Body do POST trigger |
+| `ReportGenerateResponse` | Response do POST |
+| `ReportProgressEvent` | Evento SSE "progress" (stage, message, pct, chapter?) |
+| `ReportDoneEvent` | Evento SSE terminal "done" |
+| `ReportErrorEvent` | Evento SSE terminal "error" |
+| `ReportSSEEvent` | Discriminated union dos 3 tipos de evento |
+| `REPORT_TYPE_LABELS` | Map type → label legivel |
+| `REPORT_STAGE_LABELS` | Map stage → label legivel |
+
+### 14.5 Arquivos Adicionados
+
+| Arquivo | Descricao |
+|---------|-----------|
+| `backend/app/domains/wealth/schemas/generated_report.py` | Pydantic schemas do report unificado |
+| `backend/tests/test_portfolio_report_endpoints.py` | 6 schema tests + 7 integration tests |
+| `frontends/wealth/src/lib/stores/portfolio-reports.svelte.ts` | Svelte 5 store com SSE lifecycle |
+| `frontends/wealth/src/lib/components/model-portfolio/ReportVault.svelte` | Tabela institucional de reports |
+| `frontends/wealth/src/lib/components/model-portfolio/ReportGeneratorCard.svelte` | Seletor + trigger de geracao |
+| `frontends/wealth/src/lib/components/model-portfolio/JobProgressTracker.svelte` | Progress tracker SSE step-based |
+
+### 14.6 Testes
+
+```bash
+# Schema unit tests (sem DB)
+python -m pytest backend/tests/test_portfolio_report_endpoints.py -k "not anyio" -v
+
+# Integration tests (requerem DB + Redis)
+python -m pytest backend/tests/test_portfolio_report_endpoints.py -v
+
+# Lint
+python -m ruff check backend/app/domains/wealth/schemas/generated_report.py backend/tests/test_portfolio_report_endpoints.py
+```

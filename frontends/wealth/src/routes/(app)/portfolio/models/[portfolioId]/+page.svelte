@@ -4,7 +4,7 @@
   Bottom: Fund Selection Schema + Fact Sheets.
 -->
 <script lang="ts">
-	import { getContext } from "svelte";
+	import { getContext, onMount, onDestroy } from "svelte";
 	import { invalidateAll } from "$app/navigation";
 	import {
 		PageHeader, StatusBadge, EmptyState, ActionButton, ConsequenceDialog,
@@ -17,6 +17,9 @@
 	import type { ModelPortfolio, TrackRecord, InstrumentWeight, BacktestResult, BacktestFold, StressResult, StressScenario, PortfolioView, ParametricStressResult, OverlapResult, CusipExposure, SectorExposure } from "$lib/types/model-portfolio";
 	import type { UniverseAsset } from "$lib/types/universe";
 	import GeneratedReportsPanel from "$lib/components/model-portfolio/GeneratedReportsPanel.svelte";
+	import ReportVault from "$lib/components/model-portfolio/ReportVault.svelte";
+	import ReportGeneratorCard from "$lib/components/model-portfolio/ReportGeneratorCard.svelte";
+	import JobProgressTracker from "$lib/components/model-portfolio/JobProgressTracker.svelte";
 	import ICViewsPanel from "$lib/components/model-portfolio/ICViewsPanel.svelte";
 	import ConstructionAdvisor from "$lib/components/model-portfolio/ConstructionAdvisor.svelte";
 	import ScoreBreakdownPopover from "$lib/components/model-portfolio/ScoreBreakdownPopover.svelte";
@@ -26,7 +29,12 @@
 	import BacktestEquityCurve from "$lib/components/charts/BacktestEquityCurve.svelte";
 	import { instrumentTypeLabel, instrumentTypeColor } from "$lib/types/universe";
 	import { scenarioLabel, profileColor, blockLabel, optimizerStatusLabel } from "$lib/types/model-portfolio";
-	import type { GeneratedReport } from "$lib/types/model-portfolio";
+	import type { GeneratedReport, ReportHistoryResponse, ReportGenerateRequest } from "$lib/types/model-portfolio";
+	import DriftGauge from "$lib/components/model-portfolio/DriftGauge.svelte";
+	import RebalancePreview from "$lib/components/model-portfolio/RebalancePreview.svelte";
+	import StrategyDriftAlerts from "$lib/components/model-portfolio/StrategyDriftAlerts.svelte";
+	import { createPortfolioWorkspace, type PortfolioWorkspaceStore } from "$lib/stores/portfolio-workspace.svelte";
+	import { createPortfolioReportsStore, type PortfolioReportsStore } from "$lib/stores/portfolio-reports.svelte";
 
 	import type { RiskStore } from "$lib/stores/risk-store.svelte";
 	const riskStore = getContext<RiskStore>("netz:riskStore");
@@ -34,6 +42,42 @@
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 
 	let { data }: { data: PageData } = $props();
+
+	// ── Portfolio Workspace Store (drift, rebalance, strategy alerts) ────
+	let workspace: PortfolioWorkspaceStore | null = $state(null);
+	let rebalanceDrawerOpen = $state(false);
+
+	// ── Portfolio Reports Store (report vault, generation, SSE jobs) ─────
+	let reportsStore: PortfolioReportsStore | null = $state(null);
+	let reportGenerating = $state(false);
+
+	onMount(() => {
+		const ws = createPortfolioWorkspace({
+			portfolioId: data.portfolioId as string,
+			getToken,
+		});
+		workspace = ws;
+		ws.startPolling();
+
+		const rs = createPortfolioReportsStore({
+			portfolioId: data.portfolioId as string,
+			getToken,
+			initialReports: (data.unifiedReports as ReportHistoryResponse)?.reports ?? [],
+		});
+		reportsStore = rs;
+
+		return () => {
+			ws.destroy();
+			rs.destroy();
+		};
+	});
+
+	async function handleReportGenerate(req: ReportGenerateRequest) {
+		if (!reportsStore) return;
+		reportGenerating = true;
+		await reportsStore.triggerGeneration(req);
+		reportGenerating = false;
+	}
 
 	let portfolio = $derived(data.portfolio as ModelPortfolio);
 	let trackRecord = $derived(data.trackRecord as TrackRecord | null);
@@ -927,8 +971,69 @@
 	</section>
 
 	<!-- ═══════════════════════════════════════════════════════════════════ -->
-	<!-- GENERATED REPORTS (Monthly + Long-Form DD)                         -->
+	<!-- DRIFT & REBALANCE (Portfolio Workspace)                            -->
 	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	{#if workspace && portfolio.fund_selection_schema}
+		<div class="mp-charts">
+			<DriftGauge
+				drift={workspace.drift}
+				loading={workspace.driftLoading}
+				error={workspace.driftError}
+				onRefresh={() => workspace?.refreshDrift()}
+				onRebalance={() => {
+					// Build current_holdings from fund_selection + live prices for rebalance preview
+					const fs = portfolio.fund_selection_schema?.funds ?? [];
+					const holdings = fs.map((f: { instrument_id: string; weight: number }) => ({
+						instrument_id: f.instrument_id,
+						quantity: f.weight * 1000, // Notional quantity from weight * AUM proxy
+						current_price: 1.0, // Backend uses target weights when no live price
+					}));
+					workspace?.requestRebalancePreview(holdings);
+					rebalanceDrawerOpen = true;
+				}}
+			/>
+			<StrategyDriftAlerts
+				alerts={workspace.strategyAlerts}
+				loading={workspace.strategyAlertsLoading}
+				error={workspace.strategyAlertsError}
+				onRefresh={() => workspace?.refreshStrategyAlerts()}
+			/>
+		</div>
+	{/if}
+
+	<RebalancePreview
+		preview={workspace?.rebalancePreview ?? null}
+		loading={workspace?.rebalanceLoading ?? false}
+		error={workspace?.rebalanceError ?? null}
+		open={rebalanceDrawerOpen}
+		onclose={() => (rebalanceDrawerOpen = false)}
+	/>
+
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	<!-- REPORTING & DOCUMENTATION                                         -->
+	<!-- ═══════════════════════════════════════════════════════════════════ -->
+	{#if reportsStore}
+		<!-- Active Jobs (SSE progress tracking) -->
+		<JobProgressTracker jobs={reportsStore.activeJobs} />
+
+		<!-- Report Generator -->
+		<ReportGeneratorCard
+			canGenerate={canEdit}
+			generating={reportGenerating}
+			onGenerate={handleReportGenerate}
+		/>
+
+		<!-- Document Vault (unified report history) -->
+		<ReportVault
+			{portfolioId}
+			reports={reportsStore.reports}
+			loading={reportsStore.reportsLoading}
+			error={reportsStore.reportsError}
+			onRefresh={() => reportsStore?.refreshReports()}
+		/>
+	{/if}
+
+	<!-- Legacy panels (kept for backward compatibility until fully migrated) -->
 	<GeneratedReportsPanel
 		{portfolioId}
 		portfolioName={portfolio.display_name}

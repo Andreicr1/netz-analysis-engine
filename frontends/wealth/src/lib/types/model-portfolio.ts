@@ -204,6 +204,96 @@ export interface GeneratedReport {
 	size_bytes: number | null;
 }
 
+// ── Unified Report Endpoints ──────────────────────────────────────────
+
+export type ReportType = "fact_sheet" | "long_form_dd" | "monthly_report";
+
+export interface ReportHistoryItem {
+	id: string;
+	portfolio_id: string;
+	report_type: ReportType;
+	job_id: string;
+	display_filename: string;
+	generated_at: string;
+	size_bytes: number | null;
+	status: string;
+}
+
+export interface ReportHistoryResponse {
+	portfolio_id: string;
+	reports: ReportHistoryItem[];
+	total: number;
+}
+
+export interface ReportGenerateRequest {
+	report_type: ReportType;
+	as_of_date?: string;
+	language?: "pt" | "en";
+	format?: "executive" | "institutional";
+}
+
+export interface ReportGenerateResponse {
+	job_id: string;
+	portfolio_id: string;
+	report_type: string;
+	status: string;
+}
+
+// ── SSE Progress Events ───────────────────────────────────────────────
+
+export type ReportStage =
+	| "QUEUED"
+	| "FETCHING_MARKET_DATA"
+	| "RUNNING_QUANT_ENGINE"
+	| "SYNTHESIZING_LLM"
+	| "GENERATING_PDF"
+	| "STORING_PDF"
+	| "COMPLETED";
+
+export interface ReportProgressEvent {
+	stage: ReportStage;
+	message: string;
+	pct: number;
+	/** Present for long-form DD: per-chapter updates */
+	chapter?: string;
+	chapter_status?: string;
+}
+
+export interface ReportDoneEvent {
+	status: string;
+	report_type: string;
+	storage_path?: string;
+	size_bytes?: number;
+	chapters_completed?: number;
+	total_chapters?: number;
+	error?: string | null;
+}
+
+export interface ReportErrorEvent {
+	error: string;
+}
+
+export type ReportSSEEvent =
+	| { event: "progress"; data: ReportProgressEvent }
+	| { event: "done"; data: ReportDoneEvent }
+	| { event: "error"; data: ReportErrorEvent };
+
+export const REPORT_TYPE_LABELS: Record<ReportType, string> = {
+	fact_sheet: "Fact Sheet",
+	long_form_dd: "Long-Form DD Report",
+	monthly_report: "Monthly Report",
+};
+
+export const REPORT_STAGE_LABELS: Record<ReportStage, string> = {
+	QUEUED: "Queued",
+	FETCHING_MARKET_DATA: "Fetching Market Data",
+	RUNNING_QUANT_ENGINE: "Running Quant Engine",
+	SYNTHESIZING_LLM: "Synthesizing with AI",
+	GENERATING_PDF: "Generating PDF",
+	STORING_PDF: "Storing PDF",
+	COMPLETED: "Completed",
+};
+
 // ── Rebalance Preview ─────────────────────────────────────────────────
 
 export interface HoldingInput {
