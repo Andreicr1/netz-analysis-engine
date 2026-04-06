@@ -8,7 +8,7 @@
   import { getContext } from "svelte";
   import * as Sheet from "@investintell/ui/components/ui/sheet";
   import { goto } from "$app/navigation";
-  import { ExternalLink, Loader2, Sparkles } from "lucide-svelte";
+  import { X, ExternalLink, Loader2, Sparkles } from "lucide-svelte";
   import { formatAUM } from "@investintell/ui";
   import { createClientApiClient } from "$lib/api/client";
   import type { UnifiedFundItem, UnifiedCatalogPage, ManagerCatalogItem } from "$lib/types/catalog";
@@ -124,19 +124,24 @@
   function badgeStyle(colorClass: string): string {
     return BADGE_COLORS[colorClass] ?? "color:#a1a1aa;background:rgba(161,161,170,0.08);border-color:rgba(161,161,170,0.15)";
   }
+
+  function closePanel() {
+    open = false;
+  }
 </script>
 
 <Sheet.Root bind:open>
   <Sheet.Content
     side="right"
+    showCloseButton={false}
     class="!w-[80vw] !max-w-[80vw] !gap-0 !p-0 flex flex-col overflow-hidden"
     style="width:80vw!important;max-width:80vw!important;background:#111215!important;color:#fafafa!important;border-left:1px solid rgba(255,255,255,0.1)"
   >
     {#if manager}
-      <!-- ── Header ── -->
-      <div style="padding:32px 40px 24px;border-bottom:1px solid rgba(255,255,255,0.06);flex-shrink:0">
-        <div style="margin-bottom:12px">
-          <Sheet.Title style="font-size:1.75rem;font-weight:700;letter-spacing:-0.02em;color:#fafafa;font-family:Urbanist,sans-serif">
+      <!-- ── Sticky Header ── -->
+      <div style="position:sticky;top:0;z-index:50;display:flex;align-items:center;justify-content:space-between;padding:24px 32px;background:rgba(17,18,21,0.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid rgba(255,255,255,0.05);flex-shrink:0">
+        <div>
+          <Sheet.Title style="font-size:1.875rem;font-weight:700;letter-spacing:-0.02em;color:#fafafa;font-family:Urbanist,sans-serif">
             {formatName(manager.manager_name)}
           </Sheet.Title>
           <Sheet.Description style="display:flex;align-items:center;gap:8px;margin-top:6px;font-size:0.8125rem;color:#71717a;font-family:Urbanist,sans-serif">
@@ -152,15 +157,24 @@
               <span>{manager.state ?? ""}{manager.state && manager.country ? ", " : ""}{manager.country ?? ""}</span>
             {/if}
           </Sheet.Description>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">
+            {#each manager.fund_types ?? [] as ft}
+              {@const b = badgeFor(ft)}
+              <span
+                style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.04em;border:1px solid;{badgeStyle(b.colorClass)}"
+              >{b.label}</span>
+            {/each}
+          </div>
         </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          {#each manager.fund_types ?? [] as ft}
-            {@const b = badgeFor(ft)}
-            <span
-              style="display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.04em;border:1px solid;{badgeStyle(b.colorClass)}"
-            >{b.label}</span>
-          {/each}
-        </div>
+        <button
+          onclick={closePanel}
+          style="display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:999px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:#fafafa;font-size:0.8125rem;font-weight:500;font-family:Urbanist,sans-serif;cursor:pointer;transition:background 120ms ease;flex-shrink:0"
+          onmouseenter={(e) => (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.08)'}
+          onmouseleave={(e) => (e.currentTarget as HTMLElement).style.background = 'transparent'}
+        >
+          <X size={14} />
+          Close
+        </button>
       </div>
 
       <!-- ── Fund Table ── -->
@@ -179,12 +193,12 @@
             <table style="width:100%;border-collapse:collapse">
               <thead>
                 <tr style="border-bottom:1px solid rgba(255,255,255,0.08)">
-                  <th style="color:#71717a;font-size:0.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;height:44px;padding:0 16px 0 40px;text-align:left;font-family:Urbanist,sans-serif">Fund Name</th>
-                  <th style="color:#71717a;font-size:0.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;height:44px;padding:0 16px;text-align:left;font-family:Urbanist,sans-serif;width:100px">Ticker</th>
-                  <th style="color:#71717a;font-size:0.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;height:44px;padding:0 16px;text-align:left;font-family:Urbanist,sans-serif;width:80px">Type</th>
-                  <th style="color:#71717a;font-size:0.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;height:44px;padding:0 16px;text-align:left;font-family:Urbanist,sans-serif;width:160px">Strategy</th>
-                  <th style="color:#71717a;font-size:0.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;height:44px;padding:0 16px;text-align:right;font-family:Urbanist,sans-serif;width:140px">GAV / AUM</th>
-                  <th style="width:80px"></th>
+                  <th style="color:#71717a;font-size:0.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;height:40px;padding:0 16px 0 40px;text-align:left;font-family:Urbanist,sans-serif;position:sticky;top:0;background:rgba(17,18,21,0.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);z-index:5">Fund Name</th>
+                  <th style="color:#71717a;font-size:0.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;height:40px;padding:0 16px;text-align:left;font-family:Urbanist,sans-serif;width:100px;position:sticky;top:0;background:rgba(17,18,21,0.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);z-index:5">Ticker</th>
+                  <th style="color:#71717a;font-size:0.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;height:40px;padding:0 16px;text-align:left;font-family:Urbanist,sans-serif;width:80px;position:sticky;top:0;background:rgba(17,18,21,0.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);z-index:5">Type</th>
+                  <th style="color:#71717a;font-size:0.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;height:40px;padding:0 16px;text-align:left;font-family:Urbanist,sans-serif;width:160px;position:sticky;top:0;background:rgba(17,18,21,0.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);z-index:5">Strategy</th>
+                  <th style="color:#71717a;font-size:0.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;height:40px;padding:0 16px;text-align:right;font-variant-numeric:tabular-nums;font-family:Urbanist,sans-serif;width:140px;position:sticky;top:0;background:rgba(17,18,21,0.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);z-index:5">GAV / AUM</th>
+                  <th style="width:80px;position:sticky;top:0;background:rgba(17,18,21,0.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);z-index:5"></th>
                 </tr>
               </thead>
               <tbody>
@@ -197,22 +211,22 @@
                     onmouseleave={(e) => (e.currentTarget as HTMLElement).style.background = i % 2 === 1 ? 'rgba(255,255,255,0.015)' : ''}
                     onclick={() => openFactSheet(fund)}
                   >
-                    <td style="padding:12px 16px 12px 40px;font-family:Urbanist,sans-serif;font-size:0.8125rem;vertical-align:middle">
-                      <span style="color:#fafafa;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:400px">{fund.name}</span>
+                    <td style="padding:8px 16px 8px 40px;font-family:Urbanist,sans-serif;font-size:0.875rem;vertical-align:middle">
+                      <span style="color:#fafafa;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;max-width:400px">{formatName(fund.name)}</span>
                     </td>
-                    <td style="padding:12px 16px;font-size:0.8125rem;vertical-align:middle">
-                      <span style="font-family:'Geist Mono',monospace;font-size:0.75rem;color:#a1a1aa">{fund.ticker ?? "\u2014"}</span>
+                    <td style="padding:8px 16px;vertical-align:middle">
+                      <span style="font-family:'Geist Mono',monospace;font-size:0.75rem;color:#71717a">{fund.ticker ?? "\u2014"}</span>
                     </td>
-                    <td style="padding:12px 16px;vertical-align:middle">
+                    <td style="padding:8px 16px;vertical-align:middle">
                       <span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.04em;border:1px solid;{badgeStyle(badgeFor(fund.fund_type).colorClass)}">{badgeFor(fund.fund_type).label}</span>
                     </td>
-                    <td style="padding:12px 16px;font-family:Urbanist,sans-serif;font-size:0.8125rem;color:#a1a1aa;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px">
+                    <td style="padding:8px 16px;font-family:Urbanist,sans-serif;font-size:0.8125rem;color:#a1a1aa;vertical-align:middle;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px">
                       {fund.strategy_label ?? "\u2014"}
                     </td>
-                    <td style="padding:12px 16px;text-align:right;font-family:'Geist Mono',monospace;font-weight:600;font-variant-numeric:tabular-nums;color:#fafafa;font-size:0.8125rem;vertical-align:middle">
+                    <td style="padding:8px 16px;text-align:right;font-family:'Geist Mono',monospace;font-weight:600;font-variant-numeric:tabular-nums;color:#fafafa;font-size:0.8125rem;vertical-align:middle">
                       {fund.aum != null ? formatAUM(fund.aum) : "\u2014"}
                     </td>
-                    <td style="padding:12px 16px;text-align:right;vertical-align:middle">
+                    <td style="padding:8px 16px;text-align:right;vertical-align:middle">
                       <button
                         style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:none;border-radius:6px;background:transparent;color:#71717a;cursor:pointer"
                         title="Generate DD Report"

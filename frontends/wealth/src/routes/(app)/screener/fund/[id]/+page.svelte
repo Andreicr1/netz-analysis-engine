@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
 	import { formatCompact, formatPercent, formatDate } from "@investintell/ui";
+	import { UNIVERSE_LABELS } from "$lib/types/catalog";
 	import NavPerformanceChart from "$lib/components/charts/NavPerformanceChart.svelte";
 	import SectorAllocationChart from "$lib/components/charts/SectorAllocationChart.svelte";
 	import SectorAllocationTreemap from "$lib/components/charts/SectorAllocationTreemap.svelte";
@@ -62,7 +63,7 @@
 		<div class="flex items-start justify-between mb-4">
 			<div class="flex flex-col gap-1">
 				<span class="inline-block px-2 py-0.5 bg-[var(--ii-surface-alt)] text-[var(--ii-text-muted)] text-[10px] font-bold rounded tracking-wider uppercase w-fit">
-					{fund.universe.replace("_", " ").toUpperCase()}
+					{UNIVERSE_LABELS[fund.universe as keyof typeof UNIVERSE_LABELS] ?? fund.universe.replace("_", " ").toUpperCase()}
 				</span>
 				{#if fund.manager_name}
 					<span class="text-sm font-semibold text-[var(--ii-text-muted)]">

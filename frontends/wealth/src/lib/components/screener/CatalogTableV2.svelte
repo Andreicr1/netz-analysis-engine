@@ -269,7 +269,7 @@
 
   /* ── Header ── */
   .ct2-thead-row {
-    border-bottom: 1px solid #2a2b33;
+    border-bottom: none;
   }
 
   .ct2-thead-row:hover {
@@ -289,8 +289,11 @@
     text-align: left;
     position: sticky;
     top: 0;
-    background: #141519;
+    background: rgba(20, 21, 25, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     z-index: 10;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   .ct2-th--sortable {
@@ -345,7 +348,7 @@
 
   /* ── Cells ── */
   .ct2-cell {
-    padding: 14px 16px;
+    padding: 12px 16px;
     font-family: "Urbanist", sans-serif;
     font-size: 0.9375rem;
     color: #cbccd1;
@@ -383,7 +386,7 @@
 
   .ct2-manager-name {
     color: #fff;
-    font-weight: 500;
+    font-weight: 600;
     font-size: 1rem;
     white-space: nowrap;
     overflow: hidden;
@@ -442,10 +445,10 @@
   }
 
   .ct2-website-link {
-    color: #0177fb;
+    color: #a1a1aa;
     text-decoration: none;
     font-size: 0.875rem;
-    transition: color 80ms ease;
+    transition: color 120ms ease;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -454,8 +457,7 @@
   }
 
   .ct2-website-link:hover {
-    color: #3b9bff;
-    text-decoration: underline;
+    color: #0177fb;
   }
 
   .ct2-muted {

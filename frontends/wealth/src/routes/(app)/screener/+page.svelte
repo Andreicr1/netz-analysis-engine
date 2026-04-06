@@ -66,6 +66,27 @@
     params.delete("page");
     goto(`/screener?${params.toString()}`);
   }
+
+  // ── Fund Type Quick Toggles ──
+  const FUND_TYPE_PILLS = [
+    { key: "MF", label: "MF" },
+    { key: "HF", label: "HF" },
+    { key: "PE", label: "PE" },
+    { key: "VC", label: "VC" },
+  ] as const;
+
+  let activeFundTypes = $state<Set<string>>(new Set());
+
+  function toggleFundType(key: string) {
+    const next = new Set(activeFundTypes);
+    if (next.has(key)) {
+      next.delete(key);
+    } else {
+      next.add(key);
+    }
+    activeFundTypes = next;
+    // TODO: propagate to backend via URL param once endpoint supports fund_type filter
+  }
 </script>
 
 <svelte:head>
@@ -102,6 +123,19 @@
             {/each}
           </div>
         {/if}
+      </div>
+
+      <!-- Fund Type Quick Toggles -->
+      <div class="scr-toggles">
+        {#each FUND_TYPE_PILLS as pill (pill.key)}
+          <button
+            class="scr-toggle"
+            class:scr-toggle--active={activeFundTypes.has(pill.key)}
+            onclick={() => toggleFundType(pill.key)}
+          >
+            {pill.label}
+          </button>
+        {/each}
       </div>
     </div>
 
@@ -282,6 +316,47 @@
 
   .scr-export:hover {
     background: #1a1b20;
+  }
+
+  /* ── Fund Type Toggles ── */
+  .scr-toggles {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .scr-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px;
+    border: 1px solid #3a3b44;
+    border-radius: 36px;
+    background: transparent;
+    color: #a1a1aa;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: "Urbanist", sans-serif;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+    letter-spacing: 0.02em;
+  }
+
+  .scr-toggle:hover {
+    background: #22232a;
+    border-color: #52525b;
+    color: #fff;
+  }
+
+  .scr-toggle--active {
+    background: #0177fb;
+    border-color: transparent;
+    color: #fff;
+  }
+
+  .scr-toggle--active:hover {
+    background: #0166d9;
   }
 
   /* ── Content ── */
