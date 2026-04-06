@@ -9,9 +9,11 @@
 	import Loader2 from "lucide-svelte/icons/loader-2";
 	import { createClientApiClient } from "$lib/api/client";
 	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import { portfolioDisplayName } from "$lib/constants/blocks";
 	import type { EntityAnalyticsResponse } from "$lib/types/entity-analytics";
 	import type { PeerGroupResult, MonteCarloResult } from "$lib/types/analytics";
 	import type { UniverseAsset } from "$lib/types/universe";
+	import type { ModelPortfolio } from "$lib/types/model-portfolio";
 	import type { PageData } from "./$types";
 
 	import RiskStatisticsGrid from "$lib/components/analytics/entity/RiskStatisticsGrid.svelte";
@@ -29,8 +31,9 @@
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	const api = createClientApiClient(getToken);
 
-	// ── Fund list: portfolio funds (if constructed) or full universe ──
+	// ── Entity lists: model portfolios + portfolio funds ──
 	let instruments = $derived((data.instruments ?? []) as UniverseAsset[]);
+	let portfolios = $derived((data.portfolios ?? []) as ModelPortfolio[]);
 	let portfolioFundIds = $derived(
 		new Set(workspace.funds.map((f) => f.instrument_id))
 	);
@@ -110,10 +113,19 @@
 	<!-- Toolbar: fund selector + window pills -->
 	<div class="adv-toolbar">
 		<select class="adv-select" onchange={handleFundSelect} value={selectedFundId}>
-			<option value="">Select a fund...</option>
-			{#each fundList as inst (inst.instrument_id)}
-				<option value={inst.instrument_id}>{inst.fund_name}</option>
-			{/each}
+			<option value="">Select an entity...</option>
+			{#if portfolios.length > 0}
+				<optgroup label="Model Portfolios">
+					{#each portfolios as mp (mp.id)}
+						<option value={mp.id}>{portfolioDisplayName(mp.display_name)}</option>
+					{/each}
+				</optgroup>
+			{/if}
+			<optgroup label="Funds ({fundList.length})">
+				{#each fundList as inst (inst.instrument_id)}
+					<option value={inst.instrument_id}>{inst.fund_name}</option>
+				{/each}
+			</optgroup>
 		</select>
 
 		{#if selectedFundId}
@@ -130,9 +142,7 @@
 			</div>
 		{/if}
 
-		{#if portfolioFundIds.size > 0}
-			<span class="adv-scope">{fundList.length} portfolio funds</span>
-		{/if}
+		<span class="adv-scope">{portfolios.length} portfolios &middot; {fundList.length} funds</span>
 	</div>
 
 	<!-- Content -->
