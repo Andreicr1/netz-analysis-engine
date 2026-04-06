@@ -12,7 +12,6 @@
 	import { EmptyState, formatPercent } from "@investintell/ui";
 	import { workspace, type UniverseFund } from "$lib/state/portfolio-workspace.svelte";
 	import { blockLabel, BLOCK_GROUPS, blockDisplay, groupDisplay } from "$lib/constants/blocks";
-	import Target from "lucide-svelte/icons/target";
 	import ChevronRight from "lucide-svelte/icons/chevron-right";
 	import Plus from "lucide-svelte/icons/plus";
 	import ExternalLink from "lucide-svelte/icons/external-link";
@@ -181,15 +180,6 @@
 		return result;
 	});
 
-	function formatAssetClass(raw: string | null): string {
-		if (!raw) return "—";
-		return raw.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-	}
-
-	function formatGeo(raw: string | null): string {
-		if (!raw) return "—";
-		return raw.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-	}
 </script>
 
 {#if !workspace.portfolio}
@@ -203,7 +193,6 @@
 	<div class="flex flex-col gap-3 p-5 flex-1 min-h-min">
 		<!-- Header -->
 		<div class="flex items-center gap-2 shrink-0">
-			<Target class="h-4 w-4 text-[#0177fb]" />
 			<span class="text-[15px] font-bold text-white">Fund Selection</span>
 			<span class="text-[12px] text-[#85a0bd] ml-auto">
 				{workspace.funds.length} fund{workspace.funds.length !== 1 ? "s" : ""} allocated
@@ -211,13 +200,10 @@
 		</div>
 
 		<!-- Table Headers -->
-		<div class="grid grid-cols-[16px_1fr_40px_minmax(110px,1.2fr)_65px_65px_60px_24px] gap-1 px-4 py-2 mt-2 shrink-0 text-[10px] font-semibold text-[#85a0bd]/60 uppercase tracking-[0.06em]" style="border-bottom: 1px solid rgba(64, 66, 73, 0.6);">
+		<div class="grid grid-cols-[16px_1fr_50px_70px_24px] gap-1 px-4 py-2 mt-2 shrink-0 text-[10px] font-semibold text-[#85a0bd]/60 uppercase tracking-[0.06em]" style="border-bottom: 1px solid rgba(64, 66, 73, 0.6);">
 			<span></span>
 			<span>Fund</span>
 			<span class="text-right">Score</span>
-			<span>Block</span>
-			<span>Class</span>
-			<span>Geo</span>
 			<span class="text-right">Weight</span>
 			<span></span>
 		</div>
@@ -295,14 +281,14 @@
 											{#each block.funds as fund, i (fund.instrument_id)}
 												{@const uniFund = workspace.universe.find(u => u.instrument_id === fund.instrument_id)}
 												<div
-													class="grid grid-cols-[16px_1fr_40px_minmax(110px,1.2fr)_65px_65px_60px_24px] gap-1 items-center px-3 py-1.5 transition-colors duration-100 group hover:bg-white/[0.03]"
+													class="grid grid-cols-[16px_1fr_50px_70px_24px] gap-1 items-center px-3 py-1.5 transition-colors duration-100 group hover:bg-white/[0.03]"
 													style={i < block.funds.length - 1 ? "border-bottom: 1px solid rgba(64, 66, 73, 0.15);" : ""}
 												>
 													<!-- Grip -->
 													<div class="text-[#85a0bd]/20 shrink-0 cursor-grab active:cursor-grabbing">
 														<GripVertical class="h-3 w-3" />
 													</div>
-													
+
 													<div class="flex flex-col min-w-0">
 														<div class="flex items-center gap-1 min-w-0">
 															<span class="text-[11px] font-semibold text-white truncate">{fund.fund_name}</span>
@@ -315,21 +301,6 @@
 													<!-- Score -->
 													<span class="text-[10px] font-semibold text-[#cbccd1] tabular-nums text-right">
 														{fund.score ?? uniFund?.manager_score ?? "—"}
-													</span>
-
-													<!-- Block Name -->
-													<span class="text-[10px] text-[#85a0bd] truncate" title={block.displayLabel}>
-														{block.displayLabel}
-													</span>
-
-													<!-- Class -->
-													<span class="text-[9px] text-[#85a0bd]/70 truncate" title={formatAssetClass(uniFund?.asset_class ?? null)}>
-														{formatAssetClass(uniFund?.asset_class ?? null)}
-													</span>
-
-													<!-- Geo -->
-													<span class="text-[9px] text-[#85a0bd]/70 truncate" title={formatGeo(uniFund?.geography ?? null)}>
-														{formatGeo(uniFund?.geography ?? null)}
 													</span>
 
 													<!-- Weight -->

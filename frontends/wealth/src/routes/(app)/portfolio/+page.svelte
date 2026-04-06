@@ -8,9 +8,6 @@
 <script lang="ts">
 	import { getContext } from "svelte";
 	import { Button } from "@investintell/ui/components/ui/button";
-	import Settings2 from "lucide-svelte/icons/settings-2";
-	import Globe from "lucide-svelte/icons/globe";
-	import Folders from "lucide-svelte/icons/folders";
 	import Play from "lucide-svelte/icons/play";
 	import Plus from "lucide-svelte/icons/plus";
 	import BarChart2 from "lucide-svelte/icons/bar-chart-2";
@@ -49,9 +46,9 @@
 	}
 
 	const sidebarTabs = [
-		{ value: "models", label: "Models", icon: Folders },
-		{ value: "universe", label: "Universe", icon: Globe },
-		{ value: "policy", label: "Policy", icon: Settings2 },
+		{ value: "models", label: "Models" },
+		{ value: "universe", label: "Universe" },
+		{ value: "policy", label: "Policy" },
 	] as const;
 
 	let chartTitle = $derived(
@@ -71,19 +68,17 @@
 		<!-- ── Left sidebar ── -->
 		<div class="bld-sidebar">
 
-			<!-- Sidebar header: title + New Portfolio button -->
+			<!-- Sidebar header: New Portfolio button -->
 			<div class="bld-sidebar-header">
-				<h2 class="bld-sidebar-title">Portfolio Builder</h2>
 				<Button size="sm" variant="outline" class="h-8 text-[12px]">
 					<Plus class="mr-1 h-3.5 w-3.5" />
-					New
+					New Portfolio
 				</Button>
 			</div>
 
 			<!-- Sidebar sub-pills -->
 			<div class="bld-sub-pills">
 				{#each sidebarTabs as tab (tab.value)}
-					{@const Icon = tab.icon}
 					{@const active = workspace.activeBuilderTab === tab.value}
 					<button
 						type="button"
@@ -91,7 +86,6 @@
 						class:bld-sub-pill--active={active}
 						onclick={() => workspace.activeBuilderTab = tab.value}
 					>
-						<Icon class="h-3 w-3" />
 						{tab.label}
 					</button>
 				{/each}
@@ -182,7 +176,7 @@
 		display: grid;
 		flex: 1;
 		grid-template-columns: 380px 1fr;
-		gap: 20px;
+		gap: 34px;
 		overflow: hidden;
 		min-height: 0;
 	}
@@ -203,14 +197,6 @@
 		justify-content: space-between;
 		padding: 16px 20px 8px;
 		flex-shrink: 0;
-	}
-
-	.bld-sidebar-title {
-		font-size: 16px;
-		font-weight: 700;
-		color: #fff;
-		font-family: "Urbanist", sans-serif;
-		margin: 0;
 	}
 
 	.bld-sidebar-content {
@@ -267,7 +253,7 @@
 	.bld-main {
 		display: flex;
 		flex-direction: column;
-		gap: 16px;
+		gap: 24px;
 		overflow: hidden;
 		min-height: 0;
 	}
@@ -283,7 +269,7 @@
 	/* ── Chart card ── */
 	.bld-chart-card {
 		flex-shrink: 0;
-		height: 240px;
+		height: 320px;
 		background: #141519;
 		border-radius: 20px;
 		border: 1px solid rgba(64, 66, 73, 0.3);
