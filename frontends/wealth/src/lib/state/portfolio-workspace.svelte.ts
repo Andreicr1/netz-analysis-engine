@@ -8,10 +8,13 @@ import { createClientApiClient } from "$lib/api/client";
 import { BLOCK_LABELS } from "$lib/constants/blocks";
 import type {
 	ModelPortfolio,
+	NAVPoint,
 	ParametricStressRequest,
 	ParametricStressResult,
 	RebalancePreviewRequest,
 	RebalancePreviewResponse,
+	TrackRecord,
+	OverlapResult,
 } from "$lib/types/model-portfolio";
 
 // ── Shock mapping: UI macro-shocks → per-block shocks ────────────────
@@ -89,6 +92,7 @@ export interface UniverseFund {
 	asset_class: string | null;
 	geography: string | null;
 	instrument_type: string;
+	manager_score: number | null;
 	/** Pre-computed lowercase search key: "name|ticker|block_label" */
 	_searchKey: string;
 }
@@ -102,6 +106,7 @@ interface UniverseApiItem {
 	asset_class: string | null;
 	geography: string | null;
 	approval_status: string | null;
+	manager_score: number | null;
 }
 
 export interface WorkspaceError {
@@ -110,16 +115,37 @@ export interface WorkspaceError {
 	timestamp: number;
 }
 
-// ── Workspace state ────────────────────────────────────────────────────
+export interface FactorContribution {
+	factor_label: string;
+	pct_contribution: number;
+}
+
+export interface FactorAnalysisResponse {
+	profile: string;
+	as_of_date: string;
+	systematic_risk_pct: number;
+	specific_risk_pct: number;
+	factor_contributions: FactorContribution[];
+	r_squared: number;
+	portfolio_factor_exposures: Record<string, number>;
+}
 
 export class PortfolioWorkspaceState {
 	activeSidebarTab = $state<"universe" | "policy" | "models">("models");
 	activeMainTab = $state<"overview" | "analytics" | "stress" | "holdings" | "rebalance">("overview");
 	portfolio = $state<ModelPortfolio | null>(null);
 	localStress = $state.raw<StressResultView | null>(null);
+	localFactorAnalysis = $state.raw<FactorAnalysisResponse | null>(null);
+	localOverlap = $state.raw<OverlapResult | null>(null);
+	/** Synthesized NAV series from backend track-record endpoint. */
+	navSeries = $state<NAVPoint[]>([]);
+	isLoadingTrackRecord = $state(false);
+	isLoadingFactorAnalysis = $state(false);
+	isLoadingOverlap = $state(false);
 	isConstructing = $state(false);
 	isStressing = $state(false);
 	isRebalancing = $state(false);
+	isExecuting = $state(false);
 	rebalanceResult = $state.raw<RebalancePreviewResponse | null>(null);
 	lastError = $state.raw<WorkspaceError | null>(null);
 
@@ -162,8 +188,90 @@ export class PortfolioWorkspaceState {
 	selectPortfolio(p: ModelPortfolio) {
 		this.portfolio = p;
 		this.localStress = null;
+		this.localFactorAnalysis = null;
+		this.localOverlap = null;
 		this.rebalanceResult = null;
 		this.lastError = null;
+		this.navSeries = [];
+		// Fire-and-forget: load track-record NAV series and factor analysis in background
+		this.loadTrackRecord();
+
+		if (p.profile) {
+			this.loadFactorAnalysis(p.profile);
+		}
+		if (p.id) {
+			this.loadOverlap();
+		}
+	}
+
+	// ── Track-record loading (real API) ─────────────────────────────
+
+	/** Fetch synthesized NAV series from GET /model-portfolios/{id}/track-record. */
+	async loadTrackRecord() {
+		if (!this._getToken || !this.portfolioId) return;
+		this.isLoadingTrackRecord = true;
+
+		try {
+			const api = this.api();
+			const result = await api.get<TrackRecord>(
+				`/model-portfolios/${this.portfolioId}/track-record`,
+			);
+			this.navSeries = result.nav_series ?? [];
+		} catch (err) {
+			this.lastError = {
+				action: "track-record",
+				message: err instanceof Error ? err.message : "Failed to load track record",
+				timestamp: Date.now(),
+			};
+			this.navSeries = [];
+		} finally {
+			this.isLoadingTrackRecord = false;
+		}
+	}
+
+	async loadFactorAnalysis(profile: string) {
+		this.isLoadingFactorAnalysis = true;
+		try {
+			const api = this.api();
+			const result = await api.get<FactorAnalysisResponse>(
+				`/analytics/factor-analysis/${profile}`
+			);
+			this.localFactorAnalysis = result;
+			this.lastError = null;
+		} catch (err: any) {
+			console.error("loadFactorAnalysis error:", err);
+			this.lastError = {
+				action: "factor-analysis",
+				message: err.message || "Unknown error resolving factor analysis",
+				timestamp: Date.now()
+			};
+		} finally {
+			this.isLoadingFactorAnalysis = false;
+		}
+	}
+
+	// ── Overlap loading (real API) ──────────────────────────────────
+
+	async loadOverlap() {
+		if (!this._getToken || !this.portfolioId) return;
+		this.isLoadingOverlap = true;
+		try {
+			const api = this.api();
+			const result = await api.get<OverlapResult>(
+				`/model-portfolios/${this.portfolioId}/overlap`
+			);
+			this.localOverlap = result;
+		} catch (err: any) {
+			console.error("loadOverlap error:", err);
+			this.lastError = {
+				action: "overlap",
+				message: err.message || "Unknown error fetching overlaps",
+				timestamp: Date.now()
+			};
+			this.localOverlap = null;
+		} finally {
+			this.isLoadingOverlap = false;
+		}
 	}
 
 	// ── Universe loading (real API) ──────────────────────────────────
@@ -194,6 +302,7 @@ export class PortfolioWorkspaceState {
 					asset_class: r.asset_class ?? null,
 					geography: r.geography ?? null,
 					instrument_type: r.asset_class ?? "fund",
+					manager_score: r.manager_score ?? null,
 					_searchKey: `${name}|${ticker}|${label.toLowerCase()}`,
 				};
 			});
@@ -259,7 +368,7 @@ export class PortfolioWorkspaceState {
 		this.portfolio = { ...this.portfolio };
 	}
 
-	// ── Construct (real API) ─────────────────────────────────────────
+	// ── Construction & Live Rebalance ─────────────────────────────────────────
 
 	async constructPortfolio() {
 		if (!this.portfolioId) return;
@@ -313,6 +422,31 @@ export class PortfolioWorkspaceState {
 			};
 		} finally {
 			this.isRebalancing = false;
+		}
+	}
+
+	async executeTrades(payload: RebalancePreviewRequest) {
+		if (!this.portfolioId) return;
+		this.isExecuting = true;
+		this.lastError = null;
+
+		try {
+			const api = this.api();
+			// POST /model-portfolios/{id}/rebalance/execute 
+			await api.post(
+				`/model-portfolios/${this.portfolioId}/rebalance/execute`,
+				payload,
+				{ timeoutMs: 30_000 },
+			);
+		} catch (err) {
+			this.lastError = {
+				action: "execute-trades",
+				message: err instanceof Error ? err.message : "Trade execution failed",
+				timestamp: Date.now(),
+			};
+			throw err;
+		} finally {
+			this.isExecuting = false;
 		}
 	}
 

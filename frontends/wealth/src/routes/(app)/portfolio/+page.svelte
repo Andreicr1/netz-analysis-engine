@@ -1,14 +1,12 @@
 <!--
-  Portfolio Builder — Unified workspace (App-in-App).
-  Left sidebar: Models / Universe / Policy tabs.
-  Right main: Chart + tabbed detail (Overview, Analytics, Stress, Holdings).
+  Portfolio Workspace — Unified App-in-App.
+  Left sidebar: Title + Models / Universe / Policy pills.
+  Right main: Chart + pill-tabbed detail panels.
+  Design system: Figma One X — dark premium, glassmorphism, pill navigation.
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { PageHeader } from "@investintell/ui";
 	import { Button } from "@investintell/ui/components/ui/button";
-	import { Card } from "@investintell/ui/components/ui/card";
-	import * as Tabs from "@investintell/ui/components/ui/tabs";
 	import Settings2 from "lucide-svelte/icons/settings-2";
 	import Globe from "lucide-svelte/icons/globe";
 	import Folders from "lucide-svelte/icons/folders";
@@ -17,6 +15,7 @@
 	import Loader2 from "lucide-svelte/icons/loader-2";
 
 	import { workspace } from "$lib/state/portfolio-workspace.svelte";
+	import { portfolioDisplayName } from "$lib/constants/blocks";
 	import UniversePanel from "$lib/components/portfolio/UniversePanel.svelte";
 	import PolicyPanel from "$lib/components/portfolio/PolicyPanel.svelte";
 	import ModelListPanel from "$lib/components/portfolio/ModelListPanel.svelte";
@@ -32,11 +31,9 @@
 	let { data }: { data: PageData } = $props();
 	let portfolios = $derived((data.portfolios ?? []) as ModelPortfolio[]);
 
-	// Inject auth token provider into workspace singleton
 	const getToken = getContext<() => Promise<string>>("netz:getToken");
 	workspace.setGetToken(getToken);
 
-	// Load approved universe on mount (once token is available)
 	$effect(() => {
 		if (workspace.universe.length === 0 && !workspace.isLoadingUniverse) {
 			workspace.loadUniverse();
@@ -50,155 +47,157 @@
 	function handleStressNav() {
 		workspace.activeMainTab = "stress";
 	}
+
+	const sidebarTabs = [
+		{ value: "models", label: "Models", icon: Folders },
+		{ value: "universe", label: "Universe", icon: Globe },
+		{ value: "policy", label: "Policy", icon: Settings2 },
+	] as const;
+
+	const mainTabs = [
+		{ value: "overview", label: "Fund Selection" },
+		{ value: "analytics", label: "Factor Analysis" },
+		{ value: "stress", label: "Stress Testing" },
+		{ value: "holdings", label: "Overlap Scanner" },
+		{ value: "rebalance", label: "Rebalance Sim" },
+	] as const;
+
+	let chartTitle = $derived(
+		workspace.portfolio
+			? portfolioDisplayName(workspace.portfolio.display_name)
+			: "Select a portfolio"
+	);
 </script>
 
-<div class="flex flex-col" style="height: calc(100vh - 88px); padding: 24px;">
-	<PageHeader title="Portfolio Builder">
-		{#snippet actions()}
-			<Button
-				size="sm"
-				variant="outline"
-				disabled={!workspace.portfolioId || workspace.isConstructing}
-				onclick={handleConstruct}
-			>
-				{#if workspace.isConstructing}
-					<Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
-					Constructing…
-				{:else}
-					<Play class="mr-1.5 h-4 w-4" />
-					Construct
-				{/if}
-			</Button>
-			<Button
-				size="sm"
-				variant="outline"
-				disabled={!workspace.portfolioId}
-				onclick={handleStressNav}
-			>
-				<BarChart2 class="mr-1.5 h-4 w-4" />
-				Stress Test
-			</Button>
-		{/snippet}
-	</PageHeader>
+<div class="flex flex-col" style="height: calc(100vh - 88px); padding: 24px; min-height: 0;">
 
-	<!-- Main grid: sidebar + workspace -->
-	<div class="mt-4 grid flex-1 grid-cols-12 gap-4 overflow-hidden">
-		<!-- Left sidebar -->
-		<div class="col-span-4 flex flex-col overflow-hidden xl:col-span-3">
-			<Card class="flex flex-1 flex-col overflow-hidden">
-				<Tabs.Root
-					bind:value={workspace.activeSidebarTab}
-					class="flex flex-1 flex-col overflow-hidden"
-				>
-					<Tabs.List class="w-full shrink-0">
-						<Tabs.Trigger value="models" class="flex-1 gap-1.5">
-							<Folders class="h-4 w-4" />
-							Models
-						</Tabs.Trigger>
-						<Tabs.Trigger value="universe" class="flex-1 gap-1.5">
-							<Globe class="h-4 w-4" />
-							Universe
-						</Tabs.Trigger>
-						<Tabs.Trigger value="policy" class="flex-1 gap-1.5">
-							<Settings2 class="h-4 w-4" />
-							Policy
-						</Tabs.Trigger>
-					</Tabs.List>
+	<!-- Main grid: sidebar + workspace (no top-level PageHeader) -->
+	<div class="grid flex-1 grid-cols-12 gap-5 overflow-hidden min-h-0">
 
-					<Tabs.Content value="models" class="flex-1 overflow-y-auto">
+		<!-- ── Left sidebar (widened for Universe table) ── -->
+		<div class="col-span-5 flex flex-col overflow-hidden">
+			<div class="flex flex-1 flex-col overflow-hidden bg-[#141519] rounded-[24px] border border-[#404249]/30 shadow-xl">
+
+				<!-- Sidebar header: title + action buttons -->
+				<div class="flex items-center justify-between px-5 pt-5 pb-2 shrink-0">
+					<h1 class="text-[18px] font-semibold text-white tracking-[-0.01em]">Portfolio Builder</h1>
+					<div class="flex items-center gap-1.5">
+						<Button
+							size="sm"
+							variant="outline"
+							disabled={!workspace.portfolioId || workspace.isConstructing}
+							onclick={handleConstruct}
+							class="h-8 text-[12px]"
+						>
+							{#if workspace.isConstructing}
+								<Loader2 class="mr-1 h-3.5 w-3.5 animate-spin" />
+								Building…
+							{:else}
+								<Play class="mr-1 h-3.5 w-3.5" />
+								Construct
+							{/if}
+						</Button>
+						<Button
+							size="sm"
+							variant="outline"
+							disabled={!workspace.portfolioId}
+							onclick={handleStressNav}
+							class="h-8 text-[12px]"
+						>
+							<BarChart2 class="mr-1 h-3.5 w-3.5" />
+							Stress
+						</Button>
+					</div>
+				</div>
+
+				<!-- Sidebar pills -->
+				<div class="flex items-center gap-2 px-5 pb-3 shrink-0">
+					{#each sidebarTabs as tab (tab.value)}
+						{@const Icon = tab.icon}
+						{@const active = workspace.activeSidebarTab === tab.value}
+						<button
+							type="button"
+							class="flex items-center gap-1.5 text-[12px] transition-all duration-150
+								{active
+									? 'bg-[#0177fb] text-white font-semibold rounded-full px-4 py-1.5'
+									: 'border border-white/10 text-[#cbccd1] rounded-full px-4 py-1.5 hover:bg-white/5'}"
+							onclick={() => workspace.activeSidebarTab = tab.value}
+						>
+							<Icon class="h-3 w-3" />
+							{tab.label}
+						</button>
+					{/each}
+				</div>
+
+				<!-- Sidebar content -->
+				<div class="flex-1 overflow-y-auto min-h-0">
+					{#if workspace.activeSidebarTab === "models"}
 						<ModelListPanel {portfolios} />
-					</Tabs.Content>
-					<Tabs.Content
-						value="universe"
-						class="flex-1 overflow-y-auto"
-					>
+					{:else if workspace.activeSidebarTab === "universe"}
 						<UniversePanel />
-					</Tabs.Content>
-					<Tabs.Content value="policy" class="flex-1 overflow-y-auto">
+					{:else}
 						<PolicyPanel />
-					</Tabs.Content>
-				</Tabs.Root>
-			</Card>
+					{/if}
+				</div>
+			</div>
 		</div>
 
-		<!-- Right workspace -->
-		<div
-			class="col-span-8 flex flex-col gap-4 overflow-hidden xl:col-span-9"
-		>
+		<!-- ── Right workspace ── -->
+		<div class="col-span-7 flex flex-col gap-5 overflow-hidden">
+
 			<!-- Top chart area (45%) -->
-			<Card class="flex shrink-0 flex-col" style="height: 45%;">
-				<div
-					class="flex items-center justify-between border-b px-4 py-2"
-				>
-					<span class="text-sm font-medium text-muted-foreground">
-						{workspace.portfolio?.display_name ??
-							"Select a portfolio"}
+			<div class="flex shrink-0 flex-col bg-[#141519] rounded-[24px] border border-[#404249]/30 shadow-xl overflow-hidden" style="height: 45%;">
+				<div class="flex items-center justify-between px-6 py-3">
+					<span class="text-[15px] font-medium text-[#cbccd1]">
+						{chartTitle}
 					</span>
 				</div>
-				<div class="flex flex-1 flex-col p-2" style="min-height: 0;">
+				<div class="flex flex-1 flex-col px-3 pb-3" style="min-height: 0;">
 					<MainPortfolioChart />
 				</div>
-			</Card>
+			</div>
 
-			<!-- Bottom detail tabs (55%) -->
-			<Card class="flex flex-1 flex-col overflow-hidden">
-				<Tabs.Root
-					bind:value={workspace.activeMainTab}
-					class="flex flex-1 flex-col overflow-hidden"
-				>
-					<Tabs.List class="w-full shrink-0">
-						<Tabs.Trigger value="overview" class="flex-1"
-							>Fund Selection</Tabs.Trigger
-						>
-						<Tabs.Trigger value="analytics" class="flex-1"
-							>Factor Analysis</Tabs.Trigger
-						>
-						<Tabs.Trigger value="stress" class="flex-1"
-							>Stress Testing</Tabs.Trigger
-						>
-						<Tabs.Trigger value="holdings" class="flex-1"
-							>Overlap Scanner</Tabs.Trigger
-						>
-						<Tabs.Trigger value="rebalance" class="flex-1"
-							>Rebalance Sim</Tabs.Trigger
-						>
-					</Tabs.List>
+			<!-- Bottom detail area (55%) -->
+			<div class="flex flex-1 flex-col min-h-0 bg-[#141519] rounded-[24px] border border-[#404249]/30 shadow-xl overflow-hidden">
 
-					<Tabs.Content
-						value="overview"
-						class="flex-1 overflow-y-auto"
-					>
+				<!-- Main pills -->
+				<div class="flex items-center gap-2 px-6 py-4 shrink-0 flex-wrap">
+					{#each mainTabs as tab (tab.value)}
+						{@const active = workspace.activeMainTab === tab.value}
+						<button
+							type="button"
+							class="text-[13px] transition-all duration-150
+								{active
+									? 'bg-[#0177fb] text-white font-semibold rounded-full px-5 py-2'
+									: 'border border-white/10 text-[#cbccd1] rounded-full px-5 py-2 hover:bg-white/5'}"
+							onclick={() => workspace.activeMainTab = tab.value}
+						>
+							{tab.label}
+						</button>
+					{/each}
+				</div>
+
+				<!-- Main content -->
+				<div class="flex-1 overflow-y-auto min-h-0">
+					{#if workspace.activeMainTab === "overview"}
 						<PortfolioOverview />
-					</Tabs.Content>
-					<Tabs.Content
-						value="analytics"
-						class="flex-1 overflow-y-auto"
-					>
+					{:else if workspace.activeMainTab === "analytics"}
 						<FactorAnalysisPanel />
-					</Tabs.Content>
-					<Tabs.Content value="stress" class="flex-1 overflow-y-auto">
+					{:else if workspace.activeMainTab === "stress"}
 						<StressTestPanel />
-					</Tabs.Content>
-					<Tabs.Content
-						value="holdings"
-						class="flex-1 overflow-y-auto"
-					>
+					{:else if workspace.activeMainTab === "holdings"}
 						<OverlapScannerPanel />
-					</Tabs.Content>
-					<Tabs.Content
-						value="rebalance"
-						class="flex-1 overflow-y-auto"
-					>
+					{:else}
 						<RebalanceSimulationPanel />
-					</Tabs.Content>
-				</Tabs.Root>
-			</Card>
+					{/if}
+				</div>
+			</div>
 		</div>
 	</div>
 
 	<!-- Error notification -->
 	{#if workspace.lastError}
-		<div class="fixed bottom-6 right-6 z-50 flex max-w-sm items-start gap-3 rounded-lg border border-red-500/30 bg-red-950/90 px-4 py-3 text-sm text-red-200 shadow-lg backdrop-blur-sm">
+		<div class="fixed bottom-6 right-6 z-50 flex max-w-sm items-start gap-3 rounded-[16px] border border-red-500/30 bg-red-950/90 px-4 py-3 text-sm text-red-200 shadow-lg backdrop-blur-sm">
 			<span class="flex-1">
 				<strong class="text-red-100">{({ construct: "Construction", rebalance: "Rebalance Preview", universe: "Universe Loading", stress: "Stress Test" })[workspace.lastError.action] ?? workspace.lastError.action} failed:</strong>
 				{workspace.lastError.message}

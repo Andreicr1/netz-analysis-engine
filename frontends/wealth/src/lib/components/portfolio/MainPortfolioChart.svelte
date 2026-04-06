@@ -1,7 +1,6 @@
 <!--
   MainPortfolioChart — Backtest equity curve for the selected model portfolio.
-  Displays real localBacktest NAV data when available, otherwise generates
-  deterministic dummy data seeded from the portfolio name for preview.
+  Displays real synthesized NAV data from the backend track-record endpoint.
 -->
 <script lang="ts">
 	import { onMount } from "svelte";
@@ -23,60 +22,16 @@
 		return () => ro.disconnect();
 	});
 
-	/** Simple deterministic hash from string → seed number. */
-	function hashSeed(str: string): number {
-		let h = 0;
-		for (let i = 0; i < str.length; i++) {
-			h = ((h << 5) - h + str.charCodeAt(i)) | 0;
-		}
-		return Math.abs(h);
-	}
-
-	/** Generate 252 trading days of synthetic NAV data (base 100). */
-	function generateDummyNAV(name: string): Array<{ date: string; nav: number }> {
-		const seed = hashSeed(name);
-		const points: Array<{ date: string; nav: number }> = [];
-		let nav = 100;
-		const today = new Date();
-		const start = new Date(today);
-		start.setDate(start.getDate() - 365);
-
-		// Simple pseudo-random using seed
-		let rng = seed;
-		function nextRng(): number {
-			rng = (rng * 16807 + 0) % 2147483647;
-			return (rng & 0x7fffffff) / 0x7fffffff;
-		}
-
-		const drift = 0.0003 + (nextRng() - 0.5) * 0.0004; // slight upward bias
-		const vol = 0.008 + nextRng() * 0.006;
-
-		for (let d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
-			if (d.getDay() === 0 || d.getDay() === 6) continue; // skip weekends
-			const dailyReturn = drift + vol * (nextRng() - 0.5) * 2;
-			nav *= 1 + dailyReturn;
-			points.push({
-				date: d.toISOString().slice(0, 10),
-				nav: Math.round(nav * 100) / 100,
-			});
-		}
-		return points;
-	}
-
-	let navData = $derived.by(() => {
-		if (!workspace.portfolio) return [];
-		// Generate deterministic dummy NAV from portfolio name (real NAV series wiring is a follow-up)
-		return generateDummyNAV(workspace.portfolio.display_name ?? "default");
-	});
-
+	let navData = $derived(workspace.navSeries);
 	let isEmpty = $derived(navData.length === 0);
+	let isLoading = $derived(workspace.isLoadingTrackRecord);
 
 	let option = $derived.by(() => {
 		if (isEmpty) return {};
 
 		const seriesData = navData.map((d) => [d.date, d.nav]);
-		const firstNav = navData[0]?.nav ?? 100;
-		const lastNav = navData[navData.length - 1]?.nav ?? 100;
+		const firstNav = navData[0]?.nav ?? 1000;
+		const lastNav = navData[navData.length - 1]?.nav ?? 1000;
 		const totalReturn = ((lastNav - firstNav) / firstNav) * 100;
 
 		return {
@@ -166,8 +121,9 @@
 			<ChartContainer
 				{option}
 				height={chartHeight}
-				empty={isEmpty}
-				emptyMessage="No backtest data available"
+				empty={isEmpty && !isLoading}
+				emptyMessage="No track-record data available"
+				loading={isLoading}
 				ariaLabel="Portfolio backtest equity curve"
 			/>
 		{/if}

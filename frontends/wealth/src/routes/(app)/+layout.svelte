@@ -49,7 +49,7 @@
 	const navItems = [
 		{ label: "Dashboard", href: "/dashboard",         icon: LayoutDashboard },
 		{ label: "Screener",  href: "/screener",          icon: FileSearch },
-		{ label: "Portfolio", href: "/portfolio/approved", icon: Table2 },
+		{ label: "Portfolio", href: "/portfolio", icon: Table2 },
 		{ label: "Analysis",  href: "/analysis",          icon: Axis3d },
 		{ label: "Market",    href: "/market",            icon: Globe },
 	];

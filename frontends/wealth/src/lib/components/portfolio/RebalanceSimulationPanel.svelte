@@ -1,8 +1,9 @@
 <!--
   RebalanceSimulationPanel — "Test Drive" for rebalance preview.
-  Input: mock or manual current holdings (USD) + cash.
+  Input: manual current holdings (USD) + cash.
   Output: suggested trades (BUY/SELL/HOLD), turnover %, weight deltas.
   Calls POST /model-portfolios/{id}/rebalance/preview (stateless).
+  Design: dark premium (Figma One X).
 -->
 <script lang="ts">
 	import { Button } from "@investintell/ui/components/ui/button";
@@ -20,6 +21,26 @@
 	// ── Editable holdings state ───────────────────────────────────────
 	let holdings = $state<HoldingInput[]>([]);
 	let cashAvailable = $state(500_000);
+	let executionSuccess = $state(false);
+
+	async function handleExecute() {
+		const validHoldings = holdings.filter(
+			(h) => h.instrument_id && h.quantity > 0 && h.current_price > 0,
+		);
+		
+		try {
+			await workspace.executeTrades({
+				cash_available: cashAvailable,
+				current_holdings: validHoldings,
+			});
+			executionSuccess = true;
+			setTimeout(() => {
+				executionSuccess = false;
+			}, 3000);
+		} catch (err) {
+			console.error("Failed to execute trades:", err);
+		}
+	}
 
 	function addHolding() {
 		holdings = [...holdings, { instrument_id: "", quantity: 0, current_price: 0 }];
@@ -35,25 +56,17 @@
 		);
 	}
 
-	/**
-	 * Load a dummy portfolio using actual fund IDs from the model's target.
-	 * Simulates a real-world scenario: client holds ~60-80% of target funds
-	 * at slightly different weights, plus cash for new purchases.
-	 */
 	function loadDummyPortfolio() {
 		const funds = workspace.portfolio?.fund_selection_schema?.funds;
 		if (!funds || funds.length === 0) return;
 
-		// Pick a subset of target funds (simulate partial holdings)
 		const subset = funds.slice(0, Math.max(3, Math.ceil(funds.length * 0.7)));
-		const baseAum = 10_000_000; // $10M simulated account
+		const baseAum = 10_000_000;
 
 		holdings = subset.map((f) => {
-			// Slightly deviated weight from target (±30% drift)
-			const drift = 0.7 + Math.random() * 0.6; // 0.7 to 1.3
+			const drift = 0.7 + Math.random() * 0.6;
 			const holdingValue = f.weight * baseAum * drift;
-			// Simulate a reasonable price per share
-			const price = 20 + Math.random() * 280; // $20 to $300
+			const price = 20 + Math.random() * 280;
 			const quantity = Math.round((holdingValue / price) * 100) / 100;
 
 			return {
@@ -63,7 +76,7 @@
 			};
 		});
 
-		cashAvailable = 500_000; // $500k cash
+		cashAvailable = 500_000;
 	}
 
 	function handleRun() {
@@ -80,7 +93,6 @@
 	let result = $derived(workspace.rebalanceResult);
 	let hasResult = $derived(result !== null);
 
-	/** Resolve fund name from target or result */
 	function fundName(instrumentId: string): string {
 		const funds = workspace.portfolio?.fund_selection_schema?.funds;
 		const match = funds?.find((f) => f.instrument_id === instrumentId);
@@ -109,13 +121,13 @@
 		/>
 	</div>
 {:else}
-	<div class="rebalance-panel">
+	<div class="flex flex-col h-full">
 		<!-- Input section -->
-		<div class="rebalance-inputs">
-			<div class="input-header">
-				<div class="header-left">
-					<ArrowRightLeft class="h-4 w-4" style="color: var(--ii-primary);" />
-					<span class="input-title">Rebalance Simulation</span>
+		<div class="px-5 py-4" style="border-bottom: 1px solid #404249;">
+			<div class="flex items-center justify-between mb-4">
+				<div class="flex items-center gap-2">
+					<ArrowRightLeft class="h-4 w-4 text-[#0177fb]" />
+					<span class="text-[15px] font-bold text-white">Rebalance Simulation</span>
 				</div>
 				<Button size="sm" variant="outline" onclick={loadDummyPortfolio}>
 					<Sparkles class="mr-1.5 h-3.5 w-3.5" />
@@ -124,25 +136,18 @@
 			</div>
 
 			<!-- Cash input -->
-			<div class="cash-row">
-				<label class="field-label" for="cash-input">Cash Available (USD)</label>
-				<Input
-					id="cash-input"
-					type="number"
-					step={10000}
-					min={0}
-					bind:value={cashAvailable}
-					class="cash-input"
-				/>
-				<span class="aum-badge">
+			<div class="flex items-center gap-3 mb-4">
+				<label class="text-[11px] font-semibold text-[#85a0bd] uppercase tracking-wide whitespace-nowrap" for="cash-input">Cash Available (USD)</label>
+				<Input id="cash-input" type="number" step={10000} min={0} bind:value={cashAvailable} />
+				<span class="text-[12px] font-bold text-[#cbccd1] bg-white/5 px-3 py-1.5 rounded-full whitespace-nowrap tabular-nums">
 					AUM: {formatCurrency(computedAum)}
 				</span>
 			</div>
 
 			<!-- Holdings table -->
-			<div class="holdings-section">
-				<div class="holdings-header">
-					<span class="field-label">Current Holdings</span>
+			<div class="mb-4">
+				<div class="flex items-center justify-between mb-2">
+					<span class="text-[11px] font-semibold text-[#85a0bd] uppercase tracking-wide">Current Holdings</span>
 					<Button size="sm" variant="ghost" onclick={addHolding}>
 						<Plus class="mr-1 h-3.5 w-3.5" />
 						Add
@@ -150,73 +155,45 @@
 				</div>
 
 				{#if holdings.length === 0}
-					<p class="holdings-empty">
-						No holdings. Click <strong>Load Dummy Portfolio</strong> or add manually.
+					<p class="text-[13px] text-[#85a0bd] py-3">
+						No holdings. Click <strong class="text-[#cbccd1]">Load Dummy Portfolio</strong> or add manually.
 					</p>
 				{:else}
-					<div class="holdings-table">
-						<div class="holdings-row holdings-head">
-							<span class="col-fund">Fund</span>
-							<span class="col-qty">Quantity</span>
-							<span class="col-price">Price (USD)</span>
-							<span class="col-value">Value</span>
-							<span class="col-action"></span>
+					<div class="text-[13px]">
+						<!-- Head -->
+						<div class="grid grid-cols-[2fr_1fr_1fr_1fr_32px] gap-2 py-2 text-[11px] font-semibold text-[#85a0bd] uppercase tracking-wide" style="border-bottom: 2px solid #404249;">
+							<span>Fund</span>
+							<span>Quantity</span>
+							<span>Price (USD)</span>
+							<span>Value</span>
+							<span></span>
 						</div>
 						{#each holdings as holding, i}
-							<div class="holdings-row">
-								<span class="col-fund" title={holding.instrument_id}>
+							<div class="grid grid-cols-[2fr_1fr_1fr_1fr_32px] gap-2 items-center py-2" style="border-bottom: 1px solid rgba(64, 66, 73, 0.4);">
+								<span class="text-white truncate" title={holding.instrument_id}>
 									{#if holding.instrument_id}
 										{fundName(holding.instrument_id)}
 									{:else}
-										<Input
-											type="text"
-											placeholder="Instrument ID"
-											value={holding.instrument_id}
-											oninput={(e: Event) => updateHolding(i, "instrument_id", (e.target as HTMLInputElement).value)}
-											class="inline-input"
-										/>
+										<Input type="text" placeholder="Instrument ID" value={holding.instrument_id} oninput={(e) => updateHolding(i, "instrument_id", (e.target as HTMLInputElement).value)} />
 									{/if}
 								</span>
-								<span class="col-qty">
-									<Input
-										type="number"
-										step={1}
-										min={0}
-										value={holding.quantity}
-										oninput={(e: Event) => updateHolding(i, "quantity", Number((e.target as HTMLInputElement).value))}
-										class="inline-input"
-									/>
+								<span>
+									<Input type="number" step={1} min={0} value={holding.quantity} oninput={(e) => updateHolding(i, "quantity", Number((e.target as HTMLInputElement).value))} />
 								</span>
-								<span class="col-price">
-									<Input
-										type="number"
-										step={0.01}
-										min={0}
-										value={holding.current_price}
-										oninput={(e: Event) => updateHolding(i, "current_price", Number((e.target as HTMLInputElement).value))}
-										class="inline-input"
-									/>
+								<span>
+									<Input type="number" step={0.01} min={0} value={holding.current_price} oninput={(e) => updateHolding(i, "current_price", Number((e.target as HTMLInputElement).value))} />
 								</span>
-								<span class="col-value tabular">
-									{formatCurrency(holding.quantity * holding.current_price)}
-								</span>
-								<span class="col-action">
-									<button class="remove-btn" onclick={() => removeHolding(i)} title="Remove">
-										<Trash2 class="h-3.5 w-3.5" />
-									</button>
-								</span>
+								<span class="text-white tabular-nums">{formatCurrency(holding.quantity * holding.current_price)}</span>
+								<button class="flex items-center justify-center p-1 rounded text-[#85a0bd] hover:text-[#fc1a1a] hover:bg-white/5 transition-colors" onclick={() => removeHolding(i)} title="Remove">
+									<Trash2 class="h-3.5 w-3.5" />
+								</button>
 							</div>
 						{/each}
 					</div>
 				{/if}
 			</div>
 
-			<Button
-				size="sm"
-				onclick={handleRun}
-				disabled={workspace.isRebalancing || holdings.length === 0}
-				class="run-btn"
-			>
+			<Button size="sm" onclick={handleRun} disabled={workspace.isRebalancing || computedAum <= 0}>
 				{#if workspace.isRebalancing}
 					<Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
 					Computing…
@@ -229,67 +206,69 @@
 
 		<!-- Results section -->
 		{#if hasResult && result}
-			<div class="rebalance-results">
+			<div class="flex flex-col gap-5 p-5 flex-1 overflow-y-auto">
 				<!-- KPI strip -->
-				<div class="kpi-strip">
-					<div class="kpi-item">
-						<span class="kpi-label">Total AUM</span>
-						<span class="kpi-value">{formatCurrency(result.total_aum)}</span>
+				<div class="flex gap-6 px-5 py-3 bg-white/[0.03] rounded-[12px]">
+					<div class="flex flex-col gap-0.5">
+						<span class="text-[11px] text-[#85a0bd] font-medium">Total AUM</span>
+						<span class="text-[15px] font-bold text-white tabular-nums">{formatCurrency(result.total_aum)}</span>
 					</div>
-					<div class="kpi-item">
-						<span class="kpi-label">Trades</span>
-						<span class="kpi-value">{result.total_trades}</span>
+					<div class="flex flex-col gap-0.5">
+						<span class="text-[11px] text-[#85a0bd] font-medium">Trades</span>
+						<span class="text-[15px] font-bold text-white tabular-nums">{result.total_trades}</span>
 					</div>
-					<div class="kpi-item">
-						<span class="kpi-label">Turnover</span>
-						<span class="kpi-value">{formatPercent(result.estimated_turnover_pct)}</span>
+					<div class="flex flex-col gap-0.5">
+						<span class="text-[11px] text-[#85a0bd] font-medium">Turnover</span>
+						<span class="text-[15px] font-bold text-white tabular-nums">{formatPercent(result.estimated_turnover_pct)}</span>
 					</div>
-					<div class="kpi-item">
-						<span class="kpi-label">Cash</span>
-						<span class="kpi-value">{formatCurrency(result.cash_available)}</span>
+					<div class="flex flex-col gap-0.5">
+						<span class="text-[11px] text-[#85a0bd] font-medium">Cash</span>
+						<span class="text-[15px] font-bold text-white tabular-nums">{formatCurrency(result.cash_available)}</span>
 					</div>
 				</div>
 
 				<!-- Trades table -->
-				<div class="result-section">
-					<span class="result-label">Suggested Trades</span>
-					<div class="trades-table">
-						<div class="trade-row trade-head">
-							<span class="col-action-badge">Action</span>
-							<span class="col-trade-fund">Fund</span>
-							<span class="col-trade-block">Block</span>
-							<span class="col-trade-delta">Delta (pp)</span>
-							<span class="col-trade-value">Trade Value</span>
-							<span class="col-trade-qty">Est. Qty</span>
+				<div class="flex flex-col gap-2">
+					<span class="text-[11px] font-semibold text-[#85a0bd] uppercase tracking-[0.04em]">Suggested Trades</span>
+					<div class="text-[13px]">
+						<div class="grid grid-cols-[64px_2fr_1.2fr_80px_1fr_80px] gap-2 py-2 text-[11px] font-semibold text-[#85a0bd] uppercase tracking-wide" style="border-bottom: 2px solid #404249;">
+							<span>Action</span>
+							<span>Fund</span>
+							<span>Block</span>
+							<span>Delta (pp)</span>
+							<span>Trade Value</span>
+							<span>Est. Qty</span>
 						</div>
 						{#each result.trades.filter((t) => t.action !== "HOLD") as trade}
 							{@const isCash = trade.instrument_id === CASH_INSTRUMENT_ID}
-							<div class="trade-row" class:trade-row-cash={isCash}>
-								<span class="col-action-badge">
+							<div
+								class="grid grid-cols-[64px_2fr_1.2fr_80px_1fr_80px] gap-2 items-center py-2.5
+									{isCash ? 'bg-white/[0.02]' : ''}"
+								style="border-bottom: 1px solid rgba(64, 66, 73, 0.4);{isCash ? 'border-top: 2px solid #404249;' : ''}"
+							>
+								<span>
 									<span
-										class="action-badge"
-										class:action-buy={trade.action === "BUY"}
-										class:action-sell={trade.action === "SELL"}
-										class:action-cash={isCash}
+										class="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide
+											{trade.action === 'BUY'
+												? 'bg-[#11ec79]/15 text-[#11ec79]'
+												: trade.action === 'SELL'
+													? 'bg-[#fc1a1a]/15 text-[#fc1a1a]'
+													: 'bg-white/5 text-[#85a0bd]'}"
 									>
 										{isCash ? "SWEEP" : trade.action}
 									</span>
 								</span>
-								<span class="col-trade-fund" class:cash-fund-name={isCash} title={trade.instrument_id}>
+								<span class="text-white truncate {isCash ? 'font-bold' : ''}" title={trade.instrument_id}>
 									{isCash ? "Cash Balance" : trade.fund_name}
 								</span>
-								<span class="col-trade-block">{isCash ? "—" : blockLabel(trade.block_id)}</span>
-								<span
-									class="col-trade-delta tabular"
-									class:delta-positive={trade.delta_weight > 0}
-									class:delta-negative={trade.delta_weight < 0}
-								>
+								<span class="text-[#85a0bd]">{isCash ? "—" : blockLabel(trade.block_id)}</span>
+								<span class="tabular-nums {trade.delta_weight > 0 ? 'text-[#11ec79]' : 'text-[#fc1a1a]'}">
 									{trade.delta_weight > 0 ? "+" : ""}{(trade.delta_weight * 100).toFixed(1)}
 								</span>
-								<span class="col-trade-value tabular">
+								<span class="text-white tabular-nums">
 									{trade.action === "SELL" ? "−" : "+"}{formatCurrency(Math.abs(trade.trade_value))}
 								</span>
-								<span class="col-trade-qty tabular">
+								<span class="text-[#cbccd1] tabular-nums">
 									{isCash ? "—" : trade.estimated_quantity.toFixed(2)}
 								</span>
 							</div>
@@ -299,33 +278,28 @@
 
 				<!-- Block weight comparison -->
 				{#if result.weight_comparison.length > 0}
-					<div class="result-section">
-						<span class="result-label">Block Weight Comparison</span>
-						<div class="weight-table">
-							<div class="weight-row weight-head">
-								<span class="col-wt-block">Block</span>
-								<span class="col-wt-current">Current</span>
-								<span class="col-wt-target">Target</span>
-								<span class="col-wt-delta">Delta (pp)</span>
-								<span class="col-wt-bar"></span>
+					<div class="flex flex-col gap-2">
+						<span class="text-[11px] font-semibold text-[#85a0bd] uppercase tracking-[0.04em]">Block Weight Comparison</span>
+						<div class="text-[13px]">
+							<div class="grid grid-cols-[1.5fr_80px_80px_80px_1fr] gap-2 py-2 text-[11px] font-semibold text-[#85a0bd] uppercase tracking-wide" style="border-bottom: 2px solid #404249;">
+								<span>Block</span>
+								<span>Current</span>
+								<span>Target</span>
+								<span>Delta (pp)</span>
+								<span></span>
 							</div>
 							{#each result.weight_comparison as wc}
-								<div class="weight-row">
-									<span class="col-wt-block">{blockLabel(wc.block_id)}</span>
-									<span class="col-wt-current tabular">{formatPercent(wc.current_weight)}</span>
-									<span class="col-wt-target tabular">{formatPercent(wc.target_weight)}</span>
-									<span
-										class="col-wt-delta tabular"
-										class:delta-positive={wc.delta_pp > 0}
-										class:delta-negative={wc.delta_pp < 0}
-									>
+								<div class="grid grid-cols-[1.5fr_80px_80px_80px_1fr] gap-2 items-center py-2.5" style="border-bottom: 1px solid rgba(64, 66, 73, 0.4);">
+									<span class="text-white">{blockLabel(wc.block_id)}</span>
+									<span class="text-[#cbccd1] tabular-nums">{formatPercent(wc.current_weight)}</span>
+									<span class="text-[#cbccd1] tabular-nums">{formatPercent(wc.target_weight)}</span>
+									<span class="tabular-nums {wc.delta_pp > 0 ? 'text-[#11ec79]' : 'text-[#fc1a1a]'}">
 										{wc.delta_pp > 0 ? "+" : ""}{wc.delta_pp.toFixed(1)}
 									</span>
-									<span class="col-wt-bar">
+									<span class="relative h-2 bg-white/5 rounded overflow-hidden">
 										<span
-											class="bar-fill"
-											class:bar-positive={wc.delta_pp > 0}
-											class:bar-negative={wc.delta_pp < 0}
+											class="block h-full rounded transition-[width] duration-300
+												{wc.delta_pp > 0 ? 'bg-[#11ec79]' : 'bg-[#fc1a1a]'}"
 											style="width: {Math.min(Math.abs(wc.delta_pp) * 5, 100)}%;"
 										></span>
 									</span>
@@ -334,278 +308,31 @@
 						</div>
 					</div>
 				{/if}
+
+				<!-- Trade Execution Action -->
+				<div class="pt-4 mt-2" style="border-top: 1px solid rgba(64, 66, 73, 0.4);">
+					<Button 
+						class="w-full bg-[#0177fb] hover:bg-[#0054c2] text-white font-bold" 
+						disabled={workspace.isExecuting || executionSuccess} 
+						onclick={handleExecute}
+					>
+						{#if workspace.isExecuting}
+							<Loader2 class="mr-2 h-4 w-4 animate-spin" />
+							Executing Trades...
+						{:else if executionSuccess}
+							<Plus class="mr-2 h-4 w-4" /> <!-- Using the existing Plus icon as fallback success -->
+							Trade Batch Sent to OMS
+						{:else}
+							Execute Trades
+						{/if}
+					</Button>
+				</div>
 			</div>
 		{:else if !workspace.isRebalancing}
-			<div class="rebalance-empty">
-				<ArrowRightLeft class="h-8 w-8" style="color: var(--ii-text-muted); opacity: 0.4;" />
-				<p>Add current holdings above and click <strong>Run Preview</strong> to see suggested trades.</p>
+			<div class="flex flex-col items-center justify-center gap-3 flex-1 py-12 text-center">
+				<ArrowRightLeft class="h-8 w-8 text-[#85a0bd]/30" />
+				<p class="text-[13px] text-[#85a0bd]">Add current holdings above and click <strong class="text-[#cbccd1]">Run Preview</strong> to see suggested trades.</p>
 			</div>
 		{/if}
 	</div>
 {/if}
-
-<style>
-	.rebalance-panel {
-		display: flex;
-		flex-direction: column;
-		gap: 0;
-		height: 100%;
-	}
-
-	.rebalance-inputs {
-		padding: 16px;
-		border-bottom: 1px solid var(--ii-border-subtle);
-	}
-
-	.input-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		margin-bottom: 12px;
-	}
-
-	.header-left {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-	}
-
-	.input-title {
-		font-size: var(--ii-text-body, 0.9375rem);
-		font-weight: 700;
-		color: var(--ii-text-primary);
-	}
-
-	.cash-row {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		margin-bottom: 12px;
-	}
-
-	.field-label {
-		font-size: var(--ii-text-label, 0.75rem);
-		font-weight: 600;
-		color: var(--ii-text-muted);
-		white-space: nowrap;
-	}
-
-	.aum-badge {
-		font-size: var(--ii-text-label, 0.75rem);
-		font-weight: 700;
-		color: var(--ii-text-secondary);
-		background: var(--ii-surface-alt);
-		padding: 4px 10px;
-		border-radius: var(--ii-radius-sm, 6px);
-		white-space: nowrap;
-		font-variant-numeric: tabular-nums;
-	}
-
-	.holdings-section {
-		margin-bottom: 12px;
-	}
-
-	.holdings-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		margin-bottom: 6px;
-	}
-
-	.holdings-empty {
-		font-size: var(--ii-text-small, 0.8125rem);
-		color: var(--ii-text-muted);
-		padding: 12px 0;
-	}
-
-	.holdings-table,
-	.trades-table,
-	.weight-table {
-		font-size: var(--ii-text-small, 0.8125rem);
-		width: 100%;
-	}
-
-	.holdings-row,
-	.trade-row,
-	.weight-row {
-		display: grid;
-		align-items: center;
-		gap: 8px;
-		padding: 6px 0;
-		border-bottom: 1px solid var(--ii-border-subtle);
-	}
-
-	.holdings-row {
-		grid-template-columns: 2fr 1fr 1fr 1fr 32px;
-	}
-
-	.trade-row {
-		grid-template-columns: 64px 2fr 1.2fr 80px 1fr 80px;
-	}
-
-	.weight-row {
-		grid-template-columns: 1.5fr 80px 80px 80px 1fr;
-	}
-
-	.holdings-head,
-	.trade-head,
-	.weight-head {
-		font-weight: 600;
-		color: var(--ii-text-muted);
-		font-size: var(--ii-text-label, 0.75rem);
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		border-bottom: 2px solid var(--ii-border-subtle);
-	}
-
-	.tabular {
-		font-variant-numeric: tabular-nums;
-	}
-
-	.remove-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		background: none;
-		border: none;
-		color: var(--ii-text-muted);
-		cursor: pointer;
-		padding: 4px;
-		border-radius: 4px;
-	}
-
-	.remove-btn:hover {
-		color: var(--ii-danger);
-		background: var(--ii-surface-alt);
-	}
-
-	.rebalance-results {
-		display: flex;
-		flex-direction: column;
-		gap: 16px;
-		padding: 16px;
-		flex: 1;
-		overflow-y: auto;
-	}
-
-	.result-section {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-
-	.result-label {
-		font-size: var(--ii-text-label, 0.75rem);
-		font-weight: 600;
-		color: var(--ii-text-muted);
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-	}
-
-	.kpi-strip {
-		display: flex;
-		gap: 24px;
-		padding: 12px 16px;
-		background: var(--ii-surface-alt);
-		border-radius: var(--ii-radius-md, 9px);
-	}
-
-	.kpi-item {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-
-	.kpi-label {
-		font-size: var(--ii-text-label, 0.75rem);
-		color: var(--ii-text-muted);
-		font-weight: 500;
-	}
-
-	.kpi-value {
-		font-size: var(--ii-text-body, 0.9375rem);
-		font-weight: 700;
-		font-variant-numeric: tabular-nums;
-		color: var(--ii-text-primary);
-	}
-
-	.action-badge {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		padding: 2px 8px;
-		border-radius: 4px;
-		font-size: 0.6875rem;
-		font-weight: 700;
-		letter-spacing: 0.05em;
-		text-transform: uppercase;
-	}
-
-	.action-buy {
-		background: hsl(var(--ii-success-h, 145) var(--ii-success-s, 65%) var(--ii-success-l, 42%) / 0.15);
-		color: var(--ii-success);
-	}
-
-	.action-sell {
-		background: hsl(var(--ii-danger-h, 0) var(--ii-danger-s, 85%) var(--ii-danger-l, 55%) / 0.15);
-		color: var(--ii-danger);
-	}
-
-	.action-cash {
-		background: hsl(210 15% 50% / 0.12);
-		color: var(--ii-text-secondary);
-	}
-
-	.trade-row-cash {
-		background: var(--ii-surface-alt);
-		border-top: 2px solid var(--ii-border-subtle);
-	}
-
-	.cash-fund-name {
-		font-weight: 700;
-	}
-
-	.delta-positive {
-		color: var(--ii-success);
-	}
-
-	.delta-negative {
-		color: var(--ii-danger);
-	}
-
-	.col-wt-bar {
-		position: relative;
-		height: 8px;
-		background: var(--ii-surface-alt);
-		border-radius: 4px;
-		overflow: hidden;
-	}
-
-	.bar-fill {
-		display: block;
-		height: 100%;
-		border-radius: 4px;
-		transition: width 0.3s ease;
-	}
-
-	.bar-positive {
-		background: var(--ii-success);
-	}
-
-	.bar-negative {
-		background: var(--ii-danger);
-	}
-
-	.rebalance-empty {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 12px;
-		flex: 1;
-		padding: 40px 24px;
-		text-align: center;
-		color: var(--ii-text-muted);
-		font-size: var(--ii-text-small, 0.8125rem);
-	}
-</style>
