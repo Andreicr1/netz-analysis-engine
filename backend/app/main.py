@@ -7,6 +7,7 @@ Dual mount pattern: root + /api prefix (for Cloudflare gateway proxy).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -99,8 +100,10 @@ from app.domains.wealth.routes.funds import router as wealth_funds_router
 from app.domains.wealth.routes.instruments import router as wealth_instruments_router
 from app.domains.wealth.routes.long_form_reports import router as wealth_long_form_reports_router
 from app.domains.wealth.routes.macro import router as wealth_macro_router
+from app.domains.wealth.routes.market_data import router as wealth_market_data_router
 from app.domains.wealth.routes.manager_screener import router as wealth_manager_screener_router
 from app.domains.wealth.routes.model_portfolios import router as wealth_model_portfolios_router
+from app.domains.wealth.routes.monitoring import router as wealth_monitoring_router
 from app.domains.wealth.routes.monthly_report import router as wealth_monthly_report_router
 from app.domains.wealth.routes.portfolio_views import router as wealth_portfolio_views_router
 from app.domains.wealth.routes.portfolios import router as wealth_portfolios_router
@@ -204,6 +207,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     await _verify_config_completeness()
 
+    # Start WebSocket connection manager + Redis price subscriber
+    from app.core.ws.manager import ConnectionManager, redis_subscriber
+
+    ws_manager = ConnectionManager()
+    app.state.ws_manager = ws_manager
+    redis_sub_task = asyncio.create_task(redis_subscriber(ws_manager))
+
     # Start PgNotifier for config cache invalidation
     from app.core.config.config_service import ConfigService
     from app.core.config.pg_notify import PgNotifier
@@ -228,6 +238,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     yield
     # Cleanup
+    redis_sub_task.cancel()
+    try:
+        await redis_sub_task
+    except asyncio.CancelledError:
+        pass
     if pg_notifier:
         await pg_notifier.stop()
     await engine.dispose()
@@ -448,6 +463,8 @@ api_v1.include_router(wealth_agent_router)
 api_v1.include_router(wealth_search_router)
 api_v1.include_router(wealth_sec_analysis_router)
 api_v1.include_router(wealth_sec_funds_router)
+api_v1.include_router(wealth_market_data_router)
+api_v1.include_router(wealth_monitoring_router)
 
 # ── Mount credit domain routes ───────────────────────────────
 
