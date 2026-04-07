@@ -1,0 +1,31 @@
+{
+	"name": "@investintell/eslint-plugin-netz-runtime",
+	"version": "0.1.0",
+	"description": "ESLint plugin enforcing Netz Stability Guardrails runtime primitives (P1–P6). See docs/reference/stability-guardrails.md.",
+	"type": "module",
+	"main": "./src/index.js",
+	"exports": {
+		".": "./src/index.js"
+	},
+	"files": [
+		"src/"
+	],
+	"scripts": {
+		"test": "vitest run"
+	},
+	"peerDependencies": {
+		"eslint": ">=9.0.0"
+	},
+	"devDependencies": {
+		"eslint": "^9.0.0",
+		"typescript-eslint": "^8.0.0",
+		"vitest": "^3.0.0"
+	},
+	"keywords": [
+		"eslint",
+		"eslint-plugin",
+		"netz",
+		"stability",
+		"svelte"
+	]
+}
