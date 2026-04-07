@@ -92,6 +92,37 @@ filterwarnings = [
 ]
 addopts = "-v --tb=short"
 
+# ── Coverage ────────────────────────────────────────────────────
+# Coverage configuration for the Stability Guardrails runtime kit
+# (design spec §2 + §2.8). Both the asyncio primitives in
+# ``app.core.runtime`` AND the ``p95_guard`` middleware in
+# ``app.core.middleware`` are part of the C2 acceptance criterion.
+# The original ad-hoc CLI command used a slash path
+# (``app/core/middleware/p95_guard``) that ``coverage`` rejected as
+# "module-not-imported", silently dropping the middleware from the
+# report. The canonical command is now exposed as
+# ``make coverage-runtime`` (Makefile) and runs both --cov targets
+# explicitly with the dotted module paths.
+
+[tool.coverage.run]
+branch = true
+omit = [
+    "*/__pycache__/*",
+    "*/tests/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+    # Protocol method stubs
+    "\\.\\.\\.",
+]
+
 [tool.ruff]
 target-version = "py312"
 line-length = 100

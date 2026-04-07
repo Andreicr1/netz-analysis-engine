@@ -1,6 +1,6 @@
 .PHONY: check test lint typecheck architecture serve migrate migration help pipeline \
        dev-ui build-ui dev-credit build-credit dev-wealth build-wealth \
-       dev-all build-all lint-frontend check-all types
+       dev-all build-all lint-frontend check-all types coverage-runtime
 
 # ── Unified gate ──────────────────────────────────────────
 check: lint architecture typecheck test
@@ -15,6 +15,18 @@ typecheck:
 
 test:
 	cd backend && python -m pytest tests/ $(ARGS)
+
+# Coverage report for the Stability Guardrails runtime kit
+# (design spec §2 + §2.8, acceptance criterion C2 ≥ 95%).
+# Both --cov flags are required: the runtime package AND the
+# p95_guard middleware living one directory over. Using a slash
+# path (`app/core/middleware/p95_guard`) silently drops the
+# middleware as "module-not-imported" — always use dotted paths.
+coverage-runtime:
+	cd backend && python -m pytest tests/runtime/ \
+		--cov=app.core.runtime \
+		--cov=app.core.middleware.p95_guard \
+		--cov-report=term-missing $(ARGS)
 
 architecture:
 	cd backend && lint-imports --config ../pyproject.toml
