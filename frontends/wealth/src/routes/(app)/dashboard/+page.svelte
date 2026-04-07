@@ -9,7 +9,7 @@
 	import type { RiskStore, RegimeData, DriftAlert, BehaviorAlert } from "$lib/stores/risk-store.svelte";
 	import type { MarketDataStore, DashboardSnapshot } from "$lib/stores/market-data.svelte";
 	import type { PortfolioAnalyticsStore } from "$lib/stores/portfolio-analytics.svelte";
-	import { ArrowUpRight, ChevronDown, TrendingUp, TrendingDown } from "lucide-svelte";
+	import { ArrowUpRight, TrendingUp, TrendingDown } from "lucide-svelte";
 	import AdvancedMarketChart from "$lib/components/charts/AdvancedMarketChart.svelte";
 	import LiveNewsFeed from "$lib/components/dashboard/LiveNewsFeed.svelte";
 
@@ -65,8 +65,11 @@
 
 	let totalPnl = $derived(analytics.totalPnl);
 
-	let selectedRange = $state("6M");
-	const timeRanges = ["1D", "1W", "1M", "6M", "1Y"];
+	// Note: a parent-level "1D / 1W / 1M / 6M / 1Y" selector used to live
+	// here but it was decorative — only updated a label in the AUM card and
+	// never propagated to AdvancedMarketChart. The audit flagged it as a
+	// confusing dual-selector against the chart's own granularity controls.
+	// Removed entirely; the chart manages its own range.
 
 	let selectedProfile = $state("All");
 	const profileFilters = ["Conservative", "Balanced", "Growth", "All"];
@@ -166,12 +169,6 @@
 		<div class="relative flex flex-col justify-between h-full px-5 py-4 gap-2">
 			<div class="flex items-center justify-between">
 				<span class="text-xs font-semibold uppercase tracking-[0.08em] text-[#85a0bd]">Total AUM</span>
-				<div class="flex items-center gap-1">
-					<span class="border border-white/20 rounded-full px-3 py-1 text-[11px] text-white leading-none">{selectedRange}</span>
-					<span class="border border-white/20 rounded-full p-1.5 leading-none">
-						<ChevronDown size={14} class="text-white" />
-					</span>
-				</div>
 			</div>
 
 			{#if isLoading}
@@ -277,18 +274,6 @@
 				</div>
 			</div>
 
-			<div class="flex flex-wrap items-center gap-1">
-				{#each timeRanges as tr}
-					<button
-						type="button"
-						class="h-7 px-3 rounded-full text-[11px] font-medium text-white transition-colors leading-none
-							{selectedRange === tr
-								? 'bg-[#0177fb]'
-								: 'border border-white/20 hover:bg-white/10'}"
-						onclick={() => selectedRange = tr}
-					>{tr}</button>
-				{/each}
-			</div>
 		</div>
 
 		<!-- Chart cola nas bordas internas — sem padding extra -->
