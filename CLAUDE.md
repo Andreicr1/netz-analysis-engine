@@ -234,6 +234,9 @@ Background workers ingest all external time-series data into hypertables. Routes
 | `sec_bulk_ingestion` | 900_050 | global | sec_etfs, sec_bdcs, sec_money_market_funds, sec_mmf_metrics, sec_registered_funds, strategy_label | SEC DERA bulk ZIPs (N-CEN, N-MFP, N-PORT, BDC) | Quarterly |
 | `form345_ingestion` | 900_051 | global | `sec_insider_transactions`, `sec_insider_sentiment` (MV) | SEC EDGAR Form 345 bulk TSV (insider buys/sells) | Quarterly |
 | `universe_sync` | 900_070 | global | `instruments_universe` | SEC/ESMA catalog (auto-fetches company_tickers_mf.json) | Weekly |
+| `library_index_rebuild` | 900_080 | org | `wealth_library_index` | Self-heal cross-check via EXCEPT/MINUS vs source tables | Nightly |
+| `library_pins_ttl` | 900_081 | org | `wealth_library_pins` | Prune `recent` pins > 20 per user | 6h |
+| `library_bundle_builder` | 900_082 | org | `wealth_library_index`, R2 storage | On-demand Committee Pack ZIP + manifest + SSE emit | On-demand |
 
 **Materialized views** (migration 0078-0079): `mv_unified_funds` (6-universe fund catalog with prospectus stats), `mv_unified_assets` (global instrument search), `mv_macro_latest` (latest macro indicator values), `mv_macro_regional_summary` (regional macro aggregation). Refreshed by `view_refresh.py` (screener views, after universe_sync) and `macro_view_refresh.py` (macro views, after macro/treasury ingestion). Workers call refresh after data ingestion.
 
