@@ -23,6 +23,12 @@ from app.core.runtime.broadcaster import (
     RateLimitedBroadcaster,
     make_connection_id,
 )
+from app.core.runtime.idempotency import (
+    IdempotencyStorage,
+    InMemoryIdempotencyStorage,
+    RedisIdempotencyStorage,
+    idempotent,
+)
 from app.core.runtime.idle_bridge import (
     BridgeState,
     IdleBridgeConfig,
@@ -72,7 +78,9 @@ __all__ = [
     "GateConfig",
     "GateMetrics",
     "GateState",
+    "IdempotencyStorage",
     "IdleBridgeConfig",
+    "InMemoryIdempotencyStorage",
     "IdleBridgePolicy",
     "IllegalStateError",
     "LLMGate",
@@ -87,6 +95,8 @@ __all__ = [
     "ProviderTimeoutError",
     "ProviderUnavailableError",
     "RateLimitedBroadcaster",
+    "RedisIdempotencyStorage",
     "SingleFlightLock",
+    "idempotent",
     "make_connection_id",
 ]
