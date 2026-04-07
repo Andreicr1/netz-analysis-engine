@@ -19,12 +19,10 @@
     - `onSelectFund` callback to open the Analytics column.
 -->
 <script lang="ts">
-	import Search from "lucide-svelte/icons/search";
 	import Loader2 from "lucide-svelte/icons/loader-2";
 	import Undo2 from "lucide-svelte/icons/undo-2";
 	import { PanelErrorState } from "@investintell/ui/runtime";
 	import { workspace, type UniverseFund } from "$lib/state/portfolio-workspace.svelte";
-	import { createDebouncedState } from "$lib/utils/reactivity";
 	import UniverseTable from "./UniverseTable.svelte";
 
 	interface Props {
@@ -33,16 +31,11 @@
 
 	let { onSelectFund }: Props = $props();
 
-	const search = createDebouncedState("", 300);
-
-	// Filtering is cheap (O(n) over ~50-500 funds) and reactive —
-	// $derived recomputes only when debounced search or the universe
-	// itself changes.
-	const filtered = $derived.by(() => {
-		const term = search.debounced.trim().toLowerCase();
-		if (!term) return workspace.universe;
-		return workspace.universe.filter((f) => f._searchKey.includes(term));
-	});
+	// Full universe passed straight to the table — no client-side
+	// filtering while the header search bar is suspended. When search
+	// returns (as a sub-pill toolbar feature), this becomes a $derived
+	// over workspace.universe again.
+	const filtered = $derived(workspace.universe);
 
 	// ── Drop target for reverse drag-drop ────────────────────────
 	// The Portfolio Builder is a staging area: funds dragged OUT of
@@ -101,31 +94,18 @@
 		</div>
 	{/if}
 
-	<header class="uc-header">
-		<div class="uc-title-row">
-			<span class="uc-title">Approved Universe</span>
-			<span class="uc-count">
-				{#if search.current}
-					{filtered.length} / {workspace.universe.length}
-				{:else}
-					{workspace.universe.length}
-				{/if}
-			</span>
-		</div>
+	<!--
+	  Header removed 2026-04-08 per visual alignment feedback: the
+	  Builder column does not carry an equivalent chrome, so the
+	  "Approved Universe" label + count + search-bar row was breaking
+	  Y-axis alignment between the two table <thead>s.
 
-		<div class="uc-search">
-			<Search size={14} class="uc-search-icon" />
-			<input
-				type="search"
-				class="uc-search-input"
-				placeholder="Search name, ticker or block…"
-				value={search.current}
-				oninput={(e) => { search.current = (e.target as HTMLInputElement).value; }}
-				onkeydown={(e) => { if (e.key === "Enter") search.flush(); }}
-				aria-label="Search approved universe"
-			/>
-		</div>
-	</header>
+	  The <UniverseTable> thead starts directly at the top of the
+	  column now, matching BuilderTable. Search functionality is
+	  temporarily suspended — when it returns it will live inside
+	  the sub-pills toolbar (Models | Universe | Policy) in the
+	  left shell, not inside this column.
+	-->
 
 	<svelte:boundary>
 		<div class="uc-body">
@@ -200,68 +180,10 @@
 		font-style: italic;
 	}
 
-	.uc-header {
-		flex-shrink: 0;
-		padding: 16px;
-		border-bottom: 1px solid rgba(64, 66, 73, 0.4);
-		display: flex;
-		flex-direction: column;
-		gap: 16px;
-	}
-
-	.uc-title-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-	}
-
-	.uc-title {
-		font-size: 0.6875rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		color: #85a0bd;
-	}
-
-	.uc-count {
-		font-size: 0.6875rem;
-		font-weight: 700;
-		color: #ffffff;
-		background: rgba(255, 255, 255, 0.05);
-		padding: 2px 10px;
-		border-radius: 999px;
-		font-variant-numeric: tabular-nums;
-	}
-
-	.uc-search {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-		padding: 8px 10px;
-		background: rgba(255, 255, 255, 0.03);
-		border: 1px solid rgba(64, 66, 73, 0.5);
-		border-radius: 2px;
-	}
-
-	.uc-search :global(.uc-search-icon) {
-		color: #85a0bd;
-		flex-shrink: 0;
-	}
-
-	.uc-search-input {
-		flex: 1;
-		min-width: 0;
-		background: transparent;
-		border: none;
-		outline: none;
-		color: #ffffff;
-		font-family: "Urbanist", sans-serif;
-		font-size: 0.8125rem;
-	}
-
-	.uc-search-input::placeholder {
-		color: rgba(133, 160, 189, 0.5);
-	}
+	/* Header styles removed 2026-04-08 along with the <header> element.
+	 * The table now starts at the top of the column, mirroring the
+	 * Builder column structure. If the search returns, it will live
+	 * as a toolbar inside the left-shell sub-pills row, not here. */
 
 	.uc-body {
 		flex: 1;
