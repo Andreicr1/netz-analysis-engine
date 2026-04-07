@@ -29,6 +29,7 @@ from app.core.runtime.outbound_channel import (
     ChannelMetrics,
     DropPolicy,
 )
+from app.core.runtime.single_flight import SingleFlightLock
 
 __all__ = [
     "BoundedOutboundChannel",
@@ -42,5 +43,6 @@ __all__ = [
     "DropPolicy",
     "FanoutResult",
     "RateLimitedBroadcaster",
+    "SingleFlightLock",
     "make_connection_id",
 ]
