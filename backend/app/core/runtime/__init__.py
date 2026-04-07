@@ -35,6 +35,15 @@ from app.core.runtime.outbound_channel import (
     ChannelMetrics,
     DropPolicy,
 )
+from app.core.runtime.provider_gate import (
+    ExternalProviderGate,
+    GateConfig,
+    GateMetrics,
+    GateState,
+    ProviderGateError,
+    ProviderTimeoutError,
+    ProviderUnavailableError,
+)
 from app.core.runtime.single_flight import SingleFlightLock
 
 __all__ = [
@@ -48,10 +57,17 @@ __all__ = [
     "ChannelMetrics",
     "ConnectionId",
     "DropPolicy",
+    "ExternalProviderGate",
     "FanoutResult",
+    "GateConfig",
+    "GateMetrics",
+    "GateState",
     "IdleBridgeConfig",
     "IdleBridgePolicy",
     "IllegalStateError",
+    "ProviderGateError",
+    "ProviderTimeoutError",
+    "ProviderUnavailableError",
     "RateLimitedBroadcaster",
     "SingleFlightLock",
     "make_connection_id",
