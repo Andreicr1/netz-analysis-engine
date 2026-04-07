@@ -10,6 +10,7 @@
 	import { Button } from "@investintell/ui/components/ui/button";
 	import { ChevronLeft, Loader2, Download } from "lucide-svelte";
 	import { createClientApiClient } from "$lib/api/client";
+	import { runScreenerImport, ScreenerImportError, type ImportProgress } from "$lib/api/screener-import";
 	import type { ShareClassItem, FundClassesResponse } from "$lib/types/catalog";
 	import type { ColumnDef } from "@tanstack/svelte-table";
 
@@ -38,6 +39,11 @@
 	let loading = $state(false);
 	let totalClasses = $state(0);
 	let importing = $state<string | null>(null);
+	// Live import progress per class_id — driven by SSE events from
+	// the Phase 4 job-or-stream endpoint. Components read this to
+	// render a progress indicator next to the spinner.
+	let importProgress = $state<Record<string, ImportProgress>>({});
+	let importError = $state<string | null>(null);
 
 	$effect(() => {
 		if (open && fundId) {
@@ -64,13 +70,37 @@
 	async function handleImport(item: ShareClassItem) {
 		if (!item.ticker || importing) return;
 		importing = item.class_id;
+		importError = null;
 		try {
-			await api.post(`/screener/import/${item.ticker}`, {});
+			// Phase 4 — job-or-stream + Idempotency-Key. The helper
+			// computes the SHA-256 idempotency key, posts the
+			// 202 enqueue, and consumes the SSE channel. A second
+			// click within the server's TTL window receives the same
+			// job_id back via the @idempotent decorator and the
+			// onProgress callback fast-forwards through cached events.
+			const run = await runScreenerImport({
+				identifier: item.ticker,
+				blockId: null,
+				strategy: null,
+				getToken,
+				onProgress: (p) => {
+					importProgress = { ...importProgress, [item.class_id]: p };
+				},
+			});
+			await run.result();
 			onImport?.(item);
-		} catch {
-			// Import may fail if already imported — silent
+		} catch (err) {
+			if (err instanceof ScreenerImportError) {
+				importError = err.message;
+			} else {
+				importError = err instanceof Error ? err.message : "Import failed";
+			}
 		} finally {
 			importing = null;
+			// Drop progress entry once the job is settled.
+			const next = { ...importProgress };
+			delete next[item.class_id];
+			importProgress = next;
 		}
 	}
 

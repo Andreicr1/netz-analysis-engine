@@ -187,11 +187,19 @@ export class NetzApiClient {
 		}
 	}
 
-	async post<T>(path: string, body?: unknown, options?: { timeoutMs?: number }): Promise<T> {
+	async post<T>(
+		path: string,
+		body?: unknown,
+		options?: { timeoutMs?: number; headers?: Record<string, string> },
+	): Promise<T> {
 		const timeout = options?.timeoutMs ?? this.timeoutMs;
+		const baseHeaders = await this.headers();
+		const headers = options?.headers
+			? { ...baseHeaders, ...options.headers }
+			: baseHeaders;
 		const res = await fetch(buildUrl(this.baseUrl, path), {
 			method: "POST",
-			headers: await this.headers(),
+			headers,
 			body: body !== undefined ? JSON.stringify(body) : undefined,
 			signal: AbortSignal.timeout(timeout),
 		});

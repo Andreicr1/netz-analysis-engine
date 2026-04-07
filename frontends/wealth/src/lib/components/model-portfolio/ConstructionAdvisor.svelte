@@ -11,6 +11,7 @@
 	} from "@investintell/ui";
 	import { Button } from "@investintell/ui/components/ui/button";
 	import { createClientApiClient } from "$lib/api/client";
+	import { runScreenerImport, ScreenerImportError } from "$lib/api/screener-import";
 	import { blockLabel, profileColor } from "$lib/types/model-portfolio";
 	import type {
 		ConstructionAdvice, CandidateFund, BlockGap,
@@ -154,14 +155,18 @@
 
 			let instrumentId = candidate.instrument_id;
 
-			// Import if not yet in org universe
+			// Import if not yet in org universe (Phase 4 — job-or-
+			// stream + Idempotency-Key. The helper handles SHA-256
+			// key derivation, the 202 enqueue, and SSE progress.)
 			if (!candidate.in_universe) {
 				const identifier = candidate.ticker ?? candidate.external_id;
-				const result = await api.post<{ instrument_id: string }>(
-					`/screener/import/${encodeURIComponent(identifier)}`,
-					{},
-				);
-				instrumentId = result.instrument_id;
+				const run = await runScreenerImport({
+					identifier,
+					blockId: candidate.block_id,
+					getToken,
+				});
+				const importResult = await run.result();
+				instrumentId = importResult.instrument_id || instrumentId;
 			}
 
 			// Assign to block
@@ -174,7 +179,11 @@
 			toastMessage = `${candidate.ticker ?? candidate.name} added to ${blockLabel(candidate.block_id)}`;
 		} catch (e) {
 			toastType = "error";
-			toastMessage = e instanceof Error ? e.message : "Failed to add fund";
+			if (e instanceof ScreenerImportError) {
+				toastMessage = e.message;
+			} else {
+				toastMessage = e instanceof Error ? e.message : "Failed to add fund";
+			}
 		} finally {
 			addingFund = null;
 		}
@@ -190,11 +199,13 @@
 				let instrumentId = candidate.instrument_id;
 				if (!candidate.in_universe) {
 					const identifier = candidate.ticker ?? candidate.external_id;
-					const result = await api.post<{ instrument_id: string }>(
-						`/screener/import/${encodeURIComponent(identifier)}`,
-						{},
-					);
-					instrumentId = result.instrument_id;
+					const run = await runScreenerImport({
+						identifier,
+						blockId: candidate.block_id,
+						getToken,
+					});
+					const importResult = await run.result();
+					instrumentId = importResult.instrument_id || instrumentId;
 				}
 				await api.patch(`/instruments/${instrumentId}/org`, {
 					block_id: candidate.block_id,
