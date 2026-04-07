@@ -640,6 +640,47 @@ export class PortfolioWorkspaceState {
 		return true;
 	}
 
+	/**
+	 * Remove a fund from the allocation (reverse of addFundToBlock).
+	 *
+	 * The Portfolio Builder is a staging area — the portfolio is not
+	 * "live" until explicitly activated. Removing a fund here simply
+	 * takes it out of `fund_selection_schema.funds`, which makes the
+	 * UniverseTable's `isAllocated` check return `false` and the fund
+	 * appears re-enabled (full opacity, draggable) back in the
+	 * Approved Universe column. This is the user's primary undo
+	 * action while modelling.
+	 *
+	 * After removal, weights within the affected block are redistributed
+	 * equally across the remaining funds, matching the convention of
+	 * `addFundToBlock`. When the last fund in a block is removed, the
+	 * block weight falls to 0 naturally.
+	 *
+	 * Returns `true` if the fund was found and removed, `false` if not.
+	 */
+	removeFund(instrumentId: string): boolean {
+		if (!this.portfolio?.fund_selection_schema?.funds) return false;
+		const schema = this.portfolio.fund_selection_schema;
+		const idx = schema.funds.findIndex((f) => f.instrument_id === instrumentId);
+		if (idx === -1) return false;
+
+		const removed = schema.funds[idx]!;
+		schema.funds.splice(idx, 1);
+
+		// Re-equalise the weights in the block that just lost a fund.
+		const remainingInBlock = schema.funds.filter((f) => f.block_id === removed.block_id);
+		if (remainingInBlock.length > 0) {
+			const equalWeight = Math.round((1 / remainingInBlock.length) * 10000) / 10000;
+			for (const f of remainingInBlock) {
+				f.weight = equalWeight;
+			}
+		}
+
+		// Trigger reactivity
+		this.portfolio = { ...this.portfolio };
+		return true;
+	}
+
 	updatePolicy(key: "cvar_limit" | "max_single_fund_weight", value: number) {
 		if (!this.portfolio) return;
 		// Policy updates are local UI state — the backend reads policy from StrategicAllocation table

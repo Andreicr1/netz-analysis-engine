@@ -1,28 +1,40 @@
 <!--
-  UniverseTable — 12-column institutional density table.
+  UniverseTable — 3-level institutional density tree.
 
   Reference: docs/superpowers/specs/2026-04-08-portfolio-builder-flexible-columns.md §3.1
 
-  Replaces the 5-column UniversePanel.svelte (deprecated for deletion
-  in Phase D after visual validation). Tier 1 columns always visible:
+  Structure (matches the PortfolioOverview 3-level tree exactly so a
+  fund appears in the same block in both the Universe and the Builder):
+
+    Level 1: Asset Class Group  (e.g. EQUITIES)
+      └─ Level 2: Block / Region  (e.g. North America — Large Cap)
+           ├─ Level 3: Fund row  (12 Tier 1 density columns)
+           ├─ Level 3: Fund row
+           └─ ...
+
+  Tier 1 column set (spec §3.1):
 
     1. Grip       |  2. Fund+Ticker  |  3. Asset class chip
     4. AUM        |  5. Expense %    |  6. 3Y return
     7. Risk-adj   |  8. Worst loss   |  9. Correlation → portfolio
     10. Momentum  | 11. Liquidity    | 12. Netz Score
 
-  Contract with parent:
-    - Receives `funds: UniverseFund[]` already filtered/sorted by the
-      UniverseColumn wrapper.
-    - Emits `onSelectFund(fund)` when a row is clicked — opens the
-      Analytics 3rd column (Estado B → Estado C transition).
-    - Emits `onDragStart(e, fund)` native HTML5 drag — same contract
-      as the legacy UniversePanel so allocation blocks keep receiving
-      drops without modification.
+  Why the 3-level match with Builder matters
+  -------------------------------------------
+  The previous 2-level version (group → fund) rendered a different
+  tree shape than the Builder (group → block → fund), so the same
+  fund appeared in visually different positions between the two
+  columns. Harmonising the shape means the PM can scan "North America
+  — Large Cap" in the Universe and see the candidates, then look at
+  the same North America — Large Cap block in the Builder and see
+  what's already allocated. 1:1 spatial parity eliminates mental
+  model drift.
 
-  Grouping: BLOCK_GROUPS (Cash, Equities, Fixed Income, Alternatives),
-  collapsible headers, count per group. `_searchKey` filter already
-  applied upstream — this table does NOT filter, it only renders.
+  Allocated funds are dimmed (opacity 0.4) to show "already in the
+  Builder" without hiding them — the PM can still see the full menu.
+  The Portfolio Builder is a staging area; funds can be dragged back
+  out from the Builder to the Universe drop target (see UniverseColumn)
+  which calls `workspace.removeFund()` and re-enables the row here.
 
   Nota sobre densidade: 12 colunas × ~44px de altura por linha gera
   uma tabela que precisa de pelo menos ~700px de largura da coluna
@@ -48,7 +60,7 @@
 	import Minus from "lucide-svelte/icons/minus";
 	import ChevronRight from "lucide-svelte/icons/chevron-right";
 	import { formatNumber, formatPercent, formatAUM } from "@investintell/ui";
-	import { BLOCK_GROUPS, groupDisplay } from "$lib/constants/blocks";
+	import { BLOCK_GROUPS, blockDisplay, groupDisplay } from "$lib/constants/blocks";
 	import { humanizeMetric } from "$lib/i18n/quant-labels";
 	import { workspace, type UniverseFund } from "$lib/state/portfolio-workspace.svelte";
 
@@ -63,11 +75,23 @@
 
 	const GROUP_ORDER = ["CASH & EQUIVALENTS", "EQUITIES", "FIXED INCOME", "ALTERNATIVES"];
 
-	// Group funds by BLOCK_GROUPS. Pre-computed in $derived.by so every
-	// group render is O(1) during virtualisation.
-	const universeTree = $derived.by(() => {
-		const groupMap = new Map<string, UniverseFund[]>();
+	interface BlockNode {
+		blockId: string;
+		displayLabel: string;
+		funds: UniverseFund[];
+	}
 
+	interface GroupNode {
+		name: string;
+		displayName: string;
+		blocks: BlockNode[];
+		fundCount: number;
+	}
+
+	// Build the 3-level tree: Asset Class Group → Block/Region → Fund.
+	// Same shape as the Builder's PortfolioOverview tree — guarantees
+	// 1:1 spatial parity between the two columns.
+	const universeTree = $derived.by<GroupNode[]>(() => {
 		function getGroupName(blockId: string): string {
 			for (const [groupName, blocks] of Object.entries(BLOCK_GROUPS)) {
 				if (blocks.includes(blockId)) return groupName;
@@ -75,33 +99,79 @@
 			return "OTHER";
 		}
 
+		// First pass: bucket funds by group → block.
+		const groups = new Map<string, Map<string, UniverseFund[]>>();
 		for (const fund of funds) {
 			const groupName = getGroupName(fund.block_id);
-			if (!groupMap.has(groupName)) groupMap.set(groupName, []);
-			groupMap.get(groupName)!.push(fund);
+			let blockMap = groups.get(groupName);
+			if (!blockMap) {
+				blockMap = new Map();
+				groups.set(groupName, blockMap);
+			}
+			const existing = blockMap.get(fund.block_id);
+			if (existing) {
+				existing.push(fund);
+			} else {
+				blockMap.set(fund.block_id, [fund]);
+			}
 		}
 
-		const result: { name: string; displayName: string; funds: UniverseFund[] }[] = [];
-		for (const key of GROUP_ORDER) {
-			const groupFunds = groupMap.get(key);
-			if (groupFunds && groupFunds.length > 0) {
-				result.push({ name: key, displayName: groupDisplay(key), funds: groupFunds });
-				groupMap.delete(key);
+		// Second pass: materialise ordered tree.
+		const tree: GroupNode[] = [];
+		function pushGroup(name: string) {
+			const blockMap = groups.get(name);
+			if (!blockMap || blockMap.size === 0) return;
+			const blocks: BlockNode[] = [];
+			let fundCount = 0;
+			// Sort block IDs within a group by BLOCK_GROUPS declaration
+			// order so the shape matches PortfolioOverview deterministically.
+			const canonicalOrder = BLOCK_GROUPS[name] ?? Array.from(blockMap.keys());
+			for (const blockId of canonicalOrder) {
+				const blockFunds = blockMap.get(blockId);
+				if (blockFunds && blockFunds.length > 0) {
+					blocks.push({
+						blockId,
+						displayLabel: blockDisplay(blockId),
+						funds: blockFunds,
+					});
+					fundCount += blockFunds.length;
+					blockMap.delete(blockId);
+				}
 			}
-		}
-		for (const [key, groupFunds] of groupMap.entries()) {
-			if (groupFunds.length > 0) {
-				result.push({ name: key, displayName: groupDisplay(key), funds: groupFunds });
+			// Any leftover blocks not in canonical order (defensive).
+			for (const [blockId, blockFunds] of blockMap.entries()) {
+				blocks.push({
+					blockId,
+					displayLabel: blockDisplay(blockId),
+					funds: blockFunds,
+				});
+				fundCount += blockFunds.length;
 			}
+			tree.push({
+				name,
+				displayName: groupDisplay(name),
+				blocks,
+				fundCount,
+			});
+			groups.delete(name);
 		}
-		return result;
+
+		for (const canonicalGroup of GROUP_ORDER) pushGroup(canonicalGroup);
+		for (const remaining of groups.keys()) pushGroup(remaining);
+		return tree;
 	});
 
-	// Per-group collapse state — in-memory, not localStorage (by rule).
-	let collapsed = $state<Record<string, boolean>>({});
+	// Collapse state per group and per block — in-memory, not localStorage.
+	let collapsedGroup = $state<Record<string, boolean>>({});
+	let collapsedBlock = $state<Record<string, boolean>>({});
 
-	function toggleGroup(group: string) {
-		collapsed[group] = !collapsed[group];
+	function toggleGroup(name: string) {
+		collapsedGroup[name] = !collapsedGroup[name];
+	}
+
+	function toggleBlock(blockId: string, e: Event) {
+		e.stopPropagation();
+		collapsedBlock[blockId] = !collapsedBlock[blockId];
 	}
 
 	function isAllocated(instrumentId: string): boolean {
@@ -198,7 +268,9 @@
 		</thead>
 
 		{#each universeTree as group (group.name)}
-			{@const isCollapsed = collapsed[group.name] ?? false}
+			{@const isGroupCollapsed = collapsedGroup[group.name] ?? false}
+
+			<!-- ══ Level 1: Asset Class Group ══ -->
 			<tbody class="ut-group">
 				<tr class="ut-group-header">
 					<td colspan="12">
@@ -206,63 +278,89 @@
 							type="button"
 							class="ut-group-toggle"
 							onclick={() => toggleGroup(group.name)}
-							aria-expanded={!isCollapsed}
+							aria-expanded={!isGroupCollapsed}
 						>
 							<ChevronRight
-								class="ut-group-chevron {isCollapsed ? '' : 'ut-group-chevron--open'}"
-								size={14}
+								class="ut-group-chevron {isGroupCollapsed ? '' : 'ut-group-chevron--open'}"
+								size={16}
 							/>
 							<span class="ut-group-name">{group.displayName}</span>
-							<span class="ut-group-count">{group.funds.length}</span>
+							<span class="ut-group-count">{group.fundCount}</span>
 						</button>
 					</td>
 				</tr>
 
-				{#if !isCollapsed}
-					{#each group.funds as fund (fund.instrument_id)}
-						{@const allocated = isAllocated(fund.instrument_id)}
-						{@const corr = fund.correlation_to_portfolio ?? null}
-						{@const mom = momentumIcon(fund.blended_momentum_score ?? null)}
-						{@const MomIcon = mom.icon}
-						<tr
-							class="ut-row"
-							class:ut-row--allocated={allocated}
-							draggable={!allocated}
-							ondragstart={(e) => handleDragStart(e, fund)}
-							onclick={() => handleRowClick(fund)}
-							onkeydown={(e) => handleRowKeydown(e, fund)}
-							tabindex="0"
-							role="button"
-							aria-label={`${fund.fund_name} — open details`}
-						>
-							<td class="ut-td-grip">
-								<GripVertical size={14} />
+				{#if !isGroupCollapsed}
+					{#each group.blocks as block (block.blockId)}
+						{@const isBlockCollapsed = collapsedBlock[block.blockId] ?? false}
+
+						<!-- ── Level 2: Block / Region ── -->
+						<tr class="ut-block-header">
+							<td colspan="12">
+								<button
+									type="button"
+									class="ut-block-toggle"
+									onclick={(e) => toggleBlock(block.blockId, e)}
+									aria-expanded={!isBlockCollapsed}
+								>
+									<ChevronRight
+										class="ut-block-chevron {isBlockCollapsed ? '' : 'ut-block-chevron--open'}"
+										size={14}
+									/>
+									<span class="ut-block-name">{block.displayLabel}</span>
+									<span class="ut-block-count">{block.funds.length}</span>
+								</button>
 							</td>
-							<td class="ut-td-fund">
-								<div class="ut-fund-name">{fund.fund_name}</div>
-								{#if fund.ticker}
-									<div class="ut-fund-ticker">{fund.ticker}</div>
-								{/if}
-							</td>
-							<td class="ut-td-class">
-								<span class="ut-chip">{fund.asset_class ?? "—"}</span>
-							</td>
-							<td class="ut-td-num">{formatAumCell(fund.aum_usd ?? null)}</td>
-							<td class="ut-td-num">{formatPercentCell(fund.expense_ratio ?? null)}</td>
-							<td class="ut-td-num">{formatPercentCell(fund.return_3y_ann ?? null, true)}</td>
-							<td class="ut-td-num">{formatRatioCell(fund.sharpe_1y ?? null)}</td>
-							<td class="ut-td-num ut-td-loss">{formatPercentCell(fund.max_drawdown_1y ?? null)}</td>
-							<td class="ut-td-num ut-td-corr ut-td-corr-col" style:color={correlationColor(corr)}>
-								{formatRatioCell(corr)}
-							</td>
-							<td class="ut-td-momentum ut-td-momentum-col" style:color={mom.color}>
-								<MomIcon size={14} />
-							</td>
-							<td class="ut-td-liquidity ut-td-liquidity-col">
-								<span class="ut-liquidity-pill">{fund.liquidity_tier ?? "—"}</span>
-							</td>
-							<td class="ut-td-num ut-td-score">{formatScoreCell(fund.manager_score ?? null)}</td>
 						</tr>
+
+						{#if !isBlockCollapsed}
+							{#each block.funds as fund (fund.instrument_id)}
+								{@const allocated = isAllocated(fund.instrument_id)}
+								{@const corr = fund.correlation_to_portfolio ?? null}
+								{@const mom = momentumIcon(fund.blended_momentum_score ?? null)}
+								{@const MomIcon = mom.icon}
+								<!-- ── Level 3: Fund row ── -->
+								<tr
+									class="ut-row"
+									class:ut-row--allocated={allocated}
+									draggable={!allocated}
+									ondragstart={(e) => handleDragStart(e, fund)}
+									onclick={() => handleRowClick(fund)}
+									onkeydown={(e) => handleRowKeydown(e, fund)}
+									tabindex="0"
+									role="button"
+									aria-label={`${fund.fund_name} — open details`}
+								>
+									<td class="ut-td-grip">
+										<GripVertical size={14} />
+									</td>
+									<td class="ut-td-fund">
+										<div class="ut-fund-name">{fund.fund_name}</div>
+										{#if fund.ticker}
+											<div class="ut-fund-ticker">{fund.ticker}</div>
+										{/if}
+									</td>
+									<td class="ut-td-class">
+										<span class="ut-chip">{fund.asset_class ?? "—"}</span>
+									</td>
+									<td class="ut-td-num">{formatAumCell(fund.aum_usd ?? null)}</td>
+									<td class="ut-td-num">{formatPercentCell(fund.expense_ratio ?? null)}</td>
+									<td class="ut-td-num">{formatPercentCell(fund.return_3y_ann ?? null, true)}</td>
+									<td class="ut-td-num">{formatRatioCell(fund.sharpe_1y ?? null)}</td>
+									<td class="ut-td-num ut-td-loss">{formatPercentCell(fund.max_drawdown_1y ?? null)}</td>
+									<td class="ut-td-num ut-td-corr ut-td-corr-col" style:color={correlationColor(corr)}>
+										{formatRatioCell(corr)}
+									</td>
+									<td class="ut-td-momentum ut-td-momentum-col" style:color={mom.color}>
+										<MomIcon size={14} />
+									</td>
+									<td class="ut-td-liquidity ut-td-liquidity-col">
+										<span class="ut-liquidity-pill">{fund.liquidity_tier ?? "—"}</span>
+									</td>
+									<td class="ut-td-num ut-td-score">{formatScoreCell(fund.manager_score ?? null)}</td>
+								</tr>
+							{/each}
+						{/if}
 					{/each}
 				{/if}
 			</tbody>
@@ -382,6 +480,61 @@
 		font-variant-numeric: tabular-nums;
 	}
 
+	/* ── Level 2: Block / Region header ──────────────────────────
+	 * Visual hierarchy:
+	 *   Group (L1) — uppercase, bold, #cbccd1
+	 *   Block (L2) — title case, medium, #a8b8cc, indented 24px
+	 *   Fund  (L3) — small, #fff, standard row
+	 */
+	.ut-block-header td {
+		padding: 0;
+		background: rgba(20, 21, 25, 0.6);
+		border-bottom: 1px solid rgba(64, 66, 73, 0.2);
+	}
+
+	.ut-block-toggle {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
+		padding: 6px 12px 6px 36px;
+		background: transparent;
+		border: none;
+		cursor: pointer;
+		text-align: left;
+		color: #a8b8cc;
+		font-family: "Urbanist", sans-serif;
+	}
+
+	.ut-block-toggle:hover {
+		background: rgba(255, 255, 255, 0.02);
+	}
+
+	.ut-block-toggle :global(.ut-block-chevron) {
+		color: rgba(133, 160, 189, 0.5);
+		transition: transform 160ms ease;
+		flex-shrink: 0;
+	}
+
+	.ut-block-toggle :global(.ut-block-chevron--open) {
+		transform: rotate(90deg);
+	}
+
+	.ut-block-name {
+		font-size: 0.75rem;
+		font-weight: 500;
+		color: #a8b8cc;
+		letter-spacing: 0.01em;
+	}
+
+	.ut-block-count {
+		font-size: 0.625rem;
+		color: rgba(133, 160, 189, 0.6);
+		font-variant-numeric: tabular-nums;
+		margin-left: auto;
+		padding-right: 8px;
+	}
+
 	/* ── Data rows ───────────────────────────────────────────── */
 
 	.ut-row {
@@ -421,8 +574,11 @@
 	.ut-td-grip {
 		color: #85a0bd;
 		opacity: 0.4;
-		padding-left: 4px !important;
+		/* Indent 48px from the left edge so funds nest visually
+		 * under the Level 2 Block / Region header above them. */
+		padding-left: 48px !important;
 		padding-right: 0 !important;
+		width: 68px;
 	}
 
 	.ut-td-fund {

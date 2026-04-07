@@ -21,6 +21,7 @@
 <script lang="ts">
 	import Search from "lucide-svelte/icons/search";
 	import Loader2 from "lucide-svelte/icons/loader-2";
+	import Undo2 from "lucide-svelte/icons/undo-2";
 	import { PanelErrorState } from "@investintell/ui/runtime";
 	import { workspace, type UniverseFund } from "$lib/state/portfolio-workspace.svelte";
 	import { createDebouncedState } from "$lib/utils/reactivity";
@@ -42,9 +43,64 @@
 		if (!term) return workspace.universe;
 		return workspace.universe.filter((f) => f._searchKey.includes(term));
 	});
+
+	// ── Drop target for reverse drag-drop ────────────────────────
+	// The Portfolio Builder is a staging area: funds dragged OUT of
+	// the Builder blocks and dropped here are REMOVED from the
+	// allocation. The payload signature is the same text/plain
+	// instrument_id, but with an extra "application/x-netz-allocated"
+	// MIME type set by PortfolioOverview so we know this is a
+	// removal intent (not a duplicate add). Simple drops of Universe
+	// fund IDs onto the Universe itself are no-ops (they come from
+	// allocated blocks only in practice).
+	let removeDropActive = $state(false);
+
+	function isAllocatedDrag(e: DragEvent): boolean {
+		if (!e.dataTransfer) return false;
+		return e.dataTransfer.types.includes("application/x-netz-allocated");
+	}
+
+	function handleRemoveDragOver(e: DragEvent) {
+		if (!isAllocatedDrag(e)) return;
+		e.preventDefault();
+		if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+		removeDropActive = true;
+	}
+
+	function handleRemoveDragLeave(e: DragEvent) {
+		const related = e.relatedTarget as Node | null;
+		const current = e.currentTarget as HTMLElement;
+		if (related && current.contains(related)) return;
+		removeDropActive = false;
+	}
+
+	function handleRemoveDrop(e: DragEvent) {
+		if (!isAllocatedDrag(e)) return;
+		e.preventDefault();
+		const instrumentId = e.dataTransfer?.getData("text/plain");
+		removeDropActive = false;
+		if (!instrumentId) return;
+		workspace.removeFund(instrumentId);
+	}
 </script>
 
-<div class="uc-root">
+<div
+	class="uc-root"
+	class:uc-root--removing={removeDropActive}
+	ondragover={handleRemoveDragOver}
+	ondragleave={handleRemoveDragLeave}
+	ondrop={handleRemoveDrop}
+	role="region"
+	aria-label="Approved Universe — drop allocated funds here to remove them from the Builder"
+>
+	{#if removeDropActive}
+		<div class="uc-remove-overlay">
+			<Undo2 size={28} />
+			<span class="uc-remove-title">Drop to return fund to the Universe</span>
+			<span class="uc-remove-sub">The portfolio is not live — changes are staged for review</span>
+		</div>
+	{/if}
+
 	<header class="uc-header">
 		<div class="uc-title-row">
 			<span class="uc-title">Approved Universe</span>
@@ -102,6 +158,46 @@
 		min-height: 0;
 		background: #141519;
 		overflow: hidden;
+		position: relative;
+		transition: box-shadow 120ms ease, background 120ms ease;
+	}
+
+	/* ── Drop target highlight: fund being dragged BACK out of the
+	 *    Builder. Inner shadow + subtle brand tint signal "release
+	 *    here to remove from allocation". The removal is reversible
+	 *    — the portfolio is a staging area, not live. */
+	.uc-root--removing {
+		background: rgba(1, 119, 251, 0.04);
+		box-shadow: inset 0 0 0 2px rgba(1, 119, 251, 0.45);
+	}
+
+	.uc-remove-overlay {
+		position: absolute;
+		inset: 0;
+		background: rgba(14, 15, 19, 0.82);
+		backdrop-filter: blur(2px);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 12px;
+		z-index: 5;
+		pointer-events: none;
+		color: #ffffff;
+		font-family: "Urbanist", sans-serif;
+	}
+
+	.uc-remove-title {
+		font-size: 15px;
+		font-weight: 600;
+		color: #ffffff;
+	}
+
+	.uc-remove-sub {
+		font-size: 12px;
+		font-weight: 400;
+		color: #85a0bd;
+		font-style: italic;
 	}
 
 	.uc-header {
