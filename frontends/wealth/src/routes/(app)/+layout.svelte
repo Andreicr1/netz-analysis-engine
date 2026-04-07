@@ -56,6 +56,20 @@
 	function isActive(href: string): boolean {
 		return $page.url.pathname === href || $page.url.pathname.startsWith(href + "/");
 	}
+
+	// ── Full-bleed route opt-out ─────────────────────────────────
+	// Most content routes benefit from the max-w-screen-2xl cap +
+	// p-6 padding for readability. Workspace-class routes like
+	// /portfolio (Flexible Columns Layout Builder) need every
+	// horizontal pixel — the 12-column Universe table alone demands
+	// ~1074px, and at 45% of workspace that requires > 2000px of
+	// canvas. Those routes opt out of the cage here.
+	const FULL_BLEED_PATHS = ["/portfolio"];
+	const isFullBleed = $derived(
+		FULL_BLEED_PATHS.some(
+			(p) => $page.url.pathname === p || $page.url.pathname.startsWith(p + "/"),
+		),
+	);
 </script>
 
 <div class="flex h-screen w-full bg-black text-white overflow-hidden font-sans">
@@ -212,11 +226,18 @@
 			style="height: calc(100vh - 72px); padding: 0 24px 24px 0;"
 		>
 			<main class="w-full h-full bg-[#1a1b20] rounded-tl-[32px] shadow-2xl border border-[#404149] flex flex-col overflow-hidden">
-				<div class="flex-1 min-h-0 overflow-y-auto p-6">
-					<div class="mx-auto w-full max-w-screen-2xl">
+				{#if isFullBleed}
+					<!-- Full-bleed: no padding, no max-width cap. Child owns geometry. -->
+					<div class="flex-1 min-h-0 overflow-hidden">
 						{@render children()}
 					</div>
-				</div>
+				{:else}
+					<div class="flex-1 min-h-0 overflow-y-auto p-6">
+						<div class="mx-auto w-full max-w-screen-2xl">
+							{@render children()}
+						</div>
+					</div>
+				{/if}
 			</main>
 		</div>
 	</div>

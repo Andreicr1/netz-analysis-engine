@@ -94,19 +94,20 @@
 </div>
 
 <style>
+	/* Hardcoded dark — no var() fallbacks. Matches legacy UniversePanel. */
 	.uc-root {
 		display: flex;
 		flex-direction: column;
 		height: 100%;
 		min-height: 0;
-		background: var(--ii-surface, #141519);
+		background: #141519;
 		overflow: hidden;
 	}
 
 	.uc-header {
 		flex-shrink: 0;
 		padding: 12px 16px 8px;
-		border-bottom: 1px solid var(--ii-border-subtle, rgba(64, 66, 73, 0.4));
+		border-bottom: 1px solid rgba(64, 66, 73, 0.4);
 	}
 
 	.uc-title-row {
@@ -121,13 +122,13 @@
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
-		color: var(--ii-text-muted, #85a0bd);
+		color: #85a0bd;
 	}
 
 	.uc-count {
 		font-size: 0.6875rem;
 		font-weight: 700;
-		color: var(--ii-text-primary, white);
+		color: #ffffff;
 		background: rgba(255, 255, 255, 0.05);
 		padding: 2px 10px;
 		border-radius: 999px;
@@ -140,12 +141,12 @@
 		gap: 8px;
 		padding: 8px 10px;
 		background: rgba(255, 255, 255, 0.03);
-		border: 1px solid var(--ii-border-subtle, rgba(64, 66, 73, 0.5));
-		border-radius: 8px;
+		border: 1px solid rgba(64, 66, 73, 0.5);
+		border-radius: 2px;
 	}
 
 	.uc-search :global(.uc-search-icon) {
-		color: var(--ii-text-muted, #85a0bd);
+		color: #85a0bd;
 		flex-shrink: 0;
 	}
 
@@ -155,8 +156,8 @@
 		background: transparent;
 		border: none;
 		outline: none;
-		color: var(--ii-text-primary, white);
-		font-family: var(--ii-font-sans);
+		color: #ffffff;
+		font-family: "Urbanist", sans-serif;
 		font-size: 0.8125rem;
 	}
 
@@ -176,7 +177,7 @@
 		justify-content: center;
 		gap: 10px;
 		padding: 48px 16px;
-		color: var(--ii-text-muted, #85a0bd);
+		color: #85a0bd;
 		font-size: 0.8125rem;
 	}
 

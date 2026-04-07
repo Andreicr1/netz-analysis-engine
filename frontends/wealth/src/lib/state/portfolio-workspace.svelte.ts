@@ -207,21 +207,33 @@ export class PortfolioWorkspaceState {
 	universe = $state<UniverseFund[]>([]);
 
 	/**
-	 * The fund currently "under inspection" in the Analytics column
-	 * (Estado C of the Flexible Columns Layout — design spec
-	 * 2026-04-08). Populated when the PM clicks a row in the Universe
-	 * table; consumed by the 3rd column to drive the Fund drill-down
-	 * tab. `null` means Estado B is active (2 columns only).
+	 * Analytics column mode — drives Estado C of the Flexible Columns
+	 * Layout (design spec 2026-04-08). Three mutually-exclusive modes:
+	 *
+	 *   - `"fund"` → PM clicked a row in the Universe table; the 3rd
+	 *     column shows the drill-down for `selectedAnalyticsFund`.
+	 *   - `"portfolio"` → PM clicked "View Chart" in the Builder
+	 *     action bar; the 3rd column shows MainPortfolioChart (NAV
+	 *     synthesis) for the current portfolio. This was previously
+	 *     pinned to the top of the Builder column — moved here so
+	 *     the Builder has full vertical space for allocation blocks.
+	 *   - `null` → Estado B (2 columns only, 3rd column hidden).
 	 *
 	 * Reset rules:
 	 *   1. Cleared on `selectPortfolio()` (switching model starts fresh).
 	 *   2. Cleared on `resetBuilderEntry()` (re-entering /portfolio from
-	 *      another route — Andrei's explicit "reset ao voltar" rule).
-	 *   3. Cleared directly by the Analytics column close button via
-	 *      `clearSelectedAnalyticsFund()`.
+	 *      another route — "reset ao voltar" rule).
+	 *   3. Cleared directly by the Analytics close button via
+	 *      `clearAnalytics()`.
 	 *
 	 * NOT armazenado como `layoutState`. The layout state is derived:
-	 *   selectedAnalyticsFund ? "three-col" : "two-col"
+	 *   analyticsMode !== null ? "three-col" : "two-col"
+	 */
+	analyticsMode = $state.raw<"fund" | "portfolio" | null>(null);
+
+	/**
+	 * The specific fund populating the Analytics column when
+	 * `analyticsMode === "fund"`. Ignored in `"portfolio"` mode.
 	 */
 	selectedAnalyticsFund = $state.raw<UniverseFund | null>(null);
 
@@ -272,16 +284,26 @@ export class PortfolioWorkspaceState {
 	}
 
 	/**
-	 * Set the fund currently under inspection in the Analytics column
-	 * (triggers Estado C of the Flexible Columns Layout). Passing
-	 * `null` collapses the 3rd column back to Estado B.
+	 * Open the Analytics column in "fund" mode with the given fund.
+	 * Triggered by a row click in the Universe table.
 	 */
-	setSelectedAnalyticsFund(fund: UniverseFund | null) {
+	openAnalyticsForFund(fund: UniverseFund) {
 		this.selectedAnalyticsFund = fund;
+		this.analyticsMode = "fund";
 	}
 
-	/** Convenience — collapse the Analytics column. */
-	clearSelectedAnalyticsFund() {
+	/**
+	 * Open the Analytics column in "portfolio" mode showing the
+	 * MainPortfolioChart NAV synthesis. Triggered by the Builder
+	 * "View Chart" button.
+	 */
+	openAnalyticsForPortfolio() {
+		this.analyticsMode = "portfolio";
+	}
+
+	/** Close the Analytics column, collapsing back to Estado B. */
+	clearAnalytics() {
+		this.analyticsMode = null;
 		this.selectedAnalyticsFund = null;
 	}
 
@@ -296,6 +318,7 @@ export class PortfolioWorkspaceState {
 	 * want to drop workspace state, only layout state.
 	 */
 	resetBuilderEntry() {
+		this.analyticsMode = null;
 		this.selectedAnalyticsFund = null;
 	}
 
@@ -318,6 +341,7 @@ export class PortfolioWorkspaceState {
 		this.navSeries = [];
 		// Switching models is a hard reset of the analytics context —
 		// the 3rd column closes and the PM starts fresh in Estado B.
+		this.analyticsMode = null;
 		this.selectedAnalyticsFund = null;
 		// Fire-and-forget: load track-record, factor analysis, attribution, drift
 		this.loadTrackRecord();

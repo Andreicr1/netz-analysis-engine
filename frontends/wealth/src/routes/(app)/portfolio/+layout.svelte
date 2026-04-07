@@ -50,12 +50,17 @@
 
 <style>
   .pw-layout {
-    height: calc(100vh - 88px - 68px);
+    /* Topbar = 72px (shell), pills row = ~68px.
+     * Full-bleed — no horizontal padding so the Flexible Columns
+     * Layout inside the Builder page fills every pixel of the
+     * workspace canvas. Top padding keeps the pills breathing. */
+    height: calc(100vh - 72px);
     display: flex;
     flex-direction: column;
-    padding: 24px;
-    gap: 34px;
+    padding: 16px 16px 0 16px;
+    gap: 16px;
     overflow: hidden;
+    background: #0e0f13;
   }
 
   /* ── Nav Bar ── */

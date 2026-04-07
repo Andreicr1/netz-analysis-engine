@@ -62,13 +62,14 @@
 	// ── Layout state — DERIVED, never stored ────────────────────────
 	// The layout state is a pure function of observable facts in the
 	// store. Storing it creates classes of bug like "three-col but
-	// selectedAnalyticsFund is null". See spec §2.2.
+	// analyticsMode is null". See spec §2.2.
+	//
+	// analyticsMode drives Estado C openness:
+	//   - "fund"      → row click in Universe table
+	//   - "portfolio" → "View Chart" button in Builder action bar
+	//   - null        → Estado B (2 columns)
 	const layoutState = $derived<LayoutState>(
-		workspace.selectedAnalyticsFund
-			? "three-col"
-			: workspace.portfolioId
-				? "two-col"
-				: "two-col", // landing (Estado A) deferred; empty builder still renders two-col
+		workspace.analyticsMode !== null ? "three-col" : "two-col",
 	);
 
 	// ── Left column tab switching ───────────────────────────────────
@@ -83,7 +84,7 @@
 	] as const;
 
 	function handleSelectFund(fund: UniverseFund) {
-		workspace.setSelectedAnalyticsFund(fund);
+		workspace.openAnalyticsForFund(fund);
 	}
 </script>
 
@@ -156,12 +157,18 @@
 </div>
 
 <style>
+	/* ── Hardcoded dark palette — matches legacy UniversePanel ─────
+	 * No var() fallbacks — the component is force-rendered dark
+	 * regardless of theme context so visual validation on dev
+	 * server without a theme provider matches production. */
+
 	.bld-shell {
 		height: 100%;
 		width: 100%;
 		min-height: 0;
 		overflow: hidden;
 		position: relative;
+		background: #0e0f13;
 	}
 
 	/* ── Left column chrome ──────────────────────────────────────── */
@@ -170,7 +177,7 @@
 		flex-direction: column;
 		height: 100%;
 		min-height: 0;
-		background: var(--ii-surface, #141519);
+		background: #141519;
 	}
 
 	.bld-left-header {
@@ -186,7 +193,7 @@
 		gap: 6px;
 		padding: 0 16px 10px;
 		flex-shrink: 0;
-		border-bottom: 1px solid var(--ii-border-subtle, rgba(64, 66, 73, 0.3));
+		border-bottom: 1px solid rgba(64, 66, 73, 0.4);
 	}
 
 	.bld-sub-pill {
@@ -196,8 +203,8 @@
 		border: 1px solid transparent;
 		border-radius: 999px;
 		background: transparent;
-		color: var(--ii-text-muted, #85a0bd);
-		font-family: var(--ii-font-sans);
+		color: #85a0bd;
+		font-family: "Urbanist", sans-serif;
 		font-size: 0.75rem;
 		font-weight: 500;
 		cursor: pointer;
@@ -205,18 +212,18 @@
 	}
 
 	.bld-sub-pill:hover {
-		color: var(--ii-text-primary, white);
+		color: #ffffff;
 		background: rgba(255, 255, 255, 0.03);
 	}
 
 	.bld-sub-pill--active {
-		background: var(--ii-brand-primary, #0177fb);
-		color: white;
+		background: #0177fb;
+		color: #ffffff;
 		font-weight: 600;
 	}
 
 	.bld-sub-pill--active:hover {
-		background: var(--ii-brand-primary, #0177fb);
+		background: #0177fb;
 	}
 
 	.bld-left-content {

@@ -130,6 +130,8 @@
 		height: 100%;
 		min-height: 0;
 		gap: 0;
+		background: #0e0f13;
+		border: 1px solid rgba(64, 66, 73, 0.4);
 		/* The star of the show. Transition on grid-template-columns is
 		 * supported in Chrome 107+, Edge 107+, Safari 16+. All
 		 * institutional clients run these. Duration 240ms is the
@@ -147,7 +149,7 @@
 		min-width: 0;
 		min-height: 0;
 		overflow: auto;
-		background: var(--ii-surface, transparent);
+		background: #141519;
 		/* The column uses its own border-box; collapse to 0px width
 		 * when the grid template says 0fr, with overflow hidden so
 		 * content clips cleanly during transition. */
@@ -157,12 +159,12 @@
 	.fcl-col-left,
 	.fcl-col-right {
 		/* These two can collapse; the Builder is always present. */
-		border-left: 1px solid var(--ii-border-subtle, transparent);
+		border-left: 1px solid rgba(64, 66, 73, 0.4);
 	}
 
 	.fcl-col-left {
 		border-left: none;
-		border-right: 1px solid var(--ii-border-subtle, transparent);
+		border-right: 1px solid rgba(64, 66, 73, 0.4);
 	}
 
 	.fcl-col--collapsed {
