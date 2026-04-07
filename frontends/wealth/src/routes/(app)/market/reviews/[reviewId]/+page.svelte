@@ -4,13 +4,23 @@
 -->
 <script lang="ts">
 	import { page } from "$app/stores";
+	import { invalidate } from "$app/navigation";
 	import { formatDate, formatNumber } from "@investintell/ui";
+	import { PanelErrorState, PanelEmptyState } from "@investintell/ui/runtime";
+	import { regimeLabel } from "$lib/i18n/quant-labels";
 	import type { PageData } from "./$types";
 	import type { MacroReview } from "$lib/types/macro";
 
 	let { data }: { data: PageData } = $props();
-	let review = $derived(data.review as MacroReview);
-	let report = $derived(review.report_json as Record<string, unknown>);
+
+	// ── Route Data Contract (§3.2) ──────────────────────────────────
+	const routeData = $derived(data.review);
+	let review = $derived(routeData.data as MacroReview);
+	let report = $derived((review?.report_json ?? {}) as Record<string, unknown>);
+
+	function retryLoad() {
+		invalidate($page.url.pathname);
+	}
 
 	let highlightRegion = $derived(($page.url.searchParams.get("region") ?? "").toUpperCase());
 
@@ -39,6 +49,18 @@
 	}
 </script>
 
+{#if routeData.error}
+	<PanelErrorState
+		title="Unable to load committee review"
+		message={routeData.error.message}
+		onRetry={routeData.error.recoverable ? retryLoad : undefined}
+	/>
+{:else if !routeData.data}
+	<PanelEmptyState
+		title="Review unavailable"
+		message="This committee review is not available."
+	/>
+{:else}
 <div class="review-page">
 	<div class="review-topbar">
 		<a href="/market" class="review-back">&larr; Macro Intelligence</a>
@@ -88,19 +110,19 @@
 		</section>
 	{/if}
 
-	<!-- Regime -->
+	<!-- Market Regime (tri-state: Expansion / Cautious / Stress) -->
 	{#if regime}
 		<section class="review-section">
-			<h2 class="review-section-title">Regime</h2>
+			<h2 class="review-section-title">Market Regime</h2>
 			{#if regime.global}
-				<p class="regime-global">Global: <strong>{String(regime.global).replace(/_/g, " ").toUpperCase()}</strong></p>
+				<p class="regime-global">Global: <strong>{regimeLabel(String(regime.global))}</strong></p>
 			{/if}
 			{#if regime.regional}
 				<div class="regime-grid">
 					{#each Object.entries(regime.regional as Record<string, string>) as [region, regimeVal] (region)}
 						<div class="regime-item">
 							<span class="regime-label">{regionDisplayName(region)}</span>
-							<span class="regime-value">{String(regimeVal).replace(/_/g, " ").toUpperCase()}</span>
+							<span class="regime-value">{regimeLabel(regimeVal)}</span>
 						</div>
 					{/each}
 				</div>
@@ -131,6 +153,7 @@
 		</section>
 	{/if}
 </div>
+{/if}
 
 <style>
 	.review-page {

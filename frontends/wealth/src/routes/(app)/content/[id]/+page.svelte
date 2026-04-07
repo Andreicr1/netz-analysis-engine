@@ -5,11 +5,13 @@
 -->
 <script lang="ts">
 	import { getContext } from "svelte";
-	import { invalidateAll } from "$app/navigation";
+	import { invalidateAll, invalidate } from "$app/navigation";
+	import { page as pageState } from "$app/state";
 	import {
 		PageHeader, StatusBadge, Button, ConsequenceDialog,
 		formatDateTime,
 	} from "@investintell/ui";
+	import { PanelErrorState, PanelEmptyState } from "@investintell/ui/runtime";
 	import { ForbiddenError } from "@investintell/ui/utils";
 	import type { ConsequenceDialogPayload } from "@investintell/ui";
 	import { createClientApiClient } from "$lib/api/client";
@@ -22,9 +24,20 @@
 
 	let { data }: { data: PageData } = $props();
 
-	let content = $derived(data.content as ContentFull);
+	// ── Route Data Contract (§3.2) ──────────────────────────────────────
+	// `data.content` is a RouteData<ContentFull>. The template guards
+	// render-error / empty / data in three explicit branches — the
+	// script-level `content` cast assumes the success branch because
+	// every downstream `$derived` only evaluates inside that branch at
+	// runtime (Svelte recomputes when `routeData.data` flips to null).
+	const routeData = $derived(data.content);
+	let content = $derived(routeData.data as ContentFull);
 	let actorId = $derived((data.actorId ?? null) as string | null);
 	let actorRole = $derived((data.actorRole ?? null) as string | null);
+
+	function retryLoad() {
+		invalidate(pageState.url.pathname);
+	}
 
 	// ── Approval logic ────────────────────────────────────────────────────
 
@@ -93,6 +106,18 @@
 	);
 </script>
 
+{#if routeData.error}
+	<PanelErrorState
+		title="Unable to load content"
+		message={routeData.error.message}
+		onRetry={routeData.error.recoverable ? retryLoad : undefined}
+	/>
+{:else if !routeData.data}
+	<PanelEmptyState
+		title="No content available"
+		message="This content is not available at the moment."
+	/>
+{:else}
 <PageHeader
 	title={content.title ?? contentTypeLabel(content.content_type)}
 	breadcrumbs={[{ label: "Content", href: "/content" }, { label: content.title ?? contentTypeLabel(content.content_type) }]}
@@ -188,6 +213,7 @@
 	]}
 	onConfirm={handleApprove}
 />
+{/if}
 
 <style>
 	.cd-actions {

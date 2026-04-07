@@ -6,12 +6,14 @@
 -->
 <script lang="ts">
 	import { getContext, onMount, onDestroy } from "svelte";
-	import { invalidateAll } from "$app/navigation";
+	import { invalidateAll, invalidate } from "$app/navigation";
+	import { page as pageState } from "$app/state";
 	import {
 		PageHeader, StatusBadge, ConsequenceDialog,
 		formatDateTime, formatPercent,
 		createSSEStream,
 	} from "@investintell/ui";
+	import { PanelErrorState, PanelEmptyState } from "@investintell/ui/runtime";
 	import type { ConsequenceDialogPayload } from "@investintell/ui";
 	import { Button } from "@investintell/ui/components/ui/button";
 	import { createClientApiClient } from "$lib/api/client";
@@ -24,11 +26,20 @@
 
 	let { data }: { data: PageData } = $props();
 
-	let report = $derived(data.report as DDReportFull);
+	// ── Route Data Contract (§3.2) ──────────────────────────────────
+	// `data.report` is a RouteData<DDReportFull>. The template branches
+	// on error / empty / data at the top; every $derived below only
+	// dereferences `report` inside the success branch at runtime.
+	const routeData = $derived(data.report);
+	let report = $derived(routeData.data as DDReportFull);
 	let fundId = $derived(data.fundId as string);
 	let reportId = $derived(data.reportId as string);
 	let actorId = $derived(data.actorId as string | null);
 	let actorRole = $derived(data.actorRole as string | null);
+
+	function retryLoad() {
+		invalidate(pageState.url.pathname);
+	}
 
 	// ── Chapter state ─────────────────────────────────────────────────────
 
@@ -207,6 +218,18 @@
 	// renderMarkdown + flattenObject imported from $lib/utils/render-markdown
 </script>
 
+{#if routeData.error}
+	<PanelErrorState
+		title="Unable to load DD report"
+		message={routeData.error.message}
+		onRetry={routeData.error.recoverable ? retryLoad : undefined}
+	/>
+{:else if !routeData.data}
+	<PanelEmptyState
+		title="Report unavailable"
+		message="This DD report is not available at the moment."
+	/>
+{:else}
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
 <!-- ACTION BAR                                                             -->
 <!-- ═══════════════════════════════════════════════════════════════════════ -->
@@ -468,6 +491,7 @@
 		{/snippet}
 	{/if}
 </ConsequenceDialog>
+{/if}
 
 <style>
 	/* ── Action bar ──────────────────────────────────────────────────────── */
