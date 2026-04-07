@@ -23,6 +23,12 @@ from app.core.runtime.broadcaster import (
     RateLimitedBroadcaster,
     make_connection_id,
 )
+from app.core.runtime.idle_bridge import (
+    BridgeState,
+    IdleBridgeConfig,
+    IdleBridgePolicy,
+    IllegalStateError,
+)
 from app.core.runtime.outbound_channel import (
     BoundedOutboundChannel,
     ChannelConfig,
@@ -33,6 +39,7 @@ from app.core.runtime.single_flight import SingleFlightLock
 
 __all__ = [
     "BoundedOutboundChannel",
+    "BridgeState",
     "BroadcasterClosedError",
     "BroadcasterConfig",
     "BroadcasterFullError",
@@ -42,6 +49,9 @@ __all__ = [
     "ConnectionId",
     "DropPolicy",
     "FanoutResult",
+    "IdleBridgeConfig",
+    "IdleBridgePolicy",
+    "IllegalStateError",
     "RateLimitedBroadcaster",
     "SingleFlightLock",
     "make_connection_id",
