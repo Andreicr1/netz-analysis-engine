@@ -24,7 +24,6 @@
 -->
 <script lang="ts">
 	import { getContext, onMount } from "svelte";
-	import { Button } from "@investintell/ui/components/ui/button";
 	import Plus from "lucide-svelte/icons/plus";
 
 	import { workspace, type UniverseFund } from "$lib/state/portfolio-workspace.svelte";
@@ -97,10 +96,10 @@
 		{#snippet leftColumn()}
 			<div class="bld-left">
 				<div class="bld-left-header">
-					<Button size="sm" variant="outline" class="h-8 text-[12px]">
-						<Plus class="mr-1 h-3.5 w-3.5" />
-						New Portfolio
-					</Button>
+					<button type="button" class="bld-pill bld-pill--new">
+						<Plus size={16} />
+						<span>New Portfolio</span>
+					</button>
 				</div>
 
 				<div class="bld-sub-pills">
@@ -183,15 +182,37 @@
 	.bld-left-header {
 		display: flex;
 		align-items: center;
-		padding: 14px 16px 8px;
+		padding: 16px;
 		flex-shrink: 0;
+	}
+
+	/* New Portfolio pill — matches Screener .scr-pill pattern */
+	.bld-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 18px;
+		border: 1px solid #ffffff;
+		border-radius: 36px;
+		background: #000000;
+		color: #ffffff;
+		font-family: "Urbanist", sans-serif;
+		font-size: 13px;
+		font-weight: 400;
+		cursor: pointer;
+		transition: background 120ms ease;
+		white-space: nowrap;
+	}
+
+	.bld-pill:hover {
+		background: #1a1b20;
 	}
 
 	.bld-sub-pills {
 		display: flex;
 		align-items: center;
-		gap: 6px;
-		padding: 0 16px 10px;
+		gap: 8px;
+		padding: 0 16px 16px;
 		flex-shrink: 0;
 		border-bottom: 1px solid rgba(64, 66, 73, 0.4);
 	}
@@ -199,13 +220,13 @@
 	.bld-sub-pill {
 		display: inline-flex;
 		align-items: center;
-		padding: 5px 14px;
+		padding: 6px 16px;
 		border: 1px solid transparent;
 		border-radius: 999px;
 		background: transparent;
 		color: #85a0bd;
 		font-family: "Urbanist", sans-serif;
-		font-size: 0.75rem;
+		font-size: 0.8125rem;
 		font-weight: 500;
 		cursor: pointer;
 		transition: all 120ms ease;

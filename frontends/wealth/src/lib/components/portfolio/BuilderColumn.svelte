@@ -22,7 +22,6 @@
 -->
 <script lang="ts">
 	import { goto } from "$app/navigation";
-	import { Button } from "@investintell/ui/components/ui/button";
 	import { PanelErrorState } from "@investintell/ui/runtime";
 	import Play from "lucide-svelte/icons/play";
 	import BarChart2 from "lucide-svelte/icons/bar-chart-2";
@@ -66,41 +65,38 @@
 			</div>
 
 			<div class="bc-actions">
-				<Button
-					size="sm"
-					variant="outline"
+				<button
+					type="button"
+					class="bc-pill"
 					disabled={!workspace.portfolioId}
 					onclick={handleViewChart}
-					class="h-9 text-[13px]"
 				>
-					<LineChart class="mr-1.5 h-4 w-4" />
-					View Chart
-				</Button>
-				<Button
-					size="sm"
-					variant="outline"
+					<LineChart size={16} />
+					<span>View Chart</span>
+				</button>
+				<button
+					type="button"
+					class="bc-pill"
 					disabled={!workspace.portfolioId || workspace.isConstructing}
 					onclick={handleConstruct}
-					class="h-9 text-[13px]"
 				>
 					{#if workspace.isConstructing}
-						<Loader2 class="mr-1.5 h-4 w-4 animate-spin" />
-						Building...
+						<Loader2 size={16} class="bc-pill-spinner" />
+						<span>Building…</span>
 					{:else}
-						<Play class="mr-1.5 h-4 w-4" />
-						Construct
+						<Play size={16} />
+						<span>Construct</span>
 					{/if}
-				</Button>
-				<Button
-					size="sm"
-					variant="outline"
+				</button>
+				<button
+					type="button"
+					class="bc-pill"
 					disabled={!workspace.portfolioId}
 					onclick={handleStressNav}
-					class="h-9 text-[13px]"
 				>
-					<BarChart2 class="mr-1.5 h-4 w-4" />
-					Stress Test
-				</Button>
+					<BarChart2 size={16} />
+					<span>Stress Test</span>
+				</button>
 			</div>
 		</header>
 
@@ -142,12 +138,13 @@
 		overflow: hidden;
 	}
 
+	/* ── Header — 16px standard padding & gaps everywhere ───────── */
 	.bc-header {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 16px;
-		padding: 14px 20px;
+		padding: 16px;
 		border-bottom: 1px solid rgba(64, 66, 73, 0.4);
 		flex-shrink: 0;
 		background: #141519;
@@ -156,7 +153,7 @@
 	.bc-title-block {
 		display: flex;
 		flex-direction: column;
-		gap: 2px;
+		gap: 4px;
 		min-width: 0;
 	}
 
@@ -166,12 +163,14 @@
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
 		color: #85a0bd;
+		font-family: "Urbanist", sans-serif;
 	}
 
 	.bc-title {
-		font-size: 0.9375rem;
-		font-weight: 700;
+		font-size: 1.0625rem;
+		font-weight: 600;
 		color: #ffffff;
+		font-family: "Urbanist", sans-serif;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -184,11 +183,46 @@
 		flex-shrink: 0;
 	}
 
+	/* ── Pills — Screener .scr-pill pattern (dark, white border, 36px) ── */
+	.bc-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		padding: 10px 18px;
+		border: 1px solid #ffffff;
+		border-radius: 36px;
+		background: #000000;
+		color: #ffffff;
+		font-size: 13px;
+		font-weight: 400;
+		font-family: "Urbanist", sans-serif;
+		cursor: pointer;
+		white-space: nowrap;
+		transition: background 120ms ease;
+	}
+
+	.bc-pill:hover:not(:disabled) {
+		background: #1a1b20;
+	}
+
+	.bc-pill:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.bc-pill :global(.bc-pill-spinner) {
+		animation: bc-spin 1s linear infinite;
+	}
+
+	@keyframes bc-spin {
+		to { transform: rotate(360deg); }
+	}
+
 	.bc-blocks {
 		flex: 1;
 		min-height: 0;
 		overflow-y: auto;
-		padding: 16px 20px 20px;
+		padding: 16px;
 	}
 
 	/* ── Global overrides: flatten PortfolioOverview internal cards

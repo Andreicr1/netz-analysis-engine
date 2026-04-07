@@ -142,7 +142,8 @@
 		display: flex;
 		align-items: flex-start;
 		justify-content: space-between;
-		padding: 14px 16px;
+		gap: 16px;
+		padding: 16px;
 		border-bottom: 1px solid rgba(64, 66, 73, 0.4);
 		flex-shrink: 0;
 		background: #141519;

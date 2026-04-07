@@ -70,14 +70,22 @@
 
 	// Grid template per state — expressed as a single CSS custom prop so
 	// the transition CSS only needs to watch one variable.
+	//
+	// Proportions rebalanced 2026-04-08 after visual validation:
+	// the 12-column Approved Universe table needs more horizontal
+	// real estate than the 3-column Builder allocation blocks. The
+	// previous 2fr/3fr favored the Builder wrongly; the new split
+	// gives the information-dense column majority width.
 	const gridTemplate = $derived.by(() => {
 		switch (layoutState) {
 			case "landing":
 				return "0fr minmax(0, 1fr) 0fr";
 			case "two-col":
-				return "minmax(0, 2fr) minmax(0, 3fr) 0fr";
+				// ~58% Universe / ~42% Builder
+				return "minmax(0, 1.4fr) minmax(0, 1fr) 0fr";
 			case "three-col":
-				return "minmax(0, 1.6fr) minmax(0, 2.2fr) minmax(0, 1.4fr)";
+				// ~42% Universe / ~28% Builder / ~30% Analytics
+				return "minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.1fr)";
 		}
 	});
 

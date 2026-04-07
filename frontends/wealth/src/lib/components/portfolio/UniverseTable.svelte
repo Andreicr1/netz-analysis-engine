@@ -151,20 +151,21 @@
 		return formatNumber(value, 0);
 	}
 
-	/** Correlation color scale: -1 (diversifying, green) → 0 (neutral) → +1 (concentrating, red). */
+	/** Correlation color scale: -1 (diversifying, green) → 0 (neutral) → +1 (concentrating, red).
+	 *  Hex literals — no var() fallbacks (ensures consistent rendering in any theme context). */
 	function correlationColor(value: number | null | undefined): string {
-		if (value == null) return "var(--ii-text-muted, #85a0bd)";
-		if (value <= -0.3) return "var(--ii-success, #16a34a)";
-		if (value <= 0.3) return "var(--ii-text-secondary, #cbccd1)";
-		if (value <= 0.7) return "var(--ii-warning, #f59e0b)";
-		return "var(--ii-danger, #dc2626)";
+		if (value == null) return "#85a0bd";
+		if (value <= -0.3) return "#16a34a";
+		if (value <= 0.3) return "#cbccd1";
+		if (value <= 0.7) return "#f59e0b";
+		return "#dc2626";
 	}
 
 	function momentumIcon(value: number | null | undefined) {
-		if (value == null) return { icon: Minus, color: "var(--ii-text-muted, #85a0bd)" };
-		if (value > 0.15) return { icon: TrendingUp, color: "var(--ii-success, #16a34a)" };
-		if (value < -0.15) return { icon: TrendingDown, color: "var(--ii-danger, #dc2626)" };
-		return { icon: Minus, color: "var(--ii-text-muted, #85a0bd)" };
+		if (value == null) return { icon: Minus, color: "#85a0bd" };
+		if (value > 0.15) return { icon: TrendingUp, color: "#16a34a" };
+		if (value < -0.15) return { icon: TrendingDown, color: "#dc2626" };
+		return { icon: Minus, color: "#85a0bd" };
 	}
 </script>
 
@@ -282,12 +283,25 @@
 		container-name: ut;
 	}
 
+	/* ── Hardcoded dark palette (matches Screener #000/#141519/#85a0bd) ──
+	 * All var() fallbacks removed — components force-render dark in any
+	 * theme context. Colour constants mirror the Screener page exactly:
+	 *   #000     — pure black outer canvas
+	 *   #141519  — column surface
+	 *   #85a0bd  — muted text (institutional blue-grey)
+	 *   #cbccd1  — secondary text
+	 *   #ffffff  — primary text
+	 *   #404249  — border subtle
+	 *   #0177fb  — brand primary
+	 */
+
 	.ut-table {
 		width: 100%;
 		border-collapse: collapse;
-		font-family: var(--ii-font-sans);
-		font-size: var(--ii-text-label, 0.75rem);
-		color: var(--ii-text-primary);
+		font-family: "Urbanist", sans-serif;
+		font-size: 0.75rem;
+		color: #ffffff;
+		background: #141519;
 	}
 
 	/* ── Header ──────────────────────────────────────────────── */
@@ -295,15 +309,15 @@
 	.ut-table thead th {
 		position: sticky;
 		top: 0;
-		background: var(--ii-surface, #141519);
-		color: var(--ii-text-muted, #85a0bd);
+		background: #141519;
+		color: #85a0bd;
 		font-size: 0.6875rem;
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
 		padding: 10px 8px;
 		text-align: left;
-		border-bottom: 1px solid var(--ii-border-subtle, rgba(64, 66, 73, 0.6));
+		border-bottom: 1px solid rgba(64, 66, 73, 0.6);
 		white-space: nowrap;
 		z-index: 2;
 	}
@@ -319,8 +333,8 @@
 
 	.ut-group-header td {
 		padding: 0;
-		background: var(--ii-surface, #141519);
-		border-bottom: 1px solid var(--ii-border-subtle, rgba(64, 66, 73, 0.3));
+		background: #141519;
+		border-bottom: 1px solid rgba(64, 66, 73, 0.3);
 	}
 
 	.ut-group-toggle {
@@ -333,8 +347,8 @@
 		border: none;
 		cursor: pointer;
 		text-align: left;
-		color: var(--ii-text-secondary, #cbccd1);
-		font-family: var(--ii-font-sans);
+		color: #cbccd1;
+		font-family: "Urbanist", sans-serif;
 	}
 
 	.ut-group-toggle:hover {
@@ -342,7 +356,7 @@
 	}
 
 	.ut-group-toggle :global(.ut-group-chevron) {
-		color: var(--ii-text-muted, #85a0bd);
+		color: #85a0bd;
 		transition: transform 160ms ease;
 		flex-shrink: 0;
 	}
@@ -356,12 +370,12 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
-		color: var(--ii-text-secondary, #cbccd1);
+		color: #cbccd1;
 	}
 
 	.ut-group-count {
 		font-size: 0.625rem;
-		color: var(--ii-text-muted, #85a0bd);
+		color: #85a0bd;
 		background: rgba(255, 255, 255, 0.05);
 		padding: 1px 8px;
 		border-radius: 999px;
@@ -371,9 +385,10 @@
 	/* ── Data rows ───────────────────────────────────────────── */
 
 	.ut-row {
-		border-bottom: 1px solid var(--ii-border-subtle, rgba(64, 66, 73, 0.25));
+		border-bottom: 1px solid rgba(64, 66, 73, 0.25);
 		cursor: grab;
 		transition: background-color 120ms ease;
+		background: #141519;
 	}
 
 	.ut-row:hover {
@@ -381,7 +396,7 @@
 	}
 
 	.ut-row:focus-visible {
-		outline: 2px solid var(--ii-brand-primary, #0177fb);
+		outline: 2px solid #0177fb;
 		outline-offset: -2px;
 	}
 
@@ -404,7 +419,7 @@
 	}
 
 	.ut-td-grip {
-		color: var(--ii-text-muted, #85a0bd);
+		color: #85a0bd;
 		opacity: 0.4;
 		padding-left: 4px !important;
 		padding-right: 0 !important;
@@ -417,7 +432,7 @@
 	.ut-fund-name {
 		font-size: 0.8125rem;
 		font-weight: 600;
-		color: var(--ii-text-primary, white);
+		color: #ffffff;
 		line-height: 1.2;
 		white-space: nowrap;
 		overflow: hidden;
@@ -427,7 +442,7 @@
 
 	.ut-fund-ticker {
 		font-size: 0.6875rem;
-		color: var(--ii-text-muted, #85a0bd);
+		color: #85a0bd;
 		font-variant-numeric: tabular-nums;
 		margin-top: 2px;
 	}
@@ -440,20 +455,20 @@
 		font-size: 0.6875rem;
 		font-weight: 500;
 		background: rgba(255, 255, 255, 0.05);
-		color: var(--ii-text-secondary, #cbccd1);
+		color: #cbccd1;
 		white-space: nowrap;
 	}
 
 	.ut-td-num {
 		text-align: right;
 		font-variant-numeric: tabular-nums;
-		color: var(--ii-text-primary, white);
+		color: #ffffff;
 		font-size: 0.75rem;
 		white-space: nowrap;
 	}
 
 	.ut-td-loss {
-		color: var(--ii-danger, #dc2626);
+		color: #dc2626;
 	}
 
 	.ut-td-corr {
@@ -472,19 +487,20 @@
 		font-size: 0.625rem;
 		font-weight: 500;
 		background: rgba(255, 255, 255, 0.04);
-		color: var(--ii-text-secondary, #cbccd1);
+		color: #cbccd1;
 	}
 
 	.ut-td-score {
 		font-weight: 700;
-		color: var(--ii-text-primary, white);
+		color: #ffffff;
 	}
 
 	.ut-empty {
 		padding: 48px 16px;
 		text-align: center;
-		color: var(--ii-text-muted, #85a0bd);
+		color: #85a0bd;
 		font-size: 0.8125rem;
+		background: #141519;
 	}
 
 	/* ── Responsive column hiding (container queries) ────────────

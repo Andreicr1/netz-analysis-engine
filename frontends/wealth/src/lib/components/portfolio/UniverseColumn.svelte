@@ -106,15 +106,17 @@
 
 	.uc-header {
 		flex-shrink: 0;
-		padding: 12px 16px 8px;
+		padding: 16px;
 		border-bottom: 1px solid rgba(64, 66, 73, 0.4);
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
 	}
 
 	.uc-title-row {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		margin-bottom: 10px;
 	}
 
 	.uc-title {
