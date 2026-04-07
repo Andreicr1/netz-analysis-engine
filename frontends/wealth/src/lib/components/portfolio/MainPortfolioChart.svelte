@@ -5,21 +5,38 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import { ChartContainer } from "@investintell/ui/charts";
-	import { globalChartOptions, echarts } from "@investintell/ui/charts/echarts-setup";
+	import { globalChartOptions } from "@investintell/ui/charts/echarts-setup";
+	import { formatNumber, formatPercent } from "@investintell/ui";
 	import { workspace } from "$lib/state/portfolio-workspace.svelte";
 
 	let wrapEl: HTMLDivElement | undefined = $state();
 	let chartHeight = $state(0);
 
+	// ECharts series colors must be resolved hex/rgba (CSS vars don't work
+	// inside ECharts option). Read the brand-primary token from the live
+	// computed style at mount and re-read on theme changes.
+	let brandPrimary = $state("#0177fb"); // fallback if document is unavailable
+	let brandPrimaryFill = $derived(`color-mix(in srgb, ${brandPrimary} 12%, transparent)`);
+
+	function readBrandPrimary(): string {
+		if (typeof document === "undefined") return "#0177fb";
+		return getComputedStyle(document.documentElement)
+			.getPropertyValue("--ii-brand-primary").trim() || "#0177fb";
+	}
+
 	onMount(() => {
 		if (!wrapEl) return;
+		brandPrimary = readBrandPrimary();
 		const ro = new ResizeObserver(([entry]) => {
 			chartHeight = Math.floor(entry!.contentRect.height);
 		});
 		ro.observe(wrapEl);
 		// Initial measurement
 		chartHeight = wrapEl.clientHeight;
-		return () => ro.disconnect();
+		// Re-resolve token on theme change
+		const themeObserver = new MutationObserver(() => { brandPrimary = readBrandPrimary(); });
+		themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+		return () => { ro.disconnect(); themeObserver.disconnect(); };
 	});
 
 	let navData = $derived(workspace.navSeries);
@@ -32,7 +49,7 @@
 		const seriesData = navData.map((d) => [d.date, d.nav]);
 		const firstNav = navData[0]?.nav ?? 1000;
 		const lastNav = navData[navData.length - 1]?.nav ?? 1000;
-		const totalReturn = ((lastNav - firstNav) / firstNav) * 100;
+		const totalReturn = (lastNav - firstNav) / firstNav;
 
 		return {
 			...globalChartOptions,
@@ -44,7 +61,7 @@
 					const { axisValueLabel, value } = p as { axisValueLabel?: string; value?: unknown[] };
 					const nav = Array.isArray(value) ? value[1] : null;
 					if (nav == null) return "";
-					return `<strong>${axisValueLabel ?? ""}</strong><br/>NAV: ${Number(nav).toFixed(2)}`;
+					return `<strong>${axisValueLabel ?? ""}</strong><br/>NAV: ${formatNumber(Number(nav), 2)}`;
 				},
 			},
 			xAxis: {
@@ -64,7 +81,7 @@
 					type: "slider" as const, xAxisIndex: 0, height: 20, bottom: 6,
 					filterMode: "weakFilter" as const,
 					borderColor: "transparent",
-					fillerColor: "rgba(1, 119, 251, 0.12)",
+					fillerColor: brandPrimaryFill,
 				},
 			],
 			series: [
@@ -75,15 +92,9 @@
 					smooth: true,
 					symbol: "none",
 					sampling: "lttb",
-					lineStyle: { width: 2, color: "#0177fb" },
-					itemStyle: { color: "#0177fb" },
-					areaStyle: {
-						color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-							{ offset: 0, color: "rgba(1, 119, 251, 0.18)" },
-							{ offset: 0.6, color: "rgba(1, 119, 251, 0.04)" },
-							{ offset: 1, color: "rgba(1, 119, 251, 0)" },
-						]),
-					},
+					// Institutional line chart — no area fill / gradient.
+					lineStyle: { width: 2, color: brandPrimary },
+					itemStyle: { color: brandPrimary },
 					markLine: {
 						silent: true,
 						symbol: "none" as const,
@@ -91,7 +102,7 @@
 						lineStyle: { color: "var(--ii-text-muted)", type: "dashed" as const, width: 1 },
 						label: {
 							position: "insideEndTop" as const,
-							formatter: `Base ${firstNav.toFixed(0)}`,
+							formatter: `Base ${formatNumber(firstNav, 0)}`,
 							fontSize: 10,
 						},
 					},
@@ -103,11 +114,10 @@
 					right: 16,
 					top: 6,
 					style: {
-						text: `${totalReturn >= 0 ? "+" : ""}${totalReturn.toFixed(2)}%`,
+						text: `${totalReturn >= 0 ? "+" : ""}${formatPercent(totalReturn, 2)}`,
 						fontSize: 13,
 						fontWeight: 700 as const,
 						fill: totalReturn >= 0 ? "var(--ii-success)" : "var(--ii-danger)",
-						fontFamily: "Urbanist, system-ui, sans-serif",
 					},
 				},
 			],
@@ -157,22 +167,21 @@
 		gap: 6px;
 		flex: 1;
 		height: 100%;
-		color: #85a0bd;
-		font-size: 13px;
-		font-family: "Urbanist", sans-serif;
+		color: var(--ii-text-muted);
+		font-size: var(--ii-text-small, 0.8125rem);
 	}
 
 	.main-chart-placeholder-title {
-		font-size: 14px;
+		font-size: var(--ii-text-body, 0.875rem);
 		font-weight: 600;
-		color: #cbccd1;
+		color: var(--ii-text-secondary);
 	}
 
 	.main-chart-spinner {
 		width: 24px;
 		height: 24px;
-		border: 3px solid rgba(1, 119, 251, 0.2);
-		border-top-color: #0177fb;
+		border: 3px solid color-mix(in srgb, var(--ii-brand-primary) 20%, transparent);
+		border-top-color: var(--ii-brand-primary);
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 	}

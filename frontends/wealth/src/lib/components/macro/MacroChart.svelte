@@ -51,11 +51,21 @@
 	let option = $derived.by(() => {
 		const mainSeries = series.filter((s) => !s.subchart);
 		const subSeries = series.filter((s) => s.subchart);
-		const mainGridBottom = hasSubchart ? "25%" : "15%";
-		const subGridTop = "80%";
 
+		// Layout cage — fixed pixel offsets so the dataZoom slider sits flush
+		// against the bottom of the chart instead of floating in dead space.
+		// Without subchart: 60px bottom on main grid leaves room for the
+		// slider (height 20 + 8px gap from edge + label).
+		// With subchart: main grid uses upper 50%, subgrid uses 55-60px from
+		// bottom, slider sits flush at 8px.
 		const grids: Record<string, unknown>[] = [
-			{ left: 60, right: 140, top: 40, bottom: mainGridBottom, containLabel: false },
+			{
+				left: 60,
+				right: 140,
+				top: 40,
+				bottom: hasSubchart ? "50%" : 60,
+				containLabel: false,
+			},
 		];
 		const xAxes: Record<string, unknown>[] = [
 			{ type: "time", gridIndex: 0, axisLabel: { fontSize: 10 }, axisTick: { show: false } },
@@ -66,7 +76,7 @@
 		];
 
 		if (hasSubchart) {
-			grids.push({ left: 60, right: 60, top: subGridTop, bottom: "5%", containLabel: false });
+			grids.push({ left: 60, right: 60, top: "55%", bottom: 60, containLabel: false });
 			xAxes.push({ type: "time", gridIndex: 1, axisLabel: { fontSize: 9 }, axisTick: { show: false } });
 			yAxes.push({ type: "value", gridIndex: 1, scale: true, axisLabel: { fontSize: 9 }, splitLine: { lineStyle: { type: "dashed" } } });
 		}
@@ -84,6 +94,13 @@
 				connectNulls: false,
 				showSymbol: false,
 				smooth: false,
+				// Performance: LTTB downsampling + progressive rendering keeps
+				// 8 series × ~5k points (~40k total) responsive.
+				sampling: "lttb",
+				progressive: 2000,
+				progressiveThreshold: 5000,
+				large: true,
+				largeThreshold: 2000,
 				lineStyle: {
 					width: 2.5,
 					type: s.lineStyle ?? "solid",
@@ -97,8 +114,6 @@
 				},
 				labelLayout: { moveOverlap: "shiftY" },
 				emphasis: { focus: "series" },
-				animationDuration: 2000,
-				animationEasing: "cubicInOut",
 				...(s.color ? { itemStyle: { color: s.color }, lineStyle: { color: s.color, width: 2.5, type: s.lineStyle ?? "solid" } } : {}),
 			});
 		}
@@ -111,6 +126,8 @@
 				yAxisIndex: 2,
 				data: s.data,
 				barMaxWidth: 8,
+				large: true,
+				largeThreshold: 2000,
 				...(s.color ? { itemStyle: { color: s.color } } : {}),
 			});
 		}
@@ -118,16 +135,17 @@
 		const axisPointerLink = hasSubchart ? [{ xAxisIndex: "all" }] : [{ xAxisIndex: [0] }];
 
 		const dataZoomEntries: Record<string, unknown>[] = [
-			{ type: "slider", xAxisIndex: hasSubchart ? [0, 1] : [0], bottom: hasSubchart ? "18%" : "3%", height: 20, filterMode: "weakFilter", borderColor: "transparent", fillerColor: "rgba(59,130,246,0.12)", start: zoomStart, end: zoomEnd },
+			{ type: "slider", xAxisIndex: hasSubchart ? [0, 1] : [0], bottom: 8, height: 20, filterMode: "weakFilter", borderColor: "transparent", fillerColor: "rgba(59,130,246,0.12)", start: zoomStart, end: zoomEnd },
 			{ type: "inside", xAxisIndex: hasSubchart ? [0, 1] : [0], filterMode: "weakFilter", start: zoomStart, end: zoomEnd },
 		];
 
 		return {
+			// Animation kept short — long animations turn every filter
+			// interaction into a perceived freeze. Global theme provides
+			// the Urbanist font; no per-chart override needed.
 			animation: true,
-			animationDuration: 2000,
-			animationEasing: "cubicInOut" as const,
+			animationDuration: 200,
 			backgroundColor: "transparent",
-			textStyle: { fontFamily: "Inter, system-ui, sans-serif", fontSize: 12 },
 			grid: grids,
 			xAxis: xAxes,
 			yAxis: yAxes,
@@ -177,11 +195,19 @@
 
 	function applyTimeRange(range: typeof TIME_RANGES[number]) {
 		onTimeRangeChange?.(range);
-		// Compute zoom window as percentage of all data
-		const allDates = series.flatMap((s) => s.data.map(([d]) => new Date(d).getTime()));
-		if (allDates.length === 0) { zoomStart = 0; zoomEnd = 100; return; }
-		const minTs = Math.min(...allDates);
-		const maxTs = Math.max(...allDates);
+		// Compute zoom window as percentage of all data.
+		// Use a single-pass reduce instead of Math.min(...arr) — the spread
+		// pattern blows the stack on 40k+ entries (8 series × ~5k points).
+		let minTs = Infinity;
+		let maxTs = -Infinity;
+		for (const s of series) {
+			for (const [d] of s.data) {
+				const t = new Date(d).getTime();
+				if (t < minTs) minTs = t;
+				if (t > maxTs) maxTs = t;
+			}
+		}
+		if (!isFinite(minTs) || !isFinite(maxTs)) { zoomStart = 0; zoomEnd = 100; return; }
 		const span = maxTs - minTs;
 		if (span <= 0) { zoomStart = 0; zoomEnd = 100; return; }
 
