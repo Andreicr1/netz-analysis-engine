@@ -34,12 +34,26 @@
 	const searchState = createDebouncedState("", 250);
 	let regionFilter = $state("All");
 	let frequencyFilter = $state("All");
+	let sourceFilter = $state<"All" | "fred" | "treasury" | "ofr" | "bis" | "imf">("All");
+	// All groups expanded by default — collapsing-everything-on-mount made
+	// the picker look empty on first render, which audit flagged as broken UX.
+	// Initial set is computed lazily once the CATALOG is in scope below.
 	let expandedGroups = $state<Set<string>>(new Set());
 
 	const REGIONS = ["All", "US", "Europe", "Asia", "EM", "Global"] as const;
 	const FREQUENCIES = ["All", "D", "M", "Q", "A"] as const;
+	const SOURCES = ["All", "fred", "treasury", "ofr", "bis", "imf"] as const;
+	const SOURCE_LABELS: Record<string, string> = {
+		All: "All",
+		fred: "FRED",
+		treasury: "Treasury",
+		ofr: "OFR",
+		bis: "BIS",
+		imf: "IMF",
+	};
 	const MAX_SERIES = 8;
 	const WARN_THRESHOLD = 6;
+	const FAVORITES_GROUP = "★ Favorites";
 
 	const FREQ_LABELS: Record<string, string> = { D: "Daily", M: "Monthly", Q: "Quarterly", A: "Annual" };
 
@@ -170,8 +184,21 @@
 		return CATALOG.find((e) => e.id === id);
 	}
 
+	// Seed expandedGroups once CATALOG is in scope. Default = all groups +
+	// Favorites pseudo-group expanded so the picker is never empty on load.
+	$effect(() => {
+		if (expandedGroups.size === 0) {
+			const allGroups = new Set<string>([FAVORITES_GROUP]);
+			for (const e of CATALOG) allGroups.add(e.group);
+			expandedGroups = allGroups;
+		}
+	});
+
 	let filtered = $derived.by(() => {
 		let items = CATALOG;
+		if (sourceFilter !== "All") {
+			items = items.filter((e) => e.source === sourceFilter);
+		}
 		if (regionFilter !== "All") {
 			items = items.filter((e) => e.region === regionFilter);
 		}
@@ -192,6 +219,15 @@
 
 	let groupedFiltered = $derived.by(() => {
 		const groups = new Map<string, IndicatorEntry[]>();
+		// Pin a virtual "Favorites" group at the top whenever the user has
+		// any favorites that pass the active filters. Favourites used to be
+		// decorative — the ★ button toggled state but no UI surfaced it.
+		if (favorites.size > 0) {
+			const favItems = filtered.filter((e) => favorites.has(e.id));
+			if (favItems.length > 0) {
+				groups.set(FAVORITES_GROUP, favItems);
+			}
+		}
 		for (const item of filtered) {
 			const list = groups.get(item.group) ?? [];
 			list.push(item);
@@ -247,6 +283,18 @@
 				onclick={() => (frequencyFilter = f)}
 			>
 				{f === "All" ? "All" : FREQ_LABELS[f]}
+			</button>
+		{/each}
+	</div>
+
+	<div class="chip-row">
+		{#each SOURCES as s (s)}
+			<button
+				class="chip"
+				class:chip--active={sourceFilter === s}
+				onclick={() => (sourceFilter = s)}
+			>
+				{SOURCE_LABELS[s]}
 			</button>
 		{/each}
 	</div>

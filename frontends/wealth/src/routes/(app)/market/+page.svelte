@@ -198,16 +198,16 @@
 		return REGION_DISPLAY[key] ?? key;
 	}
 
-	function scoreColor(score: number): string {
-		if (score >= 70) return "#3fb950";   /* --ii-success */
-		if (score >= 40) return "#e3b341";   /* --ii-warning */
-		return "#f85149";                     /* --ii-danger */
+	function scoreClass(score: number): string {
+		if (score >= 70) return "score-good";
+		if (score >= 40) return "score-warn";
+		return "score-bad";
 	}
 
-	function stressBarColor(value: number): string {
-		if (value > 80) return "#f85149";    /* --ii-danger */
-		if (value >= 40) return "#e3b341";   /* --ii-warning */
-		return "#94a3b8";                    /* --ii-brand-secondary (slate-400) */
+	function stressBarClass(value: number): string {
+		if (value > 80) return "stress-bar-bad";
+		if (value >= 40) return "stress-bar-warn";
+		return "stress-bar-neutral";
 	}
 
 	// ── Snapshot regime badge ────────────────────────────────────────────
@@ -301,11 +301,11 @@
 					<div class="ind-col stress-col" class:ind-col--last={i === 3}>
 						<span class="stress-label">{item.label}</span>
 						<div class="stress-value-row">
-							<span class="stress-value">{item.value != null ? item.value.toFixed(0) : "—"}</span>
+							<span class="stress-value">{item.value != null ? formatNumber(item.value, 0) : "—"}</span>
 							<span class="stress-max">/ 100</span>
 						</div>
 						<div class="stress-bar-track">
-							<div class="stress-bar-fill" style:width="{item.value ?? 0}%" style:background={stressBarColor(item.value ?? 0)}></div>
+							<div class="stress-bar-fill {stressBarClass(item.value ?? 0)}" style:width="{item.value ?? 0}%"></div>
 						</div>
 					</div>
 				{/each}
@@ -331,13 +331,13 @@
 						{#if regime?.regional_regimes[regionName]}
 							<span class="region-regime-badge">{regime.regional_regimes[regionName].replace(/_/g, " ").toUpperCase()}</span>
 						{/if}
-						<span class="region-coverage">COVERAGE {regionData.coverage != null ? (regionData.coverage * 100).toFixed(0) : "—"}%</span>
+						<span class="region-coverage">COVERAGE {regionData.coverage != null ? formatNumber(regionData.coverage * 100, 0) : "—"}%</span>
 					</div>
 					<div class="region-header-right">
 						<div class="region-score-group">
 							<span class="region-score-label">MACRO SCORE</span>
-							<span class="region-score-value" style:color={scoreColor(regionData.composite_score)}>
-								{regionData.composite_score != null ? regionData.composite_score.toFixed(0) : "—"}
+							<span class="region-score-value {scoreClass(regionData.composite_score ?? 0)}">
+								{regionData.composite_score != null ? formatNumber(regionData.composite_score, 0) : "—"}
 							</span>
 						</div>
 						<div class="region-chevron" class:region-chevron--open={isExpanded}>
@@ -369,7 +369,7 @@
 										<div class="breakdown-item">
 											<div class="breakdown-item-header">
 												<span class="breakdown-dim-name">{formatLabel(dimName)}</span>
-												<span class="breakdown-dim-score" style:color={scoreColor(dim.score ?? 0)}>{dim.score != null ? dim.score.toFixed(0) : "—"}</span>
+												<span class="breakdown-dim-score {scoreClass(dim.score ?? 0)}">{dim.score != null ? formatNumber(dim.score, 0) : "—"}</span>
 											</div>
 											<div class="breakdown-bar-track">
 												<div class="breakdown-bar-fill" style:width="{dim.score ?? 0}%"></div>
@@ -957,4 +957,15 @@
 			font-size: 16px;
 		}
 	}
+
+	/* Score / stress color tokens — replaces inline hex from scoreColor()
+	   and stressBarColor() helpers. Using semantic vars so light/dark mode
+	   and theme overrides work without touching the script. */
+	.score-good { color: var(--ii-success); }
+	.score-warn { color: var(--ii-warning); }
+	.score-bad  { color: var(--ii-danger); }
+
+	.stress-bar-bad     { background: var(--ii-danger); }
+	.stress-bar-warn    { background: var(--ii-warning); }
+	.stress-bar-neutral { background: var(--ii-text-muted); }
 </style>
