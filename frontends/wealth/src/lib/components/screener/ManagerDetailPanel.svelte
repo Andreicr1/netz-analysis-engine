@@ -7,7 +7,7 @@
 <script lang="ts">
   import { getContext } from "svelte";
   import { goto } from "$app/navigation";
-  import { ArrowLeft, ExternalLink, Loader2, Sparkles, ChartNoAxesCombined } from "lucide-svelte";
+  import { ArrowLeft, ExternalLink, Loader2, Sparkles, ChartNoAxesCombined, ShieldCheck, Check } from "lucide-svelte";
   import { formatAUM } from "@investintell/ui";
   import { createClientApiClient } from "$lib/api/client";
   import type { UnifiedFundItem, UnifiedCatalogPage, ManagerCatalogItem } from "$lib/types/catalog";
@@ -79,6 +79,94 @@
     goto(`/screener/fund/${fund.external_id}?${params.toString()}`);
   }
 
+  // ── Bulk selection for fast-track approval ──
+  const FAST_TRACK_INELIGIBLE: Set<string> = new Set([
+    "bdc", "closed_end",
+    "Hedge Fund", "Private Equity Fund", "Venture Capital Fund",
+    "Real Estate Fund", "Securitized Asset Fund", "Liquidity Fund", "Other Private Fund",
+  ]);
+
+  let selectedIds = $state<Set<string>>(new Set());
+  let isApproving = $state(false);
+  let fastTrackToast = $state<{ type: "success" | "error" | "warning"; text: string } | null>(null);
+
+  function toggleSelect(fund: UnifiedFundItem) {
+    if (!fund.instrument_id) return;
+    const next = new Set(selectedIds);
+    if (next.has(fund.instrument_id)) {
+      next.delete(fund.instrument_id);
+    } else {
+      next.add(fund.instrument_id);
+    }
+    selectedIds = next;
+  }
+
+  function toggleSelectAll() {
+    const selectable = fundItems.filter((f) => f.instrument_id);
+    if (selectedIds.size === selectable.length) {
+      selectedIds = new Set();
+    } else {
+      selectedIds = new Set(selectable.map((f) => f.instrument_id!));
+    }
+  }
+
+  let hasIneligibleSelected = $derived(
+    fundItems.some(
+      (f) => f.instrument_id && selectedIds.has(f.instrument_id) && FAST_TRACK_INELIGIBLE.has(f.fund_type),
+    ),
+  );
+
+  let allSelected = $derived(
+    fundItems.filter((f) => f.instrument_id).length > 0 &&
+    selectedIds.size === fundItems.filter((f) => f.instrument_id).length,
+  );
+
+  async function fastTrackApprove() {
+    if (selectedIds.size === 0 || isApproving) return;
+    isApproving = true;
+    fastTrackToast = null;
+    try {
+      const result = await api.post<{
+        approved: string[];
+        rejected: { instrument_id: string; name?: string; reason: string }[];
+        total_approved: number;
+        total_rejected: number;
+      }>("/screener/fast-track-approval", {
+        instrument_ids: Array.from(selectedIds),
+      });
+
+      if (result.total_rejected > 0 && result.total_approved > 0) {
+        fastTrackToast = {
+          type: "warning",
+          text: `${result.total_approved} fund${result.total_approved !== 1 ? "s" : ""} approved. ${result.total_rejected} rejected (require full DD).`,
+        };
+      } else if (result.total_approved > 0) {
+        fastTrackToast = {
+          type: "success",
+          text: `${result.total_approved} fund${result.total_approved !== 1 ? "s" : ""} added to Approved Universe.`,
+        };
+      } else {
+        fastTrackToast = {
+          type: "error",
+          text: `All ${result.total_rejected} fund${result.total_rejected !== 1 ? "s" : ""} rejected — require full Due Diligence.`,
+        };
+      }
+      selectedIds = new Set();
+    } catch {
+      fastTrackToast = { type: "error", text: "Failed to process fast-track approval." };
+    } finally {
+      isApproving = false;
+    }
+  }
+
+  // Auto-dismiss toast after 5s
+  $effect(() => {
+    if (fastTrackToast) {
+      const t = setTimeout(() => (fastTrackToast = null), 5000);
+      return () => clearTimeout(t);
+    }
+  });
+
   let ddConfirmFund = $state<UnifiedFundItem | null>(null);
   let ddGenerating = $state(false);
 
@@ -147,6 +235,14 @@
       <table class="l2-table">
         <thead>
           <tr class="l2-thead">
+            <th class="l2-th l2-th--check">
+              <input
+                type="checkbox"
+                class="l2-checkbox"
+                checked={allSelected}
+                onchange={toggleSelectAll}
+              />
+            </th>
             <th class="l2-th l2-th--name">Fund Name</th>
             <th class="l2-th l2-th--ticker">Ticker</th>
             <th class="l2-th l2-th--type">Type</th>
@@ -158,13 +254,25 @@
         <tbody>
           {#each fundItems as fund, i (fund.external_id)}
             {@const b = badgeFor(fund.fund_type)}
+            {@const isSelected = !!fund.instrument_id && selectedIds.has(fund.instrument_id)}
             <!-- svelte-ignore a11y_click_events_have_key_events -->
             <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
             <tr
               class="l2-row"
               class:l2-row--alt={i % 2 === 1}
+              class:l2-row--selected={isSelected}
               onclick={() => openFactSheet(fund)}
             >
+              <td class="l2-cell l2-cell--check">
+                <input
+                  type="checkbox"
+                  class="l2-checkbox"
+                  checked={isSelected}
+                  disabled={!fund.instrument_id}
+                  onclick={(e: MouseEvent) => e.stopPropagation()}
+                  onchange={() => toggleSelect(fund)}
+                />
+              </td>
               <td class="l2-cell l2-cell--name">
                 {formatName(fund.name)}
               </td>
@@ -219,6 +327,43 @@
       </div>
     {/if}
   </div>
+
+  <!-- ── Floating Fast-Track Action Bar ── -->
+  {#if selectedIds.size > 0}
+    <div class="ft-bar">
+      <div class="ft-bar-left">
+        <Check size={14} />
+        <span>{selectedIds.size} selected</span>
+      </div>
+      <div class="ft-bar-right">
+        {#if hasIneligibleSelected}
+          <span class="ft-bar-warning" title="Private funds and BDCs require full Due Diligence and cannot be fast-tracked.">
+            Some selections require full DD
+          </span>
+        {/if}
+        <button class="ft-bar-btn" onclick={fastTrackApprove} disabled={isApproving}>
+          {#if isApproving}
+            <Loader2 size={14} class="animate-spin" />
+            Approving...
+          {:else}
+            <ShieldCheck size={14} />
+            Fast-Track to Approved Universe
+          {/if}
+        </button>
+        <button class="ft-bar-clear" onclick={() => (selectedIds = new Set())}>
+          Clear
+        </button>
+      </div>
+    </div>
+  {/if}
+
+  <!-- ── Toast ── -->
+  {#if fastTrackToast}
+    <div class="ft-toast ft-toast--{fastTrackToast.type}">
+      {fastTrackToast.text}
+      <button class="ft-toast-close" onclick={() => (fastTrackToast = null)}>&times;</button>
+    </div>
+  {/if}
 </div>
 
 <!-- ── DD Confirmation Dialog ── -->
@@ -647,5 +792,168 @@
   .l2-dialog-cancel:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  /* ── Checkbox column ── */
+
+  .l2-th--check,
+  .l2-cell--check {
+    width: 40px;
+    min-width: 40px;
+    padding: 0 0 0 16px;
+    text-align: center;
+  }
+
+  .l2-checkbox {
+    width: 15px;
+    height: 15px;
+    accent-color: #0177fb;
+    cursor: pointer;
+  }
+
+  .l2-row--selected {
+    background: rgba(1, 119, 251, 0.06) !important;
+  }
+
+  /* ── Floating Fast-Track Bar ── */
+
+  .ft-bar {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+    background: rgba(20, 21, 25, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid rgba(1, 119, 251, 0.2);
+    z-index: 20;
+    animation: ft-slide-up 150ms ease-out;
+  }
+
+  @keyframes ft-slide-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .ft-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #0177fb;
+    font-family: "Urbanist", sans-serif;
+  }
+
+  .ft-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .ft-bar-warning {
+    font-size: 0.75rem;
+    color: #fbbf24;
+    font-family: "Urbanist", sans-serif;
+  }
+
+  .ft-bar-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    background: #0177fb;
+    color: white;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    font-family: "Urbanist", sans-serif;
+    border: none;
+    cursor: pointer;
+    transition: background 100ms ease;
+  }
+
+  .ft-bar-btn:hover:not(:disabled) {
+    background: #0062d1;
+  }
+
+  .ft-bar-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .ft-bar-clear {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid #3a3b44;
+    background: transparent;
+    color: #a1a1aa;
+    font-size: 0.8125rem;
+    font-family: "Urbanist", sans-serif;
+    cursor: pointer;
+    transition: color 100ms ease, border-color 100ms ease;
+  }
+
+  .ft-bar-clear:hover {
+    color: #fafafa;
+    border-color: #71717a;
+  }
+
+  /* ── Toast ── */
+
+  .ft-toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: 0.875rem;
+    font-family: "Urbanist", sans-serif;
+    font-weight: 500;
+    z-index: 100;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    animation: ft-toast-in 200ms ease-out;
+  }
+
+  @keyframes ft-toast-in {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .ft-toast--success {
+    background: #052e16;
+    color: #4ade80;
+    border: 1px solid rgba(74, 222, 128, 0.2);
+  }
+
+  .ft-toast--error {
+    background: #2a0a0a;
+    color: #f87171;
+    border: 1px solid rgba(248, 113, 113, 0.2);
+  }
+
+  .ft-toast--warning {
+    background: #1a1700;
+    color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.2);
+  }
+
+  .ft-toast-close {
+    background: transparent;
+    border: none;
+    color: inherit;
+    opacity: 0.6;
+    font-size: 1.125rem;
+    cursor: pointer;
+    padding: 0 0 0 4px;
+  }
+
+  .ft-toast-close:hover {
+    opacity: 1;
   }
 </style>

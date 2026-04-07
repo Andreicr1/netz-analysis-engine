@@ -9,6 +9,7 @@ All ORM results are extracted into frozen dataclasses or plain dicts/arrays
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections import defaultdict
 from datetime import date, timedelta
@@ -207,6 +208,35 @@ async def discover_candidates(
     return candidates
 
 
+async def _fetch_returns_by_type(
+    db: AsyncSession,
+    candidate_ids: list[uuid.UUID],
+    return_type: str,
+    date_floor: date,
+) -> dict[str, list[float]]:
+    """Fetch daily returns for a single return_type. Internal helper."""
+    stmt = (
+        select(
+            NavTimeseries.instrument_id,
+            NavTimeseries.nav_date,
+            NavTimeseries.return_1d,
+        )
+        .where(
+            NavTimeseries.instrument_id.in_(candidate_ids),
+            NavTimeseries.nav_date >= date_floor,
+            NavTimeseries.return_1d.is_not(None),
+            NavTimeseries.return_type == return_type,
+        )
+        .order_by(NavTimeseries.instrument_id, NavTimeseries.nav_date)
+    )
+    result = await db.execute(stmt)
+
+    fund_returns: dict[str, list[float]] = defaultdict(list)
+    for inst_id, _nav_date, ret_1d in result.all():
+        fund_returns[str(inst_id)].append(float(ret_1d))
+    return dict(fund_returns)
+
+
 async def fetch_candidate_returns(
     db: AsyncSession,
     candidate_ids: list[uuid.UUID],
@@ -216,45 +246,65 @@ async def fetch_candidate_returns(
 
     Returns {instrument_id_str: (T,) ndarray} for candidates with
     >= MIN_CANDIDATE_NAV_DAYS observations.
+
+    Queries both return types in parallel and prefers log over arithmetic.
     """
     if not candidate_ids:
         return {}
 
     date_floor = date.today() - timedelta(days=int(lookback_days * 1.5))
 
-    # Prefer log returns, fall back to arithmetic
-    for return_type in ("log", "arithmetic"):
-        stmt = (
-            select(
-                NavTimeseries.instrument_id,
-                NavTimeseries.nav_date,
-                NavTimeseries.return_1d,
-            )
-            .where(
-                NavTimeseries.instrument_id.in_(candidate_ids),
-                NavTimeseries.nav_date >= date_floor,
-                NavTimeseries.return_1d.is_not(None),
-                NavTimeseries.return_type == return_type,
-            )
-            .order_by(NavTimeseries.instrument_id, NavTimeseries.nav_date)
+    # Fire both return-type queries concurrently
+    log_task = _fetch_returns_by_type(db, candidate_ids, "log", date_floor)
+    arith_task = _fetch_returns_by_type(db, candidate_ids, "arithmetic", date_floor)
+    log_returns, arith_returns = await asyncio.gather(log_task, arith_task)
+
+    # Prefer log, fall back to arithmetic per-fund
+    def _qualify(raw: dict[str, list[float]]) -> dict[str, list[float]]:
+        return {fid: rets for fid, rets in raw.items() if len(rets) >= MIN_CANDIDATE_NAV_DAYS}
+
+    qualified_log = _qualify(log_returns)
+    if qualified_log:
+        # Use log for all funds that qualify; fill gaps from arithmetic
+        qualified_arith = _qualify(arith_returns)
+        merged = {**qualified_arith, **qualified_log}  # log takes precedence
+        return {fid: np.array(rets) for fid, rets in merged.items()}
+
+    # No log data at all — fall back to arithmetic only
+    qualified_arith = _qualify(arith_returns)
+    if qualified_arith:
+        return {fid: np.array(rets) for fid, rets in qualified_arith.items()}
+
+    return {}
+
+
+async def _fetch_portfolio_nav_by_type(
+    db: AsyncSession,
+    fund_ids: list[uuid.UUID],
+    return_type: str,
+    date_floor: date,
+) -> dict[str, dict[date, float]]:
+    """Fetch per-fund date→return map for a single return_type. Internal helper."""
+    stmt = (
+        select(
+            NavTimeseries.instrument_id,
+            NavTimeseries.nav_date,
+            NavTimeseries.return_1d,
         )
-        result = await db.execute(stmt)
+        .where(
+            NavTimeseries.instrument_id.in_(fund_ids),
+            NavTimeseries.nav_date >= date_floor,
+            NavTimeseries.return_1d.is_not(None),
+            NavTimeseries.return_type == return_type,
+        )
+        .order_by(NavTimeseries.nav_date)
+    )
+    result = await db.execute(stmt)
 
-        fund_returns: dict[str, list[float]] = defaultdict(list)
-        for inst_id, _nav_date, ret_1d in result.all():
-            fund_returns[str(inst_id)].append(float(ret_1d))
-
-        qualified = {
-            fid: returns
-            for fid, returns in fund_returns.items()
-            if len(returns) >= MIN_CANDIDATE_NAV_DAYS
-        }
-        if qualified:
-            break
-    else:
-        return {}
-
-    return {fid: np.array(rets) for fid, rets in qualified.items()}
+    by_date: dict[str, dict[date, float]] = defaultdict(dict)
+    for inst_id, nav_date, ret_1d in result.all():
+        by_date[str(inst_id)][nav_date] = float(ret_1d)
+    return dict(by_date)
 
 
 async def fetch_portfolio_returns(
@@ -268,7 +318,7 @@ async def fetch_portfolio_returns(
         (portfolio_daily_returns (T,N), portfolio_returns (T,), current_weights (N,))
         where portfolio_returns = daily_returns @ weights.
 
-    Uses date floor filter and date intersection across all funds.
+    Queries both return types in parallel and prefers log over arithmetic.
     """
     funds = fund_selection.get("funds", [])
     if not funds:
@@ -279,32 +329,21 @@ async def fetch_portfolio_returns(
 
     date_floor = date.today() - timedelta(days=int(lookback_days * 1.5))
 
-    # Fetch returns — prefer log, fallback arithmetic
-    fund_returns_by_date: dict[str, dict[date, float]] = defaultdict(dict)
-    for return_type in ("log", "arithmetic"):
-        stmt = (
-            select(
-                NavTimeseries.instrument_id,
-                NavTimeseries.nav_date,
-                NavTimeseries.return_1d,
-            )
-            .where(
-                NavTimeseries.instrument_id.in_(fund_ids),
-                NavTimeseries.nav_date >= date_floor,
-                NavTimeseries.return_1d.is_not(None),
-                NavTimeseries.return_type == return_type,
-            )
-            .order_by(NavTimeseries.nav_date)
-        )
-        result = await db.execute(stmt)
-        for inst_id, nav_date, ret_1d in result.all():
-            fund_returns_by_date[str(inst_id)][nav_date] = float(ret_1d)
+    # Fire both return-type queries concurrently
+    log_map, arith_map = await asyncio.gather(
+        _fetch_portfolio_nav_by_type(db, fund_ids, "log", date_floor),
+        _fetch_portfolio_nav_by_type(db, fund_ids, "arithmetic", date_floor),
+    )
 
-        available = [str(fid) for fid in fund_ids if str(fid) in fund_returns_by_date]
-        if len(available) >= 2:
-            break
-    else:
-        available = [str(fid) for fid in fund_ids if str(fid) in fund_returns_by_date]
+    # Prefer log; fill gaps from arithmetic per-fund
+    fund_returns_by_date: dict[str, dict[date, float]] = {}
+    for fid_str in {str(fid) for fid in fund_ids}:
+        if fid_str in log_map and len(log_map[fid_str]) >= MIN_CANDIDATE_NAV_DAYS:
+            fund_returns_by_date[fid_str] = log_map[fid_str]
+        elif fid_str in arith_map and len(arith_map[fid_str]) >= MIN_CANDIDATE_NAV_DAYS:
+            fund_returns_by_date[fid_str] = arith_map[fid_str]
+
+    available = [str(fid) for fid in fund_ids if str(fid) in fund_returns_by_date]
 
     if len(available) < 2:
         return np.array([]), np.array([]), weights

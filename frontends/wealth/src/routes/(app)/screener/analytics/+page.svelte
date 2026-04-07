@@ -32,7 +32,8 @@
 
 	// ── Filter state ────────────────────────────────────────────────
 	let searchQuery = $state("");
-	let filterType = $state("");
+	let filterRegion = $state("");
+	let filterUniverse = $state("");
 	let filterStrategy = $state("");
 	let searchDebounce: ReturnType<typeof setTimeout> | null = null;
 
@@ -46,11 +47,12 @@
 		try {
 			const params: Record<string, string> = {
 				page_size: "100",
-				has_nav: "true",
+				in_universe: "true",
 				sort: "name_asc",
 			};
 			if (searchQuery) params.q = searchQuery;
-			if (filterType) params.fund_type = filterType;
+			if (filterRegion) params.region = filterRegion;
+			if (filterUniverse) params.fund_universe = filterUniverse;
 			if (filterStrategy) params.strategy_label = filterStrategy;
 
 			const result = await api.get<UnifiedCatalogPage>("/screener/catalog", params);
@@ -74,8 +76,13 @@
 		searchDebounce = setTimeout(() => fetchCatalog(), 350);
 	}
 
-	function setFilterType(val: string) {
-		filterType = filterType === val ? "" : val;
+	function setFilterRegion(val: string) {
+		filterRegion = filterRegion === val ? "" : val;
+		fetchCatalog();
+	}
+
+	function setFilterUniverse(val: string) {
+		filterUniverse = filterUniverse === val ? "" : val;
 		fetchCatalog();
 	}
 
@@ -121,7 +128,14 @@
 			analytics = a;
 			peerGroup = p;
 		} catch (e) {
-			error = e instanceof Error ? e.message : "Failed to load analytics";
+			const msg = e instanceof Error ? e.message : "Failed to load analytics";
+			if (msg.includes("resolve entity") || msg.includes("not found") || msg.includes("404")) {
+				error = "This fund has not been imported yet — analytics require NAV data.";
+			} else if (msg.includes("Insufficient") || msg.includes("NAV data")) {
+				error = "Insufficient data to compute analytics for this fund.";
+			} else {
+				error = msg;
+			}
 			analytics = null;
 			peerGroup = null;
 		} finally {
@@ -155,8 +169,19 @@
 		}
 	}
 
-	// ── Fund type pills ─────────────────────────────────────────────
-	const FUND_TYPES = ["MF", "ETF", "CEF", "HF", "PE", "VC"];
+	// ── Filter pills ────────────────────────────────────────────────
+	const REGIONS = [
+		{ label: "US", value: "US" },
+		{ label: "EU", value: "EU" },
+	] as const;
+	const UNIVERSES = [
+		{ label: "Mutual Fund", value: "mutual_fund" },
+		{ label: "ETF", value: "etf" },
+		{ label: "CEF", value: "closed_end" },
+		{ label: "BDC", value: "bdc" },
+		{ label: "Hedge Fund", value: "hedge_fund" },
+		{ label: "UCITS", value: "ucits" },
+	] as const;
 	const STRATEGIES = ["Private Credit", "Long/Short Equity", "Multi-Strategy", "Growth Equity", "Buyout", "Infrastructure"];
 </script>
 
@@ -166,7 +191,7 @@
 
 <div class="ea-page">
 
-	<!-- ── Toolbar row 1: Search + Type pills ── -->
+	<!-- ── Toolbar row 1: Search + Region + Universe pills ── -->
 	<div class="ea-toolbar">
 		<div class="ea-toolbar-left">
 			<div class="ea-search">
@@ -181,13 +206,27 @@
 			</div>
 
 			<div class="ea-toggles">
-				{#each FUND_TYPES as ft (ft)}
+				{#each REGIONS as r (r.value)}
 					<button
 						class="ea-toggle"
-						class:ea-toggle--active={filterType === ft}
-						onclick={() => setFilterType(ft)}
+						class:ea-toggle--active={filterRegion === r.value}
+						onclick={() => setFilterRegion(r.value)}
 					>
-						{ft}
+						{r.label}
+					</button>
+				{/each}
+			</div>
+
+			<div class="ea-separator"></div>
+
+			<div class="ea-toggles">
+				{#each UNIVERSES as u (u.value)}
+					<button
+						class="ea-toggle"
+						class:ea-toggle--active={filterUniverse === u.value}
+						onclick={() => setFilterUniverse(u.value)}
+					>
+						{u.label}
 					</button>
 				{/each}
 			</div>
@@ -196,7 +235,7 @@
 		<span class="ea-count">{totalFunds.toLocaleString()} funds</span>
 	</div>
 
-	<!-- ── Toolbar row 2: Strategy pills + Fund selector + Window ── -->
+	<!-- ── Toolbar row 2: Strategy pills ── -->
 	<div class="ea-toolbar">
 		<div class="ea-toolbar-left">
 			<div class="ea-toggles">
@@ -348,6 +387,13 @@
 	}
 
 	.ea-search-input::placeholder { color: #cbccd1; }
+
+	.ea-separator {
+		width: 1px;
+		height: 24px;
+		background: #3a3b44;
+		margin: 0 4px;
+	}
 
 	/* ── Toggles (fund type + strategy) ── */
 	.ea-toggles {

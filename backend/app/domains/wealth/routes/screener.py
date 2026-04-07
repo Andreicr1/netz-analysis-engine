@@ -39,6 +39,7 @@ from app.core.tenancy.middleware import get_db_with_rls, get_org_id
 from app.domains.wealth.models.instrument import Instrument
 from app.domains.wealth.models.instrument_org import InstrumentOrg
 from app.domains.wealth.models.screening_result import ScreeningResult, ScreeningRun
+from app.domains.wealth.models.universe_approval import UniverseApproval
 from app.domains.wealth.queries.catalog_sql import (
     CatalogFilters,
     build_catalog_facets_query,
@@ -1517,6 +1518,7 @@ async def get_catalog(
     investment_geography: str | None = Query(None, description="Comma-separated: US,Europe,Emerging Markets,Asia Pacific,Global,Latin America"),
     aum_min: float | None = Query(None, ge=0, description="Minimum AUM in USD"),
     has_nav: bool | None = Query(None, description="Only funds with NAV history (ticker)"),
+    in_universe: bool | None = Query(None, description="Only funds present in instruments_universe (real NAV data)"),
     has_aum: bool | None = Query(None, description="Only funds with AUM > 0"),
     domicile: str | None = Query(None),
     manager: str | None = Query(None, description="Manager name text search"),
@@ -1538,6 +1540,7 @@ async def get_catalog(
         investment_geography=investment_geography,
         aum_min=aum_min,
         has_nav=has_nav,
+        in_universe=in_universe,
         has_aum=has_aum,
         domicile=domicile,
         manager=manager,
@@ -2349,4 +2352,190 @@ async def get_fund_classes(
         fund_name=fund_row,
         classes=classes,
         total_classes=len(classes),
+    )
+
+
+# ── Fast-Track Approval ─────────────────────────────────────────────
+
+
+class FastTrackRequest(BaseModel):
+    instrument_ids: list[uuid.UUID]
+
+
+class FastTrackResult(BaseModel):
+    approved: list[str]
+    rejected: list[dict[str, str]]
+    total_approved: int
+    total_rejected: int
+
+
+# Fund types eligible for quantitative fast-track (liquid + regulated).
+# Private, BDC, and closed-end require full DD.
+_FAST_TRACK_ELIGIBLE_UNIVERSES = {"registered_us", "etf", "money_market"}
+_FAST_TRACK_ELIGIBLE_SOURCES = {"esma"}  # UCITS funds
+
+
+@router.post(
+    "/fast-track-approval",
+    response_model=FastTrackResult,
+    summary="Bulk fast-track approval for liquid/regulated instruments",
+)
+async def fast_track_approval(
+    body: FastTrackRequest,
+    db: AsyncSession = Depends(get_db_with_rls),
+    actor: Actor = Depends(get_actor),
+    org_id: str = Depends(get_org_id),
+) -> FastTrackResult:
+    """Approve liquid/regulated instruments directly to the universe.
+
+    Eligible: ETFs, Mutual Funds, Money Market, UCITS.
+    Rejected: Private funds, BDCs, Closed-End (require full DD).
+    Creates or updates UniverseApproval with is_current=True, decision=approved.
+    """
+    _require_investment_role(actor)
+
+    if not body.instrument_ids:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="instrument_ids must not be empty",
+        )
+    if len(body.instrument_ids) > 100:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Maximum 100 instruments per request",
+        )
+
+    # Fetch instruments and their org links
+    instruments_result = await db.execute(
+        select(
+            Instrument.instrument_id,
+            Instrument.name,
+            Instrument.attributes,
+        ).where(Instrument.instrument_id.in_(body.instrument_ids)),
+    )
+    instruments_map = {
+        row.instrument_id: row for row in instruments_result.all()
+    }
+
+    # Verify all instruments have org links (imported to this org)
+    org_links_result = await db.execute(
+        select(InstrumentOrg.instrument_id).where(
+            InstrumentOrg.instrument_id.in_(body.instrument_ids),
+        ),
+    )
+    linked_ids = {row.instrument_id for row in org_links_result.all()}
+
+    approved: list[str] = []
+    rejected: list[dict[str, str]] = []
+
+    for iid in body.instrument_ids:
+        inst = instruments_map.get(iid)
+        if not inst:
+            rejected.append({
+                "instrument_id": str(iid),
+                "reason": "Instrument not found",
+            })
+            continue
+
+        if iid not in linked_ids:
+            rejected.append({
+                "instrument_id": str(iid),
+                "reason": "Instrument not imported to your organization",
+            })
+            continue
+
+        # Determine eligibility from attributes
+        attrs = inst.attributes or {}
+        sec_universe = attrs.get("sec_universe")
+        source = attrs.get("source")
+
+        eligible = (
+            sec_universe in _FAST_TRACK_ELIGIBLE_UNIVERSES
+            or source in _FAST_TRACK_ELIGIBLE_SOURCES
+        )
+
+        if not eligible:
+            structure = attrs.get("structure") or sec_universe or source or "unknown"
+            rejected.append({
+                "instrument_id": str(iid),
+                "name": inst.name,
+                "reason": f"Requires full Due Diligence ({structure})",
+            })
+            continue
+
+        # Upsert UniverseApproval: mark previous as not current
+        existing = (await db.execute(
+            select(UniverseApproval).where(
+                UniverseApproval.instrument_id == iid,
+                UniverseApproval.organization_id == org_id,
+                UniverseApproval.is_current.is_(True),
+            ),
+        )).scalar_one_or_none()
+
+        if existing and existing.decision == "approved":
+            # Already approved — skip silently
+            approved.append(str(iid))
+            continue
+
+        if existing:
+            existing.is_current = False
+
+        approval = UniverseApproval(
+            instrument_id=iid,
+            organization_id=org_id,
+            analysis_report_id=None,
+            decision="approved",
+            rationale="Auto-approved via Quantitative Fast-Track",
+            created_by=actor.actor_id,
+            decided_by=actor.actor_id,
+            decided_at=datetime.now(UTC),
+            is_current=True,
+        )
+        db.add(approval)
+
+        # Also update InstrumentOrg approval_status
+        from sqlalchemy import update as sa_update
+        await db.execute(
+            sa_update(InstrumentOrg)
+            .where(
+                InstrumentOrg.instrument_id == iid,
+                InstrumentOrg.organization_id == org_id,
+            )
+            .values(approval_status="approved"),
+        )
+
+        approved.append(str(iid))
+
+    await db.commit()
+
+    if approved:
+        from app.core.db.audit import write_audit_event
+        await write_audit_event(
+            db,
+            actor_id=actor.actor_id,
+            action="universe.fast_track_approval",
+            entity_type="UniverseApproval",
+            entity_id=",".join(approved[:10]),
+            before={"count": len(approved)},
+            after={
+                "decision": "approved",
+                "rationale": "Auto-approved via Quantitative Fast-Track",
+                "instrument_ids": approved,
+            },
+        )
+        await db.commit()
+
+    logger.info(
+        "fast_track_approval",
+        approved_count=len(approved),
+        rejected_count=len(rejected),
+        actor=actor.actor_id,
+        org_id=org_id,
+    )
+
+    return FastTrackResult(
+        approved=approved,
+        rejected=rejected,
+        total_approved=len(approved),
+        total_rejected=len(rejected),
     )

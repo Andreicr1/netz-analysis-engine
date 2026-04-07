@@ -24,6 +24,7 @@ from sqlalchemy import (
     Table,
     Text,
     and_,
+    exists,
     func,
     literal,
     literal_column,
@@ -80,6 +81,14 @@ sec_managers = Table(
     Column("aum_total", Numeric),
 )
 
+instruments_universe = Table(
+    "instruments_universe",
+    _meta,
+    Column("instrument_id", Text, primary_key=True),
+    Column("ticker", Text),
+    Column("isin", Text),
+)
+
 sec_money_market_funds = Table(
     "sec_money_market_funds",
     _meta,
@@ -127,6 +136,8 @@ class CatalogFilters:
     sort: str = "name_asc"               # name_asc | name_desc | aum_desc | aum_asc
     page: int = 1
     page_size: int = 50
+
+    in_universe: bool | None = None        # True = only funds present in instruments_universe (have real NAV data)
 
     # Prospectus-based filters (applied to registered_us + etf branches)
     # User provides human percent (0.50 = 0.50%), DB stores fraction (0.005)
@@ -269,7 +280,20 @@ def _build_base_stmt(f: CatalogFilters) -> Select[Any]:
     # 8. NAV (Ticker availability)
     if f.has_nav is True:
         conditions.append(mv_unified_funds.c.ticker.isnot(None))
-        
+
+    # 8b. In instruments_universe (real NAV data ingested)
+    if f.in_universe is True:
+        conditions.append(
+            exists(
+                select(instruments_universe.c.instrument_id).where(
+                    or_(
+                        instruments_universe.c.ticker == mv_unified_funds.c.ticker,
+                        instruments_universe.c.isin == mv_unified_funds.c.isin,
+                    ),
+                )
+            )
+        )
+
     # 9. Domicile
     if f.domicile:
         conditions.append(mv_unified_funds.c.domicile == f.domicile)
