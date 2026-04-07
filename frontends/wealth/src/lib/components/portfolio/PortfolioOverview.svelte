@@ -73,6 +73,28 @@
 		}
 	}
 
+	/**
+	 * Drag source for an already-allocated fund inside a Builder block.
+	 *
+	 * The Portfolio Builder is a staging area (not a live portfolio),
+	 * so the PM must be able to undo an allocation by dragging the
+	 * fund back out to the Approved Universe column. The UniverseColumn
+	 * wrapper listens for drops of instrument IDs that are currently
+	 * in `workspace.funds` and calls `workspace.removeFund()`.
+	 *
+	 * Payload format matches the Universe → Builder drag contract:
+	 * `text/plain = instrument_id`. A second MIME type
+	 * `application/x-netz-allocated = "1"` signals "this came from an
+	 * allocated block" so the Universe drop handler knows it is a
+	 * removal intent rather than a duplicate add attempt.
+	 */
+	function handleAllocatedFundDragStart(e: DragEvent, instrumentId: string) {
+		if (!e.dataTransfer) return;
+		e.dataTransfer.effectAllowed = "move";
+		e.dataTransfer.setData("text/plain", instrumentId);
+		e.dataTransfer.setData("application/x-netz-allocated", "1");
+	}
+
 	function openFactSheet(instrumentId: string, e: Event) {
 		e.stopPropagation();
 		goto(`/screener/fund/${instrumentId}`);
@@ -281,11 +303,15 @@
 											{#each block.funds as fund, i (fund.instrument_id)}
 												{@const uniFund = workspace.universe.find(u => u.instrument_id === fund.instrument_id)}
 												<div
-													class="grid grid-cols-[16px_1fr_50px_70px_24px] gap-1 items-center px-3 py-1.5 transition-colors duration-100 group hover:bg-white/[0.03]"
+													class="grid grid-cols-[16px_1fr_50px_70px_24px] gap-1 items-center px-3 py-1.5 transition-colors duration-100 group hover:bg-white/[0.03] cursor-grab active:cursor-grabbing"
 													style={i < block.funds.length - 1 ? "border-bottom: 1px solid rgba(64, 66, 73, 0.15);" : ""}
+													role="listitem"
+													draggable="true"
+													ondragstart={(e) => handleAllocatedFundDragStart(e, fund.instrument_id)}
+													title="Drag back to the Approved Universe to remove"
 												>
 													<!-- Grip -->
-													<div class="text-[#85a0bd]/20 shrink-0 cursor-grab active:cursor-grabbing">
+													<div class="text-[#85a0bd]/20 shrink-0">
 														<GripVertical class="h-3 w-3" />
 													</div>
 

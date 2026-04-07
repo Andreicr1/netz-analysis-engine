@@ -100,6 +100,20 @@ export interface UniverseFund {
 	geography: string | null;
 	instrument_type: string;
 	manager_score: number | null;
+	/**
+	 * Tier 1 density fields (Flexible Columns Layout spec §3.1).
+	 * Populated from fund_risk_metrics + nav_timeseries + correlation
+	 * service. `null` means the metric is not yet computed for this
+	 * instrument — the UI renders em-dash, never crashes.
+	 */
+	aum_usd: number | null;
+	expense_ratio: number | null;
+	return_3y_ann: number | null;
+	sharpe_1y: number | null;
+	max_drawdown_1y: number | null;
+	blended_momentum_score: number | null;
+	liquidity_tier: string | null;
+	correlation_to_portfolio: number | null;
 	/** Pre-computed lowercase search key: "name|ticker|block_label" */
 	_searchKey: string;
 }
@@ -114,6 +128,14 @@ interface UniverseApiItem {
 	geography: string | null;
 	approval_status: string | null;
 	manager_score: number | null;
+	aum_usd: number | null;
+	expense_ratio: number | null;
+	return_3y_ann: number | null;
+	sharpe_1y: number | null;
+	max_drawdown_1y: number | null;
+	blended_momentum_score: number | null;
+	liquidity_tier: string | null;
+	correlation_to_portfolio: number | null;
 }
 
 export interface WorkspaceError {
@@ -184,6 +206,37 @@ export class PortfolioWorkspaceState {
 	/** Approved universe funds for DnD — loaded from API when portfolio is selected. */
 	universe = $state<UniverseFund[]>([]);
 
+	/**
+	 * Analytics column mode — drives Estado C of the Flexible Columns
+	 * Layout (design spec 2026-04-08). Three mutually-exclusive modes:
+	 *
+	 *   - `"fund"` → PM clicked a row in the Universe table; the 3rd
+	 *     column shows the drill-down for `selectedAnalyticsFund`.
+	 *   - `"portfolio"` → PM clicked "View Chart" in the Builder
+	 *     action bar; the 3rd column shows MainPortfolioChart (NAV
+	 *     synthesis) for the current portfolio. This was previously
+	 *     pinned to the top of the Builder column — moved here so
+	 *     the Builder has full vertical space for allocation blocks.
+	 *   - `null` → Estado B (2 columns only, 3rd column hidden).
+	 *
+	 * Reset rules:
+	 *   1. Cleared on `selectPortfolio()` (switching model starts fresh).
+	 *   2. Cleared on `resetBuilderEntry()` (re-entering /portfolio from
+	 *      another route — "reset ao voltar" rule).
+	 *   3. Cleared directly by the Analytics close button via
+	 *      `clearAnalytics()`.
+	 *
+	 * NOT armazenado como `layoutState`. The layout state is derived:
+	 *   analyticsMode !== null ? "three-col" : "two-col"
+	 */
+	analyticsMode = $state.raw<"fund" | "portfolio" | null>(null);
+
+	/**
+	 * The specific fund populating the Analytics column when
+	 * `analyticsMode === "fund"`. Ignored in `"portfolio"` mode.
+	 */
+	selectedAnalyticsFund = $state.raw<UniverseFund | null>(null);
+
 	/** Token provider — set once from +page.svelte via setGetToken(). */
 	private _getToken: (() => Promise<string>) | null = null;
 
@@ -230,6 +283,45 @@ export class PortfolioWorkspaceState {
 		return createClientApiClient(this._getToken);
 	}
 
+	/**
+	 * Open the Analytics column in "fund" mode with the given fund.
+	 * Triggered by a row click in the Universe table.
+	 */
+	openAnalyticsForFund(fund: UniverseFund) {
+		this.selectedAnalyticsFund = fund;
+		this.analyticsMode = "fund";
+	}
+
+	/**
+	 * Open the Analytics column in "portfolio" mode showing the
+	 * MainPortfolioChart NAV synthesis. Triggered by the Builder
+	 * "View Chart" button.
+	 */
+	openAnalyticsForPortfolio() {
+		this.analyticsMode = "portfolio";
+	}
+
+	/** Close the Analytics column, collapsing back to Estado B. */
+	clearAnalytics() {
+		this.analyticsMode = null;
+		this.selectedAnalyticsFund = null;
+	}
+
+	/**
+	 * Reset layout-scoped state when the PM (re-)enters /portfolio
+	 * from another route. The 3rd column must always start closed
+	 * per the design spec §1.3 "Reset ao voltar" rule. Called from
+	 * `onMount` of `routes/(app)/portfolio/+page.svelte`.
+	 *
+	 * This is separate from `selectPortfolio()` because the PM may
+	 * re-enter with the same portfolio still selected — we don't
+	 * want to drop workspace state, only layout state.
+	 */
+	resetBuilderEntry() {
+		this.analyticsMode = null;
+		this.selectedAnalyticsFund = null;
+	}
+
 	selectPortfolio(p: ModelPortfolio) {
 		// Increment generation to invalidate any in-flight async loads
 		this._generation++;
@@ -247,6 +339,10 @@ export class PortfolioWorkspaceState {
 		this.adviceFetched = false;
 		this.lastError = null;
 		this.navSeries = [];
+		// Switching models is a hard reset of the analytics context —
+		// the 3rd column closes and the PM starts fresh in Estado B.
+		this.analyticsMode = null;
+		this.selectedAnalyticsFund = null;
 		// Fire-and-forget: load track-record, factor analysis, attribution, drift
 		this.loadTrackRecord();
 		this.loadDriftAlerts();
@@ -435,14 +531,32 @@ export class PortfolioWorkspaceState {
 	/** True while universe is being fetched from API. */
 	isLoadingUniverse = $state(false);
 
-	/** Load approved universe funds from GET /universe. */
+	/** Load approved universe funds from GET /universe.
+	 *
+	 * Passes the current Builder `funds` as `current_holdings` query
+	 * param so the backend can enrich each row with
+	 * `correlation_to_portfolio` on-the-fly (spec §3.4). When the
+	 * portfolio is empty, the param is omitted and every row's
+	 * correlation comes back `null`.
+	 */
 	async loadUniverse() {
 		if (!this._getToken) return;
 		this.isLoadingUniverse = true;
 
 		try {
 			const api = this.api();
-			const result = await api.get<UniverseApiItem[]>("/universe");
+			// Send the list of currently allocated instrument IDs so
+			// the backend can correlate each candidate against this
+			// exact portfolio composition. The query param accepts
+			// comma-separated UUIDs; empty means "no portfolio context,
+			// return correlation_to_portfolio=null for everyone".
+			const holdingIds = this.funds
+				.map((f) => f.instrument_id)
+				.filter((id): id is string => !!id);
+			const qs = holdingIds.length > 0
+				? `?current_holdings=${holdingIds.join(",")}`
+				: "";
+			const result = await api.get<UniverseApiItem[]>(`/universe${qs}`);
 
 			this.universe = result.map((r) => {
 				const blockId = r.block_id ?? "unknown";
@@ -459,6 +573,14 @@ export class PortfolioWorkspaceState {
 					geography: r.geography ?? null,
 					instrument_type: r.asset_class ?? "fund",
 					manager_score: r.manager_score ?? null,
+					aum_usd: r.aum_usd ?? null,
+					expense_ratio: r.expense_ratio ?? null,
+					return_3y_ann: r.return_3y_ann ?? null,
+					sharpe_1y: r.sharpe_1y ?? null,
+					max_drawdown_1y: r.max_drawdown_1y ?? null,
+					blended_momentum_score: r.blended_momentum_score ?? null,
+					liquidity_tier: r.liquidity_tier ?? null,
+					correlation_to_portfolio: r.correlation_to_portfolio ?? null,
 					_searchKey: `${name}|${ticker}|${label.toLowerCase()}`,
 				};
 			});
@@ -511,6 +633,47 @@ export class PortfolioWorkspaceState {
 		const equalWeight = Math.round((1 / blockFunds.length) * 10000) / 10000;
 		for (const f of blockFunds) {
 			f.weight = equalWeight;
+		}
+
+		// Trigger reactivity
+		this.portfolio = { ...this.portfolio };
+		return true;
+	}
+
+	/**
+	 * Remove a fund from the allocation (reverse of addFundToBlock).
+	 *
+	 * The Portfolio Builder is a staging area — the portfolio is not
+	 * "live" until explicitly activated. Removing a fund here simply
+	 * takes it out of `fund_selection_schema.funds`, which makes the
+	 * UniverseTable's `isAllocated` check return `false` and the fund
+	 * appears re-enabled (full opacity, draggable) back in the
+	 * Approved Universe column. This is the user's primary undo
+	 * action while modelling.
+	 *
+	 * After removal, weights within the affected block are redistributed
+	 * equally across the remaining funds, matching the convention of
+	 * `addFundToBlock`. When the last fund in a block is removed, the
+	 * block weight falls to 0 naturally.
+	 *
+	 * Returns `true` if the fund was found and removed, `false` if not.
+	 */
+	removeFund(instrumentId: string): boolean {
+		if (!this.portfolio?.fund_selection_schema?.funds) return false;
+		const schema = this.portfolio.fund_selection_schema;
+		const idx = schema.funds.findIndex((f) => f.instrument_id === instrumentId);
+		if (idx === -1) return false;
+
+		const removed = schema.funds[idx]!;
+		schema.funds.splice(idx, 1);
+
+		// Re-equalise the weights in the block that just lost a fund.
+		const remainingInBlock = schema.funds.filter((f) => f.block_id === removed.block_id);
+		if (remainingInBlock.length > 0) {
+			const equalWeight = Math.round((1 / remainingInBlock.length) * 10000) / 10000;
+			for (const f of remainingInBlock) {
+				f.weight = equalWeight;
+			}
 		}
 
 		// Trigger reactivity
