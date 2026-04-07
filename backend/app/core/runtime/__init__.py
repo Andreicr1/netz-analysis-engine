@@ -29,6 +29,16 @@ from app.core.runtime.idle_bridge import (
     IdleBridgePolicy,
     IllegalStateError,
 )
+from app.core.runtime.llm_gate import (
+    LLMGate,
+    LLMGateConfig,
+    LLMGateError,
+    LLMGateMetrics,
+    LLMHardTimeoutError,
+    LLMRateLimitError,
+    LLMResponse,
+    LLMUnavailableError,
+)
 from app.core.runtime.outbound_channel import (
     BoundedOutboundChannel,
     ChannelConfig,
@@ -65,6 +75,14 @@ __all__ = [
     "IdleBridgeConfig",
     "IdleBridgePolicy",
     "IllegalStateError",
+    "LLMGate",
+    "LLMGateConfig",
+    "LLMGateError",
+    "LLMGateMetrics",
+    "LLMHardTimeoutError",
+    "LLMRateLimitError",
+    "LLMResponse",
+    "LLMUnavailableError",
     "ProviderGateError",
     "ProviderTimeoutError",
     "ProviderUnavailableError",
