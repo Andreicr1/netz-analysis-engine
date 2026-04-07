@@ -1,12 +1,12 @@
 # Portfolio Builder — Flexible Columns Layout — Design Spec
 
 **Date:** 2026-04-08
-**Status:** Phase A + B shipped and stabilised; Phase C deferred to a future sprint pending deeper layout refactor
+**Status:** ✅ **Phase A + B — CONCLUÍDAS e mergeadas em `main`.** Phase C e demais itens desta spec movidos para backlog explícito (§6.4 + §10) — tratamento em sprints separadas.
 **Owner:** Andrei (Netz)
-**Branch:** `feat/wealth-portfolio-flex-columns`
+**Branch:** `feat/wealth-portfolio-flex-columns` (merged via `--no-ff` em `main` on 2026-04-08)
 **Base:** `main` (post Stability Guardrails + Onda 0 + PR-UX-09 sanitisation)
-**Sprint sizing:** S + L + M + S (4 phases)
-**Actual delivery (Phase B):** 7 commits, 3,634 lines added, 16 files touched
+**Sprint sizing (planned):** S + L + M + S (4 phases)
+**Actual delivery (Phase A + B):** 8 commits, 3,634 lines added, 16 files touched
 
 ---
 
@@ -271,7 +271,24 @@ Abre na 3ª coluna, tab `Fund`. Fact sheet institucional full.
 
 ## §4 — Plano de Ataque: 4 Fases
 
-### 4.1 — Fase A — Foundations (S)
+> **Status consolidado (2026-04-08):**
+>
+> - ✅ **Fase A — Foundations — CONCLUÍDA** e mergeada em `main`.
+> - ✅ **Fase B — Estado B funcional — CONCLUÍDA** e mergeada em `main`
+>   (inclui 3 rounds de polish visual + refactor estrutural para
+>   mirror do BuilderColumn com BuilderTable).
+> - 🅱️ **Fase C — Estado C + LayerChart — MOVIDA PARA BACKLOG** (§10.3).
+>   Depende de refatoração mais profunda do layout que será tratada
+>   em sprints separadas.
+> - 🅱️ **Fase D — Polish + deprecação — MOVIDA PARA BACKLOG** (§10.3).
+>   Deleção do `PortfolioOverview.svelte` fica para ser feita em
+>   conjunto com a refatoração profunda.
+>
+> As seções 4.1 a 4.4 abaixo são preservadas como referência histórica
+> do plano original. O estado real entregue está documentado no §9
+> (Execution Log) e §10 (Backlog follow-up).
+
+### 4.1 — Fase A — Foundations (S) — ✅ CONCLUÍDA
 
 Arquivos backend + scaffolding frontend. Nenhuma mudança visual ainda.
 
@@ -293,7 +310,7 @@ Arquivos backend + scaffolding frontend. Nenhuma mudança visual ainda.
 
 **Critério:** backend retorna correlação em chamada de exemplo; FlexibleColumnsLayout renderiza visualmente em isolated storybook-like test; lint wealth passa.
 
-### 4.2 — Fase B — Estado B (L) — **núcleo da sprint**
+### 4.2 — Fase B — Estado B (L) — ✅ CONCLUÍDA — **núcleo da sprint**
 
 Migração do `/portfolio/+page.svelte` para o novo layout, Estado B funcional.
 
@@ -328,7 +345,18 @@ Migração do `/portfolio/+page.svelte` para o novo layout, Estado B funcional.
   - `pnpm lint` passa
   - Visual validation no browser (memory `feedback_visual_validation.md`) — screenshot antes/depois
 
-### 4.3 — Fase C — Estado C + LayerChart (M)
+### 4.3 — Fase C — Estado C + LayerChart (M) — 🅱️ MOVIDA PARA BACKLOG (§10.3)
+
+> **Status:** Fora do escopo da v1 entregue em `main`. Estado C
+> ganhou um **placeholder funcional** na Phase B commit `e1957ac`:
+> `AnalyticsColumn.svelte` mostra `MainPortfolioChart` inline quando
+> `workspace.analyticsMode === "portfolio"` e um fund drill-down
+> placeholder quando `=== "fund"`. Esse placeholder é serviceable.
+>
+> A implementação completa (LayerChart + tabs Fund/Portfolio/Stress/
+> Compare) depende de uma refatoração mais profunda do layout FCL
+> que será conduzida numa sprint separada. Ver §10.3 para o backlog
+> detalhado.
 
 3ª coluna funcional com LayerChart.
 
@@ -358,7 +386,13 @@ Migração do `/portfolio/+page.svelte` para o novo layout, Estado B funcional.
   - `pnpm lint` passa
   - Visual validation browser
 
-### 4.4 — Fase D — Polish + deprecação (S)
+### 4.4 — Fase D — Polish + deprecação (S) — 🅱️ MOVIDA PARA BACKLOG (§10.3)
+
+> **Status:** Fora do escopo da v1 entregue em `main`. Dois legados
+> continuam em disco como código morto (já não importados por
+> lugar nenhum): `UniversePanel.svelte` e `PortfolioOverview.svelte`.
+> Serão deletados em conjunto com a refatoração profunda do layout,
+> evitando mudanças duplicadas.
 
 ```
 15 refactor(wealth/portfolio): delete UniversePanel.svelte (after visual validation)
@@ -366,8 +400,9 @@ Migração do `/portfolio/+page.svelte` para o novo layout, Estado B funcional.
 17 docs(wealth/portfolio): charter doc for FCL + deprecations
 ```
 
-**Critérios:**
+**Critérios (quando a sprint de refatoração profunda for executada):**
   - `UniversePanel.svelte` removido
+  - `PortfolioOverview.svelte` removido
   - Screenshot baseline salvo
   - Doc `docs/reference/wealth-portfolio-builder.md` atualizado com seção FCL
 
@@ -618,65 +653,135 @@ placeholder stays in AnalyticsColumn as a serviceable v1.
 
 ---
 
-## §10 — Backlog for the follow-up sprint (post-parking)
+## §10 — Backlog explícito (fora do escopo da v1)
 
-Explicit items that need to be picked up after the deeper layout
-refactor is planned:
+Tudo o que NÃO foi entregue na v1 (Phase A + B mergeadas em `main`)
+e fica reservado para sprints futuras. Dividido em três grupos por
+origem e prioridade.
 
-### 10.1 — From Phase B stabilisation debt
+### 10.1 — Débito de estabilização da Phase B
+
+Itens levantados durante as 3 rounds de validação visual da Phase B
+que ficaram parados porque requerem a refatoração profunda do
+layout:
 
 1. **Search toolbar return** — reinstate Universe filter input, but
    in a shared toolbar surface above the FCL columns (likely inside
    the left-shell sub-pills row `Models | Universe | Policy`), not
-   back inside `UniverseColumn`. The `filtered` $derived inside
+   back inside `UniverseColumn`. The `filtered` `$derived` inside
    `UniverseColumn` is ready to consume a shared search state.
 
-2. **Builder column header alignment finalisation** — decide whether
-   `BuilderColumn`'s action pill row (View Chart / Construct /
-   Stress Test) stays on top of the table or moves elsewhere.
-   Currently Y-axis is off by ~112px because the Universe column
-   has no header and the Builder still does.
+2. **Builder column header alignment finalisation (Y-axis lock)** —
+   decidir se `BuilderColumn`'s action pill row (View Chart /
+   Construct / Stress Test) permanece acima da tabela ou migra
+   para outro lugar. Atualmente o Y-axis está desalinhado em
+   ~112px porque Universe perdeu seu header mas Builder manteve.
+   Opções: remover bc-header também, migrar ações para um toolbar
+   compartilhado acima do FCL, ou inserir header equivalente no
+   Universe (com conteúdo estrutural diferente do search).
 
-3. **PortfolioOverview deletion** — the legacy component is
-   unimported dead code on disk. Delete it once the BuilderTable
-   replacement has burnt in and there's no appetite for rollback.
+3. **Deleção do `PortfolioOverview.svelte`** — o componente legado
+   está como código morto em disco (não importado em lugar
+   nenhum). Deletar quando a refatoração profunda do layout
+   estiver em progresso e não houver apetite por rollback.
 
-4. **L2 block drop target UX** — the block header row is the drop
-   zone for Universe→Builder adds, but the visual accept/reject
-   feedback is subtle. A follow-up can enlarge the drop target or
-   add a dashed outline on the entire L2 row segment.
+4. **L2 block drop target UX** — a linha do block header é o drop
+   zone para adds Universe→Builder, mas o feedback visual accept/
+   reject é sutil. Follow-up pode ampliar a área de drop ou
+   adicionar uma borda tracejada na linha L2 inteira durante o
+   drag.
 
-### 10.2 — From the original spec §6.4 backlog (still pending)
+### 10.2 — Itens do backlog original da spec (§6.4) ainda pendentes
 
-5. **Estado A (Landing)** — Model picker visual with cards, drift
-   ring, YTD return (still deferred, even lower priority now that
-   Phase B is stable).
+5. **Estado A (Landing)** — Model picker visual com cards, drift
+   ring, YTD return. Prioridade baixa — o empty state atual é
+   aceitável como MVP.
+
 6. **Keyboard drag-drop fallback** — ARIA grab mode, arrow key
-   navigation, Enter to drop. Institutional compliance requirement.
-7. **Reorder intra-block in Builder** — `svelte-dnd-action@0.9.x`
-   evaluation.
-8. **Multi-select Compare** — Ctrl+click in Universe → tab Compare
-   side-by-side.
-9. **Splitter persistente** — column proportions persist within
-   a session.
-10. **`expense_ratio` + `liquidity_tier`** backend enrichment from
-    `instrument.attributes` JSON (currently em-dash in the
-    UniverseTable; schema field exists but is always `None`).
-11. **Correlation cache** — materialised view for inter-fund
-    correlations, daily refresh by the risk metrics worker.
-12. **Guard test** — assert backend `METRIC_LABELS` mirrors frontend
-    `quant-labels.ts` exactly.
-13. **LayerChart migration of existing charts** — opportunistic,
-    when each chart is next touched.
-14. **Phase C (LayerChart install + Analytics tabs)** — reopened
-    after the next-sprint layout refactor is merged.
+   navigation, Enter to drop. Requisito de compliance institucional.
+
+7. **Reorder intra-block no Builder** — avaliar `svelte-dnd-action@0.9.x`
+   compat com Svelte 5. Permitiria reordenar fundos dentro de um
+   mesmo block sem exportar/reimportar.
+
+8. **Multi-select Compare** — Ctrl+click no Universe marca fundos
+   (estado in-memory), tab Compare na Analytics column side-by-side.
+
+9. **Splitter persistente** — position das colunas sobrevive a
+   session (in-memory, não localStorage), mas não entre navegações.
+
+10. **`expense_ratio` + `liquidity_tier` backend enrichment** — via
+    `instrument.attributes` JSON. Schema fields existem mas sempre
+    retornam `None` na v1; a UniverseTable renderiza em-dash.
+
+11. **Correlation cache** — materialised view de correlação
+    inter-fundos com refresh diário pelo worker de risk metrics.
+    Reduz custo do route loader de ~200-500ms para <50ms.
+
+12. **Guard test** — assertion backend `METRIC_LABELS` mirrors
+    frontend `quant-labels.ts` exactly.
+
+13. **LayerChart migration dos charts existentes** — oportunística,
+    quando cada chart é tocado em outro contexto.
+
+### 10.3 — Fases C + D originais, movidas na íntegra do §4
+
+Consolidadas aqui como escopo da sprint futura de refatoração
+profunda do layout FCL:
+
+14. **Fase C (original) — Estado C + LayerChart tabs completas**
+    - `AnalyticsColumn.svelte` ganha tab machinery (Fund / Portfolio
+      / Stress / Compare) em vez do branching simples `analyticsMode`
+    - `lib/components/portfolio/analytics/FundTab.svelte` — factsheet
+      drill-down + LayerChart NAV history
+    - `lib/components/portfolio/analytics/PortfolioTab.svelte` —
+      MainPortfolioChart migrado para LayerChart
+    - `lib/components/portfolio/analytics/StressTab.svelte` — 4
+      scenario narratives em plain-English
+    - `lib/components/portfolio/analytics/CompareTab.svelte` —
+      slots para até 3 fundos side-by-side
+    - `lib/components/charts-v3/LayerChartNavHistory.svelte` — primeiro
+      chart LayerChart canónico do wealth vertical
+    - Slide-in animation refinada + outside-click close
+    - **Pré-requisito:** refatoração profunda do layout FCL deve
+      acontecer primeiro — não faz sentido construir tabs sobre um
+      column design que está para ser reshaped
+
+15. **Fase D (original) — Polish + deprecação final**
+    - `UniversePanel.svelte` removido (legado 2-col)
+    - `PortfolioOverview.svelte` removido (legado card-based)
+    - Playwright visual regression baseline
+    - `docs/reference/wealth-portfolio-builder.md` atualizado com
+      seção FCL completa
+
+### 10.4 — Refatoração profunda do layout (meta-item)
+
+Item guarda-chuva que precisa ser planejado e brainstormed antes
+dos itens 14 e 15 acima:
+
+16. **Deeper FCL refactor** — a v1 entregou o 3-level tree mirror
+    e o reverse drag, mas o verdadeiro Flexible Column Layout
+    ainda não foi atingido. Tópicos que a sprint futura deve
+    endereçar:
+    - **Sub-pills placement** — consolidação com search toolbar
+      global acima do FCL
+    - **Column header strategy** — decisão sobre carregar qualquer
+      chrome ou não nas colunas, e onde ele vive
+    - **Shared typography scale** — escala tipográfica unificada
+      entre o left-shell nav + FCL columns
+    - **ContextSidebar global** — possível componente global
+      (memória `feedback_nav_architecture.md`) que assume o
+      framing de 3 colunas de forma diferente
+    - **Y-axis lock estrutural** — resolver definitivamente o
+      desalinhamento de 112px entre Universe e Builder headers
 
 ---
 
 ## Fim do spec.
 
-Phase A + B delivered on branch `feat/wealth-portfolio-flex-columns`
-(7 commits, validated by Andrei on 2026-04-08). Ready to merge when
-the next sprint consolidates the deeper layout refactor, or to
-merge independently if the team decides to ship the current state
-as an intermediate milestone.
+**Phase A + B delivered, validated, and merged.** Branch
+`feat/wealth-portfolio-flex-columns` (8 commits including this
+doc update) mergeada em `main` via `--no-ff` on 2026-04-08
+após aprovação direta do Andrei.
+
+Backlog §10 aguarda planeamento do próximo sprint de Wealth.
